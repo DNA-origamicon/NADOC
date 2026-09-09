@@ -41,6 +41,20 @@ export function regionSurfaceSignature(design) {
     .map(s => `${s.helix_id}:${s.bp_start}-${s.bp_end}`).sort().join('|')
 }
 
+/** True when a store update replaced only the persisted view-volume array.
+ *
+ * View-volume membership arrives through `nadoc:view-volume-layers`; treating
+ * this metadata identity change as structural invalidates Voltron-sized atom
+ * caches and may start work for the previous representation before that event.
+ */
+export function isViewVolumeOnlyDesignChange(next, previous) {
+  if (!next || !previous || next === previous || next.view_volumes === previous.view_volumes) return false
+  const keys = new Set([...Object.keys(next), ...Object.keys(previous)])
+  keys.delete('view_volumes')
+  for (const key of keys) if (next[key] !== previous[key]) return false
+  return true
+}
+
 /** Compile canonical refs to the small renderer-neutral predicate descriptor used by
  * every atomistic representation. Rich domain ranges are derived from live design. */
 export function atomSelectionForState(state) {
@@ -134,6 +148,9 @@ export function initAtomSurfaceDisplay({
   let _atomToastToken = 0
   let _regionSurfaceSig   = null
   let _regionSurfaceTimer = null
+  let _regionSurfaceAbort = null
+  let _regionAtomRevision = 0
+  let _regionSurfaceRevision = 0
 
   // Atomistic-only option rows (shown only while atomistic mode is active).
   // Coloring for atomistic now lives in the unified Representation-Options
@@ -663,8 +680,10 @@ export function initAtomSurfaceDisplay({
     const designChanged   = newState.currentDesign   !== prevState.currentDesign
     const geometryChanged = newState.currentGeometry !== prevState.currentGeometry ||
                             newState.currentHelixAxes !== prevState.currentHelixAxes
-    if (designChanged) _invalidateAtomData()
-    if ((designChanged || geometryChanged) && atomisticRenderer.getMode() !== 'off') {
+    const volumeOnly = designChanged && isViewVolumeOnlyDesignChange(
+      newState.currentDesign, prevState.currentDesign)
+    if (designChanged && !volumeOnly) _invalidateAtomData()
+    if (((designChanged && !volumeOnly) || geometryChanged) && atomisticRenderer.getMode() !== 'off') {
       // The renderer just created a fresh root with visible=true — re-hide it.
       _setCGVisible(false)
       if (designChanged) _applyAtomisticMode(atomisticRenderer.getMode())
@@ -687,16 +706,53 @@ export function initAtomSurfaceDisplay({
   // atom's original `serial` so ballstick bonds (serial pairs) resolve without
   // renumbering — bonds are filtered to pairs whose both endpoints survive.
 
+  let _viewVolumeLayers = []
   async function _applyRegionAtomisticOverlays(design) {
+    const revision = ++_regionAtomRevision
+    const viewVolumeAtomistic = _viewVolumeLayers.some(layer =>
+      ['vdw', 'ballstick', 'stick'].includes(layer.representation) && (layer.keys ?? []).length)
+    if (!viewVolumeAtomistic) window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', {
+      detail: { stage: 'atom-cleared', revision, viewVolume: true },
+    }))
     const { vdw, ballstick, stick = new Set() } = repColumnsByRep(design)
+    for (const layer of _viewVolumeLayers) {
+      const target = layer.representation === 'vdw' ? vdw
+        : layer.representation === 'ballstick' ? ballstick
+          : layer.representation === 'stick' ? stick : null
+      if (target) for (const key of layer.keys ?? []) target.add(key)
+    }
     if (!vdw.size && !ballstick.size && !stick.size) {
       regionVdwRenderer.dispose()
       regionBallstickRenderer.dispose()
       regionStickRenderer.dispose()
+      window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', {
+        detail: { stage: 'atom-cleared', revision, viewVolume: true },
+      }))
       return
     }
-    const data = await _ensureAtomData()
-    if (!data) return
+    if (viewVolumeAtomistic) window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', {
+      detail: { stage: 'atom-scheduled', revision, viewVolume: true },
+    }))
+    let data
+    try {
+      data = await _ensureAtomData()
+    } catch (error) {
+      if (revision === _regionAtomRevision && viewVolumeAtomistic) {
+        window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', {
+          detail: { stage: 'atom-failed', revision, viewVolume: true },
+        }))
+      }
+      console.error('Region atomistic error:', error)
+      return
+    }
+    if (!data || revision !== _regionAtomRevision) {
+      if (!data && revision === _regionAtomRevision && viewVolumeAtomistic) {
+        window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', {
+          detail: { stage: 'atom-failed', revision, viewVolume: true },
+        }))
+      }
+      return
+    }
     // Always dispose-then-update — update() does not pre-clear element meshes.
     regionVdwRenderer.dispose()
     if (vdw.size) { regionVdwRenderer.update(filterAtomData(_atomDataCache, vdw, false)); regionVdwRenderer.setMode('vdw') }
@@ -704,35 +760,72 @@ export function initAtomSurfaceDisplay({
     if (ballstick.size) { regionBallstickRenderer.update(filterAtomData(_atomDataCache, ballstick, true)); regionBallstickRenderer.setMode('ballstick') }
     regionStickRenderer.dispose()
     if (stick.size) { regionStickRenderer.update(filterAtomData(_atomDataCache, stick, true)); regionStickRenderer.setMode('stick') }
+    const volumeOpacity = rep => {
+      const values = _viewVolumeLayers.filter(layer => layer.representation === rep).map(layer => layer.opacity)
+      return values.length ? Math.min(...values) : 1
+    }
+    regionVdwRenderer.setUniformOpacity(volumeOpacity('vdw'))
+    regionBallstickRenderer.setUniformOpacity(volumeOpacity('ballstick'))
+    regionStickRenderer.setUniformOpacity(volumeOpacity('stick'))
     const selection = atomSelectionForState(store.getState())
     regionVdwRenderer.highlight(selection)
     regionBallstickRenderer.highlight(selection)
     regionStickRenderer.highlight(selection)
+    if (viewVolumeAtomistic) window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', {
+      detail: { stage: 'atom-applied', revision, viewVolume: true },
+    }))
   }
 
   // Surface overlay — debounced + signature-cached (surface compute is slow).
-  async function _recomputeRegionSurface(design) {
-    const segs = surfaceSegments(design)
-    if (!segs.length) { regionSurfaceRenderer.dispose(); return }
+  async function _recomputeRegionSurface(design, signal, revision) {
+    const segs = [...surfaceSegments(design), ..._viewVolumeLayers.filter(layer => layer.representation === 'surface').flatMap(layer => layer.segments ?? [])]
+    const viewVolumeSurface = _viewVolumeLayers.some(layer =>
+      layer.representation === 'surface' && (layer.segments ?? []).length)
+    if (!segs.length) {
+      regionSurfaceRenderer.dispose()
+      window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', {
+        detail: { stage: 'surface-cleared', revision, viewVolume: true },
+      }))
+      return
+    }
     showPersistentToast('Computing region surface…')
     try {
       const colorMode = store.getState().surfaceColorMode
-      const mesh = await api.getRegionSurface(segs, { colorMode })
+      const started = performance.now()
+      const mesh = await api.getRegionSurface(segs, { colorMode, signal, suppressBusy: true })
+      if (signal.aborted || revision !== _regionSurfaceRevision) return
       regionSurfaceRenderer.update(mesh, colorMode, 'dna-surface-region')
       regionSurfaceRenderer.applyStrandColors(_getAtomStrandColors())
-      regionSurfaceRenderer.setOpacity(store.getState().surfaceOpacity)
+      const volumeOpacity = _viewVolumeLayers.filter(layer => layer.representation === 'surface').map(layer => layer.opacity)
+      regionSurfaceRenderer.setOpacity(volumeOpacity.length ? Math.min(...volumeOpacity) : store.getState().surfaceOpacity)
+      if (viewVolumeSurface) window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', { detail: { stage: 'surface-applied', revision, durationMs: performance.now() - started, viewVolume: true } }))
     } catch (e) {
-      console.error('Region surface error:', e)
+      if (!signal.aborted && e?.name !== 'AbortError') console.error('Region surface error:', e)
+      if (!signal.aborted && viewVolumeSurface) window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', { detail: { stage: 'surface-failed', revision, viewVolume: true } }))
     } finally {
       dismissToast()
     }
   }
   function _applyRegionSurfaceOverlay(design, force = false) {
-    const sig = regionSurfaceSignature(design)
+    const volumeSig = _viewVolumeLayers.filter(layer => layer.representation === 'surface')
+      .map(layer => `${layer.id}:${layer.opacity}:${(layer.keys ?? []).join(',')}`).join('|')
+    const sig = `${regionSurfaceSignature(design)}|${volumeSig}`
     if (!force && sig === _regionSurfaceSig) return
     _regionSurfaceSig = sig
-    if (_regionSurfaceTimer) clearTimeout(_regionSurfaceTimer)
-    _regionSurfaceTimer = setTimeout(() => _recomputeRegionSurface(design), 400)
+    if (_regionSurfaceTimer) {
+      clearTimeout(_regionSurfaceTimer)
+      window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', { detail: { stage: 'surface-debounce-cancelled' } }))
+    }
+    if (_regionSurfaceAbort && !_regionSurfaceAbort.signal.aborted) {
+      _regionSurfaceAbort.abort('superseded')
+      window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', { detail: { stage: 'surface-request-aborted', viewVolume: true } }))
+    }
+    _regionSurfaceAbort = new AbortController()
+    const revision = ++_regionSurfaceRevision, signal = _regionSurfaceAbort.signal
+    _regionSurfaceTimer = setTimeout(() => _recomputeRegionSurface(design, signal, revision), 80)
+    const viewVolumeSurface = _viewVolumeLayers.some(layer =>
+      layer.representation === 'surface' && (layer.segments ?? []).length)
+    if (viewVolumeSurface) window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', { detail: { stage: 'surface-scheduled', revision, viewVolume: true } }))
   }
 
   // Override change OR geometry/design rebuild → re-apply overlays. (Registered
@@ -744,8 +837,21 @@ export function initAtomSurfaceDisplay({
     const geoChanged    = n.currentGeometry !== p.currentGeometry ||
                           n.currentHelixAxes !== p.currentHelixAxes
     if (!designChanged && !geoChanged) return
+    // The independently scheduled layer event is authoritative for spatial
+    // membership and representation. Running here as well uses the OLD layer,
+    // causing e.g. Stick → Beads to launch a needless full atom build.
+    if (!geoChanged && isViewVolumeOnlyDesignChange(n.currentDesign, p.currentDesign)) return
     _applyRegionAtomisticOverlays(n.currentDesign)
     _applyRegionSurfaceOverlay(n.currentDesign, geoChanged)
+  })
+
+  // View volumes are spatial (derived from live rendered positions), so their
+  // overlay membership arrives independently of the persisted design object.
+  window.addEventListener('nadoc:view-volume-layers', event => {
+    _viewVolumeLayers = event.detail?.layers ?? []
+    const design = store.getState().currentDesign
+    _applyRegionAtomisticOverlays(design)
+    _applyRegionSurfaceOverlay(design)
   })
 
   // Selection change → atomistic highlight + surface strand recolor (no recompute).

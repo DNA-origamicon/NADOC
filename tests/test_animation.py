@@ -462,12 +462,16 @@ def test_keyframe_trajectory_resolution_roundtrip():
             "is_trajectory": True,
             "trajectory_engine": "oxdna",
             "trajectory_scope": "job",
+            "trajectory_show_ions": True,
+            "trajectory_show_box": True,
         },
     )
     assert k.status_code == 200, k.text
     anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
     kf = anim["keyframes"][-1]
     assert kf["trajectory_scope"] == "job"
+    assert kf["trajectory_show_ions"] is True
+    assert kf["trajectory_show_box"] is True
     assert kf["trajectory_stride"] is None
 
     # Switching the same keyframe to a NAMD job swaps which field carries the resolution.

@@ -6,7 +6,15 @@ originSessionId: 1de548ef-f79d-4998-ba75-26358c25d4a2
 ---
 Forced ligation feature on branch `feature/forced-ligation` (created 2026-04-11). Merged to master 2026-04-12.
 
-**What:** Pencil tool mode — click a 3' end, drag arc to any 5' end, release to ligate. Purple dashed arc during drag, red anchor dot on 3' end, green highlight on valid 5' targets.
+**What:** Pencil tool mode — click a 3' end, then click a 5' end to ligate. Purple dashed preview arc, red anchor dot on 3' end, green highlight on valid 5' targets.
+
+**Selection echo fix (2026-09-06):** 3D design reconciliation rebuilds the canonical selection object. Cross-tab sync now compares the selected strand-ID sets before broadcasting, so an unchanged prior selection does not return to the cadnano editor and highlight the merged strand after ligation. Reproduced with the real pencil gesture on an in-memory import of `workspace/Hinge_test.nadoc`; regression lives in `frontend/e2e/cadnano_forced_ligation_selection.spec.js` and `frontend/src/app/cross_tab_sync.test.js`.
+
+**Gesture fixture correction:** The Hinge regression chooses endpoints using the editor's hit-test and excludes higher-priority crossover sprites/arcs when selecting a domain. Raw domain coordinates alone can hit a different strand's crossing arc; a midpoint between a multi-domain strand's ends is not a reliable body click. Verified forced ligation, cleared selection, and successful saves through undo/redo with these checks.
+
+**Duplicate autosave conflict (2026-09-06):** Revision materialization compared a winning save with the old embedded loadout snapshot, so identical overlapping saves after a topology edit could return `409 branch_diverged`. Active editable branches now also compare the live content; a commit-time race adopts the winning revision only when its snapshot hash matches exactly. Different edits still conflict. The Hinge Playwright regression now saves a private project/file and checks the persisted ligation, with failure-safe cleanup of its revision directory.
+
+**Undo/history autosave follow-up (2026-09-06):** Duplicate-save handling alone did not resolve old branch heads restored from undo/history snapshots. Workspace saves now use heads already observed by the same document session (including its undo/redo history); unknown heads still conflict. Successful save acknowledgements preserve edits made during disk I/O. Session recovery stores these persistence cursors separately in `workspace_heads.json`, so automatic backend reload does not lose them. Regression covers ligation → save → undo → save → redo → save, competing external edits, in-flight edits, and restart recovery. `start.sh` now enables source-only reload by default, matching `just dev`; opt out with `NADOC_RELOAD=0`.
 
 **Why:** Users need to connect strand ends that are not at canonical crossover positions (not in the HC/SQ lookup tables). This is a manual override for edge cases in design.
 

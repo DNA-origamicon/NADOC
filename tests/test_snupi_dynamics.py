@@ -127,6 +127,33 @@ def test_trajectory_rmsf_removes_rigid_body_motion():
     assert np.all(rmsf < 1e-6)
 
 
+@pytest.mark.parametrize("collinear", [False, True])
+def test_linear_rmsf_removes_infinitesimal_rigid_motion_and_preserves_strain(collinear):
+    rng = np.random.default_rng(14)
+    ref = rng.normal(size=(12, 3))
+    if collinear:
+        ref[:, :2] = 0
+    ref -= ref.mean(axis=0)
+    dilation = rng.normal(scale=0.02, size=100)
+    internal = dilation[:, None, None] * ref
+    rigid = np.cross(rng.normal(size=(100, 1, 3)), ref)
+    rigid += rng.normal(size=(100, 1, 3))
+    frames = ref + internal + rigid
+    saved = frames.copy()
+
+    # Uniform dilation is orthogonal to rigid motion. Its variance is known
+    # analytically, including for a straight helix with only five rigid modes.
+    expected = dilation.std() * np.linalg.norm(ref, axis=1)
+    actual = dyn.trajectory_rmsf(frames, ref, linearized=True)
+    np.testing.assert_allclose(actual, expected, atol=1e-12)
+    np.testing.assert_array_equal(frames, saved)
+    np.testing.assert_allclose(
+        dyn.trajectory_rmsf(ref + rigid, ref, linearized=True), 0, atol=1e-12
+    )
+    # A finite-rotation fit is not an equivalent operation on linear FEM data.
+    assert dyn.trajectory_rmsf(ref + rigid, ref).max() > 0.1
+
+
 # ── End-to-end gate: trajectory RMSF converges to NMA RMSF on a real bundle ──────
 
 

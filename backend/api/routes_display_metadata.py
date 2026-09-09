@@ -45,6 +45,7 @@ from backend.core.models import (
     Design,
     PlateLayout,
     RepresentationOverride,
+    ViewVolume,
     StapleGroup,
     TubeAssignment,
     VisibilityState,
@@ -79,8 +80,22 @@ class RepresentationOverridesSaveRequest(BaseModel):
     overrides: List[RepresentationOverride]
 
 
+class ViewVolumesSaveRequest(BaseModel):
+    volumes: List[ViewVolume]
+
+
 class StapleGroupsSaveRequest(BaseModel):
     groups: List[StapleGroup]
+
+
+@router.get("/design/view-volumes", status_code=200)
+def get_view_volumes() -> dict:
+    """Return only persisted view volumes for fast UI/test verification."""
+    design = design_state.get_or_404()
+    return {
+        "view_volumes": [volume.model_dump(mode="json") for volume in design.view_volumes],
+        "revision": design_state.revision(),
+    }
 
 
 @router.put("/design/staple-groups", status_code=200)
@@ -152,13 +167,19 @@ def save_representation_overrides(body: RepresentationOverridesSaveRequest) -> d
     """
     design = design_state.get_or_404()
     valid_helices = {h.id for h in design.helices}
+    valid_proteins = {a.id for a in design.protein_attachments}
     for ov in body.overrides:
-        if not ov.segments:
-            raise HTTPException(422, detail=f"Override {ov.id!r} covers no segments.")
+        if not ov.segments and not ov.protein_attachment_ids:
+            raise HTTPException(422, detail=f"Override {ov.id!r} covers no elements.")
         missing_h = {seg.helix_id for seg in ov.segments} - valid_helices
         if missing_h:
             raise HTTPException(
                 404, detail=f"Helix id(s) not found: {sorted(missing_h)}"
+            )
+        missing_p = set(ov.protein_attachment_ids) - valid_proteins
+        if missing_p:
+            raise HTTPException(
+                404, detail=f"Protein attachment id(s) not found: {sorted(missing_p)}"
             )
 
     def _apply(d: Design) -> None:
@@ -178,6 +199,24 @@ def clear_representation_overrides() -> dict:
 
     design, report = design_state.mutate_and_validate(_apply)
     return _design_response(design, report)
+
+
+@router.put("/design/view-volumes", status_code=200)
+def save_view_volumes(body: ViewVolumesSaveRequest) -> dict:
+    """Replace spatial view-volume metadata without validating/returning a huge design.
+
+    The request body has already validated every ViewVolume. Revalidating and then
+    serializing the complete Design made a pointer-up on VoltronCoreArm transfer an
+    82 MB response. This display-only assignment cannot invalidate topology.
+    """
+    def _apply(design: Design) -> None:
+        design.view_volumes = [volume.model_copy(deep=True) for volume in body.volumes]
+
+    design, revision = design_state.mutate_display_metadata(_apply)
+    return {
+        "view_volumes": [volume.model_dump(mode="json") for volume in design.view_volumes],
+        "revision": revision,
+    }
 
 
 @router.put("/design/visibility", status_code=200)

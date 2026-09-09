@@ -702,7 +702,7 @@ export function initTranslateRotateTool(deps) {
     document.getElementById('mode-indicator').textContent =
       `MOVE/ROTATE (${groupIds.length} clusters) — Tab: move/rotate · Esc: cancel`
     _moveRotatePanel.setAssemblyCtx(null)
-    _moveRotatePanel.setSessionMode?.('cluster')
+    _moveRotatePanel.setSessionMode?.('cluster-group')
     if (_mrPivotSel) _mrPivotSel.disabled = true       // pivot is the combined centroid
     _mrRefreshCurrentSelection?.()
     _mrSetPivotOptions([])
@@ -827,17 +827,23 @@ export function initTranslateRotateTool(deps) {
 
   _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)
   document.getElementById('mr-apply-btn')?.addEventListener('click', () => {
-    if (proteinGizmo?.isAttached()) proteinGizmo.commit()
+    const attachmentController = _moveRotatePanel.getProteinController?.()
+    if (attachmentController?.isAttached?.()) attachmentController.commit()
+    else if (proteinGizmo?.isAttached()) proteinGizmo.commit()
     else if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.confirm()
     else _confirmTranslateRotateTool()
   })
   document.getElementById('mr-cancel-btn')?.addEventListener('click', () => {
-    if (proteinGizmo?.isAttached()) proteinGizmo.cancel()
+    const attachmentController = _moveRotatePanel.getProteinController?.()
+    if (attachmentController?.isAttached?.()) attachmentController.cancel()
+    else if (proteinGizmo?.isAttached()) proteinGizmo.cancel()
     else if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.cancel()
     else _cancelTranslateRotateTool()
   })
   document.getElementById('mr-reset-btn')?.addEventListener('click', () => {
-    if (proteinGizmo?.isAttached()) proteinGizmo.reset()
+    const attachmentController = _moveRotatePanel.getProteinController?.()
+    if (attachmentController?.isAttached?.()) attachmentController.reset()
+    else if (proteinGizmo?.isAttached()) proteinGizmo.reset()
     else if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.reset()
     else _resetActiveClusterToSaved()
   })

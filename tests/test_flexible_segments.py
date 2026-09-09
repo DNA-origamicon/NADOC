@@ -420,6 +420,10 @@ def test_unconnected_mark_leaves_bead_rigid():
         },
     )
     assert r.status_code == 200, r.text  # accepted (unpaired) …
+    assert r.json()["partial_geometry"] is True
+    assert r.json()["changed_helix_ids"] == ["h_a"]
+    assert "flex_mutate;dur=" in r.headers["server-timing"]
+    assert "flex_geometry;dur=" in r.headers["server-timing"]
     assert design_state.get_or_404().flexible_segment_marks  # … and the mark persists
     assert design_state.get_or_404().flexible_connections == []  # but no connection
     nucs = r.json().get("nucleotides") or []

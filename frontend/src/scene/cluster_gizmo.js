@@ -221,6 +221,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   let _startQuat      = null   // THREE.Quaternion — dummy quaternion at drag-start
   let _isDragging     = false
   let _mode           = 'translate'   // 'translate' | 'rotate'
+  let _space          = 'world'       // 'world' | 'local' (persists across attachments)
 
   // ── Group (multi-cluster) state ──────────────────────────────────────────────
   // When several clusters are selected, the tool drives them as ONE rigid body:
@@ -840,7 +841,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _tc = new TransformControls(camera, canvas)
     _tc.attach(_dummy)
     _tc.setMode('translate')
-    _tc.setSpace('world')
+    _tc.setSpace(_space)
     _tc.setRotationSnap(_rotationSnapDeg == null ? null : THREE.MathUtils.degToRad(_rotationSnapDeg))
     scene.add(_tc.getHelper())
     _tc.addEventListener('dragging-changed', _onGroupDraggingChanged)
@@ -874,7 +875,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _tc = new TransformControls(camera, canvas)
     _tc.attach(_dummy)
     _tc.setMode('translate')
-    _tc.setSpace('world')
+    _tc.setSpace(_space)
     // Re-apply any rotate-drag snap (TC is recreated on every attach).
     _tc.setRotationSnap(_rotationSnapDeg == null ? null : THREE.MathUtils.degToRad(_rotationSnapDeg))
     // In Three.js r158+, TransformControls is not an Object3D.
@@ -1585,6 +1586,12 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       _rotationSnapDeg = deg
       _tc?.setRotationSnap(deg == null ? null : THREE.MathUtils.degToRad(deg))
     },
+    /** Orient free translation arrows and rotation rings in the scene or object frame. */
+    setSpace(space) {
+      _space = space === 'local' ? 'local' : 'world'
+      _tc?.setSpace(_space)
+    },
+    getSpace: () => _space,
     relaxClusterHeadless,
     getAllPendingTransforms,
     setPendingTransform,

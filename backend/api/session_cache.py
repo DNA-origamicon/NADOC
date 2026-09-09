@@ -52,6 +52,7 @@ _MAX_DOCS = 50
 
 _DESIGN_FILE = "active_design.nadoc"
 _ASSEMBLY_FILE = "active_assembly.nass"
+_WORKSPACE_HEADS_FILE = "workspace_heads.json"
 _REGISTRY_FILE = "registry.json"
 
 _session_dir: Path | None = None
@@ -204,6 +205,11 @@ def restore() -> int:
                 design_state.restore_doc_design(
                     doc_id, Design.from_json(d_path.read_text(encoding="utf-8"))
                 )
+                heads_path = sub / _WORKSPACE_HEADS_FILE
+                if heads_path.is_file():
+                    design_state.restore_workspace_heads(
+                        doc_id, json.loads(heads_path.read_text(encoding="utf-8"))
+                    )
                 restored += 1
             except Exception:
                 traceback.print_exc()
@@ -284,13 +290,17 @@ def _write_doc(doc_id: str) -> None:
     d.mkdir(parents=True, exist_ok=True)
     _write_or_unlink(d / _DESIGN_FILE, design.to_json() if design is not None else None)
     _write_or_unlink(
+        d / _WORKSPACE_HEADS_FILE,
+        json.dumps(design_state.workspace_heads_for_doc(doc_id)) if design is not None else None,
+    )
+    _write_or_unlink(
         d / _ASSEMBLY_FILE, assembly.to_json() if assembly is not None else None
     )
 
 
 def _remove_doc_dir(doc_id: str) -> None:
     d = _doc_dir(doc_id)
-    for name in (_DESIGN_FILE, _ASSEMBLY_FILE):
+    for name in (_DESIGN_FILE, _ASSEMBLY_FILE, _WORKSPACE_HEADS_FILE):
         (d / name).unlink(missing_ok=True)
     try:
         if d.is_dir() and not any(d.iterdir()):

@@ -43,6 +43,8 @@ import {
   createConnectionVersion, createAndApplyConnectionVersion,
   patchConnectionVersion, deleteConnectionVersion,
   applyConnectionVersion, patchDuplex, relaxDuplex,
+  createNanoparticleConnectionVersion, patchNanoparticleConnectionVersion,
+  deleteNanoparticleConnectionVersion, relaxNanoparticleConnectionVersions,
 } from '../api/client.js'
 import { showToast } from './toast.js'
 import { showConfirm } from './primitives/confirm.js'
@@ -51,7 +53,7 @@ import {
   assembleOverhangSequence, overhangDomainLength, pairingSegments,
   overhangHasDuplex, overhangDuplexSegments, capSequenceToLength, overhangRcOfPartner,
 } from '../scene/design_queries.js'
-import { selectedOverhangIds } from '../scene/selection_model.js'
+import { selectedOverhangIds, selectedStrandIds } from '../scene/selection_model.js'
 
 const _STORAGE = 'nadoc.overhangConnections.connectionType'
 
@@ -122,6 +124,12 @@ let _seqPrevA = null, _seqPrevB = null   // colored preview lines under each seq
 let _driverBox = null                    // driver toggle (Q4), shown when a duplex joins the pair
 let _pairWarnEl = null
 let _collapsed = true   // default collapsed, matching sibling sidebar sections
+let _mode = 'overhang'
+let _normalControls = null
+let _modeSelect = null, _npControls = null, _npSelect = null, _npStrandSelect = null
+let _npOverhangSelect = null, _npAddBtn = null, _npApplyBtn = null, _npRelaxBtn = null
+let _npList = null, _npSelectedVersion = null
+const _NP_DIRECT_VARIANTS = new Set(['end-to-root', 'root-to-root'])
 
 export function initOverhangConnectionsPanel({
   store, scene = null, designRenderer = null, createGlowLayer = null,
@@ -159,6 +167,8 @@ export function initOverhangConnectionsPanel({
   _seqGenB = document.getElementById('oconn-seq-gen-b')
   _pairWarnEl = document.getElementById('oconn-pair-warning')
   if (!_selectA || !_selectB || !_box || !_popover) return _api  // section absent
+
+  _buildNanoparticleMode()
 
   try {
     const saved = localStorage.getItem(_STORAGE)
@@ -232,6 +242,7 @@ export function initOverhangConnectionsPanel({
   _store.subscribe((s, p) => {
     if (s.selection !== p.selection) {
       _onSelectionChange(s)
+      _onNanoparticleSelectionChange(s)
     }
   })
 
@@ -253,7 +264,7 @@ function _overhangs() {
   const design = _design()
   if (!design) return []
   const liveStrandIds = new Set((design.strands ?? []).map(s => s.id))
-  return (design.overhangs ?? []).filter(o => !o.strand_id || liveStrandIds.has(o.strand_id))
+  return (design.overhangs ?? []).filter(o => !o.auxiliary_endpoint && (!o.strand_id || liveStrandIds.has(o.strand_id)))
 }
 
 function _displayName(ovhg) {
@@ -263,6 +274,11 @@ function _displayName(ovhg) {
 
 /** Full rebuild: repopulate both dropdowns + re-render the icon. */
 function _refresh() {
+  if (_mode === 'nanoparticle') {
+    _refreshNanoparticleMode()
+    _render()
+    return
+  }
   const ovhgs = _overhangs()
   const ids = new Set(ovhgs.map(o => o.id))
   if (_selA && !ids.has(_selA)) { _selA = null; _slotTA = 0 }
@@ -300,10 +316,11 @@ function _populate(select, ovhgs, selectedId) {
 /** Re-render the button-box icon from the current type + selection polarities. */
 function _render() {
   if (!_box) return
+  if (_mode === 'nanoparticle') { _renderNanoparticleMode(); return }
   const L = endOf(_selA)
   const R = endOf(_selB)
-  const hasA = _selA != null
-  const hasB = _selB != null
+  const hasA = _mode === 'nanoparticle' ? Boolean(_npStrandSelect?.value) : _selA != null
+  const hasB = _mode === 'nanoparticle' ? Boolean(_npOverhangSelect?.value) : _selB != null
   const forbidden = hasA && hasB && ctIsForbidden(_typeId, L, R)
   _box.innerHTML = `<div class="ct-tile">${ctTileSvg(_typeId, L, R, forbidden, hasA, hasB)}</div>`
   const variant = CT_VARIANTS.find(v => v.id === _typeId)
@@ -313,6 +330,193 @@ function _render() {
   _renderList()
   _renderDetails()
   _updateGlow()
+}
+
+function _buildNanoparticleMode() {
+  if (!_body || _modeSelect) return
+  _normalControls = _body.firstElementChild
+  // Unit-test mounts historically place the contracted elements beside the
+  // body rather than inside it. Supply a harmless wrapper in that environment.
+  if (!_normalControls) { _normalControls = document.createElement('div'); _body.appendChild(_normalControls) }
+  const switcher = document.createElement('select')
+  switcher.id = 'oconn-endpoint-mode'
+  switcher.innerHTML = '<option value="overhang">Overhang ↔ Overhang</option><option value="nanoparticle">Nanoparticle ↔ Overhang</option>'
+  switcher.style.cssText = 'width:100%;box-sizing:border-box;margin-bottom:8px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;padding:5px'
+  _body.insertBefore(switcher, _normalControls)
+  _modeSelect = switcher
+
+  const panel = document.createElement('div')
+  panel.id = 'oconn-nanoparticle-controls'
+  panel.hidden = true
+  panel.innerHTML = `
+    <div style="display:flex;gap:6px;width:100%"><button id="oconn-np-add" disabled>Add version</button><button id="oconn-np-apply" disabled>Apply</button><button id="oconn-np-relax" disabled>Relax</button></div>
+    <div style="font-size:11px;color:#8b949e;margin-top:9px">Nanoparticle connection versions</div>
+    <div id="oconn-np-list" style="height:160px;overflow:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117;padding:4px;margin-top:3px"></div>`
+  _body.insertBefore(panel, _list?.parentElement === _body ? _list : _normalControls.nextSibling)
+  _npControls = panel
+  _npSelect = null; _npStrandSelect = _selectA
+  _npOverhangSelect = _selectB; _npAddBtn = panel.querySelector('#oconn-np-add')
+  _npApplyBtn = panel.querySelector('#oconn-np-apply'); _npRelaxBtn = panel.querySelector('#oconn-np-relax'); _npList = panel.querySelector('#oconn-np-list')
+  switcher.onchange = () => {
+    _mode = switcher.value
+    for (const element of [_list?.previousElementSibling, _list, _detailsEl]) if (element) element.hidden = _mode === 'nanoparticle'
+    panel.hidden = _mode !== 'nanoparticle'
+    const labelA = document.querySelector('label[for="oconn-select-a"]')
+    const labelB = document.querySelector('label[for="oconn-select-b"]')
+    if (labelA) labelA.textContent = _mode === 'nanoparticle' ? 'Nanoparticle ssDNA handle' : 'Overhang A'
+    if (labelB) labelB.textContent = _mode === 'nanoparticle' ? 'Target Overhang' : 'Overhang B'
+    for (const element of [_lengthRow, _genBtn, _applyBtn, _secondaryBtn, _pairWarnEl]) {
+      if (element) element.hidden = _mode === 'nanoparticle'
+    }
+    for (const input of [_seqInputA, _seqInputB]) if (input) input.readOnly = _mode === 'nanoparticle'
+    for (const button of [_seqGenA, _seqGenB]) if (button) button.hidden = _mode === 'nanoparticle'
+    if (_mode === 'nanoparticle' && !_NP_DIRECT_VARIANTS.has(_typeId)) _typeId = 'end-to-root'
+    _refresh()
+  }
+  _npStrandSelect.onchange = () => { _npSelectedVersion = null; _renderNanoparticleMode() }
+  _npOverhangSelect.onchange = () => { _npSelectedVersion = null; _renderNanoparticleMode() }
+  _npAddBtn.onclick = async () => {
+    const nanoparticleId = _selectedNpId(), strandId = _npStrandSelect.value, overhangId = _npOverhangSelect.value
+    if (!nanoparticleId || !strandId || !overhangId) return
+    const before = new Set((_design()?.nanoparticle_connection_versions ?? []).map(v => v.id))
+    await createNanoparticleConnectionVersion(nanoparticleId, { strand_id: strandId, overhang_id: overhangId, connection_type: 'direct', direct_variant: _typeId })
+    _npSelectedVersion = (_design()?.nanoparticle_connection_versions ?? []).find(v => !before.has(v.id))?.id ?? null
+    _refreshNanoparticleMode(); _renderNanoparticleMode()
+  }
+  _npApplyBtn.onclick = async () => {
+    const version = _npVersion()
+    if (!version) return
+    await patchNanoparticleConnectionVersion(version.nanoparticle_id, version.id, { applied: !version.applied })
+  }
+  _npRelaxBtn.onclick = async () => {
+    if (_selectedNpId()) await relaxNanoparticleConnectionVersions(_selectedNpId())
+  }
+}
+
+function _npVersion() {
+  return (_design()?.nanoparticle_connection_versions ?? []).find(v => v.id === _npSelectedVersion) ?? null
+}
+
+function _selectedNpId() {
+  const strandId = _npStrandSelect?.value
+  for (const conjugation of (_design()?.nanoparticle_conjugations ?? [])) {
+    if ((conjugation.surface_strands ?? []).some(record => record.strand_id === strandId)) return conjugation.nanoparticle_id
+  }
+  return null
+}
+
+function _oppositeEnd(end) {
+  return end === '5p' ? '3p' : end === '3p' ? '5p' : null
+}
+
+function _physicalOverhangFreeEnd(overhangId) {
+  const tagged = endOf(overhangId)
+  if (tagged) return tagged
+  const design = _design()
+  for (const strand of (design?.strands ?? [])) {
+    const index = (strand.domains ?? []).findIndex(domain => domain.overhang_id === overhangId)
+    if (index < 0 || strand.domains.length < 2) continue
+    if (index === 0) return '5p'
+    if (index === strand.domains.length - 1) return '3p'
+  }
+  return null
+}
+
+function _npPolarityPair() {
+  const design = _design() ?? {}
+  const conjugation = (design.nanoparticle_conjugations ?? []).find(c =>
+    (c.surface_strands ?? []).some(record => record.strand_id === _npStrandSelect?.value))
+  return [_oppositeEnd(conjugation?.attach_end), _physicalOverhangFreeEnd(_npOverhangSelect?.value)]
+}
+
+function _npVariantForbidden(type = _typeId) {
+  const [L, R] = _npPolarityPair()
+  return Boolean(_npStrandSelect?.value && _npOverhangSelect?.value && ctIsForbidden(type, L, R))
+}
+
+function _setOptions(select, rows, value, blank) {
+  if (!select) return
+  select.innerHTML = `<option value="">${blank}</option>` + rows.map(([id, label]) =>
+    `<option value="${_esc(id)}">${_esc(label)}</option>`).join('')
+  select.value = rows.some(([id]) => id === value) ? value : ''
+}
+
+function _refreshNanoparticleMode() {
+  if (!_npStrandSelect) return
+  const design = _design() ?? {}
+  const particleNames = new Map((design.nanoparticles ?? []).map((p, i) => [p.id, `Gold nanosphere ${i + 1}`]))
+  const records = (design.nanoparticle_conjugations ?? []).flatMap(c =>
+    (c.surface_strands ?? []).map(record => ({ ...record, nanoparticle_id: c.nanoparticle_id })))
+  const names = new Map((design.strands ?? []).map(s => [s.id, s.name || s.id]))
+  const oldStrand = _npStrandSelect.value
+  _setOptions(_npStrandSelect, records.map(r => [r.strand_id, `${particleNames.get(r.nanoparticle_id)} · ${names.get(r.strand_id)}${r.bound_overhang_id ? ' · applied' : ' · free'}`]), oldStrand, '— select nanoparticle handle —')
+  if (!_npStrandSelect.value && records.length) _npStrandSelect.value = records[0].strand_id
+  const oldOh = _npOverhangSelect.value
+  _setOptions(_npOverhangSelect, _overhangs().map(o => [o.id, _displayName(o)]), oldOh, '— select overhang —')
+}
+
+function _renderNanoparticleMode() {
+  if (!_npControls) return
+  const design = _design() ?? {}
+  const conjugation = (design.nanoparticle_conjugations ?? []).find(c =>
+    (c.surface_strands ?? []).some(record => record.strand_id === _npStrandSelect.value))
+  const [L, R] = _npPolarityPair()
+  const hasA = Boolean(_npStrandSelect.value), hasB = Boolean(_npOverhangSelect.value)
+  const forbidden = _npVariantForbidden()
+  _box.innerHTML = `<div class="ct-tile">${ctTileSvg(_typeId, L, R, forbidden, hasA, hasB)}</div>`
+  _box.title = ctForbiddenReason(_typeId, L, R) ??
+    (CT_VARIANTS.find(v => v.id === _typeId)?.label ?? 'Direct')
+  _refreshPopoverTiles()
+  const handle = (design.strands ?? []).find(strand => strand.id === _npStrandSelect.value)
+  const overhang = _overhangs().find(item => item.id === _npOverhangSelect.value)
+  if (_seqRowA) _seqRowA.hidden = !handle
+  if (_seqRowB) _seqRowB.hidden = !overhang
+  if (_seqInputA && handle && document.activeElement !== _seqInputA) {
+    _seqInputA.value = handle.sequence ?? ''
+    _seqInputA.placeholder = handle.sequence ? '' : 'sequence…'
+  }
+  if (_seqInputB && overhang && document.activeElement !== _seqInputB) {
+    _seqInputB.value = assembleOverhangSequence(
+      overhang, overhangDomainLength(design, overhang.id) ?? undefined,
+    )
+    _seqInputB.placeholder = overhang.sequence ? '' : 'sequence…'
+  }
+  const npid = _selectedNpId()
+  const versions = (_design()?.nanoparticle_connection_versions ?? []).filter(v => v.nanoparticle_id === npid)
+  if (_npSelectedVersion && !versions.some(v => v.id === _npSelectedVersion)) _npSelectedVersion = null
+  _npAddBtn.disabled = !_npStrandSelect.value || !_npOverhangSelect.value || forbidden
+  _npAddBtn.title = forbidden ? (ctForbiddenReason(_typeId, L, R) ?? 'Forbidden DNA directionality') : ''
+  const selected = _npVersion()
+  _npApplyBtn.disabled = !selected; _npApplyBtn.textContent = selected?.applied ? 'Unapply' : 'Apply'
+  _npRelaxBtn.disabled = !versions.some(v => v.applied)
+  const strandNames = new Map((_design()?.strands ?? []).map(s => [s.id, s.name || s.id]))
+  const ohNames = new Map(_overhangs().map(o => [o.id, _displayName(o)]))
+  _npList.innerHTML = versions.length ? '' : '<div style="padding:10px;color:#6e7681">No versions yet.</div>'
+  for (const version of versions) {
+    const row = document.createElement('div'); row.className = `oconn-version-row${version.id === _npSelectedVersion ? ' is-selected' : ''}${version.applied ? ' is-applied' : ''}`
+    const residual = version.relaxed && version.residual_nm != null ? ` · residual ${version.residual_nm.toFixed(2)} nm` : ''
+    row.innerHTML = `<span style="flex:1"><b>${_esc(version.name)}</b> · ${_esc(strandNames.get(version.strand_id) || version.strand_id)} → ${_esc(ohNames.get(version.overhang_id) || version.overhang_id)}${version.applied ? ' <span class="oconn-applied-badge">Applied</span>' : ' · Unapplied'}${residual}</span><button class="oconn-row-del">×</button>`
+    row.onclick = event => { if (event.target.closest('button')) return; _npSelectedVersion = version.id; _npStrandSelect.value = version.strand_id; _npOverhangSelect.value = version.overhang_id; _renderNanoparticleMode() }
+    row.querySelector('button').onclick = async () => { await deleteNanoparticleConnectionVersion(version.nanoparticle_id, version.id) }
+    _npList.appendChild(row)
+  }
+  if (_glowA && _glowB) {
+    const entries = _designRenderer?.getBackboneEntries?.() ?? []
+    _glowA.setEntries(_npStrandSelect.value ? entries.filter(e => e?.nuc?.strand_id === _npStrandSelect.value) : [])
+    _glowB.setEntries(_npOverhangSelect.value ? entries.filter(e => e?.nuc?.overhang_id === _npOverhangSelect.value) : [])
+  }
+}
+
+function _onNanoparticleSelectionChange(state) {
+  if (_mode !== 'nanoparticle') return
+  const selected = selectedStrandIds(state)
+  const available = new Set([...(_npStrandSelect?.options ?? [])].map(o => o.value))
+  const strand = selected.find(id => available.has(id))
+  if (strand) { _npStrandSelect.value = strand; _renderNanoparticleMode() }
+  const overhang = selectedOverhangIds(state).at(-1)
+  if (overhang && [...(_npOverhangSelect?.options ?? [])].some(o => o.value === overhang)) {
+    _npOverhangSelect.value = overhang; _renderNanoparticleMode()
+  }
 }
 
 /** Position the cyan (A) / magenta (B) glow over the beads of the overhang in
@@ -1526,6 +1730,8 @@ function _buildPopover() {
     opt.title = v.label
     opt.addEventListener('click', (ev) => {
       ev.stopPropagation()
+      if (_mode === 'nanoparticle' && !_NP_DIRECT_VARIANTS.has(v.id)) return
+      if (_mode === 'nanoparticle' && _npVariantForbidden(v.id)) return
       _typeId = v.id
       try { localStorage.setItem(_STORAGE, v.id) } catch { /* ignore */ }
       _render()
@@ -1538,15 +1744,21 @@ function _buildPopover() {
 
 function _refreshPopoverTiles() {
   if (!_popover) return
-  const L = endOf(_selA)
-  const R = endOf(_selB)
-  const hasA = _selA != null
-  const hasB = _selB != null
+  const [L, R] = _mode === 'nanoparticle'
+    ? _npPolarityPair()
+    : [endOf(_selA), endOf(_selB)]
+  const hasA = _mode === 'nanoparticle' ? Boolean(_npStrandSelect?.value) : _selA != null
+  const hasB = _mode === 'nanoparticle' ? Boolean(_npOverhangSelect?.value) : _selB != null
   for (const opt of _popover.querySelectorAll('.ct-option')) {
     const id = opt.dataset.variant
+    opt.hidden = _mode === 'nanoparticle' && !_NP_DIRECT_VARIANTS.has(id)
     const forbidden = hasA && hasB && ctIsForbidden(id, L, R)
     opt.innerHTML = `<div class="ct-tile">${ctTileSvg(id, L, R, forbidden, hasA, hasB)}</div>`
     opt.classList.toggle('is-selected', id === _typeId)
+    opt.classList.toggle('is-forbidden', forbidden)
+    opt.setAttribute('aria-disabled', forbidden ? 'true' : 'false')
+    opt.title = ctForbiddenReason(id, L, R) ??
+      (CT_VARIANTS.find(variant => variant.id === id)?.label ?? '')
   }
 }
 
@@ -1620,7 +1832,13 @@ function _openPopover() {
   const r = _box.getBoundingClientRect()
   _popover.style.position = 'fixed'
   _popover.style.left = '0px'   // reset before measuring width
+  // OH↔OH retains its established four-column picker. NP-handle↔OH exposes
+  // only the two direct variants, so its popover should fit those two tiles.
+  _popover.style.gridTemplateColumns = _mode === 'nanoparticle'
+    ? 'repeat(2, 188px)'
+    : 'repeat(4, 188px)'
   _popover.hidden = false       // must be visible to measure offsetWidth
+  document.getElementById('right-panel')?.classList.add('connection-popover-open')
   const pw = _popover.offsetWidth || 0
   const vw = window.innerWidth || 0
   let left = r.right - pw                 // right edge of popover ↔ right edge of button
@@ -1633,6 +1851,7 @@ function _openPopover() {
 
 function _closePopover() {
   _popover.hidden = true
+  document.getElementById('right-panel')?.classList.remove('connection-popover-open')
   _box.setAttribute('aria-expanded', 'false')
 }
 

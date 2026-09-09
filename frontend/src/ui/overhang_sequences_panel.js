@@ -62,7 +62,7 @@ export function connectionPairForOverhang(design, ovhgId) {
  */
 export function liveOverhangs(design) {
   const liveStrandIds = new Set((design?.strands ?? []).map(s => s.id))
-  return (design?.overhangs ?? [])
+  return (design?.overhangs ?? []).filter(o => !o.auxiliary_endpoint)
     .filter(o => !o.strand_id || liveStrandIds.has(o.strand_id))
 }
 

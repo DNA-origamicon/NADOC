@@ -156,7 +156,10 @@ IDs, and every visible helix reference uses its display label rather than its in
 lattice ID. Single-base Properties show the base letter, labeled location, and ordinal
 within the strand; with the spreadsheet expanded, base selection scrolls to the owning
 strand and marks the selected sequence letters. Multiple bases are grouped into
-helix-aware labels such as `Staple - 1[34,35]`. See [Selection and right sidebar](docs/selection_and_sidebar.md)
+helix-aware labels such as `Staple - 1[34,35]`. Press **D** for the persistent
+**Dimensions** card: parts record distances between two selected bases, while
+assemblies use two movable endpoint gizmos; recorded lines can be independently
+shown, hidden, or deleted. See [Selection and right sidebar](docs/selection_and_sidebar.md)
 for interaction rules and the developer contract.
 
 Visualization includes a two-, three-, or four-panel Multi-view for comparing
@@ -165,6 +168,12 @@ navigation, plus a mutually exclusive Multi-overlay mode for compositing up to f
 representations with independent opacity and dimension-scaled separation.
 Both comparison modes can also preview the current design in mrDNA's unsimulated
 coarse (five base pairs per bead) and fine (one site per base pair) abstractions.
+Spatial View Volumes add independently persisted box or honeycomb-friendly hexagonal
+regions with per-volume representation, opacity, outline visibility, and clipped
+mid-domain cylinder boundaries. **View Actions → Section view** adds a movable
+cutting plane with closed, hatched solid intersections, numeric position/rotation
+controls, and a reset to the part centroid at 180°, 0°, 0° rotation. Toggle it off
+to restore the representation.
 
 ### Cluster system & animation
 Helices grouped into named clusters; per-cluster deformation ops; feature log
@@ -179,6 +188,19 @@ the bound overhang moves in its domain basis, and Apply commits the exact previe
 as an undoable Feature Log entry. See
 [Protein conjugation and constrained movement](docs/protein_conjugate_movement.md)
 for kinematics, transaction semantics, performance targets, and regression tests.
+
+### Gold nanoparticle conjugation
+
+**Tools → Nanoparticle → Gold nanosphere** creates a persisted, selectable gold
+nanoparticle with an editable diameter, metallic Photo Mode material, Feature Log
+history, and the same move/rotate interaction used for proteins. Its conjugation
+manager creates first-class, uniformly named and colored thiolated ssDNA handles.
+The Overhang Connections sidebar can create multiple applied or unapplied
+handle–overhang connection versions and collectively relax an anchored particle.
+Only reverse-complementary direct geometries are permitted; molecularly invalid
+root/free-end combinations are visibly disabled and rejected by the API. See
+[Gold nanoparticles and thiol conjugation](docs/nanoparticle_conjugation.md) for
+the authoring workflow, molecular/export model, automation API, and validation.
 
 ### Loop/skip topological deformation
 Implements the Dietz, Douglas & Shih (Science 2009) mechanism for bending and
@@ -251,8 +273,9 @@ adjustable in-workspace scale (draggable bounds, live recolor). A completed job
 feeds NAMD via **"Use as NAMD seed"**: the relaxed coordinates (reconstructed at
 the true backbone site, ~1.6 nm cross-pair) seed the all-atom run so it starts
 pre-relaxed instead of from ideal B-DNA — for seeded jobs the NAMD relaxation
-ladder is optional and production can run minimize-then-produce directly from the
-seeded structure. Crossover-extra particles are retained during this backmapping:
+protocol starts with an atomistic declash/minimization and a restrained release
+ladder; it does not jump directly from a coarse-grained seed into production.
+Crossover-extra particles are retained during this backmapping:
 the atomistic trajectory display and NAMD seed consume the same simulated
 `(__xb__, crossover_id, index)` position/orientation override. NAMD then applies only
 a global recentering, which changes the coordinate origin but not the insert's pose
@@ -278,6 +301,12 @@ flexibility (RMSF) map mirror the oxDNA display controls. Atomistic trajectory f
 negotiate a topology-stable binary stream and, for the standard DNA-first NAMD layout,
 read only the displayed DNA prefix of each DCD record. Desktop and native-VR
 play/pause/step/scrub controls share one authoritative trajectory state.
+
+Explicit-solvent displays can independently show water, ions, and the periodic
+cell. Graphene-only controls bypass the DNA mapper and render directly in the
+membrane-centred simulation frame. See
+[NAMD nanopore ion transport](docs/namd_nanopore_transport.md) for the seeded and
+graphene-only workflows, remote execution behavior, and transport analysis.
 
 ### FEM structural analysis
 Euler-Bernoulli beam model; RMSF heatmap via eigenvalue decomposition; real-time

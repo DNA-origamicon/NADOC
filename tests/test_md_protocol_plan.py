@@ -732,6 +732,17 @@ def test_the_fast_preset_stops_settled_stages_and_the_literature_one_does_not(cl
     assert "early_stop_off" in lit and "early_stop" not in lit
 
 
+def test_oxdna_seed_plan_forces_topology_safe_soft_declash(client):
+    plan = _plan(client, oxdna_job_id="completed-seed", declash=False, force_soft=False)
+    assert plan["declash"] is True
+    assert all(
+        stage["params"].get("timestep") == "1"
+        for stage in plan["stages"][1:]
+    )
+    assert plan["request"]["declash"]["provenance"] == "forced"
+    assert plan["request"]["force_soft"]["provenance"] == "forced"
+
+
 def test_declash_none_is_off_not_auto_detected(client, monkeypatch):
     """RE-AUDIT CONCLUDED (2026-08-19): a manual wizard run of 6hb_2xT left the Declash
     control untouched, expecting that to mean off. It didn't — untouched meant

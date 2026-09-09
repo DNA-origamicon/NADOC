@@ -150,7 +150,7 @@ export function solventFetchPlan({
 const _LIMIT_WHY = { ram: 'free RAM', heap: 'browser memory limit', budget: 'memory budget' }
 
 export function initMdSolventControls({
-  api, getSolventOverlay = null, getBoxOverlay = null,
+  api, getSolventOverlay = null, getBoxOverlay = null, simulationGraphene = false,
   getCurrentRepr = null, getAvailableBytes = () => null,
   // The live "Display MD" stream. Its frames arrive over the job WebSocket rather
   // than the REST route, so solvent for that view is requested with `setSolvent`
@@ -182,6 +182,7 @@ export function initMdSolventControls({
   let _enabled = false
   let _measuredWater = null     // real molecule count, once a frame has landed
   let _live = false             // driven by the WS stream rather than the REST route
+  let _keyframeOptions = false  // authored companions may exist without a DNA rep
 
   // ── settings ──────────────────────────────────────────────────────────────
   const _read = (k, d) => { try { return localStorage.getItem(k) ?? d } catch { return d } }
@@ -213,8 +214,12 @@ export function initMdSolventControls({
     const v = parseFloat(shellInput?.value ?? '')
     return Number.isFinite(v) && v > 0 ? Math.min(30, v) : 5
   }
-  const _repMode = () => solventRepMode(getCurrentRepr?.())
-  const _anyOn = () => !!(waterToggle?.checked || ionsToggle?.checked || boxToggle?.checked)
+  const _repMode = () => {
+    const normal = solventRepMode(getCurrentRepr?.())
+    return (_keyframeOptions || simulationGraphene) && normal === 'off' ? 'sphere' : normal
+  }
+  // Graphene rides the cell channel even when the optional box outline is hidden.
+  const _anyOn = () => !!(simulationGraphene || waterToggle?.checked || ionsToggle?.checked || boxToggle?.checked)
 
   function _requestSig() {
     return [_jobId, _repMode(), _scope(), _shellAng(), _stride,
@@ -229,7 +234,7 @@ export function initMdSolventControls({
   function _plan() {
     return solventFetchPlan({
       repMode: _repMode(),
-      water: !!waterToggle?.checked, ions: !!ionsToggle?.checked, box: !!boxToggle?.checked,
+      water: !!waterToggle?.checked, ions: !!ionsToggle?.checked, box: simulationGraphene || !!boxToggle?.checked,
       scope: _scope(), shellAng: _shellAng(),
       nWatersTotal: _meta?.n_waters ?? 0, nIons: _meta?.n_ions ?? 0,
       nFrames: _nFrames || 1, availableBytes: getAvailableBytes?.() ?? null,
@@ -289,7 +294,7 @@ export function initMdSolventControls({
     return {
       water: !!waterToggle?.checked,
       ions: !!ionsToggle?.checked,
-      box: !!boxToggle?.checked,
+      box: simulationGraphene || !!boxToggle?.checked,
       shellAng: _scope() === 'all' ? null : _shellAng(),
       atomistic: p.atomistic,
       maxWaters: p.maxWaters,
@@ -332,6 +337,8 @@ export function initMdSolventControls({
     if (!want.length) return
     const p = _plan()
     const sig = _requestSig()
+    const requestedFrame = i | 0
+    let retryLatest = false
     const ionsOn = !!ionsToggle?.checked
     _inflight = true
     _setStatus(`Loading solvent (${want.length} frames)…`, '#58a6ff')
@@ -340,13 +347,13 @@ export function initMdSolventControls({
         stride: _stride,
         water: !!waterToggle?.checked,
         ions: ionsOn,
-        box: !!boxToggle?.checked,
+        box: simulationGraphene || !!boxToggle?.checked,
         shellAng: _scope() === 'all' ? null : _shellAng(),
         atomistic: p.atomistic,
         maxWaters: p.maxWaters,
       })
       // A toggle/rep/shell change mid-flight makes this payload the wrong shape.
-      if (sig !== _requestSig()) return
+      if (sig !== _requestSig()) { retryLatest = true; return }
       const parsed = parseSolventBin(buf)
       if (!parsed) { _setStatus('No solvent for this frame', '#d29922'); return }
       getSolventOverlay?.()?.setIonSpecies(parsed.ionSpecies)
@@ -369,6 +376,13 @@ export function initMdSolventControls({
       _setStatus('Solvent load failed', '#d29922')
     } finally {
       _inflight = false
+      // A toggle/representation change invalidates the response above, and scrubbing can
+      // move the playhead outside the window while that response is in flight. Retry once
+      // from the current state; otherwise the overlay stays forever at "Loading solvent"
+      // even though the discarded request returned 200.
+      if (retryLatest || _frameIdx !== requestedFrame) {
+        queueMicrotask(() => _fetchAround(_frameIdx))
+      }
     }
   }
 
@@ -458,12 +472,25 @@ export function initMdSolventControls({
   })
 
   return {
+    /** Apply companions authored on an animation keyframe. Water stays off. The
+     * sphere fallback is required by graphene-only documents, which have no native
+     * DNA representation to select an ordinary solvent draw mode. */
+    setKeyframeOptions({ ions = false, box = false } = {}) {
+      _keyframeOptions = true
+      if (waterToggle) waterToggle.checked = false
+      if (ionsToggle) ionsToggle.checked = !!ions
+      if (boxToggle) boxToggle.checked = !!box
+      _refresh()
+    },
     /** Point the controls at a job + its trajectory density. */
-    async setJob(jobId, { stride = null, nFrames = 0 } = {}) {
+    async setJob(jobId, { stride = null, nFrames = 0, frameIdx = null } = {}) {
       const changed = jobId !== _jobId
       _jobId = jobId
       _stride = stride
       _nFrames = nFrames
+      if (frameIdx !== null && Number.isFinite(Number(frameIdx))) {
+        _frameIdx = Math.max(0, Number(frameIdx) | 0)
+      }
       if (changed) {
         _meta = null
         _measuredSpecies = null
@@ -488,6 +515,9 @@ export function initMdSolventControls({
       const was = _enabled
       const wasLive = _live
       _enabled = !!on
+      if (simulationGraphene) window.dispatchEvent(new CustomEvent(
+        "nadoc:graphene-md-active", { detail: { active: _enabled } }))
+      if (!_enabled) _keyframeOptions = false
       _live = _enabled && transport === 'live'
       if (_live !== wasLive) { _cache = new Map(); _measuredWater = null }
       // Only ask for the representation when it can matter. The panel gates these
@@ -531,6 +561,22 @@ export function initMdSolventControls({
       if (!_enabled || !_anyOn() || _repMode() === 'off') return
       if (!_draw(_frameIdx)) _fetchAround(_frameIdx)
       else if (_window(_frameIdx).length > SOLVENT_CHUNK / 2) _fetchAround(_frameIdx)
+    },
+
+    /** Wait until the requested companion frame is drawable. Video exporters call
+     * this after seeking so they never capture before an async solvent chunk lands. */
+    async settleFrame(i, timeoutMs = 120_000) {
+      const frame = i | 0
+      if (!_enabled || !_anyOn() || _repMode() === 'off') return true
+      if (_draw(frame)) return true
+      _frameIdx = frame
+      void _fetchAround(frame)
+      const deadline = Date.now() + timeoutMs
+      while (Date.now() < deadline) {
+        if (_draw(frame)) return true
+        await new Promise(resolve => setTimeout(resolve, 25))
+      }
+      return false
     },
 
     /**

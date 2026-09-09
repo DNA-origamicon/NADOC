@@ -20,7 +20,7 @@
  * @param {Object} deps
  * @param {Object} deps.store / deps.api
  * @param {Object} deps.slicePlane / deps.expandedSpacing / deps.debugOverlay
- * @param {Object} deps.measurementTool / deps.selectionManager
+ * @param {Object} deps.dimensionsTool / deps.selectionManager
  * @param {Object} deps.extrudePanel / deps.deformView
  * @param {Object} deps.crossSectionMinimap / deps.sliceHighlighter
  * @param {Function} deps.isUnfoldActive / deps.isDeformActive
@@ -39,13 +39,14 @@ import { registerShortcut, dispatchKeyEvent } from '../input/shortcuts.js'
 import { showToast } from './toast.js'
 import { nextTabLevel, previousTabLevel } from '../scene/selection_level.js'
 import { nearestWorkspaceAxis, signedAlong } from '../scene/axis_snap.js'
-import { canonicalSelection } from '../scene/selection_model.js'
+import { canonicalSelection, moveRotateSelectionLocked } from '../scene/selection_model.js'
 import { parseBaseKey } from '../scene/base_ref.js'
+import { forceLigateSelectedEnds } from '../scene/force_ligation.js'
 
 export function initKeyboardShortcuts(deps) {
   const {
     store, api,
-    slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
+    slicePlane, expandedSpacing, debugOverlay, dimensionsTool, selectionManager,
     clusterClipboard,
     extrudePanel, deformView, crossSectionMinimap, sliceHighlighter, primitiveLibrary,
     viewCube, camera, controls,
@@ -306,7 +307,7 @@ export function initKeyboardShortcuts(deps) {
     description: 'Cycle selectable forward',
     blockedInInput: true,
     canvasOnly: true,
-    blockedWhen: () => isTranslateRotateActive() || isProteinMoveActive?.(),
+    blockedWhen: () => moveRotateSelectionLocked(store.getState()) || isProteinMoveActive?.(),
     handler(e) {
       e.preventDefault()
       cycleSelectionLevel(1)
@@ -318,7 +319,7 @@ export function initKeyboardShortcuts(deps) {
     description: 'Cycle selectable backward',
     blockedInInput: true,
     canvasOnly: true,
-    blockedWhen: () => isTranslateRotateActive() || isProteinMoveActive?.(),
+    blockedWhen: () => moveRotateSelectionLocked(store.getState()) || isProteinMoveActive?.(),
     handler(e) {
       e.preventDefault()
       cycleSelectionLevel(-1)
@@ -355,6 +356,16 @@ export function initKeyboardShortcuts(deps) {
       handler(e) { e.preventDefault(); document.querySelector(selector)?.click() },
     })
   }
+
+  registerShortcut({
+    key: 'i', ctrl: false, shift: false, alt: false,
+    description: 'Force ligate selected 5′ and 3′ ends',
+    blockedInInput: true, noRepeat: true,
+    async handler(e) {
+      e.preventDefault()
+      await forceLigateSelectedEnds({ store, selectionManager, api })
+    },
+  })
 
   registerShortcut({
     key: 'd', ctrl: false, shift: true,
@@ -492,8 +503,8 @@ export function initKeyboardShortcuts(deps) {
   })
 
   registerShortcut({
-    key: 'm', ctrl: false, shift: true,
-    description: 'Toggle distance measurement',
+    key: 'd', ctrl: false, shift: false,
+    description: 'Open Dimensions',
     blockedInInput: true,
     handler(e) {
       e.preventDefault()
@@ -505,13 +516,7 @@ export function initKeyboardShortcuts(deps) {
         }
         return
       }
-      if (measurementTool.isActive()) { measurementTool.clear(); return }
-      const cb = selectionManager.getCtrlBeads()
-      if (cb.length === 2) {
-        const posA = selectionManager.getCtrlBeadPos(0)
-        const posB = selectionManager.getCtrlBeadPos(1)
-        measurementTool.show(posA, posB)
-      }
+      dimensionsTool?.open?.()
     },
   })
 
@@ -624,7 +629,11 @@ export function initKeyboardShortcuts(deps) {
         ooClose()
         return
       }
-      if (measurementTool.isActive()) { measurementTool.clear() }
+      if (dimensionsTool.isActive()) {
+        dimensionsTool.close()
+        selectionManager.clearCtrlBeads()
+        return
+      }
       if (selectionManager.getCtrlBeads().length > 0) {
         selectionManager.clearCtrlBeads()
         return

@@ -612,7 +612,7 @@ def test_start_rejected_while_one_running(monkeypatch):
 
 
 @pytest.mark.slow
-def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch):
+def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch, tmp_path, request):
     from backend.api import routes_benchmark
     from backend.api.headless_build import build_bundle
     from backend.core.hardware import cpu_count
@@ -624,11 +624,14 @@ def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch):
     except RuntimeError:
         pytest.skip("NAMD not installed on this machine")
 
-    # Build a small honeycomb 6hb the same way the user would, from an empty design.
+    # Use the supported minimum proxy length: this tests the complete real
+    # pipeline, not production-size throughput. A 32-bp rotational solvent box
+    # now contains ~440k atoms and outlives this test's deadline under xdist.
     design = build_bundle(
-        list(bench.SIX_HB_CELLS), 32, lattice=LatticeType.HONEYCOMB, name="bench6hb"
+        list(bench.SIX_HB_CELLS), 8, lattice=LatticeType.HONEYCOMB, name="bench6hb"
     )
     design_state.set_design(design)
+    monkeypatch.setattr(routes_benchmark, "_WORKSPACE_DIR", tmp_path)
 
     # Keep the sweep to a single CPU trial so the real solvate→minimize→MD→parse path
     # runs in ~a minute (the point is "does it complete", not "which config wins").
@@ -636,8 +639,12 @@ def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch):
     # worker per core), a `+p{all-cores}` NAMD run with core-pinning seizes every core
     # mid-suite and starves the ~11 concurrent workers running real oxDNA sims, blowing
     # their wall-clock deadlines (the historical "flaky under parallel xdist" failures).
-    # A 32-bp proxy completes fine on 2 threads and stays a good citizen under load.
+    # Bound the one-time CPU minimization too, which calls cpu_count()
+    # independently of the trial grid. Four cores keep it within the real-test
+    # deadline while leaving cores available for the other xdist workers.
     trial_threads = min(2, cpu_count())
+    preparation_threads = min(4, cpu_count())
+    monkeypatch.setattr(hardware, "cpu_count", lambda: preparation_threads)
     monkeypatch.setattr(
         bench,
         "namd_config_grid",
@@ -652,6 +659,18 @@ def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch):
         routes_benchmark.start_namd_benchmark(routes_benchmark.StartBenchmarkRequest())
     )
     bid = resp["benchmark_id"]
+    handle = br._RUNNING.get(bid)
+
+    def cleanup_benchmark():
+        br.cancel_benchmark(bid)
+        if handle is not None:
+            handle.thread.join(timeout=10)
+            assert not handle.thread.is_alive(), (
+                "Benchmark worker survived test teardown"
+            )
+        br._BENCH.pop(bid, None)
+
+    request.addfinalizer(cleanup_benchmark)
 
     # Poll exactly like the frontend until the run leaves the "running" state.
     # 600s (not 300): under `just test` this real NAMD run competes with ~11 other

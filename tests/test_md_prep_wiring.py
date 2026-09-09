@@ -26,6 +26,7 @@ def _fake_solvate(
     progress=None,
     *,
     box_mode=None,
+    padding_xyz_nm=None,
 ):
     """Stand-in for gmx solvation: emit the solvate phase, return dummy waters."""
     ns._emit(progress, "solvate", None, "fake solvate")

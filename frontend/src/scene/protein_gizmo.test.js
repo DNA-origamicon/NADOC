@@ -22,7 +22,7 @@ vi.mock('three/addons/controls/TransformControls.js', async () => {
   } }
 })
 
-import { clampPointToSphere, constrainCentroidTransform, initProteinGizmo, proteinPreviewMatrix } from './protein_gizmo.js'
+import { clampPointToSphere, clampPointToSphereInDragPlane, constrainCentroidTransform, initProteinGizmo, proteinPreviewMatrix } from './protein_gizmo.js'
 
 beforeEach(() => {
   patchProteinAttachment.mockClear()
@@ -86,6 +86,18 @@ describe('two-ball-joint protein constraint', () => {
     const rigidOffset = joint.clone().sub(centroid).applyQuaternion(rotation)
     expect(solved.joint.clone().sub(solved.position).distanceTo(rigidOffset)).toBeCloseTo(0, 10)
     expect(solved.joint.distanceTo(root)).toBeCloseTo(3, 10)
+  })
+})
+
+describe('planar constrained movement', () => {
+  it('does not introduce red/X-axis motion for a red-plane drag', () => {
+    const point = new THREE.Vector3(2, 8, -3)
+    const root = new THREE.Vector3(0, 0, 0)
+    const solved = clampPointToSphereInDragPlane(
+      point, root, 6, new THREE.Vector3(0, 3, -4), new THREE.Quaternion(),
+    )
+    expect(solved.x).toBe(point.x)
+    expect(solved.distanceTo(root)).toBeCloseTo(6, 12)
   })
 })
 

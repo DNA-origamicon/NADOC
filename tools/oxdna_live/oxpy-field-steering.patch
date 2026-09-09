@@ -1,0 +1,33 @@
+diff --git a/src/oxpy/CMakeLists.txt b/src/oxpy/CMakeLists.txt
+--- a/src/oxpy/CMakeLists.txt
++++ b/src/oxpy/CMakeLists.txt
+@@ -67,10 +67,10 @@ IF(Python)
+ 	# On MacOS, Python extensions should NOT link against libpython
+ 	# The symbols are resolved at runtime from the interpreter
+ 	if(APPLE)
+-		target_link_libraries(core PUBLIC oxdna_common pybind11::headers)
++		target_link_libraries(core PUBLIC oxdna_common tinyexpr pybind11::headers)
+ 		set_target_properties(core PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
+ 	else()
+-		target_link_libraries(core PUBLIC oxdna_common pybind11::headers ${Python_LIBRARIES})
++		target_link_libraries(core PUBLIC oxdna_common tinyexpr pybind11::headers ${Python_LIBRARIES})
+ 	endif()
+ 
+ 	# Create a staging directory for the Python package
+diff --git a/src/oxpy/bindings_includes/Forces/BaseForce.h b/src/oxpy/bindings_includes/Forces/BaseForce.h
+--- a/src/oxpy/bindings_includes/Forces/BaseForce.h
++++ b/src/oxpy/bindings_includes/Forces/BaseForce.h
+@@ -178,5 +178,13 @@ The rate of change of the force. The particular meaning of this attribute depends
+ The reference position associated to the force. The particular meaning of this attribute depends on the subclass external force.
+ )pbdoc");
+ 
++	force.def_readwrite("F0", &BaseForce::_F0, R"pbdoc(
++The initial magnitude of a constant-rate force.
++)pbdoc");
++
++	force.def_readwrite("dir", &BaseForce::_direction, R"pbdoc(
++The direction of a constant-rate force.
++)pbdoc");
++
+ 	force.def("as_RepulsiveSphere", [](BaseForce &f){ return dynamic_cast<RepulsiveSphere *>(&f); }, R"pbdoc(
+ Attempt to cast the current force as a :py:class:`RepulsiveSphere` object and return it.

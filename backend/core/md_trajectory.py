@@ -1334,6 +1334,59 @@ def md_frames_solvent(
     include_dna = bool(o.get("include_dna"))
 
     seg_paths = [s[2] for s in segments]
+    # Membrane-only controls deliberately contain no DNA.  Do not enter the DNA
+    # backmapper merely to draw water, ions, and the periodic cell: its alignment
+    # reference is undefined for an empty phosphate selection.  Keep these jobs in
+    # the simulation frame, centred on the graphene (or the cell when unavailable).
+    design_strands = (
+        design.get("strands") if isinstance(design, dict) else getattr(design, "strands", None)
+    )
+    graphene_only = design_strands is not None and not any(design_strands)
+    if graphene_only:
+        import MDAnalysis as mda  # type: ignore
+
+        paths = [str(p) for p in seg_paths]
+        trajectory_arg = paths if len(paths) > 1 else paths[0]
+        u = mda.Universe(str(topology_path), trajectory_arg)
+        sctx = build_solvent_ctx(u)
+        n = len(u.trajectory)
+        raw_of = composite_raw_frame_map(segments, max_frames, stride)
+        frames: dict[int, dict] = {}
+        for idx in sorted(set(int(i) for i in frame_indices)):
+            if idx < 0 or idx >= len(raw_of):
+                continue
+            gidx = raw_of[idx]
+            if gidx >= n:
+                continue
+            u.trajectory[gidx]
+            dims = getattr(u, "dimensions", None)
+            if dims is None or float(dims[0]) <= 0:
+                continue
+            box_nm = np.asarray(dims[:3], dtype=float) / 10.0
+            # GROMACS writes the membrane-only control into a [0,L] orthorhombic
+            # cell with its pore at L/2.  Carbon centroid is NOT a pore centre: the
+            # circular deletion, finite lattice edge and multiple layers can all
+            # bias it.  Move the actual cell/pore centre to the NADOC scene origin,
+            # matching the static graphene preview.
+            c_box = box_nm / 2.0
+            xf = DisplayXform.build(
+                T_dyn=-c_box, c_box=c_box, box_nm=box_nm,
+                mob_c=None, eq_centroid=None, R=None,
+            )
+            frames[idx] = extract_solvent_frame_for(
+                u, sctx,
+                {"pos_raw": np.empty((0, 3)), "pos_pre": np.empty((0, 3))},
+                xf,
+                water=bool(o.get("water", True)),
+                ions=bool(o.get("ions", True)),
+                box=bool(o.get("box", True)),
+                # A hydration shell is meaningless without DNA; show the cell.
+                shell_nm=None,
+                atomistic=bool(o.get("atomistic")),
+                max_waters=o.get("max_waters"),
+            )
+        return pack_solvent_bin(frames) if frames else empty_solvent_bin()
+
     ctx = _build_md_nadoc_ctx(
         topology_path, seg_paths, coordinate_path, design, with_atoms=True
     )
@@ -1766,17 +1819,28 @@ def count_md_frames(segments) -> int:
     """Total DCD frame count across every segment (DCD header only, no coordinate
     read) — sizes the "Graphs and Metrics" ETA/progress bar without a full parse.
     Mirrors :func:`oxdna_health.count_trajectory_frames` for the MD side."""
-    from MDAnalysis.coordinates.DCD import DCDReader  # type: ignore
-
     total = 0
     for _name, _kind, dcd in segments:
         if not Path(dcd).exists():
             continue
-        try:
-            total += len(DCDReader(str(dcd)))
-        except Exception:
-            pass
+        total += _dcd_complete_frame_count(dcd)
     return total
+
+
+def _dcd_complete_frame_count(path) -> int:
+    """Complete frames on disk, including frames beyond a stale live NSET header."""
+    try:
+        from backend.core.dcd_fast import read_layout
+
+        return int(read_layout(path).n_frames)
+    except Exception:
+        try:
+            from MDAnalysis.coordinates.DCD import DCDReader  # type: ignore
+
+            with DCDReader(str(path)) as reader:
+                return len(reader)
+        except Exception:
+            return 0
 
 
 def aligned_rmsd_nm(mobile, reference) -> float:
@@ -2104,14 +2168,9 @@ def md_composite_meta(
     ``stages`` entries also carry ``n_raw`` (the segment's undownsampled DCD frame
     count) and the payload carries ``total_raw``, so a caller can show "N of M frames"
     or recompute the count for a different ``stride`` without another request."""
-    from MDAnalysis.coordinates.DCD import DCDReader  # type: ignore
-
     counts = []
     for name, kind, dcd in segments:
-        try:
-            n = len(DCDReader(str(dcd)))
-        except Exception:
-            n = 0
+        n = _dcd_complete_frame_count(dcd)
         counts.append((name, kind, n))
     total = sum(c for _, _, c in counts)
     if total == 0:
@@ -2306,6 +2365,44 @@ def _md_composite_trajectory_data(
             )
 
     write_phase("initialize", 0, 1)
+
+    # A graphene-only control has a real all-atom trajectory but intentionally no NADOC
+    # nucleotides.  Its scrubber still drives the solvent/ion/periodic-box companion, so
+    # return one empty CG frame per selected DCD frame instead of entering phosphate
+    # alignment with empty arrays (which fails while subtracting a 3-vector centroid).
+    if hasattr(design, "strands") and not design.strands:
+        counts = [
+            (name, stage, _dcd_complete_frame_count(dcd))
+            for name, stage, dcd in segments
+        ]
+        picked = _composite_indices([row[2] for row in counts], max_frames, stride)
+        stages: list[dict] = []
+        markers: list[dict] = []
+        n_out = 0
+        for (name, stage, count), keep in zip(counts, picked):
+            if count <= 0:
+                continue
+            same = bool(stages and stages[-1]["name"] == name)
+            if n_out and not same:
+                markers.append(
+                    {"frame": n_out, "label": f"→ {name}", "kind": stage or "md",
+                     "stage_name": name}
+                )
+            if same:
+                stages[-1]["n_frames"] += len(keep)
+            else:
+                stages.append({"name": name, "kind": stage or "md", "n_frames": len(keep)})
+            n_out += len(keep)
+        write_phase("initialize", 1, 1)
+        frames = np.empty((n_out, 0), dtype="<f4") if binary else [[] for _ in range(n_out)]
+        return {
+            "n_frames": n_out,
+            "n_nucleotides": 0,
+            "keys": [],
+            "frames": frames,
+            "stages": stages,
+            "markers": markers,
+        }
 
     seg_paths = [s[2] for s in segments]
     # with_termini: recover each strand's 5'-terminal base (no P atom) so the scrubbable

@@ -179,8 +179,7 @@ def scratch_session(lattice: LatticeType = LatticeType.HONEYCOMB):
 
 def new_design(lattice: LatticeType = LatticeType.HONEYCOMB) -> Design:
     """Replace the active document's design with a fresh empty one (mirrors POST /design)."""
-    design_state.clear_history()
-    design_state.set_design(Design(lattice_type=lattice))
+    design_state.load_design(Design(lattice_type=lattice))
     return design_state.get_or_404()
 
 

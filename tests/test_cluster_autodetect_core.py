@@ -5,10 +5,6 @@ These pin the pure cluster-detection functions extracted from crud.py's
 functions take a Design and return a new Design with cluster_transforms set.
 """
 
-from pathlib import Path
-
-import pytest
-
 from tests.conftest import (
     make_18hb_routed_design,
     make_6hb_design,
@@ -20,7 +16,7 @@ from backend.core.cluster_autodetect import (
     _cluster_bundle_regions,
     repair_empty_auto_clusters,
 )
-from backend.core.models import Design
+from backend.core.models import ClusterRigidTransform
 
 
 def test_bundle_regions_splits_disconnected_blocks():
@@ -66,20 +62,65 @@ def test_autodetect_produces_scaffold_and_geometry_clusters():
     assert any(n.startswith("Geometry Cluster") for n in names), names
 
 
-def test_repair_empty_auto_clusters_restores_voltron_membership_without_references():
+def test_repair_empty_auto_clusters_restores_membership_without_references():
     """VoltronCoreArm persisted two auto-cluster shells with no members, which
     made cluster coloring fall back to strand colors in every representation."""
-    path = Path(__file__).parents[1] / "workspace" / "VoltronCoreArm.nadoc"
-    if not path.exists():
-        pytest.skip("optional workspace/VoltronCoreArm.nadoc fixture is unavailable")
-    design = Design.model_validate_json(path.read_text())
+    # Reproduce the legacy state explicitly; the user's live Voltron file may
+    # already have been repaired or edited by the time this regression runs.
+    design = make_18hb_routed_design(length_bp=42)
+    reference = make_6hb_design(length_bp=42)
+    reference = reference.copy_with(
+        helices=[
+            h.model_copy(
+                update={
+                    "id": f"ref::{h.id}",
+                    "grid_pos": [h.grid_pos[0] + 100, h.grid_pos[1] + 100],
+                }
+            )
+            for h in reference.helices
+        ],
+        strands=[
+            s.model_copy(
+                update={
+                    "id": f"ref::{s.id}",
+                    "is_reference": True,
+                    "domains": [
+                        d.model_copy(update={"helix_id": f"ref::{d.helix_id}"})
+                        for d in s.domains
+                    ],
+                }
+            )
+            for s in reference.strands
+        ],
+    )
+    active_ids = {h.id for h in design.helices}
+    design = design.copy_with(
+        helices=[*design.helices, *reference.helices],
+        strands=[*design.strands, *reference.strands],
+        cluster_transforms=[
+            ClusterRigidTransform(
+                id="scaffold-shell", name="Scaffold Cluster 1", auto_created=True
+            ),
+            ClusterRigidTransform(
+                id="geometry-shell", name="Geometry Cluster 1", auto_created=True
+            ),
+        ],
+    )
     assert all(not c.helix_ids and not c.domain_ids for c in design.cluster_transforms)
 
     repaired = repair_empty_auto_clusters(design)
 
     assert [c.name for c in repaired.cluster_transforms] == [
-        "Scaffold Cluster 1", "Geometry Cluster 1",
+        "Scaffold Cluster 1",
+        "Geometry Cluster 1",
     ]
-    assert [len(c.helix_ids) for c in repaired.cluster_transforms] == [9, 9]
+    assert [c.id for c in repaired.cluster_transforms] == [
+        "scaffold-shell",
+        "geometry-shell",
+    ]
+    assert all(set(c.helix_ids) == active_ids for c in repaired.cluster_transforms)
     reference_ids = design.reference_helix_ids()
-    assert all(not (set(c.helix_ids) & reference_ids) for c in repaired.cluster_transforms)
+    assert reference_ids
+    assert all(
+        not (set(c.helix_ids) & reference_ids) for c in repaired.cluster_transforms
+    )

@@ -9,6 +9,10 @@ import {
   overhangLabel,
   radialOutward,
   ssdnaBackbonePoints,
+  ssdnaHelixFrames,
+  SSDNA_PREVIEW_RADIUS_NM,
+  SSDNA_PREVIEW_RISE_NM,
+  SSDNA_PREVIEW_TWIST_RAD,
   perpendicular,
 } from './conjugate_manager_logic.js'
 
@@ -99,6 +103,26 @@ describe('ssdnaBackbonePoints', () => {
   })
   it('clamps to at least one bead', () => {
     expect(ssdnaBackbonePoints({ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, 0).length).toBe(1)
+  })
+})
+
+describe('ssdnaHelixFrames', () => {
+  const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
+  it('uses the same B-form rise, radius, and twist as overhang previews', () => {
+    const axis = { x: 0, y: 0, z: 1 }
+    const frames = ssdnaHelixFrames({ x: 0, y: 0, z: 0 }, axis, 5)
+    expect(frames).toHaveLength(5)
+    frames.forEach((frame, i) => {
+      expect(frame.position.z).toBeCloseTo(i * SSDNA_PREVIEW_RISE_NM, 9)
+      expect(Math.hypot(frame.position.x, frame.position.y)).toBeCloseTo(SSDNA_PREVIEW_RADIUS_NM, 9)
+      expect(dot(frame.baseNormal, axis)).toBeCloseTo(0, 9)
+    })
+    const a = frames[0].position, b = frames[1].position
+    const angle = Math.acos((a.x * b.x + a.y * b.y) / (SSDNA_PREVIEW_RADIUS_NM ** 2))
+    expect(angle).toBeCloseTo(SSDNA_PREVIEW_TWIST_RAD, 9)
+  })
+  it('returns a frame even for an empty requested sequence', () => {
+    expect(ssdnaHelixFrames({ x: 1, y: 2, z: 3 }, { x: 1, y: 0, z: 0 }, 0)).toHaveLength(1)
   })
 })
 

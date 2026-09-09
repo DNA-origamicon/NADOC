@@ -1672,6 +1672,54 @@ def test_dedicated_overhang_phase_shared_by_cg_and_atomistic():
     assert np.linalg.norm(actual_p - expected_p) < 1e-9
 
 
+def test_inline_overhang_on_scaffold_free_helix_keeps_canonical_lattice_phase():
+    """An inline OH tag must not turn its regular helix into a free posed helix.
+
+    VoltronCoreArm's OH-56 exposed this when its scaffold-free backing helix kept
+    an imported phase 33.25 degrees away from the regular crossover register.
+    """
+    base = _demo_design()
+    helix = Helix(
+        id="inline_only_helix",
+        axis_start=Vec3(x=4.5, y=4.5, z=0.0),
+        axis_end=Vec3(x=4.5, y=4.5, z=8 * BDNA_RISE_PER_BP),
+        phase_offset=math.radians(67.0),
+        length_bp=8,
+        grid_pos=(2, 2),
+    )
+    strand = Strand(
+        id="inline_only_strand",
+        domains=[
+            Domain(
+                helix_id=helix.id,
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="ovhg_inline_inline_only_strand_5p",
+            )
+        ],
+        strand_type=StrandType.STAPLE,
+    )
+    overhang = OverhangSpec(
+        id="ovhg_inline_inline_only_strand_5p",
+        helix_id=helix.id,
+        strand_id=strand.id,
+    )
+    design = base.model_copy(
+        update={
+            "helices": [*base.helices, helix],
+            "strands": [*base.strands, strand],
+            "overhangs": [overhang],
+        }
+    )
+
+    effective = effective_helix_for_geometry(helix, design)
+    canonical = _normalize_helix_for_grid(helix, design.lattice_type)
+
+    assert effective.phase_offset == pytest.approx(canonical.phase_offset)
+    assert not math.isclose(effective.phase_offset, helix.phase_offset)
+
+
 def test_ss_linker_complement_renders_in_atomistic_model():
     """Atomistic generation must include both real-helix complement domains
     AND the bridge-helix domain for ss linkers (one __s strand spanning

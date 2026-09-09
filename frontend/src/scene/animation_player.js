@@ -25,6 +25,7 @@ import * as THREE from 'three'
 
 import { clampQuatToJointBounds } from './assembly_revolute_math.js'
 import { findBinderStrand } from './overhang_strand_anim.js'
+import { keyframeTrajSpec } from './trajectory_keyframes.js'
 import { frameAtProgress, clampRange } from './trajectory_range.js'
 
 // ── Easing functions ─────────────────────────────────────────────────────────
@@ -51,6 +52,8 @@ function _ease(t, curve) {
  */
 export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry, onFetchGeometryBatch, trajectoryKeyframes, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
   let _raf          = null
+  let _playGeneration = 0
+  let _loopEpoch = 0
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
   let _bounce       = false   // ping-pong: flip direction at each boundary
@@ -298,10 +301,12 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       // loaded frame count here so an out-of-range saved value can't break it.
       let trajectory = null
       if (kf.trajectory_job_id) {
-        const nFrames = trajectoryKeyframes?.frameCount(kf.trajectory_job_id) ?? 0
+        const spec = keyframeTrajSpec(kf)
+        const nFrames = trajectoryKeyframes?.frameCount(kf.trajectory_job_id, spec) ?? 0
         const { start, end } = clampRange(kf.trajectory_frame_start, kf.trajectory_frame_end, nFrames)
-        trajectory = { jobId: kf.trajectory_job_id, engine: kf.trajectory_engine || 'oxdna',
-                       frameStart: start, frameEnd: end, nFrames }
+        trajectory = { jobId: kf.trajectory_job_id, spec, engine: kf.trajectory_engine || 'oxdna',
+                       frameStart: start, frameEnd: end, nFrames,
+                       ions: !!kf.trajectory_show_ions, box: !!kf.trajectory_show_box }
       }
 
       segments.push({
@@ -423,8 +428,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
    */
   async function _bakeStates(animation, liveFeatureLogIndex) {
     _baking = true
-    _bakeAbort = new AbortController()
-    const signal = _bakeAbort.signal
+    const abort = new AbortController()
+    _bakeAbort = abort
+    const signal = abort.signal
     try {
       const positionSet = new Set([liveFeatureLogIndex])
       for (const kf of animation.keyframes) {
@@ -501,6 +507,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       }
 
       await Promise.all(tasks)
+      if (signal.aborted) throw new DOMException('bake cancelled', 'AbortError')
 
       // Phase 2 — trajectory keyframes. Delegated: the display controller loads the
       // composite trajectory (skipped outright when it already holds that job — e.g. the
@@ -508,7 +515,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       // within this machine's memory budget. Its progress has its own denominator, so it
       // reports as a labelled second phase rather than being folded into the unit count.
       if (trajectoryKeyframes) {
+        _ownsTrajectory = animation.keyframes.some(kf => !!kf.trajectory_job_id)
         const held = await trajectoryKeyframes.prepare(animation, {
+          strict: true,
           onProgress: ({ phase, done, total }) => {
             const label = phase === 'load'
               ? (total > 0 && done > 0
@@ -536,8 +545,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         }
       }
     } finally {
-      _baking = false
-      _bakeAbort = null
+      if (_bakeAbort === abort) {
+        _baking = false
+        _bakeAbort = null
+      }
     }
   }
 
@@ -906,7 +917,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // One call, and only when the frame index actually moves: the controller's showFrame
     // drives the CG beads AND whichever heavy rep is on, from frames it already holds.
     if (seg.trajectory) {
-      const nFrames = trajectoryKeyframes?.frameCount(seg.trajectory.jobId) ?? 0
+      const nFrames = trajectoryKeyframes?.frameCount(seg.trajectory.jobId, seg.trajectory.spec) ?? 0
       if (nFrames > 0) {
         const holdSpan = seg.endT - transEnd
         const p = elapsed < transEnd
@@ -916,7 +927,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
           nFrames - 1,
           frameAtProgress(seg.trajectory.frameStart, seg.trajectory.frameEnd, p),
         ))
-        trajectoryKeyframes.show(seg.trajectory.jobId, seg.trajectory.engine, fIdx)
+        trajectoryKeyframes.show(seg.trajectory.jobId, seg.trajectory.engine, fIdx, {
+          ions: seg.trajectory.ions, box: seg.trajectory.box,
+        }, seg.trajectory.spec)
       }
       return
     }
@@ -1087,14 +1100,29 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
   // ── RAF loop ─────────────────────────────────────────────────────────────────
 
-  function _loop(now) {
+  async function _loop(now) {
     if (!_playing) return
     const elapsed  = _seekOffset + _direction * (now - _startTime) / 1000
     const atBound  = _direction === 1 ? elapsed >= _totalDur : elapsed <= 0
+    const animation = _animation
+    const loopEpoch = _loopEpoch
+    _applyAt(atBound ? (_direction === 1 ? _totalDur : 0) : elapsed)
+    const waitStart = performance.now()
+    try {
+      await trajectoryKeyframes?.settle?.()
+    } catch (error) {
+      if (loopEpoch !== _loopEpoch) return
+      stop()
+      onEvent?.({ type: 'baking_error', message: error.message })
+      return
+    }
+    if (!_playing || _animation !== animation || loopEpoch !== _loopEpoch) return
+    const waited = performance.now() - waitStart
+    _startTime += waited
+    now += waited
 
     if (atBound) {
       const boundTime = _direction === 1 ? _totalDur : 0
-      _applyAt(boundTime)
       if (_bounce) {
         _direction    = -_direction
         _seekOffset   = boundTime
@@ -1113,7 +1141,6 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         onEvent?.({ type: 'finished' })
       }
     } else {
-      _applyAt(elapsed)
       onEvent?.({ type: 'tick', currentTime: elapsed, totalDuration: _totalDur })
       _raf = requestAnimationFrame(_loop)
     }
@@ -1134,6 +1161,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
    */
   function play(animation, opts = {}) {
     stop()
+    const generation = _playGeneration
     if (!animation?.keyframes?.length) return Promise.resolve()
 
     _onJointUpdate   = opts.onJointUpdate   ?? null
@@ -1156,7 +1184,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _baseFLI = liveFLI
 
     return _bakeStates(animation, liveFLI).then(() => {
-      if (_animation !== animation) return   // user stopped while baking
+      if (_playGeneration !== generation) return   // user stopped while baking
 
       // Capture play-start atomistic positions as the rigid-body base for cluster atoms.
       _liveAtomistic = _bakedAtomistic.get(liveFLI) ?? null
@@ -1187,12 +1215,14 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       onEvent?.({ type: 'baking_done' })
       _raf = requestAnimationFrame(_loop)
     }).catch(err => {
+      if (_playGeneration !== generation) return
       // User cancelled during bake — propagate as a cancelled event so the
       // panel can drop its progress popup and revert button state.
       if (err?.name === 'AbortError') {
         onEvent?.({ type: 'baking_cancelled' })
         return
       }
+      stop()
       throw err
     })
   }
@@ -1200,6 +1230,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   /** Pause (saves current position; direction preserved for resume). */
   function pause() {
     if (!_playing) return
+    _loopEpoch++
     _seekOffset = Math.max(0, Math.min(
       _seekOffset + _direction * (performance.now() - _startTime) / 1000,
       _totalDur,
@@ -1212,6 +1243,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   /** Resume in the same direction from the paused position. */
   function resume() {
     if (_playing || !_animation || !_schedule.length) return
+    _loopEpoch++
     _startTime = performance.now()
     _playing   = true
     _raf = requestAnimationFrame(_loop)
@@ -1219,6 +1251,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
   /** Stop completely, reset position, and restore the model's visual state. */
   function stop() {
+    _loopEpoch++
+    _playGeneration++
     // ORDER MATTERS. Hand the display controllers back FIRST: a trajectory segment drives
     // the beads through designRenderer.applyFemPositions, and its restore
     // (applyFemPositions(null)) reverts them to the renderer's own base positions. Doing
@@ -1313,6 +1347,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
    * Keeps playing in the current direction if active.
    */
   function seekTo(seconds) {
+    _loopEpoch++
     const wasPlaying = _playing
     if (_playing) {
       _playing = false
@@ -1338,6 +1373,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     ))
   }
   function getTotalDuration() { return _totalDur }
+  function settleFrame() { return trajectoryKeyframes?.settle?.() ?? Promise.resolve(true) }
 
   /** Synchronous read of the current overlay state — used by the export pipeline. */
   function getActiveTextOverlay() { return _textOverlayAt(getCurrentTime()) }
@@ -1351,5 +1387,5 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         || getSurfaceRenderer?.()?.getMode?.()   !== 'off'
   }
 
-  return { play, pause, resume, stop, seekTo, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep }
+  return { play, pause, resume, stop, seekTo, settleFrame, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep }
 }

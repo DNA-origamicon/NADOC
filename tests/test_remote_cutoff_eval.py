@@ -37,6 +37,19 @@ def test_evaluator_imports_nothing_from_backend():
         assert not re.match(r"\s*(from|import)\s+backend", ln), ln
 
 
+def test_graphene_control_can_use_energy_only_plateau():
+    frames = [
+        {"TS": i, "POTENTIAL": -1000.0, "VOLUME": 500000.0}
+        for i in range(30)
+    ]
+    log = "ETITLE: TS POTENTIAL VOLUME\n" + "\n".join(
+        f"ENERGY: {f['TS']} {f['POTENTIAL']} {f['VOLUME']}" for f in frames
+    )
+    code, diag = ev.decide(log, [], energy_only=True)
+    assert code == 0
+    assert diag["dna_metrics"] == "not_applicable"
+
+
 # ── node scripts must parse+run on an OLD python3 (Alpine bare node < 3.7) ──────
 
 

@@ -256,6 +256,14 @@ describe('edge cases + teardown', () => {
 })
 
 describe('showConjugateMenu', () => {
+  it('includes a supplied protein representation submenu', () => {
+    const mgr = initConjugateManager({ api: makeApi(), store: makeStore() })
+    const representationItem = document.createElement('div')
+    representationItem.textContent = 'Representation'
+    mgr.showConjugateMenu({ x: 5, y: 5, assetId: 'a1', representationItem })
+    expect(document.getElementById('conjugate-context-menu').textContent).toContain('Representation')
+  })
+
   it('opens the manager for the asset on click', async () => {
     const mgr = initConjugateManager({ api: makeApi(), store: makeStore() })
     mgr.showConjugateMenu({ x: 5, y: 5, assetId: 'a1' })

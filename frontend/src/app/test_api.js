@@ -8,6 +8,7 @@ export function installTestApi({
   store,
   visibilityController,
   designRenderer,
+  unfoldView,
   _setRepresentation,
   controls,
   camera,
@@ -17,6 +18,7 @@ export function installTestApi({
   _anchorSelectionState,
   atomisticRenderer,
   selectionManager,
+  dimensionsTool,
   selectionController,
   _nucleotideTransformTool,
   bluntEnds,
@@ -30,20 +32,95 @@ export function installTestApi({
   _clusterBackboneEntries,
   clusterGizmo,
   proteinGizmo,
+  nanoparticleSubsystem,
+  nanoparticleConjugateManager,
   api,
   _enterAssemblyMode,
   _exitAssemblyMode,
   forceCrossoverTool,
+  markFlexibleRun,
   multiOverlay,
   multiView,
 }) {
   window.__nadocTest = {
     scene,
+    dimensions: {
+      open: () => dimensionsTool?.open?.(),
+      record: () => dimensionsTool?.record?.(),
+      clear: () => dimensionsTool?.clear?.(),
+      measurements: () => dimensionsTool?.getMeasurements?.() ?? [],
+      endpoints: () => dimensionsTool?.getAssemblyEndpoints?.() ?? [],
+      isPickingBases: () => dimensionsTool?.isPickingBases?.() ?? false,
+      setEndpoint: (index, position) => dimensionsTool?.setAssemblyEndpoint?.(index, position) ?? false,
+    },
+    markFlexibleRun,
     getProteinGizmoMode: () => proteinGizmo?.getMode?.() ?? null,
     isProteinGizmoAttached: () => proteinGizmo?.isAttached?.() ?? false,
     selectProteinForTest(id) {
       const ref = { kind: 'protein', id }
       selectionController?.replace([ref])
+    },
+    nanoparticles: {
+      create: diameterNm => api.createGoldNanosphere(diameterNm),
+      resize: (id, diameterNm) => api.patchNanoparticle(id, { diameter_nm: diameterNm }),
+      move: (id, gizmoMove) => api.patchNanoparticle(id, { gizmo_move: gizmoMove }),
+      remove: id => api.deleteNanoparticle(id),
+      conjugation: {
+        estimate: (id, scheme = 'direct_thiol') => api.estimateNanoparticleConjugation(id, scheme),
+        get: id => api.getNanoparticleConjugation(id),
+        apply: (id, spec) => api.putNanoparticleConjugation(id, spec),
+        remove: id => api.deleteNanoparticleConjugation(id),
+        validate: id => api.validateNanoparticleConjugation(id),
+        bind: (id, strandId, overhangId) => api.bindNanoparticleStrand(id, strandId, overhangId),
+        versions: id => api.getNanoparticleConnectionVersions(id),
+        createVersion: (id, spec) => api.createNanoparticleConnectionVersion(id, spec),
+        patchVersion: (id, versionId, patch) => api.patchNanoparticleConnectionVersion(id, versionId, patch),
+        deleteVersion: (id, versionId) => api.deleteNanoparticleConnectionVersion(id, versionId),
+        relaxConnections: id => api.relaxNanoparticleConnectionVersions(id),
+        open: id => nanoparticleConjugateManager?.open(id),
+        close: () => nanoparticleConjugateManager?.close(),
+        isOpen: () => nanoparticleConjugateManager?.isOpen() ?? false,
+        previewCamera: () => nanoparticleConjugateManager?.previewCamera?.() ?? null,
+        fullHandleCensus: () => nanoparticleConjugateManager?.fullHandleCensus?.() ?? null,
+        loadDesign: path => api.loadDesign(path),
+        saveDesign: path => api.saveDesign(path),
+      },
+      select: id => nanoparticleSubsystem?.select(id),
+      rendered: () => [...(nanoparticleSubsystem?.meshes?.entries?.() ?? [])].map(([id, mesh]) => ({
+        id, diameterNm: mesh.geometry?.parameters?.radius * 2,
+        position: mesh.getWorldPosition(new THREE.Vector3()).toArray(),
+        metalness: mesh.material?.metalness, color: mesh.material?.color?.getHex(),
+      })),
+      gizmoSetTransform: (translation, rotation) =>
+        nanoparticleSubsystem?.gizmo?.setTransform?.(translation, rotation) ?? false,
+      gizmoApply: () => nanoparticleSubsystem?.gizmo?.commit?.() ?? false,
+      screenPosition(id) {
+        const mesh = nanoparticleSubsystem?.meshes?.get(id)
+        if (!mesh) return null
+        const point = mesh.getWorldPosition(new THREE.Vector3()).project(camera)
+        const rect = canvas.getBoundingClientRect()
+        return {
+          x: rect.left + (point.x + 1) * rect.width / 2,
+          y: rect.top + (1 - point.y) * rect.height / 2,
+        }
+      },
+      hitAt({ x, y }) {
+        const rect = canvas.getBoundingClientRect()
+        const raycaster = new THREE.Raycaster()
+        raycaster.setFromCamera(new THREE.Vector2(
+          ((x - rect.left) / rect.width) * 2 - 1,
+          -((y - rect.top) / rect.height) * 2 + 1,
+        ), camera)
+        return nanoparticleSubsystem?.raycastPick?.(raycaster) ?? null
+      },
+      selected: () => store.getState().selection?.primary ?? null,
+      gizmoAttached: () => nanoparticleSubsystem?.gizmo?.isAttached?.() ?? false,
+      conjugationRender: () => ({
+        connectors: nanoparticleSubsystem?.connectorRoot?.children?.length ?? 0,
+        linkerAtoms: (nanoparticleSubsystem?.linkerAtomRoot?.children ?? []).map(atom => ({ name: atom.name, element: atom.userData?.element, strandId: atom.userData?.strandId })),
+        linkerAtomsVisible: Boolean(nanoparticleSubsystem?.linkerAtomRoot?.visible),
+        surfaceBonds: (nanoparticleSubsystem?.linkerAtomRoot?.children ?? []).filter(item => item.userData?.surfaceAttachment).length,
+      }),
     },
     async importProteinForTest(content) {
       const response = await api.importPdbAuto({ content, name: 'e2e-protein' })
@@ -51,6 +128,9 @@ export function installTestApi({
       return response
     },
     store,
+    /** Exact live CG mesh inventory/rebuild state (not backend topology). */
+    getRenderedDesignAudit: () => designRenderer.debugRenderedAudit?.() ?? null,
+    getRenderedCrossoverArcCount: () => unfoldView?.getArcEntries?.().length ?? 0,
     multiOverlayDiagnostics: () => multiOverlay?.diagnostics?.() ?? [],
     multiOverlayRenderOrder: () => multiOverlay?.renderOrder?.() ?? [],
     /** Final-frame color census: catches colored instance buffers that nevertheless
@@ -268,7 +348,7 @@ export function installTestApi({
       return out
     },
     /** Screen {x,y} centres of up to `maxN` visible, on-screen backbone beads.
-     *  Reusable primitive for gesture e2e tests (e.g. measurement_tool.spec.js). */
+     *  Reusable primitive for gesture e2e tests (e.g. dimensions_tool.spec.js). */
     getBackboneBeadScreenPositions(maxN = 12) {
       const rect = canvas.getBoundingClientRect()
       let mesh = null
@@ -285,6 +365,33 @@ export function installTestApi({
         out.push({
           x: rect.left + (ndc.x  *  0.5 + 0.5) * rect.width,
           y: rect.top  + (-ndc.y * 0.5 + 0.5) * rect.height,
+        })
+      }
+      return out
+    },
+    /** Unpaired rigid beads that can open "Mark flexible segment".
+     *  Includes identity so latency/rapid-click Playwright probes can select
+     *  distinct runs while still driving the real canvas context menu. */
+    getFlexibleMarkScreenPositions() {
+      const rect = canvas.getBoundingClientRect()
+      const out = []
+      const v = new THREE.Vector3(), m = new THREE.Matrix4()
+      const marked = new Set((store.getState().currentDesign?.flexible_segment_marks ?? [])
+        .map(mark => `${mark.strand_id}:${mark.domain_index}:${mark.bp_index}:${mark.direction}`))
+      for (const entry of designRenderer.getBackboneEntries?.() ?? []) {
+        const nuc = entry.nuc
+        if (!nuc?.is_unpaired || !entry.instMesh?.visible) continue
+        const key = `${nuc.strand_id}:${nuc.domain_index}:${nuc.bp_index}:${nuc.direction}`
+        if (marked.has(key)) continue
+        entry.instMesh.getMatrixAt(entry.id, m)
+        v.setFromMatrixPosition(m).applyMatrix4(entry.instMesh.matrixWorld)
+        const ndc = v.clone().project(camera)
+        if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue
+        out.push({
+          x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width,
+          y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height,
+          strand_id: nuc.strand_id, domain_index: nuc.domain_index,
+          bp_index: nuc.bp_index, direction: nuc.direction,
         })
       }
       return out
@@ -340,14 +447,9 @@ export function installTestApi({
       if (!info?.slabMatrix) return null
       const bead = new THREE.Vector3().setFromMatrixPosition(info.beadMatrix)
       const slab = new THREE.Vector3().setFromMatrixPosition(info.slabMatrix)
-      const savedPose = store.getState().currentDesign?.nucleotide_transforms?.find(t =>
-        t.kind === 'base' && t.helix_id === target.helix_id && t.bp_index === target.bp_index &&
-        t.direction === target.direction && (t.copy_k ?? 0) === (target.copy ?? 0))
       return {
         key: keys[0], bead: bead.toArray(), slab: slab.toArray(),
         offset: slab.clone().sub(bead).toArray(), distance: slab.distanceTo(bead),
-        independentPose: !!info.slab?.independentPose,
-        savedDisplayOffset: savedPose?.display_slab_offset ?? null,
       }
     },
     /** Live bead-to-slab offsets for every rendered standard nucleotide. */
@@ -363,9 +465,17 @@ export function installTestApi({
         const info = designRenderer.residueTransformInfo?.(target)
         if (!info?.beadMatrix || !info?.slabMatrix) continue
         const bead = new THREE.Vector3().setFromMatrixPosition(info.beadMatrix)
-        const slab = new THREE.Vector3().setFromMatrixPosition(info.slabMatrix)
+        const slab = new THREE.Vector3()
+        const slabQuat = new THREE.Quaternion()
+        const slabScale = new THREE.Vector3()
+        info.slabMatrix.decompose(slab, slabQuat, slabScale)
         const key = `${target.helix_id}:${target.bp_index}:${target.direction}:${target.copy}`
-        out[key] = { offset: slab.sub(bead).toArray() }
+        const offset = slab.clone().sub(bead)
+        out[key] = {
+          offset: offset.toArray(),
+          localOffset: offset.applyQuaternion(slabQuat.clone().invert()).toArray(),
+          slabScale: slabScale.toArray(),
+        }
       }
       return out
     },
@@ -432,7 +542,7 @@ export function installTestApi({
       const helix = store.getState().currentDesign?.helices?.find(h => h.id === helixId)
       if (helix?.grid_pos) slicePlane.selectCellForTest(...helix.grid_pos)
     },
-    /** Count of Alt-picked measurement beads (the measurement tool's input). */
+    /** Count of picked dimension bases (also covers the legacy Alt-pick path). */
     getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
     /** Count of committed canonical End refs (never measurement anchors). */
     getSelectedEndCount: () => (store.getState().selection?.items ?? []).filter(ref => ref.kind === 'end').length,

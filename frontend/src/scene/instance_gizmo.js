@@ -37,8 +37,10 @@ export function initInstanceGizmo(store, controls) {
   let _dummy      = null   // Object3D TC is attached to
   let _instanceId = null
   let _mode       = 'translate'   // 'translate' | 'rotate'
+  let _space      = 'world'       // user-selected free-transform frame
   let _isDragging = false
   let _scene      = null
+  let _constraintSpace = null // joint constraints override the user-selected free frame
 
   // ── Key handler (Tab cycles translate/rotate) ────────────────────────────
   function _onKey(e) {
@@ -129,6 +131,7 @@ export function initInstanceGizmo(store, controls) {
     if (!inst) return
 
     _instanceId = instanceId
+    _constraintSpace = null
 
     // Build Three.js matrix from NADOC row-major values.
     const raw = inst.transform?.values ?? [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]
@@ -173,7 +176,7 @@ export function initInstanceGizmo(store, controls) {
     _tc = new TransformControls(camera, canvas)
     _tc.attach(_dummy)
     _tc.setMode(_mode)
-    _tc.setSpace('world')
+    _tc.setSpace(_constraintSpace ?? _space)
     scene.add(_tc.getHelper())
 
     _tc.addEventListener('dragging-changed', e => {
@@ -251,6 +254,7 @@ export function initInstanceGizmo(store, controls) {
     _centroidLocal = null
     _dummyStart    = null
     _instanceStart = null
+    _constraintSpace = null
     document.removeEventListener('keydown', _onKey)
   }
 
@@ -283,14 +287,16 @@ export function initInstanceGizmo(store, controls) {
       q.setFromUnitVectors(fromZ, a)
       _dummy.quaternion.copy(q)
       _dummy.updateMatrix()
-      _tc.setSpace('local')
+      _constraintSpace = 'local'
+      _tc.setSpace(_constraintSpace)
       _tc.updateMatrixWorld?.()
     } else if (opts.spherical) {
       // 3-DOF rotation about the pivot. Keep dummy quaternion identity so
       // the rings line up with world axes (cleaner read for the user).
       _dummy.quaternion.identity()
       _dummy.updateMatrix()
-      _tc.setSpace('world')
+      _constraintSpace = 'world'
+      _tc.setSpace(_constraintSpace)
     }
     if (typeof opts.showX === 'boolean') _tc.showX = opts.showX
     if (typeof opts.showY === 'boolean') _tc.showY = opts.showY
@@ -308,6 +314,11 @@ export function initInstanceGizmo(store, controls) {
     detach,
     setMatrix,
     applyConstraint,
+    setSpace(space) {
+      _space = space === 'local' ? 'local' : 'world'
+      _tc?.setSpace(_constraintSpace ?? _space)
+    },
+    getSpace: () => _space,
     isActive: () => _instanceId !== null,
     getMode:  () => _mode,
     isDragging: () => _isDragging,

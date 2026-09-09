@@ -474,6 +474,18 @@ export function initAtomisticRenderer(scene) {
   // ── Public API ────────────────────────────────────────────────────────────
 
   return {
+    /** Uniform alpha for a dedicated overlay renderer (for example a view volume). */
+    setUniformOpacity(opacity = 1) {
+      const alpha = Math.max(0, Math.min(1, Number(opacity)))
+      for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
+        _ensureAtomAlpha(mesh)
+        for (let i = 0; i < (_state.elementAtoms[el]?.length ?? 0); i++) setInstanceAlpha(mesh, i, alpha)
+      }
+      if (_state.bondMesh) {
+        _ensureAtomAlpha(_state.bondMesh)
+        for (let i = 0; i < (_state.bondAtomIdx?.length ?? 0) / 2; i++) setInstanceAlpha(_state.bondMesh, i, alpha)
+      }
+    },
     /** Attach (or detach, with null) the CPD weld overlay. */
     setWeldOverlay(overlay) { _weldOverlay = overlay || null },
 

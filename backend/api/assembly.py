@@ -481,7 +481,7 @@ def create_assembly(body: CreateAssemblyRequest = None) -> dict:
     """Create a new empty assembly, replacing any existing one."""
     name = body.name if body else "Untitled"
     a = Assembly(metadata=DesignMetadata(name=name))
-    assembly_state.set_assembly(a)
+    assembly_state.load_assembly(a)
     return _assembly_response(a)
 
 
@@ -546,11 +546,7 @@ def load_assembly(body: AssemblyLoadRequest) -> dict:
         raise HTTPException(400, detail=f"Failed to load assembly: {exc}") from exc
     assembly, notice = _maybe_auto_downgrade_for_memory(assembly)
     assembly = _derive_assembly_duplexes_if_empty(assembly)
-    assembly_state.clear_history()
-    # Loading establishes a new baseline; do not push the previously-open
-    # document into this file's undo deque. Durable undo comes from the loaded
-    # assembly's own feature snapshots.
-    assembly_state.set_assembly_silent(assembly)
+    assembly_state.load_assembly(assembly)
     resp = _assembly_response(assembly)
     if notice:
         resp["notice"] = notice
@@ -566,8 +562,7 @@ def import_assembly(body: AssemblyImportRequest) -> dict:
         raise HTTPException(400, detail=f"Failed to parse assembly: {exc}") from exc
     assembly, notice = _maybe_auto_downgrade_for_memory(assembly)
     assembly = _derive_assembly_duplexes_if_empty(assembly)
-    assembly_state.clear_history()
-    assembly_state.set_assembly_silent(assembly)
+    assembly_state.load_assembly(assembly)
     resp = _assembly_response(assembly)
     if notice:
         resp["notice"] = notice

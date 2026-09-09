@@ -774,6 +774,10 @@ function _syncViewToolButtons(viewTools) {
     ?.classList.toggle('is-checked', !!viewTools.periodicBoundary)
 }
 
+// Seed the toolbar from the store; otherwise default-on controls (grid,
+// loop/skips, reference geometry) look off until the first state change.
+_syncViewToolButtons(editorStore.getState().viewTools)
+
 // Native-orientation toggle — default ON (cadnano2 convention).
 const nativeOrientBtn = document.getElementById('btn-native-orientation')
 let _nativeOrient = true
@@ -1363,26 +1367,9 @@ window.addEventListener('keydown', (e) => {
     return
   }
 
-  // "P" — Paint tool. Pressing P again while already on Paint nudges the paint
-  // colour up by one hex unit (#RRGGBB + 1, wrapping at #ffffff), so each press
-  // yields a distinct colour — handy for grouping strands by colour afterwards.
-  if (e.key === 'p' || e.key === 'P') {
-    if (editorStore.getState().selectedTool === 'paint') {
-      const cur  = _getActivePaintColor()
-      const n    = (parseInt(cur.slice(1), 16) + 1) & 0xffffff
-      const next = '#' + n.toString(16).padStart(6, '0')
-      editorStore.setState({ paintCustomColor: next })
-      showCursorToast(next, _lastMouseX, _lastMouseY)
-    } else {
-      editorStore.setState({ selectedTool: 'paint' })
-      showCursorToast(_toolDisplayNames.paint ?? 'Paint', _lastMouseX, _lastMouseY)
-    }
-    return
-  }
-
-  // Tab — cycle through selectable filter items (strand, line, ends, xover only)
+  // E / Q — same forward/backward selectable cycle as the 3D viewer.
   // "strand" turns all on; every other key is exclusive (only that one active).
-  if (e.key === 'Tab' && e.target?.tagName?.toUpperCase() === 'CANVAS') {
+  if (e.key.toLowerCase() === 'e' || e.key.toLowerCase() === 'q') {
     e.preventDefault()
     if (_tabCycleKeys.length) {
       const cur = editorStore.getState().selectFilter
@@ -1390,9 +1377,33 @@ window.addEventListener('keydown', (e) => {
       // If strand (all-on), it's index 0. Otherwise find the single active key.
       let activeIdx = cur.strand ? 0 : _tabCycleKeys.findIndex(k => cur[k])
       if (activeIdx < 0) activeIdx = 0
-      const nextKey = _tabCycleKeys[(activeIdx + 1) % _tabCycleKeys.length]
+      const step = e.key.toLowerCase() === 'q' ? -1 : 1
+      const nextKey = _tabCycleKeys[(activeIdx + step + _tabCycleKeys.length) % _tabCycleKeys.length]
       editorStore.setState({ selectFilter: { ...cur, ..._selectFilterFor(nextKey) } })
     }
+    return
+  }
+
+  // S — same staple-only → scaffold-only → both cycle as the 3D viewer.
+  if (e.key === 's' || e.key === 'S') {
+    e.preventDefault()
+    const cur = editorStore.getState().selectFilter
+    const next = cur.stap && !cur.scaf
+      ? { scaf: true, stap: false }
+      : cur.scaf && !cur.stap
+        ? { scaf: true, stap: true }
+        : { scaf: false, stap: true }
+    editorStore.setState({ selectFilter: { ...cur, ...next } })
+    return
+  }
+
+  // View buttons that have a matching 3D-view shortcut declare it in markup,
+  // keeping tooltips and keyboard dispatch tied to the same top-bar control.
+  const viewButton = viewToolsEl.querySelector(`.vt-btn[data-hotkey="${e.key.toLowerCase()}"]`)
+  if (viewButton) {
+    e.preventDefault()
+    viewButton.click()
+    return
   }
 
   // Routing / sequencing number shortcuts
@@ -1403,9 +1414,6 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '4') { const b = document.getElementById('menu-seq-update-routing'); if (b && !b.disabled) b.click() }
   if (e.key === '5') document.getElementById('menu-seq-assign-scaffold')?.click()
   if (e.key === '6') document.getElementById('menu-seq-assign-staples')?.click()
-
-  // Spreadsheet toggle
-  if (e.key === 's' || e.key === 'S') { _spreadsheet?.toggle(); return }
 
   // Help modal
   if (e.key === '?' || e.key === 'F1') _helpModal?.classList.add('visible')

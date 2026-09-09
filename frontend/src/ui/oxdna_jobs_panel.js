@@ -2643,7 +2643,6 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   }
   seedBtn?.addEventListener('click', async () => {
     if (!_selectedId || seedBtn.disabled || _seeding) return
-    if (!(await confirmNoConcurrentJob())) return
     const src = _selectedJob()
     _seeding = true
     seedBtn.disabled = true

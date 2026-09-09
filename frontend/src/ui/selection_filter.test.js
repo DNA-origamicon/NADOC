@@ -130,7 +130,7 @@ describe('initSelectionFilter — selectionLevel + visibility gates', () => {
     expect(store.getState().selectableTypes).toBe(before)        // level buttons no longer pin types
   })
 
-  it('clicking a tool while active suppresses the click', () => {
+  it('deform suppresses selection-level changes while it owns the selection scope', () => {
     store.setState({ deformToolActive: true })
     const f = makeV2(); f.attachFilterButtons()
     const before = store.getState().selectableTypes
@@ -139,7 +139,7 @@ describe('initSelectionFilter — selectionLevel + visibility gates', () => {
     expect(store.getState().selectableTypes).toBe(before)
   })
 
-  it('filter-inactive class follows deform/translate tool activation', () => {
+  it('filter-inactive class follows deform activation', () => {
     const f = makeV2(); f.attachFilterButtons()
     store.setState({ deformToolActive: true })
     expect(document.getElementById('select-filter').classList.contains('filter-inactive')).toBe(true)
@@ -341,12 +341,32 @@ describe('initSelectionFilter — collapsed trigger + menu', () => {
     expect(isMenuOpen()).toBe(false)
   })
 
-  it('activating a tool locks the row AND closes an open menu', () => {
+  it('move/rotate leaves the selectable menu interactive while armed empty', () => {
     const f = makeV2(); f.attachFilterButtons()
     trigger().click()
-    store.setState({ translateRotateActive: true })
+    store.setState({ translateRotateActive: true, selection: { items: [] } })
+    expect(isMenuOpen()).toBe(true)
+    expect(document.getElementById('select-filter').classList.contains('filter-inactive')).toBe(false)
+    document.querySelector('.sf-btn[data-key="line"]').click()
+    expect(sm.setSelectionLevel).toHaveBeenCalledWith('domain')
+  })
+
+  it('locks and closes selectable when Move/Rotate gains a selection, then re-arms when cleared', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    store.setState({ translateRotateActive: true, selection: { items: [] } })
+    trigger().click()
+    expect(isMenuOpen()).toBe(true)
+
+    store.setState({ selection: { items: [{ kind: 'cluster', id: 'c1' }] } })
     expect(isMenuOpen()).toBe(false)
     expect(document.getElementById('select-filter').classList.contains('filter-inactive')).toBe(true)
+    trigger().click()
+    expect(isMenuOpen()).toBe(false)
+
+    store.setState({ selection: { items: [] } })
+    expect(document.getElementById('select-filter').classList.contains('filter-inactive')).toBe(false)
+    trigger().click()
+    expect(isMenuOpen()).toBe(true)
   })
 
   it('the trigger follows the level, and a gate overrides it', () => {

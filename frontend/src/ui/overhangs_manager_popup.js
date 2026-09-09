@@ -1731,7 +1731,7 @@ export function open(preselect) {
 }
 
 function _resolvePreselect(state, explicit) {
-  const all = state.currentDesign?.overhangs ?? []
+  const all = (state.currentDesign?.overhangs ?? []).filter(o => !o.auxiliary_endpoint)
   const valid = (id) => id && all.some(o => o.id === id)
   // Caller-supplied ids win.
   if (Array.isArray(explicit) && explicit.length > 0) {

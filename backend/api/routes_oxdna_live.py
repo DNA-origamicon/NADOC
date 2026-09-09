@@ -40,6 +40,7 @@ from backend.api.routes_oxdna import (
     _load_job,
     _seed_geometry,
     _workspace,
+    capture_run_decision,
 )
 from backend.core.oxdna_job import OxdnaStatus
 from backend.core.oxdna_live_runner import (
@@ -82,6 +83,8 @@ class LiveStartRequest(BaseModel):
     field: FieldElement | None = None
     surface: SurfaceElement | None = None
     anchors: list[AnchorRef] = Field(default_factory=list)
+    surface_anchors: list[AnchorRef] = Field(default_factory=list)
+    surface_strands: dict | None = None
     anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
     burst_steps: int = Field(
         500,
@@ -106,6 +109,8 @@ class LiveReconfigureRequest(BaseModel):
     field: FieldElement | None = None
     surface: SurfaceElement | None = None
     anchors: list[AnchorRef] = Field(default_factory=list)
+    surface_anchors: list[AnchorRef] = Field(default_factory=list)
+    surface_strands: dict | None = None
     anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
 
 
@@ -117,18 +122,10 @@ def oxpy_live_available() -> dict:
     ``F0`` / ``dir`` bindings the live re-aim mutates (the user's local patch — see
     ``memory/project_oxpy_binding_patch.md``).  Without it a live session would die
     with ``AttributeError`` on the first re-aim, so Live is disabled."""
-    try:
-        import oxpy  # noqa: F401
-    except Exception as exc:  # noqa: BLE001
-        return {"available": False, "reason": f"oxpy not built ({exc})"}
-    base = getattr(getattr(oxpy, "forces", None), "BaseForce", None)
-    if base is None or not (hasattr(base, "F0") and hasattr(base, "dir")):
-        return {
-            "available": False,
-            "reason": "oxpy is missing the F0/dir field-steering patch "
-            "(see memory/project_oxpy_binding_patch.md)",
-        }
-    return {"available": True, "reason": "ready"}
+    from backend.core.engines import oxpy_live_info
+
+    info = oxpy_live_info()
+    return {"available": info["available"], "reason": info["reason"]}
 
 
 # ── Frame builder (display payload, mirrors the batch field display) ──────────
@@ -203,6 +200,9 @@ def _prepare_live_rundir(
     anchor_stiff,
     steps,
     backend=None,
+    surface_anchors=None,
+    capture_particles=None,
+    field_exclude_trailing=0,
 ):
     """Stage a temp live run dir composing any combination of an electric field, a
     hard surface, and anchor traps — the SAME proven writers the consolidated
@@ -223,6 +223,8 @@ def _prepare_live_rundir(
 
     if backend is None:
         backend = preferred_backend()
+    surface_anchors = surface_anchors or []
+    capture_particles = capture_particles or []
 
     rundir.mkdir(parents=True, exist_ok=True)
     write_topology(design, rundir / "topology.top")
@@ -236,8 +238,23 @@ def _prepare_live_rundir(
         field=field,
         wall=wall,
         anchors=anchors,
+        surface_anchors=surface_anchors,
         anchor_stiff=anchor_stiff,
+        field_exclude_trailing=field_exclude_trailing,
     )
+    if capture_particles:
+        from backend.physics.oxdna_interface import anchor_trap_block, read_cm_positions_oxdna
+        from backend.physics.oxdna_surface_strands import CAPTURE_TRAP_STIFF
+
+        cm = read_cm_positions_oxdna(rundir / "conf.dat")
+        blocks = [
+            anchor_trap_block(p, cm[p], CAPTURE_TRAP_STIFF)
+            for p in capture_particles if 0 <= p < len(cm)
+        ]
+        if blocks:
+            with open(rundir / "field_forces.txt", "a", encoding="utf-8") as stream:
+                stream.write("\n" + "\n".join(blocks))
+            info["has_forces"] = True
     has_forces = bool(info["has_forces"])
     efield_rec = None
     if info.get("field"):
@@ -260,7 +277,7 @@ def _prepare_live_rundir(
             },
             # repulsion plane / anchor traps are absolute-coordinate forces → disable
             # oxDNA's COM diffusion-fix; a pure field (always anchored) is absolute too.
-            absolute_forces=bool(wall or anchors or info.get("field")),
+            absolute_forces=bool(wall or anchors or surface_anchors or capture_particles or info.get("field")),
             backend=be,
             device="0",
         )
@@ -290,10 +307,12 @@ def _resolve_live_elements(body):
         wall_in = {
             "dir": body.surface.dir,
             "offset_nm": body.surface.offset_nm,
+            "position_nm": body.surface.position_nm,
             "stiff": body.surface.stiff,
         }
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
-    return field_in, field_oxdna, field_dir, wall_in, anchors
+    surface_anchors = [a.model_dump(by_alias=False) for a in body.surface_anchors]
+    return field_in, field_oxdna, field_dir, wall_in, anchors, surface_anchors
 
 
 def _build_live_engine(
@@ -307,6 +326,9 @@ def _build_live_engine(
     anchors,
     anchor_stiff,
     steps,
+    surface_anchors=None,
+    capture_particles=None,
+    field_exclude_trailing=0,
 ):
     """Stage *rundir* for the given element composition (seeded from *seed_conf*) and
     build the live engine + frame builder.  Shared by /start (seed = the job's relaxed
@@ -323,6 +345,9 @@ def _build_live_engine(
         field=field_in,
         wall=wall_in,
         anchors=anchors,
+        surface_anchors=surface_anchors,
+        capture_particles=capture_particles,
+        field_exclude_trailing=field_exclude_trailing,
         anchor_stiff=anchor_stiff,
         steps=steps,
     )
@@ -387,7 +412,18 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
         )
 
     # Resolve the enabled elements into the writer's input dicts (mirror /run).
-    field_in, field_oxdna, field_dir, wall_in, anchors = _resolve_live_elements(body)
+    (
+        field_in,
+        field_oxdna,
+        field_dir,
+        wall_in,
+        anchors,
+        surface_anchors,
+    ) = _resolve_live_elements(body)
+    capture = capture_run_decision(parent.run_config, body.surface_strands)
+    if capture["error"]:
+        raise HTTPException(status_code=409, detail=capture["error"])
+    field_exclude = capture["n_beads"] if field_in and not capture["subject_to_field"] else 0
 
     sid = new_session_id()
     rundir = ws / "live_sessions" / sid
@@ -408,6 +444,9 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
         field_in=field_in,
         wall_in=wall_in,
         anchors=anchors,
+        surface_anchors=surface_anchors,
+        capture_particles=capture["trap_particles"],
+        field_exclude_trailing=field_exclude,
         anchor_stiff=body.anchor_stiff,
         steps=body.burst_steps,
     )
@@ -424,6 +463,7 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
         rundir=rundir,
         design=design,
         design_ref=design_ref,
+        parent_run_config=parent.run_config,
     )
 
     # One in-process oxpy engine at a time — tear down any prior session first.
@@ -475,7 +515,20 @@ async def reconfigure_oxdna_live(session_id: str, body: LiveReconfigureRequest) 
     design_ref = live.design_ref or (rundir / "design_ref.dat")
     steps = live.burst_steps
 
-    field_in, field_oxdna, field_dir, wall_in, anchors = _resolve_live_elements(body)
+    (
+        field_in,
+        field_oxdna,
+        field_dir,
+        wall_in,
+        anchors,
+        surface_anchors,
+    ) = _resolve_live_elements(body)
+    # Reconfiguration remains rooted in the selected parent job's frozen topology.
+    # Use its recorded capture metadata to re-pin inherited capture strands.
+    capture = capture_run_decision(live.parent_run_config, body.surface_strands)
+    if capture["error"]:
+        raise HTTPException(status_code=409, detail=capture["error"])
+    field_exclude = capture["n_beads"] if field_in and not capture["subject_to_field"] else 0
 
     # Pre-validate the anchor selection on the request thread (resolve_anchor_particles
     # needs only the design, not the conf) so a stale/empty field anchor returns 400
@@ -483,7 +536,7 @@ async def reconfigure_oxdna_live(session_id: str, body: LiveReconfigureRequest) 
     if field_in:
         from backend.physics.oxdna_interface import resolve_anchor_particles
 
-        parts, _keys = resolve_anchor_particles(design, anchors)
+        parts, _keys = resolve_anchor_particles(design, anchors + surface_anchors)
         if not parts:
             raise HTTPException(
                 400,
@@ -503,6 +556,9 @@ async def reconfigure_oxdna_live(session_id: str, body: LiveReconfigureRequest) 
             field_in=field_in,
             wall_in=wall_in,
             anchors=anchors,
+            surface_anchors=surface_anchors,
+            capture_particles=capture["trap_particles"],
+            field_exclude_trailing=field_exclude,
             anchor_stiff=body.anchor_stiff,
             steps=steps,
         )

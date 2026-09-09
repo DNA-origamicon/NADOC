@@ -4,7 +4,7 @@
  * `sliceTargetKeys` is the PURE geometry core (which beads the slice plane crosses
  * at a given offset/plane). `initSliceHighlighter` is the stateful factory: it owns
  * the set of currently-recoloured entries and drives designRenderer to paint /
- * revert them (same DI shape as initEndExtrudeArrows / measurement_tool). The
+ * revert them (same DI shape as initEndExtrudeArrows / dimensions_tool). The
  * slice-plane *toggle* orchestration stays in main.js. Unit-tested in
  * slice_highlighter.test.js.
  */

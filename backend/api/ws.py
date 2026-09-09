@@ -666,7 +666,11 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     logs.append("Opening MDAnalysis Universe…")
                     u = mda.Universe(str(topology_path), str(xtc_path))
                     if len(u.atoms) > _UNWRAP_MAX_ATOMS:
-                        _cache_put_universe(_u_key, u)
+                        # Cache only the expensive parsed PSF topology. Caching `u`
+                        # itself also caches its DCD reader, so deleting a downloaded
+                        # 100+ GB trajectory cannot reclaim space until LRU eviction or
+                        # server restart. Each display socket owns its trajectory reader.
+                        _cache_put_universe(_u_key, mda.Universe(u._topology))
                 elif _large_namd:
                     logs.append(
                         "Opening MDAnalysis Universe… (single-flight topology cache; "
@@ -2112,6 +2116,12 @@ async def md_run_ws(websocket: WebSocket) -> None:
         if _prefix_reader is not None:
             try:
                 _prefix_reader.close()
+            except Exception:  # noqa: BLE001
+                pass
+        _universe = _ctx.get("universe")
+        if _universe is not None:
+            try:
+                _universe.trajectory.close()
             except Exception:  # noqa: BLE001
                 pass
 

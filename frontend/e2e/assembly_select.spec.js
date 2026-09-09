@@ -4,7 +4,7 @@
  * Validates the assembly canvas pointer handlers (_onAssemblyPointerDown +
  * _onAssemblyClick → part selection) through the REAL raycast, asserting on
  * exposed state (`__nadocTest.getActiveInstanceId`) with retry-on-miss — the
- * same robust pattern as measurement_tool.spec.js, but for part INSTANCES
+ * same robust pattern as dimensions_tool.spec.js, but for part INSTANCES
  * rather than backbone beads.
  *
  * This is the gesture GATE for safely lifting the (a)/(b) sub-parts of the

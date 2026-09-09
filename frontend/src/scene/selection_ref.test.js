@@ -10,12 +10,12 @@ describe('selection_ref — decision-independent Phase 1 identity contract', () 
   it('lists only the stable kinds ratified independently of pending semantic decisions', () => {
     expect(STABLE_SELECTION_KINDS).toEqual([
       'cluster', 'strand', 'domain', 'base', 'end', 'bond', 'crossover',
-      'overhang', 'extension', 'protein',
+      'overhang', 'extension', 'protein', 'nanoparticle',
     ])
     expect(STABLE_SELECTION_KINDS).not.toContain('forced_ligation') // classification gate
   })
 
-  it.each(['cluster', 'strand', 'overhang', 'extension', 'protein'])(
+  it.each(['cluster', 'strand', 'overhang', 'extension', 'protein', 'nanoparticle'])(
     'normalizes a minimal %s ref and strips mutable payload',
     (kind) => {
       expect(normalizeSelectionRef({ kind, id: `${kind}:1`, data: { stale: true }, mesh: {} }))
@@ -147,7 +147,7 @@ describe('selection ref design liveness', () => {
     crossovers: [{ id: 'x1' }], forced_ligations: [{ id: 'f1' }],
     overhangs: [{ id: 'o1' }], extensions: [{ id: 'e1' }],
     overhang_connections: [{ id: 'l1' }], cluster_transforms: [{ id: 'c1' }],
-    protein_attachments: [{ id: 'p1' }],
+    protein_attachments: [{ id: 'p1' }], nanoparticles: [{ id: 'n1' }],
   }
   it('keeps every live owner and rejects deleted identities', () => {
     for (const ref of [
@@ -157,6 +157,7 @@ describe('selection ref design liveness', () => {
       { kind: 'crossover', id: 'f1', subtype: 'forced_ligation' },
       { kind: 'bond', fromKey: 'h1:3:FORWARD', toKey: 'h1:4:FORWARD', strandId: 's1' },
       { kind: 'overhang', id: 'o1' }, { kind: 'cluster', id: 'c1' }, { kind: 'protein', id: 'p1' },
+      { kind: 'nanoparticle', id: 'n1' },
     ]) expect(isSelectionRefLive(ref, design)).toBe(true)
     expect(isSelectionRefLive({ kind: 'strand', id: 'gone' }, design)).toBe(false)
     expect(isSelectionRefLive({ kind: 'base', key: 'gone:1:FORWARD' }, design)).toBe(false)

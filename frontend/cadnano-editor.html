@@ -1411,7 +1411,7 @@
             </svg>
             <span class="sf-label-text">undef</span>
           </button>
-          <button class="sf-btn vt-btn" data-vt="loopSkips" title="Show loop / skip markers (blue circles = loops, red ✕ = skips)">
+          <button class="sf-btn vt-btn" data-vt="loopSkips" data-hotkey="p" title="Show loop / skip markers (blue circles = loops, red ✕ = skips) [P]">
             <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="4" cy="5" r="2.5" fill="none" stroke="#4488dd" stroke-width="1.3"/>
               <line x1="9.5" y1="2.5" x2="14" y2="7.5" stroke="#dd4444" stroke-width="1.3"/>
@@ -1419,7 +1419,7 @@
             </svg>
             <span class="sf-label-text">loop/skip</span>
           </button>
-          <button class="sf-btn vt-btn" data-vt="grid" title="Toggle bp column grid lines">
+          <button class="sf-btn vt-btn" data-vt="grid" data-hotkey="g" title="Toggle bp column grid lines [G]">
             <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect x="1" y="1" width="14" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1"/>
               <line x1="5"  y1="1" x2="5"  y2="9" stroke="currentColor" stroke-width="0.8"/>
@@ -1656,11 +1656,15 @@
           <div class="hk-section-title">Tools</div>
           <div class="hk-row"><span class="hk-desc">Cycle tool (Select / Pencil / Nick / Paint)</span><span class="hk-key">R</span></div>
           <div class="hk-row"><span class="hk-desc">Nick tool</span><span class="hk-key">N</span></div>
-          <div class="hk-row"><span class="hk-desc">Paint tool (press again to nudge colour +1)</span><span class="hk-key">P</span></div>
-          <div class="hk-row"><span class="hk-desc">Cycle selectable filter</span><span class="hk-key">Tab</span></div>
+          <div class="hk-row"><span class="hk-desc">Cycle selectable forward / backward</span><span class="hk-key">E / Q</span></div>
+          <div class="hk-row"><span class="hk-desc">Cycle scaffold / staple pickability</span><span class="hk-key">S</span></div>
           <div class="hk-row"><span class="hk-desc">Fit path and slice views</span><span class="hk-key">F</span></div>
-          <div class="hk-row"><span class="hk-desc">Toggle strand spreadsheet</span><span class="hk-key">S</span></div>
           <div class="hk-row"><span class="hk-desc">Return to Select / close popup</span><span class="hk-key">Esc</span></div>
+        </div>
+        <div class="hk-section">
+          <div class="hk-section-title">View toggles</div>
+          <div class="hk-row"><span class="hk-desc">Loop / skip markers</span><span class="hk-key">P</span></div>
+          <div class="hk-row"><span class="hk-desc">Grid</span><span class="hk-key">G</span></div>
         </div>
         <div class="hk-section">
           <div class="hk-section-title">Routing &amp; Sequencing</div>

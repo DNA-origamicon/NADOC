@@ -15,6 +15,7 @@
  *     f32[n_ions * 3]                    ions, omitted entirely when n_ions === 0
  *     f32[24]                            cell corners, only when header.has_box
  *     f32[n_serials * 3]                 DNA, only when header.n_serials > 0
+ *     f32[n_graphene * 3]                graphene carbon sites, version 3 only
  *
  * The pad is what makes the float views legal: `new Float32Array(buf, offset)` throws
  * unless offset % 4 === 0, and the JSON header is an arbitrary number of bytes.
@@ -51,7 +52,8 @@ export function parseSolventBin(buf) {
   if (!buf || buf.byteLength < 20) return null
   const dv = new DataView(buf)
   if (dv.getUint32(0, true) !== _MAGIC) return null
-  if (dv.getUint32(4, true) !== _VERSION) return null
+  const version = dv.getUint32(4, true)
+  if (version !== _VERSION && version !== 3) return null
   const nFrames = dv.getUint32(8, true)
   const headerLen = dv.getUint32(16, true)
   if (20 + headerLen > buf.byteLength) return null
@@ -90,7 +92,13 @@ export function parseSolventBin(buf) {
       if (off + n * 4 > buf.byteLength) return null
       dna = new Float32Array(buf, off, n); off += n * 4
     }
-    frames.set(header.frame_ids[i] | 0, { water, nWater, ions, box, dna })
+    let graphene = null
+    if (version === 3) {
+      n = (header.n_graphene | 0) * 3
+      if (n < 0 || off + n * 4 > buf.byteLength) return null
+      graphene = new Float32Array(buf, off, n); off += n * 4
+    }
+    frames.set(header.frame_ids[i] | 0, { water, nWater, ions, box, dna, graphene })
   }
 
   return {

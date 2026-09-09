@@ -1112,16 +1112,18 @@ body:has(#right-panel.locked-inactive) .toast {
 }
 .wizard-tabpanel[hidden] { display: none; }
 .wizard-pane { min-width: 0; }
-/* Full width, so the settings read as a form instead of a stack in a sidebar. Column FLOW
-   rather than a grid: the fields differ wildly in height (one carries a paragraph of
-   explanation, the next a checkbox) and a grid would align every row to its tallest
-   member, leaving half the panel empty. */
-/* The groups stack; the FIELDS inside each group flow into columns. */
+/* Fixed row-major placement. CSS columns rebalanced whenever a provenance/reason line
+   appeared, making controls jump between columns while the user typed. */
 .wizard-scope__fields {
-  columns: 380px 3;
-  column-gap: var(--space-4);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(420px, 1fr));
+  gap: 0 var(--space-4);
+  align-items: stretch;
 }
 .wizard-fields .wizard-field { break-inside: avoid; }
+@media (max-width: 940px) {
+  .wizard-scope__fields { grid-template-columns: minmax(0, 1fr); }
+}
 .wizard-pane h3 {
   font-size: var(--text-xs);
   text-transform: uppercase;
@@ -1132,15 +1134,23 @@ body:has(#right-panel.locked-inactive) .toast {
 
 .wizard-field {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(110px, 1fr) minmax(145px, 180px) 140px;
   gap: 2px var(--space-2);
-  align-items: center;
+  align-items: start;
+  align-content: start;
+  min-height: 142px;
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--color-border-default);
 }
+.wizard-box-size { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+.wizard-box-size > strong, .wizard-box-size > .btn { grid-column: 1 / -1; justify-self: start; }
+.wizard-box-size > label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.wizard-box-size input { width: 100%; min-width: 0; box-sizing: border-box; order: 1; }
 .wizard-field__label { font-size: var(--text-sm); }
 .wizard-field__unit { color: var(--color-text-dim); }
-.wizard-field__control { grid-column: 2; }
+.wizard-field__control { grid-column: 2; width: 100%; }
+.wizard-field__control input,
+.wizard-field__control select { width: 100%; box-sizing: border-box; }
 .wizard-field__help {
   grid-column: 1 / -1;
   font-size: var(--text-xs);
@@ -1157,8 +1167,18 @@ body:has(#right-panel.locked-inactive) .toast {
 /* Provenance: where this value came from. Without it a number on screen gives no clue
    whether changing it does anything — which is the whole problem the wizard fixes. */
 .wizard-chip {
-  grid-column: 1 / -1;
-  justify-self: start;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-height: 22px;
+  line-height: 1.15;
+  box-sizing: border-box;
   font-size: var(--text-xs);
   padding: 0 6px;
   border-radius: var(--radius-pill);
@@ -1349,7 +1369,12 @@ body:has(#right-panel.locked-inactive) .toast {
 .wizard-note h4 { margin: 0 0 var(--space-1); }
 
 .wizard-empty { font-size: var(--text-sm); color: var(--color-text-muted); }
-.wizard-status { font-size: var(--text-xs); color: var(--color-text-muted); min-height: 1em; }
+.wizard-status {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  height: 2.8em;
+  overflow: auto;
+}
 .wizard-check { accent-color: var(--color-accent); }
 
 /* Condition references — "(C1, C4)" beside the control or stage column a condition
@@ -1428,6 +1453,8 @@ body:has(#right-panel.locked-inactive) .toast {
    does (its help). They answer different questions and the reason used to replace the
    help, which cost every production control its explanation. */
 .wizard-field__why {
+  grid-column: 1 / -1;
+  min-height: 2.8em;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   font-style: italic;
@@ -1446,3 +1473,61 @@ body:has(#right-panel.locked-inactive) .toast {
 .wizard-field__alert { margin-left: 4px; cursor: help; }
 .wizard-field__alert--warning { color: var(--color-warning); }
 .wizard-field__alert--blocking { color: var(--color-danger); }
+.dimensions-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.dimensions-action-wrap,
+.dimensions-action-wrap > .def-btn {
+  width: 100%;
+}
+
+.dimensions-list {
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-default);
+  border-radius: 4px;
+  background: var(--color-bg-inset);
+  padding: 3px;
+}
+
+.dimensions-empty {
+  padding: 10px 6px;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  text-align: center;
+}
+
+.dimensions-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 4px 5px 7px;
+  border-bottom: 1px solid var(--color-border-muted, #21262d);
+  font-size: 11px;
+}
+
+.dimensions-row:last-child { border-bottom: none; }
+.dimensions-row--live { box-shadow: inset 2px 0 0 #00e5ff; }
+.dimensions-row__main { min-width: 0; }
+.dimensions-row__name { color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dimensions-row__value { color: #00e5ff; font-variant-numeric: tabular-nums; margin-top: 1px; }
+.dimensions-row__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 3px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.dimensions-row__button:hover { color: var(--color-text-primary); background: var(--color-bg-subtle); }
+.dimensions-row__button--delete:hover { color: var(--color-danger-fg, #f85149); }

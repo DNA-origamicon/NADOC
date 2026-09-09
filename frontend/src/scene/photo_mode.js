@@ -47,7 +47,8 @@ import { SMAAPass }       from 'three/addons/postprocessing/SMAAPass.js'
 import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 
-import { makeMaterial }               from './photo_renderer/material_presets.js'
+import { makeMaterial, makeGoldNanoparticleMaterial }
+  from './photo_renderer/material_presets.js'
 import { reprOf }                     from './photo_renderer/mesh_repr.js'
 import { applyInstanceAlphaMaterial } from './instance_alpha.js'
 import { FigurePass }                 from './photo_renderer/figure_pass.js'
@@ -253,7 +254,9 @@ export function swapToFlatMaterials(root, presets = null) {
     // swap makes every unnamed mesh look 'atomistic' (see mesh_repr.js).
     const repr   = reprOf(obj)
     const preset = presets?.[repr] ?? (repr === 'atomistic' ? 'cpk-flat' : 'flat')
-    const mat = makeMaterial(repr, preset, vc, 1.0)
+    const mat = obj.userData?.photoMaterialKind === 'gold-nanoparticle'
+      ? makeGoldNanoparticleMaterial()
+      : makeMaterial(repr, preset, vc, 1.0)
     mat.side = src.side
     // Preserve the depth contract. Overlay geometry (ghost planes, hit targets,
     // immobilisation surfaces) is drawn depthWrite:false precisely so it cannot

@@ -128,7 +128,11 @@ export function openImportPdbModal({ onResult }) {
         ? { pdbId: json.pdb_id, name: json.name || originalArgs.name }
         : { content: json.content ?? originalArgs.content, name: json.name || originalArgs.name }
       b.onclick = () => run(
-        { ...retrySource, removeDnaFromProtein: remove },
+        {
+          ...retrySource,
+          removeDnaFromProtein: remove,
+          expectedRevision: json.revision ?? originalArgs.expectedRevision,
+        },
         remove ? 'Importing protein (DNA removed)…' : 'Importing protein + DNA…',
         recentMeta,
       )

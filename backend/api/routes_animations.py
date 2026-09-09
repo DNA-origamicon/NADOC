@@ -66,6 +66,8 @@ class CreateKeyframeBody(BaseModel):
     # the model so a typo comes back as a 422 instead of a 500 from model construction.
     trajectory_scope: Optional[Literal["lineage", "job"]] = None
     trajectory_stride: Optional[int] = Field(default=None, ge=1)
+    trajectory_show_ions: bool = False
+    trajectory_show_box: bool = False
     spin_axis: Optional[str] = None
     spin_rotations: float = 0.0
     spin_invert: bool = False
@@ -96,6 +98,8 @@ class PatchKeyframeBody(BaseModel):
     # the model so a typo comes back as a 422 instead of a 500 from model construction.
     trajectory_scope: Optional[Literal["lineage", "job"]] = None
     trajectory_stride: Optional[int] = Field(default=None, ge=1)
+    trajectory_show_ions: Optional[bool] = None
+    trajectory_show_box: Optional[bool] = None
     spin_axis: Optional[str] = None
     spin_rotations: Optional[float] = None
     spin_invert: Optional[bool] = None
@@ -189,6 +193,8 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
         trajectory_frame_end=body.trajectory_frame_end,
         trajectory_scope=body.trajectory_scope,
         trajectory_stride=body.trajectory_stride,
+        trajectory_show_ions=body.trajectory_show_ions,
+        trajectory_show_box=body.trajectory_show_box,
         spin_axis=body.spin_axis,
         spin_rotations=body.spin_rotations,
         spin_invert=body.spin_invert,

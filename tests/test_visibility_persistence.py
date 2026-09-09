@@ -38,7 +38,7 @@ def test_visibility_endpoint_persists_without_feature_log_entry(tmp_path, monkey
     with TestClient(app) as client:
         # Lifespan startup may restore the default document; establish this
         # test's design after startup so revision pointers match tmp_path.
-        design_state.set_design_branch(design, push_history=False)
+        design_state.set_design_branch(design)
         response = client.put("/api/design/visibility", json=body)
         assert response.status_code == 200
         saved_path = tmp_path / "visibility.nadoc"

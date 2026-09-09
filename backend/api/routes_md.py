@@ -30,7 +30,8 @@ from dataclasses import asdict
 from collections import OrderedDict
 from pathlib import Path
 import os
-from typing import Literal, Optional
+import re
+from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -80,6 +81,8 @@ from backend.core.md_prep_progress import (
     clear_prep_progress,
     design_size_factor,
     read_prep_progress,
+    register_active_preparation,
+    unregister_active_preparation,
     write_prep_progress,
 )
 from backend.core.namd_runner import (
@@ -178,6 +181,11 @@ class CreateJobRequest(BaseModel):
     ion_conc_mM: float = Field(0.0, ge=0.0)
     mg_conc_mM: float = Field(12.5, ge=0.0)
     padding_nm: float = Field(1.2, gt=0.0)
+    box_size_nm: Optional[tuple[
+        Optional[Annotated[float, Field(gt=0, allow_inf_nan=False)]],
+        Optional[Annotated[float, Field(gt=0, allow_inf_nan=False)]],
+        Optional[Annotated[float, Field(gt=0, allow_inf_nan=False)]],
+    ]] = Field(None, description="Initial X/Y/Z cell lengths in nm; null axes use calculated sizes.")
     box_mode: Literal["bbox", "rotation"] = Field(
         "rotation",
         description="Cell geometry chosen at solvation. 'rotation' is a cubic cell "
@@ -333,6 +341,56 @@ class CreateJobRequest(BaseModel):
         "relaxed coordinates (its OWN design.json + latest last_conf) "
         "instead of ideal B-DNA.",
     )
+    graphene_nanopore: bool = Field(
+        False,
+        description="Carry a deposited oxDNA surface into this seeded NAMD job as a "
+        "graphene-nanopore build descriptor. Requires an oxDNA surface-deposition seed.",
+    )
+    graphene_only: bool = Field(
+        False,
+        description="Build a membrane/electrolyte control with no DNA. Requires "
+        "graphene_nanopore; the pore is centered in an XY sheet at z=0.",
+    )
+    graphene_pore_diameter_nm: float = Field(
+        2.1, gt=0.0, le=100.0,
+        description="Diameter of the aligned graphene aperture in nm.",
+    )
+    graphene_surface_axis: Optional[str] = Field(
+        None,
+        description="Hard-surface face: -x, +x, -y, +y, -z, or +z. None inherits "
+        "an oxDNA deposition plane, or defaults to -y for a fresh design.",
+    )
+    graphene_surface_offset_nm: float = Field(
+        0.0, ge=0.0, le=100.0,
+        description="Persistent outward displacement from the selected design face (nm).",
+    )
+
+    @field_validator("graphene_surface_axis")
+    @classmethod
+    def _valid_graphene_surface_axis(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in {"-x", "+x", "-y", "+y", "-z", "+z"}:
+            raise ValueError("graphene_surface_axis must be -x, +x, -y, +y, -z, or +z")
+        return v
+    graphene_layers: int = Field(
+        1, ge=1, le=6,
+        description="Number of fixed graphene layers; additional layers extend away from DNA.",
+    )
+    graphene_layer_spacing_nm: float = Field(
+        0.335, gt=0.1, le=1.0,
+        description="Normal spacing between graphene layers in nm.",
+    )
+    graphene_atomistic_clearance_nm: float = Field(
+        0.32, ge=0.0, le=2.0,
+        description="Minimum DNA-heavy-atom to first-layer separation after backmapping (nm).",
+    )
+    graphene_water_clearance_nm: float = Field(
+        0.30, ge=0.0, le=1.0,
+        description="Remove water oxygens closer than this distance to a graphene site (nm).",
+    )
+    graphene_sheet_margin_nm: float = Field(
+        1.5, ge=0.5, le=10.0,
+        description="Graphene overhang beyond the DNA lateral extent (nm).",
+    )
     mrdna_job_id: Optional[str] = Field(
         None,
         description="If set, seed the NAMD run from this completed FINE-stage mrDNA "
@@ -431,6 +489,13 @@ class CreateJobRequest(BaseModel):
         "annotation, never a Design edit; a selection that resolves to nothing "
         "leaves the run unanchored.",
     )
+    surface_anchors: Optional[list] = Field(
+        None,
+        description="Anchor scopes attached to the NAMD hard surface. They are kept "
+        "separate for provenance/UI but resolve to the same fixed-atom mechanism at "
+        "their deposited coordinates. oxDNA surface anchors are mapped to ordinary "
+        "fixed anchors when graphene_nanopore is not requested.",
+    )
     anchor_atoms: Optional[list[str]] = Field(
         None,
         description="DEFAULT atom-name filter, for anchors that do not carry their own "
@@ -440,6 +505,14 @@ class CreateJobRequest(BaseModel):
         "this default). None = all heavy atoms (hydrogens are never anchored). "
         "Names that match nothing are rejected rather than silently producing an "
         "unanchored run.",
+    )
+    anchor_k: Optional[float] = Field(
+        0.02,
+        gt=0.0,
+        le=100.0,
+        description="GPU-compatible harmonic force constant for DNA anchors during "
+        "relaxation (kcal/mol/Å²). The default 0.02 damps global drift/tumbling "
+        "without turning the selected atoms into immobile fixedAtoms.",
     )
     field: Optional[dict] = Field(
         None,
@@ -470,10 +543,9 @@ class CreateJobRequest(BaseModel):
     draft: bool = Field(
         False,
         description="Create the job as an unprepared DRAFT (status='draft') instead of "
-        "solvating immediately. Only valid for a seeded job (oxdna/mrdna). "
-        "The 'Use as NAMD seed' button uses this so the user can set advanced "
-        "options first; the deferred solvation runs on POST /md/jobs/{id}/prepare "
-        "(the 'Relax from oxDNA' button).",
+        "solvating immediately. Valid for native, graphene-only, and seeded jobs. "
+        "The deferred build runs on POST /md/jobs/{id}/prepare when the user presses "
+        "Run, so topology-changing surface choices are frozen exactly once.",
     )
     stage_overrides: dict = Field(
         default_factory=dict,
@@ -1913,7 +1985,12 @@ def _conservative_production_conf(
     # seed=None keeps build_production_conf's own default, which the pure-builder tests
     # pin byte-for-byte; the append route passes an explicit random draw.
     seed_kw = {} if seed is None else {"seed": int(seed)}
-    return build_production_conf(
+    anchor_k = None
+    if package_dir is not None and anchors_file:
+        from backend.core.md_anchor_settings import production_anchor_file
+
+        anchors_file, anchor_k = production_anchor_file(package_dir, anchors_file)
+    conf = build_production_conf(
         spec,
         name_stem,
         box,
@@ -1924,6 +2001,7 @@ def _conservative_production_conf(
         rigid_bonds=rigid_bonds,
         hmr=hmr,
         anchors_file=anchors_file,
+        anchor_k=anchor_k,
         field=field,
         colvars_file=colvars_file,
         n_atoms=n_atoms,
@@ -1931,6 +2009,15 @@ def _conservative_production_conf(
         npt=package_npt_allowed(package_dir) if package_dir else True,
         **seed_kw,
     )
+    from backend.core.namd_graphene import graphene_pressure_conf
+
+    manifest_path = package_dir / "manifest.json" if package_dir else None
+    wall = (
+        json.loads(manifest_path.read_text()).get("graphene_nanopore")
+        if manifest_path and manifest_path.exists() else None
+    )
+    return graphene_pressure_conf(conf, enabled=bool(wall and anchor_k is not None),
+                                  fixed_cell=bool(wall and wall.get("cell_policy") == "fixed_volume"))
 
 
 def _seed_production_conf(
@@ -2411,6 +2498,16 @@ def _sequence_problem(design) -> Optional[str]:
     return "; ".join(problems) if problems else None
 
 
+def _infer_graphene_only(body: CreateJobRequest, design) -> CreateJobRequest:
+    """Make an empty graphene system a membrane control without a UI-only flag."""
+    # Sequence assignment is deliberately irrelevant: an unsequenced origami still has
+    # DNA and must remain on the DNA topology/relaxation path (then wait at its ordinary
+    # sequence gate). A true membrane control has no strands at all.
+    if body.graphene_nanopore and not design.strands:
+        return body.model_copy(update={"graphene_only": True})
+    return body
+
+
 @router.get("/md/relax-presets")
 async def list_relax_presets() -> dict:
     """The named relaxation protocols the panel offers, cheapest first.
@@ -2526,6 +2623,186 @@ def _apply_photoproduct_integrator_policy(design, body: CreateJobRequest) -> Cre
 resolve_relax_preset = _apply_relax_preset
 
 
+def _inherit_oxdna_seed_anchors(body: CreateJobRequest) -> CreateJobRequest:
+    """Import an oxDNA seed's attachment intent once, when creating the NAMD job."""
+    if not body.oxdna_job_id:
+        return body
+    from backend.core.oxdna_job import OxdnaJob  # noqa: PLC0415
+
+    try:
+        source = OxdnaJob.load(body.oxdna_job_id, _workspace())
+    except FileNotFoundError:
+        return body  # the normal seed check supplies the useful 400
+    config = source.run_config or {}
+    ordinary = list(config.get("anchors") or [])
+    surface = list(config.get("surface_anchors") or [])
+    if not ordinary and not surface:
+        return body
+
+    # Explicit [] is the API-level opt-out. Browser creation requests send null,
+    # which deliberately means "take the seed defaults".
+    if body.anchors == [] and "anchors" in body.model_fields_set:
+        ordinary = []
+        if not body.graphene_nanopore:
+            surface = []
+    updates: dict = {}
+    inherited_structure = ordinary + (surface if not body.graphene_nanopore else [])
+    if inherited_structure:
+        updates["anchors"] = list(body.anchors or []) + inherited_structure
+    if body.graphene_nanopore:
+        if body.surface_anchors == [] and "surface_anchors" in body.model_fields_set:
+            surface = []
+        if surface:
+            updates["surface_anchors"] = list(body.surface_anchors or []) + surface
+    return body.model_copy(update=updates) if updates else body
+
+
+def _harmonicize_seed_anchors(
+    package_path: Path,
+    *,
+    name_stem: str,
+    force_constant: float = 0.02,
+    graphene_force_constant: float = 50.0,
+    force_gpu_resident: bool = False,
+) -> None:
+    """Compose ladder release restraints with constant, GPU-safe physical anchors.
+
+    NAMD has one positional-restraint channel. Each stage therefore gets a combined
+    PDB whose ordinary DNA weights already include that stage's release scaling while
+    DNA anchors retain ``force_constant`` and graphene retains its independently stiff
+    ``graphene_force_constant``. Configs then run at scaling 1.
+    """
+    manifest_path = package_path / "manifest.json"
+    if not manifest_path.exists():
+        return
+    manifest = json.loads(manifest_path.read_text())
+    marker_name = (manifest.get("files") or {}).get("anchors")
+    if not marker_name or not (package_path / marker_name).exists():
+        return
+    marker_lines = (package_path / marker_name).read_text().splitlines(keepends=True)
+
+    def weight(line: str) -> float:
+        try:
+            return float(line[60:66].strip() or 0.0)
+        except (ValueError, IndexError):
+            return 0.0
+
+    for conf_path in package_path.glob("*.conf"):
+        conf = conf_path.read_text(encoding="utf-8")
+        scale_match = re.search(r"^\s*constraintScaling\s+(\S+)", conf, re.MULTILINE | re.IGNORECASE)
+        scale = float(scale_match.group(1)) if scale_match else 0.0
+        ref_match = re.search(r"^\s*consref\s+(\S+)", conf, re.MULTILINE | re.IGNORECASE)
+        ref_name = ref_match.group(1) if ref_match else f"{name_stem}.pdb"
+        ref_path = package_path / ref_name
+        if not ref_path.exists():
+            ref_name = f"{name_stem}.pdb"
+            ref_path = package_path / f"{name_stem}.pdb"
+        ref_lines = ref_path.read_text().splitlines(keepends=True)
+        if len(ref_lines) != len(marker_lines):
+            raise RuntimeError("Anchor/restraint PDB rows do not align for harmonic composition.")
+        combined = []
+        for ref, marker in zip(ref_lines, marker_lines, strict=True):
+            if ref.startswith(("ATOM", "HETATM")):
+                is_graphene = (
+                    marker[17:21].strip() == "GRP"
+                    or marker[72:76].strip().startswith("GR")
+                )
+                value = (
+                    graphene_force_constant if is_graphene
+                    else force_constant if weight(marker) > 0
+                    else weight(ref) * scale
+                )
+                ref = ref.rstrip("\n").ljust(80)
+                ref = ref[:60] + f"{value:6.2f}" + ref[66:] + "\n"
+            combined.append(ref)
+        combined_name = f"restraints_combined_{conf_path.stem}.pdb"
+        (package_path / combined_name).write_text("".join(combined), encoding="utf-8")
+
+        owned = {"fixedatoms", "fixedatomsfile", "fixedatomscol", "constraints",
+                 "consref", "conskfile", "conskcol", "consexp", "constraintscaling"}
+        kept = []
+        inserted = False
+        block = (
+            "constraints        on\n"
+            f"consref            {ref_name}\n"
+            f"conskfile          {combined_name}\n"
+            "conskcol           B\nconsexp            2\nconstraintScaling  1\n"
+        )
+        for line in conf.splitlines(keepends=True):
+            key = line.split("#", 1)[0].strip().split(None, 1)[0].lower() if line.split("#", 1)[0].strip() else ""
+            if key in owned:
+                continue
+            kept.append(line)
+            if not inserted and key == "coordinates":
+                kept.append(block)
+                inserted = True
+        restore_resident = force_gpu_resident or manifest.get("gpu_resident_mode") == "on"
+        if restore_resident and not re.search(r"^\s*GPUresident\b", "".join(kept), re.MULTILINE | re.IGNORECASE):
+            kept.insert(0, "GPUresident        on\n")
+        from backend.core.namd_graphene import graphene_pressure_conf
+
+        conf_path.write_text(
+            graphene_pressure_conf(
+                "".join(kept), enabled=bool(manifest.get("graphene_nanopore")),
+                fixed_cell=(manifest.get("graphene_nanopore") or {}).get("cell_policy") == "fixed_volume"
+            ),
+            encoding="utf-8",
+        )
+
+    manifest.setdefault("anchors", {})["mechanism"] = "harmonic_positional"
+    manifest["anchors"]["force_constant_kcal_mol_A2"] = force_constant
+    manifest["anchors"]["fixed_equivalent_rms_A_300K"] = (0.596161 / (2 * force_constant)) ** 0.5
+    if manifest.get("graphene_nanopore"):
+        from backend.core.namd_graphene import (
+            GRAPHENE_PISTON_DECAY_FS,
+            GRAPHENE_PISTON_PERIOD_FS,
+        )
+
+        piston_defaults = [GRAPHENE_PISTON_PERIOD_FS, GRAPHENE_PISTON_DECAY_FS]
+        settings = manifest.setdefault("relax_protocol_settings", {})
+        settings["ladder_piston_period_decay_fs"] = piston_defaults
+        settings["production_piston_period_decay_fs"] = piston_defaults
+        manifest["graphene_nanopore"]["restraint_mechanism"] = "harmonic_positional"
+        manifest["graphene_nanopore"]["restraint_k_kcal_mol_A2"] = graphene_force_constant
+        manifest["graphene_nanopore"]["model"] = (
+            "neutral graphene LJ sites held by GPUresident-compatible harmonic restraints"
+        )
+        descriptor = package_path / "graphene_nanopore.json"
+        if descriptor.exists():
+            descriptor.write_text(
+                json.dumps(manifest["graphene_nanopore"], indent=2), encoding="utf-8"
+            )
+    text = json.dumps(manifest, indent=2)
+    manifest_path.write_text(text, encoding="utf-8")
+    mirror = package_path / "nadoc_md_run.json"
+    if mirror.exists():
+        mirror.write_text(text, encoding="utf-8")
+
+
+def _audit_external_force_configs(package_path: Path) -> None:
+    """Refuse a prepared package whose final NAMD directives contradict its manifest.
+
+    This runs before any executor can see the package, making the invariant identical for
+    local launch, Alpine staging, and RunPod compression.
+    """
+    manifest = json.loads((package_path / "manifest.json").read_text())
+    expects_restraints = bool((manifest.get("files") or {}).get("anchors"))
+    for conf_path in package_path.glob("*.conf"):
+        conf = conf_path.read_text(encoding="utf-8")
+        resident = bool(re.search(r"^\s*GPUresident\s+on\b", conf, re.I | re.M))
+        fixed = bool(re.search(r"^\s*fixedAtoms\s+on\b", conf, re.I | re.M))
+        harmonic = bool(re.search(r"^\s*constraints\s+on\b", conf, re.I | re.M))
+        if resident and fixed:
+            raise RuntimeError(
+                f"{conf_path.name} requests GPUresident with fixedAtoms; rebuild with "
+                "harmonic anchors."
+            )
+        if expects_restraints and not (fixed or harmonic):
+            raise RuntimeError(
+                f"{conf_path.name} drops the package's anchor/graphene restraint marker."
+            )
+
+
 @router.post("/md/jobs")
 async def create_md_job(body: CreateJobRequest) -> dict:
     """Create a new MD job and prepare it (solvation + config gen) in the background.
@@ -2561,6 +2838,12 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         raise HTTPException(400, f"Unknown protocol: {body.protocol!r}")
     if body.salt_mode not in {"screening", "custom"}:
         raise HTTPException(400, f"Unknown salt_mode: {body.salt_mode!r}")
+    if body.graphene_only and not body.graphene_nanopore:
+        raise HTTPException(400, "graphene_only requires graphene_nanopore=true")
+    if body.graphene_only and any(
+        (body.oxdna_job_id, body.mrdna_job_id, body.blade_job_id)
+    ):
+        raise HTTPException(400, "A graphene-only control cannot also have a DNA seed.")
 
     # E-field guards.  Both are physics/engine facts, not preferences, so they belong
     # here rather than only in the UI.  `field` is an untyped dict (mirroring CanDo's), so
@@ -2614,10 +2897,6 @@ async def create_md_job(body: CreateJobRequest) -> dict:
             "protocol has no solvation step to seed.",
         )
     seeded = bool(body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id)
-    if body.draft and not seeded:
-        raise HTTPException(
-            400, "A draft job must be seeded from an oxDNA / mrDNA / BLADE job."
-        )
     if seeded:
         # The seed's design lives on disk (the source job's snapshot); it is resolved in
         # the background worker so its (slow) reconstruction shows on the progress
@@ -2646,22 +2925,31 @@ async def create_md_job(body: CreateJobRequest) -> dict:
             # A seed is named deliberately ("Use as NAMD seed"), so an unusable one is a
             # real error rather than something to quietly relax without.
             raise HTTPException(400, str(exc))
+        if body.oxdna_job_id:
+            body = _inherit_oxdna_seed_anchors(body)
         design = None
         name = _seed_design_name(body)  # nice list label; provisional otherwise
         size_factor = 1.0
     else:
         # The active design is request-scoped (doc session contextvar), so it must
         # be captured here on the request thread, not in the background worker.
-        design = design_state.get_or_404().without_reference_geometry()
-        from backend.core.cpd_forcefield import CpdCapabilityError, assert_cpd_simulation_supported
-        try:
-            assert_cpd_simulation_supported(design, path="NAMD job creation")
-        except CpdCapabilityError as exc:
-            raise HTTPException(400, str(exc)) from exc
-        try:
-            body = _apply_photoproduct_integrator_policy(design, body)
-        except CpdCapabilityError as exc:
-            raise HTTPException(400, str(exc)) from exc
+        if body.graphene_only:
+            from backend.core.models import Design, DesignMetadata  # noqa: PLC0415
+
+            design = Design(metadata=DesignMetadata(name="graphene_control"))
+        else:
+            design = design_state.get_or_404().without_reference_geometry()
+            body = _infer_graphene_only(body, design)
+            from backend.core.cpd_forcefield import (  # noqa: PLC0415
+                CpdCapabilityError,
+                assert_cpd_simulation_supported,
+            )
+
+            try:
+                assert_cpd_simulation_supported(design, path="NAMD job creation")
+                body = _apply_photoproduct_integrator_policy(design, body)
+            except CpdCapabilityError as exc:
+                raise HTTPException(400, str(exc)) from exc
         name = (design.metadata.name or "design").replace(" ", "_")
         size_factor = design_size_factor(design)
 
@@ -2670,7 +2958,7 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         # boundary: it re-reads the live design and prepares from the now-current
         # sequence, so exact atom count, storage/throughput projections and every other
         # package consumer all see the updated topology before NAMD can start.
-        if _sequence_problem(design):
+        if not body.graphene_only and _sequence_problem(design):
             job = _spawn_draft_job(body, name=name)
             job.awaiting_sequence = True
             job.save(_workspace())
@@ -2721,6 +3009,18 @@ async def get_md_job_forces(job_id: str) -> dict:
         }
     manifest = json.loads(manifest_path.read_text())
     anchors = manifest.get("anchors") or None
+    groups = manifest.get("anchor_groups")
+    if groups is None:
+        # Packages prepared before anchor_groups was added still retain their two
+        # request categories on the job row.  Use that as a display-only migration.
+        prep = job.prep_params or {}
+        if "anchors" in prep or "surface_anchors" in prep:
+            groups = {
+                "structure": list(prep.get("anchors") or []),
+                "surface": list(prep.get("surface_anchors") or []),
+            }
+        else:
+            groups = {}
     # A package that recorded a selection but resolved none is NOT anchored; say so
     # rather than letting a non-empty `requested` list read as an applied anchor.
     if anchors and not (
@@ -2746,6 +3046,9 @@ async def get_md_job_forces(job_id: str) -> dict:
         "editable": editable,
         "status": job.status.value,
         "anchors": anchors,
+        "structure_anchors": groups.get("structure"),
+        "surface_anchors": groups.get("surface"),
+        "anchor_inheritance": manifest.get("anchor_inheritance"),
         "field": manifest.get("field") or None,
     }
 
@@ -2934,13 +3237,12 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
 
 @router.post("/md/jobs/{job_id}/prepare")
 async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
-    """Prepare (solvate) a DRAFT job with the given advanced settings, then start it.
+    """Freeze and prepare a DRAFT job with its final user-selected settings.
 
-    Backs the "Relax from oxDNA" button: a draft created by "Use as NAMD seed"
-    deferred its solvation so the user could set options.  This runs the STANDARD
-    prep pipeline into the SAME job id, seeding from the draft's recorded oxDNA/mrDNA
-    source (the body's seed ids are ignored — the draft owns the seed).  ``autostart``
-    (in the body) launches the run once prep finishes, exactly like a normal relax.
+    Seeded drafts retain their recorded source; native wizard drafts snapshot the live
+    design here, while copies use their retained snapshot. Graphene-only drafts
+    construct the empty control design here.
+    In every case the package is built into the SAME job id.
     """
     job = _load_job(job_id)
     if job.status != MdStatus.draft:
@@ -2971,8 +3273,6 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
     seeded = bool(
         new_body.oxdna_job_id or new_body.mrdna_job_id or new_body.blade_job_id
     )
-    if not seeded:
-        raise HTTPException(400, "Draft has no seed source; cannot prepare.")
     try:
         if new_body.oxdna_job_id:
             from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
@@ -2986,7 +3286,7 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
             await run_in_threadpool(
                 assert_mrdna_namd_seed_available, new_body.mrdna_job_id, _workspace()
             )
-        else:
+        elif new_body.blade_job_id:
             from backend.core.blade_runner import assert_blade_namd_seed_available  # noqa: PLC0415
 
             await run_in_threadpool(
@@ -2995,12 +3295,32 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(400, str(exc))
 
+    design = None
+    size_factor = 1.0
+    if not seeded:
+        if new_body.graphene_only:
+            from backend.core.models import Design, DesignMetadata  # noqa: PLC0415
+
+            design = Design(metadata=DesignMetadata(name="graphene_control"))
+        else:
+            # Copies retain their source's frozen design. Ordinary wizard drafts have
+            # no snapshot yet and freeze the active document when Run is pressed.
+            snapshot = job.job_dir(_workspace()) / "design.json"
+            if snapshot.is_file():
+                from backend.core.models import Design  # noqa: PLC0415
+
+                design = Design.from_json(snapshot.read_text())
+            else:
+                design = design_state.get_or_404().without_reference_geometry()
+            new_body = _infer_graphene_only(new_body, design)
+        size_factor = design_size_factor(design)
+
     _spawn_prep_job(
         new_body,
-        design=None,
-        seeded=True,
+        design=design,
+        seeded=seeded,
         name=job.design_name or "design",
-        size_factor=1.0,
+        size_factor=size_factor,
         existing_job=job,
     )
     logger.info(
@@ -3725,8 +4045,12 @@ def _spawn_prep_job(
             tracker=tracker,
         )
     )
+    register_active_preparation(job.job_id)
     _PREP_TASKS.add(task)
-    task.add_done_callback(_PREP_TASKS.discard)
+    def _prep_done(done_task: asyncio.Task, *, active_job_id: str = job.job_id) -> None:
+        _PREP_TASKS.discard(done_task)
+        unregister_active_preparation(active_job_id)
+    task.add_done_callback(_prep_done)
 
     return job
 
@@ -3755,6 +4079,9 @@ async def _prepare_job_bg(
     try:
         seed_model = None
         seed_solute_coords = None
+        seed_kwargs_graphene = None
+        if body.surface_anchors and not body.graphene_nanopore:
+            raise RuntimeError("Surface anchors require the NAMD graphene hard surface.")
         if seeded:
             if body.oxdna_job_id:
                 tracker.report("seed", None, "Reconstructing relaxed atomic model…")
@@ -3763,6 +4090,30 @@ async def _prepare_job_bg(
                 seed = await run_in_threadpool(build_namd_seed, body.oxdna_job_id, ws)
                 local_design = seed.design
                 seed_model = seed.atomistic_model
+                if seed.backmap_report is not None:
+                    import json as _json
+
+                    (job_dir / "oxdna_seed_backmap.json").write_text(
+                        _json.dumps(seed.backmap_report, indent=2), encoding="utf-8"
+                    )
+                if body.graphene_nanopore:
+                    inherited_surface = seed.deposition_surface or {}
+                    seed_kwargs_graphene = {
+                        **inherited_surface,
+                        "material": "graphene",
+                        "pore_diameter_nm": float(body.graphene_pore_diameter_nm),
+                        "layers": int(body.graphene_layers),
+                        "layer_spacing_nm": float(body.graphene_layer_spacing_nm),
+                        "atomistic_clearance_nm": float(body.graphene_atomistic_clearance_nm),
+                        "water_clearance_nm": float(body.graphene_water_clearance_nm),
+                        "sheet_margin_nm": float(body.graphene_sheet_margin_nm),
+                        "edge_model": "neutral_cut",
+                    }
+                    if body.graphene_surface_axis is not None:
+                        seed_kwargs_graphene.pop("pore_center_nm", None)
+                        seed_kwargs_graphene.pop("plane_point_nm", None)
+                        seed_kwargs_graphene["surface_axis"] = body.graphene_surface_axis
+                    seed_kwargs_graphene["surface_offset_nm"] = float(body.graphene_surface_offset_nm)
                 _seed_src = f"oxDNA job {body.oxdna_job_id} (stage {seed.stage_name})"
             elif body.mrdna_job_id:
                 tracker.report("seed", None, "Reconstructing relaxed atomic model…")
@@ -3798,6 +4149,19 @@ async def _prepare_job_bg(
         job = MdJob.load(job_id, ws)
         job.prep_params = body.model_dump()
         job.save(ws)
+        if body.graphene_nanopore and seed_kwargs_graphene is None:
+            seed_kwargs_graphene = {
+                "surface_axis": body.graphene_surface_axis or "-y",
+                "surface_offset_nm": float(body.graphene_surface_offset_nm),
+                "material": "graphene",
+                "pore_diameter_nm": float(body.graphene_pore_diameter_nm),
+                "layers": int(body.graphene_layers),
+                "layer_spacing_nm": float(body.graphene_layer_spacing_nm),
+                "atomistic_clearance_nm": float(body.graphene_atomistic_clearance_nm),
+                "water_clearance_nm": float(body.graphene_water_clearance_nm),
+                "sheet_margin_nm": float(body.graphene_sheet_margin_nm),
+                "edge_model": "neutral_cut",
+            }
 
         # Vacuum pre-stage seed.  Composes WITH the engine seeds above rather than
         # competing with them: those choose the DESIGN snapshot, this supplies the
@@ -3820,7 +4184,7 @@ async def _prepare_job_bg(
                 vac.n_atoms,
             )
 
-        if _sequenced_base_count(local_design) == 0:
+        if _sequenced_base_count(local_design) == 0 and not body.graphene_only:
             raise RuntimeError(_NO_SEQUENCE_MSG)
 
         # Persist the EXACT design this run is prepared from + its out-of-date
@@ -3845,6 +4209,20 @@ async def _prepare_job_bg(
             prepare = prepare_equilibrium_aware_namd
         else:
             prepare = prepare_mgh_slow_release
+        if body.graphene_only:
+            seed_kwargs_graphene = {
+                "surface_axis": body.graphene_surface_axis or "-z",
+                "surface_offset_nm": float(body.graphene_surface_offset_nm),
+                "material": "graphene",
+                "pore_diameter_nm": float(body.graphene_pore_diameter_nm),
+                "layers": int(body.graphene_layers),
+                "layer_spacing_nm": float(body.graphene_layer_spacing_nm),
+                "atomistic_clearance_nm": 0.0,
+                "water_clearance_nm": float(body.graphene_water_clearance_nm),
+                "sheet_margin_nm": float(body.graphene_sheet_margin_nm),
+                "edge_model": "neutral_cut",
+                "control": "graphene_only",
+            }
         # A BLADE or vacuum-prestage seed feeds an EXACT all-atom conformation straight
         # into solvation via solute_coords — which only aligns under the full psfgen
         # topology (with hydrogens), so force it.  The equilibrium-aware protocol ALREADY
@@ -3864,6 +4242,7 @@ async def _prepare_job_bg(
             # Same reason as above: the GBIS prep has its own signature and never
             # takes an md_protocols kwarg.
             seed_kwargs["seed_lattice_nm"] = body.seed_lattice_nm
+            seed_kwargs["box_size_nm"] = body.box_size_nm
         package_subdir, name_stem, segments = await run_in_threadpool(
             prepare,
             local_design,
@@ -3876,8 +4255,11 @@ async def _prepare_job_bg(
             minimize_steps=body.minimize_steps,
             adaptive_minimization=body.adaptive_minimization,
             atomistic_model=seed_model,
-            declash=body.declash,
-            force_soft=body.force_soft,
+            # Coarse-grained backmapping has no atomistic excluded-volume history.
+            # Even after the strict ring/bond projection it needs the conservative
+            # 1 fs, no-RATTLE declash path before the normal ENM release ladder.
+            declash=True if body.oxdna_job_id else body.declash,
+            force_soft=bool(body.force_soft or body.oxdna_job_id),
             high_aspect_ratio=body.relax_preset == HIGH_ASPECT_RATIO,
             fast=body.fast,
             gpu_resident_mode=body.gpu_resident or "auto",
@@ -3890,7 +4272,7 @@ async def _prepare_job_bg(
             production_rigid_bonds=body.production_rigid_bonds,
             production_hmr=body.production_hmr,
             devices=body.devices,
-            anchors=body.anchors,
+            anchors=[*(body.anchors or []), *(body.surface_anchors or [])] or None,
             anchor_atoms=body.anchor_atoms,
             field=body.field,
             # One displayed random base seed owns both the solvent/ion draw and the
@@ -3901,9 +4283,104 @@ async def _prepare_job_bg(
             # protocol_fidelity is where a package states its own deltas.
             early_stop_relax=body.early_stop_relax,
             stage_overrides=body.stage_overrides or None,
+            graphene_nanopore=seed_kwargs_graphene,
+            graphene_only=body.graphene_only,
             progress=tracker.report,
             **seed_kwargs,
         )
+        # NAMD consumes one fixedAtoms union; retain the semantic groups for the UI.
+        package_path = job_dir / package_subdir
+        manifest_path = package_path / "manifest.json"
+        if manifest_path.exists():
+            _manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            _manifest["anchor_groups"] = {
+                "structure": list(body.anchors or []),
+                "surface": list(body.surface_anchors or []),
+            }
+            if body.oxdna_job_id and (body.anchors or body.surface_anchors):
+                _manifest["anchor_inheritance"] = {
+                    "source_engine": "oxdna",
+                    "source_job_id": body.oxdna_job_id,
+                }
+            _text = json.dumps(_manifest, indent=2)
+            manifest_path.write_text(_text, encoding="utf-8")
+            mirror = package_path / "nadoc_md_run.json"
+            if mirror.exists():
+                mirror.write_text(_text, encoding="utf-8")
+        if body.graphene_nanopore and seed_kwargs_graphene is not None:
+            # The descriptor is deliberately package-local and in the same recentered
+            # frame as the DNA seed. The atomistic graphene builder consumes this file;
+            # keeping it beside the frozen package also makes previews/retries reproducible.
+            import json as _json
+            nanopore = seed_kwargs_graphene
+            package_path = job_dir / package_subdir
+            (package_path / "graphene_nanopore.json").write_text(
+                _json.dumps(nanopore, indent=2), encoding="utf-8"
+            )
+            # NAMD fixedAtoms reads the B column from a full-system PDB. Mark only the
+            # GRPH segment and force CUDA offload: GPU-resident NAMD rejects fixed atoms.
+            system_pdb = package_path / f"{name_stem}.pdb"
+            # Reuse the DNA-anchor marker when one exists: NAMD permits one fixedAtoms
+            # file, so that full-system marker must be the union of graphene + both DNA
+            # anchor sets. With no DNA anchors, create the graphene-only marker.
+            confs = list(package_path.glob("*.conf"))
+            existing_marker = None
+            for conf in confs:
+                for ln in conf.read_text(encoding="utf-8").splitlines():
+                    if ln.lstrip().startswith("fixedAtomsFile"):
+                        candidate = package_path / ln.split(None, 1)[1].strip()
+                        if candidate.exists():
+                            existing_marker = candidate
+                            break
+                if existing_marker:
+                    break
+            marker_source = existing_marker or system_pdb
+            marker_lines = []
+            for line in marker_source.read_text(encoding="utf-8").splitlines():
+                if line.startswith(("ATOM", "HETATM")):
+                    line = line.ljust(80)
+                    prior = float(line[60:66].strip() or 0.0)
+                    b = 1.0 if line[72:76].strip().startswith("GR") else prior
+                    line = line[:60] + f"{b:6.2f}" + line[66:]
+                marker_lines.append(line)
+            marker_name = existing_marker.name if existing_marker else "graphene_fixed.pdb"
+            (package_path / marker_name).write_text("\n".join(marker_lines) + "\n", encoding="utf-8")
+            fixed_block = (
+                f"fixedAtoms         on\nfixedAtomsFile     {marker_name}\n"
+                "fixedAtomsCol      B\n"
+            )
+            for conf in confs:
+                text_conf = conf.read_text(encoding="utf-8")
+                if "fixedAtomsFile" not in text_conf:
+                    anchor = next((ln for ln in text_conf.splitlines(True) if ln.lstrip().startswith("coordinates")), None)
+                    if anchor:
+                        text_conf = text_conf.replace(anchor, anchor + fixed_block, 1)
+                conf.write_text(text_conf, encoding="utf-8")
+            manifest_path = package_path / "manifest.json"
+            if manifest_path.exists():
+                manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["graphene_nanopore"] = nanopore
+                manifest["graphene_nanopore"]["fixed_atoms_file"] = marker_name
+                manifest["graphene_nanopore"]["model"] = (
+                    "fixed neutral CA sites using CHARMM aromatic-carbon Lennard-Jones parameters"
+                )
+                # Production children inherit this marker through the ordinary anchor
+                # channel, keeping the membrane fixed even when no DNA anchor exists.
+                manifest.setdefault("files", {})["anchors"] = marker_name
+                manifest_path.write_text(_json.dumps(manifest, indent=2), encoding="utf-8")
+        # The package, not the executor, defines the physics. Harmonicize every relax
+        # package that has DNA anchors and/or graphene so local, Alpine and RunPod stage
+        # byte-identical GPU-compatible confs. This was accidentally gated on oxDNA or
+        # graphene-only, leaving native DNA+graphene jobs on fixedAtoms.
+        if body.anchors or body.surface_anchors or body.graphene_nanopore:
+            _harmonicize_seed_anchors(
+                job_dir / package_subdir,
+                name_stem=name_stem,
+                force_constant=body.anchor_k or 0.02,
+                graphene_force_constant=50.0,
+                force_gpu_resident=(body.gpu_resident == "on"),
+            )
+        _audit_external_force_configs(job_dir / package_subdir)
         logger.info(
             "prep %s: done; package=%s name_stem=%s segments=%d",
             job_id,
@@ -3957,6 +4434,38 @@ async def _prepare_job_bg(
     if body.autostart and job.execution_target == "local":
         logger.info("prep %s: autostart=True, launching", job_id)
         start_job(job, ws)
+    elif body.autostart and job.execution_target == "runpod":
+        logger.info("prep %s: autostart=True, staging and launching on RunPod", job_id)
+        try:
+            await _start_runpod_job(job)
+        except Exception as exc:  # noqa: BLE001 — persist async launch failure on the job
+            logger.error("runpod launch %s: FAILED: %s", job_id, exc, exc_info=True)
+            job = MdJob.load(job_id, ws)
+            detail = getattr(exc, "detail", None) or str(exc)
+            job.status = MdStatus.failed
+            job.failure_kind = "remote_launch"
+            job.error = f"RunPod launch failed: {detail}"
+            job.save(ws)
+    elif body.autostart and job.execution_target == "alpine":
+        logger.info("prep %s: autostart=True, staging and submitting to Alpine", job_id)
+        try:
+            from backend.core import cluster_config, cluster_ssh, md_executor  # noqa: PLC0415
+
+            mgr = cluster_ssh.get_manager()
+            if not mgr.is_connected():
+                raise RuntimeError("Not connected to Alpine — reconnect (Duo) and submit again.")
+            profile = cluster_config.load_profiles(ws).get(job.cluster_name or "alpine")
+            if profile is None:
+                raise RuntimeError(f"Unknown cluster profile {job.cluster_name or 'alpine'!r}.")
+            request = SubmitRemoteRequest(
+                cluster_name=job.cluster_name or "alpine",
+                resources=job.requested_resources or None,
+            )
+            resources = _remote_resources(job, profile, request)
+            await md_executor.submit_job(job, ws, profile=profile, resources=resources, conn=mgr)
+        except Exception as exc:  # noqa: BLE001 — queued package remains manually retryable
+            logger.error("alpine submit %s: FAILED: %s", job_id, exc, exc_info=True)
+            _record_submit_failure(MdJob.load(job_id, ws), str(exc))
     elif body.autostart:
         logger.info(
             "prep %s: remote target %s — submit via /submit-remote when connected",
@@ -4585,7 +5094,7 @@ async def get_md_job(job_id: str) -> dict:
 
 @router.post("/md/jobs/{job_id}/copy")
 async def copy_md_job(job_id: str) -> dict:
-    """Create a clean, queued copy of a NAMD job with one fresh base seed."""
+    """Copy settings without launching; relaxation copies remain unprepared drafts."""
     source = _load_job(job_id)
     used_seeds = [
         seed
@@ -4616,34 +5125,25 @@ async def copy_md_job(job_id: str) -> dict:
             update={
                 "seed": copied_seed,
                 "autostart": False,
-                "draft": source.status == MdStatus.draft,
+                "draft": True,
             }
         )
-        if source.status == MdStatus.draft:
-            job = _spawn_draft_job(body, name=source.design_name or "design")
-            job.awaiting_sequence = source.awaiting_sequence
-            job.save(_workspace())
-        else:
-            seeded = bool(body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id)
-            design = None
-            if not seeded:
-                snapshot = source.job_dir(_workspace()) / "design.json"
-                if not snapshot.is_file():
-                    raise HTTPException(
-                        409,
-                        "This job has no frozen design snapshot and cannot be copied exactly.",
-                    )
-                from backend.core.models import Design  # noqa: PLC0415
-
-                design = Design.from_json(snapshot.read_text())
-            job = _spawn_prep_job(
-                body,
-                design=design,
-                seeded=seeded,
-                name=source.design_name or "design",
-                size_factor=1.0 if seeded else design_size_factor(design),
-                parent_job_id=source.parent_job_id,
+        seeded = bool(body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id)
+        snapshot = source.job_dir(_workspace()) / "design.json"
+        if source.status != MdStatus.draft and not seeded and not snapshot.is_file():
+            raise HTTPException(
+                409,
+                "This job has no frozen design snapshot and cannot be copied exactly.",
             )
+        job = _spawn_draft_job(body, name=source.design_name or "design")
+        job.awaiting_sequence = source.awaiting_sequence
+        job.project_id = source.project_id
+        job.design_revision_id = source.design_revision_id
+        job.parent_job_id = source.parent_job_id
+        job.design_fingerprint = source.design_fingerprint
+        job.feature_log_position = source.feature_log_position
+        if snapshot.is_file():
+            shutil.copy2(snapshot, job.job_dir(_workspace()) / "design.json")
         job.prep_params_set = (
             list(source.prep_params_set) if source.prep_params_set is not None else None
         )
@@ -4661,8 +5161,10 @@ async def copy_md_job(job_id: str) -> dict:
 
 @router.get("/md/jobs/{job_id}/display")
 async def get_md_job_display(job_id: str) -> dict:
-    """Return the manifest and latest segment suitable for DNA-only display."""
+    """Return the manifest and latest segment suitable for MD display."""
     job = _load_job(job_id)
+    root = root_relaxation(job)
+    graphene_only = bool((root.prep_params or {}).get("graphene_only"))
     package_dir = job.package_dir(_workspace())
     manifest = package_dir / "nadoc_md_run.json"
     if not manifest.exists():
@@ -4725,6 +5227,10 @@ async def get_md_job_display(job_id: str) -> dict:
         "package_dir": str(package_dir.resolve()) if package_dir.exists() else None,
         "segment_name": segment_name,
         "trajectory_path": str(dcd_path.resolve()) if dcd_path else None,
+        # A membrane-only control has no DNA coordinates to map into the NADOC
+        # scene.  The client must use the solvent/cell renderer directly instead
+        # of opening the DNA websocket (which quite correctly has no P atoms).
+        "graphene_only": graphene_only,
         # Set when what's on disk is a single fetched frame from a job still running
         # on the cluster, not a trajectory.  The panel must say so: it looks
         # identical to real results otherwise, and it does not advance on its own.
@@ -5308,6 +5814,11 @@ class ProductionRunRequest(BaseModel):
         "production child be anchored when its relaxation was not — anchors "
         "used to be a prep-only concept that production silently discarded.",
     )
+    surface_anchors: Optional[list] = Field(
+        None,
+        description="Surface-attachment anchor scopes for this production run. They "
+        "remain separately recorded but use the same positional-restraint marker.",
+    )
     anchor_atoms: Optional[list[str]] = Field(
         None,
         description="DEFAULT atom-name filter for anchors that carry no `atoms` of their "
@@ -5325,6 +5836,44 @@ class ProductionRunRequest(BaseModel):
         "both ends needs only ~0.01–0.03. The restraint is referenced to this "
         "child's own equilibrated coordinates, not the idealised build pose.",
     )
+    ion_transport_mode: Literal["off", "voltage"] = Field(
+        "off",
+        description="Ordinary production or voltage-driven nanopore ion transport.",
+    )
+    ion_transport_voltage_mV: float = Field(
+        100.0, ge=-2000.0, le=2000.0,
+        description="Voltage drop across the periodic cell along the membrane normal.",
+    )
+    ion_transport_current_stride_ps: float = Field(
+        10.0, gt=0.0, le=1000.0,
+        description="Requested interval for charge-displacement current analysis.",
+    )
+
+
+class HeadlessIonTransportPrepareRequest(BaseModel):
+    """One-call preparation of an oxDNA-seeded nanopore relaxation."""
+
+    oxdna_job_id: Optional[str] = None
+    graphene_only: bool = False
+    reservoir_padding_nm: float = Field(3.0, ge=1.5, le=10.0)
+    pore_diameter_nm: float = Field(2.1, gt=0, le=100)
+    graphene_layers: int = Field(1, ge=1, le=6)
+    ion_conc_mM: float = Field(150.0, ge=0, le=5000)
+    mg_conc_mM: float = Field(0.0, ge=0, le=500)
+    execution_target: Literal["local", "runpod", "alpine"] = "runpod"
+    runpod_budget_usd: float = Field(5.0, gt=0, le=1000)
+    autostart: bool = True
+
+
+class HeadlessIonTransportRunRequest(BaseModel):
+    """One-call voltage-driven production from a completed nanopore relaxation."""
+
+    length_ns: float = Field(10.0, gt=0, le=MAX_PRODUCTION_NS)
+    voltage_mV: float = Field(100.0, ge=-2000, le=2000)
+    current_stride_ps: float = Field(10.0, gt=0, le=1000)
+    execution_target: Literal["local", "runpod", "alpine"] = "runpod"
+    runpod_budget_usd: float = Field(5.0, gt=0, le=1000)
+    autostart: bool = True
 
 
 def _production_seed_checkpoint(
@@ -5478,13 +6027,21 @@ def _resolve_child_anchors(
     """
     parent_pkg = parent.package_dir(_workspace())
     manifest = json.loads((parent_pkg / "manifest.json").read_text())
+    root_manifest = _read_manifest(root_relaxation(parent))
+    has_fixed_membrane = bool(root_manifest.get("graphene_nanopore"))
     field = manifest.get("field") or None
 
-    if body.anchors is None:
+    requested_anchors = None if body.anchors is None and body.surface_anchors is None else [
+        *(body.anchors or []), *(body.surface_anchors or [])]
+    if requested_anchors is None:
         inherited = (manifest.get("files") or {}).get("anchors")
         requested = ((manifest.get("anchors") or {}).get("requested")) or []
         return inherited, None, requested, field
-    if not body.anchors:
+    if not requested_anchors:
+        if has_fixed_membrane:
+            inherited = (manifest.get("files") or {}).get("anchors")
+            if inherited:
+                return inherited, None, [], field
         return None, None, [], field
 
     snapshot = child.job_dir(_workspace()) / "design.json"
@@ -5509,7 +6066,7 @@ def _resolve_child_anchors(
     # Per-anchor atom sets; anchor_atoms is the fallback for anchors that carry none.
     indices = resolve_anchor_atom_map(
         design,
-        body.anchors,
+        requested_anchors,
         full_topology=full_topology,
         default_atoms=set(body.anchor_atoms) if body.anchor_atoms else None,
     )
@@ -5517,7 +6074,7 @@ def _resolve_child_anchors(
         logger.warning(
             "[%s] production anchors %r resolved to no DNA residue — running unanchored",
             child.job_id,
-            body.anchors,
+            requested_anchors,
         )
         return None, None, [], field
 
@@ -5538,7 +6095,15 @@ def _resolve_child_anchors(
                 f"like P, O5', C5', C4', C3', C1'."
             ),
         )
-    return "restraints_anchors.pdb", staged, list(body.anchors), field
+    if has_fixed_membrane:
+        lines = []
+        for line in staged.read_text(encoding="utf-8").splitlines():
+            if line.startswith(("ATOM", "HETATM")) and line[72:76].strip().startswith("GR"):
+                line = line.ljust(80)
+                line = line[:60] + f"{1.0:6.2f}" + line[66:]
+            lines.append(line)
+        staged.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return "restraints_anchors.pdb", staged, requested_anchors, field
 
 
 @router.post("/md/jobs/{parent_id}/production-run")
@@ -5627,7 +6192,7 @@ async def _spawn_md_production_impl(
     # The rotation-sized envelope is specifically a guard for a freely tumbling solute.
     # An enabled quaternion restraint is the physical mechanism that makes the cheaper
     # pose-sized cell intentional; translation still has the package's normal padding.
-    if not body.orientation_restraint:
+    if not body.orientation_restraint and not (parent.prep_params or {}).get("graphene_only"):
         _assert_cell_fits_a_free_run(
             parent, plan["length_ns"], allow=body.allow_undersized_cell
         )
@@ -5763,6 +6328,75 @@ async def _spawn_md_production_impl(
     anchors_file, anchors_src, anchors_requested, field = _resolve_child_anchors(
         parent, child, body
     )
+    root_manifest = _read_manifest(root_relaxation(parent))
+    ion_transport = None
+    if body.ion_transport_mode == "voltage":
+        source_manifest = root_manifest
+        membrane = source_manifest.get("graphene_nanopore")
+        if not membrane:
+            raise HTTPException(
+                400,
+                "Voltage-driven ion transport requires a parent prepared with the NAMD hard surface.",
+            )
+        direction = list(membrane.get("dir") or [])
+        if len(direction) != 3:
+            raise HTTPException(400, "The parent hard surface has no valid normal direction.")
+        field = {
+            "voltage_mV": float(body.ion_transport_voltage_mV),
+            "dir": direction,
+            "normalized": True,
+        }
+        ion_transport = {
+            "protocol": "voltage_driven_periodic",
+            "voltage_mV": float(body.ion_transport_voltage_mV),
+            "direction": direction,
+            "current_stride_ps": float(body.ion_transport_current_stride_ps),
+            "concentration_gradient": False,
+            "current_estimator": "I=sum(q_i*delta_r_i_dot_n)/(delta_t*L_n)",
+            # Keep the geometric aperture in the production child.  The parent may be
+            # moved or deleted later, and crossing analysis must use the exact recentered
+            # plane which was used to build this package (coordinates are in nm here).
+            "pore_center_nm": membrane.get("pore_center_nm") or membrane.get("plane_point_nm"),
+            "plane_point_nm": membrane.get("plane_point_nm") or membrane.get("pore_center_nm"),
+            "pore_diameter_nm": membrane.get("pore_diameter_nm"),
+            "membrane_layers": membrane.get("layers", 1),
+            "membrane_layer_spacing_nm": membrane.get("layer_spacing_nm", 0.335),
+            "notes": [
+                "Uses NAMD eFieldNormalized so voltage is maintained as the cell changes.",
+                "Bulk electrolyte is inherited from the equilibrated parent.",
+            ],
+        }
+
+    transport_dcd_freq = None
+    if ion_transport is not None and body.dcd_freq is None:
+        transport_dcd_freq = max(
+            100,
+            int(round(body.ion_transport_current_stride_ps * 1000.0 / plan["timestep_fs"])),
+        )
+        ion_transport["trajectory_stride_steps"] = transport_dcd_freq
+        ion_transport["trajectory_stride_ps"] = (
+            transport_dcd_freq * plan["timestep_fs"] / 1000.0
+        )
+    # NAMD 3 GPU-resident does not support fixedAtoms. Transport production uses the
+    # manual's harmonic-restraint workaround for the membrane marker instead.
+    from backend.core.md_anchor_settings import harmonic_anchor_k
+
+    parent_anchor_manifest = _read_manifest(parent)
+    effective_anchor_k = (body.anchor_k or 0.02) if ion_transport is not None else (
+        body.anchor_k if body.anchor_k is not None else harmonic_anchor_k(parent_anchor_manifest)
+    )
+    graphene_anchor_k = 10.0 if ion_transport is not None else (
+        float((root_manifest.get("graphene_nanopore") or {}).get(
+            "restraint_k_kcal_mol_A2", 50.0
+        ))
+        if root_manifest.get("graphene_nanopore") else None
+    )
+    if ion_transport is not None:
+        ion_transport["membrane_restraint"] = {
+            "mechanism": "harmonic positional",
+            "force_constant_kcal_mol_A2": graphene_anchor_k,
+            "reason": "GPUresident-compatible replacement for fixedAtoms",
+        }
 
     md_ensemble.build_replica_package(
         parent,
@@ -5777,19 +6411,35 @@ async def _spawn_md_production_impl(
         hmr=plan.get("hmr"),
         ready_checkpoint=spec.name,
         workspace=_workspace(),
-        dcd_freq=(body.dcd_freq or PRODUCTION_DCD_FREQ),
+        dcd_freq=(body.dcd_freq or transport_dcd_freq or PRODUCTION_DCD_FREQ),
         force_resident=plan.get("force_resident"),
         enm_restraints=restraints["enm_restraints"],
         damping=restraints["damping"],
         stage_overrides=body.stage_overrides or None,
         anchors_file=anchors_file,
         anchors_src=anchors_src,
-        anchor_k=body.anchor_k,
+        anchor_k=effective_anchor_k,
+        graphene_anchor_k=graphene_anchor_k,
         anchors_requested=anchors_requested,
         field=field,
         orientation_restraint=body.orientation_restraint,
         orientation_force_constant=body.orientation_force_constant,
+        # A fixed solid membrane must not be combined with a cell-rescaling barostat;
+        # transport samples the equilibrated parent cell at constant volume.
+        force_nvt=ion_transport is not None,
     )
+    if ion_transport is not None:
+        child_pkg = child.package_dir(_workspace())
+        (child_pkg / "ion_transport.json").write_text(
+            json.dumps(ion_transport, indent=2), encoding="utf-8"
+        )
+        child_manifest_path = child_pkg / "manifest.json"
+        child_manifest = json.loads(child_manifest_path.read_text())
+        child_manifest["ion_transport"] = ion_transport
+        child_manifest.setdefault("files", {})["ion_transport"] = "ion_transport.json"
+        child_manifest_path.write_text(
+            json.dumps(child_manifest, indent=2), encoding="utf-8"
+        )
 
     # Local target autostarts the NAMD run immediately; an Alpine child is left
     # 'queued' so the submit-review card can size resources + hand it to SLURM
@@ -5810,6 +6460,221 @@ async def _spawn_md_production_impl(
         "warning": warning,
         "autostart": bool(body.autostart),
     }
+
+
+@router.post("/md/ion-transport/prepare")
+async def prepare_headless_ion_transport(body: HeadlessIonTransportPrepareRequest) -> dict:
+    """Prepare and optionally launch the complete seeded nanopore relaxation headlessly."""
+    if not body.graphene_only and not body.oxdna_job_id:
+        raise HTTPException(400, "Provide oxdna_job_id, or set graphene_only=true.")
+    request = CreateJobRequest(
+        oxdna_job_id=body.oxdna_job_id,
+        graphene_only=body.graphene_only,
+        draft=False,
+        autostart=body.autostart,
+        relax_preset=DEFAULT_PRESET,
+        graphene_nanopore=True,
+        graphene_pore_diameter_nm=body.pore_diameter_nm,
+        graphene_layers=body.graphene_layers,
+        padding_nm=body.reservoir_padding_nm if body.graphene_only else 1.2,
+        salt_mode="custom",
+        ion_conc_mM=body.ion_conc_mM,
+        mg_conc_mM=body.mg_conc_mM,
+        gpu_resident="on",
+        devices="0",
+        execution_target=body.execution_target,
+        runpod_budget_usd=(
+            body.runpod_budget_usd if body.execution_target == "runpod" else None
+        ),
+    )
+    result = await create_md_job(request)
+    result["workflow"] = "ion_transport_relaxation"
+    result["next"] = f"POST /api/md/ion-transport/{result['job_id']}/run"
+    return result
+
+
+@router.post("/md/ion-transport/{parent_id}/run")
+async def run_headless_ion_transport(
+    parent_id: str, body: HeadlessIonTransportRunRequest
+) -> dict:
+    """Spawn the GPU-resident voltage/current production child headlessly."""
+    request = ProductionRunRequest(
+        length_ns=body.length_ns,
+        autostart=body.autostart,
+        production_timestep_fs=4.0,
+        rigid_bonds="all",
+        hmr=True,
+        gpu_resident="on",
+        enm_restraints="off",
+        langevin_damping=1.0,
+        dcd_freq=max(100, int(round(body.current_stride_ps * 250.0))),
+        ion_transport_mode="voltage",
+        ion_transport_voltage_mV=body.voltage_mV,
+        ion_transport_current_stride_ps=body.current_stride_ps,
+        execution_target=body.execution_target,
+        runpod_budget_usd=(
+            body.runpod_budget_usd if body.execution_target == "runpod" else None
+        ),
+    )
+    return await _spawn_md_production_impl(parent_id, request)
+
+
+def _analyze_ion_transport_package(job: MdJob) -> dict:
+    """Calculate electrical current plus aperture-validated ion crossings from DCD."""
+    import numpy as np  # noqa: PLC0415
+    import MDAnalysis as mda  # noqa: PLC0415
+
+    pkg = job.package_dir(_workspace())
+    manifest = json.loads((pkg / "manifest.json").read_text())
+    meta = manifest.get("ion_transport")
+    if not meta:
+        raise HTTPException(400, "This is not an ion-transport production package.")
+    # A resumed production writes ``base.dcd``, ``base.cont1.dcd``, ... . A lexical
+    # sort puts the continuations before the base ("c" < "d"), making time jump from
+    # the latest frames back to zero. The chart then draws each cumulative counter as
+    # two disconnected-looking traces joined across that backwards jump. Reuse the
+    # trajectory service's header-time ordering, which is also robust past cont9.
+    dcds = [path for _name, _stage, path in _md_segment_dcds(job)]
+    if not dcds:
+        raise HTTPException(409, "No production trajectory is available yet.")
+    universe = mda.Universe(str(pkg / f"{manifest['name_stem']}.psf"), [str(p) for p in dcds])
+    direction = np.asarray(meta["direction"], dtype=float)
+    direction /= np.linalg.norm(direction)
+    groups = {
+        "Na+": universe.select_atoms("resname SOD"),
+        "Cl-": universe.select_atoms("resname CLA"),
+        "Mg2+": universe.select_atoms("(resname MG and name MG) or (resname MGH and name MG)"),
+    }
+    # An absent species is not a meaningful zero-valued measurement. Omitting it here
+    # keeps every downstream consumer (plot, JSON export, headless API) honest rather
+    # than manufacturing a flat Mg2+ line for a NaCl-only system.
+    groups = {name: atoms for name, atoms in groups.items() if len(atoms)}
+    charges = {"Na+": 1.0, "Cl-": -1.0, "Mg2+": 2.0}
+    samples = {name: [] for name in groups}
+    crossings = {name: {"positive": 0, "negative": 0} for name in groups}
+    cumulative = {name: {"positive": [], "negative": [], "net": []} for name in groups}
+    occupancy = {name: [] for name in groups}
+    times_ns = []
+    plane_nm = meta.get("plane_point_nm") or meta.get("pore_center_nm")
+    center_nm = meta.get("pore_center_nm") or plane_nm
+    diameter_nm = meta.get("pore_diameter_nm")
+    aperture_ready = plane_nm is not None and center_nm is not None and diameter_nm is not None
+    plane = np.asarray(plane_nm, dtype=float) * 10.0 if aperture_ready else None
+    center = np.asarray(center_nm, dtype=float) * 10.0 if aperture_ready else None
+    radius_a = float(diameter_nm) * 5.0 if aperture_ready else None
+    half_depth_a = max(
+        5.0,
+        (float(meta.get("membrane_layers", 1)) - 1.0)
+        * float(meta.get("membrane_layer_spacing_nm", 0.335)) * 5.0 + 3.0,
+    )
+    previous = None
+    previous_time = None
+    for ts in universe.trajectory:
+        current = {name: atoms.positions.copy() for name, atoms in groups.items()}
+        if previous is not None:
+            dt_ps = float(ts.time - previous_time)
+            cell = np.asarray(ts.dimensions[:3], dtype=float)
+            length = float(cell[int(np.argmax(np.abs(direction)))])
+            if dt_ps <= 0:
+                previous, previous_time = current, float(ts.time)
+                continue
+            times_ns.append(float(ts.time) / 1000.0)
+            for name in groups:
+                delta = current[name] - previous[name]
+                delta -= cell * np.round(delta / cell)
+                q_disp = charges[name] * float(np.sum(delta @ direction))
+                samples[name].append(float(q_disp / (dt_ps * length) * 160.2176634))
+                if aperture_ready and len(delta):
+                    # Signed distance to the nearest periodic copy of the membrane.
+                    prev_rel_vec = previous[name] - plane
+                    prev_rel_vec -= cell * np.round(prev_rel_vec / cell)
+                    prev_signed = prev_rel_vec @ direction
+                    curr_signed = prev_signed + delta @ direction
+                    crossed = ((prev_signed < 0) & (curr_signed >= 0)) | ((prev_signed > 0) & (curr_signed <= 0))
+                    for idx in np.flatnonzero(crossed):
+                        denom = prev_signed[idx] - curr_signed[idx]
+                        frac = float(prev_signed[idx] / denom) if denom else 0.0
+                        hit = previous[name][idx] + frac * delta[idx]
+                        radial = hit - center
+                        radial -= cell * np.round(radial / cell)
+                        radial -= direction * float(radial @ direction)
+                        if float(np.linalg.norm(radial)) <= radius_a:
+                            key = "positive" if curr_signed[idx] > prev_signed[idx] else "negative"
+                            crossings[name][key] += 1
+                    pos, neg = crossings[name]["positive"], crossings[name]["negative"]
+                    cumulative[name]["positive"].append(pos)
+                    cumulative[name]["negative"].append(neg)
+                    cumulative[name]["net"].append(pos - neg)
+                    rel_now = current[name] - center
+                    rel_now -= cell * np.round(rel_now / cell)
+                    axial = np.abs(rel_now @ direction)
+                    radial_now = rel_now - np.outer(rel_now @ direction, direction)
+                    occupancy[name].append(int(np.sum((axial <= half_depth_a) & (np.linalg.norm(radial_now, axis=1) <= radius_a))))
+                elif aperture_ready:
+                    pos, neg = crossings[name]["positive"], crossings[name]["negative"]
+                    cumulative[name]["positive"].append(pos)
+                    cumulative[name]["negative"].append(neg)
+                    cumulative[name]["net"].append(pos - neg)
+                    occupancy[name].append(0)
+        previous, previous_time = current, float(ts.time)
+    by_species = {}
+    total = np.zeros(len(next(iter(samples.values()), [])), dtype=float)
+    for name, values in samples.items():
+        arr = np.asarray(values, dtype=float)
+        if len(arr):
+            total += arr
+        by_species[name] = {
+            "n_ions": len(groups[name]),
+            "mean_current_nA": float(arr.mean()) if len(arr) else 0.0,
+            "stderr_nA": float(arr.std(ddof=1) / np.sqrt(len(arr))) if len(arr) > 1 else None,
+            "crossings_positive": crossings[name]["positive"],
+            "crossings_negative": crossings[name]["negative"],
+            "net_crossings": crossings[name]["positive"] - crossings[name]["negative"],
+            "mean_pore_occupancy": float(np.mean(occupancy[name])) if occupancy[name] else None,
+        }
+    result = {
+        "job_id": job.job_id,
+        "frames": len(total) + 1 if len(total) else 0,
+        "voltage_mV": meta["voltage_mV"],
+        "mean_current_nA": float(total.mean()) if len(total) else 0.0,
+        "stderr_nA": float(total.std(ddof=1) / np.sqrt(len(total))) if len(total) > 1 else None,
+        "conductance_nS": (
+            float(total.mean()) / float(meta["voltage_mV"]) * 1000.0
+            if len(total) and meta["voltage_mV"] else None
+        ),
+        "species": by_species,
+        "method": meta["current_estimator"],
+        "crossing_method": (
+            "successive-frame plane intersection inside the circular aperture; "
+            "positive follows the configured membrane normal"
+            if aperture_ready else None
+        ),
+        "pore": {
+            "center_nm": center_nm,
+            "diameter_nm": diameter_nm,
+            "direction": meta["direction"],
+        } if aperture_ready else None,
+        "series": {
+            "time_ns": times_ns,
+            "current_nA": {
+                **{name: values for name, values in samples.items()},
+                "total": total.tolist(),
+            },
+            "cumulative_crossings": cumulative,
+            "pore_occupancy": occupancy,
+            "cumulative_charge_e": [
+                sum(charges[name] * cumulative[name]["net"][i] for name in groups)
+                for i in range(len(times_ns))
+            ] if aperture_ready else [],
+        },
+    }
+    (pkg / "ion_transport_analysis.json").write_text(json.dumps(result, indent=2))
+    return result
+
+
+@router.get("/md/ion-transport/{job_id}/analysis")
+async def analyze_headless_ion_transport(job_id: str) -> dict:
+    return await run_in_threadpool(_analyze_ion_transport_package, _load_job(job_id))
 
 
 def _job_settings_editable(job: MdJob) -> bool:
@@ -5920,7 +6785,7 @@ async def update_md_job_settings(job_id: str, body: dict) -> dict:
         if job.run_kind == "production"
         else CreateJobRequest.model_fields
     )
-    for key in ("anchors", "anchor_atoms", "anchor_k", "field"):
+    for key in ("anchors", "surface_anchors", "anchor_atoms", "anchor_k", "field"):
         if (
             key in request_fields
             and key not in body
@@ -6281,6 +7146,25 @@ async def start_md_job(job_id: str) -> dict:
     if job.status in (MdStatus.running, MdStatus.completed):
         raise HTTPException(400, f"Job is {job.status.value} — cannot start")
 
+    # Repair production packages made before nanopore metadata inheritance was added.
+    # This precedes both local and RunPod launch, so an already-queued child gets the
+    # persisted pore geometry without rebuilding coordinates or changing its seed.
+    if job.run_kind == "production":
+        root = root_relaxation(job)
+        root_manifest_path = root.package_dir(_workspace()) / "manifest.json"
+        child_manifest_path = job.package_dir(_workspace()) / "manifest.json"
+        if root_manifest_path.is_file() and child_manifest_path.is_file():
+            root_manifest = json.loads(root_manifest_path.read_text())
+            surface = root_manifest.get("graphene_nanopore")
+            if surface:
+                child_manifest = json.loads(child_manifest_path.read_text())
+                child_manifest["graphene_nanopore"] = surface
+                child_manifest["anchor_groups"] = root_manifest.get("anchor_groups")
+                child_manifest_path.write_text(json.dumps(child_manifest, indent=2))
+                descriptor = root.package_dir(_workspace()) / "graphene_nanopore.json"
+                if descriptor.is_file():
+                    shutil.copy2(descriptor, job.package_dir(_workspace()) / descriptor.name)
+
     # ── RunPod: rent a GPU, run the ladder there, destroy the pod ─────────────
     # Must come BEFORE find_namd(): a RunPod job runs NAMD on the POD (the patched
     # sm_89 build on the network volume), so requiring a LOCAL NAMD would refuse to
@@ -6529,21 +7413,30 @@ def _size_prepared_job(
 
 
 def _remote_resources(job: MdJob, profile, body: "SubmitRemoteRequest") -> dict:
-    """Resolve the SLURM resources for a remote submit: an explicit override, or the
-    Phase-2 auto-recommendation from the prepared package's sizing + any measured
-    ns/day."""
-    if body.resources:
-        return body.resources
-    # Fall back to the partition chosen in the wizard, so a node picked against a live
-    # queue picture is still honoured when the job is finally submitted.
+    """Resolve a complete SLURM request from sizing plus sparse user overrides.
+
+    Both the wizard and review card intentionally send only edited fields.  They must
+    augment, rather than replace, the exact post-build recommendation; otherwise a
+    selection such as ``gres_type`` alone leaves the submitter without a partition.
+    """
+    explicit = {
+        k: v for k, v in (body.resources or {}).items() if v not in (None, "")
+    }
+    requested = job.requested_resources or {}
+    partition = explicit.get("partition") or job.partition
+    gres_type = explicit.get("gres_type") or requested.get("gres_type")
     sizing = _size_prepared_job(
-        job, profile, body.safety_factor, partition=job.partition
+        job,
+        profile,
+        body.safety_factor,
+        partition=partition,
+        gres_type=gres_type,
     )
     if sizing is None:
         raise HTTPException(
             400, "Job is not prepared yet (no manifest.json) — cannot size resources."
         )
-    return _merge_requested(sizing["resources"], job)
+    return {**_merge_requested(sizing["resources"], job), **explicit}
 
 
 def _merge_requested(resources: dict, job: MdJob) -> dict:

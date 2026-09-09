@@ -452,7 +452,7 @@ export function initConjugateManager({ api, store } = {}) {
   }
 
   // ── one-item context menu used by the protein right-click entry point ────────
-  function showConjugateMenu({ x, y, assetId, attachmentId = null } = {}) {
+  function showConjugateMenu({ x, y, assetId, attachmentId = null, representationItem = null, onDismiss = null } = {}) {
     if (!assetId) return
     document.getElementById('conjugate-context-menu')?.remove()
     const menu = document.createElement('div')
@@ -465,9 +465,15 @@ export function initConjugateManager({ api, store } = {}) {
     item.addEventListener('mouseenter', () => { item.style.background = '#3a82f6' })
     item.addEventListener('mouseleave', () => { item.style.background = '' })
     const dismiss = () => { menu.remove(); window.removeEventListener('pointerdown', onOutside, true) }
+    onDismiss?.(dismiss)
     const onOutside = (ev) => { if (!menu.contains(ev.target)) dismiss() }
     item.addEventListener('click', () => { dismiss(); open(assetId, { sourceAttachmentId: attachmentId }) })
     menu.appendChild(item)
+    if (representationItem) {
+      const sep = document.createElement('div')
+      sep.style.cssText = 'border-top:1px solid #555;margin:4px 0;'
+      menu.append(sep, representationItem)
+    }
     document.body.appendChild(menu)
     setTimeout(() => window.addEventListener('pointerdown', onOutside, true), 0)
   }

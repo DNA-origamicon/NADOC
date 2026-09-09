@@ -120,6 +120,11 @@ export const primarySelectionRef = state => createSelectionState(state).primary
 export const canonicalSelection = state =>
   createSelectionState(state?.selection && typeof state.selection === 'object' ? state.selection : (state ?? {}))
 
+/** Move/Rotate owns the current target once one has been chosen.  Selection-level
+ * controls and hover/snap picking stay available only while the tool is armed empty. */
+export const moveRotateSelectionLocked = state =>
+  !!state?.translateRotateActive && canonicalSelection(state).items.length > 0
+
 /** Direct strand ownership encoded by canonical strand/domain refs, in stable order. */
 export function selectedStrandIds(state) {
   const ids = []

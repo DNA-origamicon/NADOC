@@ -23,6 +23,33 @@ export function clampPointToSphere(point, root, radius) {
   return root.clone().add(delta.normalize().multiplyScalar(radius))
 }
 
+export function clampPointToSphereInDragPlane(point, root, radius, translation, rotation) {
+  const maxMove = Math.max(...translation.toArray().map(Math.abs), 1e-12)
+  const noRotation = Math.abs(rotation.x) + Math.abs(rotation.y) + Math.abs(rotation.z) < 1e-8
+  const locked = noRotation
+    ? translation.toArray().map(value => Math.abs(value) <= maxMove * 0.01)
+    : [false, false, false]
+  if (!locked.some(Boolean)) return clampPointToSphere(point, root, radius)
+  const delta = point.clone().sub(root)
+  let fixedSq = 0
+  let freeSq = 0
+  for (let i = 0; i < 3; i++) {
+    if (locked[i]) fixedSq += delta.getComponent(i) ** 2
+    else freeSq += delta.getComponent(i) ** 2
+  }
+  // At a tangent plane, roundoff can make availableSq microscopically
+  // negative.  Falling back to a 3D radial projection violates the user's
+  // selected plane and creates a conspicuous normal-axis jump.
+  const availableSq = Math.max(0, radius * radius - fixedSq)
+  if (freeSq <= 1e-24) return point.clone()
+  const scale = Math.sqrt(availableSq / freeSq)
+  const solved = point.clone()
+  for (let i = 0; i < 3; i++) {
+    if (!locked[i]) solved.setComponent(i, root.getComponent(i) + delta.getComponent(i) * scale)
+  }
+  return solved
+}
+
 export function constrainCentroidTransform({ centroid, position, rotation, joint, root, radius }) {
   const translation = position.clone().sub(centroid)
   const proposedJoint = joint.clone()
@@ -30,7 +57,10 @@ export function constrainCentroidTransform({ centroid, position, rotation, joint
     .applyQuaternion(rotation)
     .add(centroid)
     .add(translation)
-  const constrainedJoint = clampPointToSphere(proposedJoint, root, radius)
+  const requestedTranslation = position.clone().sub(centroid)
+  const constrainedJoint = clampPointToSphereInDragPlane(
+    proposedJoint, root, radius, requestedTranslation, rotation,
+  )
   return {
     position: position.clone().add(constrainedJoint.clone().sub(proposedJoint)),
     joint: constrainedJoint,
@@ -47,6 +77,7 @@ export function proteinPreviewMatrix(pivot, position, rotation) {
 
 export function initProteinGizmo(store, controls, {
   onCommitted, onCancelled, onLiveStart, onLive, onLiveEnd, onTransform,
+  patchAttachment = patchProteinAttachment, noun = 'Protein',
 } = {}) {
   let _tc = null
   let _dummy = null
@@ -170,19 +201,20 @@ export function initProteinGizmo(store, controls, {
       translation: [p.x - px, p.y - py, p.z - pz],
       rotation: [q.x, q.y, q.z, q.w],
     }
+    if (_constraint?.mode === 'two_ball_joint') move.preconstrained = true
     const id = _attachmentId
     _dirty = false
     if (_sessionStarted) onLiveEnd?.(_attachmentId)
     _sessionStarted = false
     try {
-      await patchProteinAttachment(id, { gizmo_move: move })
+      await patchAttachment(id, { gizmo_move: move })
     } catch (error) {
       _dirty = true
       throw error
     }
     // The PATCH has succeeded and its feature-log entry now exists. Notify
     // immediately rather than waiting for the authoritative geometry refresh.
-    showToast('Protein move applied — Feature Log entry created.', { severity: 'success' })
+    showToast(`${noun} move applied — Feature Log entry created.`, { severity: 'success' })
     // Pose changed server-side; refresh the render and re-anchor the gizmo at
     // the protein's new centroid for the next incremental move.
     if (onCommitted) await onCommitted(id)

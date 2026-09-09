@@ -1981,6 +1981,10 @@ def build_atomistic_model(
             )
             if apply_design_geometry:
                 apply_nucleotide_transforms(model.atoms, design)
+            if design.nanoparticle_conjugations:
+                from backend.core.nanoparticle_atomistic import append_nanoparticle_linkers
+
+                model = append_nanoparticle_linkers(model, design)
             return model
 
     from backend.core.deformation import effective_helix_for_geometry
@@ -2710,6 +2714,10 @@ def build_atomistic_model(
     model = AtomisticModel(atoms=atoms, bonds=bonds)
     if include_proteins:
         model = _append_protein_atoms(model, design)
+    if design.nanoparticle_conjugations:
+        from backend.core.nanoparticle_atomistic import append_nanoparticle_linkers
+
+        model = append_nanoparticle_linkers(model, design)
     return model
 
 

@@ -395,6 +395,7 @@ def build_solvent_ctx(universe) -> dict:
     o, h1, h2 = water_triplets(atoms.names, atoms.resnames, resindices)
     irows, icodes = ion_rows(atoms.names, atoms.resnames)
     return {
+        "graphene_rows": np.flatnonzero(np.asarray(atoms.resnames) == "GRP"),
         "water_o": o,
         "water_h1": h1,
         "water_h2": h2,
@@ -583,6 +584,13 @@ def extract_solvent_frame(
         out["ions"] = np.zeros(0, dtype=np.float32)
         out["ion_species"] = np.zeros(0, dtype=np.uint8)
 
+    # Actual carbon sites, imaged into the same primary cell as solvent and DNA.
+    rows = sctx.get("graphene_rows", np.zeros(0, dtype=np.int64))
+    carbon_pre = pos_all[rows] / 10.0 + xf.T_dyn
+    out["graphene"] = apply_xform(
+        image_into_cell(carbon_pre, xf), xf
+    ).astype(np.float32).reshape(-1)
+
     # ── Cell ─────────────────────────────────────────────────────────────────
     corners = box_corners(xf) if box else np.zeros((0, 3))
     out["box"] = corners.astype(np.float32).reshape(-1)
@@ -606,6 +614,7 @@ def pack_solvent_bin(frames: dict, meta: dict | None = None) -> bytes:
             f32[n_ions * 3]                     ions, omitted entirely when n_ions == 0
             f32[24]                             8 box corners, only when has_box
             f32[n_serials * 3]                  DNA, only when n_serials > 0
+            f32[n_graphene * 3]                 graphene carbon sites, v3 only
 
     EVERY block is optional and the header alone says which are present:
     ``per_frame_nw`` / ``n_ions`` / ``has_box`` / ``n_serials`` are the counts of
@@ -641,6 +650,11 @@ def pack_solvent_bin(frames: dict, meta: dict | None = None) -> bytes:
         "n_serials": 0,
         **(meta or {}),
     }
+    # v3 appends an actual graphene-coordinate block after DNA. Keep v2 for
+    # ordinary jobs, and fail closed in older clients for graphene jobs.
+    n_graphene = np.asarray(frames[ids[0]].get("graphene", [])).size // 3 if ids else 0
+    header["n_graphene"] = n_graphene
+    version = 3 if n_graphene else _VERSION
     blocks: list[bytes] = []
     n_serials = int(header["n_serials"])
     for k in ids:
@@ -675,11 +689,15 @@ def pack_solvent_bin(frames: dict, meta: dict | None = None) -> bytes:
             src = np.asarray(f.get("dna", []), dtype=np.float32).ravel()
             d[: src.size] = src[: d.size]
             blocks.append(d.tobytes())
+        if n_graphene:
+            carbon = np.asarray(f.get("graphene", []), dtype=np.float32).ravel()
+            assert carbon.size == n_graphene * 3
+            blocks.append(carbon.tobytes())
 
     hb = json.dumps(header, separators=(",", ":")).encode("utf-8")
     pad = (-len(hb)) % 4
     return (
-        struct.pack("<IIII", _MAGIC, _VERSION, len(ids), 0)
+        struct.pack("<IIII", _MAGIC, version, len(ids), 0)
         + struct.pack("<I", len(hb))
         + hb
         + b"\x00" * pad

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { initProteinTraceRenderer, proteinOvoidSpec, proteinTraceChains } from './protein_trace_renderer.js'
+import { initProteinTraceRenderer, proteinBoxSpec, proteinOvoidSpec, proteinTraceChains } from './protein_trace_renderer.js'
 
 const atom = (id, chain, seq, x, name = 'CA') => ({
   name, chain_id: chain, seq_num: seq,
@@ -39,6 +39,14 @@ describe('proteinOvoidSpec', () => {
   })
 })
 
+describe('proteinBoxSpec', () => {
+  it('uses the same padded protein bounds for a box', () => {
+    const spec = proteinBoxSpec([{ x: -2, y: -1, z: 0 }, { x: 4, y: 3, z: 2 }])
+    expect(spec.center.toArray()).toEqual([1, 1, 1])
+    expect(spec.size.toArray()).toEqual([6.36, 4.36, 2.36])
+  })
+})
+
 describe('initProteinTraceRenderer', () => {
   it('builds named photo-compatible meshes and preserves exact all-atom centroid', () => {
     const scene = new THREE.Scene()
@@ -61,6 +69,17 @@ describe('initProteinTraceRenderer', () => {
     renderer.update({ atoms: [atom('p1', 'PA', 1, 0), atom('p1', 'PA', 2, 3)] })
     expect(scene.getObjectByName('proteinOvoid')).not.toBeNull()
     expect(scene.getObjectByName('proteinTrace').children).toHaveLength(1)
+    renderer.dispose()
+  })
+
+  it('builds one protein-sized box per attachment in hull-prism mode', () => {
+    const scene = new THREE.Scene()
+    const renderer = initProteinTraceRenderer(scene)
+    renderer.setMode('box')
+    renderer.update({ atoms: [atom('p1', 'PA', 1, 0), atom('p1', 'PA', 2, 3)] })
+    const box = scene.getObjectByName('proteinBox')
+    expect(box).not.toBeNull()
+    expect(box.geometry.type).toBe('BoxGeometry')
     renderer.dispose()
   })
 })

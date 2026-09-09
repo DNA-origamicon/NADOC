@@ -14,12 +14,19 @@ from backend.core.molecular_placement_audit import (
 )
 
 
+def _workspace_design(fixture: str) -> Design:
+    path = Path(__file__).parents[1] / "workspace" / f"{fixture}.nadoc"
+    if not path.is_file():
+        pytest.skip(
+            f"Original geometry fixture missing: {path} (workspace is not synced)"
+        )
+    return Design.from_json(path.read_text())
+
+
 @pytest.mark.parametrize("fixture", ["6hb_2xT", "2x3SQx32_2xT"])
 @pytest.mark.parametrize("fast_bridges", [True, False])
 def test_production_two_base_default_has_no_insert_defects(fixture, fast_bridges):
-    design = Design.from_json(
-        (Path(__file__).parents[1] / "workspace" / f"{fixture}.nadoc").read_text()
-    )
+    design = _workspace_design(fixture)
     legacy = build_atomistic_model(
         design,
         fast_bridges=fast_bridges,
@@ -41,29 +48,29 @@ def test_production_two_base_default_has_no_insert_defects(fixture, fast_bridges
     assert diagnostics["n_clashes"] == 0
 
     assert not [
-        hit for hit in diagnostics["clashes"]
+        hit
+        for hit in diagnostics["clashes"]
         if any(model.atoms[i].crossover_id in target_ids for i in hit["serials"])
     ]
     assert not [
-        hit for hit in diagnostics["piercing"]["pierced"]
+        hit
+        for hit in diagnostics["piercing"]["pierced"]
         if set(hit["crossover_ids"]) & target_ids
     ]
     assert not [
-        hit for hit in diagnostics["bonds"]["overstretched"]
+        hit
+        for hit in diagnostics["bonds"]["overstretched"]
         if any(model.atoms[i].crossover_id in target_ids for i in hit["serials"])
     ]
 
     positions = np.asarray([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
-    legacy_positions = np.asarray(
-        [[a.x, a.y, a.z] for a in legacy.atoms], dtype=float
-    )
+    legacy_positions = np.asarray([[a.x, a.y, a.z] for a in legacy.atoms], dtype=float)
     for plane in _midpoint_constraint_planes(records):
         origin = np.asarray(plane["origin"], dtype=float)
         normal = np.asarray(plane["normal"], dtype=float)
         for crossover_id in plane["crossover_ids"]:
             serials = [
-                atom.serial for atom in model.atoms
-                if atom.crossover_id == crossover_id
+                atom.serial for atom in model.atoms if atom.crossover_id == crossover_id
             ]
             # "Their side" is defined by the retired placement, not by whichever
             # side the promoted atoms happen to occupy after the transform.
@@ -76,9 +83,7 @@ def test_production_two_base_default_has_no_insert_defects(fixture, fast_bridges
 @pytest.mark.parametrize("fixture", ["6hb_2xT", "2x3SQx32_2xT"])
 @pytest.mark.slow
 def test_auditor_shows_promoted_production_v7_without_a_pending_proposal(fixture):
-    design = Design.from_json(
-        (Path(__file__).parents[1] / "workspace" / f"{fixture}.nadoc").read_text()
-    )
+    design = _workspace_design(fixture)
     bundle = build_molecular_placement_audit(design)
 
     assert bundle["provider"]["panel_labels"] == {

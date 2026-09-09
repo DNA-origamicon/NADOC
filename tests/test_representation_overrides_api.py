@@ -28,7 +28,10 @@ from fastapi.testclient import TestClient
 from backend.api.main import app
 from backend.api import state as design_state
 from backend.api.routes import _demo_design
-from backend.core.models import Design, RepresentationOverride, RepresentationSegment
+from backend.core.models import (
+    Design, ProteinAttachment, ProteinTargetFree,
+    RepresentationOverride, RepresentationSegment,
+)
 
 HELIX = "demo_helix"
 
@@ -181,6 +184,38 @@ def test_put_overrides_empty_segments_422(client):
     assert (
         client.put("/api/design/representation-overrides", json=body).status_code == 422
     )
+
+
+def test_put_protein_override_unknown_attachment_404(client):
+    body = {
+        "overrides": [{
+            "representation": "hull-prism",
+            "segments": [],
+            "protein_attachment_ids": ["ghost-protein"],
+        }]
+    }
+    assert (
+        client.put("/api/design/representation-overrides", json=body).status_code == 404
+    )
+
+
+@pytest.mark.parametrize("representation", ["full", "beads", "cylinders", "hull-prism", "surface", "vdw", "ballstick", "stick"])
+def test_put_protein_only_override_persists(client, representation):
+    design = design_state.get_design()
+    attachment = ProteinAttachment(asset_id="test-asset", target=ProteinTargetFree())
+    design.protein_attachments.append(attachment)
+    body = {
+        "overrides": [{
+            "representation": representation,
+            "segments": [],
+            "protein_attachment_ids": [attachment.id],
+        }]
+    }
+    response = client.put("/api/design/representation-overrides", json=body)
+    assert response.status_code == 200, response.text
+    saved = response.json()["design"]["representation_overrides"][0]
+    assert saved["protein_attachment_ids"] == [attachment.id]
+    assert saved["segments"] == []
 
 
 def test_put_overrides_leaves_geometry_untouched(client):

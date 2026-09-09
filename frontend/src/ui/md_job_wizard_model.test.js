@@ -666,6 +666,13 @@ describe('planPayload', () => {
 })
 
 describe('productionPayload', () => {
+  it('carries the voltage-driven ion transport protocol', () => {
+    expect(productionPayload({ lengthNs: 20, touched: {
+      ion_transport_mode: 'voltage', ion_transport_voltage_mV: 150,
+      ion_transport_current_stride_ps: 10,
+    }})).toMatchObject({ ion_transport_mode: 'voltage',
+      ion_transport_voltage_mV: 150, ion_transport_current_stride_ps: 10 })
+  })
   it('sends the opt-in overall-orientation restraint and its quaternion strength', () => {
     expect(productionPayload({
       lengthNs: 10,

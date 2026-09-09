@@ -311,9 +311,24 @@ def connect_register(
     length = min(sd_a.length_bp, sd_b.length_bp)
     if length <= 0:
         raise ValueError("attach sub-domain has zero length")
+    def _end_at_attach(domain, sub_domain, attach, overhang_id):
+        # A selected sub-domain can be longer than its partner. Preserve the
+        # requested connection type by taking the paired window adjacent to
+        # the requested physical end. Previously both root and free_end always
+        # started at the sub-domain's 5' edge, making the two variants
+        # topologically identical for a one-sub-domain overhang.
+        offset = sub_domain.start_bp_offset
+        if attach == "free_end":
+            offset += sub_domain.length_bp - length
+        start_bp = offset_to_bp(domain, offset)
+        end_bp = offset_to_bp(domain, offset + length - 1)
+        return DuplexEnd(
+            overhang_id=overhang_id, start_bp=start_bp, end_bp=end_bp,
+        )
+
     return (
-        subdomain_end(dom_a, sd_a, length, oh_a_id),
-        subdomain_end(dom_b, sd_b, length, oh_b_id),
+        _end_at_attach(dom_a, sd_a, attach_a, oh_a_id),
+        _end_at_attach(dom_b, sd_b, attach_b, oh_b_id),
     )
 
 

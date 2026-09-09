@@ -59,6 +59,12 @@ export function proteinOvoidSpec(atoms = []) {
   return { center, radii }
 }
 
+export function proteinBoxSpec(atoms = []) {
+  const ovoid = proteinOvoidSpec(atoms)
+  if (!ovoid) return null
+  return { center: ovoid.center, size: ovoid.radii.clone().multiplyScalar(2) }
+}
+
 export function initProteinTraceRenderer(scene) {
   const root = new THREE.Group()
   root.name = 'proteinTraceRoot'
@@ -90,7 +96,7 @@ export function initProteinTraceRenderer(scene) {
 
   function rebuild() {
     clear()
-    if (mode !== 'trace' && mode !== 'ovoid') return
+    if (mode !== 'trace' && mode !== 'ovoid' && mode !== 'box') return
     const atomsByAttachment = new Map()
     for (const atom of data?.atoms ?? []) {
       const id = attachmentId(atom)
@@ -105,16 +111,20 @@ export function initProteinTraceRenderer(scene) {
       root.add(group)
       attachmentGroups.set(id, group)
     }
-    if (mode === 'ovoid') {
+    if (mode === 'ovoid' || mode === 'box') {
       let ovoidIndex = 0
       for (const group of attachmentGroups.values()) {
-        const spec = proteinOvoidSpec(group.userData.atoms)
+        const spec = mode === 'box'
+          ? proteinBoxSpec(group.userData.atoms)
+          : proteinOvoidSpec(group.userData.atoms)
         if (!spec) continue
-        const geometry = new THREE.SphereGeometry(1, 20, 14)
-        geometry.scale(spec.radii.x, spec.radii.y, spec.radii.z)
+        const geometry = mode === 'box'
+          ? new THREE.BoxGeometry(spec.size.x, spec.size.y, spec.size.z)
+          : new THREE.SphereGeometry(1, 20, 14)
+        if (mode === 'ovoid') geometry.scale(spec.radii.x, spec.radii.y, spec.radii.z)
         geometry.translate(spec.center.x, spec.center.y, spec.center.z)
         const mesh = new THREE.Mesh(geometry, materialFor(ovoidIndex++))
-        mesh.name = 'proteinOvoid'
+        mesh.name = mode === 'box' ? 'proteinBox' : 'proteinOvoid'
         mesh.castShadow = true
         mesh.receiveShadow = true
         mesh.userData.atom = group.userData.atoms[0]

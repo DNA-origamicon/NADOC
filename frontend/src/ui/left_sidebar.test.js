@@ -65,4 +65,17 @@ describe('initLeftSidebar', () => {
     expect(controller.getActiveTab()).toBe('feature-log')
     expect(controller.isCollapsed()).toBe(false)
   })
+
+  it('does not stop or re-seek geometry when opening Plates & tubes from Animations', () => {
+    const { controller, deps } = makeSidebar()
+    controller.setActiveTab('scene')
+    deps.animPlayer.stop.mockClear()
+    deps.seekFeaturesWithDelta.mockClear()
+
+    controller.setActiveTab('plates')
+
+    expect(deps.animPlayer.stop).not.toHaveBeenCalled()
+    expect(deps.seekFeaturesWithDelta).not.toHaveBeenCalled()
+    expect(controller.getActiveTab()).toBe('plates')
+  })
 })

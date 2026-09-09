@@ -39,6 +39,44 @@ def _write_dcd(path, n_frames, start_time, dt=100.0, n_atoms=4):
     return path
 
 
+def test_composite_meta_counts_complete_frames_past_stale_header(tmp_path):
+    """A growing NAMD DCD must not look like its old one-frame header in the UI."""
+    import struct
+
+    from backend.core.md_trajectory import md_composite_meta
+
+    dcd = _write_dcd(tmp_path / "live.dcd", 5, 0.0)
+    with dcd.open("r+b") as fh:
+        fh.seek(8)  # NSET in the CORD header
+        fh.write(struct.pack("<i", 1))
+    meta = md_composite_meta([("production", "md", dcd)], stride=1)
+    assert meta["n_frames"] == 5
+    assert meta["total_raw"] == 5
+
+
+def test_graphene_only_binary_trajectory_has_empty_cg_frames(tmp_path):
+    """The scrubber may drive solvent/ions/box even when there are no DNA beads."""
+    import json
+    import struct
+    from types import SimpleNamespace
+
+    from backend.core.md_trajectory import md_composite_trajectory_bin
+
+    dcd = _write_dcd(tmp_path / "graphene.dcd", 5, 0.0)
+    payload = md_composite_trajectory_bin(
+        tmp_path / "unused.psf",
+        [("production", "md", dcd)],
+        tmp_path / "unused.pdb",
+        SimpleNamespace(strands=[]),
+        stride=2,
+    )
+    magic, version, n_frames, n_keys, header_len = struct.unpack_from("<5I", payload)
+    assert (magic, version, n_frames, n_keys) == (0x4E54524A, 1, 3, 0)
+    header = json.loads(payload[20 : 20 + header_len])
+    assert header["keys"] == []
+    assert header["stages"] == [{"name": "production", "kind": "md", "n_frames": 3}]
+
+
 @pytest.fixture
 def job(tmp_path, monkeypatch):
     """A one-segment job whose package dir is a tmp dir."""

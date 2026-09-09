@@ -95,6 +95,27 @@ export function coalesceCylinderRuns(domains = []) {
   return runs
 }
 
+/** Maximal inclusive bp runs for which a domain resolves to cylinders. */
+export function clippedCylinderRuns(bpLo, bpHi, isCylinder) {
+  const runs = []
+  let start = null
+  for (let bp = bpLo; bp <= bpHi; bp++) {
+    if (isCylinder(bp)) {
+      if (start === null) start = bp
+    } else if (start !== null) {
+      runs.push([start, bp - 1]); start = null
+    }
+  }
+  if (start !== null) runs.push([start, bpHi])
+  return runs
+}
+
+/** Half-base-aligned fractions of a domain cylinder occupied by one bp run. */
+export function clippedCylinderFractions(domainLo, domainHi, runLo, runHi) {
+  const count = domainHi - domainLo + 1
+  return [(runLo - domainLo) / count, (runHi - domainLo + 1) / count]
+}
+
 const Y_HAT       = new THREE.Vector3(0, 1, 0)
 const ID_QUAT     = new THREE.Quaternion()
 
@@ -152,6 +173,23 @@ export function directConnectedOverhangIds(design) {
 export function syncPatchedBeadPosition(entry, backbonePosition) {
   entry.pos.set(backbonePosition[0], backbonePosition[1], backbonePosition[2])
   return entry.pos
+}
+
+/**
+ * Change only an instance's scale, preserving its currently rendered position
+ * and orientation.  Appearance controls must use the live matrix as their
+ * authority: entry.pos / build-time slab fields can legitimately lag while a
+ * simulation, unfold, deformation, or animation owns the display pose.
+ */
+export function rescaleInstanceInPlace(
+  mesh, id, scale, matrix = new THREE.Matrix4(), position = new THREE.Vector3(),
+  quaternion = new THREE.Quaternion(), currentScale = new THREE.Vector3(),
+) {
+  mesh.getMatrixAt(id, matrix)
+  matrix.decompose(position, quaternion, currentScale)
+  matrix.compose(position, quaternion, scale)
+  mesh.setMatrixAt(id, matrix)
+  return position
 }
 
 // Modification type → Three.js hex color (display color in the 3D scene)
@@ -215,7 +253,6 @@ const _slabCenterS = new THREE.Vector3()   // straight slab center
 const _slabCenterD = new THREE.Vector3()   // deformed slab center
 const _slabCenterL = new THREE.Vector3()   // lerped slab center
 const _slabBaseS   = new THREE.Vector3()   // translated authoritative base position
-const _slabMateBaseS = new THREE.Vector3() // translated paired base position
 const _slabRescaleQ   = new THREE.Quaternion()  // scratch for the in-place slab rescale
 const _slabQuatS      = new THREE.Quaternion()
 const _slabQuatL      = new THREE.Quaternion()
@@ -250,8 +287,13 @@ function _setInstColor(entry, hexColor) {
  * compose(pos, identity, (s,s,s)).
  */
 function _setBeadScale(entry, s) {
-  _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(s, s, s))
-  entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+  // Scaling is presentation-only. Re-composing from entry.pos used to teleport
+  // a bead when another visualization had updated its matrix but not that cache.
+  // Read the live instance and synchronize the cache to the pose we preserved.
+  entry.pos.copy(rescaleInstanceInPlace(
+    entry.instMesh, entry.id, _tScale.set(s, s, s), _tMatrix, _tPos,
+    _slabRescaleQ, _physDir,
+  ))
   entry.instMesh.instanceMatrix.needsUpdate = true
 }
 
@@ -412,6 +454,14 @@ export function slabConnectionCorner(
     .add(slabCenter)
 }
 
+/** Carry the one canonical native bead↔slab registration through any pose.
+ * Translation order is irrelevant because the offset lives in slab-local space. */
+export function slabCenterFromLocalOffset(
+  beadCenter, localCenterOffset, slabQuat, out = new THREE.Vector3(),
+) {
+  return out.copy(localCenterOffset).applyQuaternion(slabQuat).add(beadCenter)
+}
+
 // ── Main builder ──────────────────────────────────────────────────────────────
 
 /**
@@ -482,14 +532,6 @@ export function orderStrandNucleotides(nucs) {
 
 export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full') {
   const loopSet = new Set(loopStrandIds)
-  const independentPoses = new Map((design?.nucleotide_transforms ?? [])
-    .filter(t => t.kind === 'base')
-    .map(t => [`${t.helix_id}:${t.bp_index}:${t.direction}:${t.copy_k ?? 0}`, t]))
-  const poseMatrix = (pose) => new THREE.Matrix4()
-    .makeTranslation(...pose.pivot.map((v, i) => v + pose.translation[i]))
-    .multiply(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion(...pose.rotation)))
-    .multiply(new THREE.Matrix4().makeTranslation(...pose.pivot.map(v => -v)))
-
   // LOD skip flags. Order matters: 'cylinders' implies 'beads' skips too.
   const _initialLodKey = lod === 'cylinders' ? 'cylinders' : (lod === 'beads' ? 'beads' : 'full')
   const _skipBeads   = _initialLodKey === 'cylinders'
@@ -1213,49 +1255,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // solver adds only the shared-plane and O5'-bead contact adjustment documented above.
       let quat   = slabQuaternion(bnDir, tanDir)
       const mate   = slabMate.get(nuc)
-      const pose = independentPoses.get(
-        `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}:${nuc.copy ?? 0}`)
-      const independentPose = !!pose
-      let center
-      if (pose) {
-        // Geometry already carries the saved nucleotide delta. Reconstruct the slab
-        // from the pre-pose residue + mate, then apply that SAME delta to the complete
-        // slab. Re-solving contact from the posed bead changed the bead↔slab distance
-        // after Apply (2hb_1xT: 0.35205 → 0.30000 nm).
-        const delta = poseMatrix(pose)
-        const inverse = delta.clone().invert()
-        const originalBb = bbPos.clone().applyMatrix4(inverse)
-        const originalBase = new THREE.Vector3(...nuc.base_position).applyMatrix4(inverse)
-        const originalBn = bnDir.clone().transformDirection(inverse)
-        const originalTan = tanDir.clone().transformDirection(inverse)
-        if (pose.display_slab_offset && pose.display_slab_rotation) {
-          center = originalBb.clone()
-            .add(new THREE.Vector3(...pose.display_slab_offset))
-            .applyMatrix4(delta)
-          quat = new THREE.Quaternion(...pose.rotation)
-            .multiply(new THREE.Quaternion(...pose.display_slab_rotation))
-        } else {
-        let originalMateBase = null
-        if (mate?.base_position) {
-          originalMateBase = new THREE.Vector3(...mate.base_position)
-          const matePose = independentPoses.get(
-            `${mate.helix_id}:${mate.bp_index}:${mate.direction}:${mate.copy ?? 0}`)
-          if (matePose) originalMateBase.applyMatrix4(poseMatrix(matePose).invert())
-        }
-        center = pairedSlabCenter(
-          originalBb, originalBase, originalMateBase, originalTan, originalBn,
-        ).applyMatrix4(delta)
-        quat = new THREE.Quaternion(...pose.rotation).multiply(slabQuaternion(originalBn, originalTan))
-        }
-      } else {
-        center = pairedSlabCenter(
-          bbPos,
-          new THREE.Vector3(...nuc.base_position),
-          mate?.base_position ? new THREE.Vector3(...mate.base_position) : null,
-          tanDir,
-          bnDir,
-        )
-      }
+      const center = pairedSlabCenter(
+        bbPos,
+        new THREE.Vector3(...nuc.base_position),
+        mate?.base_position ? new THREE.Vector3(...mate.base_position) : null,
+        tanDir,
+        bnDir,
+      )
 
       _tMatrix.compose(center, quat,
         _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
@@ -1265,7 +1271,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       slabEntries.push({
         instMesh: iSlabs, id: slabId,
         connectorMesh: iSlabConnectors, connectorId: slabId,
-        nuc, mate, independentPose, pose, quat, bnDir, bbPos, center, defaultColor: color,
+        nuc, mate, quat, bnDir, bbPos, center,
+        // The fully measured native build is the sole authority for bead↔slab
+        // registration.  Every later operation carries this local pose through its
+        // current rotation instead of re-solving from a possibly partial/stale set
+        // of base, mate, straight-frame, or overlay coordinates.
+        localCenterOffset: center.clone().sub(bbPos)
+          .applyQuaternion(quat.clone().invert()),
+        defaultColor: color,
       })
       slabId++
     }
@@ -1278,29 +1291,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   /** Canonical paired slab center for build, animation, restore, and overrides. */
   function _slabCenterAt(
     slab, tangent, baseMap = null, beadMap = null, out = new THREE.Vector3(),
-    baseNormal = null,
+    baseNormal = null, poseQuat = null,
   ) {
     const n = slab.nuc
     const key = `${n.helix_id}:${n.bp_index}:${n.direction}`
-    _slabBaseS.copy(baseMap?.get(key) ?? _tPos.set(...n.base_position))
     const liveEntry = _nucToEntry.get(n)
     _slabCenterL.copy(beadMap?.get(key) ?? liveEntry?.pos ?? _tPos.set(...n.backbone_position))
-    if (slab.independentPose && slab.pose?.display_slab_offset) {
-      return out.copy(_slabCenterL).add(
-        _slabBaseS.set(...slab.pose.display_slab_offset)
-          .applyQuaternion(new THREE.Quaternion(...slab.pose.rotation)),
-      )
-    }
-    let mateBase = null
-    if (!slab.independentPose && slab.mate?.base_position) {
-      const mate = slab.mate
-      const mateKey = `${mate.helix_id}:${mate.bp_index}:${mate.direction}`
-      _slabMateBaseS.copy(baseMap?.get(mateKey) ?? _tPos.set(...mate.base_position))
-      mateBase = _slabMateBaseS
-    }
-    return pairedSlabCenter(
-      _slabCenterL, _slabBaseS, mateBase, tangent, baseNormal ?? slab.bnDir, out,
-    )
+    const q = poseQuat ?? slabQuaternion(baseNormal ?? slab.bnDir, tangent)
+    return slabCenterFromLocalOffset(_slabCenterL, slab.localCenterOffset, q, out)
   }
 
   // ── Domain cylinders (LOD level 2 — one per domain, strand-colored) ─────────
@@ -1391,6 +1389,18 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   iHelixCylinders.name = 'helixCylinders'
   root.add(iHelixCylinders)
 
+  // Override-only cylinders clipped to contiguous bp runs. The regular mesh is
+  // retained as the whole-domain fast path.
+  let _clippedCylCapacity = 1
+  let iClippedHelixCylinders = new THREE.InstancedMesh(
+    GEO_UNIT_CYL, new THREE.MeshLambertMaterial({ color: 0xffffff }), _clippedCylCapacity,
+  )
+  iClippedHelixCylinders.count = 0
+  iClippedHelixCylinders.frustumCulled = false
+  iClippedHelixCylinders.visible = false
+  iClippedHelixCylinders.name = 'clippedHelixCylinders'
+  root.add(iClippedHelixCylinders)
+
   // Same geometry, but regrouped into maximal adjacent same-colour runs. The
   // per-domain mesh remains visible to raycasting through material.visible=false.
   const iMergedHelixCylinders = new THREE.InstancedMesh(
@@ -1423,6 +1433,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   _curvedCylGroup.name = 'curvedCylGroup'
   _curvedCylGroup.visible = false
   root.add(_curvedCylGroup)
+  const _clippedCurvedCylGroup = new THREE.Group()
+  _clippedCurvedCylGroup.name = 'clippedCurvedCylGroup'
+  _clippedCurvedCylGroup.visible = false
+  root.add(_clippedCurvedCylGroup)
 
   // Half-cylinder mesh for single-stranded overhang domains (amber, DoubleSide so
   // the inside of the curved surface is visible when viewed at oblique angles).
@@ -1950,10 +1964,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   function applySlabParams() {
     for (const entry of slabEntries) {
-      _slabAxisDir.set(...entry.nuc.axis_tangent).normalize()
-      const center = _slabCenterAt(entry, _slabAxisDir, null, null, _slabCenterD)
-      _tMatrix.compose(center, entry.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
-      iSlabs.setMatrixAt(entry.id, _tMatrix)
+      rescaleInstanceInPlace(
+        iSlabs, entry.id,
+        _tScale.set(slabParams.length, slabParams.width, slabParams.thickness),
+        _tMatrix, _tPos, _slabRescaleQ, _physDir,
+      )
     }
     iSlabs.instanceMatrix.needsUpdate = true
     _refreshSlabConnectors()
@@ -2401,19 +2416,25 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           _slabBnS.set(...nuc.base_normal)
           _slabQuatS.copy(slabQuaternion(_slabBnS, _slabAxisDir))
           slab.bbPos.copy(sp)
-          center_ = _slabCenterAt(slab, _slabAxisDir, null, straightPosMap, _slabCenterS)
+          center_ = _slabCenterAt(
+            slab, _slabAxisDir, null, straightPosMap, _slabCenterS, _slabBnS, _slabQuatS,
+          )
           quat_   = _slabQuatS
         } else {
           slab.bbPos.set(nuc.backbone_position[0], nuc.backbone_position[1], nuc.backbone_position[2])
           _slabAxisDir.set(...nuc.axis_tangent).normalize()
-          center_ = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+          center_ = _slabCenterAt(
+            slab, _slabAxisDir, null, null, _slabCenterD, slab.bnDir, slab.quat,
+          )
           quat_   = slab.quat
         }
       } else {
         const bp = nuc.backbone_position
         slab.bbPos.set(bp[0], bp[1], bp[2])
         _slabAxisDir.set(...nuc.axis_tangent).normalize()
-        center_ = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+        center_ = _slabCenterAt(
+          slab, _slabAxisDir, null, null, _slabCenterD, slab.bnDir, slab.quat,
+        )
         quat_   = slab.quat
       }
       _tMatrix.compose(center_, quat_,
@@ -2629,12 +2650,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
         _slabQuatS.setFromRotationMatrix(_slabBasis)
 
-        center_ = _slabCenterAt(slab, _slabAxisDir, null, straightPosMap, _slabCenterS)
+        center_ = _slabCenterAt(
+          slab, _slabAxisDir, null, straightPosMap, _slabCenterS, _slabBnS, _slabQuatS,
+        )
         quat_   = _slabQuatS
       } else {
         slab.bbPos.copy(entry.pos)
         _slabAxisDir.set(...nuc.axis_tangent).normalize()
-        center_ = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+        center_ = _slabCenterAt(
+          slab, _slabAxisDir, null, null, _slabCenterD, slab.bnDir, slab.quat,
+        )
         quat_   = slab.quat
       }
 
@@ -2931,6 +2956,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     _installInstanceAlpha(iSlabs)
     _installInstanceAlpha(iSlabConnectors)
     _installInstanceAlpha(iHelixCylinders)
+    _installInstanceAlpha(iClippedHelixCylinders)
     // The curved proxies and the linker BINDING cylinders were the last three
     // cylinder families with no alpha channel. Their material.opacity is owned by
     // the deform cross-fade (proxies) or nothing at all (binding), so a per-instance
@@ -2977,6 +3003,81 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   /** The full alpha for one cylinder instance: ghosting x override x cluster. */
   function _cylFactor(dom) {
     return _refAlphaFor(dom.strandId) * _cylRepVis(dom) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom)
+  }
+
+  function _replaceClippedCylinderMesh(capacity) {
+    const previous = iClippedHelixCylinders
+    const mesh = new THREE.InstancedMesh(
+      GEO_UNIT_CYL, new THREE.MeshLambertMaterial({ color: 0xffffff }), capacity,
+    )
+    mesh.count = 0; mesh.frustumCulled = false; mesh.visible = false
+    mesh.name = 'clippedHelixCylinders'
+    root.add(mesh); previous.removeFromParent()
+    previous.material.dispose()
+    if (!previous.geometry.userData?.shared) previous.geometry.dispose()
+    iClippedHelixCylinders = mesh; _clippedCylCapacity = capacity
+    if (_repAlphaReady) _installInstanceAlpha(mesh)
+  }
+
+  /** Replace a partially overridden straight-domain cylinder with one instance
+   * per maximal cylinder bp run. This lets a spatial boundary cut a domain
+   * without either drawing the whole domain or leaving a hole. */
+  function _rebuildClippedCylinderRuns() {
+    const clipped = []
+    for (const dom of _domainCylData) {
+      const runs = clippedCylinderRuns(dom.bp_lo, dom.bp_hi,
+        bp => _effCol(dom.helixId, bp) === 'cylinders')
+      if (runs.length === 1 && runs[0][0] === dom.bp_lo && runs[0][1] === dom.bp_hi) continue
+      for (const [bpLo, bpHi] of runs) clipped.push({ dom, bpLo, bpHi })
+    }
+    if (clipped.length > _clippedCylCapacity) {
+      let capacity = _clippedCylCapacity
+      while (capacity < clipped.length) capacity *= 2
+      _replaceClippedCylinderMesh(capacity)
+    }
+    if (!iClippedHelixCylinders._instanceAlpha) _installInstanceAlpha(iClippedHelixCylinders)
+    const p0 = new THREE.Vector3(), p1 = new THREE.Vector3()
+    const pos = new THREE.Vector3(), dir = new THREE.Vector3(), quat = new THREE.Quaternion()
+    for (let index = 0; index < clipped.length; index++) {
+      const { dom, bpLo, bpHi } = clipped[index]
+      const [f0, f1] = clippedCylinderFractions(dom.bp_lo, dom.bp_hi, bpLo, bpHi)
+      const t0 = THREE.MathUtils.lerp(dom.t0, dom.t1, f0)
+      const t1 = THREE.MathUtils.lerp(dom.t0, dom.t1, f1)
+      p0.copy(dom.arrow.aStart).lerp(dom.arrow.aEnd, t0)
+      p1.copy(dom.arrow.aStart).lerp(dom.arrow.aEnd, t1)
+      pos.copy(p0).add(p1).multiplyScalar(.5); dir.copy(p1).sub(p0)
+      const length = dir.length()
+      quat.setFromUnitVectors(Y_HAT, length > .001 ? dir.divideScalar(length) : Y_HAT)
+      _tMatrix.compose(pos, quat, _tScale.set(_cylRadiusScale, length, _cylRadiusScale))
+      iClippedHelixCylinders.setMatrixAt(index, _tMatrix)
+      iClippedHelixCylinders.setColorAt(index, _tColor.setHex(dom.defaultColor))
+      _setCylAlpha(iClippedHelixCylinders, index,
+        _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom))
+    }
+    iClippedHelixCylinders.count = clipped.length
+    iClippedHelixCylinders.visible = _repActive && clipped.length > 0
+    iClippedHelixCylinders.instanceMatrix.needsUpdate = true
+    if (iClippedHelixCylinders.instanceColor) iClippedHelixCylinders.instanceColor.needsUpdate = true
+
+    for (const mesh of [..._clippedCurvedCylGroup.children]) {
+      mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose()
+    }
+    for (const dom of _curvedDomainCylData) {
+      const runs = clippedCylinderRuns(dom.bp_lo, dom.bp_hi,
+        bp => _effCol(dom.helixId, bp) === 'cylinders')
+      if (runs.length === 1 && runs[0][0] === dom.bp_lo && runs[0][1] === dom.bp_hi) continue
+      for (const [bpLo, bpHi] of runs) {
+        const built = _buildDomainTubeGeo(dom.arrow, bpLo, bpHi, CYL_TUBE_R, 2 * Math.PI)
+        if (!built) continue
+        const alpha = _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom)
+        const mesh = new THREE.Mesh(built.geo, new THREE.MeshLambertMaterial({
+          color: dom.defaultColor, transparent: alpha < 1, opacity: alpha, depthWrite: alpha >= 1,
+        }))
+        mesh.userData = { ...dom, bp_lo: bpLo, bp_hi: bpHi, clippedCylinder: true }
+        _clippedCurvedCylGroup.add(mesh)
+      }
+    }
+    _clippedCurvedCylGroup.visible = _repActive && _clippedCurvedCylGroup.children.length > 0
   }
 
   let _mergedCylActive = false
@@ -3063,19 +3164,28 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   function _applyRepOverrides() {
     _disableMergedCylinders()
     if (!_repActive) {
+      iClippedHelixCylinders.count = 0
+      iClippedHelixCylinders.visible = false
+      for (const mesh of [..._clippedCurvedCylGroup.children]) {
+        mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose()
+      }
+      _clippedCurvedCylGroup.visible = false
       // Overrides off — hand the channel back to its other two factors.
       _applyAlphaChannel()
       _reapplyDetailVisibility()
       return
     }
     _ensureAlphaInstalled()
+    _rebuildClippedCylinderRuns()
     // A bead (either strand) shows only where its column resolves to 'full'.
     const beadVis = (nuc) => (nuc && _effCol(nuc.helix_id, nuc.bp_index) === 'full' ? 1 : 0)
     for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
     for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
     for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
     for (const e of coneEntries) {
-      const vis = e.isCrossHelix ? 1 : beadVis(e.fromNuc)
+      const vis = e.isCrossHelix
+        ? (beadVis(e.fromNuc) && beadVis(e.toNuc) ? 1 : 0)
+        : beadVis(e.fromNuc)
       _setEntryAlpha(e, _refAlphaFor(e.strandId) * vis * _clusterAlphaFor(e.fromNuc) * _hiddenAlphaFor(e.fromNuc))
     }
     for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, _cylFactor(dom))
@@ -3785,15 +3895,21 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       for (const entry of slabEntries) {
         if (entry.nuc.strand_type === 'scaffold') continue
-        const s = slabParams
-        _slabAxisDir.set(...entry.nuc.axis_tangent).normalize()
-        const center = _slabCenterAt(entry, _slabAxisDir, null, null, _slabCenterD)
-        if (visible) {
-          _tMatrix.compose(center, entry.quat, _tScale.set(s.length, s.width, s.thickness))
-        } else {
-          _tMatrix.compose(center, entry.quat, _tScale.set(0, 0, 0))
+        if (!visible) {
+          // A zero-scale matrix cannot later yield its orientation, so retain the
+          // exact live pose. This is display state, never authored geometry.
+          iSlabs.getMatrixAt(entry.id, _tMatrix)
+          _tMatrix.decompose(_tPos, _slabRescaleQ, _physDir)
+          if (_physDir.lengthSq() > 1e-12) entry._preHideSlabMatrix = _tMatrix.clone()
+          _tMatrix.compose(_tPos, _slabRescaleQ, _tScale.set(0, 0, 0))
+          iSlabs.setMatrixAt(entry.id, _tMatrix)
+        } else if (entry._preHideSlabMatrix) {
+          entry._preHideSlabMatrix.decompose(_tPos, _slabRescaleQ, _physDir)
+          _tMatrix.compose(_tPos, _slabRescaleQ,
+            _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+          iSlabs.setMatrixAt(entry.id, _tMatrix)
+          entry._preHideSlabMatrix = null
         }
-        iSlabs.setMatrixAt(entry.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
       _refreshSlabConnectors()
@@ -3999,7 +4115,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             q = _slabQuatS; bn = _slabBnS
           }
           _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()
-          const center = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+          const center = _slabCenterAt(
+            slab, _slabAxisDir, null, null, _slabCenterD, bn, q,
+          )
           _tMatrix.compose(center, q, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
           slab.instMesh.setMatrixAt(slab.id, _tMatrix)
           touchedSlab = true
@@ -4173,20 +4291,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             // backbone. Bypassing it put both slabs at the central H-bond sites and
             // made paired 0.70-nm bodies overlap.
             const center = _slabCenterAt(
-              slab, _slabAxisDir, liveBaseMap, null, _slabCenterD, _slabBnS,
+              slab, _slabAxisDir, liveBaseMap, null, _slabCenterD, _slabBnS, _slabQuatS,
             )
             _tMatrix.compose(center, _slabQuatS, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
           } else {
             _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()
             const center = _slabCenterAt(
-              slab, _slabAxisDir, liveBaseMap, null, _slabCenterD,
+              slab, _slabAxisDir, liveBaseMap, null, _slabCenterD, slab.bnDir, slab.quat,
             )
             _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
           }
         } else {
           _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()
           const center = _slabCenterAt(
-            slab, _slabAxisDir, liveBaseMap, null, _slabCenterD,
+            slab, _slabAxisDir, liveBaseMap, null, _slabCenterD, slab.bnDir, slab.quat,
           )
           _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
         }
@@ -4481,11 +4599,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           // Both endpoint frames must be orthonormal. Both endpoint centers come from
           // the paired coordinate abstraction; no legacy backbone offset is introduced.
           _slabQuatS.copy(slabQuaternion(_slabBnS, _slabAxisDir))
-          _slabCenterAt(slab, _slabAxisDir, straightBaseMap, straightPosMap, _slabCenterS)
+          _slabCenterAt(
+            slab, _slabAxisDir, straightBaseMap, straightPosMap,
+            _slabCenterS, _slabBnS, _slabQuatS,
+          )
 
           const dp = nuc.backbone_position
           _slabAxisDir.set(...nuc.axis_tangent).normalize()
-          _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+          _slabCenterAt(
+            slab, _slabAxisDir, null, null, _slabCenterD, slab.bnDir, slab.quat,
+          )
 
           // Lerp center; slerp quaternion.
           _slabCenterL.lerpVectors(_slabCenterS, _slabCenterD, t)
@@ -4497,7 +4620,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           // No straight data available — stay at deformed orientation.
           slab.bbPos.copy(entry.pos)
           _slabAxisDir.set(...nuc.axis_tangent).normalize()
-          slabCenter_ = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+          slabCenter_ = _slabCenterAt(
+            slab, _slabAxisDir, null, null, _slabCenterD, slab.bnDir, slab.quat,
+          )
           slabQuat_   = slab.quat
         }
 
@@ -4866,7 +4991,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           }
         }
         _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()
-        const center_ = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+        const center_ = _slabCenterAt(
+          slab, _slabAxisDir, null, null, _slabCenterD, slab.bnDir, slab.quat,
+        )
         _tMatrix.compose(
           center_, slab.quat,
           _tScale.set(slabParams.length * slabFade, slabParams.width * slabFade, slabParams.thickness * slabFade),
@@ -5827,7 +5954,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         slab.quat.copy(slabQuaternion(_slabBn, _slabTan))
         slab.bbPos.set(n.backbone_position[0], n.backbone_position[1], n.backbone_position[2])
         _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()
-        const center = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+        const center = _slabCenterAt(
+          slab, _slabAxisDir, null, null, _slabCenterD, slab.bnDir, slab.quat,
+        )
         _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
         iSlabs.setMatrixAt(slab.id, _tMatrix)
         slabsUpdated = true
@@ -5936,7 +6065,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         slab.quat.copy(slabQuaternion(_slabBn, _slabTan))
         slab.bbPos.set(n.backbone_position[0], n.backbone_position[1], n.backbone_position[2])
         _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()
-        const center = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+        const center = _slabCenterAt(
+          slab, _slabAxisDir, null, null, _slabCenterD, slab.bnDir, slab.quat,
+        )
         _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
         iSlabs.setMatrixAt(slab.id, _tMatrix)
         slabsUpdated = true

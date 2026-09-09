@@ -17,6 +17,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { crossoverArcHiddenForRepresentations } from './view_volume_rules.js'
 
 const SRC = readFileSync(resolve(process.cwd(), 'src/scene/unfold_view.js'), 'utf8')
 
@@ -65,6 +66,13 @@ describe('arc colour buffer is RGBA', () => {
 })
 
 describe('arc cluster display', () => {
+  it('hides a crossover when either endpoint leaves the full representation', () => {
+    expect(crossoverArcHiddenForRepresentations('full', 'full')).toBe(false)
+    expect(crossoverArcHiddenForRepresentations('cylinders', 'full')).toBe(true)
+    expect(crossoverArcHiddenForRepresentations('full', 'surface')).toBe(true)
+    expect(crossoverArcHiddenForRepresentations('stick', 'vdw')).toBe(true)
+  })
+
   it('hides a crossover when either endpoint belongs to reference geometry', () => {
     const fn = SRC.slice(SRC.indexOf('function _reapplyArcHidden'))
     const body = fn.slice(0, SRC.indexOf('\n  function ', SRC.indexOf('function _reapplyArcHidden') + 1) - SRC.indexOf('function _reapplyArcHidden'))

@@ -31,6 +31,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import importlib
 from pathlib import Path
 
 # NADOC project root (this file is backend/core/engines.py → up 3).  The from-source
@@ -94,6 +95,23 @@ _TOOLCHAIN_PROBES = {
     "conda": ["conda", "mamba", "micromamba"],
     "apt": ["apt-get"],
 }
+
+
+def oxpy_live_info() -> dict:
+    """Probe the Python binding and NADOC's required live-steering attributes."""
+    try:
+        oxpy = importlib.import_module("oxpy")
+    except Exception as exc:
+        return {"available": False, "path": None, "reason": f"oxpy not built ({exc})"}
+    base = getattr(getattr(oxpy, "forces", None), "BaseForce", None)
+    path = getattr(oxpy, "__file__", None)
+    if base is None or not (hasattr(base, "F0") and hasattr(base, "dir")):
+        return {
+            "available": False,
+            "path": path,
+            "reason": "oxpy is installed but lacks NADOC's F0/dir live-steering bindings",
+        }
+    return {"available": True, "path": path, "reason": "ready"}
 
 
 # ── hardware / toolchain probes ───────────────────────────────────────────────
@@ -707,6 +725,7 @@ def engines_status() -> dict:
     gmx_path = _try_find(find_gmx)
     psfgen_path = _try_find(find_psfgen)
     dnanalysis_path = find_dnanalysis()
+    oxpy_info = oxpy_live_info()
     mrdna_path = _try_find(find_mrdna)
     blade_python = _try_find(find_blade_python)
     arbd_path = _try_find(find_arbd)
@@ -779,6 +798,15 @@ def engines_status() -> dict:
             _source_build_plan(gpu, tools, name="oxDNA", commands_fn=_managed_oxdna_commands),
             required_note="Bundled with oxDNA; building oxDNA provides it.",
             forced=_f("dnanalysis"),
+        ),
+        "oxpy": _engine(
+            "oxpy",
+            "oxpy (Live bindings)",
+            "In-process oxDNA binding with NADOC field-steering support for Live sessions.",
+            oxpy_info["path"] if oxpy_info["available"] else None,
+            _source_build_plan(gpu, tools, name="oxDNA + oxpy", commands_fn=_managed_oxdna_commands),
+            required_note=oxpy_info["reason"],
+            forced=_f("oxpy"),
         ),
         # ── mrDNA coarse-grained pipeline (mrdna Python + ARBD GPU engine + CUDA) ──
         "mrdna": _engine(
@@ -872,7 +900,12 @@ def engines_status() -> dict:
         ),
         "engines": engines,
         "sections": {
-            "oxdna": _section(["oxdna"]),
+            "oxdna": {
+                **_section(["oxdna"]),
+                "live_required": ["oxpy"],
+                "live_ready": engines["oxpy"]["installed"],
+                "live_missing": [] if engines["oxpy"]["installed"] else ["oxpy"],
+            },
             "md": _section(["namd", "gromacs"]),
         },
     }

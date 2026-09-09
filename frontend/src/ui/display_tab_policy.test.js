@@ -23,8 +23,13 @@ describe('display_tab_policy', () => {
     expect(shouldTearDownDisplays('scene')).toBe(false)
   })
 
+  it('keeps the painted pose on the view-only Plates & tubes tab', () => {
+    expect(preservesDisplays('plates')).toBe(true)
+    expect(shouldTearDownDisplays('plates')).toBe(false)
+  })
+
   it('tears the display down on the editing tabs', () => {
-    for (const tab of ['design', 'view', 'features', 'assembly', 'feature-log', 'plates']) {
+    for (const tab of ['design', 'view', 'features', 'assembly', 'feature-log']) {
       expect(shouldTearDownDisplays(tab)).toBe(true)
     }
   })
@@ -47,7 +52,7 @@ describe('display_tab_policy', () => {
     // Photo mode preserves displays: you photograph what is on screen, which
     // includes an oxDNA/NAMD frame. Animations preserves them because a trajectory
     // keyframe paints through the same controller.
-    expect(displayTabIds()).toEqual(['dynamics', 'photo', 'scene'])
+    expect(displayTabIds()).toEqual(['dynamics', 'photo', 'scene', 'plates'])
   })
 
   describe('live sessions are stricter than painted displays', () => {

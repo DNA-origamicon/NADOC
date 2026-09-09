@@ -22,6 +22,8 @@
  * Factory: initOxdnaDisplay({ designRenderer, api }) → controller.
  */
 
+import { initTrajectoryPreparationCache } from '../scene/trajectory_preparation_cache.js'
+import { initTrajectoryDownloads } from '../scene/trajectory_downloads.js'
 import { strideIndices, nearestOf } from '../scene/trajectory_range.js'
 import { colormapHex } from './colormaps.js'
 import { expandStampFrames, stampTopologyMatches } from '../scene/atomistic_stamp.js'
@@ -441,7 +443,7 @@ export function prebuildMemoryPlan({
 }
 
 export function initOxdnaDisplay({
-  designRenderer, api, proteinRenderer = null,
+  designRenderer, api, proteinRenderer = null, preparationOnly = false, sharedFrameQueue = null,
   getAtomisticRenderer = null, getSurfaceRenderer = null,
   getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
   applyOxdnaFrame = null,
@@ -520,6 +522,7 @@ export function initOxdnaDisplay({
     return _loadAbort.signal
   }
   function _cancelLoad() {
+    trajectoryDownloads.cancelPending()
     _loadAbort?.abort()
     _loadAbort = null
     _epoch++
@@ -955,6 +958,7 @@ export function initOxdnaDisplay({
   // fetch); it must not be triggered by this controller racing itself.
   let _frameFetchQueue = Promise.resolve()
   function _queueFrameFetch(fn) {
+    if (sharedFrameQueue) return sharedFrameQueue(fn)
     const run = _frameFetchQueue.then(fn, fn)
     // Keep the chain alive after a rejection, but let the caller see the error.
     _frameFetchQueue = run.then(() => {}, () => {})
@@ -1052,6 +1056,9 @@ export function initOxdnaDisplay({
         : null
       if (_bakedSurf && nextSurf !== null && nextSurf !== _bakedSurf.cap) _bakedSurf = null
     }
+    const epoch = _epoch
+    const token = ++_prebuildToken
+    const live = () => epoch === _epoch && token === _prebuildToken
     const kind = _repKind()
     if (kind === 'cg') return { ok: true, n: 0 }   // CG plays instantly — nothing to bake
     // Size the grid BEFORE building it: how many frames fit the budget depends on the
@@ -1069,14 +1076,12 @@ export function initOxdnaDisplay({
       const seed = _ensureGrid(kind)
       if (seed?.grid?.length) await _coarseFrame(kind, seed.grid[0], _epoch)
     }
+    if (!live()) return { ok: false, n: 0 }
     const bake = _ensureGrid(kind)
     if (!bake || !bake.grid.length) return { ok: false, n: 0 }
-    const epoch = _epoch
-    const token = ++_prebuildToken
-    const live = () => epoch === _epoch && token === _prebuildToken
     const total = bake.grid.length
     let done = bake.grid.filter((g) => bake.byIdx.has(g)).length
-    onProgress?.(done, total)
+    onProgress?.(done, total, trajectoryPreparationProgress())
     const todo = bake.grid.filter((g) => !bake.byIdx.has(g))
     // Warming one cell alone first pays off only when the per-request setup is CACHED
     // server-side for the requests that follow (oxDNA's alignment cache). On the batching
@@ -1085,7 +1090,7 @@ export function initOxdnaDisplay({
     if (todo.length && !_heavyBatch) {
       await _coarseFrame(kind, todo[0], epoch)
       if (!live()) return { ok: false, n: total }
-      done++; onProgress?.(done, total)
+      done++; onProgress?.(done, total, trajectoryPreparationProgress())
     }
     const rest = _heavyBatch ? todo : todo.slice(1)
     if (_heavyBatch) {
@@ -1107,7 +1112,8 @@ export function initOxdnaDisplay({
         const chunk = queue.slice(0, CHUNK)
         queue = queue.slice(CHUNK)
         await _coarseFrames(kind, chunk, epoch)
-        if (live()) { done += chunk.length; onProgress?.(done, total) }
+        if (live()) { done += chunk.length; onProgress?.(done, total, trajectoryPreparationProgress()) }
+        if (preparationOnly) await new Promise(resolve => setTimeout(resolve, 0))
       }
     } else {
       let next = 0
@@ -1115,12 +1121,13 @@ export function initOxdnaDisplay({
         while (next < rest.length && live()) {
           const g = rest[next++]
           await _coarseFrame(kind, g, epoch)
-          if (live()) { done++; onProgress?.(done, total) }
+          if (live()) { done++; onProgress?.(done, total, trajectoryPreparationProgress()) }
+          if (preparationOnly) await new Promise(resolve => setTimeout(resolve, 0))
         }
       }
       await Promise.all(Array.from({ length: Math.min(3, rest.length) }, worker))
     }
-    return { ok: live(), n: total, capped: !!bake.capped, cap: bake.cap,
+    return { ok: live() && bake.grid.every(g => bake.byIdx.has(g)), n: total, capped: !!bake.capped, cap: bake.cap,
              frames: bake.grid.length, trajFrames: bake.total ?? total }
   }
 
@@ -1684,18 +1691,14 @@ export function initOxdnaDisplay({
    * cache it, and show the first frame.  Returns metadata for the player
    * (n_frames + stage markers).  The actual scrubbing is driven by showFrame().
    */
-  async function loadTrajectory(
-    jobId, align = true, scope = 'lineage', stride = undefined, onProgress = null,
-  ) {
-    if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
-    const epoch = ++_epoch
-    const signal = _beginLoad()
+  const trajectoryDownloads = initTrajectoryDownloads(async (jobId, {
+    align = true, scope = 'lineage', stride, signal, onProgress,
+  }) => {
     let resp = null
     if (api.preferTrajectoryBin && api.getOxdnaTrajectoryBin) {
       const buf = await api.getOxdnaTrajectoryBin(
         jobId, { align, signal, scope, stride, onProgress },
       )
-      if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
       if (buf) {
         onProgress?.({ phase: 'decode', done: 0, total: 1 })
         resp = parseOxdnaTrajectoryBin(buf)
@@ -1707,13 +1710,63 @@ export function initOxdnaDisplay({
     if (!resp && !signal.aborted) {
       resp = await api.getOxdnaTrajectory(jobId, { align, signal, scope, stride })
     }
-    if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
+    return resp
+  })
+
+  const preparationCache = preparationOnly ? null : initTrajectoryPreparationCache({
+    context: () => ({ repr: getCurrentRepr?.() || 'full', surface: getSurfaceParams() }),
+    download: (jobId, spec, options) => trajectoryDownloads.get(jobId, spec, options),
+    createSession: (payload, settings) => initOxdnaDisplay({
+      preparationOnly: true, designRenderer: {}, sharedFrameQueue: _queueFrameFetch,
+      api: { ...api, preferTrajectoryBin: false, getOxdnaTrajectory: async () => payload },
+      getCurrentRepr: () => settings.repr,
+      getSurfaceParams: () => settings.surface,
+      getAtomisticRenderer: () => ({ getMode: () => settings.repr }),
+    }),
+  })
+
+  function trajectoryPreparationProgress() {
+    const kind = _repKind(), bake = _bakeFor(kind)
+    return { kind, trajectoryFrames: _traj?.n_frames || 0,
+      grid: bake?.grid || [], readyIndices: [...(bake?.byIdx.keys() || [])],
+      capped: !!bake?.capped }
+  }
+
+  function trajectoryPreparationState() {
+    return { atom: _bakedAtom, surface: _bakedSurf, topology: _pendingTopoModel,
+      topologyJob: _pendingTopoJob, bonds: _atomTopoBonds, stamp: _stampDesc,
+      stampJob: _stampDescJob, serials: _atomSerials, surfaceBytes: _surfFrameBytes,
+      budget: _atomBudget }
+  }
+
+  function adoptTrajectoryPreparation(jobId, { scope, stride }) {
+    const prepared = preparationCache?.snapshot(jobId, { scope, stride })
+    if (prepared) {
+      _bakedAtom = prepared.atom; _bakedSurf = prepared.surface
+      _pendingTopoModel = prepared.topology; _pendingTopoJob = prepared.topologyJob
+      _atomTopoBonds = prepared.bonds; _atomTopoJob = null
+      _stampDesc = prepared.stamp; _stampDescJob = prepared.stampJob
+      _atomSerials = prepared.serials; _surfFrameBytes = prepared.surfaceBytes
+      _atomBudget = prepared.budget
+    }
+  }
+
+  async function loadTrajectory(
+    jobId, align = true, scope = 'lineage', stride = undefined, onProgress = null,
+  ) {
+    if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
+    const epoch = ++_epoch
+    const signal = _beginLoad()
+    const resp = await trajectoryDownloads.get(jobId, { align, scope, stride }, { signal, onProgress })
+    if (epoch !== _epoch || signal.aborted) return { ok: false, reason: 'superseded' }
     if (!resp?.ready || !Array.isArray(resp.frames) || !resp.frames.length) {
       return { ok: false, reason: resp?.reason || 'no trajectory yet' }
     }
+    trajectoryDownloads.consumed(jobId, { align, scope, stride })
     _traj = resp
     _bakedAtom = null     // new job → drop the previous job's heavy bakes
     _bakedSurf = null
+    adoptTrajectoryPreparation(jobId, { scope, stride })
     designRenderer.clearScalarColors?.()
     _active = true
     _mode = 'trajectory'
@@ -1721,6 +1774,10 @@ export function initOxdnaDisplay({
     _align = align
     _trajScope = scope
     _trajStride = stride
+    if (preparationOnly) {
+      _active = false
+      return { ok: true, n_frames: resp.n_frames }
+    }
     // Replace setup-preview strands before showFrame's FEM move; otherwise the rebuild
     // leaves the origami at design coordinates and the preview caps at seed coordinates.
     onProgress?.({ phase: 'surface-strands', done: 0, total: 1 })
@@ -1796,6 +1853,7 @@ export function initOxdnaDisplay({
     // for THIS (job, align) are exactly what refresh exists to re-fetch.
     _heavyMemo.clear()
     if (_mode === 'trajectory') {
+      trajectoryDownloads.clear() // a growing run may have new frames
       _dropJobCompanions(_jobId) // refresh origami, protein pose, and real caps
       return loadTrajectory(_jobId, _align, _trajScope, _trajStride)
     }
@@ -1807,6 +1865,7 @@ export function initOxdnaDisplay({
 
   /** Clear the overlay (positions + colours) and restore the design. */
   function stopAndRestore() {
+    trajectoryDownloads.clear()
     _epoch++   // cancel any in-flight display fetch so it can't re-apply after we restore
     _cancelLoad() // also terminate the HTTP/body transfer and release browser resources
     _heavyToken++   // and any in-flight heavy reconstruction
@@ -1851,6 +1910,17 @@ export function initOxdnaDisplay({
     setStrainDsdnaOnly,
     strainDsdnaOnly: () => _strainDsOnly,
     loadTrajectory,
+    trajectoryPreparationState, adoptTrajectoryPreparation,
+    prepareTrajectory: (jobId, spec, options) => preparationCache?.prepare(jobId, spec, options),
+    retainPreparedTrajectories: requests => preparationCache?.retain(requests),
+    cancelTrajectoryPreparation: () => { preparationCache?.cancel(); trajectoryDownloads.cancelPending() },
+    prefetchTrajectory: (jobId, spec = {}, options = {}) => {
+      if (_traj && _jobId === jobId && trajSpecMatches(spec) && _align === (spec.align ?? true)) {
+        trajectoryDownloads.seed(jobId, spec, _traj)
+      }
+      return trajectoryDownloads.get(jobId, spec, options)
+    },
+    retainTrajectoryDownloads: requests => trajectoryDownloads.retain(requests),
     showFrame,
     refresh,
     stopAndRestore,

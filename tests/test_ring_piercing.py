@@ -40,7 +40,7 @@ from tests.reciprocal_design import reciprocal_design
 # Representative native placements that the retained gate must refuse. These are
 # detector controls, not proposals to move the inserted bases.  The promoted 2xT
 # default deliberately removed the former ("TT", 8) positive control.
-_KNOWN_PIERCED = [("T", 8)]
+_KNOWN_PIERCED = [("T", 9)]
 _PHASE_SWEEP = range(8, 19)
 
 

@@ -162,10 +162,12 @@ def build_replica_package(
     #: already-completed children still pointed at.
     anchors_src: "Optional[Path]" = None,
     anchor_k: Optional[float] = None,
+    graphene_anchor_k: Optional[float] = None,
     anchors_requested: Optional[list] = None,
     field: Optional[dict] = None,
     orientation_restraint: bool = False,
     orientation_force_constant: float = 500.0,
+    force_nvt: bool = False,
 ) -> Path:
     """Build a production-only package for one ensemble replica; returns its package dir.
 
@@ -298,6 +300,18 @@ def build_replica_package(
             child_pkg / "photoproduct_forcefield_manifest.json",
         )
 
+    # The graphene membrane is part of the simulated system, not merely preparation UI.
+    # Carry its machine-readable descriptor into every production child just as we carry
+    # the PSF/PDB.  Previously only graphene_fixed.pdb happened to survive through the
+    # anchors path: NAMD could restrain the atoms, but the child manifest/reloaded UI said
+    # there was no nanopore and downstream transport analysis lost its pore geometry.
+    graphene_nanopore = manifest.get("graphene_nanopore")
+    if graphene_nanopore and (parent_pkg / "graphene_nanopore.json").is_file():
+        shutil.copy2(
+            parent_pkg / "graphene_nanopore.json",
+            child_pkg / "graphene_nanopore.json",
+        )
+
     ff = parent_pkg / "forcefield"
     if ff.is_dir():
         for f in sorted(ff.rglob("*")):
@@ -354,7 +368,11 @@ def build_replica_package(
 
             coords = read_namd_coor(child_pkg / "equilibrated.coor")
             n_anchor_atoms = retarget_anchor_pdb(
-                src_anchor, dst_anchor, coords=coords, k=anchor_k
+                src_anchor,
+                dst_anchor,
+                coords=coords,
+                k=anchor_k,
+                graphene_k=graphene_anchor_k,
             )
         logger.info(
             "[%s] anchors: %d atom(s) %s",
@@ -368,7 +386,7 @@ def build_replica_package(
     # ── Reseed (velocity reinit for a replica; velocity-PRESERVING for a continuation) ──
     # A carved cell (vacuum corners) must stay at constant volume — the parent package's
     # manifest is the record of how it was solvated.  The replica inherits that.
-    npt_allowed = package_npt_allowed(parent_pkg)
+    npt_allowed = package_npt_allowed(parent_pkg) and not force_nvt
     reseed_name = f"{name_stem}_00_reseed"
     reseed_conf = build_reseed_conf(
         reseed_name,
@@ -466,6 +484,8 @@ def build_replica_package(
     # builds, so it needs the same size gate + explicit override as every other conf
     # writer.  Without n_atoms this fell to "unknown" and forced resident ON, which is
     # why turning the Advanced-card dropdown off changed nothing for a production run.
+    from backend.core.namd_graphene import graphene_pressure_conf
+
     production_conf = build_production_conf(
         prod,
         name_stem,
@@ -493,7 +513,17 @@ def build_replica_package(
         colvars_file=colvars_file,
     )
     (child_pkg / f"{prod_name}.conf").write_text(
-        inject_packaged_photoproduct_parameters(production_conf, parent_pkg)
+        inject_packaged_photoproduct_parameters(
+            graphene_pressure_conf(
+                production_conf,
+                enabled=bool(graphene_nanopore and anchor_k is not None),
+                fixed_cell=bool(
+                    graphene_nanopore
+                    and graphene_nanopore.get("cell_policy") == "fixed_volume"
+                ),
+            ),
+            parent_pkg,
+        )
     )
 
     # ── Manifest (production-only; total_ns == length_ns) ───────────────────────
@@ -508,9 +538,12 @@ def build_replica_package(
         "files": {
             **manifest.get("files", {}),
             **({"anchors": anchors_file} if anchors_file else {"anchors": None}),
+            **({"graphene_nanopore": "graphene_nanopore.json"} if graphene_nanopore else {}),
         },
         "box_ang": list(box),
         "mgh_extrabonds": mgh_extrabonds,
+        "graphene_nanopore": graphene_nanopore,
+        "anchor_groups": manifest.get("anchor_groups"),
         # The child's OWN external forces, so the run record states what it ran under
         # instead of leaving an analysis to assume "production = unrestrained".
         "field": field,
@@ -520,6 +553,7 @@ def build_replica_package(
                 "file": anchors_file,
                 "n_atoms_anchored": n_anchor_atoms,
                 "k_kcal_mol_a2": anchor_k,
+                "graphene_k_kcal_mol_a2": graphene_anchor_k,
                 "mechanism": (
                     "fixedAtoms (fixedAtomsCol B); held immobile"
                     if anchor_k is None

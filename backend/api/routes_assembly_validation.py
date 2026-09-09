@@ -77,7 +77,7 @@ def flatten_load_as_design() -> dict:
         design = Design.from_json(flatten_assembly(assembly).to_json())
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(400, detail=str(exc))
-    design_state.set_design(design)
+    design_state.load_design(design)
     report = validate_design(design)
     from backend.api.crud import _design_response
 

@@ -2,7 +2,62 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as THREE from 'three'
-import { coalesceCylinderRuns, directConnectedOverhangIds, orderStrandNucleotides, syncPatchedBeadPosition } from './helix_renderer.js'
+import {
+  clippedCylinderFractions, clippedCylinderRuns, coalesceCylinderRuns, directConnectedOverhangIds, orderStrandNucleotides,
+  rescaleInstanceInPlace, syncPatchedBeadPosition,
+} from './helix_renderer.js'
+
+describe('view-volume cylinder clipping', () => {
+  it('partitions a domain into maximal cylinder runs at mid-domain boundaries', () => {
+    const cylinderBps = new Set([3, 4, 5, 8, 9])
+    expect(clippedCylinderRuns(0, 11, bp => cylinderBps.has(bp))).toEqual([[3, 5], [8, 9]])
+  })
+
+  it('preserves empty and complete-domain fast paths', () => {
+    expect(clippedCylinderRuns(4, 7, () => false)).toEqual([])
+    expect(clippedCylinderRuns(4, 7, () => true)).toEqual([[4, 7]])
+  })
+
+  it('maps inclusive bp runs to exact half-base-aligned cylinder lengths', () => {
+    expect(clippedCylinderFractions(0, 9, 3, 6)).toEqual([.3, .7])
+    const [start, end] = clippedCylinderFractions(10, 29, 15, 19)
+    expect((end - start) * 20 * .334).toBeCloseTo(5 * .334)
+  })
+})
+
+describe('view-volume crossover visibility', () => {
+  it('requires both cross-helix connector endpoints to remain full detail', () => {
+    expect(HR).toMatch(/e\.isCrossHelix\s*\?\s*\(beadVis\(e\.fromNuc\)\s*&&\s*beadVis\(e\.toNuc\)/)
+  })
+})
+
+describe('pose-preserving presentation edits', () => {
+  it('changes instance scale without changing its live position or orientation', () => {
+    const mesh = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(1), new THREE.MeshBasicMaterial(), 1,
+    )
+    const position = new THREE.Vector3(17, -4, 9)
+    const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(.3, -.7, 1.1))
+    mesh.setMatrixAt(0, new THREE.Matrix4().compose(
+      position, quaternion, new THREE.Vector3(2, 2, 2),
+    ))
+
+    rescaleInstanceInPlace(mesh, 0, new THREE.Vector3(4, 5, 6))
+
+    const matrix = new THREE.Matrix4()
+    const actualPosition = new THREE.Vector3()
+    const actualQuaternion = new THREE.Quaternion()
+    const actualScale = new THREE.Vector3()
+    mesh.getMatrixAt(0, matrix)
+    matrix.decompose(actualPosition, actualQuaternion, actualScale)
+    expect(actualPosition.toArray()).toEqual(position.toArray())
+    expect(Math.abs(actualQuaternion.dot(quaternion))).toBeCloseTo(1, 6)
+    expect(actualScale.x).toBeCloseTo(4, 6)
+    expect(actualScale.y).toBeCloseTo(5, 6)
+    expect(actualScale.z).toBeCloseTo(6, 6)
+  })
+
+})
 
 describe('coalesceCylinderRuns', () => {
   it('merges only contiguous same-color domains on the same helix', () => {
@@ -103,6 +158,22 @@ function fnBody(src, name) {
   return null
 }
 
+describe('presentation paths preserve live geometry', () => {
+  it('routes bead sizing/highlighting and slab refresh through live matrices', () => {
+    const beadScale = fnBody(HR, '_setBeadScale')
+    expect(beadScale).toContain('rescaleInstanceInPlace')
+    expect(beadScale).not.toContain('compose(entry.pos')
+
+    const slabParams = fnBody(HR, 'applySlabParams')
+    expect(slabParams).toContain('rescaleInstanceInPlace')
+    expect(slabParams).not.toContain('_slabCenterAt')
+
+    const stapleVisibility = HR.slice(HR.indexOf('setStapleVisibility(visible)'))
+    expect(stapleVisibility.slice(0, 2400)).toContain('_preHideSlabMatrix')
+    expect(stapleVisibility.slice(0, 2400)).not.toContain('_slabCenterAt')
+  })
+})
+
 describe('instanceAlpha coverage', () => {
   it('every cylinder data array carries domainIndex', () => {
     // Without it, _clusterAlphaForCyl can only ever resolve the helix-level key —
@@ -135,6 +206,12 @@ describe('instanceAlpha coverage', () => {
     // it as an ordinary domain produced a second stale full cylinder.
     expect(HR).toContain("strand.strand_type === 'oh_binder'")
     expect(HR).toContain('dom.binds_overhang_id != null')
+  })
+
+  it('has one canonical native bead-to-slab placement path', () => {
+    expect(HR).not.toContain('display_slab_offset')
+    expect(HR).not.toContain('display_slab_rotation')
+    expect(HR).not.toContain('independentPose')
   })
 
   it('preserves authoritative moved-overhang endpoints during deform lerp', () => {

@@ -2,11 +2,9 @@
 
 The engine APIs deliberately remain Design-based.  Assembly mode materializes its
 complete world-space topology into that shared Design slot, then all existing job
-lifecycle code is reused.  BigO-poly is the acceptance fixture because it is the
-representative one-instance assembly used for part/assembly parity.
+lifecycle code is reused. A deterministic two-instance bundle assembly verifies
+that every engine receives all instances without relying on editable workspace files.
 """
-
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,26 +17,42 @@ from backend.core.lammps_job import LammpsJob, LammpsStatus
 from backend.core.md_job import MdJob, MdStatus, new_job as new_md_job
 from backend.core.oxdna_job import OxdnaJob
 from backend.core.snupi_job import SnupiJob
+from backend.core.models import (
+    Assembly,
+    Design,
+    Mat4x4,
+    PartInstance,
+    PartSourceInline,
+    StrandType,
+)
+from backend.core.sequences import assign_scaffold_sequence, assign_staple_sequences
+from tests.conftest import make_6hb_design
 
 
-ROOT = Path(__file__).parents[1]
-BIG_O_POLY = ROOT / "workspace" / "BigO-poly.nass"
+SOURCE = "simulation-parity.nass"
+INSTANCE_IDS = ("left", "right")
 
 
 @pytest.fixture
-def assembly_sim_client(tmp_path, monkeypatch):
-    if not BIG_O_POLY.exists():
-        pytest.skip("optional workspace/BigO-poly.nass parity fixture is unavailable")
-
+def assembly_sim_client(tmp_path, monkeypatch, request):
     from backend.api import assembly as routes_assembly
     from backend.api import (
-        routes_cando, routes_lammps, routes_md, routes_mrdna, routes_oxdna,
+        routes_cando,
+        routes_lammps,
+        routes_md,
+        routes_mrdna,
+        routes_oxdna,
         routes_snupi,
     )
 
     for module in (
-        routes_assembly, routes_cando, routes_lammps, routes_md, routes_mrdna,
-        routes_oxdna, routes_snupi,
+        routes_assembly,
+        routes_cando,
+        routes_lammps,
+        routes_md,
+        routes_mrdna,
+        routes_oxdna,
+        routes_snupi,
     ):
         monkeypatch.setattr(module, "_WORKSPACE_DIR", tmp_path)
 
@@ -56,10 +70,14 @@ def assembly_sim_client(tmp_path, monkeypatch):
     # real NAMD execution remains in the guarded slow/manual validation group.
     def queue_namd(body, *, design, seeded, name, size_factor, **_kwargs):
         assert not seeded
-        assert len(design.helices) == 56 and len(design.strands) == 177
+        assert len(design.helices) == 12 and len(design.strands) == 24
         job = new_md_job(
-            design_name=name, protocol=body.protocol, name_stem="", package_subdir="",
-            threads=body.threads, devices=body.devices,
+            design_name=name,
+            protocol=body.protocol,
+            name_stem="",
+            package_subdir="",
+            threads=body.threads,
+            devices=body.devices,
             design_source_path=body.design_source_path,
         )
         job.status = MdStatus.queued
@@ -74,64 +92,92 @@ def assembly_sim_client(tmp_path, monkeypatch):
     doc = "__test_assembly_sim_parity__"
     headers = {"X-NADOC-Doc": doc}
     client = TestClient(app)
+    part = make_6hb_design(length_bp=42)
+    for sid in [s.id for s in part.strands if s.strand_type == StrandType.SCAFFOLD]:
+        part, _, _ = assign_scaffold_sequence(part, "M13mp18", strand_id=sid)
+    part = assign_staple_sequences(part)
+    assembly = Assembly(
+        instances=[
+            PartInstance(
+                id=instance_id,
+                source=PartSourceInline(design=part),
+                transform=Mat4x4(
+                    values=[1, 0, 0, index * 30, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+                ),
+            )
+            for index, instance_id in enumerate(INSTANCE_IDS)
+        ]
+    )
+    fixture_path = tmp_path / SOURCE
+    fixture_path.write_text(assembly.to_json())
+    request.addfinalizer(lambda: design_state.drop_doc(doc))
+    request.addfinalizer(lambda: assembly_state.drop_doc(doc))
     loaded = client.post(
-        "/api/assembly/load", json={"path": str(BIG_O_POLY)}, headers=headers
+        "/api/assembly/load", json={"path": str(fixture_path)}, headers=headers
     )
     assert loaded.status_code == 200, loaded.text
-    materialized = client.post(
-        "/api/assembly/flatten/load-as-design", headers=headers
-    )
+    materialized = client.post("/api/assembly/flatten/load-as-design", headers=headers)
     assert materialized.status_code == 200, materialized.text
     payload = materialized.json()
-    assert len(payload["design"]["helices"]) == 56
-    assert len(payload["design"]["strands"]) == 177
+    assert len(payload["design"]["helices"]) == 12
+    assert len(payload["design"]["strands"]) == 24
 
     yield client, headers, tmp_path
 
-    design_state.drop_doc(doc)
-    assembly_state.drop_doc(doc)
 
-
-def test_bigo_poly_prepares_shared_engine_jobs_and_unified_lifecycle(
+def test_assembly_prepares_shared_engine_jobs_and_unified_lifecycle(
     assembly_sim_client,
 ):
     client, headers, workspace = assembly_sim_client
-    source = "BigO-poly.nass"
+    source = SOURCE
     requests = {
         "oxdna": (
             "/api/oxdna/jobs",
             {
-                "backend": "CUDA", "mc_steps": 100, "md_relax_steps": 100,
-                "equil_steps": 100, "autostart": False,
+                "backend": "CUDA",
+                "mc_steps": 100,
+                "md_relax_steps": 100,
+                "equil_steps": 100,
+                "autostart": False,
                 "design_source_path": source,
             },
         ),
         "cando": (
             "/api/cando/jobs",
             {
-                "nonlinear": False, "with_rmsf": False,
-                "with_thermal_fluctuations": False, "autostart": False,
+                "nonlinear": False,
+                "with_rmsf": False,
+                "with_thermal_fluctuations": False,
+                "autostart": False,
                 "design_source_path": source,
             },
         ),
         "snupi": (
             "/api/snupi/jobs",
             {
-                "nonlinear": False, "with_rmsf": False, "material": "snupi",
-                "autostart": False, "design_source_path": source,
+                "nonlinear": False,
+                "with_rmsf": False,
+                "material": "snupi",
+                "autostart": False,
+                "design_source_path": source,
             },
         ),
         "mrdna": (
             "/api/mrdna/jobs",
             {
-                "coarse_steps": 1_000, "fine_steps": 0, "output_period": 100,
-                "autostart": False, "design_source_path": source,
+                "coarse_steps": 1_000,
+                "fine_steps": 0,
+                "output_period": 100,
+                "autostart": False,
+                "design_source_path": source,
             },
         ),
         "lammps": (
             "/api/lammps/jobs",
             {
-                "steps": 1_000, "dump_every": 100, "ranks": 1,
+                "steps": 1_000,
+                "dump_every": 100,
+                "ranks": 1,
                 "design_source_path": source,
             },
         ),
@@ -148,24 +194,32 @@ def test_bigo_poly_prepares_shared_engine_jobs_and_unified_lifecycle(
         job = response.json()
         assert job["status"] == "queued"
         if engine == "lammps":
-            assert job["n_atoms"] == 14_112
+            assert job["n_atoms"] == 1_008
         elif engine != "namd":
-            assert job["n_nucleotides"] == 14_112
+            assert job["n_nucleotides"] == 1_008
         assert job["design_source_path"] == source
         created[engine] = job["job_id"]
 
     # Every backend persisted the SAME namespaced flattened topology, rather than
     # preparing just the source part or an empty assembly shell.
     models = {
-        "oxdna": OxdnaJob, "cando": CandoJob,
-        "snupi": SnupiJob, "mrdna": MrdnaJob, "namd": MdJob,
+        "oxdna": OxdnaJob,
+        "cando": CandoJob,
+        "snupi": SnupiJob,
+        "mrdna": MrdnaJob,
+        "namd": MdJob,
     }
     for engine, model in models.items():
         job = model.load(created[engine], workspace)
         snapshot = job.job_dir(workspace) / "design.json"
         assert snapshot.exists(), f"{engine} did not persist its simulation topology"
-        text = snapshot.read_text()
-        assert "inst-7a49906c-dda1-4256-83ee-cf1510467a32::" in text
+        frozen = Design.from_json(snapshot.read_text())
+        assert len(frozen.helices) == 12 and len(frozen.strands) == 24
+        for instance_id in INSTANCE_IDS:
+            assert (
+                sum(h.id.startswith(f"inst-{instance_id}::") for h in frozen.helices)
+                == 6
+            )
 
     lammps = LammpsJob.load(created["lammps"], workspace)
     assert (lammps.job_dir(workspace) / "data.oxdna").exists()
@@ -179,7 +233,11 @@ def test_bigo_poly_prepares_shared_engine_jobs_and_unified_lifecycle(
         headers=headers,
     )
     assert response.status_code == 200, response.text
-    nodes = {node["engine"]: node for node in response.json() if node["job_id"] in created.values()}
+    nodes = {
+        node["engine"]: node
+        for node in response.json()
+        if node["job_id"] in created.values()
+    }
     assert set(nodes) == set(created)
     for engine, node in nodes.items():
         assert node["status"] == "queued", engine

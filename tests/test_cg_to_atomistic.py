@@ -33,9 +33,12 @@ from backend.core.cg_to_atomistic import (
     _refit_helix_axes,
     _smooth_cg_positions_per_domain,
     build_atomistic_model_from_cg,
+    build_atomistic_model_from_cg_pair_frames,
+    build_topology_safe_oxdna_seed,
     build_atomistic_model_from_cg_spline,
     read_backbone_positions,
 )
+from backend.core.ring_piercing import model_piercings
 from backend.core.constants import NM_TO_OXDNA
 from backend.core.lattice import make_bundle_design
 from backend.core.models import Design
@@ -75,6 +78,58 @@ def _write_synthetic_conf(design: Design, conf_path: Path) -> None:
     tests of read_configuration + the smoothing/refit helpers.
     """
     write_configuration(design, geometry=_ideal_geometry(design), path=conf_path)
+
+
+def test_pair_frame_backmap_ignores_box_rigid_motion_and_is_topology_safe(tmp_path):
+    """The unwrapped/aligned canonical map must not depend on oxDNA box drift."""
+    design = make_bundle_design(cells=[(0, 0)], length_bp=20, plane="XY")
+    source = tmp_path / "ideal.dat"
+    moved = tmp_path / "moved.dat"
+    _write_synthetic_conf(design, source)
+
+    theta = np.deg2rad(37.0)
+    rotation = np.array(
+        [[np.cos(theta), -np.sin(theta), 0.0],
+         [np.sin(theta), np.cos(theta), 0.0], [0.0, 0.0, 1.0]]
+    )
+    translation = np.array([8.0, -3.0, 5.0])  # raw oxDNA length units
+    output = []
+    for line in source.read_text().splitlines():
+        fields = line.split()
+        if len(fields) >= 9 and not line.startswith(("t =", "b =", "E =")):
+            values = np.asarray([float(v) for v in fields[:9]])
+            values[:3] = rotation @ values[:3] + translation
+            values[3:6] = rotation @ values[3:6]
+            values[6:9] = rotation @ values[6:9]
+            line = " ".join([*(f"{v:.12g}" for v in values), *fields[9:]])
+        output.append(line)
+    moved.write_text("\n".join(output) + "\n")
+
+    reference = build_atomistic_model_from_cg_pair_frames(design, source)
+    transformed = build_atomistic_model_from_cg_pair_frames(design, moved)
+    p = np.asarray([[a.x, a.y, a.z] for a in reference.atoms])
+    q = np.asarray([[a.x, a.y, a.z] for a in transformed.atoms])
+    # The production reader aligns a relaxed frame back to the design reference before
+    # backmapping, so whole-box translation/rotation must disappear exactly.
+    assert np.sqrt(np.mean(np.sum((p - q) ** 2, axis=1))) < 1e-7
+    assert model_piercings(reference) == []
+    assert model_piercings(transformed) == []
+
+
+def test_topology_safe_seed_keeps_clean_1hb_at_full_canonical_target(tmp_path):
+    design = make_bundle_design(cells=[(0, 0)], length_bp=12, plane="XY")
+    conf = tmp_path / "ideal.dat"
+    _write_synthetic_conf(design, conf)
+    seed, target, report = build_topology_safe_oxdna_seed(design, conf)
+
+    assert len(seed.atoms) == len(target.atoms)
+    assert report.fully_mapped_units == 12
+    assert report.backed_off_units == 0
+    assert report.mean_target_fraction == pytest.approx(1.0)
+    assert report.min_bond_ratio == pytest.approx(1.0)
+    assert report.max_bond_ratio == pytest.approx(1.0)
+    assert report.steric_clashes == 0
+    assert report.ring_piercings == 0
 
 
 def _ideal_cg_positions_dict(

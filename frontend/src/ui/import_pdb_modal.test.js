@@ -64,6 +64,7 @@ describe('openImportPdbModal cancellation', () => {
         has_protein: true,
         pdb_id: '8SCP',
         name: '8SCP',
+        revision: 17,
       })
       .mockResolvedValueOnce({
         imported: { protein: true },
@@ -83,6 +84,7 @@ describe('openImportPdbModal cancellation', () => {
       pdbId: '8SCP',
       name: '8SCP',
       removeDnaFromProtein: true,
+      expectedRevision: 17,
     })
     expect(onResult.mock.calls[1][0].content).toBeUndefined()
   })

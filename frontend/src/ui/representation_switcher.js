@@ -15,6 +15,7 @@
 // injected.
 
 import { supportedColoringSet, nextColoringMode, reprMenuState, coloringFallbackMode, COLORING_LABELS as _COLORING_LABELS } from '../scene/coloring_modes.js'
+import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, editOverridesForProteins } from '../scene/representation_overrides.js'
 import { showToast } from './toast.js'
 import { showConfirm } from './primitives/confirm.js'
 import { registerShortcut } from '../input/shortcuts.js'
@@ -284,6 +285,25 @@ export function initRepresentationSwitcher({
 
       // ── Design mode: existing single-design behaviour ────────────────────────
       if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
+      // When concrete renderable elements are selected, the menu/sidebar acts on
+      // those elements instead of replacing the whole-part representation.
+      const refs = store.getState().selection?.items ?? []
+      const proteinIds = refs.filter(r => r.kind === 'protein').map(r => r.id)
+      const strandIds = refs.filter(r => r.kind === 'strand').map(r => r.id)
+      const clusterIds = refs.filter(r => r.kind === 'cluster').map(r => r.id)
+      const domainRefs = refs.filter(r => r.kind === 'domain')
+      const segs = [
+        ...strandsToSegments(currentDesign, strandIds),
+        ...clustersToSegments(currentDesign, clusterIds),
+        ...domainsToSegments(currentDesign, domainRefs),
+      ]
+      if (!external && (proteinIds.length || segs.length)) {
+        let next = currentDesign.representation_overrides ?? []
+        if (segs.length) next = editOverridesForSegments(next, segs, repr)
+        if (proteinIds.length) next = editOverridesForProteins(next, proteinIds, repr)
+        await api.saveRepresentationOverrides(next)
+        return
+      }
       // Choosing a global representation (View → Representation menu or an F-key) is
       // a master reset: it clears any per-region representation overrides so the new
       // global wins everywhere. Internal _setRepresentation calls (reset-to-full,

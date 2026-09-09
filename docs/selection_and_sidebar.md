@@ -11,15 +11,80 @@ The right sidebar is divided into four vertical tabs:
 
 | Tab | Sections |
 |---|---|
-| **Properties** | Properties, Strand Lengths, Staple Groups |
-| **Visualization** | Representation toggles, Representation Options, Reset Camera, Unhide All, Multi-view, Multi-overlay |
+| **Properties** | Properties, Dimensions, Strand Lengths, Staple Groups |
+| **Visualization** | Representation toggles, Representation Options, View Actions (Reset Camera, Unhide All, Section view), Multi-view, Multi-overlay, View Volumes |
 | **Clustering** | Movable Clusters, Joints |
 | **Overhangs** | Overhangs, Overhang Connections, Strand Animation |
 
 Each section uses the same grey-gradient card treatment as the left sidebar. Use the
 chevron at the top of the tab strip to collapse or restore the sidebar. Drag the divider
-between the tab strip and viewport to resize it. The Blunt End and empty Measurements
-cards are intentionally absent.
+between the tab strip and viewport to resize it. The Blunt End card is intentionally
+absent; distance measurement is provided by the persistent **Dimensions** card.
+
+### Dimensions
+
+Press **D** to open **Properties → Dimensions**. The card remembers its collapsed
+state across reloads, but opening a document does not create or save measurement
+geometry automatically.
+
+For a part, open Dimensions and click two individual bases. The picks are pending
+endpoints only: no line is drawn and no measurement is added to the list until
+**Record** is clicked. Recording freezes a world-space line and its distance in
+nanometres, clears the pending base picks, and allows another pair to be selected.
+
+For an assembly, opening Dimensions creates two translation gizmos connected by a
+live line. Moving either gizmo updates the distance. **Record** freezes a copy while
+leaving the two handles available for another measurement. Closing the card removes
+the live line and gizmos; only recorded lines remain in the viewport.
+
+The scrollable list contains the recorded dimensions. Each row has an eye control to
+show or hide that line and an X control to delete it. **Clear** removes the live
+dimension, pending endpoints, and every recorded dimension. Pressing **Escape**,
+selecting another right-sidebar tab, changing documents, or closing the session
+deactivates and collapses the card. Recorded lines survive ordinary card/tab closure,
+but are cleared at the document/session boundary. Dimensions are view-session state
+and are not serialized into `.nadoc` or `.nass` files.
+
+### Camera navigation
+
+Orbit, Trackball, and Multiscale navigation pan in the rendered screen plane.
+Trackball-based modes orthogonalize the camera up vector after resets, camera-pose
+transitions, and part/assembly changes, preventing vertical pan from acquiring a
+forward/backward component in strongly curved designs.
+
+### Section view
+
+In **Visualization → View Actions**, toggle **Section view** to cut through the
+current representation. Intersected solids have closed, diagonally hatched cut
+faces. Toggle it off to restore the full representation without editing the design.
+
+The framed **Section plane** controls provide:
+
+- **Move / Rotate:** choose the canvas gizmo mode. Move slides along the plane's
+  local normal; Rotate changes its orientation.
+- **Position (nm):** enter world X, Y, and Z coordinates, or use each row's
+  **−2 / +2** buttons for 2 nm increments.
+- **Rotation (°):** enter X, Y, and Z Euler angles (XYZ order), or use
+  **−5° / +5°** for 5° increments. Enter applies a field; arrow keys use the
+  same increments as the buttons. Gizmo changes update the fields.
+- **Flip:** reverse the side retained by the cut.
+- **Reset:** move the plane to the part's current nucleotide-position centroid,
+  set rotation to **180°, 0°, 0°**, and clear Flip. If nucleotide geometry is
+  unavailable, or an assembly is active, use the visible content's bounding-box
+  center instead.
+- **Hide controls:** hide the canvas gizmo and plane outline while keeping the
+  section and numeric controls active.
+
+On activation the plane starts at the visible content's center, oriented to the
+current viewing direction. Reset uses the fixed rotation described above. Section
+settings last for the current view session and are not saved into the design.
+
+The renderer clips surfaces and uses winding stencils to fill solid intersections.
+Invisible picking meshes and open sheets do not contribute hatched fills. Open
+circular tube/cylinder ends are closed in temporary stencil geometry; source meshes
+remain unchanged. This requires the main renderer's stencil buffer. Coverage lives
+in `frontend/e2e/section_view.spec.js` and the `section_view` / `section_geometry`
+unit tests, including stray-fill regressions and restoration after disabling.
 
 ### Multi-view
 
@@ -65,6 +130,32 @@ mode and restores the prior workspace camera.
 The same mrDNA Coarse and mrDNA Fine choices are available for every overlay layer,
 so simulation output can be compared directly with native representations or with
 the other mrDNA resolution.
+
+### View volumes
+
+The collapsible **View Volumes** card applies a representation and opacity to a
+spatial region without changing the design topology. Use the square-plus button for
+an oriented box or the hexagon-plus button for a regular hexagonal prism suited to
+honeycomb helix bundles. A hexagonal volume has two resize dimensions: the red radial
+arm changes both cross-section axes together, while the blue Z arm changes its length.
+
+Hovering a volume edge highlights its outline. Clicking the highlighted edge selects
+only the volume and does not also snap-select a nearby strand. Dragging empty viewport
+space to orbit preserves the volume selection; a stationary empty-space click clears
+it. The eye button on a volume row hides that volume's outline, handles, hover target,
+and transform gizmo while leaving its representation active. The eye button in the
+card header shows or hides every outline. Outline visibility and the card's collapsed
+state persist across reloads.
+
+The power button on each row independently enables or disables that volume's
+representation layer without hiding its editable outline. The power button in the
+card header enables or disables every layer, making it quick to compare combinations
+of representations at different locations. Enabled state is saved with the design.
+
+Volume membership is evaluated per base-pair column. Cylinder representation clips
+domains into contiguous in-volume runs, including boundaries that fall in the middle
+of a domain, so the cylinder length follows the spatial boundary instead of dropping
+the complete domain. Overlapping volumes remain independent representation layers.
 
 ## Selection levels
 

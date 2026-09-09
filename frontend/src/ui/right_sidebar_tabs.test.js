@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
 import { initRightSidebarTabs } from './right_sidebar_tabs.js'
 
@@ -72,6 +72,17 @@ describe('right sidebar tabs', () => {
     expect(tabs.isCollapsed()).toBe(false)
     tabs.open('properties')
     expect(tabs.isCollapsed()).toBe(false)
+  })
+
+  it('notifies subscribers when the active right-sidebar tab changes', () => {
+    const tabs = initRightSidebarTabs({ document, storage: null })
+    const listener = vi.fn()
+    const unsubscribe = tabs.onChange(listener)
+    tabs.open('visualization')
+    expect(listener).toHaveBeenLastCalledWith({ activeTab: 'visualization', collapsed: false })
+    unsubscribe()
+    tabs.open('properties')
+    expect(listener).toHaveBeenCalledTimes(1)
   })
 
   it('does not restore the hidden assembly tab in a part frontend', () => {

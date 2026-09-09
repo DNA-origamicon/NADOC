@@ -7,15 +7,17 @@ Tier 1 — pure unit tests (no OpenMM required, always run)
     _rename_charmm_to_amber_pdb, _build_c1prime_reference,
     _compute_drift_metrics — tested against synthetic data.
 
-Tier 2 — smoke tests (@skip_no_openmm, not @slow)
+Tier 2 — smoke tests (@skip_no_openmm, slow-test registry)
     verify_design_with_openmm on a 21 bp single helix, CPU only,
     50-step minimise + 100 NVT steps. Checks return type, field
     presence, and basic sanity (finite energy, n_missing == 0).
-    Each test < 60 s on CPU.
+    Nine assertions share one real simulation.
 
 Tier 3 — full MD (@pytest.mark.slow + @skip_no_openmm)
-    10 ps NVT runs on single-helix and two-helix designs.
-    Checks drift thresholds and inter-helix COM stability.
+    10 ps NVT run on a single helix, checking drift thresholds.
+    Inter-helix drift arithmetic is tested with prescribed displacements below.
+    Unconnected duplex separation in implicit solvent is a model-validation
+    question, not a software regression invariant (see project_openmm_implicit).
 """
 
 from __future__ import annotations
@@ -486,8 +488,31 @@ class TestComputeDriftMetrics:
         design = _make_two_helix_design(21)
         ref = _build_c1prime_reference(design)
         _, _, _, _, com_drift = _compute_drift_metrics(ref, ref, design)
-        for pair_key, drift in com_drift.items():
-            assert drift < 1e-9, f"COM drift for {pair_key}: {drift:.2e} nm"
+        assert com_drift == pytest.approx({"h0_h1": 0.0}, abs=1e-9)
+
+    @pytest.mark.parametrize("separation_change", [-0.25, 0.25])
+    def test_two_helix_com_drift_measures_relative_separation(self, separation_change):
+        from backend.checkers.openmm_checker import (
+            _build_c1prime_reference,
+            _compute_drift_metrics,
+        )
+
+        design = _make_two_helix_design(21)
+        ref = _build_c1prime_reference(design)
+        centers = {
+            hid: np.mean([p for key, p in ref.items() if key[0] == hid], axis=0)
+            for hid in ("h0", "h1")
+        }
+        axis = centers["h1"] - centers["h0"]
+        axis /= np.linalg.norm(axis)
+        translated = {
+            key: p
+            + np.array([2.0, -3.0, 1.0])
+            + (separation_change * axis if key[0] == "h1" else 0)
+            for key, p in ref.items()
+        }
+        *_, drift = _compute_drift_metrics(translated, ref, design)
+        assert drift == pytest.approx({"h0_h1": abs(separation_change)}, abs=1e-9)
 
 
 class TestImportError:
@@ -518,74 +543,56 @@ class TestOpenMMSmoke:
         prefer_gpu=False,
     )
 
-    def test_returns_verification_result(self):
+    @pytest.fixture(scope="class")
+    def smoke_result(self):
+        from backend.checkers.openmm_checker import verify_design_with_openmm
+
+        return verify_design_with_openmm(
+            _make_single_helix_design(21), **self._SMOKE_KWARGS
+        )
+
+    def test_returns_verification_result(self, smoke_result):
         from backend.checkers.openmm_checker import (
-            verify_design_with_openmm,
             VerificationResult,
         )
 
-        design = _make_single_helix_design(21)
-        result = verify_design_with_openmm(design, **self._SMOKE_KWARGS)
+        result = smoke_result
         assert isinstance(result, VerificationResult)
 
-    def test_per_helix_rmsd_has_expected_helix_key(self):
-        from backend.checkers.openmm_checker import verify_design_with_openmm
-
-        design = _make_single_helix_design(21)
-        result = verify_design_with_openmm(design, **self._SMOKE_KWARGS)
+    def test_per_helix_rmsd_has_expected_helix_key(self, smoke_result):
+        result = smoke_result
         assert "test_helix" in result.per_helix_rmsd_nm
 
-    def test_platform_is_cpu(self):
-        from backend.checkers.openmm_checker import verify_design_with_openmm
-
-        design = _make_single_helix_design(21)
-        result = verify_design_with_openmm(design, **self._SMOKE_KWARGS)
+    def test_platform_is_cpu(self, smoke_result):
+        result = smoke_result
         assert result.platform_used == "CPU"
 
-    def test_ff_description_mentions_amber14_and_gbn2(self):
-        from backend.checkers.openmm_checker import verify_design_with_openmm
-
-        design = _make_single_helix_design(21)
-        result = verify_design_with_openmm(design, **self._SMOKE_KWARGS)
+    def test_ff_description_mentions_amber14_and_gbn2(self, smoke_result):
+        result = smoke_result
         desc = result.ff_description.upper()
         assert "AMBER14" in desc
         assert "GBN" in desc
 
-    def test_n_missing_is_zero_for_valid_design(self):
-        from backend.checkers.openmm_checker import verify_design_with_openmm
-
-        design = _make_single_helix_design(21)
-        result = verify_design_with_openmm(design, **self._SMOKE_KWARGS)
+    def test_n_missing_is_zero_for_valid_design(self, smoke_result):
+        result = smoke_result
         assert result.n_missing == 0
 
-    def test_potential_energy_is_finite_and_negative(self):
+    def test_potential_energy_is_finite_and_negative(self, smoke_result):
         """GBNeck2 implicit-solvent energy is negative for solvated DNA."""
-        from backend.checkers.openmm_checker import verify_design_with_openmm
-
-        design = _make_single_helix_design(21)
-        result = verify_design_with_openmm(design, **self._SMOKE_KWARGS)
+        result = smoke_result
         assert np.isfinite(result.potential_energy_kj_per_mol)
         assert result.potential_energy_kj_per_mol < 0.0
 
-    def test_n_atoms_is_positive(self):
-        from backend.checkers.openmm_checker import verify_design_with_openmm
-
-        design = _make_single_helix_design(21)
-        result = verify_design_with_openmm(design, **self._SMOKE_KWARGS)
+    def test_n_atoms_is_positive(self, smoke_result):
+        result = smoke_result
         assert result.n_atoms > 0
 
-    def test_global_rmsd_is_finite(self):
-        from backend.checkers.openmm_checker import verify_design_with_openmm
-
-        design = _make_single_helix_design(21)
-        result = verify_design_with_openmm(design, **self._SMOKE_KWARGS)
+    def test_global_rmsd_is_finite(self, smoke_result):
+        result = smoke_result
         assert np.isfinite(result.global_rmsd_nm)
 
-    def test_warnings_is_list(self):
-        from backend.checkers.openmm_checker import verify_design_with_openmm
-
-        design = _make_single_helix_design(21)
-        result = verify_design_with_openmm(design, **self._SMOKE_KWARGS)
+    def test_warnings_is_list(self, smoke_result):
+        result = smoke_result
         assert isinstance(result.warnings, list)
 
 
@@ -594,7 +601,7 @@ class TestOpenMMSmoke:
 
 @skip_no_openmm
 class TestOpenMMFullMD:
-    """Full 10 ps NVT run. Expects drift < thresholds. ~2–5 min on CPU."""
+    """Full 10 ps NVT run on a single duplex. Expects drift < thresholds."""
 
     _NVT_KWARGS = dict(
         n_steps_minimize=500,
@@ -620,20 +627,3 @@ class TestOpenMMFullMD:
             f"  max_dev     = {result.max_deviation_nm:.3f} nm  (threshold 0.5)\n"
             f"  warnings    = {result.warnings}"
         )
-
-    @pytest.mark.slow
-    def test_two_helix_inter_helix_com_drift_small(self):
-        """
-        A 2-helix design (no crossovers) should maintain inter-helix distance
-        within 0.5 nm over 10 ps. Larger drift indicates GBNeck2 over-repulsion
-        without explicit Mg²⁺ — a known limitation documented in the module.
-        """
-        from backend.checkers.openmm_checker import verify_design_with_openmm
-
-        design = _make_two_helix_design(42)
-        result = verify_design_with_openmm(design, **self._NVT_KWARGS)
-        for pair_key, drift in result.inter_helix_com_drift_nm.items():
-            assert drift < 0.5, (
-                f"Inter-helix COM drift {pair_key}: {drift:.3f} nm > 0.5 nm. "
-                "This may indicate implicit-Mg²⁺ repulsion — note limitation in module docstring."
-            )

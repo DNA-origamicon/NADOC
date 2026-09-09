@@ -100,6 +100,19 @@ describe('stepEulerDeg', () => {
     expect(rz).toBeCloseTo(erz)
   })
 
+  it('composes a local-axis step by post-multiplying the current pose', () => {
+    const start = [30, 20, 10]
+    const [rx, ry, rz] = stepEulerDeg(start, 'z', 45, 'local')
+    const qCur = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler((30 * Math.PI) / 180, (20 * Math.PI) / 180, (10 * Math.PI) / 180, 'XYZ'))
+    const qStep = quatAbout([0, 0, 1], 45)
+    const qExp = qCur.clone().multiply(qStep)
+    const [erx, ery, erz] = quatToEulerDeg([qExp.x, qExp.y, qExp.z, qExp.w])
+    expect(rx).toBeCloseTo(erx)
+    expect(ry).toBeCloseTo(ery)
+    expect(rz).toBeCloseTo(erz)
+  })
+
   it('unknown axis is a no-op (returns a copy of the input)', () => {
     expect(stepEulerDeg([1, 2, 3], 'w', 45)).toEqual([1, 2, 3])
   })

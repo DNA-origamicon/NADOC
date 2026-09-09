@@ -152,7 +152,7 @@ describe('lassoCaptureType — the engaged selLevel is the single source of trut
     const r = lassoCaptureType({ selLevel: 'base' })
     expect(r.base).toBe(true)
     // The measurement pool guard: the end-bead lasso path is `useEnds && (beadLevel || isEnd)`,
-    // and it pushes into _ctrlBeads (which measurement_tool expects to hold 2). Base must
+    // and it pushes into _ctrlBeads (which dimensions_tool uses as its two anchors). Base must
     // not travel that path.
     expect(r.ends).toBe(false)
     expect(r.beadLevel).toBe(false)

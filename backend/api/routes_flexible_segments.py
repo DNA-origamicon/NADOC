@@ -25,9 +25,10 @@ URLs are unchanged from their previous home in crud.py. Mounting is done in
 
 from __future__ import annotations
 
+import time
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
 from backend.api import state as design_state
@@ -85,14 +86,39 @@ def _flex_mark_from_body(design: Design, b: FlexibleSegmentMarkBody, unpaired=No
     )
 
 
-def _flex_log_response(op_kind, label, params, fn):
+def _mark_helix_ids(design: Design, marks) -> set[str]:
+    """Helices whose per-nucleotide flexible classification can change."""
+    strands = {strand.id: strand for strand in design.strands}
+    result: set[str] = set()
+    for mark in marks:
+        strand = strands.get(mark.strand_id)
+        if strand is not None and 0 <= mark.domain_index < len(strand.domains):
+            result.add(strand.domains[mark.domain_index].helix_id)
+    return result
+
+
+def _flex_log_response(
+    response: Response, op_kind, label, params, fn, changed_helix_ids
+):
     """Apply a flexible-segment mutation through the feature log (revertable +
-    deletable like other snapshot ops), then ship full geometry so beads
-    reclassify out of the rigid meshes and arcs/axis update."""
+    deletable like other snapshot ops), then ship only the affected helices so
+    beads reclassify out of the rigid meshes and arcs update."""
+    started = time.perf_counter()
     updated, validation, _entry = design_state.mutate_with_feature_log(
         op_kind, label, params, fn
     )
-    return _design_response_with_geometry(updated, validation)
+    mutated = time.perf_counter()
+    payload = _design_response_with_geometry(
+        updated,
+        validation,
+        changed_helix_ids=sorted(changed_helix_ids),
+    )
+    built = time.perf_counter()
+    response.headers["Server-Timing"] = (
+        f"flex_mutate;dur={(mutated - started) * 1000:.1f}, "
+        f"flex_geometry;dur={(built - mutated) * 1000:.1f}"
+    )
+    return payload
 
 
 class FlexibleRelaxTransform(BaseModel):
@@ -174,11 +200,12 @@ def flexible_relax(body: FlexibleRelaxBody) -> dict:
 
 
 @router.post("/design/flexible-segment", status_code=200)
-def add_flexible_segment(body: FlexibleSegmentMarkBody) -> dict:
+def add_flexible_segment(body: FlexibleSegmentMarkBody, response: Response) -> dict:
     """Mark one unpaired bead flexible and re-derive connections. Feature-log step."""
     from backend.core.flexible_segments import apply_marks
 
-    mark = _flex_mark_from_body(design_state.get_or_404(), body)  # validates unpaired
+    design = design_state.get_or_404()
+    mark = _flex_mark_from_body(design, body)  # validates unpaired
 
     def fn(d: Design) -> Design:
         return apply_marks(
@@ -186,12 +213,14 @@ def add_flexible_segment(body: FlexibleSegmentMarkBody) -> dict:
         )
 
     return _flex_log_response(
-        "flexible-segment-mark", "Mark flexible ssDNA", {"mark_ids": [mark.id]}, fn
+        response, "flexible-segment-mark", "Mark flexible ssDNA",
+        {"mark_ids": [mark.id]}, fn,
+        _mark_helix_ids(design, [*design.flexible_segment_marks, mark]),
     )
 
 
 @router.delete("/design/flexible-segment/{mark_id}", status_code=200)
-def delete_flexible_segment(mark_id: str) -> dict:
+def delete_flexible_segment(mark_id: str, response: Response) -> dict:
     """Remove a flexible-segment mark and re-derive connections. Feature-log step."""
     from backend.core.flexible_segments import apply_marks
 
@@ -204,12 +233,14 @@ def delete_flexible_segment(mark_id: str) -> dict:
         return apply_marks(d.copy_with(flexible_segment_marks=marks))
 
     return _flex_log_response(
-        "flexible-segment-unmark", "Unmark flexible ssDNA", {"mark_ids": [mark_id]}, fn
+        response, "flexible-segment-unmark", "Unmark flexible ssDNA",
+        {"mark_ids": [mark_id]}, fn,
+        _mark_helix_ids(design, design.flexible_segment_marks),
     )
 
 
 @router.post("/design/flexible-segment/batch", status_code=200)
-def batch_flexible_segment(body: FlexibleSegmentBatchBody) -> dict:
+def batch_flexible_segment(body: FlexibleSegmentBatchBody, response: Response) -> dict:
     """Mark an explicit list of unpaired beads flexible, re-derive once. Feature-log
     step. ``replace=True`` with no marks clears all flexible segments."""
     from backend.core.flexible_segments import apply_marks, unpaired_bead_keys
@@ -245,8 +276,13 @@ def batch_flexible_segment(body: FlexibleSegmentBatchBody) -> dict:
         if is_clear
         else f"Mark flexible ssDNA ({len(new_marks)} base{'' if len(new_marks) == 1 else 's'})"
     )
+    changed_helix_ids = _mark_helix_ids(
+        design, [*design.flexible_segment_marks, *new_marks]
+    )
     return _flex_log_response(
-        op_kind, label, {"n_marks": len(new_marks), "replace": body.replace}, fn
+        response, op_kind, label,
+        {"n_marks": len(new_marks), "replace": body.replace}, fn,
+        changed_helix_ids,
     )
 
 

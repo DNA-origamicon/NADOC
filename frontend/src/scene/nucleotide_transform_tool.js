@@ -9,17 +9,10 @@ import { showToast } from '../ui/toast.js'
 import { canonicalSelection } from './selection_model.js'
 import { selectionRefsEqual } from './selection_ref.js'
 
-export function transformBodyForTarget(target, pivot, translation, quaternion, residueInfo = null) {
+export function transformBodyForTarget(target, pivot, translation, quaternion) {
   const pose = {
     pivot: pivot.toArray(), translation: translation.toArray(),
     rotation: [quaternion.x, quaternion.y, quaternion.z, quaternion.w], compose: true,
-  }
-  if (target.helix_id !== '__xb__' && residueInfo?.slabMatrix && residueInfo?.beadMatrix) {
-    const bead = new THREE.Vector3().setFromMatrixPosition(residueInfo.beadMatrix)
-    const slab = new THREE.Vector3(), slabQ = new THREE.Quaternion(), slabScale = new THREE.Vector3()
-    residueInfo.slabMatrix.decompose(slab, slabQ, slabScale)
-    pose.display_slab_offset = slab.sub(bead).toArray()
-    pose.display_slab_rotation = [slabQ.x, slabQ.y, slabQ.z, slabQ.w]
   }
   return target.helix_id === '__xb__'
     ? { ...pose, kind: 'extra_base', crossover_id: target.crossover_id, extra_base_k: target.k }

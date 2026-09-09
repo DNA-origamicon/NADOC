@@ -95,7 +95,7 @@ const CENSUS = {
     run:        { on: 'md-jobs-run-btn' },
     efield:     { on: 'md-efield-toggle' },
     anchors:    { on: 'md-anchors-toggle' },
-    surface:    { off: 'md-surface-toggle' },
+    surface:    { on: 'md-surface-toggle' },
     advanced:   { on: 'md-jobs-new-btn' },   // the Job Wizard replaced the drawer
     viz:        { on: 'md-jobs-viz-toggle' },
     metrics:    { on: 'md-metrics-toggle' },
@@ -193,7 +193,7 @@ describe('engine capability descriptor — helper API', () => {
     expect(supportsCard('cando', 'surface')).toBe(false)
     expect(supportsCard('mrdna', 'efield')).toBe(true)    // M6: field/anchors now reachable
     expect(supportsCard('mrdna', 'surface')).toBe(true)   // M8: ARBD repulsion plane now reachable
-    expect(supportsCard('namd', 'surface')).toBe(false)
+    expect(supportsCard('namd', 'surface')).toBe(true)
     expect(supportsCard('lammps', 'metrics')).toBe(false)   // no longer a selectable engine → false
     expect(supportsCard('bogus', 'efield')).toBe(false)
     expect(supportsCard('oxdna', 'bogus')).toBe(false)

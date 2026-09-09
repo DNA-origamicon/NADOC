@@ -495,3 +495,53 @@ describe('fieldAppliesToTarget', () => {
     expect(fieldAppliesToTarget(undefined, 'alpine')).toBe(true)
   })
 })
+
+describe('box dimension overrides', () => {
+  it('shows calculated dimensions and resets a manual axis', async () => {
+    const { wiz, api, launch } = setup()
+    api.fetchProtocolPlan.mockResolvedValue({ ...PLAN,
+      box_preview: { calculated_nm: [12, 15, 18], estimated: true },
+    })
+    await wiz.open('relaxation')
+    const box = () => modalRoot().querySelector('[data-testid="box-size-controls"]')
+    const axis = name => box().querySelector(`[aria-label="Box ${name} (nm)"]`)
+    expect(axis('X').value).toBe('12.000')
+    expect(axis('Y').value).toBe('15.000')
+    axis('Y').value = '25'
+    axis('Y').dispatchEvent(new Event('change', { bubbles: true }))
+    expect(box().querySelector('[aria-label="Box Y manually changed"]')).not.toBeNull()
+    expect(box().querySelector('[aria-label="Box X manually changed"]')).toBeNull()
+    expect(axis('X').value).toBe('12.000')
+    box().querySelector('button').click()
+    expect(axis('Y').value).toBe('15.000')
+    expect(box().querySelector('.wizard-field__alert')).toBeNull()
+    ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
+    footerButtons().find(b => b.textContent.includes('Create job')).click()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(launch).toHaveBeenCalled()
+    expect(launch.mock.calls[0][0].box_size_nm).toBeNull()
+  })
+
+  it('submits a partial override without freezing automatic axes', async () => {
+    const { wiz, launch } = setup()
+    await wiz.open('relaxation')
+    const input = modalRoot().querySelector('[aria-label="Box Y (nm)"]')
+    input.value = '25'
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
+    footerButtons().find(b => b.textContent.includes('Create job')).click()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(launch.mock.calls[0][0].box_size_nm).toEqual([null, 25, null])
+  })
+
+  it('locks dimension inputs and reset for completed jobs', async () => {
+    const { wiz } = setup()
+    await wiz.openReadOnly({ ...JOB,
+      prep_params: { ...JOB.prep_params, box_size_nm: [null, 25, null] },
+      prep_params_set: [...JOB.prep_params_set, 'box_size_nm'],
+    })
+    const group = modalRoot().querySelector('[data-testid="box-size-controls"]')
+    for (const control of group.querySelectorAll('input, button')) expect(control.disabled).toBe(true)
+    expect(group.querySelector('[aria-label="Box Y (nm)"]').value).toBe('25')
+  })
+})

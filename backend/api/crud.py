@@ -1473,8 +1473,7 @@ def create_bundle(body: BundleRequest) -> dict:
         metadata=DesignMetadata(name=body.name),
         lattice_type=body.lattice_type,
     )
-    design_state.clear_history()
-    design_state.set_design(empty)
+    design_state.load_design(empty)
 
     trace = _TimingTrace()
     with trace.step("mutation"):
@@ -1522,8 +1521,7 @@ def create_design(body: CreateDesignRequest) -> dict:
         metadata=DesignMetadata(name=body.name),
         lattice_type=body.lattice_type,
     )
-    design_state.clear_history()
-    design_state.set_design(new_design)
+    design_state.load_design(new_design)
     report = validate_design(new_design)
     # New lineage — nothing in the client's cache matches this design's history.
     return _design_response(new_design, report, full_feature_log=True)
@@ -1689,8 +1687,7 @@ def load_design(body: FilePathRequest) -> dict:
     design = _derive_duplexes_if_empty(design)
     design = _materialize_duplex_clusters_on_load(design)
     design = _recompute_flexible_connections(design)
-    design_state.clear_history()  # fresh baseline — no undo into previous session
-    design_state.set_design(design)
+    design_state.load_design(design)
     report = validate_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
     return _design_response(design, report, full_feature_log=True)
@@ -1728,8 +1725,7 @@ def import_design(body: DesignImportRequest) -> dict:
     design = _derive_duplexes_if_empty(design)
     design = _materialize_duplex_clusters_on_load(design)
     design = _recompute_flexible_connections(design)
-    design_state.clear_history()
-    design_state.set_design(design)
+    design_state.load_design(design)
     report = validate_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
     return _design_response(design, report, full_feature_log=True)
@@ -1770,8 +1766,7 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     design = _recenter_design(design)
     design = autodetect_all_overhangs(design)
     design = _autodetect_clusters(design)
-    design_state.clear_history()
-    design_state.set_design(design)
+    design_state.load_design(design)
     report = validate_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
     resp = _design_response(design, report, full_feature_log=True)
@@ -2006,8 +2001,7 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     _cx = round(_post_recenter[0][1] - _pre_recenter[0][1], 4) if _pre_recenter else 0.0
     _cy = round(_post_recenter[0][2] - _pre_recenter[0][2], 4) if _pre_recenter else 0.0
     design = _autodetect_clusters(design)
-    design_state.clear_history()
-    design_state.set_design(design)
+    design_state.load_design(design)
     report = validate_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
     resp = _design_response(design, report, full_feature_log=True)

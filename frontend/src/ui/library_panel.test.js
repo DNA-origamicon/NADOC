@@ -66,6 +66,47 @@ describe('library cache', () => {
 })
 
 describe('welcome workspace server tabs', () => {
+  it('expands and collapses every folder from one button', async () => {
+    document.body.innerHTML = '<div id="library-panel-mount"></div>'
+    const api = {
+      listLibraryFiles: vi.fn().mockResolvedValue([
+        { path: 'Alpha', name: 'Alpha', type: 'folder', size_bytes: 0 },
+        { path: 'Alpha/Nested', name: 'Nested', type: 'folder', size_bytes: 0 },
+        { path: 'Alpha/Nested/a.nadoc', name: 'a', type: 'part', size_bytes: 10 },
+        { path: 'Beta', name: 'Beta', type: 'folder', size_bytes: 0 },
+        { path: 'Beta/b.nadoc', name: 'b', type: 'part', size_bytes: 10 },
+      ]),
+      libraryDiskUsage: vi.fn().mockResolvedValue({}),
+    }
+    initLibraryPanel({
+      api,
+      onOpenPart: vi.fn(), onOpenAssembly: vi.fn(),
+      onNewPart: vi.fn(), onNewAssembly: vi.fn(),
+    })
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    const button = document.querySelector('.lib-expand-all-btn')
+    expect(button.title).toBe('Expand all folders')
+    expect(button.classList.contains('lib-trash-icon-btn')).toBe(true)
+    expect(button.querySelector('svg')).toBeTruthy()
+    const toolbarItems = [...document.querySelector('.lib-sort-bar').children]
+    expect(toolbarItems[0].className).toBe('lib-sort-leading-actions')
+    expect(toolbarItems[0].children[0].getAttribute('aria-label')).toBe('Open Trash')
+    expect(toolbarItems[0].children[1]).toBe(button)
+    expect(toolbarItems[1].textContent).toBe('Sort:')
+    expect(document.querySelectorAll('.lib-folder-row')).toHaveLength(2)
+
+    button.click()
+    expect(button.title).toBe('Collapse all folders')
+    expect(document.querySelectorAll('.lib-folder-row')).toHaveLength(3)
+    expect(document.querySelectorAll('.lib-file-row')).toHaveLength(2)
+
+    button.click()
+    expect(button.title).toBe('Expand all folders')
+    expect(document.querySelectorAll('.lib-folder-row')).toHaveLength(2)
+    expect(document.querySelectorAll('.lib-file-row')).toHaveLength(0)
+  })
+
   it('keeps local files usable while a configured peer is offline', async () => {
     document.body.innerHTML = '<div id="library-panel-mount"></div>'
     const api = {

@@ -45,7 +45,7 @@ const REPLAYABLE_SUBTYPES = new Set([
   'joint-place', 'joint-update', 'joint-delete',
 ])
 
-export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfiguration, onOpenOverhangsManager }) {
+export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager }) {
   const panelBody = document.getElementById('feature-log-panel-body')
   const heading   = document.getElementById('feature-log-panel-heading')
   const arrow     = document.getElementById('feature-log-panel-arrow')
@@ -1401,7 +1401,8 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
           'extrude-deformed-continuation', 'overhang-extrude',
         ])
         const isLinkerAdd = entry.op_kind === 'linker-add'
-        const isEditable = (_EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd) && !isEvicted
+        const isNanoparticle = entry.op_kind === 'nanoparticle-create'
+        const isEditable = (_EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd || isNanoparticle) && !isEvicted
         const hasLaterSnapshot = isEditable && log.slice(i + 1).some(e => e.feature_type === 'snapshot')
         // linker-add isn't a topology replay — Overhangs Manager just opens —
         // so a later snapshot is fine.
@@ -1433,6 +1434,10 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
                 const ovhgIds = [entry.params?.overhang_a_id, entry.params?.overhang_b_id]
                   .filter(Boolean)
                 onOpenOverhangsManager?.(ovhgIds)
+                return
+              }
+              if (isNanoparticle) {
+                await onEditNanoparticle?.(entry.params?.nanoparticle_id)
                 return
               }
               const current = entry.params?.length_bp

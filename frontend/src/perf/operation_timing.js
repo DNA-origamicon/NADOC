@@ -90,12 +90,21 @@ export function finishOperationAfterRender(trace = _active) {
 
 export function activeOperationTiming() { return _active }
 
-/** Resolve after the currently active interactive operation presents its final
- * frame. Display-only background polls use this to avoid stealing CPU/network
- * capacity from click-to-render work. */
-export function whenOperationIdle() {
+/** Briefly defer background polls while an interactive operation renders.
+ * Timing is diagnostic, not a lock: an aborted render or a missing completion
+ * callback must never prevent unrelated requests from being sent indefinitely.
+ * Expiry releases only the waiter; it does not finish or cancel the operation. */
+export function whenOperationIdle({ maxWaitMs = 2000 } = {}) {
   if (!_active) return Promise.resolve()
-  return new Promise(resolve => _idleWaiters.add(resolve))
+  return new Promise(resolve => {
+    const release = () => {
+      clearTimeout(timer)
+      _idleWaiters.delete(release)
+      resolve()
+    }
+    const timer = setTimeout(release, maxWaitMs)
+    _idleWaiters.add(release)
+  })
 }
 
 _expose()

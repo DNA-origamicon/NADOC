@@ -654,9 +654,16 @@ def package_npt_allowed(package_dir: "str | Path") -> bool:
     if not mpath.exists():
         return True
     try:
-        sol = json.loads(mpath.read_text()).get("solvation") or {}
+        manifest = json.loads(mpath.read_text())
+        sol = manifest.get("solvation") or {}
     except (json.JSONDecodeError, OSError):
         return True
+    if (
+        manifest.get("graphene_only")
+        or (manifest.get("charge_audit") or {}).get("graphene_only")
+        or (manifest.get("graphene_nanopore") or {}).get("control") == "graphene_only"
+    ):
+        return False
     if "npt_allowed" in sol:
         return bool(sol["npt_allowed"])
     return not bool(sol.get("carved", False))
@@ -731,11 +738,20 @@ def namd_efield_vector(field: Optional[dict]) -> Optional[tuple[float, float, fl
     """
     if not field:
         return None
-    mag_pn = float(field.get("field_pN", field.get("force_pN", 0.0)) or 0.0)
+    voltage_mv = field.get("voltage_mV")
+    if voltage_mv is not None:
+        mag_pn = None
+        voltage_kcal_mol_e = float(voltage_mv) * 1e-3 * 23.060547830619
+    else:
+        mag_pn = float(field.get("field_pN", field.get("force_pN", 0.0)) or 0.0)
     dx, dy, dz = (float(c) for c in (field.get("dir") or (0.0, 0.0, 0.0)))
     dnorm = math.sqrt(dx * dx + dy * dy + dz * dz)
-    if mag_pn == 0.0 or dnorm <= 1e-12:
+    if ((voltage_mv is not None and voltage_kcal_mol_e == 0.0)
+            or (voltage_mv is None and mag_pn == 0.0) or dnorm <= 1e-12):
         return None
+    if voltage_mv is not None:
+        scale = voltage_kcal_mol_e / dnorm
+        return (dx * scale, dy * scale, dz * scale)
     # F = q·E  ⇒  E = F / q.  q < 0, so E is antiparallel to the requested force.
     scale = mag_pn / (KCAL_MOL_A_IN_PN * NAMD_DNA_CHARGE_PER_NUCLEOTIDE_E * dnorm)
     return (dx * scale, dy * scale, dz * scale)
@@ -746,10 +762,13 @@ def _efield_lines(field: Optional[dict]) -> list[str]:
     vec = namd_efield_vector(field)
     if vec is None:
         return []
-    return [
+    lines = [
         "eFieldOn           on\n",
         "eField             {:.8g} {:.8g} {:.8g}\n".format(*vec),
     ]
+    if field and field.get("voltage_mV") is not None:
+        lines.append("eFieldNormalized   yes\n")
+    return lines
 
 
 def external_forces_block(
@@ -1395,6 +1414,8 @@ coordinates        {name_stem}.pdb
 seed               {seed}
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
+parameters         forcefield/par_all36m_prot.prm
+parameters         forcefield/par_np_thiol.prm
 parameters         forcefield/toppar_water_ions_cufix.str
 parameters         forcefield/par_stub_ions_nbfix.str
 {extras}
@@ -1497,6 +1518,8 @@ coordinates        {name_stem}.pdb
 seed               {seed}
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
+parameters         forcefield/par_all36m_prot.prm
+parameters         forcefield/par_np_thiol.prm
 parameters         forcefield/toppar_water_ions_cufix.str
 parameters         forcefield/par_stub_ions_nbfix.str
 {extras}
@@ -1650,6 +1673,8 @@ coordinates        {name_stem}.pdb
 
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
+parameters         forcefield/par_all36m_prot.prm
+parameters         forcefield/par_np_thiol.prm
 parameters         forcefield/toppar_water_ions_cufix.str
 parameters         forcefield/par_stub_ions_nbfix.str
 {solvent_block}
@@ -2334,6 +2359,7 @@ def retarget_anchor_pdb(
     *,
     coords=None,
     k: Optional[float] = None,
+    graphene_k: Optional[float] = None,
 ) -> int:
     """Re-point an existing anchor PDB at new reference coordinates and/or a new column-B
     weight.  Returns the number of anchored (B > 0) atoms.
@@ -2376,7 +2402,14 @@ def retarget_anchor_pdb(
             if b > 0:
                 n_anchored += 1
                 if k is not None:
-                    raw = _set_bfactor(raw, float(k))
+                    is_graphene = (
+                        raw[17:21].strip() == "GRP"
+                        or raw[72:76].strip().startswith("GR")
+                    )
+                    raw = _set_bfactor(
+                        raw,
+                        float(graphene_k if is_graphene and graphene_k is not None else k),
+                    )
         out.append(raw)
     if coords is not None and row + 1 != len(coords):
         raise ValueError(
@@ -3310,8 +3343,8 @@ def mgh_slow_release_segments(
     ``nvt_only=True`` forces every stage to run with the barostat off.  This is
     required when the package was built with a water-shell carve: the carved cell
     has vacuum corners, and an NPT piston would compress the box until the DNA
-    overlaps its own periodic image.  Stage names keep their ``NPT`` label (to
-    preserve manifest/resume continuity) but the cell is held fixed.
+    overlaps its own periodic image.  On-disk segment names keep their historical
+    ``NPT`` token for resume continuity, while the user-facing stage label says NVT.
     """
     min_name = f"{name_stem}_00_min_enm_k0p5"
 
@@ -3411,7 +3444,12 @@ def mgh_slow_release_segments(
         previous = seg_name
 
     for scale, total_steps, label in npt_ladder:
-        stage_str = "300K NPT k=0" if scale is None else f"300K NPT ENM k={scale}"
+        ensemble = "NVT" if nvt_only else "NPT"
+        stage_str = (
+            f"300K {ensemble} k=0"
+            if scale is None
+            else f"300K {ensemble} ENM k={scale}"
+        )
         for i, (pct, frac) in enumerate(pcts):
             seg_steps = _round_up_to_cycle(max(100, int(total_steps * frac)))
             seg_name = f"{name_stem}_{stage_idx:02d}_{label}_p{int(pct)}"
@@ -3520,6 +3558,7 @@ def prepare_mgh_slow_release(
     salt_mode: str = "custom",
     padding_nm: float = 1.2,
     box_mode: str = "rotation",
+    box_size_nm: Optional[tuple[Optional[float], Optional[float], Optional[float]]] = None,
     #: Deprecated compatibility input. Cell geometry is now selected directly with
     #: ``box_mode`` instead of inferred from a future run length.
     free_ns: Optional[float] = None,
@@ -3566,6 +3605,8 @@ def prepare_mgh_slow_release(
     devices: str = "0",
     early_stop_relax: bool = False,
     stage_overrides: Optional[dict] = None,
+    graphene_nanopore: Optional[dict] = None,
+    graphene_only: bool = False,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -3639,7 +3680,7 @@ def prepare_mgh_slow_release(
     # reference (the 6hbx100_90deg poly-T incident). Shared choke point for BOTH the local
     # (create_md_job) and RunPod (prep_*) paths. Only for full-topology MD builds; display
     # / coarse paths legitimately render poly-T as a placeholder.
-    if require_full_topology:
+    if require_full_topology and not graphene_only:
         from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
 
         require_sequenced_scaffold(design)
@@ -3695,10 +3736,13 @@ def prepare_mgh_slow_release(
         # so a CPU-targeted job was sized against VRAM on any host that has a GPU.
         devices=devices,
         box_mode=box_mode,
+        box_size_nm=box_size_nm,
         # Cell geometry is an explicit preparation choice. Production children inherit
         # it verbatim and cannot re-solvate, so run length must not silently change it.
         free_ns=None,
         progress=progress,
+        graphene_nanopore=graphene_nanopore,
+        graphene_only=graphene_only,
     )
 
     # Extract ZIP — inner folder is "{name}_namd_solvated/"
@@ -3775,13 +3819,32 @@ def prepare_mgh_slow_release(
         pdb_path,
         sort_chains=require_full_topology,
     )
-    enm_report = write_aksimentiev_enm_files(
-        pdb_path,
-        package_dir,
-        name_stem,
-        exclude_residues=_ladder_enm_exclude or None,
-        progress=progress,
-    )
+    if graphene_only:
+        # The relaxation ladder's segment schema references the usual ENM filenames.
+        # Keep zero-length placeholders so one package path remains usable, while
+        # accurately recording that this membrane/electrolyte control has no DNA ENM.
+        _empty_enm_files = {}
+        for _scale in (0.5, 0.1, 0.01):
+            _name = f"{name_stem}_k{_scale:g}.enm.extra"
+            (package_dir / _name).write_text("")
+            _empty_enm_files[_name] = 0
+        enm_report = {
+            "schema": "nadoc.aksimentiev_enm.v1",
+            "source_pdb": str(pdb_path),
+            "n_residues_with_base_atoms": 0,
+            "n_base_atoms": 0,
+            "n_bonds": 0,
+            "files": _empty_enm_files,
+            "not_applicable": "graphene-only control contains no DNA",
+        }
+    else:
+        enm_report = write_aksimentiev_enm_files(
+            pdb_path,
+            package_dir,
+            name_stem,
+            exclude_residues=_ladder_enm_exclude or None,
+            progress=progress,
+        )
 
     # Anchors (optional): resolve the shared anchor scopes to DNA residues and write a
     # fixedAtoms marker PDB the whole ladder reads.  A JOB-REQUEST annotation resolved
@@ -3935,10 +3998,20 @@ def prepare_mgh_slow_release(
         name_stem,
         soft=force_soft,
         gentle=gentle_ladder,
-        nvt_only=False,
+        # Fixed Cartesian wall restraints require a fixed cell so periodic seams
+        # cannot reopen. Solvent density must be validated before transport.
+        nvt_only=bool(graphene_nanopore),
         timestep_fs=ladder_dt,
         high_aspect_ratio=high_aspect_ratio,
     )
+    if graphene_only and segments:
+        # There is no DNA ENM or Mg-hexahydrate restraint to release.  Retain one
+        # NVT equilibration stage (chunked so the energy plateau accelerator can
+        # stop it early), rather than running four numerically identical stages.
+        control_stage = segments[0].stage
+        segments = [s for s in segments if s.stage == control_stage]
+        for control_segment in segments:
+            control_segment.stage = "300 K NVT graphene/solvent equilibration"
 
     # The HMR PSF enters at the first hard, rigid-bond segment; minimisation and
     # the soft strain-relief first segment keep the unmodified PSF.
@@ -4106,14 +4179,16 @@ def prepare_mgh_slow_release(
             ),
         },
         "capture_vel_force": capture_vel_force,
+        "graphene_only": bool(graphene_only),
         # How the cell was solvated.  Production and reseed confs READ this back: a
         # carved cell contains vacuum, so its stages must run at constant volume or the
         # barostat collapses the box onto the solute.  Without it recorded, the
         # production path had no way to know and hardcoded the barostat on.
         "solvation": {
             "padding_nm": float(padding_nm),
+            "requested_box_size_nm": box_size_nm,
             "carved": False,
-            "npt_allowed": True,
+            "npt_allowed": not bool(graphene_nanopore),
             # Unrestrained ns the cell was sized for.  A production child re-uses this
             # cell verbatim, so this is the record of the decision every descendant
             # inherits — without it, a package that cannot host a long free run is

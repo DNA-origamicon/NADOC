@@ -46,6 +46,10 @@ early (before the expensive solvation step).
 See [external_tools.md](external_tools.md) for the full environment-variable
 reference shared across all simulation back-ends.
 
+For surface-deposited oxDNA seeds, graphene nanopores, membrane-only controls,
+ion-transport production, and current/crossing analysis, see
+[NAMD nanopore ion transport](namd_nanopore_transport.md).
+
 ## Sequence gate and deferred preparation
 
 Creating a NAMD job records the intended protocol and is allowed before sequences are

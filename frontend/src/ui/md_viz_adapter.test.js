@@ -83,7 +83,9 @@ describe('mdVizApiAdapter', () => {
 
     it('loadTrajectory reaches getMdTrajectory with a usable AbortSignal', async () => {
       const api = { getMdTrajectory: vi.fn(async () => ({ ready: false })) }
-      const ctrl = initOxdnaDisplay({ designRenderer: renderer(), api: mdVizApiAdapter(api) })
+      const ctrl = initOxdnaDisplay({
+        designRenderer: renderer(), api: mdVizApiAdapter(api), onSurfaceStrands: vi.fn(),
+      })
       await ctrl.loadTrajectory('J1')
       expect(api.getMdTrajectory).toHaveBeenCalledTimes(1)
       const [id, signal] = api.getMdTrajectory.mock.calls[0]
@@ -114,13 +116,34 @@ describe('mdVizApiAdapter', () => {
 
     it('carries signal, interval, and progress through the compact binary path', async () => {
       const progress = vi.fn()
-      const api = { getMdTrajectoryBin: vi.fn(async () => null), getMdTrajectory: vi.fn(async () => ({ ready: false })) }
+      const event = { phase: 'download', done: 10, total: 20 }
+      const api = { getMdTrajectoryBin: vi.fn(async (_id, _signal, opts) => {
+        opts.onProgress(event)
+        return null
+      }), getMdTrajectory: vi.fn(async () => ({ ready: false })) }
       const ctrl = initOxdnaDisplay({ designRenderer: renderer(), api: mdVizApiAdapter(api) })
       await ctrl.loadTrajectory('J1', true, 'lineage', 7, progress)
       const [id, signal, opts] = api.getMdTrajectoryBin.mock.calls[0]
       expect(id).toBe('J1')
       expect(signal).toBeInstanceOf(AbortSignal)
-      expect(opts).toEqual({ stride: 7, onProgress: progress })
+      expect(opts).toEqual({ stride: 7, onProgress: expect.any(Function) })
+      expect(progress).toHaveBeenCalledWith(event)
+    })
+
+    it('maps the companion display request used while applying trajectory frame zero', async () => {
+      const api = {
+        getMdTrajectory: vi.fn(async () => ({
+          ready: true, n_frames: 1, keys: [], frames: [new Float32Array(0)],
+          markers: [], stages: [],
+        })),
+        getMdDisplayMeta: vi.fn(async () => ({ ready: true })),
+      }
+      const ctrl = initOxdnaDisplay({
+        designRenderer: renderer(), api: mdVizApiAdapter(api), onSurfaceStrands: vi.fn(),
+      })
+      const result = await ctrl.loadTrajectory('graphene')
+      expect(result).toMatchObject({ ok: true, n_frames: 1 })
+      expect(api.getMdDisplayMeta).toHaveBeenCalledWith('graphene')
     })
 
     // ── The atomistic bug: NAMD frames never reached the renderer ──────────────

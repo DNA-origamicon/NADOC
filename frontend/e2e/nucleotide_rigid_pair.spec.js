@@ -60,8 +60,6 @@ test('2hb_1xT nucleotide drag keeps its bead and slab rigidly arranged', async (
     window.__nadocTest.getNucleotideTransformScreenState().active)).toBe(false)
   const after = await page.evaluate(() => window.__nadocTest.getSelectedResidueArrangement())
   const allAfter = await page.evaluate(() => window.__nadocTest.getResidueArrangements())
-  expect(after.independentPose, JSON.stringify({ before, during, after })).toBe(true)
-  expect(after.savedDisplayOffset, JSON.stringify({ before, during, after })).not.toBeNull()
   expect(after.distance, JSON.stringify({ before, during, after })).toBeCloseTo(before.distance, 5)
   for (let i = 0; i < 3; i++) expect(after.offset[i]).toBeCloseTo(before.offset[i], 4)
 

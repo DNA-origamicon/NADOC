@@ -562,3 +562,52 @@ the green completion check because the job is marked complete, rather than claim
   `charge_audit` field when the standalone file is absent (fixes replicas already on disk —
   the child manifest already carries the map). Verified on prod job `6d7c2e38e455`: RMSF
   route now returns 1328/1328. See LESSONS A10.
+
+### Patch-grid recovery and physical restraint inheritance (2026-09-04)
+
+`small_plate` job `d882c98ac759` / Slurm `32086330` completed minimization but failed
+in the first NPT settle stage with `Periodic cell has become too small for original
+patch grid!`, before its first 5,000-step checkpoint. Alpine now stages
+`remote_cell_recovery.py` and `remote_resume_conf.py` on both Submit and Resume.
+The generated sbatch retries this exact failure within the allocation, rebuilding
+from a validated checkpoint and remaining steps; one gentler pre-checkpoint retry is
+allowed. Retries are bounded and reject stalled checkpoints or >15% cumulative volume
+loss. Physical restraints and integrator choices persist. No scheduler auto-resubmission.
+
+The same audit fixed harmonic anchors becoming hard fixed atoms in appended production,
+inherited harmonic settings for production children, and graphene-only controls acquiring
+an NPT barostat after their NVT relaxation. Details and verification limits are in
+[the audit](../docs/namd_alpine_failure_audit.md). The failed job has not been resubmitted.
+
+## R1 graphene force-field correction (2026-09-04)
+
+R1 `0a2aaa5638ff` / Slurm `32088967` failed at k=0.1 step 14: unbonded
+graphene CA sites experienced enormous mutual LJ repulsion at 1.42 Å. New
+packages use dedicated NGRC sites with CA cross LJ and zero NGRC–NGRC NBFIX
+in `par_np_thiol.prm`. Geometry, anchor stiffness and 4 fs timestep are unchanged.
+`namd_graphene.validate_graphene_wall_package` blocks legacy wall packages before
+Alpine submit/resume, local execution and RunPod provisioning. Copy + Run must
+rebuild and minimize; old graphene checkpoints are not reusable. Copy remains an
+editable draft and does not prepare or submit. See `docs/namd_graphene_wall_failure_audit.md`.
+
+## small_plate restrained-wall barostat audit — 2026-09-05
+
+Slurm `32089399` (`7aa73d7afe93`) failed after a successful k=0.1 recovery:
+recovery had slowed the piston to 10000/5000 fs, but k=0.01 reset it to
+1000/500 fs. Local 4 fs replays reproduce alternating, amplifying cell/pressure
+oscillations within 12 steps, driving graphene restraint energy from 34.8k to
+752M kcal/mol before the exclusion fatal. Margin 4, GPU offload, and retaining
+k=0.1 all fail. Changing only the piston to 10000/5000 fs passes 5000 steps.
+This is independent of the earlier corrected graphene self-LJ defect.
+
+Restrained graphene NPT config composition now keeps at least 10000/5000 fs
+across relaxation, appended production and replica production; NVT stays NVT.
+See [audit](../docs/namd_graphene_barostat_failure_audit.md). The failing job's
+intact pre-failure checkpoint can be used with the corrected piston; unlike the
+self-LJ fix, this does not require rebuilding or reminimization. An isolated
+continuation is under `experiments/namd_32089399_diagnosis/recovery_package`.
+The backend was preserved during diagnosis, then restarted by the user before the
+new copy was prepared. On September 5 at 21:11 UTC, copy `e75ffd56c6f8` was verified
+as SLURM `32108809`, RUNNING on `c3gpu-g7-u5`. All 75 package inputs transferred
+successfully and all 22 active NPT configs retain 10000/5000 fs. Full-ladder stability
+is still unverified. See [upload audit](../experiments/namd_e75ffd56c6f8_upload_audit/README.md).

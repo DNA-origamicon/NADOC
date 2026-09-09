@@ -12,7 +12,8 @@
  * Modifier semantics (remapped 2026-05-17):
  *   Ctrl+left-drag             → rectangle lasso multi-select.
  *   Ctrl+left-click (no drag)  → no-op (was bead/arc toggle pre-remap).
- *   Alt+left-click             → toggle backbone bead in _ctrlBeads (distance measurement).
+ *   Alt+left-click             → toggle a legacy dimension anchor.
+ *   Plain click (Dimensions)   → select one of the two live dimension bases.
  *   Shift+left-click           → toggle the hit element at the active level.
  *
  * Right-click behaviour:
@@ -39,9 +40,10 @@ import { baseKey, xbKey, atomBaseKey, parseBaseKey, toggleBaseKey, mergeBaseKeys
 import {
   backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
   nearestCandidate, candidatesInRect, makeProjector, worldPosOf,
+  resolveIndividualBaseElements,
 } from './base_pick.js'
 import { flexAnchorKey } from './flexible_arcs.js'
-import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
+import { moveRotateSelectionLocked, selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
   vrDeformationPlanePick, vrInitialSelectionOwnerTokens, vrOwnerTokens,
@@ -52,6 +54,7 @@ import { referenceStrandInteractionHidden } from './reference_navigation.js'
 import { resolveVREndToolContext } from './vr_tool_context.js'
 import { resolveVRDeformationScope } from './vr_tool_execution_plan.js'
 import { getVRDeformationPlaneFrames } from './deformation_editor.js'
+import { selectedEndLigationArgs, selectedEndsIncludeNuc } from './force_ligation.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -1364,6 +1367,15 @@ function _showNickMenu(x, y, coneEntry, onNick) {
   _menuOutsideListeners(menu)
 }
 
+function _showForceLigateMenu(x, y, onForceLigateSelectedEnds) {
+  _dismissMenu()
+  const menu = _menuBase(x, y)
+  menu.appendChild(_menuItem('Force ligate', () => onForceLigateSelectedEnds?.()))
+  document.body.appendChild(menu)
+  _menuEl = menu
+  _menuOutsideListeners(menu)
+}
+
 function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
   _dismissMenu()
   const menu = _menuBase(x, y)
@@ -1671,10 +1683,10 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {HTMLCanvasElement} canvas
  * @param {THREE.Camera} camera
  * @param {object} designRenderer
- * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
+ * @param {{ onNick?: Function, onForceLigateSelectedEnds?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
+  const { onNick, onForceLigateSelectedEnds, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getNanoparticleRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
   if (!selectionController) throw new TypeError('selection manager requires the canonical selection controller')
   _onEditStrandSequence = onEditStrandSequence ?? null
   _onHideSelection = onHideSelection ?? null
@@ -3188,6 +3200,29 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     })
   }
 
+  // Measurement resolution must survive representation/filter changes after the
+  // selection was made. Include the renderer's live nucleotide entries even when
+  // their mesh is currently hidden; exotic base families still come from the shared
+  // selectable-candidate union above.
+  function _individualBaseCandidates() {
+    const candidates = [..._baseCandidates()]
+    const seen = new Set(candidates.map(candidate => candidate.key))
+    const entries = [
+      ...designRenderer.getBackboneEntries(),
+      ...(designRenderer.getFluoroEntries?.() ?? []),
+    ]
+    for (const entry of entries) {
+      const key = baseKey(entry?.nuc, entry?._copy)
+      if (!key || seen.has(key) || !entry?.instMesh) continue
+      seen.add(key)
+      candidates.push({
+        key, instMesh: entry.instMesh, id: entry.id,
+        family: 'backbone', nuc: entry.nuc,
+      })
+    }
+    return candidates
+  }
+
   // Live position accessor — glow_layer's refresh() re-reads entry.pos on every
   // simulation frame, and _writeEntries copies immediately, so one shared scratch vector
   // is safe and the glow tracks a bead that is moving under MD playback.
@@ -4010,6 +4045,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return
+    if (moveRotateSelectionLocked(store.getState())) return
     if (isDisabled?.()) return
 
     // Modifier precedence: Alt > Shift > Ctrl. They never combine meaningfully
@@ -4036,10 +4072,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Skip when the CG root is hidden (atomistic/surface mode): Three.js r172 does not check
     // visible in Raycaster.intersectObjects, so hidden InstancedMeshes would still register
     // hits and incorrectly disable controls.
+    _setNdc(e.clientX, e.clientY)
+    raycaster.setFromCamera(_ndc, _cam())
+    const nanoparticleHit = Boolean(getNanoparticleRenderer?.()?.raycastPick?.(raycaster))
     const cgRootVisible = designRenderer.getHelixCtrl()?.root?.visible !== false
     if (controls && cgRootVisible) {
-      _setNdc(e.clientX, e.clientY)
-      raycaster.setFromCamera(_ndc, _cam())
       // Filter to visible meshes only — Three.js r172+ ignores .visible in
       // intersectObjects, so hidden meshes (e.g. iHelixCylinders in full-detail
       // mode, or iSpheres/iCubes in cylinder-LOD mode) would otherwise register
@@ -4061,7 +4098,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         const domain = designRenderer.getCylinderDomainAt(hit.instanceId)
         return domain && !_isHiddenReferenceStrand(domain.strandId)
       })
-      if (beadHit || coneHit || cylHit) controls.enabled = false
+      if (nanoparticleHit || beadHit || coneHit || cylHit) controls.enabled = false
+    } else if (controls && nanoparticleHit) {
+      controls.enabled = false
     }
   })
 
@@ -4073,6 +4112,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // button, so hover keeps working while zooming (as desired). Also skipped during
     // a ctrl/lasso drag or while disabled.
     if (e.buttons !== 0) {
+      _clearHoverPreview()
+    } else if (moveRotateSelectionLocked(store.getState())) {
       _clearHoverPreview()
     } else if (!_ctrlDownPos && !_inLassoMode && !isDisabled?.()) {
       _updateHoverPreview(e.clientX, e.clientY)
@@ -4102,6 +4143,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   canvas.addEventListener('pointerup', e => {
     if (controls) controls.enabled = true
     if (e.button !== 0) return
+
+    // Once Move/Rotate has a target, canvas selection is frozen. Clear stale
+    // gesture bookkeeping without consuming right-click/context-menu behavior;
+    // the panel's Clear selection action explicitly re-arms picking.
+    if (moveRotateSelectionLocked(store.getState())) {
+      _downPos = _ctrlDownPos = _altDownPos = _shiftDownPos = null
+      _clearHoverPreview()
+      return
+    }
 
     // Lasso finalize
     if (_inLassoMode) {
@@ -4323,6 +4373,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const beadDist = beadHit0?.distance ?? Infinity
     const coneDist = coneHit0?.distance ?? Infinity
+
+    // ── Nanoparticle hit ────────────────────────────────────────────────────
+    // Same persistent, closest-visible-object selection rule as proteins.
+    const nanoparticleHit = getNanoparticleRenderer?.()?.raycastPick?.(raycaster)
+    if (nanoparticleHit && nanoparticleHit.distance <= Math.min(beadDist, coneDist)) {
+      selectionController.select({ kind: 'nanoparticle', id: nanoparticleHit.id })
+      return
+    }
 
     // ── Protein hit ──────────────────────────────────────────────────────────
     // Click-to-select a free-standing or attached protein. Takes precedence
@@ -4575,6 +4633,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Whether the frontmost hit is a bead (vs a terminal cone sitting behind it).
     const _beadFrontmost = hitBead && (!coneHit || beadHit.distance <= coneHit.distance)
+
+    // A valid canonical End pair owns this context click when the pointer is on
+    // either selected endpoint.  Check both a frontmost bead and a cone's two
+    // nucleotides so the action is reliable across representation/overlap cases.
+    const _selectedEnds = selectedEndRefs(store.getState()).map(_entryForEndRef).filter(Boolean)
+    const _clickedSelectedEnd = _beadFrontmost
+      ? selectedEndsIncludeNuc(_selectedEnds, hitBead?.nuc)
+      : selectedEndsIncludeNuc(_selectedEnds, hitCone?.fromNuc) ||
+        selectedEndsIncludeNuc(_selectedEnds, hitCone?.toNuc)
+    if (onForceLigateSelectedEnds && selectedEndLigationArgs(_selectedEnds) && _clickedSelectedEnd) {
+      _showForceLigateMenu(e.clientX, e.clientY, onForceLigateSelectedEnds)
+      return
+    }
 
     // Multi-selection right-click — dispatch to the appropriate menu.
     if (_multiLoopSkipEntries.length > 0) {
@@ -5025,6 +5096,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     getBaseWorldPosition(key) {
       const candidate = _baseCandidates().find(item => item.key === key)
       return candidate ? worldPosOf(candidate, new THREE.Vector3()).clone() : null
+    },
+
+    /** Canonical Base and End refs resolved through one live base-element path. */
+    getSelectedIndividualBases() {
+      const refs = (store.getState().selection?.items ?? [])
+        .filter(ref => ref.kind === 'base' || ref.kind === 'end')
+      if (refs.length !== 2) return []
+      const bases = resolveIndividualBaseElements(_individualBaseCandidates(), refs)
+      return bases.length === 2 ? bases : []
+    },
+
+    /** Remove only the canonical individual-base refs after a measurement. */
+    clearSelectedIndividualBases() {
+      const items = store.getState().selection?.items ?? []
+      selectionController.replace(items.filter(ref => ref.kind !== 'base' && ref.kind !== 'end'))
     },
 
     /**

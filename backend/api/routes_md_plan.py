@@ -96,6 +96,9 @@ class ProtocolPlanRequest(CreateJobRequest):
     langevin_damping: Optional[float] = Field(
         None, gt=0.0, description="Production only: Langevin coupling, ps^-1."
     )
+    ion_transport_mode: str = Field("off", description="'off' or voltage-driven transport.")
+    ion_transport_voltage_mV: float = Field(100.0, ge=-2000.0, le=2000.0)
+    ion_transport_current_stride_ps: float = Field(10.0, gt=0.0, le=1000.0)
     stage_overrides: dict = Field(
         default_factory=dict,
         description="Per-stage NAMD directive overrides, keyed by stage index (and '*'). "
@@ -233,6 +236,13 @@ def _provenance(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> dict:
                 "4 fs timestep, so forcing every stage soft turns fast mode off"
             ),
         }
+    if body.oxdna_job_id:
+        reason = (
+            "oxDNA is coarse-grained, so its atomistic seed must pass the topology-safe "
+            "projection and a 1 fs no-RATTLE declash before the normal release ladder"
+        )
+        out["declash"] = {"value": True, "provenance": "forced", "reason": reason}
+        out["force_soft"] = {"value": True, "provenance": "forced", "reason": reason}
     return out
 
 
@@ -282,6 +292,7 @@ def _design_flags(*, padding_nm: float = 1.2) -> dict:
 
 def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> dict:
     carved = False
+    wall = bool(resolved.graphene_nanopore)
     gbis = resolved.protocol == md_presets.IMPLICIT_PROTOCOL
     flags = _design_flags(padding_nm=float(resolved.padding_nm))
     high_aspect_ratio = resolved.relax_preset == md_presets.HIGH_ASPECT_RATIO
@@ -345,7 +356,7 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             ctx,
             soft=force_soft,
             gentle=gentle_ladder,
-            nvt_only=carved,
+            nvt_only=carved or wall,
             timestep_fs=ladder_dt,
             stage_overrides=body.stage_overrides or None,
             high_aspect_ratio=high_aspect_ratio,
@@ -442,6 +453,8 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             },
         ]
     warnings: list[str] = []
+    if wall:
+        warnings.append("Periodic graphene spans the entire cell. The restrained wall uses a fixed-volume cell to keep its edges sealed; validate solvent density before transport production.")
     if gbis:
         warnings.append(
             "Implicit-solvent stages keep the explicit ladder's NAMES (they say NPT and "
@@ -823,6 +836,29 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             "source": "ProductionRunRequest.langevin_damping",
         }
     )
+    if body.ion_transport_mode == "voltage":
+        has_membrane = bool(manifest.get("graphene_nanopore"))
+        conditions.append(
+            {
+                "id": "ion_transport_geometry",
+                "kind": "info" if has_membrane else "blocking",
+                "title": (
+                    f"Voltage-driven ion transport at {body.ion_transport_voltage_mV:g} mV"
+                    if has_membrane else "Ion transport needs a NAMD hard surface"
+                ),
+                "detail": (
+                    "The field follows the membrane normal and is emitted with "
+                    "eFieldNormalized. Bulk electrolyte is inherited from the parent; "
+                    "current-analysis metadata is sampled at "
+                    f"{body.ion_transport_current_stride_ps:g} ps."
+                    if has_membrane else
+                    "Prepare and relax an oxDNA-seeded job with Apply hard surface enabled, "
+                    "then start ion-transport production from that completed job."
+                ),
+                "applies_to": "all",
+                "source": "ProductionRunRequest.ion_transport_mode",
+            }
+        )
     conditions.append(
         _box_fit_condition(
             parent,
@@ -1152,6 +1188,19 @@ def _production_provenance(
             reason=f"the literature production value "
             f"({_p.PRODUCTION_LANGEVIN_DAMPING:g} ps⁻¹)",
         ),
+        "ion_transport_mode": entry(
+            body.ion_transport_mode, "ion_transport_mode",
+            reason="standard molecular dynamics unless voltage-driven transport is selected",
+        ),
+        "ion_transport_voltage_mV": entry(
+            float(body.ion_transport_voltage_mV), "ion_transport_voltage_mV",
+            reason="100 mV voltage-driven transport default",
+        ),
+        "ion_transport_current_stride_ps": entry(
+            float(body.ion_transport_current_stride_ps),
+            "ion_transport_current_stride_ps",
+            reason="10 ps charge-displacement sampling used in established nanopore work",
+        ),
         "seed": {
             "value": body.seed,
             "provenance": "user" if body.seed is not None else "derived",
@@ -1272,12 +1321,29 @@ async def protocol_plan(body: ProtocolPlanRequest) -> dict:
     kind = (body.kind or "relaxation").strip().lower()
     if kind not in ("relaxation", "production"):
         raise HTTPException(400, "kind must be 'relaxation' or 'production'")
+    if kind == "relaxation" and body.oxdna_job_id:
+        # Mirror routes_md's real preparation call so the wizard previews the actual
+        # coarse-grained-seed safety ladder and greys out the overridden controls.
+        resolved = resolved.model_copy(update={"declash": True, "force_soft": True})
 
     plan = (
         _production_plan(body, resolved)
         if kind == "production"
         else _relaxation_plan(body, resolved)
     )
+
+    if kind == "relaxation" and resolved.protocol != md_presets.IMPLICIT_PROTOCOL:
+        from starlette.concurrency import run_in_threadpool
+        from backend.core.md_box_preview import preview_box
+        try:
+            current_design = design_state.get_or_404()
+        except HTTPException:
+            current_design = None
+        if current_design is not None:
+            try:
+                plan["box_preview"] = await run_in_threadpool(preview_box, current_design, resolved)
+            except Exception as exc:
+                plan["warnings"].append(f"Box estimate unavailable: {exc}")
 
     stages = plan["stages"]
     edited = sorted({k for k, v in (body.stage_overrides or {}).items() if v})

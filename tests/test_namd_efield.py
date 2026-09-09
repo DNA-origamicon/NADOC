@@ -142,6 +142,34 @@ def test_efield_accepts_the_persisted_force_pn_spelling():
     assert v1 == v2
 
 
+def test_voltage_field_uses_normalized_cell_voltage():
+    from backend.core.md_protocols import _efield_lines
+
+    lines = "".join(_efield_lines({"voltage_mV": 100.0, "dir": [0, 0, 1]}))
+    assert "eFieldNormalized   yes" in lines
+    assert "eField             0 0 2.3060548" in lines
+
+
+def test_transport_voltage_and_soft_membrane_are_gpu_resident_compatible():
+    from backend.core.md_protocols import SegmentSpec, build_production_conf
+
+    spec = SegmentSpec(
+        name="transport", stage="transport", percent=100, steps=1000,
+        temp=300, damping=1, scale=None, npt=False, previous="equilibrated",
+    )
+    conf = build_production_conf(
+        spec, "demo", (100.0, 100.0, 100.0), False,
+        timestep_fs=4.0, hmr=True, rigid_bonds="all", n_atoms=250000,
+        force_resident=True, anchors_file="membrane.pdb", anchor_k=10.0,
+        field={"voltage_mV": 100.0, "dir": [0, 0, 1]}, npt=False,
+    )
+    assert "GPUresident        on" in conf
+    assert "constraints        on" in conf
+    assert "fixedAtoms         on" not in conf
+    assert "eFieldNormalized   yes" in conf
+    assert "langevinPiston     on" not in conf
+
+
 # ── conf emission ─────────────────────────────────────────────────────────────
 
 
@@ -413,6 +441,7 @@ def _fake_solvate(
     progress=None,
     *,
     box_mode=None,
+    padding_xyz_nm=None,
 ):
     """Stand-in for gmx solvation (mirrors test_namd_anchors): psfgen still runs for real,
     so the PSF whose charges we read below is the genuine CHARMM topology."""

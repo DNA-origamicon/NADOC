@@ -29,7 +29,11 @@ describe('installTestApi', () => {
       assemblyRenderer: {},
       _assemblyPendingPartJoints: new Map(),
       _assemblyPendingTransforms: new Map(),
-      api: {},
+      api: {
+        createGoldNanosphere: () => 'created', patchNanoparticle: () => 'patched',
+        deleteNanoparticle: () => 'deleted',
+      },
+      nanoparticleSubsystem: { select: id => selected.push([{ kind: 'nanoparticle', id }]), meshes: new Map() },
       forceCrossoverTool: { testApi: forceApi },
     })
 
@@ -40,5 +44,8 @@ describe('installTestApi', () => {
     expect(window.__nadocForceXover).toBe(forceApi)
     window.__nadocTest.selectProteinForTest('protein-1')
     expect(selected).toEqual([[{ kind: 'protein', id: 'protein-1' }]])
+    expect(window.__nadocTest.nanoparticles.create(10)).toBe('created')
+    window.__nadocTest.nanoparticles.select('gold-1')
+    expect(selected.at(-1)).toEqual([{ kind: 'nanoparticle', id: 'gold-1' }])
   })
 })

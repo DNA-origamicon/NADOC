@@ -81,6 +81,17 @@ def test_transform_round_trips_in_design_json_and_normalizes_quaternion():
     assert restored.nucleotide_transforms[0].rotation == [0, 0, 0, 1]
 
 
+def test_legacy_renderer_specific_slab_pose_is_discarded():
+    transform = NucleotideTransform.model_validate({
+        "kind": "base", "helix_id": "h1", "bp_index": 2,
+        "direction": "REVERSE", "display_slab_offset": [1, 2, 3],
+        "display_slab_rotation": [0, 0, 0, 1],
+    })
+    payload = transform.model_dump()
+    assert "display_slab_offset" not in payload
+    assert "display_slab_rotation" not in payload
+
+
 @pytest.mark.parametrize("kwargs", [
     {"kind": "base", "helix_id": "h1", "bp_index": 1},
     {"kind": "extra_base", "crossover_id": "xo"},
@@ -98,8 +109,6 @@ def test_put_route_persists_one_undoable_pose_and_composes_followup_delta():
         "kind": "base", "helix_id": "h0", "bp_index": 4, "direction": "FORWARD",
         "copy_k": 0, "pivot": [0, 0, 0], "translation": [1, 0, 0],
         "rotation": [0, 0, 0, 1],
-        "display_slab_offset": [0.1, 0.2, 0.3],
-        "display_slab_rotation": [0, 0, 0, 1],
     }
     first = client.put("/api/design/nucleotide-transform", json=body)
     assert first.status_code == 200
@@ -115,7 +124,6 @@ def test_put_route_persists_one_undoable_pose_and_composes_followup_delta():
     assert len(stored2) == 1
     assert stored2[0]["id"] == stored[0]["id"]
     assert stored2[0]["translation"] == pytest.approx([1, 2, 0])
-    assert stored2[0]["display_slab_offset"] == [0.1, 0.2, 0.3]
 
     undo = client.post("/api/design/undo")
     assert undo.status_code == 200

@@ -1617,3 +1617,49 @@ describe('displayOccupancy', () => {
     expect(ctrl.drivesHeavy?.()).toBeFalsy()
   })
 })
+
+describe('animation background loading', () => {
+  it('downloads without moving the scene, then Play activates those exact frames', async () => {
+    const designRenderer = { applyFemPositions: vi.fn(), clearScalarColors: vi.fn() }
+    const api = { getOxdnaTrajectory: vi.fn(async () => ({
+      ready: true, n_frames: 2, keys: [['h0', 0, 'FORWARD']],
+      frames: [[1, 2, 3, 1, 0, 0], [7, 8, 9, 1, 0, 0]],
+    })) }
+    const ctrl = initOxdnaDisplay({ designRenderer, api })
+    await ctrl.prefetchTrajectory('A', { scope: 'job', stride: 1 })
+    expect(ctrl.isActive()).toBe(false)
+    expect(designRenderer.applyFemPositions).not.toHaveBeenCalled()
+    await ctrl.loadTrajectory('A', true, 'job', 1)
+    ctrl.showFrame(1)
+    expect(api.getOxdnaTrajectory).toHaveBeenCalledTimes(1)
+    expect(designRenderer.applyFemPositions.mock.lastCall[0][0].backbone_position).toEqual([7, 8, 9])
+  })
+})
+
+it('prepares atomistic trajectory frames off-screen and adopts them on Play without rebuilding', async () => {
+  const ar = { getMode: () => 'ballstick', update: vi.fn(), applyPositionLerp: vi.fn() }
+  const renderer = { applyFemPositions: vi.fn(), clearScalarColors: vi.fn() }
+  const api = {
+    getOxdnaTrajectory: vi.fn(async () => ({ ready: true, n_frames: 3,
+      keys: [['h', 0, 'F']], frames: [0, 1, 2].map(x => [x, 0, 0, 1, 0, 0]) })),
+    getOxdnaAtomisticModel: vi.fn(async () => ({ n_serials: 1,
+      atoms: [{ serial: 0, element: 'P', strand_id: 's', x: 0, y: 0, z: 0 }], bonds: [] })),
+    getOxdnaFramesAtomistic: vi.fn(async (_job, frames) => Object.fromEntries(frames.map(i => [String(i), [i, 0, 0]]))),
+  }
+  const ctrl = initOxdnaDisplay({ designRenderer: renderer, api,
+    getCurrentRepr: () => 'ballstick', getAtomisticRenderer: () => ar })
+  const progress = vi.fn()
+  const result = await ctrl.prepareTrajectory('J', { scope: 'job' }, { onProgress: progress })
+  expect(result.ok).toBe(true)
+  expect(renderer.applyFemPositions).not.toHaveBeenCalled()
+  expect(ar.update).not.toHaveBeenCalled()
+  expect(ctrl.isActive()).toBe(false)
+  const fetched = api.getOxdnaFramesAtomistic.mock.calls.length
+  expect(fetched).toBeGreaterThan(0)
+  expect(progress.mock.lastCall[0].phase).toBe('ready')
+  await ctrl.loadTrajectory('J', true, 'job')
+  await ctrl.prebuildHeavy()
+  await tick()
+  expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(fetched)
+  expect(ar.update).toHaveBeenCalled()
+})

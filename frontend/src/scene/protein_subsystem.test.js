@@ -107,8 +107,8 @@ describe('initProteinSubsystem', () => {
     )
     expect(_lastTraceRenderer.setMode).toHaveBeenCalledWith('trace')
     expect(_lastRenderer.setMode).toHaveBeenCalledWith('off')
-    expect(_lastRenderer.update).toHaveBeenCalledWith({ atoms: [{ helix_id: '__protein__p1' }] })
-    expect(_lastTraceRenderer.update).toHaveBeenCalledWith({ atoms: [{ helix_id: '__protein__p1' }] })
+    expect(_lastRenderer.update).toHaveBeenCalledWith({ atoms: [], bonds: [] })
+    expect(_lastTraceRenderer.update).toHaveBeenCalledWith({ atoms: [{ helix_id: '__protein__p1' }], bonds: [] })
   })
 
   it('applies stick and yields protein geometry to the global surface renderer', async () => {
@@ -147,6 +147,28 @@ describe('initProteinSubsystem', () => {
     sub.dispose()
   })
 
+  it('draws proteins like Full in beads and as boxes in hull-prism', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ atoms: [{ helix_id: '__protein__p1' }] }),
+    })
+    const sub = initProteinSubsystem(makeDeps())
+    await sub.refresh()
+
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
+      detail: { representation: 'beads' },
+    }))
+    expect(_lastRenderer.setMode).toHaveBeenLastCalledWith('off')
+    expect(_lastTraceRenderer.setMode).toHaveBeenLastCalledWith('trace')
+
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
+      detail: { representation: 'hull-prism' },
+    }))
+    expect(_lastRenderer.setMode).toHaveBeenLastCalledWith('off')
+    expect(_lastTraceRenderer.setMode).toHaveBeenLastCalledWith('box')
+    sub.dispose()
+  })
+
   it('clears proteins (mode off + empty update) when the fetch returns no atoms', async () => {
     global.fetch.mockResolvedValue({ ok: true, json: async () => ({ atoms: [] }) })
     const deps = makeDeps()
@@ -157,7 +179,7 @@ describe('initProteinSubsystem', () => {
     await flush()
     expect(_lastRenderer.setMode).toHaveBeenCalledWith('off')
     expect(_lastTraceRenderer.setMode).toHaveBeenCalledWith('off')
-    expect(_lastRenderer.update).toHaveBeenCalledWith({ atoms: [] })
+    expect(_lastRenderer.update).toHaveBeenCalledWith({ atoms: [], bonds: [] })
     void sub
   })
 

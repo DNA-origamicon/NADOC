@@ -135,6 +135,14 @@ describe('runPdbImport', () => {
     expect(deps.resetForNewDesign).not.toHaveBeenCalled()
   })
 
+  it('preserves the decision response revision for the follow-up import', async () => {
+    const importPdbAuto = vi.fn().mockResolvedValue({ imported: { protein: true }, protein: { name: 'P', atom_count: 1 } })
+    const deps = makeDeps({}, { importPdbAuto, currentRevisionWatermark: vi.fn(() => 4) })
+    const { runPdbImport } = initImportMenu(deps)
+    await runPdbImport({ pdbId: '8SCP', removeDnaFromProtein: true, expectedRevision: 17 })
+    expect(importPdbAuto).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 17 }))
+  })
+
   it('imports a DNA design: resets, syncs, hides welcome, toasts', async () => {
     const json = { imported: { dna: true }, import_warnings: ['watch out'] }
     const deps = makeDeps({}, { importPdbAuto: vi.fn().mockResolvedValue(json) })

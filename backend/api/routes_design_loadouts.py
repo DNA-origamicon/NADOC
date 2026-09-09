@@ -107,7 +107,7 @@ def activate_last_editable_loadout() -> dict:
         active_loadout_id=target.id,
         last_editable_loadout_id=target.id,
     )
-    design_state.set_design_branch(updated, push_history=False)
+    design_state.set_design_branch(updated)
     # Branch switch — the restored design's feature log has no relation to
     # whatever the client currently has cached.
     return _design_response_with_geometry(

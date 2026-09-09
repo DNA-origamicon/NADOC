@@ -23,6 +23,7 @@ import { buildClusterColorLookup } from './helix_renderer/palette.js'
 import { installInstanceAlpha, setInstanceAlpha } from './instance_alpha.js'
 import { markOperationTiming, finishOperationAfterRender } from '../perf/operation_timing.js'
 import { designRebuildAwaitingGeometry } from './design_render_readiness.js'
+import { sameConnectionTopology, sameCrossoverTopology, sameForcedLigationTopology } from './connection_topology.js'
 
 /**
  * Initialise the design renderer.
@@ -371,16 +372,26 @@ export function initDesignRenderer(scene, storeRef) {
    */
   function _applyXoverClusterAlpha() {
     if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
-    if (!_clusterAlphaKeys.size && !_xoverBeadsMesh._instanceAlpha) return
+    const design = storeRef.getState().currentDesign
+    const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
+    const state = storeRef.getState()
+    const refHidden = state.showReferenceGeometry === false || state.simulationTabActive === true
+    const hasHidden = _hiddenCrossoverIds.size > 0 || (refHidden && refIds.size > 0)
+    const repVisible = ad => _helixCtrl?.columnRepAt?.(ad.nucA?.helix_id, ad.nucA?.bp_index) === 'full' &&
+      _helixCtrl?.columnRepAt?.(ad.nucB?.helix_id, ad.nucB?.bp_index) === 'full'
+    const hasRepHidden = _xoverArcData.some(ad => !repVisible(ad))
+    if (!_clusterAlphaKeys.size && !hasHidden && !hasRepHidden && !_xoverBeadsMesh._instanceAlpha) return
     installInstanceAlpha(_xoverBeadsMesh)
     installInstanceAlpha(_xoverSlabsMesh)
     if (_xoverConnMesh) installInstanceAlpha(_xoverConnMesh)
     if (_xoverSlabConnMesh) installInstanceAlpha(_xoverSlabConnMesh)
     for (const ad of _xoverArcData) {
-      const a = _clusterAlphaKeys.size
+      const hidden = _hiddenCrossoverIds.has(ad.xoId) ||
+        (refHidden && (refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id)))
+      const a = hidden || !repVisible(ad) ? 0 : (_clusterAlphaKeys.size
         ? Math.min(clusterAlphaForNuc(_clusterAlphaKeys, ad.nucA),
                    clusterAlphaForNuc(_clusterAlphaKeys, ad.nucB))
-        : 1
+        : 1)
       for (let i = 0; i < ad.beadCount; i++) {
         setInstanceAlpha(_xoverBeadsMesh, ad.beadStartIdx + i, a)
         setInstanceAlpha(_xoverSlabsMesh, ad.beadStartIdx + i, a)
@@ -394,99 +405,19 @@ export function initDesignRenderer(scene, storeRef) {
     }
   }
 
-  /** Zero the InstancedMesh scale for every extra-base bead/slab whose crossover
-   *  ID is in _hiddenCrossoverIds.  Called after rebuild and after setHiddenCrossovers. */
+  /** Apply alpha visibility for extra bases in hidden crossovers. */
   function _applyXoverVisibility() {
     if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
-    const m4   = new THREE.Matrix4()
-    const pos  = new THREE.Vector3()
-    const qid  = new THREE.Quaternion()
-    const zero = new THREE.Vector3(0, 0, 0)
-    const design = storeRef.getState().currentDesign
-    const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
-    const state = storeRef.getState()
-    const refHidden = state.showReferenceGeometry === false || state.simulationTabActive === true
-    let dirty = false
-    for (const ad of _xoverArcData) {
-      const hide = _hiddenCrossoverIds.has(ad.xoId) ||
-        (refHidden && (refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id)))
-      if (hide) {
-        for (let i = 0; i < ad.beadCount; i++) {
-          const bi = ad.beadStartIdx + i
-          _xoverBeadsMesh.getMatrixAt(bi, m4)
-          pos.setFromMatrixPosition(m4)
-          _xoverBeadsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
-          _xoverSlabsMesh.getMatrixAt(bi, m4)
-          pos.setFromMatrixPosition(m4)
-          _xoverSlabsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
-        }
-      } else {
-        const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
-        const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
-        if (!posA || !posB) continue
-        arcControlPoint(posA, posB, ad.nucA, ad.nucB, _clusterXoverCtrl)
-        updateExtraBaseInstances(
-          _xoverBeadsMesh, _xoverSlabsMesh,
-          ad.beadStartIdx, ad.beadCount,
-          posA, _clusterXoverCtrl, posB, ad.avgAx,
-          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
-        )
-      }
-      dirty = true
-    }
-    if (dirty) {
-      _xoverBeadsMesh.instanceMatrix.needsUpdate = true
-      _xoverSlabsMesh.instanceMatrix.needsUpdate = true
-    }
-    _syncExtraBaseConnectors()
+    // Visibility is presentation state, not geometry. The former zero-scale /
+    // rebuild path destroyed slab orientation and snapped simulated insert beads
+    // back onto a native Bezier when they became visible again.
+    _applyXoverClusterAlpha()
   }
 
-  /** Hide (zero-scale) or restore (reposition) extra-base beads/slabs for every
-   *  crossover touching a reference strand. Mixed-ownership records are still
-   *  comparison geometry and must not leak onto the Simulate tab. */
+  /** Apply alpha visibility to extra bases touching a reference strand. */
   function _applyReferenceXoverVisibility() {
     if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
-    const design = storeRef.getState().currentDesign
-    const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
-    if (!refIds.size) return
-    const state = storeRef.getState()
-    const hidden = state.showReferenceGeometry === false || state.simulationTabActive === true
-    const m4 = new THREE.Matrix4()
-    const pos = new THREE.Vector3()
-    const qid = new THREE.Quaternion()
-    const zero = new THREE.Vector3(0, 0, 0)
-    let dirty = false
-    for (const ad of _xoverArcData) {
-      if (!(refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id))) continue
-      if (_hiddenCrossoverIds.has(ad.xoId)) continue   // already hidden by a cluster toggle
-      if (hidden) {
-        for (let i = 0; i < ad.beadCount; i++) {
-          const bi = ad.beadStartIdx + i
-          _xoverBeadsMesh.getMatrixAt(bi, m4); pos.setFromMatrixPosition(m4)
-          _xoverBeadsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
-          _xoverSlabsMesh.getMatrixAt(bi, m4); pos.setFromMatrixPosition(m4)
-          _xoverSlabsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
-        }
-        dirty = true
-      } else {
-        const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
-        const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
-        if (!posA || !posB) continue
-        arcControlPoint(posA, posB, ad.nucA, ad.nucB, _clusterXoverCtrl)
-        updateExtraBaseInstances(
-          _xoverBeadsMesh, _xoverSlabsMesh,
-          ad.beadStartIdx, ad.beadCount,
-          posA, _clusterXoverCtrl, posB, ad.avgAx,
-          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
-        )
-        dirty = true
-      }
-    }
-    if (dirty) {
-      _xoverBeadsMesh.instanceMatrix.needsUpdate = true
-      _xoverSlabsMesh.instanceMatrix.needsUpdate = true
-    }
-    _syncExtraBaseConnectors()
+    _applyXoverClusterAlpha()
   }
 
   const _clusterXoverPosA = new THREE.Vector3()
@@ -848,15 +779,27 @@ export function initDesignRenderer(scene, storeRef) {
       }
     }
 
-    // 2. Check that no nuc flips is_five_prime or is_three_prime.
+    // 2. Check that no nuc flips a mesh-membership field. Flexible-segment
+    //    classification removes/adds a nucleotide from the rigid meshes, so it
+    //    must use the structural overlay path rather than a matrix-only patch.
     //    is_five_prime: sphere↔cube mesh-type change needs full rebuild.
     //    is_three_prime: a new strand terminal means cone topology changed
     //    (a nick was placed), requiring a full rebuild to re-sort strands
     //    and rebuild cross-helix connections.
     const helixSet = new Set(realIds)
+    const previousByKey = new Map((prevGeo ?? [])
+      .filter(n => helixSet.has(n.helix_id))
+      .map(n => [`${n.helix_id}:${n.bp_index}:${n.direction}`, n]))
     for (const nuc of newGeo) {
       if (!helixSet.has(nuc.helix_id)) continue
       const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+      const previous = previousByKey.get(key)
+      if (!!previous?.is_flexible_segment !== !!nuc.is_flexible_segment) {
+        markOperationTiming('partial-patch-rejected', {
+          reason: 'flexible-mesh-membership-changed', helixId: nuc.helix_id,
+        })
+        return false
+      }
       const existing = _helixCtrl.lookupEntry(key)
       if (existing && existing.nuc.is_five_prime !== !!nuc.is_five_prime) {
         markOperationTiming('partial-patch-rejected', { reason: 'five-prime-mesh-changed', helixId: nuc.helix_id })
@@ -878,14 +821,6 @@ export function initDesignRenderer(scene, storeRef) {
       _helixCtrl.applyColoring(newState.coloringMode, newState.currentDesign, customColors, loopSet)
     }
     return true
-  }
-
-  function _sameCrossoverTopology(a, b) {
-    const signature = (design) => JSON.stringify((design?.crossovers ?? []).map(x => [
-      x.id, x.half_a?.helix_id, x.half_a?.index, x.half_a?.strand,
-      x.half_b?.helix_id, x.half_b?.index, x.half_b?.strand, x.extra_bases,
-    ]))
-    return signature(a) === signature(b)
   }
 
   function _crossoverChangesAreLocal(a, b, changedHelixSet) {
@@ -917,7 +852,10 @@ export function initDesignRenderer(scene, storeRef) {
     const realIds = changedHelixIds.filter(id => !id.startsWith('__'))
     if (!realIds.length || realIds.length > 12) return false
     const realSet = new Set(realIds)
-    const sameCrossovers = _sameCrossoverTopology(prevState.currentDesign, newState.currentDesign)
+    const sameCrossovers = sameCrossoverTopology(prevState.currentDesign, newState.currentDesign)
+    // This overlay replaces helix meshes but not unfold_view's persistent arc
+    // group. Force-ligation edits therefore require the full rebuild path.
+    if (!sameForcedLigationTopology(prevState.currentDesign, newState.currentDesign)) return false
     // Full/bead representations retain the conservative original contract.
     // In cylinder LOD, crossover cones are not visible and whole-helix cylinder
     // instances can be suppressed safely, so local crossover/scaffold changes
@@ -1144,8 +1082,7 @@ export function initDesignRenderer(scene, storeRef) {
       if (p && n &&
           p.helices.length      === n.helices.length      &&
           p.strands.length      === n.strands.length      &&
-          p.crossovers.length   === n.crossovers.length   &&
-          p.crossovers.every((xo, i) => xo.extra_bases === n.crossovers[i]?.extra_bases) &&
+          sameConnectionTopology(p, n) &&
           p.deformations.length === n.deformations.length &&
           p.extensions.length   === n.extensions.length   &&
           p.overhangs.length    === n.overhangs.length) {
@@ -1246,6 +1183,21 @@ export function initDesignRenderer(scene, storeRef) {
   }
 
   return {
+    applyViewVolumeLayers(layers = []) {
+      if (!_helixCtrl?.applyRepOverrides) return
+      const { columnRep } = resolveRepOverrides(storeRef.getState().currentDesign)
+      // A spatial volume overrides the global/coarse representation in its
+      // footprint. Independent heavy layers are retained in the event payload;
+      // the CG visibility channel only needs to know whether to show full/beads,
+      // cylinders, or yield the column to a heavy overlay.
+      for (const layer of layers) {
+        const rep = layer.representation === 'beads' ? 'full' : layer.representation
+        for (const key of layer.keys ?? []) columnRep.set(key, rep)
+      }
+      _helixCtrl.setDetailLevel(_detailLevel)
+      _helixCtrl.applyRepOverrides(columnRep)
+      _applyXoverClusterAlpha()
+    },
     setMode(mode) {
       _currentMode = mode
       _helixCtrl?.setMode(mode)
@@ -1261,6 +1213,16 @@ export function initDesignRenderer(scene, storeRef) {
 
     getSlabEntries() {
       return _helixCtrl?.slabEntries ?? []
+    },
+
+    captureClusterBase(helixIds, domainIds = null) {
+      return _helixCtrl?.captureClusterBase?.(helixIds, domainIds)
+    },
+
+    applyClusterTransform(helixIds, center, position, rotation, domainIds = null) {
+      return _helixCtrl?.applyClusterTransform?.(
+        helixIds, center, position, rotation, domainIds, { forceAxes: true },
+      )
     },
 
     residueTransformInfo(target) {

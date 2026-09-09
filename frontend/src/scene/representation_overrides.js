@@ -70,6 +70,15 @@ export function repColumnsByRep(design) {
   return { vdw, ballstick, stick, surface }
 }
 
+/** Resolve last-wins representation overrides for independently rendered proteins. */
+export function proteinRepsByAttachment(design) {
+  const out = new Map()
+  for (const ov of design?.representation_overrides ?? []) {
+    for (const id of ov.protein_attachment_ids ?? []) out.set(id, ov.representation ?? 'full')
+  }
+  return out
+}
+
 // ── Selection → segments (UI helpers) ────────────────────────────────────────
 
 /** Column footprint of the given strands' domains → segments. */
@@ -108,7 +117,7 @@ export function domainsToSegments(design, domainRefs) {
  * @param {()=>void} o.dismiss                 dismiss the owning menu before applying
  * @returns {HTMLElement} the menu item (caller appends it, usually after a separator)
  */
-export function createRepresentationMenuItem({ apply, dismiss }) {
+export function createRepresentationMenuItem({ apply, dismiss, includePartReps = false }) {
   const item = document.createElement('div')
   item.style.cssText = 'padding:6px 14px;color:#eef;cursor:pointer;display:flex;' +
                        'justify-content:space-between;align-items:center;gap:14px'
@@ -130,7 +139,9 @@ export function createRepresentationMenuItem({ apply, dismiss }) {
     fly.appendChild(o)
   }
   _opt('Full detail', 'full')
+  if (includePartReps) _opt('Beads', 'beads')
   _opt('Cylinders', 'cylinders')
+  if (includePartReps) _opt('Hull Prism', 'hull-prism')
   _opt('Surface', 'surface')
   _opt('VDW', 'vdw')
   _opt('Ball & Stick', 'ballstick')
@@ -262,5 +273,21 @@ export function editOverridesForSegments(overrides, segments, rep) {
     }
   }
 
-  return out.filter(ov => ov.segments?.length)
+  return out.filter(ov => ov.segments?.length || ov.protein_attachment_ids?.length)
+}
+
+/** Assign/reset one or more protein attachments without changing DNA overrides. */
+export function editOverridesForProteins(overrides, attachmentIds, rep) {
+  const ids = new Set(attachmentIds ?? [])
+  if (!ids.size) return (overrides ?? []).map(o => ({ ...o }))
+  const out = (overrides ?? []).map(ov => ({
+    ...ov,
+    protein_attachment_ids: (ov.protein_attachment_ids ?? []).filter(id => !ids.has(id)),
+  }))
+  if (rep) {
+    const target = out.find(ov => ov.representation === rep)
+    if (target) target.protein_attachment_ids = [...(target.protein_attachment_ids ?? []), ...ids]
+    else out.push({ name: '', representation: rep, segments: [], protein_attachment_ids: [...ids] })
+  }
+  return out.filter(ov => ov.segments?.length || ov.protein_attachment_ids?.length)
 }

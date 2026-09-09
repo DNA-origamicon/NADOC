@@ -49,4 +49,22 @@ describe('parseOxdnaTrajectoryBin', () => {
     new DataView(keyDrift).setUint32(12, 3, true)
     expect(parseOxdnaTrajectoryBin(keyDrift)).toBeNull()
   })
+
+  it('accepts metadata-only frames for a graphene control with zero nucleotides', () => {
+    const header = new TextEncoder().encode(JSON.stringify({
+      keys: [], stages: [{ name: 'production', n_frames: 3 }], markers: [],
+    }))
+    let size = 20 + header.byteLength
+    size += (4 - (size % 4)) % 4
+    const buf = new ArrayBuffer(size)
+    const dv = new DataView(buf)
+    dv.setUint32(0, 0x4E54524A, true); dv.setUint32(4, 1, true)
+    dv.setUint32(8, 3, true); dv.setUint32(12, 0, true)
+    dv.setUint32(16, header.byteLength, true)
+    new Uint8Array(buf, 20, header.byteLength).set(header)
+    const out = parseOxdnaTrajectoryBin(buf)
+    expect(out).toMatchObject({ ready: true, n_frames: 3, n_nucleotides: 0 })
+    expect(out.frames).toHaveLength(3)
+    expect(out.frames.every(frame => frame.length === 0)).toBe(true)
+  })
 })

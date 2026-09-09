@@ -78,11 +78,18 @@ describe('structural partial reconciliation', () => {
     expect(body).toContain("reason: 'helix-axis-changed'")
   })
 
+  it('rejects matrix-only patching when flexible marks change mesh membership', () => {
+    const body = functionBody(SRC, '_tryPatchInPlace')
+    expect(body).toContain('is_flexible_segment')
+    expect(body).toContain("reason: 'flexible-mesh-membership-changed'")
+  })
+
   it('bounds the overlay fast path and preserves a full-rebuild fallback', () => {
     const body = functionBody(SRC, '_tryStructuralOverlay')
     expect(body).not.toBeNull()
     expect(body).toContain('realIds.length > 12')
-    expect(body).toContain('_sameCrossoverTopology')
+    expect(body).toContain('sameCrossoverTopology')
+    expect(body).toContain('sameForcedLigationTopology')
     expect(body).toContain('currentDesign?.deformations')
     expect(body).toContain('_detailLevel === 1')
     expect(body).toContain('_detailLevel === 2')
@@ -180,11 +187,14 @@ describe('crossover extra-base cluster display', () => {
     expect(body).toContain('clusterAlphaForNuc')
   })
 
-  it('installs the alpha channel LAZILY', () => {
-    // installInstanceAlpha flips the material to transparent, which costs render
-    // ordering and fill rate on every design — even ones with no faded cluster.
+  it('uses alpha visibility without rewriting live extra-base poses', () => {
+    // Hidden/reference toggles are presentation state. Rebuilding matrices here
+    // used to snap simulated insert beads back onto their native Bezier.
     const body = functionBody(SRC, '_applyXoverClusterAlpha')
-    expect(body).toMatch(/if\s*\(!_clusterAlphaKeys\.size\s*&&\s*!_xoverBeadsMesh\._instanceAlpha\)\s*return/)
+    expect(body).toContain('const hidden =')
+    expect(body).toContain('hidden || !repVisible(ad) ? 0')
+    expect(functionBody(SRC, '_applyXoverVisibility')).not.toContain('setMatrixAt')
+    expect(functionBody(SRC, '_applyReferenceXoverVisibility')).not.toContain('setMatrixAt')
   })
 
   it('fades the connectors too, not just the beads and slabs', () => {

@@ -1,0 +1,18 @@
+{
+  "baseline": {},
+  "margin4": {
+    "margin": "4"
+  },
+  "margin6": {
+    "margin": "6"
+  },
+  "offload": {
+    "GPUresident": "off"
+  },
+  "relax2fs": {
+    "timestep": "2"
+  },
+  "enm_control": {
+    "extraBondsFile": "/home/joshua/NADOC/workspace/md_jobs/7aa73d7afe93/package/small_plate_namd_solvated/small_plate_k0.1.enm.extra"
+  }
+}

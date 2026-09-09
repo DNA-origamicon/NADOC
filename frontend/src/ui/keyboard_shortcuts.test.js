@@ -52,7 +52,7 @@ function makeDeps(overrides = {}) {
     slicePlane: { isVisible: vi.fn(() => false), hide: vi.fn() },
     expandedSpacing: { toggle: vi.fn() },
     debugOverlay: { toggle: vi.fn(), isActive: vi.fn(() => true) },
-    measurementTool: { isActive: vi.fn(() => false), clear: vi.fn(), show: vi.fn() },
+    dimensionsTool: { isActive: vi.fn(() => false), clear: vi.fn(), open: vi.fn(), close: vi.fn() },
     clusterClipboard: {
       copy: vi.fn(), paste: vi.fn(), cancel: vi.fn(), isActive: vi.fn(() => false),
     },
@@ -190,6 +190,22 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('base')
   })
 
+  it("Q/E keep cycling while Move/Rotate is armed empty, then stop after selection", async () => {
+    const d = makeDeps()
+    d.store.setState({ translateRotateActive: true, selection: { items: [] } })
+    initKeyboardShortcuts(d)
+    await press('e', { tag: 'CANVAS' })
+    await press('q', { tag: 'CANVAS' })
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenNthCalledWith(1, 'strand')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenNthCalledWith(2, 'base')
+
+    d.selectionManager.setSelectionLevel.mockClear()
+    d.store.setState({ selection: { items: [{ kind: 'cluster', id: 'c1' }] } })
+    await press('e', { tag: 'CANVAS' })
+    await press('q', { tag: 'CANVAS' })
+    expect(d.selectionManager.setSelectionLevel).not.toHaveBeenCalled()
+  })
+
   it("'v' captures a camera pose named by count", async () => {
     const d = makeDeps()
     d.store.setState({ currentDesign: { helices: [{}], camera_poses: [{}, {}] } })
@@ -242,28 +258,19 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(d.frameSelectionOrAll).toHaveBeenCalledTimes(1)
   })
 
-  it("'m' shows measurement when exactly 2 ctrl-beads are picked; clears when already active", async () => {
+  it("'d' opens the Dimensions card", async () => {
     const d = makeDeps()
-    d.selectionManager.getCtrlBeads.mockReturnValue([{}, {}])
     initKeyboardShortcuts(d)
-    await press('m', { shift: true })
-    expect(d.measurementTool.show).toHaveBeenCalled()
-
-    // Already active → clears instead.
-    d.measurementTool.isActive.mockReturnValue(true)
-    d.measurementTool.show.mockClear()
-    await press('m', { shift: true })
-    expect(d.measurementTool.clear).toHaveBeenCalled()
-    expect(d.measurementTool.show).not.toHaveBeenCalled()
+    await press('d')
+    expect(d.dimensionsTool.open).toHaveBeenCalledTimes(1)
   })
 
-  it("'m' is suppressed in unfold view (shows mode-indicator message)", async () => {
+  it("'d' is suppressed in unfold view (shows mode-indicator message)", async () => {
     const d = makeDeps()
     d.store.setState({ unfoldActive: true })
-    d.selectionManager.getCtrlBeads.mockReturnValue([{}, {}])
     initKeyboardShortcuts(d)
-    await press('m', { shift: true })
-    expect(d.measurementTool.show).not.toHaveBeenCalled()
+    await press('d')
+    expect(d.dimensionsTool.open).not.toHaveBeenCalled()
     expect(document.getElementById('mode-indicator').textContent).toMatch(/not available/i)
   })
 
@@ -278,7 +285,19 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(d.api.forcedLigation).not.toHaveBeenCalled()
   })
 
-  it("'x' rejects an invalid pair (same polarity / same strand) without calling the api", async () => {
+  it("'i' force-ligates a selected 5′/3′ pair in backend argument order", async () => {
+    const d = makeDeps()
+    d.selectionManager.getSelectedEndBeads.mockReturnValue([
+      { nuc: { strand_id: 'five-strand', is_five_prime: true } },
+      { nuc: { strand_id: 'three-strand', is_three_prime: true } },
+    ])
+    initKeyboardShortcuts(d)
+    await press('i')
+    expect(d.selectionManager.clearEndSelection).toHaveBeenCalledTimes(1)
+    expect(d.api.forcedLigation).toHaveBeenCalledWith('three-strand', 'five-strand')
+  })
+
+  it("'i' rejects an invalid pair (same polarity / same strand) without calling the api", async () => {
     const d = makeDeps()
     // Two 5′ ends → not a 3′/5′ pair.
     d.selectionManager.getSelectedEndBeads.mockReturnValue([
@@ -286,16 +305,16 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
       { nuc: { strand_id: 'B', is_five_prime: true } },
     ])
     initKeyboardShortcuts(d)
-    await press('x')
+    await press('i')
     expect(d.api.forcedLigation).not.toHaveBeenCalled()
     expect(d.selectionManager.clearEndSelection).not.toHaveBeenCalled()
   })
 
-  it("'x' is a no-op unless exactly 2 ends are selected, and never in assembly mode", async () => {
+  it("'i' is a no-op unless exactly 2 ends are selected, and never in assembly mode", async () => {
     const d = makeDeps()
     d.selectionManager.getSelectedEndBeads.mockReturnValue([{ nuc: { strand_id: 'A', is_five_prime: true } }])
     initKeyboardShortcuts(d)
-    await press('x')
+    await press('i')
     expect(d.api.forcedLigation).not.toHaveBeenCalled()
 
     // Even a valid pair is ignored while an assembly is active.
@@ -304,7 +323,7 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
       { nuc: { strand_id: 'A', is_five_prime: true } },
       { nuc: { strand_id: 'B', is_three_prime: true } },
     ])
-    await press('x')
+    await press('i')
     expect(d.api.forcedLigation).not.toHaveBeenCalled()
   })
 
@@ -639,7 +658,17 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     await press('Escape')
     expect(d.ooClose).toHaveBeenCalled()
 
-    // ctrl-beads present → clearCtrlBeads (after measurement clear)
+    // Active Dimensions closes before the ordinary ctrl-bead cleanup path.
+    clearShortcuts()
+    d = makeDeps()
+    d.dimensionsTool.isActive.mockReturnValue(true)
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.dimensionsTool.close).toHaveBeenCalled()
+    expect(d.selectionManager.clearCtrlBeads).toHaveBeenCalled()
+    expect(d.cancelTranslateRotateTool).not.toHaveBeenCalled()
+
+    // ctrl-beads present → clearCtrlBeads
     clearShortcuts()
     d = makeDeps()
     d.selectionManager.getCtrlBeads.mockReturnValue([{}])

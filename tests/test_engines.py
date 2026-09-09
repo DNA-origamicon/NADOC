@@ -205,6 +205,10 @@ def _patch_all(
     monkeypatch.setattr(engines, "find_oxdna", lambda: oxdna)
     monkeypatch.setattr(engines, "find_dnanalysis", lambda: dnanalysis)
     monkeypatch.setattr(
+        engines, "oxpy_live_info",
+        lambda: {"available": True, "path": "/o/oxpy/__init__.py", "reason": "ready"},
+    )
+    monkeypatch.setattr(
         engines, "find_namd", lambda: namd or (_ for _ in ()).throw(RuntimeError())
     )
     monkeypatch.setattr(
@@ -240,6 +244,24 @@ def test_status_all_installed_sections_ready(monkeypatch):
     assert st["sections"]["md"]["ready"] is True
     assert st["engines"]["oxdna"]["installed"] is True
     assert st["engines"]["oxdna"]["install"] is None  # no plan when installed
+    assert st["sections"]["oxdna"]["live_ready"] is True
+    assert st["engines"]["oxpy"]["installed"] is True
+
+
+def test_status_missing_oxpy_reports_live_not_ready_without_blocking_batch(monkeypatch):
+    _patch_all(
+        monkeypatch, oxdna="/o/oxDNA", anm=None, namd="/n/namd3", gmx="/g/gmx",
+        psfgen="/n/psfgen", dnanalysis="/o/DNAnalysis",
+    )
+    monkeypatch.setattr(
+        engines, "oxpy_live_info",
+        lambda: {"available": False, "path": None, "reason": "oxpy not built"},
+    )
+    st = engines.engines_status()
+    assert st["sections"]["oxdna"]["ready"] is True
+    assert st["sections"]["oxdna"]["live_ready"] is False
+    assert st["sections"]["oxdna"]["live_missing"] == ["oxpy"]
+    assert st["engines"]["oxpy"]["install"] is not None
 
 
 def test_status_missing_oxdna_gates_oxdna_section(monkeypatch):

@@ -16,6 +16,12 @@ From the `NADOC` folder:
 Then open **http://localhost:5173** in your browser. Press **Ctrl-C** in the
 terminal to stop.
 
+Backend Python edits reload automatically when using `./start.sh`, including
+Tailscale mode. Only `backend/` and `scripts/` are watched; workspace saves do not
+trigger restarts. Open designs recover through the session cache. Use
+`NADOC_RELOAD=0 ./start.sh` to disable backend reload. Frontend edits continue to
+reload through Vite.
+
 ## Use NADOC across the two Tailscale computers
 
 Run this on each computer whose workspace should be available:

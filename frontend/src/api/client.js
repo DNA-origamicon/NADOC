@@ -73,6 +73,15 @@ function _isStaleDesignResponse(json) {
   return false
 }
 
+/** Advance the stale-response watermark for a lightweight metadata response. */
+function _acceptMetadataRevision(json) {
+  const rev = json?.revision
+  if (typeof rev !== 'number') return true
+  if (rev < _lastAppliedRevision) return false
+  _lastAppliedRevision = rev
+  return true
+}
+
 /** Reset the stale-response watermark. MUST be called when the backend restarts
  *  (its per-session revision resets low, so post-restart responses would
  *  otherwise be dropped as "stale"). Called from the restart-recovery handler. */
@@ -364,6 +373,8 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     path === '/design/load' || path === '/design/import' ||
     path === '/design/bundle' || path === '/design/bundle-segment' ||
     path === '/design/bundle-continuation' || path === '/design/bundle-deformed-continuation' ||
+    path === '/design/flexible-segment' || path === '/design/flexible-segment/batch' ||
+    path.startsWith('/design/flexible-segment/') ||
     path === '/design/overhang/extrude' || /\/assembly\/instances\/[^/]+\/overhang\/extrude$/.test(path)
   )
   // An optimistic UI may start the trace immediately before calling the API so
@@ -371,7 +382,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
   // trace instead of replacing it at fetch time.
   const activeTrace = activeOperationTiming()
   const operationTrace = isTimedOperation
-    ? activeTrace?.details?.optimisticPreview
+    ? (activeTrace?.details?.optimisticPreview || activeTrace?.details?.requestPath === path)
       ? activeTrace
       : beginOperationTiming(`${method} ${path}`, { body })
     : null
@@ -425,7 +436,9 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     r = await fetch(`${BASE}${path}`, opts)
     tNetwork = performance.now() - t0
     markOperationTiming('response-received', {
-      serverTiming: r.headers?.get?.('Server-Timing') ?? null, status: r.status,
+      serverTiming: r.headers?.get?.('Server-Timing') ?? null,
+      contentLength: r.headers?.get?.('Content-Length') ?? null,
+      status: r.status,
     }, operationTrace)
     notifyRequestSuccess()   // any HTTP response means the backend is reachable
     json = await r.json().catch(() => null)
@@ -904,6 +917,7 @@ export function _syncFromAssemblyResponse(json) {
 export async function getDesign({ metadataOnly = false } = {}) {
   const json = await _request('GET', '/design')
   if (!json) return null
+  if (_isStaleDesignResponse(json)) return json
   if (metadataOnly) {
     // A sibling tab told us its mutation cannot affect geometry/topology-derived
     // renderer state (for example, an overhang label rename).  Keep the existing
@@ -1026,6 +1040,13 @@ export async function saveRepresentationOverrides(overrides) {
 export async function clearRepresentationOverrides() {
   const json = await _request('DELETE', '/design/representation-overrides')
   return _syncFromDesignResponse(json)
+}
+
+/** Replace display-only spatial view volumes persisted with the part. */
+export async function saveViewVolumes(volumes) {
+  const json = await _request('PUT', '/design/view-volumes', { volumes }, { suppressBusy: true })
+  if (!json || !_acceptMetadataRevision(json)) return null
+  return json
 }
 
 /** Persist display-only nucleotide/cluster visibility in the .nadoc file. */
@@ -1803,7 +1824,8 @@ export async function getDeformDebug() {
  * straightHelixAxes without touching currentGeometry.
  */
 export async function getStraightGeometry() {
-  const json = await _request('GET', '/design/geometry?apply_deformations=false')
+  const base = '/design/geometry?apply_deformations=false'
+  const json = await _request('GET', base + geometryQuerySuffix(true))
   if (!json) return null
   const nucleotides = json.nucleotides ?? json
   const helixAxesMap = {}
@@ -1978,6 +2000,74 @@ export async function patchProteinAttachment(attachmentId, patch) {
 /** Detach a protein. */
 export async function deleteProteinAttachment(attachmentId) {
   const json = await _request('DELETE', `/design/protein/attachments/${attachmentId}`)
+  return _syncFromDesignResponse(json)
+}
+
+/** Create, resize/move, and delete display-layer nanoparticles. */
+export async function createGoldNanosphere(diameterNm) {
+  const json = await _request('POST', '/design/nanoparticles/gold-nanospheres', { diameter_nm: diameterNm })
+  if (json) _syncFromDesignResponse(json)
+  return json
+}
+
+export async function patchNanoparticle(id, patch) {
+  const json = await _request('PATCH', `/design/nanoparticles/${id}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteNanoparticle(id) {
+  const json = await _request('DELETE', `/design/nanoparticles/${id}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function estimateNanoparticleConjugation(id, scheme) {
+  return _request('POST', `/design/nanoparticles/${id}/conjugation/estimate`, { scheme })
+}
+
+export async function getNanoparticleConjugation(id) {
+  return _request('GET', `/design/nanoparticles/${id}/conjugation`)
+}
+
+export async function putNanoparticleConjugation(id, spec) {
+  const json = await _request('PUT', `/design/nanoparticles/${id}/conjugation`, spec)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteNanoparticleConjugation(id) {
+  const json = await _request('DELETE', `/design/nanoparticles/${id}/conjugation`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function validateNanoparticleConjugation(id) {
+  return _request('GET', `/design/nanoparticles/${id}/conjugation/validate`)
+}
+
+export async function bindNanoparticleStrand(id, strandId, overhangId) {
+  const json = await _request('POST', `/design/nanoparticles/${id}/strands/${strandId}/bind`, { overhang_id: overhangId })
+  return _syncFromDesignResponse(json)
+}
+
+export async function getNanoparticleConnectionVersions(id) {
+  return _request('GET', `/design/nanoparticles/${id}/connection-versions`)
+}
+
+export async function createNanoparticleConnectionVersion(id, spec) {
+  const json = await _request('POST', `/design/nanoparticles/${id}/connection-versions`, spec)
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchNanoparticleConnectionVersion(id, versionId, patch) {
+  const json = await _request('PATCH', `/design/nanoparticles/${id}/connection-versions/${versionId}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteNanoparticleConnectionVersion(id, versionId) {
+  const json = await _request('DELETE', `/design/nanoparticles/${id}/connection-versions/${versionId}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function relaxNanoparticleConnectionVersions(id) {
+  const json = await _request('POST', `/design/nanoparticles/${id}/connection-versions/relax`, {})
   return _syncFromDesignResponse(json)
 }
 
@@ -2517,8 +2607,8 @@ async function _oxdnaJSONRequest(method, path, body = undefined, { signal } = {}
   return json
 }
 
-async function _backgroundJobList(path) {
-  await whenOperationIdle()
+async function _backgroundJobList(path, { waitForIdle = true } = {}) {
+  if (waitForIdle) await whenOperationIdle()
   return _oxdnaJSON('GET', path)
 }
 
@@ -2691,7 +2781,7 @@ export const getLammpsDeviation = (id, opts) => {
 export const estimateOxdnaDisk   = (body)        => _oxdnaJSON('POST', '/oxdna/jobs/estimate-disk', body)
 /** Forecast free-disk-after for an oxDNA production/run stage ({steps}). */
 export const estimateOxdnaRunDisk = (id, body)   => _oxdnaJSON('POST', `/oxdna/jobs/${id}/estimate-run-disk`, body)
-export const listOxdnaJobs       = ()            => _backgroundJobList('/oxdna/jobs')
+export const listOxdnaJobs       = (opts)        => _backgroundJobList('/oxdna/jobs', opts)
 export const getOxdnaJob         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}`)
 export const getOxdnaErrorLog    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/error-log`)
 export const getOxdnaProgress    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/progress`)
@@ -3099,7 +3189,7 @@ export const preflightMdVram     = (body)        => _oxdnaJSON('POST', '/md/jobs
 /** Forecast free-disk-after for a NAMD production stage (same body as appendMdProduction). */
 export const estimateMdProductionDisk = (id, body) => _oxdnaJSON('POST', `/md/jobs/${id}/estimate-production-disk`, body)
 /** List NAMD/MD jobs (for the trajectory-keyframe dropdown). */
-export const listMdJobs          = ()            => _backgroundJobList('/md/jobs')
+export const listMdJobs          = (opts)        => _backgroundJobList('/md/jobs', opts)
 /** Start moving an MD job's folder to <destRoot>/<job_id> (background; poll status). */
 export const archiveMdJob        = (id, destRoot) => _oxdnaJSON('POST', `/md/jobs/${id}/archive`, { dest_root: destRoot })
 export const unarchiveMdJob      = (id)          => _oxdnaJSON('POST', `/md/jobs/${id}/unarchive`)
@@ -3271,6 +3361,10 @@ export const getMdSolventMeta = (id) =>
 export const startMdMetrics      = (id, body)    => _oxdnaJSON('POST', `/md/jobs/${id}/metrics/start`, body)
 /** Poll an MD metric run → {state, progress, eta_s, frames_done, frames_total, result?}. */
 export const getMdMetricsRun     = (runId)       => _oxdnaJSON('GET',  `/md/metrics/${runId}`)
+/** Analyze a voltage-driven production trajectory: current, conductance, aperture
+ * crossings and pore occupancy. The backend caches the JSON beside the package. */
+export const getMdIonTransportAnalysis = (id) =>
+  _oxdnaJSON('GET', `/md/ion-transport/${id}/analysis`)
 
 // NAMD MD job lifecycle (routes_md.py).  All go through _oxdnaJSON so the tab's
 // X-NADOC-Doc header is ALWAYS stamped — the staleness/out-of-date checks read the

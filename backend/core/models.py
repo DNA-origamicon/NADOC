@@ -319,6 +319,11 @@ class OverhangSpec(BaseModel):
     # no per-domain color field is needed.
     parent_overhang_id: Optional[str] = None
 
+    # Internal overhang endpoints let non-origami ssDNA (currently AuNP
+    # surface handles) participate in the canonical Duplex model without
+    # appearing as ordinary user-authored overhangs in pickers/managers.
+    auxiliary_endpoint: bool = False
+
     # Display-only "Strand Animation" setup captured from the right-sidebar panel.
     # Permissive dict mirroring frontend/src/strand-anim/params.js keys (mode, form,
     # meltBp, thetaDeg, invaderSplayDeg, exitAngleDeg, armPull, unwindScale, dispGap,
@@ -1234,9 +1239,47 @@ class RepresentationOverride(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     representation: Literal[
-        "full", "cylinders", "surface", "vdw", "ballstick", "stick"
+        "full", "beads", "cylinders", "hull-prism", "surface", "vdw", "ballstick", "stick"
     ] = "full"
     segments: List[RepresentationSegment] = Field(default_factory=list)
+    protein_attachment_ids: List[str] = Field(default_factory=list)
+
+
+class ViewVolume(BaseModel):
+    """Oriented, display-only spatial representation region.
+
+    Bounds store the box centre and local dimensions in design/world nanometres;
+    rotation is a normalized Three.js quaternion. Volumes deliberately remain
+    independent records: intersecting volumes contribute independent render
+    layers instead of using the last-wins rule of topological overrides.
+    """
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "View Volume"
+    shape: Literal["box", "hexagonal"] = "box"
+    min_corner: tuple[float, float, float]
+    max_corner: tuple[float, float, float]
+    rotation: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+    representation: Literal[
+        "full", "beads", "cylinders", "surface", "vdw", "ballstick", "stick"
+    ] = "full"
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
+    outline_visible: bool = True
+    enabled: bool = True
+
+    @field_validator("rotation")
+    @classmethod
+    def _rotation_is_unit_quaternion(cls, value: tuple[float, float, float, float]):
+        norm = sum(component * component for component in value) ** 0.5
+        if not 0.999 <= norm <= 1.001:
+            raise ValueError("rotation must be a normalized quaternion")
+        return value
+
+    @model_validator(mode="after")
+    def _ordered_nonzero_bounds(self) -> "ViewVolume":
+        if any(lo >= hi for lo, hi in zip(self.min_corner, self.max_corner)):
+            raise ValueError("min_corner must be strictly below max_corner on every axis")
+        return self
 
 
 # ── Deformation models (geometric layer, Phase 6) ─────────────────────────────
@@ -1261,11 +1304,10 @@ class BendParams(BaseModel):
       θ_period = κ × length_bp             — angle per polymer period
     Polymer ring closure in N copies ⇔ θ_period = 360°/N.
 
-    Storing κ instead of a window-spanning angle makes the per-helix rotation
-    between near and far_next equal to κ × L for every helix in a uniform-length
-    bundle, regardless of bp-stagger. Combined with auto-extension of the bend
-    region (see ``_effective_bend_window``), this eliminates Kabsch averaging
-    artifacts in periodic polymerization.
+    Storing κ instead of a window-spanning angle lets the editor derive both
+    angle and radius. For polymer-circle bends, the editor accounts for how
+    each staggered periodic seam overlaps the explicitly selected bend window;
+    helices outside that window intentionally accumulate less rotation.
     """
 
     kind: Literal["bend"] = "bend"
@@ -1273,6 +1315,13 @@ class BendParams(BaseModel):
         0.0  # per-bp curvature; positive = bend toward +direction
     )
     direction_deg: float = 0.0  # 0 = +X in the bundle cross-section plane
+    # Persisted bend-editor intent. Non-null means "Curve to make polymer
+    # circle" is enabled and this many copies should close one revolution.
+    # Geometry remains canonical in curvature_deg_per_bp so legacy consumers
+    # and files continue to work unchanged.
+    polymer_circle_count: Optional[int] = Field(
+        default=None, ge=2, exclude_if=lambda value: value is None
+    )
 
 
 class DeformationOp(BaseModel):
@@ -1323,13 +1372,6 @@ class NucleotideTransform(BaseModel):
     rotation: List[float] = Field(
         default_factory=lambda: [0.0, 0.0, 0.0, 1.0], min_length=4, max_length=4
     )
-    # Full-representation source slab pose. Atomistic consumers ignore these;
-    # the CG renderer uses them to preserve the exact bead↔slab arrangement.
-    display_slab_offset: Optional[List[float]] = Field(None, min_length=3, max_length=3)
-    display_slab_rotation: Optional[List[float]] = Field(
-        None, min_length=4, max_length=4
-    )
-
     @model_validator(mode="after")
     def _validate_target_and_pose(self) -> "NucleotideTransform":
         if self.kind == "base":
@@ -1356,8 +1398,6 @@ class NucleotideTransform(BaseModel):
             *self.pivot,
             *self.translation,
             *self.rotation,
-            *(self.display_slab_offset or []),
-            *(self.display_slab_rotation or []),
         ]
         if not all(math.isfinite(float(v)) for v in values):
             raise ValueError("nucleotide transform values must be finite")
@@ -1367,15 +1407,6 @@ class NucleotideTransform(BaseModel):
                 "nucleotide transform rotation must be a non-zero quaternion"
             )
         self.rotation = [float(v) / norm for v in self.rotation]
-        if self.display_slab_rotation is not None:
-            slab_norm = math.sqrt(
-                sum(float(v) ** 2 for v in self.display_slab_rotation)
-            )
-            if slab_norm < 1e-12:
-                raise ValueError("display slab rotation must be a non-zero quaternion")
-            self.display_slab_rotation = [
-                float(v) / slab_norm for v in self.display_slab_rotation
-            ]
         return self
 
     def target_key(self) -> tuple:
@@ -1816,6 +1847,16 @@ SnapshotOpKind = Literal[
     "protein-attach-patch",
     "protein-attach-delete",
     "protein-conjugate",
+    "nanoparticle-create",
+    "nanoparticle-patch",
+    "nanoparticle-delete",
+    "nanoparticle-conjugate",
+    "nanoparticle-conjugation-delete",
+    "nanoparticle-strand-bind",
+    "nanoparticle-connection-version-create",
+    "nanoparticle-connection-version-patch",
+    "nanoparticle-connection-version-delete",
+    "nanoparticle-connection-relax",
     "assembly-create-group",
     "assembly-ungroup",
     "assembly-patch-group",
@@ -2107,6 +2148,10 @@ class AnimationKeyframe(BaseModel):
     # UI writes an explicit value on every new trajectory keyframe.
     trajectory_scope: Optional[Literal["lineage", "job"]] = None
     trajectory_stride: Optional[int] = None
+    # NAMD trajectory companions. These are authored per keyframe so a timeline can
+    # deliberately reveal/hide the ions and periodic cell between segments.
+    trajectory_show_ions: bool = False
+    trajectory_show_box: bool = False
 
     # Spin = camera orbits the model centroid for the full keyframe duration.
     # Independent of camera_pose_id: the saved pose supplies the framing/lens,
@@ -2747,6 +2792,82 @@ class VisibilityState(BaseModel):
     hidden_cluster_ids: List[str] = Field(default_factory=list)
 
 
+class Nanoparticle(BaseModel):
+    """A rigid, display-only nanoparticle placed in the design scene."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    kind: Literal["gold_nanosphere"] = "gold_nanosphere"
+    diameter_nm: float = Field(gt=0.0, le=1000.0)
+    pose: Mat4x4 = Field(default_factory=Mat4x4)
+    visible: bool = True
+
+
+class NanoparticleSurfaceStrand(BaseModel):
+    """One real DNA strand grafted to a nanoparticle surface.
+
+    ``site_local`` is a unit direction in nanoparticle-local coordinates.  The
+    strand itself remains a normal ``Design.strands`` entry on ``helix_id``;
+    this record only supplies ownership and the surface attachment chemistry.
+    Gold is intentionally not atomized, so ``sulfur_local_nm`` terminates at
+    the mathematical particle surface.
+    """
+
+    strand_id: str
+    helix_id: str
+    overhang_id: Optional[str] = None
+    site_local: Tuple[float, float, float]
+    sulfur_local_nm: Tuple[float, float, float]
+    # Exact terminal backbone bead in the nanoparticle's local frame.  This
+    # includes helix radius/phase and lets the browser use the identical joint
+    # as the committed backend constraint solver.
+    backbone_attachment_local_nm: Optional[Tuple[float, float, float]] = None
+    bound_overhang_id: Optional[str] = None
+
+
+class NanoparticleConjugation(BaseModel):
+    """A thiol-DNA surface functionalization owned by one nanoparticle."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    nanoparticle_id: str
+    scheme: Literal[
+        "direct_thiol", "alkyl_thiol", "peg_thiol", "peg_backfill"
+    ] = "direct_thiol"
+    sequence: str
+    attach_end: Literal["5p", "3p"] = "5p"
+    spacer_nm: float = Field(default=0.7, ge=0.0, le=100.0)
+    requested_count: int = Field(ge=1, le=10000)
+    estimated_capacity: int = Field(ge=1)
+    density_per_nm2: float = Field(gt=0.0)
+    distribution_seed: int = 1
+    model_version: str = "thiol-au-v1"
+    literature_key: str = "hurst-2006"
+    surface_strands: List[NanoparticleSurfaceStrand] = Field(default_factory=list)
+
+
+class NanoparticleConnectionVersion(BaseModel):
+    """Saved candidate joining one nanoparticle handle to one overhang."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""
+    created_at: float = Field(default_factory=time.time)
+    nanoparticle_id: str
+    strand_id: str
+    overhang_id: str
+    connection_type: Literal["direct"] = "direct"
+    direct_variant: Literal["end-to-root", "root-to-root"] = "end-to-root"
+    # Canonical 5'/3'-aware endpoint mapping used to create the Duplex. NP
+    # "root" is the thiol-bound surface end, so its canonical attach value
+    # depends on whether the conjugation chemistry is 5' or 3'.
+    nanoparticle_attach: Optional[Literal["root", "free_end"]] = None
+    target_attach: Literal["root", "free_end"] = "root"
+    applied: bool = False
+    relaxed: bool = False
+    residual_nm: Optional[float] = None
+    duplex_id: Optional[str] = None
+    constraint_root_nm: Optional[Tuple[float, float, float]] = None
+    constraint_radius_nm: Optional[float] = None
+
+
 class Design(BaseModel):
     """
     Top-level design object.  This is the ground truth for a DNA origami
@@ -2778,6 +2899,9 @@ class Design(BaseModel):
     flexible_connections: List[FlexibleConnection] = Field(default_factory=list)
     protein_assets: List[ProteinAsset] = Field(default_factory=list)
     protein_attachments: List[ProteinAttachment] = Field(default_factory=list)
+    nanoparticles: List[Nanoparticle] = Field(default_factory=list)
+    nanoparticle_conjugations: List[NanoparticleConjugation] = Field(default_factory=list)
+    nanoparticle_connection_versions: List[NanoparticleConnectionVersion] = Field(default_factory=list)
     tm_settings: TmSettings = Field(default_factory=TmSettings)
     extensions: List[StrandExtension] = Field(default_factory=list)
     staple_groups: List[StapleGroup] = Field(default_factory=list)
@@ -2786,6 +2910,7 @@ class Design(BaseModel):
     # selected strands or clusters so a focal region can show full detail against a
     # coarser background. Display-only; never affects topology or geometry.
     representation_overrides: List[RepresentationOverride] = Field(default_factory=list)
+    view_volumes: List[ViewVolume] = Field(default_factory=list)
     visibility_state: VisibilityState = Field(default_factory=VisibilityState)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
     crossovers: List[Crossover] = Field(default_factory=list)

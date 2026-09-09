@@ -14,6 +14,7 @@
  */
 
 import * as THREE from 'three'
+import { initSectionView } from './scene/section_view.js'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
 import { buildVRVisualizationSnapshot } from './scene/vr_visualization_snapshot.js'
@@ -35,7 +36,7 @@ import { initPrimitiveLibrary }      from './ui/primitive_library.js'
 import { axesVisibleForDesign }      from './ui/extrude_panel_logic.js'
 import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { quatToEulerDeg, extractJointAngleDeg } from './scene/rotation_math.js'
-import { initMeasurementTool }       from './scene/measurement_tool.js'
+import { initDimensionsTool }        from './scene/dimensions_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
 import { isNewPositioningOn, setNewPositioning } from './ui/new_positioning.js'
 import { initCreateSeam } from './scene/create_seam.js'
@@ -50,6 +51,7 @@ import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { nucleotideLocalBox, selectionBBox } from './scene/selection_bbox.js'
 import { navigationDesign, navigationGeometry } from './scene/reference_navigation.js'
 import { fitViewPose } from './scene/fit_view_math.js'
+import { screenPlaneCameraUp } from './scene/camera_basis.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
 import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
 import { makeSegmentCache } from './scene/multiscale_nav.js'
@@ -108,7 +110,10 @@ import { initBeltPathPanel }       from './ui/belt_path_panel.js'
 import { initStrandAnimPanel }     from './ui/strand_anim_panel.js'
 import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
 import { initProteinSubsystem }    from './scene/protein_subsystem.js'
+import { initNanoparticleSubsystem } from './scene/nanoparticle_subsystem.js'
+import { promptGoldNanosphereDiameter } from './ui/nanoparticle_dialog.js'
 import { initConjugateManager }    from './ui/conjugate_manager.js'
+import { initNanoparticleConjugateManager } from './ui/nanoparticle_conjugate_manager.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
 import { initCadnanoView }         from './scene/cadnano_view.js'
 import { initDeformView }          from './scene/deform_view.js'
@@ -131,7 +136,7 @@ import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initAtomSurfaceDisplay }  from './scene/atom_surface_display.js'
 import { installAtomisticLoadingProbe } from './scene/debug/atomistic_loading_probe.js'
 import { installSharedRendererDebug } from './scene/debug/shared_renderer_debug.js'
-import { overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
+import { overhangsToSegments, editOverridesForSegments, editOverridesForProteins, createRepresentationMenuItem } from './scene/representation_overrides.js'
 import { initSpreadsheet } from './ui/spreadsheet.js'
 import { initVisibilityController } from './scene/visibility_controller.js'
 import { initExportMenu }          from './ui/export_menu.js'
@@ -187,6 +192,7 @@ import {
 } from './scene/selection_model.js'
 import { isSelectionRefLive } from './scene/selection_ref.js'
 import { initForceCrossoverTool }   from './scene/force_crossover_tool.js'
+import { forceLigateSelectedEnds }  from './scene/force_ligation.js'
 import { initOverhangOrientationPanel } from './ui/overhang_orientation_panel.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
 import { showOpProgress, hideOpProgress }                from './ui/op_progress.js'
@@ -222,7 +228,7 @@ import { initMdPanel }    from './ui/md_panel.js'
 import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
-import { initMultiView } from './ui/multi_view.js'
+import { initMultiView, multiViewDesignCentroid } from './ui/multi_view.js'
 import { initMultiOverlay } from './ui/multi_overlay.js'
 import { applyComparisonRepresentation } from './ui/comparison_representations.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
@@ -260,6 +266,8 @@ import { initMdEngines }   from './ui/md_engines.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
 import { initForcesCard } from './ui/forces_card.js'
 import { initOxdnaFloorSetup } from './ui/oxdna_floor_setup.js'
+import { initGrapheneDisplayControls } from './ui/graphene_display_controls.js'
+import { initGrapheneNanoporeOverlay } from './scene/graphene_nanopore_overlay.js'
 import { initOxdnaSurfaceStrandsSetup } from './ui/oxdna_surface_strands_setup.js'
 import { initSurfaceStrandsOverlay } from './scene/surface_strands_overlay.js'
 import { captureNucleotidesFromChains } from './scene/surface_strands_math.js'
@@ -270,6 +278,7 @@ import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 import { initRightSidebarTabs } from './ui/right_sidebar_tabs.js'
+import { initViewVolumes } from './scene/view_volumes.js'
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
 // dynamically-added DOM (modals, context menus, panel rebuilds).
@@ -299,6 +308,9 @@ async function main() {
     setRenderFn, resetRenderFn,
   } = initScene(canvas)
 
+  initSectionView({ scene, camera, renderer, controls, addFrameCallback, removeFrameCallback, getRenderCamera,
+    getPartCentroid: fallback => multiViewDesignCentroid(store.getState(), fallback), document })
+
   // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
   const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo, setRenderFn, resetRenderFn }
 
@@ -323,6 +335,8 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
+  const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer })
+  window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug
 
   // ── Assembly renderer (shows PartInstance geometry when assembly mode active) ─
   // Phase 7e (2026-05-20): the shared-instancing renderer is now the DEFAULT
@@ -625,6 +639,7 @@ async function main() {
   let _atomSurface = null
   let visibilityController = null
   let selectionManager = null
+  let dimensionsTool = null
   // Part-edit mode imports its design during boot, before the lower UI sections
   // are composed. Store subscribers can run synchronously during that import, so
   // every value they touch must already be initialized (optional chaining does
@@ -633,6 +648,23 @@ async function main() {
   let clusterPanel = null
   let _currentRepr = 'full'
   const selectionController = createSelectionController({ store })
+  // The exact post-context-menu mark path is named so Playwright can time it
+  // deterministically without making a software-WebGL raycast part of the
+  // latency measurement.
+  const _markFlexibleRun = async (run) => {
+    const trace = beginOperationTiming('Mark flexible segment', {
+      requestPath: '/design/flexible-segment/batch', nMarks: run.length,
+    })
+    markOperationTiming('run-resolved', undefined, trace)
+    // Acknowledge synchronously: persistence and the structural scene patch can
+    // finish in the background while the user opens the next context menu.
+    showToast(`Marked ${run.length}-base flexible segment`)
+    markOperationTiming('optimistic-confirmation-visible', undefined, trace)
+    // Add only this run. The backend merges/deduplicates against its latest
+    // design, so rapid marks cannot overwrite an earlier in-flight mark whose
+    // response has not reached this tab yet.
+    await api.batchFlexibleSegment({ marks: run })
+  }
   selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     selectionController,
     onHideSelection: refs => {
@@ -644,6 +676,7 @@ async function main() {
       visibilityController?.hide(refs)
     },
     getProteinRenderer: () => proteinRenderer,
+    getNanoparticleRenderer: () => nanoparticleSubsystem,
     getAtomisticRenderer: () => atomisticRenderer,
     // Per-region overlay renderers (mixed rep) — lazy getters resolve after they're
     // created below; used for atom/surface picking in atomistic/surface regions.
@@ -661,6 +694,11 @@ async function main() {
     },
     onDrillLevel: selectionFilter.reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
+      // The gizmo paints an unapplied transform directly into the live meshes,
+      // while topology responses rebuild from the committed design.  Commit the
+      // visible pose first so a nick cannot snap a moved cluster back to its
+      // previous transform during the structural rebuild.
+      if (_translateRotateActive) await _confirmTranslateRotateTool()
       _clearStapleChecks()
       // A nick is a topology change; drop the scaffold-routing indicator (the
       // unified scaffold context menu's "Nick here" routes through here).
@@ -671,6 +709,7 @@ async function main() {
         console.error('Nick failed:', err?.message)
       }
     },
+    onForceLigateSelectedEnds: () => forceLigateSelectedEnds({ store, selectionManager, api }),
     onLoopSkip: async ({ helixId, bpIndex, delta }) => {
       _clearStapleChecks()
       const result = await api.insertLoopSkip(helixId, bpIndex, delta)
@@ -764,13 +803,7 @@ async function main() {
         const run = flexibleRunForBead(currentDesign, currentGeometry, nuc)
         if (!run.length) return
         if (action === 'mark') {
-          const existing = currentDesign?.flexible_segment_marks ?? []
-          const keep = existing.map(m => ({
-            strand_id: m.strand_id, domain_index: m.domain_index,
-            bp_index: m.bp_index, direction: m.direction,
-          }))
-          await api.batchFlexibleSegment({ marks: [...keep, ...run], replace: true })
-          showToast(`Marked ${run.length}-base flexible segment`)
+          await _markFlexibleRun(run)
         } else if (action === 'unmark') {
           const runKeys = new Set(run.map(r => `${r.strand_id}:${r.domain_index}:${r.bp_index}:${r.direction}`))
           const keep = (currentDesign?.flexible_segment_marks ?? [])
@@ -828,25 +861,19 @@ async function main() {
     getControls: () => sceneCtx.getActiveControls(),
   })
 
-  // ── Measurement tool ─────────────────────────────────────────────────────────
-  // 3D line + distance readout between exactly 2 ctrl-clicked beads (press 'M';
-  // not valid in unfold view). Self-wires to ctrl-bead changes and also refreshes
-  // the selection-count HUD on each change. _updateSelectionHud is hoisted (defined
-  // just below), so the callback resolves it lazily.
-  const measurementTool = initMeasurementTool({
-    scene,
-    selectionManager,
-    onSelectionHudChange: () => _updateSelectionHud(),
+  // ── Dimensions tool ──────────────────────────────────────────────────────────
+  // Persistent Properties card: base-to-base dimensions in parts, draggable
+  // endpoint gizmos in assemblies, plus frozen/individually visible records.
+  dimensionsTool = initDimensionsTool({
+    scene, camera, canvas, controls, store, selectionManager, assemblyRenderer, rightSidebar,
   })
 
-  // One-time hint about the 2026-05-17 selection-modifier remap. Ctrl was
-  // overloaded (lasso AND measurement-bead pick); measurement bead now lives
-  // on Alt-click and Shift-click is the new additive-selection modifier.
+  // One-time hint about selection modifiers and the CAD-style Dimensions mode.
   const _SEL_HINT_KEY = 'nadoc.hint.selModifiers.v1'
   if (!localStorage.getItem(_SEL_HINT_KEY)) {
     setTimeout(() => {
       showToast(
-        'Selection: Alt-click = measure distance · Shift-click = add to selection · Ctrl-drag = lasso',
+        'Selection: D = dimensions · Shift-click = add to selection · Ctrl-drag = lasso',
         { duration: 8000 },
       )
       localStorage.setItem(_SEL_HINT_KEY, '1')
@@ -915,6 +942,7 @@ async function main() {
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, null)
+  window.addEventListener('nadoc:view-volume-layers', () => unfoldView.refreshArcVisibility())
   visibilityController = initVisibilityController({
     store, designRenderer, unfoldView,
     onPersist: (visibilityState) => api.saveVisibilityState(visibilityState),
@@ -965,6 +993,7 @@ async function main() {
   const _trajPlan = initTrajPrebuildPlan({ api })
   const trajectoryKeyframes = initTrajectoryKeyframes({
     getController: (engine) => (engine === 'namd' ? mdViz : oxdnaDisplay),
+    getCompanion:  (engine) => (engine === 'namd' ? mdPanel?.trajectorySolvent : null),
     planPrebuild:  (ctrl) => _trajPlan.planFor(ctrl),
     // Only oxDNA exposes a live frames-processed counter for the build; NAMD's
     // loader has no equivalent route, so it reports start/end only.
@@ -987,8 +1016,8 @@ async function main() {
     getDesignGeometry:      () => store.getState().currentGeometry,
     // Pass through any opts (signal, suppressBusy) the player provides — the
     // bake loop wires its own AbortController and asks _request to skip the
-    // generic "Working…" auto-popup so the panel's "Rendering Animation"
-    // popup stays in front.
+    // generic "Working…" auto-popup so frame preparation remains non-modal.
+    // The animation panel reports its progress inline.
     onFetchGeometryBatch:   (positions, opts) => api.getGeometryBatch(positions, opts),
     trajectoryKeyframes,
     onFetchAtomisticBatch:  (positions, opts) => api.getAtomisticBatch(positions, opts),
@@ -1082,7 +1111,20 @@ async function main() {
     if (!assetId) return
     e.preventDefault()
     e.stopPropagation()
-    conjugateManager.showConjugateMenu({ x: e.clientX, y: e.clientY, assetId, attachmentId: attId })
+    let dismissProteinMenu = () => {}
+    const representationItem = createRepresentationMenuItem({
+      includePartReps: true,
+      dismiss: () => dismissProteinMenu(),
+      apply: rep => {
+        const design = store.getState().currentDesign
+        const next = editOverridesForProteins(design?.representation_overrides ?? [], [attId], rep)
+        void api.saveRepresentationOverrides(next)
+      },
+    })
+    conjugateManager.showConjugateMenu({
+      x: e.clientX, y: e.clientY, assetId, attachmentId: attId, representationItem,
+      onDismiss: fn => { dismissProteinMenu = fn },
+    })
   }, { capture: true }), { capture: true })
 
 
@@ -1117,8 +1159,19 @@ async function main() {
     rightSidebar,
   })
   const proteinRenderer = proteinSubsystem.renderer
-  const proteinGizmo = proteinSubsystem.gizmo
+  const proteinAttachmentGizmo = proteinSubsystem.gizmo
   const _refreshProteins = proteinSubsystem.refresh
+  const nanoparticleConjugateManager = initNanoparticleConjugateManager({ api, store })
+  const nanoparticleSubsystem = initNanoparticleSubsystem({
+    scene, store, controls, camera, canvas, selectionController, designRenderer, rightSidebar,
+    openConjugateManager: id => nanoparticleConjugateManager.open(id),
+  })
+  const nanoparticleGizmo = nanoparticleSubsystem.gizmo
+  // Entity-neutral adapter keeps the existing Move/Rotate controls shared.
+  const proteinGizmo = new Proxy({}, { get: (_target, key) => (...args) => {
+    const active = nanoparticleGizmo.isAttached?.() ? nanoparticleGizmo : proteinAttachmentGizmo
+    return active[key]?.(...args)
+  } })
   // Conjugate Manager — isolated modal showing azide-oligo attachment sites on a
   // protein. Opened from Tools ▸ Conjugate Manager… and the protein right-click.
   const conjugateManager = initConjugateManager({ api, store })
@@ -1496,6 +1549,8 @@ async function main() {
     anchorGlow.setAnchors([...(_anchorsByEngine[engine] || []),
                            ...(engine === 'oxdna' && oxdnaFloorSetup?.isEnabled?.()
                              ? (_anchorsByEngine['oxdna-surface'] || []) : []),
+                           ...(engine === 'namd' && document.getElementById('md-surface-enable')?.checked
+                             ? (_anchorsByEngine['namd-surface'] || []) : []),
                            ...(_anchorsByEngine.occupancy || []),
                            ...(_anchorsByEngine['md-occupancy'] || [])])
   }
@@ -1566,6 +1621,22 @@ async function main() {
       _syncSurfaceAnchorsGate()
       oxdnaPanel?.refreshControls?.()
     },
+  })
+  const grapheneNanoporeOverlay = initGrapheneNanoporeOverlay(scene)
+  initGrapheneDisplayControls({ preview: grapheneNanoporeOverlay, simulation: mdSolventOverlay })
+  window.addEventListener("nadoc:graphene-md-active", (event) => {
+    grapheneNanoporeOverlay.setSimulationActive(event.detail?.active)
+  })
+  window.addEventListener('nadoc:graphene-nanopore-preview', (event) => {
+    const surface = event.detail?.surface || oxdnaFloorSetup?.getSurfaceSpec?.()
+    grapheneNanoporeOverlay.update({
+      ...event.detail,
+      surface: surface ? {
+        dir: surface.dir, positionNm: surface.positionNm,
+        faceRelative: !!surface.faceRelative,
+      } : null,
+      bounds: _oxdnaStructureBounds(),
+    })
   })
   // Surface capture strands — sub-section of the Hard-surface card (immobilization).
   // See memory/project_surface_strands.md.
@@ -1698,6 +1769,19 @@ async function main() {
     'snupi-jobs-body', 'blade-jobs-body', 'md-jobs-panel-body',
   ]) standardizeSimulationCardOrder(document.getElementById(id))
 
+  // Scene adornments are job-scoped even though the renderer is shared by every engine
+  // tab.  Never let the previous engine's restraints/surface/field imply that the newly
+  // opened engine will run with them.  Its own panel will restore the applicable visuals
+  // when the user explicitly selects one of that engine's jobs.
+  let _sceneVisualEngine = null
+  const _resetSimulationSceneVisuals = () => {
+    anchorGlow.clear?.()
+    _viewToolButtons?.setSurfaceGrid?.({ enabled: false })
+    grapheneNanoporeOverlay.clear?.()
+    surfaceStrandsOverlay?.clear?.()
+    efieldSetup?.detachGizmo?.()
+  }
+
   // Relocate every engine's stage-timeline element to the ONE timeline host at the bottom
   // of the jobs card (each panel still populates its element by id; the master card shows
   // only the selected engine's + hides the block otherwise).
@@ -1736,7 +1820,20 @@ async function main() {
     // visibility rides the tab here. The card inside stays hidden unless a local relaxation
     // is actually live (md_jobs_panel.js owns that gate).
     onSelect: (engine) => {
-      simulateJobs?.setActiveEngine?.(engine); _refreshAnchorGlow()
+      if (_sceneVisualEngine !== null && engine !== _sceneVisualEngine) {
+        // Panels intentionally retain cached displays on an ordinary row deselect. At
+        // an ENGINE boundary the contract is stricter: clear any retained selection in
+        // the destination panel, otherwise its already-highlighted row would require a
+        // misleading deselect/reselect double click before its visuals could return.
+        const destinationPanel = {
+          oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel,
+          snupi: snupiPanel, blade: bladePanel, namd: mdPanel,
+        }[engine]
+        destinationPanel?.deselectJob?.()
+        _resetSimulationSceneVisuals()
+      }
+      _sceneVisualEngine = engine
+      simulateJobs?.setActiveEngine?.(engine)
       const namdLiveHost = document.getElementById('namd-live-controls-host')
       if (namdLiveHost) namdLiveHost.style.display = engine === 'namd' ? '' : 'none'
     },
@@ -2995,6 +3092,8 @@ async function main() {
 
   /** Clear per-file state (slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
+    dimensionsTool?.clear?.()
+    dimensionsTool?.close?.()
     selectionController.reload('design')
     // Leave photo mode before tearing the scene down. Otherwise the photo
     // render override stays installed and the next loaded design comes up
@@ -3113,6 +3212,7 @@ async function main() {
   let _hiddenStripEls = []
 
   function _enterAssemblyMode() {
+    dimensionsTool?.clear?.()
     selectionController.reload('assembly')
     if (window.nadocDebug?.verbose)
       console.log('[restore] _enterAssemblyMode() — assemblyActive →', true)
@@ -3164,6 +3264,7 @@ async function main() {
   }
 
   function _exitAssemblyMode() {
+    dimensionsTool?.clear?.()
     selectionController.reload('design')
     _setDesignGeometryVisible(true)
     _assemblyFileHandle = null
@@ -3702,6 +3803,13 @@ async function main() {
     conjugateManager.open(assetId, { sourceAttachmentId })
   })
 
+  document.getElementById('menu-tools-gold-nanosphere')?.addEventListener('click', async () => {
+    const diameter = await promptGoldNanosphereDiameter()
+    if (diameter == null) return
+    const response = await api.createGoldNanosphere(diameter)
+    if (response?.nanoparticle_id) nanoparticleSubsystem.select(response.nanoparticle_id)
+  })
+
   initAssemblyOverhangsManagerPopup({ store })
   document.getElementById('menu-assembly-overhangs-manager')?.addEventListener('click', () => {
     const { currentAssembly } = store.getState()
@@ -3768,6 +3876,7 @@ async function main() {
       camera.position.set(6, 3, 18)
       controls.target.set(6, 3, 0)
     }
+    camera.up.copy(screenPlaneCameraUp(camera.position, controls.target, camera.up))
     controls.update()
   })
 
@@ -4053,6 +4162,7 @@ async function main() {
       camera.position.set(6, 3, 18)
       controls.target.set(6, 3, 0)
     }
+    camera.up.copy(screenPlaneCameraUp(camera.position, controls.target, camera.up))
     controls.update()
   })
 
@@ -4075,7 +4185,7 @@ async function main() {
   // document 'keydown' listener.
   initKeyboardShortcuts({
     store, api,
-    slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
+    slicePlane, expandedSpacing, debugOverlay, dimensionsTool, selectionManager,
     clusterClipboard: _clusterClipboard,
     extrudePanel: _extrudePanel, deformView, crossSectionMinimap, sliceHighlighter,
     primitiveLibrary: _primitiveLibrary,
@@ -4439,8 +4549,10 @@ async function main() {
     applyAssemblyPrimaryLive:     _applyAssemblyPrimaryLive,
     queueAssemblyPrimaryCommit:   _queueAssemblyPrimaryCommit,
     setClusterRotationPoint:      api.setClusterRotationPoint,
+    clearSelection:               () => selectionManager.clearSelection(),
   })
   proteinSubsystem.setMoveRotatePanel(_moveRotatePanel)
+  nanoparticleSubsystem.setMoveRotatePanel(_moveRotatePanel)
   const _mrPanel                        = _moveRotatePanel.panel
   const _mrPivotSel                     = _moveRotatePanel.pivotSel
   const _mrSetTransformValues           = _moveRotatePanel.setTransformValues
@@ -5567,6 +5679,16 @@ async function main() {
       seekInstanceFeatures: _seekInstanceFeaturesFast,
     },
     onEditFeature: _onEditFeature,
+    onEditNanoparticle: async id => {
+      const particle = store.getState().currentDesign?.nanoparticles?.find(item => item.id === id)
+      if (!particle) return
+      const diameter = await promptGoldNanosphereDiameter({
+        current: particle.diameter_nm, title: 'Edit gold nanosphere diameter',
+      })
+      if (diameter != null && diameter !== particle.diameter_nm) {
+        await api.patchNanoparticle(id, { diameter_nm: diameter })
+      }
+    },
     onAnimateConfiguration: _animateAssemblyConfiguration,
     // Linker-add log entries delegate their ✎ click here so the user lands
     // directly in the Overhangs Manager with the linker's two overhangs
@@ -6724,6 +6846,7 @@ async function main() {
       store,
       visibilityController,
       designRenderer,
+      unfoldView,
       _setRepresentation,
       controls,
       camera,
@@ -6733,6 +6856,7 @@ async function main() {
       _anchorSelectionState,
       atomisticRenderer,
       selectionManager,
+      dimensionsTool,
       selectionController,
       _nucleotideTransformTool,
       bluntEnds,
@@ -6748,10 +6872,13 @@ async function main() {
       _clusterBackboneEntries,
       clusterGizmo,
       proteinGizmo,
+      nanoparticleSubsystem,
+      nanoparticleConjugateManager,
       api,
       _enterAssemblyMode,
       _exitAssemblyMode,
       forceCrossoverTool,
+      markFlexibleRun: _markFlexibleRun,
       multiOverlay: _multiOverlay,
       multiView: _multiView,
     })

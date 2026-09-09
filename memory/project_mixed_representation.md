@@ -7,6 +7,35 @@ beads, binding cylinders — are CLOSED, and the suspected photo-export bug was 
 photo-mode/override interaction, per-region extra bases, a test gap, and in-app verification —
 real, but none of them silently wrong geometry.
 
+## Spatial View Volumes (Path B, shipped 2026-09-01)
+
+The Visualization sidebar now owns a `View Volumes` card. Each persisted
+`Design.view_volumes` record stores an axis-aligned world-space box, name,
+representation, and opacity. The plus action builds a volume around the current
+part; selecting it exposes eight raycastable corner handles, and dragging a handle
+resizes against the opposite corner. Spatial membership is resolved from live
+rendered nucleotide positions. Overlaps remain independent overlay layers (for
+example surface + stick), while the coarse-grained visibility channel yields to
+the selected heavy representations. The controller exposes
+`window.__NADOC_VIEW_VOLUMES__` for deterministic building/validation. Persistence:
+`PUT /design/view-volumes`; implementation/tests live in
+`frontend/src/scene/view_volumes.js`, `view_volumes.test.js`,
+`frontend/e2e/view_volumes.spec.js`, and `tests/test_view_volumes_api.py`.
+
+**Interaction/performance revision (2026-09-01):** box manipulation now uses
+Three.js `TransformControls` with explicit Move (translation, shape preserved) and
+Resize (scale about center) modes. Pointer motion changes only the scene-local box;
+spatial membership is latest-frame coalesced and representation application is a
+120 ms trailing-edge job. Surface requests are abortable and revision-checked;
+atom overlays reject stale async completions. Pointer-up persists once through a
+small metadata-only response—the old endpoint revalidated and returned the entire
+82 MB VoltronCoreArm design. `window.__NADOC_VIEW_VOLUMES__` exposes scripted
+begin/translatePreview/scalePreview/commit, cancellation, event timing, counters,
+and current bounds. `view_volumes_voltron_performance.spec.js` validates 24
+frame-paced move/resize previews on real VoltronCoreArm, one commit, coalescing,
+and <50 ms membership passes (the fixture itself takes ~9 minutes to load/build in
+the isolated Playwright server).
+
 The 2026-06-02 "PATH A IN PROGRESS / UI + photo-mode pending" banner was **stale**. Codebase
 probe (2026-07-28) found every backend + frontend + UI anchor EXISTS and WIRED: model +
 routes + 13 backend tests, resolution + renderer alpha path, the right-click Representation
@@ -567,3 +596,54 @@ Debug handles added: `__NADOC_DBG__.designRenderer`, `__NADOC_DBG__.unfoldView` 
 `_ALL_REPRS` in `representation_switcher.js` is the *global* rep list, `animation_player.js`
 has no representation state, and ssDNA ball-joint code has none. `unfold_view.js:308` *consumes*
 `columnRepAt` rather than duplicating it.
+
+## View volume interaction contract (2026-09-01)
+
+View volumes are oriented boxes persisted as local min/max bounds plus a normalized
+`[x, y, z, w]` quaternion. `TransformControls` owns Move, Resize, and Rotate; Tab cycles
+those modes while a volume is selected. Selection comes from the transparent raycast box or
+the volume's list row, and Escape/canvas background/list-row toggle clears it. Corner handles
+and the transform gizmo exist visually only for the selected volume. Rotation participates in
+membership by inverse-transforming each world point into the box's local frame.
+
+All three transforms share the latest-frame preview and trailing representation scheduler.
+Interactive `objectChange` events update the local box immediately, supersede pending
+membership work, and never persist/rebuild the design; `mouseUp` commits exactly once. Debug
+hooks expose mode, selection, gizmo visibility, centers, rotate previews, revisions, and stage
+timings. The Chromium E2E flow covers Tab/Escape/list/background behavior and persisted
+rotation; the large VoltronCoreArm performance flow covers the shared scheduling path.
+
+View-volume PUTs use `state.mutate_display_metadata`: an atomic no-validation mutation that
+still advances the document revision. The lightweight response returns only volumes + revision;
+the API client advances its stale-response watermark, and the controller reasserts only the
+newest acknowledged snapshot. This prevents an older in-flight rebuild response from removing
+a just-created or just-moved volume without putting the 82 MB design back on the wire. The
+Playwright race test deliberately removes the optimistic volume while a move PUT is gated, then
+verifies the acknowledgement restores it and the backend retains its moved bounds.
+
+The browser debug API also exposes `backboneTargets(limit)`, `moveToBackbone(keyOrIndex)`, and
+`selectedMembership(targetKey)`. The VoltronCoreArm regression uses actual live renderer entries,
+moves the selected box centre onto a chosen nucleotide, and checks non-empty membership, exact
+target inclusion, the retained card row, and matching persisted volume ID. Persistence inspection
+uses lightweight `GET /api/design/view-volumes` rather than downloading the entire ~82 MB design.
+Two live Voltron runs reached and passed every base/card/backend assertion; their only timeout was
+the subsequently removed legacy 24-rAF synthetic performance loop, which can suspend indefinitely
+in headless Chromium once a large occupied layer is active.
+
+Voltron Volume 1 representation changes exposed two independent cascade sources. First,
+`atom_surface_display` treated every new `currentDesign` identity—including optimistic and
+acknowledged view-volume metadata—as structural, invalidated the full atom cache, and applied the
+OLD spatial layer before the authoritative layer event. `isViewVolumeOnlyDesignChange` now makes
+the layer event the sole heavy-overlay trigger and retains caches for card-only saves. Second, the
+generic 1.5 s workspace autosave started serializing the ~82 MB portable design between dropdown
+changes, blocking the next tiny metadata PUT. View-volume-only changes now retain immediate server
+persistence but debounce the portable-file flush until 10 s of card inactivity. The saved-pose
+Playwright test passes Beads→Stick→Beads with exactly one atom request total, two completed metadata
+saves, no move commits, retained occupied membership/card count, and final Beads persistence.
+
+The View Volumes header owns a hidden `.nadoc-spinner` driven by real heavy-overlay lifecycle
+events, not by the selected dropdown value. Atomistic and surface coordinators emit scheduled,
+applied, cleared, failed, and abort stages tagged `viewVolume:true`; the card tracks atom and
+surface independently so overlapping work keeps it visible until both settle. Switching to a
+light representation, a no-data response, cancellation, and failure all clear ownership, avoiding
+the classic endless-spinner failure. `representationBusy()` exposes the state to Playwright.

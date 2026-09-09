@@ -125,6 +125,8 @@ def restore_doc_assembly(doc_id: str, assembly: Assembly) -> None:
         if s is None:
             s = _AssemblySession()
             _sessions[doc_id] = s
+        s.history.clear()
+        s.redo.clear()
         s.assembly = assembly
         s.revision += 1
 
@@ -185,6 +187,16 @@ def copy_for_persist() -> tuple[Assembly | None, int]:
         s = _session()
         snap = s.assembly.model_copy(deep=True) if s.assembly is not None else None
         return snap, s.revision
+
+
+def load_assembly(a: Assembly) -> None:
+    """Atomically replace the document and discard the previous edit history."""
+    with _lock:
+        s = _session()
+        s.history.clear()
+        s.redo.clear()
+        s.assembly = a
+        s.revision += 1
 
 
 def set_assembly(a: Assembly) -> None:

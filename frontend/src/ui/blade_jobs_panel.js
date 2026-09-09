@@ -562,7 +562,6 @@ export function initBladeJobsPanel({ bladeDisplay = null, getWorkspacePath = nul
     seedBtn.addEventListener('click', async () => {
       const job = _selectedJob()
       if (!job || seedBtn.disabled || _seeding || !seedReady(job)) return
-      if (!(await confirmNoConcurrentJob())) return
       _seeding = true
       seedBtn.disabled = true
       _setSeedStatus('Creating NAMD draft…', '#4a9eff')

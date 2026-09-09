@@ -44,6 +44,8 @@ LIVE_HEALTH_NAME = "nadoc_live_health.py"
 LIVE_HEALTH_FILE = "output/live_health.json"
 LIVE_HEALTH_INTERVAL_S = 300
 SETTLE_RETARGET_NAME = "nadoc_settle_retarget.py"
+CELL_RECOVERY_NAME = "nadoc_cell_recovery.py"
+RESUME_CONF_NAME = "nadoc_resume_conf.py"
 
 # RunPod's node WC health step + the verbatim md_health copy it imports. Alpine uses
 # the portable pair-plan evaluator below because its bare Python has no MDAnalysis.
@@ -141,6 +143,7 @@ def _early_stop_block(
     name_stem,
     health_python,
     portable_wc=False,
+    energy_only=False,
 ) -> list[str]:
     """Emit the node-side evaluate-then-bridge block for one non-final chunk.
 
@@ -154,7 +157,9 @@ def _early_stop_block(
     # The sbatch redirects each conf's stdout to ``<conf>.log`` in the run cwd (see
     # _exec_line), while coords/DCD land in ``output/`` (the confs write there).
     wc = f"output/{conf}.wc.json"
-    if portable_wc:
+    if energy_only:
+        health_line = "    : # graphene-only: DNA health is not applicable"
+    elif portable_wc:
         health_line = (
             f'    python3 {ALPINE_WC_EVAL_NAME} '
             f'--dcd "output/{conf}.dcd" --plan "{ALPINE_WC_PLAN_NAME}" '
@@ -172,8 +177,12 @@ def _early_stop_block(
         f'  if [ -f "output/{conf}.dcd" ]; then',
         health_line,
         "  fi",
-        f'  if [ -f "{wc}" ] && python3 {EARLY_STOP_EVAL_NAME} '
-        f'--log "{conf}.log" --wc "{wc}"; then',
+        (
+            f'  if python3 {EARLY_STOP_EVAL_NAME} --log "{conf}.log" --energy-only; then'
+            if energy_only
+            else f'  if [ -f "{wc}" ] && python3 {EARLY_STOP_EVAL_NAME} '
+                 f'--log "{conf}.log" --wc "{wc}"; then'
+        ),
     ]
     lines += _bridge_lines(conf, remaining, "    ")
     lines += ["  fi", "fi"]
@@ -410,6 +419,11 @@ def generate_sbatch(
     gpu = is_gpu_target(profile, resources)
 
     chain = _segment_chain(manifest)
+    graphene_only = bool(
+        manifest.get("graphene_only")
+        or (manifest.get("charge_audit") or {}).get("graphene_only")
+        or (manifest.get("graphene_nanopore") or {}).get("control") == "graphene_only"
+    )
 
     lines: list[str] = ["#!/bin/bash"]
     lines += _sbatch_directives(job_name, resources, gpu)
@@ -499,9 +513,32 @@ def generate_sbatch(
         lines.append(f'  echo "[NADOC] {verb} {conf}"')
         lines.append(f"  NADOC_CURRENT_STAGE='{conf}'")
         lines.append(f"  NADOC_CURRENT_LOG='{log}'")
-        lines.append(
-            "  " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu))
-        )
+        total = next((int(s.get("steps", 0)) for s in manifest.get("segments", [])
+                      if s["name"] == conf), 0)
+        if total:
+            # Recovery happens inside this allocation, never by submitting another
+            # Slurm job. Other NAMD failures still reach the diagnostic EXIT trap.
+            lines += [
+                "  nadoc_attempt=0",
+                "  while true; do",
+                "    nadoc_rc=0",
+                '    if [ "$nadoc_attempt" -eq 0 ]; then',
+                "      " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu)) + " || nadoc_rc=$?",
+                "    else",
+                "      " + _exec_line(conf + ".cell_retry", log, resources, gpu, profile.namd_command(gpu)) + " || nadoc_rc=$?",
+                "    fi",
+                f'    if [ "$nadoc_rc" -eq 0 ] && [ -f "output/{conf}.coor" ]; then break; fi',
+                '    [ "$nadoc_rc" -ne 0 ] || nadoc_rc=1',
+                f'    if ! grep -q "Periodic cell has become too small" "{log}" || [ "$nadoc_attempt" -ge 4 ]; then exit "$nadoc_rc"; fi',
+                "    nadoc_attempt=$((nadoc_attempt + 1))",
+                f'    cp "{log}" "output/{conf}.cell_failure_${{nadoc_attempt}}.log"',
+                f'    python3 {CELL_RECOVERY_NAME} --segment {conf} --source {run_conf} --total {total} --attempt "$nadoc_attempt" >> "{log}" 2>&1 || exit "$nadoc_rc"',
+                "  done",
+            ]
+        else:
+            lines.append(
+                "  " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu))
+            )
         lines.append("fi")
         # Local and RunPod retarget the restrained settle reference to the completed
         # minimization coordinates. Alpine must do the identical stdlib rewrite before
@@ -519,13 +556,14 @@ def generate_sbatch(
         # In-sbatch early-stop: after a non-final relaxation chunk, let the node
         # evaluate the plateau and bridge the stage's remaining chunks.
         if early_stop_relax and _early_stop_eligible(chain, i):
-            last = _stage_last_chunk_index(chain, i)
+            last = len(chain) - 1 if graphene_only else _stage_last_chunk_index(chain, i)
             lines += _early_stop_block(
                 conf,
                 chain[i + 1 : last + 1],
                 name_stem=name_stem,
                 health_python=health_python,
                 portable_wc=True,
+                energy_only=graphene_only,
             )
     lines.append("")
     lines.append('echo "[NADOC] ladder complete"')

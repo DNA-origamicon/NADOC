@@ -44,7 +44,10 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
 
-  reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
+  // Cleanup reporter runs last and removes screenshots/traces/.last-run even
+  // after a failed or timed-out spec. Persistent HTML reports are intentionally
+  // disabled by the repository's no-Playwright-artifacts policy.
+  reporter: [['list'], ['./e2e/artifact-cleanup-reporter.js']],
 
   use: {
     baseURL: `http://127.0.0.1:${FRONTEND_PORT}`,

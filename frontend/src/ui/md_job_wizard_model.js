@@ -346,7 +346,7 @@ export function presetSummary(preset, plan) {
  *  risks a 400 when they disagree. */
 export const WIZARD_FIELDS = [
   'threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM', 'padding_nm',
-  'box_mode', 'minimize_steps', 'adaptive_minimization', 'fast',
+  'box_mode', 'box_size_nm', 'minimize_steps', 'adaptive_minimization', 'fast',
   'gpu_fallback_policy', 'gpu_resident', 'early_stop_relax',
   'allow_ring_pierced_seed', 'seed',
   'force_soft', 'declash',
@@ -539,6 +539,9 @@ export function planPayload(state = {}) {
     send('dcd_freq')
     send('seed')
     send('langevin_damping')
+    send('ion_transport_mode')
+    send('ion_transport_voltage_mV')
+    send('ion_transport_current_stride_ps')
     if (t.enm_restraints) body.enm_restraints = t.enm_restraints
     send('orientation_restraint')
     send('orientation_force_constant')
@@ -559,6 +562,7 @@ export function planPayload(state = {}) {
  * key in `touched` can never reach the request and 400 it.
  */
 export const PRODUCTION_FIELDS = [
+  'ion_transport_mode', 'ion_transport_voltage_mV', 'ion_transport_current_stride_ps',
   'length_ns', 'steps', 'dcd_freq', 'production_timestep_fs', 'production_rigid_bonds',
   'production_hmr', 'gpu_resident', 'enm_restraints', 'langevin_damping', 'seed',
   'orientation_restraint', 'orientation_force_constant',
@@ -607,6 +611,9 @@ export function productionPayload({ touched = {}, autostart = false,
     body.orientation_force_constant = touched.orientation_force_constant
   }
   if (has('seed')) body.seed = touched.seed
+  if (has('ion_transport_mode')) body.ion_transport_mode = touched.ion_transport_mode
+  if (has('ion_transport_voltage_mV')) body.ion_transport_voltage_mV = touched.ion_transport_voltage_mV
+  if (has('ion_transport_current_stride_ps')) body.ion_transport_current_stride_ps = touched.ion_transport_current_stride_ps
   if (stageOverrides && Object.keys(stageOverrides).length) {
     body.stage_overrides = stageOverrides
   }

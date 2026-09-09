@@ -153,6 +153,22 @@ export function makeMaterial(repr, presetName, vertexColors = false, opacity = 1
   return mat
 }
 
+/** Dedicated photomode material for gold nanoparticles. Gold is a conductor,
+ * so its colour comes from the metallic reflection under the studio IBL. */
+export function makeGoldNanoparticleMaterial() {
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: 0xd4af37,
+    metalness: 1.0,
+    roughness: 0.16,
+    clearcoat: 0.0,
+    specularIntensity: 1.0,
+    envMapIntensity: 1.6,
+  })
+  mat.name = 'photoGoldNanoparticle'
+  mat.userData.photoMaterialKind = 'gold-nanoparticle'
+  return mat
+}
+
 // R5 — bloom-blowout guard. The fluorophore slider (0..100) drives BOTH the
 // bead's self-emission (this material) AND the per-fluorophore PointLight
 // (illumination/reflections, scaled by _FLUORO_LIGHT_GAIN in photo_renderer.js).

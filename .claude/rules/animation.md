@@ -133,9 +133,11 @@ SAME display controllers the jobs panels drive: `oxdnaDisplay` for oxDNA/LAMMPS,
   `showFrame(prevFrame)` when the panel was already scrubbing that job. **Using `stopAndRestore()`
   here re-downloads the trajectory on every Play** — on VoltronCoreScad that is 370 MB and >120 s,
   which is how the bug was caught (the e2e's second play timed out).
-- **One job per controller at a time.** `prepare` loads the first job per controller; a second job
-  on the SAME engine swaps in when its segment is reached (a reload each pass). Two jobs on
-  different engines are free. No saved animation uses more than one job today.
+- **One displayed job per controller at a time.** Background coordinate downloads are
+  retained for the active animation. `prepare` records every job/resolution frame count;
+  later same-engine segments activate their cached coordinates and prepare heavy frames
+  on entry. Playback holds its clock, and exporters await `settleFrame`, until the
+  requested frame and companions are ready.
 - **RESOLUTION is per keyframe, and it is part of the cache key** (2026-08-02). `keyframeTrajSpec(kf)`
   (pure, exported) turns a keyframe into `{engine, scope, stride}`. oxDNA: `scope='job'` = this job's
   own stages at every written frame, `'lineage'` = the whole ancestor chain strided to
@@ -159,6 +161,14 @@ SAME display controllers the jobs panels drive: `oxdnaDisplay` for oxDNA/LAMMPS,
   Don't reintroduce `jobDisplayName` per entry: it is the design-file **stem**, identical for
   every job of one design, which is what made production runs unpickable. See
   `memory/project_simulate_panel_overhaul.md` → "Job NAMES".
+- **Background loading (2026-09-04)** — `prefetch(animation)` downloads through the
+  display controller without taking display ownership. `trajectory_downloads.js` shares
+  pending/completed downloads with Play, keyed by job/alignment/scope/stride, and evicts
+  inactive-animation requests. Off-screen sessions additionally prepare heavy frames
+  without scene ownership; Play adopts completed per-job caches. Preview is no longer
+  the prerequisite for preparation.
+  Bottom Play includes all trajectory fields in its dirty signature and prepares
+  strictly: missing frames or failed reconstruction stop playback with an error.
 - **Authoring preview** — `previewLoad(jobId, spec, {onProgress})` / `previewShow` / `isPreviewing`
   let `animation_panel.js` scrub the real model while you drag the bar's needle, through the SAME
   controller, so a preview then Play is one download. `release()` is shared with playback.
@@ -507,7 +517,9 @@ the raw-canvas twin, for the first time. The encode branches themselves are brow
 
 **Zero tests** for the REST of `animation_player.js` (only the arc/restore slice above is covered),
 `overhang_unzip_overlay.js`, `overhang_strand_anim.js`, `camera_panel.js`.
-**Zero e2e specs** touch animation.
+Animation browser coverage includes `animation_trajectory_background.spec.js` (isolated
+API fixture) and `animation_voltron_preparation.spec.js` (real Voltron trajectories in
+temporary private job copies; requires an open heavyweight test session).
 Names that sound relevant but are not: `tests/test_cluster_config.py` (Alpine HPC submission
 profiles), `frontend/src/ui/export_menu.test.js` / `metric_export_modal.test.js` /
 `oxdna_export_card.test.js` (unrelated export paths), `photo_renderer/figure_camera.test.js`
@@ -537,3 +549,17 @@ These names appear in older memory files, `docs/triage/05_animation.md`, and sta
 - `memory/project_animation_all_reprs.md` — beads/atomistic/surface in the pre-bake + lerp pipeline
 - `memory/project_strand_animations.md` + `.claude/rules/strand-anim.md` — the sandbox
 - `.claude/rules/rendering.md` — `helix_renderer.js` hooks used above
+
+Trajectory frame preparation uses off-screen display sessions and per-job caches in
+`trajectory_preparation_cache.js`. Bottom Play progress is inline and cancellable via
+`animation_preparation_progress.js`; do not restore a blocking preview-render dialog.
+
+### Sequence preparation priority and readiness rail
+
+`trajectory_preparation_queue.js` serializes whole download/build tasks in first-keyframe
+order across engines; cache entries still own deduplication and cancellation. Reordering
+changes pending priority without interrupting an active task. `animation_readiness.js`
+maps actual prepared cache cells onto selected/reversed frame ranges; the DOM factory
+`animation_readiness_bar.js` draws duration-weighted segments beside the bottom scrubber.
+Never treat server parser progress as usable frames. Visible animation job lists pass
+`waitForIdle:false`; row metadata/progress must not wait for dropdown job lookup.

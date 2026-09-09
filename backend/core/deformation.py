@@ -141,7 +141,16 @@ def _helix_preserves_stored_pose(helix: "Helix", design: "Design") -> bool:
     if helix.id.startswith("__lnk__"):
         return True
 
-    overhang_helix_ids = {o.helix_id for o in getattr(design, "overhangs", [])}
+    # Inline overhangs are unpaired tails of otherwise ordinary lattice strands.
+    # Tagging one must never change the phase policy of its backing helix: doing so
+    # made the result depend on whether scaffold happened to occupy that helix and
+    # preserved stale imported phases (often one nucleotide out of register).
+    # Only separately extruded/free-standing overhang helices own a stored pose.
+    overhang_helix_ids = {
+        o.helix_id
+        for o in getattr(design, "overhangs", [])
+        if not o.id.startswith("ovhg_inline_")
+    }
     if helix.id not in overhang_helix_ids:
         return False
 

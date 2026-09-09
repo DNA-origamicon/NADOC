@@ -1,5 +1,54 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, photoproductProgressView, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, grapheneOnlyTrajectoryPlan, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, mdHardSurfacePayload, mdInheritedPrepParams, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, photoproductProgressView, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
+
+describe('hard-surface new-job payload', () => {
+  it('transfers every visible graphene option with numeric types', () => {
+    expect(mdHardSurfacePayload({
+      enabled: true, grapheneOnly: true, poreDiameterNm: '2.6', layers: '3',
+      surfaceAxis: '+z', surfaceOffsetNm: '1.25',
+      layerSpacingNm: '0.34', atomisticClearanceNm: '0.36',
+      waterClearanceNm: '0.29', sheetMarginNm: '2.2',
+    })).toEqual({
+      graphene_nanopore: true, graphene_only: true,
+      graphene_surface_axis: '+z', graphene_surface_offset_nm: 1.25,
+      graphene_pore_diameter_nm: 2.6, graphene_layers: 3,
+      graphene_layer_spacing_nm: 0.34,
+      graphene_atomistic_clearance_nm: 0.36,
+      graphene_water_clearance_nm: 0.29,
+      graphene_sheet_margin_nm: 2.2,
+    })
+  })
+})
+
+describe('mdInheritedPrepParams', () => {
+  it('restores hard-surface controls for a reloaded production child', () => {
+    const parent = {
+      job_id: 'relax',
+      prep_params: {
+        graphene_nanopore: true, graphene_only: true,
+        graphene_pore_diameter_nm: 2.1, graphene_layers: 2,
+        graphene_water_clearance_nm: 0.4,
+        surface_anchors: [{ kind: 'surface', axis: 'z' }],
+      },
+    }
+    const child = { job_id: 'prod', parent_job_id: 'relax', run_kind: 'production' }
+    expect(mdInheritedPrepParams(child, [child, parent])).toEqual(parent.prep_params)
+  })
+})
+
+describe('grapheneOnlyTrajectoryPlan', () => {
+  it('uses every raw DCD frame and opens on the latest one', () => {
+    expect(grapheneOnlyTrajectoryPlan({ ready: true, n_frames: 275 })).toEqual({
+      nFrames: 275, frameIdx: 274, stride: 1,
+    })
+  })
+
+  it('waits safely when the DCD has no complete frame yet', () => {
+    expect(grapheneOnlyTrajectoryPlan({ ready: false })).toEqual({
+      nFrames: 0, frameIdx: 0, stride: 1,
+    })
+  })
+})
 
 describe('photoproductProgressView', () => {
   it('reports every loading phase with the appropriate work unit', () => {
@@ -308,7 +357,7 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRequestedRunTarget, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRunControlForSelection, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase, preferredMdSelection } from './md_jobs_panel.js'
+import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRequestedRunTarget, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRunControlForSelection, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdDraftLaunchPayload, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase, preferredMdSelection } from './md_jobs_panel.js'
 
 describe('preferredMdSelection', () => {
   const jobs = [
@@ -326,6 +375,12 @@ describe('preferredMdSelection', () => {
 })
 
 describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
+  it('launches a draft from a copy of its saved settings without another wizard', () => {
+    const job = { prep_params: { relax_preset: 'standard', seed: 17 } }
+    const payload = mdDraftLaunchPayload(job)
+    expect(payload).toEqual(job.prep_params)
+    expect(payload).not.toBe(job.prep_params)
+  })
   it('mdJobIsDraft is true only for status "draft"', () => {
     expect(mdJobIsDraft({ status: 'draft' })).toBe(true)
     for (const s of ['queued', 'preparing', 'running', 'completed', 'failed', 'stopped']) {
@@ -340,7 +395,7 @@ describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
     expect(mdDraftRunLabel({ status: 'draft', seed_oxdna_job_id: 'ox1' })).toBe('▶ Relax from oxDNA')
     expect(mdDraftRunLabel({ status: 'draft', seed_mrdna_job_id: 'mr1' })).toBe('▶ Relax from mrDNA')
     expect(mdDraftRunLabel({ status: 'draft', seed_blade_job_id: 'bl1' })).toBe('▶ Relax from BLADE')
-    expect(mdDraftRunLabel({ status: 'draft' })).toBe('▶ Relax from oxDNA')  // default
+    expect(mdDraftRunLabel({ status: 'draft' })).toBe('▶ Run')
   })
 })
 
@@ -443,6 +498,23 @@ describe('mdJobIsRunning / mdJobIsStartable / mdJobIsResumable (what the one con
 })
 
 describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)', () => {
+  it('uses the saved target for a copied draft, including remote connection gates', () => {
+    const copy = { job_id: 'copy', status: 'draft', execution_target: 'local' }
+    expect(mdRunControl(copy)).toMatchObject({ label: '▶ Run', disabled: false })
+    const alpine = { ...copy, execution_target: 'alpine',
+      prep_params: { execution_target: 'alpine', partition: 'ah200' } }
+    expect(mdRunControl(alpine, { clusterState: 'connected', machineBusy: true }))
+      .toMatchObject({ action: 'run', label: '☁ Submit to Alpine', disabled: false })
+    expect(mdRunControl(alpine, { clusterState: 'disconnected' }))
+      .toMatchObject({ label: '☁ Submit to Alpine', disabled: true })
+    expect(mdDraftLaunchPayload(alpine)).toMatchObject({ execution_target: 'alpine', partition: 'ah200' })
+    expect(mdRunControl({ ...alpine, seed_oxdna_job_id: 'seed' }, { clusterState: 'connected' }).label)
+      .toBe('☁ Submit to Alpine')
+    expect(mdRunControl({ ...copy, execution_target: 'runpod' }, { runpodReady: false }))
+      .toMatchObject({ label: '☁ Submit to RunPod', disabled: true })
+    expect(mdRunControl(copy, { runTarget: 'alpine' }).label).toBe('▶ Run')
+  })
+
   it('offers Run for a sequence-deferred job so the click can show the sequence refusal', () => {
     const job = { status: 'draft', execution_target: 'local', awaiting_sequence: true }
     expect(mdJobIsDraft(job)).toBe(false)

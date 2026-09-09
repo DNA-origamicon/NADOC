@@ -121,9 +121,9 @@ export async function beadCandidates(page) {
 
 // NOTE on plain-click strand selection: selection_manager gates regular-click
 // selection by `selectableTypes` (set via the filter UI), so a bare bead click
-// won't select a strand in a default/fresh part. The Alt-click measurement-bead
-// pick below is NOT gated, so it's the reliable primitive to build gesture tests
-// on (and `getSelectedObject` is exposed for specs that first enable a filter).
+// won't select a strand in a default/fresh part. The legacy Alt-click dimension
+// anchor path below is NOT gated (and `getSelectedObject` is exposed for specs
+// that first enable a filter).
 
 /**
  * Alt-pick distinct beads until exactly `n` measurement beads are registered.
@@ -244,6 +244,14 @@ async function _verifiedEndPixel(page, target) {
     }
     return null
   }, { t: target })
+}
+
+/** Right-click a pixel whose real frontmost bead is the requested endpoint. */
+export async function rightClickVerifiedEnd(page, target) {
+  const point = await _verifiedEndPixel(page, target)
+  expect(point, `frontmost raycast pixel for selected end ${target.strand_id}`).not.toBeNull()
+  await page.mouse.click(point.x, point.y, { button: 'right' })
+  return point
 }
 
 /**

@@ -151,3 +151,8 @@ whether your repro harness even shares the channel the bug rides.
 - **`just smoke` is two gates** (console-error render + teardown) — run it for any DOM/scene/store fix.
 - **Don't grow main.js** — see the prime-directive section in `issues_ledger.md`. If the buggy code is
   still inline, extract-then-fix (carve-up) or minimal-patch-then-log-as-extraction-target.
+
+ISSUE-24 (2026-09-04): [x] Released animation job rows from the performance idle gate,
+with a bounded fallback for background requests. Pending-list and timing regressions
+pass; the ordered preparation/readiness follow-up passes 196 focused tests and two
+isolated browser checks. Full validation details: docs/animation_trajectory_loading_audit.md.

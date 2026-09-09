@@ -406,6 +406,26 @@ describe('initTrajectoryKeyframes.show', () => {
     expect(ox.shown).toEqual([1, 2, 1])
   })
 
+  it('drives NAMD ions and periodic box from the keyframe while frames advance', async () => {
+    const md = makeCtrl()
+    const companion = {
+      setEnabled: vi.fn(), setJob: vi.fn(async () => {}),
+      setKeyframeOptions: vi.fn(), showFrame: vi.fn(),
+    }
+    const tk = initTrajectoryKeyframes({
+      getController: () => md,
+      getCompanion: () => companion,
+    })
+    await tk.prepare(anim(trajKf('A', 'namd', { trajectory_stride: 2 })))
+    md.shown.length = 0
+    tk.show('A', 'namd', 3, { ions: true, box: false })
+    await Promise.resolve(); await Promise.resolve()
+    expect(companion.setJob).toHaveBeenCalledWith('A', { stride: 2, nFrames: 100, frameIdx: 3 })
+    expect(companion.setKeyframeOptions).toHaveBeenCalledWith({ ions: true, box: false })
+    tk.show('A', 'namd', 4, { ions: true, box: false })
+    expect(companion.showFrame).toHaveBeenLastCalledWith(4)
+  })
+
   it('re-applies the same index after invalidate()', async () => {
     const { ox, tk } = await prepared()
     tk.show('A', 'oxdna', 4)
@@ -586,4 +606,72 @@ describe('initTrajectoryKeyframes preview', () => {
     expect(ox.loads).toEqual(['A'])       // ← still one download
     expect(ox.resumed).toBe(1)
   })
+})
+
+describe('automatic animation preparation', () => {
+  it('background prefetch never takes the display controller over', async () => {
+    const ox = makeCtrl()
+    ox.prefetchTrajectory = vi.fn(async () => ({ ready: true, n_frames: 10 }))
+    ox.retainTrajectoryDownloads = vi.fn()
+    const tk = initTrajectoryKeyframes({ getController: () => ox })
+    await tk.prefetch(anim(fullKf('A')))
+    expect(ox.prefetchTrajectory).toHaveBeenCalledWith('A', expect.objectContaining({ scope: 'job' }), expect.any(Object))
+    expect(ox.loadTrajectory).not.toHaveBeenCalled()
+    expect(tk.isPreviewing()).toBe(false)
+  })
+
+  it('strict playback refuses missing frames rather than silently skipping the job', async () => {
+    const ox = makeCtrl()
+    ox.loadTrajectory.mockResolvedValue({ ok: false })
+    const tk = initTrajectoryKeyframes({ getController: () => ox })
+    await expect(tk.prepare(anim(fullKf('A')), { strict: true })).rejects.toThrow('Could not load trajectory A')
+  })
+
+  it('prepares the second same-engine frame count and settles the requested frame after swapping', async () => {
+    const ox = makeCtrl({ nFrames: 10 })
+    ox.prefetchTrajectory = vi.fn(async () => ({ ready: true, n_frames: 10 }))
+    const tk = initTrajectoryKeyframes({ getController: () => ox })
+    await tk.prepare(anim(fullKf('A'), fullKf('B')), { strict: true })
+    expect(tk.frameCount('B')).toBe(10)
+    tk.show('B', 'oxdna', 7)
+    await tk.settle()
+    expect(ox.loads).toEqual(['A', 'B'])
+    expect(ox.shown.at(-1)).toBe(7)
+  })
+})
+
+describe('trajectory resolution and readiness across segments', () => {
+  it('keeps distinct frame counts and activates each stride for the same job', async () => {
+    const ox = makeCtrl({ nFrames: 10 })
+    ox.prefetchTrajectory = vi.fn(async () => ({ ready: true, n_frames: 5 }))
+    const tk = initTrajectoryKeyframes({ getController: () => ox })
+    const a = trajKf('A', 'namd', { trajectory_stride: 1 })
+    const b = trajKf('A', 'namd', { trajectory_stride: 2 })
+    await tk.prepare(anim(a, b), { strict: true })
+    expect(tk.frameCount('A', keyframeTrajSpec(a))).toBe(10)
+    expect(tk.frameCount('A', keyframeTrajSpec(b))).toBe(5)
+    tk.show('A', 'namd', 4, null, keyframeTrajSpec(b))
+    await tk.settle()
+    expect(ox.loadArgs.at(-1)).toEqual({ id: 'A', scope: 'lineage', stride: 2 })
+    expect(ox.shown.at(-1)).toBe(4)
+  })
+
+  it('does not start strict playback when heavy reconstruction fails', async () => {
+    const ox = makeCtrl()
+    ox.prebuildHeavy.mockRejectedValue(new Error('reconstruction failed'))
+    const tk = initTrajectoryKeyframes({ getController: () => ox })
+    await expect(tk.prepare(anim(fullKf('A')), { strict: true })).rejects.toThrow('Could not load trajectory A')
+  })
+})
+
+it('does not activate an abandoned animation after a later-job download completes', async () => {
+  let finish
+  const ox = makeCtrl()
+  ox.prefetchTrajectory = vi.fn(() => new Promise(resolve => { finish = resolve }))
+  const tk = initTrajectoryKeyframes({ getController: () => ox })
+  const pending = tk.prepare(anim(fullKf('A'), fullKf('B')), { strict: true })
+  tk.cancel()
+  finish({ ready: true, n_frames: 10 })
+  await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  expect(ox.loads).toEqual([])
 })

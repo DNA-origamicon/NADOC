@@ -31,7 +31,7 @@ export function openProteinAttachModal({ store, api, onChanged }) {
   async function render() {
     const design = store.getState().currentDesign
     const lib = (await api.listProteinLibrary())?.assets ?? []
-    const overhangs = design?.overhangs ?? []
+    const overhangs = (design?.overhangs ?? []).filter(o => !o.auxiliary_endpoint)
     const attachments = design?.protein_attachments ?? []
     const assetsById = new Map((design?.protein_assets ?? []).map(a => [a.id, a]))
     for (const a of lib) if (!assetsById.has(a.id)) assetsById.set(a.id, a)

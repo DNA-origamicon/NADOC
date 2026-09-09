@@ -14,6 +14,25 @@ structural model we already mimic ([[snupi-mimic]], [[project_snupi_gaps]]). It 
 internal-force + mass description verbatim and adds **Langevin time-integration** → trajectories
 instead of a single mean structure.
 
+## Linear RMSF audit (2026-09-06)
+
+`simulate_equilibrium` now requests `trajectory_rmsf(linearized=True)` for its linear
+force model. The free linear FEM rotations are `omega × X0`, not finite rotations
+of X0: Kabsch alignment cannot remove them exactly and spuriously counts their
+diffusive growth as internal fluctuation. The readout now projects displacements
+off the translational/infinitesimal-rotational subspace before taking variance.
+SVD rank selection preserves the five observable rigid modes of collinear nodes.
+The default finite-coordinate helper and nonlinear-force path retain Kabsch.
+Forces, random noise, trajectories, mean shape, topology and physical constants
+are unchanged; other analysis helpers still use their documented finite alignment.
+
+The original 200k-step 42 bp 2HB regression gave Stokes/RPY means 0.354160/0.409694 nm
+under finite alignment (15.7% difference); linear projection gives
+0.351144/0.402770 nm (14.7%), within the unchanged 15% sampling tolerance. These
+finite trajectories are not a claim of complete equilibrium convergence. Analytic
+controls add arbitrary linear rigid motion to known uniform dilation and verify
+that only the prescribed strain contributes to RMSF, including collinear nodes.
+
 Governing equation (everything scopes off this):
 
     M V̇ = F − Z V + R ,   U̇ = V
