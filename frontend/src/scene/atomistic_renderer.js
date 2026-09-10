@@ -75,6 +75,13 @@ const _HIDDEN_BOND = new THREE.Matrix4().makeScale(0, 0, 0)
 // ── Renderer factory ──────────────────────────────────────────────────────────
 
 export function initAtomisticRenderer(scene) {
+  // Colour preferences are shared by renderer instances; skip a repeated paint
+  // only when this instance has actually painted those same preferences.
+  let _lastColorPaint = null
+  const _colorsCurrent = () => _lastColorPaint && _lastColorPaint.mode === _colorMode
+    && _lastColorPaint.strands === _strandColors && _lastColorPaint.bases === _baseColors
+    && _lastColorPaint.scalar === _scalarColors
+
 
   // Factory-scoped mutable state bundled into one object per Pass 13-F's
   // closure-capture decomposition. The `geom` field holds THREE scratch
@@ -99,6 +106,7 @@ export function initAtomisticRenderer(scene) {
     matCache:       new Map(),  // `${el}|${radius}` → material; see _material()
     bondMesh:       null,
     bondAtomIdx:    null, // Int32Array [a0,b0,a1,b1,…] atom rows, bond instance order
+    frameOffsets:  null, // topology-only serial → XYZ offsets for cached trajectory frames
     // 'helix:bp:dir' → per-cluster opacity (<1 only) and → per-cluster colour.
     // Both are keyed per NUCLEOTIDE rather than per strand: a strand can span several
     // clusters, and the scaffold spans nearly all of them. Empty = nothing to do, and
@@ -198,6 +206,7 @@ export function initAtomisticRenderer(scene) {
       _state.bondMesh = null
     }
     _state.bondAtomIdx = null
+    _state.frameOffsets = null
   }
 
   // ── Rebuild geometry ──────────────────────────────────────────────────────
@@ -212,6 +221,51 @@ export function initAtomisticRenderer(scene) {
     if (ArrayBuffer.isView(bonds)) { out[0] = bonds[k * 2]; out[1] = bonds[k * 2 + 1] }
     else { const p = bonds[k]; out[0] = p[0]; out[1] = p[1] }
     return out
+  }
+
+  // Exact trajectory snapshots are the common playback case. Write the existing
+  // instance buffers directly, without allocating atom tuples or bond matrices.
+  const _frameDir = new THREE.Vector3(), _frameMid = new THREE.Vector3()
+  function _applySnapshot(xyz) {
+    if (!_state.frameOffsets) {
+      const offset = r => _state.atoms.serial(r) * 3
+      _state.frameOffsets = {
+        elements: Object.fromEntries(Object.entries(_state.elementAtoms)
+          .map(([el, rows]) => [el, Int32Array.from(rows, offset)])),
+        bonds: Int32Array.from(_state.bondAtomIdx || [], offset),
+      }
+    }
+    for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
+      const offsets = _state.frameOffsets.elements[el]
+      const out = mesh.instanceMatrix.array, scale = _state.elementScale[el]
+      for (let i = 0; i < offsets.length; i++) {
+        const s = offsets[i], m = i * 16
+        out[m] = out[m + 5] = out[m + 10] = scale
+        out[m + 1] = out[m + 2] = out[m + 3] = out[m + 4] = 0
+        out[m + 6] = out[m + 7] = out[m + 8] = out[m + 9] = out[m + 11] = 0
+        out[m + 12] = xyz[s]; out[m + 13] = xyz[s + 1]; out[m + 14] = xyz[s + 2]
+        out[m + 15] = 1
+      }
+      mesh.instanceMatrix.needsUpdate = true
+    }
+    const mesh = _state.bondMesh
+    if (!mesh) return
+    const offsets = _state.frameOffsets.bonds, out = mesh.instanceMatrix.array
+    const { tmpMat, tmpQ, tmpS, yAxis } = _state.geom
+    for (let i = 0; i < offsets.length; i += 2) {
+      const a = offsets[i], b = offsets[i + 1], m = i * 8
+      _frameDir.set(xyz[b] - xyz[a], xyz[b + 1] - xyz[a + 1], xyz[b + 2] - xyz[a + 2])
+      const length = _frameDir.length()
+      if (length < 1e-9 || length > _MAX_BOND_NM) {
+        _HIDDEN_BOND.toArray(out, m)
+        continue
+      }
+      tmpQ.setFromUnitVectors(yAxis, _frameDir.multiplyScalar(1 / length))
+      _frameMid.set((xyz[a] + xyz[b]) * 0.5, (xyz[a + 1] + xyz[b + 1]) * 0.5,
+        (xyz[a + 2] + xyz[b + 2]) * 0.5)
+      tmpMat.compose(_frameMid, tmpQ, tmpS.set(BOND_RADIUS, length, BOND_RADIUS)).toArray(out, m)
+    }
+    mesh.instanceMatrix.needsUpdate = true
   }
 
   function _rebuild(data) {
@@ -233,7 +287,7 @@ export function initAtomisticRenderer(scene) {
       (buckets[table.element(i)] ??= []).push(i)
     }
 
-    const useImpostors = impostorsEnabled()
+    const useImpostors = impostorsEnabled(data?.sphereImpostors === true)
 
     // Stick uses the same atom instances as ball-and-stick for picking, lasso,
     // live selection glow, and animated positions.  Its instances are deliberately
@@ -244,10 +298,10 @@ export function initAtomisticRenderer(scene) {
       if (!rows.length) continue
       const meta = ELEMENTS[el] ?? DEFAULT_ELEMENT
       const radius = (isVdw ? meta.vdw : BALL_RADIUS) * _vdwScale
-      const scale  = atomInstanceScale(radius)
+      const scale  = atomInstanceScale(radius, useImpostors)
       const mesh   = new THREE.InstancedMesh(
-        atomSphereGeometry(),
-        _material(`${el}|${radius.toFixed(4)}`, () => makeAtomSphereMaterial(radius)),
+        atomSphereGeometry(useImpostors),
+        _material(`${useImpostors}|${el}|${radius.toFixed(4)}`, () => makeAtomSphereMaterial(radius, useImpostors)),
         rows.length,
       )
       mesh.frustumCulled = false
@@ -439,6 +493,7 @@ export function initAtomisticRenderer(scene) {
         }
       }
     }
+    _lastColorPaint = { mode: _colorMode, strands: _strandColors, bases: _baseColors, scalar: _scalarColors }
   }
 
   /** Per-cluster opacity of one atom row, keyed per nucleotide. Atoms carry no
@@ -843,9 +898,13 @@ export function initAtomisticRenderer(scene) {
      * @param {Map<string,number>|null} baseColors  base position key → hex
      */
     setColorMode(mode, strandColors = new Map(), baseColors = null) {
-      _colorMode    = mode
-      _strandColors = strandColors instanceof Map ? strandColors : new Map()
-      if (baseColors instanceof Map) _baseColors = baseColors
+      const strands = strandColors instanceof Map ? strandColors : new Map()
+      const bases = baseColors instanceof Map ? baseColors : _baseColors
+      const same = (a, b) => a.size === b.size && [...a].every(([key, color]) => b.get(key) === color)
+      if (_colorsCurrent() && _colorMode === mode && same(strands, _strandColors) && same(bases, _baseColors)) return
+      _colorMode = mode
+      _strandColors = new Map(strands)
+      _baseColors = new Map(bases)
       _applyColors(_state.lastSel)
     },
 
@@ -894,14 +953,20 @@ export function initAtomisticRenderer(scene) {
      * ramp as the beads.  Accepts a Map or a plain object; repaints in place.
      */
     applyScalarColors(map) {
-      _scalarColors = map instanceof Map ? map
+      const next = map instanceof Map ? new Map(map)
         : (map && typeof map === 'object' ? new Map(Object.entries(map)) : null)
+      // Representation rebuilds already paint the held scalar map. Both the
+      // shared controls and simulation owner reapply it; identical values must
+      // not repaint every atom and bond twice (~125 ms on P1 Alpine).
+      if (_colorsCurrent() && (next === _scalarColors || (next && _scalarColors && next.size === _scalarColors.size
+          && [...next].every(([key, color]) => _scalarColors.get(key) === color)))) return
+      _scalarColors = next
       _applyColors(_state.lastSel)
     },
 
     /** Drop the scalar overlay → atoms return to CPK/strand/base colouring. */
     clearScalarColors() {
-      if (!_scalarColors) return
+      if (!_scalarColors && _colorsCurrent()) return
       _scalarColors = null
       _applyColors(_state.lastSel)
     },
@@ -980,6 +1045,14 @@ export function initAtomisticRenderer(scene) {
      */
     applyPositionLerp(fromXyz, toXyz, t, baseXyz = null, clusterTransforms = [], clusterHelixIds = null) {
       if (!fromXyz || !toXyz) return
+      if (fromXyz === toXyz && !(clusterHelixIds && baseXyz && clusterTransforms.length)) {
+        _applySnapshot(fromXyz)
+        _weldOverlay?.update(serial => {
+          const s = serial * 3
+          return [fromXyz[s], fromXyz[s + 1], fromXyz[s + 2]]
+        })
+        return
+      }
 
       // Build helix_id → cluster transform lookup for O(1) per-atom access.
       const helixClusterMap = new Map()

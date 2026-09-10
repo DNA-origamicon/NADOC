@@ -307,3 +307,50 @@ class TestBoxCorners:
             coordinate = (points - origin) @ unit
             assert coordinate.min() >= -1e-9
             assert coordinate.max() <= length + 1e-9
+
+
+def test_primary_cell_ions_match_heavy_anchor_imaging(monkeypatch):
+    """Ion-only trajectories can omit DNA neighbours after final cell wrapping."""
+    from types import SimpleNamespace
+    from backend.core import md_solvent as ms
+
+    rng = np.random.default_rng(93)
+    xf = _xform(rng)
+    dna_raw = rng.random((100, 3)) * xf.box_nm
+    dna_pre = dna_raw + xf.T_dyn + rng.integers(-3, 4, (100, 3)) * xf.box_nm
+    ions = np.concatenate([dna_raw[:40] + 0.02, rng.random((60, 3)) * xf.box_nm])
+    positions = (ions * 10).astype(np.float32)
+    u = SimpleNamespace(atoms=SimpleNamespace(positions=positions),
+                        dimensions=np.r_[xf.box_nm * 10, [90, 90, 90]])
+    ctx = {'n_waters_total': 0, 'n_ions': len(ions),
+           'ion_rows': np.arange(len(ions)), 'ion_species': np.zeros(len(ions), dtype=np.uint8)}
+    anchored = ms.extract_solvent_frame(u, ctx, dna_raw, dna_pre, xf, water=False)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('ion-only display must not search DNA neighbours')
+
+    monkeypatch.setattr(ms, '_nearest_anchor', forbidden)
+    direct = ms.extract_solvent_frame(u, ctx, np.empty((0, 3)), np.empty((0, 3)), xf, water=False)
+    np.testing.assert_allclose(direct['ions'], anchored['ions'], atol=3e-6, rtol=0)
+    assert direct['n_ions'] == len(ions)
+    np.testing.assert_array_equal(u.atoms.positions, positions)
+
+
+def test_ion_extraction_uses_reader_buffer_without_copying_all_atoms():
+    from types import SimpleNamespace
+
+    class NoFullCellCopy:
+        @property
+        def positions(self):
+            raise AssertionError('must not copy the full solvated AtomGroup')
+
+    positions = np.zeros((5, 3), dtype=np.float32)
+    positions[4] = [10, 20, 30]
+    u = SimpleNamespace(atoms=NoFullCellCopy(), dimensions=[50, 50, 50, 90, 90, 90],
+                        trajectory=SimpleNamespace(ts=SimpleNamespace(positions=positions)))
+    ctx = {'n_waters_total': 0, 'n_ions': 1, 'ion_rows': np.array([4]),
+           'ion_species': np.array([0], dtype=np.uint8)}
+    xf = DisplayXform.build(T_dyn=[0, 0, 0], c_box=[2.5, 2.5, 2.5], box_nm=[5, 5, 5])
+    result = extract_solvent_frame(u, ctx, np.empty((0, 3)), np.empty((0, 3)), xf, water=False)
+    np.testing.assert_array_equal(result['ions'], [1, 2, 3])
+    np.testing.assert_array_equal(positions[4], [10, 20, 30])

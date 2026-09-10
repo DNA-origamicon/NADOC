@@ -6322,6 +6322,23 @@
                     <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
                   </div>
 
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;opacity:0.5" title="Available for NAMD nanopore simulations with a saved trajectory.">
+                    <input id="md-ion-paths-toggle" name="md-viz" type="radio" value="ion-paths" disabled> View nanopore ion paths
+                  </label>
+                  <div id="md-ion-paths-options" style="display:none;padding-left:18px;margin-top:4px;font-size:var(--text-xs);color:#8b949e">
+                    <label>Frames before crossing <input id="md-ion-paths-before" type="number" min="1" max="1000000" step="1" value="10" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label><br>
+                    <label>Frames after crossing <input id="md-ion-paths-after" type="number" min="1" max="1000000" step="1" value="10" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label><br>
+                    <label>Line thickness (px) <input id="md-ion-paths-width" type="number" min="0.5" max="12" step="0.5" value="2" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label>
+                    <label for="md-ion-paths-percentage" style="display:block;margin-top:6px">Ion paths shown <output id="md-ion-paths-percentage-label" for="md-ion-paths-percentage">100%</output></label>
+                    <input id="md-ion-paths-percentage" type="range" min="0" max="100" step="1" value="100" style="width:100%" title="Show a stable subset of complete paths. 0% leaves the average origami and nanopore visible.">
+                    <div>Saved simulation frames, independent of playback interval. Large windows are supported up to the available frames; windows clip at segment ends.</div>
+                    <button id="md-ion-paths-retry" type="button" style="margin-top:4px">Reload paths</button>
+                    <div>Cyan: RMSF average origami, placed in the first saved frame. Grey: simulated graphene nanopore and aperture. Paths include recrossings.</div>
+                    <div><span style="color:#ab5cf2">Na⁺</span> · <span style="color:#1ff01f">Cl⁻</span> · <span style="color:#ffdc32">Mg²⁺</span> · <span style="color:#8f40d4">K⁺</span> · <span style="color:#3dff00">Ca²⁺</span></div>
+                  </div>
+                  <progress id="md-ion-paths-progress" max="100" value="0" hidden aria-label="Nanopore ion paths loading progress" style="width:100%;height:10px;accent-color:#58a6ff"></progress>
+                  <div id="md-ion-paths-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px" role="status"></div>
+
                   <!-- ── Solvent & periodic cell ──────────────────────────────
                        CHECKBOXES, deliberately NOT peers in the name="md-viz"
                        radio group above: they LAYER on whichever view is active.

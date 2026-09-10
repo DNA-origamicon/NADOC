@@ -1,3 +1,4 @@
+import { initMdIonPathsControls } from './md_ion_paths_controls.js'
 /**
  * ui/md_jobs_panel.js — MD relaxation / production panel (Milestone 2).
  *
@@ -1358,7 +1359,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getCurrentRepr = null, getWeldOverlay = null, onJobCreated = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getIonPathsOverlay = null, getCurrentRepr = null, getWeldOverlay = null, onJobCreated = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -1422,6 +1423,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const displayIndicator      = document.getElementById('md-jobs-display-indicator')
   const displayIndicatorDot   = document.getElementById('md-jobs-display-indicator-dot')
   const displayIndicatorLabel = document.getElementById('md-jobs-display-indicator-label')
+  let ionPaths = null
+  const ionPathsToggle = document.getElementById('md-ion-paths-toggle')
   const vizOffRadio   = document.getElementById('md-jobs-viz-off')
   const showAllToggle = document.getElementById('md-jobs-show-all')
 
@@ -1433,9 +1436,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // lost trajectory, failed load).
   function _syncVizOffRadio() {
     if (!vizOffRadio) return
-    const anyOn = [displayToggle, flexToggle, photoproductToggle, trajToggle, occupancyToggle]
+    const anyOn = [displayToggle, flexToggle, photoproductToggle, trajToggle, occupancyToggle, ionPathsToggle]
       .some(t => t?.checked)
-    if (!anyOn) vizOffRadio.checked = true
+    vizOffRadio.checked = !(anyOn || _trajJobId || _trajLoadJobId)
   }
 
   // List + detail
@@ -1529,6 +1532,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // job_id → per-segment RAW DCD frame counts, from the header-only /trajectory-meta read.
   // Prices the "→ N frames" readout for any interval without a round trip per keystroke.
   const _trajRawCounts = new Map()
+  const _trajCountRequests = new Map()
+  // Selection owns detail cards; these IDs own the expensive trajectory and its
+  // companions. Browsing jobs must not release or retarget the loaded data.
+  let _trajJobId = null
+  let _trajLoadJobId = null
+  let _trajLoading = false
   // Host MemAvailable + the prebuild memory plan. One instance per panel, so this
   // panel's two consumers (DNA prebuild + solvent) price against ONE reading.
   const _memPlan = initTrajPrebuildPlan({ api })
@@ -2654,7 +2663,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   async function _refreshMdPrewarm(force = false, { allowAlpine = false } = {}) {
-    if (displayToggle?.checked) return false
+    if (displayToggle?.checked || _trajJobId || _trajLoadJobId) return false
     // NB: intentionally NOT gated on the Dynamics tab being visible.  Prewarm now
     // warms the display socket (parse PSF + build model, ~5 s) in the background as
     // soon as a design with a loadable MD job is open, so toggling Display MD later
@@ -2872,6 +2881,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   })
 
   window.addEventListener('nadoc:workspace-path-change', () => {
+    _setTrajOff()
     _clearSelectedJob()
     _resetControlsToDefaults()   // drop the previous design's MD settings
     _renderList()
@@ -2897,11 +2907,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
     loadProgressEl: trajLoadProgress,
     prevBtn: trajPrev, nextBtn: trajNext,
+    onBeforeSeek: (i) => solvent?.ensureFrame(i) ?? true,
     onSeek: (i) => { getMdViz?.()?.showFrame(i); solvent?.showFrame(i) },
     onBeforePlay: async () => {
       const v = getMdViz?.()
       if (!v) return true
-      v.setPlaying(true)
+      // DNA and its companions share one playback clock. Join the background
+      // ion/box preparation before allowing the timer to advance either layer.
+      if (await solvent?.prepareAll() === false) return false
       // CG plays instantly (prebuildHeavy is a no-op for the bead model). A heavy rep has
       // to have every played frame in hand first, and on a long trajectory that is tens of
       // seconds — REPORT IT. Discarding the progress callback (`() => {}`) left the play
@@ -2914,7 +2927,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (r?.n) _setTrajStatus(`${base} · atoms ready (${r.frames ?? r.n} frames)`, _C.ok)
       return r?.ok !== false
     },
-    onPlayStateChange: (playing) => { if (!playing) getMdViz?.()?.setPlaying(false) },
+    onPlayStateChange: (playing) => { getMdViz?.()?.setPlaying?.(playing) },
   })
 
   function _setFlexStatus(text, color = _C.dim) {
@@ -3175,6 +3188,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (trajStatus) { trajStatus.textContent = text; trajStatus.style.color = color }
   }
   function _setTrajOff() {
+    ionPaths?.off()
+    _trajJobId = null
+    _trajLoadJobId = null
     trajPlayer.stop()
     if (getMdViz?.()?.mode?.() === 'trajectory') getMdViz().stopAndRestore()
     if (trajToggle) trajToggle.checked = false
@@ -3184,6 +3200,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     solvent?.clear()
     _syncVizOffRadio()
   }
+  ionPaths = initMdIonPathsControls({
+    api, getOverlay: getIonPathsOverlay, getJobId: () => _selectedId, getDisplay: getMdViz,
+    onOff: _syncVizOffRadio,
+    activate: () => {
+      _stopMdDisplay('Native positions restored')
+      if (_occupancyIsActive()) _setOccupancyOff()
+      _setFlexOff()
+      _setPhotoproductOff()
+      _setTrajOff()
+    },
+  })
   // Frame interval, clamped in JS — the min/max attributes are a hint to the browser,
   // not a guarantee.
   function _trajInterval() {
@@ -3196,12 +3223,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   async function _loadTrajRawCounts(jobId, { refetch = false } = {}) {
     if (!jobId) return null
     if (!refetch && _trajRawCounts.has(jobId)) return _trajRawCounts.get(jobId)
-    const meta = await api.getMdTrajectoryMeta(jobId).catch(() => null)
-    if (!meta?.ready) return null
-    const counts = (meta.stages || []).map(s => Number(s.n_raw) || 0)
-    _trajRawCounts.set(jobId, counts)
-    if (jobId === _selectedId) _renderTrajFramesHint()
-    return counts
+    if (!refetch && _trajCountRequests.has(jobId)) return _trajCountRequests.get(jobId)
+    if (refetch) _trajRawCounts.delete(jobId)
+    const pending = api.getMdTrajectoryMeta(jobId).catch(() => null).then(meta => {
+      if (!meta?.ready) return null
+      const counts = (meta.stages || []).map(s => Number(s.n_raw) || 0)
+      if (_trajCountRequests.get(jobId) === pending) {
+        _trajRawCounts.set(jobId, counts)
+        if (jobId === _selectedId) _renderTrajFramesHint()
+      }
+      return counts
+    }).finally(() => {
+      if (_trajCountRequests.get(jobId) === pending) _trajCountRequests.delete(jobId)
+    })
+    _trajCountRequests.set(jobId, pending)
+    return pending
   }
   function _renderTrajFramesHint() {
     if (!trajFramesHint) return
@@ -3215,13 +3251,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
   /** Gate a heavy load behind a confirm once the interval asks for a lot of frames.
    *  Warn, never cap — the frames were explicitly requested. */
-  function _confirmTrajLoad() {
-    const counts = _selectedId ? _trajRawCounts.get(_selectedId) : null
+  function _confirmTrajLoad(jobId = _selectedId, interval = _trajInterval()) {
+    const counts = jobId ? _trajRawCounts.get(jobId) : null
     if (!counts || !counts.length) return true
-    const frames = stridedFrameCount(counts, _trajInterval())
+    const frames = stridedFrameCount(counts, interval)
     if (frames < TRAJ_FRAME_CONFIRM) return true
     return window.confirm(
-      `Frame interval ${_trajInterval()} loads ${frames.toLocaleString()} frames.\n\n`
+      `Frame interval ${interval} loads ${frames.toLocaleString()} frames.\n\n`
       + 'That can take several minutes and a lot of memory. Continue?')
   }
   /** Build every atomistic/surface frame the trajectory will need, UP FRONT.
@@ -3305,16 +3341,52 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   async function _refreshTraj() {
-    const v = getMdViz?.()
-    if (!_selectedId || !v) return
-    const interval = _trajInterval()
-    _setTrajStatus('Loading trajectory…', _C.accent)
+    if (_trajLoading || !_selectedId) return
     const jobId = _selectedId
+    const interval = _trajInterval()
+    _trajLoadJobId = jobId
+    _trajLoading = true
+    const spinner = makeSpinner(_C.accent, 12)
+    spinner.setAttribute('aria-label', 'Loading trajectory')
+    trajToggle?.after(spinner)
+    trajToggle?.setAttribute('aria-busy', 'true')
+    if (trajToggle) trajToggle.disabled = true
+    if (trajInterval) trajInterval.disabled = true
+    try {
+      _setTrajStatus('Counting trajectory frames…', _C.accent)
+      if (trajFramesHint) trajFramesHint.textContent = 'Counting frames…'
+      const counts = await _loadTrajRawCounts(jobId, { refetch: true })
+      if (_trajLoadJobId !== jobId) return
+      if (!counts?.some(n => n > 0)) throw new Error('No trajectory frames available yet')
+      if (!_confirmTrajLoad(jobId, interval)) {
+        if (!_trajJobId) _setTrajOff()
+        return
+      }
+      await _refreshTrajInner(jobId, interval)
+    } catch (err) {
+      if (_trajLoadJobId === jobId) {
+        _setTrajOff()
+        _setTrajStatus(err?.message || 'Could not load trajectory', _C.warn)
+      }
+    } finally {
+      _trajLoading = false
+      _trajLoadJobId = null
+      spinner.remove()
+      trajToggle?.removeAttribute('aria-busy')
+      if (trajInterval) trajInterval.disabled = false
+      _updateVizToggles()
+    }
+  }
+
+  async function _refreshTrajInner(jobId, interval) {
+    const v = getMdViz?.()
+    if (!jobId || !v) return
+    _setTrajStatus('Loading trajectory…', _C.accent)
     trajPlayer.setLoading({ phase: 'extract', done: 0, total: 0, reset: true,
       label: _TRAJ_LOAD_LABELS.extract })
     const poll = setInterval(async () => {
       const p = await api.getMdTrajectoryProgress(jobId).catch(() => null)
-      if (_selectedId === jobId && p?.active) _showTrajLoadProgress(p)
+      if (_trajLoadJobId === jobId && p?.active) _showTrajLoadProgress(p)
     }, 250)
     let r
     try {
@@ -3323,26 +3395,26 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       clearInterval(poll)
       trajPlayer.setLoading(null)
     }
+    if (_trajLoadJobId !== jobId) return
     if (r.ok) {
+      _trajJobId = jobId
       if (trajControls) trajControls.style.display = ''
       trajPlayer.setTrajectory(r.n_frames, r.markers)
       const nStages = (r.stages || []).length
       const base =
         `${r.n_frames} frames · ${nStages} segment${nStages === 1 ? '' : 's'} · every ${interval}`
       _setTrajStatus(base, _C.ok)
-      // A running job keeps writing — re-price the hint against what's on disk now.
-      _loadTrajRawCounts(_selectedId, { refetch: true })
       // loadTrajectory applies frame 0 through its own showFrame(0), which bypasses
       // the player's onSeek — so the solvent for frame 0 has to be asked for here.
       solvent?.setEnabled(true, 'traj')
-      await solvent?.setJob(_selectedId, { stride: interval, nFrames: r.n_frames })
-      weld?.setJob(_selectedId)
+      await solvent?.setJob(jobId, { stride: interval, nFrames: r.n_frames })
+      weld?.setJob(jobId)
       solvent?.showFrame(0)
       // A graphene control has no DNA heavy model to prebuild. Its visible trajectory is
       // graphene + solvent/ions/box; sending it through the nucleotide-aligned atomistic
       // frame endpoint produces an avoidable empty-DNA 500 after the trajectory itself
       // has loaded successfully.
-      const grapheneOnly = !!mdInheritedPrepParams(_selectedJob(), _jobs).graphene_only
+      const grapheneOnly = !!mdInheritedPrepParams(_jobs.find(j => j.job_id === jobId), _jobs).graphene_only
       if (!grapheneOnly) await _prebuildTrajHeavy(v, base)
     } else {
       if (trajToggle) trajToggle.checked = false
@@ -3351,12 +3423,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   }
   trajToggle?.addEventListener('change', async () => {
+    ionPaths?.off()
     if (trajToggle.checked) {
+      if (_selectedId && _selectedId === _trajJobId) return
       if (!_selectedId) { trajToggle.checked = false; showToast('Select an MD job first', 'warn'); _syncVizOffRadio(); return }
       if (!_mdHasTrajectory(_selectedJob())) {
         trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); _syncVizOffRadio(); return
       }
-      if (!_confirmTrajLoad()) { trajToggle.checked = false; _syncVizOffRadio(); return }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
       if (_occupancyIsActive()) _setOccupancyOff()
       _setFlexOff()
@@ -3372,7 +3445,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   trajInterval?.addEventListener('change', async () => {
     _renderTrajFramesHint()
     if (!trajToggle?.checked) return
-    if (!_confirmTrajLoad()) return
     await _refreshTraj()
   })
   _renderTrajFramesHint()
@@ -3381,7 +3453,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // one stall at a time. The controller re-applies the current frame on this event
   // (main.js → reapplyForRepr); this fills the cache behind it.
   window.addEventListener('nadoc:representation-change', () => {
-    if (!trajToggle?.checked || !_selectedId) return
+    if (!_trajJobId) return
     const v = getMdViz?.()
     if (v?.mode?.() !== 'trajectory') return
     const base = (trajStatus?.textContent || '').split(' · preparing')[0].split(' · atoms')[0]
@@ -3398,14 +3470,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   // Enable/disable the viz view radios for the current selection.  With NO job
   // selected only "Off" is selectable (Display needs a job; Flexibility/Trajectory
-  // additionally need a written trajectory).  Turns an active view off if the job
-  // switched away or lost its trajectory, and keeps "Off" checked when nothing is on.
+  // additionally need a written trajectory). A loaded trajectory retains ownership
+  // across selections, even when the selected job has no frames of its own.
   function _updateVizToggles(job = _selectedJob()) {
     const hasJob  = !!job
     const hasTraj = _mdHasTrajectory(job)
+    ionPaths?.setEnabled(hasTraj && !!mdInheritedPrepParams(job, _jobs).graphene_nanopore)
     _setRadioEnabled(displayToggle, hasJob)
     _setRadioEnabled(flexToggle, hasTraj)
-    _setRadioEnabled(trajToggle, hasTraj)
+    _setRadioEnabled(trajToggle, hasTraj && !_trajLoading)
+    if (trajToggle && _trajJobId) trajToggle.checked = !_selectedId || _selectedId === _trajJobId
     // Occupancy needs PRODUCTION dynamics, not merely frames: clustering the relaxation
     // ladder describes the schedule. Gated tighter than the flexibility map on purpose.
     const hasFree = mdHasProductionRun(job)
@@ -3422,13 +3496,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (!hasFree && occupancyToggle?.checked && _occupancyReady) _setOccupancyOff()
     if (!hasFree && photoproductToggle?.checked) _setPhotoproductOff()
     if (!hasJob && displayToggle?.checked) _stopMdDisplay('Native positions restored')
-    if (!hasTraj) { if (flexToggle?.checked) _setFlexOff(); if (trajToggle?.checked) _setTrajOff() }
+    if (!hasTraj) { if (flexToggle?.checked) _setFlexOff(); if (trajToggle?.checked && !_trajJobId && !_trajLoadJobId) _setTrajOff() }
     // Solvent layers over any view that shows ONE FRAME — the live stream or the
     // trajectory scrub, which deliver frames by different transports. The flex map
     // is deliberately excluded: an RMSF map is a time-mean structure, so there is
     // no single frame's solvent to draw.
     solvent?.setEnabled(
-      !!trajToggle?.checked || !!displayToggle?.checked,
+      !!_trajJobId || !!displayToggle?.checked,
       displayToggle?.checked ? 'live' : 'traj')
     if (hasJob) _freeRamBytes()      // prime the shared budget for the readout
     // Interval row only means anything for a job with frames on disk; its readout needs
@@ -4602,6 +4676,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   function _selectJob(jobId) {
     _userDeselected = false   // an explicit pick supersedes a previous deselection
     if (_selectedId === jobId) return
+    ionPaths?.off()
     _gateBDismissed = null   // a fresh selection may re-show a pending decision
     _mdDebug(`[${_ts()}] md-jobs: selecting job ${jobId}`)
     const selectedJob = _jobs.find(j => j.job_id === jobId) || null
@@ -4656,8 +4731,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // `_syncRunTargetToJob` also refreshes RunPod pre-flight when appropriate, so the
     // selected job's pane and paid-launch gate move together without duplicate probes.
     _paintRunpodGate()   // reveal the RunPod status box for a RunPod job
-    void _applyVisualizationJobSwitch(visualizationAction, selectedJob)
-    if (selectedJob?.execution_target === 'alpine' && !displayToggle?.checked) {
+    if (!_trajJobId && !_trajLoadJobId) void _applyVisualizationJobSwitch(visualizationAction, selectedJob)
+    if (!_trajJobId && !_trajLoadJobId && selectedJob?.execution_target === 'alpine' && !displayToggle?.checked) {
       void _prepareSelectedAlpineDisplay(selectedJob)
     }
   }
@@ -4717,11 +4792,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     forcesProvenanceEl.style.color = tone === 'ok' ? _C.ok : tone === 'warn' ? '#e3b341' : _C.dim
   }
 
-  /** Clicking the ALREADY-selected row deselects it.  Deliberately NON-destructive: unlike
-   *  `_selectJob` (which switches jobs) this does NOT call `_setFlexOff` / `_setTrajOff` /
+  /** Clicking the ALREADY-selected row deselects it. This does NOT call `_setFlexOff` / `_setTrajOff` /
    *  `_stopMdDisplay` / `_updateVizToggles(null)`, so a loaded trajectory, the RMSF map and
    *  the live-display stream all stay on screen with their cached frames intact.  Only
-   *  picking a DIFFERENT job unloads them.  The status WebSocket does close — it streams
+   *  explicitly choosing another visualization replaces a loaded trajectory.
+   *  The status WebSocket does close — it streams
    *  detail for a job that's no longer being shown — and reopens on re-selection. */
   function _deselectJob() {
     if (surfaceEnableChk) surfaceEnableChk.checked = false
@@ -5674,6 +5749,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Shared with trajectory keyframes so playback uses this controller's cache and
     // the same overlays as the Dynamics tab.
     trajectorySolvent: solvent,
+    ionPathsActive: () => ionPaths?.isActive(),
+    reapplyIonPaths: () => ionPaths?.reapplyRepresentation(),
     /** Binary solvent frame from the live MD WebSocket → the overlay. Wired in
      *  main.js, because md_panel owns the socket and this panel owns the toggles. */
     acceptLiveSolvent: (buf) => solvent?.liveBlob(buf),

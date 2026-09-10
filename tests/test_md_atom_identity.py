@@ -81,6 +81,7 @@ def test_atomistic_flex_mean_positions_every_synthetic_residue_by_serial(monkeyp
     """Crossover/extension atoms must be averaged directly, never parent-key projected."""
     ctx = {
         "n_frames": 2,
+        "universe": SimpleNamespace(trajectory=SimpleNamespace(close=lambda: None)),
         "atom_meta": [
             {"serial": 1, "scalar_key": "__xb__:xo7:2:0"},
             {"serial": 4, "scalar_key": "__ext_tail7:3:REVERSE:0"},
@@ -98,7 +99,7 @@ def test_atomistic_flex_mean_positions_every_synthetic_residue_by_serial(monkeyp
     ]
     monkeypatch.setattr(md_trajectory, "_build_md_nadoc_ctx", lambda *a, **k: ctx)
     monkeypatch.setattr(
-        md_trajectory, "_extract_md_atoms_frame", lambda _ctx, idx: frames[idx]
+        md_trajectory, "_extract_md_atoms_frame", lambda _ctx, idx, **kw: np.array([[a[k] for k in ("x", "y", "z")] for a in frames[idx]])
     )
 
     result = md_trajectory.md_rmsf_atomistic(

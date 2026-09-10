@@ -385,14 +385,48 @@ def reconstruct_heavy_pre(
     return pos_pre
 
 
-def build_solvent_ctx(universe) -> dict:
+def solvent_universe(topology_path, trajectory_arg):
+    """Read PSF atom identities without constructing unused bonded interactions.
+
+    Solvent imaging uses recorded coordinates and residue/segment membership. It
+    never traverses bonds, angles, dihedrals or impropers. Keep MDAnalysis' own
+    atom parser (including its STANDARD/EXT/NAMD handling), but stop after NATOM.
+    This Universe is private to solvent work and must not enter the full-topology
+    cache used by bond-rendering and simulation analyses.
+    """
+    import MDAnalysis as mda
+    from MDAnalysis.topology.PSFParser import PSFParser
+
+    class AtomOnlyPSFParser(PSFParser):
+        format = 'NADOC_SOLVENT_PSF'
+
+        def _parse_sec(self, psffile, section_info):
+            if section_info[0] != 'NATOM':
+                # PSFParser.parse handles EOF by adding empty bonded attributes.
+                raise StopIteration
+            return super()._parse_sec(psffile, section_info)
+
+    return mda.Universe(str(topology_path), trajectory_arg, topology_format=AtomOnlyPSFParser)
+
+
+def build_solvent_ctx(universe, *, water: bool = True) -> dict:
     """Resolve the solvent topology ONCE per Universe (it never changes per frame)."""
     atoms = universe.atoms
-    try:
-        resindices = atoms.resindices
-    except Exception:  # noqa: BLE001 — a topology with no residue info
-        resindices = np.zeros(len(atoms), dtype=np.int64)
-    o, h1, h2 = water_triplets(atoms.names, atoms.resnames, resindices)
+    if water:
+        try:
+            resindices = atoms.resindices
+        except Exception:  # noqa: BLE001 — a topology with no residue info
+            resindices = np.zeros(len(atoms), dtype=np.int64)
+        o, h1, h2 = water_triplets(atoms.names, atoms.resnames, resindices)
+        n_waters = int(o.size)
+    else:
+        # Retain the topology census without building a million O/H/H triplets.
+        names = np.asarray(atoms.names, dtype='U8')
+        resnames = np.asarray(atoms.resnames, dtype='U8')
+        n_waters = int(np.count_nonzero(
+            np.isin(resnames, list(WATER_ISH_RESNAMES)) & np.char.startswith(names, 'O')
+        ))
+        o = h1 = h2 = np.zeros(0, dtype=np.int64)
     irows, icodes = ion_rows(atoms.names, atoms.resnames)
     return {
         "graphene_rows": np.flatnonzero(np.asarray(atoms.resnames) == "GRP"),
@@ -401,7 +435,7 @@ def build_solvent_ctx(universe) -> dict:
         "water_h2": h2,
         "ion_rows": irows,
         "ion_species": icodes,
-        "n_waters_total": int(o.size),
+        "n_waters_total": n_waters,
         "n_ions": int(irows.size),
     }
 
@@ -511,11 +545,16 @@ def extract_solvent_frame(
         if dimensions_ang is not None
         else getattr(universe, "dimensions", None)
     )
-    pos_all = (
-        np.asarray(positions_ang, dtype=float)
-        if positions_ang is not None
-        else universe.atoms.positions
-    )
+    if positions_ang is not None:
+        pos_all = np.asarray(positions_ang)
+    elif getattr(universe, 'trajectory', None) is not None:
+        # AtomGroup.positions fancy-indexes every atom, copying the whole solvated
+        # cell even when only a few thousand ions are needed. Select rows directly
+        # from the reader's current coordinate buffer; all operations below copy
+        # their selected coordinates before transforming them.
+        pos_all = universe.trajectory.ts.positions
+    else:
+        pos_all = universe.atoms.positions
 
     # ── Water ────────────────────────────────────────────────────────────────
     if water and sctx["n_waters_total"]:

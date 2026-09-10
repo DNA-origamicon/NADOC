@@ -125,6 +125,48 @@ describe('atomistic_renderer stick representation', () => {
 })
 
 describe('atomistic_renderer applyPositionLerp bond cutoff', () => {
+  it('matches the interpolation path for sparse, reordered serials and resets topology offsets', () => {
+    const { scene, ar } = makeTwoAtomBond()
+    for (const serials of [[7, 2], [4, 9]]) {
+      ar.update({ atoms: serials.map((serial, i) => ({ serial, element: i ? 'O' : 'C',
+        helix_id: 'h0', x: i * 0.1, y: 0, z: 0 })), bonds: [[...serials]] })
+      const xyz = new Float32Array(30)
+      xyz.set([1, 2, 3], serials[0] * 3)
+      xyz.set([1.1, 2.1, 3.1], serials[1] * 3)
+      ar.applyPositionLerp(xyz, xyz.slice(), 0.5) // existing general path
+      const meshes = scene.children.filter(m => m.isInstancedMesh)
+      const expected = meshes.map(m => m.instanceMatrix.array.slice())
+      ar.applyPositionLerp(xyz, xyz, 0) // cached snapshot path
+      meshes.forEach((m, j) => {
+        expect(m.instanceMatrix.array.length).toBe(expected[j].length)
+        Array.from(m.instanceMatrix.array).forEach((v, i) => expect(v).toBeCloseTo(expected[j][i], 6))
+      })
+      xyz.set([1, 2, 3], serials[1] * 3)
+      ar.applyPositionLerp(xyz, xyz, 0)
+      expect(bondCylinderScaleY(scene)).toBe(0)
+    }
+    ar.dispose()
+  })
+
+  it('uses compact spheres for trajectory payloads and restores ordinary design rendering', () => {
+    const { scene, ar } = makeTwoAtomBond()
+    const data = { atoms: [{ serial: 3, element: 'C', x: 1, y: 2, z: 3 }], bonds: [] }
+    ar.update({ ...data, sphereImpostors: true })
+    let mesh = scene.children.find(m => m.name === 'atomSpheres')
+    expect(mesh.geometry).toBe(IMPOSTOR_QUAD)
+    const material = mesh.material
+    const xyz = new Float32Array(12); xyz.set([4, 5, 6], 9)
+    ar.applyPositionLerp(xyz, xyz, 0)
+    const matrix = new THREE.Matrix4(); mesh.getMatrixAt(0, matrix)
+    expect(matrix.elements[0]).toBe(1) // radius belongs to the sphere shader
+    expect(matrix.elements.slice(12, 15)).toEqual([4, 5, 6])
+    ar.update(data)
+    mesh = scene.children.find(m => m.name === 'atomSpheres')
+    expect(mesh.geometry).toBe(SPHERE_GEO)
+    expect(mesh.material).not.toBe(material)
+    ar.dispose()
+  })
+
   it('draws a bond when the two atoms are a normal bond length apart', () => {
     const { scene, ar } = makeTwoAtomBond()
     // serial 0 at origin, serial 1 at 0.15 nm — a real backbone-ish bond.
@@ -764,4 +806,41 @@ describe('onAtomsChanged', () => {
     ar.update({ atoms: ANCHORED_ATOMS.map(a => ({ ...a, x: a.x + 1 })), bonds: [] })
     expect(n).toBe(0)
   })
+})
+
+it('keeps cached scalar colours through representation changes without redundant GPU uploads', () => {
+  const scene = new THREE.Scene(), ar = initAtomisticRenderer(scene)
+  ar.setMode('vdw')
+  ar.update({ atoms: [{ serial: 0, element: 'C', helix_id: 'h', bp_index: 0, direction: 'FORWARD', x: 1, y: 2, z: 3 }], bonds: [] })
+  const colors = new Map([['h:0:FORWARD', 0x00ff00]])
+  ar.applyScalarColors(colors)
+  const mesh = () => scene.getObjectByName('atomSpheres')
+  const version = mesh().instanceColor.version
+  ar.applyScalarColors(Object.fromEntries(colors))
+  expect(mesh().instanceColor.version).toBe(version)
+  ar.setMode('ballstick')
+  const rebuiltVersion = mesh().instanceColor.version
+  ar.applyScalarColors(colors)
+  expect(mesh().instanceColor.version).toBe(rebuiltVersion)
+  colors.set('h:0:FORWARD', 0xff0000)
+  ar.applyScalarColors(colors)
+  expect(mesh().instanceColor.version).toBeGreaterThan(rebuiltVersion)
+  const actual = new THREE.Color(); mesh().getColorAt(0, actual)
+  expect(actual.getHex()).toBe(0xff0000)
+  ar.dispose()
+})
+
+it('repaints each renderer when another renderer changes the shared scalar preference', () => {
+  const a = new THREE.Scene(), b = new THREE.Scene()
+  const ar = initAtomisticRenderer(a), br = initAtomisticRenderer(b)
+  const data = { atoms: [{ serial: 0, element: 'C', helix_id: 'h', bp_index: 0, direction: 'FORWARD', x: 0, y: 0, z: 0 }], bonds: [] }
+  for (const r of [ar, br]) { r.setMode('vdw'); r.update(data); r.clearScalarColors() }
+  const colors = { 'h:0:FORWARD': 0x00ff00 }
+  ar.applyScalarColors(colors); br.applyScalarColors(colors)
+  const actual = new THREE.Color()
+  for (const scene of [a, b]) { scene.getObjectByName('atomSpheres').getColorAt(0, actual); expect(actual.getHex()).toBe(0x00ff00) }
+  ar.clearScalarColors(); br.clearScalarColors()
+  b.getObjectByName('atomSpheres').getColorAt(0, actual)
+  expect(actual.getHex()).not.toBe(0x00ff00)
+  ar.dispose(); br.dispose()
 })

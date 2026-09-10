@@ -72,7 +72,7 @@ const _MARKER_COLOR ={ production: '#3fb950', equil: '#4a9eff', md_relax: '#e0a8
 
 export function initOxdnaTrajectoryPlayer({
   playBtn, slider, markersEl, label, onSeek, prevBtn = null, nextBtn = null,
-  loadProgressEl = null, onBeforePlay = null, onPlayStateChange = null, fps = 8,
+  loadProgressEl = null, onBeforePlay = null, onBeforeSeek = null, onPlayStateChange = null, fps = 8,
 } = {}) {
   let _n = 0          // frame count
   let _i = 0          // current frame
@@ -81,6 +81,8 @@ export function initOxdnaTrajectoryPlayer({
   let _preparing = false   // awaiting onBeforePlay (pre-building heavy frames)
   let _prepToken = 0       // bumped to cancel an in-flight prepare (user clicked again)
   let _bgPrep = null       // {done,total} while frames are prepared in the BACKGROUND
+  let _seekToken = 0
+  let _waitingForFrame = false
   const _loadPhases = new Map() // phase → latest progress; completed rows stay visible
 
   /** Shared oxDNA/NAMD trajectory-build bar. The engines only supply counts; this
@@ -172,7 +174,7 @@ export function initOxdnaTrajectoryPlayer({
       const p = _bgPrep && _bgPrep.total
         ? ` (${_bgPrep.done}/${_bgPrep.total} frames)`
         : ''
-      playBtn.title = `Preparing all-atom frames${p} — playback needs the whole trajectory in memory`
+      playBtn.title = `Preparing trajectory frames${p} — playback waits for the visible layers to be ready`
       playBtn.style.cursor = 'progress'
       return
     }
@@ -207,14 +209,36 @@ export function initOxdnaTrajectoryPlayer({
 
   function seek(i, fire = true) {
     if (_n <= 0) return
-    _i = Math.max(0, Math.min(_n - 1, i | 0))
-    if (slider) slider.value = String(_i)
-    _setLabel()
-    _steppers.refresh()
-    if (fire) onSeek?.(_i)
+    const target = Math.max(0, Math.min(_n - 1, i | 0))
+    const token = ++_seekToken
+    const apply = () => {
+      if (token !== _seekToken) return false
+      _i = target
+      if (slider) slider.value = String(_i)
+      _setLabel()
+      _steppers.refresh()
+      if (fire) onSeek?.(_i)
+      return true
+    }
+    const ready = fire ? onBeforeSeek?.(target) : true
+    if (ready?.then) {
+      _waitingForFrame = true
+      // Keep the displayed frame number with the unchanged scene while buffering.
+      if (slider) slider.value = String(_i)
+      return Promise.resolve(ready).then(ok => {
+        if (token !== _seekToken) return false
+        if (ok === false) { pause(); return false }
+        return apply()
+      }, () => { if (token === _seekToken) pause(); return false })
+        .finally(() => { if (token === _seekToken) _waitingForFrame = false })
+    }
+    _waitingForFrame = false
+    if (ready === false) return false
+    return apply()
   }
 
   function _tick() {
+    if (_waitingForFrame) return
     seek(_i + 1 >= _n ? 0 : _i + 1)   // loop continuously
   }
 
@@ -240,6 +264,8 @@ export function initOxdnaTrajectoryPlayer({
     onPlayStateChange?.(true)
   }
   function pause() {
+    _seekToken++
+    _waitingForFrame = false
     _prepToken++   // cancel any in-flight prepare so it won't start the loop on resolve
     const wasActive = !!_timer || _preparing
     _preparing = false

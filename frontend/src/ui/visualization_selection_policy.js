@@ -4,7 +4,8 @@
  * Selection owns every job-scoped card, including visualization. A completed parent is
  * often the only locally available trajectory while its child runs remotely; treating
  * historical selection as "detail only" leaves the display stuck on that remote child.
- * Deselection remains non-destructive, but every real selection retargets the cards.
+ * Deselection remains non-destructive. The MD panel separately retains ownership of
+ * an explicitly loaded trajectory and bypasses this dispatch while browsing jobs.
  */
 export function selectionUpdatesVisualization(job) {
   return !!job

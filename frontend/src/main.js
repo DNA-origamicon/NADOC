@@ -1,3 +1,4 @@
+import { initMdIonPaths } from './scene/md_ion_paths.js'
 /**
  * NADOC frontend entry point.
  *
@@ -1198,6 +1199,11 @@ async function main() {
   // builds its own initMdOverlay instance below — that one is a real standalone rep.)
   const mdSolventOverlay  = initMdSolventOverlay(scene)
   const mdBoxOverlay      = initMdBoxOverlay(scene)
+  const mdIonPaths = initMdIonPaths(scene, () => controls.target, {
+    // The preview is initialized below; this callback runs only when a loaded
+    // ion-path visualization acquires/releases its scene.
+    onActiveChange: active => grapheneNanoporeOverlay.setSimulationActive(active, 'ion-paths'),
+  })
   const occupancyOverlay  = initOccupancyOverlay({ scene, getGeometry: () => store.getState().currentGeometry, getDesign: () => store.getState().currentDesign, getHelixAxes: () => store.getState().currentHelixAxes, getRepr: () => _currentRepr, setDesignVisible: (v) => designRenderer.setDesignVisible(v), onStatus: (s) => showToast(s.text, s.level) })
   const mdDisplayController = initMdPanel(store, {
     designRenderer, atomisticRenderer,
@@ -1244,6 +1250,7 @@ async function main() {
     // Explicit water / ions / periodic cell overlays for the Visualizations card.
     getSolventOverlay: () => mdSolventOverlay,
     getBoxOverlay: () => mdBoxOverlay,
+    getIonPathsOverlay: () => mdIonPaths,
     getCurrentRepr: () => _currentRepr,
     // Phase 4: gate the Alpine run-target on the live cluster-connection state.
     getClusterState: () => clusterConn?.getState?.() ?? 'disconnected',
@@ -1382,9 +1389,10 @@ async function main() {
     // it a NAMD trajectory in vdw/ballstick draws the CG beads through the atoms.
     onHeavyApplied: () => _atomSurface?.setCGVisible(false),
   })
-  if (import.meta.env.DEV) window.__nadocMdViz = mdViz
+  if (import.meta.env.DEV) { window.__nadocMdViz = mdViz; window.__nadocMdPanel = mdPanel }
   window.addEventListener('nadoc:representation-change', () => {
-    if (mdViz.isActive?.()) mdViz.reapplyForRepr()
+    if (mdPanel?.ionPathsActive()) mdPanel.reapplyIonPaths()
+    else if (mdViz.isActive?.()) mdViz.reapplyForRepr()
   })
   // oxDNA jobs panel — uses the remote's Live wiring (oxdnaLive); the MD viz panel
   // (initMdJobsPanel) is wired to mdViz separately above via getMdViz.
@@ -1622,7 +1630,7 @@ async function main() {
     },
   })
   const grapheneNanoporeOverlay = initGrapheneNanoporeOverlay(scene)
-  initGrapheneDisplayControls({ preview: grapheneNanoporeOverlay, simulation: mdSolventOverlay })
+  initGrapheneDisplayControls({ preview: grapheneNanoporeOverlay, simulation: mdSolventOverlay, ionPaths: mdIonPaths })
   window.addEventListener("nadoc:graphene-md-active", (event) => {
     grapheneNanoporeOverlay.setSimulationActive(event.detail?.active)
   })

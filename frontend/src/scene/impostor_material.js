@@ -28,7 +28,7 @@ import { patchShaderForInstanceAlpha } from './instance_alpha.js'
 //   • `?impostors=1` in the URL (per-tab), or
 //   • `localStorage.NADOC_IMPOSTORS = 'true'` (sticky), or
 //   • `window.NADOC_IMPOSTORS = true` (console).
-export function impostorsEnabled() {
+export function impostorsEnabled(fallback = false) {
   try {
     const p = new URLSearchParams(location.search).get('impostors')
     if (p === '1') return true
@@ -36,7 +36,7 @@ export function impostorsEnabled() {
     if (localStorage.getItem('NADOC_IMPOSTORS') === 'true') return true
     if (window.NADOC_IMPOSTORS === true) return true
   } catch { /* non-browser / SSR guard */ }
-  return false
+  return fallback
 }
 
 // Shared unit quad spanning [-1,1] in XY (2 triangles). position.xy is the

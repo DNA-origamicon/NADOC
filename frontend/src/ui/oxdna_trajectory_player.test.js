@@ -73,6 +73,54 @@ describe('initOxdnaTrajectoryPlayer', () => {
     expect(label.textContent).toContain('4 / 10')
   })
 
+  it('holds the frame and clock while a companion seek waits, and ignores cancelled results', async () => {
+    vi.useFakeTimers()
+    let release
+    const onSeek = vi.fn()
+    const ready = vi.fn(() => new Promise(resolve => { release = resolve }))
+    const p = initOxdnaTrajectoryPlayer({ playBtn, slider, label, onSeek,
+      onBeforeSeek: ready, fps: 10 })
+    p.setTrajectory(100)
+    try {
+      await p.play()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(p.current()).toBe(0)
+      expect(ready).toHaveBeenCalledTimes(1)
+      expect(onSeek).not.toHaveBeenCalled()
+      release(true)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(p.current()).toBe(1)
+      expect(onSeek).toHaveBeenCalledWith(1)
+      await vi.advanceTimersByTimeAsync(100)
+      p.pause()
+      release(true)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(p.current()).toBe(1)
+      expect(onSeek).toHaveBeenCalledTimes(1)
+      expect(p.isPlaying()).toBe(false)
+    } finally { p.stop() }
+  })
+
+  it('applies only the newest manual seek and pauses on a missing companion frame', async () => {
+    const pending = new Map()
+    const onSeek = vi.fn()
+    const p = initOxdnaTrajectoryPlayer({ onSeek,
+      onBeforeSeek: i => new Promise(resolve => pending.set(i, resolve)) })
+    p.setTrajectory(100)
+    try {
+      const first = p.seek(20), second = p.seek(40)
+      pending.get(40)(true); await second
+      pending.get(20)(true); await first
+      expect(p.current()).toBe(40)
+      expect(onSeek.mock.calls).toEqual([[40]])
+      await p.play()
+      const fail = p.seek(50)
+      pending.get(50)(false); await fail
+      expect(p.current()).toBe(40)
+      expect(p.isPlaying()).toBe(false)
+    } finally { p.stop() }
+  })
+
   it('renders one shared trajectory-loading bar with frame N of total', () => {
     player.setLoading({ done: 17, total: 80 })
     expect(loadProgressEl.style.display).not.toBe('none')

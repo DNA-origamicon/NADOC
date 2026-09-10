@@ -1692,13 +1692,84 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
   })
   afterEach(() => { clearDom(); vi.useRealTimers() })
 
-  const openWithJob = async () => {
-    const panel = initMdJobsPanel({ getMdViz: () => viz })
+  const openWithJob = async (options = {}) => {
+    const panel = initMdJobsPanel({ getMdViz: () => viz, ...options })
     await flushMicro()
     await panel.selectJob('J9')
     await flushMicro()
     return panel
   }
+
+  it('enables ion paths only for nanopore jobs and restores when trajectory is selected', async () => {
+    for (const suffix of ['toggle', 'before', 'after', 'width', 'options', 'status']) {
+      const el = document.createElement(['options', 'status'].includes(suffix) ? 'div' : 'input')
+      el.id = `md-ion-paths-${suffix}`; document.body.appendChild(el)
+    }
+    $('md-ion-paths-toggle').type = 'radio'
+    const poreJob = { ...JOB, job_id: 'P1', prep_params: { graphene_nanopore: true } }
+    mdApi.listMdJobs.mockResolvedValue([JOB, poreJob])
+    mdApi.getMdJob.mockImplementation(async id => id === 'P1' ? poreJob : JOB)
+    mdApi.getMdIonPaths.mockResolvedValue({ crossings: 3, frames: 100, paths: [] })
+    const overlay = { clear: vi.fn(), setData: vi.fn(), setWidth: vi.fn() }
+    const panel = await openWithJob({ getIonPathsOverlay: () => overlay })
+    expect($('md-ion-paths-toggle').disabled).toBe(true)
+    await panel.selectJob('P1'); await flushMicro()
+    expect($('md-ion-paths-toggle').disabled).toBe(false)
+    $('md-ion-paths-toggle').checked = true
+    $('md-ion-paths-toggle').dispatchEvent(new Event('change'))
+    await flushMicro()
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(mdApi.getMdIonPaths).toHaveBeenCalledWith('P1', 10, 10, expect.any(AbortSignal), expect.any(Object))
+    expect(overlay.setData).toHaveBeenCalledOnce()
+    $('md-jobs-traj-toggle').checked = true
+    $('md-jobs-traj-toggle').dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect($('md-ion-paths-toggle').checked).toBe(false)
+    expect(overlay.clear).toHaveBeenCalled()
+  })
+
+  it('the NAMD Play button waits for all ion/box frames before advancing DNA', async () => {
+    for (const [id, tag] of Object.entries({ 'md-jobs-traj-play': 'button', 'md-jobs-solvent-opts': 'div',
+      'md-jobs-solvent-status': 'div', 'md-jobs-ions-toggle': 'input', 'md-jobs-box-toggle': 'input' })) {
+      const el = document.createElement(tag); el.id = id; document.body.appendChild(el)
+    }
+    localStorage.setItem('nadoc:md-jobs-solvent-ions', 'true')
+    localStorage.setItem('nadoc:md-jobs-solvent-box', 'true')
+    const pack = ids => {
+      const header = new TextEncoder().encode(JSON.stringify({ frame_ids: ids, n_ions: 1,
+        ion_species: [0], has_box: true, per_frame_nw: ids.map(() => 0) }))
+      const start = (20 + header.length + 3) & ~3
+      const buf = new ArrayBuffer(start + ids.length * 27 * 4), dv = new DataView(buf)
+      dv.setUint32(0, 0x4E534C56, true); dv.setUint32(4, 2, true)
+      dv.setUint32(8, ids.length, true); dv.setUint32(16, header.length, true)
+      new Uint8Array(buf, 20, header.length).set(header)
+      const xyz = new Float32Array(buf, start)
+      ids.forEach((id, i) => xyz.fill(id, i * 27, (i + 1) * 27))
+      return buf
+    }
+    let release
+    mdApi.getMdSolventMeta.mockResolvedValue({ ready: true, n_ions: 1, n_waters: 0 })
+    mdApi.getMdFramesSolventBin.mockResolvedValueOnce(pack([0]))
+      .mockImplementationOnce((_job, ids) => new Promise(resolve => { release = () => resolve(pack(ids)) }))
+    const overlay = { setMode: vi.fn(), setIonSpecies: vi.fn(), setFrame: vi.fn(),
+      setWaterVisible: vi.fn(), setIonsVisible: vi.fn(), clear: vi.fn() }
+    await openWithJob({ getCurrentRepr: () => 'full', getSolventOverlay: () => overlay })
+    $('md-jobs-traj-toggle').checked = true
+    $('md-jobs-traj-toggle').dispatchEvent(new Event('change'))
+    await flushMicro(100)
+    expect(release).toBeTypeOf('function')
+    vi.useFakeTimers()
+    $('md-jobs-traj-play').click()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(viz.showFrame).not.toHaveBeenCalled()
+    expect($('md-jobs-traj-play').disabled).toBe(true)
+    release(); await flushMicro(100)
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(viz.showFrame.mock.calls.at(-1)).toEqual([20])
+    expect(overlay.setFrame.mock.calls.at(-1)[0].ions[0]).toBe(20)
+    expect(mdApi.getMdFramesSolventBin).toHaveBeenCalledTimes(2)
+    $('md-jobs-traj-play').click()
+  })
 
   it('prices the readout from the RAW on-disk counts, not the downsampled ones', async () => {
     await openWithJob()
@@ -1728,6 +1799,47 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     expect(viz.loadTrajectory).toHaveBeenCalledWith(
       'J9', true, 'lineage', 7, expect.any(Function),
     )
+  })
+
+  it('recounts a previously single-frame download before loading and spins through preparation', async () => {
+    mdApi.getMdTrajectoryMeta.mockResolvedValue({ ready: true, stages: [{ n_raw: 1 }] })
+    await openWithJob()
+    expect($('md-jobs-traj-frames-hint').textContent).toContain('1 frame of 1 written')
+    let counted, loaded
+    mdApi.getMdTrajectoryMeta.mockImplementation(() => new Promise(resolve => { counted = resolve }))
+    viz.loadTrajectory.mockImplementation(() => new Promise(resolve => { loaded = resolve }))
+    const toggle = $('md-jobs-traj-toggle')
+    toggle.checked = true
+    toggle.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(viz.loadTrajectory).not.toHaveBeenCalled()
+    expect(toggle.nextElementSibling.classList.contains('nadoc-spinner')).toBe(true)
+    expect(toggle.getAttribute('aria-busy')).toBe('true')
+    expect($('md-jobs-traj-frames-hint').textContent).toBe('Counting frames…')
+    counted({ ready: true, stages: [{ n_raw: 5597 }] })
+    await flushMicro()
+    expect($('md-jobs-traj-frames-hint').textContent).toContain('280 frames of 5,597 written')
+    expect(viz.loadTrajectory).toHaveBeenCalledTimes(1)
+    expect(toggle.disabled).toBe(true)
+    loaded({ ok: true, n_frames: 280, markers: [], stages: [{}] })
+    await flushMicro()
+    expect(toggle.hasAttribute('aria-busy')).toBe(false)
+    expect(toggle.disabled).toBe(false)
+    expect(document.querySelector('[aria-label="Loading trajectory"]')).toBeNull()
+  })
+
+  it('clears the loading spinner and does not load when recounting fails', async () => {
+    await openWithJob()
+    mdApi.getMdTrajectoryMeta.mockResolvedValue(null)
+    const toggle = $('md-jobs-traj-toggle')
+    toggle.checked = true
+    toggle.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(viz.loadTrajectory).not.toHaveBeenCalled()
+    expect(toggle.checked).toBe(false)
+    expect(toggle.hasAttribute('aria-busy')).toBe(false)
+    expect(document.querySelector('[aria-label="Loading trajectory"]')).toBeNull()
+    expect($('md-jobs-traj-status').textContent).toContain('No trajectory frames')
   })
 
   it('shows a named progress row for every trajectory load subprocess', async () => {
@@ -1908,6 +2020,86 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     expect($('md-jobs-detail').style.display).toBe('none')       // detail cleared
     expect(viz.stopAndRestore).not.toHaveBeenCalled()            // …frames kept
     expect(t.checked).toBe(true)
+  })
+
+  it.each(['completed', 'draft'])('keeps the loaded trajectory when browsing a %s job', async (status) => {
+    const job = { ...JOB, design_source_path: PART }
+    const other = { ...job, job_id: 'J10', status }
+    mdApi.listMdJobs.mockResolvedValue([job, other])
+    mdApi.getMdJob.mockImplementation(async id => id === 'J10' ? other : job)
+    const panel = await openWithJob({ getWorkspacePath: () => PART })
+    const toggle = $('md-jobs-traj-toggle')
+    toggle.checked = true
+    toggle.dispatchEvent(new Event('change'))
+    await flushMicro()
+    viz.mode = () => 'trajectory'
+    viz.stopAndRestore.mockClear()
+    viz.loadTrajectory.mockClear()
+    viz.prebuildHeavy.mockClear()
+
+    await panel.selectJob('J10')
+    await flushMicro()
+    await panel.refresh()
+    await flushMicro()
+    expect(panel.getSelectedJob()?.job_id).toBe('J10')
+    expect(viz.stopAndRestore).not.toHaveBeenCalled()
+    expect(viz.loadTrajectory).not.toHaveBeenCalled()
+    expect(viz.prebuildHeavy).not.toHaveBeenCalled()
+    expect($('md-jobs-traj-controls').style.display).toBe('')
+    expect(toggle.checked).toBe(false)
+    expect(toggle.disabled).toBe(status === 'draft')
+
+    panel.deselectJob()
+    await panel.refresh()
+    await flushMicro()
+    await panel.selectJob('J9')
+    await flushMicro()
+    expect(toggle.checked).toBe(true)
+    expect(viz.loadTrajectory).not.toHaveBeenCalled()
+    expect(viz.stopAndRestore).not.toHaveBeenCalled()
+  })
+
+  it('replaces the retained trajectory only when View trajectory is chosen for another job', async () => {
+    const job = { ...JOB, design_source_path: PART }
+    const other = { ...job, job_id: 'J10' }
+    mdApi.listMdJobs.mockResolvedValue([job, other])
+    mdApi.getMdJob.mockImplementation(async id => id === 'J10' ? other : job)
+    const panel = await openWithJob({ getWorkspacePath: () => PART })
+    const toggle = $('md-jobs-traj-toggle')
+    toggle.checked = true
+    toggle.dispatchEvent(new Event('change'))
+    await flushMicro()
+    viz.mode = () => 'trajectory'
+    await panel.selectJob('J10')
+    await flushMicro()
+    expect(viz.loadTrajectory).toHaveBeenCalledTimes(1)
+    toggle.checked = true
+    toggle.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(viz.loadTrajectory).toHaveBeenCalledTimes(2)
+    expect(viz.loadTrajectory.mock.calls[1][0]).toBe('J10')
+  })
+
+  it('finishes the requested load even if another job is selected while it loads', async () => {
+    const job = { ...JOB, design_source_path: PART }
+    const other = { ...job, job_id: 'J10', status: 'draft' }
+    mdApi.listMdJobs.mockResolvedValue([job, other])
+    mdApi.getMdJob.mockImplementation(async id => id === 'J10' ? other : job)
+    const panel = await openWithJob({ getWorkspacePath: () => PART })
+    let finish
+    viz.loadTrajectory.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const toggle = $('md-jobs-traj-toggle')
+    toggle.checked = true
+    toggle.dispatchEvent(new Event('change'))
+    await flushMicro()
+    await panel.selectJob('J10')
+    await flushMicro()
+    finish({ ok: true, n_frames: 50, markers: [], stages: [{}] })
+    await flushMicro()
+    expect($('md-jobs-traj-controls').style.display).toBe('')
+    expect(viz.prebuildHeavy).toHaveBeenCalledTimes(1)
+    expect(toggle.checked).toBe(false)
+    expect(viz.loadTrajectory).toHaveBeenCalledTimes(1)
   })
 
   it('the poll does not re-select after a deliberate deselect (until the user picks again)', async () => {

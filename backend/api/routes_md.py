@@ -5284,14 +5284,11 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
     job.user_stopped = True
     job.error = None
     job.save(_workspace())
-    # Archive-from-birth runs (including the real 24hb_0xT Alpine run) already resolve
-    # package_dir into the chosen storage volume. stop_md_job/fetch_outputs downloaded
-    # straight there, so starting another archive move would fail with "already archived"
-    # even though the requested operation succeeded.
+    # Downloads already land in the job's current directory, including default-workspace
+    # and archive-from-birth runs. Moving to that same directory would fail even though
+    # the requested download succeeded.
     requested_path = (Path(body.dest_root).expanduser() / job.job_id).resolve()
-    current_path = (
-        Path(job.archive_path).resolve() if job.archived and job.archive_path else None
-    )
+    current_path = job.job_dir(_workspace()).resolve()
     if current_path == requested_path:
         return {
             "ok": True,
@@ -6366,16 +6363,61 @@ async def run_headless_ion_transport(
     return await _spawn_md_production_impl(parent_id, request)
 
 
-def _analyze_ion_transport_package(job: MdJob) -> dict:
+@router.get("/md/jobs/{job_id}/ion-paths")
+async def md_ion_paths_route(job_id: str, before: int = 10, after: int = 10, request_id: str = "") -> Response:
+    """Individual aperture-crossing paths in a fixed pore-centred frame (nm)."""
+    from backend.core.md_ion_paths import ion_paths, pack_ion_paths, MAX_PATH_WINDOW
+
+    if not (1 <= before <= MAX_PATH_WINDOW and 1 <= after <= MAX_PATH_WINDOW):
+        raise HTTPException(422, f"Frames before and after must each be between 1 and {MAX_PATH_WINDOW:,}.")
+    from backend.core import ion_transport_progress as progress
+    key = f"ion-paths:{job_id}"
+    progress.start(key, request_id)
+    report = lambda *args: progress.update(key, request_id, *args)
+    job = _load_job(job_id)
+    paths = [p for _name, _stage, p in _md_segment_dcds(job)]
+    try:
+        design = _md_snapshot_design(job) or design_state.get_or_404()
+        def build():
+            data = ion_paths(job.package_dir(_workspace()), paths, before, after, design, compact=True, **({"progress": report} if request_id else {}))
+            report("serialize", 0, 1)
+            payload = pack_ion_paths(data)
+            report("serialize", 1, 1)
+            progress.finish(key, request_id)
+            return payload
+        payload = await asyncio.to_thread(build)
+        return Response(payload, media_type="application/octet-stream")
+    except FileNotFoundError as exc:
+        progress.finish(key, request_id, str(exc))
+        raise HTTPException(409, "Download the nanopore topology and trajectory before viewing ion paths.") from exc
+    except (ValueError, KeyError) as exc:
+        progress.finish(key, request_id, str(exc))
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        progress.finish(key, request_id, str(exc))
+        raise
+
+@router.get("/md/jobs/{job_id}/ion-paths-progress")
+async def md_ion_paths_progress_route(job_id: str, request_id: str) -> dict:
+    from backend.core import ion_transport_progress as progress
+    _load_job(job_id)
+    return progress.snapshot(f"ion-paths:{job_id}", request_id)
+
+
+def _analyze_ion_transport_package(job: MdJob, progress=None) -> dict:
     """Calculate electrical current plus aperture-validated ion crossings from DCD."""
     import numpy as np  # noqa: PLC0415
     import MDAnalysis as mda  # noqa: PLC0415
 
+    report = progress or (lambda *args: None)
+    report('validate', 0, 1)
     pkg = job.package_dir(_workspace())
     manifest = json.loads((pkg / "manifest.json").read_text())
     meta = manifest.get("ion_transport")
     if not meta:
         raise HTTPException(400, "This is not an ion-transport production package.")
+    report('validate', 1, 1)
+    report('inventory', 0, 0)
     # A resumed production writes ``base.dcd``, ``base.cont1.dcd``, ... . A lexical
     # sort puts the continuations before the base ("c" < "d"), making time jump from
     # the latest frames back to zero. The chart then draws each cumulative counter as
@@ -6384,7 +6426,11 @@ def _analyze_ion_transport_package(job: MdJob) -> dict:
     dcds = [path for _name, _stage, path in _md_segment_dcds(job)]
     if not dcds:
         raise HTTPException(409, "No production trajectory is available yet.")
+    report('inventory', len(dcds), len(dcds), f'{len(dcds)} trajectory files')
+    report('topology', 0, 0, 'Reading PSF and opening trajectory files')
     universe = mda.Universe(str(pkg / f"{manifest['name_stem']}.psf"), [str(p) for p in dcds])
+    report('topology', 1, 1)
+    report('select', 0, 1)
     direction = np.asarray(meta["direction"], dtype=float)
     direction /= np.linalg.norm(direction)
     groups = {
@@ -6396,6 +6442,7 @@ def _analyze_ion_transport_package(job: MdJob) -> dict:
     # keeps every downstream consumer (plot, JSON export, headless API) honest rather
     # than manufacturing a flat Mg2+ line for a NaCl-only system.
     groups = {name: atoms for name, atoms in groups.items() if len(atoms)}
+    report('select', 1, 1, f'{sum(len(atoms) for atoms in groups.values())} ions')
     charges = {"Na+": 1.0, "Cl-": -1.0, "Mg2+": 2.0}
     samples = {name: [] for name in groups}
     crossings = {name: {"positive": 0, "negative": 0} for name in groups}
@@ -6416,7 +6463,15 @@ def _analyze_ion_transport_package(job: MdJob) -> dict:
     )
     previous = None
     previous_time = None
-    for ts in universe.trajectory:
+    frame_total = len(universe.trajectory)
+    stages = ['frames', 'current'] + (['crossings', 'occupancy'] if aperture_ready else [])
+    for stage in stages:
+        report(stage, 0, frame_total)
+    if not aperture_ready:
+        report('crossings', 1, 1, 'Unavailable: pore geometry is missing')
+        report('occupancy', 1, 1, 'Unavailable: pore geometry is missing')
+    for frame_number, ts in enumerate(universe.trajectory, 1):
+        report('frames', frame_number, frame_total)
         current = {name: atoms.positions.copy() for name, atoms in groups.items()}
         if previous is not None:
             dt_ps = float(ts.time - previous_time)
@@ -6424,6 +6479,8 @@ def _analyze_ion_transport_package(job: MdJob) -> dict:
             length = float(cell[int(np.argmax(np.abs(direction)))])
             if dt_ps <= 0:
                 previous, previous_time = current, float(ts.time)
+                for stage in stages[1:]:
+                    report(stage, frame_number, frame_total, 'Skipped non-increasing timestamp')
                 continue
             times_ns.append(float(ts.time) / 1000.0)
             for name in groups:
@@ -6464,6 +6521,9 @@ def _analyze_ion_transport_package(job: MdJob) -> dict:
                     cumulative[name]["net"].append(pos - neg)
                     occupancy[name].append(0)
         previous, previous_time = current, float(ts.time)
+        for stage in stages[1:]:
+            report(stage, frame_number, frame_total)
+    report('statistics', 0, 1)
     by_species = {}
     total = np.zeros(len(next(iter(samples.values()), [])), dtype=float)
     for name, values in samples.items():
@@ -6515,13 +6575,37 @@ def _analyze_ion_transport_package(job: MdJob) -> dict:
             ] if aperture_ready else [],
         },
     }
+    report('statistics', 1, 1)
+    report('save', 0, 1)
     (pkg / "ion_transport_analysis.json").write_text(json.dumps(result, indent=2))
+    report('save', 1, 1)
     return result
 
 
 @router.get("/md/ion-transport/{job_id}/analysis")
-async def analyze_headless_ion_transport(job_id: str) -> dict:
-    return await run_in_threadpool(_analyze_ion_transport_package, _load_job(job_id))
+async def analyze_headless_ion_transport(job_id: str, request_id: str | None = None) -> dict:
+    from backend.core import ion_transport_progress as progress
+
+    request_id = request_id or uuid.uuid4().hex
+    job = _load_job(job_id)
+    progress.start(job_id, request_id)
+    try:
+        result = await run_in_threadpool(
+            _analyze_ion_transport_package, job,
+            lambda *args: progress.update(job_id, request_id, *args),
+        )
+    except Exception as exc:
+        progress.finish(job_id, request_id, str(getattr(exc, 'detail', None) or exc))
+        raise
+    progress.finish(job_id, request_id)
+    return result
+
+
+@router.get("/md/ion-transport/{job_id}/analysis-progress")
+def ion_transport_analysis_progress(job_id: str, request_id: str) -> dict:
+    from backend.core.ion_transport_progress import snapshot
+
+    return snapshot(job_id, request_id)
 
 
 def _job_settings_editable(job: MdJob) -> bool:

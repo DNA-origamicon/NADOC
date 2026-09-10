@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { ionTransportSeries } from './ion_transport_popup.js'
+import { describe, expect, it, vi } from 'vitest'
+vi.mock('./metric_graph.js', () => ({ buildChartSpec: value => value, drawChart: vi.fn(), SERIES_COLORS: ['blue'] }))
+import { drawChart } from './metric_graph.js'
+import { ionTransportSeries, openIonTransportPopup } from './ion_transport_popup.js'
 
 describe('ionTransportSeries', () => {
   it('maps current and aperture crossings onto simulation time', () => {
@@ -40,4 +42,17 @@ describe('ionTransportSeries', () => {
       [0, 0], [2, 1], [4, 2], [6, 2], [8, 3], [10, 4], [12, 5],
     ])
   })
+})
+
+
+it('reports data preparation and each plot separately before completing', async () => {
+  const updates = []
+  await openIonTransportPopup({ series: {} }, { onProgress: value => updates.push(value) })
+  expect(updates.map(value => `${value.stage}:${value.done}`)).toEqual([
+    'plot-series:0', 'plot-series:1', 'plot-current:0', 'plot-current:1',
+    'plot-crossings:0', 'plot-crossings:1',
+  ])
+  expect(drawChart).toHaveBeenCalledTimes(2)
+  expect(document.querySelector('[data-ion-transport-stage="plot-crossings"]').dataset.state).toBe('done')
+  document.querySelector('[data-close]').click()
 })

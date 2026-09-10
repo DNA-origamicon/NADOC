@@ -824,6 +824,18 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(atom.applyPositionLerp).toHaveBeenCalledWith([1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6], 0, null, [], null)
   })
 
+  it('opts NAMD trajectory topology into compact spheres without changing the cached model', async () => {
+    const { ctrl, api, atom } = makeHeavyDeps('vdw')
+    api.trajectoryImpostors = true
+    await ctrl.loadTrajectory('jobT')
+    await tick()
+    expect(atom.update.mock.calls.at(-1)[0].sphereImpostors).toBe(true)
+    ctrl.stopAndRestore()
+    await ctrl.displayJob('jobT')
+    await tick()
+    expect(atom.update.mock.calls.at(-1)[0].sphereImpostors).toBeUndefined()
+  })
+
   it('relaxed display uses the FAST stamp path when the bundle endpoint exists', async () => {
     const { ctrl, api, atom } = makeHeavyDeps('ballstick')
     // Combined bundle: renderer topology (atoms+bonds) + stamp descriptor in one fetch.
@@ -966,6 +978,48 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(cmap).toHaveProperty('h0:0:FORWARD')
   })
 
+  it('reuses prepared nanopore averages and topology across every representation without fetching', async () => {
+    const { ctrl, api, atom, surf, state, designRenderer } = makeHeavyDeps('full')
+    const response = await api.getOxdnaRmsf('jobF')
+    const representations = {
+      atomistic_model: await api.getOxdnaAtomisticModel('jobF'),
+      atomistic_average: await api.getOxdnaRmsfAtomistic('jobF'),
+      surface_average: await api.getOxdnaRmsfSurface('jobF'),
+    }
+    for (const fn of Object.values(api)) fn.mockClear?.()
+    await ctrl.displayRmsf('jobF', { response, representations, awaitHeavy: true })
+    for (const repr of ['vdw', 'surface', 'ballstick', 'full', 'surface']) {
+      state.repr = repr
+      await ctrl.reapplyForRepr({ strict: true })
+    }
+    expect(api.getOxdnaRmsf).not.toHaveBeenCalled()
+    expect(api.getOxdnaAtomisticModel).not.toHaveBeenCalled()
+    expect(api.getOxdnaRmsfAtomistic).not.toHaveBeenCalled()
+    expect(api.getOxdnaRmsfSurface).not.toHaveBeenCalled()
+    expect(atom.applyPositionLerp).toHaveBeenCalledTimes(2)
+    expect(surf.applyPositionLerp).toHaveBeenCalledTimes(2)
+    expect(designRenderer.applyFemPositions).toHaveBeenCalled()
+    ctrl.stopAndRestore()
+    expect(ctrl.isActive()).toBe(false)
+  })
+
+  it('primes dormant atoms with the mean before the first nanopore representation switch', async () => {
+    const { ctrl, api, atom, state, onRestoreDesignHeavy } = makeHeavyDeps('full')
+    atom.getMode = () => state.repr === 'full' ? 'off' : 'vdw'
+    const response = await api.getOxdnaRmsf('jobF')
+    const representations = { atomistic_model: await api.getOxdnaAtomisticModel('jobF'),
+      atomistic_average: await api.getOxdnaRmsfAtomistic('jobF') }
+    await ctrl.displayRmsf('jobF', { response, representations, awaitHeavy: true })
+    expect(atom.update).toHaveBeenCalledOnce()
+    expect(atom.applyPositionLerp).not.toHaveBeenCalled()
+    state.repr = 'vdw'
+    await ctrl.reapplyForRepr({ strict: true })
+    expect(atom.update).toHaveBeenCalledOnce()
+    expect(atom.applyPositionLerp).toHaveBeenCalledOnce()
+    ctrl.stopAndRestore()
+    expect(onRestoreDesignHeavy).toHaveBeenCalledOnce()
+  })
+
   it('flexibility map colours the surface mesh by per-vertex RMSF (scalar, not strand)', async () => {
     const { ctrl, api, surf } = makeHeavyDeps('surface')
     await ctrl.displayRmsf('jobF')
@@ -1097,6 +1151,27 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     // different downsample. oxDNA has no interval (that control is MD's), so it stays
     // undefined here and the oxDNA client ignores it.
     expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledWith('jobT', [2], true, 'lineage', undefined)
+  })
+
+  it.each(['ballstick', 'surface'])('fine %s scrubbing reuses prepared exact frames across granularity switches', async (repr) => {
+    const { ctrl, api, atom, surf, onHeavyStatus } = makeHeavyDeps(repr)
+    await ctrl.loadTrajectory('jobT')
+    await tick()
+    await ctrl.prebuildHeavy()
+    api.getOxdnaFramesAtomistic.mockClear()
+    api.getOxdnaFramesSurface.mockClear()
+    onHeavyStatus.mockClear()
+    ctrl.setGranularity('fine')
+    for (const i of [2, 4, 2]) { ctrl.showFrame(i); await tick() }
+    expect(api.getOxdnaFramesAtomistic).not.toHaveBeenCalled()
+    expect(api.getOxdnaFramesSurface).not.toHaveBeenCalled()
+    expect(onHeavyStatus.mock.calls.some(([s]) => s.building)).toBe(false)
+    const frame = (repr === 'surface' ? surf : atom).applyPositionLerp.mock.calls.at(-1)[0]
+    expect(Array.from(frame.vertices ?? frame)).toEqual([2, 2, 2])
+    ctrl.setGranularity('coarse')
+    await tick()
+    expect(api.getOxdnaFramesAtomistic).not.toHaveBeenCalled()
+    expect(api.getOxdnaFramesSurface).not.toHaveBeenCalled()
   })
 
   it('stopAndRestore rebuilds the design heavy reps; a late reconstruction does not re-apply', async () => {

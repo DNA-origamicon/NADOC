@@ -1,3 +1,4 @@
+import { initIonTransportProgress } from './ion_transport_progress.js'
 import { buildChartSpec, drawChart, SERIES_COLORS } from './metric_graph.js'
 
 let root = null
@@ -43,24 +44,40 @@ export function ionTransportSeries(result) {
   }
 }
 
-export function openIonTransportPopup(result) {
+export async function openIonTransportPopup(result, { onProgress = null } = {}) {
   if (root) root.remove()
   root = document.createElement('div')
   root.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;font-family:var(--font-ui,sans-serif)'
   root.innerHTML = `<div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:16px;max-width:95vw;max-height:92vh;overflow:auto;color:#c9d1d9">
     <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:8px"><strong>Nanopore ion transport</strong><button data-close style="background:#21262d;border:1px solid #30363d;border-radius:5px;color:#c9d1d9;padding:4px 10px;cursor:pointer">Close</button></div>
     <div data-summary style="font-size:12px;color:#8b949e;margin-bottom:10px"></div>
+    <div data-progress style="margin-bottom:10px"></div>
     <div style="display:flex;flex-wrap:wrap;gap:14px"><canvas data-current></canvas><canvas data-crossings></canvas></div>
     <div style="font-size:11px;color:#6e7681;margin-top:8px">Current uses charge displacement across the periodic cell. Crossings require the ion path to intersect the membrane plane inside the circular pore.</div>
   </div>`
   document.body.appendChild(root)
+  const popup = root
+  const progress = initIonTransportProgress(popup.querySelector('[data-progress]'))
+  progress.reset(['plot-series', 'plot-current', 'plot-crossings'])
+  const close = () => { popup.remove(); if (root === popup) root = null }
+  popup.querySelector('[data-close]').addEventListener('click', close)
+  popup.addEventListener('click', event => { if (event.target === popup) close() })
+  const stage = async (name, work) => {
+    progress.update({ stage: name, done: 0, total: 1 })
+    onProgress?.({ stage: name, done: 0, total: 1 })
+    await new Promise(resolve => setTimeout(resolve, 20))
+    if (!popup.isConnected) throw new Error('Ion transport plot closed.')
+    let result
+    try { result = work() }
+    catch (error) { progress.fail(error?.message || 'Plot failed'); throw error }
+    progress.update({ stage: name, done: 1, total: 1 })
+    onProgress?.({ stage: name, done: 1, total: 1 })
+    return result
+  }
   const current = Number(result.mean_current_nA || 0)
   const conductance = result.conductance_nS == null ? '—' : `${Number(result.conductance_nS).toFixed(3)} nS`
-  root.querySelector('[data-summary]').textContent = `${current.toFixed(4)} nA mean current · ${conductance} · ${result.frames || 0} frames · ${result.pore?.diameter_nm ?? '—'} nm pore`
-  const series = ionTransportSeries(result)
-  drawChart(root.querySelector('[data-current]'), buildChartSpec({ series: series.current, width: 560, height: 300, title: 'Electrical current', xLabel: 'simulation time (ns)', yLabel: 'current (nA)', zeroLine: true }))
-  drawChart(root.querySelector('[data-crossings]'), buildChartSpec({ series: series.crossings, width: 560, height: 300, title: 'Aperture-validated crossings', xLabel: 'simulation time (ns)', yLabel: 'cumulative net crossings', zeroLine: true }))
-  const close = () => { root?.remove(); root = null }
-  root.querySelector('[data-close]').addEventListener('click', close)
-  root.addEventListener('click', event => { if (event.target === root) close() })
+  popup.querySelector('[data-summary]').textContent = `${current.toFixed(4)} nA mean current · ${conductance} · ${result.frames || 0} frames · ${result.pore?.diameter_nm ?? '—'} nm pore`
+  const series = await stage('plot-series', () => ionTransportSeries(result))
+  await stage('plot-current', () => drawChart(popup.querySelector('[data-current]'), buildChartSpec({ series: series.current, width: 560, height: 300, title: 'Electrical current', xLabel: 'simulation time (ns)', yLabel: 'current (nA)', zeroLine: true })))
+  await stage('plot-crossings', () => drawChart(popup.querySelector('[data-crossings]'), buildChartSpec({ series: series.crossings, width: 560, height: 300, title: 'Aperture-validated crossings', xLabel: 'simulation time (ns)', yLabel: 'cumulative net crossings', zeroLine: true })))
 }

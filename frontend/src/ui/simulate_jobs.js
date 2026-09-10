@@ -1095,16 +1095,23 @@ export function initSimulateJobs({
   endDownloadBtn?.addEventListener('click', async () => {
     const node = _selectedNode()
     if (_busy || node?.engine !== 'namd') return
-    const destRoot = getRunDir()
-    if (!destRoot) {
-      showToast('Choose a storage directory first.', { severity: 'warning' })
-      return
-    }
     _busy = true
-    _endTransfers.set(node.job_id, { phase: 'downloading', pct: 0, moved: 0, total: 0 })
     _renderMaster()
-    const stopWatching = _watchDownloadProgress(node.job_id)
+    let stopWatching = () => {}
     try {
+      // null means the server's default folder, which the Directory button already
+      // displays. Resolve that same folder instead of treating null as no choice.
+      let destRoot = getRunDir()
+      if (!destRoot) {
+        const directory = await api.getMdRunDirStatus(null)
+        if (!directory?.ok || !directory.path) {
+          throw new Error(directory?.detail || 'Could not check the storage directory.')
+        }
+        destRoot = directory.path
+      }
+      _endTransfers.set(node.job_id, { phase: 'downloading', pct: 0, moved: 0, total: 0 })
+      _renderMaster()
+      stopWatching = _watchDownloadProgress(node.job_id)
       const result = await api.finishMdJob(node.job_id, destRoot)
       await stopWatching()
       if (!result) throw new Error(api.lastErrorMessage?.() || 'Transfer could not be started')
