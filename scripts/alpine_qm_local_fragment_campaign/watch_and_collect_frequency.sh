@@ -22,8 +22,10 @@ while true; do
     (cd "$repository_root" && uv run python scripts/alpine_qm_local_fragment_campaign/collect_frequency_campaign.py \
       --campaign-root "$campaign_root" \
       --remote-results "$campaign_root/remote-results") >> "$log" 2>&1
-    (cd "$repository_root" && uv run python scripts/alpine_qm_local_fragment_campaign/evaluate_handoff.py \
-      "$campaign_root") >> "$log" 2>&1
+    if [[ -f "$campaign_root/bundle/offload_plan.json" ]]; then
+      (cd "$repository_root" && uv run python scripts/alpine_qm_local_fragment_campaign/evaluate_handoff.py \
+        "$campaign_root") >> "$log" 2>&1
+    fi
     exit 0
   fi
   sleep 60

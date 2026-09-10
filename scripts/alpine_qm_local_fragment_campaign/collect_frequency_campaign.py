@@ -44,7 +44,7 @@ def collect(*, campaign_root: Path, remote_results: Path) -> dict[str, object]:
         campaign.get("schema")
         != "nadoc.photoproduct-alpine-local-fragment-campaign.v1"
         or campaign.get("queued_frequency_count") != len(records)
-        or len(records) != 6
+        or not records
     ):
         raise ValueError("local Alpine fragment campaign manifest is invalid")
 
@@ -175,13 +175,21 @@ def collect(*, campaign_root: Path, remote_results: Path) -> dict[str, object]:
     retained = campaign.get("retained_local_frequencies") or []
     passed_remote = sum(item["status"] in PASSED_FREQUENCY for item in results)
     passed_retained = sum(item["status"] in PASSED_FREQUENCY for item in retained)
-    all_passed = passed_remote == len(results) == 6 and passed_retained == len(retained) == 1
+    all_passed = (
+        passed_remote == len(results) == len(records)
+        and passed_retained == len(retained)
+    )
+    stage_id = campaign.get("stage_id", "D1-frequency-hessian")
+    next_stage = campaign.get(
+        "next_stage", "D2-reused-core-frequency-inventory"
+    )
     report = {
         "schema": "nadoc.photoproduct-alpine-local-fragment-frequency-collection.v1",
         "status": "passed_frequency_cohort" if all_passed else "incomplete_or_failed",
         "gate_effect": "none",
         "simulation_ready": False,
-        "scoped_frequency_count": 7,
+        "stage": stage_id,
+        "scoped_frequency_count": len(records) + len(retained),
         "passed_frequency_count": passed_remote + passed_retained,
         "retained_local": retained,
         "alpine_results": results,
@@ -190,7 +198,7 @@ def collect(*, campaign_root: Path, remote_results: Path) -> dict[str, object]:
             "sha256": _sha256(campaign_path),
         },
         "next_action": (
-            "reconcile reused-core frequency inventory"
+            campaign.get("passed_next_action", "reconcile reused-core frequency inventory")
             if all_passed
             else "hold dependent stages and review failed or missing cases"
         ),
@@ -200,7 +208,7 @@ def collect(*, campaign_root: Path, remote_results: Path) -> dict[str, object]:
     gates.mkdir(exist_ok=True)
     gate = {
         "schema": "nadoc.photoproduct-alpine-stage-trigger.v1",
-        "stage": "D1-frequency-hessian",
+        "stage": stage_id,
         "status": "passed" if all_passed else "hold",
         "gate_effect": "none",
         "simulation_ready": False,
@@ -208,11 +216,12 @@ def collect(*, campaign_root: Path, remote_results: Path) -> dict[str, object]:
             "path": str(report_path.resolve()),
             "sha256": _sha256(report_path),
         },
-        "next_stage": (
-            "D2-reused-core-frequency-inventory" if all_passed else None
-        ),
+        "next_stage": next_stage if all_passed else None,
     }
-    (gates / "frequency_cohort.json").write_text(json.dumps(gate, indent=2) + "\n")
+    trigger_file = campaign.get("trigger_file", "frequency_cohort.json")
+    if Path(trigger_file).name != trigger_file:
+        raise ValueError("trigger file must be a plain filename")
+    (gates / trigger_file).write_text(json.dumps(gate, indent=2) + "\n")
     return report
 
 

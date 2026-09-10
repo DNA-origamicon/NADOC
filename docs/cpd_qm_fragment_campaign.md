@@ -379,6 +379,19 @@ running tasks: task 0 was scheduled through 04:42 MDT and task 1 through 04:57 M
 on Sep 10. Task 2 had already failed with exit code 1. Stage E therefore remains an
 independent, incomplete validation input pending collection and recovery review.
 
+Wave 1 of D1 completed later on Sep 10: anti endpoint 1, anti endpoint 2, and syn
+endpoint 2 passed 141/141-mode, zero-imaginary-mode, and Cartesian-Hessian audits.
+The remaining three D1 tasks are `32360291_3` through `_5`; after a stale array
+throttle was released, they became ordinarily eligible and pending on priority.
+
+The D2 inventory found four matching passed reused-core frequency audits and one
+missing case, the 36-atom `tt-cpd-cis-syn-ii` core. That missing job was generated
+from its hash-matching passed optimized-model audit under protocol v1.7.0 and
+submitted independently as Slurm job **32368077**, task 0. Its collector watcher is
+`nadoc-alpine-local-fragment-frequency-watch-32368077.service`. This lets the only
+known D2 calculation accrue queue priority while D1 finishes. D2 still cannot pass
+until both D1 and the five-core reconciliation pass.
+
 ## Verification of this review
 
 Targeted monitor tests exercise input/source corruption, interrupted execution, stage
@@ -386,7 +399,7 @@ failure, benchmark/stage events, deduplication, deferred-stage registration, and
 distinction between identity and harmonic-minimum evidence. Shell syntax, Ruff, systemd
 unit verification, live service execution, and the nine-case listing passed.
 
-The required `just test-smart` selected **FAST**: **8,100 passed, 109 skipped, 11 failed**.
+The required `just test-smart` selected **FAST**: **8,108 passed, 109 skipped, 11 failed**.
 Failures are in assembly flattening/CanDo tests outside the changed campaign code;
 representative reruns fail because workspace fixtures `BigO.nadoc` and `smallO-poly.nass`
 are absent. No application or scientific production validation is claimed.
