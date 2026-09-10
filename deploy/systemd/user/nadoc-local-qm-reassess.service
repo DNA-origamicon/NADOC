@@ -1,0 +1,12 @@
+[Unit]
+Description=Reassess local TT-CPD fragment campaign evidence and checkpoints
+ConditionPathIsMountPoint=/media/jojo/Archive
+ConditionPathExists=/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-local-fragment-campaign-v1/review_preparation.json
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/jojo/Work/NADOC
+ExecStart=/home/jojo/Work/NADOC/.venv/bin/python scripts/local_qm_fragment_campaign/reassess.py --notify
+Nice=10
+MemoryMax=1G
+TimeoutStartSec=60

@@ -15,6 +15,16 @@ if [[ "$action" == "--list" ]]; then
 import json
 import sys
 manifest = json.load(open(sys.argv[1]))
+from pathlib import Path
+review = Path(sys.argv[1]).with_name('review_preparation.json')
+if review.is_file():
+    cases = json.loads(review.read_text())['jobs']
+    extensions = review.with_name('review_extensions.json')
+    if extensions.is_file():
+        cases += json.loads(extensions.read_text())['jobs']
+    for case in cases:
+        print(f"{case['id']}\tstage-{case['stage']}\tbudget {case['wall_hours']:g} h")
+    raise SystemExit(0)
 for case in manifest["fragment_cases"]:
     hours = case["resources"]["estimated_local_wall_hours"]
     print(f"{case['id']}\t{case['tier']}\t{case['product_id']}\t{hours[0]:g}-{hours[1]:g} h")
@@ -25,6 +35,11 @@ fi
 if [[ "$action" != "--run" || -z "$case_id" ]]; then
   echo "an exact --run CASE_ID selection is required; no default job is started" >&2
   exit 2
+fi
+
+if [[ -f "$campaign_root/review_preparation.json" ]]; then
+  exec /home/jojo/Work/NADOC/.venv/bin/python \
+    /home/jojo/Work/NADOC/scripts/local_qm_fragment_campaign/run_case.py "$campaign_root" "$case_id"
 fi
 
 job_dir="$campaign_root/cases/$case_id/job"

@@ -137,6 +137,16 @@ def _existing_core_inventory(evidence_root: Path) -> list[dict[str, object]]:
         audit_path = result_dir / "optimized_model_audit.json"
         if not job_path.is_file():
             raise FileNotFoundError(f"missing existing core job: {job_path}")
+        audit = json.loads(audit_path.read_text()) if audit_path.is_file() else {}
+        passed = audit.get("status") in {
+            "passed_identity_and_chirality", "passed_candidate_identity_and_chirality"
+        } and audit.get("chirality_audit", {}).get("passed") is True
+        state = "completed_identity_audit" if passed else (
+            "existing_attempt_requires_review"
+            if any((result_dir / name).exists() for name in
+                   ("output.dat", "run_manifest.json", "optimized_model_audit.json"))
+            else "prepared_not_run"
+        )
         inventory.append(
             {
                 "product_id": product_id,
@@ -144,11 +154,11 @@ def _existing_core_inventory(evidence_root: Path) -> list[dict[str, object]]:
                 "job_manifest": _record(job_path),
                 "input": _record(job_dir / "input.dat"),
                 "evidence": _record(audit_path) if audit_path.is_file() else None,
-                "state": "completed_identity_audit" if audit_path.is_file() else "prepared_not_run",
+                "state": state,
                 "estimated_local_wall_hours": [1.0, 3.0],
                 "need": (
                     "existing core geometry can be reused"
-                    if audit_path.is_file()
+                    if passed
                     else "complete the distinct product-core minimum before fitting or transfer tests"
                 ),
             }
@@ -246,7 +256,7 @@ def build(*, evidence_root: Path, output_root: Path) -> dict[str, object]:
     output_root.mkdir(parents=True, exist_ok=True)
     _write_run_helper(output_root)
     core = _existing_core_inventory(evidence_root)
-    missing_core = [item for item in core if item["state"] == "prepared_not_run"]
+    missing_core = [item for item in core if item["state"] != "completed_identity_audit"]
     primary_cases = [item for item in cases if item["tier"] == "primary"]
     heldout_cases = [item for item in cases if item["tier"] == "heldout"]
     campaign = {

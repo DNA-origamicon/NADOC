@@ -67,6 +67,33 @@ def test_local_runner_has_no_default_execution_path() -> None:
     assert '--scratch-dir "$scratch_root"' in runner
 
 
+def test_core_inventory_does_not_call_interrupted_or_failed_jobs_prepared(tmp_path: Path) -> None:
+    builder = _load_builder()
+    products = (
+        "tt-cpd-cis-anti-i", "tt-cpd-cis-anti-ii", "tt-cpd-cis-syn-ii",
+        "tt-cpd-trans-anti-i", "tt-cpd-trans-anti-ii", "tt-cpd-trans-syn-i",
+        "tt-cpd-trans-syn-ii",
+    )
+    base = tmp_path / "tt-cpd-work-v1/qm"
+    for product in (*products, "geometry"):
+        directory = base / ("geometry" if product == "geometry" else f"stereo-geometries/{product}")
+        directory.mkdir(parents=True)
+        (directory / "job_manifest.json").write_text("{}")
+        (directory / "input.dat").write_text("input")
+        if product in {"geometry", "tt-cpd-cis-anti-i"}:
+            (directory / "optimized_model_audit.json").write_text(json.dumps({
+                "status": "passed_identity_and_chirality", "chirality_audit": {"passed": True}}))
+        if product == "tt-cpd-cis-anti-ii":
+            (directory / "output.dat").write_text("interrupted")
+        if product == "tt-cpd-trans-anti-i":
+            (directory / "optimized_model_audit.json").write_text('{"status": "failed"}')
+    states = {row['product_id']: row['state'] for row in builder._existing_core_inventory(tmp_path)}
+    assert states['tt-cpd-cis-anti-i'] == 'completed_identity_audit'
+    assert states['tt-cpd-cis-anti-ii'] == 'existing_attempt_requires_review'
+    assert states['tt-cpd-trans-anti-i'] == 'existing_attempt_requires_review'
+    assert states['tt-cpd-trans-anti-ii'] == 'prepared_not_run'
+
+
 @pytest.mark.skipif(
     not ANTI_SOURCE.is_file(), reason="Archive-backed reviewed boundary source unavailable"
 )

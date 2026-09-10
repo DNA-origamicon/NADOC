@@ -1,0 +1,10 @@
+[Unit]
+Description=Reassess and advance authorized local QM campaign every five minutes
+
+[Timer]
+OnCalendar=*-*-* *:0/5:30
+Persistent=true
+Unit=nadoc-local-qm-continue.service
+
+[Install]
+WantedBy=timers.target
