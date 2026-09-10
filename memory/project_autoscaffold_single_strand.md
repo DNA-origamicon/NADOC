@@ -95,7 +95,11 @@ Helpers: `nick_is_proper` (same-helix adjacent-bp), `seam_crossover_count` (proc
 ADJACENT endpoints (`_closeable_path`) + adds a closing zig → circular scaffold → `_linearize_circular_scaffolds` buries the
 nick. Section-router trunk (seamless mode) uses it; teeth now route FULLY SEAMLESS (0 seams, proper buried nick `_0_1[123/124]`),
 matching the reference. Test `test_seamless_autoscaffold_is_fully_seamless_like_reference` now PASSES (xfail removed).
-KNOWN LIMIT: the HC dumbbell trunk is a degree-2 6-RING; closing the full cycle creates a face conflict at the endpoints
+**Resolved 2026-09-10:** the HC dumbbell trunk's degree-2 6-RING now closes seamlessly.
+The closing edge follows `(path[-1], path[0])`, so it uses the final helix's free
+3′ face. Public seamless routing also defaults to a cycle with a buried nick and
+warns for unclosed output; see `project_seamless_router.md`.
+Historical limit: closing the full cycle created a face conflict at the endpoints
 (free-face mismatch → 3 fragments), so it FALLS BACK to the bounded-seamed trunk (1 strand, buried nick, ~4 backbone seams).
 SQ teeth close cleanly. Fixing HC-ring closure (place the closing zig at the endpoints' actual FREE faces, not the FORWARD-hA
 heuristic) is the remaining follow-up if a seam-free HC dumbbell is wanted. Full suite 1853 pass.

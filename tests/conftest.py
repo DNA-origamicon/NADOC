@@ -556,6 +556,11 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Full workspace BigO polymer: load/flatten thousands of strands, export all
+    # particles, or reconstruct every nucleotide and the FEM mesh (9.8/16.9 s
+    # in the 2026-09-10 fast gate). Smaller flatten/periodic pins stay fast.
+    "test_bigo_periodic_flatten_stitches_repeats_and_keeps_full_ssdna_ends",
+    "test_bigo_periodic_flatten_has_one_fem_component_and_registered_seams",
     # Full six-helix topology-safe atomistic projection: 9.8–10.9 s each in the
     # 2026-09-04 fast gate. Retain the complete geometry assertions in slow/oxdna.
     "test_build_namd_seed_uses_snapshot_and_backbone_site",
@@ -914,6 +919,8 @@ def _slow_area_for(module: str) -> str:
     """Map a slow test's module (bare filename, no .py) to one area marker.
     First match wins; order matters (oxdna before headless so the oxDNA
     headless-build file lands in oxdna, not headless)."""
+    if module == "test_assembly_flatten":
+        return "cando"
     if "oxdna" in module or "skip_twist" in module:
         return "oxdna"
     # snupi = the native FEM shape predictor; it shares the CanDo/FEM solver stack,

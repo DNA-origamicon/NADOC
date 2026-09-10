@@ -1,8 +1,10 @@
 """
 Seamless scaffold router — zig-zag end crossovers only, no seam HJ.
 
-Each helix in the Hamiltonian path is visited ONCE.  Adjacent pairs receive a
-single end crossover at the hi face (if hA is FORWARD) or the lo face (if hA
+Each helix in the Hamiltonian cycle is visited ONCE (the nick helix has two
+domains). The cycle is opened at one buried, same-helix adjacent-base nick.
+If no cycle is found or realized, retain the available route and warn.
+Adjacent pairs receive a single end crossover at the hi face (if hA is FORWARD) or the lo face (if hA
 is REVERSE).  Consecutive HC helices alternate parity, so faces alternate
 naturally: hi / lo / hi / lo …
 
@@ -55,12 +57,38 @@ def _closeable_path(ids: list[str], adj: dict[str, set[str]]) -> list[str] | Non
     mid-bundle instead of stranded at an outer face (the seamless route is otherwise a
     linear path with non-closeable ends)."""
     id_set = set(ids)
-    for end in sorted(ids):
-        for start in sorted(n for n in adj.get(end, set()) if n in id_set):
-            p = _ham_path_ending(ids, adj, end, start)
-            if p and len(p) == len(id_set) and p[0] in adj.get(p[-1], set()):
-                return p
-    return None
+    local = {hid: adj[hid] & id_set for hid in ids}
+    if len(local) < 2:
+        return None
+    # Two helices can close with two distinct turns, one at each face.
+    if len(local) == 2:
+        a, b = sorted(local)
+        return [a, b] if b in local[a] else None
+    if any(len(nbs) < 2 for nbs in local.values()):
+        return None
+    # Lattice crossover graphs are bipartite: a cycle uses equal numbers of
+    # both colors. Reject impossible odd/unbalanced sections before searching.
+    colors: dict[str, int] = {}
+    for root in sorted(local):
+        if root in colors:
+            continue
+        colors[root] = 0
+        stack = [root]
+        while stack:
+            node = stack.pop()
+            for nb in local[node]:
+                if nb not in colors:
+                    colors[nb] = 1 - colors[node]
+                    stack.append(nb)
+    if all(colors[a] != colors[b] for a in local for b in local[a]):
+        if sum(colors.values()) * 2 != len(local):
+            return None
+    key = lambda n: (len(local[n]), n)  # noqa: E731
+    # Every cycle includes this vertex. One fixed start and ONE shared budget
+    # suffice; retrying all start/end pairs can multiply the ceiling enormously.
+    return _ham_path_search(
+        ids, local, key, [min(local, key=key)], [_HAM_PATH_BUDGET], close_cycle=True
+    )
 
 
 # ── Local helpers ─────────────────────────────────────────────────────────────
@@ -108,11 +136,34 @@ class SeamlessResult:
     bridge_xovers: int = 0  # HJ bridge crossovers placed between sections
 
 
+def _warn_open_scaffolds(design: Design, result: SeamlessResult) -> None:
+    """Check the actual termini, since one strand alone does not prove closure."""
+    open_count = 0
+    for strand in design.strands:
+        if not strand.is_scaffold or strand.is_reference or not strand.domains:
+            continue
+        first, last = strand.domains[0], strand.domains[-1]
+        step = 1 if first.direction == Direction.FORWARD else -1
+        if not (
+            first.helix_id == last.helix_id
+            and first.direction == last.direction
+            and last.end_bp + step == first.start_bp
+        ):
+            open_count += 1
+    if open_count:
+        result.warnings.append(
+            f"[Seamless] No closed route with one buried nick was achieved: "
+            f"{open_count} scaffold strand(s) still have separated termini. "
+            "The design may not admit a seamless cycle, or the search "
+            "could not find or realize one. Adjust the cross-section or route manually."
+        )
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 
 def auto_scaffold_seamless(
-    design: Design, *, close_cycle: bool = False, reset: bool = True
+    design: Design, *, close_cycle: bool = True, reset: bool = True
 ) -> tuple[Design, SeamlessResult]:
     """Run the seamless scaffold pipeline.
 
@@ -121,11 +172,13 @@ def auto_scaffold_seamless(
     Phase 2 (Zig-Zag): place one end crossover per within-group adjacent pair,
       at the hi face for FORWARD helices and the lo face for REVERSE helices.
 
-    ``close_cycle`` (used by the section router for a uniform sub-bundle like the
-    trunk) routes the bundle along a Hamiltonian path with adjacent endpoints and adds
+    ``close_cycle`` (the default) routes a bundle along a Hamiltonian path with
+    adjacent endpoints and adds
     a closing zig, so the bundle becomes a circular scaffold; the resulting loop is then
     reopened with one buried mid-bundle nick.  This gives a FULLY SEAMLESS backbone with
     a proper nick (no seamed raster needed).
+    ``close_cycle=False`` retains open paths for section windows that are closed
+    during splicing. If closure fails, retain the available route and warn.
 
     ``reset`` (ISSUE-9) retracts any prior auto-route back to the staple-defined
     structural seed first, so re-routing an already-routed design is idempotent.
@@ -157,12 +210,15 @@ def auto_scaffold_seamless(
 
         woven = realize_hinge_weave_seamless(design.model_copy(deep=True))
         if woven is not None:
+            woven[1].warnings[:0] = result.warnings
+            if close_cycle:
+                _warn_open_scaffolds(*woven)
             return woven
 
     # Irregular multi-section designs (teeth, dumbbells) fragment under the native
     # zig/bridge route; the section router decomposes them into uniform sub-bundles,
-    # routes the windows seamless and the backbone seamed (so it closes into a circle
-    # and the single nick buries mid-bundle), and 2-opt-splices them into ONE strand.
+    # routes the windows and backbone seamless when possible, and 2-opt-splices
+    # them into ONE strand with a buried nick.
     # Falls back to the native route when it cannot cleanly section.
     if not design.forced_ligations:
         from backend.core.section_router import has_multisection_helix, route_sections
@@ -170,6 +226,9 @@ def auto_scaffold_seamless(
         if has_multisection_helix(coverage):
             sectioned = route_sections(design.model_copy(deep=True), seamless=True)
             if sectioned is not None:
+                sectioned[1].warnings[:0] = result.warnings
+                if close_cycle:
+                    _warn_open_scaffolds(*sectioned)
                 return sectioned
 
     helix_by_id: dict = {h.id: h for h in design.helices}
@@ -231,13 +290,11 @@ def auto_scaffold_seamless(
                 continue
             for i in range(len(path) - 1):
                 zig_pairs.append((path[i], path[i + 1]))
-            # Closing zig: turn the linear raster into a circular scaffold so its single
-            # nick can be buried.  FORWARD helix as hA (hi face), like the group case.
+            # Follow the same directed traversal as every other turn: the last
+            # helix's 3' face is free. Forcing FORWARD first can reuse an occupied
+            # hi face when the path starts FORWARD, fragmenting a valid cycle.
             if close_cycle and path[0] in adj.get(path[-1], set()):
-                a, b = path[-1], path[0]
-                h_fwd = a if _is_forward(*helix_by_id[a].grid_pos) else b
-                h_rev = b if h_fwd == a else a
-                zig_pairs.append((h_fwd, h_rev))
+                zig_pairs.append((path[-1], path[0]))
 
         else:
             # Multi-section: sort groups by total bp ascending (arms first),
@@ -512,6 +569,7 @@ def auto_scaffold_seamless(
     # single buried, non-crossover mid-bundle nick (same machinery as the seamed router).
     if close_cycle:
         current = _linearize_circular_scaffolds(current, result)
+        _warn_open_scaffolds(current, result)
 
     append_single_strand_warning(current, result)
     return current, result

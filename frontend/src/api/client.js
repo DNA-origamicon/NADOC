@@ -1433,7 +1433,13 @@ export async function autoScaffoldSeamless(opts = {}) {
     nick_offset: nickOffset,
     min_end_margin: minEndMargin,
   })
-  return _syncFromDesignResponse(json)
+  const ok = await _syncFromDesignResponse(json)
+  // Reset summaries describe a normal reroute, not a routing failure.
+  const warnings = (json?.warnings ?? []).filter(w => !w.startsWith('Reset prior auto-scaffold route'))
+  if (ok && warnings.length) {
+    showToast(warnings.join('  •  '), { severity: 'warning', duration: 10000 })
+  }
+  return ok
 }
 
 export async function syncScaffoldSequenceResponse(json) {

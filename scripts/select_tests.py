@@ -115,6 +115,7 @@ FULL_TRIGGER_SUBSTRINGS = (
 # Order matters (first hit classifies the file). Everything here has a narrow,
 # well-understood blast radius contained within the listed area(s).
 LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("assembly_flatten", ("cando",)),
     ("oxdna", ("oxdna",)),
     ("oxpy", ("oxdna",)),
     ("skip_twist", ("oxdna",)),

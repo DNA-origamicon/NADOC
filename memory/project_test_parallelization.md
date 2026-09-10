@@ -11,6 +11,21 @@ Backend tests run in parallel via pytest-xdist. The 2026-09-06 inventory contain
 8,166 cases, including real MD and finite-element solves; full-suite wall time is
 not a measure of the fast development loop.
 
+**2026-09-10 fast-gate triage:** the two `test_bigo_periodic_flatten_*` cases in
+`tests/test_assembly_flatten.py` load the full live BigO polymer, flatten thousands
+of strands, and export its topology / reconstruct nucleotide geometry and FEM mesh.
+They took 9.77 s / 16.87 s (5 s per-test limit), so they now live in `_SLOW_TESTS`,
+area `cando`; `assembly_flatten` source changes select that same slow area. The
+smaller flatten/periodic tests stay fast. **Unresolved fixture drift:** the current
+workspace polymer yields 5,366 strands and 1,624 seam distances, while these tests
+hardcode 587 and 112 for an older three-repeat artifact. Both failed before their
+classification changed; moving them to slow does not resolve those assertions.
+They need a deterministic saved-fixture replacement in a separate assembly task.
+The subsequent `just test-smart` run passed 7,721 tests (35 skipped), with zero
+per-test violators (slowest 3.47 s). It still printed the aggregate 99 s / 90 s
+backstop notice; the 7,755-case fast suite has broad cumulative cost, so no
+additional tests were relegated merely to suppress that notice.
+
 **2026-09-06 audit outcome:** across the full and final focused runs, all current
 cases are accounted for: 8,076 passed, 89 test skips, one expected failure, plus
 one collection skip. Frontend: 6,191 passed. The full command was intentionally
