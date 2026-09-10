@@ -1425,6 +1425,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const displayIndicatorLabel = document.getElementById('md-jobs-display-indicator-label')
   let ionPaths = null
   const ionPathsToggle = document.getElementById('md-ion-paths-toggle')
+  const ionVectorFieldToggle = document.getElementById('md-ion-vector-field-toggle')
   const vizOffRadio   = document.getElementById('md-jobs-viz-off')
   const showAllToggle = document.getElementById('md-jobs-show-all')
 
@@ -1436,7 +1437,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // lost trajectory, failed load).
   function _syncVizOffRadio() {
     if (!vizOffRadio) return
-    const anyOn = [displayToggle, flexToggle, photoproductToggle, trajToggle, occupancyToggle, ionPathsToggle]
+    const anyOn = [displayToggle, flexToggle, photoproductToggle, trajToggle, occupancyToggle, ionPathsToggle, ionVectorFieldToggle]
       .some(t => t?.checked)
     vizOffRadio.checked = !(anyOn || _trajJobId || _trajLoadJobId)
   }
@@ -3202,6 +3203,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
   ionPaths = initMdIonPathsControls({
     api, getOverlay: getIonPathsOverlay, getJobId: () => _selectedId, getDisplay: getMdViz,
+    getFlexScale,
     onOff: _syncVizOffRadio,
     activate: () => {
       _stopMdDisplay('Native positions restored')

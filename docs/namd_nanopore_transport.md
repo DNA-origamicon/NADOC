@@ -137,6 +137,20 @@ temporarily stale DCD header cannot make a live run appear to contain one frame.
 Selecting a production child after reload inherits the relaxation parent's hard-
 surface controls and nanopore descriptor.
 
+For a nanopore job with saved trajectory frames, **View nanopore ion paths** shows
+the crossing-centred trajectory windows and **View ion vector field** spatially bins
+those same directed, saved-frame displacements into an average field for one selected
+ion species. Ion paths can retain species colors or use an earliest-to-latest saved-frame
+color ramp shown in the adjustable legend beside the 3D view. The before/after window is
+shared by both views. Arrow density controls
+the number of bins along the longest occupied dimension; its slider reaches 64 and
+the adjacent numeric field accepts higher exact values. Empty bins are omitted.
+Magnitude can be encoded by arrow size or by a blue-to-red colour scale, while the
+separate arrow-size slider uniformly scales every arrow's length and thickness. Switching
+between the two views retains the decoded crossing data, display settings, RMSF-average
+origami, and graphene representation, so only a window edit or explicit reload repeats
+the trajectory analysis.
+
 When the selected design contains a nanopore, the Metrics card exposes the ion
 transport plot. NADOC reports species-resolved current, total current, cumulative
 positive/negative/net crossings, pore occupancy, cumulative transported charge, and

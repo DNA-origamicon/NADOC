@@ -16,7 +16,7 @@ export const ION_PATH_STAGES = [
 ]
 export function ionPathsProgress(snapshot) {
   const stages = new Map((snapshot?.stages || []).map(s => [s.stage, s]))
-  let percentage = 0, label = 'Preparing nanopore ion paths'
+  let percentage = 0, label = 'Preparing nanopore ion visualization'
   for (const [name, weight, title] of ION_PATH_STAGES) {
     const stage = stages.get(name)
     if (!stage) continue
