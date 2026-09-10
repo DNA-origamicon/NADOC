@@ -1,0 +1,51 @@
+{
+  "status": "Selected trajectory representation audit, not a convergence assessment",
+  "method": "Read box in every frame; independently reconstruct each chain by sequential minimum-image bonds; compare each molecular Rg with direct-coordinate analysis.",
+  "limitations": "These selected CPU pivot, GPU MD and CPU NPT trajectories do not prove every future trajectory is unwrapped. No simulation or stored analysis was modified.",
+  "results": [
+    {
+      "directory": "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/equilibrium_zero_tail_294/n455_t294_s201",
+      "trajectory_sha256": "90fac82f76b942fd16fa2c212310268b68828db59161c3b77d1adabb4b0ca66b",
+      "frames": 2000,
+      "chains": 1,
+      "n": 455,
+      "maximum_rg_difference_nm": 7.105427357601002e-15,
+      "maximum_direct_bond_nm": 0.3927701666680267,
+      "maximum_minimum_image_bond_nm": 0.3927701666680267,
+      "agreement_within_1e_9_nm": true
+    },
+    {
+      "directory": "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/equilibrium_zero_tail_381_396/n135_t396_s201",
+      "trajectory_sha256": "5f5017879041ec5d1523300a193bc0d2fbc4eafe393ae6c7fecbc4215b3e46aa",
+      "frames": 2000,
+      "chains": 1,
+      "n": 135,
+      "maximum_rg_difference_nm": 8.881784197001252e-16,
+      "maximum_direct_bond_nm": 0.39494386604176407,
+      "maximum_minimum_image_bond_nm": 0.39494386604176407,
+      "agreement_within_1e_9_nm": true
+    },
+    {
+      "directory": "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/zero_tail_gpu_n36_t381/s701",
+      "trajectory_sha256": "bc0e1405183aa8655b9d4842b44555acd20b7ec9b5ddd4efa9baa43544151b27",
+      "frames": 2000,
+      "chains": 1,
+      "n": 36,
+      "maximum_rg_difference_nm": 4.440892098500626e-16,
+      "maximum_direct_bond_nm": 0.38758865643858215,
+      "maximum_minimum_image_bond_nm": 0.38758865643858215,
+      "agreement_within_1e_9_nm": true
+    },
+    {
+      "directory": "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p10_s401",
+      "trajectory_sha256": "3eb9662fae72496e0b3294d96dde319ce97076f09894fe6924fcc5d1f648ce82",
+      "frames": 40,
+      "chains": 108,
+      "n": 135,
+      "maximum_rg_difference_nm": 2.6645352591003757e-15,
+      "maximum_direct_bond_nm": 0.38346490314106046,
+      "maximum_minimum_image_bond_nm": 0.38346490314106046,
+      "agreement_within_1e_9_nm": true
+    }
+  ]
+}

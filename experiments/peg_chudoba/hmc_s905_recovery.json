@@ -1,0 +1,7 @@
+{
+  "failed_run": "runs/hmc_n36_t381_raw_warm_s905",
+  "retry": "runs/hmc_n36_t381_raw_warm_s905_retry1",
+  "reason": "False CUDA cell overflow at exact capacity; failed after 800 saved proposals, engine error frame 804. Corrected atomic reservation bounds check, retaining true-overflow detection.",
+  "restart": "Same independent CPU endpoint and seed, fresh full allocation. Failed prefix is excluded, not pooled.",
+  "validation": "verification_cells.txt"
+}

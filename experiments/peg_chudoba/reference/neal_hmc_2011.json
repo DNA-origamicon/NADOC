@@ -1,0 +1,7 @@
+{
+  "title": "MCMC Using Hamiltonian Dynamics",
+  "author": "Radford M. Neal",
+  "source": "https://arxiv.org/pdf/1206.1901",
+  "sha256": "0582743db6913dd05ef7204a76fcd041fffdd86a7ca6c9580fb0fd5fdbf19f13",
+  "purpose": "Sampling-method reference; not a source of PEG force-field parameters"
+}

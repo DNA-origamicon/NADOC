@@ -389,6 +389,9 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
         raise HTTPException(400, f"Live oxDNA not available: {avail['reason']}")
 
     parent = _load_job(body.job_id)
+    from backend.physics.oxdna_peg import is_peg
+    if is_peg((parent.run_config or {}).get("surface_strands")):
+        raise HTTPException(409, "DNA2PEG uses the local CPU/CUDA job runner; oxpy Live is not supported yet")
     eligible = {OxdnaStatus.queued, OxdnaStatus.completed, OxdnaStatus.stopped, OxdnaStatus.failed}
     if is_running(body.job_id) or parent.status not in eligible:
         raise HTTPException(400, "Live needs a prepared or previously run job to seed from.")

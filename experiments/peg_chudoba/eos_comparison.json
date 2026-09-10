@@ -1,0 +1,491 @@
+{
+  "status": "Incomplete and unvalidated",
+  "primary_cutoff": "zero_tail",
+  "published_states": 15,
+  "estimates": [
+    {
+      "n": 135,
+      "temperature_K": 294.0,
+      "pressure_kpa": 1.0,
+      "sampling": "npt",
+      "cutoff": "raw",
+      "seeds": [
+        1402,
+        401,
+        403
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_extensions_n135_t294_p1_round1/n135_t294_p1_r402_g1",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_pilot_n135_t294/n135_t294_p1_s401",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_pilot_n135_t294/n135_t294_p1_s403"
+      ],
+      "replica_ids": [
+        402,
+        401,
+        403
+      ],
+      "mean_concentration_g_per_l": 2.327965059738441,
+      "conservative_sem_g_per_l": 0.07540068304858497,
+      "minimum_effective_volume_samples": 6.1152834607174,
+      "rank_folded_split_rhat": 1.2170303717625097,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": null,
+      "minimum_effective_structure_samples": 3.8460214748246373,
+      "retained_structure_frames": [
+        501,
+        20,
+        20
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 2.3026043752141034,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": 0.01101391311391886,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    },
+    {
+      "n": 135,
+      "temperature_K": 294.0,
+      "pressure_kpa": 1.0,
+      "sampling": "npt",
+      "cutoff": "zero_tail",
+      "seeds": [
+        402,
+        401,
+        403
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p1_s402",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p1_s401",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p1_s403"
+      ],
+      "replica_ids": [
+        402,
+        401,
+        403
+      ],
+      "mean_concentration_g_per_l": 2.4675504596448836,
+      "conservative_sem_g_per_l": 0.10511508322709916,
+      "minimum_effective_volume_samples": 12.307983566736743,
+      "rank_folded_split_rhat": 1.428888597946043,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": 1.1575068599852776,
+      "minimum_effective_structure_samples": 4.8997253867764545,
+      "retained_structure_frames": [
+        501,
+        501,
+        501
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 2.3026043752141034,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": 0.07163457440032128,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    },
+    {
+      "n": 135,
+      "temperature_K": 294,
+      "pressure_kpa": 10,
+      "sampling": "npt",
+      "cutoff": "raw",
+      "seeds": [
+        301,
+        302,
+        401,
+        402
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/npt_n135_m108_p10_raw_s301_20k",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/npt_n135_m108_p10_raw_s302_20k",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_pilot_n135_t294/n135_t294_p10_s401",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_pilot_n135_t294/n135_t294_p10_s402"
+      ],
+      "replica_ids": [
+        301,
+        302,
+        401,
+        402
+      ],
+      "mean_concentration_g_per_l": 17.56405403970951,
+      "conservative_sem_g_per_l": 0.8996521311173518,
+      "minimum_effective_volume_samples": 4.100122404874062,
+      "rank_folded_split_rhat": 1.7274321206481733,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": null,
+      "minimum_effective_structure_samples": 5.687056413997078,
+      "retained_structure_frames": [
+        20,
+        20,
+        20,
+        501
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 17.205650347325232,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": 0.02083058095156498,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    },
+    {
+      "n": 135,
+      "temperature_K": 294.0,
+      "pressure_kpa": 10.0,
+      "sampling": "npt",
+      "cutoff": "zero_tail",
+      "seeds": [
+        403,
+        401,
+        402
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p10_s403",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p10_s401",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p10_s402"
+      ],
+      "replica_ids": [
+        403,
+        401,
+        402
+      ],
+      "mean_concentration_g_per_l": 17.50070687582137,
+      "conservative_sem_g_per_l": 0.628864494127436,
+      "minimum_effective_volume_samples": 3.2813833931908563,
+      "rank_folded_split_rhat": 1.9063573651518166,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": 1.4333427019980272,
+      "minimum_effective_structure_samples": 3.8791269216334667,
+      "retained_structure_frames": [
+        501,
+        501,
+        501
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 17.205650347325232,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": 0.017148815798294192,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    },
+    {
+      "n": 135,
+      "temperature_K": 294.0,
+      "pressure_kpa": 20.0,
+      "sampling": "npt",
+      "cutoff": "zero_tail",
+      "seeds": [
+        401,
+        403,
+        402
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p20_s401",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p20_s403",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p20_s402"
+      ],
+      "replica_ids": [
+        401,
+        403,
+        402
+      ],
+      "mean_concentration_g_per_l": 28.441322573349083,
+      "conservative_sem_g_per_l": 1.5576059327066765,
+      "minimum_effective_volume_samples": 5.858026965339651,
+      "rank_folded_split_rhat": 2.5505719163928324,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": 1.4078645047168221,
+      "minimum_effective_structure_samples": 4.684458010521932,
+      "retained_structure_frames": [
+        501,
+        501,
+        501
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 28.008888165887754,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": 0.015439185050836635,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    },
+    {
+      "n": 135,
+      "temperature_K": 294.0,
+      "pressure_kpa": 50.0,
+      "sampling": "npt",
+      "cutoff": "zero_tail",
+      "seeds": [
+        403,
+        401,
+        402
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p50_s403",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p50_s401",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p50_s402"
+      ],
+      "replica_ids": [
+        403,
+        401,
+        402
+      ],
+      "mean_concentration_g_per_l": 49.21854121638271,
+      "conservative_sem_g_per_l": 4.5733760439979285,
+      "minimum_effective_volume_samples": 3.186867316921205,
+      "rank_folded_split_rhat": 3.117413893871859,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": 1.4827089835305443,
+      "minimum_effective_structure_samples": 3.7210630565358707,
+      "retained_structure_frames": [
+        501,
+        501,
+        501
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 50.317739131165325,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": -0.021845137197386566,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    },
+    {
+      "n": 135,
+      "temperature_K": 294.0,
+      "pressure_kpa": 100.0,
+      "sampling": "npt",
+      "cutoff": "zero_tail",
+      "seeds": [
+        401
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p100_s401"
+      ],
+      "replica_ids": [
+        401
+      ],
+      "mean_concentration_g_per_l": 83.42053856504812,
+      "conservative_sem_g_per_l": 0.14914798734705306,
+      "minimum_effective_volume_samples": 6.488609811481345,
+      "rank_folded_split_rhat": null,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": null,
+      "minimum_effective_structure_samples": 8.99165038008551,
+      "retained_structure_frames": [
+        501
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 73.41585851570058,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": 0.13627410005983864,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    },
+    {
+      "n": 455,
+      "temperature_K": 294.0,
+      "pressure_kpa": 1.0,
+      "sampling": "npt",
+      "cutoff": "raw",
+      "seeds": [
+        401
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_pilot_n455_t294/n455_t294_p1_s401"
+      ],
+      "replica_ids": [
+        401
+      ],
+      "mean_concentration_g_per_l": 6.95213182185741,
+      "conservative_sem_g_per_l": 0.030876230401884905,
+      "minimum_effective_volume_samples": 8.166317802768463,
+      "rank_folded_split_rhat": null,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": null,
+      "minimum_effective_structure_samples": 6.239913071842413,
+      "retained_structure_frames": [
+        20
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 6.079719986493366,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": 0.14349539737063277,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    },
+    {
+      "n": 455,
+      "temperature_K": 294.0,
+      "pressure_kpa": 1.0,
+      "sampling": "npt",
+      "cutoff": "zero_tail",
+      "seeds": [
+        403,
+        402,
+        401
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n455_t294/n455_t294_p1_s403",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n455_t294/n455_t294_p1_s402",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n455_t294/n455_t294_p1_s401"
+      ],
+      "replica_ids": [
+        403,
+        402,
+        401
+      ],
+      "mean_concentration_g_per_l": 6.186257633442381,
+      "conservative_sem_g_per_l": 0.3832006715234209,
+      "minimum_effective_volume_samples": 4.183793625441893,
+      "rank_folded_split_rhat": 2.406724504188026,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": 1.3194276850144833,
+      "minimum_effective_structure_samples": 6.0676813324641925,
+      "retained_structure_frames": [
+        501,
+        501,
+        501
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 6.079719986493366,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": 0.017523446340571125,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    },
+    {
+      "n": 455,
+      "temperature_K": 371.0,
+      "pressure_kpa": 1.0,
+      "sampling": "npt",
+      "cutoff": "raw",
+      "seeds": [
+        401
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_pilot_n455_t371/n455_t371_p1_s401"
+      ],
+      "replica_ids": [
+        401
+      ],
+      "mean_concentration_g_per_l": 483.1926543066276,
+      "conservative_sem_g_per_l": 0.24708312778767536,
+      "minimum_effective_volume_samples": 4.321379300928174,
+      "rank_folded_split_rhat": null,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": null,
+      "minimum_effective_structure_samples": 2.924477876479655,
+      "retained_structure_frames": [
+        20
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 420.263499230635,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": 0.1497373795040382,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    },
+    {
+      "n": 455,
+      "temperature_K": 371.0,
+      "pressure_kpa": 1.0,
+      "sampling": "npt",
+      "cutoff": "zero_tail",
+      "seeds": [
+        401
+      ],
+      "directories": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/eos_zero_tail_n455_t371/n455_t371_p1_s401"
+      ],
+      "replica_ids": [
+        401
+      ],
+      "mean_concentration_g_per_l": 480.8929370492578,
+      "conservative_sem_g_per_l": 0.3066562176085679,
+      "minimum_effective_volume_samples": 3.111556209254022,
+      "rank_folded_split_rhat": null,
+      "structure_observable": "Mean instantaneous chain Rg over all molecules; used only for mixing diagnostics",
+      "structure_rank_folded_split_rhat": null,
+      "minimum_effective_structure_samples": 3.614864703072812,
+      "retained_structure_frames": [
+        501
+      ],
+      "extension_recommended": true,
+      "published_concentration_g_per_l": 420.263499230635,
+      "digitization_relative_bound": 0.03,
+      "relative_difference": 0.1442652952959642,
+      "status": "Allocation estimates only; initialization, structural mixing and independent-seed convergence must be assessed"
+    }
+  ],
+  "missing_three_seed_states": [
+    {
+      "figure": "8",
+      "n": 135,
+      "temperature_K": 294,
+      "concentration_g_per_l": 73.41585851570058,
+      "pressure_kpa": 100.16869893899221,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 135,
+      "temperature_K": 294,
+      "concentration_g_per_l": 104.60550704609257,
+      "pressure_kpa": 199.8960609445916,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 135,
+      "temperature_K": 294,
+      "concentration_g_per_l": 221.87430734276185,
+      "pressure_kpa": 1000.8530705063966,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 294,
+      "concentration_g_per_l": 27.302559141125894,
+      "pressure_kpa": 9.983359835179114,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 294,
+      "concentration_g_per_l": 84.33963014952116,
+      "pressure_kpa": 100.17078247701723,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 294,
+      "concentration_g_per_l": 230.5448039481236,
+      "pressure_kpa": 1000.8740474588507,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 371,
+      "concentration_g_per_l": 420.263499230635,
+      "pressure_kpa": 0.9991673292031187,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 371,
+      "concentration_g_per_l": 428.0038688605718,
+      "pressure_kpa": 9.983359835179114,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 371,
+      "concentration_g_per_l": 449.622015930842,
+      "pressure_kpa": 100.17078247701723,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 371,
+      "concentration_g_per_l": 546.5829823849524,
+      "pressure_kpa": 1000.8740474588507,
+      "digitization_relative_bound": 0.03
+    }
+  ],
+  "excluded": []
+}

@@ -912,6 +912,19 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 
     protein = has_proteins(design)
 
+    from backend.physics.oxdna_peg import is_peg, PegParameters, find_peg_oxdna
+    if is_peg(surface_strands_in):
+        try:
+            PegParameters.model_validate(surface_strands_in)
+        except ValueError as exc:
+            raise HTTPException(400, f"Invalid PEG surface: {exc}") from exc
+        if protein or body.execution_target != "local":
+            raise HTTPException(400, "DNA2PEG currently supports local DNA/PEG jobs only")
+        if body.interaction_type != "DNA2":
+            raise HTTPException(400, "PEG requires the oxDNA2 DNA model")
+        if not find_peg_oxdna():
+            raise HTTPException(400, "PEG engine missing. Run bash scripts/build-oxdna-peg.sh")
+
     if protein and body.execution_target == "local":
         run_bin = find_oxdna()
         if run_bin and not oxdna_supports_dnanm(run_bin):
@@ -927,7 +940,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     # otherwise run the cheap MC stage and only abort the long MD stage with the
     # cryptic "Backend 'CUDA' not supported".  Point the user at the fix instead.
     if body.backend == "CUDA" and body.execution_target == "local":
-        run_bin = find_oxdna()
+        run_bin = find_peg_oxdna() if is_peg(surface_strands_in) else find_oxdna()
         if run_bin and not oxdna_supports_cuda(run_bin):
             engine = "oxDNA"
             override = "OXDNA_BIN"
@@ -1621,6 +1634,14 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     )
     prod = assign_stage_seeds([prod], stage_seed)[0]
     prod = hybridize_stage(prod, protein=any(s.parfile for s in specs))
+    from backend.physics.oxdna_peg import configure_peg_stages, is_peg
+    peg_spec = (job.run_config or {}).get("surface_strands")
+    if is_peg(peg_spec):
+        configure_peg_stages([prod], peg_spec)
+        # Preserve the substrate and grafts when extending an existing job.
+        prod.external_forces = True
+        prod.absolute_forces = True
+        prod.forces_file = specs[-1].forces_file or "equil_forces.txt"
     specs.append(prod)
 
     # Persist the extended spec list + append the stage status; resume into it.
@@ -1683,6 +1704,9 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     nets a centre-of-mass drift that streams the whole structure across the
     periodic box, so the UI shows a warning notice — but the run is allowed."""
     parent = _load_job(job_id)
+    from backend.physics.oxdna_peg import is_peg
+    if is_peg((parent.run_config or {}).get("surface_strands")):
+        raise HTTPException(409, "For PEG use the consolidated Run action; it preserves the surface and grafts")
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
         raise HTTPException(
             400, "An electric-field run requires a completed job to seed from."
@@ -1849,6 +1873,13 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     cap_particles = cap["trap_particles"]
     cap_n_beads = cap["n_beads"]
     subject_caps = cap["subject_to_field"]
+    from backend.physics.oxdna_peg import is_peg, configure_peg_stages, peg_terminal_field_text
+    peg_run = is_peg(cap["spec"])
+    if peg_run:
+        subject_caps = False  # never apply DNA's backbone charge to PEG beads
+        cap["spec"]["subjectToField"] = False
+        if wall_in is None:
+            wall_in = (parent.run_config or {}).get("surface")
     field_exclude = (
         cap_n_beads if (field_in and cap_n_beads > 0 and not subject_caps) else 0
     )
@@ -1993,6 +2024,11 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         child.run_config["surface"]["position_nm"] = _wall_axis_position_nm(
             info["wall"]
         )
+    if peg_run:
+        configure_peg_stages([stage], cap["spec"])
+        child.run_config["surface"] = wall_in
+        with open(cjd / "run_forces.txt", "a", encoding="utf-8") as stream:
+            stream.write("\n" + peg_terminal_field_text(cap["spec"], field_in))
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
     child.status = OxdnaStatus.queued
     child.save(ws)
@@ -2004,6 +2040,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
 async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) -> dict:
     """Branch a relaxed job into force-ramp → contact-restraint → equilibration stages."""
     parent = _load_job(job_id)
+    from backend.physics.oxdna_peg import is_peg
+    if is_peg((parent.run_config or {}).get("surface_strands")):
+        raise HTTPException(409, "PEG is already grafted; use Run to continue this surface simulation")
     if body.max_approach_force_pn < body.approach_force_pn:
         raise HTTPException(400, "max_approach_force_pn must be >= approach_force_pn")
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
@@ -3566,6 +3605,9 @@ def _capture_bead_count(job) -> int:
 
 
 def _capture_strand_length(job) -> int:
+    ss = (job.run_config or {}).get("surface_strands") or {}
+    if ss.get("material") == "PEG":
+        return int((ss.get("built") or {}).get("beads_per_chain") or int(ss.get("segments", 8)) + 1)
     sequence = ((job.run_config or {}).get("surface_strands") or {}).get(
         "sequence"
     ) or ""
@@ -3709,7 +3751,7 @@ def _capture_display_strands(job, conf_path, full_map) -> list:
     if n_cap <= 0 or not full_map:
         return []
     seq = "".join(c for c in (ss.get("sequence") or "").upper() if c in "ACGT")
-    L = len(seq) or 8
+    L = _capture_strand_length(job) or 8
     from backend.physics.oxdna_interface import OXDNA_LENGTH_UNIT, _parse_box_nm
 
     lines = [

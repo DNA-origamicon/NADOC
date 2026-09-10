@@ -1,0 +1,170 @@
+{
+  "created_unix": 1788992167.0566306,
+  "reason": "Figure 4(b) vector audit supports zero outer attractive tail, not raw truncation. Preserve already running child allocations, stop scheduling additional raw runs.",
+  "drivers": [
+    {
+      "pid": 1197039,
+      "args": [
+        ".venv/bin/python",
+        "-m",
+        "experiments.peg_chudoba.run_chain_campaign",
+        "--lengths",
+        "9",
+        "18",
+        "27",
+        "36",
+        "76",
+        "135",
+        "275",
+        "455",
+        "795",
+        "--output",
+        "experiments/peg_chudoba/runs/equilibrium_294"
+      ],
+      "action": "Sent SIGTERM to queue driver only"
+    },
+    {
+      "pid": 1261499,
+      "args": [
+        ".venv/bin/python",
+        "-m",
+        "experiments.peg_chudoba.run_chain_campaign",
+        "--cutoff",
+        "raw",
+        "--lengths",
+        "36",
+        "76",
+        "135",
+        "275",
+        "455",
+        "795",
+        "--temperatures",
+        "320",
+        "347",
+        "--output",
+        "experiments/peg_chudoba/runs/equilibrium_raw_320_347"
+      ],
+      "action": "Sent SIGTERM to queue driver only"
+    },
+    {
+      "pid": 1261666,
+      "args": [
+        ".venv/bin/python",
+        "-m",
+        "experiments.peg_chudoba.run_chain_campaign",
+        "--cutoff",
+        "raw",
+        "--lengths",
+        "36",
+        "76",
+        "135",
+        "275",
+        "455",
+        "795",
+        "--temperatures",
+        "361",
+        "371",
+        "--output",
+        "experiments/peg_chudoba/runs/equilibrium_raw_361_371"
+      ],
+      "action": "Sent SIGTERM to queue driver only"
+    },
+    {
+      "pid": 1261798,
+      "args": [
+        ".venv/bin/python",
+        "-m",
+        "experiments.peg_chudoba.run_chain_campaign",
+        "--cutoff",
+        "raw",
+        "--lengths",
+        "36",
+        "76",
+        "135",
+        "275",
+        "455",
+        "795",
+        "--temperatures",
+        "381",
+        "396",
+        "--output",
+        "experiments/peg_chudoba/runs/equilibrium_raw_381_396"
+      ],
+      "action": "Sent SIGTERM to queue driver only"
+    },
+    {
+      "pid": 1318568,
+      "args": [
+        ".venv/bin/python",
+        "-m",
+        "experiments.peg_chudoba.run_eos_campaign",
+        "--lengths",
+        "135",
+        "--temperatures",
+        "294",
+        "--sweeps",
+        "2000",
+        "--output",
+        "experiments/peg_chudoba/runs/eos_pilot_n135_t294"
+      ],
+      "action": "Sent SIGTERM to queue driver only"
+    },
+    {
+      "pid": 1318735,
+      "args": [
+        ".venv/bin/python",
+        "-m",
+        "experiments.peg_chudoba.run_eos_campaign",
+        "--lengths",
+        "455",
+        "--temperatures",
+        "294",
+        "--sweeps",
+        "2000",
+        "--output",
+        "experiments/peg_chudoba/runs/eos_pilot_n455_t294"
+      ],
+      "action": "Sent SIGTERM to queue driver only"
+    },
+    {
+      "pid": 1318893,
+      "args": [
+        ".venv/bin/python",
+        "-m",
+        "experiments.peg_chudoba.run_eos_campaign",
+        "--lengths",
+        "455",
+        "--temperatures",
+        "371",
+        "--sweeps",
+        "2000",
+        "--output",
+        "experiments/peg_chudoba/runs/eos_pilot_n455_t371"
+      ],
+      "action": "Sent SIGTERM to queue driver only"
+    },
+    {
+      "pid": 1336520,
+      "args": [
+        ".venv/bin/python",
+        "-m",
+        "experiments.peg_chudoba.run_chain_extensions",
+        "--output",
+        "experiments/peg_chudoba/runs/chain_extensions_round1"
+      ],
+      "action": "Sent SIGTERM to queue driver only"
+    },
+    {
+      "pid": 1381900,
+      "args": [
+        ".venv/bin/python",
+        "-m",
+        "experiments.peg_chudoba.run_eos_extensions",
+        "--output",
+        "experiments/peg_chudoba/runs/eos_extensions_n135_t294_p1_round1"
+      ],
+      "action": "Sent SIGTERM to queue driver only"
+    }
+  ],
+  "evidence": "reference/potential_curve_audit.json"
+}

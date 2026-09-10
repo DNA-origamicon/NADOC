@@ -1,0 +1,70 @@
+{
+  "checks": [
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+      "step": 150000,
+      "reported_energy_per_bead": 0.148598561127371,
+      "reference_energy_per_bead": 0.14859856112729522,
+      "error": -7.577272143066693e-14
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+      "step": 225000,
+      "reported_energy_per_bead": 0.161869529736083,
+      "reference_energy_per_bead": 0.1618695297358418,
+      "error": -2.412237076754309e-13
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+      "step": 300000,
+      "reported_energy_per_bead": 0.165450053609425,
+      "reference_energy_per_bead": 0.1654500536094533,
+      "error": 2.8310687127941492e-14
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1",
+      "step": 150000,
+      "reported_energy_per_bead": 0.159557844579605,
+      "reference_energy_per_bead": 0.15955784457966868,
+      "error": 6.367129046225273e-14
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1",
+      "step": 225000,
+      "reported_energy_per_bead": 0.174934077779234,
+      "reference_energy_per_bead": 0.17493407777919714,
+      "error": -3.68594044175552e-14
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1",
+      "step": 300000,
+      "reported_energy_per_bead": 0.174883881612189,
+      "reference_energy_per_bead": 0.17488388161218624,
+      "error": -2.7755575615628914e-15
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1",
+      "step": 150000,
+      "reported_energy_per_bead": 0.16727047112791,
+      "reference_energy_per_bead": 0.1672704711271161,
+      "error": -7.938927293338338e-13
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1",
+      "step": 225000,
+      "reported_energy_per_bead": 0.159584044635626,
+      "reference_energy_per_bead": 0.15958404463497836,
+      "error": -6.476486014150851e-13
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1",
+      "step": 300000,
+      "reported_energy_per_bead": 0.16079626277375,
+      "reference_energy_per_bead": 0.16079626277377582,
+      "error": 2.581268532253489e-14
+    }
+  ],
+  "maximum_absolute_error": 7.938927293338338e-13,
+  "interpretation": "Nine saved N275/320K configurations agree with the independent all-pairs physical-unit energy oracle. This verifies endpoint energy evaluation, not proposal acceptance probabilities or detailed balance.",
+  "oracle_sha256": "a6a1f5fb2ede9c1c90b30f674f7c92a5ca1f48603453a5aeb33d4c994e5a4cff"
+}

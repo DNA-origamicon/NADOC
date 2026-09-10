@@ -1,0 +1,18 @@
+{
+  "created_unix": 1788992588.4799428,
+  "result": "91 distinct tests passed across initial run (87), sampled-energy checks (3), and harmonic-distribution retry (1). Initial harmonic test timed out under concurrent GPU load; retry allowed 180 s and passed in 58.9 s.",
+  "outputs": [
+    "verification_zero_tail.txt",
+    "verification_zero_tail_sampling.txt",
+    "verification_zero_tail_harmonic_retry.txt"
+  ],
+  "hashes": {
+    "/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/build/bin/oxDNA": "435384b65cc8e0eeabd748c9bbc1b1ea41ffd2d8316f52742a60fc15240ca7b6",
+    "/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/build/src/liboxdna_common.so": "374d2dbbe0990256cfabc3049adf4ef9be9e6d8849a282a9212c14dff3f4ee5d",
+    "tools/oxdna_peg/chudoba_math.h": "1fd2af23439f24a2a7d8774625f744e538b5cb733270db0d679bec9cbafac141",
+    "tools/oxdna_peg/patch_chudoba_zero_tail.py": "7d178cfaeaca78b11f75ef0e845814333fe294f839bdda349b7dde112c6c0ac6",
+    "tools/oxdna_peg/chudoba_reference.py": "a6a1f5fb2ede9c1c90b30f674f7c92a5ca1f48603453a5aeb33d4c994e5a4cff",
+    "tests/test_chudoba_zero_tail.py": "d0710ac1b4a7163bb89e75d919b3777518863eda338c6dbcbedca9ad55753323",
+    "tests/test_chudoba_hmc.py": "4b07fd1cc28860cf4d00e948166d44cc98a13ad1d62b082c278712683697943d"
+  }
+}

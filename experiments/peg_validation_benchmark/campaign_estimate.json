@@ -1,0 +1,248 @@
+{
+  "schema": "nadoc.peg-calibration-estimate.v1",
+  "date": "2026-09-09",
+  "target_gpu": "One full NVIDIA RTX PRO 6000 Blackwell 96 GB; not Ada or MIG",
+  "rate_evidence": "Forecast ranges, not measured PEG or RTX PRO throughput",
+  "overhead_fraction": 0.25,
+  "cloud_spend_this_task_usd": 0,
+  "neutral": {
+    "rows": [
+      {
+        "name": "free_chains",
+        "conditions": 4,
+        "replicas": 3,
+        "equil_ns": 20,
+        "production_ns": 100,
+        "atoms": "25000-60000",
+        "total_ns": 1440,
+        "throughput_ns_day": {
+          "slow": 200,
+          "central": 350,
+          "fast": 500
+        },
+        "gpu_hours_with_25pct_overhead": {
+          "low": 86.4,
+          "central": 123.42857142857143,
+          "high": 216.0
+        }
+      },
+      {
+        "name": "solution_concentrations",
+        "conditions": 3,
+        "replicas": 3,
+        "equil_ns": 20,
+        "production_ns": 100,
+        "atoms": "30000-100000",
+        "total_ns": 1080,
+        "throughput_ns_day": {
+          "slow": 150,
+          "central": 250,
+          "fast": 400
+        },
+        "gpu_hours_with_25pct_overhead": {
+          "low": 81.0,
+          "central": 129.6,
+          "high": 216.0
+        }
+      },
+      {
+        "name": "grafted_surfaces",
+        "conditions": 4,
+        "replicas": 3,
+        "equil_ns": 50,
+        "production_ns": 200,
+        "atoms": "120000-220000",
+        "total_ns": 3000,
+        "throughput_ns_day": {
+          "slow": 100,
+          "central": 160,
+          "fast": 250
+        },
+        "gpu_hours_with_25pct_overhead": {
+          "low": 360.0,
+          "central": 562.5,
+          "high": 900.0
+        }
+      },
+      {
+        "name": "dna_approach_windows",
+        "conditions": 32,
+        "replicas": 2,
+        "equil_ns": 5,
+        "production_ns": 20,
+        "atoms": "100000-250000",
+        "total_ns": 1600,
+        "throughput_ns_day": {
+          "slow": 60,
+          "central": 110,
+          "fast": 180
+        },
+        "gpu_hours_with_25pct_overhead": {
+          "low": 266.6666666666667,
+          "central": 436.3636363636364,
+          "high": 800.0
+        }
+      },
+      {
+        "name": "finite_size_controls",
+        "conditions": 2,
+        "replicas": 2,
+        "equil_ns": 50,
+        "production_ns": 100,
+        "atoms": "250000-500000",
+        "total_ns": 600,
+        "throughput_ns_day": {
+          "slow": 50,
+          "central": 80,
+          "fast": 125
+        },
+        "gpu_hours_with_25pct_overhead": {
+          "low": 144.0,
+          "central": 225.0,
+          "high": 360.0
+        }
+      }
+    ],
+    "total_ns": 7720,
+    "gpu_hours": {
+      "low": 938.0666666666667,
+      "central": 1476.8922077922077,
+      "high": 2492.0
+    },
+    "single_gpu_days": {
+      "low": 39.086111111111116,
+      "central": 61.537175324675324,
+      "high": 103.83333333333333
+    },
+    "indicative_gpu_rental_usd": {
+      "low_at_1_69_per_hour": 1585.3326666666667,
+      "central_at_1_69_per_hour": 2495.947831168831,
+      "high_at_2_09_per_hour": 5208.28
+    }
+  },
+  "pilot": {
+    "rows": [
+      {
+        "name": "pilot_free_chain",
+        "conditions": 1,
+        "replicas": 3,
+        "equil_ns": 10,
+        "production_ns": 50,
+        "atoms": "25000-60000",
+        "total_ns": 180,
+        "throughput_ns_day": {
+          "slow": 200,
+          "central": 350,
+          "fast": 500
+        },
+        "gpu_hours_with_25pct_overhead": {
+          "low": 10.8,
+          "central": 15.428571428571429,
+          "high": 27.0
+        }
+      },
+      {
+        "name": "pilot_surface",
+        "conditions": 1,
+        "replicas": 3,
+        "equil_ns": 20,
+        "production_ns": 100,
+        "atoms": "120000-220000",
+        "total_ns": 360,
+        "throughput_ns_day": {
+          "slow": 100,
+          "central": 160,
+          "fast": 250
+        },
+        "gpu_hours_with_25pct_overhead": {
+          "low": 43.2,
+          "central": 67.5,
+          "high": 108.0
+        }
+      },
+      {
+        "name": "pilot_dna_windows",
+        "conditions": 8,
+        "replicas": 2,
+        "equil_ns": 5,
+        "production_ns": 10,
+        "atoms": "100000-250000",
+        "total_ns": 240,
+        "throughput_ns_day": {
+          "slow": 60,
+          "central": 110,
+          "fast": 180
+        },
+        "gpu_hours_with_25pct_overhead": {
+          "low": 40.0,
+          "central": 65.45454545454545,
+          "high": 120.0
+        }
+      }
+    ],
+    "total_ns": 780,
+    "gpu_hours": {
+      "low": 94.0,
+      "central": 148.38311688311688,
+      "high": 255.0
+    },
+    "single_gpu_days": {
+      "low": 3.9166666666666665,
+      "central": 6.18262987012987,
+      "high": 10.625
+    },
+    "indicative_gpu_rental_usd": {
+      "low_at_1_69_per_hour": 158.85999999999999,
+      "central_at_1_69_per_hour": 250.76746753246752,
+      "high_at_2_09_per_hour": 532.9499999999999
+    }
+  },
+  "field_addition": {
+    "rows": [
+      {
+        "name": "additional_uniform_field_states",
+        "conditions": 8,
+        "replicas": 3,
+        "equil_ns": 50,
+        "production_ns": 200,
+        "atoms": "150000-350000",
+        "total_ns": 6000,
+        "throughput_ns_day": {
+          "slow": 80,
+          "central": 130,
+          "fast": 200
+        },
+        "gpu_hours_with_25pct_overhead": {
+          "low": 900.0,
+          "central": 1384.6153846153845,
+          "high": 2250.0
+        }
+      }
+    ],
+    "total_ns": 6000,
+    "gpu_hours": {
+      "low": 900.0,
+      "central": 1384.6153846153845,
+      "high": 2250.0
+    },
+    "single_gpu_days": {
+      "low": 37.5,
+      "central": 57.692307692307686,
+      "high": 93.75
+    },
+    "indicative_gpu_rental_usd": {
+      "low_at_1_69_per_hour": 1521.0,
+      "central_at_1_69_per_hour": 2340.0,
+      "high_at_2_09_per_hour": 4702.5
+    }
+  },
+  "exclusions": [
+    "adaptive convergence extensions",
+    "new surface/solvent/chemistry",
+    "constant-potential electrode calibration",
+    "kinetic validation",
+    "storage charges",
+    "analyst time",
+    "large parameterization iterations beyond routine overhead"
+  ]
+}

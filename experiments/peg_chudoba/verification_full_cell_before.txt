@@ -1,0 +1,183 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+______________________ test_exactly_full_cuda_cell[False] ______________________
+
+tmp_path = PosixPath('/tmp/pytest-of-jojo/pytest-55/test_exactly_full_cuda_cell_Fa0')
+edge = False
+
+    @pytest.mark.parametrize('edge',[False,True])
+    def test_exactly_full_cuda_cell(tmp_path,edge):
+        # All five beads fit in one cell of capacity five. Filling the final valid
+        # slot must preserve all forces and energies, not report overflow.
+>       test_chudoba_forces(tmp_path,294,'CUDA',edge,cell_capacity_factor=1.)
+
+tests/test_chudoba_engine.py:218: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tmp_path = PosixPath('/tmp/pytest-of-jojo/pytest-55/test_exactly_full_cuda_cell_Fa0')
+temperature = 294, backend = 'CUDA', edge = False, cell_capacity_factor = 1.0
+
+    @pytest.mark.parametrize('temperature',[294,347,371,396])
+    @pytest.mark.parametrize('backend,edge',[('CPU',False),('CUDA',False),('CUDA',True)])
+    def test_chudoba_forces(tmp_path,temperature,backend,edge,cell_capacity_factor=None):
+        binary=Path.home()/'.local/share/nadoc/engines/oxdna-chudoba/build/bin/oxDNA'
+        if not binary.exists():
+            pytest.skip('Build isolated Chudoba engine first')
+        xyz=np.array([[0,0,0],[.33,0,0],[.51,.27,0],[.7,.36,.25],[.91,.18,.4]])
+        expected=finite_difference_forces(xyz,temperature)*.8518/24.943387854
+        n=len(xyz)
+        (tmp_path/'topology.top').write_text(f'{n} 1\n'+''.join(
+            f'1 500 {i+1 if i+1<n else -1} {i-1}\n' for i in range(n)))
+        (tmp_path/'conf.dat').write_text('t = 0\nb = 20 20 20\nE = 0 0 0\n'+''.join(
+            ' '.join(f'{v:.15g}' for v in pos/.8518+3)+' 1 0 0 0 0 1 0 0 0 0 0 1e-6\n' for pos in xyz))
+        dt=1e-6
+        stage=OxdnaStageSpec('force','production','MD',1,backend,dt=dt,
+            thermostat='no',interaction='DNA2PEG',peg_parameters=PegParameters().engine_parameters(),seed=71)
+        inp=render_stage_input(stage,'topology.top','conf.dat').replace('refresh_vel = true','refresh_vel = false')
+        inp=inp.replace('use_edge = true',f'use_edge = {str(edge).lower()}')
+        if cell_capacity_factor is not None:inp+=f'\nmax_density_multiplier = {cell_capacity_factor}\n'
+        lines=[line for line in inp.splitlines() if not line.startswith('T =')]
+        (tmp_path/'input').write_text('\n'.join(lines)+f'\nT = {temperature}K\npeg_chudoba = true\npeg_chudoba_pure = true\nT_force_value = true\n')
+        with (tmp_path/'input').open('a') as stream:
+            stream.write("""CUDA_update_stress_tensor_every = 1
+     data_output_1 = {
+     name = check.dat
+     print_every = 1
+     col_1 = {
+     type = pressure
+     }
+     col_2 = {
+     type = potential_energy
+     }
+     }
+    """)
+        result=subprocess.run([str(binary),'input'],cwd=tmp_path,capture_output=True,text=True,timeout=30)
+>       assert result.returncode==0,result.stderr[-5000:]
+E       AssertionError: INFO: seeding the RNG with 71
+E         INFO: Initializing backend 
+E         INFO: Simulation type: MD
+E         INFO: CUDA backend precision: mixed
+E         INFO: Chudoba 2017 PEG: one EO per bead, published implicit-water Hamiltonian
+E         INFO: NADOC_DNA2PEG_V1: neutral CM springs and WCA sterics; type 500
+E         INFO: The generator will try to take into account bonded interactions by choosing distances between bonded neighbours no larger than 2.000000
+E         INFO: Converting temperature from Kelvin (294.000000 K) to simulation units (0.098000)
+E         INFO: Using different widths for major and minor grooves
+E         INFO: Setting the maximum IO limit to 1000 MB/s
+E         INFO: Using CUDA device 0
+E         INFO: CUDA sort_every not specified, using 0
+E         INFO: Chudoba 2017 PEG: one EO per bead, published implicit-water Hamiltonian
+E         INFO: NADOC_DNA2PEG_V1: neutral CM springs and WCA sterics; type 500
+E         INFO: The generator will try to take into account bonded interactions by choosing distances between bonded neighbours no larger than 2.000000
+E         INFO: pid: 1375576
+E         DEBUG: Debye-Huckel parameters: Q=0.054300, lambda_0=0.361646, lambda=0.506304, r_high=1.518911, cutoff=3.241164
+E         DEBUG: Debye-Huckel parameters: debye_huckel_RC=2.278367e+00, debye_huckel_B=3.085882e-03
+E         INFO: The Debye length at this temperature (0.098000) and salt concentration (0.500000) is 0.506304
+E         INFO: (Cells.cpp) N_cells_side: 3, 3, 3; rcut=1.45659, IS_MC: 0
+E         INFO: N: 5, N molecules: 1
+E         INFO: threads_per_block was not specified or set to 0. The default value (64) will be used
+E         INFO: CUDA Cells mem: 0.00 MBs, lists mem: 0.00 MBs
+E         INFO: CUDA max_neigh: 4, max_N_per_cell: 5, N_cells: 27 (per side: 3 3 3)
+E         INFO: Allocated CUDA memory: 0.00 MBs
+E         INFO: Aggregated I/O statistics (set debug=1 for file-wise information)
+E         	  0.000  B written to files
+E         	  0.000  B written to stdout/stderr
+E         ERROR: A cell contains more than _max_n_per_cell (5) particles: This means (a) the box is too large for the simulation, or (b) your structure is very dense, or (c) the simulation exploded. Try shrinking the simulation box, or setting 'cells_auto_optimisation = false' and 'max_density_multiplier = 10' (or more) in the input file.
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/build/bin/oxDNA', 'input'], returncode=1, ... box, or setting 'cells_auto_optimisation = false' and 'max_density_multiplier = 10' (or more) in the input file.\n\n").returncode
+
+tests/test_chudoba_engine.py:49: AssertionError
+______________________ test_exactly_full_cuda_cell[True] _______________________
+
+tmp_path = PosixPath('/tmp/pytest-of-jojo/pytest-55/test_exactly_full_cuda_cell_Tr0')
+edge = True
+
+    @pytest.mark.parametrize('edge',[False,True])
+    def test_exactly_full_cuda_cell(tmp_path,edge):
+        # All five beads fit in one cell of capacity five. Filling the final valid
+        # slot must preserve all forces and energies, not report overflow.
+>       test_chudoba_forces(tmp_path,294,'CUDA',edge,cell_capacity_factor=1.)
+
+tests/test_chudoba_engine.py:218: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tmp_path = PosixPath('/tmp/pytest-of-jojo/pytest-55/test_exactly_full_cuda_cell_Tr0')
+temperature = 294, backend = 'CUDA', edge = True, cell_capacity_factor = 1.0
+
+    @pytest.mark.parametrize('temperature',[294,347,371,396])
+    @pytest.mark.parametrize('backend,edge',[('CPU',False),('CUDA',False),('CUDA',True)])
+    def test_chudoba_forces(tmp_path,temperature,backend,edge,cell_capacity_factor=None):
+        binary=Path.home()/'.local/share/nadoc/engines/oxdna-chudoba/build/bin/oxDNA'
+        if not binary.exists():
+            pytest.skip('Build isolated Chudoba engine first')
+        xyz=np.array([[0,0,0],[.33,0,0],[.51,.27,0],[.7,.36,.25],[.91,.18,.4]])
+        expected=finite_difference_forces(xyz,temperature)*.8518/24.943387854
+        n=len(xyz)
+        (tmp_path/'topology.top').write_text(f'{n} 1\n'+''.join(
+            f'1 500 {i+1 if i+1<n else -1} {i-1}\n' for i in range(n)))
+        (tmp_path/'conf.dat').write_text('t = 0\nb = 20 20 20\nE = 0 0 0\n'+''.join(
+            ' '.join(f'{v:.15g}' for v in pos/.8518+3)+' 1 0 0 0 0 1 0 0 0 0 0 1e-6\n' for pos in xyz))
+        dt=1e-6
+        stage=OxdnaStageSpec('force','production','MD',1,backend,dt=dt,
+            thermostat='no',interaction='DNA2PEG',peg_parameters=PegParameters().engine_parameters(),seed=71)
+        inp=render_stage_input(stage,'topology.top','conf.dat').replace('refresh_vel = true','refresh_vel = false')
+        inp=inp.replace('use_edge = true',f'use_edge = {str(edge).lower()}')
+        if cell_capacity_factor is not None:inp+=f'\nmax_density_multiplier = {cell_capacity_factor}\n'
+        lines=[line for line in inp.splitlines() if not line.startswith('T =')]
+        (tmp_path/'input').write_text('\n'.join(lines)+f'\nT = {temperature}K\npeg_chudoba = true\npeg_chudoba_pure = true\nT_force_value = true\n')
+        with (tmp_path/'input').open('a') as stream:
+            stream.write("""CUDA_update_stress_tensor_every = 1
+     data_output_1 = {
+     name = check.dat
+     print_every = 1
+     col_1 = {
+     type = pressure
+     }
+     col_2 = {
+     type = potential_energy
+     }
+     }
+    """)
+        result=subprocess.run([str(binary),'input'],cwd=tmp_path,capture_output=True,text=True,timeout=30)
+>       assert result.returncode==0,result.stderr[-5000:]
+E       AssertionError: INFO: seeding the RNG with 71
+E         INFO: Initializing backend 
+E         INFO: Simulation type: MD
+E         INFO: CUDA backend precision: mixed
+E         INFO: Chudoba 2017 PEG: one EO per bead, published implicit-water Hamiltonian
+E         INFO: NADOC_DNA2PEG_V1: neutral CM springs and WCA sterics; type 500
+E         INFO: The generator will try to take into account bonded interactions by choosing distances between bonded neighbours no larger than 2.000000
+E         INFO: Converting temperature from Kelvin (294.000000 K) to simulation units (0.098000)
+E         INFO: Using different widths for major and minor grooves
+E         INFO: Setting the maximum IO limit to 1000 MB/s
+E         INFO: Using CUDA device 0
+E         INFO: CUDA sort_every not specified, using 0
+E         INFO: Chudoba 2017 PEG: one EO per bead, published implicit-water Hamiltonian
+E         INFO: NADOC_DNA2PEG_V1: neutral CM springs and WCA sterics; type 500
+E         INFO: The generator will try to take into account bonded interactions by choosing distances between bonded neighbours no larger than 2.000000
+E         INFO: Using edge-based approach
+E         INFO: pid: 1375580
+E         DEBUG: Debye-Huckel parameters: Q=0.054300, lambda_0=0.361646, lambda=0.506304, r_high=1.518911, cutoff=3.241164
+E         DEBUG: Debye-Huckel parameters: debye_huckel_RC=2.278367e+00, debye_huckel_B=3.085882e-03
+E         INFO: The Debye length at this temperature (0.098000) and salt concentration (0.500000) is 0.506304
+E         INFO: (Cells.cpp) N_cells_side: 3, 3, 3; rcut=1.45659, IS_MC: 0
+E         INFO: N: 5, N molecules: 1
+E         INFO: threads_per_block was not specified or set to 0. The default value (64) will be used
+E         INFO: CUDA Cells mem: 0.00 MBs, lists mem: 0.00 MBs
+E         INFO: CUDA max_neigh: 4, max_N_per_cell: 5, N_cells: 27 (per side: 3 3 3)
+E         INFO: Allocated CUDA memory: 0.00 MBs
+E         INFO: Aggregated I/O statistics (set debug=1 for file-wise information)
+E         	  0.000  B written to files
+E         	  0.000  B written to stdout/stderr
+E         ERROR: A cell contains more than _max_n_per_cell (5) particles: This means (a) the box is too large for the simulation, or (b) your structure is very dense, or (c) the simulation exploded. Try shrinking the simulation box, or setting 'cells_auto_optimisation = false' and 'max_density_multiplier = 10' (or more) in the input file.
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/build/bin/oxDNA', 'input'], returncode=1, ... box, or setting 'cells_auto_optimisation = false' and 'max_density_multiplier = 10' (or more) in the input file.\n\n").returncode
+
+tests/test_chudoba_engine.py:49: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_chudoba_engine.py::test_exactly_full_cuda_cell[False] - Ass...
+FAILED tests/test_chudoba_engine.py::test_exactly_full_cuda_cell[True] - Asse...
+2 failed, 27 deselected in 0.66s

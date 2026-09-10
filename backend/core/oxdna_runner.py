@@ -580,6 +580,8 @@ def prepare_oxdna_job(
             else CaptureSpec.from_payload(surface_strands)
         )
         if cspec:
+            from backend.physics.oxdna_peg import configure_peg_stages
+            configure_peg_stages(specs, surface_strands if isinstance(surface_strands, dict) else {"material": cspec.material, **(cspec.peg or {})})
             cap_info = append_capture_strands(
                 jd / "topology.top", jd / "conf.dat", cspec, surface
             )
@@ -589,6 +591,9 @@ def prepare_oxdna_job(
                 "capture": {
                     "n_strands": cap_info.get("n_strands", 0),
                     "n_beads": cap_info.get("n_beads", 0),
+                    "material": cap_info.get("material", "DNA"),
+                    "beads_per_chain": cap_info.get("beads_per_chain"),
+                    "terminal_particles": cap_info.get("terminal_particles", []),
                     "min_dist_to_origami_nm": cap_info.get("min_dist_to_origami_nm"),
                     "box_nm_grown": cap_info.get("box_nm_grown"),
                     "trap_particles": [
@@ -1607,11 +1612,15 @@ async def run_job(
     jd = job.job_dir(workspace_dir)
     logger.info("[%s] oxdna run_job starting; job_dir=%s", job.job_id, jd)
 
+    from backend.physics.oxdna_peg import configure_peg_stages
+    configure_peg_stages(specs, (job.run_config or {}).get("surface_strands"))
     is_hybrid = any(s.parfile for s in specs)
-    oxdna_bin = find_oxdna()
+    is_peg_job = any(s.interaction == "DNA2PEG" for s in specs)
+    from backend.physics.oxdna_peg import find_peg_oxdna
+    oxdna_bin = find_peg_oxdna() if is_peg_job else find_oxdna()
     if oxdna_bin is None:
         job.status = OxdnaStatus.failed
-        job.error = "oxDNA binary not found. Set $OXDNA_BIN or run scripts/build-oxdna.sh."
+        job.error = "PEG engine missing; run bash scripts/build-oxdna-peg.sh." if is_peg_job else "oxDNA binary not found. Set $OXDNA_BIN or run scripts/build-oxdna.sh."
         job.save(workspace_dir)
         return
     if is_hybrid and not oxdna_supports_dnanm(oxdna_bin):
@@ -1907,7 +1916,7 @@ async def run_job(
             kind=spec.kind,
             min_bp_retained=spec.min_bp_retained,
             topology_path=topo,
-            dnanalysis_bin=None if is_hybrid else find_dnanalysis(),
+            dnanalysis_bin=None if (is_hybrid or is_peg_job) else find_dnanalysis(),
             salt_concentration=spec.salt_concentration,
             # Surface capture strands are appended AFTER the design walk; without this
             # the reader mistakes them for a leading protein block and every geometric

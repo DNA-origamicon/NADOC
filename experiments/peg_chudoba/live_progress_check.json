@@ -1,0 +1,118 @@
+{
+  "checked_unix": 1788997384.0338554,
+  "interpretation": "Two observed output positions and process identity; not convergence evidence",
+  "runs": [
+    {
+      "pid": 1382067,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_extensions_n135_t294_p1_round1/n135_t294_p1_r402_g1",
+      "step": "18000",
+      "live_now": true,
+      "step_now": "18000"
+    },
+    {
+      "pid": 1399570,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_n455_t371/n455_t371_p1_s401",
+      "step": "1320",
+      "live_now": true,
+      "step_now": "1340"
+    },
+    {
+      "pid": 1445446,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_extensions_n135_t294_p1_round1/n135_t294_p1_r402_g1",
+      "step": "9000",
+      "live_now": true,
+      "step_now": "9200"
+    },
+    {
+      "pid": 1459710,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_n455_t294/n455_t294_p1_s402",
+      "step": "1900",
+      "live_now": true,
+      "step_now": "1940"
+    },
+    {
+      "pid": 1478785,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round6/n135_t371_r201_g1",
+      "step": "803250",
+      "live_now": true,
+      "step_now": "830700"
+    },
+    {
+      "pid": 1483907,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round7/n135_t396_r201_g1",
+      "step": "648800",
+      "live_now": true,
+      "step_now": "671200"
+    },
+    {
+      "pid": 1489428,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_extensions_n135_t294_p10_round1/n135_t294_p10_r403_g1",
+      "step": "4400",
+      "live_now": true,
+      "step_now": "4400"
+    },
+    {
+      "pid": 1498991,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/equilibrium_zero_tail_294/n455_t294_s202",
+      "step": "93550",
+      "live_now": true,
+      "step_now": "99000"
+    },
+    {
+      "pid": 1504326,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+      "step": "155700",
+      "live_now": true,
+      "step_now": "167700"
+    },
+    {
+      "pid": 1511582,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_gpu_n135_t396/s722",
+      "step": "9687.7807",
+      "live_now": true,
+      "step_now": "11049.0200"
+    },
+    {
+      "pid": 1516946,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round5/n135_t381_r202_g1",
+      "step": "70500",
+      "live_now": true,
+      "step_now": "93000"
+    },
+    {
+      "pid": 1517055,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/equilibrium_zero_tail_381_396/n275_t381_s203",
+      "step": "29350",
+      "live_now": true,
+      "step_now": "36700"
+    },
+    {
+      "pid": 1517633,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p20_s403",
+      "step": "520",
+      "live_now": true,
+      "step_now": "720"
+    },
+    {
+      "pid": 1517695,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/equilibrium_zero_tail_320_347/n275_t347_s202",
+      "step": "27150",
+      "live_now": true,
+      "step_now": "36450"
+    },
+    {
+      "pid": 1520339,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/equilibrium_zero_tail_361_371/n275_t371_s201",
+      "step": "8500",
+      "live_now": true,
+      "step_now": "17000"
+    },
+    {
+      "pid": 1521263,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round9/n275_t361_r201_g1",
+      "step": "2600",
+      "live_now": true,
+      "step_now": "12350"
+    }
+  ]
+}

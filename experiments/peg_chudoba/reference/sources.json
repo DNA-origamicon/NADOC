@@ -1,0 +1,18 @@
+{
+  "doi": "10.1021/acs.jctc.7b00560",
+  "retrieved": "2026-09-09",
+  "sources": [
+    {
+      "file": "chudoba_2017_preprint.pdf",
+      "url": "https://arxiv.org/pdf/1710.09191",
+      "status": "Open manuscript; publisher full text not yet verified",
+      "sha256": "5263417e76403cde6acfc587bb8a82b902d468b1b5b13d9cc1a75020f84b0368"
+    },
+    {
+      "file": "ct7b00560_si_002.pdf",
+      "url": "https://ndownloader.figshare.com/files/9686908",
+      "status": "Final publisher supporting information; Figshare article 5573527",
+      "sha256": "f44afbe3b905438ce0d14add5ebbe5ea860897b2d2551366c0e742c9e196ccbd"
+    }
+  ]
+}

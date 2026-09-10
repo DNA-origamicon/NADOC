@@ -1,0 +1,428 @@
+{
+  "source": "arXiv:1710.09191v1 Figure 7(b)",
+  "source_sha256": "5263417e76403cde6acfc587bb8a82b902d468b1b5b13d9cc1a75020f84b0368",
+  "method": "Vertical vector segments centered on independently digitized colored markers; axis scale verified against rendered page.",
+  "interpretation": "Published plotted intervals. Error-bar type not specified in accessed preprint; do not treat these as SEM or confidence intervals.",
+  "intervals": [
+    {
+      "n": 36,
+      "temperature_K": 294,
+      "figure": "7b",
+      "lower_nm": 1.286472621858573,
+      "upper_nm": 1.3461543162523983,
+      "marker_nm": 1.3218487260306524,
+      "half_width_nm": 0.029840847196912712,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 36,
+      "temperature_K": 320,
+      "figure": "7b",
+      "lower_nm": 1.23872678065264,
+      "upper_nm": 1.2944306668019552,
+      "marker_nm": 1.2741036943095039,
+      "half_width_nm": 0.027851943074657548,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 36,
+      "temperature_K": 347,
+      "figure": "7b",
+      "lower_nm": 1.1949611761455796,
+      "upper_nm": 1.23872678065264,
+      "marker_nm": 1.2223792353742766,
+      "half_width_nm": 0.02188280225353023,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 36,
+      "temperature_K": 361,
+      "figure": "7b",
+      "lower_nm": 1.155173379883029,
+      "upper_nm": 1.2148550742768547,
+      "marker_nm": 1.1905494840551085,
+      "half_width_nm": 0.029840847196912823,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 36,
+      "temperature_K": 371,
+      "figure": "7b",
+      "lower_nm": 1.135279481751754,
+      "upper_nm": 1.1909809394467075,
+      "marker_nm": 1.1706555859238335,
+      "half_width_nm": 0.027850728847476747,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 36,
+      "temperature_K": 381,
+      "figure": "7b",
+      "lower_nm": 1.103449730432586,
+      "upper_nm": 1.155173379883029,
+      "marker_nm": 1.1388258346046656,
+      "half_width_nm": 0.02586182472522147,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 36,
+      "temperature_K": 396,
+      "figure": "7b",
+      "lower_nm": 1.1074275386770964,
+      "upper_nm": 1.151193143184157,
+      "marker_nm": 1.1348464073905777,
+      "half_width_nm": 0.021882802253530342,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 76,
+      "temperature_K": 294,
+      "figure": "7b",
+      "lower_nm": 2.0305048976591364,
+      "upper_nm": 2.110080490184237,
+      "marker_nm": 2.062757200037245,
+      "half_width_nm": 0.03978779626255036,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 76,
+      "temperature_K": 320,
+      "figure": "7b",
+      "lower_nm": 1.8952254189847206,
+      "upper_nm": 2.0145888077723715,
+      "marker_nm": 1.9473716194941044,
+      "half_width_nm": 0.059681694393825424,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 76,
+      "temperature_K": 347,
+      "figure": "7b",
+      "lower_nm": 1.7758620301970698,
+      "upper_nm": 1.8872673740413384,
+      "marker_nm": 1.8240304224619432,
+      "half_width_nm": 0.055702671922134295,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 76,
+      "temperature_K": 361,
+      "figure": "7b",
+      "lower_nm": 1.6724147312961835,
+      "upper_nm": 1.7519903238212842,
+      "marker_nm": 1.7046832233700355,
+      "half_width_nm": 0.03978779626255036,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 76,
+      "temperature_K": 371,
+      "figure": "7b",
+      "lower_nm": 1.6206910818457403,
+      "upper_nm": 1.7042444826153513,
+      "marker_nm": 1.6569373821641027,
+      "half_width_nm": 0.04177670038480552,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 76,
+      "temperature_K": 381,
+      "figure": "7b",
+      "lower_nm": 1.5331574443772573,
+      "upper_nm": 1.6047749919589755,
+      "marker_nm": 1.561445699752237,
+      "half_width_nm": 0.035808773790859116,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 76,
+      "temperature_K": 396,
+      "figure": "7b",
+      "lower_nm": 1.5172413544904926,
+      "upper_nm": 1.5809032855831902,
+      "marker_nm": 1.5415518016209622,
+      "half_width_nm": 0.03183096554634879,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 135,
+      "temperature_K": 294,
+      "figure": "7b",
+      "lower_nm": 2.8103447330233786,
+      "upper_nm": 3.076923453673338,
+      "marker_nm": 2.945644246446278,
+      "half_width_nm": 0.13328936032497962,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 135,
+      "temperature_K": 320,
+      "figure": "7b",
+      "lower_nm": 2.599469898522734,
+      "upper_nm": 2.7984088798354856,
+      "marker_nm": 2.698959423927594,
+      "half_width_nm": 0.09946949065637578,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 135,
+      "temperature_K": 347,
+      "figure": "7b",
+      "lower_nm": 2.3488072677595393,
+      "upper_nm": 2.6074279434661163,
+      "marker_nm": 2.4761481291254666,
+      "half_width_nm": 0.1293103378532885,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 135,
+      "temperature_K": 361,
+      "figure": "7b",
+      "lower_nm": 2.1816980377659556,
+      "upper_nm": 2.364720929191942,
+      "marker_nm": 2.273229518227433,
+      "half_width_nm": 0.0915114457129933,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 135,
+      "temperature_K": 371,
+      "figure": "7b",
+      "lower_nm": 2.018569044471244,
+      "upper_nm": 2.277189720177821,
+      "marker_nm": 2.149888321195272,
+      "half_width_nm": 0.1293103378532885,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 135,
+      "temperature_K": 381,
+      "figure": "7b",
+      "lower_nm": 1.8753315208534453,
+      "upper_nm": 2.0145888077723715,
+      "marker_nm": 1.9469593893662012,
+      "half_width_nm": 0.06962864345946307,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 135,
+      "temperature_K": 396,
+      "figure": "7b",
+      "lower_nm": 1.847479577778788,
+      "upper_nm": 2.034482705903647,
+      "marker_nm": 1.9429815811216908,
+      "half_width_nm": 0.0935015640624296,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 275,
+      "temperature_K": 294,
+      "figure": "7b",
+      "lower_nm": 4.2864734314366135,
+      "upper_nm": 4.962865967899969,
+      "marker_nm": 4.624708554938078,
+      "half_width_nm": 0.3381962682316777,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 275,
+      "temperature_K": 320,
+      "figure": "7b",
+      "lower_nm": 3.6618045444237004,
+      "upper_nm": 4.234747353531808,
+      "marker_nm": 3.9483160184747224,
+      "half_width_nm": 0.28647140455405373,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 275,
+      "temperature_K": 347,
+      "figure": "7b",
+      "lower_nm": 3.454907518167566,
+      "upper_nm": 3.8726793789243446,
+      "marker_nm": 3.665822422165179,
+      "half_width_nm": 0.2088859303783892,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 275,
+      "temperature_K": 361,
+      "figure": "7b",
+      "lower_nm": 2.8939005622473513,
+      "upper_nm": 3.3116724230041297,
+      "marker_nm": 3.104815466244964,
+      "half_width_nm": 0.2088859303783892,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 275,
+      "temperature_K": 371,
+      "figure": "7b",
+      "lower_nm": 2.7148554790658745,
+      "upper_nm": 3.2201585488367743,
+      "marker_nm": 2.9655581793260377,
+      "half_width_nm": 0.2526515348854499,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 275,
+      "temperature_K": 381,
+      "figure": "7b",
+      "lower_nm": 2.277189720177821,
+      "upper_nm": 2.6074279434661163,
+      "marker_nm": 2.444336591214012,
+      "half_width_nm": 0.16511911164414772,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 275,
+      "temperature_K": 396,
+      "figure": "7b",
+      "lower_nm": 2.1657819478791906,
+      "upper_nm": 2.5079584528097403,
+      "marker_nm": 2.336910269841434,
+      "half_width_nm": 0.17108825246527481,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 455,
+      "temperature_K": 294,
+      "figure": "7b",
+      "lower_nm": 5.464191229426358,
+      "upper_nm": 6.538461728515217,
+      "marker_nm": 6.0013665484677565,
+      "half_width_nm": 0.5371352495444293,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 455,
+      "temperature_K": 320,
+      "figure": "7b",
+      "lower_nm": 5.301062236131647,
+      "upper_nm": 6.446950282802224,
+      "marker_nm": 5.874046328963903,
+      "half_width_nm": 0.5729440233352885,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 455,
+      "temperature_K": 347,
+      "figure": "7b",
+      "lower_nm": 4.393898538582009,
+      "upper_nm": 5.460213421181847,
+      "marker_nm": 4.927096049378897,
+      "half_width_nm": 0.5331574412999189,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 455,
+      "temperature_K": 361,
+      "figure": "7b",
+      "lower_nm": 3.4151197219050156,
+      "upper_nm": 4.242707826929552,
+      "marker_nm": 3.8289526296870715,
+      "half_width_nm": 0.4137940525122681,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 455,
+      "temperature_K": 371,
+      "figure": "7b",
+      "lower_nm": 3.0888593068612304,
+      "upper_nm": 3.840849627605177,
+      "marker_nm": 3.462905632607917,
+      "half_width_nm": 0.37599516037197334,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 455,
+      "temperature_K": 381,
+      "figure": "7b",
+      "lower_nm": 2.464190419848318,
+      "upper_nm": 2.834218867853526,
+      "marker_nm": 2.6512336174701456,
+      "half_width_nm": 0.1850142240026038,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 455,
+      "temperature_K": 396,
+      "figure": "7b",
+      "lower_nm": 2.3368714145716467,
+      "upper_nm": 2.599469898522734,
+      "marker_nm": 2.468210726044159,
+      "half_width_nm": 0.13129924197554366,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 795,
+      "temperature_K": 294,
+      "figure": "7b",
+      "lower_nm": 7.433687144422599,
+      "upper_nm": 9.232096021180748,
+      "marker_nm": 8.332908096291332,
+      "half_width_nm": 0.8992044383790745,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 795,
+      "temperature_K": 320,
+      "figure": "7b",
+      "lower_nm": 7.377984472500465,
+      "upper_nm": 9.021219972452922,
+      "marker_nm": 8.19762910330779,
+      "half_width_nm": 0.8216177499762285,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 795,
+      "temperature_K": 347,
+      "figure": "7b",
+      "lower_nm": 6.029178422045446,
+      "upper_nm": 7.334217653766224,
+      "marker_nm": 6.681714551395493,
+      "half_width_nm": 0.6525196158603892,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 795,
+      "temperature_K": 361,
+      "figure": "7b",
+      "lower_nm": 4.2864734314366135,
+      "upper_nm": 5.309017852620667,
+      "marker_nm": 4.799751545331427,
+      "half_width_nm": 0.5112722105920269,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 795,
+      "temperature_K": 371,
+      "figure": "7b",
+      "lower_nm": 3.454907518167566,
+      "upper_nm": 4.210875647156023,
+      "marker_nm": 3.832907610460581,
+      "half_width_nm": 0.3779840644942283,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 795,
+      "temperature_K": 381,
+      "figure": "7b",
+      "lower_nm": 2.9376661667544117,
+      "upper_nm": 3.1485410012550563,
+      "marker_nm": 3.04113046483583,
+      "half_width_nm": 0.1054374172503223,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "n": 795,
+      "temperature_K": 396,
+      "figure": "7b",
+      "lower_nm": 2.7427049936861705,
+      "upper_nm": 2.8819622806050966,
+      "marker_nm": 2.8103617322039103,
+      "half_width_nm": 0.06962864345946307,
+      "digitization_bound_nm": 0.025
+    }
+  ]
+}

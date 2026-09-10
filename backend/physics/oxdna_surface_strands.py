@@ -175,12 +175,16 @@ class CaptureSpec:
     offset_y_nm: float = 0.0
     seed: int = 1
     subject_to_field: bool = True
+    material: str = "DNA"
+    peg: dict | None = None
 
     @classmethod
     def from_payload(cls, d: dict | None) -> "CaptureSpec | None":
         if not d or not d.get("enabled", True):
             return None
-        seq = sanitize_sequence(d.get("sequence", ""))
+        from backend.physics.oxdna_peg import is_peg, PegParameters
+        peg = PegParameters.model_validate(d).model_dump() if is_peg(d) else None
+        seq = "A" * (peg["segments"] + 1) if peg else sanitize_sequence(d.get("sequence", ""))
         if not seq:
             return None
         shape = d.get("shape") if d.get("shape") in _VALID_SHAPES else "circle"
@@ -188,6 +192,8 @@ class CaptureSpec:
         end = end if end in _VALID_ENDS else "5'"
         return cls(
             sequence=seq,
+            material="PEG" if peg else "DNA",
+            peg=peg,
             attach_end=end,
             shape=shape,
             size_nm=max(0.0, float(d.get("sizeNm", d.get("size_nm", 0)) or 0)),
@@ -273,6 +279,11 @@ def build_capture_strands(
     Returns a :class:`CaptureBuild`.  Empty when the spec produces no strands.
     """
     out = CaptureBuild()
+    if spec.material == "PEG":
+        from backend.physics.oxdna_peg import build_peg_strands
+        return build_peg_strands(spec, origami_cm_oxdna=origami_cm_oxdna,
+            n_particles_origami=n_particles_origami, n_strands_origami=n_strands_origami,
+            surface=surface)
     seq = spec.sequence
     L = len(seq)
     if L == 0:
@@ -602,6 +613,9 @@ def append_capture_strands(
     return {
         "n_strands": build.n_strands,
         "n_beads": build.n_beads,
+        "material": spec.material,
+        "beads_per_chain": len(spec.sequence),
+        "terminal_particles": [p + len(spec.sequence) - 1 for p, _ in build.trap_anchors] if spec.material == "PEG" else [],
         "trap_anchors": build.trap_anchors,
         "trap_text": capture_trap_text(build),
         "min_dist_to_origami_nm": build.min_dist_to_origami_nm,

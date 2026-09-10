@@ -1,0 +1,494 @@
+{
+  "source_sha256": "aba5d447d06b9f1cc49c3e90a6f39fc51b85d0779cac2285033149928377c645",
+  "topologies": [
+    {
+      "path": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1/topology.top",
+      "beads": 275,
+      "chains": 1,
+      "sha256": "80adddb514f13716da1df8f204c1723dd3c207dbe3bd156ee4090be0c49b5aec"
+    },
+    {
+      "path": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1/topology.top",
+      "beads": 275,
+      "chains": 1,
+      "sha256": "80adddb514f13716da1df8f204c1723dd3c207dbe3bd156ee4090be0c49b5aec"
+    },
+    {
+      "path": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1/topology.top",
+      "beads": 275,
+      "chains": 1,
+      "sha256": "80adddb514f13716da1df8f204c1723dd3c207dbe3bd156ee4090be0c49b5aec"
+    }
+  ],
+  "comparisons": [
+    {
+      "cutoff": "zero_tail",
+      "n": 36,
+      "temperature_K": 320.0,
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "sampling_generation": 0,
+      "directories": [
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n36_t320_s201",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n36_t320_s202",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n36_t320_s203"
+      ],
+      "observable": "sqrt(mean(Rg^2))",
+      "mean_rg_nm": 1.285840526199342,
+      "rms_rg_nm": 1.3106573248609386,
+      "conservative_sem_nm": 0.008216986573110355,
+      "minimum_seed_effective_samples": 336.6012258079354,
+      "rank_folded_split_rhat": 1.0007800303228849,
+      "extension_recommended": false,
+      "largest_seed_half_difference_nm": 0.028703763117942982,
+      "published_rg_nm": 1.2741036943095039,
+      "digitization_bound_nm": 0.025,
+      "figure": "7b",
+      "relative_difference": 0.028689682570337993,
+      "within_two_sem_plus_digitization": true,
+      "published_plotted_interval": {
+        "n": 36,
+        "temperature_K": 320,
+        "figure": "7b",
+        "lower_nm": 1.23872678065264,
+        "upper_nm": 1.2944306668019552,
+        "marker_nm": 1.2741036943095039,
+        "half_width_nm": 0.027851943074657548,
+        "digitization_bound_nm": 0.025
+      },
+      "estimate_within_published_interval": true,
+      "two_sem_overlaps_published_interval": true
+    },
+    {
+      "cutoff": "zero_tail",
+      "n": 76,
+      "temperature_K": 320.0,
+      "seeds": [
+        1201,
+        1202,
+        1203
+      ],
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "sampling_generation": 1,
+      "directories": [
+        "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round1/n76_t320_r201_g1",
+        "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round1/n76_t320_r202_g1",
+        "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round1/n76_t320_r203_g1"
+      ],
+      "observable": "sqrt(mean(Rg^2))",
+      "mean_rg_nm": 1.979382190523302,
+      "rms_rg_nm": 2.0206977657414473,
+      "conservative_sem_nm": 0.008329544957455347,
+      "minimum_seed_effective_samples": 790.5915003192364,
+      "rank_folded_split_rhat": 1.0004907135563772,
+      "extension_recommended": false,
+      "largest_seed_half_difference_nm": 0.04107640152414649,
+      "published_rg_nm": 1.9473716194941044,
+      "digitization_bound_nm": 0.025,
+      "figure": "7b",
+      "relative_difference": 0.0376539051474889,
+      "within_two_sem_plus_digitization": false,
+      "published_plotted_interval": {
+        "n": 76,
+        "temperature_K": 320,
+        "figure": "7b",
+        "lower_nm": 1.8952254189847206,
+        "upper_nm": 2.0145888077723715,
+        "marker_nm": 1.9473716194941044,
+        "half_width_nm": 0.059681694393825424,
+        "digitization_bound_nm": 0.025
+      },
+      "estimate_within_published_interval": true,
+      "two_sem_overlaps_published_interval": true
+    },
+    {
+      "cutoff": "zero_tail",
+      "n": 135,
+      "temperature_K": 320.0,
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "sampling_generation": 0,
+      "directories": [
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n135_t320_s201",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n135_t320_s202",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n135_t320_s203"
+      ],
+      "observable": "sqrt(mean(Rg^2))",
+      "mean_rg_nm": 2.7813934577776176,
+      "rms_rg_nm": 2.8387714573027063,
+      "conservative_sem_nm": 0.021537390044722864,
+      "minimum_seed_effective_samples": 254.59176997850264,
+      "rank_folded_split_rhat": 1.001551544026426,
+      "extension_recommended": false,
+      "largest_seed_half_difference_nm": 0.10831057896806984,
+      "published_rg_nm": 2.698959423927594,
+      "digitization_bound_nm": 0.025,
+      "figure": "7b",
+      "relative_difference": 0.05180219907554395,
+      "within_two_sem_plus_digitization": false,
+      "published_plotted_interval": {
+        "n": 135,
+        "temperature_K": 320,
+        "figure": "7b",
+        "lower_nm": 2.599469898522734,
+        "upper_nm": 2.7984088798354856,
+        "marker_nm": 2.698959423927594,
+        "half_width_nm": 0.09946949065637578,
+        "digitization_bound_nm": 0.025
+      },
+      "estimate_within_published_interval": false,
+      "two_sem_overlaps_published_interval": true
+    },
+    {
+      "cutoff": "zero_tail",
+      "n": 275,
+      "temperature_K": 294.0,
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "sampling_generation": 0,
+      "directories": [
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_294/n275_t294_s201",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_294/n275_t294_s202",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_294/n275_t294_s203"
+      ],
+      "observable": "sqrt(mean(Rg^2))",
+      "mean_rg_nm": 4.567934281671337,
+      "rms_rg_nm": 4.654268283959403,
+      "conservative_sem_nm": 0.06366478424450261,
+      "minimum_seed_effective_samples": 285.5124458730772,
+      "rank_folded_split_rhat": 1.0077817052707692,
+      "extension_recommended": false,
+      "largest_seed_half_difference_nm": 0.15287823556972402,
+      "published_rg_nm": 4.624708554938078,
+      "digitization_bound_nm": 0.025,
+      "figure": "7b",
+      "relative_difference": 0.006391695535010955,
+      "within_two_sem_plus_digitization": true,
+      "published_plotted_interval": {
+        "n": 275,
+        "temperature_K": 294,
+        "figure": "7b",
+        "lower_nm": 4.2864734314366135,
+        "upper_nm": 4.962865967899969,
+        "marker_nm": 4.624708554938078,
+        "half_width_nm": 0.3381962682316777,
+        "digitization_bound_nm": 0.025
+      },
+      "estimate_within_published_interval": true,
+      "two_sem_overlaps_published_interval": true
+    },
+    {
+      "cutoff": "zero_tail",
+      "n": 275,
+      "temperature_K": 320.0,
+      "seeds": [
+        1201,
+        1202,
+        1203
+      ],
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "sampling_generation": 1,
+      "directories": [
+        "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+        "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1",
+        "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1"
+      ],
+      "observable": "sqrt(mean(Rg^2))",
+      "mean_rg_nm": 4.251835366896768,
+      "rms_rg_nm": 4.3380218838900415,
+      "conservative_sem_nm": 0.02418139366580992,
+      "minimum_seed_effective_samples": 631.0300095855524,
+      "rank_folded_split_rhat": 1.0008915956170596,
+      "extension_recommended": false,
+      "largest_seed_half_difference_nm": 0.11049834056571584,
+      "published_rg_nm": 3.9483160184747224,
+      "digitization_bound_nm": 0.025,
+      "figure": "7b",
+      "relative_difference": 0.0987017917491484,
+      "within_two_sem_plus_digitization": false,
+      "published_plotted_interval": {
+        "n": 275,
+        "temperature_K": 320,
+        "figure": "7b",
+        "lower_nm": 3.6618045444237004,
+        "upper_nm": 4.234747353531808,
+        "marker_nm": 3.9483160184747224,
+        "half_width_nm": 0.28647140455405373,
+        "digitization_bound_nm": 0.025
+      },
+      "estimate_within_published_interval": false,
+      "two_sem_overlaps_published_interval": false
+    },
+    {
+      "cutoff": "zero_tail",
+      "n": 275,
+      "temperature_K": 347.0,
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "sampling_generation": 0,
+      "directories": [
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n275_t347_s201",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n275_t347_s202",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n275_t347_s203"
+      ],
+      "observable": "sqrt(mean(Rg^2))",
+      "mean_rg_nm": 3.5524577362961782,
+      "rms_rg_nm": 3.634845706694923,
+      "conservative_sem_nm": 0.07547858771422433,
+      "minimum_seed_effective_samples": 67.46553578594957,
+      "rank_folded_split_rhat": 1.0160103835979917,
+      "extension_recommended": true,
+      "largest_seed_half_difference_nm": 0.19661012056904426,
+      "published_rg_nm": 3.665822422165179,
+      "digitization_bound_nm": 0.025,
+      "figure": "7b",
+      "relative_difference": -0.00845014076049,
+      "within_two_sem_plus_digitization": true,
+      "published_plotted_interval": {
+        "n": 275,
+        "temperature_K": 347,
+        "figure": "7b",
+        "lower_nm": 3.454907518167566,
+        "upper_nm": 3.8726793789243446,
+        "marker_nm": 3.665822422165179,
+        "half_width_nm": 0.2088859303783892,
+        "digitization_bound_nm": 0.025
+      },
+      "estimate_within_published_interval": true,
+      "two_sem_overlaps_published_interval": true
+    },
+    {
+      "cutoff": "zero_tail",
+      "n": 275,
+      "temperature_K": 361.0,
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "sampling_generation": 0,
+      "directories": [
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_361_371/n275_t361_s201",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_361_371/n275_t361_s202",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_361_371/n275_t361_s203"
+      ],
+      "observable": "sqrt(mean(Rg^2))",
+      "mean_rg_nm": 3.1376370499304898,
+      "rms_rg_nm": 3.224784077417962,
+      "conservative_sem_nm": 0.10368186534895242,
+      "minimum_seed_effective_samples": 15.738511628640927,
+      "rank_folded_split_rhat": 1.044124260761076,
+      "extension_recommended": true,
+      "largest_seed_half_difference_nm": 0.3667459977520102,
+      "published_rg_nm": 3.104815466244964,
+      "digitization_bound_nm": 0.025,
+      "figure": "7b",
+      "relative_difference": 0.03863953026428679,
+      "within_two_sem_plus_digitization": true,
+      "published_plotted_interval": {
+        "n": 275,
+        "temperature_K": 361,
+        "figure": "7b",
+        "lower_nm": 2.8939005622473513,
+        "upper_nm": 3.3116724230041297,
+        "marker_nm": 3.104815466244964,
+        "half_width_nm": 0.2088859303783892,
+        "digitization_bound_nm": 0.025
+      },
+      "estimate_within_published_interval": true,
+      "two_sem_overlaps_published_interval": true
+    },
+    {
+      "cutoff": "zero_tail",
+      "n": 275,
+      "temperature_K": 371.0,
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "sampling_generation": 0,
+      "directories": [
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_361_371/n275_t371_s201",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_361_371/n275_t371_s202",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_361_371/n275_t371_s203"
+      ],
+      "observable": "sqrt(mean(Rg^2))",
+      "mean_rg_nm": 3.0395886038935664,
+      "rms_rg_nm": 3.1158420954721247,
+      "conservative_sem_nm": 0.05883278897603185,
+      "minimum_seed_effective_samples": 29.058162042317353,
+      "rank_folded_split_rhat": 1.0456150960138066,
+      "extension_recommended": true,
+      "largest_seed_half_difference_nm": 0.5404670877365625,
+      "published_rg_nm": 2.9655581793260377,
+      "digitization_bound_nm": 0.025,
+      "figure": "7b",
+      "relative_difference": 0.05067643494360352,
+      "within_two_sem_plus_digitization": false,
+      "published_plotted_interval": {
+        "n": 275,
+        "temperature_K": 371,
+        "figure": "7b",
+        "lower_nm": 2.7148554790658745,
+        "upper_nm": 3.2201585488367743,
+        "marker_nm": 2.9655581793260377,
+        "half_width_nm": 0.2526515348854499,
+        "digitization_bound_nm": 0.025
+      },
+      "estimate_within_published_interval": true,
+      "two_sem_overlaps_published_interval": true
+    },
+    {
+      "cutoff": "zero_tail",
+      "n": 275,
+      "temperature_K": 381.0,
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "sampling_generation": 0,
+      "directories": [
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_381_396/n275_t381_s201",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_381_396/n275_t381_s202",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_381_396/n275_t381_s203"
+      ],
+      "observable": "sqrt(mean(Rg^2))",
+      "mean_rg_nm": 2.5815543211355365,
+      "rms_rg_nm": 2.643559169560549,
+      "conservative_sem_nm": 0.10910079619425714,
+      "minimum_seed_effective_samples": 23.306163395216803,
+      "rank_folded_split_rhat": 1.0645726587207625,
+      "extension_recommended": true,
+      "largest_seed_half_difference_nm": 0.3313456097539893,
+      "published_rg_nm": 2.444336591214012,
+      "digitization_bound_nm": 0.025,
+      "figure": "7b",
+      "relative_difference": 0.08150374177706454,
+      "within_two_sem_plus_digitization": true,
+      "published_plotted_interval": {
+        "n": 275,
+        "temperature_K": 381,
+        "figure": "7b",
+        "lower_nm": 2.277189720177821,
+        "upper_nm": 2.6074279434661163,
+        "marker_nm": 2.444336591214012,
+        "half_width_nm": 0.16511911164414772,
+        "digitization_bound_nm": 0.025
+      },
+      "estimate_within_published_interval": false,
+      "two_sem_overlaps_published_interval": true
+    },
+    {
+      "cutoff": "zero_tail",
+      "n": 275,
+      "temperature_K": 396.0,
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "sampling_generation": 0,
+      "directories": [
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_381_396/n275_t396_s201",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_381_396/n275_t396_s202",
+        "experiments/peg_chudoba/runs/equilibrium_zero_tail_381_396/n275_t396_s203"
+      ],
+      "observable": "sqrt(mean(Rg^2))",
+      "mean_rg_nm": 2.4294217690136146,
+      "rms_rg_nm": 2.476910257382358,
+      "conservative_sem_nm": 0.1447432285466636,
+      "minimum_seed_effective_samples": 17.928796179236812,
+      "rank_folded_split_rhat": 1.188033244721938,
+      "extension_recommended": true,
+      "largest_seed_half_difference_nm": 0.2920133341199742,
+      "published_rg_nm": 2.336910269841434,
+      "digitization_bound_nm": 0.025,
+      "figure": "7b",
+      "relative_difference": 0.05990815708573316,
+      "within_two_sem_plus_digitization": true,
+      "published_plotted_interval": {
+        "n": 275,
+        "temperature_K": 396,
+        "figure": "7b",
+        "lower_nm": 2.1657819478791906,
+        "upper_nm": 2.5079584528097403,
+        "marker_nm": 2.336910269841434,
+        "half_width_nm": 0.17108825246527481,
+        "digitization_bound_nm": 0.025
+      },
+      "estimate_within_published_interval": true,
+      "two_sem_overlaps_published_interval": true
+    }
+  ],
+  "mapping_result": "Preprint methods explicitly specify 275 EO units, one neutral bead per EO; all three replica topologies contain exactly 275 beads in one chain. Figure 7 caption identifies N275 as 12100 g/mol, consistent with 275 times 44.",
+  "parameter_result": "Preprint states parametric interpolation from 294 through 381 K, Table S1 at 396 K. Current 320 K convention matches this instruction.",
+  "observable_sensitivity": {
+    "published_marker_nm": 3.9483160184747224,
+    "rms_rg_nm": 4.3380218838900415,
+    "mean_rg_nm": 4.251835366896768,
+    "mean_relative_difference": 0.07687311425981003
+  },
+  "decision": "No chain mapping change or parameter adjustment justified. Increasing positive discrepancies across the four sampled 320 K chain lengths warrant a systematic interaction/sampling audit; these correlations alone do not identify a cause. N275 higher-temperature states remain underconverged."
+}

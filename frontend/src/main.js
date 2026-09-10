@@ -1296,7 +1296,10 @@ async function main() {
     // Flexible ssDNA beads are excluded from the rigid mesh, so applyFemPositions
     // never moves them — redraw them at the frame's simulated positions instead of
     // leaving a stale geometric arc floating over the sim (null reverts to the arc).
-    onFrame: (u) => flexibleArcs.applySimPositions(u),
+    onFrame: (u) => {
+      flexibleArcs.applySimPositions(u)
+      surfaceStrandsOverlay?.applyPegFrame?.(u)
+    },
     // A displayed job's real relaxed capture strands replace the seed preview overlay
     // (surfaceStrandsOverlay declared below; fires only on user display → lazy ref safe).
     onSurfaceStrands: (strands) => surfaceStrandsOverlay?.setResults?.(strands),
@@ -1641,6 +1644,10 @@ async function main() {
   // Surface capture strands — sub-section of the Hard-surface card (immobilization).
   // See memory/project_surface_strands.md.
   const oxdnaSurfaceStrandsSetup = initOxdnaSurfaceStrandsSetup({
+    material: 'PEG',
+    ids: { enable: 'oxdna-peg-enable', controls: 'oxdna-peg-controls',
+      shape: 'oxdna-peg-shape', size: 'oxdna-peg-size', density: 'oxdna-peg-density',
+      offx: 'oxdna-peg-offx', offy: 'oxdna-peg-offy', seed: 'oxdna-peg-seed', status: 'oxdna-peg-status' },
     onChange: () => { oxdnaLive?.onElementsChanged?.(); _refreshStrandsOverlay() },
     generateSequence: (len) => api.generateRandomSequence(len),
   })
@@ -6658,6 +6665,23 @@ async function main() {
     showLinkerConfigModal({ readOnly: true })
   })
 
+  let pegTestingModal = null
+  let pegTestingLoading = false
+  document.getElementById('menu-help-peg-testing')?.addEventListener('click', async () => {
+    if (pegTestingModal?.isOpen()) { pegTestingModal.close(); return }
+    if (pegTestingLoading) return
+    pegTestingLoading = true
+    const setPegToggle = enabled => {
+      _setMenuToggle('menu-help-peg-testing', enabled)
+      document.getElementById('menu-help-peg-testing')?.setAttribute('aria-pressed', String(enabled))
+    }
+    try {
+      const { showPegTesting } = await import('./ui/peg_testing.js')
+      pegTestingModal = showPegTesting({ onClose: () => { pegTestingModal = null; setPegToggle(false) } })
+      setPegToggle(true)
+    } finally { pegTestingLoading = false }
+  })
+
   document.getElementById('menu-help-about-file')?.addEventListener('click', async () => {
     const { showAboutFileModal } = await import('./ui/about_file_modal.js')
     showAboutFileModal({ api, path: _workspacePath })
@@ -6735,6 +6759,39 @@ async function main() {
     // CG on measured placement, ball-and-stick still on the 1ZEW templates.
     _atomSurface?.invalidateAtomCache()
     await _atomSurface?.refetchAtomistic()
+  })
+
+  // PEG setup travels with the NADOC file, while bead coordinates remain physical
+  // simulation data. Restore after geometry subscribers have updated the bounds.
+  let restoredPegDesignId = null
+  const restoreSavedPegSetup = () => {
+    const state = store.getState()
+    const design = state.currentDesign
+    if (!design || design.id === restoredPegDesignId || !state.currentGeometry?.length) return
+    restoredPegDesignId = design.id
+    const saved = design.metadata?.peg_surface
+    if (saved) {
+      oxdnaFloorSetup.applyConfig(saved.surface)
+      oxdnaAnchorsSetup.applyConfig(saved.anchors || [])
+      oxdnaSurfaceStrandsSetup.setSurfaceEnabled(!!saved.surface)
+      oxdnaSurfaceStrandsSetup.applyConfig(saved.surface_strands)
+      surfaceStrandsOverlay.setColor('#61d9b4')
+      _refreshStrandsOverlay()
+    }
+  }
+  store.subscribe((next, prev) => {
+    if (next.currentDesign?.id !== prev.currentDesign?.id) restoredPegDesignId = null
+    if (next.currentDesign !== prev.currentDesign || next.currentGeometry !== prev.currentGeometry) queueMicrotask(restoreSavedPegSetup)
+  })
+  queueMicrotask(restoreSavedPegSetup)
+  document.getElementById('oxdna-peg-store')?.addEventListener('click', async () => {
+    const surface = oxdnaFloorSetup.getSurfaceSpec()
+    const strands = oxdnaSurfaceStrandsSetup.getStrandsSpec()
+    await api.updateMetadata({ peg_surface: strands && surface?.enabled ? {
+      surface: { dir: surface.dir, position_nm: surface.positionNm, offset_nm: surface.offsetNm, stiff: surface.stiff },
+      surface_strands: strands,
+      anchors: oxdnaAnchorsSetup.getAnchors(),
+    } : null })
   })
 
   initDebugMenu({

@@ -1,0 +1,51 @@
+{
+  "finding": "First zero-tail state passing sampling checks but outside the published interval plus two simulation SEMs and digitization allowance",
+  "comparison": {
+    "cutoff": "zero_tail",
+    "n": 275,
+    "temperature_K": 320.0,
+    "seeds": [
+      1201,
+      1202,
+      1203
+    ],
+    "replica_ids": [
+      201,
+      202,
+      203
+    ],
+    "sampling_generation": 1,
+    "directories": [
+      "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+      "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1",
+      "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1"
+    ],
+    "observable": "sqrt(mean(Rg^2))",
+    "mean_rg_nm": 4.251835366896768,
+    "rms_rg_nm": 4.3380218838900415,
+    "conservative_sem_nm": 0.02418139366580992,
+    "minimum_seed_effective_samples": 631.0300095855524,
+    "rank_folded_split_rhat": 1.0008915956170596,
+    "extension_recommended": false,
+    "largest_seed_half_difference_nm": 0.11049834056571584,
+    "published_rg_nm": 3.9483160184747224,
+    "digitization_bound_nm": 0.025,
+    "figure": "7b",
+    "relative_difference": 0.0987017917491484,
+    "within_two_sem_plus_digitization": false,
+    "published_plotted_interval": {
+      "n": 275,
+      "temperature_K": 320,
+      "figure": "7b",
+      "lower_nm": 3.6618045444237004,
+      "upper_nm": 4.234747353531808,
+      "marker_nm": 3.9483160184747224,
+      "half_width_nm": 0.28647140455405373,
+      "digitization_bound_nm": 0.025
+    },
+    "estimate_within_published_interval": false,
+    "two_sem_overlaps_published_interval": false
+  },
+  "next_action": "Audit mapping, chain-length convention, cutoff reconstruction and published parameter precision against source evidence before modifying any parameter. Compare other completed N275 states to establish whether discrepancy is systematic.",
+  "caveat": "Sampling checks do not prove equilibrium; final journal main text and original tables remain unverified. No parameter change or new simulation allocated."
+}

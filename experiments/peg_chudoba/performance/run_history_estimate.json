@@ -1,0 +1,146 @@
+{
+  "timestamp_utc": "2026-09-10T03:57:56.056843+00:00",
+  "rows": [
+    {
+      "workload": "CPU pivot N795, 320 K (serial)",
+      "samples": [
+        {
+          "run": "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n795_t320_s201/run.json",
+          "wall_s": 1677.0360114574432,
+          "cpu_s": 1602.71
+        },
+        {
+          "run": "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n795_t320_s202/run.json",
+          "wall_s": 1661.547077178955,
+          "cpu_s": 1582.99
+        },
+        {
+          "run": "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n795_t320_s203/run.json",
+          "wall_s": 1725.0676665306091,
+          "cpu_s": 1642.89
+        }
+      ],
+      "sweeps": 100000,
+      "mean_wall_s": 1687.883585055669,
+      "mean_cpu_s": 1609.53,
+      "observed_sweeps_s": 59.24579211824128,
+      "cpu_time_baseline_sweeps_s": 62.129938553490774,
+      "wall_over_cpu": 1.0486810342495443
+    },
+    {
+      "workload": "CPU pivot N455, 347 K (serial)",
+      "samples": [
+        {
+          "run": "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n455_t347_s201/run.json",
+          "wall_s": 773.9087755680084,
+          "cpu_s": 708.528
+        },
+        {
+          "run": "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n455_t347_s202/run.json",
+          "wall_s": 844.8011493682861,
+          "cpu_s": 770.09
+        },
+        {
+          "run": "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n455_t347_s203/run.json",
+          "wall_s": 804.2209720611572,
+          "cpu_s": 736.341
+        }
+      ],
+      "sweeps": 100000,
+      "mean_wall_s": 807.6436323324839,
+      "mean_cpu_s": 738.3196666666666,
+      "observed_sweeps_s": 123.81698560688069,
+      "cpu_time_baseline_sweeps_s": 135.4426876524577,
+      "wall_over_cpu": 1.09389424228505
+    },
+    {
+      "workload": "CPU pivot N455, 320 K (earlier concurrent; seeds 201\u2013202)",
+      "samples": [
+        {
+          "run": "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n455_t320_s201/run.json",
+          "wall_s": 1076.1840779781342,
+          "cpu_s": 976.975
+        },
+        {
+          "run": "experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347/n455_t320_s202/run.json",
+          "wall_s": 1106.2027740478516,
+          "cpu_s": 1010.03
+        }
+      ],
+      "sweeps": 100000,
+      "mean_wall_s": 1091.1934260129929,
+      "mean_cpu_s": 993.5025,
+      "observed_sweeps_s": 91.64278084535427,
+      "cpu_time_baseline_sweeps_s": 100.6539993608471,
+      "wall_over_cpu": 1.0983298240447235
+    },
+    {
+      "workload": "CPU NPT 108 \u00d7 N135, 294 K, P10 (earlier concurrent)",
+      "samples": [
+        {
+          "run": "experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p10_s401/run.json",
+          "wall_s": 575.4461095333099,
+          "cpu_s": 562.714
+        },
+        {
+          "run": "experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p10_s402/run.json",
+          "wall_s": 576.8052945137024,
+          "cpu_s": 564.659
+        },
+        {
+          "run": "experiments/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p10_s403/run.json",
+          "wall_s": 568.7237656116486,
+          "cpu_s": 555.462
+        }
+      ],
+      "sweeps": 2000,
+      "mean_wall_s": 573.6583898862203,
+      "mean_cpu_s": 560.945,
+      "observed_sweeps_s": 3.4863954493835276,
+      "cpu_time_baseline_sweeps_s": 3.565411938781877,
+      "wall_over_cpu": 1.0226642360413594
+    },
+    {
+      "workload": "CPU NPT 108 \u00d7 N455, 294 K, P1 (earlier concurrent)",
+      "samples": [
+        {
+          "run": "experiments/peg_chudoba/runs/eos_zero_tail_n455_t294/n455_t294_p1_s401/run.json",
+          "wall_s": 2410.2643706798553,
+          "cpu_s": 2372.16
+        },
+        {
+          "run": "experiments/peg_chudoba/runs/eos_zero_tail_n455_t294/n455_t294_p1_s402/run.json",
+          "wall_s": 2544.9475185871124,
+          "cpu_s": 2505.61
+        },
+        {
+          "run": "experiments/peg_chudoba/runs/eos_zero_tail_n455_t294/n455_t294_p1_s403/run.json",
+          "wall_s": 2729.5667383670807,
+          "cpu_s": 2673.85
+        }
+      ],
+      "sweeps": 2000,
+      "mean_wall_s": 2561.592875878016,
+      "mean_cpu_s": 2517.2066666666665,
+      "observed_sweeps_s": 0.7807641951356055,
+      "cpu_time_baseline_sweeps_s": 0.7945315044983726,
+      "wall_over_cpu": 1.0176331207918365
+    },
+    {
+      "workload": "CPU NPT 108 \u00d7 N455, 371 K, P1 (earlier concurrent)",
+      "samples": [
+        {
+          "run": "experiments/peg_chudoba/runs/eos_zero_tail_n455_t371/n455_t371_p1_s401/run.json",
+          "wall_s": 7294.148887395859,
+          "cpu_s": 7201.84
+        }
+      ],
+      "sweeps": 2000,
+      "mean_wall_s": 7294.148887395859,
+      "mean_cpu_s": 7201.84,
+      "observed_sweeps_s": 0.27419237403502406,
+      "cpu_time_baseline_sweeps_s": 0.2777068082601113,
+      "wall_over_cpu": 1.012817403246373
+    }
+  ]
+}

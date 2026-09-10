@@ -87,6 +87,7 @@ class OxdnaStageSpec:
     # ANM parameter-file name in the job dir (the protein spring network); emitted
     # as `parfile = <name>` only for hybrid stages.
     parfile: str | None = None
+    peg_parameters: dict | None = None
     # ── Output-cadence overrides (benchmark trials) ─────────────────────────────
     # None → derive from `steps` as usual (~100 trajectory + energy samples).  A
     # short THROUGHPUT trial sets print_conf_interval high (no intermediate frames)
@@ -376,6 +377,11 @@ def render_stage_input(
     lines.append("")
     interaction = spec.interaction or "DNA2"
     lines.append(f"interaction_type = {interaction}")
+    if spec.peg_parameters:
+        if interaction != "DNA2PEG":
+            raise ValueError("PEG parameters require the DNA2PEG interaction")
+        for key in ("peg_bond_length", "peg_bond_k", "peg_sigma", "peg_dna_sigma", "peg_epsilon"):
+            lines.append(f"{key} = {float(spec.peg_parameters[key]):.12g}")
     parfile = parfile_name or spec.parfile
     if parfile:
         lines.append(f"parfile = {parfile}")

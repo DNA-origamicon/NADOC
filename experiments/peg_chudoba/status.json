@@ -1,0 +1,127 @@
+{
+  "generated_utc": "2026-09-10T07:03:10.760025+00:00",
+  "status": "Incomplete; not a benchmark reproduction claim",
+  "primary_convention": "zero_tail",
+  "chain_states_with_three_replicas": 39,
+  "published_chain_states": 45,
+  "chain_states_flagged_for_extension": 12,
+  "chain_states_passing_sampling_checks": 27,
+  "sampled_chain_states_outside_comparison_intervals": [
+    {
+      "n": 275,
+      "temperature_K": 320.0
+    }
+  ],
+  "eos_states_with_three_replicas": 5,
+  "published_eos_states": 15,
+  "current_library_matches_validation": true,
+  "final_journal_main_text_verified": false,
+  "live_engines": [
+    {
+      "pid": 1445446,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_extensions_n135_t294_p1_round1/n135_t294_p1_r402_g1",
+      "cutoff": "zero_tail",
+      "sampling": "npt",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1489428,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_extensions_n135_t294_p10_round1/n135_t294_p10_r403_g1",
+      "cutoff": "zero_tail",
+      "sampling": "npt",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1521263,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round9/n275_t361_r201_g1",
+      "cutoff": "zero_tail",
+      "sampling": "pivot",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1538478,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_extensions_n135_t294_p20_round1/n135_t294_p20_r401_g1",
+      "cutoff": "zero_tail",
+      "sampling": "npt",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1551021,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_gpu_n135_t396_extension1/s1721",
+      "cutoff": "zero_tail",
+      "sampling": "md",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1576688,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round6/n135_t371_r203_g1",
+      "cutoff": "zero_tail",
+      "sampling": "pivot",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1577971,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round5/n135_t381_r203_g1",
+      "cutoff": "zero_tail",
+      "sampling": "pivot",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1580455,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round7/n135_t396_r203_g1",
+      "cutoff": "zero_tail",
+      "sampling": "pivot",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1588421,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_n455_t371/n455_t371_p1_s402",
+      "cutoff": "zero_tail",
+      "sampling": "npt",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1592699,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/equilibrium_zero_tail_381_396/n455_t381_s201",
+      "cutoff": "zero_tail",
+      "sampling": "pivot",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1593692,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_n455_t294/n455_t294_p10_s401",
+      "cutoff": "zero_tail",
+      "sampling": "npt",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 1600079,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p100_s402",
+      "cutoff": "zero_tail",
+      "sampling": "npt",
+      "process_state": "T",
+      "suspended": true
+    },
+    {
+      "pid": 2081428,
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/equilibrium_zero_tail_361_371/n795_t361_s201",
+      "cutoff": "zero_tail",
+      "sampling": "pivot",
+      "process_state": "R",
+      "suspended": false
+    }
+  ],
+  "unsuspended_engine_count": 1,
+  "suspended_engine_count": 12
+}

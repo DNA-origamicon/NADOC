@@ -1,0 +1,111 @@
+{
+  "status": "Sampler checks, not a published benchmark reproduction claim",
+  "interpretation": "GPU trajectories start from independent CPU origins. Quadrature SEM comparison assumes post-discard sampling has lost initial-state dependence; inspect both cohorts for convergence.",
+  "comparisons": [
+    {
+      "cutoff": "raw",
+      "sampling": "hmc",
+      "n": 36,
+      "temperature_K": 381,
+      "completed": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/hmc_n36_t381_raw_warm_s903",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/hmc_n36_t381_raw_warm_s904",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/hmc_n36_t381_raw_warm_s905_retry1"
+      ],
+      "pending": [],
+      "gpu": {
+        "rms_rg_nm": 1.1552726267701114,
+        "conservative_sem_nm": 0.010444732318720791,
+        "minimum_seed_effective_samples": 231.58830573160338,
+        "rank_folded_split_rhat": 1.0048842595159015,
+        "extension_recommended": false,
+        "largest_seed_half_difference_nm": 0.06084589637122417
+      },
+      "replica_ids": [
+        203,
+        201,
+        202
+      ],
+      "cpu_rms_rg_nm": 1.1373296139009696,
+      "cpu_sem_nm": 0.008752375670293482,
+      "difference_nm": 0.017943012869141794,
+      "combined_sem_nm": 0.013627050784512248,
+      "within_two_combined_sem": true,
+      "cpu_extension_recommended": false
+    },
+    {
+      "cutoff": "zero_tail",
+      "sampling": "md",
+      "n": 36,
+      "temperature_K": 381,
+      "completed": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/zero_tail_gpu_n36_t381/s701",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/zero_tail_gpu_n36_t381/s702",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/zero_tail_gpu_n36_t381/s703"
+      ],
+      "pending": [],
+      "gpu": {
+        "rms_rg_nm": 1.180927979408381,
+        "conservative_sem_nm": 0.013437823565761635,
+        "minimum_seed_effective_samples": 112.10644574310537,
+        "rank_folded_split_rhat": 1.0047465725854192,
+        "extension_recommended": false,
+        "largest_seed_half_difference_nm": 0.07199251985152344
+      },
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "cpu_rms_rg_nm": 1.1749294806606188,
+      "cpu_sem_nm": 0.007834240501275996,
+      "difference_nm": 0.005998498747762149,
+      "combined_sem_nm": 0.015554755749171117,
+      "within_two_combined_sem": true,
+      "cpu_extension_recommended": false
+    },
+    {
+      "cutoff": "zero_tail",
+      "sampling": "md",
+      "n": 135,
+      "temperature_K": 396,
+      "completed": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/zero_tail_gpu_n135_t396/s721",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/zero_tail_gpu_n135_t396/s722",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/zero_tail_gpu_n135_t396/s723"
+      ],
+      "pending": [],
+      "gpu": {
+        "rms_rg_nm": 2.0770057226304117,
+        "conservative_sem_nm": 0.11026098542195106,
+        "minimum_seed_effective_samples": 9.05839047017806,
+        "rank_folded_split_rhat": 1.0883433248335386,
+        "extension_recommended": true,
+        "largest_seed_half_difference_nm": 0.5025925850591624
+      },
+      "replica_ids": [
+        201,
+        202,
+        203
+      ],
+      "cpu_rms_rg_nm": 1.9313032203610478,
+      "cpu_sem_nm": 0.04140577383488448,
+      "difference_nm": 0.14570250226936388,
+      "combined_sem_nm": 0.11777912808764254,
+      "within_two_combined_sem": true,
+      "cpu_extension_recommended": true
+    },
+    {
+      "cutoff": "zero_tail",
+      "sampling": "md",
+      "n": 135,
+      "temperature_K": 396,
+      "completed": [],
+      "pending": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/zero_tail_gpu_n135_t396_extension1/s1721",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/zero_tail_gpu_n135_t396_extension1/s1722",
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs/zero_tail_gpu_n135_t396_extension1/s1723"
+      ]
+    }
+  ]
+}

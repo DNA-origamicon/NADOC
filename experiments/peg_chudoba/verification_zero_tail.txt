@@ -1,0 +1,54 @@
+........................................................................ [ 81%]
+...............F                                                         [100%]=============================== SLOW-TEST BUDGET ===============================
+3 unmarked test(s) over the 5.0s budget, but a heavy sim was running (simulation process(es) running: oxDNA) — these timings are NOT trustworthy and no triage is owed. Re-measure on an idle machine before relegating anything.
+    60.1s  tests/test_chudoba_hmc.py::test_hmc_harmonic_bond_distribution
+    12.3s  tests/test_chudoba_hmc.py::test_hmc_npt_ideal_volume
+     5.8s  tests/test_chudoba_engine.py::test_interacting_npt_snapshot_energy[hmc-verlet]
+full report: .nadoc-slow-candidates.json  (triage: .claude/skills/triage-slow-tests)
+
+=================================== FAILURES ===================================
+_____________________ test_hmc_harmonic_bond_distribution ______________________
+
+tmp_path = PosixPath('/tmp/pytest-of-jojo/pytest-57/test_hmc_harmonic_bond_distrib0')
+
+    def test_hmc_harmonic_bond_distribution(tmp_path):
+        """Two bonded beads have analytic radial density r² exp[-k(r-b)²/(2RT)]."""
+        if not BINARY.exists():pytest.skip('Build Chudoba engine first')
+        directory=tmp_path/'bond'
+>       run=subprocess.run([sys.executable,'-m','experiments.peg_chudoba.run_chain',
+            '--sampling','hmc','--n','2','--steps','5000','--hmc-steps','37',
+            '--dt-fs','8','--seed','904','--output',str(directory)],
+            cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True,timeout=60)
+
+tests/test_chudoba_hmc.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib/python3.12/subprocess.py:550: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/subprocess.py:1209: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/subprocess.py:2116: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: -9 args: ['/home/jojo/Work/NADOC/.venv/bin/python', '-m'...>
+endtime = 68645.800463898, orig_timeout = 60, stdout_seq = [], stderr_seq = []
+skip_check_and_raise = False
+
+    def _check_timeout(self, endtime, orig_timeout, stdout_seq, stderr_seq,
+                       skip_check_and_raise=False):
+        """Convenience for checking if a timeout has expired."""
+        if endtime is None:
+            return
+        if skip_check_and_raise or _time() > endtime:
+>           raise TimeoutExpired(
+                    self.args, orig_timeout,
+                    output=b''.join(stdout_seq) if stdout_seq else None,
+                    stderr=b''.join(stderr_seq) if stderr_seq else None)
+E           subprocess.TimeoutExpired: Command '['/home/jojo/Work/NADOC/.venv/bin/python', '-m', 'experiments.peg_chudoba.run_chain', '--sampling', 'hmc', '--n', '2', '--steps', '5000', '--hmc-steps', '37', '--dt-fs', '8', '--seed', '904', '--output', '/tmp/pytest-of-jojo/pytest-57/test_hmc_harmonic_bond_distrib0/bond']' timed out after 60 seconds
+
+/usr/lib/python3.12/subprocess.py:1253: TimeoutExpired
+=========================== short test summary info ============================
+FAILED tests/test_chudoba_hmc.py::test_hmc_harmonic_bond_distribution - subpr...
+1 failed, 87 passed in 95.11s (0:01:35)

@@ -1,0 +1,47 @@
+{
+  "description": "CPU-only 10 million pair evaluations at runtime-loaded T=371 K; temperature coefficient caching. Informal local timing, not simulation throughput.",
+  "results": [
+    {
+      "repeat": 0,
+      "variant": "before",
+      "seconds": 0.45101031,
+      "checksum": "-352704870.5015718",
+      "binary_sha256": "00802215b825f47f61a0afc4dcc05d3021aed97eb1b5cb2f1db071547188d2f9"
+    },
+    {
+      "repeat": 0,
+      "variant": "after",
+      "seconds": 0.3855389,
+      "checksum": "-352704870.5015718",
+      "binary_sha256": "004eb7088c23bd2ffaf90ecb98b42400caf35d55819ac30719f7712935f649dc"
+    },
+    {
+      "repeat": 1,
+      "variant": "before",
+      "seconds": 0.40433036,
+      "checksum": "-352704870.5015718",
+      "binary_sha256": "00802215b825f47f61a0afc4dcc05d3021aed97eb1b5cb2f1db071547188d2f9"
+    },
+    {
+      "repeat": 1,
+      "variant": "after",
+      "seconds": 0.20932361,
+      "checksum": "-352704870.5015718",
+      "binary_sha256": "004eb7088c23bd2ffaf90ecb98b42400caf35d55819ac30719f7712935f649dc"
+    },
+    {
+      "repeat": 2,
+      "variant": "before",
+      "seconds": 0.37864841,
+      "checksum": "-352704870.5015718",
+      "binary_sha256": "00802215b825f47f61a0afc4dcc05d3021aed97eb1b5cb2f1db071547188d2f9"
+    },
+    {
+      "repeat": 2,
+      "variant": "after",
+      "seconds": 0.22134199,
+      "checksum": "-352704870.5015718",
+      "binary_sha256": "004eb7088c23bd2ffaf90ecb98b42400caf35d55819ac30719f7712935f649dc"
+    }
+  ]
+}

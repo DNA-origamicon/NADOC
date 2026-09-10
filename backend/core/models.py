@@ -2289,6 +2289,8 @@ class DesignMetadata(BaseModel):
     # computers keep its own optimal cores/threads/GPU defaults while the .nadoc
     # file stays portable.  Typed field → survives a load→save round-trip.
     hardware_defaults: Dict[str, HardwareBenchmark] = Field(default_factory=dict)
+    # Saved simulation setup, separate from DNA topology. Reapplied on file open.
+    peg_surface: Optional[dict] = None
 
 
 class TmSettings(BaseModel):

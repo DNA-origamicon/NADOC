@@ -1,0 +1,33 @@
+configuration {
+  step        20000
+  dt 2.000000e+00
+  version 2024-06-04
+}
+
+colvar {
+  name d47_66
+  x       11.418014820177
+}
+
+colvar {
+  name d48_67
+  x       10.143035986495
+}
+
+colvar {
+  name d47_48
+  x       12.236896901949
+}
+
+colvar {
+  name d66_67
+  x       6.0554660346275
+}
+
+restraint {
+  configuration {
+    step 20000
+    name harmonic1
+  }
+}
+

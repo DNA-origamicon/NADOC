@@ -1,0 +1,46 @@
+{
+  "cutoff": "zero_tail",
+  "n": 795,
+  "temperature_K": 294.0,
+  "seeds": [
+    201,
+    202,
+    203
+  ],
+  "replica_ids": [
+    201,
+    202,
+    203
+  ],
+  "sampling_generation": 0,
+  "directories": [
+    "experiments/peg_chudoba/runs/equilibrium_zero_tail_294/n795_t294_s201",
+    "experiments/peg_chudoba/runs/equilibrium_zero_tail_294/n795_t294_s202",
+    "experiments/peg_chudoba/runs/equilibrium_zero_tail_294/n795_t294_s203"
+  ],
+  "observable": "sqrt(mean(Rg^2))",
+  "mean_rg_nm": 8.685696352145625,
+  "rms_rg_nm": 8.870195743406756,
+  "conservative_sem_nm": 0.0643373613347805,
+  "minimum_seed_effective_samples": 323.48541950227445,
+  "rank_folded_split_rhat": 1.0023058285730593,
+  "extension_recommended": false,
+  "largest_seed_half_difference_nm": 0.22055823377810846,
+  "published_rg_nm": 8.332908096291332,
+  "digitization_bound_nm": 0.025,
+  "figure": "7b",
+  "relative_difference": 0.06447780785612522,
+  "within_two_sem_plus_digitization": false,
+  "published_plotted_interval": {
+    "n": 795,
+    "temperature_K": 294,
+    "figure": "7b",
+    "lower_nm": 7.433687144422599,
+    "upper_nm": 9.232096021180748,
+    "marker_nm": 8.332908096291332,
+    "half_width_nm": 0.8992044383790745,
+    "digitization_bound_nm": 0.025
+  },
+  "estimate_within_published_interval": true,
+  "two_sem_overlaps_published_interval": true
+}

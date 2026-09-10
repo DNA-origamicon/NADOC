@@ -1,0 +1,7 @@
+{
+  "completed_unix": 1788989658.1871774,
+  "command": ".venv/bin/python -m pytest tests/test_chudoba_engine.py -k \"mc_energy_accounting or interacting_npt or molecular_volume\" -q",
+  "result": "6 passed, 21 deselected in 8.44s",
+  "shared_library_sha256": "e5928b68aaa521740f2d12e73480deef7de5a3ff49cbb67bf852221386724158",
+  "plan_coverage": "45 unique allocations cover the complete 15-state EOS target set with three seeds"
+}

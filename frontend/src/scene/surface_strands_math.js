@@ -230,6 +230,13 @@ export function surfaceStrandsSpec(raw = {}) {
     seed: (Number(raw.seed) >>> 0),
     subjectToField: raw.subjectToField !== false,
   }
+  if (raw.material === 'PEG') Object.assign(spec, {
+    material: 'PEG', sequence: '', attachEnd: "5'", subjectToField: false,
+    segments: Math.max(2, Math.min(64, Math.round(Number(raw.segments) || 8))),
+    bondLengthNm: Math.max(0.3, Math.min(1.5, Number(raw.bondLengthNm) || 0.7)),
+    beadDiameterNm: Math.max(0.2, Math.min(1, Number(raw.beadDiameterNm) || 0.5)),
+    terminalChargeE: Math.max(-2, Math.min(2, Number(raw.terminalChargeE) || 0)),
+  })
   spec.count = surfaceStrandCount(spec)
   return spec
 }

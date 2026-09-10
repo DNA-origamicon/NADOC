@@ -31,6 +31,7 @@ const DEFAULT_IDS = {
   field: 'oxdna-surfstrand-field', status: 'oxdna-surfstrand-status',
   highlight: 'oxdna-surfstrand-highlight', showshape: 'oxdna-surfstrand-showshape',
   color: 'oxdna-surfstrand-color', colorHex: 'oxdna-surfstrand-color-hex',
+  segments: 'oxdna-peg-segments', bond: 'oxdna-peg-bond', diameter: 'oxdna-peg-diameter', charge: 'oxdna-peg-charge',
 }
 
 const GEN_DEFAULT_LEN = 8   // fallback when the sequence box is empty
@@ -40,7 +41,7 @@ const GEN_DEFAULT_LEN = 8   // fallback when the sequence box is empty
 // Short enough to still read as live, long enough to swallow a burst of keystrokes.
 const CHANGE_DEBOUNCE_MS = 90
 
-export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence = null, ids = null } = {}) {
+export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence = null, ids = null, material = 'DNA' } = {}) {
   const id = { ...DEFAULT_IDS, ...(ids || {}) }
   const $ = (k) => document.getElementById(id[k])
   const enableChk = $('enable')
@@ -64,6 +65,9 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
   function _rawFields() {
     return {
       enabled: _enabled,
+      ...(material === 'PEG' ? { material, segments: Number($('segments')?.value || 8),
+        bondLengthNm: Number($('bond')?.value || 0.7), beadDiameterNm: Number($('diameter')?.value || 0.5),
+        terminalChargeE: Number($('charge')?.value || 0) } : {}),
       sequence: seqIn?.value || '',
       attachEnd: endSel?.value || "5'",
       shape: shapeSel?.value || 'circle',
@@ -72,7 +76,7 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
       offsetXNm: offxIn?.value,
       offsetYNm: offyIn?.value,
       seed: seedIn?.value,
-      subjectToField: fieldChk ? !!fieldChk.checked : true,
+      subjectToField: material === 'PEG' ? false : fieldChk ? !!fieldChk.checked : true,
     }
   }
   function getStrandsSpec() { return surfaceStrandsSpec(_rawFields()) }
@@ -120,6 +124,10 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
     if (!_surfaceOn) { _setStatus('Enable the hard surface first — capture strands attach to it.'); return }
     if (!_enabled) { _setStatus('Off — tick "Add surface strands" to disperse capture strands.'); return }
     const spec = getStrandsSpec()
+    if (material === 'PEG') {
+      _setStatus(`${spec?.count || 0} PEG chains · ${spec?.segments || 8} bonds/chain · neutral backbone; terminal qE uses Physical E-field in Run.`, '#65d6b7')
+      return
+    }
     if (!spec || !spec.sequence) { _setStatus('Enter a capture-strand sequence (A/C/G/T).', '#e0a800'); return }
     if (!(spec.densityPerUm2 > 0) || !(spec.sizeNm > 0)) { _setStatus('Set a density and coverage size > 0.', '#e0a800'); return }
     const area = surfaceStrandArea(spec)
@@ -156,7 +164,7 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
     }
     _syncControlsVisibility(); _render(true)
   })
-  for (const el of [seqIn, densIn, sizeIn, offxIn, offyIn, seedIn]) el?.addEventListener('input', () => _render())
+  for (const el of [seqIn, densIn, sizeIn, offxIn, offyIn, seedIn, ...(material === 'PEG' ? [$('segments'), $('bond'), $('diameter'), $('charge')] : [])]) el?.addEventListener('input', () => _render())
   endSel?.addEventListener('change', () => _render(true))
   shapeSel?.addEventListener('change', () => _render(true))
   fieldChk?.addEventListener('change', () => _render(true))
@@ -200,9 +208,13 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
 
   // Repopulate from a stored spec (echo-back when a job is selected). Null → off.
   function applyConfig(spec) {
+    if (material === 'PEG' && spec?.material !== 'PEG') spec = null
     _enabled = !!(spec && spec.enabled)
     if (enableChk) enableChk.checked = _enabled
     if (spec) {
+      for (const [key, field] of [['segments', 'segments'], ['bond', 'bondLengthNm'], ['diameter', 'beadDiameterNm'], ['charge', 'terminalChargeE']]) {
+        if ($(key) && spec[field] != null) $(key).value = String(spec[field])
+      }
       if (seqIn && spec.sequence != null) seqIn.value = spec.sequence
       if (endSel && spec.attachEnd) endSel.value = spec.attachEnd
       if (shapeSel && spec.shape) shapeSel.value = spec.shape

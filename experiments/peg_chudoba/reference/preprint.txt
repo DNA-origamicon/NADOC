@@ -1,0 +1,1016 @@
+                                                               A temperature-dependent implicit-solvent model of
+                                                                    polyethylene glycol in aqueous solution
+                                                                            Richard Chudoba,∗,†,‡ Jan Heyda,∗,¶ and Joachim Dzubiella∗,†,‡
+                                                                 †Institut für Physik, Humboldt-Universität zu Berlin, Newtonstr. 15, D-12489 Berlin, Germany
+                                                          ‡Institut für Weiche Materie und Funktionale Materialen, Helmholtz-Zentrum Berlin, Hahn-Meitner Platz 1,
+arXiv:1710.09191v1 [physics.chem-ph] 25 Oct 2017
+
+
+
+
+                                                                                                   D-14109 Berlin, Germany
+                                                       ¶Department of Physical Chemistry, University of Chemistry and Technology, Technická 5, CZ-16628 Praha 6, Czech
+                                                                                                              Republic
+
+                                                           E-mail: richard.chudoba@helmholtz-berlin.de; jan.heyda@vscht.cz; joachim.dzubiella@helmholtz-berlin.de
+
+
+                                                   Abstract                                                              solution temperature (LCST) at ≈ 373 K in pure water. 10,11
+                                                                                                                         Nevertheless its purposeful integration in aqueous-based ma-
+                                                   A temperature (T )-dependent coarse-grained (CG) Hamil-               terials at more relevant operating conditions can be achieved
+                                                   tonian of polyethylene glycol/oxide (PEG/PEO) in aqueous              via copolymerization or by adding cosolvents, leading to
+                                                   solution is reported to be used in implicit-solvent material          complex block-copolymer architectures in solvent mixtures
+                                                   models in a wide temperature (i.e., solvent quality) range.           acting as soft switchable and functional materials. 5,12
+                                                   The T -dependent nonbonded CG interactions are derived                   In order to rationalize and guide future PEG-based soft
+                                                   from a combined bottom-up and top-down approach. The                  material design, the quantitative understanding and theoret-
+                                                   pair potentials calculated from atomistic replica-exchange            ical description of PEG properties starting from the micro-
+                                                   molecular dynamics simulations in combination with the it-            scopic structure in aqueous solution to consistent macro-
+                                                   erative Boltzmann inversion are post-refined by benchmark-            scopic observables is a precondition. Due to the chemi-
+                                                   ing to experimental data of the radius of gyration. For               cal simplicity and relatively small sizes of the monomer,
+                                                   better handling and a fully continuous transferability in T -         atomistic level computer simulations are feasible, at least
+                                                   space, the pair potentials are conveniently truncated and             for small molecular weights. 13–16 Such simulations allow to
+                                                   mapped to an analytic formula with three structural param-            obtain details about the polymer conformations, 17,18 mean
+                                                   eters expressed as explicit continuous functions of T . It is         polymer size, 19 or hydration properties 20 in aqueous so-
+                                                   then demonstrated that this model without further adjust-             lutions, but are restricted to rather short polymer chains
+                                                   ments successfully reproduces other experimentally known              and sub-microsecond timescales. Larger scale simulations
+                                                   key thermodynamic properties of semi-dilute PEG solutions             (longer or more chains) for the modeling of larger assem-
+                                                   such as the full equation of state (i.e., T -dependent osmotic        blies of material components are not feasible on the atom-
+                                                   pressure) for various chain lengths as well as their cloud            istic level, and efficient mesoscale polymer models that are
+                                                   point (or collapse) temperature.                                      transferable between various system conditions are in urgent
+                                                                                                                         need. 21–25
+                                                                                                                            To bridge the scales, several coarse-grained (CG) mod-
+                                                   1    Introduction                                                     els of PEG have indeed been proposed with varying de-
+                                                                                                                         gree of chemical detail. Most CG approaches start from
+                                                   One of the chemically simplest but increasingly popular
+                                                                                                                         explicit-solvent atomistic simulations, so called bottom-up
+                                                   polymer in material science is polyethylene glycol (PEG),
+                                                                                                                         approaches, and thus capture faithfully the essential polymer
+                                                   also known as polyethylene oxide (PEO). For instance, PEG
+                                                                                                                         chemical features and local structure. The coarse-graining
+                                                   is frequently used in biochemistry and biophysics mostly
+                                                                                                                         is achieved by established statistical mechanics methods that
+                                                   due to its bioinert properties, e.g., as antifouling agent, co-
+                                                                                                                         integrate out the microscopic degrees of freedom, such as
+                                                   valent modifier, carrier matrix, or crowding agent for pro-
+                                                                                                                         the iterative Boltzmann inversion (IBI). 26–28 In this or sim-
+                                                   tein stabilization or crystallization, 1–4 just to name a few.
+                                                                                                                         ilar ways, fully implicit-solvent PEG coarse-grained models
+                                                   Another line of important modern applications of PEG con-
+                                                                                                                         were derived 29–31 as well as models where water molecules
+                                                   cerns thermo- and stimuli-responsive materials which under
+                                                                                                                         are coarse-grained to single neutral beads. 32 Other ap-
+                                                   the action of external stimuli, most prominently a tempera-
+                                                                                                                         proaches have rather followed a top-down strategy by resign-
+                                                   ture change, undergo rapid and reversible changes of some
+                                                                                                                         ing on chemical details or solvent and using simple empiri-
+                                                   of their properties in aqueous environment. 5–9 PEG itself is
+                                                                                                                         cal pair interaction potentials between monomers, such as
+                                                   thermoresponsive, however, has a rather high lower critical
+
+                                                                                                                     1
+Lennard-Jones or Weeks-Chandler-Anderson, 33 which aim
+to reproduce a variety of known experimental observables,
+such as the polymer size or the osmotic pressure. 34,35 In-
+deed, under good solvent conditions and in the limit of in-
+finitely long PEG chains, it was found that available macro-
+scopic experimental data can be reproduced. 35 Finally, sev-
+eral mesoscale models for PEG have combined bottom-
+up and top-down approaches to obtain consistent descrip-               Figure 1: A single PEG nonamer chain, (EO)9 , is shown
+tions of multiple structural and macroscopic properties at             with carbon atoms in black, oxygen in red and hydrogen in
+the same time, 36–38 including those based on the MARTINI-             white. In the coarse-grained (CG) representation of PEG,
+approach. 39–44                                                        the – CH2 – O – CH2 – group of atoms (or – CH2 – O – CH3
+   Despite the substantial body of mesoscale models of aque-           at the terminal ends) is replaced by a spherical bead (EO
+ous PEG published up to now, without exception they were               unit, depicted as transparent spheres). The center of a CG
+parametrized close to room temperature (≈ 298 K), thus fo-             bead corresponds to the center of the mass of the replaced
+cusing only on the well soluble state, that is, in a good sol-         EO group.
+vent state. Hence, a large gap exists within the model range
+concerning the models transferability to other temperatures,
+in particular regarding configurational and miscibility prop-          short-range features like the T -dependence of the hydration
+erties of PEG for increasing temperatures moving towards               (desolvation) barrier between monomers. This potential is
+the θ and critical solution temperatures. Recall that aque-            easy to implement and can be used for any temperature in fu-
+ous PEG solutions possess an LCST (opposite to an upper                ture simulations. In the final top-down closure, adjustments
+CST) and thus are macromolecular systems whose effective               of the interaction potential are made in order to match prop-
+polymer-polymer attraction is governed by positive entropy.            erly the polymer size at room temperature. We demonstrate
+This is opposite to the simple classical interaction Hamilto-          that this single adjustment together with the T -dependence
+nians that are commonly used in textbook modeling, 45 and              originating from the bottom-up approach is sufficient to suc-
+are still applicable for polymer melts, 21–23 where the intri-         cessfully reproduce other experimentally known key thermo-
+cate solvent effects play no role. For PEG in water, the non-          dynamic properties of semi-dilute PEG solutions such as the
+bonded self-interactions of the polymer become more attrac-            full equation of state (i.e., osmotic pressure) at various chain
+tive for increasing temperature, i.e., the solvent eventually          lengths as well as their cloud point (or collapse) temperature
+turns bad, driving a chain collapse transition (for a single           in the bad solvent condition.
+chain 46 ) and clouding (for many chains) at the LCST when
+approaching from lower temperatures. Hence, even for small
+temperature changes close to room temperature it is a pri-             2     Computational Methods and Coarse-
+ori unclear to which extent the previously introduced mod-                   Graining Procedure
+els, which define purely energetic nonbonded potentials, can
+be applied and if they perform at least qualitatively correct.         2.1    Atomistic Replica-Exchange Molecular
+Moreover, it is questionable, if and how they can be modified
+                                                                              Dynamics (MD) Simulations
+towards T -dependent effects without major re-definitions of
+the model assumptions.                                                 We employed all-atom, explicit-water MD simulations to ob-
+   The goal of this work is to establish a T -dependent                tain configurations and interactions of EO oligomers of dif-
+implicit-solvent CG model for PEG, which shall be appli-               ferent lengths (mono-, tri-, and nonamer), cf. the exemplary
+cable and transferable in a wide temperature range, even in-           nonamer in Figure 1. EO stands for the ethylene oxide unit
+cluding the LCST, and respects both microscopic structural             consisting of – CH2 – O – CH2 – in the main part of the chain
+details and macroscopic thermodynamic properties. For this,            or CH3 – O – CH2 – at the termini, respectively. The free
+we introduce a two-step procedure, combining the micro-                monomer, CH3 – O – CH3 , is also described as a single EO
+scopic bottom-up approach with a mapping to an effective               unit. The MD simulations were carried out using the Gro-
+analytical Hamiltonian and a subsequent top-down refine-               macs 4.6 software, 47,48 employing the PEO parametrization
+ment. In the first step the interaction (pair) potentials in the       developed by Lee et al. 13 with the bonded parameters of
+CG model are based solely on atomistic simulations in ex-              the CHARMM force field in combination with the TIP3P
+plicit solvent and the microscopic degrees of freedom are in-          water model. 49 All bonds of the EO oligomers and water
+tegrated out using the IBI method for various temperatures.            molecules were constraint with the LINCS 50 and SETTLE
+In the crucial intermediate step, to improve handling and              algorithms, 51 respectively. The cut-off distance for non-
+warrant the continuous interpolation (i.e., the transferability)       bonded interactions was set to 1.0 nm while long range elec-
+on the T -scale in further applications, the interaction poten-        trostatics was accounted for by the Particle Mesh Ewald
+tial derived at discrete temperatures is conveniently mapped           (PME) method with cubic interpolation and a grid spacing
+to a smooth analytical expression, maintaining key structural
+
+                                                                   2
+Table 1: Parametrization of bonded interactions in the CG              based on the symmetric – CH2 – O – CH2 – group) is reason-
+model of PEG according to Lee et al. 39 The bonded interac-            able since only small anisotropy effects (e.g., due to a possi-
+tion energy is defined in eq 1.                                        bly present large molecular dipole) can be neglected. 29,30,39
+                                                                       The bonded interactions – which are assumed to be temper-
+                   b0 (nm)     kb (kJ mol−1 nm−2 )                     ature independent – are based on atomistic simulations as
+         bond
+                    0.33              17 000                           derived in the work of Lee et al. 39 and can be summarized in
+                                                                       the interaction energy
+                   θ 0 (deg)      kθ (kJ mol−1 )
+         angle
+                      130              85                                Ubonded = ∑ 21 kibj bi j − b0i j
+                                                                                                            2
+                   φ 0 (deg)      kφ (kJ mol−1 )       n                             bonds
+                                                                                                                      2
+        dihedral      180              1.96            1                         + ∑ 12 kiθjk cos(θi jk ) − cos(θi0jk )               (1)
+         angle         0               0.18            2                             angles
+                       0               0.33            3                                                                       
+                                                                                       ∑ ∑ kn,i jkl 1 + cos(nφi jkl − φn,i0 jkl ) .
+                                                                                                  φ
+                       0               0.12            4                         +
+                                                                                     torsions n
+
+                                                                       The bonded parameters are presented in Table 1. Only the
+of 0.16 nm. 52 The long range dispersion correction was ap-            first neighbors (directly connected by bonds) were excluded
+plied for energy and pressure.                                         from the nonbonded interactions. Furthermore, the water
+   For the study of T -dependent properties of complex liq-            molecules are not present explicitly anymore but implicitly
+uids and polymers, the replica exchange MD (REMD)                      included in the effective T -dependent monomer-monomer
+method 53 is appropriate to efficiently sample complex en-             (pair) interaction potentials. The latter were derived employ-
+ergy landscapes in a wide temperature range. We em-                    ing the iterative Boltzmann inversion (IBI) approach, 26–28
+ploy the REMD tool as implemented in the Gromacs                       discussed in detail in Section 2.3.
+software. 47 Here, 48 replicas were generated in a range                  The CG simulations were performed utilizing the Gro-
+270 K to 503 K. 54 Replica exchanges via Monte-Carlo swap              macs 4.6 and 5.1 software, 47,48,57 using the stochastic
+moves (accept/reject) were attempted every 50 integration              Langevin dynamics (LD) integrator in the NV T ensem-
+steps. Periodic boundary conditions were used and the indi-            ble with a friction constant γ = 1 ps−1 and corresponding
+vidual replicas were simulated under constant pressure and             random force. The mass of the monomer bead is set to
+temperature, which were controlled by the velocity-rescale             44 g mol−1 and the integration step could be increased to
+thermostat (τT = 0.1 ps) and the Parrinello–Rahman barostat            10 fs. Tabulated potentials with a cut-off distance of 1.2 nm
+(at 1 bar, τ p = 2 ps), respectively. 55,56 Each box contained         were used during IBI and a cut-off distance 0.9 nm for the
+either 72 monomer and 1984 TIP3P water molecules, or 36                final CG potentials. The CG simulations were applied for
+trimer and 1929 TIP3P water molecules, or 36 nonamer and               the same systems as in the atomistic MD simulations to de-
+1404 TIP3P water molecules, yielding approximately 2 M                 termine the effective CG potentials (bottom-up approach).
+(monomer) or 1 M (oligomers) concentrations in the water               Therefore the simulation box of a constant volume (V =
+solutions. After the initial energy minimization, the indi-            64 nm3 ) was filled with 72 monomer, 36 trimer, or 36 non-
+vidual replicas were equilibrated in the NV T ensemble for             amer molecules. The simulations were performed for 100 ns
+100 ps and in the N pT ensemble for another 100 ps. The in-            in a wide temperature range (270 K to 480 K).
+tegration step of the leap-frog (md) integrator was set to 2 fs
+and data were collected every 1 ps. The total simulation time
+                                                                       2.2.2   Calculating PEG solution properties
+per replica was 33 ns out of which the last 30 ns were used
+for data analysis.                                                     Using the CG simulations, single and many PEG chain prop-
+   Recall that the role of the REMD simulation is to provide           erties were calculated, such as the radius of gyration Rg , os-
+an accurate (but probably not perfect) atomistic reference             motic pressure or collapse transition (as a marker for the
+for developing the CG potentials in the bottom-up approach,            LCST 46 ) as a function of the chain length to relate them
+which, together with the iterative Boltzmann inversion (IBI)           to experimental data (top-down approach). Here, single CG
+described further below, is the first step in our CG force field       polymer chains made of 9, 18, 27, 36, 76, 135, 275, 455
+development.                                                           and 795 EO units were simulated at temperatures 294, 320,
+                                                                       347, 361, 371, 381 and 396 K. The analyses, such as regard-
+2.2     Coarse-Grained Simulations                                     ing the distribution of Rg , were made on trajectories longer
+                                                                       than a multiple of the chain correlation (Rouse) time, i.e.,
+2.2.1   Computational Methods                                          the shortest chains were sampled for 300 ns while the longest
+In the CG simulations all atoms forming a monomer unit                 chains were sampled for up to 5000 ns. The trajectory was
+are replaced with a neutral CG bead located in their center            split into 20 equally long blocks from which the first two
+of mass, see Figure 1. This symmetric representation (i.e.,            were discarded and the remaining 18 were the subject of the
+
+
+                                                                   3
+statistical analysis. These simulations were used for the final
+tuning of the interaction potential, so that the experimental              gtarget (r)                               g(r)
+dependence of Rg and the collapse temperature were repro-
+duced.
+   For the calculations of the equation of state, 108 relaxed
+polymer chains, of a length 135, or 455, were placed into
+the simulation box. LD simulations in the N pT ensemble                      (a)                                   (b)
+with a prescribed external pressure (1 kPa, 10 kPa, 100 kPa
+and 1000 kPa), controlled by the Parrinello–Rahman baro-
+stat with a time constant of τ p = 5 ps, were employed. The                Figure 2: Snapshots of the simulation boxes containing a
+total simulation time was 1000 ns, employing a time step                   solution of PEG nonamer as used for the IBI procedure.
+τ = 10 fs, from which the first 100 ns were considered as an               The molecules only seemingly protrude out of the box as
+equilibration phase. The average polymer concentration was                 molecules are shown undivided despite the periodic bound-
+determined a posteriori from the mean system volume. It                    ary conditions. The pair RDF g(r) between the EO units
+shall be noted that to speed up reaching the desired pressure              located right in the middle of the chains (5th monomer of the
+level, the system was first equilibrated with the Berendsen                nonamer) in the atomistic simulation (a) is accurately repro-
+barostat and an increased isothermal compressibility of the                duced by the implicit-solvent CG simulation (b). In the CG
+environment (4.5 × 10−3 bar−1 , i.e., one hundred times the                simulation box, the middle units are depicted in orange while
+normal isothermal compressibility of water). After the sim-                the remaining units are shown as cyan beads.
+ulation box achieved the presumed volume, the water-like
+isothermal compressibility was restored and the system was
+equilibrated until no drift in the mean volume was observed.               respectively from its smoothly decaying variant
+
+                                                                                         Ueff,0 (r) = −kB T ln gtarget (r)w(r; rdecay ).   (4)
+2.3    Iterative Boltzmann Inversion
+                                                                              The latter is employed, as it is recommended to use only a
+The iterative Boltzmann inversion (IBI) 26–28,58 was em-                   short range part of such a potential to avoid unwanted oscil-
+ployed to obtain the effective nonbonded pair potential be-                lations in the long-range part, which may cause convergence
+tween the EO units from simulations at finite concentrations               problems of the IBI method. This is achieved via application
+of the oligomer. This method is based on iteratively refining              of a smooth weighting function
+the effective potential Ueff (r) via
+                                                                                             (
+                                                   gi (r)                                     1                     r ≤ rdecay
+         Ueff,i+1 (r) = Ueff,i (r) + λ kB T ln               ,   (2)                   w=                                      ,     (5)
+                                                 gtarget (r)                                  exp(−s(r − rdecay ) r > rdecay
+
+where kB denotes the Boltzmann constant, T the tempera-                    which decays exponentially with a factor s = 23 nm−1 be-
+ture, and λ a propagation (damping) constant, until the struc-             yond a preset distance rdecay = 0.95 nm.
+ture of the CG solution, expressed by the radial distribution                 There are known convergence problems of IBI, when ini-
+function (RDF) gi (r), agrees with the target structure from               tiated with a purely repulsive guess Ueff,0 (r). To overcome
+the atomistic simulation gtarget (r). While the coarse-graining            this issue for the nonamer, we have employed the initial po-
+procedure works robustly as expected for the solution of                   tential from the trimer instead.
+simple monomers, faithful monomer-monomer interactions                        The CG simulations (using Ueff (r)) have exactly the same
+have to respect the connectivity of the chain while avoiding               composition as the reference atomistic simulations and were
+finite chain effects. To overcome this problem, we followed                performed at eight different temperatures covering the range
+the work of Fischer 30 and performed simulations of solu-                  from the room to collapse transition temperature. Note that
+tions of PEG trimers and nonamers, in which the bonded                     in this work the latter is set equal to the LCST. 46 The cut-off
+neighborhood is present, yet the chains are not too long, thus             distance of the nonbonded potential is set to 1.2 nm, which
+still allow for proper sampling. The RDF between the center                was found sufficient as its increase to 1.5 nm does not influ-
+of mass of the monomer, or the center of mass of the mid-                  ence the resulting effective potentials (Figure S3).
+dle EO unit of the oligomer, i.e., the second monomer of the                  The solution structure of RDF is rather sensitive to the
+trimer or the fifth monomer of the nonamer (see Figure 2),                 underlying effective interaction potential and thus a propa-
+respectively, is then chosen as the reference property.                    gation (damping) constant λ between 1 and 0.05 was intro-
+   The initial effective potential is determined from the                  duced to improve numerical stability of the method. 59 As the
+Boltzmann inversion of the RDF                                             potential is becoming more complex, a strong damping up to
+                                                                           λ = 0.05 was used in this work.
+                Ueff,0 (r) = −kB T ln gtarget (r),               (3)
+                                                                              The convergence of the IBI method is judged by the eval-
+
+
+
+                                                                       4
+uation of the merit criteria 27,59                                       corresponding to a good solvent regime, with 3ν ≃ 1.8, was
+                                                                         confirmed by these measurements. The parameter b was de-
+                     exp(−r/rm )[gi (r) − gtarget (r)]2 dr
+                 R
+          ti =                                             .   (6)       termined to be 0.0278 nm3 , 65 0.0520 nm3 , 68 or 0.00583 nm3
+                              gtarget (r)2 dr
+                            R
+                                                                         (with 3ν = 1.81), 66 respectively. It should be noted that the
+                                                                         parameter values span over one order of magnitude.
+In this work, we preset the merit criteria threshold to t <
+                                                                            The temperature dependence of the second virial coeffi-
+10−5 and used rm = 0.41 nm. Typically up to 30 iteration
+                                                                         cient was investigated up to 373 K employing small angle
+steps are needed until the merit criteria is reached.
+                                                                         X-ray 71 or light 72 scattering. A linear scaling of B2 with
+                                                                         temperature T was proposed
+3     Reference Experimental Data                                                              B2 = Bfit (Tθ − T ),                  (9)
+3.1    Collapse transition and LCST behavior                             with parameters Bfit = 2.00 nm3 K−1 and Tθ = 373.2 K de-
+The LCST is accompanied by clouding of the solution and                  termined for PEG of molar mass M = 4600 g mol−1 . 71
+is connected to single chain collapse and subsequent ag-                    The conversion of the mass-density based second virial
+gregation, with both steps driven by increasing strength                 coefficient A2 to the concentration based one B2 is provided
+of hydrophobic interactions. As we are not interested                    in the SI.
+in the fine distinction between these effects, in this work
+we use LCST, clouding, and collapse transition synony-                   3.4    Osmotic pressure
+mously. 46,60,61 While it is established that the LCST is not
+present for the short oligomers, 10,62,63 chains up to the 50-           Recently, osmotic pressure of the PEG polymer samples of
+mer exhibit a so called closed-loop diagram and possess                  the molar mass M = 20 × 103 and 35 × 103 g mol−1 in con-
+both a LCST (≈ 440 K) and a UCST over a rather broad                     centration up to 2% (w/w) was measured at 298 K directly
+range of polymer concentrations. 10,62,63 For longer polymer             by using membrane osmometry. 69 The data were fitted by
+chains the value of the LCST decreases strongly with the                 the Cohen osmotic equation of state (EOS) in the semidilute
+polymerization degree up to around 1000-mer, when it satu-               regime, 73
+rates around 370 K. 64 Interestingly, for the shorter polymer                                    "            9/4 #
+chains the weight fraction also significantly alters the LCST                          9/5   RT      C          C
+                                                                                    ΠN =                  +α              .    (10)
+(≈ 20 K), while the polydispersity has only a marginal ef-                                  MmV̄     CN∗        CN∗
+fect. 63 In contrast, LCST of solutions of long polymer chains
+is much less affected by the polymer concentrations. 10,62,63            Here, Mm is the molar mass of a monomer (Mm =
+                                                                         44.05 g mol−1 ), V̄ is the partial specific volume of the poly-
+                                                                         mer (V̄ = 0.825 mL g−1 ), and C is the polymer mass con-
+3.2    Radius of gyration                                                centration. The parameter α is the so called crossover index
+The radius of gyration Rg of PEG chain with molecular                    (α = 0.49) and CN∗ is the characteristic N-dependent polymer
+weight (i.e., polymerization degree N) was determined at                 concentration. The last two parameters are defined within
+                                                                         the Cohen model. 73 In particular, CN∗ ≡ N − /5 /V̄ , which is a
+                                                                                                                        4
+around 298 K for a broad range of polymer sizes (M =
+103 to 107 g mol−1 ). 65,66 It was found empirically that the ra-        semiquantitative estimation of the polymer concentration up
+dius of gyration follows the scaling law                                 to the semidilute regime.
+                                                                            The osmotic pressure of semi-diluted solutions of PEG
+                              Rg = lN ν ,                      (7)       oligomers (molar mass M = 400 g mol−1 , 1000 g mol−1 and
+                                                                         4000 g mol−1 ) was measured using vapor pressure osmome-
+with parameters l = 0.1814 nm and ν = 0.58, 66 or l =                    try. 70 Kirkwood-Buff integrals (KBI) 74
+0.15195 nm and ν = 0.6. 35,67                                                                       Z ∞
+                                                                                        Gi j = 4π         (gi j (r) − 1) r2 dr,     (11)
+                                                                                                     0
+3.3    Second virial coefficient
+                                                                         where gi j (r) stands for the radial distribution function be-
+The second virial coefficient B2 was experimentally obtained
+                                                                         tween particles i and j, were calculated for various PEG con-
+near room temperature employing methods such as light-
+                                                                         centrations from the partial molar volumes. 70
+scattering, 65,66 freezing point depression, 68 membrane os-
+mometry, 69 or vapor pressure osmometry. 70 The scaling of
+the second virial coefficient                                            4     Results and Discussion
+                                        3ν
+                              B2 = bN                          (8)       The CG potential is derived in two steps combining bottom-
+                                                                         up and top-down approaches. The first step provides the
+                                                                         fine structure of a CG interaction potential which originates
+
+
+                                                                     5
+mostly from averaging out the solvent degrees of freedom of                               0.5                                                          (a)
+the explicit-solvent present in atomistic MD simulations via                              0.0
+
+
+
+
+                                                                       Ueﬀ (kJ mol−1 )
+application of the IBI procedure. The interaction potential
+                                                                                         −0.5
+is then mapped onto an analytical expression. In the second
+step, the top-down closure, the final adjustment of the inter-                           −1.0                                                 1mer 294 K
+                                                                                                                                              1mer 371 K
+action potential is made in order to match the proper scal-                              −1.5                                                 3mer 294 K
+ing of the gyration radius with degree of polymerization or                              −2.0                                                 3mer 371 K
+collapse transition temperature (LCST). This is later demon-                                                                                  9mer 294 K
+                                                                                         −2.5                                                 9mer 371 K
+strated to be sufficient to provide a final T -dependent model
+with desired macroscopic properties.                                                                                                                   (b)
+                                                                                          2.0
+4.1    Bottom-up coarse-graining                                                          1.5
+
+
+
+
+                                                                                g(r)
+Selected RDFs between the middle EO units of the simu-
+                                                                                          1.0
+lated oligomers (mono-, tri-, and nonamer) from the atom-
+istic simulations (at finite oligomer concentrations) at ambi-                            0.5
+ent temperature and near the expected LCST are shown in
+Figure 3 (b) with dashed lines. A substantial difference in                               0.0
+g(r) is found when the systems of free EO monomers and                                       0.3   0.4    0.5    0.6     0.7     0.8    0.9    1.0   1.1     1.2
+the longer EO oligomers are compared. While the monomer                                                                   r (nm)
+molecules prefer to be in a direct contact at 294 K, as doc-
+umented by the first peak of g(r) exceeding two, this peak             Figure 3: (a) The converged nonbonded potentials Ueff
+gets close to unity for the trimer and is only about 0.8 in the        between PEG CG middle beads obtained with IBI using
+case of the nonamer. In all systems the affinity between the           monomers, trimers, or nonamers. (b) Corresponding RDFs
+EO units increases smoothly with temperature, that is, con-            as obtained from atomistic MD simulations and CG LD sim-
+sistent LCST behavior, as can be seen from the comparison              ulations of molar concentrations (see Figure 2) employing
+between 294 K and 371 K in Figure 3 (b).                               the respective converged potentials. An almost perfect match
+   To find the effective pair interaction potential which repro-       with the corresponding atomistic simulations (dashed lines,
+duces the EO oligomer solution structure in Figure 3 (b), we           mostly overlapped by solid lines of the CG simulations) is
+apply the IBI procedure, described by eq 2. As can be seen             achieved.
+in Figure 3 (b) the solution structure in the CG simulations
+perfectly reproduces the structure in the atomistic simula-
+                                                                       gyration of long and short PEG chains (36 to 795-mer) and
+tions. Notably in the RDFs, the near contacts are becoming
+                                                                       compare with the empirical relation of eq 7. The CG model,
+less probable for the trimer and are even below one in the
+                                                                       at this stage, systematically underestimates the polymer size
+whole distance range for the nonamer. This effect in g(r)
+                                                                       for all chain lengths (cf. Figure S6). To achieve the initial
+should be expected, due to the locally increasing excluded
+                                                                       goal, i.e., describe experimental properties of PEG chains
+volume around the middle bead with increasing polymer
+                                                                       in a whole temperature range as faithfully as possible, we
+chain length. This, however, contrasts with the derived effec-
+                                                                       need to apply, as expected, a top-down closure for adjusting
+tive nonbonded interaction potentials in Figure 3 (a) which
+                                                                       the CG potentials by benchmarking to available experimen-
+are always attractive, although, the depth of the first min-
+                                                                       tal data. For this purpose, the nonbonded potentials obtained
+imum for the nonamer is only a half of that found in the
+                                                                       from IBI are mapped to a short-ranged analytic form that
+monomer. More importantly, the effective potential does not
+                                                                       is convenient to handle for adjustments and future calcula-
+change much between the trimer and the nonamer, suggest-
+                                                                       tions. We use a form similar to some found in the literature
+ing a good convergence and saturation behavior and thus a
+                                                                       which is a sum of a general Mie potential 75 and a Gaussian
+reasonable approximation of the effective interaction poten-
+                                                                       part. The later represents the hydration (desolvation) barrier
+tial for long polymer chains at ambient and elevated temper-
+                                                                       and so respects the partially hydrophilic nature of the EO
+atures.
+                                                                       group. 38 Thus, we have
+   Our pair potentials derived at 294 K exhibit similar posi-
+tions and heights of minima and maxima to those of previ-                                     n
+                                                                                                 n m/(n−m) h σ n  σ m i
+                                                                          Unonbonded (r) = n−m                 ε        −
+ous work employing IBI on tri- and decamers, albeit derived                                         m
+                                                                                                              {z r          r }
+from a different force field. 30
+                                                                                            |
+                                                                                                                              Mie potential
+                                                                                                                 r−µ 2
+                                                                                                    + γe−( ) ,    δ
+4.2    Top-down post-refinement                                                                       | {z }
+                                                                                                         Gaussian potential
+Using the CG potential as directly obtained from the IBI pro-                                                                                              (12)
+cedure of the nonamer, we determined the mean radius of
+
+                                                                   6
+                                                                                                      0.43                                                      0.72
+                                                                             (a)                                         σ
+                                                                                                                         μ                                      0.71
+                   0.0                                                                                0.42
+Ueﬀ (kJ mol−1 )
+
+
+
+
+                                                                                             σ (nm)
+
+
+
+
+                                                                                                                                                                       μ (nm)
+                                                                                                                                                                0.70
+                                                                                                                                                                0.69
+                  −0.5                                                                                0.41
+                                                                                                                                                                0.68
+                                                                          294 K                                                                         (a)
+                  −1.0                                                    320 K                       0.40                                                      0.67
+                                                                          347 K                                                                         (b)
+                                                                                                          10
+                                                                          371 K
+                  −1.5                                                                                     9
+                                                                                                           8            m
+
+
+
+
+                                                                                                      m
+                                                                             (b)
+                                                                                                           7
+                   0.0
+Ueﬀ (kJ mol−1 )
+
+
+
+
+                                                                                                           6
+                                                                                                           5
+                  −0.5                                                                                      260   280    300      320 340   360   380         400
+                                                               294 K                                                                T (K)
+                  −1.0                                         294 K adjusted
+                                0                              371 K
+                            ε                                                                Figure 5: T -dependent parameters of the analytical inter-
+                            ε                                  371 K adjusted                action potential in eq 12. The EO bead size parame-
+                  −1.5
+                      0.3       0.4   0.5   0.6   0.7   0.8   0.9   1.0    1.1     1.2       ters σ (green, left axis) and position of the Gaussian po-
+                                                   r (nm)                                    tential µ (blue, right axis) are found to be linearly depen-
+                                                                                             dent on T in the approximate range from 294 K to 371 K
+Figure 4: (a) A set of T -dependent nonbonded pair potentials                                (LCST): σ (T ) = (1.39(4) × 10−4 T /K + 0.367(1)) nm and
+between the CG EO units as obtained by the IBI in a solu-                                    µ(T ) = (2.9(3) × 10−4 T /K + 0.604(9)) nm. The exponent
+tion of nonamer at various temperatures. Solid lines with                                    of the attractive Mie part m can be fitted with the exponential
+symbols are fits by the analytical form eq 12 to the IBI raw                                 function m(T ) = 54(2) × 0.9943(1)T /K in the same T -range.
+data (lines without symbols) up to the second maxima. The                                    Values outside this range are plotted with empty symbols.
+depth of the first minima is temperature independent, instead
+the broadening of the potential well causes the greater attrac-                              Table 2: The final set of parameters of the CG nonbonded
+tion as the temperature increases. (b) The final adjustment of                               pair potential between EO mers in PEG as described with
+the effective interaction potentials shown at low (green) and                                eq 12. Parameters m, σ and µ are functions of temperature
+high (red) temperature by shifting the minimum from ε 0 to                                   T . The value of ε is adjusted (from the original fit ε 0 to the
+ε. Fit parameters for the analytical form of the pair potential                              corrected ε) in the CG model to correctly reproduce the ex-
+eq 12 are summarized in Table 2.                                                             perimental polymer size scaling with the molecular weight,
+                                                                                             see text.
+
+where n and m are the exponents for the repulsive and attrac-                                                parameter            value
+tive interaction terms, respectively, ε the depth of the poten-
+                                                                                                      Mie repulsion          n    8.00
+tial well, and σ the distance where the Mie potential has a
+                                                                                                      Mie attraction         m    54 × 0.9943T /K
+zero value; γ, µ and δ are parameters for the Gaussian peak
+height, position and width. Moreover, analogously as in the                                           Mie distance           σ    (1.39 × 10−4 T /K + 0.367) nm
+raw IBI-derived potentials, we have allowed the parameters                                            Mie depth              ε0   1.193 kJ mol−1
+of the effective potential to be T -dependent. By mapping                                             Mie depth corr.        ε    1.372 kJ mol−1
+onto this form and introducing a potential cut-off at a dis-                                          Gauss distance         µ    (2.9 × 10−4 T /K + 0.604) nm
+tance beyond the first maximum, where Ueff (r ≥ rcut-off ) = 0,                                       Gauss height           γ    0.4841 kJ mol−1
+i.e., we are subtracting the small attraction (. 0.1kB T ) which                                      Gauss width            δ    0.1064 nm
+originates from the presence of the second minimum.
+   The raw IBI potentials can be well fitted by the analytical
+                                                                                             ble 2.
+form at all temperatures, including the second repulsive part,
+                                                                                                We found that the effective potentials Ueff (r) originated
+i.e., the desolvation barrier, (≈ 0.8 nm), as shown in Fig-
+                                                                                             from the IBI of nonamer resulted in too collapsed states at
+ure 4 (a). Interestingly, several fitting parameters are found
+                                                                                             294 K when compared to experiments as well as an incorrect
+to be temperature independent, such as n, ε, γ and δ . The
+                                                                                             distribution of the radius of gyration when confronted with
+generalized bead size, σ , and the position of the Gaussian
+                                                                                             atomistic simulations. This suggests that the IBI-derived pair
+peak, µ, vary linearly with temperature in the range from
+                                                                                             potential is overall slightly too attractive. After the mapping
+294 K to 371 K, see Figure 5. The attractive exponent m
+                                                                                             onto the analytical form of eq 12, where the second min-
+shows an exponential dependence in the same temperature
+                                                                                             imum was cut-off, the CG simulation results on the poly-
+range. The set of fitting parameters is summarized in Ta-
+
+
+                                                                                         7
+                      CG (this work)                                          identified as the LCST. The clouding is due to chain collapse
+          2.0         CG Lee                                                  and subsequent aggregation, with both steps driven by in-
+                      atomistic Lee
+                      Kawaguchi                                               creasing strength of hydrophobic interactions. We perform
+                      Gruijthuijsen                                           a series of CG simulations of PEG chains consisting of 36
+          1.5
+                                                                              to 795 mers in the temperature range from 294 K to 396 K to
+                                        8
+Rg (nm)
+
+
+
+
+                                                                              verify the T -dependent collapse behavior of our optimized
+                                               (b)
+          1.0                           4                                     CG model. The CG simulations in the range 294 K to 381 K
+                                                                              were performed using a parametric interpolation, while out-
+                                        2
+                                                                              side this range, i.e., at 396 K, parameters from Table S1 were
+                                        1                                     directly used. In the first step of the analysis, the mean radius
+          0.5
+                                       0.5                                    of gyration of the PEG chains is calculated in this tempera-
+                (a)                                                           ture range, cf. Figure 7, and the existence and location of the
+                                             101        102        103
+          0.0                                                                 collapse transition is compared to the known experimental
+                10      20     30      40          50   60    70     80       data. 10
+                                         N                                       While for the shorter chains (<135-mer) the collapse is
+                                                                              rather gradual in the whole investigated temperature range,
+Figure 6: Radius of gyration of short (9 to 76-mer) and                       for the long chains of 455-mer and 755-mer, the mean ra-
+medium long (up to 795-mer, inset) PEG chains in water un-                    dius of gyration has a sigmoidal shape and decreases rather
+der good solvent conditions (294 K) obtained from the CG                      sharply around 350 K to 380 K, see Figure 7 (b). We then
+model derived in this work (blue triangles). Values are com-                  define the collapse transition (or LCST) as the temperature
+pared with reference atomistic simulations 13 (green trian-                   where the single chain collapses and, typical for a critical
+gles) as well as with a recently proposed CG PEG model                        transition of a finite system, the radius of gyration maximizes
+with explicit but CG representation of the solvent 39 (orange                 its fluctuations. The suggested measure of these fluctuations
+squares). Finally, we added the extrapolation of the semi-                    is the quantity hR4g i/hR2g i2 − 1. 76 We thus focus on the distri-
+empirical relation determined from experiments with long                      bution of the radius of gyration as a function of temperature
+PEG chains 35,67 (blue line). Furthermore, another semi-                      and quantify the conformational fluctuations of the chain, see
+empirical relation 66 is presented for comparison (red line).                 Figure 7 (c) and Figure S10.
+                                                                                 For shorter chains, up to the 275-mer, the fluctua-
+                                                                              tions increase monotonically with temperature between
+mer size indicate slightly more repulsive interactions when
+                                                                              294 K to 396 K, while for longer polymer chains, maximum
+compared with the experimental data, as documented in Fig-
+                                                                              fluctuations around 371 K followed by an abrupt decrease
+ure S5. To partly recover the attraction, we empirically ad-
+                                                                              of fluctuations in the collapsed globular state are observed
+just only the depth of the first, temperature-independent min-
+                                                                              in Figure 7 (c). Based on this analysis, we determine a
+ima and decrease ε 0 to the finally adjusted parameter ε, also
+                                                                              LCST ≈ 371 K for longer chains, while no critical tempera-
+given in Table 2. The exact value of ε was determined by
+                                                                              ture (LCST or UCST) is observed for short chains within our
+matching the radius of gyration Rg of 135-mer with the ex-
+                                                                              CG model and analysis. These findings are consistent with
+perimental value near room temperature (294 K). Our final
+                                                                              experimental data, where low concentration solutions of low
+model reaches a very good agreement with experimental data
+                                                                              mass PEG have the cloud point shifted to significantly higher
+over the whole range of tested PEG chain lengths (36 to 795-
+                                                                              temperatures (> 400 K) or no critical point is observed at all
+mer) as demonstrated in Figure 6 (b). At the same time the
+                                                                              (for chains shorter than the 52-mer). 10
+CG model reaches an excellent quantitative agreement with
+                                                                                 Based on the above stated analysis, we conclude that the
+the atomistic simulations for short chains, 13 see Figure 6 (a).
+                                                                              derived CG model with T -dependent parameters is able to
+   Hence, we have presented an analytical form of the T -
+                                                                              reproduce the LCST behavior without further tweaking of
+dependent effective CG pair potential between EO units of
+                                                                              the parameters. Our model is thus proved to be able to re-
+PEG based on microscopic simulations but fine-tuned to re-
+                                                                              produce and describe single chain properties (i.e., at infinite
+produce the experimental data on the Rg (N) dependence. We
+                                                                              dilution of the polymer) in a broad range of temperatures
+emphasize that the original T -dependence of three parame-
+                                                                              and chain lengths. In the next section, we will apply the CG
+ters involved in the potential is still present in the model and
+                                                                              model also at finite polymer concentrations to scrutinize its
+originates purely from the atomistic simulations, see Table 2
+                                                                              behavior and applicability for more complex systems.
+and Figures 4 and 5. The T -dependent performance and re-
+liability of the model is scrutinized in the next section.
+                                                                              4.4    Osmotic pressure of the optimized CG
+4.3        LCST of the optimized CG model                                            model
+PEG solutions become cloudy around a temperature of                           In order to compare to the experimental osmotic pressure, as
+370 K where water turns to a bad solvent of PEG and is often                  described in Section 2, we perform CG simulations in the
+
+
+                                                                          8
+                       2.0
+                                                   (a)              294 K        371 K                       107
+                                                                    320 K        381 K                                135mer at 294 K
+                                                                    347 K        396 K                                135mer Cohen EOS
+ probability density
+
+                       1.5                                                                                   106      455mer at 294 K
+                                                                    361 K
+                                                                                                                      455mer Cohen EOS
+                                                                                                                      455mer at 371 K
+                       1.0                                                                                   105
+
+
+
+
+                                                                                                    Π (Pa)
+                       0.5                                                                                   104
+
+                       0.0                                                                                   103
+                             2          4     6          8          10      12           14
+                                                     Rg (nm)
+                                                                                                             102
+                       10                                                                                       100         101                     102      103
+                                 (b)                              36mer     275mer                                                         −1
+                        9                                         76mer     455mer                                                c (g L        )
+                        8                                        135mer     795mer
+                        7                                                                         Figure 8: The osmotic pressure Π of PEG as a function of
+            Rg (nm)
+
+
+
+
+                        6                                                                         the polymer mass concentration in water for various chain
+                        5                                                                         lengths at 294 K and 371 K. The CG simulation data, shown
+                        4                                                                         as symbols (error bars are of symbol size), are compared
+                        3                                                                         with the Cohen EOS (eq 10) valid for the semi-dilute regime
+                        2                                                                         far below the LCST (solid lines). The thin dotted line for the
+                        1
+                                                                                                  371 K simulation data is just a guide to the eye.
+hR4g i/hR2g i2 − 1
+
+
+
+
+                                 (c)
+                       0.2
+                                                                                                  N pT ensemble of systems containing 108 chains of either
+                       0.1                                                                        135-mers or 455-mers. All the simulations are performed at
+                                                                                                  ambient temperature, where experimental data are available,
+                        0                                                                         as well as close to the LCST, where interesting physics is ex-
+                         280           300   320         340       360      380      400
+                                                                                                  pected, due to the polymer collapse and the strong tempera-
+                                                         T (K)
+                                                                                                  ture dependence of the inter-chain interactions. Results are
+Figure 7: (a) Distribution of the gyration radius Rg of a 795-                                    presented in Figure 8. Data obtained from the simulations in
+mer in the temperature range 294 K to 396 K. With increas-                                        a good solvent regime at 294 K are compared with the Cohen
+ing temperature, the extended conformations are decreas-                                          EOS, eq 10, valid for a semidilute concentrations with ex-
+ingly populated, followed by a deformed and broaden dis-                                          perimentally determined parameters V̄ and α at 298 K. In the
+tribution around the LCST (361 K and 371 K) to ultimately                                         investigated concentration ranges up to ≈ 20% by weight,
+only exist in highly compact states at the highest tempera-                                       the osmotic pressure obtained by simulations agrees well
+tures. The inset graphics present the typical conformation at                                     with the values predicted. At the LCST, the concentration of
+given temperature (i.e., 294 K, 371 K and 396 K) with poly-                                       PEG is high (≈ 400 g L−1 ) even for the lowest simulated os-
+mer colors matching the colors of the respective data lines.                                      motic pressure 1 kPa as expected for the more concentrated
+(b) The radius of gyration of aqueous PEG and (c) its fluctu-                                     phase in the phase separated regime. At the LCST the Cohen
+ation as a function of T for a single polymer chain of various                                    EOS is not valid and no fitting was attempted.
+lengths determined from the CG simulation. The radius of                                             We finally note that in the low density / low pressure limit
+gyration decreases sharply between 350 K to 380 K for 455-                                        of our data at 1 kPa and 294 K the weight concentration of
+mer and 755-mer which agrees well with the experimentally                                         PEG is 0.23% for the 135-mer and 0.61% for the 455-mer,
+determined value of LCST around 371 K. In chains up to                                            respectively, see Figure 8. Applying the leading order vi-
+275-mer (M = 12 100 g mol−1 ), fluctuations increase mono-                                        ral expansion, Π = kB T (c + B2 c2 ), to the smallest concen-
+tonically with temperature between 294 K to 396 K. Longer                                         tration, gives the values for the second virial coefficient,
+polymer chains, however, exhibit a maximum in the fluctu-                                         BEOS
+                                                                                                    2   = 240 nm3 and 1890 nm3 for the 135-mer and 455-mer,
+ations around 371 K followed by an abrupt decrease as the                                         respectively. Evaluation of the KBI in the same low density
+chains collapse to the globule. We define the collapse transi-                                    limit provides the second virial coefficient B2 = −G22 /2,
+tion temperature or LCST as the temperature with maximal                                          yielding BKBI
+                                                                                                             2   = 150 nm3 and 1100 nm3 for the 135-mer and
+fluctuations.                                                                                     455-mer, respectively. Experimental data 65 are 190 nm3 and
+                                                                                                  1300 nm3 for the 135-mer and 455-mer, respectively, reason-
+                                                                                                  ably close to our predictions. Hence, we have demonstrated
+                                                                                                  that our model reliably reproduces the EOS of aqueous PEG
+
+
+                                                                                              9
+                0                                                              polymer affinity with increasing amount of interacting poly-
+                         (a)                                                   mers. These findings agree with the concentration depen-
+                                                                               dence of G22 determined experimentally. 70
+G22 (nm3 )
+
+
+             −50
+
+
+             −100                                                              5     Conclusion
+             −150
+                                                                               Using a combined bottom-up and top-down approach a fully
+                 290 300 310 320 330 340 350 360 370 380                       implicit-solvent CG model of PEG was developed that is
+                                   T (K)                                       transferable between different temperatures (that is, different
+                                                                               solvent qualities). In the first step, the IBI procedure was em-
+                0
+                                                                               ployed on the solution of EO oligomers to integrate out the
+                         (b)
+             −100                                                              solvent and polymer atomistic degrees of freedom and thus
+G22 (nm3 )
+
+
+
+
+                                                                               determine the fine structure of the effective nonbonded pair
+             −200                                                              potentials between the EO units. The solutions of nonamer
+                                                                               were selected for this purpose as they sufficiently include
+             −300                                                              the effects of bonded neighbors and the influence of termi-
+             −400                                                              nal groups is suppressed. The coarse-graining procedure was
+                    10    20   30   40   50 60 70       80   90 100 110        employed in a wide temperature range (270 K to 450 K) and
+                                           c (g L−1 )                          an analytic form of the nonbonded potential with three T -
+                                                                               dependent parameters was proposed. In a crucial intermedi-
+Figure 9: The Kirkwood-Buff integrals G22 (symbols) be-                        ate step, the atomistic structure up to the desolvation barrier
+tween PEG 135-mer chains. (a) Under the constant osmotic                       was faithfully retained in the analytic expression for simple
+pressure 1 bar, the KBI is evaluated as a function of temper-                  and continuous transferability. In the top-down closure, a
+ature. The linear regression of the data is presented with a                   temperature independent parameter was adjusted to achieve
+solid green line. (b) The concentration dependence of the                      agreement with the experimentally known radius of gyration
+KBI in a good solvent regime at 294 K. The thin dotted blue                    of the 135-mer.
+line is a guide to the eye.                                                       The post-refined model was tested under good solvent
+                                                                               conditions for polymer size and pressure as well as for LCST
+                                                                               prediction. At 294 K excellent agreement of the radius of
+for a wide range of temperatures, molecular weights, and                       gyration as a function of polymer chain length was achieved
+concentrations.                                                                comparing both to the atomistic simulation (for short poly-
+                                                                               mer chains) and the available experimental data (up to 795-
+4.5            Kirkwood-Buff Integrals                                         mer ∼ 35 000 g mol−1 ). At finite concentrations, the osmotic
+                                                                               pressure was determined in direct simulation and compared
+The Kirkwood-Buff theory is a rigorous approach for the                        with experimental data. The Cohen equation of state for
+structure-thermodynamics relation of solutions and mixtures                    semidilute concentrations was obeyed by the model. Fur-
+of arbitrary number of components, in which the KBIs con-                      thermore the second virial coefficient B2 was estimated to
+tain full information about the solution structure at a given                  be in a good agreement with experimentally determined val-
+system composition. In contrast to the virial coefficients,                    ues. Finally, for a sufficiently long single chains the peak
+the KBIs are concentration and temperature dependent func-                     in Rg -fluctuations and the coil-to-globule transition at ele-
+tions, and their combinations directly provide macroscopic                     vated temperature (370 K) under bad solvent conditions is
+properties, such as PEG activity coefficients and partial mo-                  observed. This clear signature of criticality compares well to
+lar volumes.                                                                   the experimentally determined value of the cloud point tem-
+   In the coarse-grained description of a PEG solution, the                    perature. Finally, at finite concentrations, an initially diluted
+only remaining KBI is G22 between polymer chains, which                        system having low osmotic pressure becomes highly concen-
+temperature dependence is presented in Figure 9 (a). G22                       trated when the temperature is elevated to 370 K, resembling
+is negative, but increases with temperature, which indicates                   the dense phase expected above the LCST.
+that the aggregation forces strengthen with temperature. This                     Our transferable CG model should be useful for efficient
+is consistent with the measured temperature dependence of                      future simulations of aqueous PEG in more complex sys-
+the second virial coefficient, 71,72 and culminates as LCST                    tems at various temperatures and close to the important col-
+behavior at elevated temperatures, where the PEG confor-                       lapse (switching) transition, pushing coarse-grained simula-
+mation entropy and other polymer-water interaction effects                     tions further into a potential applicability to soft functional
+must be also taken into account.                                               material design.
+   In Figure 9 (b) we can see a positive slope of G22 with con-
+centration, which reflects the strengthening of the polymer-                       Acknowledgement R. C. and J. D. acknowledge funding
+
+
+                                                                          10
+from the Deutsche Forschungsgemeinschaft (DFG grant DZ-                   materials. Polym. Chem. 2015, 6, 1033–1043, DOI:
+74/6), Germany, for this project. J. H. thanks the Czech Sci-             10.1039/C4PY01539H.
+ence Foundation (grant 16-57654Y) for support.
+                                                                      (9) Gandhi, A.; Paul, A.; Sen, S. O.; Sen, K. K.
+                                                                          Studies on thermoresponsive polymers: Phase be-
+Supporting Information Available                                          haviour, drug delivery and biomedical applications.
+                                                                          Asian J. Pharm. Sci. 2015, 10, 99–107, DOI:
+The following files are available free of charge. MARTINI                 10.1016/j.ajps.2014.08.010.
+force field evaluation; IBI results for monomers and trimers;
+values of the nonbonded potential parameters (data in Fig-           (10) Saeki, S.; Kuwahara, N.; Nakata, M.; Kaneko, M. Up-
+ure 5); details of the top-down refinement; structural com-               per and lower critical solution temperatures in poly
+parison between the atomistic and CG model; simulation tra-               (ethylene glycol) solutions. Polymer (Guildf). 1976, 17,
+jectories of the radius of gyration; KBI for short oligomers.             685–689, DOI: 10.1016/0032-3861(76)90208-1.
+                                                                     (11) Kjellander, R.; Florin, E. Water structure and changes
+                                                                          in thermal stability of the system poly(ethylene ox-
+References                                                                ide)water. J. Chem. Soc. Faraday Trans. 1 Phys.
+ (1) Wei, Q.; Becherer, T.; Angioletti-Uberti, S.; Dzu-                   Chem. Condens. Phases 1981, 77, 2053, DOI:
+     biella, J.; Wischke, C.; Neffe, A. T.; Lendlein, A.;                 10.1039/f19817702053.
+     Ballauff, M.; Haag, R. Protein Interactions with Poly-          (12) Deyerle, B. A.; Zhang, Y. Effects of hofmeister an-
+     mer Coatings and Biomaterials. Angew. Chemie Int. Ed.                ions on the aggregation behavior of PEO-PPO-PEO
+     2014, 53, 8004–8031, DOI: 10.1002/anie.201400546.                    triblock copolymers. Langmuir 2011, 27, 9203–9210,
+ (2) McPherson, A. Crystallization of Proteins from                       DOI: 10.1021/la201463g.
+     Polyethylene Glycol. J. Biol. Chem. 1976, 251, 6300–            (13) Lee, H.; Venable, R. M.; MacKerell, A. D.; Pas-
+     6303.                                                                tor, R. W. Molecular Dynamics Studies of Polyethy-
+ (3) Galkin, O.; Vekilov, P. G. Control of protein crystal                lene Oxide and Polyethylene Glycol: Hydrodynamic
+     nucleation around the metastable liquid-liquid phase                 Radius and Shape Anisotropy. Biophys. J. 2008, 95,
+     boundary. Proc. Natl. Acad. Sci. 2000, 97, 6277–6281,                1590–1599, DOI: 10.1529/biophysj.108.133025.
+     DOI: 10.1073/pnas.110000497.                                    (14) Starovoytov, O. N.; Borodin, O.; Bedrov, D.;
+ (4) Knowles, D. B.; LaCroix, A. S.; Deines, N. F.;                       Smith, G. D. Development of a polarizable force field
+     Shkel, I.; Record, M. T. Separation of preferential in-              for molecular dynamics simulations of poly (Ethylene
+     teraction and excluded volume effects on DNA duplex                  Oxide) in aqueous solution. J. Chem. Theory Comput.
+     and hairpin stability. Proc. Natl. Acad. Sci. 2011, 108,             2011, 7, 1902–1915, DOI: 10.1021/ct200064u.
+     12699–12704, DOI: 10.1073/pnas.1103382108.                      (15) Fuchs, P. F. J.; Hansen, H. S.; Hünenberger, P. H.;
+ (5) Stuart, M. A. C.; Huck, W. T. S.; Genzer, J.;                        Horta, B. A. C. A GROMOS Parameter Set for Vici-
+     Müller, M.; Ober, C.; Stamm, M.; Sukhorukov, G. B.;                 nal Diether Functions: Properties of Polyethyleneox-
+     Szleifer, I.; Tsukruk, V. V.; Urban, M.; Winnik, F.;                 ide and Polyethyleneglycol. J. Chem. Theory Comput.
+     Zauscher, S.; Luzinov, I.; Minko, S. Emerging appli-                 2012, 8, 3943–3963, DOI: 10.1021/ct300245h.
+     cations of stimuli-responsive polymer materials. Nat.           (16) Hezaveh, S.; Samanta, S.; Milano, G.; Roccatano, D.
+     Mater. 2010, 9, 101–113, DOI: 10.1038/nmat2614.                      Molecular dynamics simulation study of solvent ef-
+ (6) Ward, M. A.; Georgiou, T. K. Thermoresponsive poly-                  fects on conformation and dynamics of polyethylene
+     mers for biomedical applications. Polymers (Basel).                  oxide and polypropylene oxide chains in water and in
+     2011, 3, 1215–1242, DOI: 10.3390/polym3031215.                       common organic solvents. J. Chem. Phys. 2012, 136,
+                                                                          124901, DOI: 10.1063/1.3694736.
+ (7) Gibson, M. I.; O’Reilly, R. K. To aggregate, or not
+     to aggregate? considerations in the design and ap-              (17) Tasaki, K. Poly(oxyethylene)-water interactions: A
+     plication of polymeric thermally-responsive nanopar-                 molecular dynamics study. J. Am. Chem. Soc. 1996,
+     ticles. Chem. Soc. Rev. 2013, 42, 7204–7213, DOI:                    118, 8459–8469, DOI: 10.1021/ja951005c.
+     10.1039/C3CS60035A.                                             (18) Smith, G. D.; Bedrov, D.; Borodin, O. Conforma-
+ (8) Phillips, D. J.; Gibson, M. I. Towards being genuinely               tions and Chain Dimensions of Poly(ethylene oxide) in
+     smart: ‘isothermally-responsive’ polymers as versa-                  Aqueous Solution: A Molecular Dynamics Simulation
+     tile, programmable scaffolds for biologically-adaptable              Study. J. Am. Chem. Soc. 2000, 122, 9548–9549, DOI:
+                                                                          10.1021/ja001053j.
+
+
+                                                                11
+(19) Oh, S. Y.; Yang, H. E.; Bae, Y. C. Molecular simu-                (30) Fischer, J.; Paschek, D.; Geiger, A.; Sadowski, G.
+     lations and thermodynamic modeling for closed-loop                     Modeling of Aqueous Poly(oxyethylene) Solutions. 2.
+     phase miscibility of aqueous PEO solutions. Macro-                     Mesoscale Simulations. J. Phys. Chem. B 2008, 112,
+     mol. Res. 2013, 21, 921–930, DOI: 10.1007/s13233-                      13561–13571, DOI: 10.1021/jp805770q.
+     013-1121-7.
+                                                                       (31) Cordeiro, R. M.; Zschunke, F.; Müller-Plathe, F.
+(20) Liese, S.; Gensler, M.; Krysiak, S.; Schwarzl, R.; Ac-                 Mesoscale Molecular Dynamics Simulations of the
+     hazi, A.; Paulus, B.; Hugel, T.; Rabe, J. P.; Netz, R. R.              Force between Surfaces with Grafted Poly(ethylene
+     Hydration Effects Turn a Highly Stretched Polymer                      oxide) Chains Derived from Atomistic Simula-
+     from an Entropic into an Energetic Spring. ACS Nano                    tions. Macromolecules 2010, 43, 1583–1591, DOI:
+     2017, 11, 702–712, DOI: 10.1021/acsnano.6b07071.                       10.1021/ma902060k.
+(21) Carbone, P.; Varzaneh, H. A. K.; Chen, X.; Müller-               (32) Prasitnok, K.; Wilson, M. R. A coarse-grained model
+     Plathe, F. Transferability of coarse-grained force fields:             for polyethylene glycol in bulk water and at a water/air
+     The polymer case. J. Chem. Phys. 2008, 128, 064904,                    interface. Phys. Chem. Chem. Phys. 2013, 15, 17093,
+     DOI: 10.1063/1.2829409.                                                DOI: 10.1039/c3cp52958d.
+(22) Qian, H.-j.; Carbone, P.; Chen, X.; Karimi-                       (33) Weeks, J. D.; Chandler, D.; Andersen, H. C. Role
+     Varzaneh, H. A.; Liew, C. C.; Müller-Plathe, F.                       of Repulsive Forces in Determining the Equilibrium
+     Temperature-Transferable Coarse-Grained Potentials                     Structure of Simple Liquids. J. Chem. Phys. 1971, 54,
+     for Ethylbenzene, Polystyrene, and Their Mix-                          5237–5247, DOI: 10.1063/1.1674820.
+     tures. Macromolecules 2008, 41, 9919–9929, DOI:
+     10.1021/ma801910r.                                                (34) Jeppesen, C.; Kremer, K. Single-chain collapse as
+                                                                            a first-order transition: model for PEO in wa-
+(23) Krishna, V.; Noid, W. G.; Voth, G. A. The multi-                       ter. Europhys. Lett. 1996, 34, 563–568, DOI:
+     scale coarse-graining method. IV. Transferring coarse-                 10.1209/epl/i1996-00495-1.
+     grained potentials between temperatures. J. Chem.
+     Phys. 2009, 131, 024103, DOI: 10.1063/1.3167797.                  (35) Xie, F.; Turesson, M.; Jansson, M.; Skepö, M.; Fors-
+                                                                            man, J. A simple and versatile implicit solvent model
+(24) Abbott, L. J.; Stevens, M. J. A temperature-dependent                  for polyethylene glycol in aqueous solution at room
+     coarse-grained model for the thermoresponsive poly-                    temperature. Polymer (Guildf). 2016, 84, 132–137,
+     mer poly(N-isopropylacrylamide). J. Chem. Phys.                        DOI: 10.1016/j.polymer.2015.12.034.
+     2015, 143, 244901, DOI: 10.1063/1.4938100.
+                                                                       (36) Shinoda, W.; DeVane, R.; Klein, M. L. Multi-property
+(25) De Silva, C. C.; Leophairatana, P.; Ohkuma, T.; Kober-
+                                                                            fitting and parameterization of a coarse grained model
+     stein, J. T.; Kremer, K.; Mukherji, D. Sequence trans-
+                                                                            for aqueous surfactants. Mol. Simul. 2007, 33, 27–36,
+     ferable coarse-grained model of amphiphilic copoly-
+                                                                            DOI: 10.1080/08927020601054050.
+     mers. J. Chem. Phys. 2017, 147, 064904, DOI:
+     10.1063/1.4997638.                                                (37) Shinoda, W.; DeVane, R.; Klein, M. L. Coarse-
+                                                                            grained molecular modeling of non-ionic surfactant
+(26) Schommers, W. Pair potentials in disordered many-
+                                                                            self-assembly. Soft Matter 2008, 4, 2454, DOI:
+     particle systems: A study for liquid gallium. Phys.
+                                                                            10.1039/b808701f.
+     Rev. A 1983, 28, 3599–3605, DOI: 10.1103/Phys-
+     RevA.28.3599.                                                     (38) Jusufi, A.; Sanders, S.; Klein, M. L.; Pana-
+(27) Reith, D.; Pütz, M.; Müller-Plathe, F. Deriving ef-                  giotopoulos, A. Z. Implicit-Solvent Models for Mi-
+     fective mesoscale potentials from atomistic simula-                    cellization: Nonionic Surfactants and Temperature-
+     tions. J. Comput. Chem. 2003, 24, 1624–1636, DOI:                      Dependent Properties. J. Phys. Chem. B 2011, 115,
+     10.1002/jcc.10307.                                                     990–1001, DOI: 10.1021/jp108107f.
+
+(28) Rosenberger, D.; Hanke, M.; van der Vegt, N. F. Com-              (39) Lee, H.; de Vries, A. H.; Marrink, S.-J.; Pastor, R. W.
+     parison of iterative inverse coarse-graining methods.                  A Coarse-Grained Model for Polyethylene Oxide and
+     Eur. Phys. J. Spec. Top. 2016, 225, 1323–1345, DOI:                    Polyethylene Glycol: Conformation and Hydrodynam-
+     10.1140/epjst/e2016-60120-1.                                           ics. J. Phys. Chem. B 2009, 113, 13186–13194, DOI:
+                                                                            10.1021/jp9058966.
+(29) Bedrov, D.; Ayyagari, C.; Smith, G. D. Multi-
+     scale modeling of poly(ethylene oxide)-poly(propylene             (40) Choi, E.; Mondal, J.; Yethiraj, A. Coarse-grained
+     oxide)-poly(ethylene oxide) triblock copolymer mi-                     models for aqueous polyethylene glycol solutions.
+     celles in aqueous solution. J. Chem. Theory Comput.                    J. Phys. Chem. B 2014, 118, 323–329, DOI:
+     2006, 2, 598–606, DOI: 10.1021/ct050334k.                              10.1021/jp408392b.
+
+
+                                                                  12
+(41) Wang, S.; Larson, R. G. A Coarse-Grained Implicit                (51) Miyamoto, S.; Kollman, P. A. Settle: An analytical ver-
+     Solvent Model for Poly(ethylene oxide), CnEm Surfac-                  sion of the SHAKE and RATTLE algorithm for rigid
+     tants, and Hydrophobically End-Capped Poly(ethylene                   water models. J. Comput. Chem. 1992, 13, 952–962,
+     oxide) and Its Application to Micelle Self-Assembly                   DOI: 10.1002/jcc.540130805.
+     and Phase Behavior. Macromolecules 2015, 48, 7709–
+     7718, DOI: 10.1021/acs.macromol.5b01587.                         (52) Essmann, U.; Perera, L.; Berkowitz, M. L.; Darden, T.;
+                                                                           Lee, H.; Pedersen, L. G. A smooth particle mesh Ewald
+(42) Rossi, G.; Fuchs, P. F. J.; Barnoud, J.; Monticelli, L.               method. J. Chem. Phys. 1995, 103, 8577–8593, DOI:
+     A Coarse-Grained MARTINI Model of Polyethylene                        10.1063/1.470117.
+     Glycol and of Polyoxyethylene Alkyl Ether Surfac-
+     tants. J. Phys. Chem. B 2012, 116, 14353–14362, DOI:             (53) Swendsen, R. H.; Wang, J.-S. Replica Monte Carlo
+     10.1021/jp3095165.                                                    Simulation of Spin-Glasses. Phys. Rev. Lett. 1986, 57,
+                                                                           2607–2609, DOI: 10.1103/PhysRevLett.57.2607.
+(43) Nawaz, S.; Carbone, P. Coarse-Graining Poly(ethylene
+     oxide)Poly(propylene oxide)Poly(ethylene oxide)                  (54) Patriksson, A.; van der Spoel, D. A temperature pre-
+     (PEOPPOPEO) Block Copolymers Using the MAR-                           dictor for parallel tempering simulations. Phys. Chem.
+     TINI Force Field. J. Phys. Chem. B 2014, 118,                         Chem. Phys. 2008, 10, 2073, DOI: 10.1039/b716554d.
+     1648–1659, DOI: 10.1021/jp4092249.                               (55) Bussi, G.; Donadio, D.; Parrinello, M. Canonical sam-
+(44) Taddese, T.; Carbone, P. Effect of Chain Length on the                pling through velocity rescaling. J. Chem. Phys. 2007,
+     Partition Properties of Poly(ethylene oxide): Compari-                126, 014101, DOI: 10.1063/1.2408420.
+     son between MARTINI Coarse-Grained and Atomistic                 (56) Parrinello, M.; Rahman, A. Polymorphic transi-
+     Models. J. Phys. Chem. B 2017, 121, 1601–1609, DOI:                   tions in single crystals: A new molecular dynamics
+     10.1021/acs.jpcb.6b10858.                                             method. J. Appl. Phys. 1981, 52, 7182–7190, DOI:
+(45) Flory, P. J. Principles of Polymer Chemistry; Cornell                 10.1063/1.328693.
+     University Press: Ithaca, 1953.                                  (57) Abraham, M. J.; Murtola, T.; Schulz, R.; Páll, S.;
+(46) Wu, C.; Wang, X. Globule-to-Coil Transition of                        Smith, J. C.; Hess, B.; Lindahl, E. GROMACS: High
+     a Single Homopolymer Chain in Solution. Phys.                         performance molecular simulations through multi-level
+     Rev. Lett. 1998, 80, 4092–4094, DOI: 10.1103/Phys-                    parallelism from laptops to supercomputers. SoftwareX
+     RevLett.80.4092.                                                      2015, 1-2, 19–25, DOI: 10.1016/j.softx.2015.06.001.
+
+(47) Hess, B.; Kutzner, C.; van der Spoel, D.; Lin-                   (58) Peter, C.; Kremer, K. Multiscale simulation of soft
+     dahl, E. GROMACS 4: Algorithms for Highly Effi-                       matter systems from the atomistic to the coarse-
+     cient, Load-Balanced, and Scalable Molecular Simula-                  grained level and back. Soft Matter 2009, 5, 4357, DOI:
+     tion. J. Chem. Theory Comput. 2008, 4, 435–447, DOI:                  10.1039/b912027k.
+     10.1021/ct700301q.                                               (59) Bayramoglu, B.; Faller, R. Coarse-Grained Model-
+(48) Pronk, S.; Páll, S.; Schulz, R.; Larsson, P.; Bjelk-                 ing of Polystyrene in Various Environments by Itera-
+     mar, P.; Apostolov, R.; Shirts, M. R.; Smith, J. C.; Kas-             tive Boltzmann Inversion. Macromolecules 2012, 45,
+     son, P. M.; van der Spoel, D.; Hess, B.; Lindahl, E.                  9205–9219, DOI: 10.1021/ma301280b.
+     GROMACS 4.5: a high-throughput and highly paral-                 (60) Grinberg, V. Y.; Burova, T. V.; Grinberg, N. V.;
+     lel open source molecular simulation toolkit. Bioinfor-               Dubovik, A. S.; Papkov, V. S.; Khokhlov, A. R. En-
+     matics 2013, 29, 845–854, DOI: 10.1093/bioinformat-                   ergetics of LCST transition of poly(ethylene oxide) in
+     ics/btt055.                                                           aqueous solutions. Polymer (Guildf). 2015, 73, 86–90,
+(49) Jorgensen, W. L.; Chandrasekhar, J.; Madura, J. D.;                   DOI: 10.1016/j.polymer.2015.07.032.
+     Impey, R. W.; Klein, M. L. Comparison of simple po-              (61) Ashbaugh, H. S.; Paulaitis, M. E. Monomer Hydropho-
+     tential functions for simulating liquid water. J. Chem.               bicity as a Mechanism for the LCST Behavior of
+     Phys. 1983, 79, 926–935, DOI: 10.1063/1.445869.                       Poly(ethylene oxide) in Water. Ind. Eng. Chem. Res.
+(50) Hess, B.; Bekker, H.; Berendsen, H. J. C.;                            2006, 45, 5531–5537, DOI: 10.1021/ie051131h.
+     Fraaije, J. G. E. M. LINCS: A linear constraint                  (62) Bae, Y. C.; Lambert, S. M.; Soane, D. S.; Praus-
+     solver for molecular simulations. J. Comput. Chem.                    nitz, J. M. Cloud-point curves of polymer solutions
+     1997, 18, 1463–1472, DOI: 10.1002/(SICI)1096-                         from thermooptical measurements. Macromolecules
+     987X(199709)18:12<1463::AID-JCC4>3.0.CO;2-H.                          1991, 24, 4403–4407, DOI: 10.1021/ma00015a024.
+
+
+
+                                                                 13
+(63) Saraiva, A.; Persson, O.; Fredenslund, A. An ex-                      and Other Neutral Flexible Polymers in Good Sol-
+     perimental investigation of cloud-point curves for the                vents. J. Phys. Chem. B 2009, 113, 3709–3714, DOI:
+     poly(ethylene glycol)/water system at varying molecu-                 10.1021/jp806893a.
+     lar weight distributions. Fluid Phase Equilib. 1993, 91,
+     291–311, DOI: 10.1016/0378-3812(93)85105-U.                      (74) Kirkwood, J. G.; Buff, F. P. The Statistical Mechanical
+                                                                           Theory of Solutions. I. J. Chem. Phys. 1951, 19, 774–
+(64) Boucher, E. A.; Hines, P. M. Effects of inorganic salts               777, DOI: 10.1063/1.1748352.
+     on the properties of aqueous poly(ethylene oxide) solu-
+     tions. J. Polym. Sci. Polym. Phys. Ed. 1976, 14, 2241–           (75) Carbone, P.; Avendaño, C. Coarse-grained methods
+     2251, DOI: 10.1002/pol.1976.180141209.                                for polymeric materials: Enthalpy- and entropy-driven
+                                                                           models. Wiley Interdiscip. Rev. Comput. Mol. Sci. 2014,
+(65) Devanand, K.; Selser, J. C. Asymptotic behavior                       4, 62–70, DOI: 10.1002/wcms.1149.
+     and long-range interactions in aqueous solutions of
+     poly(ethylene oxide). Macromolecules 1991, 24, 5943–             (76) Ivanov, V. A.; Paul, W.; Binder, K. Finite chain
+     5947, DOI: 10.1021/ma00022a008.                                       length effects on the coilglobule transition of stiff-chain
+                                                                           macromolecules: A Monte Carlo simulation. J. Chem.
+(66) Kawaguchi, S.; Imai, G.; Suzuki, J.; Miyahara, A.; Ki-                Phys. 1998, 109, 5659–5669, DOI: 10.1063/1.477184.
+     tano, T.; Ito, K. Aqueous solution properties of oligo-
+     and poly(ethylene oxide) by static light scattering and
+     intrinsic viscosity. Polymer (Guildf). 1997, 38, 2885–
+     2891, DOI: 10.1016/S0032-3861(96)00859-2.
+(67) van Gruijthuijsen, K. When attractions meet repulsions
+     in colloid-polymer mixtures. Ph.D. thesis, University
+     of Fribourg, Switzerland, 2012.
+(68) Wang, S.-C.; Wang, C.-K.; Chang, F.-M.; Tsao, H.-K.
+     Second Virial Coefficients of Poly(ethylene glycol) in
+     Aqueous Solutions at Freezing Point. Macromolecules
+     2002, 35, 9551–9555, DOI: 10.1021/ma025663a.
+
+(69) Li, J.; Turesson, M.; Haglund, C. A.; Cabane, B.;
+     Skepö, M. Equation of state of PEG/PEO in good sol-
+     vent. Comparison between a one-parameter EOS and
+     experiments. Polymer (Guildf). 2015, 80, 205–213,
+     DOI: 10.1016/j.polymer.2015.10.056.
+
+(70) Kushare, S. K.; Shaikh, V. R.; Terdale, S. S.; Da-
+     gade, D. H.; Kolhapurkar, R. R.; Patil, K. J. Thermo-
+     dynamics of aqueous polyethylene-glycol (PEG) solu-
+     tions at 298.15K: Activity, activity coefficients and ap-
+     plication of molecular theories. J. Mol. Liq. 2013, 187,
+     129–136, DOI: 10.1016/j.molliq.2013.06.017.
+(71) Pedersen, J. S.; Sommer, C. Scatt. Methods Prop.
+     Polym. Mater.; Progress in Colloid and Polymer
+     Science June; Springer Berlin Heidelberg: Berlin,
+     Heidelberg, 2005; Vol. 130; pp 70–78, DOI:
+     10.1007/b107350.
+
+(72) Venohr, H.; Fraaije, V.; Strunk, H.; Borchard, W.
+     Static and dynamic light scattering from aqueous
+     poly(ethylene oxide) solutions. Eur. Polym. J. 1998, 34,
+     723–732, DOI: 10.1016/S0014-3057(97)00159-6.
+
+(73) Cohen, J. A.; Podgornik, R.; Hansen, P. L.;
+     Parsegian, V. A. A Phenomenological One-Parameter
+     Equation of State for Osmotic Pressures of PEG
+
+
+
+                                                                 14
+Graphical TOC Entry
+
+
+
+
+                      Polymer size
+                                              LCST
+
+
+
+
+                                     Temperature
+
+
+
+
+                                        15
+

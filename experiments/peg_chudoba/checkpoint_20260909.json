@@ -1,0 +1,119 @@
+{
+  "user_requested_checkpoint": true,
+  "summary": "PROGRESS_SUMMARY.md",
+  "snapshot": {
+    "generated_utc": "2026-09-10T00:30:07.189057+00:00",
+    "status": "Incomplete; not a benchmark reproduction claim",
+    "primary_convention": "zero_tail",
+    "chain_states_with_three_replicas": 31,
+    "published_chain_states": 45,
+    "chain_states_flagged_for_extension": 8,
+    "chain_states_passing_sampling_checks": 23,
+    "sampled_chain_states_outside_comparison_intervals": [],
+    "eos_states_with_three_replicas": 4,
+    "published_eos_states": 15,
+    "current_library_matches_validation": true,
+    "final_journal_main_text_verified": false,
+    "live_engines": [
+      {
+        "pid": 1445446,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_extensions_n135_t294_p1_round1/n135_t294_p1_r402_g1",
+        "cutoff": "zero_tail",
+        "sampling": "npt"
+      },
+      {
+        "pid": 1489428,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_extensions_n135_t294_p10_round1/n135_t294_p10_r403_g1",
+        "cutoff": "zero_tail",
+        "sampling": "npt"
+      },
+      {
+        "pid": 1521263,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round9/n275_t361_r201_g1",
+        "cutoff": "zero_tail",
+        "sampling": "pivot"
+      },
+      {
+        "pid": 1525697,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_n455_t294/n455_t294_p1_s403",
+        "cutoff": "zero_tail",
+        "sampling": "npt"
+      },
+      {
+        "pid": 1538478,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_extensions_n135_t294_p20_round1/n135_t294_p20_r401_g1",
+        "cutoff": "zero_tail",
+        "sampling": "npt"
+      },
+      {
+        "pid": 1548487,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/equilibrium_zero_tail_294/n795_t294_s201",
+        "cutoff": "zero_tail",
+        "sampling": "pivot"
+      },
+      {
+        "pid": 1551021,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_gpu_n135_t396_extension1/s1721",
+        "cutoff": "zero_tail",
+        "sampling": "md"
+      },
+      {
+        "pid": 1569588,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/equilibrium_zero_tail_361_371/n455_t361_s201",
+        "cutoff": "zero_tail",
+        "sampling": "pivot"
+      },
+      {
+        "pid": 1573967,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1",
+        "cutoff": "zero_tail",
+        "sampling": "pivot"
+      },
+      {
+        "pid": 1574294,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/equilibrium_zero_tail_320_347/n455_t320_s202",
+        "cutoff": "zero_tail",
+        "sampling": "pivot"
+      },
+      {
+        "pid": 1576688,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round6/n135_t371_r203_g1",
+        "cutoff": "zero_tail",
+        "sampling": "pivot"
+      },
+      {
+        "pid": 1577971,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round5/n135_t381_r203_g1",
+        "cutoff": "zero_tail",
+        "sampling": "pivot"
+      },
+      {
+        "pid": 1580455,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/zero_tail_chain_extensions_round7/n135_t396_r203_g1",
+        "cutoff": "zero_tail",
+        "sampling": "pivot"
+      },
+      {
+        "pid": 1581426,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_n135_t294/n135_t294_p100_s401",
+        "cutoff": "zero_tail",
+        "sampling": "npt"
+      },
+      {
+        "pid": 1588421,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/eos_zero_tail_n455_t371/n455_t371_p1_s402",
+        "cutoff": "zero_tail",
+        "sampling": "npt"
+      },
+      {
+        "pid": 1592699,
+        "directory": "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_chudoba/runs/equilibrium_zero_tail_381_396/n455_t381_s201",
+        "cutoff": "zero_tail",
+        "sampling": "pivot"
+      }
+    ]
+  },
+  "background_jobs_left_running": true,
+  "new_allocations_during_checkpoint": false,
+  "goal_complete": false
+}

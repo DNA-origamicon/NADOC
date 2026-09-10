@@ -1,0 +1,457 @@
+{
+  "source": "arXiv:1710.09191v1, pages 8\u20139",
+  "method": "Vector marker centers; manually verified plot axes. Bounds are digitization uncertainty only.",
+  "chain_dimensions": [
+    {
+      "figure": "6a",
+      "n": 9,
+      "temperature_K": 294,
+      "rg_nm": 0.5714805410092424,
+      "digitization_bound_nm": 0.02
+    },
+    {
+      "figure": "6a",
+      "n": 18,
+      "temperature_K": 294,
+      "rg_nm": 0.8685207386290849,
+      "digitization_bound_nm": 0.02
+    },
+    {
+      "figure": "6a",
+      "n": 27,
+      "temperature_K": 294,
+      "rg_nm": 1.1055648212253866,
+      "digitization_bound_nm": 0.02
+    },
+    {
+      "figure": "6a",
+      "n": 36,
+      "temperature_K": 294,
+      "rg_nm": 1.3148103615064108,
+      "digitization_bound_nm": 0.02
+    },
+    {
+      "figure": "6a",
+      "n": 76,
+      "temperature_K": 294,
+      "rg_nm": 2.0698485526426493,
+      "digitization_bound_nm": 0.02
+    },
+    {
+      "figure": "7b",
+      "n": 36,
+      "temperature_K": 294,
+      "rg_nm": 1.3218487260306524,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 36,
+      "temperature_K": 320,
+      "rg_nm": 1.2741036943095039,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 36,
+      "temperature_K": 347,
+      "rg_nm": 1.2223792353742766,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 36,
+      "temperature_K": 361,
+      "rg_nm": 1.1905494840551085,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 36,
+      "temperature_K": 371,
+      "rg_nm": 1.1706555859238335,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 36,
+      "temperature_K": 381,
+      "rg_nm": 1.1388258346046656,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 36,
+      "temperature_K": 396,
+      "rg_nm": 1.1348464073905777,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 76,
+      "temperature_K": 294,
+      "rg_nm": 2.062757200037245,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 76,
+      "temperature_K": 320,
+      "rg_nm": 1.9473716194941044,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 76,
+      "temperature_K": 347,
+      "rg_nm": 1.8240304224619432,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 76,
+      "temperature_K": 361,
+      "rg_nm": 1.7046832233700355,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 76,
+      "temperature_K": 371,
+      "rg_nm": 1.6569373821641027,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 76,
+      "temperature_K": 381,
+      "rg_nm": 1.561445699752237,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 76,
+      "temperature_K": 396,
+      "rg_nm": 1.5415518016209622,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 135,
+      "temperature_K": 294,
+      "rg_nm": 2.945644246446278,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 135,
+      "temperature_K": 320,
+      "rg_nm": 2.698959423927594,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 135,
+      "temperature_K": 347,
+      "rg_nm": 2.4761481291254666,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 135,
+      "temperature_K": 361,
+      "rg_nm": 2.273229518227433,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 135,
+      "temperature_K": 371,
+      "rg_nm": 2.149888321195272,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 135,
+      "temperature_K": 381,
+      "rg_nm": 1.9469593893662012,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 135,
+      "temperature_K": 396,
+      "rg_nm": 1.9429815811216908,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 275,
+      "temperature_K": 294,
+      "rg_nm": 4.624708554938078,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 275,
+      "temperature_K": 320,
+      "rg_nm": 3.9483160184747224,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 275,
+      "temperature_K": 347,
+      "rg_nm": 3.665822422165179,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 275,
+      "temperature_K": 361,
+      "rg_nm": 3.104815466244964,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 275,
+      "temperature_K": 371,
+      "rg_nm": 2.9655581793260377,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 275,
+      "temperature_K": 381,
+      "rg_nm": 2.444336591214012,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 275,
+      "temperature_K": 396,
+      "rg_nm": 2.336910269841434,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 455,
+      "temperature_K": 294,
+      "rg_nm": 6.0013665484677565,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 455,
+      "temperature_K": 320,
+      "rg_nm": 5.874046328963903,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 455,
+      "temperature_K": 347,
+      "rg_nm": 4.927096049378897,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 455,
+      "temperature_K": 361,
+      "rg_nm": 3.8289526296870715,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 455,
+      "temperature_K": 371,
+      "rg_nm": 3.462905632607917,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 455,
+      "temperature_K": 381,
+      "rg_nm": 2.6512336174701456,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 455,
+      "temperature_K": 396,
+      "rg_nm": 2.468210726044159,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 795,
+      "temperature_K": 294,
+      "rg_nm": 8.332908096291332,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 795,
+      "temperature_K": 320,
+      "rg_nm": 8.19762910330779,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 795,
+      "temperature_K": 347,
+      "rg_nm": 6.681714551395493,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 795,
+      "temperature_K": 361,
+      "rg_nm": 4.799751545331427,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 795,
+      "temperature_K": 371,
+      "rg_nm": 3.832907610460581,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 795,
+      "temperature_K": 381,
+      "rg_nm": 3.04113046483583,
+      "digitization_bound_nm": 0.025
+    },
+    {
+      "figure": "7b",
+      "n": 795,
+      "temperature_K": 396,
+      "rg_nm": 2.8103617322039103,
+      "digitization_bound_nm": 0.025
+    }
+  ],
+  "osmotic_pressure": [
+    {
+      "figure": "8",
+      "n": 135,
+      "temperature_K": 294,
+      "concentration_g_per_l": 2.3026043752141034,
+      "pressure_kpa": 0.9991673292031187,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 135,
+      "temperature_K": 294,
+      "concentration_g_per_l": 17.205650347325232,
+      "pressure_kpa": 9.983363005479209,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 135,
+      "temperature_K": 294,
+      "concentration_g_per_l": 28.008888165887754,
+      "pressure_kpa": 20.005845468743285,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 135,
+      "temperature_K": 294,
+      "concentration_g_per_l": 50.317739131165325,
+      "pressure_kpa": 49.985914447505024,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 135,
+      "temperature_K": 294,
+      "concentration_g_per_l": 73.41585851570058,
+      "pressure_kpa": 100.16869893899221,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 135,
+      "temperature_K": 294,
+      "concentration_g_per_l": 104.60550704609257,
+      "pressure_kpa": 199.8960609445916,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 135,
+      "temperature_K": 294,
+      "concentration_g_per_l": 221.87430734276185,
+      "pressure_kpa": 1000.8530705063966,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 294,
+      "concentration_g_per_l": 6.079719986493366,
+      "pressure_kpa": 0.9991673292031187,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 294,
+      "concentration_g_per_l": 27.302559141125894,
+      "pressure_kpa": 9.983359835179114,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 294,
+      "concentration_g_per_l": 84.33963014952116,
+      "pressure_kpa": 100.17078247701723,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 294,
+      "concentration_g_per_l": 230.5448039481236,
+      "pressure_kpa": 1000.8740474588507,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 371,
+      "concentration_g_per_l": 420.263499230635,
+      "pressure_kpa": 0.9991673292031187,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 371,
+      "concentration_g_per_l": 428.0038688605718,
+      "pressure_kpa": 9.983359835179114,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 371,
+      "concentration_g_per_l": 449.622015930842,
+      "pressure_kpa": 100.17078247701723,
+      "digitization_relative_bound": 0.03
+    },
+    {
+      "figure": "8",
+      "n": 455,
+      "temperature_K": 371,
+      "concentration_g_per_l": 546.5829823849524,
+      "pressure_kpa": 1000.8740474588507,
+      "digitization_relative_bound": 0.03
+    }
+  ]
+}

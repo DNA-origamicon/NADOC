@@ -1,0 +1,11 @@
+{
+  "created_unix": 1788991608.240979,
+  "result": "5 tests passed; CPU NPT, CUDA MD and CUDA HMC shape against independent configuration analysis; online analysis ingestion; solution packing and virial checks",
+  "hashes": {
+    "/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/build/bin/oxDNA": "435384b65cc8e0eeabd748c9bbc1b1ea41ffd2d8316f52742a60fc15240ca7b6",
+    "/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/build/src/liboxdna_common.so": "452568dfd56a219fe6883d67e49e1617e58a465585eb1c79caf1cfe3b44c2fd2",
+    "tools/oxdna_peg/PEGChainShape.h": "d7f0a56fec5d33590ee8a524a8aa0a61233fea44592a716e876367c611128cc5",
+    "tools/oxdna_peg/patch_chudoba_shape.py": "1356f60db441801a0194fd08f289e5e6576c244b396f779e773a9ce048745882",
+    "tests/test_chudoba_shape.py": "d771c8d8938ef05748f2af7f58a5fb6c5d4dd4fad35f441984d67e0ab7ced8d7"
+  }
+}

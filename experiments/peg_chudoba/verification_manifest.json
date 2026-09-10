@@ -1,0 +1,7 @@
+{
+  "completed_unix": 1788988368.2678163,
+  "tests": "72 passed; see verification.txt",
+  "binary_sha256": "435384b65cc8e0eeabd748c9bbc1b1ea41ffd2d8316f52742a60fc15240ca7b6",
+  "shared_library_sha256": "d41c64b084dcc34e986f6fcdd65b19a547adcea659a5cac6694121bbc029dc63",
+  "math_header_sha256": "865affcab446b64f8cb41e8e0a26e085075f9ea8cc9dd0927170c7e15f0c858b"
+}

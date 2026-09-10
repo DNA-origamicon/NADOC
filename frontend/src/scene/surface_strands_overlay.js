@@ -78,6 +78,33 @@ export function initSurfaceStrandsOverlay({
   const group = new THREE.Group()
   group.visible = false
   scene.add(group)
+  const pegGroup = new THREE.Group()
+  pegGroup.name = 'peg-surface-beads'
+  group.add(pegGroup)
+  let pegDrawKey = null
+  const clearPeg = () => {
+    for (const object of [...pegGroup.children]) {
+      object.geometry?.dispose(); object.material?.dispose(); pegGroup.remove(object)
+    }
+    pegDrawKey = null
+  }
+  function drawPeg(chains, spec, key) {
+    if (pegDrawKey === key) return
+    clearPeg(); pegDrawKey = key
+    const positions = chains.flatMap(chain => chain.map(bead => Array.isArray(bead) ? bead : bead.p))
+    if (!positions.length) return
+    const spheres = new THREE.InstancedMesh(new THREE.SphereGeometry((spec.beadDiameterNm || 0.5) / 2, 10, 8),
+      new THREE.MeshBasicMaterial({ color: _color }), positions.length)
+    const matrix = new THREE.Matrix4()
+    positions.forEach((p, i) => { matrix.makeTranslation(...p); spheres.setMatrixAt(i, matrix) })
+    spheres.instanceMatrix.needsUpdate = true
+    pegGroup.add(spheres)
+    const lines = []
+    for (const chain of chains) for (let i = 1; i < chain.length; i++) lines.push(...(chain[i - 1].p || chain[i - 1]), ...(chain[i].p || chain[i]))
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3))
+    pegGroup.add(new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: _color })))
+  }
 
   // Translucent coverage patch (geometry rebuilt per shape/size change).  The strands
   // themselves render through the representation system, not here.
@@ -199,8 +226,9 @@ export function initSurfaceStrandsOverlay({
       shape: spec.shape, sizeNm: spec.sizeNm, densityPerUm2: spec.densityPerUm2,
       seed: spec.seed, offsetXNm: spec.offsetXNm, offsetYNm: spec.offsetYNm,
     })
-    const L = Math.max(1, (spec.sequence?.length || PREVIEW_BEADS_DEFAULT))
-    const local = captureStrandLocalBeads(L)
+    const isPeg = spec.material === 'PEG'
+    const L = isPeg ? (spec.segments || 8) + 1 : Math.max(1, (spec.sequence?.length || PREVIEW_BEADS_DEFAULT))
+    const local = isPeg ? Array.from({ length: L }, (_, i) => ({ axial: i * (spec.bondLengthNm || 0.7), du: 0, dv: 0 })) : captureStrandLocalBeads(L)
     const nStrands = Math.min(pts.length, Math.floor(MAX_BEADS / L))
     const bead = new THREE.Vector3(), radial = new THREE.Vector3()
     const a3 = [_basis.d.x, _basis.d.y, _basis.d.z]   // helix axis = surface normal
@@ -231,6 +259,7 @@ export function initSurfaceStrandsOverlay({
     return [
       'preview', spec.shape, spec.sizeNm, spec.densityPerUm2, spec.seed,
       spec.offsetXNm, spec.offsetYNm, spec.sequence?.length || PREVIEW_BEADS_DEFAULT,
+      spec.material, spec.segments, spec.bondLengthNm, spec.beadDiameterNm,
       _axis, _positionNm, _color,
       Math.round(c.x * 1e4), Math.round(c.y * 1e4), Math.round(c.z * 1e4),
     ].join('|')
@@ -271,7 +300,13 @@ export function initSurfaceStrandsOverlay({
     // _draw repeatedly while the SAME simulation-result array is active; rebuilding again
     // after RMSF applies its positions/colors wipes that overlay. Results keep stable array
     // identity, so emit only when chains or effective highlight actually changed.
-    _emitStrands(chains, emittedHighlight, key)
+    if (active && spec?.material === 'PEG') {
+      _emitStrands([], false, 'PEG:no-DNA-bases')
+      drawPeg(chains, spec, inResults ? chains : key)
+    } else {
+      if (pegGroup.children.length) clearPeg()
+      _emitStrands(chains, emittedHighlight, key)
+    }
 
     // Centre gizmo — only while setting up an actionable preview. Detaching is
     // part of hiding: a merely invisible TransformControls still owns listeners
@@ -312,6 +347,17 @@ export function initSurfaceStrandsOverlay({
     _results = (Array.isArray(strands) && strands.length) ? strands : null
     _draw()
   }
+  function applyPegFrame(updates) {
+    if (_lastSpec?.material !== 'PEG' || !updates) return
+    const chains = []
+    for (const update of updates) {
+      const match = /^cap(\d+)$/.exec(update.helix_id || '')
+      if (!match) continue
+      const index = Number(match[1])
+      ;(chains[index] ||= []).push(update.cm_position || update.backbone_position)
+    }
+    if (chains.length) setResults(chains.filter(Boolean))
+  }
   function setHighlight(on) { _highlight = !!on; _draw() }
   function setShapePreview(on) { _shapePreview = !!on; _draw() }
   // The strands are coloured by the renderer (setExtraNucleotides); here we only tint the
@@ -329,6 +375,7 @@ export function initSurfaceStrandsOverlay({
   }
   function clear() { _lastSpec = null; _lastEnabled = false; _results = null; _draw() }
   function dispose() {
+    clearPeg()
     _deactivateGizmo()
     helper.parent?.remove(helper); tc.dispose?.()
     dummy.parent?.remove(dummy)
@@ -338,12 +385,12 @@ export function initSurfaceStrandsOverlay({
   }
 
   const debug = () => ({
-    visible: group.visible, hasPatch: !!patchMesh,
+    visible: group.visible, hasPatch: !!patchMesh, pegBeads: pegGroup.children[0]?.count || 0,
     patchVisible: !!(patchMesh && patchMesh.visible), mode: _results ? 'results' : 'preview',
     highlight: _highlight, shapePreview: _shapePreview, patchColor: '#' + patchMat.color.getHexString(),
     gizmoVisible: helper.visible, gizmoAttached: _gizmoAttached, gizmoEnabled: tc.enabled,
     baseCenter: [Math.round(_baseCenter.x * 100) / 100, Math.round(_baseCenter.y * 100) / 100, Math.round(_baseCenter.z * 100) / 100],
     patchPos: patchMesh ? [Math.round(patchMesh.position.x * 100) / 100, Math.round(patchMesh.position.y * 100) / 100, Math.round(patchMesh.position.z * 100) / 100] : null,
   })
-  return { setPlane, update, setResults, setHighlight, setShapePreview, setColor, setVisible, clear, dispose, debug }
+  return { setPlane, update, setResults, applyPegFrame, setHighlight, setShapePreview, setColor, setVisible, clear, dispose, debug }
 }

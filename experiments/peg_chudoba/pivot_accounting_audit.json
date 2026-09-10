@@ -1,0 +1,152 @@
+{
+  "seed": 20260910,
+  "checks": [
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+      "configuration_sha256": "650d4dcc54ee6902bb86c462090b40f498fa7fc2c61e320e73ba9812bf636323",
+      "pivot": 1,
+      "direction": 1,
+      "angle_radians": 0.15,
+      "full_delta_kj_mol": 0.047141666873585564,
+      "local_delta_kj_mol": 0.04714166687017496,
+      "error_kj_mol": -3.410605131648481e-12,
+      "pairs_entering_cutoff": 0,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+      "configuration_sha256": "650d4dcc54ee6902bb86c462090b40f498fa7fc2c61e320e73ba9812bf636323",
+      "pivot": 137,
+      "direction": 1,
+      "angle_radians": 0.65,
+      "full_delta_kj_mol": 1.7132122828979846,
+      "local_delta_kj_mol": 1.7132122828954834,
+      "error_kj_mol": -2.5011104298755527e-12,
+      "pairs_entering_cutoff": 0,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+      "configuration_sha256": "650d4dcc54ee6902bb86c462090b40f498fa7fc2c61e320e73ba9812bf636323",
+      "pivot": 137,
+      "direction": -1,
+      "angle_radians": -0.65,
+      "full_delta_kj_mol": 6.035787571958508,
+      "local_delta_kj_mol": 6.035787571958281,
+      "error_kj_mol": -2.2737367544323206e-13,
+      "pairs_entering_cutoff": 0,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+      "configuration_sha256": "650d4dcc54ee6902bb86c462090b40f498fa7fc2c61e320e73ba9812bf636323",
+      "pivot": 273,
+      "direction": -1,
+      "angle_radians": 0.15,
+      "full_delta_kj_mol": -0.6218087647282573,
+      "local_delta_kj_mol": -0.6218087647328048,
+      "error_kj_mol": -4.547473508864641e-12,
+      "pairs_entering_cutoff": 0,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1",
+      "configuration_sha256": "a5c355253dbb813cd95811fb89d855e1caedbce5e8bb5468ad92311e6e1ba2e7",
+      "pivot": 1,
+      "direction": 1,
+      "angle_radians": 0.15,
+      "full_delta_kj_mol": 0.26274195712335313,
+      "local_delta_kj_mol": 0.26274195712335313,
+      "error_kj_mol": 0.0,
+      "pairs_entering_cutoff": 0,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1",
+      "configuration_sha256": "a5c355253dbb813cd95811fb89d855e1caedbce5e8bb5468ad92311e6e1ba2e7",
+      "pivot": 137,
+      "direction": 1,
+      "angle_radians": 0.65,
+      "full_delta_kj_mol": 0.09064327256692195,
+      "local_delta_kj_mol": 0.0906432725673767,
+      "error_kj_mol": 4.547473508864641e-13,
+      "pairs_entering_cutoff": 0,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1",
+      "configuration_sha256": "a5c355253dbb813cd95811fb89d855e1caedbce5e8bb5468ad92311e6e1ba2e7",
+      "pivot": 137,
+      "direction": -1,
+      "angle_radians": -0.65,
+      "full_delta_kj_mol": 58694.59700854308,
+      "local_delta_kj_mol": 58694.597008543155,
+      "error_kj_mol": 7.275957614183426e-11,
+      "pairs_entering_cutoff": 209,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1",
+      "configuration_sha256": "a5c355253dbb813cd95811fb89d855e1caedbce5e8bb5468ad92311e6e1ba2e7",
+      "pivot": 273,
+      "direction": -1,
+      "angle_radians": 0.15,
+      "full_delta_kj_mol": -1.4484339445675687,
+      "local_delta_kj_mol": -1.448433944569615,
+      "error_kj_mol": -2.0463630789890885e-12,
+      "pairs_entering_cutoff": 0,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1",
+      "configuration_sha256": "5f9f02f950b0c92bf2668cb78708670d61a3275682a9ce0e0b62e5bde5ad673b",
+      "pivot": 1,
+      "direction": 1,
+      "angle_radians": 0.15,
+      "full_delta_kj_mol": -2.1527784024779066,
+      "local_delta_kj_mol": -2.1527784024790435,
+      "error_kj_mol": -1.1368683772161603e-12,
+      "pairs_entering_cutoff": 0,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1",
+      "configuration_sha256": "5f9f02f950b0c92bf2668cb78708670d61a3275682a9ce0e0b62e5bde5ad673b",
+      "pivot": 137,
+      "direction": 1,
+      "angle_radians": 0.65,
+      "full_delta_kj_mol": -0.44080486285270126,
+      "local_delta_kj_mol": -0.4408048628530423,
+      "error_kj_mol": -3.410605131648481e-13,
+      "pairs_entering_cutoff": 1,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1",
+      "configuration_sha256": "5f9f02f950b0c92bf2668cb78708670d61a3275682a9ce0e0b62e5bde5ad673b",
+      "pivot": 137,
+      "direction": -1,
+      "angle_radians": -0.65,
+      "full_delta_kj_mol": -0.9399137617622273,
+      "local_delta_kj_mol": -0.9399137617643873,
+      "error_kj_mol": -2.1600499167107046e-12,
+      "pairs_entering_cutoff": 4,
+      "pairs_leaving_cutoff": 0
+    },
+    {
+      "directory": "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1",
+      "configuration_sha256": "5f9f02f950b0c92bf2668cb78708670d61a3275682a9ce0e0b62e5bde5ad673b",
+      "pivot": 273,
+      "direction": -1,
+      "angle_radians": 0.15,
+      "full_delta_kj_mol": -3.6640800073971604,
+      "local_delta_kj_mol": -3.6640800073971604,
+      "error_kj_mol": 0.0,
+      "pairs_entering_cutoff": 1,
+      "pairs_leaving_cutoff": 0
+    }
+  ],
+  "maximum_absolute_error_kj_mol": 7.275957614183426e-11,
+  "scope": "Offline affected-owner and pair-deduplication accounting; not native neighbor-list or acceptance execution.",
+  "script_sha256": "8fad3af9019ad6868817881b7fea04c368d1e94467f4542baf5acfd8698f0e62"
+}

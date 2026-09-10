@@ -1,0 +1,269 @@
+{
+  "created_unix": 1789000792.1718543,
+  "policy": "One existing PEG campaign at a time",
+  "queue": [
+    {
+      "pid": 1504218,
+      "start": "7287704",
+      "state": "S",
+      "name": "python",
+      "parent": 1504216,
+      "command": "python -u -m experiments.peg_chudoba.run_chain_extensions --cutoff zero_tail --output experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail-extensions8.log"
+    },
+    {
+      "pid": 1393796,
+      "start": "6869946",
+      "state": "S",
+      "name": "python",
+      "parent": 1393794,
+      "command": ".venv/bin/python -m experiments.peg_chudoba.run_chain_campaign --cutoff zero_tail --lengths 9 18 27 36 76 135 275 455 795 --temperatures 294 --output experiments/peg_chudoba/runs/equilibrium_zero_tail_294 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail294.log"
+    },
+    {
+      "pid": 1393937,
+      "start": "6870062",
+      "state": "S",
+      "name": "python",
+      "parent": 1393935,
+      "command": ".venv/bin/python -m experiments.peg_chudoba.run_chain_campaign --cutoff zero_tail --lengths 36 76 135 275 455 795 --temperatures 320 347 --output experiments/peg_chudoba/runs/equilibrium_zero_tail_320_347 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail320347.log"
+    },
+    {
+      "pid": 1394047,
+      "start": "6870178",
+      "state": "S",
+      "name": "python",
+      "parent": 1394045,
+      "command": ".venv/bin/python -m experiments.peg_chudoba.run_chain_campaign --cutoff zero_tail --lengths 36 76 135 275 455 795 --temperatures 361 371 --output experiments/peg_chudoba/runs/equilibrium_zero_tail_361_371 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail361371.log"
+    },
+    {
+      "pid": 1394140,
+      "start": "6870296",
+      "state": "S",
+      "name": "python",
+      "parent": 1394138,
+      "command": ".venv/bin/python -m experiments.peg_chudoba.run_chain_campaign --cutoff zero_tail --lengths 36 76 135 275 455 795 --temperatures 381 396 --output experiments/peg_chudoba/runs/equilibrium_zero_tail_381_396 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail381396.log"
+    },
+    {
+      "pid": 1394697,
+      "start": "6871961",
+      "state": "S",
+      "name": "python",
+      "parent": 1394696,
+      "command": ".venv/bin/python -m experiments.peg_chudoba.run_eos_campaign --cutoff zero_tail --lengths 135 --temperatures 294 --sweeps 2000 --output experiments/peg_chudoba/runs/eos_zero_tail_n135_t294 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-eos-zero135294.log"
+    },
+    {
+      "pid": 1394914,
+      "start": "6872078",
+      "state": "S",
+      "name": "python",
+      "parent": 1394911,
+      "command": ".venv/bin/python -m experiments.peg_chudoba.run_eos_campaign --cutoff zero_tail --lengths 455 --temperatures 294 --sweeps 2000 --output experiments/peg_chudoba/runs/eos_zero_tail_n455_t294 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-eos-zero455294.log"
+    },
+    {
+      "pid": 1395086,
+      "start": "6872194",
+      "state": "S",
+      "name": "python",
+      "parent": 1395084,
+      "command": ".venv/bin/python -m experiments.peg_chudoba.run_eos_campaign --cutoff zero_tail --lengths 455 --temperatures 371 --sweeps 2000 --output experiments/peg_chudoba/runs/eos_zero_tail_n455_t371 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-eos-zero455371.log"
+    },
+    {
+      "pid": 1445313,
+      "start": "7062965",
+      "state": "S",
+      "name": "python",
+      "parent": 1445311,
+      "command": ".venv/bin/python -m experiments.peg_chudoba.run_eos_extensions --cutoff zero_tail --output experiments/peg_chudoba/runs/eos_zero_tail_extensions_n135_t294_p1_round1 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-eos-zero-tail-extensions-p1.log"
+    },
+    {
+      "pid": 1458646,
+      "start": "7112458",
+      "state": "S",
+      "name": "python",
+      "parent": 1458645,
+      "command": ".venv/bin/python -m experiments.peg_chudoba.run_chain_extensions --cutoff zero_tail --output experiments/peg_chudoba/runs/zero_tail_chain_extensions_round5 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail-extensions5.log"
+    },
+    {
+      "pid": 1478701,
+      "start": "7189048",
+      "state": "S",
+      "name": "python",
+      "parent": 1478700,
+      "command": "python -u -m experiments.peg_chudoba.run_chain_extensions --cutoff zero_tail --output experiments/peg_chudoba/runs/zero_tail_chain_extensions_round6 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail-extensions6.log"
+    },
+    {
+      "pid": 1483819,
+      "start": "7208402",
+      "state": "S",
+      "name": "python",
+      "parent": 1483818,
+      "command": "python -u -m experiments.peg_chudoba.run_chain_extensions --cutoff zero_tail --output experiments/peg_chudoba/runs/zero_tail_chain_extensions_round7 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail-extensions7.log"
+    },
+    {
+      "pid": 1489332,
+      "start": "7229408",
+      "state": "S",
+      "name": "python",
+      "parent": 1489330,
+      "command": "python -u -m experiments.peg_chudoba.run_eos_extensions --cutoff zero_tail --n 135 --temperature 294 --pressure-kpa 10 --steps 20000 --output experiments/peg_chudoba/runs/eos_zero_tail_extensions_n135_t294_p10_round1 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-eos-zero-tail-extensions-p10.log"
+    },
+    {
+      "pid": 1521176,
+      "start": "7354890",
+      "state": "S",
+      "name": "python",
+      "parent": 1521175,
+      "command": "python -u -m experiments.peg_chudoba.run_chain_extensions --cutoff zero_tail --output experiments/peg_chudoba/runs/zero_tail_chain_extensions_round9 ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail-extensions9.log"
+    },
+    {
+      "pid": 1550934,
+      "start": "7475499",
+      "state": "S",
+      "name": "python",
+      "parent": 1550932,
+      "command": "python -u -m experiments.peg_chudoba.run_gpu_chain_continuation ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail-gpu135396-extension1.log"
+    },
+    {
+      "pid": 1533846,
+      "start": "7405741",
+      "state": "S",
+      "name": "python",
+      "parent": 1533844,
+      "command": "python -u - ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-eos-zero-tail-extensions-p20.log"
+    },
+    {
+      "pid": 1537046,
+      "start": "7418747",
+      "state": "S",
+      "name": "python",
+      "parent": 1537041,
+      "command": "python -u - ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail-extensions10.log"
+    },
+    {
+      "pid": 1552776,
+      "start": "7482360",
+      "state": "S",
+      "name": "python",
+      "parent": 1552775,
+      "command": "python -u - ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail-extensions11.log"
+    },
+    {
+      "pid": 1570932,
+      "start": "7555666",
+      "state": "S",
+      "name": "python",
+      "parent": 1570931,
+      "command": "python -u - ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-zero-tail-extensions12.log"
+    },
+    {
+      "pid": 1582808,
+      "start": "7603578",
+      "state": "S",
+      "name": "python",
+      "parent": 1582807,
+      "command": "python -u - ",
+      "cwd": "/home/jojo/Work/NADOC",
+      "stdout": "/tmp/nadoc-peg-eos-zero-tail-extensions-p50.log"
+    }
+  ],
+  "events": [
+    {
+      "event": "all_campaigns_suspended",
+      "unix": 1789000801.1059446
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1504218,
+      "unix": 1789000801.1358075
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1504218,
+      "unix": 1789000856.6148257
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1393796,
+      "unix": 1789000856.6755936
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1393796,
+      "unix": 1789004191.6487124
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1393937,
+      "unix": 1789004191.6831455
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1393937,
+      "unix": 1789017807.5403898
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1394047,
+      "unix": 1789017807.5849159
+    }
+  ],
+  "limitations": "SIGSTOP retains RAM/VRAM; elapsed_seconds includes pauses. Does not admit newly launched campaigns. Do not launch additional benchmarks.",
+  "controller": {
+    "pid": 1606968,
+    "start": "7704131",
+    "state": "R",
+    "name": "python3",
+    "parent": 10615,
+    "command": "/usr/bin/python3 -m experiments.peg_chudoba.serialize_existing --apply ",
+    "cwd": "/home/jojo/Work/NADOC",
+    "stdout": "/proc/1606968/fd/pipe:[5732658]"
+  },
+  "updated_unix": 1789017807.5849173,
+  "active_campaign": {
+    "pid": 1394047,
+    "start": "6870178",
+    "state": "S",
+    "name": "python",
+    "parent": 1394045,
+    "command": ".venv/bin/python -m experiments.peg_chudoba.run_chain_campaign --cutoff zero_tail --lengths 36 76 135 275 455 795 --temperatures 361 371 --output experiments/peg_chudoba/runs/equilibrium_zero_tail_361_371 ",
+    "cwd": "/home/jojo/Work/NADOC",
+    "stdout": "/tmp/nadoc-peg-zero-tail361371.log"
+  }
+}

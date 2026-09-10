@@ -1,0 +1,13 @@
+{
+  "status": "Source audit only; native GPU MD barostat not enabled for PEG benchmarks",
+  "source_revision": "8028cf33b3cba12992b771156085fa54879f50cd",
+  "hashes": {
+    "/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/source/src/CUDA/Backends/MD_CUDABackend.cu": "e20f49daf4884028521510a549b57eedf728860c72d09112c8213fb10994e486",
+    "/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/source/src/CUDA/Backends/MD_CUDAMixedBackend.cu": "f670c0911e08a0dfdcd6595e2ce78f6a83bf22b013c9f61a21fa827af1d97cb2"
+  },
+  "findings": [
+    "Isotropic proposal is symmetric in L, but acceptance uses only N_objects log(V_new/V_old). Sampling the usual NPT measure dV requires an additional (2/3) log(V_new/V_old).",
+    "Molecular rescaling updates float positions. Mixed backend overrides atomic rescaling to refresh double positions, but has no analogous molecular override in the inspected source."
+  ],
+  "scope": "Not applied to PEG_HMC: its CPU log-volume move and explicit synchronization use a separate path."
+}
