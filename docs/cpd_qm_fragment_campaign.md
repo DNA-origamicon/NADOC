@@ -392,6 +392,15 @@ submitted independently as Slurm job **32368077**, task 0. Its collector watcher
 known D2 calculation accrue queue priority while D1 finishes. D2 still cannot pass
 until both D1 and the five-core reconciliation pass.
 
+The 2026-09-10 17:37 MDT reassessment remains favorable. D1 is 4/7 passed, with
+array tasks 3–5 pending for priority; D2 is 4/5 prevalidated, with job 32368077
+pending for priority. Both completion watchers are active. Alpine reports no estimated
+start for either pending allocation. No additional QM submission is justified yet:
+the known D1 and D2 work is already queued, D3 lacks a hash-pinned target/scan scope,
+D4 and held-out C remain gated, and boundary stage E remains incomplete at 0/3 passed
+compute products. The signed-off machine-readable decision is
+`reassessment_2026-09-10T173737-0600.json` in the Alpine continuation evidence root.
+
 ## Verification of this review
 
 Targeted monitor tests exercise input/source corruption, interrupted execution, stage
