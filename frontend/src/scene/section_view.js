@@ -8,6 +8,12 @@ const materials = object => Array.isArray(object.material) ? object.material : [
 const isVisibleMaterial = material => material && material.visible && material.colorWrite &&
   !(material.transparent && material.opacity <= 0)
 
+const isGpuPositionedImpostor = material => {
+  if (!material?.userData?.isImpostor) return false
+  const key = material.customProgramCacheKey?.() || ''
+  return key.startsWith('sharedInstanced_') || key.startsWith('atomImpostor_')
+}
+
 export function isSectionContent(object) {
   if (!(object.isMesh || object.isLine || object.isPoints) || !object.geometry) return false
   for (let node = object; node; node = node.parent) {
@@ -19,9 +25,15 @@ export function isSectionContent(object) {
 
 // Preserve application shader patches (instance transforms, visibility and animation).
 export function sectionStencilMaterial(source, plane, side) {
-  const material = source.clone()
-  material.onBeforeCompile = source.onBeforeCompile
-  material.customProgramCacheKey = source.customProgramCacheKey
+  // An impostor's display shader turns every vertex into a camera-facing quad.
+  // Its section proxy uses real sphere geometry, so it also needs an unpatched
+  // material or the closed sphere would be flattened back into the billboard.
+  const impostor = source.userData?.isImpostor
+  const material = impostor ? new THREE.MeshBasicMaterial() : source.clone()
+  if (!impostor) {
+    material.onBeforeCompile = source.onBeforeCompile
+    material.customProgramCacheKey = source.customProgramCacheKey
+  }
   material.visible = isVisibleMaterial(source) && !source.wireframe
   material.side = side
   material.clippingPlanes = [...(source.clippingPlanes || []).filter(p => p !== plane), plane]
@@ -32,6 +44,18 @@ export function sectionStencilMaterial(source, plane, side) {
   const op = side === THREE.BackSide ? THREE.IncrementWrapStencilOp : THREE.DecrementWrapStencilOp
   material.stencilFail = material.stencilZFail = material.stencilZPass = op
   return material
+}
+
+export function sectionStencilGeometryFor(object) {
+  const impostor = materials(object).find(material => material?.userData?.isImpostor)
+  // Shared assembly instances keep their centers in GPU textures rather than
+  // instanceMatrix. A plain sphere proxy cannot reproduce those transforms.
+  if (isGpuPositionedImpostor(impostor)) return null
+  const radius = Number(impostor?.userData?.impostorRadius)
+  if (Number.isFinite(radius) && radius > 0) {
+    return new THREE.SphereGeometry(radius, 10, 8)
+  }
+  return sectionStencilGeometry(object.geometry)
 }
 
 export function initSectionView({ scene, camera, renderer, controls, addFrameCallback, removeFrameCallback, getRenderCamera, getPartCentroid, document }) {
@@ -156,13 +180,16 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
         }
       }
       if (!object.isMesh) return
-      if (!stencilGeometries.has(object.geometry)) {
-        stencilGeometries.set(object.geometry, sectionStencilGeometry(object.geometry))
+      const impostorRadius = materials(object).find(m => m?.userData?.isImpostor)?.userData?.impostorRadius
+      const stencilKey = impostorRadius == null ? object.geometry : `impostor-sphere:${impostorRadius}`
+      if (!stencilGeometries.has(stencilKey)) {
+        const geometry = sectionStencilGeometryFor(object)
+        stencilGeometries.set(stencilKey, { geometry, owned: geometry !== object.geometry })
       }
-      const stencilGeometry = stencilGeometries.get(object.geometry)
+      const stencilGeometry = stencilGeometries.get(stencilKey).geometry
       if (!stencilGeometry) { removeProxy(object); return }
       let entry = proxies.get(object)
-      if (entry && (entry.material !== object.material || entry.geometry !== object.geometry)) { removeProxy(object); entry = null }
+      if (entry && (entry.material !== object.material || entry.geometry !== object.geometry || entry.stencilKey !== stencilKey)) { removeProxy(object); entry = null }
       if (!entry) {
         const meshes = [THREE.BackSide, THREE.FrontSide].map((side, index) => {
           const mesh = object.clone(false)
@@ -177,7 +204,7 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
           root.add(mesh)
           return mesh
         })
-        entry = { meshes, material: object.material, geometry: object.geometry }
+        entry = { meshes, material: object.material, geometry: object.geometry, stencilKey }
         proxies.set(object, entry)
       }
       for (const mesh of entry.meshes) {
@@ -237,7 +264,7 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
       for (const [material, clippingPlanes] of saved) { material.clippingPlanes = clippingPlanes; material.needsUpdate = true }
       saved.clear()
       for (const object of proxies.keys()) removeProxy(object)
-      for (const [source, geometry] of stencilGeometries) if (geometry && geometry !== source) geometry.dispose()
+      for (const { geometry, owned } of stencilGeometries.values()) if (owned) geometry?.dispose()
       stencilGeometries.clear()
       renderer.localClippingEnabled = previousClipping
     }

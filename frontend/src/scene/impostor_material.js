@@ -50,9 +50,9 @@ export const IMPOSTOR_QUAD = (() => {
 })()
 
 // ── Composable GLSL snippets ──────────────────────────────────────────────────
-// Bodies only (no chunk `#include`), so BOTH the design-view material below AND
-// the assembly shared-instancing patch (assembly_renderer.js `_attachInstanceShader`)
-// can compose them. The two paths differ only in how they compute the bead CENTER:
+// Shared by both the design-view material below and the assembly shared-instancing
+// patch (assembly_renderer_shared.js `_attachInstanceShader`). The two paths differ
+// only in how they compute the bead CENTER:
 // design view reads `instanceMatrix`; the shared path composes it from the
 // per-instance × per-bp DataTextures. Everything downstream (the disc test, the
 // sphere normal, the depth write, the lit-normal handoff) is identical.
@@ -74,15 +74,21 @@ varying vec3  v_centerView;
 varying float v_impR;
 `
 
-// Inserted right AFTER `#include <clipping_planes_fragment>`: discard outside the
-// disc, compute the view-space sphere normal `_imp_normal`, and write corrected
-// gl_FragDepth so the painted sphere occludes real geometry (slabs, cylinders,
-// arcs). Reads v_corner / v_centerView / v_impR set by the vertex stage.
+// Replaces `#include <clipping_planes_fragment>`. The stock clipping chunk tests
+// `vClipPosition`, which comes from the camera-facing billboard quad. That makes a
+// section plane slice the quad's orientation instead of the sphere. Reconstruct the
+// actual view-space sphere point first, then feed its negated position (the convention
+// Three's clipping chunk expects) into the unchanged stock clipping equations.
 export const IMPOSTOR_FRAG_SPHERE_BODY = /* glsl */`
   float _imp_r2 = dot(v_corner, v_corner);
   if (_imp_r2 > 1.0) discard;
   vec3 _imp_normal = vec3(v_corner, sqrt(1.0 - _imp_r2));   // view space, +z toward camera
-  float _imp_viewZ = v_centerView.z + _imp_normal.z * v_impR;
+  vec3 _imp_surfaceView = v_centerView + _imp_normal * v_impR;
+  vec3 _imp_clipPosition = -_imp_surfaceView;
+#define vClipPosition _imp_clipPosition
+#include <clipping_planes_fragment>
+#undef vClipPosition
+  float _imp_viewZ = _imp_surfaceView.z;
   vec4  _imp_clip  = projectionMatrix * vec4(0.0, 0.0, _imp_viewZ, 1.0);
   gl_FragDepth = 0.5 + 0.5 * (_imp_clip.z / _imp_clip.w);
 `
@@ -120,7 +126,7 @@ const _VERT_PROJECT = /* glsl */`
 `
 
 const _FRAG_DECL   = `#include <common>\n${IMPOSTOR_FRAG_UNIFORMS}`
-const _FRAG_SPHERE = `#include <clipping_planes_fragment>\n${IMPOSTOR_FRAG_SPHERE_BODY}`
+const _FRAG_SPHERE = IMPOSTOR_FRAG_SPHERE_BODY
 const _FRAG_NORMAL = IMPOSTOR_FRAG_NORMAL
 
 /**
