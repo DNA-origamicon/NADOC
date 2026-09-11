@@ -773,14 +773,31 @@ def _recenter_pdb_in_padded_box(
             if not np.isfinite(value) or value <= 0:
                 raise ValueError("Box dimensions must be finite and positive")
             if value * 10 <= minimum_span[i]:
-                raise ValueError(f"Box {'XYZ'[i]} must exceed the solute extent ({minimum_span[i] / 10:.3f} nm)")
+                raise ValueError(f"Final box-size check failed: Box {'XYZ'[i]} must exceed the solute extent ({minimum_span[i] / 10:.3f} nm). Increase the initial box dimension in wizard tab 2.")
             lengths[i] = value * 10
 
     # The finite graphene seed is resized later, but actual solute atoms must fit.
     if len(physical) and box_size_nm is not None:
         shifted = physical + lengths / 2 - centre
-        if np.any(shifted.min(axis=0) < 0) or np.any(shifted.max(axis=0) >= lengths):
-            raise ValueError("Requested box does not contain the centered solute; increase its dimensions.")
+        clearance = np.minimum(shifted.min(axis=0), lengths - shifted.max(axis=0))
+        required_half = np.maximum(centre - physical.min(axis=0), physical.max(axis=0) - centre)
+        if box_mode == "rotation":
+            # A rotation-safe cell must retain padding at every solute orientation,
+            # not merely contain the initial pose.
+            required_half[:] = np.linalg.norm(physical - centre, axis=1).max()
+            clearance = lengths / 2 - required_half
+        for i, selected in enumerate(box_size_nm):
+            if selected is None:
+                continue
+            if clearance[i] + 0.001 < pad_a[i]:  # 0.001 Å accommodates PDB rounding only
+                required = 2 * required_half[i] + 2 * pad_a[i]
+                raise ValueError(
+                    f"Final box-size check failed: Box {'XYZ'[i]} is {selected:.3f} nm; "
+                    f"the prepared solute needs at least {np.ceil(required * 100) / 1000:.3f} nm "
+                    f"to retain {pad_a[i] / 10:.3f} nm padding on each side. "
+                    "Increase this initial box dimension in wizard tab 2 and prepare again. "
+                    "The submitted box was not resized."
+                )
     # Translation that centres the structure in the selected cell.
     tx, ty, tz = lengths / 2.0 - centre
 
@@ -2925,20 +2942,23 @@ def build_namd_solvated_package(
         # Cell-sizing rule: prefer rotation (orientation-proof), but fall back to the
         # historical bbox rule when that would not fit the hardware — a cell too big to
         # run is not safer than one too small.  The downgrade is recorded, not silent.
-        _atom_cap = _box_mode_atom_cap(devices)
-        # Prefer the tutorial's bbox ± 20 Å when it fits the selected hardware.
-        padding_nm, padding_note = resolve_padding_nm(
-            dna_pdb, padding_nm, max_atoms=_atom_cap
-        )
-        if padding_note:
-            logger.info("box sizing: %s", padding_note)
-        box_mode, box_mode_note = resolve_box_mode(
-            dna_pdb, padding_nm, max_atoms=_atom_cap, free_ns=free_ns,
-            preferred=box_mode,
-        )
-        if box_mode_note:
-            logger.warning("box sizing: %s", box_mode_note)
-            _emit(progress, "assemble", 0.4, f"Box sizing: {box_mode_note}")
+        fixed_box = box_size_nm is not None and all(v is not None for v in box_size_nm)
+        padding_note = box_mode_note = None
+        if not fixed_box:
+            _atom_cap = _box_mode_atom_cap(devices)
+            # Prefer the tutorial's bbox ± 20 Å when it fits the selected hardware.
+            padding_nm, padding_note = resolve_padding_nm(
+                dna_pdb, padding_nm, max_atoms=_atom_cap
+            )
+            if padding_note:
+                logger.info("box sizing: %s", padding_note)
+            box_mode, box_mode_note = resolve_box_mode(
+                dna_pdb, padding_nm, max_atoms=_atom_cap, free_ns=free_ns,
+                preferred=box_mode,
+            )
+            if box_mode_note:
+                logger.warning("box sizing: %s", box_mode_note)
+                _emit(progress, "assemble", 0.4, f"Box sizing: {box_mode_note}")
         cell_options = {}
         if box_size_nm is not None:
             cell_options["box_size_nm"] = box_size_nm

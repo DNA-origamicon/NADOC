@@ -1591,3 +1591,36 @@ def test_the_plan_endpoint_reports_which_stages_were_edited(client):
     )
     assert plan["edited_stages"] == ["*", "3"]
     assert "outputname" in plan["protected_directives"]
+
+
+def test_fast_protocol_plan_does_not_wait_for_box_estimate(monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock
+    from backend.api import routes_md_plan as routes
+
+    estimate = AsyncMock(return_value={"box_preview": {"calculated_nm": [10, 11, 12]}})
+    monkeypatch.setattr(routes, "protocol_box_preview", estimate)
+    body = routes.ProtocolPlanRequest()
+    fast = asyncio.run(routes.protocol_plan(body, include_box_preview=False))
+    assert fast["request"]["seed"]
+    assert fast["stages"]
+    assert "box_preview" not in fast
+    estimate.assert_not_awaited()
+    full = asyncio.run(routes.protocol_plan(body))
+    assert full["box_preview"]["calculated_nm"] == [10, 11, 12]
+    estimate.assert_awaited_once()
+
+
+def test_box_preview_dependencies_ignore_unrelated_edits_and_track_geometry():
+    import asyncio
+    from backend.api import routes_md_plan as routes
+
+    def inputs(**changes):
+        request = routes.ProtocolPlanRequest(**changes)
+        return asyncio.run(routes.protocol_plan(request, include_box_preview=False))["box_preview_request"]
+
+    original = inputs(padding_nm=1.2)
+    assert inputs(padding_nm=1.2, seed=12345, threads=4) == original
+    assert inputs(padding_nm=1.2, box_size_nm=[20, None, None]) == original
+    assert inputs(padding_nm=2) != original
+    assert inputs(padding_nm=1.2, graphene_nanopore=True) != original

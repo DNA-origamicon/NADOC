@@ -139,3 +139,45 @@ def test_real_solvation_preserves_cell_and_magnesium_restraint_indices():
                 params = parse_conf_directives(archive.read(path).decode())
                 assert params.get('langevinpiston', 'off') == 'off'
         assert len(xyz(read('.pdb'))) == count
+
+
+def test_fast_preview_never_runs_crossover_optimizer(monkeypatch):
+    from backend.core import atomistic, md_box_preview
+    from backend.api.routes_md import CreateJobRequest
+    from tests.reciprocal_design import reciprocal_design
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Crossover optimizer must not run for box sizing')
+
+    monkeypatch.setattr(atomistic, '_minimize_backbone_bridge', forbidden)
+    md_box_preview._design_pdb.cache_clear()
+    md_box_preview._calculated_box.cache_clear()
+    result = md_box_preview.preview_box(reciprocal_design(None),
+        CreateJobRequest(devices='cpu', box_mode='bbox', padding_nm=1.2))
+    assert all(v > 2.4 for v in result['calculated_nm'])
+    assert result['selected_nm'] == result['calculated_nm']
+    md_box_preview._design_pdb.cache_clear()
+    md_box_preview._calculated_box.cache_clear()
+
+
+def test_fixed_box_is_preserved_when_final_coordinates_fit():
+    selected = (8.0, 10.0, 12.0)
+    shifted, actual = _recenter_pdb_in_padded_box(DNA, 1.2, 'bbox', box_size_nm=selected)
+    assert actual == selected
+    assert np.all(xyz(shifted).min(0) >= 1.2)
+    assert np.all(np.asarray(actual) - xyz(shifted).max(0) >= 1.2)
+
+
+def test_final_box_check_rejects_insufficient_padding_without_resizing():
+    # X contains the solute but falls short of the requested 1.2 nm water padding.
+    with pytest.raises(ValueError, match=r'Final box-size check failed: Box X.*7.400 nm'):
+        _recenter_pdb_in_padded_box(DNA, 1.2, 'bbox', box_size_nm=(7.0, 10, 12))
+
+
+def test_final_check_preserves_rotation_clearance_not_only_initial_pose():
+    # This box fits the padded bbox, but the solute corners would lose clearance on rotation.
+    with pytest.raises(ValueError, match='Final box-size check failed'):
+        _recenter_pdb_in_padded_box(DNA, 1.2, 'rotation', box_size_nm=(8, 10, 12))
+    _, automatic = _recenter_pdb_in_padded_box(DNA, 1.2, 'rotation')
+    _, fixed = _recenter_pdb_in_padded_box(DNA, 1.2, 'rotation', box_size_nm=automatic)
+    assert fixed == automatic

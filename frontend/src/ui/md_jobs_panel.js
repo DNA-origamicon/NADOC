@@ -64,6 +64,7 @@ import { initClusterAvailability } from './cluster_availability.js'
 import { shouldStopLiveSession, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
 import { webSocketUrl } from '../shared/websocket_url.js'
 import { initJobWizard } from './md_job_wizard.js'
+import { createBoxSizeFailureNotifier } from './md_box_size_failure.js'
 import { isProductionParent, jobSettingsState } from './md_job_wizard_model.js'
 import { createContextMenu } from './primitives/context_menu.js'
 import { mdMinimizationRow, mdLatestStageLabel, mdProductionStageLabel } from './md_stage_timeline.js'
@@ -1934,12 +1935,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   }
 
+  const notifyBoxSizeFailures = createBoxSizeFailureNotifier()
+
   // ── Job list fetch ─────────────────────────────────────────────────────────
   async function _fetchJobs() {
     try {
       const jobs = await api.listMdJobs()
       if (!jobs) throw new Error(api.lastErrorMessage() ?? 'HTTP error')
       _jobs = jobs
+      notifyBoxSizeFailures(jobs)
       _jobs.sort((a, b) => b.created_at - a.created_at)
       _mdDebug(`[${_ts()}] md-jobs: fetched ${_jobs.length} jobs`)
       if (_fetchFails > 0) { _fetchFails = 0; _setBackendStale(false); _checkEngines() }  // reconnected → restore status line
@@ -4099,6 +4103,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     api: {
       getRelaxPresets: () => api.getRelaxPresets(),
       fetchProtocolPlan: body => api.fetchProtocolPlan(body),
+      fetchProtocolBoxPreview: body => api.fetchProtocolBoxPreview(body),
       // The client returns null on a non-OK response, so the wizard needs this to say
       // WHY a plan came back empty instead of showing a blank table.
       lastErrorMessage: () => api.lastErrorMessage?.(),

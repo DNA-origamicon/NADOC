@@ -3177,7 +3177,8 @@ export const getRelaxPresets     = ()            => _oxdnaJSON('GET',  '/md/rela
  *  Job Wizard's source of truth. Built server-side by running the real conf writers, so
  *  it cannot drift from what the run does. Writes nothing and (for a relaxation) touches
  *  no disk, so it is safe to re-request behind a short debounce as the user edits. */
-export const fetchProtocolPlan   = (body)        => _oxdnaJSON('POST', '/md/protocol-plan', body)
+export const fetchProtocolPlan   = (body)        => _oxdnaJSON('POST', '/md/protocol-plan?include_box_preview=false', body)
+export const fetchProtocolBoxPreview = (body) => _oxdnaJSON('POST', '/md/protocol-box-preview', body)
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
 /** Validate the selected NAMD run/download directory. With no path, the backend creates and
  * returns NADOC's portable <workspace>/md_jobs default. */

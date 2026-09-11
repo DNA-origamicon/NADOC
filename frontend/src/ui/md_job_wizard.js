@@ -331,6 +331,12 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   let modal = null
   let presets = []
   let plan = null
+  let planLoading = false
+  let boxLoading = false
+  let boxKey = null
+  const boxEstimates = new Map()
+  let planVersion = 0
+  let sessionVersion = 0
   let busy = false
   // Selecting RunPod makes GPU-resident the visible default. Track whether this value
   // came from the target default so moving back to Local/Alpine can restore Auto without
@@ -462,21 +468,31 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   }
 
   async function loadPlan() {
+    const version = ++planVersion
+    planLoading = false
     ensureParent()
     if (state.mode === 'production' && !state.parentJobId) {
       // No relaxation to seed from — the empty state says so; a plan request would just
       // 400 and paint a scarier message over it.
       plan = null
+      boxKey = null
+      boxLoading = false
       mounts.status.textContent = ''
       render()
       return
     }
+    planLoading = true
     mounts.status.textContent = 'Working out what this will run…'
+    renderFields()
+    paintActions()
+    const payload = {
+      ...(!readOnly && state.mode !== 'production' ? getPreparationContext() : {}),
+      ...planPayload({ ...state, touched: { ...ladderPin(), ...state.touched } }),
+    }
     try {
-      const next = await api.fetchProtocolPlan({
-        ...(!readOnly && state.mode !== 'production' ? getPreparationContext() : {}),
-        ...planPayload({ ...state, touched: { ...ladderPin(), ...state.touched } }),
-      })
+      const next = await api.fetchProtocolPlan(payload)
+      if (version !== planVersion) return
+      planLoading = false
       plan = next || null
       // The API client returns null on a non-OK response rather than throwing, so an
       // un-surfaced failure would leave the table silently blank — which is exactly the
@@ -485,6 +501,8 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
         ? ''
         : `Could not work out what this would run: ${api.lastErrorMessage?.() || 'server error'}`
     } catch (err) {
+      if (version !== planVersion) return
+      planLoading = false
       plan = null
       mounts.status.textContent = `Could not work out what this would run: ${err?.message || err}`
     }
@@ -497,10 +515,74 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       const ns = Number(plan?.totals?.total_ns)
       if (Number.isFinite(ns) && ns > 0) state.touched.length_ns = ns
     }
+    updateBoxPreview(payload)
     render()
     // The wall time step 1 recommends is total_ns / throughput, so a plan that changed the
     // run length invalidates it. No-ops unless the length actually moved.
     targetStep?.refreshSizing?.()
+  }
+
+  function applyBoxEstimate() {
+    const entry = boxEstimates.get(boxKey)
+    boxLoading = !!entry?.pending
+    if (plan && entry?.result) {
+      plan = { ...plan, box_preview: entry.result.box_preview,
+        warnings: [...new Set([...(plan.warnings || []), ...(entry.result.warnings || [])])],
+      }
+    }
+  }
+
+  function updateBoxPreview(payload) {
+    if (!plan || !api.fetchProtocolBoxPreview || state.mode === 'production'
+        || plan.protocol === 'implicit_gbis_namd') {
+      boxKey = null
+      boxLoading = false
+      return
+    }
+    // The server provides the same resolved inputs used by its geometry cache.
+    // Keep a fallback for older servers that do not yet report dependencies.
+    const inputs = plan.box_preview_request || payload
+    boxKey = JSON.stringify(inputs)
+    if (!boxEstimates.has(boxKey)) {
+      const entry = { pending: true, result: null }
+      boxEstimates.set(boxKey, entry)
+      void loadBoxPreview(inputs, boxKey, entry, sessionVersion)
+    }
+    applyBoxEstimate()
+  }
+
+  async function loadBoxPreview(payload, key, entry, session) {
+    try {
+      const result = await api.fetchProtocolBoxPreview(payload)
+      if (!result) throw new Error(api.lastErrorMessage?.() || 'server error')
+      entry.result = result
+    } catch (err) {
+      entry.result = { warnings: [`Box estimate unavailable: ${err?.message || err}`] }
+    }
+    entry.pending = false
+    if (session !== sessionVersion || key !== boxKey) return
+    applyBoxEstimate()
+    // Geometry finishing must not replace a different field while the user edits it.
+    const previous = mounts.fields.querySelector('.wizard-box-size')
+    if (previous) {
+      previous.querySelectorAll('.nadoc-spinner').forEach(spinner => spinner.remove())
+      const manual = valueOf('box_size_nm') || []
+      const calculated = plan?.box_preview?.calculated_nm || []
+      for (const [i, axis] of ['X', 'Y', 'Z'].entries()) {
+        const input = previous.querySelector(`[aria-label="Box ${axis} (nm)"]`)
+        if (input && manual[i] == null && document.activeElement !== input) {
+          input.value = calculated[i] == null ? '' : calculated[i].toFixed(3)
+        }
+      }
+    }
+    renderConditions()
+    paintActions()
+  }
+
+  function loadingIcon(label) {
+    return el('span', { className: 'nadoc-spinner', attrs: {
+      role: 'status', 'aria-label': `Calculating ${label}`, title: `Calculating ${label}…`,
+    } })
   }
 
   /** What the plan says about a field. In production mode the production-resolved block
@@ -566,7 +648,10 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     if (key === 'gpu_fallback_policy') {
       try { localStorage.setItem(GPU_FALLBACK_KEY, String(value)) } catch { /* private mode */ }
     }
+    planVersion++
+    planLoading = true
     refetch()
+    paintActions()
     renderFields()          // immediate feedback; the table follows when the plan lands
   }
 
@@ -744,6 +829,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       nativeInput?.setAttribute('aria-label', `Box ${axis} (nm)`)
       group.appendChild(el('label', { className: 'wizard-field__label', children: [
         document.createTextNode(`${axis} `), input,
+        !override && (boxLoading || (planLoading && !boxKey)) ? loadingIcon(`Box ${axis}`) : null,
         override ? el('span', { className: 'wizard-field__alert wizard-field__alert--warning',
           text: '⚠', attrs: { 'aria-label': `Box ${axis} manually changed`,
             title: 'Manual dimension: check solute clearance and reservoir depth. Reset restores automatic sizing.' } }) : null,
@@ -753,7 +839,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       onClick: () => setField('box_size_nm', null),
     }))
     group.appendChild(el('div', { className: 'wizard-field__help',
-      text: 'Automatic dimensions are estimates until preparation measures the final seed. Reset follows the selected cell sizing and water padding. Production inherits the prepared cell.',
+      text: 'These dimensions are submitted unchanged. Preparation checks the final solute clearance and stops if the box is too small. Reset uses fast geometry with the selected cell sizing and water padding. Production inherits the prepared cell.',
     }))
     parent.appendChild(group)
   }
@@ -834,7 +920,9 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
               conditionRefs(fieldConds.get(field.key)),
             ],
           }),
-          el('div', { className: 'wizard-field__control', children: [control] }),
+          el('div', { className: 'wizard-field__control', children: [control,
+            planLoading && !Object.prototype.hasOwnProperty.call(state.touched, field.key)
+              ? loadingIcon(field.label) : null] }),
           el('div', {
             className: `wizard-chip wizard-chip--${provenance}`,
             attrs: { title: reason },
@@ -1713,14 +1801,20 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
 
   function paintActions() {
     const blocked = plan ? blockingConditions(plan).length > 0 : false
-    const disabled = busy || !plan || blocked
+    const needsBox = state.mode !== 'production' && plan?.protocol !== 'implicit_gbis_namd'
+    const dimensions = submittedBoxSize()
+    const waitingForBox = needsBox && !!api.fetchProtocolBoxPreview
+      && (planLoading || boxLoading || !dimensions)
+    const disabled = busy || !plan || blocked || waitingForBox
     if (createBtn) {
       createBtn.disabled = disabled
       const label = createBtn.querySelector('span') || createBtn
       label.textContent = submitting
         ? (state.editJobId ? 'Saving…' : 'Creating job…')
         : (state.editJobId ? 'Save changes' : 'Create job')
-      createBtn.title = blocked
+      createBtn.title = waitingForBox
+        ? 'Wait for the initial box dimensions, or resolve the box calculation error.'
+        : blocked
         ? 'Resolve the blocking condition on the next tab first.'
         : submitting
           ? 'Creating the job record. Preparation progress will appear in the jobs panel.'
@@ -1749,8 +1843,15 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     showAction(createBtn, onPlan && !readOnly)
   }
 
+  function submittedBoxSize() {
+    const manual = valueOf('box_size_nm') || []
+    const calculated = plan?.box_preview?.calculated_nm || []
+    const sizes = [0, 1, 2].map(i => manual[i] ?? calculated[i])
+    return sizes.every(v => Number.isFinite(v) && v > 0) ? sizes : null
+  }
+
   async function submit({ autostart }) {
-    if (busy) return
+    if (busy || createBtn?.disabled) return
     busy = true
     submitting = true
     paintActions()
@@ -1795,6 +1896,16 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
           // Step 1's answer. Spread OVER the protocol payload so the wizard's choice is
           // what actually reaches the API, not the panel's older radio state.
           ...targetStep.payloadFields(),
+        }
+        if (plan?.protocol !== 'implicit_gbis_namd') {
+          const dimensions = submittedBoxSize()
+          if (dimensions) {
+            request.box_size_nm = dimensions
+            // Preserve the sizing choices resolved by the preview, including a
+            // hardware-driven padding/mode fallback, alongside its exact dimensions.
+            if (plan.box_preview?.padding_nm != null) request.padding_nm = plan.box_preview.padding_nm
+            if (plan.box_preview?.box_mode) request.box_mode = plan.box_preview.box_mode
+          }
         }
         const pendingJob = state.editJobId
           ? updateJob?.(state.editJobId, request)
@@ -2048,6 +2159,8 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
 
   async function open(mode = null, { draftId = null, prefill = null,
     parentJobId = null, viewJob: job = null, editJob: editableJob = null } = {}) {
+    const session = ++sessionVersion
+    refetch.cancel()
     if (!modal) build()
     const wasReadOnly = readOnly
     readOnly = !!job
@@ -2136,10 +2249,19 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       const newCreation = !draftId && !prefill
       if (newCreation || state.touched.seed == null) state.touched.seed = randomNAMDSeed()
     }
+    planVersion++
+    plan = null
+    planLoading = true
+    boxLoading = false
+    boxKey = null
+    boxEstimates.clear()
     renderSource()
+    modal.open()
+    render()
     if (!presets.length) {
       try {
         const cat = await api.getRelaxPresets?.()
+        if (session !== sessionVersion) return
         presets = cat?.presets || []
         // Never re-pick the protocol in a locked view: a job that ran a protocol since made
         // unavailable would silently be captioned with a different one.
@@ -2149,7 +2271,10 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
           state.presetId = (presets.find(p => p.available !== false) || presets[0])?.id
             || state.presetId
         }
-      } catch { presets = [] }
+      } catch {
+        if (session !== sessionVersion) return
+        presets = []
+      }
     }
     if (modal.header) {
       const t = modal.header.querySelector('.modal__title')
@@ -2173,6 +2298,10 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   }
 
   function close() {
+    sessionVersion++
+    planVersion++
+    planLoading = false
+    boxLoading = false
     refetch.cancel()
     modal?.close()
   }

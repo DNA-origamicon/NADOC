@@ -15,6 +15,7 @@ import { fieldAppliesToTarget, initJobWizard } from './md_job_wizard.js'
 
 /** A plan in the shape POST /md/protocol-plan returns, trimmed to what the wizard reads. */
 const PLAN = {
+  box_preview_request: { protocol: 'mgh', padding_nm: 1.2, box_mode: 'bbox' },
   param_groups: ['Integrator'],
   stages: [
     {
@@ -519,11 +520,12 @@ describe('box dimension overrides', () => {
     footerButtons().find(b => b.textContent.includes('Create job')).click()
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(launch).toHaveBeenCalled()
-    expect(launch.mock.calls[0][0].box_size_nm).toBeNull()
+    expect(launch.mock.calls[0][0].box_size_nm).toEqual([12, 15, 18])
   })
 
-  it('submits a partial override without freezing automatic axes', async () => {
-    const { wiz, launch } = setup()
+  it('submits displayed automatic dimensions alongside a manual override', async () => {
+    const { wiz, api, launch } = setup()
+    api.fetchProtocolPlan.mockResolvedValue({ ...PLAN, box_preview: { calculated_nm: [12, 15, 18] } })
     await wiz.open('relaxation')
     const input = modalRoot().querySelector('[aria-label="Box Y (nm)"]')
     input.value = '25'
@@ -531,7 +533,7 @@ describe('box dimension overrides', () => {
     ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
     footerButtons().find(b => b.textContent.includes('Create job')).click()
     await new Promise(resolve => setTimeout(resolve, 0))
-    expect(launch.mock.calls[0][0].box_size_nm).toEqual([null, 25, null])
+    expect(launch.mock.calls[0][0].box_size_nm).toEqual([12, 25, 18])
   })
 
   it('locks dimension inputs and reset for completed jobs', async () => {
@@ -543,5 +545,145 @@ describe('box dimension overrides', () => {
     const group = modalRoot().querySelector('[data-testid="box-size-controls"]')
     for (const control of group.querySelectorAll('input, button')) expect(control.disabled).toBe(true)
     expect(group.querySelector('[aria-label="Box Y (nm)"]').value).toBe('25')
+  })
+})
+
+describe('wizard parameter loading', () => {
+  const deferred = () => {
+    let resolve
+    const promise = new Promise(r => { resolve = r })
+    return { promise, resolve }
+  }
+
+  it('shows seeds immediately and resolves parameters before geometry', async () => {
+    const { wiz, api } = setup()
+    const catalog = deferred()
+    const parameters = deferred()
+    const geometry = deferred()
+    api.getRelaxPresets.mockReturnValue(catalog.promise)
+    api.fetchProtocolPlan.mockReturnValue(parameters.promise)
+    api.fetchProtocolBoxPreview = vi.fn(() => geometry.promise)
+    const opening = wiz.open('relaxation')
+    const seed = fieldControl('Random seed')
+    expect(Number(seed.value)).toBeGreaterThan(0)
+    expect(seed.closest('.wizard-field').querySelector('.nadoc-spinner')).toBeNull()
+    expect(document.querySelectorAll('.wizard-field__control .nadoc-spinner').length).toBeGreaterThan(0)
+    catalog.resolve({ presets: [] })
+    await Promise.resolve()
+    parameters.resolve(PLAN)
+    await opening
+    expect(document.querySelectorAll('.wizard-field__control .nadoc-spinner').length).toBe(0)
+    expect(document.querySelector('[aria-label="Calculating Box X"]')).toBeTruthy()
+    geometry.resolve({ box_preview: { calculated_nm: [10, 11, 12] } })
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Box X (nm)"]').value).toBe('10.000'))
+    expect(document.querySelector('[aria-label="Calculating Box X"]')).toBeNull()
+    wiz.close()
+  })
+
+  it('keeps a pending estimate through unrelated edits and reuses it after completion', async () => {
+    const { wiz, api } = setup()
+    const geometry = deferred()
+    api.fetchProtocolBoxPreview = vi.fn(() => geometry.promise)
+    await wiz.open('relaxation')
+    const changeSeed = value => {
+      const input = fieldControl('Random seed')
+      expect(input.disabled).toBe(false)
+      input.value = String(value)
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    changeSeed(12345)
+    await vi.waitFor(() => expect(api.fetchProtocolPlan).toHaveBeenCalledTimes(2))
+    expect(fieldControl('Random seed').value).toBe('12345')
+    expect(api.fetchProtocolBoxPreview).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('[aria-label="Calculating Box X"]')).toBeTruthy()
+    // Finishing geometry preserves a different field's DOM, focus, and uncommitted input.
+    const seed = fieldControl('Random seed')
+    seed.focus()
+    seed.value = '54321'
+    geometry.resolve({ box_preview: { calculated_nm: [10, 11, 12] } })
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Box X (nm)"]').value).toBe('10.000'))
+    expect(fieldControl('Random seed')).toBe(seed)
+    expect(document.activeElement).toBe(seed)
+    expect(seed.value).toBe('54321')
+    changeSeed(54321)
+    await vi.waitFor(() => expect(api.fetchProtocolPlan).toHaveBeenCalledTimes(3))
+    expect(api.fetchProtocolBoxPreview).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('[aria-label="Box X (nm)"]').value).toBe('10.000')
+    wiz.close()
+  })
+
+  it('starts a new estimate for changed padding and ignores the superseded result', async () => {
+    const { wiz, api } = setup()
+    const oldGeometry = deferred()
+    const newGeometry = deferred()
+    api.fetchProtocolBoxPreview = vi.fn()
+      .mockReturnValueOnce(oldGeometry.promise)
+      .mockReturnValueOnce(newGeometry.promise)
+    await wiz.open('relaxation')
+    api.fetchProtocolPlan.mockResolvedValue({ ...PLAN,
+      box_preview_request: { ...PLAN.box_preview_request, padding_nm: 2 },
+    })
+    const padding = fieldControl('Water padding')
+    padding.value = '2'
+    padding.dispatchEvent(new Event('change', { bubbles: true }))
+    await vi.waitFor(() => expect(api.fetchProtocolBoxPreview).toHaveBeenCalledTimes(2))
+    expect(api.fetchProtocolBoxPreview.mock.calls[1][0].padding_nm).toBe(2)
+    oldGeometry.resolve({ box_preview: { calculated_nm: [10, 11, 12] } })
+    await Promise.resolve()
+    expect(document.querySelector('[aria-label="Calculating Box X"]')).toBeTruthy()
+    newGeometry.resolve({ box_preview: { calculated_nm: [20, 21, 22] } })
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Box X (nm)"]').value).toBe('20.000'))
+    wiz.close()
+  })
+
+  it('waits for geometry before creating and submits the exact displayed cell', async () => {
+    const { wiz, api, launch } = setup()
+    const geometry = deferred()
+    api.fetchProtocolBoxPreview = vi.fn(() => geometry.promise)
+    await wiz.open('relaxation')
+    ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
+    const create = footerButtons().find(b => b.textContent.includes('Create job'))
+    expect(create.disabled).toBe(true)
+    create.click()
+    expect(launch).not.toHaveBeenCalled()
+    geometry.resolve({ box_preview: {
+      calculated_nm: [10.123, 11.456, 12.789], padding_nm: 1.2, box_mode: 'bbox',
+    } })
+    await vi.waitFor(() => expect(create.disabled).toBe(false))
+    create.click()
+    await vi.waitFor(() => expect(launch).toHaveBeenCalledTimes(1))
+    expect(launch.mock.calls[0][0]).toMatchObject({
+      box_size_nm: [10.123, 11.456, 12.789], padding_nm: 1.2, box_mode: 'bbox',
+    })
+    wiz.close()
+  })
+
+  it('ignores geometry from a previous wizard session', async () => {
+    const { wiz, api } = setup()
+    const oldGeometry = deferred()
+    const newGeometry = deferred()
+    api.fetchProtocolBoxPreview = vi.fn()
+      .mockReturnValueOnce(oldGeometry.promise)
+      .mockReturnValueOnce(newGeometry.promise)
+    await wiz.open('relaxation')
+    wiz.close()
+    await wiz.open('relaxation')
+    newGeometry.resolve({ box_preview: { calculated_nm: [20, 21, 22] } })
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Box X (nm)"]').value).toBe('20.000'))
+    oldGeometry.resolve({ box_preview: { calculated_nm: [10, 11, 12] } })
+    await Promise.resolve()
+    expect(document.querySelector('[aria-label="Box X (nm)"]').value).toBe('20.000')
+    wiz.close()
+  })
+
+  it('clears geometry spinners and reports failed estimates', async () => {
+    const { wiz, api } = setup()
+    const geometry = deferred()
+    api.fetchProtocolBoxPreview = vi.fn(() => geometry.promise)
+    await wiz.open('relaxation')
+    geometry.resolve(null)
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Calculating Box X"]')).toBeNull())
+    expect(document.body.textContent).toContain('Box estimate unavailable')
+    wiz.close()
   })
 })

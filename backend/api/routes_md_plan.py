@@ -1307,12 +1307,12 @@ def _max_ns() -> float:
 
 
 @router.post("/md/protocol-plan")
-async def protocol_plan(body: ProtocolPlanRequest) -> dict:
+async def protocol_plan(body: ProtocolPlanRequest, include_box_preview: bool = True) -> dict:
     """Every parameter this job would run, per stage, without preparing anything.
 
-    Cheap and side-effect-free for a relaxation (no disk at all), so the wizard can
-    re-request it on every keystroke behind a short debounce.  A production plan reads the
-    parent package's manifest, which is a small JSON file.
+    With include_box_preview=False, relaxation parameters resolve without geometry
+    reconstruction. The wizard requests that slower estimate separately. A production
+    plan reads the parent package manifest.
     """
     resolved = resolve_relax_preset(body)
     preset = md_presets.get_preset(getattr(resolved, "relax_preset", None))
@@ -1332,18 +1332,19 @@ async def protocol_plan(body: ProtocolPlanRequest) -> dict:
         else _relaxation_plan(body, resolved)
     )
 
-    if kind == "relaxation" and resolved.protocol != md_presets.IMPLICIT_PROTOCOL:
-        from starlette.concurrency import run_in_threadpool
-        from backend.core.md_box_preview import preview_box
-        try:
-            current_design = design_state.get_or_404()
-        except HTTPException:
-            current_design = None
-        if current_design is not None:
-            try:
-                plan["box_preview"] = await run_in_threadpool(preview_box, current_design, resolved)
-            except Exception as exc:
-                plan["warnings"].append(f"Box estimate unavailable: {exc}")
+    if include_box_preview:
+        estimate = await protocol_box_preview(body)
+        plan.update({k: v for k, v in estimate.items() if k != "warnings"})
+        plan["warnings"].extend(estimate.get("warnings", []))
+
+    # Send the resolved geometry dependencies so edits to unrelated run parameters
+    # reuse both pending and completed estimates in the wizard.
+    from backend.core.md_box_preview import box_preview_inputs
+    plan["box_preview_request"] = (
+        {"protocol": resolved.protocol, **box_preview_inputs(resolved)}
+        if kind == "relaxation" and resolved.protocol != md_presets.IMPLICIT_PROTOCOL
+        else None
+    )
 
     stages = plan["stages"]
     edited = sorted({k for k, v in (body.stage_overrides or {}).items() if v})
@@ -1371,3 +1372,24 @@ async def protocol_plan(body: ProtocolPlanRequest) -> dict:
         **{k: v for k, v in plan.items() if k != "stages"},
         "stages": stages,
     }
+
+
+@router.post("/md/protocol-box-preview")
+async def protocol_box_preview(body: ProtocolPlanRequest) -> dict:
+    """Estimate geometry separately so cheap wizard parameters need not wait for it."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.core.md_box_preview import preview_box
+
+    resolved = resolve_relax_preset(body)
+    if (body.kind or "relaxation").strip().lower() != "relaxation" or resolved.protocol == md_presets.IMPLICIT_PROTOCOL:
+        return {}
+    if body.oxdna_job_id:
+        resolved = resolved.model_copy(update={"declash": True, "force_soft": True})
+    try:
+        current_design = design_state.get_or_404()
+    except HTTPException:
+        return {}
+    try:
+        return {"box_preview": await run_in_threadpool(preview_box, current_design, resolved)}
+    except Exception as exc:
+        return {"warnings": [f"Box estimate unavailable: {exc}"]}
