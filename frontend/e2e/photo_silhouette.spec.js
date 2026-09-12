@@ -79,7 +79,8 @@ test.describe('Photomode silhouette', () => {
 
     await loadDesign(page)
 
-    await page.locator('#photo-tab-btn').click()
+    if (!await page.locator('#photo-lighting-enabled').isVisible()) await page.locator('#photo-tab-btn').click()
+    await page.locator('#photo-lighting-enabled').check()
     await expect(page.locator('#tab-content-photo')).toBeVisible({ timeout: 5_000 })
 
     // White sky so "outline pixel" == "dark pixel".
@@ -126,7 +127,8 @@ test.describe('Photomode silhouette', () => {
     // Toggling the grid must now change NOTHING about the outline.
     await loadDesign(page)
 
-    await page.locator('#photo-tab-btn').click()
+    if (!await page.locator('#photo-lighting-enabled').isVisible()) await page.locator('#photo-tab-btn').click()
+    await page.locator('#photo-lighting-enabled').check()
     await expect(page.locator('#tab-content-photo')).toBeVisible({ timeout: 5_000 })
     await page.locator('#photo-bg-color').fill('#ffffff')
     await page.locator('#photo-bg-color').dispatchEvent('input')

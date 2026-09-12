@@ -47,7 +47,7 @@ import { initRunpodStatus } from './runpod_status.js'
 import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { helixDisplayLabel } from './design_display_labels.js'
 import { confirmNoConcurrentJob, confirmDiskSpaceOk } from './job_activity.js'
-import { shouldTearDownDisplays, shouldResumeDisplays } from './display_tab_policy.js'
+import { shouldTearDownDisplays, sidebarPanelVisible } from './display_tab_policy.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -2956,14 +2956,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // See display_tab_policy.js.
   window.addEventListener('nadoc:left-tab-change', (e) => {
     const tab = e.detail?.activeTab
-    if (shouldTearDownDisplays(tab)) {
+    if (!e.detail?.navigationOnly && shouldTearDownDisplays(tab)) {
       // keepCache: leaving the tab is not "I'm done with this job". Dropping `_traj`
       // here costs a full re-download on return — 1 GB / minutes on a production run —
       // and the Animations tab's authoring preview drives this same controller, so a
       // trip to Feature Log would otherwise bin the trajectory the user is scrubbing.
       if (oxdnaDisplay?.isActive()) _allDisplaysOff({ keepCache: true })
     }
-    if (shouldResumeDisplays(tab)) {
+    if (sidebarPanelVisible(e.detail, 'dynamics')) {
       if (_base.isOpen()) _onOpen()
     } else {
       _base.clearPoll()

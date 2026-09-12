@@ -1,6 +1,8 @@
+import { initSidebarStack } from './sidebar_stack.js'
+
 const TAB_SECTIONS = {
   assembly: ['assembly-panel'],
-  properties: ['properties-section', 'dimensions-section', 'reverse-complement-section', 'move-rotate-panel', 'extrude-panel', 'deform-panel', 'strand-hist-section', 'groups-panel'],
+  properties: ['properties-section', 'dimensions-section', 'reverse-complement-section', 'primitives-panel', 'overhang-orient-panel', 'move-rotate-panel', 'extrude-panel', 'deform-panel', 'strand-hist-section', 'groups-panel'],
   visualization: ['representation-modes-section', 'view-volumes-section', 'coloring-options-section', 'repr-options-section', 'right-view-actions', 'right-multi-view', 'right-multi-overlay'],
   clustering: ['cluster-panel', 'joints-panel'],
   overhangs: ['overhang-panel', 'overhang-connections-section', 'assembly-overhang-panel', 'assembly-oconn-panel', 'strand-anim-panel'],
@@ -63,10 +65,9 @@ function buildAddedSections(document) {
   return { representations, actionsBody, actions, multiView, multiOverlay }
 }
 
-export function initRightSidebarTabs({ document, storage = globalThis.localStorage } = {}) {
+export function initRightSidebarTabs({ document, storage = globalThis.localStorage, getAvailableWidth = null } = {}) {
   const panel = document?.getElementById('right-panel')
   const strip = document?.getElementById('right-tab-strip')
-  const toggle = document?.getElementById('right-tab-toggle')
   if (!panel || !strip) return null
 
   const added = buildAddedSections(document)
@@ -86,76 +87,36 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
     }
   }
 
-  const buttons = [...strip.querySelectorAll('.right-tab-btn')]
-  const tabs = buttons.map(button => button.dataset.tab)
   const changeListeners = new Set()
-  let activeTab = 'properties'
-  let collapsed = false
-  try {
-    const raw = storage?.getItem('nadoc.rightSidebar.v1')
-    const saved = raw?.startsWith('{') ? JSON.parse(raw) : { activeTab: raw }
-    if (tabs.includes(saved?.activeTab)) activeTab = saved.activeTab
-    if (typeof saved?.collapsed === 'boolean') collapsed = saved.collapsed
-  } catch { /* storage may be unavailable */ }
-  // localStorage is shared by every NADOC tab. A part editor opened from an
-  // assembly therefore inherits `activeTab: assembly`, even though its Assembly
-  // button is correctly unavailable. Never render a hidden mode-only tab: fall
-  // back to the canonical part-mode Properties view. Entering assembly mode later
-  // calls setAssemblyMode(true), which explicitly opens Assembly again.
-  const restoredButton = buttons.find(button => button.dataset.tab === activeTab)
-  if (restoredButton?.hidden) activeTab = 'properties'
-
-  function persist() {
-    try { storage?.setItem('nadoc.rightSidebar.v1', JSON.stringify({ activeTab, collapsed })) } catch { /* storage may be unavailable */ }
-  }
-
-  function render() {
-    const shut = collapsed || panel.classList.contains('locked-inactive')
-    panel.classList.toggle('hidden', shut)
-    for (const button of buttons) button.classList.toggle('active', button.dataset.tab === activeTab && !shut)
-    for (const name of tabs) {
-      const pane = document.getElementById(`right-tab-content-${name}`)
-      if (pane) pane.hidden = name !== activeTab
-    }
-    if (toggle) {
-      toggle.textContent = shut ? '◀' : '▶'
-      toggle.title = shut ? 'Show sidebar' : 'Hide sidebar'
-    }
-    for (const listener of changeListeners) listener({ activeTab, collapsed: shut })
-  }
-
-  function select(tab) {
-    if (!tabs.includes(tab)) return
-    if (tab === activeTab && !collapsed) collapsed = true
-    else { activeTab = tab; collapsed = false }
-    persist()
-    render()
-  }
-
-  // Tool-driven navigation must reveal a tab without inheriting the tab button's
-  // click-again-to-collapse behaviour.  Panels such as Extrude use this when they
-  // become active so their controls are always visible.
-  function open(tab) {
-    if (!tabs.includes(tab)) return
-    activeTab = tab
-    collapsed = false
-    persist()
-    render()
-  }
-
-  function setAssemblyMode(enabled) {
-    const assemblyButton = buttons.find(button => button.dataset.tab === 'assembly')
-    if (assemblyButton) assemblyButton.hidden = !enabled
-    if (enabled) open('assembly')
-    else if (activeTab === 'assembly') open('properties')
-  }
-  for (const button of buttons) button.addEventListener('click', () => select(button.dataset.tab))
-  toggle?.addEventListener('click', () => {
-    collapsed = !collapsed
-    persist()
-    render()
+  const stack = initSidebarStack({
+    side: 'right', document, storage, getAvailableWidth,
+    labels: { assembly: 'Assembly', properties: 'Properties', visualization: 'Visualization', clustering: 'Clustering', overhangs: 'Overhangs' },
+    panePrefix: 'right-tab-content-', defaultTab: 'properties',
+    storageKey: 'nadoc.rightSidebar.v2', legacyKeys: ['nadoc.rightSidebar.v1'],
+    onChange(detail) { for (const listener of changeListeners) listener(detail) },
   })
-  render()
+  function setAssemblyMode(enabled) {
+    const button = strip.querySelector('[data-tab="assembly"]')
+    if (button) button.hidden = !enabled
+    if (enabled) stack.selectTab('assembly')
+    else {
+      for (const item of stack.getInstances()) if (item.type === 'assembly') stack.close(item.id)
+      if (stack.getActiveTab() === 'assembly') stack.selectTab('properties')
+    }
+  }
+
+  // These contextual tools previously lived outside the tab panes. Keep them
+  // in Properties and reveal that column when a tool explicitly becomes visible.
+  const contextual = ['primitives-panel', 'overhang-orient-panel'].map(id => document.getElementById(id)).filter(Boolean)
+  const visible = new Map(contextual.map(node => [node, node.style.display !== 'none']))
+  const toolObserver = new MutationObserver(() => {
+    for (const node of contextual) {
+      const shown = node.style.display !== 'none'
+      if (shown && !visible.get(node)) stack.selectTab('properties')
+      visible.set(node, shown)
+    }
+  })
+  for (const node of contextual) toolObserver.observe(node, { attributes: true, attributeFilter: ['style'] })
 
   const updateRepresentation = () => {
     for (const button of document.querySelectorAll('.right-repr-btn')) {
@@ -171,13 +132,11 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
   updateRepresentation()
 
   return {
-    select, open, setAssemblyMode, render,
-    getActiveTab: () => activeTab,
-    isCollapsed: () => collapsed,
+    ...stack, select: stack.setActiveTab, open: stack.selectTab, setAssemblyMode, render: stack.refresh,
     onChange(listener) {
       changeListeners.add(listener)
       return () => changeListeners.delete(listener)
     },
-    dispose() { changeListeners.clear(); observer.disconnect() },
+    dispose() { changeListeners.clear(); observer.disconnect(); toolObserver.disconnect(); stack.dispose() },
   }
 }

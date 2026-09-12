@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  DISPLAY_HOME_TAB,
+  DISPLAY_HOME_TAB, sidebarPanelVisible,
   preservesDisplays,
   shouldTearDownDisplays,
   shouldStopLiveSession,
@@ -83,4 +83,10 @@ describe('display_tab_policy', () => {
     expect(shouldTearDownDisplays('photo')).toBe(false)
     expect(shouldResumeDisplays('photo')).toBe(false)
   })
+})
+
+it('keeps simulation controls active when a different open sidebar has focus', () => {
+  expect(sidebarPanelVisible({ activeTab: 'photo', openPanels: ['dynamics', 'photo'] }, 'dynamics')).toBe(true)
+  expect(sidebarPanelVisible({ activeTab: 'photo', openPanels: ['dynamics'], collapsed: true }, 'dynamics')).toBe(false)
+  expect(sidebarPanelVisible({ activeTab: 'dynamics' }, 'dynamics')).toBe(true)
 })

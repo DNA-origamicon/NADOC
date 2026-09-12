@@ -19,7 +19,8 @@ test('assembly cylinders render a real photomode key-shadow map', async ({ page 
     return state?.assemblyActive && state.currentAssembly?.instances?.length === 20
   }, null, { timeout: 45_000 })
 
-  await page.locator('#photo-tab-btn').click()
+  if (!await page.locator('#photo-lighting-enabled').isVisible()) await page.locator('#photo-tab-btn').click()
+  await page.locator('#photo-lighting-enabled').check()
   await page.locator('#photo-studio-environment').uncheck()
   // A smaller map keeps the software-WebGL regression fast while exercising
   // exactly the same custom depth shaders and shadow-camera path.

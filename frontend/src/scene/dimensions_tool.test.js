@@ -79,7 +79,7 @@ function setup({ assembly = false } = {}) {
   const rightSidebar = {
     open: vi.fn(),
     onChange(fn) { sidebarListener = fn; return () => { sidebarListener = null } },
-    change(activeTab) { sidebarListener?.({ activeTab, collapsed: false }) },
+    change(activeTab, openPanels) { sidebarListener?.({ activeTab, openPanels, collapsed: false }) },
   }
   const controls = { target: new THREE.Vector3(), enabled: true }
   const box = new THREE.Box3(new THREE.Vector3(-5, -2, -1), new THREE.Vector3(5, 2, 1))
@@ -169,7 +169,10 @@ describe('Dimensions tool', () => {
     tool.open()
     selectionManager.fire([bead(0, 0, 0, 4), bead(3, 4, 0, 9)])
     expect(document.getElementById('dimensions-record').disabled).toBe(false)
-    rightSidebar.change('visualization')
+    rightSidebar.change('visualization', ['properties', 'visualization'])
+    expect(tool.isActive()).toBe(true)
+    expect(document.getElementById('dimensions-record').disabled).toBe(false)
+    rightSidebar.change('visualization', ['visualization'])
     expect(tool.isActive()).toBe(false)
     expect(document.getElementById('dimensions-body').style.display).toBe('none')
     expect(document.getElementById('dimensions-record').disabled).toBe(true)

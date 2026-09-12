@@ -537,21 +537,23 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 4px;
+      padding: 38px 0 6px;
+      box-sizing: border-box;
       z-index: 11;
     }
     .left-tab-btn {
       writing-mode: vertical-rl;
       transform: rotate(180deg);
       width: 30px;
-      padding: 10px 5px;
+      padding: 8px 5px;
       background: #161b22;
       border: 1px solid #30363d;
       border-radius: 6px;
       color: #c9d1d9;
-      font-size: var(--text-xs);
+      font-size: 11px;
       font-weight: 600;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
       cursor: pointer;
       user-select: none;
@@ -604,6 +606,8 @@
     }
     #left-tab-toggle:disabled { opacity: 0.3; cursor: default; }
     #left-panel .tab-content[hidden] { display: none; }
+    #photo-settings { border: 0; padding: 0; margin: 0; min-width: 0; }
+    #photo-settings:disabled { opacity: .55; }
 
     /* Left-sidebar cards use several neighboring gray surfaces, so the legacy
        muted ramp is too faint at the panel's compact type sizes.  Keep accent
@@ -6901,9 +6905,10 @@
         <div id="tab-content-photo" class="tab-content" hidden>
 
           <div style="display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid #21262d">
-            <button id="photo-exit-btn" class="pxr-btn" style="flex:1">← Exit Photo Mode</button>
+            <label style="display:flex;align-items:center;gap:8px"><input id="photo-lighting-enabled" type="checkbox">Enable lighting &amp; appearance</label>
           </div>
 
+          <fieldset id="photo-settings" disabled>
           <div id="photo-status" class="pxr-note" style="padding:6px 14px;border-bottom:1px solid #21262d">
             inactive
           </div>
@@ -7280,6 +7285,7 @@
 
           </div>
 
+        </fieldset>
         </div><!-- /#tab-content-photo -->
 
         <!-- Plates and tubes — 96-well plate layout + IDT tube list -->
@@ -7293,16 +7299,14 @@
 
       </div><!-- /#left-panel -->
 
-      <!-- Vertical tab strip — always visible, even when #left-panel is collapsed.
-           Click an inactive tab to expand+switch; click the active tab to collapse.
-           The toggle arrow at the top is a redundant collapse/expand affordance
-           that doesn't change which tab is active. -->
+      <!-- Section shortcuts remain visible when controls are hidden.
+           Each section expands independently; the arrow hides all controls. -->
       <div id="left-tab-strip">
         <button id="left-tab-toggle" title="Hide sidebar">◀</button>
         <button class="left-tab-btn active" data-tab="feature-log" title="Feature Log">Feature Log</button>
         <button class="left-tab-btn"        data-tab="dynamics"     title="Simulations">Simulations</button>
         <button class="left-tab-btn"        data-tab="scene"        title="Animations — camera poses + animation playback">Animations</button>
-        <button class="left-tab-btn"        data-tab="photo"        title="Photo mode — figure-quality render and export" id="photo-tab-btn" data-test="photo-tab-btn">Photomode</button>
+        <button class="left-tab-btn"        data-tab="photo"        title="Lighting &amp; appearance controls" id="photo-tab-btn" data-test="photo-tab-btn">Appearance</button>
         <button class="left-tab-btn"        data-tab="plates"       title="Plates and tubes — 96-well plate layout + IDT tube list">Plates &amp; tubes</button>
         <!-- Drag-to-resize the sidebar; lives on the tab strip's outer edge
              (the border with the 3D viewport) so it's easy to find. -->

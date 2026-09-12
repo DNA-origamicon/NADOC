@@ -362,7 +362,7 @@ export function initOxdnaLive({
   // exempt even though it now preserves painted displays — a live stream writes bead
   // positions every frame and would fight animation playback for the same beads.
   window.addEventListener('nadoc:left-tab-change', (e) => {
-    if (shouldStopLiveSession(e.detail?.activeTab) && _on) stop()
+    if (!e.detail?.navigationOnly && shouldStopLiveSession(e.detail?.activeTab) && _on) stop()
   })
   window.addEventListener('nadoc:workspace-path-change', () => { if (_on) stop() })
 

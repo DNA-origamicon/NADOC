@@ -359,7 +359,7 @@ export function initForcesCard({
   // card where it closes on leave (oxDNA), else detach directly — never re-attach.
   if (gizmo) {
     window.addEventListener('nadoc:left-tab-change', (e) => {
-      if (e.detail?.activeTab !== 'dynamics') {
+      if (!e.detail?.navigationOnly && e.detail?.activeTab !== 'dynamics') {
         _jobFieldActive = false
         if (V.closeOnLeaveTab && _open) _close_()
         else gizmo.detach?.()

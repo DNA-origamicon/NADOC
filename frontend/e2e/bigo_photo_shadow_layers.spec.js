@@ -27,7 +27,8 @@ async function openBigO(page, kind) {
     store.setState({ coloringMode: 'strand' })
   })
   await page.waitForTimeout(750)
-  await page.locator('#photo-tab-btn').click()
+  if (!await page.locator('#photo-lighting-enabled').isVisible()) await page.locator('#photo-tab-btn').click()
+  await page.locator('#photo-lighting-enabled').check()
   await page.waitForFunction(() => window.__photoMode?.getDiagnostics?.().active)
   await page.evaluate(() => {
     const p = window.__photoMode

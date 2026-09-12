@@ -1,0 +1,67 @@
+import { test, expect } from '@playwright/test'
+import { loadScaffoldedPart, trackConsoleErrors } from './helpers/scene_harness.js'
+
+const control = (column, id) => column.locator(`#${id}, [data-sidebar-source-id="${id}"]`)
+
+test('stacked copies share controls but retain separate widths and scroll positions', async ({ page }, testInfo) => {
+  test.setTimeout(120_000)
+  await page.setViewportSize({ width: 2200, height: 1000 })
+  const errors = trackConsoleErrors(page)
+  await loadScaffoldedPart(page, { doc: '__e2e__sidebar-stack', name: 'sidebar-stack' })
+  await page.keyboard.press('f')
+  await page.locator('#photo-tab-btn').click()
+  await page.locator('#photo-tab-btn').click()
+  const photos = page.locator('.sidebar-column[data-panel-type="photo"]')
+  await expect(photos).toHaveCount(2)
+  const first = photos.nth(0), second = photos.nth(1)
+  await control(first, 'photo-lighting-enabled').check()
+  await expect(control(second, 'photo-lighting-enabled')).toBeChecked()
+  await control(second, 'photo-key-intensity').hover()
+  await control(second, 'photo-key-intensity').focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(control(first, 'photo-key-intensity')).toHaveValue('2.05')
+  await expect.poll(() => page.evaluate(() => window.__photoMode.getSettings().keyIntensity)).toBe(2.05)
+
+  // Native wheel scrolling affects only the view under the pointer.
+  await first.locator('.sidebar-column-body').hover({ position: { x: 100, y: 100 } })
+  await page.mouse.wheel(0, 450)
+  const scroll = await first.locator('.sidebar-column-body').evaluate(e => e.scrollTop)
+  await second.locator('.sidebar-column-body').hover({ position: { x: 100, y: 100 } })
+  await page.mouse.wheel(0, 800)
+  await expect.poll(() => first.locator('.sidebar-column-body').evaluate(e => e.scrollTop)).toBe(scroll)
+
+  const widthsBefore = await photos.evaluateAll(elements => elements.map(e => e.getBoundingClientRect().width))
+  const handle = await first.locator('.sidebar-column-resize').boundingBox()
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + 100)
+  await page.mouse.down(); await page.mouse.move(handle.x + 65, handle.y + 100); await page.mouse.up()
+  const widthsAfter = await photos.evaluateAll(elements => elements.map(e => e.getBoundingClientRect().width))
+  expect(widthsAfter[0]).toBeGreaterThan(widthsBefore[0])
+  expect(widthsAfter[1]).toBe(widthsBefore[1])
+
+  await page.locator('[data-tab="scene"].left-tab-btn').click()
+  await expect(page.locator('#animation-select option:checked')).toHaveText('animation 1')
+  await expect(page.locator('#animation-select option')).toHaveCount(1)
+  await page.locator('[data-tab="dynamics"].left-tab-btn').click()
+  await page.screenshot({ path: testInfo.outputPath('sidebar-stack.png') })
+  const count = await page.locator('.sidebar-column').count()
+  await page.locator('#photo-tab-btn').click()
+  await expect(page.locator('#left-tab-strip .sidebar-space-notice')).toContainText('No room')
+  await expect(page.locator('.sidebar-column')).toHaveCount(count)
+  const bounds = await page.evaluate(() => {
+    const rect = id => document.getElementById(id).getBoundingClientRect()
+    return { stack: rect('left-panel').right, strip: rect('left-tab-strip').left, viewport: rect('viewport-container').width, right: rect('right-panel').right, width: innerWidth }
+  })
+  expect(Math.abs(bounds.stack - bounds.strip)).toBeLessThan(2)
+  expect(bounds.viewport).toBeGreaterThanOrEqual(319)
+  expect(bounds.right).toBeLessThanOrEqual(bounds.width)
+
+  await first.locator('.sidebar-close').click()
+  await expect(photos).toHaveCount(1)
+  expect(await page.evaluate(() => window.__photoMode.isActive())).toBe(true)
+  await page.locator('#left-tab-toggle').click()
+  await page.locator('#left-tab-toggle').click()
+  expect(await page.evaluate(() => window.__photoMode.isActive())).toBe(true)
+  await control(photos.first(), 'photo-lighting-enabled').uncheck()
+  expect(await page.evaluate(() => window.__photoMode.isActive())).toBe(false)
+  expect(errors, errors.join('\n')).toEqual([])
+})

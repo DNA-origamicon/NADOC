@@ -78,3 +78,9 @@ export function displayTabIds() {
 export function liveTabIds() {
   return [DISPLAY_HOME_TAB, ...LIVE_PRESERVING_TABS]
 }
+
+/** Panel visibility is independent of scene/display ownership. Legacy events have one tab. */
+export function sidebarPanelVisible(detail, id) {
+  return !detail?.collapsed && (Array.isArray(detail?.openPanels)
+    ? detail.openPanels.includes(id) : detail?.activeTab === id)
+}

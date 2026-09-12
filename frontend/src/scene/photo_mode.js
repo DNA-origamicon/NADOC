@@ -1563,7 +1563,7 @@ export function createPhotoMode(sceneCtx) {
 // ── Tab orchestration ────────────────────────────────────────────────────────
 
 /**
- * Wire the "Exp. Photomode" left-sidebar tab: construct the renderer + panel,
+ * Wire explicit lighting activation: construct the renderer + panel,
  * hide the editor gizmos on entry, restore them on exit, and keep the occlusion
  * bake in step with geometry changes.
  *
@@ -1592,13 +1592,7 @@ export function initPhotoMode({
   function enter() {
     if (mode.isActive()) return
     if (!_panel) _panel = initPhotoPanel(mode, {
-      onExit: () => {
-        exit()
-        // The button is labelled "Exit Photo Mode", so leave the Photo pane as
-        // well as removing its render override. The sidebar is initialized just
-        // after this controller; the lazy lookup avoids a construction cycle.
-        window.__leftSidebar?.selectTab?.('feature-log')
-      },
+      onExit: exit,
       store, player, exportPhotoVideo, trajectoryKeyframes,
     })
 
@@ -1622,6 +1616,7 @@ export function initPhotoMode({
 
     mode.activate()
     _panel.onEnter()
+    syncLightingControl()
   }
 
   function exit() {
@@ -1638,7 +1633,22 @@ export function initPhotoMode({
     assemblyJointRenderer?.setVisible?.(true)
 
     _panel?.onExit()
+    syncLightingControl()
   }
+
+  function syncLightingControl() {
+    const active = mode.isActive()
+    const control = document.getElementById('photo-lighting-enabled')
+    if (control) control.checked = active
+    const settings = document.getElementById('photo-settings')
+    if (settings) settings.disabled = !active
+    window.dispatchEvent(new CustomEvent('nadoc:lighting-change', { detail: { active } }))
+  }
+  document.getElementById('photo-lighting-enabled')?.addEventListener('change', event => {
+    if (event.target.checked) enter()
+    else exit()
+  })
+  syncLightingControl()
 
   // ── Keeping the rig in step with the geometry ──────────────────────────────
   // The camera is irrelevant (the shadow map re-renders every frame anyway) —

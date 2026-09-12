@@ -1,3 +1,4 @@
+import { sidebarPanelVisible } from './display_tab_policy.js'
 /**
  * simulate_jobs.js — the unified simulation job list + master Job status card
  * (Phase C of the simulate-panel overhaul).
@@ -1163,7 +1164,7 @@ export function initSimulateJobs({
 
   // ── lifecycle ─────────────────────────────────────────────────────────────
   window.addEventListener('nadoc:left-tab-change', (e) => {
-    _dynamicsActive = e.detail?.activeTab === 'dynamics' && !e.detail?.collapsed
+    _dynamicsActive = sidebarPanelVisible(e.detail, 'dynamics')
     if (_dynamicsActive) _fetch()
     else if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
   })

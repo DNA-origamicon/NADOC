@@ -1074,6 +1074,23 @@ describe('initPhotoMode', () => {
     deps = { store, sceneCtx: ctx, ...gizmos }
   })
 
+  it('requires the explicit lighting switch and disables settings on exit', () => {
+    document.body.innerHTML = '<input id="photo-lighting-enabled" type="checkbox"><fieldset id="photo-settings"></fieldset>'
+    const tab = initPhotoMode(deps)
+    const input = document.getElementById('photo-lighting-enabled')
+    const settings = document.getElementById('photo-settings')
+    expect(tab.mode.isActive()).toBe(false)
+    expect(settings.disabled).toBe(true)
+    input.checked = true
+    input.dispatchEvent(new Event('change'))
+    expect(tab.mode.isActive()).toBe(true)
+    expect(settings.disabled).toBe(false)
+    input.checked = false
+    input.dispatchEvent(new Event('change'))
+    expect(tab.mode.isActive()).toBe(false)
+    expect(settings.disabled).toBe(true)
+  })
+
   it('enter() activates the mode and suppresses the editor gizmos', () => {
     const tab = initPhotoMode(deps)
     tab.enter()

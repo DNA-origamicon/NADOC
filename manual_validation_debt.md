@@ -252,3 +252,33 @@ section — open only the one being processed.
 - **MV-OCONN-3** — Sequence preview after a live drag-resize. Load a design with an overhang, **drag-resize the overhang longer in 3D**, then open the Overhang Connections section and select it as side A with a direct variant. Verify: (a) the `.oconn-seq-preview` line under the seq input pads with undefined `N` bases out to the NEW backing-domain length (`overhangDomainLength` = `abs(end_bp-start_bp)+1`, the authoritative length after a drag); (b) pairing colours are anchored at the **attach** sub-domain with excess at the free tip (green = complementary, amber = mismatch/N, grey = excess/undefined); (c) the binding-details preview anchors at the binding's STORED `sub_domain_a_id`/`sub_domain_b_id`, not a guessed polarity. Pure helpers are pinned (`design_queries.test.js` 53, `.seqpreview` 2); the drag-then-open gesture was never checked against a real backend. See [[project_overhang_connections_panel]].
 - **MV-AUTOREFINE-FT** — Autorefine **fine-tune pass** live progress + result block on a REAL GPU run (it is always-on and has never been seen against a real engine). In the Simulate section select oxDNA, load a square-lattice bundle (e.g. a 3×6 SQ design; the seeded `3x6x200_test.nadoc` is the cheap fixture), click **✦ Autorefine** and let it converge. Verify: (a) after the uniform secant converges the panel switches to fine-tune progress and shows the `ft_phase` sequence baseline → candidates → edit with per-edit accept/revert readout (the poll loop reads `phase="finetune"`); (b) the result panel's `_finetuneBlock` renders edits-kept + worst-deviation before→after; (c) on completion the toast reads "Autorefine finetuned skips applied" and the **explicit non-uniform** pattern lands in the design (Feature Log entry is revertable/seekable, and the skip marks are NOT evenly spaced); (d) on a homogeneous design it keeps **0 edits** and does no harm; (e) the run's per-iteration jobs are tagged `[AR]`, selectable and stoppable, and the deviation-map toggle still paints. Backend is pinned only against mock/stub engines (`test_skip_finetune.py` 10, `test_skip_twist_tuning.py` 22) and the 4 e2e specs are mocked (`frontend/e2e/autorefine_button.spec.js`) — **no part of this has ever run on a real GPU pass**, and `identify_finetune_edits` still ranks on an unsigned `dev_max` (LESSONS A6 violation, logged in `project_tech_debt`), so a real run may legitimately pick the wrong sign. Needs a CUDA oxDNA build + ~hours. See [[project_regional_autorefine]] (open defect 2) and `project_skip_twist_curvature_sweep.md` (exp34 Gate 2 was designed as this validation and never resolved it).
 - **MV-EDITORDOC** — Cadnano editor **multi-document** path (per-doc `X-NADOC-Doc` routing + independent undo stacks). Pushed here 2026-07-31 by `/audit-debt` TD-03: probing confirmed the editor's only e2e coverage is `cadnano_sliceview_positions.spec.js:86` and `autobreak_edges.spec.js:194,257` — **2 specs, 3 `goto('/cadnano-editor')` calls, none with `?doc=`** — so every automated run exercises only the backend `__default__` document. That is exactly where the undo/redo header bug (`api.js:691`) lived. Manual op: from the 3D app open **two different documents** (each main-app tab mints its own `?doc=`), open the editor from each via `btn-open-editor` (named window per doc, so you should get two distinct editor tabs, not one focused). In editor A make an edit (nick a strand); in editor B make a different edit. Verify: (a) B's pathview does not show A's edit and vice-versa; (b) `Ctrl+Z` in A undoes only A's edit — B's stays; (c) neither tab throws *"Feature index N out of range (log has 1 entries)"* (the symptom of a mutation that lost `docHeaders()`); (d) the Feature Log panel in each editor lists only its own doc's ops; (e) a *standalone* editor tab opened directly at `/cadnano-editor.html` with no `?doc=` still lands on `__default__` and is unaffected by A/B (that asymmetry is deliberate — `shared/doc_id.js:16`). Fixture: any two `.nadoc` from `workspace/`. See `.claude/rules/cadnano-editor.md` → *Doc scoping* / *Two header conventions*.
+
+
+## MV-PANELS-1 — Sidebar stack (layout accepted; broader real-file checks remain)
+
+**SETUP:** Open any part, optionally `small_plate.nadoc` as a real-file example.
+Do not save fixture changes. See `docs/expandable_panels_implementation_plan.md`.
+
+**MAIN CASES:** Click Appearance twice to open two shared-state columns. Enable
+lighting and change a setting in either copy; both must reflect it. Scroll to
+different parts of the controls, drag one width, then close one copy with its X.
+Hide/reopen the stack; lighting must stay on. Open Simulations and Animation;
+check the rail remains immediately to the right of the last column. Repeat with
+right-side Visualization copies; its rail stays immediately left of the stack.
+Verify matching strip/header colors on both sides and neutral Properties/Plates.
+
+**EDGE CASES:** Fill available width, attempt another panel, shrink the window,
+resize individual right columns, use keyboard navigation/resizing, reload saved layout,
+and repeat with an assembly. Check duplicate Feature log, Animation, Simulations,
+and Plates controls as well as Appearance. No copy should execute an action twice.
+
+**PASS CRITERIA:** Shared settings/actions, separate scrolling/widths, reachable X
+buttons, restrained purple/blue/green/yellow header accents, neutral Plates, no
+right-sidebar overlap, no scene changes from hiding controls.
+
+**WATCH FOR:** Native input focus, drag controls, dynamic job lists and plot/canvas
+widgets in duplicate views. The generated-design browser regression exercises
+Appearance synchronization, width/scroll independence, capacity, closing and
+lighting persistence; full real-file engine/plot coverage remains user validation.
+Animation geometry ownership and unified exports remain stages 2–3. Detached
+browser controls were assessed but are not implemented.

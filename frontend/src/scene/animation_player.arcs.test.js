@@ -91,6 +91,20 @@ function makeHarness({ design, clusterTransforms = [], cameraPoses = [] } = {}) 
 }
 
 describe('independent pose + spin camera channels', () => {
+  it('currently reapplies authored geometry even for a camera-only keyframe (visualization audit)', async () => {
+    const h = makeHarness({ design: design(3) })
+    await h.player.play({ id: 'camera-only', keyframes: [kf({ spin_axis: 'y', spin_rotations: 1 })] })
+    h.player.pause()
+    h.calls.lerp.length = 0
+    h.player.seekTo(0.5)
+    // Characterization of the gap: these are backend design positions, not a
+    // snapshot of the currently displayed simulation deformation.
+    expect(h.calls.lerp.length).toBeGreaterThan(0)
+    expect(h.calls.lerp.at(-1).from.posMap.get('h0:0:fwd').z).toBe(3)
+    expect(h.calls.lerp.at(-1).to.posMap.get('h0:0:fwd').z).toBe(3)
+    h.player.stop()
+  })
+
   it('uses the selected pose as the spin perspective instead of clearing/ignoring it', async () => {
     const pose = { id: 'perspective', position: [10, 0, 0], target: [0, 0, 0], up: [0, 1, 0], fov: 30 }
     const h = makeHarness({ design: design(0), cameraPoses: [pose] })

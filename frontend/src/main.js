@@ -1699,6 +1699,7 @@ async function main() {
   // halo too so it never lingers in other tabs, and put it back on return (the anchors
   // survive the tab switch, so the halo must too).
   window.addEventListener('nadoc:left-tab-change', (e) => {
+    if (e.detail?.navigationOnly) return
     if (e.detail?.activeTab !== 'dynamics') anchorGlow.clear()
     else _refreshAnchorGlow()
   })
@@ -1908,7 +1909,7 @@ async function main() {
     },
   })
   const _refreshSimPolicy = () => {
-    if (store.getState().simulationTabActive) simulateLaunch?.refresh?.()
+    if (store.getState().simulationControlsOpen) simulateLaunch?.refresh?.()
   }
   window.addEventListener('nadoc:workspace-path-change', _refreshSimPolicy)
   window.addEventListener('nadoc:design-changed', _refreshSimPolicy)
@@ -5704,14 +5705,9 @@ async function main() {
   })
 
 
-  // ── Left panel tab controller ────────────────────────────────────────────────
-  // Three tabs (Feature Log / Dynamics / Scene) on a vertical strip that is
-  // always visible. Click an inactive tab → expand + switch; click the active
-  // tab while expanded → collapse; switch between tabs while expanded → swap
-  // content without changing collapsed state. The toggle arrow at the top of
-  // the strip is a dedicated collapse/expand affordance that mirrors the
-  // active-tab click. Persists (activeTab, collapsed) to localStorage so the
-  // sidebar restores its prior state across reloads.
+  // ── Expandable sidebar controls ────────────────────────────────────────────
+  // Expandable sidebar sections share scene state. Their visibility is independent
+  // of lighting and playback; explicit controls own those lifecycle transitions.
   initPlatesTab({ api, designRenderer, selectionManager, store })
 
   // Staple groups used to exist only in frontend state. Persist sidebar edits
@@ -5758,11 +5754,11 @@ async function main() {
     pinToFeature: () => new Promise((resolve) => {
       const fl = _partFeatureLogPanel
       if (!fl?.enterPickMode) { resolve(null); return }
-      window.__leftSidebar?.setActiveTab?.('feature-log')
+      window.__leftSidebar?.selectTab?.('feature-log')
       fl.enterPickMode((idx) => {
         // Switch back to the Scene tab so the user lands back on the
         // animation panel they were editing.
-        window.__leftSidebar?.setActiveTab?.('scene')
+        window.__leftSidebar?.selectTab?.('scene')
         resolve(idx)
       })
     }),

@@ -19,7 +19,8 @@ const _initialState = {
 
   /** True only while the expanded Simulations tab is active. Reference backdrop
    * geometry is forcibly hidden for this view without changing the user's View toggle. */
-  simulationTabActive: false,
+  simulationTabActive: false, // Legacy scene policy; panel visibility no longer writes this.
+  simulationControlsOpen: false,
 
   /**
    * True when the active design was imported from a caDNAno file and has not yet

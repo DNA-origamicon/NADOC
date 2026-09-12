@@ -3576,30 +3576,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   }
 
-  // Leaving the Dynamics tab stops the live DISPLAY (it deforms the model, which
-  // shouldn't persist off-tab) but KEEPS the background prewarm socket warm, so
-  // returning + re-toggling is instant.  Prewarm now spans tabs (Option 1); it is
-  // torn down only on Display-MD handoff (_startMdDisplay) or app teardown.
-  // The Photo tab is EXEMPT: it renders what's on screen, so the MD frame the user
-  // picked has to still be there when the photo renderer draws it.
-  document.querySelectorAll('#left-tab-strip .left-tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      setTimeout(() => {
-        if (displayToggle?.checked && !_isDisplayTabVisible()) {
-          _stopMdDisplay('Native positions restored')  // also resumes prewarm
-        } else if (!displayToggle?.checked) {
-          _startMdPrewarm()
-        }
-      }, 0)
-    })
-  })
-
   window.addEventListener('nadoc:left-tab-change', evt => {
     const tab = evt.detail?.activeTab
     // The LIVE "Display MD" socket, not the painted trajectory scrub — so this uses the
     // stricter predicate and still stops on the Animations tab, where a stream would
     // fight animation playback for the same beads.
-    if (shouldStopLiveSession(tab)) {
+    if (!evt.detail?.navigationOnly && shouldStopLiveSession(tab)) {
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')  // resumes prewarm
     } else if (shouldResumeDisplays(tab) && !displayToggle?.checked) {
       _startMdPrewarm()
