@@ -401,6 +401,16 @@ D4 and held-out C remain gated, and boundary stage E remains incomplete at 0/3 p
 compute products. The signed-off machine-readable decision is
 `reassessment_2026-09-10T173737-0600.json` in the Alpine continuation evidence root.
 
+Alpine accounting on 2026-09-12 confirmed that all seven submitted tasks completed
+normally with exit code `0:0`; no task was cancelled, preempted, or interrupted. The
+remaining three D1 cases passed with zero imaginary modes and valid Cartesian Hessians,
+so `gates/frequency_cohort.json` passed D1. The independently queued cis-syn-II reused
+core also passed with 102/102 modes, zero imaginary modes, and a valid Hessian. A
+hash-pinned reconciliation of that result with the four retained matching core audits
+passed D2 in `gates/reused_core_frequency_inventory.json`. The handoff now reports
+`ready_D3`. Further submission remains held until the charge, nonbonded, and justified
+torsion target scope is hash-pinned.
+
 ## Verification of this review
 
 Targeted monitor tests exercise input/source corruption, interrupted execution, stage
