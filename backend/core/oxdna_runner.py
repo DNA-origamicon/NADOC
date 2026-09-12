@@ -687,6 +687,8 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
     Raises FileNotFoundError if the snapshot or a relaxed conf is missing.
     """
     job = OxdnaJob.load(job_id, workspace_dir)
+    from backend.core.peg_seed_source import require_supported_namd_source
+    require_supported_namd_source(job)
     jd = job.job_dir(workspace_dir)
     design = _load_snapshot_design(jd)
     if design is None:
@@ -720,46 +722,30 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
     # is irrelevant for a boxed MD seed, but the exported PDB's 8-char coordinate
     # fields overflow past ~±1000 Å — the file silently corrupts and the downstream
     # ENM base-ring scan finds no atoms.  Translate every atom by the model centroid.
-    deposition_surface = None
-    if (job.run_config or {}).get("kind") == "surface_deposition":
-        raw_surface = (job.run_config or {}).get("surface") or {}
-        if raw_surface.get("position_nm") is not None and len(raw_surface.get("dir") or []) == 3:
-            deposition_surface = {
-                "dir": [float(v) for v in raw_surface["dir"]],
-                "position_nm": float(raw_surface["position_nm"]),
-                "stiff": float(raw_surface.get("stiff", 0.0)),
-                "source": "oxdna_surface_deposition",
-            }
+    from backend.core.surface_transforms import deposition_surface_descriptor
+    deposition_surface = deposition_surface_descriptor(job.run_config)
 
     if model.atoms:
         import numpy as _np
+        from backend.core.surface_transforms import (
+            RigidTransform, surface_frame, transform_surface,
+        )
 
         coords = _np.asarray([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
         centroid = coords.mean(axis=0)
-        coords -= centroid
+        recenter = RigidTransform(translation_nm=-centroid)
+        coords = recenter.points(coords)
         for a, (x, y, z) in zip(model.atoms, coords):
             a.x, a.y, a.z = float(x), float(y), float(z)
         if deposition_surface is not None:
-            # Plane equation is n.r = position. Translating r' = r-centroid gives
-            # n.r' = position-n.centroid. This preserves DNA/surface separation while
-            # keeping the combined deposited assembly close to the origin.
-            normal = _np.asarray(deposition_surface["dir"], dtype=float)
-            normal /= _np.linalg.norm(normal)
-            deposition_surface["dir"] = normal.tolist()
-            axis = int(_np.argmax(_np.abs(normal)))
-            plane_point = _np.zeros(3, dtype=float)
-            # position_nm is the UI/world coordinate along the selected Cartesian axis,
-            # not the signed plane scalar (important for -x/-y/-z normals).
-            plane_point[axis] = deposition_surface["position_nm"]
-            plane_point -= centroid
-            deposition_surface["position_nm"] = float(plane_point[axis])
-            deposition_surface["plane_point_nm"] = plane_point.tolist()
-            plane_scalar = float(_np.dot(normal, plane_point))
-            # Default pore centre is the projection of the pre-translation DNA COM onto
-            # the plane; after recentering that is simply position*n.
-            deposition_surface["pore_center_nm"] = (
-                normal * plane_scalar
-            ).tolist()
+            deposition_surface = transform_surface(
+                deposition_surface, recenter
+            )
+            # Keep the existing default: pore centered beneath the recentered DNA.
+            if "pore_center_nm" not in deposition_surface:
+                deposition_surface["pore_center_nm"] = surface_frame(
+                    deposition_surface
+                ).project([0., 0., 0.]).tolist()
         # (Geometry sanity — the reconstruction must preserve the CG extent — is
         # enforced inside build_atomistic_model_from_cg_spline, which raises before
         # we get here if the all-atom placer exploded a heavily-deformed seed.)
@@ -785,6 +771,8 @@ def assert_namd_seed_available(job_id: str, workspace_dir: Path) -> None:
     background.  Raises FileNotFoundError with a user-facing message otherwise.
     """
     job = OxdnaJob.load(job_id, workspace_dir)  # FileNotFoundError if unknown
+    from backend.core.peg_seed_source import require_supported_namd_source
+    require_supported_namd_source(job)
     if _load_snapshot_design(job.job_dir(workspace_dir)) is None:
         raise FileNotFoundError(
             f"oxDNA job {job_id} has no design.json snapshot; cannot build a NAMD seed."

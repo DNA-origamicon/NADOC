@@ -322,12 +322,7 @@ def _resolve_live_elements(body):
         field_dir = list(body.field.dir)
     wall_in = None
     if body.surface:
-        wall_in = {
-            "dir": body.surface.dir,
-            "offset_nm": body.surface.offset_nm,
-            "position_nm": body.surface.position_nm,
-            "stiff": body.surface.stiff,
-        }
+        wall_in = body.surface.model_dump(exclude_none=True)
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     surface_anchors = [a.model_dump(by_alias=False) for a in body.surface_anchors]
     return field_in, field_oxdna, field_dir, wall_in, anchors, surface_anchors

@@ -74,10 +74,13 @@ def build_peg_strands(spec, *, origami_cm_oxdna, n_particles_origami, n_strands_
     if not len(cm):
         raise ValueError("This surface workflow requires a DNA probe/design")
     normal, u, v = plane_basis(surface["dir"])
-    wall = float((cm @ normal).min()) - float(surface.get("offset_nm", 0)) * NM_TO_OXDNA
-    if surface.get("position_nm") is not None:
-        from backend.physics.oxdna_interface import wall_position_from_absolute
-        wall = -wall_position_from_absolute(surface["dir"], surface["position_nm"])
+    from backend.physics.oxdna_surface_geometry import resolved_wall
+    from backend.core.surface_transforms import surface_frame
+    resolved = resolved_wall(surface, cm)
+    wall = -resolved["position"]
+    if surface.get("tangent_u") is not None:
+        frame = surface_frame(resolved)
+        u, v = np.asarray(frame.tangent_u), frame.tangent_v
     centroid = cm.mean(axis=0)
     origin = centroid + (wall - centroid @ normal) * normal
     length = params.segments + 1

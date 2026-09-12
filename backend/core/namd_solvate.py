@@ -137,8 +137,16 @@ def _graphene_pdb_atoms(dna_pdb: str, spec: dict) -> list[str]:
     axis = spec.get("surface_axis")
     n = np.asarray(axis_normals.get(axis, spec.get("dir", [0.0, 0.0, 1.0])), dtype=float)
     n /= np.linalg.norm(n)
+    from backend.core.surface_transforms import SurfaceFrame
+    if spec.get("tangent_u") is None:
+        trial = [1., 0., 0.] if abs(n[0]) < .8 else [0., 1., 0.]
+        spec["tangent_u"] = np.cross(n, trial).tolist()
+    frame = SurfaceFrame([0, 0, 0], n, spec["tangent_u"])
+    u, v = np.asarray(frame.tangent_u), frame.tangent_v
     radius = float(spec.get("pore_diameter_nm", 2.1)) / 2.0
     pts = np.asarray(_dna_atom_positions_nm(dna_pdb), dtype=float)
+    from backend.core.surface_periodic import register_graphene_plane
+    register_graphene_plane(spec, pts, n)
     if axis is not None or "pore_center_nm" not in spec:
         if len(pts):
             lo, hi = pts.min(axis=0), pts.max(axis=0)
@@ -164,16 +172,14 @@ def _graphene_pdb_atoms(dna_pdb: str, spec: dict) -> list[str]:
         side = 1.0 if float(np.median(signed)) >= 0 else -1.0
         nearest = float(np.min(side * signed))
         shift = max(0.0, clearance - nearest)
-        center = center - side * n * shift
+        from backend.core.surface_periodic import translate_coated_surface
+        spec["dir"] = n.tolist()
+        translate_coated_surface(spec, -side * n * shift)
+        center = np.asarray(spec["pore_center_nm"])
         spec["atomistic_clearance_shift_nm"] = shift
-        spec["pore_center_nm"] = center.tolist()
-        spec["plane_point_nm"] = center.tolist()
     margin = float(spec.get("sheet_margin_nm", 1.5))
     extent = max(5.0, float(np.ptp(pts, axis=0).max() / 2 + margin)) if len(pts) else 5.0
     extent = max(extent, radius + max(margin, 0.3))
-    trial = np.array([1.0, 0.0, 0.0]) if abs(n[0]) < 0.8 else np.array([0.0, 1.0, 0.0])
-    u = np.cross(n, trial); u /= np.linalg.norm(u)
-    v = np.cross(n, u)
     bond = 0.142  # nm
     dy = np.sqrt(3.0) * bond / 2.0
     atoms: list[str] = []

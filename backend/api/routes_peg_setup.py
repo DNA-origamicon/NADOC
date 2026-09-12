@@ -33,15 +33,19 @@ class PegCoating(PegParameters):
         return self
 
 
-class PegSurface(BaseModel):
+from backend.physics.oxdna_surface_geometry import SurfaceGeometry
+
+
+class PegSurface(SurfaceGeometry):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     dir: tuple[float, float, float]
-    position_nm: float
     offset_nm: float = 0
     stiff: float = Field(5, gt=0)
 
     @model_validator(mode="after")
     def check_direction(self):
+        if self.position_nm is None and self.plane_point_nm is None:
+            raise ValueError("PEG setup requires an explicit surface plane")
         if not math.isclose(math.hypot(*self.dir), 1, abs_tol=1e-6):
             raise ValueError("Surface direction must be a unit vector")
         return self
@@ -82,3 +86,22 @@ def review_peg_setup(body: PegSetupRequest) -> dict:
         "job_request_fragment": {**body.model_dump(mode="json"), "autostart": False},
         "barriers": barriers,
     }
+
+
+class PegSeedReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_job_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    target_representation: Literal["coarse_grained", "atomistic"] | None = None
+
+
+@router.post("/namd-seed")
+def review_peg_namd_seed(body: PegSeedReviewRequest):
+    from fastapi import HTTPException
+    from backend.api.routes_oxdna import _workspace
+    from backend.core.peg_seed_source import inspect_peg_job
+    try:
+        return inspect_peg_job(body.source_job_id, _workspace(), body.target_representation)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(422, str(exc)) from exc

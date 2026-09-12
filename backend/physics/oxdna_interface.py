@@ -35,6 +35,7 @@ import subprocess
 from pathlib import Path
 from typing import Iterator, NamedTuple, Optional
 
+from backend.physics.oxdna_surface_geometry import resolved_wall
 import numpy as np
 
 import math
@@ -1939,6 +1940,7 @@ def read_configuration_full_unwrapped(
     copies: bool = False,
     include_extra_bases: bool = False,
     include_extensions: bool = False,
+    n_trailing_extra: int = 0,
 ) -> dict[tuple, dict]:
     """``read_configuration_full`` + PBC make-whole, WITHOUT any reference alignment.
 
@@ -1953,6 +1955,8 @@ def read_configuration_full_unwrapped(
     (surface-flattened) conformation is preserved in its own frame.  A structure that
     is already whole passes through unchanged (min-image no-op).  Returns the same
     shape as :func:`read_configuration_full`.  Used by the NAMD-seed reconstruction.
+    ``n_trailing_extra`` excludes appended coating particles from DNA indexing;
+    coating coordinates are made whole separately with their registered grafts.
     """
     relax = read_configuration_full(
         conf_path,
@@ -1960,6 +1964,7 @@ def read_configuration_full_unwrapped(
         copies=copies,
         include_extra_bases=include_extra_bases,
         include_extensions=include_extensions,
+        n_trailing_extra=n_trailing_extra,
     )
     box = _parse_box_nm(conf_path)
     if box is None or not np.all(box > 0):
@@ -2935,13 +2940,7 @@ def place_configuration_against_surface(
     if not valid:
         raise ValueError("Surface anchors do not map to this oxDNA configuration.")
     direction = _normalize3(wall.get("dir"))
-    absolute_nm = wall.get("position_nm")
-    if absolute_nm is not None:
-        position = wall_position_from_absolute(direction, float(absolute_nm))
-    else:
-        position, _ = wall_position_from_extent(
-            cm, direction, float(wall.get("offset_nm", 0.0)) * NM_TO_OXDNA
-        )
+    position = resolved_wall(wall, cm)["position"]
     all_gaps = [sum(direction[i] * point[i] for i in range(3)) + position for point in cm]
     anchor_gaps = [all_gaps[p] for p in valid]
     min_gap_before = min(all_gaps)
@@ -3133,13 +3132,7 @@ def write_surface_deposition_approach_forces(
     if stiff <= 0:
         raise ValueError("Surface deposition requires a surface stiffness > 0.")
     direction = _normalize3(wall.get("dir"))
-    absolute_nm = wall.get("position_nm")
-    if absolute_nm is not None:
-        position = wall_position_from_absolute(direction, float(absolute_nm))
-    else:
-        position, _ = wall_position_from_extent(
-            cm, direction, float(wall.get("offset_nm", 0.0)) * NM_TO_OXDNA
-        )
+    position = resolved_wall(wall, cm)["position"]
     force_oxdna = pn_to_oxdna_force(force_pn)
     anchor_set = set(particles)
     floor_particles = [i for i in range(len(cm)) if i not in anchor_set]
@@ -3209,13 +3202,7 @@ def write_surface_deposition_settle_forces(
         raise ValueError("Surface deposition requires at least one resolved surface anchor.")
     cm = read_cm_positions_oxdna(conf_path)
     direction = _normalize3(wall.get("dir"))
-    absolute_nm = wall.get("position_nm")
-    if absolute_nm is not None:
-        position = wall_position_from_absolute(direction, float(absolute_nm))
-    else:
-        position, _ = wall_position_from_extent(
-            cm, direction, float(wall.get("offset_nm", 0.0)) * NM_TO_OXDNA
-        )
+    position = resolved_wall(wall, cm)["position"]
     gaps = {
         p: sum(direction[i] * cm[p][i] for i in range(3)) + position
         for p in particles if p < len(cm)
@@ -3489,9 +3476,7 @@ def wall_position_from_absolute(wall_dir, position_nm: float) -> float:
     derived solely from the requested world coordinate makes the wall invariant to
     changes in the seed structure's extent between serial production runs.
     """
-    direction = _normalize3(wall_dir)
-    axis_component = max(direction, key=abs)
-    return -axis_component * float(position_nm) * NM_TO_OXDNA
+    return resolved_wall({"dir": wall_dir, "position_nm": position_nm}, [])["position"]
 
 
 def write_run_forces(
@@ -3663,30 +3648,10 @@ def surface_anchor_forces_text(
     if wall:
         stiff = float(wall.get("stiff", 0.0))
         if stiff > 0:
-            offset_nm = float(wall.get("offset_nm", 0.0))
-            absolute_nm = wall.get("position_nm")
-            if absolute_nm is not None:
-                position = wall_position_from_absolute(wall.get("dir"), absolute_nm)
-                min_proj = min(
-                    (
-                        sum(p[i] * _normalize3(wall.get("dir"))[i] for i in range(3))
-                        for p in cm
-                    ),
-                    default=0.0,
-                )
-            else:
-                position, min_proj = wall_position_from_extent(
-                    cm, wall.get("dir"), offset_nm * NM_TO_OXDNA
-                )
-            blocks.append(repulsion_plane_block(stiff, wall.get("dir"), position))
-            wall_meta = {
-                "dir": _normalize3(wall.get("dir")),
-                "stiff": stiff,
-                "offset_nm": offset_nm,
-                "position": position,
-                "min_proj": min_proj,
-                "position_nm": float(absolute_nm) if absolute_nm is not None else None,
-            }
+            wall_meta = resolved_wall(wall, cm)
+            blocks.append(repulsion_plane_block(
+                stiff, wall_meta["dir"], wall_meta["position"]
+            ))
 
     for p in particles:
         if p < n_total:

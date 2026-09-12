@@ -352,7 +352,10 @@ class FieldRequest(FieldElement):
         "(default pins anchors effectively immobile)",
     )
     seed: Optional[int] = Field(None, ge=1, le=OXDNA_SEED_MAX)
-class SurfaceElement(BaseModel):
+from backend.physics.oxdna_surface_geometry import SurfaceGeometry, persisted_wall, same_plane, absolute_wall_for_configuration
+
+
+class SurfaceElement(SurfaceGeometry):
     """The hard-surface element of a composed run (one-sided repulsion plane).
 
     ``dir`` is the plane's outward normal (the structure rests on the side ``dir``
@@ -1097,7 +1100,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         # scrubbed; visualization must render the exact plane oxDNA used at run start.
         wall_meta = (forces_info or {}).get("wall")
         if wall_meta and job.run_config.get("surface"):
-            job.run_config["surface"]["position_nm"] = _wall_axis_position_nm(wall_meta)
+            job.run_config["surface"] = persisted_wall(job.run_config["surface"], wall_meta)
         # Capture-strand build summary → run_config (for echo-back + production trap re-emission)
         # and a non-blocking clash warning if a capture bead seeds too close to the origami.
         cap = (forces_info or {}).get("capture")
@@ -1857,12 +1860,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         field_config = resolved_field["config"]
     wall_in = None
     if body.surface:
-        wall_in = {
-            "dir": body.surface.dir,
-            "offset_nm": body.surface.offset_nm,
-            "position_nm": body.surface.position_nm,
-            "stiff": body.surface.stiff,
-        }
+        wall_in = body.surface.model_dump(exclude_none=True)
     ordinary_anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     surface_anchors = [a.model_dump(by_alias=False) for a in body.surface_anchors]
     # Surface capture strands built into the relaxed parent are inherited via the copied
@@ -1944,12 +1942,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             "seed": job_seed,
             "steps": body.steps,
             "field": field_config,
-            "surface": {
-                "dir": body.surface.dir,
-                "offset_nm": body.surface.offset_nm,
-                "position_nm": body.surface.position_nm,
-                "stiff": body.surface.stiff,
-            }
+            "surface": body.surface.model_dump(exclude_none=True)
             if body.surface
             else None,
             "anchors": [
@@ -2021,9 +2014,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             child.efield["charge_audit"] = info["field"]
     child.n_nucleotides = info["n_total"]
     if info.get("wall") and child.run_config.get("surface"):
-        child.run_config["surface"]["position_nm"] = _wall_axis_position_nm(
-            info["wall"]
-        )
+        child.run_config["surface"] = persisted_wall(child.run_config["surface"], info["wall"])
     if peg_run:
         configure_peg_stages([stage], cap["spec"])
         child.run_config["surface"] = wall_in
@@ -2059,12 +2050,7 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
             400, "The selected job has no relaxed structure to deposit."
         )
 
-    wall = {
-        "dir": list(body.surface.dir),
-        "offset_nm": body.surface.offset_nm,
-        "position_nm": body.surface.position_nm,
-        "stiff": body.surface.stiff,
-    }
+    wall = body.surface.model_dump(exclude_none=True)
     anchors = [
         a.model_dump(by_alias=False, exclude_none=True) for a in body.surface_anchors
     ]
@@ -2154,19 +2140,10 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
     else:
         shutil.copy(relaxed_conf, cjd / "conf.dat")
     try:
+        wall = absolute_wall_for_configuration(wall, cjd / "conf.dat")
+        child.run_config["surface"] = wall
         parent_wall = (parent.run_config or {}).get("surface") or {}
-        parent_dir = parent_wall.get("dir") or []
-        same_surface_plane = (
-            len(parent_dir) == 3
-            and parent_wall.get("position_nm") is not None
-            and wall.get("position_nm") is not None
-            and all(
-                abs(float(parent_dir[i]) - float(wall["dir"][i])) < 1e-6
-                for i in range(3)
-            )
-            and abs(float(parent_wall["position_nm"]) - float(wall["position_nm"]))
-            < 1e-6
-        )
+        same_surface_plane = same_plane(parent_wall, wall)
         placement_info = place_configuration_against_surface(
             cjd / "conf.dat",
             design,
