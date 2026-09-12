@@ -379,6 +379,30 @@ def _build_overhang_patch(
         }
     )
 
+    # Native motifs carry authored sequence that cannot be recovered from a
+    # scaffold. Splice only the edited tail, even when the write resizes it or
+    # defers reassignment until a connection version is applied.
+    if sequence_was_set:
+        native_ids = {h.id for h in design.helices if h.native_residues}
+        source = design.find_strand(spec.strand_id)
+        if source and source.sequence is not None and any(d.helix_id in native_ids for d in source.domains):
+            from backend.core.sequences import _build_loop_skip_map, _domain_seq_span
+            skips = _build_loop_skip_map(design)
+            offset = 0
+            for domain in source.domains:
+                span = _domain_seq_span(domain, skips)
+                if domain.overhang_id == overhang_id:
+                    owner = updated.find_strand(source.id)
+                    tail = next(d for d in owner.domains if d.overhang_id == overhang_id)
+                    replacement = new_seq or "N" * _domain_seq_span(tail, skips)
+                    sequence = source.sequence[:offset] + replacement + source.sequence[offset + span:]
+                    updated = updated.model_copy(update={"strands": [
+                        strand.model_copy(update={"sequence": sequence}) if strand.id == source.id else strand
+                        for strand in updated.strands
+                    ]})
+                    break
+                offset += span
+
     # When the sequence is cleared (no resize happened so strand.sequence was not
     # touched above), re-derive the strand's assembled sequence so the overhang
     # position reverts to N×len instead of retaining the old bases.

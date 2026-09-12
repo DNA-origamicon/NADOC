@@ -5118,3 +5118,13 @@ export async function getMdIonPathsProgress(id, requestId, signal) {
   if (!response.ok) return null
   return response.json()
 }
+
+export async function getAptamerCatalog() {
+  return _request('GET', '/design/import/aptamers')
+}
+
+export async function importAptamer(args) {
+  return _request('POST', '/design/import/aptamer', {
+    ...args, expected_revision: currentRevisionWatermark(),
+  })
+}

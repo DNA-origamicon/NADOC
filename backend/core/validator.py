@@ -125,7 +125,14 @@ def validate_design(design: Design) -> ValidationReport:
     scaffold_count = sum(
         1 for s in design.strands if s.is_scaffold and not s.is_reference
     )
-    if scaffold_count == 0:
+    native_ids = {h.id for h in design.helices if h.native_residues}
+    native_only = bool(design.strands) and all(
+        s.domains and all(d.helix_id in native_ids for d in s.domains)
+        for s in design.strands
+    )
+    if scaffold_count == 0 and native_only:
+        report.results.append(ValidationResult(True, "Native oligo complex requires no scaffold."))
+    elif scaffold_count == 0:
         report.results.append(ValidationResult(False, "No scaffold strand defined."))
     elif scaffold_count == 1:
         report.results.append(ValidationResult(True, "Scaffold strand present."))

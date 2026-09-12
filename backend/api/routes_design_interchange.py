@@ -453,3 +453,65 @@ def save_design(body: FilePathRequest) -> dict:
     except OSError as exc:
         raise HTTPException(500, detail=f"Failed to save design: {exc}") from exc
     return {"saved_to": path}
+
+
+class AptamerImportRequest(BaseModel):
+    template_id: Optional[str] = None
+    content: Optional[str] = None
+    name: str = "Aptamer"
+    expected_revision: Optional[int] = None
+
+
+@router.get("/design/import/aptamers")
+def aptamer_catalog() -> dict:
+    from backend.core.aptamer import CATALOG
+    return {"templates": CATALOG}
+
+
+@router.post("/design/import/aptamer")
+def import_aptamer_design(body: AptamerImportRequest) -> dict:
+    from backend.core.aptamer import CATALOG, import_aptamer, template_content
+    from backend.api.crud import _design_response_with_geometry
+
+    if bool(body.template_id) == bool(body.content):
+        raise HTTPException(400, detail="Choose one aptamer template or a PDB file")
+    try:
+        content = template_content(body.template_id) if body.template_id else body.content
+        if len(content.encode()) > MAX_PDB_INPUT_BYTES:
+            raise HTTPException(413, detail="Aptamer PDB exceeds 50 MB")
+        entry = next((e for e in CATALOG if e["id"] == body.template_id), None)
+        name = entry["name"] if entry else body.name
+        imported = import_aptamer(content, name, entry["url"] if entry else "local PDB")
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    from backend.core.models import Design
+
+    # Import is a topology operation even when this is the first object in a
+    # session. Seed an empty document so the snapshot has a real pre-state and
+    # both timeline seek and undo can remove/recreate the imported UUIDs.
+    expected_revision = body.expected_revision
+    if design_state.get_design() is None:
+        if expected_revision is not None and expected_revision != design_state.revision():
+            raise HTTPException(409, detail="Design changed while preparing aptamer import")
+        design_state.load_design(Design(metadata=imported.metadata))
+        expected_revision = design_state.revision()
+
+    def merge(d):
+        return d.copy_with(
+            helices=[*d.helices, *imported.helices],
+            strands=[*d.strands, *imported.strands],
+            cluster_transforms=[*d.cluster_transforms, *imported.cluster_transforms],
+        )
+
+    design, report, _ = design_state.mutate_with_feature_log(
+        "aptamer-import", f"Import aptamer {name}",
+        {"template_id": body.template_id, "name": name}, merge,
+        expected_revision=expected_revision,
+    )
+    result = _design_response_with_geometry(design, report)
+    result["import_warnings"] = [
+        "Imported folded DNA geometry. K+ response is source annotation, not a concentration-driven simulation. "
+        "Water, proteins and free ions are omitted; new overhangs require sequence design and relaxation."
+    ]
+    return result

@@ -594,6 +594,23 @@ def assign_staple_sequences(design: Design) -> Design:
     overhang_map: dict[str, object] = {o.id: o for o in design.overhangs}
     overhang_bp_bases = build_overhang_bp_bases(design)
 
+    native_ids = {h.id for h in design.helices if h.native_residues}
+    if native_ids:
+        # Imported forward strands are sequence templates for partners drawn on
+        # their native carriers, including after either strand is ligated.
+        for source in design.strands:
+            if source.is_reference:
+                continue
+            offset = 0
+            for domain in source.domains:
+                span = _domain_seq_span(domain, ls_map)
+                if domain.helix_id in native_ids and domain.direction == Direction.FORWARD:
+                    seq = iter((source.sequence or "")[offset:offset + span])
+                    for bp in domain_bp_range(domain):
+                        count = 1 if domain.overhang_id else max(0, 1 + ls_map.get((domain.helix_id, bp), 0))
+                        scaf_map.setdefault((domain.helix_id, bp, Direction.FORWARD.value),
+                                            [next(seq, "N") for _ in range(count)])
+                offset += span
     new_strands: list[Strand] = []
     for strand in design.strands:
         if strand.is_scaffold:
@@ -626,6 +643,13 @@ def assign_staple_sequences(design: Design) -> Design:
             if domain.overhang_id is not None:
                 spec = overhang_map.get(domain.overhang_id)
                 bases.extend(_assemble_overhang_5to3(spec, span))
+                idx += span
+                continue
+
+            # Deposited G4 bases remain authored sequence when connected to a
+            # sequenced origami; scaffold reassignment must not erase the motif.
+            if domain.helix_id in native_ids and domain.direction == Direction.FORWARD:
+                bases.extend((strand.sequence or "")[idx:idx + span].ljust(span, "N"))
                 idx += span
                 continue
 

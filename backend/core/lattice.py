@@ -2083,7 +2083,15 @@ def _find_strand_by_5prime(
 def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: ignore[name-defined]
     """Join s2's domains onto the 3' end of s1. Returns updated Design."""
     new_domains = _merge_adjacent_domains(list(s1.domains) + list(s2.domains))
-    new_strand = s1.model_copy(update={"domains": new_domains})
+    updates = {"domains": new_domains}
+    native_ids = {h.id for h in design.helices if h.native_residues}
+    if any(d.helix_id in native_ids for d in (*s1.domains, *s2.domains)):
+        from backend.core.sequences import strand_sequence_length
+        updates["sequence"] = "".join(
+            (s.sequence or "").ljust(strand_sequence_length(design, s), "N")
+            for s in (s1, s2)
+        )
+    new_strand = s1.model_copy(update=updates)
     new_strands = [
         new_strand if s.id == s1.id else s for s in design.strands if s.id != s2.id
     ]
@@ -3697,6 +3705,14 @@ def _scaffold_coverage_by_helix(design: Design) -> dict[str, tuple[int, int]]:
                     coverage[dom.helix_id] = (min(prev_lo, lo), max(prev_hi, hi))
                 else:
                     coverage[dom.helix_id] = (lo, hi)
+    # Deposited motifs are anchors too: only bases outside the native core
+    # become attachment overhangs, even without a scaffold strand.
+    for helix in design.helices:
+        if helix.native_residues:
+            coverage[helix.id] = (
+                min(site.bp_index for site in helix.native_residues),
+                max(site.bp_index for site in helix.native_residues),
+            )
     return coverage
 
 
@@ -5335,6 +5351,17 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
             continue
 
         domains = list(strand.domains)
+        # Resize across a native core/tail split as one continuous strand.
+        # Otherwise trimming an entire tagged tail would invert its domain.
+        if helix.native_residues and len(domains) > 1:
+            ti, ai = (0, 1) if end == "5p" else (len(domains) - 1, len(domains) - 2)
+            term, adj = domains[ti], domains[ai]
+            if (term.overhang_id and term.overhang_id.startswith("ovhg_inline_")
+                    and adj.helix_id == term.helix_id and adj.direction == term.direction):
+                first, last = domains[min(ti, ai)], domains[max(ti, ai)]
+                domains[min(ti, ai):max(ti, ai) + 1] = [term.model_copy(update={
+                    "start_bp": first.start_bp, "end_bp": last.end_bp,
+                })]
 
         if end == "5p":
             term_dom = domains[0]
@@ -5349,7 +5376,18 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
             new_domain = term_dom.model_copy(update={"end_bp": new_bp})
             domains[-1] = new_domain
 
-        strand = strand.model_copy(update={"domains": domains, "sequence": None})
+        sequence = None
+        if strand.sequence is not None and any(
+            helices_by_id[d.helix_id].native_residues for d in strand.domains
+        ):
+            growth = (abs(new_domain.end_bp - new_domain.start_bp)
+                      - abs(term_dom.end_bp - term_dom.start_bp))
+            sequence = strand.sequence
+            if growth > 0:
+                sequence = "N" * growth + sequence if end == "5p" else sequence + "N" * growth
+            elif growth < 0:
+                sequence = sequence[-growth:] if end == "5p" else sequence[:growth]
+        strand = strand.model_copy(update={"domains": domains, "sequence": sequence})
         strands_by_id[strand.id] = strand
         modified.append((entry["strand_id"], end))
 

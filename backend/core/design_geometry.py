@@ -554,7 +554,10 @@ def _geometry_for_helices(
     if measured_positioning:
         import numpy as _np
 
+        native_ids = {h.id for h in design.helices if effective_helix_for_geometry(h, design).native_residues}
         for _a in deformed_helix_axes(design):
+            if _a["helix_id"] in native_ids:
+                continue
             _s = _np.asarray(_a["start"], dtype=float)
             _v = _np.asarray(_a["end"], dtype=float) - _s
             _n = float(_np.linalg.norm(_v))
@@ -1056,7 +1059,10 @@ def _positions_for_design(
     if measured_positioning:
         import numpy as _np
 
+        native_ids = {h.id for h in design.helices if effective_helix_for_geometry(h, design).native_residues}
         for _a in deformed_helix_axes(design):
+            if _a["helix_id"] in native_ids:
+                continue
             _s = _np.asarray(_a["start"], dtype=float)
             _v = _np.asarray(_a["end"], dtype=float) - _s
             _n = float(_np.linalg.norm(_v))

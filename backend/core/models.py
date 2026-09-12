@@ -128,6 +128,15 @@ class Mat4x4(BaseModel):
 # ── Core design models ────────────────────────────────────────────────────────
 
 
+class NativeResidue(BaseModel):
+    """Non-helical residue geometry in nm, keyed by stable native bp address."""
+
+    bp_index: int
+    base: Literal["A", "C", "G", "T"]
+    source_residue: str
+    atoms: Dict[str, Vec3]
+
+
 class Helix(BaseModel):
     """
     A single double-stranded DNA helix in the design.
@@ -147,6 +156,8 @@ class Helix(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     axis_start: Vec3
     axis_end: Vec3
+    native_residues: List[NativeResidue] = Field(default_factory=list)
+    native_source: Optional[str] = None
     phase_offset: float = 0.0  # radians
     twist_per_bp_rad: float = math.radians(34.3)  # radians/bp  (default = B-DNA 34.3°)
     length_bp: int
@@ -1722,6 +1733,7 @@ class OverhangRotationLogEntry(BaseModel):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
+    "aptamer-import",
     "bundle-create",
     "cluster-paste",
     "extrude-segment",
