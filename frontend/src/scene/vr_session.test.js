@@ -135,6 +135,21 @@ describe('initVRSession', () => {
     )
   })
 
+  it('explains an unsupported native platform without launching', async () => {
+    const reason = 'NADOC native VR is not supported under WSL.'
+    const native = {
+      status: vi.fn().mockResolvedValue({ available: false, running: false, unsupported_reason: reason }),
+      launch: vi.fn(),
+    }
+    const h = makeHarness({ xr: null, native })
+    expect(await h.controller.enter()).toBe(false)
+    expect(native.launch).not.toHaveBeenCalled()
+    expect(h.showToast).toHaveBeenCalledWith(reason, { severity: 'error' })
+    expect(h.button.disabled).toBe(false)
+    expect(h.controller.isActive()).toBe(false)
+    h.controller.dispose()
+  })
+
   it('uses the native OpenXR companion when Linux Firefox has no WebXR', async () => {
     const native = {
       status: vi.fn().mockResolvedValue({ available: true, running: false }),

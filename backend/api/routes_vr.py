@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 import os
+import platform
 from pathlib import Path
 import shutil
 import signal
@@ -43,9 +44,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _VIEWER_DIR = _REPO_ROOT / "native" / "vr_viewer"
 _BUILD_DIR = _VIEWER_DIR / "build"
 _VIEWER = _BUILD_DIR / "nadoc-vr-viewer"
-_STATE_PATH = Path(tempfile.gettempdir()) / f"nadoc-vr-{os.getuid()}.json"
-_LOG_PATH = Path(tempfile.gettempdir()) / f"nadoc-vr-{os.getuid()}.log"
-_STEAMVR_LOG_PATH = Path(tempfile.gettempdir()) / f"nadoc-steamvr-{os.getuid()}.log"
+_USER_ID = os.getuid() if hasattr(os, "getuid") else "local"
+_STATE_PATH = Path(tempfile.gettempdir()) / f"nadoc-vr-{_USER_ID}.json"
+_LOG_PATH = Path(tempfile.gettempdir()) / f"nadoc-vr-{_USER_ID}.log"
+_STEAMVR_LOG_PATH = Path(tempfile.gettempdir()) / f"nadoc-steamvr-{_USER_ID}.log"
 _STATE_LOCK = threading.Lock()
 _RUNTIME_LOCK = threading.Lock()
 _FEEDBACK_LOCK = threading.Lock()
@@ -303,7 +305,20 @@ class VRPlaneFeedbackRequest(BaseModel):
     )
 
 
-def _require_local(request: Request) -> None:
+def _native_platform_reason() -> str | None:
+    if platform.system() != "Linux":
+        return "NADOC native VR requires a native Linux desktop with SteamVR; this operating system is not supported."
+    if (
+        "microsoft" in platform.release().lower()
+        or "microsoft" in platform.version().lower()
+        or os.environ.get("WSL_DISTRO_NAME")
+        or os.environ.get("WSL_INTEROP")
+    ):
+        return "NADOC native VR is not supported under WSL. Run NADOC on a native Linux desktop with SteamVR."
+    return None
+
+
+def _require_local(request: Request, *, check_platform: bool = True) -> None:
     host = request.client.host if request.client else ""
     if host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(
@@ -320,6 +335,11 @@ def _require_local(request: Request) -> None:
         raise HTTPException(
             403, detail="Native VR launch is available only from localhost."
         )
+
+    if check_platform:
+        reason = _native_platform_reason()
+        if reason:
+            raise HTTPException(503, detail=reason)
 
 
 def _rgb(hex_color: str) -> tuple[float, float, float]:
@@ -3052,6 +3072,9 @@ def _cleanup_after_process(
 
 
 def _status_payload() -> dict:
+    reason = _native_platform_reason()
+    if reason:
+        return {"running": False, "available": False, "unsupported_reason": reason}
     state = _read_state()
     if not state:
         return {
@@ -3539,7 +3562,7 @@ def _event_payload(state: dict | None) -> dict:
 
 @router.get("/vr/status")
 def vr_status(request: Request) -> dict:
-    _require_local(request)
+    _require_local(request, check_platform=False)
     return _status_payload()
 
 

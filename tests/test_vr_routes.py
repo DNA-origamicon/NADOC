@@ -54,6 +54,16 @@ from backend.api.routes_vr import (
 from backend.core.vr_scene_contract import compare_scenes, parse_scene_contract
 
 
+@pytest.fixture(autouse=True)
+def native_linux_host(monkeypatch):
+    """Route tests model a supported workstation regardless of the test host."""
+    monkeypatch.setattr(routes_vr.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(routes_vr.platform, "release", lambda: "6.8.0-generic")
+    monkeypatch.setattr(routes_vr.platform, "version", lambda: "Ubuntu")
+    monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
+    monkeypatch.delenv("WSL_INTEROP", raising=False)
+
+
 _BASE_COLORS_FOR_TEST = {
     "A": (0x44 / 255, 0xDD / 255, 0x88 / 255),
     "T": (1.0, 0x55 / 255, 0x55 / 255),
@@ -3275,3 +3285,39 @@ def test_unligated_crossover_gets_full_only_amber_warning_at_midpoint() -> None:
         (_owner_token("cluster", "left"), 0.5, 0.5),
         (_owner_token("cluster", "right"), 0.5, 0.5),
     )
+
+
+@pytest.mark.parametrize("system,release", [
+    ("Windows", "11"), ("Darwin", "24.0"),
+    ("Linux", "6.6.87.2-microsoft-standard-WSL2"),
+])
+def test_unsupported_native_platform_has_no_side_effects(monkeypatch, system, release):
+    monkeypatch.setattr(routes_vr.platform, "system", lambda: system)
+    monkeypatch.setattr(routes_vr.platform, "release", lambda: release)
+    def unexpected(*args, **kwargs):
+        pytest.fail("Unsupported VR must not inspect state or start processes")
+    monkeypatch.setattr(routes_vr, "_read_state", unexpected)
+    monkeypatch.setattr(routes_vr, "_start_steamvr", unexpected)
+    request = Request({"type": "http", "client": ("127.0.0.1", 1234), "headers": []})
+    status = routes_vr.vr_status(request)
+    assert status["available"] is False
+    assert status["running"] is False
+    assert status["unsupported_reason"]
+    for action in [lambda: routes_vr.launch_vr(VRLaunchRequest(), request),
+                   lambda: routes_vr.start_vr_runtime(request),
+                   lambda: routes_vr.stop_vr(request)]:
+        with pytest.raises(HTTPException) as exc:
+            action()
+        assert exc.value.status_code == 503
+        assert exc.value.detail == status["unsupported_reason"]
+
+
+def test_native_linux_platform_supported(monkeypatch):
+    monkeypatch.setattr(routes_vr.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(routes_vr.platform, "release", lambda: "6.8.0-generic")
+    monkeypatch.setattr(routes_vr.platform, "version", lambda: "Ubuntu")
+    monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
+    monkeypatch.delenv("WSL_INTEROP", raising=False)
+    assert routes_vr._native_platform_reason() is None
+    monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+    assert "WSL" in routes_vr._native_platform_reason()
