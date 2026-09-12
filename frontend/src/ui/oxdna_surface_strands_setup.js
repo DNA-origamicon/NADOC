@@ -19,6 +19,7 @@
  *   setOffset(xNm, yNm) — the centre gizmo pushes the dragged patch centre back here.
  */
 
+import './peg_coating_setup.css'
 import { surfaceStrandsSpec, surfaceStrandArea } from '../scene/surface_strands_math.js'
 
 const DEFAULT_IDS = {

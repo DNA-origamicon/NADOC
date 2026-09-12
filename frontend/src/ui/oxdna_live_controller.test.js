@@ -167,6 +167,24 @@ describe('initOxdnaLive factory', () => {
   })
   afterEach(() => { clearDom(); vi.clearAllMocks() })
 
+  it('starts PEG using its own capability and displays PEG CM frames, then stops', async () => {
+    job.run_config = { surface_strands: { material: 'PEG', enabled: true } }
+    api.oxdnaLiveAvailable.mockResolvedValue({ available: false, peg: { available: true } })
+    const positions = [{ helix_id: 'cap0', bp_index: 1000000, direction: 'FORWARD',
+      backbone_position: [1, 2, 3], cm_position: [1, 2, 3] }]
+    api.getOxdnaLiveFrame.mockResolvedValue({ ready: true, status: 'running',
+      positions, n_positions: 1, n_bursts: 2, backend: 'CPU' })
+    const ctl = make()
+    await flush()
+    expect(els['oxdna-jobs-live-btn'].disabled).toBe(false)
+    els['oxdna-jobs-live-btn'].click()
+    await wait(30)
+    expect(api.startOxdnaLive).toHaveBeenCalled()
+    expect(display.displayLiveFrame).toHaveBeenCalledWith(positions)
+    ctl.stop()
+    expect(api.stopOxdnaLive).toHaveBeenCalledWith('s1')
+  })
+
   it('disables the button with a tooltip when oxpy is unavailable', async () => {
     api.oxdnaLiveAvailable.mockResolvedValue({ available: false, reason: 'oxpy not built' })
     make()
@@ -381,5 +399,24 @@ describe('initOxdnaLive factory', () => {
     ctl.stop()
     window.removeEventListener('nadoc:oxdna-live-stop', h)
     expect(stopped).toBe(true)
+  })
+})
+
+
+describe('PEG and physical Live contracts', () => {
+  it('does not confuse stock oxpy availability with PEG availability', () => {
+    const job = { status: 'queued', run_config: { surface_strands: { material: 'PEG' } } }
+    expect(liveButtonState({ available: true, pegAvailable: false, job }).enabled).toBe(false)
+    expect(liveButtonState({ available: false, pegAvailable: true, job }).enabled).toBe(true)
+  })
+  it('carries PEG identity and recomposes signed physical fields', () => {
+    const el = { surfaceStrands: { enabled: true, material: 'PEG', segments: 8 },
+      field: { enabled: true, field_V_per_m: 1e6, dna_effective_charge_e: -.25, dir: [0, 1, 0] } }
+    const body = liveStartBody({ job_id: 'peg' }, el)
+    expect(body.surface_strands).toMatchObject({ material: 'PEG', segments: 8, subjectToField: false })
+    expect(body.field).toEqual({ field_V_per_m: 1e6, dna_effective_charge_e: -.25, dir: [0, 1, 0] })
+    const before = reconfigSig(el)
+    el.field.field_V_per_m = 2e6
+    expect(reconfigSig(el)).not.toBe(before)
   })
 })

@@ -70,8 +70,10 @@ class _OxpyStepper:
         backend: str = "CPU",
         fallback_input: str = "input_cpu",
         _open_fn=None,
+        steer_field=True,
     ):
         self.rundir = Path(rundir)
+        self.steer_field = steer_field
         self.input_name = input_name
         # ``backend`` is the backend the primary ``input`` was staged with. When it
         # is "CUDA" and the open fails (no GPU init / out of memory), we retry on the
@@ -149,7 +151,7 @@ class _OxpyStepper:
         return False
 
     def set_field(self, F0: float, direction) -> None:
-        if self._field is None:
+        if self._field is None or not self.steer_field:
             return  # no uniform field in this run → nothing to steer
         v = _unit(direction)
         self._field.F0 = float(F0)

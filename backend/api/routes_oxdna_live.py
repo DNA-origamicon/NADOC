@@ -41,6 +41,7 @@ from backend.api.routes_oxdna import (
     _seed_geometry,
     _workspace,
     capture_run_decision,
+    resolve_oxdna_field_api,
 )
 from backend.core.oxdna_job import OxdnaStatus
 from backend.core.oxdna_live_runner import (
@@ -203,6 +204,8 @@ def _prepare_live_rundir(
     surface_anchors=None,
     capture_particles=None,
     field_exclude_trailing=0,
+    peg_spec=None,
+    topology_path=None,
 ):
     """Stage a temp live run dir composing any combination of an electric field, a
     hard surface, and anchor traps — the SAME proven writers the consolidated
@@ -227,7 +230,11 @@ def _prepare_live_rundir(
     capture_particles = capture_particles or []
 
     rundir.mkdir(parents=True, exist_ok=True)
-    write_topology(design, rundir / "topology.top")
+    if peg_spec:
+        if Path(topology_path).resolve() != (rundir / "topology.top").resolve():
+            shutil.copyfile(topology_path, rundir / "topology.top")
+    else:
+        write_topology(design, rundir / "topology.top")
     shutil.copy(seed_conf, rundir / "conf.dat")
     # The forces file keeps the name _OxpyStepper maps to an absolute path
     # ("field_forces.txt"); its CONTENTS are the composed field/surface/anchor blocks.
@@ -255,12 +262,19 @@ def _prepare_live_rundir(
             with open(rundir / "field_forces.txt", "a", encoding="utf-8") as stream:
                 stream.write("\n" + "\n".join(blocks))
             info["has_forces"] = True
+    if peg_spec:
+        from backend.physics.oxdna_peg import peg_terminal_field_text
+        terminal = peg_terminal_field_text(peg_spec, field)
+        if terminal:
+            with (rundir / "field_forces.txt").open("a") as stream:
+                stream.write("\n" + terminal)
+            info["has_forces"] = True
     has_forces = bool(info["has_forces"])
     efield_rec = None
     if info.get("field"):
         efield_rec = {
             "dir": info["field"]["dir"],
-            "force_oxdna": info["field"]["force_oxdna"],
+            "force_oxdna": info["field"].get("force_oxdna", 0.0),
         }
     forces_file = "field_forces.txt" if has_forces else None
 
@@ -281,6 +295,9 @@ def _prepare_live_rundir(
             backend=be,
             device="0",
         )
+        if peg_spec:
+            from backend.physics.oxdna_peg import configure_peg_stages
+            configure_peg_stages([spec], peg_spec)
         return render_stage_input(spec, "topology.top", "conf.dat", forces_file)
 
     (rundir / "input").write_text(_render(backend))
@@ -299,8 +316,9 @@ def _resolve_live_elements(body):
     field_oxdna = 0.0
     field_dir = [0.0, 1.0, 0.0]
     if body.field:
-        field_oxdna = pn_to_oxdna_force(body.field.field_pN)
-        field_in = {"force_oxdna": field_oxdna, "dir": list(body.field.dir)}
+        resolved = resolve_oxdna_field_api(body.field)
+        field_oxdna = resolved["stage_force_oxdna"]
+        field_in = resolved["writer"]
         field_dir = list(body.field.dir)
     wall_in = None
     if body.surface:
@@ -329,6 +347,8 @@ def _build_live_engine(
     surface_anchors=None,
     capture_particles=None,
     field_exclude_trailing=0,
+    peg_spec=None,
+    topology_path=None,
 ):
     """Stage *rundir* for the given element composition (seeded from *seed_conf*) and
     build the live engine + frame builder.  Shared by /start (seed = the job's relaxed
@@ -350,18 +370,27 @@ def _build_live_engine(
         field_exclude_trailing=field_exclude_trailing,
         anchor_stiff=anchor_stiff,
         steps=steps,
+        peg_spec=peg_spec,
+        topology_path=topology_path,
     )
     anchor_keys = [tuple(k) for k in info["anchor_keys"]]
-    field_oxdna = field_in["force_oxdna"] if field_in else 0.0
+    field_oxdna = field_in.get("force_oxdna", 0.0) if field_in else 0.0
     field_dir = list(field_in["dir"]) if field_in else [0.0, 1.0, 0.0]
+    if peg_spec:
+        from backend.physics.oxdna_peg_live import PegLiveStepper, peg_frame_builder
+        stepper = PegLiveStepper(rundir, backend=backend, spec=peg_spec,
+                                physical=bool(field_in and "field_V_per_m" in field_in))
+    else:
+        stepper = _OxpyStepper(rundir, backend=backend,
+                               steer_field=not (field_in and "field_V_per_m" in field_in))
     engine = LiveOxdnaSession(
         design,
         anchor_keys,
-        stepper=_OxpyStepper(rundir, backend=backend),
+        stepper=stepper,
         field_dir=field_dir,
         field_oxdna=field_oxdna,
     )
-    builder = _make_frame_builder(design, design_ref, anchor_keys)
+    builder = peg_frame_builder(design, peg_spec) if peg_spec else _make_frame_builder(design, design_ref, anchor_keys)
     return engine, builder, info, backend
 
 
@@ -370,7 +399,9 @@ def _build_live_engine(
 
 @router.get("/oxdna/live/available")
 async def get_oxdna_live_available() -> dict:
-    return oxpy_live_available()
+    from backend.physics.oxdna_peg_live import peg_live_available
+    peg = peg_live_available()
+    return {**oxpy_live_available(), "peg": {"available": peg["available"], "reason": peg["reason"]}}
 
 
 @router.post("/oxdna/live/start")
@@ -384,14 +415,16 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
     ``OxdnaJob``, no stored frames — only the temp rundir (removed on stop).  A
     field with no anchor is allowed (the UI warns that an unanchored uniform force
     drifts the COM across the box, but the run is not blocked)."""
-    avail = oxpy_live_available()
-    if not avail["available"]:
-        raise HTTPException(400, f"Live oxDNA not available: {avail['reason']}")
-
     parent = _load_job(body.job_id)
     from backend.physics.oxdna_peg import is_peg
-    if is_peg((parent.run_config or {}).get("surface_strands")):
-        raise HTTPException(409, "DNA2PEG uses the local CPU/CUDA job runner; oxpy Live is not supported yet")
+    from backend.physics.oxdna_peg_live import peg_live_available, validate_peg_continuation
+    peg_spec = (parent.run_config or {}).get("surface_strands")
+    peg_spec = peg_spec if is_peg(peg_spec) else None
+    avail = peg_live_available() if peg_spec else oxpy_live_available()
+    if not avail["available"]:
+        raise HTTPException(400, f"Live oxDNA not available: {avail['reason']}")
+    if not peg_spec and (body.surface_strands or {}).get("material") == "PEG":
+        raise HTTPException(409, "Prepare a PEG job before starting PEG Live")
     eligible = {OxdnaStatus.queued, OxdnaStatus.completed, OxdnaStatus.stopped, OxdnaStatus.failed}
     if is_running(body.job_id) or parent.status not in eligible:
         raise HTTPException(400, "Live needs a prepared or previously run job to seed from.")
@@ -426,7 +459,13 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
     capture = capture_run_decision(parent.run_config, body.surface_strands)
     if capture["error"]:
         raise HTTPException(status_code=409, detail=capture["error"])
-    field_exclude = capture["n_beads"] if field_in and not capture["subject_to_field"] else 0
+    field_exclude = capture["n_beads"] if field_in and (peg_spec or not capture["subject_to_field"]) else 0
+
+    if peg_spec:
+        try:
+            validate_peg_continuation(peg_spec, body.surface_strands, pjd / "topology.top")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     sid = new_session_id()
     rundir = ws / "live_sessions" / sid
@@ -435,24 +474,31 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
     # mirroring routes_oxdna._design_ref_conf — NOT the drifted seed conf.  Written
     # before the engine build so the frame builder can parse it.
     design_ref = rundir / "design_ref.dat"
-    write_configuration(design, _seed_geometry(design), design_ref)
+    try:
+        write_configuration(design, _seed_geometry(design), design_ref)
 
-    # _build_live_engine autodetects the backend (CUDA when a GPU is present, with a
-    # CPU fallback input staged) and returns it for the response.
-    engine, builder, info, backend = _build_live_engine(
-        design,
-        seed_conf,
-        rundir,
-        design_ref,
-        field_in=field_in,
-        wall_in=wall_in,
-        anchors=anchors,
-        surface_anchors=surface_anchors,
-        capture_particles=capture["trap_particles"],
-        field_exclude_trailing=field_exclude,
-        anchor_stiff=body.anchor_stiff,
-        steps=body.burst_steps,
-    )
+        # _build_live_engine autodetects the backend (CUDA when a GPU is present, with a
+        # CPU fallback input staged) and returns it for the response.
+        engine, builder, info, backend = _build_live_engine(
+            design,
+            seed_conf,
+            rundir,
+            design_ref,
+            field_in=field_in,
+            wall_in=wall_in,
+            anchors=anchors,
+            surface_anchors=surface_anchors,
+            capture_particles=capture["trap_particles"],
+            field_exclude_trailing=field_exclude,
+            anchor_stiff=body.anchor_stiff,
+            steps=body.burst_steps,
+            peg_spec=peg_spec,
+            topology_path=pjd / "topology.top" if peg_spec else None,
+        )
+    except Exception:
+        import shutil
+        shutil.rmtree(rundir, ignore_errors=True)
+        raise
     # A field with no (or an unresolvable) anchor selection is allowed — the COM
     # drift is surfaced as a UI warning, not blocked.
 
@@ -468,6 +514,8 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
         design_ref=design_ref,
         parent_run_config=parent.run_config,
     )
+
+    live.physical_field = bool(body.field and body.field.field_V_per_m is not None)
 
     # One in-process oxpy engine at a time — tear down any prior session first.
     stop_all()
@@ -495,6 +543,8 @@ async def update_oxdna_live_field(session_id: str, body: LiveFieldRequest) -> di
     live = get_session(session_id)
     if live is None:
         raise HTTPException(404, f"live session {session_id!r} not found")
+    if getattr(live, "physical_field", False):
+        raise HTTPException(409, "Use reconfigure with a physical field in V/m to update signed particle forces")
     live.set_field(field_oxdna=pn_to_oxdna_force(body.field_pN), field_dir=body.dir)
     return {"ok": True}
 
@@ -517,6 +567,15 @@ async def reconfigure_oxdna_live(session_id: str, body: LiveReconfigureRequest) 
         raise HTTPException(400, "This live session does not support reconfigure.")
     design_ref = live.design_ref or (rundir / "design_ref.dat")
     steps = live.burst_steps
+    from backend.physics.oxdna_peg import is_peg
+    from backend.physics.oxdna_peg_live import validate_peg_continuation
+    peg_spec = live.parent_run_config.get("surface_strands")
+    peg_spec = peg_spec if is_peg(peg_spec) else None
+    if peg_spec:
+        try:
+            validate_peg_continuation(peg_spec, body.surface_strands, rundir / "topology.top")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     (
         field_in,
@@ -531,7 +590,7 @@ async def reconfigure_oxdna_live(session_id: str, body: LiveReconfigureRequest) 
     capture = capture_run_decision(live.parent_run_config, body.surface_strands)
     if capture["error"]:
         raise HTTPException(status_code=409, detail=capture["error"])
-    field_exclude = capture["n_beads"] if field_in and not capture["subject_to_field"] else 0
+    field_exclude = capture["n_beads"] if field_in and (peg_spec or not capture["subject_to_field"]) else 0
 
     # Pre-validate the anchor selection on the request thread (resolve_anchor_particles
     # needs only the design, not the conf) so a stale/empty field anchor returns 400
@@ -564,9 +623,12 @@ async def reconfigure_oxdna_live(session_id: str, body: LiveReconfigureRequest) 
             field_exclude_trailing=field_exclude,
             anchor_stiff=body.anchor_stiff,
             steps=steps,
+            peg_spec=peg_spec,
+            topology_path=rundir / "topology.top" if peg_spec else None,
         )
         return engine, builder
 
+    live.physical_field = bool(body.field and body.field.field_V_per_m is not None)
     live.reconfigure(rebuild, field_oxdna=field_oxdna, field_dir=field_dir)
     logger.info(
         "reconfigure_oxdna_live: session=%s field=%s surface=%s anchors=%d",

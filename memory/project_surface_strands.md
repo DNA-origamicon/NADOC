@@ -1,5 +1,13 @@
 # Surface capture strands (oxDNA immobilization) — plan + status
 
+**PEG setup review (2026-09-11):** The experimental PEG sidebar now uses shared
+numeric-input colors and offers an engine-independent `POST /api/oxdna/peg/setup`
+review. It returns requested counts, a job-request fragment and explicit barriers;
+it does not certify launch readiness. Real-input Playwright checks cover review
+and wizard payload propagation. Persistence ordering, half-integer count rounding,
+NAMD mapping and validation gaps are catalogued in [PEG coating setup](../docs/peg_coating_setup.md).
+
+
 **Rank:** P3 — SHIPPED & tested end-to-end (build → relax/run → E-field exclusion → display →
 UI/overlay/math + pytest/vitest, live-job verified 2026-07-17). Only residuals: (1) `oxdna_design_fingerprint`
 does **not** include capture-strand state → toggling capture strands won't invalidate a cached job

@@ -97,6 +97,7 @@ from backend.api.routes_protein import router as protein_router
 from backend.api.routes_photoproducts import router as photoproducts_router
 from backend.api.routes_nanoparticles import router as nanoparticles_router
 from backend.api.routes_project_collaboration import router as project_collaboration_router
+from backend.api.routes_peg_setup import router as peg_setup_router
 from backend.api.routes_assign_sequences import router as assign_sequences_router
 from backend.api.routes_scaffold_routing import router as scaffold_routing_router
 from backend.api.ws import router as ws_router
@@ -423,6 +424,7 @@ app.include_router(md_metrics_router, prefix="/api")
 app.include_router(md_plan_router, prefix="/api")
 app.include_router(md_queue_router, prefix="/api")
 app.include_router(oxdna_router, prefix="/api")
+app.include_router(peg_setup_router, prefix="/api")
 app.include_router(lammps_router, prefix="/api")
 app.include_router(mrdna_router, prefix="/api")
 app.include_router(cando_router, prefix="/api")

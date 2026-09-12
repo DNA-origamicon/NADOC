@@ -127,3 +127,12 @@ uv pip install --reinstall ~/oxDNA/build_oxpy/python   # staged package → venv
 
 Built & validated 2026-06-23 (oxpy 3.7, py3.12, gcc-13). All real-engine
 field-steering tests pass; full `just test` 3082 passed.
+
+## PEG Live (2026-09-11)
+
+DNA2PEG uses a separate `build-live/python/oxpy` library loaded only in an isolated
+persistent subprocess. `scripts/build-oxdna-peg-live.sh` builds it without replacing
+stock oxpy or the batch binary. Live preserves prepared PEG topology and emits
+PEG CM frames; capability gating is job-specific. Build/import and mocked-worker/UI
+checks pass; real PEG stepping remains slow-test-session gated. See
+[PEG Live](../docs/peg_live.md) for commands, contracts and remaining barriers.

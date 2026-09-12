@@ -14,6 +14,7 @@
  */
 
 import * as THREE from 'three'
+import { initPegCoatingSetup } from './ui/peg_coating_setup.js'
 import { initSectionView } from './scene/section_view.js'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
@@ -6760,6 +6761,8 @@ async function main() {
     _atomSurface?.invalidateAtomCache()
     await _atomSurface?.refetchAtomistic()
   })
+
+  initPegCoatingSetup({ reviewSetup: api.reviewPegSetup, getSurface: () => oxdnaFloorSetup.getSurfaceSpec(), getCoating: () => oxdnaSurfaceStrandsSetup.getStrandsSpec() })
 
   // PEG setup travels with the NADOC file, while bead coordinates remain physical
   // simulation data. Restore after geometry subscribers have updated the bounds.

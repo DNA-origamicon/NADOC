@@ -4665,12 +4665,14 @@
                       <label>Kuhn segments <input id="oxdna-peg-segments" type="number" min="2" max="64" value="8" style="width:65px"></label>
                       <label>Bond length (nm) <input id="oxdna-peg-bond" type="number" min="0.3" max="1.5" step="0.05" value="0.7" style="width:65px"></label>
                       <label>WCA size σ (nm) <input id="oxdna-peg-diameter" type="number" min="0.2" max="1" step="0.05" value="0.5" style="width:65px"></label>
-                      <label>Terminal charge (e) <input id="oxdna-peg-charge" type="number" min="-2" max="2" step="1" value="0" style="width:65px"></label>
+                      <label>Terminal charge (e) <input id="oxdna-peg-charge" type="number" min="-2" max="2" step="any" value="0" style="width:65px"></label>
                       <label>Patch <select id="oxdna-peg-shape"><option value="square">Square</option><option value="circle">Circle</option></select></label>
-                      <label>Width/diameter (nm) <input id="oxdna-peg-size" type="number" min="2" value="12" style="width:65px"></label>
-                      <label>Chains/µm² <input id="oxdna-peg-density" type="number" min="0" step="100" value="27778" style="width:90px"></label>
-                      <label>Offset X / Y (nm) <input id="oxdna-peg-offx" type="number" value="0" style="width:55px"> <input id="oxdna-peg-offy" type="number" value="0" style="width:55px"></label>
-                      <label>Placement seed <input id="oxdna-peg-seed" type="number" value="17" style="width:75px"></label>
+                      <label>Width/diameter (nm) <input id="oxdna-peg-size" type="number" min="2" step="any" value="12" style="width:65px"></label>
+                      <label>Chains/µm² <input id="oxdna-peg-density" type="number" min="0" step="any" value="27778" style="width:90px"></label>
+                      <label>Offset X / Y (nm) <input id="oxdna-peg-offx" aria-label="PEG offset X (nm)" type="number" step="any" value="0" style="width:55px"> <input id="oxdna-peg-offy" aria-label="PEG offset Y (nm)" type="number" step="any" value="0" style="width:55px"></label>
+                      <label>Placement seed <input id="oxdna-peg-seed" type="number" min="0" max="4294967295" value="17" style="width:75px"></label>
+                      <button id="oxdna-peg-review" type="button">Review oxDNA PEG setup</button>
+                      <div id="oxdna-peg-review-result" role="status" aria-live="polite"></div>
                       <button id="oxdna-peg-store" type="button">Store PEG setup in design</button>
                       <span style="font-size:11px;color:#8b949e">Local CPU/CUDA jobs via DNA2PEG. Bead–spring approximation; not chemically calibrated PEG. Save the design after storing its setup.</span>
                     </div>

@@ -5126,3 +5126,5 @@ export async function cancelBenchmark(id) {
 //  `import * as api from '.../api/client.js'`) keep working unchanged.
 export * from './animation_endpoints.js'
 export * from './overhang_endpoints.js'
+
+export function reviewPegSetup(body) { return _request('POST', '/oxdna/peg/setup', body) }
