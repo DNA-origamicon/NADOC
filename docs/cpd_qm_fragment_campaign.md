@@ -411,6 +411,33 @@ passed D2 in `gates/reused_core_frequency_inventory.json`. The handoff now repor
 `ready_D3`. Further submission remains held until the charge, nonbonded, and justified
 torsion target scope is hash-pinned.
 
+## Primary syn/anti fitting submission (2026-09-13)
+
+The D3 scope is now hash-pinned at
+`alpine-qm-primary-syn-anti-fit-v1` in the photoproduct evidence archive. The primary
+cis-syn candidate retains its completed charge fit and quantitatively selected coupled
+response fit; its charges are re-evaluated against the newly collected 996-point ESP.
+The primary cis-anti-I charges are fitted independently against its HF/6-31G(d) dipole,
+1023-point ESP, and six conventional water curves. Endpoint-1 water sites train the
+fit, while endpoint-2 sites remain held out.
+
+The anti bonded fit uses its passed minimum Hessian and four completed fixed-geometry
+response Hessians. The minimum plus conformers 001 and 004 form the training set;
+conformers 002 and 003 remain validation data. The complete four-carbon ring block is
+fit as a coupled response with periodicities 1 through 4, fixed QM improper reference
+angles, and no Urey-Bradley terms. Cyclic ring bonds are not treated as independent
+torsion scans.
+
+Alpine job **32491760** builds a separate OpenMM/RDKit/SciPy fitting environment without
+changing the pinned QM environment. Dependent job **32492585** performs the anti charge
+fit and constructs the bonded basis. Array **32492672[0-4]** computes the minimum and
+four conformer responses in parallel. Job **32492676** assembles the disjoint campaign,
+applies the preregistered bounded ridge policy, selects a quantitative candidate, writes
+the CHARMM algebraic transform, and reassesses both primary families. The local watcher
+only synchronizes results and writes a gate-neutral trigger. A favorable result advances
+to D4 CHARMM mapping and primary-fit freeze; it does not make either product simulation
+ready.
+
 ## Verification of this review
 
 Targeted monitor tests exercise input/source corruption, interrupted execution, stage
