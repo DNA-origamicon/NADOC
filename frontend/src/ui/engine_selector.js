@@ -1,3 +1,4 @@
+import { sidebarPanelVisible } from './display_tab_policy.js'
 /**
  * engine_selector.js — U4, "unified panel" track. Collapse the five stacked
  * simulation panels (oxDNA / LAMMPS / mrDNA / CanDo / NAMD) into ONE Simulate
@@ -72,7 +73,7 @@ export function reconcileSelectedEngine(selector) {
 /** Reconcile panel visibility at the actual Simulations-tab open boundary. */
 export function bindEngineSelectorToSimulationTab(selector, target = window) {
   const onTabChange = event => {
-    if (event.detail?.activeTab === 'dynamics' && !event.detail?.collapsed) {
+    if (sidebarPanelVisible(event.detail, 'dynamics')) {
       reconcileSelectedEngine(selector)
     }
   }

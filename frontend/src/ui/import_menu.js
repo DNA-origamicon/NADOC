@@ -19,6 +19,7 @@
  */
 import { showToast } from './toast.js'
 import { openFileBrowser } from './file_browser.js'
+import { openImportAptamerModal } from './import_aptamer_modal.js'
 import { openImportPdbModal } from './import_pdb_modal.js'
 
 /** Sanitize an imported design name to the filename-safe charset (pure). */
@@ -269,6 +270,20 @@ export function initImportMenu(deps) {
 
   document.getElementById('menu-file-import-pdb')?.addEventListener('click', () => {
     openImportPdbModal({ onResult: runPdbImport })
+  })
+
+  document.getElementById('menu-file-import-aptamer')?.addEventListener('click', () => {
+    openImportAptamerModal({ api, onImport: async args => {
+      const json = await api.importAptamer(args)
+      if (!json) return null
+      api.syncDesignResponse(json)
+      hideWelcome()
+      if (store.getState().assemblyActive) {
+        await importAsAssemblyPart(sanitizeImportName(json.design?.metadata?.name ?? 'Aptamer'))
+      }
+      showToast('Aptamer imported as editable DNA strands.', 4000)
+      return json
+    } })
   })
 
   return { importCadnanoWithAutodetection, importScadnanoWithAutodetection, runPdbImport }

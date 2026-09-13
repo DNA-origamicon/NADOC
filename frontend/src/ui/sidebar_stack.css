@@ -1,0 +1,75 @@
+:is(#left-panel, #right-panel).sidebar-stack {
+  width: auto !important;
+  flex: 0 0 auto;
+  flex-direction: row;
+  border: 0;
+  overflow: hidden;
+  transition: none;
+}
+:is(#left-panel, #right-panel).sidebar-stack.hidden { width: 0 !important; }
+.sidebar-parking[hidden] { display: none; }
+.sidebar-column {
+  --sidebar-accent: #7d8590;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-width: 0;
+  height: 100%;
+  position: relative;
+  box-sizing: border-box;
+  border-right: 1px solid #30363d;
+  background: #0d1117;
+}
+.sidebar-column[data-panel-type="feature-log"] { --sidebar-accent: #aa8ed4; }
+.sidebar-column[data-panel-type="dynamics"] { --sidebar-accent: #70a4d4; }
+.sidebar-column[data-panel-type="scene"] { --sidebar-accent: #83b89a; }
+.sidebar-column[data-panel-type="photo"] { --sidebar-accent: #cfbe77; }
+.sidebar-column-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px 7px 12px;
+  border-top: 2px solid var(--sidebar-accent);
+  border-bottom: 1px solid #30363d;
+  background: color-mix(in srgb, var(--sidebar-accent) 9%, #11161e);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sidebar-column[data-panel-type="plates"] .sidebar-column-header { background: #161b22; border-top-color: #30363d; }
+.sidebar-close { background: transparent; border: 0; color: #c9d1d9; font-size: 20px; line-height: 24px; width: 26px; padding: 0; cursor: pointer; }
+.sidebar-close:hover { background: #ffffff12; }
+.sidebar-column-body { flex: 1; min-height: 0; overflow: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.sidebar-column-body > .tab-content { min-width: 0; }
+.sidebar-column-resize { position: absolute; right: -3px; top: 0; bottom: 0; width: 6px; cursor: ew-resize; z-index: 15; touch-action: none; }
+.sidebar-column-resize:hover, .sidebar-column-resize.is-dragging { background: #58a6ff55; }
+.sidebar-column-resize:focus-visible, .sidebar-close:focus-visible { outline: 2px solid #58a6ff; outline-offset: -2px; }
+.sidebar-space-notice { position: absolute; top: 38px; left: 42px; width: 240px; padding: 10px; color: #e6edf3; background: #21262d; border: 1px solid #484f58; border-radius: 5px; z-index: 40; font-size: 12px; }
+.sidebar-space-notice[hidden] { display: none; }
+
+/* Right columns grow inward; the rail remains beside the viewport. */
+#right-panel.sidebar-stack { flex-direction: row-reverse; }
+#right-panel .sidebar-column { border-right: 0; border-left: 1px solid #30363d; }
+#right-panel .sidebar-column-resize { right: auto; left: 0; }
+#right-tab-strip .sidebar-space-notice { left: auto; right: 42px; }
+.sidebar-column[data-panel-type="assembly"], #right-tab-strip [data-tab="assembly"] { --sidebar-accent: #aa8ed4; }
+.sidebar-column[data-panel-type="visualization"], #right-tab-strip [data-tab="visualization"] { --sidebar-accent: #70a4d4; }
+.sidebar-column[data-panel-type="clustering"], #right-tab-strip [data-tab="clustering"] { --sidebar-accent: #83b89a; }
+.sidebar-column[data-panel-type="overhangs"], #right-tab-strip [data-tab="overhangs"] { --sidebar-accent: #cfbe77; }
+.sidebar-column[data-panel-type="properties"] .sidebar-column-header { background: #161b22; border-top-color: #30363d; }
+#left-tab-strip [data-tab="feature-log"] { --sidebar-accent: #aa8ed4; }
+#left-tab-strip [data-tab="dynamics"] { --sidebar-accent: #70a4d4; }
+#left-tab-strip [data-tab="scene"] { --sidebar-accent: #83b89a; }
+#left-tab-strip [data-tab="photo"] { --sidebar-accent: #cfbe77; }
+:is(#left-tab-strip, #right-tab-strip) [data-tab]:not([data-tab="plates"]):not([data-tab="properties"]) {
+  background: color-mix(in srgb, var(--sidebar-accent) 10%, #161b22);
+  border-color: color-mix(in srgb, var(--sidebar-accent) 35%, #30363d) !important;
+}
+:is(#left-tab-strip, #right-tab-strip) [data-tab].active:not([data-tab="plates"]):not([data-tab="properties"]) {
+  background: color-mix(in srgb, var(--sidebar-accent) 23%, #161b22);
+  border-color: var(--sidebar-accent) !important;
+}
+:is(#left-tab-strip, #right-tab-strip) [data-tab]:hover:not([data-tab="plates"]):not([data-tab="properties"]) {
+  background: color-mix(in srgb, var(--sidebar-accent) 30%, #161b22);
+}

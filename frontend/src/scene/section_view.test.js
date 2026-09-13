@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { initSectionView, isSectionContent, sectionStencilMaterial } from './section_view.js'
+import { initSectionView, isSectionContent, sectionStencilGeometryFor, sectionStencilMaterial } from './section_view.js'
+import { makeImpostorPhongMaterial } from './impostor_material.js'
 
 describe('section view', () => {
   it('excludes tools and includes instanced solids', () => {
@@ -29,6 +30,24 @@ describe('section view', () => {
     expect(material.stencilZPass).toBe(THREE.IncrementWrapStencilOp)
     expect(material.clippingPlanes).toEqual([plane])
     expect(material.colorWrite).toBe(false)
+  })
+  it('uses closed sphere proxies so atom impostors contribute to the section cap', () => {
+    const source = makeImpostorPhongMaterial({ radius: 0.35 })
+    const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(2, 2), source, 1)
+    const geometry = sectionStencilGeometryFor(mesh)
+    geometry.computeBoundingSphere()
+    expect(geometry.type).toBe('SphereGeometry')
+    expect(geometry.boundingSphere.radius).toBeCloseTo(0.35)
+    const material = sectionStencilMaterial(source, new THREE.Plane(), THREE.BackSide)
+    expect(material.userData.isImpostor).toBeUndefined()
+    expect(material.onBeforeCompile).not.toBe(source.onBeforeCompile)
+    geometry.dispose()
+  })
+  it('does not place a sphere cap at the origin for GPU-positioned assembly impostors', () => {
+    const source = makeImpostorPhongMaterial({ radius: 0.35 })
+    source.customProgramCacheKey = () => `sharedInstanced_${source.uuid}`
+    const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(2, 2), source, 1)
+    expect(sectionStencilGeometryFor(mesh)).toBeNull()
   })
   it('tracks replaced representations and restores exact clipping and navigation state', () => {
     document.body.innerHTML = '<div id="right-view-actions"><div class="ox-card__body"></div></div><canvas></canvas>'

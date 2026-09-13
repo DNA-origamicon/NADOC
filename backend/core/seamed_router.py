@@ -204,6 +204,8 @@ def _ham_path_search(
     neighbor_key,
     starters: list[str],
     budget: list[int] | None = None,
+    *,
+    close_cycle: bool = False,
 ) -> list[str] | None:
     """Budgeted, connectivity/degree-pruned Hamiltonian-path DFS.
 
@@ -211,6 +213,8 @@ def _ham_path_search(
     ascending- or descending-degree heuristics).  `starters` is the ordered list
     of start nodes to try; `budget` (a single-element list) is shared across
     calls so a multi-start search has one combined ceiling.
+    ``close_cycle`` requires the final vertex to neighbor the start; a full
+    open path is rejected inside DFS so other branches are still explored.
 
     Returns the first complete path found, or ``None`` if no Hamiltonian path
     exists OR the visit budget is exhausted — a graceful give-up instead of an
@@ -230,6 +234,8 @@ def _ham_path_search(
         rem = id_set - vis
         if not rem:
             return True
+        if close_cycle and not (adj[path[0]] & rem):
+            return False  # no unvisited vertex can supply the closing edge
         frontier = [nb for nb in adj[node] if nb in rem]
         if not frontier:
             return False  # current end is boxed in
@@ -265,7 +271,7 @@ def _ham_path_search(
             return False
         vis.add(node)
         path.append(node)
-        if len(path) == n:
+        if len(path) == n and (not close_cycle or path[0] in adj[node]):
             return True
         if _can_complete(node):
             for nb in sorted(adj[node] - vis, key=neighbor_key):

@@ -47,7 +47,7 @@ function _applyWidth(panel, w) {
 
 function _wireHandle(side, { getWorkspacePath = () => null } = {}) {
   const panel = document.getElementById(side === 'left' ? 'left-panel' : 'right-panel')
-  if (!panel) return
+  if (!panel || panel.classList.contains('sidebar-stack')) return
   // Both handles live in their tab strips — locate document-wide so this
   // remains tolerant of legacy markup and focused tests.
   const handle = document.querySelector(`.panel-resize-handle[data-resize="${side}"]`)
@@ -90,6 +90,7 @@ function _wireHandle(side, { getWorkspacePath = () => null } = {}) {
     let w = _startW + delta
     if (w < MIN_PX * 0.5) w = 0   // dragged way past min → snap shut
     else                  w = Math.max(MIN_PX, Math.min(MAX_PX, w))
+    if (side === 'right' && w > 0) w = Math.min(w, Math.max(MIN_PX, window.__leftSidebar?.maxRightWidth?.() ?? MAX_PX))
     _applyWidth(panel, w)
   })
 
@@ -121,6 +122,6 @@ function _wireHandle(side, { getWorkspacePath = () => null } = {}) {
 }
 
 export function initSidebarResize(options = {}) {
-  _wireHandle('left', options)
+  // Left columns own their independent resize handles and saved widths.
   _wireHandle('right')
 }

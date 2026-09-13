@@ -170,6 +170,10 @@ def effective_helix_for_geometry(helix: "Helix", design: "Design") -> "Helix":
     This is the single phase/axis decision point shared by CG geometry,
     atomistic placement, and deformation frames.
     """
+    if helix.native_residues:
+        from backend.core.aptamer import native_core_paired
+        if native_core_paired(helix, design):
+            return helix.model_copy(update={"native_residues": []})
     if _helix_preserves_stored_pose(helix, design):
         return helix
     return _normalize_helix_for_grid(helix, design.lattice_type)
@@ -2645,6 +2649,30 @@ def _seg_endpoints_curve(
 
 
 def deformed_helix_axes(design: "Design") -> list[dict]:
+    """Project native non-helical paths alongside the ordinary duplex axes."""
+    axes = _lattice_helix_axes(design)
+    native = {h.id: h for h in design.helices if effective_helix_for_geometry(h, design).native_residues}
+    for entry in axes:
+        helix = native.get(entry["helix_id"])
+        if helix is None:
+            continue
+        arrs = deformed_nucleotide_arrays(helix, design)
+        points = {
+            int(bp): p.tolist()
+            for bp, direction, p in zip(arrs["bp_indices"], arrs["directions"], arrs["positions"])
+            if direction == 0
+        }
+        samples = list(points.values())
+        if not samples:
+            continue
+        entry.update(start=samples[0], end=samples[-1], samples=samples)
+        for segment in entry.get("segments", []):
+            segment["start"] = points.get(segment["bp_lo"], samples[0])
+            segment["end"] = points.get(segment["bp_hi"], samples[-1])
+    return axes
+
+
+def _lattice_helix_axes(design: "Design") -> list[dict]:
     """
     Return deformed axis positions for each helix.
 

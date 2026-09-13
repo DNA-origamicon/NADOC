@@ -1433,7 +1433,13 @@ export async function autoScaffoldSeamless(opts = {}) {
     nick_offset: nickOffset,
     min_end_margin: minEndMargin,
   })
-  return _syncFromDesignResponse(json)
+  const ok = await _syncFromDesignResponse(json)
+  // Reset summaries describe a normal reroute, not a routing failure.
+  const warnings = (json?.warnings ?? []).filter(w => !w.startsWith('Reset prior auto-scaffold route'))
+  if (ok && warnings.length) {
+    showToast(warnings.join('  •  '), { severity: 'warning', duration: 10000 })
+  }
+  return ok
 }
 
 export async function syncScaffoldSequenceResponse(json) {
@@ -3171,7 +3177,8 @@ export const getRelaxPresets     = ()            => _oxdnaJSON('GET',  '/md/rela
  *  Job Wizard's source of truth. Built server-side by running the real conf writers, so
  *  it cannot drift from what the run does. Writes nothing and (for a relaxation) touches
  *  no disk, so it is safe to re-request behind a short debounce as the user edits. */
-export const fetchProtocolPlan   = (body)        => _oxdnaJSON('POST', '/md/protocol-plan', body)
+export const fetchProtocolPlan   = (body)        => _oxdnaJSON('POST', '/md/protocol-plan?include_box_preview=false', body)
+export const fetchProtocolBoxPreview = (body) => _oxdnaJSON('POST', '/md/protocol-box-preview', body)
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
 /** Validate the selected NAMD run/download directory. With no path, the backend creates and
  * returns NADOC's portable <workspace>/md_jobs default. */
@@ -3363,8 +3370,10 @@ export const startMdMetrics      = (id, body)    => _oxdnaJSON('POST', `/md/jobs
 export const getMdMetricsRun     = (runId)       => _oxdnaJSON('GET',  `/md/metrics/${runId}`)
 /** Analyze a voltage-driven production trajectory: current, conductance, aperture
  * crossings and pore occupancy. The backend caches the JSON beside the package. */
-export const getMdIonTransportAnalysis = (id) =>
-  _oxdnaJSON('GET', `/md/ion-transport/${id}/analysis`)
+export const getMdIonTransportAnalysis = (id, { requestId } = {}) =>
+  _oxdnaJSON('GET', `/md/ion-transport/${id}/analysis${requestId ? `?request_id=${encodeURIComponent(requestId)}` : ''}`)
+export const getMdIonTransportProgress = (id, requestId) =>
+  _oxdnaJSON('GET', `/md/ion-transport/${id}/analysis-progress?request_id=${encodeURIComponent(requestId)}`)
 
 // NAMD MD job lifecycle (routes_md.py).  All go through _oxdnaJSON so the tab's
 // X-NADOC-Doc header is ALWAYS stamped — the staleness/out-of-date checks read the
@@ -5136,3 +5145,50 @@ export const reviewNamdPegSurface = body => _request('POST', '/md/peg-surfaces/r
 export const saveNamdPegSurface = (body, id = null) => _request(id ? 'PUT' : 'POST', id ? `/md/peg-surfaces/${encodeURIComponent(id)}` : '/md/peg-surfaces', body, { skipSimulationPrepare: true })
 
 export const createPegFastRelax = id => _request('POST', `/md/peg-qualifications/${encodeURIComponent(id)}/fast-relax`, undefined, { skipSimulationPrepare: true })
+
+/** Binary path loads throw server/transport errors so window edits retain the previous scene. */
+export async function getMdIonPaths(id, before, after, signal, { requestId, onProgress } = {}) {
+  const path = `/md/jobs/${id}/ion-paths?before=${before}&after=${after}${requestId ? `&request_id=${encodeURIComponent(requestId)}` : ''}`
+  await _ensureAssemblySimulation(path)
+  const response = await fetch(`${BASE}${path}`, { headers: { ...docHeaders() }, signal })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(errorDetailToMessage(body?.detail, response.statusText || 'Could not load ion paths'))
+  }
+  const { decodeMdIonPaths } = await import('../scene/md_ion_paths_bin.js')
+  const total = Number(response.headers.get('content-length'))
+  let buffer
+  if (response.body?.getReader && onProgress) {
+    const reader = response.body.getReader(), chunks = []
+    let loaded = 0
+    onProgress({ stage: 'download', fraction: 0 })
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value); loaded += value.byteLength
+      onProgress({ stage: 'download', fraction: total > 0 ? Math.min(1, loaded / total) : 0 })
+    }
+    const bytes = new Uint8Array(loaded)
+    let offset = 0
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
+    buffer = bytes.buffer
+  } else buffer = await response.arrayBuffer()
+  onProgress?.({ stage: 'decode', fraction: 1 })
+  return decodeMdIonPaths(buffer)
+}
+
+export async function getMdIonPathsProgress(id, requestId, signal) {
+  const response = await fetch(`${BASE}/md/jobs/${id}/ion-paths-progress?request_id=${encodeURIComponent(requestId)}`, { headers: { ...docHeaders() }, signal })
+  if (!response.ok) return null
+  return response.json()
+}
+
+export async function getAptamerCatalog() {
+  return _request('GET', '/design/import/aptamers')
+}
+
+export async function importAptamer(args) {
+  return _request('POST', '/design/import/aptamer', {
+    ...args, expected_revision: currentRevisionWatermark(),
+  })
+}

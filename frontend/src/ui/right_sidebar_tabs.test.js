@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
 import { initRightSidebarTabs } from './right_sidebar_tabs.js'
 
 describe('right sidebar tabs', () => {
+  afterEach(() => { document.defaultView.__rightSidebar?.dispose(); document.defaultView.close() })
   beforeEach(() => {
     const dom = new JSDOM(`
       <div id="right-tab-strip">
@@ -41,11 +42,13 @@ describe('right sidebar tabs', () => {
     `)
     globalThis.document = dom.window.document
     globalThis.MutationObserver = dom.window.MutationObserver
+    globalThis.requestAnimationFrame = fn => setTimeout(fn, 16)
+    globalThis.cancelAnimationFrame = clearTimeout
   })
 
   it('groups the requested sections and switches panes', () => {
     const storage = { getItem: () => null, setItem: () => {} }
-    const tabs = initRightSidebarTabs({ document, storage })
+    const tabs = initRightSidebarTabs({ document, getAvailableWidth: () => 1600, storage })
     expect(document.getElementById('measurements-section')).toBeNull()
     expect(document.querySelector('#right-tab-content-properties #extrude-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-properties #deform-panel')).toBeTruthy()
@@ -57,16 +60,18 @@ describe('right sidebar tabs', () => {
     expect(document.querySelector('#right-tab-content-visualization #right-multi-view-body')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-visualization #right-multi-overlay-body')).toBeTruthy()
     tabs.select('visualization')
-    expect(document.getElementById('right-tab-content-properties').hidden).toBe(true)
+    expect(document.getElementById('right-tab-content-properties').hidden).toBe(false)
     expect(document.getElementById('right-tab-content-visualization').hidden).toBe(false)
     tabs.select('visualization')
+    expect(tabs.getOpenPanels()).toEqual(['properties', 'visualization', 'visualization'])
+    document.getElementById('right-tab-toggle').click()
     expect(document.getElementById('right-panel').classList.contains('hidden')).toBe(true)
     document.getElementById('right-tab-toggle').click()
     expect(document.getElementById('right-panel').classList.contains('hidden')).toBe(false)
   })
 
   it('opens a requested tab without collapsing it when it is already active', () => {
-    const tabs = initRightSidebarTabs({ document, storage: null })
+    const tabs = initRightSidebarTabs({ document, getAvailableWidth: () => 1600, storage: null })
     tabs.open('properties')
     expect(tabs.getActiveTab()).toBe('properties')
     expect(tabs.isCollapsed()).toBe(false)
@@ -75,11 +80,11 @@ describe('right sidebar tabs', () => {
   })
 
   it('notifies subscribers when the active right-sidebar tab changes', () => {
-    const tabs = initRightSidebarTabs({ document, storage: null })
+    const tabs = initRightSidebarTabs({ document, getAvailableWidth: () => 1600, storage: null })
     const listener = vi.fn()
     const unsubscribe = tabs.onChange(listener)
     tabs.open('visualization')
-    expect(listener).toHaveBeenLastCalledWith({ activeTab: 'visualization', collapsed: false })
+    expect(listener).toHaveBeenLastCalledWith({ activeTab: 'visualization', collapsed: false, openPanels: ['properties', 'visualization'] })
     unsubscribe()
     tabs.open('properties')
     expect(listener).toHaveBeenCalledTimes(1)
@@ -90,7 +95,7 @@ describe('right sidebar tabs', () => {
       getItem: () => JSON.stringify({ activeTab: 'assembly', collapsed: false }),
       setItem: () => {},
     }
-    const tabs = initRightSidebarTabs({ document, storage })
+    const tabs = initRightSidebarTabs({ document, getAvailableWidth: () => 1600, storage })
     expect(tabs.getActiveTab()).toBe('properties')
     expect(document.querySelector('[data-tab="assembly"]').hidden).toBe(true)
     expect(document.getElementById('right-tab-content-assembly').hidden).toBe(true)
@@ -98,7 +103,7 @@ describe('right sidebar tabs', () => {
   })
 
   it('keeps the assembly overview separate from overhang-related sections', () => {
-    const tabs = initRightSidebarTabs({ document, storage: null })
+    const tabs = initRightSidebarTabs({ document, getAvailableWidth: () => 1600, storage: null })
     const button = document.querySelector('[data-tab="assembly"]')
     expect(button.hidden).toBe(true)
     expect(document.querySelector('#right-tab-content-assembly #assembly-panel')).toBeTruthy()
@@ -120,7 +125,7 @@ describe('right sidebar tabs', () => {
   it('proxies representation buttons to the existing controls', () => {
     let clicks = 0
     document.getElementById('menu-view-detail-full').addEventListener('click', () => clicks++)
-    initRightSidebarTabs({ document, storage: null })
+    initRightSidebarTabs({ document, getAvailableWidth: () => 1600, storage: null })
     const full = [...document.querySelectorAll('.right-repr-btn')].find(b => b.textContent === 'Full')
     expect([...document.querySelectorAll('.right-repr-btn')].map(b => b.textContent))
       .toEqual(expect.arrayContaining(['mrDNA Coarse', 'mrDNA Fine']))
@@ -128,4 +133,29 @@ describe('right sidebar tabs', () => {
     full.click()
     expect(clicks).toBe(1)
   })
+  it('resizes and closes individual copies while refusing panels beyond capacity', () => {
+    const tabs = initRightSidebarTabs({ document, storage: null, getAvailableWidth: () => 650 })
+    tabs.select('properties')
+    const handles = document.querySelectorAll('.sidebar-column-resize')
+    for (let i = 0; i < 20; i++) handles[0].dispatchEvent(new document.defaultView.KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+    expect(tabs.getInstances().map(item => item.width)).toEqual([370, 280])
+    expect(tabs.select('overhangs')).toBe(false)
+    expect(document.querySelector('[role="status"]').textContent).toContain('No room')
+    document.querySelector('.sidebar-close').click()
+    expect(tabs.getOpenPanels()).toEqual(['properties'])
+    expect(tabs.getInstances()[0].width).toBe(280)
+    expect(document.getElementById('properties-section')).toBeTruthy()
+  })
+
+  it('restores independent widths and duplicate panels from preferences', () => {
+    const storage = { getItem: () => JSON.stringify({ activeTab: 'visualization', collapsed: false, instances: [
+      { type: 'visualization', width: 220 }, { type: 'visualization', width: 340 },
+    ] }), setItem: vi.fn() }
+    const tabs = initRightSidebarTabs({ document, storage, getAvailableWidth: () => 1600 })
+    expect(tabs.getInstances().map(item => item.width)).toEqual([220, 340])
+    tabs.open('visualization')
+    expect(tabs.getOpenPanels()).toEqual(['visualization', 'visualization'])
+    expect(document.querySelectorAll('#right-representation-modes')).toHaveLength(1)
+  })
+
 })

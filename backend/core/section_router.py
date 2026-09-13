@@ -455,6 +455,10 @@ def route_sections(design: Design, *, seamless: bool = False):
         )
         if trunk_strand is None:
             trunk_strand, trunk_x = _route_subbundle(design, trunk_sec)
+            result.warnings.append(
+                "[Seamless] The backbone could not be routed as a seamless cycle; "
+                "used interior seam crossovers to keep one scaffold strand."
+            )
     else:
         trunk_strand, trunk_x = _route_subbundle(design, trunk_sec, matched=True)
     if trunk_strand is None:

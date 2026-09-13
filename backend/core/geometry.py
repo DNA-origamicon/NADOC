@@ -343,6 +343,9 @@ def nucleotide_positions(
     appear as a backbone bond stretched past oxDNA's FENE divergence. bp_index
     labels are unchanged — only positions move.
     """
+    if helix.native_residues:
+        from backend.core.aptamer import native_positions
+        return native_positions(helix)
     start = helix.axis_start.to_array()
     end = helix.axis_end.to_array()
     axis_vec = end - start
@@ -472,6 +475,14 @@ def nucleotide_positions_arrays(helix: Helix, compact_skips: bool = False) -> di
     Falls back to nucleotide_positions() and converts when the helix has
     loop/skip modifications (rare; keeps loop/skip semantics correct).
     """
+    if helix.native_residues:
+        arrays = _nuc_arrays_from_list(
+            helix.id, helix.bp_start, nucleotide_positions(helix),
+            np.array([0.0, 0.0, 1.0]),
+        )
+        for key in ("axis_points", "radial_hats", "azimuths"):
+            arrays.pop(key, None)
+        return arrays
     start = helix.axis_start.to_array()
     end_arr = helix.axis_end.to_array()
     axis_vec = end_arr - start

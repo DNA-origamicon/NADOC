@@ -90,18 +90,18 @@ export function makeBondMaterial() {
 // unit sphere, so the matrix scale IS the radius.
 
 /** Geometry for one atom instance: a 2-triangle billboard, or a ~160-tri sphere. */
-export function atomSphereGeometry() {
-  return impostorsEnabled() ? IMPOSTOR_QUAD : SPHERE_GEO
+export function atomSphereGeometry(useImpostors = impostorsEnabled()) {
+  return useImpostors ? IMPOSTOR_QUAD : SPHERE_GEO
 }
 
 /** Material for an atom-sphere InstancedMesh of the given true radius (nm). */
-export function makeAtomSphereMaterial(radius) {
-  return impostorsEnabled() ? makeImpostorPhongMaterial({ radius }) : makeSphereMaterial()
+export function makeAtomSphereMaterial(radius, useImpostors = impostorsEnabled()) {
+  return useImpostors ? makeImpostorPhongMaterial({ radius }) : makeSphereMaterial()
 }
 
 /** Instance-matrix scale that pairs with `atomSphereGeometry()` for `radius`. */
-export function atomInstanceScale(radius) {
-  return impostorsEnabled() ? 1 : radius
+export function atomInstanceScale(radius, useImpostors = impostorsEnabled()) {
+  return useImpostors ? 1 : radius
 }
 
 // ── Pure geometry helpers ────────────────────────────────────────────────────

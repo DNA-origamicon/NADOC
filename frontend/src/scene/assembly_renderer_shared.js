@@ -544,8 +544,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       // Different chunks than the common/dithering replaces above, so separate.
       if (_isImpostor) {
         shader.fragmentShader = shader.fragmentShader
-          .replace('#include <clipping_planes_fragment>',
-            `#include <clipping_planes_fragment>\n${IMPOSTOR_FRAG_SPHERE_BODY}`)
+          .replace('#include <clipping_planes_fragment>', IMPOSTOR_FRAG_SPHERE_BODY)
           .replace('#include <normal_fragment_begin>', IMPOSTOR_FRAG_NORMAL)
       }
     }
@@ -804,8 +803,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
           varying vec3 v_atomColor;
           ${IMPOSTOR_FRAG_UNIFORMS}
         `)
-        .replace('#include <clipping_planes_fragment>',
-          `#include <clipping_planes_fragment>\n${IMPOSTOR_FRAG_SPHERE_BODY}`)
+        .replace('#include <clipping_planes_fragment>', IMPOSTOR_FRAG_SPHERE_BODY)
         .replace('#include <normal_fragment_begin>', IMPOSTOR_FRAG_NORMAL)
         .replace('#include <color_fragment>', `
           #include <color_fragment>

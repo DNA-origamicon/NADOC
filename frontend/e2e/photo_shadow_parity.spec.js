@@ -21,7 +21,8 @@ async function loadPhoto(page, kind) {
     await page.evaluate(async () => window.__nadocTest?.setRepresentation?.('cylinders'))
     await page.waitForTimeout(500)
   }
-  await page.locator('#photo-tab-btn').click()
+  if (!await page.locator('#photo-lighting-enabled').isVisible()) await page.locator('#photo-tab-btn').click()
+  await page.locator('#photo-lighting-enabled').check()
   await page.locator('#photo-key-shadow-mapsize').selectOption('1024')
   await page.waitForFunction(() => {
     const d = window.__photoMode?.getDiagnostics?.()

@@ -1,6 +1,7 @@
 /**
  * md_solvent_controls.js — the Visualizations card's Water / Ions / Periodic box
  * toggles, and the fetch+cache that feeds them.
+ * Water is available only in live Display MD; trajectory playback loads ions/cell.
  *
  * Lives outside md_jobs_panel.js (already ~3.7k lines) because this is a cohesive
  * subsystem with its own state, its own DOM and its own network traffic. The panel
@@ -13,11 +14,10 @@
  *    quite apart from being unaffordable. The hydration shell is the useful view and
  *    the default. Ions top out around 15 k and are always drawn in full.
  *
- * 2. **The molecule set changes every frame.** The shell is a distance query and
- *    water diffuses, so the payload length differs frame to frame. Frames are
- *    therefore SNAPPED to, never interpolated, and the cache is keyed by an exact
- *    request signature — changing the shell radius, the scope, or the rep invalidates
- *    it wholesale rather than mixing two kinds of frame.
+ * 2. **Trajectory companions are prepared for the whole loaded trajectory.**
+ *    Frames snap to their matching DNA frame; Play joins preparation and seeks
+ *    wait for missing coordinates. Job, interval, and toggle changes invalidate
+ *    the cache. Drawing-style changes reuse the same ion coordinates.
  *
  * 3. **Whole-box atomistic is the case that kills the tab.** ~32 MB/frame on a large
  *    job against a 1536 MB hard heap ceiling that terminates rather than degrades.
@@ -39,9 +39,8 @@ const LS = {
   shell: 'nadoc:md-jobs-solvent-shell',
 }
 
-/** Frames per request. The server-side MDAnalysis context build is ~30 s and is paid
- *  once per REQUEST, so a bigger window is strictly cheaper per frame; 32 matches the
- *  DNA prebuild's chunk for the same reason. */
+/** Default window for the live-water memory estimate. Trajectory preparation uses
+ * measured complete-frame bytes and batches up to 128 MiB instead. */
 export const SOLVENT_CHUNK = 32
 
 /** Bytes per molecule on the wire. */
@@ -176,9 +175,11 @@ export function initMdSolventControls({
   let _meta = null              // /solvent-meta for _jobId
   let _measuredSpecies = null   // real ion census, once a frame has landed
   let _cache = new Map()        // frame index → parsed frame
-  let _sig = ''                 // request signature the cache belongs to
   let _frameIdx = 0
   let _inflight = null
+  let _generation = 0
+  let _preparation = null
+  let _frameBytes = 0
   let _enabled = false
   let _measuredWater = null     // real molecule count, once a frame has landed
   let _live = false             // driven by the WS stream rather than the REST route
@@ -200,7 +201,7 @@ export function initMdSolventControls({
   }
 
   function _persist() {
-    _write(LS.water, String(!!waterToggle?.checked))
+    if (_live) _write(LS.water, String(!!waterToggle?.checked))
     _write(LS.ions, String(!!ionsToggle?.checked))
     _write(LS.box, String(!!boxToggle?.checked))
     _write(LS.scope, _scope())
@@ -219,11 +220,14 @@ export function initMdSolventControls({
     return (_keyframeOptions || simulationGraphene) && normal === 'off' ? 'sphere' : normal
   }
   // Graphene rides the cell channel even when the optional box outline is hidden.
-  const _anyOn = () => !!(simulationGraphene || waterToggle?.checked || ionsToggle?.checked || boxToggle?.checked)
+  const _waterOn = () => _live && !!waterToggle?.checked
+  const _anyOn = () => !!(simulationGraphene || _waterOn() || ionsToggle?.checked || boxToggle?.checked)
 
   function _requestSig() {
-    return [_jobId, _repMode(), _scope(), _shellAng(), _stride,
-            !!waterToggle?.checked, !!ionsToggle?.checked, !!boxToggle?.checked].join('|')
+    const mode = _repMode()
+    return [_jobId, _live || mode === 'off' ? mode : 'sphere',
+            _waterOn() ? _scope() : null, _waterOn() ? _shellAng() : null, _stride,
+            _waterOn(), !!ionsToggle?.checked, !!boxToggle?.checked].join('|')
   }
 
   function _setStatus(text, color = '#8b949e') {
@@ -234,7 +238,7 @@ export function initMdSolventControls({
   function _plan() {
     return solventFetchPlan({
       repMode: _repMode(),
-      water: !!waterToggle?.checked, ions: !!ionsToggle?.checked, box: simulationGraphene || !!boxToggle?.checked,
+      water: _waterOn(), ions: !!ionsToggle?.checked, box: simulationGraphene || !!boxToggle?.checked,
       scope: _scope(), shellAng: _shellAng(),
       nWatersTotal: _meta?.n_waters ?? 0, nIons: _meta?.n_ions ?? 0,
       nFrames: _nFrames || 1, availableBytes: getAvailableBytes?.() ?? null,
@@ -242,9 +246,9 @@ export function initMdSolventControls({
   }
 
   function _renderCount() {
-    if (waterOpts) waterOpts.style.display = waterToggle?.checked ? '' : 'none'
+    if (waterOpts) waterOpts.style.display = _waterOn() ? '' : 'none'
     if (!countEl) return
-    if (!waterToggle?.checked || !_meta?.n_waters) { countEl.textContent = ''; return }
+    if (!_waterOn() || !_meta?.n_waters) { countEl.textContent = ''; return }
     const p = _plan()
     const total = _meta.n_waters
     const shown = _measuredWater ?? p.nWaterEst
@@ -292,7 +296,7 @@ export function initMdSolventControls({
   function _request() {
     const p = _plan()
     return {
-      water: !!waterToggle?.checked,
+      water: _waterOn(),
       ions: !!ionsToggle?.checked,
       box: simulationGraphene || !!boxToggle?.checked,
       shellAng: _scope() === 'all' ? null : _shellAng(),
@@ -315,47 +319,51 @@ export function initMdSolventControls({
 
   // ── fetch ─────────────────────────────────────────────────────────────────
   function _invalidate() {
+    _generation++
+    _preparation = null
+    _frameBytes = 0
     _cache = new Map()
-    _sig = _requestSig()
     _measuredWater = null
   }
 
-  /** Frame window to request around `i` — a little behind the playhead, mostly ahead. */
-  function _window(i) {
-    const start = Math.max(0, i - 4)
-    const out = []
-    for (let k = start; k < Math.min(_nFrames || (i + 1), start + SOLVENT_CHUNK); k++) {
-      if (!_cache.has(k)) out.push(k)
-    }
-    return out
+  function _fetchMissing(i) {
+    if (_live || !_jobId || !_enabled || !_anyOn() || _repMode() === 'off') return
+    if (_inflight) return _inflight
+    // Show and measure one frame first, then prepare all remaining frames in
+    // byte-bounded batches, amortizing the backend's per-request topology setup.
+    const foreground = !_cache.has(i)
+    const want = foreground ? [i]
+      : Array.from({ length: _nFrames }, (_, k) => k).filter(k => !_cache.has(k))
+        .slice(0, Math.max(1, Math.floor(128 * 1024 * 1024 / Math.max(1, _frameBytes))))
+    if (!want.length) return
+    const generation = _generation
+    const task = _fetchBatch(want, generation)
+    _inflight = task
+    void task.finally(() => { if (_inflight === task) _inflight = null })
+    return task
   }
 
-  async function _fetchAround(i) {
-    if (!_jobId || !_enabled || !_anyOn() || _repMode() === 'off') return
-    if (_inflight) return
-    const want = _window(i)
-    if (!want.length) return
+  async function _fetchBatch(want, generation) {
     const p = _plan()
     const sig = _requestSig()
-    const requestedFrame = i | 0
-    let retryLatest = false
     const ionsOn = !!ionsToggle?.checked
-    _inflight = true
-    _setStatus(`Loading solvent (${want.length} frames)…`, '#58a6ff')
     try {
       const buf = await api.getMdFramesSolventBin(_jobId, want, {
         stride: _stride,
-        water: !!waterToggle?.checked,
+        water: false,
         ions: ionsOn,
         box: simulationGraphene || !!boxToggle?.checked,
         shellAng: _scope() === 'all' ? null : _shellAng(),
-        atomistic: p.atomistic,
+        atomistic: false, // Trajectory companions contain no water; ion coordinates are unchanged by representation.
         maxWaters: p.maxWaters,
       })
       // A toggle/rep/shell change mid-flight makes this payload the wrong shape.
-      if (sig !== _requestSig()) { retryLatest = true; return }
+      if (generation !== _generation || sig !== _requestSig() || !_enabled || _live) return false
       const parsed = parseSolventBin(buf)
-      if (!parsed) { _setStatus('No solvent for this frame', '#d29922'); return }
+      if (!parsed || want.some(k => !parsed.frames.has(k))) {
+        _setStatus('Ion/box frames are missing. Retry playback to reload them.', '#d29922')
+        return false
+      }
       getSolventOverlay?.()?.setIonSpecies(parsed.ionSpecies)
       // Only a payload that ASKED for ions can speak to what the job contains — one
       // fetched with the toggle off carries an empty species array for the obvious
@@ -364,26 +372,65 @@ export function initMdSolventControls({
         _measuredSpecies = tallyIonSpecies(parsed.ionSpecies, parsed.speciesTable)
         _renderLegend()
       }
-      for (const [id, f] of parsed.frames) _cache.set(id, f)
       const first = parsed.frames.values().next().value
+      // Measure the complete payload, including graphene, before preparing all
+      // frames. The metadata's ion count alone misses most of P1's bytes.
+      _frameBytes = Math.max(_frameBytes, Math.ceil(buf.byteLength / parsed.frames.size))
+      if (_frameBytes * Math.max(1, _nFrames) > _plan().budgetBytes) {
+        _setStatus(`Ion/box trajectory needs ${formatBytes(_frameBytes * _nFrames)}. Increase the frame interval to fit memory.`, '#d29922')
+        return false
+      }
+      for (const [id, f] of parsed.frames) _cache.set(id, f)
       if (first) _measuredWater = first.nWater
       _renderCount()
       _setStatus(parsed.capped
         ? `Solvent ready · capped at ${first?.nWater?.toLocaleString?.() ?? ''} molecules/frame`
         : 'Solvent ready', parsed.capped ? '#d29922' : '#3fb950')
       _draw(_frameIdx)
+      return true
     } catch {
-      _setStatus('Solvent load failed', '#d29922')
-    } finally {
-      _inflight = false
-      // A toggle/representation change invalidates the response above, and scrubbing can
-      // move the playhead outside the window while that response is in flight. Retry once
-      // from the current state; otherwise the overlay stays forever at "Loading solvent"
-      // even though the discarded request returned 200.
-      if (retryLatest || _frameIdx !== requestedFrame) {
-        queueMicrotask(() => _fetchAround(_frameIdx))
-      }
+      if (generation === _generation) _setStatus('Ion/box load failed. Retry playback to reload.', '#d29922')
+      return false
     }
+  }
+
+  const _needsFrames = () => _enabled && !_live && _anyOn() && _repMode() !== 'off' && !!_jobId
+
+  /** One background preparation shared by Play and scrubbing. Every frame must
+   * be present: a nearby window is not a complete playable trajectory. */
+  function prepareAll() {
+    if (!_needsFrames()) return Promise.resolve(true)
+    if (_preparation?.generation === _generation) return _preparation.promise
+    const generation = _generation
+    const live = () => generation === _generation && _needsFrames()
+    const promise = (async () => {
+      while (live()) {
+        // A stale request from the previous settings must finish before starting
+        // the next worker; otherwise the backend kills the competing request.
+        if (_inflight) { await _inflight; if (!live()) return false }
+        const total = Math.max(1, _nFrames)
+        if (_cache.size >= total) {
+          _setStatus(`Ions / box ready · ${total}/${total} frames`, '#3fb950')
+          return true
+        }
+        const pending = _fetchMissing(_frameIdx)
+        _setStatus(`Preparing ions / box · ${_cache.size}/${total} frames…`, '#58a6ff')
+        if (await pending === false) return false
+      }
+      return false
+    })()
+    _preparation = { generation, promise }
+    void promise.finally(() => {
+      if (_preparation?.promise === promise) _preparation = null
+    })
+    return promise
+  }
+
+  /** Gate a scene seek without drawing ions ahead of the DNA. */
+  function ensureFrame(i) {
+    if (!_needsFrames() || _cache.has(i | 0)) return true
+    const generation = _generation
+    return prepareAll().then(ok => ok && generation === _generation && _cache.has(i | 0))
   }
 
   // ── draw ──────────────────────────────────────────────────────────────────
@@ -396,7 +443,7 @@ export function initMdSolventControls({
     // molecule k of frame i is a different molecule from molecule k of frame i+1.
     if (ov) {
       ov.setMode(_repMode(), ['ballstick', 'stick'].includes(getCurrentRepr?.()))
-      ov.setWaterVisible(!!waterToggle?.checked)
+      ov.setWaterVisible(_waterOn())
       ov.setIonsVisible(!!ionsToggle?.checked)
       ov.setFrame(f)
     }
@@ -413,6 +460,7 @@ export function initMdSolventControls({
   }
 
   function _refresh() {
+    if (!_live && waterToggle) waterToggle.checked = false
     _persist()
     _renderCount()
     _renderLegend()
@@ -431,7 +479,7 @@ export function initMdSolventControls({
     }
     _invalidate()
     _clearScene()
-    _fetchAround(_frameIdx)
+    void prepareAll()
   }
 
   // ── wiring ────────────────────────────────────────────────────────────────
@@ -465,10 +513,11 @@ export function initMdSolventControls({
     const ballstick = ['ballstick', 'stick'].includes(getCurrentRepr?.())
     const modeChanged      = mode !== _lastRepMode
     const ballstickChanged = ballstick !== _lastBallstick
+    const wireChanged = _live ? modeChanged : (mode === 'off') !== (_lastRepMode === 'off')
     _lastRepMode   = mode
     _lastBallstick = ballstick
-    if (modeChanged) { _refresh(); return }
-    if (ballstickChanged) _draw(_frameIdx)   // cached frame, new bond geometry
+    if (wireChanged) { _refresh(); return }
+    if (modeChanged || ballstickChanged) _draw(_frameIdx) // same ions, new drawing style
   })
 
   return {
@@ -485,9 +534,12 @@ export function initMdSolventControls({
     /** Point the controls at a job + its trajectory density. */
     async setJob(jobId, { stride = null, nFrames = 0, frameIdx = null } = {}) {
       const changed = jobId !== _jobId
+      const reset = changed || stride !== _stride || nFrames !== _nFrames
+      if (reset) _invalidate()
       _jobId = jobId
       _stride = stride
       _nFrames = nFrames
+      if (reset && frameIdx === null) _frameIdx = 0
       if (frameIdx !== null && Number.isFinite(Number(frameIdx))) {
         _frameIdx = Math.max(0, Number(frameIdx) | 0)
       }
@@ -500,7 +552,12 @@ export function initMdSolventControls({
       // Retry while the answer is "not ready": a package still being built has no
       // charge audit yet and reports zero water and zero ions, and caching THAT for the
       // life of the panel is how the readouts end up contradicting the screen.
-      if (jobId && !_meta?.ready) _meta = await api.getMdSolventMeta(jobId).catch(() => null)
+      const generation = _generation
+      if (jobId && !_meta?.ready) {
+        const meta = await api.getMdSolventMeta(jobId).catch(() => null)
+        if (generation !== _generation || jobId !== _jobId) return
+        _meta = meta
+      }
       _renderCount()
       _renderLegend()
       if (_enabled && _anyOn()) _refresh()
@@ -515,10 +572,15 @@ export function initMdSolventControls({
       const was = _enabled
       const wasLive = _live
       _enabled = !!on
+      if (!on) { _generation++; _preparation = null }
       if (simulationGraphene) window.dispatchEvent(new CustomEvent(
         "nadoc:graphene-md-active", { detail: { active: _enabled } }))
       if (!_enabled) _keyframeOptions = false
       _live = _enabled && transport === 'live'
+      if (waterToggle) {
+        waterToggle.checked = _live ? _read(LS.water, '') === 'true' : false
+      }
+      _renderCount()
       if (_live !== wasLive) { _cache = new Map(); _measuredWater = null }
       // Only ask for the representation when it can matter. The panel gates these
       // controls once during its own construction, and main.js's `getCurrentRepr`
@@ -538,12 +600,16 @@ export function initMdSolventControls({
         : 'Select an MD job and turn on Display MD or View trajectory'
       for (const el of [waterToggle, ionsToggle, boxToggle]) {
         if (!el) continue
-        el.disabled = !ok
+        const waterBlocked = el === waterToggle && !_live
+        const allowed = ok && !waterBlocked
+        el.disabled = !allowed
+        if (waterBlocked) el.title = 'Water is unavailable for full trajectories. Use Display MD to view water.'
+        else if (el === waterToggle) el.removeAttribute('title')
         const lab = el.closest('label')
         if (lab) {
-          lab.style.opacity = ok ? '1' : '0.5'
-          lab.style.cursor = ok ? 'pointer' : 'not-allowed'
-          lab.title = ok ? lab.title : why
+          lab.style.opacity = allowed ? '1' : '0.5'
+          lab.style.cursor = allowed ? 'pointer' : 'not-allowed'
+          lab.title = waterBlocked ? el.title : allowed ? '' : why
         }
       }
       if (root) root.style.opacity = ok ? '1' : '0.6'
@@ -555,12 +621,11 @@ export function initMdSolventControls({
       }
     },
 
-    /** Draw frame `i`; fetches the surrounding window if it isn't cached. */
+    /** Draw frame `i`; prepare missing companions without displaying stale ones. */
     showFrame(i) {
       _frameIdx = i | 0
       if (!_enabled || !_anyOn() || _repMode() === 'off') return
-      if (!_draw(_frameIdx)) _fetchAround(_frameIdx)
-      else if (_window(_frameIdx).length > SOLVENT_CHUNK / 2) _fetchAround(_frameIdx)
+      if (!_draw(_frameIdx)) { _clearScene(); void prepareAll() }
     },
 
     /** Wait until the requested companion frame is drawable. Video exporters call
@@ -570,13 +635,13 @@ export function initMdSolventControls({
       if (!_enabled || !_anyOn() || _repMode() === 'off') return true
       if (_draw(frame)) return true
       _frameIdx = frame
-      void _fetchAround(frame)
-      const deadline = Date.now() + timeoutMs
-      while (Date.now() < deadline) {
-        if (_draw(frame)) return true
-        await new Promise(resolve => setTimeout(resolve, 25))
-      }
-      return false
+      const generation = _generation
+      let timer
+      try {
+        const ready = await Promise.race([ensureFrame(frame),
+          new Promise(resolve => { timer = setTimeout(() => resolve(false), timeoutMs) })])
+        return ready && generation === _generation && _draw(frame)
+      } finally { clearTimeout(timer) }
     },
 
     /**
@@ -606,6 +671,8 @@ export function initMdSolventControls({
 
     /** Tear down: hide everything and cancel any server-side analysis. */
     clear() {
+      _generation++
+      _preparation = null
       _clearScene()
       _setStatus('')
       _cache = new Map()
@@ -615,6 +682,8 @@ export function initMdSolventControls({
     },
 
     isAnyOn: _anyOn,
+    prepareAll,
+    ensureFrame,
     plan: _plan,
   }
 }

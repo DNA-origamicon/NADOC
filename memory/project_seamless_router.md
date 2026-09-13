@@ -5,7 +5,42 @@ type: project
 originSessionId: 4a5f87b3-ab49-4bcb-84bb-6252b80892b0
 ---
 ## What it does
-`auto_scaffold_seamless(design)` places one scaffold crossover per adjacent helix pair at a **helix end** (hi face if hA is FORWARD/even-parity, lo face if REVERSE/odd-parity). Each helix is visited once. For multi-section designs, groups are stitched by HJ bridges (same as seamed Phase 1). Returns `(updated_design, SeamlessResult)`.
+`auto_scaffold_seamless(design)` now defaults to a **closed route with one buried nick**:
+the 5′/3′ termini are adjacent bases on the same helix, inside the bundle. This is
+the user-confirmed target (2026-09-10), not separated termini on an open raster.
+Each helix is traversed once, with the nick helix split into two domains. Turns use
+end crossovers only. Multi-section designs dispatch through the section router.
+Returns `(updated_design, SeamlessResult)`; `close_cycle=False` explicitly retains
+open paths for section windows that are closed during splicing.
+
+### Cycle closure and warnings (2026-09-10)
+- The public command previously left `close_cycle=False`; `cube_pore.nadoc` was one
+  strand with 35 crossovers and separated ends, so the strand-count warning missed it.
+  The default now produces 36 end crossovers, one scaffold, no seams, and a buried
+  nick at `h_XY_0_0[19/20]` after resetting the saved route to its structural seed.
+- `_closeable_path` uses shared `_ham_path_search(close_cycle=True)`: closure is
+  required **inside** DFS, so an open full path triggers backtracking. One fixed
+  start and one visit budget cover the whole cycle search; minimum-degree and
+  bipartite-balance checks reject impossible shapes early.
+- Closing zig is directed `(path[-1], path[0])`, using the last helix's free 3′ face.
+  Forcing the FORWARD helix first reused the hi face for FORWARD-start paths. Fixing
+  this also closes the HC ring used by the dumbbell trunk without backbone seams.
+- Every public return checks actual terminal adjacency, including hinge/section
+  dispatch. Failure yields a `[Seamless]` warning even for one open strand. It does
+  **not** claim mathematical impossibility when bounded search merely failed.
+  Section fallback to interior backbone seams also warns. Reset warnings survive
+  specialized dispatch. The frontend displays returned warnings as a toast.
+- Regression tests cover SQ 6×6/3×4, HC 6HB, saved cube rerouting/idempotence,
+  coverage/transition continuity, odd/degree-one shapes, and search exhaustion.
+- Validation: focused routing/hinge tests 75 passed, 1 skipped; final `test-smart`
+  decision FAST, 7,721 passed / 35 skipped, FULL deferred without a test session.
+  No per-test timing violations after BigO triage; aggregate 99 s timing notice
+  remains (see `project_test_parallelization.md`). Browser regression exercised
+  the public command and visible warning; inspected the 3D cube and warning.
+  Final frontend unit suite: 400 files / 6,282 tests passed.
+  The original workspace cube checksum is unchanged.
+
+The dated architecture notes below describe the earlier open-path implementation.
 
 **File:** `backend/core/seamless_router.py`
 **API endpoint:** `POST /design/auto-scaffold-seamless` (crud.py)
@@ -14,7 +49,7 @@ originSessionId: 4a5f87b3-ab49-4bcb-84bb-6252b80892b0
 
 ## Key architectural difference from seamed router
 - **Seamed**: visits each helix twice (two half-domains); HJ crossovers at midpoints + lo+hi ends.
-- **Seamless**: visits each helix once; one crossover per adjacent pair at hi or lo end only. Hamiltonian path endpoints become the scaffold 5'/3' termini — no open-end skipping.
+- **Seamless**: traverses each helix once; end turns close a Hamiltonian cycle, then a single buried nick sets the scaffold 5′/3′ termini. An open-path fallback warns.
 
 ## Closing zig (CRITICAL insight)
 In a multi-section design, path[0] and path[-1] of a non-last group are both adjacent to the bridge helix. After the bridge HJ connects group G to group G+1, the resulting topology is **not circular** — the bridge breaks any loop. Therefore the closing zig crossover (path[0] ↔ path[-1] at hi face) is safe to place within non-last groups.

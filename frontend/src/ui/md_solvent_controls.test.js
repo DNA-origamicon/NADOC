@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { beforeEach, afterEach, vi } from 'vitest'
+import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import {
   solventFetchPlan, estimateShellFraction, SOLVENT_CHUNK,
   initMdSolventControls, tallyIonSpecies, ION_SPECIES,
@@ -249,6 +250,26 @@ describe('live transport', () => {
     expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
   })
 
+  it('disables saved water for trajectories and restores it only for live display', async () => {
+    localStorage.setItem('nadoc:md-jobs-solvent-water', 'true')
+    await made.setJob('job-1', { stride: 20, nFrames: 280 })
+    made.setEnabled(true, 'traj')
+    const water = document.getElementById('md-jobs-water-toggle')
+    expect(water.disabled).toBe(true)
+    expect(water.checked).toBe(false)
+    expect(water.title).toContain('unavailable for full trajectories')
+    expect(document.getElementById('md-jobs-water-opts').style.display).toBe('none')
+    const ions = document.getElementById('md-jobs-ions-toggle')
+    ions.checked = true
+    ions.dispatchEvent(new Event('change'))
+    expect(api.getMdFramesSolventBin.mock.calls.at(-1)[2]).toMatchObject({ water: false, ions: true })
+    expect(localStorage.getItem('nadoc:md-jobs-solvent-water')).toBe('true')
+    made.setEnabled(true, 'live')
+    expect(water.disabled).toBe(false)
+    expect(water.checked).toBe(true)
+    expect(setSolvent.mock.calls.at(-1)[0].water).toBe(true)
+  })
+
   it('tells the stream to stop when every toggle goes off', () => {
     made.setEnabled(true, 'live')
     const box = document.getElementById('md-jobs-box-toggle')
@@ -357,8 +378,8 @@ describe('representation change → cache invalidation', () => {
     })
     await made.setJob('job-1', { stride: 1, nFrames: 20 })
     made.setEnabled(true, 'traj')
-    document.getElementById('md-jobs-water-toggle').checked = true
-    document.getElementById('md-jobs-water-toggle').dispatchEvent(new Event('change'))
+    document.getElementById('md-jobs-ions-toggle').checked = true
+    document.getElementById('md-jobs-ions-toggle').dispatchEvent(new Event('change'))
     await settle()
     // One fetch has happened for the initial 'sphere' (full) view; count from here.
     expect(api.getMdFramesSolventBin).toHaveBeenCalledTimes(1)
@@ -379,12 +400,9 @@ describe('representation change → cache invalidation', () => {
     expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
   })
 
-  // 3 floats per molecule vs 9 — the payload really is a different shape, so the cached
-  // frames are unusable and this one MUST refetch.
-  it('refetches when the wire mode flips (full → vdw, sphere → atomistic)', async () => {
+  it('reuses ion coordinates when switching full → vdw', async () => {
     await changeRepr('vdw')
-    expect(api.getMdFramesSolventBin).toHaveBeenCalledTimes(1)
-    expect(api.getMdFramesSolventBin.mock.calls[0][2]).toMatchObject({ atomistic: true })
+    expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
   })
 
   // Same 'atomistic' payload; only whether the overlay draws the O-H bonds differs, which
@@ -438,30 +456,33 @@ describe('ion legend precedence', () => {
   ]
 
   /** One sphere-mode frame carrying `codes.length` ions, in the real wire layout. */
-  function packIonFrame(codes) {
+  function packIonFrame(codes, ids = [0], nGraphene = 0) {
     const h = {
-      frame_ids: [0], atomistic: false, n_waters_total: 0,
+      frame_ids: ids, atomistic: false, n_waters_total: 0,
       n_ions: codes.length, n_ions_total: codes.length, has_box: false,
       shell_nm: null, capped: false,
       species_table: ['NA', 'CL', 'MG', 'K', 'CA'],
-      ion_species: codes, per_frame_nw: [0], n_serials: 0,
+      ion_species: codes, per_frame_nw: ids.map(() => 0), n_serials: 0, n_graphene: nGraphene,
     }
     const hb = new TextEncoder().encode(JSON.stringify(h))
     const pad = (4 - (hb.length % 4)) % 4
-    const floats = codes.length * 3
+    const floats = (codes.length + nGraphene) * 3 * ids.length
     const buf = new ArrayBuffer(20 + hb.length + pad + floats * 4)
     const dv = new DataView(buf)
-    dv.setUint32(0, MAGIC, true); dv.setUint32(4, 2, true)
-    dv.setUint32(8, 1, true); dv.setUint32(12, 0, true)
+    dv.setUint32(0, MAGIC, true); dv.setUint32(4, nGraphene ? 3 : 2, true)
+    dv.setUint32(8, ids.length, true); dv.setUint32(12, 0, true)
     dv.setUint32(16, hb.length, true)
     new Uint8Array(buf, 20, hb.length).set(hb)
+    const xyz = new Float32Array(buf, 20 + hb.length + pad)
+    ids.forEach((id, i) => xyz.fill(id + 1, i * (codes.length + nGraphene) * 3,
+      (i + 1) * (codes.length + nGraphene) * 3))
     return buf
   }
 
   const settle = () => new Promise(r => setTimeout(r, 0))
   const legend = () => document.getElementById('md-jobs-ions-legend')
 
-  let api, made, meta
+  let api, made, meta, overlay
 
   /** Turn Ions on and let the (unawaited) fetch land. */
   async function turnIonsOn() {
@@ -471,21 +492,23 @@ describe('ion legend precedence', () => {
     await settle()
   }
 
-  async function boot() {
+  async function boot({ nFrames = 20, availableBytes = null } = {}) {
     api = {
       getMdSolventMeta: vi.fn(async () => meta),
       getMdFramesSolventBin: vi.fn(async () => null),
       cancelMdAnalysis: vi.fn(),
     }
+    overlay = { setIonSpecies: vi.fn(), setMode: vi.fn(), setFrame: vi.fn(),
+      setWaterVisible: vi.fn(), setIonsVisible: vi.fn(), clear: vi.fn() }
     made = initMdSolventControls({
       api,
-      getSolventOverlay: () => ({ setIonSpecies: vi.fn(), setMode: vi.fn(), setFrame: vi.fn(),
-                                  setWaterVisible: vi.fn(), setIonsVisible: vi.fn(), clear: vi.fn() }),
+      getSolventOverlay: () => overlay,
+      getAvailableBytes: () => availableBytes,
       getBoxOverlay: () => ({ setCorners: vi.fn(), hide: vi.fn() }),
       getCurrentRepr: () => 'full',
       getLiveDisplay: () => ({ setSolvent: vi.fn(() => true) }),
     })
-    await made.setJob('job-1', { stride: 1, nFrames: 20 })
+    await made.setJob('job-1', { stride: 1, nFrames })
     made.setEnabled(true, 'traj')
   }
 
@@ -510,6 +533,95 @@ describe('ion legend precedence', () => {
     expect(legend().style.display).toBe('')
     expect(legend().textContent).toContain('Na⁺ 8')
     expect(legend().textContent).not.toContain('no ions')
+  })
+
+  it('draws the requested ion frame before prefetching the surrounding window', async () => {
+    await boot()
+    let neighbours
+    api.getMdFramesSolventBin
+      .mockResolvedValueOnce(packIonFrame([0, 1]))
+      .mockImplementationOnce(() => new Promise(resolve => { neighbours = resolve }))
+    await turnIonsOn()
+    expect(api.getMdFramesSolventBin.mock.calls[0][1]).toEqual([0])
+    expect(api.getMdFramesSolventBin.mock.calls[1][1]).toEqual(
+      Array.from({ length: 19 }, (_, i) => i + 1))
+    expect(await made.settleFrame(0, 100)).toBe(true)
+    expect(legend().textContent).toContain('Na⁺ 1')
+    neighbours(null)
+    await settle()
+  })
+
+  it('prepares every companion frame beyond the old window and replays without fetching', async () => {
+    await boot({ nFrames: 280 })
+    api.getMdFramesSolventBin.mockImplementation(async (_job, ids) => packIonFrame([0, 2], ids))
+    await turnIonsOn()
+    expect(await made.prepareAll()).toBe(true)
+    expect(api.getMdFramesSolventBin.mock.calls.map(c => c[1].length)).toEqual([1, 279])
+    expect(document.getElementById('md-jobs-solvent-status').textContent).toContain('280/280')
+    api.getMdFramesSolventBin.mockClear()
+    for (const i of [0, 17, 32, 80, 150, 279, 0]) {
+      expect(made.ensureFrame(i)).toBe(true)
+      made.showFrame(i)
+      expect(overlay.setFrame.mock.calls.at(-1)[0].ions[0]).toBe(i + 1)
+    }
+    expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
+  })
+
+  it('holds Play until all companions are ready, then DNA and ions pass frame 17 together', async () => {
+    await boot({ nFrames: 70 })
+    let release
+    api.getMdFramesSolventBin.mockResolvedValueOnce(packIonFrame([0]))
+      .mockImplementationOnce((_job, ids) => new Promise(resolve => { release = () => resolve(packIonFrame([0], ids)) }))
+    await turnIonsOn()
+    const frames = []
+    const player = initOxdnaTrajectoryPlayer({ fps: 10, onBeforePlay: () => made.prepareAll(),
+      onBeforeSeek: i => made.ensureFrame(i), onSeek: i => {
+        made.showFrame(i)
+        frames.push([i, overlay.setFrame.mock.calls.at(-1)[0].ions[0]])
+      } })
+    player.setTrajectory(70)
+    vi.useFakeTimers()
+    try {
+      const playing = player.play()
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(player.current()).toBe(0)
+      expect(player.isPlaying()).toBe(false)
+      release(); await playing
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(player.current()).toBe(40)
+      expect(frames).toEqual(Array.from({ length: 40 }, (_, i) => [i + 1, i + 2]))
+    } finally { player.stop(); vi.useRealTimers() }
+  })
+
+  it('rejects partial batches and allows a deliberate retry without an automatic request loop', async () => {
+    await boot({ nFrames: 70 })
+    api.getMdFramesSolventBin.mockResolvedValue(packIonFrame([0]))
+    await turnIonsOn()
+    expect(api.getMdFramesSolventBin).toHaveBeenCalledTimes(2)
+    expect(document.getElementById('md-jobs-solvent-status').textContent).toContain('missing')
+    api.getMdFramesSolventBin.mockImplementation(async (_job, ids) => packIonFrame([0], ids))
+    expect(await made.prepareAll()).toBe(true)
+    expect(made.ensureFrame(69)).toBe(true)
+  })
+
+  it('discards an in-flight load after disabling the view', async () => {
+    await boot()
+    let release
+    api.getMdFramesSolventBin.mockImplementation(() => new Promise(resolve => { release = resolve }))
+    await turnIonsOn()
+    const preparing = made.prepareAll()
+    made.setEnabled(false)
+    release(packIonFrame([0]))
+    expect(await preparing).toBe(false)
+    expect(overlay.setFrame).not.toHaveBeenCalled()
+  })
+
+  it('includes graphene in the full-trajectory memory budget', async () => {
+    await boot({ nFrames: 280, availableBytes: 1024 * 1024 })
+    api.getMdFramesSolventBin.mockResolvedValue(packIonFrame([0], [0], 1000))
+    await turnIonsOn()
+    expect(api.getMdFramesSolventBin).toHaveBeenCalledTimes(1)
+    expect(document.getElementById('md-jobs-solvent-status').textContent).toContain('Increase the frame interval')
   })
 
   // The regression: a package whose charge audit is missing or half-written answers

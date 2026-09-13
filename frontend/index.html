@@ -537,21 +537,23 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 4px;
+      padding: 38px 0 6px;
+      box-sizing: border-box;
       z-index: 11;
     }
     .left-tab-btn {
       writing-mode: vertical-rl;
       transform: rotate(180deg);
       width: 30px;
-      padding: 10px 5px;
+      padding: 8px 5px;
       background: #161b22;
       border: 1px solid #30363d;
       border-radius: 6px;
       color: #c9d1d9;
-      font-size: var(--text-xs);
+      font-size: 11px;
       font-weight: 600;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
       cursor: pointer;
       user-select: none;
@@ -604,6 +606,8 @@
     }
     #left-tab-toggle:disabled { opacity: 0.3; cursor: default; }
     #left-panel .tab-content[hidden] { display: none; }
+    #photo-settings { border: 0; padding: 0; margin: 0; min-width: 0; }
+    #photo-settings:disabled { opacity: .55; }
 
     /* Left-sidebar cards use several neighboring gray surfaces, so the legacy
        muted ramp is too faint at the panel's compact type sizes.  Keep accent
@@ -3956,6 +3960,7 @@
           <button class="dropdown-item" id="menu-file-import-cadnano">Import caDNAno…</button>
           <button class="dropdown-item" id="menu-file-import-scadnano">Import scadnano…</button>
           <button class="dropdown-item" id="menu-file-import-pdb">Import PDB…</button>
+          <button class="dropdown-item" id="menu-file-import-aptamer">Aptamer…</button>
         </div>
       </div>
 
@@ -6353,6 +6358,39 @@
                     <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
                   </div>
 
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;opacity:0.5" title="Available for NAMD nanopore simulations with a saved trajectory.">
+                    <input id="md-ion-paths-toggle" name="md-viz" type="radio" value="ion-paths" disabled> View nanopore ion paths
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px;opacity:0.5" title="Average the selected ion's displacement vectors in spatial bins around the nanopore.">
+                    <input id="md-ion-vector-field-toggle" name="md-viz" type="radio" value="ion-vector-field" disabled> View ion vector field
+                  </label>
+                  <div id="md-ion-paths-options" style="display:none;padding-left:18px;margin-top:4px;font-size:var(--text-xs);color:#8b949e">
+                    <label>Frames before crossing <input id="md-ion-paths-before" type="number" min="1" max="1000000" step="1" value="10" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label><br>
+                    <label>Frames after crossing <input id="md-ion-paths-after" type="number" min="1" max="1000000" step="1" value="10" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label><br>
+                    <div id="md-ion-paths-path-options">
+                      <label>Line thickness (px) <input id="md-ion-paths-width" type="number" min="0.5" max="12" step="0.5" value="2" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label>
+                      <label style="display:block;margin-top:5px">Path coloring <select id="md-ion-paths-color" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"><option value="species">Ion species</option><option value="time">Earliest → latest frame</option></select></label>
+                      <label for="md-ion-paths-percentage" style="display:block;margin-top:6px">Ion paths shown <output id="md-ion-paths-percentage-label" for="md-ion-paths-percentage">100%</output></label>
+                      <input id="md-ion-paths-percentage" type="range" min="0" max="100" step="1" value="100" style="width:100%" title="Show a stable subset of complete paths. 0% leaves the average origami and nanopore visible.">
+                    </div>
+                    <div id="md-ion-paths-vector-options" style="display:none;margin-top:5px">
+                      <label>Ion species <select id="md-ion-paths-species" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"><option value="NA">Na⁺</option><option value="CL">Cl⁻</option><option value="MG">Mg²⁺</option><option value="K">K⁺</option><option value="CA">Ca²⁺</option></select></label><br>
+                      <label for="md-ion-paths-density" style="display:block;margin-top:5px">Arrow density <output id="md-ion-paths-density-label" for="md-ion-paths-density">14</output></label>
+                      <input id="md-ion-paths-density" type="range" min="4" max="64" step="1" value="14" style="width:100%" title="Number of spatial bins along the longest dimension. Only occupied bins produce arrows.">
+                      <label style="display:block;margin-top:2px">Exact density <input id="md-ion-paths-density-number" type="number" min="4" max="1000000" step="1" value="14" style="width:72px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px" title="Enter densities above the slider's 64-bin limit."> bins</label>
+                      <label for="md-ion-paths-arrow-scale" style="display:block;margin-top:5px">Arrow size <output id="md-ion-paths-arrow-scale-label" for="md-ion-paths-arrow-scale">1.00×</output></label>
+                      <input id="md-ion-paths-arrow-scale" type="range" min="0.25" max="3" step="0.05" value="1" style="width:100%" title="Uniformly scale the length and thickness of every arrow.">
+                      <label style="display:block;margin-top:5px">Vector magnitude <select id="md-ion-paths-magnitude" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"><option value="size">Arrow size</option><option value="color">Color coded</option></select></label>
+                      <div style="margin-top:4px">Arrows average saved-frame displacements within occupied spatial bins for the selected ion.</div>
+                    </div>
+                    <div>Saved simulation frames, independent of playback interval. Large windows are supported up to the available frames; windows clip at segment ends.</div>
+                    <button id="md-ion-paths-retry" type="button" style="margin-top:4px">Reload ion data</button>
+                    <div>Cyan: RMSF average origami, placed in the first saved frame. Grey: simulated graphene nanopore and aperture. Paths include recrossings.</div>
+                    <div><span style="color:#ab5cf2">Na⁺</span> · <span style="color:#1ff01f">Cl⁻</span> · <span style="color:#ffdc32">Mg²⁺</span> · <span style="color:#8f40d4">K⁺</span> · <span style="color:#3dff00">Ca²⁺</span></div>
+                  </div>
+                  <progress id="md-ion-paths-progress" max="100" value="0" hidden aria-label="Nanopore ion visualization loading progress" style="width:100%;height:10px;accent-color:#58a6ff"></progress>
+                  <div id="md-ion-paths-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px" role="status"></div>
+
                   <!-- ── Solvent & periodic cell ──────────────────────────────
                        CHECKBOXES, deliberately NOT peers in the name="md-viz"
                        radio group above: they LAYER on whichever view is active.
@@ -6899,9 +6937,10 @@
         <div id="tab-content-photo" class="tab-content" hidden>
 
           <div style="display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid #21262d">
-            <button id="photo-exit-btn" class="pxr-btn" style="flex:1">← Exit Photo Mode</button>
+            <label style="display:flex;align-items:center;gap:8px"><input id="photo-lighting-enabled" type="checkbox">Enable lighting &amp; appearance</label>
           </div>
 
+          <fieldset id="photo-settings" disabled>
           <div id="photo-status" class="pxr-note" style="padding:6px 14px;border-bottom:1px solid #21262d">
             inactive
           </div>
@@ -7278,6 +7317,7 @@
 
           </div>
 
+        </fieldset>
         </div><!-- /#tab-content-photo -->
 
         <!-- Plates and tubes — 96-well plate layout + IDT tube list -->
@@ -7291,16 +7331,14 @@
 
       </div><!-- /#left-panel -->
 
-      <!-- Vertical tab strip — always visible, even when #left-panel is collapsed.
-           Click an inactive tab to expand+switch; click the active tab to collapse.
-           The toggle arrow at the top is a redundant collapse/expand affordance
-           that doesn't change which tab is active. -->
+      <!-- Section shortcuts remain visible when controls are hidden.
+           Each section expands independently; the arrow hides all controls. -->
       <div id="left-tab-strip">
         <button id="left-tab-toggle" title="Hide sidebar">◀</button>
         <button class="left-tab-btn active" data-tab="feature-log" title="Feature Log">Feature Log</button>
         <button class="left-tab-btn"        data-tab="dynamics"     title="Simulations">Simulations</button>
         <button class="left-tab-btn"        data-tab="scene"        title="Animations — camera poses + animation playback">Animations</button>
-        <button class="left-tab-btn"        data-tab="photo"        title="Photo mode — figure-quality render and export" id="photo-tab-btn" data-test="photo-tab-btn">Photomode</button>
+        <button class="left-tab-btn"        data-tab="photo"        title="Lighting &amp; appearance controls" id="photo-tab-btn" data-test="photo-tab-btn">Appearance</button>
         <button class="left-tab-btn"        data-tab="plates"       title="Plates and tubes — 96-well plate layout + IDT tube list">Plates &amp; tubes</button>
         <!-- Drag-to-resize the sidebar; lives on the tab strip's outer edge
              (the border with the 3D viewport) so it's easy to find. -->

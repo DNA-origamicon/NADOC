@@ -24,8 +24,12 @@ from backend.core.regional_skip_placer import (
 
 @pytest.fixture(scope="module")
 def sq_design():
-    """A routed, sequenced 2x3x40 square-lattice bundle, no skips (the candidate source)."""
-    return build_sq_skip_design(square_cells(2, 3), 40, None)
+    """Enough duplex for several skip slots, including with a buried scaffold nick.
+
+    At 40 bp a closed route can leave only one budgeted skip on the first helix;
+    the deviation/strain tests below deliberately exercise the SECOND slot.
+    """
+    return build_sq_skip_design(square_cells(2, 3), 80, None)
 
 
 def _first_helix_with_budget(design, budget_per_helix, want=3):

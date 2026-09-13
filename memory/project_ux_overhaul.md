@@ -29,6 +29,15 @@ canvas Tab selection-level cycling and the expert Delete/x/1–6 bindings.
 alternatives. If a tradeoff emerges during implementation that contradicts the decision, surface
 it explicitly rather than silently re-deciding.
 
+**Sidebar stacks (2026-09-11):** Both edges now use `ui/sidebar_stack.js` with
+`shared_panel_views.js`: repeat rail clicks create shared-state copies, independent
+scroll/width, X close, inward growth and a shared 320px viewport reserve. Left/right
+rail colors match panel headers; Properties and Plates remain neutral. Saved layouts
+use left v3 / right v2. Empty animation contexts start with a persisted-on-save
+`animation 1`; `animation_defaults.js` prevents repeated seeding within a session. Programmatic navigation focuses an existing copy. Dimensions
+stays active when another column opens while Properties remains open. Detached
+browser controls remain assessment-only. See `docs/expandable_panels_implementation_plan.md`.
+
 ## Corrections from the 2026-07-31 audit (the archive is wrong about these)
 
 | Archive claim | Reality |
@@ -45,7 +54,7 @@ it explicitly rather than silently re-deciding.
 | Thing | Location |
 |---|---|
 | Sim-folder hiding | `ui/sim_folders.js` — `SIM_FOLDER_NAMES:2`, `isSimFolderPath:17` (`root.endsWith('_jobs')` heuristic :19), `visibleWorkspaceEntries:22`. Importers: `ui/library_panel.js:14`, `ui/file_browser.js:16` — **both** pass the flag (`library_panel.js:245`, `file_browser.js:381`). Checkboxes OFF by default (`library_panel.js:121`, `file_browser.js:71`) |
-| Per-file sidebar width | `ui/sidebar_resize.js` — `leftWidthStorageKey:26`, legacy global `LS_LEFT:23`, `nadoc:workspace-path-change` listener `:115-119` (left only), RIGHT stays global `:55-57`. Sole importer `main.js:180` |
+| Sidebar width | `ui/sidebar_stack.js` owns independent saved column widths on both edges; `sidebar_resize.js` is a legacy fallback and skips stack hosts |
 | Modal primitive | `ui/primitives/modal.js` `createModal` — 22 call sites |
 | Confirm primitive | `ui/primitives/confirm.js` `showConfirm` — ~25 call sites, **zero tests** |
 | Toast | `ui/toast.js` — 374 call sites, **1 test** |

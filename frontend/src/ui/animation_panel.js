@@ -19,6 +19,7 @@
  * @param {object}   opts.scene                — THREE.Scene
  * @param {object}   opts.camera               — THREE.PerspectiveCamera
  */
+import { initAnimationDefaults } from './animation_defaults.js'
 import { showToast } from './toast.js'
 import { openKeyframeTextPopup } from './keyframe_text_popup.js'
 import { initAnimationReadinessBar } from './animation_readiness_bar.js'
@@ -164,6 +165,12 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   let _partMode    = false
   let _partDesign  = null
   let _partPatchFn = null
+  let _partInstanceId = null
+  const defaults = initAnimationDefaults({
+    store, api,
+    getContext: () => ({ assemblyMode: _assemblyMode, partMode: _partMode, partDesign: _partDesign, partPatchFn: _partPatchFn, partInstanceId: _partInstanceId }),
+    onError: error => showToast(`Could not create animation 1: ${error.message}`, { severity: 'error' }),
+  })
 
   // ── Mode-aware helpers ────────────────────────────────────────────────────────────
 
@@ -189,6 +196,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   // ── Animation selector ───────────────────────────────────────────────────────
 
   function _rebuildSelect(animations) {
+    void defaults.ensure()
     if (!selectEl) return
     selectEl.innerHTML = ''
     if (!animations?.length) {
@@ -319,11 +327,12 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   newBtn?.addEventListener('click', async () => {
     if (actionsMenu) actionsMenu.style.display = 'none'
+    await defaults.ensure()
     if (_partMode) {
       const n = (_partDesign?.animations?.length ?? 0) + 1
       await _partPatchFn(d => {
         d.animations = [...(d.animations ?? []), {
-          id: crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`, name: `Animation ${n}`,
+          id: crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`, name: `animation ${n}`,
           keyframes: [], fps: 30, loop: false,
         }]
       })
@@ -333,7 +342,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     const source = _assemblyMode ? state.currentAssembly : state.currentDesign
     if (!source) return
     const n = (source.animations?.length ?? 0) + 1
-    await _api(api.createAnimation, api.createAssemblyAnimation)(`Animation ${n}`)
+    await _api(api.createAnimation, api.createAssemblyAnimation)(`animation ${n}`)
   })
 
   deleteAnimBtn?.addEventListener('click', async () => {
@@ -2053,6 +2062,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (_assemblyMode || _partMode) return  // other mode has its own data source
     if (n.currentDesign === p.currentDesign) return
     if (_selfKfPatch > 0) return           // our own edit; the row already shows it
+    void defaults.ensure()
     if (!_collapsed) _rebuildSelectMaybeDefer(n.currentDesign?.animations ?? [])
   })
 
@@ -2060,6 +2070,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (!_assemblyMode) return
     if (n.currentAssembly === p.currentAssembly) return
     if (_selfKfPatch > 0) return           // our own edit; the row already shows it
+    void defaults.ensure()
     if (!_collapsed) _rebuildSelectMaybeDefer(n.currentAssembly?.animations ?? [])
   })
 
@@ -2090,6 +2101,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   }
 
   function setPartContext(instanceId, design, patchFn) {
+    _partInstanceId = instanceId
     _partMode    = true
     _partDesign  = design
     _partPatchFn = patchFn

@@ -4,7 +4,9 @@ import { graphenePreviewSites, initGrapheneRepresentation } from './graphene_rep
 /** Display-only preview of the graphene build descriptor used by an oxDNA-seeded NAMD job. */
 export function initGrapheneNanoporeOverlay(scene) {
   let mesh = null
-  let simulationActive = false
+  // Independent scene owners can overlap during a visualization handoff. A
+  // solvent refresh must not release the ion-path view's suppression lease.
+  const simulationOwners = new Set()
   let display = { visible: true, representation: 'plane' }
   let spec = null
   let atoms = null
@@ -55,7 +57,7 @@ export function initGrapheneNanoporeOverlay(scene) {
       mesh = atoms.mesh()
       if (!mesh) { atoms.dispose(); atoms = null; return }
     }
-    mesh.visible = display.visible && !simulationActive
+    mesh.visible = display.visible && simulationOwners.size === 0
     mesh.name = 'Graphene nanopore preview'
     mesh.userData.grapheneNanopore = true
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n)
@@ -63,15 +65,16 @@ export function initGrapheneNanoporeOverlay(scene) {
     mesh.renderOrder = 12
     scene.add(mesh)
   }
-  function setSimulationActive(active) {
-    simulationActive = !!active
-    if (mesh) mesh.visible = display.visible && !simulationActive
+  function setSimulationActive(active, owner = 'md') {
+    if (active) simulationOwners.add(owner)
+    else simulationOwners.delete(owner)
+    if (mesh) mesh.visible = display.visible && simulationOwners.size === 0
   }
   function setDisplay(settings) {
     const changed = settings.representation != null && display.representation !== settings.representation
     display = { ...display, ...settings }
     if (changed && spec) update(spec)
-    if (mesh) mesh.visible = display.visible && !simulationActive
+    if (mesh) mesh.visible = display.visible && simulationOwners.size === 0
   }
   function reset() { clear(); spec = null }
   return { update, clear: reset, setSimulationActive, setDisplay, dispose: reset, mesh: () => mesh }

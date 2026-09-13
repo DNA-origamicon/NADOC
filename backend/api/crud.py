@@ -2601,6 +2601,10 @@ def add_strand(body: StrandRequest) -> dict:
         color=color,
     )
 
+    if new_strand.sequence is None:
+        from backend.core.aptamer import native_partner_sequence
+        new_strand.sequence = native_partner_sequence(design_cur, new_strand)
+
     # Pen-tool auto-designation: a staple painted antiparallel over an existing
     # overhang becomes an OH binder linked to that overhang.
     if new_strand.strand_type == StrandType.STAPLE:
@@ -2618,6 +2622,7 @@ def add_strand(body: StrandRequest) -> dict:
         params={
             **body.model_dump(mode="json"),
             "_strand_id": new_strand.id,
+            "sequence": new_strand.sequence,
             "_color": color,
         },
         fn=_apply,

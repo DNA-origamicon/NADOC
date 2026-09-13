@@ -2677,6 +2677,10 @@ def build_atomistic_model(
     if close_backbone:
         _close_sequential_backbone(atoms, bonds)
 
+    if nuc_pos_override is None and nuc_frame_override is None:
+        from backend.core.aptamer import apply_native_atoms
+        apply_native_atoms(atoms, design)
+
     # ── Apply deformations (bend/twist) and cluster rigid transforms ──────────
     # All atom positions above are placed in straight (undeformed) geometry.
     # This final pass rotates/translates every atom to match the deformed 3-D view.

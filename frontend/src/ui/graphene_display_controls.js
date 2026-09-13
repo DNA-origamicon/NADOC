@@ -1,5 +1,5 @@
 /** Browser display preferences only; deliberately independent of job preparation. */
-export function initGrapheneDisplayControls({ preview, simulation, storage } = {}) {
+export function initGrapheneDisplayControls({ preview, simulation, ionPaths, storage } = {}) {
   const toggle = document.getElementById('md-graphene-show')
   const select = document.getElementById('md-graphene-representation')
   let settings = { visible: true, representation: 'plane' }
@@ -14,6 +14,7 @@ export function initGrapheneDisplayControls({ preview, simulation, storage } = {
     if (select) select.value = settings.representation
     preview?.setDisplay(settings)
     simulation?.setGrapheneDisplay(settings)
+    ionPaths?.setGrapheneDisplay(settings)
   }
   function change() {
     settings = { visible: toggle?.checked !== false, representation: select?.value || 'plane' }

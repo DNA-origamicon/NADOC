@@ -1,3 +1,4 @@
+import { nativeCorePaired } from '../shared/aptamer.js'
 /**
  * Helix renderer — builds Three.js instanced objects from geometry API data.
  *
@@ -731,6 +732,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     // not as a regular helix axis stick — drawing one here produces stray
     // black lines floating between the two clusters at the linker midpoint.
     if (helix.id?.startsWith('__lnk__')) continue
+    const isNativeFold = Boolean(helix.native_residues?.length) && !nativeCorePaired(helix, design)
     const axDef     = helixAxes?.[helix.id]
     const tubeSamp  = axDef?.samples
     const isCurved  = tubeSamp != null && tubeSamp.length > 2
@@ -770,7 +772,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     // per-segment cylinder array used by non-curved helices below and skip
     // the single shaft entirely.
     const useSegments = !isCurved || (axDef?.segments?.length ?? 0) > 1
-    if (isCurved && !useSegments) {
+    // Native oligos have a backbone, not a duplex axis. Full uses the same
+    // strand-colored direction cones as every ordinary strand. Keep the
+    // axis metadata for cylinder LOD, but never overlay an axis tube.
+    if (isCurved && !useSegments && !isNativeFold) {
       const pts   = tubeSamp.map(s => new THREE.Vector3(...s))
       const curve = new THREE.CatmullRomCurve3(pts)
       const segs  = Math.max(tubeSamp.length * 4, 16)
@@ -797,7 +802,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       straightShaft.material.userData.skipOpacityRestore = true
       root.add(straightShaft)
     }
-    if (useSegments) {
+    if (useSegments && !isNativeFold) {
       // Straight helix: one world-space cylinder per scaffold domain (no merging).
       // Backend supplies pre-transformed per-segment endpoints when present
       // (axDef.segments); otherwise compute from the helix's straight axis. The
@@ -866,7 +871,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             // 0, AXIS_SAMPLE_STEP, 2*step, …, with length_bp-1 appended last.
             const localBp = (si === lastSampleIdx)
               ? helix.length_bp - 1
-              : si * AXIS_SAMPLE_STEP
+              : si * (isNativeFold ? 1 : AXIS_SAMPLE_STEP)
             if (localBp > localLo && localBp <= localHi) {
               pts.push(new THREE.Vector3(...tubeSamp[si]))
             }
@@ -913,6 +918,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       bp_lo:   helix.bp_start,
       bp_hi:   helix.bp_start + helix.length_bp - 1,
       isCurved,
+      isNative: isNativeFold,
       // True when this helix renders its axis via per-segment cylinders
       // rather than a single shaft. Set for every non-curved helix and for
       // curved helices with bp-range gaps between segments (so the gap
@@ -1674,6 +1680,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // Returns { geo, t0Curve, t1Curve } where t0/t1Curve are the curve parameters
   // used (so they can be re-used when rebuilding after a radius change).
   function _buildDomainTubeGeo(arrow, lo, hi, tubRadius, openAngle = 2 * Math.PI) {
+    if (arrow.isNative) tubRadius *= 0.18 / 1.125
     const nSamples  = arrow.samples.length
     const bpSpan    = Math.max(1, arrow.bpLen - 1)
     const halfBpT   = 0.5 / bpSpan

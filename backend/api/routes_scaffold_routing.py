@@ -149,9 +149,9 @@ def auto_scaffold_matched_endpoint() -> dict:
 
 @router.post("/design/auto-scaffold-seamless", status_code=200)
 def auto_scaffold_seamless_endpoint() -> dict:
-    """Seamless scaffold routing: one end crossover per helix pair (zig-zag).
+    """Seamless scaffold cycle with one buried nick, warning if closure fails.
 
-    Computes a Hamiltonian path through scaffold helices, places HJ bridges
+    Searches for a Hamiltonian cycle through scaffold helices, places HJ bridges
     between coverage-signature groups (multi-section designs like dumbbells),
     then places a single end crossover per within-group adjacent pair,
     alternating hi/lo face based on helix parity.

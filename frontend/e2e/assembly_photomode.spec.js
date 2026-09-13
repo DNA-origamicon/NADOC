@@ -54,7 +54,8 @@ test('BigO assembly supports the complete photomode control surface', async ({ p
     return dbg?.store.getState().assemblyActive && box && !box.isEmpty()
   }, null, { timeout: 45_000 })
 
-  await page.locator('#photo-tab-btn').click()
+  if (!await page.locator('#photo-lighting-enabled').isVisible()) await page.locator('#photo-tab-btn').click()
+  await page.locator('#photo-lighting-enabled').check()
   await expect(page.locator('#tab-content-photo')).toBeVisible()
   await expect.poll(() => page.evaluate(() => window.__photoMode?.isActive())).toBe(true)
   await expect(page.locator('#photo-status')).toContainText('key shadow on')
@@ -188,12 +189,12 @@ test('BigO assembly supports the complete photomode control surface', async ({ p
   // for minutes per frame; closing its isolated browser is the teardown rather
   // than turning compositor starvation into a false application failure.
   if (REPRESENTATIONS.at(-1) === 'cylinders') {
-    await page.evaluate(() => document.getElementById('photo-exit-btn')?.click())
+    await page.locator('#photo-lighting-enabled').uncheck()
     await expect.poll(
       () => page.evaluate(() => window.__photoMode?.isActive()),
       { timeout: 60_000 },
     ).toBe(false)
-    await expect(page.locator('#tab-content-photo')).toBeHidden()
+    await expect(page.locator('#tab-content-photo')).toBeVisible()
     expect(errors).toEqual([])
   }
 })

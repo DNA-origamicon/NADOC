@@ -12,9 +12,11 @@ import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 const start = vi.fn()
 const poll = vi.fn()
 const analyzeTransport = vi.fn()
+const transportProgress = vi.fn()
 vi.mock('../api/client.js', () => ({
   startMdMetrics: (...a) => start(...a),
   getMdMetricsRun: (...a) => poll(...a),
+  getMdIonTransportProgress: (...a) => transportProgress(...a),
   getMdIonTransportAnalysis: (...a) => analyzeTransport(...a),
 }))
 const openTransport = vi.fn()
@@ -75,6 +77,7 @@ function makeResult() {
 
 beforeEach(() => {
   clearDom(); mountIds(IDS)
+  transportProgress.mockReset()
   start.mockReset(); poll.mockReset(); analyzeTransport.mockReset(); openTransport.mockReset(); openPopup.mockReset(); downloadText.mockReset()
 })
 
@@ -151,7 +154,44 @@ describe('initMdMetricsCard', () => {
     expect(document.getElementById('md-metrics-ion-transport-row').style.display).toBe('')
     document.getElementById('md-metrics-ion-transport-display').click()
     await vi.waitFor(() => expect(openTransport).toHaveBeenCalledTimes(1))
-    expect(analyzeTransport).toHaveBeenCalledWith('prod1')
+    expect(analyzeTransport).toHaveBeenCalledWith('prod1', { requestId: expect.any(String) })
+  })
+
+  it('polls stage progress and stays busy through plot rendering despite selection changes', async () => {
+    let job = { job_id: 'prod1', run_kind: 'production', spawn_params: { ion_transport_mode: 'voltage' } }
+    let finishAnalysis, finishPlot
+    analyzeTransport.mockImplementation(() => new Promise(resolve => { finishAnalysis = resolve }))
+    openTransport.mockImplementation(() => new Promise(resolve => { finishPlot = resolve }))
+    transportProgress.mockImplementation(async (_id, requestId) => ({ request_id: requestId,
+      state: 'running', stages: [{ stage: 'current', done: 25, total: 100 }] }))
+    const card = initMdMetricsCard({ getSelectedJob: () => job, getJobs: () => [] })
+    const button = document.getElementById('md-metrics-ion-transport-display')
+    button.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-ion-transport-stage="current"]').textContent)
+      .toContain('25 / 100 (25%)'))
+    job = { job_id: 'relax', prep_params: { graphene_nanopore: true } }
+    card.sync()
+    expect(button.disabled).toBe(true)
+    expect(document.querySelector('[data-ion-transport-stage="current"]').textContent).toContain('25 / 100')
+    finishAnalysis({ mean_current_nA: 0.2, frames: 100, series: {} })
+    await vi.waitFor(() => expect(openTransport).toHaveBeenCalledTimes(1))
+    expect(button.disabled).toBe(true)
+    expect(transportProgress.mock.calls.every(([id]) => id === 'prod1')).toBe(true)
+    finishPlot()
+    await vi.waitFor(() => expect(document.getElementById('md-metrics-ion-transport-status').textContent).toContain('100 frames'))
+    expect(button.disabled).toBe(true) // the selected relaxation cannot be analyzed
+  })
+
+  it('shows a terminal error and unlocks retry after an analysis failure', async () => {
+    const job = { job_id: 'prod1', run_kind: 'production', spawn_params: { ion_transport_mode: 'voltage' } }
+    analyzeTransport.mockRejectedValue(new Error('Unreadable trajectory'))
+    initMdMetricsCard({ getSelectedJob: () => job, getJobs: () => [] })
+    const button = document.getElementById('md-metrics-ion-transport-display')
+    button.click()
+    await vi.waitFor(() => expect(button.disabled).toBe(false))
+    expect(document.getElementById('md-metrics-ion-transport-status').textContent).toContain('Unreadable trajectory')
+    expect(openTransport).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-ion-transport-progress] progress:not([value])')).toBeNull()
   })
 
   it('shows a disabled transport action on a nanopore relaxation', () => {

@@ -403,8 +403,8 @@ export function initDimensionsTool({
       _renderList()
     }
   })
-  const unsubscribeSidebar = rightSidebar?.onChange?.(({ activeTab }) => {
-    if (activeTab !== 'properties' && !collapsed) close()
+  const unsubscribeSidebar = rightSidebar?.onChange?.(({ activeTab, openPanels }) => {
+    if (!(openPanels ? openPanels.includes('properties') : activeTab === 'properties') && !collapsed) close()
   })
 
   _applyCollapse()

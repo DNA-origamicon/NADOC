@@ -1,3 +1,4 @@
+import { quadruplexMarkers } from '../shared/aptamer.js'
 /**
  * Pathview — Canvas 2D strand editor, cadnano2-style.
  *
@@ -2771,6 +2772,65 @@ export function initPathview(canvasEl, containerEl, {
 
   // ── Draw: overhang names ─────────────────────────────────────────────────────
 
+  function _drawQuadruplexHatching() {
+    const cores = new Map((_design?.helices ?? [])
+      .filter(h => h.native_residues?.length)
+      .map(h => [h.id, new Set(h.native_residues.map(site => site.bp_index))]))
+    if (!cores.size) return
+    ctx.save()
+    ctx.strokeStyle = '#d8b4fe'
+    ctx.lineWidth = 0.8
+    ctx.setLineDash([])
+    ctx.beginPath()
+    for (const strand of _design.strands ?? []) {
+      if (strand.is_reference) continue
+      for (const domain of strand.domains ?? []) {
+        const core = cores.get(domain.helix_id)
+        const info = _rowMap.get(domain.helix_id)
+        if (!core || !info || domain.direction !== 'FORWARD') continue
+        const lo = Math.min(domain.start_bp, domain.end_bp)
+        const hi = Math.max(domain.start_bp, domain.end_bp)
+        // Saved residue addresses limit the hatch to the imported sequence,
+        // including when the core is trimmed, nicked, or joined to a staple.
+        for (const bp of core) {
+          if (bp < lo || bp > hi) continue
+          const left = _bpToX(bp)
+          for (const offset of [2.5, 7.5]) {
+            ctx.moveTo(left + offset - 1.5, info.fwdY + 2)
+            ctx.lineTo(left + offset + 1.5, info.fwdY - 2)
+          }
+        }
+      }
+    }
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  function _drawQuadruplexMarkers() {
+    ctx.save()
+    for (const marker of quadruplexMarkers(_design)) {
+      const info = _rowMap.get(marker.helixId)
+      if (!info) continue
+      const x = _bpCenterX(marker.bp)
+      const y = info.fwdY - CELL_H * 0.35
+      ctx.save()
+      ctx.translate(x, y)
+      ctx.scale(0.7, 0.7)
+      // Four guanines around a channel: vector icon stays sharp at every zoom.
+      ctx.strokeStyle = marker.paired ? '#94a3b8' : '#a855f7'
+      ctx.fillStyle = ctx.strokeStyle
+      ctx.lineWidth = 0.8
+      ctx.strokeRect(-4, -8, 8, 8)
+      for (const dx of [-5, 2]) for (const dy of [-9, -2]) ctx.fillRect(dx, dy, 3, 3)
+      ctx.font = 'bold 8px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'bottom'
+      ctx.fillText(marker.paired ? 'G4 · duplex' : 'G4', 7, 1)
+      ctx.restore()
+    }
+    ctx.restore()
+  }
+
   function _drawOverhangNames() {
     if (!_viewTools.overhangNames || !_design?.strands) return
     const labelMap = new Map()
@@ -4030,9 +4090,11 @@ export function initPathview(canvasEl, containerEl, {
     _drawExtensions()
     _drawCoaxialArcs()
     _drawCrossoverArcs()
+    _drawQuadruplexHatching()
     _drawSequences()
     _drawLoopSkips()
     _drawOverhangNames()
+    _drawQuadruplexMarkers()
   }
 
   let _drawFrame = null
@@ -4565,7 +4627,7 @@ export function initPathview(canvasEl, containerEl, {
         if (dF > HIT && dR > HIT) continue
         const isFwdTrack = dF <= dR
         const direction  = isFwdTrack ? 'FORWARD' : 'REVERSE'
-        const isScaffold = isFwdTrack === info.scaffoldFwd
+        const isScaffold = isFwdTrack === info.scaffoldFwd && !_helixById.get(hid)?.native_residues?.length
         const bp = _xToBp(wx) - _ghostShiftBp   // REAL bp when painting through a mirror
         _painting        = true
         _paintAnchor     = bp

@@ -37,11 +37,16 @@ describe('makeImpostorPhongMaterial', () => {
     mat.onBeforeCompile(s)
     expect(s.uniforms.u_impostorRadius.value).toBeCloseTo(0.35)
     expect(s.vertexShader).not.toContain('#include <project_vertex>')       // replaced outright
-    // The fragment patch KEEPS the clipping chunk and appends the sphere body
-    // after it, so assert on the injected body rather than the chunk's absence.
-    // (u_impostorRadius is declared on the VERTEX side; the fragment side gets the
-    // ray-paint + depth write.)
+    // The fragment patch evaluates clipping after reconstructing the actual sphere
+    // surface. Clipping the camera-facing billboard would cut from the camera axes
+    // instead of the section plane's direction.
     expect(s.vertexShader).toContain('u_impostorRadius')
+    expect(s.fragmentShader).toContain('vec3 _imp_surfaceView = v_centerView + _imp_normal * v_impR;')
+    expect(s.fragmentShader).toContain('vec3 _imp_clipPosition = -_imp_surfaceView;')
+    expect(s.fragmentShader.indexOf('_imp_surfaceView'))
+      .toBeLessThan(s.fragmentShader.indexOf('#include <clipping_planes_fragment>'))
+    expect(s.fragmentShader).toContain('#define vClipPosition _imp_clipPosition')
+    expect(s.fragmentShader).toContain('#undef vClipPosition')
     expect(s.fragmentShader).toContain('gl_FragDepth')
   })
 

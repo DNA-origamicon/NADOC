@@ -707,6 +707,25 @@ describe('consolidated Change directory / Delete (above the jobs card)', () => {
 })
 
 describe('Terminate run and download feedback', () => {
+  it.each(['alpine', 'runpod'])('uses the displayed default directory for %s without a browser preference', async (execution_target) => {
+    localStorage.removeItem('nadoc.runDir')
+    mount()
+    const path = '/home/joshua/NADOC/workspace/md_jobs'
+    const { sim, api } = make([mdNode({ status: 'running', execution_target })], {
+      getMdRunDirStatus: vi.fn().mockResolvedValue({ ok: true, path, default: true }),
+      finishMdJob: vi.fn().mockResolvedValue({ action: 'download', verified: true }),
+      mdDownloadStatus: vi.fn().mockResolvedValue({ state: 'verified' }),
+    })
+    await sim.refresh(); sim.selectJob('md1')
+    const directory = document.querySelector('#simulate-run-dir button')
+    expect(directory.textContent).toContain('md_jobs')
+    expect(directory.title).toContain(path)
+    document.getElementById('simulate-jobs-end-download-btn').click()
+    await vi.waitFor(() => expect(api.finishMdJob).toHaveBeenCalledWith('md1', path))
+    await vi.waitFor(() => expect(document.getElementById('simulate-jobs-end-download-btn').textContent)
+      .toBe('Download complete'))
+  })
+
   it('uses terminate wording for both Alpine and RunPod', async () => {
     for (const execution_target of ['alpine', 'runpod']) {
       mount()

@@ -52,6 +52,7 @@ export function initVRSession({
   onNativeEvent = null,
 } = {}) {
   let session = null
+  let nativeUnsupportedReason = null
   let nativeActive = false
   let nativePollTimer = null
   let nativeEventTimer = null
@@ -430,7 +431,18 @@ export function initVRSession({
     starting = true
     _setButtonState({ busy: true })
     let status = null
-    try { status = await native.launch() } catch { /* API client reports the detail */ }
+    try {
+      if (native.status) {
+        const capability = await native.status()
+        if (!capability || capability.available === false) {
+          starting = false
+          _setButtonState()
+          showToast(capability?.unsupported_reason || _nativeFailureMessage(), { severity: 'error' })
+          return false
+        }
+      }
+      status = await native.launch()
+    } catch { /* API client reports the detail */ }
     starting = false
     if (!status?.running) {
       _setButtonState()
@@ -450,7 +462,11 @@ export function initVRSession({
       } catch { /* try the native companion */ }
     }
     if (!native?.status) return false
-    try { return (await native.status())?.available === true } catch { return false }
+    try {
+      const status = await native.status()
+      nativeUnsupportedReason = status?.unsupported_reason || null
+      return status?.available === true
+    } catch { return false }
   }
 
   async function enter() {
@@ -540,7 +556,7 @@ export function initVRSession({
       ? (xr?.requestSession
           ? 'View the current 3D scene in an immersive VR headset.'
           : 'View the active Part with NADOC\'s native SteamVR companion.')
-      : 'Immersive VR is not currently available to this browser. Start SteamVR or use a WebXR-capable browser.'
+      : (nativeUnsupportedReason || 'Immersive VR is not currently available to this browser. Native VR requires a native Linux desktop with SteamVR, or use a WebXR-capable browser.')
   })
 
   // Reconnect the menu state after a page refresh while the companion is open.

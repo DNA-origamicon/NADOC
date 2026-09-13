@@ -16,6 +16,17 @@ metadata:
 > [project_photo_mode_archive.md](project_photo_mode_archive.md); mine it only for
 > a specific past decision.
 
+**2026-09-11 — sidebar stack revision:** Rail clicks append full-height,
+independently resizable columns, including shared-state copies. Source controllers
+and DOM listeners are shared; other views mirror changed nodes/properties and
+retain their own scrolling. Appearance uses an explicit `photo-lighting-enabled`
+switch, never panel visibility. Closing a copy or hiding all controls preserves
+lighting and playback. Columns have close buttons and subtle type-colored headers;
+capacity reserves the right sidebar and 320px of workspace. Layout v3 migrates old
+preferences. See `docs/expandable_panels_implementation_plan.md` for the pending
+user checkpoint. Detached controls are assessed only in
+`docs/detached_controls_feasibility.md`.
+
 Photo mode lives at [frontend/src/scene/photo_mode.js](frontend/src/scene/photo_mode.js),
 UI in [frontend/src/ui/photo_panel.js](frontend/src/ui/photo_panel.js)
 (`data-tab="photo"`, HTML under `#tab-content-photo`), with the shared sub-modules

@@ -41,7 +41,8 @@ test('graphene-only trajectory exposes numeric bounds and both video exporters r
   await page.locator('#anim-export-btn').click()
   await Promise.all([regularDownload, regularIons])
 
-  await page.locator('#photo-tab-btn').click()
+  if (!await page.locator('#photo-lighting-enabled').isVisible()) await page.locator('#photo-tab-btn').click()
+  await page.locator('#photo-lighting-enabled').check()
   await page.locator('#photo-video-res').selectOption('720p')
   await page.locator('#photo-video-fps').fill('1')
   const photoDownload = page.waitForEvent('download', { timeout: 180_000 })
