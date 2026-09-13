@@ -75,7 +75,10 @@ now passes all 30 frames, but does not plateau. Two-window per-chain convergence
 and precise failed-check messages are covered by positive/negative runner tests.
 See `docs/namd_peg_skip_validation.md`. Native inputs remain unchanged. The ordinary
 API resumed the job into p50; resident mode and a new trajectory frame were verified.
-P10 is completed, skipping was correctly withheld, and job error is null. See `docs/namd_peg_failure_20260912.md`. Production promotion remains deferred.
+The full job has since completed all chunks (25 ps + 4.8 ns), with saved safety
+checks passed and no job error. No chunk was skipped; energy/polymer plateau
+criteria remain false. See `docs/namd_dna_peg_readiness.md` for the covalent-junction,
+mixed-system preparation, health and visualization gaps. Production promotion remains deferred.
 See `docs/namd_peg_fast_relax.md`; MC seeding is assessed but not implemented. See
 `docs/namd_peg_wall_validation.md` for the parameter contract and barriers.
 

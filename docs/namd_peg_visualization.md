@@ -80,8 +80,11 @@ shared controls against the recorded native qualification trajectory.
 - Changed Python files pass Ruff and `git diff --check` passes. Repository-wide
   `just lint` reports existing F841 in `routes_oxdna.py` and F401 in
   `test_oxdna_peg.py`.
-- `just smoke` was refused by `scripts/sim_guard.py` because the real NAMD job was
-  running. This broader smoke gate remains outstanding; its guard was preserved.
+- `just smoke` was initially refused while NAMD was running. After the native job
+  finished, the guarded rerun produced **22 passed, 1 failed**: assembly-exit
+  console checking caught an HTTP 500 from the mrDNA save race described below.
+  Six temporary documents were removed by global teardown; the wrapper removed
+  browser outputs and verified no E2E workspace/session artifacts remained.
 - Read-only dev API checks returned p10's 30 frames through step 120000 and the
   actively written p100 stage, including step 140000 at the time of inspection.
 - Browser setup exposed a separate mrDNA job-reconciliation race:

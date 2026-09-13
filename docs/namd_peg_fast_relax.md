@@ -74,9 +74,10 @@ skipping; all ran. Maximum sampled penetration was 0.4701 Å and maximum sampled
 graft displacement 0.9169 Å. This validates the execution path; it does not claim
 that a 4.8 ns relaxation or thermodynamic equilibration has completed.
 
-Full-length job `48c1995afbd5` retains its successful minimization and 25 ps warm-up.
-Its original false health failure (energy-print cadence) was corrected without
-changing the molecular configuration or the native outputs.
+Full-length job `48c1995afbd5` is now completed: 25 ps warm-up and the full
+4.8 ns 4 fs rung. Every chunk ran and passed its saved safety checks; no skips
+occurred. Energy and polymer plateau checks remain false. The earlier false
+health failures were corrected without changing native forces or molecular inputs.
 
 The measured 4 fs stage throughput on this small case is about 73 ns/day. Tcl wall
 evaluation still requires CPU work and host/device transfers; GPU-resident
@@ -101,8 +102,9 @@ integration does not imply a GPU-native wall implementation.
 
 The actual development API successfully started, stopped and resumed full-length
 job `48c1995afbd5`. Stop preserved the 10,000-step 4 fs checkpoint; resume wrote
-`peg_relax_p10.resume1.conf` and a new `peg_relax_p10.cont1.dcd`. At handoff the
-job is **running**, with no error, in the p10 chunk. The 4.8 ns maximum-duration
-run has not completed. The completed 125 ps validation job remains available.
+`peg_relax_p10.resume1.conf` and a new `peg_relax_p10.cont1.dcd`. The job subsequently completed all chunks with no error. Both the completed
+4.825 ns job and the shorter 125 ps validation job remain available.
 
 The later continuation-parsing failure and its fix are documented in [skip verification](namd_peg_skip_validation.md), including precise failure messages and positive/negative runner tests.
+
+For the next chemical and mixed-system gates, see [DNA–PEG readiness](namd_dna_peg_readiness.md).
