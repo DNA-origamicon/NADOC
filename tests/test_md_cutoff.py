@@ -439,3 +439,66 @@ class TestEarlyStopFrameBudget:
 
         assert _output_freq(100) > 0
         assert _output_freq(0) > 0
+
+
+@pytest.mark.parametrize('mode,enabled,expect_skip,expect_failed', [
+    ('flat', True, True, False),
+    ('drift', True, False, False),
+    ('flat', False, False, False),
+    ('missing_energy', True, False, True),
+])
+def test_peg_runner_uses_real_metric_decision_and_preserves_restart_chain(
+    tmp_path, monkeypatch, mode, enabled, expect_skip, expect_failed
+):
+    """Controlled coordinates/energies; real PEG validator + real runner skip branch.
+
+    NAMD itself is stubbed. No synthetic evidence is published as a native job.
+    """
+    import numpy as np
+    from backend.core import namd_peg_health as ph
+    job = _setup(tmp_path, early_stop=enabled)
+    job.run_kind = 'peg_fast_relax'
+    pkg = job.package_dir(tmp_path)
+    manifest = json.loads((pkg/'manifest.json').read_text())
+    manifest.update(peg_fast_relax=True, input_hashes={}, n_atoms=2,
+                    slit=dict(box_nm=[4.8]*3, inset_nm=.2, axis=2, k_kcal_mol_A2=10),
+                    graft_k_kcal_mol_A2=5., audit=dict(anchor_indices_0=[0], peg_indices_0=[0,1]))
+    for s, js in zip(manifest['segments'], job.segments):
+        s.update(steps=3000, dcd_freq=100, npt=False)
+        js.steps=3000
+    (pkg/'manifest.json').write_text(json.dumps(manifest))
+    job.save(tmp_path)
+    calls=[];_install_fakes(monkeypatch,calls)
+    monkeypatch.setattr(ph,'read_pair',lambda *a: dict(atoms=[['1','PEG'],['2','PEG']],
+                                                      xyz=np.array([[10.,10.,4.],[10.,10.,6.]])))
+    def evidence(package, segment, atoms):
+        frames={}
+        for i in range(30):
+            z=6. if mode!='drift' else 6.+i*.1
+            row=dict(TS=(i+1)*100,POTENTIAL=-10000.,TOTAL=-9000.,TEMP=294.,BOUNDARY=0.,MISC=0.)
+            if mode=='missing_energy' and i==29: row=None
+            frames[(i+1)*100]=(np.array([[10.,10.,4.],[10.,10.,z]]),row)
+        return frames, 'Running with GPU-resident mode\nWRITING COORDINATES TO OUTPUT FILE AT STEP 3000\nEnd of program\n', ['controlled-test-evidence']
+    monkeypatch.setattr(ph,'segment_evidence',evidence)
+    asyncio.run(nr.run_job(job,tmp_path))
+    final=MdJob.load(job.job_id,tmp_path)
+    if expect_failed:
+        assert final.status == MdStatus.failed
+        assert final.segments[0].status == 'failed'
+        assert 'energy_frame_coverage' in final.error and '3000' in final.error
+        assert calls == [_MIN,'T_01_p10']
+        assert not any(s.skipped for s in final.segments)
+    else:
+        assert final.status == MdStatus.completed
+        assert [s.skipped for s in final.segments] == [False,expect_skip,expect_skip,False]
+        assert calls == ([_MIN,'T_01_p10','T_02_p100'] if expect_skip else [_MIN]+[s.name for s in job.segments])
+        decision=json.loads((pkg/'output/T_01_p10.peg-skip.json').read_text())
+        assert decision['skip'] == expect_skip
+        if not enabled: assert 'skip_disabled' in decision['skip_blockers']
+        if mode=='drift': assert 'polymer_not_plateaued' in decision['skip_blockers']
+        if expect_skip:
+            for name in ('T_01_p50','T_01_p100'):
+                for ext in ('coor','vel','xsc'):
+                    assert (pkg/f'output/{name}.{ext}').read_bytes()==(pkg/f'output/T_01_p10.{ext}').read_bytes()
+                assert not (pkg/f'{name}.log').exists()
+                assert not (pkg/f'output/{name}.dcd').exists()

@@ -15,6 +15,8 @@
 
 import * as THREE from 'three'
 import { initPegCoatingSetup } from './ui/peg_coating_setup.js'
+import { initNamdPegSurfaces } from './ui/namd_peg_surfaces.js'
+import { initNamdPegReview } from './ui/namd_peg_review.js'
 import { initSectionView } from './scene/section_view.js'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
@@ -308,6 +310,7 @@ async function main() {
     addFrameCallback, removeFrameCallback,
     setRenderFn, resetRenderFn,
   } = initScene(canvas)
+  initNamdPegReview({ scene, camera, controls, store, api })
 
   initSectionView({ scene, camera, renderer, controls, addFrameCallback, removeFrameCallback, getRenderCamera,
     getPartCentroid: fallback => multiViewDesignCentroid(store.getState(), fallback), document })
@@ -1233,6 +1236,7 @@ async function main() {
     clusterMemberStrandIds: id => selectionManager?.clusterMemberStrandIds?.(id) || [],
   })
 
+  initNamdPegSurfaces({ api })
   const mdPanel = initMdJobsPanel({
     mdDisplayController,
     getWorkspacePath: () => _workspacePath,

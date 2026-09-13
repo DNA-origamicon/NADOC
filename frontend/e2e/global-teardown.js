@@ -35,5 +35,11 @@ export default async function globalTeardown() {
   const scratchVictims = scratchFiles.filter(f =>
     f.startsWith(E2E_PREFIX) || f.startsWith('e2e__'))
   await Promise.all(scratchVictims.map(f => rm(path.join(scratch, f), { recursive: true, force: true })))
+  // Direct NAMD surface drafts are a separate artifact class, named by the test.
+  const surfaceDir = path.join(WORKSPACE, 'namd_surfaces')
+  let surfaces = []
+  try { surfaces = await readdir(surfaceDir) } catch {}
+  await Promise.all(surfaces.filter(f => f.startsWith('__e2e__namd-peg-direct') && (f.endsWith('.json') || f.endsWith('.tmp')))
+    .map(f => rm(path.join(surfaceDir, f), { force: true })))
   if (victims.length || scratchVictims.length) console.log(`[e2e teardown] removed ${victims.length + scratchVictims.length} __e2e__ artifact(s)`)
 }

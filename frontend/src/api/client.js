@@ -5128,3 +5128,11 @@ export * from './animation_endpoints.js'
 export * from './overhang_endpoints.js'
 
 export function reviewPegSetup(body) { return _request('POST', '/oxdna/peg/setup', body) }
+
+// Surface-library requests do not require a DNA or assembly simulation snapshot.
+export const listNamdPegSurfaces = () => _request('GET', '/md/peg-surfaces', undefined, { skipSimulationPrepare: true })
+export const getPegQualification = (id, segment, maxFrames = 100) => _request('GET', `/md/peg-qualifications/${encodeURIComponent(id)}?max_frames=${maxFrames}${segment ? `&segment=${encodeURIComponent(segment)}` : ''}`, undefined, { skipSimulationPrepare: true })
+export const reviewNamdPegSurface = body => _request('POST', '/md/peg-surfaces/review', body, { skipSimulationPrepare: true })
+export const saveNamdPegSurface = (body, id = null) => _request(id ? 'PUT' : 'POST', id ? `/md/peg-surfaces/${encodeURIComponent(id)}` : '/md/peg-surfaces', body, { skipSimulationPrepare: true })
+
+export const createPegFastRelax = id => _request('POST', `/md/peg-qualifications/${encodeURIComponent(id)}/fast-relax`, undefined, { skipSimulationPrepare: true })

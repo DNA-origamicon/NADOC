@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 
@@ -153,11 +153,19 @@ function makeDeps(overrides = {}) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers()
   clearDom()
   _madeAtomRenderers.length = 0
   _madeSurfaceRenderers.length = 0
   vi.clearAllMocks()
   global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ stats: {} }) }))
+})
+
+// Drain the surface debounce while jsdom still exists; real timers otherwise
+// dispatch into a torn-down window after this file's final test.
+afterEach(async () => {
+  await vi.runOnlyPendingTimersAsync()
+  vi.useRealTimers()
 })
 
 describe('regionSurfaceSignature (pure)', () => {

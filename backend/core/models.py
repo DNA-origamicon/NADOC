@@ -2291,6 +2291,8 @@ class DesignMetadata(BaseModel):
     hardware_defaults: Dict[str, HardwareBenchmark] = Field(default_factory=dict)
     # Saved simulation setup, separate from DNA topology. Reapplied on file open.
     peg_surface: Optional[dict] = None
+    # Display-only, self-contained atomistic PEG qualification document. Never DNA topology.
+    namd_peg_review: Optional[dict] = None
 
 
 class TmSettings(BaseModel):

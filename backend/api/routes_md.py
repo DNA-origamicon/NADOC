@@ -1844,6 +1844,8 @@ def _completed_production_checkpoint(
 def _production_ready_checkpoint(
     job: MdJob,
 ) -> tuple[Optional[int], Optional[SegmentSpec], str, str]:
+    if job.run_kind in ('peg_wall_qualification', 'peg_fast_relax'):
+        return None, None, 'PEG wall qualification is a recorded validation result; production setup is not wired.', ''
     package_dir = job.package_dir(_workspace())
     manifest_path = package_dir / "manifest.json"
     if not manifest_path.exists():

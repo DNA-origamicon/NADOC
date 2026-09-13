@@ -12,6 +12,12 @@ narratives are in [the archive](project_md_job_system_archive.md).
 
 ## Current state
 
+- PEG qualification/fast-relax visualization now routes the shared Display MD, RMSF,
+  trajectory, solvent/cell and atomistic representation controls to saved PEG atom
+  indices. Active-stage frames and continuation rollback are supported. Production-only
+  occupancy and DNA-specific analyses expose applicability limits; see
+  [PEG visualization](../docs/namd_peg_visualization.md).
+
 - The Job Wizard is both creator and read-only settings viewer. It owns execution target,
   protocol/stage parameters, SLURM resources, RunPod GPU choice, anchors, production settings,
   and safety overrides.
@@ -50,6 +56,28 @@ narratives are in [the archive](project_md_job_system_archive.md).
 - Heavy integration tests remain test-session-only; ordinary changes use `just test-smart`.
 
 ## Open work
+
+An isolated PEG-only repulsive-wall qualification now lives in
+`experiments/peg_wall/`, with shared force logic in `backend/core/namd_peg_wall.py`.
+It uses pinned additive ether/TIP3P assets, native harmonic graft restraints and
+Tcl wall forces with explicit GPU-resident MD. Native 1,000-iteration minimization
+and 1 ps resident qualification passed on 2026-09-12 (9,092 atoms). Persistent
+`workspace/NAMD_PEG8_wall_review.nadoc` and completed jobs `94d4b96fd8d7` /
+`654049290521` provide dedicated atomistic playback. The review now creates managed `peg_fast_relax` child jobs: 25 ps at 2 fs, then
+one 4.8 ns 4 fs/HMR NVT rung with p10/p50/p100 chunks and PEG-aware skip decisions.
+Permanent grafts/walls persist; DNA health and ENM release are inapplicable.
+A full shortened 125 ps lifecycle passed (`ab217dbdf612`); full-length job
+`48c1995afbd5` completed native p10 (480 ps) but was falsely marked failed:
+continuation ENERGY rows before ETITLE were dropped by the parser. The new
+strict PEG evidence reader fixes delayed/headerless parsing and pairs samples by
+restart epoch (numeric suffix order, rollback truncation). Untouched native p10
+now passes all 30 frames, but does not plateau. Two-window per-chain convergence
+and precise failed-check messages are covered by positive/negative runner tests.
+See `docs/namd_peg_skip_validation.md`. Native inputs remain unchanged. The ordinary
+API resumed the job into p50; resident mode and a new trajectory frame were verified.
+P10 is completed, skipping was correctly withheld, and job error is null. See `docs/namd_peg_failure_20260912.md`. Production promotion remains deferred.
+See `docs/namd_peg_fast_relax.md`; MC seeding is assessed but not implemented. See
+`docs/namd_peg_wall_validation.md` for the parameter contract and barriers.
 
 1. Retire the duplicate legacy RunPod GPU picker after confirming no remaining caller depends on it.
 2. Surface cluster build/module/probe remediation in the UI where the wizard reports module issues.
@@ -103,3 +131,14 @@ carbon rendering. Sticks infer nearest-neighbor visual edges with a 0.19 nm cuto
 without adding simulation bonds or drawing periodic edges across the cell. The MD
 plane fills complete carbon hexagons, preserving the pore and transformed membrane
 position. Visual adjacency is retained between frames and reset on clear/new data.
+
+## Direct NAMD PEG surface drafts (2026-09-11)
+
+File → NAMD PEG Surfaces and the NAMD sidebar now open a standalone surface draft
+editor, usable without DNA or an oxDNA source. It saves workspace-level definitions
+under `namd_surfaces`, with support/plane/patch, density/seed, PEG representation,
+chain length and chemistry/asset notes. Review uses shared plane geometry and a
+schematic graft preview. The API is `/api/md/peg-surfaces`; create/list/update/review
+never invoke engine preparation. Drafts are not attached to ordinary NAMD jobs yet.
+Target assets, graft/cross interactions, molecular construction and engine validation
+remain explicit blockers. See [direct PEG surface setup](../docs/namd_peg_surfaces.md).

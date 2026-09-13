@@ -3932,6 +3932,7 @@
         <div class="dropdown">
           <button class="dropdown-item" id="menu-file-new">New Part</button>
           <button class="dropdown-item" id="menu-file-new-assembly">New Assembly…</button>
+          <button class="dropdown-item" id="menu-namd-peg-surfaces">NAMD PEG Surfaces…</button>
           <button class="dropdown-item" id="menu-file-open">Open File… <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+O]</span></button>
           <div class="submenu-item">Recent <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu" id="recent-files-submenu">
@@ -6101,6 +6102,14 @@
                 </div>
               </div>
 
+              <div class="ox-card" id="namd-peg-surfaces">
+                <strong>PEG surfaces</strong>
+                <p class="namd-peg-note">Create a PEG-coated support directly for NAMD. Save and reopen surface drafts here.</p>
+                <button class="btn" type="button" data-new-surface>New PEG surface…</button>
+                <select aria-label="Saved NAMD PEG surfaces"><option value="">Loading surface drafts…</option></select>
+                <button class="btn" type="button" data-open-surface disabled>Open surface draft</button>
+                <p role="status" class="namd-peg-note"></p>
+              </div>
               <!-- ── Hard surface (graphene nanopore inherited from an oxDNA deposition) ── -->
               <div class="ox-card">
                 <div id="md-surface-toggle" class="ox-card__header" style="color:#c9d1d9">

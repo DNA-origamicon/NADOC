@@ -21,6 +21,13 @@ See [shared surface transforms](surface_transforms.md) for the geometry contract
 representability limits, all six barrier dispositions and verification results.
 The original source files and design topology remain unchanged by inspection.
 
+## Direct creation is separate from checkpoint seeding
+
+[Direct NAMD PEG surface drafts](namd_peg_surfaces.md) can now be created and reopened
+from File → NAMD PEG Surfaces or the NAMD sidebar without an oxDNA source. They
+save support/coating intent and a schematic graft layout. They do not perform the
+checkpoint-to-atom mapping described here or attach themselves to simulation jobs.
+
 ## Required representation decision
 
 Choose coarse-grained PEG with atomistic DNA, or atomistic PEG and DNA. Current
