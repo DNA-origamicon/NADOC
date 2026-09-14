@@ -50,19 +50,16 @@ const _GLOW_TEX = (() => {
   return tex
 })()
 
-// Cache SpriteMaterial per hex color to avoid re-creating every setEntries call.
-const _matCache = new Map()
+// Each sprite owns its material: donors of the same color may have different
+// quenching. Reuse it across frames and dispose it when the sprite is removed.
 function _getSpriteMat(hexColor) {
-  if (_matCache.has(hexColor)) return _matCache.get(hexColor)
-  const mat = new THREE.SpriteMaterial({
+  return new THREE.SpriteMaterial({
     map:        _GLOW_TEX,
     color:      hexColor,
     blending:   THREE.AdditiveBlending,
     depthWrite: false,
     transparent: true,
   })
-  _matCache.set(hexColor, mat)
-  return mat
 }
 
 const FLUORO_GLOW_SCALE = 20   // 20 nm diameter = 10 nm radius
@@ -74,9 +71,9 @@ export function createMultiColorGlowLayer(scene) {
   function _writeEntries(entries) {
     // Remove sprites whose count doesn't match (rebuild pool).
     if (_sprites.length !== entries.length) {
-      for (const s of _sprites) scene.remove(s)
+      for (const s of _sprites) { scene.remove(s); s.material.dispose() }
       _sprites = entries.map(() => {
-        const s = new THREE.Sprite()
+        const s = new THREE.Sprite(_getSpriteMat(0xffffff))
         s.renderOrder = 1
         scene.add(s)
         return s
@@ -85,7 +82,8 @@ export function createMultiColorGlowLayer(scene) {
     for (let i = 0; i < entries.length; i++) {
       const s   = _sprites[i]
       const ent = entries[i]
-      s.material = _getSpriteMat(ent.emissionColor)
+      s.material.color.setHex(ent.emissionColor)
+      s.material.opacity = Number.isFinite(ent.brightness) ? Math.max(0, Math.min(1, ent.brightness)) : 1
       s.position.copy(ent.pos)
       s.scale.setScalar(ent.scale ?? FLUORO_GLOW_SCALE)
       s.visible = true
@@ -105,14 +103,15 @@ export function createMultiColorGlowLayer(scene) {
     },
     clear() {
       _entries = []
-      for (const s of _sprites) scene.remove(s)
+      for (const s of _sprites) { scene.remove(s); s.material.dispose() }
       _sprites = []
     },
     /** Number of active glow sprites (used by e2e to confirm fluorophores glow). */
     count() { return _sprites.length },
     dispose() {
-      for (const s of _sprites) scene.remove(s)
+      for (const s of _sprites) { scene.remove(s); s.material.dispose() }
       _sprites = []
+      _entries = []
     },
   }
 }

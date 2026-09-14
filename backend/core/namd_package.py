@@ -78,6 +78,8 @@ def build_namd_package(
     ring. Off by default — see :func:`backend.core.ring_piercing.gate_seed_piercing`.
     """
     design = design.without_reference_geometry()
+    from backend.core.streptavidin import require_coating_simulation_support
+    require_coating_simulation_support(design, 'NAMD package')
     _check_ff_files()
 
     name = (design.metadata.name or "design").replace(" ", "_")

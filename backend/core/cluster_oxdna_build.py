@@ -43,6 +43,10 @@ def make_source_tarball(source_dir: Path, out_path: Path) -> Path:
 
     with tarfile.open(out_path, "w:gz") as archive:
         archive.add(source_dir, arcname=source_dir.name, filter=skip)
+        thermostat_patch = Path(__file__).resolve().parents[2] / "tools/oxdna_thermostat/rigid-body-bussi.patch"
+        archive.add(thermostat_patch, arcname="rigid-body-bussi.patch")
+        archive.add(thermostat_patch.with_name("cuda-bussi-rng.patch"), arcname="cuda-bussi-rng.patch")
+        archive.add(thermostat_patch.with_name("physics-corrections.patch"), arcname="physics-corrections.patch")
     return out_path
 
 
@@ -79,15 +83,34 @@ def build_sbatch(*, build_dir: str, source_name: str, tar_name: str,
         "", "source /etc/profile", "set -eo pipefail", "module purge",
         f"module load {' '.join(mods)}",
         f"if test -x '{install}/bin/oxDNA' -a -x '{install}/bin/DNAnalysis' "
-        f"-a \"$(cat '{install}/cuda-architectures' 2>/dev/null)\" = '{arch_arg}'; then",
+        f"-a \"$(cat '{install}/cuda-architectures' 2>/dev/null)\" = '{arch_arg}' "
+        f"-a \"$(cat '{install}/cpu-portability' 2>/dev/null)\" = 'generic-v1' "
+        f"-a \"$(cat '{install}/bussi-rigid-dofs' 2>/dev/null)\" = 'v1' "
+        f"-a \"$(cat '{install}/bussi-cuda-rng' 2>/dev/null)\" = 'v1' "
+        f"-a \"$(cat '{install}/physics-corrections' 2>/dev/null)\" = 'v3'; then",
         f"  {verify_oxdna}",
         f"  {verify_analysis}",
         "  echo '[nadoc] existing adaptive-memory oxDNA install verified'",
         "  exit 0",
         "fi",
         f"cd '{build_dir}'", f"rm -rf '{name}' build install", f"tar xzf '{tar}'",
+        f"if git -C '{name}' apply --reverse --check ../physics-corrections.patch >/dev/null 2>&1; then",
+        f"  git -C '{name}' apply --reverse ../physics-corrections.patch",
+        "fi",
+        f"if ! git -C '{name}' apply --reverse --check ../rigid-body-bussi.patch >/dev/null 2>&1; then",
+        f"  git -C '{name}' apply --check ../rigid-body-bussi.patch",
+        f"  git -C '{name}' apply ../rigid-body-bussi.patch",
+        "fi",
+        f"if ! git -C '{name}' apply --reverse --check ../cuda-bussi-rng.patch >/dev/null 2>&1; then",
+        f"  git -C '{name}' apply --check ../cuda-bussi-rng.patch",
+        f"  git -C '{name}' apply ../cuda-bussi-rng.patch",
+        "fi",
+        f"if ! git -C '{name}' apply --reverse --check ../physics-corrections.patch >/dev/null 2>&1; then",
+        f"  git -C '{name}' apply --check ../physics-corrections.patch",
+        f"  git -C '{name}' apply ../physics-corrections.patch",
+        "fi",
         f"cmake -S '{name}' -B build -DCMAKE_BUILD_TYPE=Release -DCUDA=ON "
-        f"-DCMAKE_CUDA_ARCHITECTURES='{arch_arg}' "
+        f"-DNATIVE_COMPILATION=OFF -DCMAKE_CUDA_ARCHITECTURES='{arch_arg}' "
         "-DCMAKE_BUILD_RPATH_USE_ORIGIN=ON "
         "-DCMAKE_INSTALL_RPATH='$ORIGIN/../lib'",
         f"cmake --build build -j{int(cores)} --target oxDNA DNAnalysis",
@@ -101,6 +124,10 @@ def build_sbatch(*, build_dir: str, source_name: str, tar_name: str,
         "2>/dev/null || true",
         f"printf '%s\\n' adaptive-memory > '{install}/build-flavor'",
         f"printf '%s\\n' '{arch_arg}' > '{install}/cuda-architectures'",
+        f"printf '%s\\n' generic-v1 > '{install}/cpu-portability'",
+        f"printf '%s\\n' v1 > '{install}/bussi-rigid-dofs'",
+        f"printf '%s\\n' v1 > '{install}/bussi-cuda-rng'",
+        f"printf '%s\\n' v3 > '{install}/physics-corrections'",
         verify_oxdna,
         verify_analysis,
         "echo '[nadoc] adaptive-memory oxDNA build complete'",

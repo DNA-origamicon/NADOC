@@ -2879,6 +2879,8 @@ def build_namd_solvated_package(
         ZIP file contents ready to write to disk or serve as a download.
     """
     design = design.without_reference_geometry()
+    from backend.core.streptavidin import require_coating_simulation_support
+    require_coating_simulation_support(design, 'NAMD solvated package')
     _check_ff_files()
 
     name = (design.metadata.name or "design").replace(" ", "_")

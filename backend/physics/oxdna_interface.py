@@ -942,6 +942,8 @@ def write_topology(design: Design, path: str | Path) -> None:
     Sequences are written as 'N' (unknown base) unless design strands carry a
     sequence string.
     """
+    from backend.core.streptavidin import require_coating_simulation_support
+    require_coating_simulation_support(design, 'oxDNA topology')
     rows, n_strands = topology_rows(design)
     lines = [f"{len(rows)} {n_strands}"]
     for si, base, n3, n5 in rows:

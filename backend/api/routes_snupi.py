@@ -196,6 +196,11 @@ class CreateSnupiJobRequest(BaseModel):
 async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
     """Prepare + run a new SNUPI FEM shape-prediction job from the active design."""
     design = design_state.get_or_404().without_reference_geometry()
+    from backend.core.streptavidin import require_coating_simulation_support
+    try:
+        require_coating_simulation_support(design, 'SNUPI')
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
     if not design.helices:
         raise HTTPException(400, "Design has no helices to predict a shape for.")
 

@@ -3636,6 +3636,9 @@ def prepare_mgh_slow_release(
     Returns (package_subdir, name_stem) relative to job_dir.
     """
     from backend.core.namd_solvate import build_namd_solvated_package  # noqa: PLC0415
+    from backend.core.streptavidin import require_coating_simulation_support
+    if not graphene_only:
+        require_coating_simulation_support(design, 'NAMD protocol')
 
     # Refuse to build an all-atom MD package whose SCAFFOLD sequence is unassigned: every
     # unassigned base is silently built as thymine (poly-T) — a physically meaningless

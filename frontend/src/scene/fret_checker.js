@@ -7,6 +7,8 @@
  *                 acceptor are shrunk (scale 3 ≈ 1.5 nm radius) to signal energy
  *                 transfer. Both modes share one setFluorescenceGlow() call;
  *                 FRET takes priority on scale.
+ *   Gold:         FRET also attenuates supported donor intensities using the
+ *                 empirical NSET curves and reports uncalibrated pairs.
  *
  * Stateful: owns the two on/off flags, wires the menu toggles, subscribes to
  * geometry reloads, and is re-checked every frame while FRET is on (translate/
@@ -14,7 +16,7 @@
  * The distance test itself lives in fret_util.js (`fretQuenchedDonors`); the
  * pure lookup-table build (`buildFretLookups`) is exported + unit-tested here.
  *
- * Extracted verbatim from main.js's `// ── Fluorescence + FRET Checker` block.
+ * Originally extracted from main.js's Fluorescence + FRET Checker block.
  *
  * @param {object} deps
  * @param {object} deps.designRenderer — getFluoroEntries / setFluorescenceGlow / clearFluorescenceGlow
@@ -24,6 +26,8 @@
  */
 import { FLUORO_EMISSION_COLORS } from './helix_renderer.js'
 import { fretQuenchedDonors } from './fret_util.js'
+import { evaluateGoldQuenching } from './gold_quenching.js'
+import { initGoldQuenchingPanel } from '../ui/gold_quenching_panel.js'
 
 // Förster radii (nm) for donor→acceptor pairs supported by NADOC modifications.
 export const FRET_PAIRS = [
@@ -57,24 +61,41 @@ export function buildFretLookups(pairs) {
   return { donorMap, r0Map }
 }
 
-export function initFretChecker({ designRenderer, store, setMenuToggle }) {
+export function initFretChecker({ designRenderer, store, setMenuToggle, nanoparticleSubsystem = null }) {
   let _fluorescenceOn = false
   let _fretOn         = false
   const { donorMap, r0Map } = buildFretLookups(FRET_PAIRS)
+  const goldPanel = initGoldQuenchingPanel()
+  let goldResults = []
 
   function _refreshGlowModes() {
-    if (!_fluorescenceOn && !_fretOn) { designRenderer.clearFluorescenceGlow(); return }
+    const particles = nanoparticleSubsystem?.getQuenchingParticles?.() ?? []
+    const gold = particles.filter(p => p.kind === 'gold_nanosphere')
+    goldResults = []
+    if (_fretOn) {
+      for (const dot of particles.filter(p => p.kind === 'quantum_dot')) {
+        goldResults.push(evaluateGoldQuenching({ ...dot, label: `${dot.quantum_dot?.product_name ?? 'Quantum dot'} (${dot.id})` }, gold))
+      }
+    }
+    nanoparticleSubsystem?.setGoldQuenching?.(goldResults)
+    if (!_fluorescenceOn && !_fretOn) { goldPanel.update([], false); designRenderer.clearFluorescenceGlow(); return }
 
     const all      = designRenderer.getFluoroEntries()   // includes BHQ/Biotin for distance checks
     const quenched = _fretOn ? fretQuenchedDonors(all, donorMap, r0Map) : new Set()
 
     const entries = all
       .filter(fe => FLUORO_EMISSION_COLORS.has(fe.nuc?.modification))
-      .map(fe => ({
+      .map(fe => {
+        const result = _fretOn ? evaluateGoldQuenching({ pos: fe.pos, modification: fe.nuc.modification, label: fe.nuc.modification }, gold) : null
+        if (result) goldResults.push(result)
+        return {
         pos:          fe.pos,
         emissionColor: FLUORO_EMISSION_COLORS.get(fe.nuc.modification),
         scale:        quenched.has(fe) ? FRET_QUENCHED_SCALE : undefined,
-      }))
+        brightness:   result?.brightness ?? 1,
+      }})
+
+    goldPanel.update(goldResults, _fretOn)
 
     if (entries.length > 0) designRenderer.setFluorescenceGlow(entries)
     else                    designRenderer.clearFluorescenceGlow()
@@ -83,6 +104,7 @@ export function initFretChecker({ designRenderer, store, setMenuToggle }) {
   document.getElementById('menu-view-fluorescence')?.addEventListener('click', () => {
     _fluorescenceOn = !_fluorescenceOn
     setMenuToggle('menu-view-fluorescence', _fluorescenceOn)
+    nanoparticleSubsystem?.setFluorescence(_fluorescenceOn)
     _refreshGlowModes()
   })
 
@@ -94,7 +116,7 @@ export function initFretChecker({ designRenderer, store, setMenuToggle }) {
 
   // Rebuild glow whenever the geometry reloads while either mode is on.
   store.subscribe((newState, prevState) => {
-    if ((_fluorescenceOn || _fretOn) && newState.currentGeometry !== prevState.currentGeometry) {
+    if ((_fluorescenceOn || _fretOn) && (newState.currentGeometry !== prevState.currentGeometry || newState.currentDesign !== prevState.currentDesign)) {
       _refreshGlowModes()
     }
   })
@@ -105,5 +127,6 @@ export function initFretChecker({ designRenderer, store, setMenuToggle }) {
     // rotate moves update glow instantly. No-op unless FRET is on.
     refreshIfFret: () => { if (_fretOn) _refreshGlowModes() },
     isFretOn: () => _fretOn,
+    getGoldQuenchingResults: () => goldResults,
   }
 }

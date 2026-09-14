@@ -61,7 +61,9 @@ export function installTestApi({
       selectionController?.replace([ref])
     },
     nanoparticles: {
-      create: diameterNm => api.createGoldNanosphere(diameterNm),
+      create: (diameterNm, coating = null) => api.createGoldNanosphere(diameterNm, coating),
+      coat: (id, coating) => api.patchNanoparticle(id, { coating }),
+      createQuantumDot: (catalogId, diameterNm) => api.createQuantumDot(catalogId, diameterNm),
       resize: (id, diameterNm) => api.patchNanoparticle(id, { diameter_nm: diameterNm }),
       move: (id, gizmoMove) => api.patchNanoparticle(id, { gizmo_move: gizmoMove }),
       remove: id => api.deleteNanoparticle(id),
@@ -87,9 +89,23 @@ export function installTestApi({
       },
       select: id => nanoparticleSubsystem?.select(id),
       rendered: () => [...(nanoparticleSubsystem?.meshes?.entries?.() ?? [])].map(([id, mesh]) => ({
-        id, diameterNm: mesh.geometry?.parameters?.radius * 2,
+        id, kind: mesh.userData.nanoparticleKind, diameterNm: mesh.geometry?.parameters?.radius * 2,
         position: mesh.getWorldPosition(new THREE.Vector3()).toArray(),
         metalness: mesh.material?.metalness, color: mesh.material?.color?.getHex(),
+        emissiveIntensity: mesh.material?.emissiveIntensity,
+        coating: (() => {
+          const group = mesh.children.find(child => child.name === 'streptavidin-coating')
+          if (!group) return null
+          const first = group.children[0]
+          const matrix = new THREE.Matrix4(); first.getMatrixAt(0, matrix)
+          first.updateWorldMatrix(true, false)
+          return { count: group.userData.tetramerCount, chains: group.children.length,
+            firstPosition: new THREE.Vector3().setFromMatrixPosition(matrix).applyMatrix4(first.matrixWorld).toArray() }
+        })(),
+        fluorescence: mesh.children.filter(child => child.isSprite).map(child => ({
+          color: child.material.color.getHex(),
+          position: child.getWorldPosition(new THREE.Vector3()).toArray(),
+        })),
       })),
       gizmoSetTransform: (translation, rotation) =>
         nanoparticleSubsystem?.gizmo?.setTransform?.(translation, rotation) ?? false,

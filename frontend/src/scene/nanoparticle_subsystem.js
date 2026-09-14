@@ -1,9 +1,12 @@
 import * as THREE from 'three'
+import { createMultiColorGlowLayer } from './glow_layer.js'
 import { initProteinGizmo } from './protein_gizmo.js'
 import { primaryRefOfKind } from './selection_model.js'
 import { deferrableContextMenu } from './right_click_menu.js'
 import { patchNanoparticle, deleteNanoparticle } from '../api/client.js'
 import { promptGoldNanosphereDiameter } from '../ui/nanoparticle_dialog.js'
+import { addStreptavidinCoating } from './streptavidin_renderer.js'
+import { openStreptavidinDialog } from '../ui/streptavidin_dialog.js'
 
 const GOLD = 0xd4af37
 
@@ -33,6 +36,51 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   })
   const selectedMaterial = material.clone()
   selectedMaterial.emissive.setHex(0x5b4300)
+  const dotMaterials = new Map()
+  const dotGlows = new Map()
+  let fluorescenceOn = false
+  let goldQuenching = new Map()
+  function particleMaterial(particle, selected) {
+    if (particle.kind !== 'quantum_dot') return selected ? selectedMaterial : material
+    const color = particle.quantum_dot?.display_color ?? '#58d65d'
+    const key = particle.id
+    if (!dotMaterials.has(key)) dotMaterials.set(key, new THREE.MeshPhysicalMaterial({
+      color, metalness: 0, roughness: 0.3, clearcoat: 0.35,
+      emissive: color, emissiveIntensity: fluorescenceOn ? 1.5 : selected ? 0.5 : 0.12,
+      toneMapped: !fluorescenceOn,
+    }))
+    const mat = dotMaterials.get(key)
+    mat.color.set(color)
+    mat.emissive.set(color)
+    mat.emissiveIntensity = fluorescenceOn ? 1.5 * (goldQuenching.get(particle.id)?.brightness ?? 1) : selected ? 0.5 : 0.12
+    if (mat.toneMapped !== !fluorescenceOn) { mat.toneMapped = !fluorescenceOn; mat.needsUpdate = true }
+    return mat
+  }
+
+  function refreshAppearance() {
+    const id = primaryRefOfKind(store.getState(), 'nanoparticle')?.id ?? null
+    for (const particle of store.getState().currentDesign?.nanoparticles ?? []) {
+      const mesh = meshes.get(particle.id)
+      if (!mesh) continue
+      mesh.material = particleMaterial(particle, particle.id === id)
+      if (particle.kind !== 'quantum_dot') continue
+      if (fluorescenceOn) {
+        if (!dotGlows.has(particle.id)) dotGlows.set(particle.id, createMultiColorGlowLayer(mesh))
+        dotGlows.get(particle.id).setEntries([{
+          pos: new THREE.Vector3(),
+          emissionColor: mesh.material.emissive.getHex(),
+          scale: particle.diameter_nm * 2.5,
+          brightness: goldQuenching.get(particle.id)?.brightness ?? 1,
+        }])
+        // Halos are attached to the particle, so live previews move them too.
+        // Only the physical sphere participates in selection/raycasting.
+        for (const child of mesh.children) child.raycast = () => {}
+      } else {
+        dotGlows.get(particle.id)?.clear()
+        dotGlows.delete(particle.id)
+      }
+    }
+  }
 
   // The shared panel is composed before this subsystem and can temporarily be
   // rebound by other selection subscribers.  Keep the nanoparticle gizmo as a
@@ -49,17 +97,28 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   })
 
   function rebuild() {
-    for (const mesh of meshes.values()) root.remove(mesh)
+    for (const glow of dotGlows.values()) glow.clear()
+    dotGlows.clear()
+    for (const mesh of meshes.values()) {
+      root.remove(mesh); mesh.geometry.dispose()
+      for (const child of mesh.children) if (child.name === 'streptavidin-coating') child.traverse(obj => { obj.geometry?.dispose(); obj.material?.dispose() })
+    }
     meshes.clear()
+    const ids = new Set((store.getState().currentDesign?.nanoparticles ?? []).map(p => p.id))
+    for (const [id, mat] of dotMaterials) {
+      if (!ids.has(id)) { mat.dispose(); dotMaterials.delete(id) }
+    }
     connectorRoot.clear(); linkerAtomRoot.clear()
     for (const particle of store.getState().currentDesign?.nanoparticles ?? []) {
       if (!particle.visible) continue
       const mesh = new THREE.Mesh(new THREE.SphereGeometry(particle.diameter_nm / 2, 48, 32),
-        particle.id === highlighted ? selectedMaterial : material)
-      mesh.name = `gold-nanosphere:${particle.id}`
+        particleMaterial(particle, particle.id === highlighted))
+      mesh.name = `${particle.kind === 'quantum_dot' ? 'quantum-dot' : 'gold-nanosphere'}:${particle.id}`
       mesh.userData.nanoparticleId = particle.id
-      mesh.userData.photoMaterialKind = 'gold-nanoparticle'
+      mesh.userData.nanoparticleKind = particle.kind
+      if (particle.kind !== 'quantum_dot') mesh.userData.photoMaterialKind = 'gold-nanoparticle'
       mesh.applyMatrix4(poseMatrix(particle))
+      addStreptavidinCoating(mesh, particle.coating)
       root.add(mesh)
       meshes.set(particle.id, mesh)
     }
@@ -162,7 +221,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
         overhangId: version.overhang_id, versionId: version.id }
       connectorRoot.add(line)
     }
-    syncSelection()
+    syncSelection(true)
   }
 
   function centroid(id) {
@@ -172,7 +231,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
 
   const gizmo = initProteinGizmo(store, controls, {
     patchAttachment: patchNanoparticle,
-    noun: 'Gold nanosphere',
+    noun: 'Nanoparticle',
     onCommitted: () => { liveHelixIds = []; livePivot = null; rebuild() },
     onCancelled: () => {
       if (liveHelixIds.length && livePivot) {
@@ -224,12 +283,13 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     onLiveEnd: () => {},
   })
 
-  function syncSelection() {
+  function syncSelection(reanchor = false) {
     const id = primaryRefOfKind(store.getState(), 'nanoparticle')?.id ?? null
     highlighted = id
-    for (const [meshId, mesh] of meshes) mesh.material = meshId === id ? selectedMaterial : material
+    const particles = store.getState().currentDesign?.nanoparticles ?? []
+    refreshAppearance()
     if (id && meshes.has(id)) {
-      if (gizmo.getAttachmentId() !== id) gizmo.attach(
+      if (reanchor || gizmo.getAttachmentId() !== id) gizmo.attach(
         id, scene, camera, canvas, centroid(id), movementConstraints.get(id) ?? null,
       )
       moveRotatePanel?.setProteinController?.(gizmo)
@@ -239,7 +299,9 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
       const panel = document.getElementById('move-rotate-panel')
       if (panel) { panel.style.display = ''; panel.dataset.nanoparticleActive = 'true' }
       const selectionBox = document.getElementById('mr-current-selection')
-      if (selectionBox) selectionBox.textContent = `Gold nanosphere · ${id}`
+      const particle = particles.find(p => p.id === id)
+      if (selectionBox) selectionBox.textContent = `${particle?.kind === 'quantum_dot'
+        ? `Quantum dot · ${particle.quantum_dot?.product_name ?? ''}` : 'Gold nanosphere'} · ${id}`
       const hint = document.getElementById('mr-session-hint')
       if (hint) hint.textContent = movementConstraints.has(id)
         ? 'Drag the nanoparticle joint. The handle duplex swings rigidly between two ball joints.'
@@ -293,12 +355,18 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
       button.onclick = async () => { if (disabled) return; dismiss(); await action() }
       menu.appendChild(button)
     }
-    add('Edit diameter…', async () => {
-      const current = store.getState().currentDesign?.nanoparticles?.find(p => p.id === id)?.diameter_nm
-      const diameter = await promptGoldNanosphereDiameter({ current, title: 'Edit gold nanosphere diameter' })
+    const particle = store.getState().currentDesign?.nanoparticles?.find(p => p.id === id)
+    const isDot = particle?.kind === 'quantum_dot'
+    add(isDot ? 'Edit scene diameter…' : 'Edit diameter…', async () => {
+      const current = particle?.diameter_nm
+      const title = isDot
+        ? `Edit ${particle.quantum_dot?.product_name ?? 'quantum dot'} scene diameter (${particle.quantum_dot?.diameter_range_nm?.join('–')} nm)`
+        : 'Edit gold nanosphere diameter'
+      const diameter = await promptGoldNanosphereDiameter({ current, title })
       if (diameter != null && diameter !== current) await patchNanoparticle(id, { diameter_nm: diameter })
     })
-    add('Conjugate Manager…', () => openConjugateManager?.(id))
+    if (isDot) add('Streptavidin coating…', () => openStreptavidinDialog(particle))
+    if (!isDot) add('Conjugate Manager…', () => openConjugateManager?.(id))
     add('Delete', () => deleteNanoparticle(id))
     document.body.appendChild(menu)
     onOutside = event => {
@@ -312,8 +380,14 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   }, { capture: true }), { capture: true })
 
   store.subscribe((next, prev) => {
-    if (next.currentDesign !== prev.currentDesign) rebuild()
-    else if (next.currentGeometry !== prev.currentGeometry) rebuild()
+    const linked = [next.currentDesign, prev.currentDesign].some(design =>
+      design?.nanoparticle_conjugations?.length || design?.nanoparticle_connection_versions?.length)
+    // Free particles do not depend on DNA geometry or display metadata. An
+    // autosave/animation response must not discard an in-progress dot move.
+    const particlesChanged = next.currentDesign !== prev.currentDesign &&
+      JSON.stringify(next.currentDesign?.nanoparticles) !== JSON.stringify(prev.currentDesign?.nanoparticles)
+    if (particlesChanged || (linked && (next.currentDesign !== prev.currentDesign ||
+        next.currentGeometry !== prev.currentGeometry))) rebuild()
     else if (next.selection !== prev.selection) syncSelection()
   })
   document.addEventListener('keydown', event => {
@@ -327,9 +401,51 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     // second, non-topological linker on top of the simulation structure.
     linkerAtomRoot.visible = false
   })
+  window.addEventListener('nadoc:coating-oxdna-transforms', event => {
+    for (const [id, mesh] of meshes) {
+      const group = mesh.children.find(c => c.name === 'streptavidin-coating')
+      if (!group) continue
+      const transform = event.detail?.[`${id}:strep:0`]
+      group.matrixAutoUpdate = false
+      group.matrix.identity()
+      if (transform) {
+        mesh.updateWorldMatrix(true, false)
+        group.matrix.copy(mesh.matrixWorld).invert().multiply(new THREE.Matrix4().set(...transform)).multiply(mesh.matrixWorld)
+      }
+      group.matrixWorldNeedsUpdate = true
+    }
+  })
   rebuild()
   return {
     root, meshes, gizmo, rebuild, connectorRoot, linkerAtomRoot,
+    setFluorescence(on) {
+      fluorescenceOn = Boolean(on)
+      refreshAppearance()
+    },
+    getQuenchingParticles() {
+      return (store.getState().currentDesign?.nanoparticles ?? []).map(particle => ({
+        ...particle,
+        // Live gizmo transforms take precedence over the saved pose. Visibility
+        // is a view setting, so hidden gold remains physically present.
+        pos: meshes.has(particle.id) ? meshes.get(particle.id).getWorldPosition(new THREE.Vector3())
+          : root.localToWorld(new THREE.Vector3().setFromMatrixPosition(poseMatrix(particle))),
+      }))
+    },
+    setGoldQuenching(results) {
+      const next = new Map(results.map(result => [result.donor.id, result]))
+      let changed = next.size !== goldQuenching.size
+      for (const [id, result] of next) {
+        if (result.brightness !== goldQuenching.get(id)?.brightness) changed = true
+        const mesh = meshes.get(id)
+        if (mesh) mesh.userData.goldQuenching = { brightness: result.brightness, incomplete: result.incomplete }
+      }
+      for (const id of goldQuenching.keys()) if (!next.has(id)) {
+        const mesh = meshes.get(id)
+        if (mesh) delete mesh.userData.goldQuenching
+      }
+      goldQuenching = next
+      if (changed) refreshAppearance()
+    },
     raycastPick(raycaster) {
       const hit = raycaster.intersectObjects([...meshes.values()], false)[0]
       return hit ? { distance: hit.distance, id: hit.object.userData.nanoparticleId } : null

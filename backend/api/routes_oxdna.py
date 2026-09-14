@@ -53,6 +53,7 @@ from backend.core.oxdna_job import (
 )
 from backend.core.oxdna_protocol import (
     apply_stage_overrides,
+    constrain_fixed_core_stages,
     assign_stage_seeds,
     build_field_stage,
     build_production_stage,
@@ -73,6 +74,9 @@ from backend.core.oxdna_runner import (
     oxdna_build_flavor,
     oxdna_supports_cuda,
     oxdna_supports_dnanm,
+    oxdna_supports_rigid_bussi,
+    oxdna_supports_matched_bussi_rng,
+    oxdna_supports_physics_v3,
     prepare_oxdna_job,
     reconcile_oxdna_status,
     start_job,
@@ -837,6 +841,13 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         )
 
     design = design_state.get_or_404().without_reference_geometry()
+    from backend.core.streptavidin import require_coating_simulation_support
+    try:
+        require_coating_simulation_support(design, 'oxDNA')
+        # GPU default explicitly requested; convergence/sampling checks remain
+        # outstanding for fixed gold/strep/DNA (TD-OXDNA-PHYSICS).
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
     # Prefer the loaded file's name over design.metadata.name — a "save as" can
     # leave stale metadata (e.g. 6hb_OxDNA_test.nadoc still carries name
     # "6hb_primitive"), and the jobs list should show what the user opened.
@@ -922,6 +933,13 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
                 "or set $OXDNA_BIN to a compatible upstream build.",
             )
 
+        if run_bin and not oxdna_supports_rigid_bussi(run_bin):
+            raise HTTPException(
+                400,
+                "This oxDNA build lacks the protein rotational-degree thermostat fix. "
+                "Run `bash scripts/build-oxdna.sh` before simulating protein-DNA designs.",
+            )
+
     # Fail fast on the classic broken state: a CUDA run requested but the binary
     # NADOC resolved is CPU-only (e.g. a conda/apt oxDNA on PATH).  oxDNA would
     # otherwise run the cheap MC stage and only abort the long MD stage with the
@@ -940,7 +958,17 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
                 f"${override} to an existing CUDA build. To run "
                 f"on CPU anyway (much slower), choose the CPU backend.",
             )
+    if protein and body.backend == "CUDA" and body.execution_target == "local":
+        run_bin = find_oxdna()
+        if run_bin and not oxdna_supports_matched_bussi_rng(run_bin):
+            raise HTTPException(
+                400,
+                "This CUDA build predates the validated Bussi random-stream initialization. "
+                "Run `bash scripts/build-oxdna.sh` before creating protein-DNA GPU jobs.",
+            )
     run_bin = find_oxdna()
+    if body.execution_target == "local" and run_bin and not oxdna_supports_physics_v3(run_bin):
+        raise HTTPException(400, "Rebuild oxDNA with scripts/build-oxdna.sh for the current physics corrections.")
     if body.execution_target == "local" and body.engine_variant == "adaptive-memory" and (
         not run_bin or oxdna_build_flavor(run_bin) != "adaptive-memory"
     ):
@@ -976,6 +1004,8 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         specs = apply_stage_overrides(specs, body.stage_overrides)
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, f"Invalid oxDNA stage override: {exc}") from exc
+    if any(p.oxdna_fixed_core for p in design.nanoparticles):
+        constrain_fixed_core_stages(specs)
     specs = assign_stage_seeds(specs, job_seed)
 
     job = new_oxdna_job(
@@ -994,6 +1024,8 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "backend": body.backend,
             "interaction_type": body.interaction_type,
             "engine_variant": body.engine_variant,
+            "protein_present": protein,
+            "fixed_core_present": any(p.oxdna_fixed_core for p in design.nanoparticles),
             "stage_overrides": body.stage_overrides,
             "device": body.device,
             "salt_concentration": body.salt_concentration,
@@ -1391,6 +1423,8 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, f"Invalid oxDNA stage override: {exc}") from exc
     seed = job.random_seed or _fresh_oxdna_seed(body.seed)
+    if any(p.oxdna_fixed_core for p in design.nanoparticles):
+        constrain_fixed_core_stages(specs)
     specs = assign_stage_seeds(specs, seed)
     (job.job_dir(_workspace()) / "stages_spec.json").write_text(
         json.dumps([asdict(spec) for spec in specs], indent=2), encoding="utf-8"
@@ -3624,6 +3658,8 @@ def _relaxed_full_map(
     if not snap.exists():
         raise HTTPException(500, "design.json snapshot missing for this job")
     design = Design.from_json(snap.read_text())
+    if any(p.oxdna_fixed_core for p in design.nanoparticles):
+        align = False
 
     # A job written by an older build can have FEWER particles than the design now
     # walks to (strand extensions add one per extension base).  The reader cannot
@@ -3766,6 +3802,7 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
     from backend.physics.oxdna_protein import has_proteins, protein_display_transforms
 
     if has_proteins(design):
+        if any(p.oxdna_fixed_core for p in design.nanoparticles): align = False
         transforms = protein_display_transforms(
             conf_path, ref_conf, design, _seed_geometry(design), align=align
         )

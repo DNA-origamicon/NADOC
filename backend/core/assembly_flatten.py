@@ -469,6 +469,8 @@ def flatten_assembly(assembly: Assembly) -> Design:
         # launch a scientifically meaningless partial/empty simulation while the
         # assembly viewport still shows the complete structure.
         design = _load_design(inst.source)
+        from backend.core.streptavidin import require_coating_simulation_support
+        require_coating_simulation_support(design, 'Assembly flattening (coating instances are not yet projected)')
         instance_designs[inst.id] = design
 
         hp = f"inst-{inst.id}::"  # helix/domain prefix

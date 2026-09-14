@@ -63,6 +63,16 @@ def oxdna_design_fingerprint(design: Design) -> str:
     # the status endpoint compared it with active + reference DNA.
     design = design.without_reference_geometry()
     payload = design.model_dump(mode="json", include=_FINGERPRINT_FIELDS)
+    # Only coatings add this key: old uncoated designs retain their exact hashes.
+    # A pre-coating trajectory must never appear to describe the coated system.
+    coated = [dict(id=p.id, kind=p.kind, diameter_nm=p.diameter_nm, pose=p.pose.values,
+                   mode=p.coating.mode, spacer_nm=p.coating.spacer_nm,
+                   poses=[pose.values for pose in p.coating.poses],
+                   atoms=[a.model_dump(mode='json') for a in p.coating.protein.atoms],
+                   bonds=p.coating.protein.bonds, **({'oxdna_fixed_core': p.oxdna_fixed_core, 'biotin_dna': [r.model_dump() for r in p.biotin_dna]} if p.oxdna_fixed_core or p.biotin_dna else {}))
+              for p in design.nanoparticles if p.coating]
+    if coated:
+        payload['streptavidin_coated_particles'] = coated
     # Strand colours are persisted on the Strand model so they survive a file
     # round-trip, but they do not affect topology, sequence, seed coordinates, or
     # any simulation input.  Hashing them made a purely cosmetic recolour mark all

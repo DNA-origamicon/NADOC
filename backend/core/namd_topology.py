@@ -661,6 +661,8 @@ def build_charmm_psfgen_topology(
     instead of ideal B-DNA (the Phase-2 NAMD seed).  Default: build ideal B-DNA.
     """
     design = design.without_reference_geometry()
+    from backend.core.streptavidin import require_coating_simulation_support
+    require_coating_simulation_support(design, 'NAMD CHARMM topology')
     if not _TOP_ALL36_NA.exists():
         raise RuntimeError(f"Missing CHARMM NA topology file: {_TOP_ALL36_NA}")
     psfgen = psfgen_path or find_psfgen()

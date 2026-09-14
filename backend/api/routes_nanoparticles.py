@@ -4,6 +4,7 @@ from typing import Literal, Optional
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
@@ -17,12 +18,31 @@ from backend.core.nanoparticle import (
     replace_gold_nanosphere,
 )
 from backend.core.conjugate_strands import groups_without_strands
+from backend.core.quantum_dots import (
+    DATA_DIR as QUANTUM_DOT_DATA_DIR, catalog_entry, create_quantum_dot,
+    quantum_dot_catalog, validate_quantum_dot_diameter,
+)
 
 router = APIRouter()
 
 
+class StreptavidinRequest(BaseModel):
+    coverage_reference: Optional[Literal["gold_2007", "gurtovenko_2019", "gold_2017"]] = None
+    count_override: Optional[int] = Field(default=None, ge=1, le=1500)
+    mode: Literal["adsorption", "biotin_tether"] = "adsorption"
+    footprint_nm2: float = Field(default=40.0, ge=25.0, le=100.0)
+    spacer_nm: Optional[float] = Field(default=None, ge=0.0, le=20.0)
+    seed: int = Field(default=1, ge=0, le=2147483647)
+
+
 class GoldNanosphereCreate(BaseModel):
     diameter_nm: float = Field(gt=0.0, le=1000.0)
+    coating: Optional[StreptavidinRequest] = None
+
+
+class QuantumDotCreate(BaseModel):
+    catalog_id: str
+    diameter_nm: Optional[float] = Field(default=None, gt=0.0, le=1000.0)
 
 
 class GizmoMove(BaseModel):
@@ -36,6 +56,7 @@ class NanoparticlePatch(BaseModel):
     diameter_nm: Optional[float] = Field(default=None, gt=0.0, le=1000.0)
     pose: Optional[list[float]] = None
     gizmo_move: Optional[GizmoMove] = None
+    coating: Optional[StreptavidinRequest] = None
 
 
 class ThiolConjugationRequest(BaseModel):
@@ -69,17 +90,68 @@ class NanoparticleConnectionVersionPatch(BaseModel):
     applied: Optional[bool] = None
 
 
-@router.post("/design/nanoparticles/gold-nanospheres", status_code=201)
-def create_nanosphere(body: GoldNanosphereCreate) -> dict:
-    particle = create_gold_nanosphere(body.diameter_nm)
+@router.get("/nanoparticles/quantum-dots/catalog")
+def get_quantum_dot_catalog() -> dict:
+    return quantum_dot_catalog()
+
+
+@router.get("/design/nanoparticles/coating-simulation-audit")
+def get_coating_simulation_audit() -> dict:
+    from backend.core.streptavidin import coating_simulation_gaps
+    return coating_simulation_gaps(design_state.get_or_404())
+
+
+@router.get("/nanoparticles/quantum-dots/catalog/{catalog_id}/spectra")
+def get_quantum_dot_spectra(catalog_id: str):
+    try:
+        entry = catalog_entry(catalog_id)
+    except KeyError:
+        raise HTTPException(404, detail="Quantum dot not found in catalog.")
+    # Only bundled catalog paths are served; no user-supplied path or URL is fetched.
+    return FileResponse(QUANTUM_DOT_DATA_DIR / entry["spectra"]["plot_file"], media_type="image/png")
+
+
+@router.post("/design/nanoparticles/quantum-dots", status_code=201)
+def import_quantum_dot(body: QuantumDotCreate) -> dict:
+    try:
+        particle = create_quantum_dot(body.catalog_id, body.diameter_nm)
+    except KeyError:
+        raise HTTPException(404, detail="Quantum dot not found in catalog.")
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc))
 
     def mutate(design: Design) -> None:
         design.nanoparticles = [*design.nanoparticles, particle]
 
     updated, report, _ = design_state.mutate_with_feature_log(
         "nanoparticle-create",
-        f"Create {body.diameter_nm:g} nm gold nanosphere",
-        {"nanoparticle_id": particle.id, "diameter_nm": body.diameter_nm},
+        f"Import {particle.quantum_dot.product_name} quantum dot ({particle.diameter_nm:g} nm)",
+        {"nanoparticle_id": particle.id, "catalog_id": body.catalog_id,
+         "diameter_nm": particle.diameter_nm},
+        mutate,
+    )
+    response = _design_response(updated, report)
+    response["nanoparticle_id"] = particle.id
+    return response
+
+
+@router.post("/design/nanoparticles/gold-nanospheres", status_code=201)
+def create_nanosphere(body: GoldNanosphereCreate) -> dict:
+    particle = create_gold_nanosphere(body.diameter_nm)
+    if body.coating:
+        from backend.core.streptavidin import build_streptavidin_coating
+        try:
+            particle.coating = build_streptavidin_coating(body.diameter_nm, **body.coating.model_dump())
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc))
+
+    def mutate(design: Design) -> None:
+        design.nanoparticles = [*design.nanoparticles, particle]
+
+    updated, report, _ = design_state.mutate_with_feature_log(
+        "nanoparticle-create",
+        f"Create {body.diameter_nm:g} nm gold nanosphere" + (f" with {len(particle.coating.poses)} streptavidin tetramers" if particle.coating else ""),
+        {"nanoparticle_id": particle.id, **body.model_dump(exclude_none=True)},
         mutate,
     )
     response = _design_response(updated, report)
@@ -98,8 +170,30 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
     ):
         raise HTTPException(400, detail="Invalid gizmo move dimensions.")
     current = design_state.get_or_404()
-    if not any(item.id == nanoparticle_id for item in current.nanoparticles):
-        raise HTTPException(404, detail="Nanoparticle not found.")
+    particle = _particle_or_404(current, nanoparticle_id)
+    coating_changed = 'coating' in body.model_fields_set
+    if particle.biotin_dna and (coating_changed or body.diameter_nm is not None):
+        raise HTTPException(409, 'Remove biotinylated DNA before changing core size or coating.')
+    if body.coating and any(c.nanoparticle_id == nanoparticle_id for c in current.nanoparticle_conjugations):
+        raise HTTPException(409, 'Remove the existing thiol-DNA surface layer before applying streptavidin; mixed-layer packing is not modeled.')
+    new_coating = particle.coating
+    if coating_changed or (body.diameter_nm is not None and particle.coating):
+        from backend.core.streptavidin import build_streptavidin_coating
+        settings = body.coating if coating_changed else particle.coating
+        try:
+            new_coating = None if settings is None else build_streptavidin_coating(
+                body.diameter_nm or particle.diameter_nm, mode=settings.mode,
+                footprint_nm2=settings.footprint_nm2, spacer_nm=settings.spacer_nm, seed=settings.seed,
+                coverage_reference=settings.coverage_reference, count_override=settings.count_override)
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc))
+    if particle.kind == "quantum_dot" and body.diameter_nm is not None:
+        if particle.quantum_dot is None:
+            raise HTTPException(422, detail="Quantum dot has no catalog size specification.")
+        try:
+            validate_quantum_dot_diameter(particle.quantum_dot, body.diameter_nm)
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc))
 
     constraint_result = None
     constrained_design = None
@@ -120,24 +214,22 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
 
     def mutate(design: Design) -> Design:
         if constrained_design is not None:
-            return constrained_design
-        return replace_gold_nanosphere(
-            design,
-            nanoparticle_id,
-            diameter_nm=body.diameter_nm,
-            pose=body.pose,
-            gizmo_move=body.gizmo_move.model_dump() if body.gizmo_move else None,
-        )
+            updated_design = constrained_design
+        else:
+            updated_design = replace_gold_nanosphere(
+                design, nanoparticle_id, diameter_nm=body.diameter_nm, pose=body.pose,
+                gizmo_move=body.gizmo_move.model_dump() if body.gizmo_move else None)
+        next(p for p in updated_design.nanoparticles if p.id == nanoparticle_id).coating = new_coating
+        return updated_design
 
-    label = (
-        "Resize gold nanosphere"
-        if body.diameter_nm is not None
-        else "Move gold nanosphere"
-    )
+    noun = "quantum dot" if particle.kind == "quantum_dot" else "gold nanosphere"
+    label = f"{'Resize' if body.diameter_nm is not None else 'Move'} {noun}"
+    if coating_changed:
+        label = f"{'Apply' if new_coating else 'Remove'} streptavidin coating on {noun}"
     updated, report, _ = design_state.mutate_with_feature_log(
         "nanoparticle-patch",
         label,
-        {"nanoparticle_id": nanoparticle_id, **body.model_dump(exclude_none=True)},
+        {"nanoparticle_id": nanoparticle_id, **body.model_dump(exclude_unset=True)},
         mutate,
     )
     response = _design_response(updated, report)
@@ -149,13 +241,14 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
 @router.delete("/design/nanoparticles/{nanoparticle_id}")
 def delete_nanoparticle(nanoparticle_id: str) -> dict:
     current = design_state.get_or_404()
-    if not any(item.id == nanoparticle_id for item in current.nanoparticles):
-        raise HTTPException(404, detail="Nanoparticle not found.")
+    particle = _particle_or_404(current, nanoparticle_id)
 
     def mutate(design: Design) -> None:
         conjugations = [c for c in design.nanoparticle_conjugations if c.nanoparticle_id == nanoparticle_id]
         owned_strands = {s.strand_id for c in conjugations for s in c.surface_strands}
         owned_helices = {s.helix_id for c in conjugations for s in c.surface_strands if s.helix_id.startswith("__np__")}
+        owned_strands.update(r.strand_id for r in particle.biotin_dna)
+        owned_helices.update(r.helix_id for r in particle.biotin_dna)
         removed_duplex_ids = {v.duplex_id for v in design.nanoparticle_connection_versions
                               if v.nanoparticle_id == nanoparticle_id} - {None}
         design.nanoparticles = [
@@ -175,7 +268,7 @@ def delete_nanoparticle(nanoparticle_id: str) -> dict:
 
     updated, report, _ = design_state.mutate_with_feature_log(
         "nanoparticle-delete",
-        "Delete gold nanosphere",
+        "Delete quantum dot" if particle.kind == "quantum_dot" else "Delete gold nanosphere",
         {"nanoparticle_id": nanoparticle_id},
         mutate,
     )
@@ -192,6 +285,8 @@ def _particle_or_404(design: Design, nanoparticle_id: str):
 @router.post("/design/nanoparticles/{nanoparticle_id}/conjugation/estimate")
 def estimate_conjugation(nanoparticle_id: str, body: CoverageEstimateRequest) -> dict:
     particle = _particle_or_404(design_state.get_or_404(), nanoparticle_id)
+    if particle.kind != "gold_nanosphere":
+        raise HTTPException(422, detail="Quantum-dot functionalization is not enabled yet.")
     return estimate_thiol_coverage(particle.diameter_nm, body.scheme)
 
 
@@ -207,6 +302,10 @@ def get_conjugation(nanoparticle_id: str) -> dict:
 def put_conjugation(nanoparticle_id: str, body: ThiolConjugationRequest) -> dict:
     design = design_state.get_or_404()
     particle = _particle_or_404(design, nanoparticle_id)
+    if particle.coating:
+        raise HTTPException(409, 'Remove the streptavidin coating before grafting thiol-DNA; mixed-layer packing is not modeled.')
+    if particle.kind != "gold_nanosphere":
+        raise HTTPException(422, detail="Quantum-dot functionalization is not enabled yet.")
     old = [c for c in design.nanoparticle_conjugations if c.nanoparticle_id == nanoparticle_id]
     if any(s.bound_overhang_id for c in old for s in c.surface_strands):
         raise HTTPException(409, detail="Unbind nanoparticle strands before replacing conjugation.")
@@ -843,3 +942,50 @@ def bind_surface_strand(nanoparticle_id: str, strand_id: str, body: SurfaceStran
         {"nanoparticle_id": nanoparticle_id, "strand_id": strand_id, "overhang_id": body.overhang_id}, mutate,
     )
     return _design_response(updated, report)
+
+
+class BiotinDNARequest(BaseModel):
+    sequence: str
+    pocket: Literal['auto','A','B','C','D'] = 'auto'
+    linker_nm: float = Field(default=2., ge=1., le=10.)
+
+
+@router.post('/design/nanoparticles/{nanoparticle_id}/biotin-dna')
+def create_biotin_dna(nanoparticle_id: str, body: BiotinDNARequest):
+    from backend.core.gold_strep_dna import build_dna
+    design = design_state.get_or_404()
+    particle = _particle_or_404(design, nanoparticle_id)
+    try:
+        record, helix, strand = build_dna(particle, body.sequence, body.pocket, body.linker_nm)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    def mutate(d):
+        p = _particle_or_404(d, nanoparticle_id)
+        p.biotin_dna = [record]; p.oxdna_fixed_core = True
+        d.helices.append(helix); d.strands.append(strand)
+    updated, report, _ = design_state.mutate_with_feature_log('nanoparticle-biotin-dna', 'Attach 5′ biotinylated DNA to streptavidin', {'nanoparticle_id':nanoparticle_id, **body.model_dump()}, mutate)
+    return _design_response(updated, report)
+
+
+@router.delete('/design/nanoparticles/{nanoparticle_id}/biotin-dna')
+def remove_biotin_dna(nanoparticle_id: str):
+    def mutate(d):
+        p = _particle_or_404(d, nanoparticle_id)
+        sids={r.strand_id for r in p.biotin_dna}; hids={r.helix_id for r in p.biotin_dna}
+        d.strands=[s for s in d.strands if s.id not in sids]
+        d.helices=[h for h in d.helices if h.id not in hids]
+        p.biotin_dna=[]; p.oxdna_fixed_core=False
+    updated, report, _ = design_state.mutate_with_feature_log('nanoparticle-biotin-dna', 'Remove biotinylated DNA', {'nanoparticle_id':nanoparticle_id}, mutate)
+    return _design_response(updated, report)
+
+
+@router.post('/design/nanoparticles/{nanoparticle_id}/streptavidin-preview')
+def preview_streptavidin(nanoparticle_id: str, body: StreptavidinRequest):
+    """Build the same coating as Apply without changing design or history."""
+    from backend.core.streptavidin import build_streptavidin_coating
+    particle = _particle_or_404(design_state.get_or_404(), nanoparticle_id)
+    try:
+        coating = build_streptavidin_coating(particle.diameter_nm, **body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    return {'coating': coating.model_dump(mode='json')}

@@ -281,6 +281,13 @@ def _reposition_owned_helices(design: Design, old: Nanoparticle, new: Nanopartic
         for record in conj.surface_strands
         if record.helix_id.startswith("__np__") and record.bound_overhang_id is None
     }
+    if old.biotin_dna:
+        delta = new.pose.to_array() @ np.linalg.inv(old.pose.to_array())
+        ids = {r.helix_id for r in old.biotin_dna}
+        design = design.copy_with(helices=[h.model_copy(update={
+            'axis_start': Vec3(**dict(zip(('x','y','z'), _point(delta, h.axis_start.to_array())))),
+            'axis_end': Vec3(**dict(zip(('x','y','z'), _point(delta, h.axis_end.to_array())))),
+        }) if h.id in ids else h for h in design.helices])
     if not owned:
         return design
     matrix = new.pose.to_array()

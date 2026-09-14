@@ -1792,6 +1792,7 @@ SnapshotOpKind = Literal[
     "protein-attach-patch",
     "protein-attach-delete",
     "protein-conjugate",
+    "nanoparticle-biotin-dna",
     "nanoparticle-create",
     "nanoparticle-patch",
     "nanoparticle-delete",
@@ -2737,14 +2738,75 @@ class VisibilityState(BaseModel):
     hidden_cluster_ids: List[str] = Field(default_factory=list)
 
 
+class QuantumDotSpectra(BaseModel):
+    """Vendor-published curves; these are plots, not synthetic numerical samples."""
+
+    source_url: str
+    source_page: int = Field(ge=1)
+    plot_file: str
+    sha256: str
+    format: Literal["vendor_plot"] = "vendor_plot"
+    note: str
+
+
+class QuantumDotSpec(BaseModel):
+    """Frozen catalog provenance, preserved with the imported particle."""
+
+    catalog_id: str
+    catalog_version: str
+    vendor: str
+    product_name: str
+    product_code: str
+    product_url: str
+    composition: str
+    emission_peak_nm: float
+    emission_tolerance_nm: Optional[float] = None
+    absorption_peak_nm: Optional[float] = None
+    absorption_tolerance_nm: Optional[float] = None
+    diameter_range_nm: tuple[float, float]
+    core_diameter_range_nm: Optional[tuple[float, float]] = None
+    size_basis: str
+    size_source_url: str
+    surface_coating: str
+    functionalization: str
+    display_color: str
+    spectra: QuantumDotSpectra
+
+
+class StreptavidinCoating(BaseModel):
+    coverage_reference: Optional[str] = None
+    count_override: Optional[int] = Field(default=None, ge=1, le=1500)
+    kind: Literal["streptavidin"] = "streptavidin"
+    mode: Literal["adsorption", "biotin_tether"] = "adsorption"
+    footprint_nm2: float = Field(default=40.0, ge=25.0, le=100.0)
+    spacer_nm: float = Field(default=0.3, ge=0.0, le=20.0)
+    seed: int = 1
+    target_count: int = Field(ge=1)
+    protein: ProteinAsset
+    poses: List[Mat4x4] = Field(default_factory=list)
+    source: str = "https://doi.org/10.1016/j.mee.2007.01.247"
+    placement_note: str = ""
+
+
+class BiotinDNA(BaseModel):
+    strand_id: str
+    helix_id: str
+    chain: Literal["A", "B", "C", "D"]
+    linker_nm: float = Field(default=2., ge=1., le=10.)
+
+
 class Nanoparticle(BaseModel):
     """A rigid, display-only nanoparticle placed in the design scene."""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    kind: Literal["gold_nanosphere"] = "gold_nanosphere"
+    kind: Literal["gold_nanosphere", "quantum_dot"] = "gold_nanosphere"
     diameter_nm: float = Field(gt=0.0, le=1000.0)
     pose: Mat4x4 = Field(default_factory=Mat4x4)
     visible: bool = True
+    quantum_dot: Optional[QuantumDotSpec] = None
+    coating: Optional[StreptavidinCoating] = None
+    oxdna_fixed_core: bool = False
+    biotin_dna: List[BiotinDNA] = Field(default_factory=list)
 
 
 class NanoparticleSurfaceStrand(BaseModel):

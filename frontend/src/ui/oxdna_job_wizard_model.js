@@ -1,3 +1,5 @@
+// GPU default is user-authorized; further convergence and sampling checks are
+// required for DNA/protein and fixed gold/strep/DNA (TD-OXDNA-PHYSICS).
 const DEFAULTS = Object.freeze({
   backend: 'CUDA', device: '0', salt_concentration: 0.5,
   interaction_type: 'DNA2',
@@ -24,6 +26,15 @@ export function validateOxdnaWizard(values = {}) {
     range(key, 100, null, 'Each stage must run for at least 100 steps.')
   range('min_bp_retained', 0, 1, 'Base-pair retention must be between 0 and 1.')
   range('max_relax_retries', 0, 3, 'Retries must be between 0 and 3.')
+  for (const stage of oxdnaStagePlan(v)) {
+    if (stage.sim_type !== 'MD') continue
+    if (!['bussi', 'john', 'brownian', 'langevin', 'no'].includes(stage.thermostat))
+      errors.thermostat = 'Choose bussi, john, brownian, langevin, or no thermostat.'
+    if (['john', 'brownian', 'langevin'].includes(stage.thermostat)
+      && !(Number.isFinite(Number(stage.diff_coeff)) && Number(stage.diff_coeff) > 0))
+      errors.diff_coeff = 'Enter a positive diffusion coefficient for each local-bath stage.'
+    if (!(Number.isFinite(Number(stage.dt)) && Number(stage.dt) > 0)) errors.dt = 'Time step must be positive.'
+  }
   return { valid: Object.keys(errors).length === 0, errors }
 }
 
@@ -33,7 +44,8 @@ const interval = steps => Math.max(1, Math.floor(Number(steps) / 100))
 
 export function oxdnaStagePlan(values = {}) {
   const v = oxdnaWizardDefaults(values)
-  const shared = { interaction_type: v.interaction_type, temperature: '296K', salt_concentration: Number(v.salt_concentration), topology: 'topology.top', device: String(v.device) }
+  const interaction = v.protein_present ? 'DNANM' : v.interaction_type
+  const shared = { ...(interaction === 'DNA2' ? { use_average_seq: false, seq_dep_file: '../oxDNA2_average_sequence_parameters.txt' } : {}), interaction_type: interaction, ...(v.protein_present ? { parfile: 'anm.par' } : {}), temperature: '296K', salt_concentration: Number(v.salt_concentration), topology: 'topology.top', device: String(v.device) }
   const stages = [
     { name: '1_mc_relax', purpose: 'Clear local clashes with mutual base-pair traps', ...shared,
       sim_type: 'MC', backend: 'CPU', steps: Number(v.mc_steps), ensemble: 'NVT', delta_translation: 0.1,
@@ -42,18 +54,32 @@ export function oxdnaStagePlan(values = {}) {
       conf_file: 'conf.dat', last_conf_file: 'last_conf.dat', trajectory_file: 'trajectory.dat', energy_file: 'energy.dat' },
     { name: '2_md_relax', purpose: 'Relax the assembly with a capped backbone potential', ...shared,
       sim_type: 'MD', backend: v.backend, steps: Number(v.md_relax_steps), dt: 0.002,
-      thermostat: 'bussi', bussi_tau: 1000, newtonian_steps: 53, max_backbone_force: 5,
+      thermostat: 'bussi', diff_coeff: null, refresh_vel: true, bussi_tau: 1000, newtonian_steps: 53, max_backbone_force: 5,
       max_backbone_force_far: 10, external_forces: true, forces_file: 'forces.txt',
       min_bp_retained: Number(v.min_bp_retained), conf_file: '../1_mc_relax/last_conf.dat',
       last_conf_file: 'last_conf.dat', trajectory_file: 'trajectory.dat', energy_file: 'energy.dat' },
     { name: '3_equil', purpose: 'Verify the relaxed assembly under near-standard forces', ...shared,
       sim_type: 'MD', backend: v.backend, steps: Number(v.equil_steps), dt: 0.003,
-      thermostat: 'bussi', bussi_tau: 1000, newtonian_steps: 53, max_backbone_force: 50,
+      thermostat: 'bussi', diff_coeff: null, refresh_vel: true, bussi_tau: 1000, newtonian_steps: 53, max_backbone_force: 50,
       max_backbone_force_far: 100, external_forces: false, forces_file: null,
       min_bp_retained: Number(v.min_bp_retained), conf_file: '../2_md_relax/last_conf.dat',
       last_conf_file: 'last_conf.dat', trajectory_file: 'trajectory.dat', energy_file: 'energy.dat' },
   ].map(stage => ({ ...stage, print_conf_interval: interval(stage.steps), print_energy_every: interval(stage.steps) }))
-  return applyOxdnaStageOverrides(stages, v.stage_overrides)
+  for (const stage of stages) {
+    if (v.protein_present) {
+      stage.min_bp_retained = 0
+      stage.external_forces = true
+      stage.fix_diffusion = false
+      if (stage.name === '3_equil') stage.forces_file = 'equil_forces.txt'
+    }
+  }
+  const resolved = applyOxdnaStageOverrides(stages, v.stage_overrides)
+  if (v.fixed_core_present) for (const stage of resolved) {
+    stage.external_forces = true
+    stage.fix_diffusion = false
+    if (stage.sim_type === 'MD') stage.dt = Math.min(stage.dt, 0.0001)
+  }
+  return resolved
 }
 
 export function applyOxdnaStageOverrides(stages, overrides = {}) {

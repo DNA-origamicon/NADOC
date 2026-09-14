@@ -1,0 +1,17 @@
+#gold-quenching-status {
+  position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%);
+  z-index: 35; padding: 7px 12px; border: 1px solid #6c7380; border-radius: 5px;
+  background: #20252d; color: #f0f3f6; cursor: pointer;
+}
+#gold-quenching-status[hidden] { display: none; }
+#gold-quenching-dialog {
+  width: min(1050px, 90vw); max-height: 85vh; overflow: auto;
+  background: #20252d; color: #f0f3f6; border: 1px solid #6c7380; border-radius: 8px; padding: 24px;
+}
+#gold-quenching-dialog::backdrop { background: #0009; }
+#gold-quenching-dialog .gold-quenching-table { overflow-x: auto; }
+#gold-quenching-dialog table { border-collapse: collapse; width: 100%; }
+#gold-quenching-dialog th, #gold-quenching-dialog td { text-align: left; padding: 8px; border-bottom: 1px solid #59616d; }
+#gold-quenching-dialog a { color: #7ec8ff; }
+#gold-quenching-dialog details, #gold-quenching-dialog form { margin-top: 16px; }
+#gold-quenching-dialog summary { cursor: pointer; }

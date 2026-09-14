@@ -2010,8 +2010,20 @@ export async function deleteProteinAttachment(attachmentId) {
 }
 
 /** Create, resize/move, and delete display-layer nanoparticles. */
-export async function createGoldNanosphere(diameterNm) {
-  const json = await _request('POST', '/design/nanoparticles/gold-nanospheres', { diameter_nm: diameterNm })
+export async function createGoldNanosphere(diameterNm, coating = null) {
+  const json = await _request('POST', '/design/nanoparticles/gold-nanospheres', { diameter_nm: diameterNm, ...(coating ? { coating } : {}) })
+  if (json) _syncFromDesignResponse(json)
+  return json
+}
+
+export async function getQuantumDotCatalog() {
+  return _request('GET', '/nanoparticles/quantum-dots/catalog')
+}
+
+export async function createQuantumDot(catalogId, diameterNm) {
+  const json = await _request('POST', '/design/nanoparticles/quantum-dots', {
+    catalog_id: catalogId, diameter_nm: diameterNm,
+  })
   if (json) _syncFromDesignResponse(json)
   return json
 }
@@ -5127,4 +5139,17 @@ export async function importAptamer(args) {
   return _request('POST', '/design/import/aptamer', {
     ...args, expected_revision: currentRevisionWatermark(),
   })
+}
+
+export async function createNanoparticleBiotinDNA(id, spec) {
+  const json = await _request('POST', `/design/nanoparticles/${id}/biotin-dna`, spec)
+  return json ? _syncFromDesignResponse(json) : null
+}
+export async function removeNanoparticleBiotinDNA(id) {
+  const json = await _request('DELETE', `/design/nanoparticles/${id}/biotin-dna`)
+  return json ? _syncFromDesignResponse(json) : null
+}
+
+export async function previewNanoparticleStreptavidin(id, spec) {
+  return _request('POST', `/design/nanoparticles/${id}/streptavidin-preview`, spec, { suppressBusy: true, skipSimulationPrepare: true })
 }

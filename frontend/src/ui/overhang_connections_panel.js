@@ -444,7 +444,8 @@ function _setOptions(select, rows, value, blank) {
 function _refreshNanoparticleMode() {
   if (!_npStrandSelect) return
   const design = _design() ?? {}
-  const particleNames = new Map((design.nanoparticles ?? []).map((p, i) => [p.id, `Gold nanosphere ${i + 1}`]))
+  const particleNames = new Map((design.nanoparticles ?? []).map((p, i) => [p.id,
+    p.kind === 'quantum_dot' ? `Quantum dot ${p.quantum_dot?.product_name ?? i + 1}` : `Gold nanosphere ${i + 1}`]))
   const records = (design.nanoparticle_conjugations ?? []).flatMap(c =>
     (c.surface_strands ?? []).map(record => ({ ...record, nanoparticle_id: c.nanoparticle_id })))
   const names = new Map((design.strands ?? []).map(s => [s.id, s.name || s.id]))

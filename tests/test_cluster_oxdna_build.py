@@ -13,6 +13,10 @@ def test_build_script_compiles_adaptive_cuda_for_a100_and_h200():
     )
     assert "#SBATCH --partition=acpu" in script
     assert "-DCUDA=ON" in script
+    assert "-DNATIVE_COMPILATION=OFF" in script
+    assert "cpu-portability" in script and "generic-v1" in script
+    assert "bussi-rigid-dofs" in script
+    assert "apply --check ../rigid-body-bussi.patch" in script
     assert "-DCMAKE_CUDA_ARCHITECTURES='80;90'" in script
     assert "--target oxDNA DNAnalysis" in script
     assert "adaptive-memory" in script
@@ -43,6 +47,8 @@ def test_tarball_excludes_git_and_old_builds(tmp_path):
     with tarfile.open(target) as archive:
         names = archive.getnames()
     assert "source/src/x.cpp" in names
+    assert "rigid-body-bussi.patch" in names
+    assert "cuda-bussi-rng.patch" in names
     assert not any(".git" in name or "build-old" in name for name in names)
 
 

@@ -1594,6 +1594,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       fsApi: api,
     },
     getInitialValues: () => ({
+      protein_present: Boolean(getCurrentDesign?.()?.protein_attachments?.some(a => a.visible !== false)
+        || getCurrentDesign?.()?.nanoparticles?.some(p => p.oxdna_fixed_core)),
+      fixed_core_present: Boolean(getCurrentDesign?.()?.nanoparticles?.some(p => p.oxdna_fixed_core)),
       backend: backendSel?.value || 'CUDA', device: deviceInput?.value || '0', interaction_type: 'DNA2',
       salt_concentration: parseFloat(saltInput?.value || '0.5'),
       mc_steps: parseInt(mcStepsInput?.value || '1000', 10),

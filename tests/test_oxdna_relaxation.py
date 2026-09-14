@@ -1164,6 +1164,7 @@ def test_run_job_recovers_from_production_explosion(
     r.prepare_oxdna_job(design, geometry, job, tmp_path, [spec])
 
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
+    monkeypatch.setattr(r, "oxdna_supports_physics_v3", lambda _: True)
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
     monkeypatch.setattr(
         r,
@@ -1220,6 +1221,7 @@ def test_run_job_recovers_from_md_relax_bp_melt(
     r.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
 
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
+    monkeypatch.setattr(r, "oxdna_supports_physics_v3", lambda _: True)
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
 
     md_health_calls = {"n": 0}
@@ -1281,6 +1283,7 @@ def test_run_job_fails_after_exhausting_melt_retries(
     r.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
 
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
+    monkeypatch.setattr(r, "oxdna_supports_physics_v3", lambda _: True)
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
     monkeypatch.setattr(
         r,
@@ -4087,6 +4090,7 @@ def test_bp_retention_drops_when_melted(design, geometry, tmp_path):
 # ── Mock oxDNA binary ─────────────────────────────────────────────────────────
 
 _MOCK_OXDNA = """#!/usr/bin/env python3
+# NADOC physics corrections v3
 import sys, re, shutil
 from pathlib import Path
 inp = Path(sys.argv[1])
@@ -4184,6 +4188,7 @@ def test_runner_gate_fails_on_melted(design, geometry, tmp_path, monkeypatch):
     # Mock that writes a MELTED last_conf (reverse strands shoved away).
     melt = tmp_path / "melt_oxdna.py"
     melt.write_text("""#!/usr/bin/env python3
+# NADOC physics corrections v3
 import sys, re
 from pathlib import Path
 inp = Path(sys.argv[1]); text = inp.read_text()

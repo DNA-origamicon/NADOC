@@ -32,6 +32,9 @@ def test_build_script_is_pinned_adaptive_and_persistent():
     script = render_build_script("90", "/workspace/adaptive.patch")
     assert OXDNA_REV in script
     assert "CMAKE_CUDA_ARCHITECTURES=90" in script
+    assert "-DNATIVE_COMPILATION=OFF" in script
+    assert "apply --check /workspace/nadoc_oxdna/rigid-body-bussi.patch" in script
+    assert "adaptive-portable-physics-v3-sm90" in script
     assert "/usr/local/cuda-12.8/bin" in script
     assert "git -C \"$source_dir\" apply /workspace/adaptive.patch" in script
     assert f"{REMOTE_ROOT}/engines/" in script
@@ -61,7 +64,7 @@ def test_stage_inputs_chain_previous_checkpoint(tmp_path):
 def test_chain_is_restartable_and_reports_terminal_state():
     specs = build_relaxation_stages(mc_steps=10, md_relax_steps=20, equil_steps=30)
     script = render_chain_script("j1", specs, "120")
-    assert "adaptive-sm120/bin/oxDNA" in script
+    assert "adaptive-portable-physics-v3-sm120/bin/oxDNA" in script
     assert "if [ ! -s 1_mc_relax/last_conf.dat ]; then" in script
     assert "failed:2_md_relax:$rc" in script
     assert "echo completed > nadoc_status" in script
@@ -72,6 +75,9 @@ def test_manifest_records_reproducible_engine_and_target():
     specs = build_relaxation_stages(mc_steps=1, md_relax_steps=2, equil_steps=3)
     result = manifest("j1", specs, GPU_TARGETS[0])
     assert result["source_revision"] == OXDNA_REV
+    assert result["bussi_rigid_dofs"] == "v1"
+    assert result["bussi_cuda_rng"] == "CPU-matched-v1"
+    assert result["cpu_portability"] == "generic-v1"
     assert result["engine"] == "oxdna-adaptive-memory"
     assert result["cuda_arch"] == "90"
     assert [s["steps"] for s in result["stages"]] == [1, 2, 3]
@@ -139,3 +145,36 @@ def test_oxdna_job_loads_old_schema_with_local_execution_default(tmp_path):
     assert loaded.status is OxdnaStatus.queued
     assert loaded.execution_target == "local"
     assert loaded.runpod_pod_id is None
+
+
+@pytest.mark.parametrize('damage', [None, 'marker', 'rng_marker', 'physics_marker', 'library', 'runtime'])
+def test_cached_engine_requires_complete_working_installation(tmp_path, monkeypatch, damage):
+    import os
+    import subprocess
+    from backend.core import runpod_oxdna as module
+    monkeypatch.setattr(module, 'REMOTE_ROOT', str(tmp_path/'remote'))
+    from pathlib import Path
+    install = Path(module.engine_dir('90'))
+    (install/'bin').mkdir(parents=True)
+    (install/'lib').mkdir()
+    for name in ['oxDNA', 'DNAnalysis']:
+        executable=install/'bin'/name
+        executable.write_text("#!/bin/sh\necho \"Input file '--help' not found\" >&2\nexit 1\n")
+        executable.chmod(0o755)
+    (install/'lib/liboxdna_common.so').write_bytes(b'library')
+    (install/'bussi-rigid-dofs').write_text('v1\n')
+    (install/'bussi-cuda-rng').write_text('v1\n')
+    (install/'physics-corrections').write_text('v3\n')
+    if damage=='marker':(install/'bussi-rigid-dofs').unlink()
+    elif damage=='physics_marker':(install/'physics-corrections').unlink()
+    elif damage=='rng_marker':(install/'bussi-cuda-rng').unlink()
+    elif damage=='library':(install/'lib/liboxdna_common.so').unlink()
+    elif damage=='runtime':(install/'bin/oxDNA').write_text('#!/bin/sh\nexit 132\n')
+    # Rebuilding is observable, but cannot contact the network or compile.
+    commands=tmp_path/'commands';commands.mkdir()
+    git=commands/'git';git.write_text('#!/bin/sh\nexit 99\n');git.chmod(0o755)
+    nvcc=commands/'nvcc';nvcc.write_text('#!/bin/sh\nexit 99\n');nvcc.chmod(0o755)
+    result=subprocess.run(['bash'],input=module.render_build_script('90','/unused.patch'),
+                          text=True,capture_output=True,timeout=10,
+                          env=dict(os.environ,PATH=str(commands)+':'+os.environ['PATH']))
+    assert result.returncode==(0 if damage is None else 99),result.stderr

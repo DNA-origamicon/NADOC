@@ -2867,6 +2867,11 @@ async def create_md_job(body: CreateJobRequest) -> dict:
             design = Design(metadata=DesignMetadata(name="graphene_control"))
         else:
             design = design_state.get_or_404().without_reference_geometry()
+            from backend.core.streptavidin import require_coating_simulation_support
+            try:
+                require_coating_simulation_support(design, 'NAMD')
+            except ValueError as exc:
+                raise HTTPException(422, str(exc))
             body = _infer_graphene_only(body, design)
         name = (design.metadata.name or "design").replace(" ", "_")
         size_factor = design_size_factor(design)
