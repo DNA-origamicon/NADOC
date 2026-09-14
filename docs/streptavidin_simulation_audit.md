@@ -201,3 +201,14 @@ sampling and useful-sample performance checks remain TD-OXDNA-PHYSICS. Proteinâ€
 contact amplitudes remain unchanged pending model validation. The original strep
 on nanoparticles system also needs full NAMD validation (TD-STREP-NAMD), including
 force-field completeness, attachment/linker physics, stability, and accessibility.
+
+## Occupancy extension (2026-09-14)
+
+The fixed-core subset now expands multiple applied tetramers and multiple occupied
+DNA pockets. The manager requires coating application first, then an exact DNA
+count per tetramer; placements that cannot pass the geometric screen are rejected
+atomically. Details and limits are in [the placement note](streptavidin_dna_placement.md).
+The three-anchor-per-tetramer and reciprocal DNA-spring model is unchanged.
+Existing single-DNA records retain their original seed convention. Native B-form
+layout, simulation preparation, and equilibrium physical validation remain
+separate concerns; NAMD validation remains outstanding.

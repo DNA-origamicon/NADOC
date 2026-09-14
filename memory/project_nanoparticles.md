@@ -120,7 +120,7 @@ Streptavidin DNA also offers generation with length 2–200. Browser regression:
 frontend/e2e/nanoparticle_standalone_sequence.spec.js.
 
 Streptavidin manager uses the same three-column 960×600 window as thiols:
-DNA left, shared orbitable gold/PDB preview center, coating controls right.
+Coating controls left, shared orbitable gold/PDB preview center, DNA controls right.
 Compact mode moves explanations/publication URLs to control and option tooltips.
 Read-only streptavidin-preview endpoint reuses the Apply packing builder; debounced
 and serialized preview requests avoid parallel packing jobs. Preview labels core
@@ -132,3 +132,42 @@ route returned the pre-I/O snapshot under the acknowledgement's newer revision.
 The route now returns a current snapshot captured under the acknowledgement lock;
 confirmed autosaves still omit full snapshots. Regression assertion added to
  tests/test_design_identity_api.py's interleaved save test.
+
+### Explicit DNA occupancy (2026-09-14)
+The existing compact manager now requires an applied coating before DNA attachment;
+unsaved coating edits disable attachment. `dna_per_strep` requests 1–4 strands for
+adsorption or 1–3 for biotin tether (pocket A reserved), on every applied tetramer.
+Placement is atomic and rejects a count that the finite geometric search cannot
+fit. Native B-form rise/twist/radius remain unchanged; rigid directions/phases
+are searched against core, coating and DNA obstacles. First backbone bead is at
+the linker endpoint. Particle rotation now preserves helical phase. Preview uses
+actual scene nucleotide positions. See docs/streptavidin_dna_placement.md.
+
+BiotinDNA stores tetramer_index (legacy default 0) and placement_version (legacy 1,
+new 2). Version 2's separate extended oxDNA seed starts at the native 5′ bead and
+is also clash-screened. CPU/GPU fixed-core export includes every tetramer and
+occupied pocket; the old one-tetramer/one-DNA and CPU-only restrictions above are
+historical. NAMD/live remain guarded; GPU sampling/convergence is still open.
+
+Conjugate-manager follow-up: attaching/removing biotinylated DNA now refreshes the
+existing manager and native preview in place, preserving the orbit camera. Step 1
+coating controls are left; Remove coating is the last control in that list. Step 2
+DNA controls are right, with a final Apply footer. Apply finishes an unchanged
+coating/DNA setup without recreating the coating or adding an undo entry.
+
+Manager integer fields retain always-visible native up/down steppers (including
+thiol length/count). Step 2 puts Length and Generate sequence on one row;
+Playwright clicks all five integer steppers and verifies no vertical overflow
+in the DNA column at the standard 960×600 manager size.
+
+### Biotin visualization (2026-09-14)
+- Full and manager preview: one yellow bound-ring marker per occupied DNA pocket, using shared PDB-derived `biotin_pockets.json`; per-tetramer simulation deltas now independent.
+- Native atomistic/VDW/sticks/surface: actual biotin-TEG heavy-atom graph, constrained tail/spacer fit with fixed ring and tetrahedral 5′ phosphate approach. New manager/API reach default 1.8 nm; saved values unchanged. Failed fits show a real unconnected spacer + warning rather than stretched DNA bond. Display chemistry does not stale oxDNA jobs.
+- `docs/biotin_display.md` describes sources, assumptions and limitations. This is display geometry, not NAMD parameters or an equilibrium model. Dynamic atomistic protein/ligand reconstruction still needs integration/validation; do not interpret native-pose biotin in atomistic trajectory display as simulated ligand motion.
+
+### Atomistic loading audit (2026-09-14)
+- Cold biotin fitting consumed >99% of backend time; replaced Python-loop Jacobian + sparse LSMR with vectorized Jacobian + dense LM (same objective/acceptance, A/B failure counts unchanged). Versioned bounded disk/memory fit cache, prepared on attach/document load; no design/job fingerprint changes.
+- Corrected coated PDB drawing: Full CA traces now swap to complete imported atoms/bonds in VDW/Ball & Stick/Stick. `streptavidin_atomic_renderer.js` shares GPU buffers across rigid tetramers; group transforms move atoms AND bonds. No extra PDB requests.
+- Backend prepared 6-strand build ~14 ms vs same DNA-only ~13 ms; cold fit formerly seconds. Native-view and matched-atom-count browser benchmark: `frontend/e2e/biotin_loading.spec.js`, fixtures from `scripts/biotin_loading_fixtures.py`, results in `workspace/validation/biotin_loading_20260914/`; details in `docs/biotin_display.md`.
+- Protein spheres use existing analytic sphere impostors. Native cache misses clear the renderer's retained previous-part atoms before switching; identity-only saves preserve the in-flight atom request. `nanoparticle_render_dependencies.js` prevents identical save responses rebuilding coating GPU resources, while molecular/placement edits and undo still invalidate them.
+- Coatings opt into `unitSphereImpostors`: one material/program across elements and sphere modes, with actual radii in instance transforms. Final headless matched-atom benchmark: first painted Ball & Stick 956 ms coated / 1504 ms DNA; VDW 1263 / 1651 ms. Repeat switch setup faster in all three modes, but Stick painting remains slower (317 / 214 ms). Do not claim universal frame-time parity. 18 backend, 95 frontend, and two Playwright checks passed; final log and full metrics retained in the validation directory above.
