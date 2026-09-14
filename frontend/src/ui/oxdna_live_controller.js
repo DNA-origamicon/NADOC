@@ -42,37 +42,41 @@ const RECONFIG_MS = 350     // debounce live recomposition POSTs (engine rebuild
  *  place (force.F0/.dir mutation) without a rebuild, so they must not trip a
  *  reconfigure.  Two element sets with the same signature → only a field re-aim is
  *  ever needed; a changed signature → recompose the engine. */
+function liveField(field) {
+  if (!field?.enabled) return null
+  if (field.field_V_per_m > 0) return { field_V_per_m: field.field_V_per_m,
+    dna_effective_charge_e: field.dna_effective_charge_e, dir: field.dir }
+  return field.field_pN > 0 ? { field_pN: field.field_pN, dir: field.dir } : null
+}
+
 export function reconfigSig(el = {}) {
   const f = el.field, s = el.surface
   const a = [...(el.anchors || []), ...(el.surfaceAnchors || [])]
-  const fieldOn = !!(f?.enabled && f.field_pN > 0)
+  const fieldOn = !!liveField(f)
   const surf = s?.enabled
     ? { dir: s.dir, off: s.offsetNm, position: s.positionNm, stiff: s.stiff }
     : null
   const anchors = a.map((x) => JSON.stringify(x)).sort()
   const capture = el.surfaceStrands?.enabled
-    ? { enabled: true, subjectToField: el.surfaceStrands.subjectToField !== false }
+    ? (el.surfaceStrands.material === 'PEG' ? el.surfaceStrands : { enabled: true, subjectToField: el.surfaceStrands.subjectToField !== false })
     : null
-  return JSON.stringify({ fieldOn, surf, anchors, capture })
+  return JSON.stringify({ fieldOn, surf, anchors, capture, ...(f?.field_V_per_m > 0 ? { physicalField: liveField(f) } : {}) })
 }
 
 /** Build Live's continuation payload from the same current cards as Full Sim. */
 export function liveStartBody(job, el = {}) {
   const body = { job_id: job?.job_id }
   const field = el.field
-  if (field?.enabled && field.field_pN > 0) {
-    body.field = { field_pN: field.field_pN, dir: field.dir }
-  }
+  if (liveField(field)) body.field = liveField(field)
   if (el.surface?.enabled) body.surface = {
     dir: el.surface.dir, offset_nm: el.surface.offsetNm,
     position_nm: el.surface.positionNm, stiff: el.surface.stiff,
   }
   if (el.anchors?.length) body.anchors = el.anchors
   if (el.surfaceAnchors?.length) body.surface_anchors = el.surfaceAnchors
-  if (el.surfaceStrands?.enabled) body.surface_strands = {
-    enabled: true,
-    subjectToField: el.surfaceStrands.subjectToField !== false,
-  }
+  if (el.surfaceStrands?.enabled) body.surface_strands = el.surfaceStrands.material === 'PEG'
+    ? { ...el.surfaceStrands, subjectToField: false }
+    : { enabled: true, subjectToField: el.surfaceStrands.subjectToField !== false }
   return body
 }
 
@@ -84,7 +88,11 @@ export function liveJobEligible(job) {
 
 /** Pure: gate the Live button.  Returns { enabled, reason } — `reason` is the
  *  disabled tooltip (oxpy missing / no completed relaxed job selected). */
-export function liveButtonState({ available, availReason, job }) {
+export function liveButtonState({ available, availReason, job, pegAvailable, pegReason }) {
+  if (job?.run_config?.surface_strands?.material === 'PEG' && job.run_config.surface_strands.enabled !== false) {
+    available = !!pegAvailable
+    availReason = pegReason || 'Build PEG Live bindings: bash scripts/build-oxdna-peg-live.sh'
+  }
   if (!available) return { enabled: false, reason: availReason || 'oxpy live engine not available' }
   if (!liveJobEligible(job)) {
     return { enabled: false, reason: 'Select a prepared or previously run oxDNA job' }
@@ -100,11 +108,11 @@ export function backendLabel(backend) {
 }
 
 /** Pure: the running-status line, including the active backend when known. */
-export function liveStatusLine({ ready, nPositions = 0, nBursts = 0, backend = null } = {}) {
+export function liveStatusLine({ ready, nPositions = 0, nBursts = 0, backend = null, peg = false } = {}) {
   if (!ready) return 'Live session warming up…'
   const eng = backendLabel(backend)
   const on  = eng ? ` · ${eng}` : ''
-  return `Live · ${nPositions} nt · ${nBursts} burst${nBursts === 1 ? '' : 's'} stepped${on}`
+  return `Live · ${nPositions} ${peg ? 'particles' : 'nt'} · ${nBursts} burst${nBursts === 1 ? '' : 's'} stepped${on}`
 }
 
 /** Pure: one-shot GPU→CPU fallback popup text, or null. `shown` guards the
@@ -125,6 +133,7 @@ export function initOxdnaLive({
 
   let _available  = false
   let _availReason = 'checking…'
+  let _pegAvailable = false, _pegReason = ''
   let _on         = false
   let _sid        = null
   let _hasField   = false      // is the RUNNING session's field on (→ steerable)?
@@ -141,7 +150,18 @@ export function initOxdnaLive({
     if (statusEl) { statusEl.textContent = text; statusEl.style.color = color }
   }
 
+  const lockedPegControls = new Map()
   function _setButton() {
+    const pegRunning = _on && getSelectedJob?.()?.run_config?.surface_strands?.material === 'PEG'
+    if (pegRunning && !lockedPegControls.size) {
+      for (const node of document.querySelectorAll('#oxdna-peg-enable, #oxdna-floor-enable, #oxdna-peg-controls input, #oxdna-peg-controls select, #oxdna-peg-controls button')) {
+        lockedPegControls.set(node, node.disabled)
+        node.disabled = true
+      }
+    } else if (!pegRunning && lockedPegControls.size) {
+      for (const [node, disabled] of lockedPegControls) node.disabled = disabled
+      lockedPegControls.clear()
+    }
     if (_on) {
       liveBtn.textContent = '■ Stop Live'
       liveBtn.disabled = false
@@ -153,7 +173,7 @@ export function initOxdnaLive({
       return
     }
     const { enabled, reason } = liveButtonState({
-      available: _available, availReason: _availReason,
+      available: _available, availReason: _availReason, pegAvailable: _pegAvailable, pegReason: _pegReason,
       job: getSelectedJob?.() || null,
     })
     liveBtn.textContent = '◉ Live'
@@ -169,6 +189,8 @@ export function initOxdnaLive({
   async function _checkAvailable() {
     const d = await api.oxdnaLiveAvailable().catch(() => null)
     _available = !!d?.available
+    _pegAvailable = !!d?.peg?.available
+    _pegReason = d?.peg?.reason || ''
     _availReason = d?.reason || 'oxpy live engine not available'
     _setButton()
   }
@@ -195,7 +217,7 @@ export function initOxdnaLive({
     // drift) — the E-field card warns, but the live session is not blocked.
     const el = getRunElements?.() || {}
     const field = el.field
-    const hasField = !!(field?.enabled && field.field_pN > 0)
+    const hasField = !!liveField(field)
     const body = liveStartBody(job, el)
 
     _busy = true
@@ -243,8 +265,8 @@ export function initOxdnaLive({
       return
     }
     if (f.status === 'error') {
-      _setStatus(`Live session error: ${f.error || 'unknown'}`, _C.err)
       stop()
+      _setStatus(`Live session error: ${f.error || 'unknown'}`, _C.err)
       return
     }
     // GPU→CPU fallback (out of memory): alert the user ONCE, then carry on on CPU.
@@ -257,7 +279,7 @@ export function initOxdnaLive({
     if (f.ready && Array.isArray(f.positions) && f.positions.length) {
       oxdnaDisplay?.displayLiveFrame?.(f.positions)
       _setStatus(liveStatusLine({ ready: true, nPositions: f.n_positions,
-                                  nBursts: f.n_bursts, backend: _backend }), _C.ok)
+                                  nBursts: f.n_bursts, backend: _backend, peg: getSelectedJob?.()?.run_config?.surface_strands?.material === 'PEG' }), _C.ok)
     } else {
       _setStatus('Live session warming up…', _C.accent)
     }
@@ -281,6 +303,7 @@ export function initOxdnaLive({
   // Re-aim the running field when the gizmo/inputs change (throttled — drag fires
   // many times per second; the backend coalesces to the latest anyway).
   function _maybeReaimField(field) {
+    if (field?.field_V_per_m > 0) return
     if (!_hasField) return                     // only a session whose field is on is steerable
     if (!field?.enabled || !(field.field_pN > 0)) return
     const now = Date.now()
@@ -301,7 +324,7 @@ export function initOxdnaLive({
   // E-field card warns), but the recompose is not blocked.
   function _onCompositionChanged(el, sig) {
     const field = el.field
-    const hasField = !!(field?.enabled && field.field_pN > 0)
+    const hasField = !!liveField(field)
     _sig = sig
     _hasField = hasField
     if (_reconfigTimer) clearTimeout(_reconfigTimer)

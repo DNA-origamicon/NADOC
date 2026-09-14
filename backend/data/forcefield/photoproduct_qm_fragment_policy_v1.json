@@ -1,0 +1,125 @@
+{
+  "schema": "nadoc.photoproduct-qm-fragment-policy.v1",
+  "version": "1.0.0",
+  "status": "active_evidence_generation_policy",
+  "gate_effect": "none",
+  "simulation_ready": false,
+  "objective": "Parameterize the chemically changed TT-CPD core and validate each glycosidic boundary with the smallest model that retains the complete covalent photoproduct, while transferring unchanged sugar-phosphate chemistry from CHARMM36.",
+  "literature_basis": [
+    {
+      "id": "CGenFF-2010",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/",
+      "practice": "Develop new CHARMM terms on small model compounds, use MP2/6-31G(d) geometries and vibrations, add diffuse functions for anions, and validate assembled molecules separately."
+    },
+    {
+      "id": "CHARMM-modified-ribonucleotides-2016",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4801715/",
+      "practice": "Transfer established ribose and phosphate terms, fit new base chemistry with capped fragments, and validate the assembled modified nucleotide and oligonucleotide in condensed-phase MD."
+    },
+    {
+      "id": "CGenFF-5.0-four-membered-rings-2025",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11938330/",
+      "practice": "Fit strained four-membered-ring bonded terms on small training compounds and test transfer on separate validation compounds."
+    },
+    {
+      "id": "Masson-CPD-2008",
+      "url": "https://doi.org/10.1021/ja076081h",
+      "practice": "Use an isolated N-methyl cis-syn thymine dimer for lesion electrostatics rather than treating the complete DNA environment quantum mechanically."
+    },
+    {
+      "id": "CPD-QMMM-2016",
+      "url": "https://doi.org/10.1021/jacs.6b06701",
+      "practice": "Keep the reactive two-base chromophore in the QM region and represent the surrounding oligonucleotide and solvent with MM."
+    }
+  ],
+  "chemical_partition": {
+    "core": {
+      "model": "N1-methylated complete two-base TT-CPD",
+      "atom_count": 36,
+      "charge": 0,
+      "retains": [
+        "both complete thymine-derived rings",
+        "both product crosslinks in the reviewed ordered graph (like-numbered for syn and crossed C5/C6 for anti)",
+        "all four product stereocenters",
+        "neutral N1 methyl caps"
+      ],
+      "determines": [
+        "product-core equilibrium geometry",
+        "ring bond and angle response",
+        "ring proper and stereochemical improper response",
+        "core charge and water-interaction targets"
+      ]
+    },
+    "single_endpoint_glycosidic_boundary": {
+      "model": "complete two-base TT-CPD with one full deoxyribose and one N1 methyl cap",
+      "atom_count": 49,
+      "charge": 0,
+      "variants": [
+        "retain endpoint 1 deoxyribose; hydroxyl-cap its open O3'",
+        "retain endpoint 2 deoxyribose; hydroxyl-cap its open O5'"
+      ],
+      "retains": [
+        "complete product core and chirality",
+        "one real C1'-N1 glycosidic boundary",
+        "one complete deoxyribose ring",
+        "the opposite endpoint's neutral N1 methyl cap"
+      ],
+      "determines": [
+        "mixed product/N1/C1' bonded transfer",
+        "glycosidic torsion response",
+        "lesion-to-sugar coupling for each ordered endpoint"
+      ]
+    },
+    "phosphate_and_remote_backbone": {
+      "action": "transfer unchanged CHARMM36 nucleic-acid atom types, charges, and bonded parameters",
+      "new_qm_job": false,
+      "reason": "The TT photocycloaddition changes the two base C5/C6 environments but neither creates nor removes a sugar-phosphate bond. Mixed lesion terms end at the glycosidic interface covered by the endpoint fragments.",
+      "validation": "Audit the assembled d(TpT) patch and short DNA in MM/NAMD; escalate to a full d(TpT) QM target only if a named boundary-transfer metric fails."
+    }
+  },
+  "representative_plan": {
+    "training_families": [
+      {
+        "family": "syn-head-to-head",
+        "primary_product": "tt-cpd-cis-syn",
+        "endpoint_fragments": [1, 2]
+      },
+      {
+        "family": "anti-head-to-tail",
+        "primary_product": "tt-cpd-cis-anti-i",
+        "endpoint_fragments": [1, 2]
+      }
+    ],
+    "held_out_transfer_checks": [
+      {
+        "product_id": "tt-cpd-cis-syn-ii",
+        "retained_endpoint": 2,
+        "purpose": "ordered syn-family orientation check"
+      },
+      {
+        "product_id": "tt-cpd-trans-anti-i",
+        "retained_endpoint": 1,
+        "purpose": "trans/anti-family transfer check"
+      }
+    ],
+    "all_eight_identity_rule": "Every ordered product keeps an independent atom map and signed-chirality audit. A shared fitted block may be released only after its held-out checks pass."
+  },
+  "qm_protocol": {
+    "geometry": "MP2/6-31G(d), DF, frozen core, gau_tight",
+    "frequency": "MP2/6-31G(d) after a passed minimum",
+    "water": "CHARMM-compatible HF/6-31G(d) monohydrate targets",
+    "torsions": "relaxed constrained MP2/6-31G(d) scans only for acyclic glycosidic central bonds",
+    "reflection": "forbidden"
+  },
+  "full_boundary_policy": {
+    "currently_submitted_alpine_jobs": "leave submitted and accept results as independent validation evidence if they run",
+    "new_local_63_atom_jobs": "do not launch by default",
+    "escalation_triggers": [
+      "endpoint-fragment MM/QM geometry or response target fails",
+      "a mixed lesion/glycosidic parameter is not identifiable from the fragment targets",
+      "assembled d(TpT) minimization leaves large projected forces at either glycosidic boundary",
+      "short explicit-solvent DNA loses product stereochemistry or develops reproducible local instability"
+    ]
+  },
+  "release_effect": "Prepared or completed fragment calculations are evidence only. They do not release a force field or open any NAMD capability gate."
+}

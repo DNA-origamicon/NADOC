@@ -137,8 +137,16 @@ def _graphene_pdb_atoms(dna_pdb: str, spec: dict) -> list[str]:
     axis = spec.get("surface_axis")
     n = np.asarray(axis_normals.get(axis, spec.get("dir", [0.0, 0.0, 1.0])), dtype=float)
     n /= np.linalg.norm(n)
+    from backend.core.surface_transforms import SurfaceFrame
+    if spec.get("tangent_u") is None:
+        trial = [1., 0., 0.] if abs(n[0]) < .8 else [0., 1., 0.]
+        spec["tangent_u"] = np.cross(n, trial).tolist()
+    frame = SurfaceFrame([0, 0, 0], n, spec["tangent_u"])
+    u, v = np.asarray(frame.tangent_u), frame.tangent_v
     radius = float(spec.get("pore_diameter_nm", 2.1)) / 2.0
     pts = np.asarray(_dna_atom_positions_nm(dna_pdb), dtype=float)
+    from backend.core.surface_periodic import register_graphene_plane
+    register_graphene_plane(spec, pts, n)
     if axis is not None or "pore_center_nm" not in spec:
         if len(pts):
             lo, hi = pts.min(axis=0), pts.max(axis=0)
@@ -164,16 +172,14 @@ def _graphene_pdb_atoms(dna_pdb: str, spec: dict) -> list[str]:
         side = 1.0 if float(np.median(signed)) >= 0 else -1.0
         nearest = float(np.min(side * signed))
         shift = max(0.0, clearance - nearest)
-        center = center - side * n * shift
+        from backend.core.surface_periodic import translate_coated_surface
+        spec["dir"] = n.tolist()
+        translate_coated_surface(spec, -side * n * shift)
+        center = np.asarray(spec["pore_center_nm"])
         spec["atomistic_clearance_shift_nm"] = shift
-        spec["pore_center_nm"] = center.tolist()
-        spec["plane_point_nm"] = center.tolist()
     margin = float(spec.get("sheet_margin_nm", 1.5))
     extent = max(5.0, float(np.ptp(pts, axis=0).max() / 2 + margin)) if len(pts) else 5.0
     extent = max(extent, radius + max(margin, 0.3))
-    trial = np.array([1.0, 0.0, 0.0]) if abs(n[0]) < 0.8 else np.array([0.0, 1.0, 0.0])
-    u = np.cross(n, trial); u /= np.linalg.norm(u)
-    v = np.cross(n, u)
     bond = 0.142  # nm
     dy = np.sqrt(3.0) * bond / 2.0
     atoms: list[str] = []
@@ -2878,6 +2884,23 @@ def build_namd_solvated_package(
     bytes
         ZIP file contents ready to write to disk or serve as a download.
     """
+    from backend.core.cpd_forcefield import (
+        assert_cpd_simulation_supported,
+        inject_photoproduct_parameters,
+        photoproduct_package_assets,
+    )
+
+    assert_cpd_simulation_supported(design, path="explicit-solvent NAMD package builder")
+    has_photoproducts = bool(design.photoproduct_junctions)
+    if has_photoproducts and not require_full_topology:
+        from backend.core.cpd_forcefield import CpdCapabilityError  # noqa: PLC0415
+
+        raise CpdCapabilityError(
+            "A formed photoproduct requires the authoritative full CHARMM/psfgen "
+            "topology path. Set require_full_topology=True; the legacy heavy-atom "
+            "PSF exporter is intentionally unavailable for product designs."
+        )
+    photoproduct_assets = photoproduct_package_assets(design)
     design = design.without_reference_geometry()
     from backend.core.streptavidin import require_coating_simulation_support
     require_coating_simulation_support(design, 'NAMD solvated package')
@@ -3100,23 +3123,28 @@ def build_namd_solvated_package(
         mgcl2_mM=mg_conc_mM,
         mg_hexahydrate=mg_hexahydrate and bool(mgh_clusters),
     )
-    with tempfile.TemporaryDirectory(prefix="nadoc_hmr_") as _hmr_tmp:
-        hmr_tmp = Path(_hmr_tmp)
-        psf_path = hmr_tmp / f"{name}.psf"
-        hmr_path = hmr_tmp / f"{name}_hmr.psf"
-        psf_path.write_text(solvated_psf)
-        n_hmr = write_hmr_psf(psf_path, hmr_path)
-        hmr_psf = hmr_path.read_text()
-    fast_conf = _render_solvated_fast_namd_conf(
-        name,
-        box_nm,
-        n_total,
-        nacl_mM=ion_conc_mM,
-        mgcl2_mM=mg_conc_mM,
-        mg_hexahydrate=mg_hexahydrate and bool(mgh_clusters),
-        n_hmr=n_hmr,
-        nvt_only=False,
-    )
+    namd_conf = inject_photoproduct_parameters(namd_conf, design)
+    hmr_psf = None
+    fast_conf = None
+    n_hmr = 0
+    if not has_photoproducts:
+        with tempfile.TemporaryDirectory(prefix="nadoc_hmr_") as _hmr_tmp:
+            hmr_tmp = Path(_hmr_tmp)
+            psf_path = hmr_tmp / f"{name}.psf"
+            hmr_path = hmr_tmp / f"{name}_hmr.psf"
+            psf_path.write_text(solvated_psf)
+            n_hmr = write_hmr_psf(psf_path, hmr_path)
+            hmr_psf = hmr_path.read_text()
+        fast_conf = _render_solvated_fast_namd_conf(
+            name,
+            box_nm,
+            n_total,
+            nacl_mM=ion_conc_mM,
+            mgcl2_mM=mg_conc_mM,
+            mg_hexahydrate=mg_hexahydrate and bool(mgh_clusters),
+            n_hmr=n_hmr,
+            nvt_only=False,
+        )
 
     if graphene_nanopore:
         from backend.core.namd_graphene import graphene_pressure_conf
@@ -3124,6 +3152,38 @@ def build_namd_solvated_package(
         fast_conf = graphene_pressure_conf(fast_conf, enabled=True, fixed_cell=True)
 
     readme = _README.format(name=name)
+    if has_photoproducts:
+        readme = readme.replace(
+            f"{name}_hmr.psf      HMR topology for fast dynamics (non-water H mass x3)\n",
+            "",
+        ).replace(
+            "namd_fast.conf      Fast-relaxation template: HMR + GPUresident + 4 fs\n",
+            "",
+        ).replace(
+            "    namd3 +p4 +setcpuaffinity +devices 0 namd_fast.conf > output/namd_fast.log &\n",
+            "",
+        ).replace(
+            "namd_fast.conf mirrors NADOC's local fast-relaxation path: HMR topology,\n"
+            "GPUresident on, 4 fs timestep, sparse output, and 12-step cycles. Use it only\n"
+            "after namd.conf preflight is clean. It is for capped solvated boxes; periodic\n"
+            "unit-cell packages with wrap bonds must stay on standard CUDA.\n",
+            "The managed NADOC ladder and production writers load the packaged lesion\n"
+            "parameters in every stage and use an ordinary-mass PSF at no more than 2 fs.\n",
+        ).replace(
+            "2. namd_fast.conf is a standalone fast dynamics template.\n"
+            "3. For full production, use NADOC's managed equilibrium-aware ladder configs.\n"
+            "4. Analyse with VMD: vmd {name}.psf output/{name}.dcd\n".format(name=name),
+            "2. Continue only through NADOC's managed equilibrium-aware ladder configs.\n"
+            f"3. Analyse with VMD: vmd {name}.psf output/{name}.dcd\n",
+        )
+        readme += (
+            "\nTT-CPD timestep policy\n"
+            "----------------------\n"
+            "This product package deliberately omits the HMR PSF and 4 fs fast "
+            "configuration. The standalone namd.conf performs minimization/preflight only; "
+            "use NADOC's managed ordinary-mass pathway at no more than 2 fs until "
+            "product-specific HMR validation is released.\n"
+        )
     prompt = _AI_PROMPT.replace("{name}", name)
     launch = _LAUNCH_SH.format(name=name)
     audit_json = {
@@ -3135,6 +3195,8 @@ def build_namd_solvated_package(
         "requirements": {
             "full_dna_topology_required": require_full_topology and not graphene_only,
             "neutral_final_psf_required": require_full_topology,
+            "photoproduct_timestep_fs": 2.0 if has_photoproducts else None,
+            "photoproduct_hmr_4fs_validated": False if has_photoproducts else None,
         },
         "graphene_only": graphene_only,
         "dry_dna": dry_audit.to_dict(),
@@ -3181,10 +3243,12 @@ def build_namd_solvated_package(
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(prefix + f"{name}.pdb", solvated_pdb)
         zf.writestr(prefix + f"{name}.psf", solvated_psf)
-        zf.writestr(prefix + f"{name}_hmr.psf", hmr_psf)
+        if hmr_psf is not None:
+            zf.writestr(prefix + f"{name}_hmr.psf", hmr_psf)
         zf.writestr(prefix + "charge_audit.json", json.dumps(audit_json, indent=2))
         zf.writestr(prefix + "namd.conf", namd_conf)
-        zf.writestr(prefix + "namd_fast.conf", fast_conf)
+        if fast_conf is not None:
+            zf.writestr(prefix + "namd_fast.conf", fast_conf)
         if mgh_extrabonds:
             zf.writestr(prefix + "mgh_extrabonds.txt", mgh_extrabonds)
         zf.writestr(prefix + "README.txt", readme)
@@ -3195,6 +3259,39 @@ def build_namd_solvated_package(
             ff_path = _FF_DIR / ff_file
             if ff_path.exists():
                 zf.writestr(prefix + f"forcefield/{ff_file}", ff_path.read_bytes())
+        if photoproduct_assets:
+            packaged_manifest = {
+                "schema": "nadoc.packaged-photoproduct-forcefield.v1",
+                "timestep_fs": 2.0,
+                "hmr_4fs_enabled": False,
+                "lesions": [
+                    {
+                        "lesion_id": lesion.id,
+                        "product": lesion.product,
+                        "stereochemistry": lesion.stereochemistry,
+                        "base_keys": [lesion.base_key_1, lesion.base_key_2],
+                    }
+                    for lesion in design.photoproduct_junctions
+                ],
+                "assets": [
+                    {
+                        key: str(value) if isinstance(value, Path) else value
+                        for key, value in record.items()
+                        if key != "source_path"
+                    }
+                    for record in photoproduct_assets
+                ],
+                "topology_and_placement_audits": topology_metadata,
+            }
+            zf.writestr(
+                prefix + "photoproduct_forcefield_manifest.json",
+                json.dumps(packaged_manifest, indent=2),
+            )
+            for record in photoproduct_assets:
+                zf.writestr(
+                    prefix + f"forcefield/{record['relative_path']}",
+                    record["source_path"].read_bytes(),
+                )
 
         info = zipfile.ZipInfo(prefix + "launch.sh")
         info.compress_type = zipfile.ZIP_DEFLATED

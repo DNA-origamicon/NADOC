@@ -1,0 +1,381 @@
+{
+  "schema": "nadoc.tt-cpd-definition-review-ingestion-audit.v1",
+  "status": "passed_review_ingestion",
+  "passed": true,
+  "simulation_ready": false,
+  "gate_effect": "none",
+  "review_packet": {
+    "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-review-ingestion-v1/completed_definition_review_packet.json",
+    "sha256": "41257dbd03cc0424309eee4c1c47123438f8ee89355532e24825104945dc4767"
+  },
+  "approved_product_ids": [
+    "tt-cpd-cis-syn-ii",
+    "tt-cpd-trans-syn-i",
+    "tt-cpd-trans-syn-ii",
+    "tt-cpd-cis-anti-i",
+    "tt-cpd-cis-anti-ii",
+    "tt-cpd-trans-anti-i",
+    "tt-cpd-trans-anti-ii"
+  ],
+  "unresolved_product_ids": [],
+  "records": [
+    {
+      "product_id": "tt-cpd-cis-syn-ii",
+      "decision": "APPROVE",
+      "reviewer": "Jeffe",
+      "reviewed_at": "2026-09-05T04:58:58.069397+00:00",
+      "atom_mapped_rationale": "Visual-review rationale (verbatim): Look canonical",
+      "definition_candidate": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/definition-candidates-minimum-backed-v1/tt-cpd-cis-syn-ii.json",
+        "sha256": "7edfea2e6eeb8bd9586f01638fafd57c47f2bfc62fb934e6f3cad068136f8909"
+      },
+      "reviewed_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-review-ingestion-v1/reviewed_definitions/tt-cpd-cis-syn-ii.json",
+        "sha256": "cdcf91558952d1b0a6dd3c0df8ddd9ff5a8b5418a97cb4108b5d0765adc27a37",
+        "schema": "nadoc.photoproduct-chemical-definition.v1",
+        "chirality_audit": {
+          "schema": "nadoc.photoproduct-chirality-audit.v1",
+          "product_id": "tt-cpd-cis-syn-ii",
+          "passed": true,
+          "centers": [
+            {
+              "atom": "1:C5",
+              "ccd_configuration": "S",
+              "signed_volume": -2.385746869321885,
+              "expected_sign": "negative",
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "ccd_configuration": "S",
+              "signed_volume": 1.58225637630891,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "ccd_configuration": "R",
+              "signed_volume": 2.3426871102984403,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "ccd_configuration": "R",
+              "signed_volume": -1.6735125493271608,
+              "expected_sign": "negative",
+              "passed": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "product_id": "tt-cpd-trans-syn-i",
+      "decision": "APPROVE",
+      "reviewer": "Jeffe",
+      "reviewed_at": "2026-09-05T04:59:10.647566+00:00",
+      "atom_mapped_rationale": "Visual-review rationale (verbatim): Looks canonical",
+      "definition_candidate": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/definition-candidates-minimum-backed-v1/tt-cpd-trans-syn-i.json",
+        "sha256": "9c95a9a83d28339aa6d0ff0024b13e5d397eaab14ae0a4ea38932c3ad3e06f88"
+      },
+      "reviewed_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-review-ingestion-v1/reviewed_definitions/tt-cpd-trans-syn-i.json",
+        "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b",
+        "schema": "nadoc.photoproduct-chemical-definition.v1",
+        "chirality_audit": {
+          "schema": "nadoc.photoproduct-chirality-audit.v1",
+          "product_id": "tt-cpd-trans-syn-i",
+          "passed": true,
+          "centers": [
+            {
+              "atom": "1:C5",
+              "ccd_configuration": "S",
+              "signed_volume": -2.32247131319912,
+              "expected_sign": "negative",
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "ccd_configuration": "S",
+              "signed_volume": 1.6821822740564205,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "ccd_configuration": "S",
+              "signed_volume": -2.3224601824731588,
+              "expected_sign": "negative",
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "ccd_configuration": "S",
+              "signed_volume": 1.6822010738127617,
+              "expected_sign": "positive",
+              "passed": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "product_id": "tt-cpd-trans-syn-ii",
+      "decision": "APPROVE",
+      "reviewer": "Jeffe",
+      "reviewed_at": "2026-09-05T04:59:14.940711+00:00",
+      "atom_mapped_rationale": "Visual-review rationale (verbatim): Atoms all reasonably placed",
+      "definition_candidate": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/definition-candidates-minimum-backed-v1/tt-cpd-trans-syn-ii.json",
+        "sha256": "a56ab333280660f339d87a10a68b6ad11e43324f4f5e2a82b621028b3e6786d0"
+      },
+      "reviewed_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-review-ingestion-v1/reviewed_definitions/tt-cpd-trans-syn-ii.json",
+        "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29",
+        "schema": "nadoc.photoproduct-chemical-definition.v1",
+        "chirality_audit": {
+          "schema": "nadoc.photoproduct-chirality-audit.v1",
+          "product_id": "tt-cpd-trans-syn-ii",
+          "passed": true,
+          "centers": [
+            {
+              "atom": "1:C5",
+              "ccd_configuration": "R",
+              "signed_volume": 2.3467340021803107,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "ccd_configuration": "R",
+              "signed_volume": -1.584141348418046,
+              "expected_sign": "negative",
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "ccd_configuration": "R",
+              "signed_volume": 2.346738191282051,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "ccd_configuration": "R",
+              "signed_volume": -1.5841494237131515,
+              "expected_sign": "negative",
+              "passed": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "product_id": "tt-cpd-cis-anti-i",
+      "decision": "APPROVE",
+      "reviewer": "Jeffe",
+      "reviewed_at": "2026-09-05T04:59:17.145773+00:00",
+      "atom_mapped_rationale": "Visual-review rationale (verbatim): Atoms all reasonably placed",
+      "definition_candidate": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/definition-candidates-minimum-backed-v1/tt-cpd-cis-anti-i.json",
+        "sha256": "ca0f64bd6361b3937bbdc089dd524c54ec0cd37376cb9ff0ea763049707dd3e5"
+      },
+      "reviewed_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-review-ingestion-v1/reviewed_definitions/tt-cpd-cis-anti-i.json",
+        "sha256": "2ad8acdded5633ea84bf33c48cd7decbd3a1b6fab46f97bc54f0e9ca54a6e1c4",
+        "schema": "nadoc.photoproduct-chemical-definition.v1",
+        "chirality_audit": {
+          "schema": "nadoc.photoproduct-chirality-audit.v1",
+          "product_id": "tt-cpd-cis-anti-i",
+          "passed": true,
+          "centers": [
+            {
+              "atom": "1:C5",
+              "ccd_configuration": "S",
+              "signed_volume": -2.6443488867991665,
+              "expected_sign": "negative",
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "ccd_configuration": "S",
+              "signed_volume": -1.8766685440450543,
+              "expected_sign": "negative",
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "ccd_configuration": "S",
+              "signed_volume": 2.4177962156324937,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "ccd_configuration": "R",
+              "signed_volume": -1.6738243376521524,
+              "expected_sign": "negative",
+              "passed": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "product_id": "tt-cpd-cis-anti-ii",
+      "decision": "APPROVE",
+      "reviewer": "Jeffe",
+      "reviewed_at": "2026-09-05T04:59:21.488815+00:00",
+      "atom_mapped_rationale": "Visual-review rationale (verbatim): Atoms all reasonably placed",
+      "definition_candidate": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/definition-candidates-minimum-backed-v1/tt-cpd-cis-anti-ii.json",
+        "sha256": "4c966a566deb8fbdbd930b8ab3453f1083e9abdc875f52fea12fc22852b2afa5"
+      },
+      "reviewed_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-review-ingestion-v1/reviewed_definitions/tt-cpd-cis-anti-ii.json",
+        "sha256": "8668cfeaaa85d70f920f81f425dff79cb0de29228ddb62532352e4e0092e52c8",
+        "schema": "nadoc.photoproduct-chemical-definition.v1",
+        "chirality_audit": {
+          "schema": "nadoc.photoproduct-chirality-audit.v1",
+          "product_id": "tt-cpd-cis-anti-ii",
+          "passed": true,
+          "centers": [
+            {
+              "atom": "1:C5",
+              "ccd_configuration": "R",
+              "signed_volume": 2.6443358722012382,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "ccd_configuration": "R",
+              "signed_volume": 1.8766721992589612,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "ccd_configuration": "R",
+              "signed_volume": -2.417785907164895,
+              "expected_sign": "negative",
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "ccd_configuration": "S",
+              "signed_volume": 1.6738216982196288,
+              "expected_sign": "positive",
+              "passed": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "product_id": "tt-cpd-trans-anti-i",
+      "decision": "APPROVE",
+      "reviewer": "Jeffe",
+      "reviewed_at": "2026-09-05T05:01:45.773582+00:00",
+      "atom_mapped_rationale": "Visual-review rationale (verbatim): Looks good to me.",
+      "definition_candidate": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/definition-candidates-minimum-backed-v1/tt-cpd-trans-anti-i.json",
+        "sha256": "4b47c3c7b3bb8bc613788fe2a5841bc9b1960facf8a8040bdec8e1a79fb63d37"
+      },
+      "reviewed_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-review-ingestion-v1/reviewed_definitions/tt-cpd-trans-anti-i.json",
+        "sha256": "27139365d5cfb64d2b90b2172c13c94eac02d5357dd46c4e1a8e686f00c3539f",
+        "schema": "nadoc.photoproduct-chemical-definition.v1",
+        "chirality_audit": {
+          "schema": "nadoc.photoproduct-chirality-audit.v1",
+          "product_id": "tt-cpd-trans-anti-i",
+          "passed": true,
+          "centers": [
+            {
+              "atom": "1:C5",
+              "ccd_configuration": "R",
+              "signed_volume": 2.6619923222841875,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "ccd_configuration": "R",
+              "signed_volume": 1.835065513997425,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "ccd_configuration": "S",
+              "signed_volume": 2.2135538592255255,
+              "expected_sign": "positive",
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "ccd_configuration": "R",
+              "signed_volume": -1.6244055816345038,
+              "expected_sign": "negative",
+              "passed": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "product_id": "tt-cpd-trans-anti-ii",
+      "decision": "APPROVE",
+      "reviewer": "Jeffe",
+      "reviewed_at": "2026-09-05T05:00:00.540142+00:00",
+      "atom_mapped_rationale": "Visual-review rationale (verbatim): Positions good enough",
+      "definition_candidate": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/definition-candidates-minimum-backed-v1/tt-cpd-trans-anti-ii.json",
+        "sha256": "607ae9ea35a4b1145ff1a422b698b9da17f18350427a8e47701eefdadd45936c"
+      },
+      "reviewed_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-review-ingestion-v1/reviewed_definitions/tt-cpd-trans-anti-ii.json",
+        "sha256": "f6933a888a07ed850dd469ab9f81f4d0dcbdf489924bfac5470092f46880b5c8",
+        "schema": "nadoc.photoproduct-chemical-definition.v1",
+        "chirality_audit": {
+          "schema": "nadoc.photoproduct-chirality-audit.v1",
+          "product_id": "tt-cpd-trans-anti-ii",
+          "passed": true,
+          "centers": [
+            {
+              "atom": "1:C5",
+              "ccd_configuration": "S",
+              "signed_volume": -2.6619971702737755,
+              "expected_sign": "negative",
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "ccd_configuration": "S",
+              "signed_volume": -1.8350513541690874,
+              "expected_sign": "negative",
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "ccd_configuration": "R",
+              "signed_volume": -2.2135421791771153,
+              "expected_sign": "negative",
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "ccd_configuration": "S",
+              "signed_volume": 1.6244060363263453,
+              "expected_sign": "positive",
+              "passed": true
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "release_boundary": "This audit does not attach assets or pass gates. Each approved exact file must be curated under the force-field tree, attached, and independently gate-reviewed."
+}

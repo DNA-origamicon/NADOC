@@ -1,5 +1,22 @@
 # LESSONS — full entries
 
+<a id="k13"></a>
+### K13. Recreating a working VR system instead of recovering its launch conditions (2026-09-08)
+
+The recovery detoured through substitute views, repeated setup windows, and display-stack
+assumptions despite an established native physical-eye mirror. Separate failures were
+conflated: Tailscale authorization, saved session, Vive desktop ownership, Steam's cached
+AMD GPU override, and a stationary headset facing away from the model. The user confirmed
+the existing submitted left-eye path worked after restoring those conditions and applying
+the already-implemented dummy framing to the actual loaded `24hb_0xT` snapshot.
+
+**How to avoid:** follow [VR recovery guardrails](feedback_vr_restore_proven_path.md)
+before changing code/settings. Current evidence and installed system fixes live in
+[the workstation record](project_steamvr_drm_lease_fix.md). Inspect fresh evidence at
+the failing layer; do not reinstall/reimplement or ask for repeated session selection
+without establishing necessity. A working snapshot mirror is not a live editing bridge;
+successful current-session recovery does not prove reboot persistence.
+
 Split out of the index [LESSONS.md](LESSONS.md) on 2026-07-09 for context economy. The index carries a one-line symptom hook per lesson; open only the entry that matches your symptom. IDs/anchors are stable — other files (CLAUDE.md's Done checklist) cite them.
 
 ## A. DNA topology / geometry reasoning

@@ -176,11 +176,11 @@ describe('initMoveRotatePanel — view setters', () => {
 
   it('setCurrentSelection renders the target list with an explicit clear action', () => {
     const els = mountPanelDom()
-    const deps = makeDeps({ selection: { items: [{ kind: 'base', key: 'h:1:F' }] } })
+    const deps = makeDeps({ selection: { items: [{ kind: 'base', key: 'h:1:FORWARD' }] } })
     const api = initMoveRotatePanel(deps)
-    api.setCurrentSelection(['Base · h:1:F', 'Strand · s1'])
+    api.setCurrentSelection(['Base · h:1:FORWARD', 'Strand · s1'])
     expect([...els['mr-current-selection'].querySelectorAll('.mr-selection-item')].map(e => e.textContent))
-      .toEqual(['Base · h:1:F', 'Strand · s1'])
+      .toEqual(['Base · h:1:FORWARD', 'Strand · s1'])
     els['mr-current-selection'].querySelector('.mr-selection-clear').click()
     expect(deps.clearSelection).toHaveBeenCalledOnce()
     api.setCurrentSelection([])

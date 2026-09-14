@@ -1,0 +1,93 @@
+{
+  "schema": "nadoc.photoproduct-candidate-assembly-policy.v1",
+  "version": "1.1.0",
+  "status": "workflow_policy",
+  "policy": "traceable-charmm-smoke-candidate-v1.1",
+  "scope": {
+    "product_id": "tt-cpd-cis-syn",
+    "nonbonded_hypothesis_id": "charmm36-hybrid-cyclobutane-v1",
+    "patch_name": "TCPDCS1"
+  },
+  "candidate_nonbonded_limits": {
+    "maximum_charge_constraint_error_e": 1e-08,
+    "maximum_charge_change_e": 0.2,
+    "maximum_esp_rmse_atomic_unit": 0.02,
+    "maximum_dipole_vector_error_debye": 2.5,
+    "maximum_held_out_water_energy_error_kcal_mol": 0.5,
+    "maximum_held_out_water_distance_error_angstrom": 0.1
+  },
+  "model_compound_boundary_transfer": {
+    "policy": "n1-methyl-cap-to-dna-c1-prime-v1",
+    "stable_atom_substitutions": {
+      "C1'": "CM"
+    },
+    "additional_boundary_dihedrals": [
+      {
+        "product_local_atoms": ["C6", "N1", "C1'", "O4'"],
+        "model_local_atoms": ["C6", "N1", "CM", "HCM1"],
+        "boundary_atom_types": {"C1'": "CN7B", "O4'": "ON6"}
+      },
+      {
+        "product_local_atoms": ["C6", "N1", "C1'", "C2'"],
+        "model_local_atoms": ["C6", "N1", "CM", "HCM2"],
+        "boundary_atom_types": {"C1'": "CN7B", "C2'": "CN8"}
+      },
+      {
+        "product_local_atoms": ["C6", "N1", "C1'", "H1'"],
+        "model_local_atoms": ["C6", "N1", "CM", "HCM3"],
+        "boundary_atom_types": {"C1'": "CN7B", "H1'": "HN7"}
+      }
+    ],
+    "required_dna_boundary_type": "CN7B",
+    "allowed_only_when_term_contains": "C1'",
+    "interpretation": "The N1-methyl cap is the declared local model for the glycosidic boundary. Numeric bonded terms may seed a smoke candidate after replacing model CM by DNA C1'. The three C6-N1-C1'-sugar dihedrals created by changing the C6 type are mapped deterministically to the three symmetry-equivalent C6-N1-CM-HCM model occurrences. This is not evidence that the transfer is quantitatively accurate in DNA."
+  },
+  "transfer_parameter_policy": {
+    "require_pinned_cgenff_release": true,
+    "require_exact_model_atom_path": true,
+    "require_unambiguous_bond_and_angle_values": true,
+    "retain_all_matching_fourier_terms": true,
+    "emit_self_contained_cgenff_mass_lj_and_bonded_records": true
+  },
+  "bonded_identity_type_aliases": {
+    "2:C5": {
+      "name": "CPD5B",
+      "reason": "Preserve the fitted endpoint-2 C5 improper atom order without colliding with the mirror-related endpoint-1 CHARMM type signature. Mass and Lennard-Jones values are copied exactly from the selected nonbonded source type; charge is unchanged."
+    },
+    "2:C6": {
+      "name": "CPD6B",
+      "reason": "Preserve the fitted endpoint-2 C6 improper atom order without colliding with the mirror-related endpoint-1 CHARMM type signature. Mass and Lennard-Jones values are copied exactly from the selected nonbonded source type; charge is unchanged."
+    }
+  },
+  "candidate_authorization": {
+    "authorizes": [
+      "real_psfgen_static_topology_audit",
+      "staged_local_and_global_minimization",
+      "ordinary-mass_2_fs_namd_smoke"
+    ],
+    "does_not_authorize": [
+      "force_field_release",
+      "production_scientific_interpretation",
+      "hmr_or_4_fs_dynamics",
+      "transfer_to_another_photoproduct_or_stereoisomer"
+    ]
+  },
+  "mandatory_post_assembly_metrics": [
+    "complete_parameter_workbook_audit",
+    "product_vs_reactant_psf_atom_count_and_charge_conservation",
+    "exactly_one_C5-C5_and_one_C6-C6_crosslink",
+    "expected_product_atom_types_and_four_stereochemical_impropers",
+    "warning_free_parameter_load_and_minimization",
+    "finite_energy_and_force_trace",
+    "crosslink_distance_and_signed_chirality_retention",
+    "no_new_severe_clashes_or_backbone_breaks"
+  ],
+  "release_blockers_retained": [
+    "DNA-context QM or equivalent transferability validation for C1'-N1-C6 terms",
+    "relaxed scans for freely rotatable fitted torsions or a justified multi-conformer substitute",
+    "MM-minimum geometry and vibrational comparison on training and held-out structures",
+    "aqueous DNA validation against structural or experimental observables",
+    "independent reproducibility audit"
+  ],
+  "provenance_note": "Thresholds are conservative NADOC smoke-candidate engineering limits informed by CHARMM/CGenFF target practice. They are not universal force-field acceptance criteria and do not replace the stricter release validation set."
+}

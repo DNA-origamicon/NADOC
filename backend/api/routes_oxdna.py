@@ -356,7 +356,10 @@ class FieldRequest(FieldElement):
         "(default pins anchors effectively immobile)",
     )
     seed: Optional[int] = Field(None, ge=1, le=OXDNA_SEED_MAX)
-class SurfaceElement(BaseModel):
+from backend.physics.oxdna_surface_geometry import SurfaceGeometry, persisted_wall, same_plane, absolute_wall_for_configuration
+
+
+class SurfaceElement(SurfaceGeometry):
     """The hard-surface element of a composed run (one-sided repulsion plane).
 
     ``dir`` is the plane's outward normal (the structure rests on the side ``dir``
@@ -923,6 +926,19 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 
     protein = has_proteins(design)
 
+    from backend.physics.oxdna_peg import is_peg, PegParameters, find_peg_oxdna
+    if is_peg(surface_strands_in):
+        try:
+            PegParameters.model_validate(surface_strands_in)
+        except ValueError as exc:
+            raise HTTPException(400, f"Invalid PEG surface: {exc}") from exc
+        if protein or body.execution_target != "local":
+            raise HTTPException(400, "DNA2PEG currently supports local DNA/PEG jobs only")
+        if body.interaction_type != "DNA2":
+            raise HTTPException(400, "PEG requires the oxDNA2 DNA model")
+        if not find_peg_oxdna():
+            raise HTTPException(400, "PEG engine missing. Run bash scripts/build-oxdna-peg.sh")
+
     if protein and body.execution_target == "local":
         run_bin = find_oxdna()
         if run_bin and not oxdna_supports_dnanm(run_bin):
@@ -945,7 +961,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     # otherwise run the cheap MC stage and only abort the long MD stage with the
     # cryptic "Backend 'CUDA' not supported".  Point the user at the fix instead.
     if body.backend == "CUDA" and body.execution_target == "local":
-        run_bin = find_oxdna()
+        run_bin = find_peg_oxdna() if is_peg(surface_strands_in) else find_oxdna()
         if run_bin and not oxdna_supports_cuda(run_bin):
             engine = "oxDNA"
             override = "OXDNA_BIN"
@@ -1116,7 +1132,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         # scrubbed; visualization must render the exact plane oxDNA used at run start.
         wall_meta = (forces_info or {}).get("wall")
         if wall_meta and job.run_config.get("surface"):
-            job.run_config["surface"]["position_nm"] = _wall_axis_position_nm(wall_meta)
+            job.run_config["surface"] = persisted_wall(job.run_config["surface"], wall_meta)
         # Capture-strand build summary → run_config (for echo-back + production trap re-emission)
         # and a non-blocking clash warning if a capture bead seeds too close to the origami.
         cap = (forces_info or {}).get("capture")
@@ -1655,6 +1671,14 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     )
     prod = assign_stage_seeds([prod], stage_seed)[0]
     prod = hybridize_stage(prod, protein=any(s.parfile for s in specs))
+    from backend.physics.oxdna_peg import configure_peg_stages, is_peg
+    peg_spec = (job.run_config or {}).get("surface_strands")
+    if is_peg(peg_spec):
+        configure_peg_stages([prod], peg_spec)
+        # Preserve the substrate and grafts when extending an existing job.
+        prod.external_forces = True
+        prod.absolute_forces = True
+        prod.forces_file = specs[-1].forces_file or "equil_forces.txt"
     specs.append(prod)
 
     # Persist the extended spec list + append the stage status; resume into it.
@@ -1717,6 +1741,9 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     nets a centre-of-mass drift that streams the whole structure across the
     periodic box, so the UI shows a warning notice — but the run is allowed."""
     parent = _load_job(job_id)
+    from backend.physics.oxdna_peg import is_peg
+    if is_peg((parent.run_config or {}).get("surface_strands")):
+        raise HTTPException(409, "For PEG use the consolidated Run action; it preserves the surface and grafts")
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
         raise HTTPException(
             400, "An electric-field run requires a completed job to seed from."
@@ -1867,12 +1894,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         field_config = resolved_field["config"]
     wall_in = None
     if body.surface:
-        wall_in = {
-            "dir": body.surface.dir,
-            "offset_nm": body.surface.offset_nm,
-            "position_nm": body.surface.position_nm,
-            "stiff": body.surface.stiff,
-        }
+        wall_in = body.surface.model_dump(exclude_none=True)
     ordinary_anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     surface_anchors = [a.model_dump(by_alias=False) for a in body.surface_anchors]
     # Surface capture strands built into the relaxed parent are inherited via the copied
@@ -1883,6 +1905,13 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     cap_particles = cap["trap_particles"]
     cap_n_beads = cap["n_beads"]
     subject_caps = cap["subject_to_field"]
+    from backend.physics.oxdna_peg import is_peg, configure_peg_stages, peg_terminal_field_text
+    peg_run = is_peg(cap["spec"])
+    if peg_run:
+        subject_caps = False  # never apply DNA's backbone charge to PEG beads
+        cap["spec"]["subjectToField"] = False
+        if wall_in is None:
+            wall_in = (parent.run_config or {}).get("surface")
     field_exclude = (
         cap_n_beads if (field_in and cap_n_beads > 0 and not subject_caps) else 0
     )
@@ -1947,12 +1976,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             "seed": job_seed,
             "steps": body.steps,
             "field": field_config,
-            "surface": {
-                "dir": body.surface.dir,
-                "offset_nm": body.surface.offset_nm,
-                "position_nm": body.surface.position_nm,
-                "stiff": body.surface.stiff,
-            }
+            "surface": body.surface.model_dump(exclude_none=True)
             if body.surface
             else None,
             "anchors": [
@@ -2024,9 +2048,12 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             child.efield["charge_audit"] = info["field"]
     child.n_nucleotides = info["n_total"]
     if info.get("wall") and child.run_config.get("surface"):
-        child.run_config["surface"]["position_nm"] = _wall_axis_position_nm(
-            info["wall"]
-        )
+        child.run_config["surface"] = persisted_wall(child.run_config["surface"], info["wall"])
+    if peg_run:
+        configure_peg_stages([stage], cap["spec"])
+        child.run_config["surface"] = wall_in
+        with open(cjd / "run_forces.txt", "a", encoding="utf-8") as stream:
+            stream.write("\n" + peg_terminal_field_text(cap["spec"], field_in))
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
     child.status = OxdnaStatus.queued
     child.save(ws)
@@ -2038,6 +2065,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
 async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) -> dict:
     """Branch a relaxed job into force-ramp → contact-restraint → equilibration stages."""
     parent = _load_job(job_id)
+    from backend.physics.oxdna_peg import is_peg
+    if is_peg((parent.run_config or {}).get("surface_strands")):
+        raise HTTPException(409, "PEG is already grafted; use Run to continue this surface simulation")
     if body.max_approach_force_pn < body.approach_force_pn:
         raise HTTPException(400, "max_approach_force_pn must be >= approach_force_pn")
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
@@ -2054,12 +2084,7 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
             400, "The selected job has no relaxed structure to deposit."
         )
 
-    wall = {
-        "dir": list(body.surface.dir),
-        "offset_nm": body.surface.offset_nm,
-        "position_nm": body.surface.position_nm,
-        "stiff": body.surface.stiff,
-    }
+    wall = body.surface.model_dump(exclude_none=True)
     anchors = [
         a.model_dump(by_alias=False, exclude_none=True) for a in body.surface_anchors
     ]
@@ -2149,19 +2174,10 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
     else:
         shutil.copy(relaxed_conf, cjd / "conf.dat")
     try:
+        wall = absolute_wall_for_configuration(wall, cjd / "conf.dat")
+        child.run_config["surface"] = wall
         parent_wall = (parent.run_config or {}).get("surface") or {}
-        parent_dir = parent_wall.get("dir") or []
-        same_surface_plane = (
-            len(parent_dir) == 3
-            and parent_wall.get("position_nm") is not None
-            and wall.get("position_nm") is not None
-            and all(
-                abs(float(parent_dir[i]) - float(wall["dir"][i])) < 1e-6
-                for i in range(3)
-            )
-            and abs(float(parent_wall["position_nm"]) - float(wall["position_nm"]))
-            < 1e-6
-        )
+        same_surface_plane = same_plane(parent_wall, wall)
         placement_info = place_configuration_against_surface(
             cjd / "conf.dat",
             design,
@@ -3600,6 +3616,9 @@ def _capture_bead_count(job) -> int:
 
 
 def _capture_strand_length(job) -> int:
+    ss = (job.run_config or {}).get("surface_strands") or {}
+    if ss.get("material") == "PEG":
+        return int((ss.get("built") or {}).get("beads_per_chain") or int(ss.get("segments", 8)) + 1)
     sequence = ((job.run_config or {}).get("surface_strands") or {}).get(
         "sequence"
     ) or ""
@@ -3745,7 +3764,7 @@ def _capture_display_strands(job, conf_path, full_map) -> list:
     if n_cap <= 0 or not full_map:
         return []
     seq = "".join(c for c in (ss.get("sequence") or "").upper() if c in "ACGT")
-    L = len(seq) or 8
+    L = _capture_strand_length(job) or 8
     from backend.physics.oxdna_interface import OXDNA_LENGTH_UNIT, _parse_box_nm
 
     lines = [

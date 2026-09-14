@@ -28,6 +28,9 @@ import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { renderJobList } from './jobs_panel_render.js'
+import { openPegQualification } from './namd_peg_review.js'
+import { isPegJob } from './namd_peg_visualization.js'
+import { updatePegVisualization } from './namd_peg_viz_controls.js'
 import { shouldForceDisplayReload, mdReadinessIndicator, mdDisplayReadinessFromMeta } from './md_display_state.js'
 import { initMdSolventControls } from './md_solvent_controls.js'
 import { initMdWeldControls } from './md_weld_controls.js'
@@ -2434,6 +2437,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   })
 
   async function _fetchDisplayMeta(jobId = _selectedId) {
+    if (isPegJob(_jobs.find(job => job.job_id === jobId))) return null
     if (!jobId) return null
     try {
       const d = await api.getMdDisplayMeta(jobId)
@@ -2524,6 +2528,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   async function _refreshMdDisplay({ forceReloadRemote = false } = {}) {
+    if (isPegJob(_selectedJob())) return
     if (!displayToggle?.checked) return
     if (!_isDynamicsTabVisible()) {
       _stopMdDisplay('Native positions restored')
@@ -2672,6 +2677,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   async function _refreshMdPrewarm(force = false, { allowAlpine = false } = {}) {
+    if (isPegJob(_selectedJob())) return false
     if (displayToggle?.checked || _trajJobId || _trajLoadJobId) return false
     // NB: intentionally NOT gated on the Dynamics tab being visible.  Prewarm now
     // warms the display socket (parse PSF + build model, ~5 s) in the background as
@@ -3483,6 +3489,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // additionally need a written trajectory). A loaded trajectory retains ownership
   // across selections, even when the selected job has no frames of its own.
   function _updateVizToggles(job = _selectedJob()) {
+    if (updatePegVisualization(job)) return
     const hasJob  = !!job
     const hasTraj = _mdHasTrajectory(job)
     ionPaths?.setEnabled(hasTraj && !!mdInheritedPrepParams(job, _jobs).graphene_nanopore)
@@ -3673,6 +3680,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // A job created elsewhere (the oxDNA panel's "Use as NAMD seed") must show up
   // here even when this panel is already open — `_revealMdPanel` only refreshes
   // on a collapse→expand, so without this the new preparing job never appears.
+  window.addEventListener('nadoc:peg-job-selected', evt => _selectJob(evt.detail.jobId))
   window.addEventListener('nadoc:md-job-created', async (evt) => {
     const jobId = evt.detail?.jobId
     await _fetchJobs()
@@ -4736,6 +4744,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   async function _applyVisualizationJobSwitch(action, job) {
+    if (isPegJob(job)) {
+      _stopMdDisplay(); _setFlexOff(); _setPhotoproductOff(); _setTrajOff()
+      if (_occupancyReady) _setOccupancyOff()
+      openPegQualification(job, action)
+      return
+    }
     return applyMdVisualizationJobSwitch(action, {
       off: _setTrajOff,
       trajectory: () => _mdHasTrajectory(job) && trajToggle?.checked

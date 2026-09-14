@@ -1,0 +1,12 @@
+[Unit]
+Description=Assess and conditionally continue authorized local QM fragment sets
+ConditionPathIsMountPoint=/media/jojo/Archive
+ConditionPathExists=/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-local-fragment-campaign-v1/continuation_authorization.json
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/jojo/Work/NADOC
+ExecStart=/home/jojo/Work/NADOC/.venv/bin/python scripts/local_qm_fragment_campaign/continue_campaign.py
+MemoryMax=2G
+Nice=10
+TimeoutStartSec=10min

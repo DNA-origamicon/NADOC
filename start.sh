@@ -55,6 +55,7 @@ if [ "$TAILSCALE_MODE" -eq 1 ]; then
   [ -n "$TAILSCALE_DNS_NAME" ] || die "Could not determine this computer's Tailscale DNS name."
   PUBLIC_URL="https://${TAILSCALE_DNS_NAME}:5173"
   export NADOC_PUBLIC_URL="$PUBLIC_URL"
+  export NADOC_TAILSCALE_IP="$TAILSCALE_IP"
   TOKEN_FILE=".nadoc-peer-token"
   if [ ! -f "$TOKEN_FILE" ]; then
     umask 077

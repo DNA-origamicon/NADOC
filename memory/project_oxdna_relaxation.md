@@ -66,3 +66,21 @@ display changes in the running app. Run the wizard path regression with
 `cd frontend && npx playwright test e2e/oxdna_job_wizard_paths.spec.js --reporter=list`; it intercepts
 job creation and paid-provider calls and removes its generated design. Real oxDNA simulation tests are
 heavy and test-session-only.
+
+## Shared surface / PEG handoff update (2026-09-11)
+
+Hard-wall and PEG setup, run and Live writers accept explicit `plane_point_nm`
+and `tangent_u` descriptors through `physics/oxdna_surface_geometry.py`; oblique
+planes no longer use a dominant-axis position approximation. Offset-only deposition
+walls are frozen before moving the probe. Shared rigid transforms retain surface,
+pore, graft and coating registration through seed recentering and graphene clearance.
+
+`POST /api/oxdna/peg/namd-seed` is a read-only checkpoint inventory with explicit
+DNA/PEG identities, graft references, source hashes and periodic make-whole handling.
+Normal NAMD seeding rejects PEG until its target chemistry, mapping and assets are
+provided; it must not silently yield DNA-only input. The unwrapped configuration
+reader now accepts `n_trailing_extra` to keep DNA indexing correct. Rotated
+orthorhombic graphene cells have an explicit geometry adapter; stock solvated-job
+creation does not silently rotate a user's existing cell or external fields.
+Implementation and remaining scientific/test-session prerequisites are tracked in
+[shared surface transforms](../docs/surface_transforms.md).

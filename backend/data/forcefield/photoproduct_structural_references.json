@@ -1,0 +1,75 @@
+{
+  "schema": "nadoc.photoproduct-structural-references.v1",
+  "sources": [
+    {
+      "id": "Taylor-2023-CPD-stereochemistry",
+      "citation": "Taylor, Adjacent and Nonadjacent Dipyrimidine Photoproducts as Intrinsic Probes of DNA Secondary and Tertiary Structure, Photochem. Photobiol. 99 (2023) 277-295",
+      "doi": "10.1111/php.13694",
+      "url": "https://onlinelibrary.wiley.com/doi/10.1111/php.13694",
+      "authority": [
+        "eight ordered DNA-level TT-CPD stereoisomer classes",
+        "ordered endpoint C5 absolute configurations",
+        "distinction between eight DNA-attached products and six hydrolyzed aglycone products",
+        "syn head-to-head and anti head-to-tail connectivity"
+      ],
+      "ordered_c5_configurations": {
+        "cis-syn-I": ["R", "S"],
+        "cis-syn-II": ["S", "R"],
+        "trans-syn-I": ["S", "S"],
+        "trans-syn-II": ["R", "R"],
+        "cis-anti-I": ["S", "S"],
+        "cis-anti-II": ["R", "R"],
+        "trans-anti-I": ["R", "S"],
+        "trans-anti-II": ["S", "R"]
+      },
+      "supporting_information": {
+        "url": "https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1111%2Fphp.13694&file=php13694-sup-0001-Supinfo.pdf",
+        "figures_used": ["S1", "S2"],
+        "local_download_status": "publisher HTTP 403 from command-line client; reviewed through publisher-rendered PDF",
+        "redistributed": false
+      },
+      "not_authority": [
+        "C6 absolute configurations without an atom-mapped structure",
+        "CHARMM charges, types, or bonded parameters",
+        "optimized coordinates"
+      ]
+    },
+    {
+      "id": "JASMS-2026-SIX-TT-CPD",
+      "citation": "Yang et al., Ion Mobility Separation of Six Isomeric Cyclobutane Thymidine Photodimers Relevant to the Photochemistry of Non-B DNA Structures, J. Am. Soc. Mass Spectrom. 37 (2026) 1218-1225",
+      "doi": "10.1021/jasms.6c00014",
+      "url": "https://doi.org/10.1021/jasms.6c00014",
+      "authority": [
+        "six-isomer hydrolyzed/aglycone experimental catalog",
+        "syn is head-to-head and anti is head-to-tail",
+        "experimental separation of all six thymidine dimers"
+      ],
+      "not_authority": [
+        "CHARMM atom types or charges",
+        "bonded parameters",
+        "ordered absolute atom-level stereochemistry in DNA",
+        "aqueous DNA conformational validation"
+      ],
+      "supplement": {
+        "doi": "10.1021/jasms.6c00014.s001",
+        "figshare_article_id": 31946103,
+        "figshare_file_id": 63497964,
+        "download_url": "https://ndownloader.figshare.com/files/63497964",
+        "filename": "js6c00014_si_001.pdf",
+        "sha256": "e05d24e83a09520f9284e25bd091d1e3c789c1532f9e29abae50fdf387b8102f",
+        "license": "CC BY-NC 4.0",
+        "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+        "contents_used": [
+          "six DFT sodium-adduct labels and relative enthalpies",
+          "method metadata: Gaussian 16 C.02 and 6-311++G(d,p) with GD3",
+          "frequency confirmation statement"
+        ],
+        "missing_for_nadoc_definition": [
+          "DFT coordinate files",
+          "atom maps",
+          "absolute configuration assignment for each ordered endpoint"
+        ]
+      }
+    }
+  ]
+}

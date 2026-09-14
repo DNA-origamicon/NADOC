@@ -9,6 +9,12 @@ review_after: 2026-09-01
 
 ## Mission and current state
 
+VR recovery starts with [the restoration guardrails](feedback_vr_restore_proven_path.md)
+and [the workstation fix record](project_steamvr_drm_lease_fix.md). On 2026-09-08 the
+user confirmed the existing physical left-eye mirror displaying `24hb_0xT` worked
+after restoring direct mode/GPU selection and using existing dummy framing. Do not
+recreate that method; this confirmation does not close controller/editing gates.
+
 Make NADOC's native VR view a faithful, comfortable counterpart to the desktop application without creating a second geometry, selection, or job model. As redirected on 2026-08-20, the active implementation priority is now complete in-headset **Extrude** and **Move/Rotate** UI/UX; Twist/Bend and simulation-result expansion remain secondary until those two workflows have safe Confirm/Cancel/Undo transactions and pass their physical gates.
 
 Active branch: `feature/native-vr-navigation` (tracked at `origin/feature/native-vr-navigation`).
@@ -155,6 +161,8 @@ Phase 6 unified-job snapshot foundation: native launch now reads the active desi
 
 Phase 6 live-status checkpoint: while native VR is active, Firefox now refreshes the same document-scoped unified list every 1.5 s and publishes only successful reads; it never replaces a known list with false emptiness after a transport failure. The localhost backend owns a monotonic sequence across browser reloads and atomically replaces the private mode-0600 v2 feed, while the native reader accepts only newer complete records and retains legacy v1 launch parsing for diagnostics. An open detail page follows the same engine-qualified job identity across reorder/status updates and returns safely to the list if that job disappears. The panel says `LIVE READ ONLY` for a feed no more than five seconds old and `LINK STALE READ ONLY` thereafter, including capped lists; action controls and result loading still do not exist. Evidence: 44 VR route tests plus Ruff, 19 focused frontend projection/client/session tests, all 5,772 frontend tests, the production build, native build, and the interaction validator pass. The physical mixed-engine/status/staleness gate remains required before widening Phase 6. No package or sudo change is needed.
 
+Tailscale-origin bridge checkpoint: native VR endpoints retain their host-local boundary but now accept both the exact HTTPS `*.ts.net` origin exported as `NADOC_PUBLIC_URL` and the exact Tailscale self-address exported as `NADOC_TAILSCALE_IP` by `start.sh --tailscale`. The self-address is required because Tailscale Serve/Vite may preserve it as the FastAPI client instead of presenting loopback; origin-less same-origin GET polling is therefore also admitted only from that declared self-address. A different tailnet client, hostname, port, scheme, URL path, non-tailnet setting, or ordinary network peer still fails closed. Paired workspace discovery does not redirect VR: the viewer always starts on the active URL's host. Evidence: focused VR route/network-boundary tests and Ruff pass, and source-level checks cover the running Compy5000 launcher's exact public URL plus `100.89.83.24` self-address. The non-reload backend must be restarted after this checkpoint before it serves the change; no live VR session was launched during automated verification.
+
 2026-08-20 goal redirect and transaction audit: stop broadening the VR surface until Move/Rotate and exact-End Extrude are complete workflows. Existing Move/Rotate preview is exact and reversible for Cluster/Base/End/Domain/Strand, but Cluster commit currently refuses VR ownership, residue-scope persistence can create multiple undo entries, and native has no authoritative committing/succeeded/failed acknowledgement. Existing Extrude has exact End context, one-cell footprint, natural/Expanded preview geometry, configuration, and sequenced preflight, but Preview/Confirm remain disabled. Both tools therefore need one shared browser-authoritative transaction state machine with action/target identity, final-state revalidation, duplicate-confirm suppression, exact Cancel, completion feedback, and an Undo token that refuses to consume an unrelated desktop edit. Phase 5A will first add atomic residue-scope persistence and Move/Rotate commit/undo; Phase 5B will reuse the lifecycle for `addBundleContinuation`. Atom editing, multi-cell extrusion, deformed-End extrusion, Twist/Bend execution, job actions, and simulation results are explicitly out of the critical path.
 
 Phase 5A atomic-transaction foundation: `PUT /design/nucleotide-transforms` now validates a bounded, duplicate-free exact residue set before mutation, composes every pose in one state mutation, emits one `nucleotide-transform-batch` snapshot/feature-log entry, refreshes all affected helices once, and returns an explicit VR transaction identity. This removes the former one-request/one-undo-entry-per-residue failure mode for Domain/Strand moves. The nucleotide VR mirror now keeps its hidden persistence pose aligned with the native matrix—previously it moved only renderer matrices, so a future Confirm would have saved an identity transform—and exposes an atomic commit adapter; the Cluster adapter can likewise commit its existing pending transform and capture the resulting log identity. A pure coordinator serializes duplicate Confirm attempts and permits Undo only while that exact feature entry remains the current desktop log tail. These adapters are intentionally **not yet connected to the native Confirm button**: the launch scene needs an acknowledgement-driven committed-transform layer before clearing Preview, otherwise a successful desktop commit would visually snap back in the headset. Focused evidence currently covers atomic backend undo/refusal, Base/Domain persistence, Cluster commit identity, duplicate execution, and stale-desktop Undo refusal. Next checkpoint is the native pending/succeeded/failed protocol plus retained committed transform and exact Undo rendering; only then may Move/Rotate Confirm become reachable.
@@ -162,6 +170,27 @@ Phase 5A atomic-transaction foundation: `PUT /design/nucleotide-transforms` now 
 Phase 5A acknowledged Move/Rotate checkpoint: Confirm is now reachable for exact Cluster/Base/End/Domain/Strand previews. Native locks tool/menu actions at `COMMITTING`; Firefox executes the corresponding Cluster or atomic residue adapter; and a new private mode-0600 monotonic feedback record returns pending/succeeded/failed/refused plus the exact feature-log entry. Out-of-order pending writes cannot replace a terminal result, terminal feedback can safely rebase after Firefox reconnect, duplicate controller Confirm is suppressed, and failed Confirm remains retryable. Native promotes a preview only after success, retains it through representation and Expanded changes, bakes an older accepted layer when a newer commit succeeds, and removes only the newest layer after an exact feature-bound Undo. Picking, anchors, owner bounds, handles, shadows, and every representation use the same committed-plus-pending geometry. If any unrelated desktop mutation changes the feature-log tail, VR refuses Undo and invalidates its token rather than consuming that desktop edit. Automated evidence: 59 focused backend tests, 71 focused frontend tool tests, all 5,782 frontend tests, production build, clean-system-linker native build, and all 12 native validators pass. No package or sudo change is needed. Physical Full/Ball-and-Stick and recovery checks remain the Phase 5A go/no-go gate before exact-End Extrude is enabled.
 
 ## Workstation VR runtime gotcha (system-local, not a NADOC feature)
+
+**2026-09-08 saved-session regression:** the workstation was logged into GNOME Shell 46
+Wayland. `wayland-info` exposed no `wp_drm_lease_device_v1`; SteamVR 2.16.7 failed
+with `VRInitError_Compositor_GnomeNoDRMLeasing`. Forcing SDL/Xwayland found the
+Vive's 2160×1200 Vulkan display and selected 90 Hz, but Xwayland could not acquire
+it and failed with `VRInitError_Compositor_CannotDRMLeaseDisplay`. This is distinct
+from the Xorg connector-ownership case below. `_assert_vr_display_lease_available()`
+now fails before launching SteamVR when a Wayland session does not advertise the
+lease protocol. Boot journals show the successful 2026-08-17 and 2026-08-28 runs
+were automatically selected GDM X11 sessions. The 2026-08-30 reboot instead used
+Wayland after the account's saved session reverted to generic `ubuntu`. Persist
+`Session=ubuntu-xorg` and `SessionType=x11` through AccountsService, then sign out
+and back in; no per-login gear-menu choice is required. A process-local X11
+override cannot transfer DRM master ownership away from a running Mutter session.
+
+The 2026-08-17 Codex transcript and preserved 2026-08-28 SteamVR logs settle the
+architecture: the custom component was NADOC's native OpenXR companion, including
+the real submitted-eye mirror, while SteamVR remained the runtime/compositor. The
+physical success path recorded `CHmdWindowSDL: Using X11`, `Direct mode: enabled`,
+`Headset is using direct mode`, and `Startup Complete`; no alternate runtime or
+bespoke headset driver participated.
 
 SteamVR's compositor fails `xrCreateSession` with `CannotDRMLeaseDisplay` ("Failed to acquire xlib
 display" / "VR requires direct mode") whenever the Vive's `HDMI-0` connector is a live ordinary

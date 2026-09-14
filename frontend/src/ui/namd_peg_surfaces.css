@@ -1,0 +1,22 @@
+.modal--namd-peg { color: #c9d1d9; max-width: min(780px, calc(100vw - 24px)); }
+.modal--namd-peg [hidden] { display: none !important; }
+.modal--namd-peg h3 { font-size: 14px; margin: 18px 0 10px; }
+.namd-peg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+.namd-peg-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; margin-bottom: 8px; min-width: 0; }
+.namd-peg-field input, .namd-peg-field select, #namd-peg-surfaces select {
+  background: #161b22; color: #c9d1d9; border: 1px solid #484f58; border-radius: 4px;
+  padding: 7px 8px; min-width: 0; font: inherit; width: 100%; box-sizing: border-box;
+}
+.namd-peg-field input:focus-visible, .namd-peg-field select:focus-visible { outline: 2px solid #58a6ff; outline-offset: 1px; }
+.namd-peg-note { color: #a9b4c1; font-size: 12px; line-height: 1.5; }
+.namd-peg-estimate { padding: 10px; background: #21262d; border-radius: 4px; font-size: 13px; }
+.modal--namd-peg [role=status] { white-space: pre-line; line-height: 1.5; }
+.modal--namd-peg svg { display: block; width: min(100%, 260px); margin: 12px auto; }
+.namd-peg-patch { fill: #21262d; stroke: #a9b4c1; stroke-width: 1; }
+.namd-peg-pore { fill: #0d1117; stroke: #a9b4c1; }
+.namd-peg-graft { fill: #d2a8ff; }
+.modal--namd-peg li { margin-bottom: 6px; font-size: 12px; line-height: 1.5; }
+#namd-peg-surfaces { padding: 10px; display: grid; gap: 8px; }
+#namd-peg-surfaces p { margin: 0; }
+#namd-peg-surfaces button { min-height: 30px; }
+@media (max-width: 560px) { .namd-peg-grid { grid-template-columns: 1fr; } }

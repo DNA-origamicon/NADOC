@@ -2613,6 +2613,13 @@ def build_gromacs_package(
     solvate      : if True, add TIP3P water + MgCl2 ions (server-side)
     ion_conc_mM  : MgCl2 concentration in mM (default: 10.0)
     """
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+
+    reject_photoproduct_design(
+        design,
+        path="GROMACS package builder",
+        supported_path="the full-topology explicit-solvent NAMD workflow",
+    )
     from backend.physics.oxdna_protein import has_proteins
 
     _has_protein = has_proteins(design)

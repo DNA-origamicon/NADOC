@@ -1,0 +1,15 @@
+{
+  "schema": "nadoc.photoproduct-geometry-refinement-audit-policy.v1",
+  "version": "1.0.0",
+  "status": "workflow_policy",
+  "method": "strict-remiminization-and-finite-difference-hessian-v1",
+  "platform": "Reference",
+  "openmm_force_tolerance": 1e-7,
+  "openmm_maximum_iterations": 100000,
+  "cartesian_finite_difference_step_angstrom": 5e-5,
+  "maximum_stored_minimum_displacement_angstrom": 1e-4,
+  "maximum_force_kcal_mol_angstrom": 1e-5,
+  "maximum_raw_hessian_asymmetry": 1e-4,
+  "minimum_vibrational_projected_curvature": 1e-4,
+  "decision_rule": "Every numerical check must pass. This audit is gate-neutral and does not validate nonbonded terms, CHARMM export, DNA-context transfer, or NAMD readiness."
+}

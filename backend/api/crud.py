@@ -618,6 +618,7 @@ class CreateDesignRequest(BaseModel):
 
 
 class MetadataUpdateRequest(BaseModel):
+    peg_surface: Optional[dict] = None
     name: Optional[str] = None
     description: Optional[str] = None
     author: Optional[str] = None
@@ -1540,6 +1541,11 @@ def update_metadata(body: MetadataUpdateRequest) -> dict:
             d.metadata.author = body.author
         if body.tags is not None:
             d.metadata.tags = body.tags
+        if "peg_surface" in body.model_fields_set:
+            if body.peg_surface is not None:
+                from backend.physics.oxdna_peg import PegParameters
+                PegParameters.model_validate(body.peg_surface.get("surface_strands") or {})
+            d.metadata.peg_surface = body.peg_surface
 
     design, report = design_state.mutate_and_validate(_apply)
     return _design_response(design, report)

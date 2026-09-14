@@ -72,6 +72,7 @@ Detailed extraction verification lives in the path-scoped [main-init rule](.clau
 - `*_archive.md` is history. Do not read it routinely; open it only to recover a specific past decision.
 - `.claude/rules/*.md` supplies path-scoped architecture. `.claude/runbooks/` supplies debugging procedures. `.claude/skills/` supplies task-specific workflows.
 - Before completing a behavior change, read the relevant project head and any clearly matching feedback file. Update stale current-state claims that the change resolves.
+- Before VR/SteamVR/Vive or left-eye-mirror troubleshooting, read [VR recovery guardrails](memory/feedback_vr_restore_proven_path.md) and [the proven workstation fixes](memory/project_steamvr_drm_lease_fix.md). Recover the established path before proposing a replacement.
 - Before adding a feature, read [FEATURE_DEVELOPMENT.md](FEATURE_DEVELOPMENT.md). Cohesive behavior belongs in a tested module; composition roots such as `main.js` receive only imports, initialization, and thin wiring.
 
 ### Part/assembly feature parity

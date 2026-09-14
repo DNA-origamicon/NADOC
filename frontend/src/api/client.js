@@ -3558,6 +3558,60 @@ export async function deleteNucleotideTransform(transformId) {
   return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
+// ── Manual formed TT-CPD intent ─────────────────────────────────────────────
+
+export async function getPhotoproductCatalog() {
+  return _request('GET', '/design/photoproducts/catalog', undefined, { suppressBusy: true })
+}
+
+export async function getPhotoproductToolchain() {
+  return _request('GET', '/design/photoproducts/toolchain', undefined, { suppressBusy: true })
+}
+
+export async function getPhotoproductScientificReview() {
+  return _request('GET', '/design/photoproducts/scientific-review', undefined, { suppressBusy: true })
+}
+
+export async function putPhotoproductScientificReviewDecision(body) {
+  return _request(
+    'PUT',
+    '/design/photoproducts/scientific-review/decision',
+    body,
+    { suppressBusy: true },
+  )
+}
+
+export async function getPhotoproductModelTrajectory(productId) {
+  return _request(
+    'GET',
+    `/design/photoproducts/catalog/${encodeURIComponent(productId)}/model-trajectory`,
+    undefined,
+    { suppressBusy: true },
+  )
+}
+
+export async function preflightPhotoproduct(baseKeys, stereochemistry = 'cis-syn') {
+  return _request('POST', '/design/photoproducts/preflight', {
+    base_keys: baseKeys,
+    stereochemistry,
+    expected_revision: currentRevisionWatermark(),
+  }, { suppressBusy: true })
+}
+
+export async function createPhotoproduct(baseKeys, stereochemistry = 'cis-syn') {
+  const json = await _request('POST', '/design/photoproducts', {
+    base_keys: baseKeys,
+    stereochemistry,
+    expected_revision: currentRevisionWatermark(),
+  })
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
+export async function deletePhotoproduct(photoproductId) {
+  const json = await _request('DELETE', `/design/photoproducts/${encodeURIComponent(photoproductId)}`)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
 /**
  * Paste a copy of `clusterIds` at a lattice offset (Ctrl+C / Ctrl+V).
  * `(deltaRow + deltaCol)` must be EVEN — an odd shift flips helix polarity and moves
@@ -4693,9 +4747,9 @@ export async function getSystemResources(devices = '0') {
   }
 }
 
-/** Local native-OpenXR companion used when the browser has no immersive WebXR
- * bridge (notably stock Firefox/Chromium on Linux). These endpoints are
- * localhost-only and never mutate the active design. */
+/** Host-local native-OpenXR companion used when the browser has no immersive
+ * WebXR bridge (notably stock Firefox/Chromium on Linux). These endpoints accept
+ * localhost or this host's configured Tailscale origin and never mutate design. */
 export async function getVRStatus() {
   return _request('GET', '/vr/status', undefined, { suppressBusy: true })
 }
@@ -5093,6 +5147,16 @@ export async function cancelBenchmark(id) {
 //  `import * as api from '.../api/client.js'`) keep working unchanged.
 export * from './animation_endpoints.js'
 export * from './overhang_endpoints.js'
+
+export function reviewPegSetup(body) { return _request('POST', '/oxdna/peg/setup', body) }
+
+// Surface-library requests do not require a DNA or assembly simulation snapshot.
+export const listNamdPegSurfaces = () => _request('GET', '/md/peg-surfaces', undefined, { skipSimulationPrepare: true })
+export const getPegQualification = (id, segment, maxFrames = 100) => _request('GET', `/md/peg-qualifications/${encodeURIComponent(id)}?max_frames=${maxFrames}${segment ? `&segment=${encodeURIComponent(segment)}` : ''}`, undefined, { skipSimulationPrepare: true })
+export const reviewNamdPegSurface = body => _request('POST', '/md/peg-surfaces/review', body, { skipSimulationPrepare: true })
+export const saveNamdPegSurface = (body, id = null) => _request(id ? 'PUT' : 'POST', id ? `/md/peg-surfaces/${encodeURIComponent(id)}` : '/md/peg-surfaces', body, { skipSimulationPrepare: true })
+
+export const createPegFastRelax = id => _request('POST', `/md/peg-qualifications/${encodeURIComponent(id)}/fast-relax`, undefined, { skipSimulationPrepare: true })
 
 /** Binary path loads throw server/transport errors so window edits retain the previous scene. */
 export async function getMdIonPaths(id, before, after, signal, { requestId, onProgress } = {}) {

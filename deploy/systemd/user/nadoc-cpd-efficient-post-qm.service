@@ -1,0 +1,13 @@
+[Unit]
+Description=NADOC efficient TT-CPD post-QM sequence (steps 2-4)
+RequiresMountsFor=/media/jojo/Archive
+ConditionPathExists=/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/fit/all-forms/fixed-geometry-qm-v1/remaining-all-forms-queue-report-v1.json
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/jojo/Work/NADOC
+MemoryMax=24G
+CPUQuota=800%
+StandardOutput=append:/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-efficient-sequence-v1/post-qm-sequence.log
+StandardError=append:/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-efficient-sequence-v1/post-qm-sequence.log
+ExecStart=/home/jojo/Work/NADOC/.venv/bin/python scripts/run_post_qm_efficient_sequence.py --storage-root /media/jojo/Archive/NADOC_archive --qm-root /media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/fit/all-forms/fixed-geometry-qm-v1 --queue-report /media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/fit/all-forms/fixed-geometry-qm-v1/remaining-all-forms-queue-report-v1.json --output-root /media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-efficient-sequence-v1 --registry /home/jojo/Work/NADOC/backend/data/forcefield/photoproduct_registry.json --max-frames 500

@@ -1,0 +1,6 @@
+.                                                                        [100%]=============================== SLOW-TEST BUDGET ===============================
+1 unmarked test(s) over the 5.0s budget, but a heavy sim was running (simulation process(es) running: oxDNA) — these timings are NOT trustworthy and no triage is owed. Re-measure on an idle machine before relegating anything.
+    58.8s  tests/test_chudoba_hmc.py::test_hmc_harmonic_bond_distribution
+full report: .nadoc-slow-candidates.json  (triage: .claude/skills/triage-slow-tests)
+
+1 passed, 2 deselected in 58.90s

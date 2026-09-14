@@ -1,0 +1,29 @@
+.peg-testing { width: min(1180px, 96vw); max-width: 96vw; }
+.peg-testing .modal__body { padding: 16px; overflow-y: auto; }
+.peg-testing p { margin: 0 0 12px; line-height: 1.5; }
+.peg-layout { display: grid; grid-template-columns: 245px minmax(0, 1fr); gap: 16px; }
+.peg-layout > * { min-width: 0; }
+.peg-controls { display: flex; flex-direction: column; gap: 10px; }
+.peg-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #b5c5d4; }
+.peg-controls select, .peg-controls input:not([type=checkbox]) { width: 100%; box-sizing: border-box; }
+.peg-controls select, .peg-controls input[type=number] { background: #151f2c; color: #e0edf8; border: 1px solid #3d5064; padding: 6px; border-radius: 5px; }
+.peg-controls input[type=range] { accent-color: #63dbbd; }
+.peg-view { height: 360px; border: 1px solid #33455a; border-radius: 8px; overflow: hidden; background: #0b1420; position: relative; }
+.peg-view canvas { display: block; width: 100%; height: 100%; }
+.peg-backend { color: #7fe5c4; font-size: 12px; margin: 8px 0; }
+.peg-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.peg-stats div { border: 1px solid #33455a; padding: 9px; border-radius: 6px; font-size: 11px; color: #a8bdce; }
+.peg-stats strong { display: block; color: #e3f6ff; font-size: 18px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.peg-chart { width: 100%; height: 155px; background: #101b28; border-radius: 6px; }
+.peg-note { color: #a8bdce; font-size: 12px; line-height: 1.5; }
+.peg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.peg-actions button { background: #243d50; color: #e3f6ff; padding: 7px 12px; border: 1px solid #4a667e; border-radius: 5px; cursor: pointer; }
+.peg-testing details { border-top: 1px solid #33455a; padding-top: 12px; margin-top: 14px; }
+.peg-testing summary { cursor: pointer; color: #c0d8e9; margin-bottom: 10px; }
+.peg-testing a { color: #7ecbff; }
+.peg-testing li { margin-bottom: 8px; line-height: 1.5; }
+@media (max-width: 720px) {
+  .peg-layout { grid-template-columns: minmax(0, 1fr); }
+  .peg-controls { display: grid; grid-template-columns: 1fr 1fr; }
+  .peg-view { height: 280px; }
+}

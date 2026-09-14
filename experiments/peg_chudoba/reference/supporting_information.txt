@@ -1,0 +1,506 @@
+                         Supporting information for:
+               Temperature-Dependent Implicit-Solvent Model of
+                   Polyethylene Glycol in Aqueous Solution
+                          Richard Chudoba,∗,†,‡ Jan Heyda,∗,¶ and Joachim Dzubiella∗,†,‡
+                 †Institut für Physik, Humboldt-Universität zu Berlin, Newtonstraße 15, D-12489 Berlin, Germany
+     ‡Institut für Weiche Materie und Funktionale Materialen, Helmholtz-Zentrum Berlin, Hahn-Meitner-Platz 1, D-14109
+                                                         Berlin, Germany
+     ¶Department of Physical Chemistry, University of Chemistry and Technology, Prague, Technická 5, CZ-16628 Praha 6,
+                                                          Czech Republic
+
+        E-mail: richard.chudoba@helmholtz-berlin.de; jan.heyda@vscht.cz; joachim.dzubiella@helmholtz-berlin.de
+
+
+1 MARTINI Force Field
+                                                                                                                       atomistic
+In our preliminary investigation, the MARTINI based CG                                        2.0                      proposed CG
+                                                                                                                       MARTINI CG
+model S1 of PEG, originally parametrized at 296 K, was tested           probability density
+at different temperatures. A single 36-mer chain was placed                                   1.5                      294 K
+into the simulation box containing 1950 MARTINI water                                                                  371 K
+beads and 4 MARTINI anti-freeze particles. After equili-
+bration, a 400 ns trajectory was obtained using the leap-frog                                 1.0
+(md) integrator with a timestep of 8 fs. Simulations were per-
+formed at constant pressure 1 bar but various temperatures
+                                                                                              0.5
+(294 K, 320 K and 371 K), controlled with the Berendsen
+barostat and the velocity-rescale thermostat, respectively. As
+recommended by the MARTINI scheme, Lennard-Jones in-                                          0.0
+teraction forces were smoothly switched to zero in a distance                                    0.5   1.0     1.5      2.0          2.5
+from 0.9 nm to 1.2 nm. The radius of gyration, Rg , of the 36-                                               Rg (nm)
+mer chain was evaluated for each simulation run. Contrary to
+the atomistic simulations and our final CG model, the poly-             Figure S1: Distributions of the radius of gyration, Rg , of
+mer coil rather swells with increasing temperature as shown             PEG 36-mer at 294 K (dashed lines) and 371 K (solid lines)
+in Figure S1.                                                           employing atomistic REMD simulations, the MARTINI CG
+                                                                        model S1 and the CG model proposed in this work. The MAR-
+                                                                        TINI CG model, contrary to our model, predicts swelling of
+2 Iterative Boltzmann Inversion (IBI)                                   the coil as the temperature increases. However, it shall be
+                                                                        noted that the MARTINI CG model was parametrized only
+To derive the effective nonbonded pair potential, IBI was em-
+                                                                        at 296 K and validity at higher temperatures (e.g., 320 K) was
+ployed in an aqueous solution of PEG oligomers. The longer
+                                                                        not assumed.
+oligomer was used, the shallower the attraction well in the
+potential (Figure S2). Though we chose two different target
+radial distribution functions (RDFs), in the case of the trimer
+(between terminal units and between middle units, respec-
+tively), the potentials developed to almost identical structures
+in both cases. The only noticeable and expected difference
+is for the desolvation barrier. Thus the RDF between mid-
+dle units was chosen as the target RDF when IBI of longer
+oligomers (i.e., nonamer) was employed.
+   As shown in Figure S3, a rather short cutoff distance of
+1.2 nm in the IBI procedure is sufficient.
+
+
+
+                                                                   S1
+                2.5                                                                    1.1
+                                                           (a)
+                2.0                                                                    1.0
+
+                1.5                                                                    0.9
+       g(r)
+
+
+
+
+                                                                              g(r)
+                1.0                                                                    0.8
+
+                0.5                                                                    0.7
+                                                                                                                             (a)
+                0.0                                                                    0.6
+                0.5
+                                                                                       0.4
+                                                           (b)                                                               (b)
+                0.0                                                                    0.2
+                                                                                       0.0
+               −0.5
+)
+
+
+
+
+                                                                   )
+Ueﬀ kJ mol−1
+
+
+
+
+                                                                       Ueﬀ kJ mol−1
+
+
+                                                                                      −0.2
+               −1.0                                                                   −0.4
+(
+
+
+
+
+                                                                   (
+
+
+
+
+               −1.5                                                                   −0.6
+                                            monomer                                   −0.8                         294 K, 1.2 nm
+               −2.0                         dimer                                                                  294 K, 1.5 nm
+                                                                                      −1.0
+                                            trimer (head-head)                                                     371 K, 1.2 nm
+               −2.5                         trimer (mid-mid)                          −1.2                         371 K, 1.5 nm
+                  0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2                                0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2
+                                   r (nm)                                                                 r (nm)
+
+Figure S2: The radial distribution functions (a) and the con-          Figure S3: The effect of an imposed cutoff distance on the
+verged effective pair nonbonded potentials (b) from prelimi-           CG nonbonded potential during the IBI procedure. The con-
+nary tests of IBI in solutions of monomer, dimer and trimer at         verged effective pair nonbonded potentials Ueff (b) and the
+356 K. The radial distribution functions between monomer               corresponding RDFs (a), obtained in ≈ 1 m aqueous solution
+molecules, EO units of dimer, terminal EO units of trimer              of PEG nonamer are shown. In the first case, the cutoff dis-
+and middle EO units of trimer from the atomistic simula-               tance was set to 1.5 nm with damping starting at 1.3 nm. In
+tions (panel (a), dotted lines) were chosen as the target RDFs.        the other case, a shorter distance 1.2 nm with damping from
+Though there is a clear difference in the target RDFs for dif-         1.0 nm was chosen.
+ferently chosen units in the trimer, the obtained final CG po-
+tentials are rather similar. Note that the abrupt cutoff of the
+nonbonded potential at 0.95 nm as shown here was not used
+in the production simulations, where a smoothly decaying
+function was applied instead.
+
+
+
+
+                                                                  S2
+3 Top-down Postreﬁnement                                                                            Table S1: Final sets of parameters for the pair nonbonded
+                                                                                                    potential (eq 1) after fixing the parameters n = 8.00, γ =
+When the nonbonded potentials emerged from the IBI of                                               0.4841 kJ mol−1 , δ = 0.1064 nm and with ε adjusted from
+monomers or trimers are applied to a PEG polymer, they                                              1.193 kJ mol−1 to 1.372 kJ mol−1 .
+turn out to be too attractive. In the consequence, the poly-
+mer chain collapses into a dense globule even at room tem-                                                       T (K)       m σ (nm) μ (nm)
+perature (Figure S4), contrary to the good solvent regime ob-
+                                                                                                                    270 10.74     0.4039    0.6818
+served in experiments. The nonbonded potential derived
+                                                                                                                    294 10.14     0.4081    0.6888
+from the nonamers partly enables swollen states though a fur-
+                                                                                                                    320 8.63      0.4120    0.6955
+ther refinement is needed to achieve an agreement with the
+                                                                                                                    347 7.50      0.4158    0.7018
+experimental data.
+                                                                                                                    371 6.53      0.4188    0.7070
+                                                                                                                    396 5.94      0.4238    0.7154
+                      2.0                                                                                           422 5.24      0.4277    0.7219
+                                                                          Ueﬀ, monomer
+                                                                          Ueﬀ, trimer                               450 5.09      0.4312    0.7277
+                                     20
+                                                                          Ueﬀ, nonamer
+                                     15                                   Ueﬀ, ﬁnal
+                      1.5
+probability density
+
+
+
+
+                                     10
+                                      5                                                             ing the (also temperature-independent) value of ε. It shall be
+                                      0                                                             mentioned that the unaltered nonbonded potential does not
+                      1.0              1.5     2       2.5   3                                      follow the empirical and theoretical scaling law Rg (N) = lNν
+                                                                                                    while the modified form does (Figure S6). The effect of vari-
+                                                                                                    ous ε values on Rg is demonstrated in Figure S7.
+                      0.5
+
+
+                      0.0
+                            2        4             6     8               10      12
+                                                   Rg (nm)
+
+Figure S4: Distributions of the radius of gyration Rg of a PEG
+795-mer at 294 K when various effective nonbonded pair po-
+tentials are applied. The potentials derived using IBI in solu-
+tions of PEG monomer and trimer bring the polymer into a
+densely collapsed globule. Even the potential derived from a
+solution of nonamer is more attractive when compared to the
+experimental data. The inset shows in full the narrow distri-
+butions of the dense globules.
+
+  The analytic expression, eq 1 can be used to fit the non-
+bonded potential, derived with IBI in a solution of nonamers,
+up to the desolvation barrier. The resulting set of parameter
+values, in a temperature range from 270 K to 450 K, is sum-
+marized in Table S1.
+
+                                 (         )( )          [( σ )n ( σ )m ]
+                                             n m/(n−m)
+        Unonbonded (r) =              n
+                                     n−m     m         ε        −
+                                 |                   {z     r      r }
+                                                         Mie potential
+                                             r−μ   2
+                                + γe−( ) ,    δ
+                                  | {z }
+                                 Gaussian potential
+                                                                                         (1)
+
+  As mentioned before, our choice of the analytic expression
+does not describe the relatively shallow second minimum in
+the nonbonded potential. However, omitting this minimum
+turns the nonbonded potential from too attractive to too re-
+pulsive (Figure S5), which may be compensated by increas-
+
+
+                                                                                               S3
+           3.5                                                                                   10
+                    135mer                                Ueﬀ, nonamer
+                                                          Ueﬀ, truncated
+           3.0                                            Ueﬀ, ﬁnal
+
+
+           2.5
+ Rg (nm)
+
+
+
+
+                                                                                       Rg (nm)
+           2.0
+                                                                                                                          ε = 1.25 kJ mol−1
+           1.5         9mer                                                                                               ε = 1.31 kJ mol−1
+                                                                                                                          ε = 1.37 kJ mol−1
+                                                                                                                          ε = 1.43 kJ mol−1
+           1.0                                                                                                            Gruijthuijsen
+              280        300       320           340       360             380                    1
+                                                                                                             100                              1000
+                                         T (K)                                                                       N
+
+Figure S5: Radius of gyration Rg of CG PEG 9-mer and 135-                              Figure S7: Radius of gyration Rg at 294 K as a function of
+mer as a function of temperature when various effective non-                           the chain length at various ε values used in the nonbonded
+bonded pair potentials are applied. Comparing to the exper-                            potential (eq 1) during the parameter refinement. The exper-
+imental data (not shown), the full potential derived directly                          imental data S2,S3 are shown for comparison.
+with IBI in a solution of PEG nonamer, Ueff, nonamer is more at-
+tractive, while the same potential truncated after desolvation
+barrier, Ueff, trunc is less attractive.
+
+
+
+
+                        CG nonamer
+           2.0          CG ﬁnal
+                        atomistic Lee
+
+           1.5
+                                          8
+Rg (nm)
+
+
+
+
+                                                 (b)
+           1.0                            4
+                                          2
+                                          1
+           0.5
+                                         0.5
+                 (a)
+                                               101        102              103
+           0.0
+                 10       20     30      40          50   60        70       80
+                                           N
+
+Figure S6: Radius of gyration Rg at 294 K as a function of the
+chain length when the nonbonded potentials derived with IBI
+of nonamer is applied in the CG model. Comparing to the
+adjusted final nonbonded potential and experimental data,
+the simulation yields more collapsed conformations and the
+radius of gyration does not follow the scaling Rg (N) = lNν
+(dashed lines).
+
+
+
+
+                                                                                  S4
+4 Structural Comparison                                                                                    The radius of gyration Rg and the end-to-end distance Ree
+                                                                                                         were used as representative chain properties in Figure S9.
+We performed an atomistic REMD of the PEG 36-mer and
+compared chain structural properties to the CG model.
+The simulation box contained a single polymer chain and
+5824 TIP3P water molecules; the simulation setup is de-
+scribed in detail in the main text.
+   First, bonded parameters, such as distributions of the bond
+length, the bond angle and the dihedral angle were scruti-
+nized. Virtual sites placed at the centers of mass of the in-
+tended CG beads were used as reference points when evaluat-
+ing the atomistic simulations. The CG model retains much of
+bonded structural details as shown in Figure S8. Though the
+dihedral angle distribution is more prominent in the atom-
+istic simulations near room temperature, the proposed CG
+model exhibits almost the identical distribution when com-
+pared to the CG model of Lee et al. S1
+
+
+                                            40
+                                            35                                       294 K
+                      probability density
+
+
+
+
+                                                  (a)                                320 K
+                                            30
+                                                                                     347 K
+                                            25                                       371 K
+                                            20
+                                            15
+                                            10
+                                             5
+                                             0
+                                             0.20    0.25     0.30    0.35  0.40    0.45     0.50
+                                                                     b (nm)
+                         0.040
+                         0.035                                                                                                 2.0                                              294 K
+probability density
+
+
+
+
+                                                                                                         probability density
+
+
+
+
+                                                   (b)                                                                                   (a)
+                         0.030                                                                                                                                                  320 K
+                                                                                                                               1.5                                              347 K
+                         0.025                                                                                                                                                  371 K
+                         0.020
+                                                                                                                               1.0
+                         0.015
+                         0.010                                                                                                 0.5
+                         0.005
+                         0.000                                                                                                 0.0
+                                              60         80   100      120   140    160      180                                  0.5              1.0         1.5        2.0           2.5
+                                                                     θ (deg)                                                                                 Rg (nm)
+                         0.006                                                                                                 0.5
+probability density
+
+
+
+
+                                                                                                         probability density
+
+
+
+
+                         0.005                     (c)                                                                         0.4       (b)
+                         0.004
+                                                                                                                               0.3
+                         0.003
+                                                                                                                               0.2
+                         0.002
+                         0.001                                                                                                 0.1
+                         0.000                                                                                                 0.0
+                             −180                    −120     −60       0      60   120      180                                     0         1         2     3      4    5       6
+                                                                     φ (deg)                                                                                 Ree (nm)
+
+Figure S8: Comparison between the atomistic simulation and                                               Figure S9: Distributions of (a) the radius of gyration Rg and
+the CG model of PEG 36-mer at various temperatures. Dis-                                                 (b) the end-to-end distance Ree of the PEG 36-mer at various
+tributions of (a) the bond length b, (b) the bond angle θ, and                                           temperatures. The data originating from the virtual sites in
+(c) the dihedral angle φ are shown. The data originating from                                            the atomistic simulations are shown with dashed lines, the
+the virtual sites in the atomistic simulations are shown with                                            actual distributions in the CG model with solid lines.
+dashed lines, the actual distributions in the CG model with
+solid lines.
+
+                                                                                                    S5
+5 Single-chain Simulation Trajectories                                    6            The Second Virial Coeﬃcient
+                                                                          The following relation is used to convert between the concen-
+                    294 K     371 K            381 K                      tration (number per unit volume) based second virial coeffi-
+          16                                                              cient B2 and the mass density (mass per unit volume) based
+          14        795-mer                                               second virial coefficient A2 : S4
+          12
+Rg (nm)
+
+
+
+
+          10
+           8                                                                                                     A2 M2
+                                                                                                          B2 =         ,                          (2)
+           6                                                                                                      NA
+           4
+           2                                                              where M is the molar mass of the polymer chain (kg mol−1 )
+                0    1000     2000       3000          4000   5000
+                                                                          and NA the Avogadro constant.
+          12
+                    455-mer                                                 The molar mass M of a polymer chain being N monomers
+          10
+                                                                          long is calculated as
+Rg (nm)
+
+
+
+
+           8
+           6                                                                                     M = NMm , Mm = 44.05 g mol−1 .                   (3)
+           4
+           2
+                0     400     800        1200          1600   2000        7            Kirkwood-Buﬀ Integrals
+           6
+           5        135-mer                                               The Kirkwood-Buff Integrals (KBIs) were evaluated for three
+                                                                          oligomers (9-, 18-, and 27-mer) at 294 K as a function of con-
+Rg (nm)
+
+
+
+
+           4
+                                                                          centration. Values were compared to experimental data. S5
+           3
+                                                                          While the longer oligomers achieve both qualitative and
+           2
+                                                                          quantitative agreement, the nonamer does not exhibit exper-
+           1
+                0     200     400            600       800    1000        imentally observed properties. For the nonamer, however,
+          2.5                                                             the effects of end groups are significant. S6 In our model, the
+                     36-mer                                               PEG chains are terminated with methyl caps, while the ex-
+          2.0                                                             periments were conducted with an unmodified PEG, having
+Rg (nm)
+
+
+
+
+          1.5                                                             hydrophilic hydroxyl groups at the ends. That is why the pro-
+          1.0                                                             posed model does not provide matching results for the very
+                                                                          short oligomers.
+          0.5
+                0      60     120            180       240    300
+                                    t (ns)                                               0                                            0
+                                                                                                                                      −2
+Figure S10: Simulation trajectories of the radius of gyration                          −5
+of polymer chains. For each polymer chain, trajectories in a                                                                          −4
+
+
+
+
+                                                                                                                                            G22 (106 mm3 mol−1 )
+good solvent regime (294 K), around LCST (371 K) and in a                              −10                                            −6
+                                                                          G22 (nm3 )
+
+
+
+
+bad solvent regime (381 K) are shown. The first tenth of the                                                                          −8
+trajectory (gray background) is considered as an equilibra-                            −15
+                                                                                                                                      −10
+tion phase and not included in the analysis.
+                                                                                       −20                                            −12
+                                                                                                                       9-mer          −14
+                                                                                       −25                            18-mer
+                                                                                                                      23-mer (exp.)   −16
+                                                                                                                      27-mer
+                                                                                       −30                                         −18
+                                                                                             0   0.001 0.002 0.003 0.004 0.005 0.006
+                                                                                                                 x
+
+                                                                          Figure S11: The Kirkwood-Buff integral G22 between chains
+                                                                          for three oligomers (see the legend) in a good solvent regime
+                                                                          (294 K) employing the proposed CG model. Experimental
+                                                                          data S5 for 23-mer (M = 1000 g mol−1 ) are shown for com-
+                                                                          parison. KBI values are plotted as a function of concentra-
+                                                                          tion, expressed by the molar fraction x of the oligomer. Note
+                                                                          that the right-hand-side y-axis allows an easy comparison
+                                                                          with Figures 7–8 in the referenced paper. S5
+
+
+                                                                     S6
+References
+(S1) Lee, H.; de Vries, A. H.; Marrink, S.-J.; Pastor, R. W.
+     A Coarse-Grained Model for Polyethylene Oxide and
+     Polyethylene Glycol: Conformation and Hydrodynam-
+     ics. J. Phys. Chem. B 2009, 113, 13186–13194, DOI:
+     10.1021/jp9058966.
+
+(S2) van Gruijthuijsen, K. When attractions meet repulsions
+     in colloid-polymer mixtures. Ph.D. thesis, University of
+     Fribourg, Switzerland, 2012.
+(S3) Xie, F.; Turesson, M.; Jansson, M.; Skepö, M.; Fors-
+     man, J. A simple and versatile implicit solvent model for
+     polyethylene glycol in aqueous solution at room tem-
+     perature. Polymer (Guildf). 2016, 84, 132–137, DOI:
+     10.1016/j.polymer.2015.12.034.
+(S4) Wang, S.-C.; Wang, C.-K.; Chang, F.-M.; Tsao, H.-K.
+     Second Virial Coefficients of Poly(ethylene glycol) in
+     Aqueous Solutions at Freezing Point. Macromolecules
+     2002, 35, 9551–9555, DOI: 10.1021/ma025663a.
+(S5) Kushare, S. K.; Shaikh, V. R.; Terdale, S. S.; Da-
+     gade, D. H.; Kolhapurkar, R. R.; Patil, K. J. Thermody-
+     namics of aqueous polyethylene-glycol (PEG) solutions
+     at 298.15 K: Activity, activity coefficients and applica-
+     tion of molecular theories. J. Mol. Liq. 2013, 187, 129–
+     136, DOI: 10.1016/j.molliq.2013.06.017.
+(S6) Dormidontova, E. E. Influence of end groups on
+     phase behavior and properties of PEO in aqueous so-
+     lutions. Macromolecules 2004, 37, 7747–7761, DOI:
+     10.1021/ma035609.
+
+
+
+
+                                                                 S7
+

@@ -631,6 +631,13 @@ def build_periodic_cell_package(
     bytes
         ZIP file contents ready to write to disk or serve as a download.
     """
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+
+    reject_photoproduct_design(
+        design,
+        path="periodic-cell NAMD package builder",
+        supported_path="the nonperiodic full-topology explicit-solvent NAMD workflow",
+    )
     _check_ff_files()
 
     name = (design.metadata.name or "design").replace(" ", "_")

@@ -1,0 +1,33 @@
+{
+  "schema": "nadoc.photoproduct-response-fit-policy.v1",
+  "version": "2.0.0",
+  "status": "workflow_policy",
+  "policy": "dimensionless-heldout-bounded-ridge-v2",
+  "dataset_weighting": "equal_dataset_rms",
+  "minimum_target_rms": 1e-12,
+  "ridge_lambdas": [0.0, 1e-08, 1e-06, 0.0001, 0.01, 1.0, 100.0],
+  "coefficient_rules": {
+    "r^2": {"scale": 300.0, "lower_bound": 0.0, "upper_bound": 1000.0},
+    "r": {"scale": 900.0, "lower_bound": -4000.0, "upper_bound": 0.0},
+    "theta^2": {"scale": 50.0, "lower_bound": 0.0, "upper_bound": 300.0},
+    "theta": {"scale": 100.0, "lower_bound": -1200.0, "upper_bound": 0.0},
+    "r13^2": {"scale": 10.0, "lower_bound": 0.0, "upper_bound": 100.0},
+    "r13": {"scale": 50.0, "lower_bound": -500.0, "upper_bound": 0.0},
+    "cosine_dihedral": {"scale": 1.0, "lower_bound": -20.0, "upper_bound": 20.0},
+    "wrapped_delta^2": {"scale": 20.0, "lower_bound": 0.0, "upper_bound": 200.0},
+    "wrapped_delta": {"scale": 50.0, "lower_bound": -500.0, "upper_bound": 500.0}
+  },
+  "candidate_selection": {
+    "score": "validation_gradient_normalized_rmse_squared_plus_validation_hessian_normalized_rmse_squared",
+    "near_best_relative_window": 0.05,
+    "tie_breakers": [
+      "fewest_active_bounds",
+      "smallest_scaled_coefficient_norm",
+      "largest_ridge_lambda",
+      "smallest_raw_validation_score"
+    ],
+    "require_training_design_full_rank": true,
+    "require_physical_charmm_transform": true
+  },
+  "interpretation": "Version 2 adds a bond r^2/r basis. Selection authorizes only a traceable smoke-test candidate, never force-field release."
+}

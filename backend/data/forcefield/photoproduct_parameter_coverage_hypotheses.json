@@ -1,0 +1,16 @@
+{
+  "schema": "nadoc.photoproduct-parameter-coverage-hypotheses.v1",
+  "status": "candidate_not_reviewed",
+  "gate_effect": "none",
+  "product_id": "tt-cpd-cis-syn",
+  "unchanged_boundary_types": {
+    "C1'": "CN7B"
+  },
+  "boundary_source": {
+    "residue": "THY",
+    "atom": "C1'",
+    "type": "CN7B",
+    "topology_sha256": "57fed4acc6bc755f2f422b136a385f0c1b1b0a9958e79ea6c6e392b90227ee49"
+  },
+  "release_rule": "Boundary atoms retain CHARMM36 types and charges. Every mixed boundary/product bonded term must still match a validated parameter or be fitted."
+}

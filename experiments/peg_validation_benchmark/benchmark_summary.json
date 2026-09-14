@@ -1,0 +1,74 @@
+{
+  "purpose": "NAMD timing proxy, not a PEG calibration trajectory",
+  "source_config": "/home/jojo/Work/AutoNAMD/simulations/benchmark/benchmark_gpures.namd",
+  "binary": "/home/jojo/Applications/NAMD_3.0.2/namd3",
+  "gpu": "RTX 3080 Ti",
+  "steps": null,
+  "timestep_fs": 2,
+  "cutoff_angstrom": 12,
+  "PME_grid_angstrom": 1,
+  "full_elect_frequency": 1,
+  "NVT": true,
+  "cpu_threads": 4,
+  "cloud_spend_usd": 0,
+  "notes": [
+    "Timing proxies contain DNA/protein and explicit water, not PEG.",
+    "Existing unrelated QM process retained; local GPU utilization was 16% before timing.",
+    "Original AutoNAMD w09 start files were unavailable; successful small tests use bench_f1 binary coordinates/cell and ionized topology.",
+    "ApoA1 input from official NAMD benchmark archive, changed to 2fs NVT and fullElectFrequency=1.",
+    "Do not infer a fixed speedup factor from RTX 3080 Ti to RTX PRO 6000.",
+    "No Runpod pod created; cloud spend $0.",
+    "Small tests run 20000 steps each; ApoA1 uses the built-in 60-second timing limit, which prints an expected CmiAbort stack trace."
+  ],
+  "apoa1_source": "https://www.ks.uiuc.edu/Research/namd/benchmarks/systems/apoa1_gpu.tar.gz",
+  "apoa1_archive_sha256": "b25d5357a6af6b9a33da48c51a1f581ef8600d428710debafa4e765a6a875502",
+  "results": [
+    {
+      "name": "plain",
+      "atom_count": 35254,
+      "benchmark_seconds_per_step": [
+        0.00116755,
+        0.00117039,
+        0.00117292,
+        0.00121834,
+        0.0012083
+      ],
+      "median_ns_per_day": 147.32462572042425,
+      "performance_average_ns_day": 143.358,
+      "complete": true,
+      "config_sha256": "44257d79225ca4293807b6bc9ac5330df1694905bf1acf68d1682c151a566553"
+    },
+    {
+      "name": "colvars",
+      "atom_count": 35254,
+      "benchmark_seconds_per_step": [
+        0.00147127,
+        0.00146316,
+        0.00144967,
+        0.00145697,
+        0.00133489
+      ],
+      "median_ns_per_day": 118.60230478321449,
+      "performance_average_ns_day": 120.923,
+      "complete": true,
+      "config_sha256": "cc2259632945d11e6ed2aaacd1e1f3a005baf944288ef9aa46a998ca609284b1"
+    },
+    {
+      "name": "apoa1",
+      "atom_count": 92224,
+      "benchmark_seconds_per_step": [
+        0.00178017,
+        0.00177625,
+        0.0018413,
+        0.00188989,
+        0.00188073
+      ],
+      "median_ns_per_day": 93.84673871721067,
+      "performance_average_ns_day": 93.4745,
+      "complete": true,
+      "config_sha256": "a426c1e551a1870566e5f54361da929ea2f7adc8ea6d1b15f218def0371d9fb8",
+      "termination": "Expected NAMD benchmarkTime=60 exit (CmiAbort); not a dynamics instability.",
+      "steps": 33000
+    }
+  ]
+}

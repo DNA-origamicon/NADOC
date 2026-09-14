@@ -9,9 +9,11 @@ Split deliberately in two:
 * **``RunpodClient``** — a thin httpx wrapper. Its tests inject an httpx MockTransport,
   so the whole module is testable without renting anything.
 
-⚠️ **The pod is the meter.** Budgeted GPU creation uses GraphQL ``terminateAfter`` so
-RunPod owns the hard deadline. NADOC still destroys pre-submit failures and terminal runs
-immediately, but a submitted chain may intentionally outlive NADOC and be adopted later.
+⚠️ **The pod is the meter.** Budgeted GPU creation requests GraphQL
+``terminateAfter``, but that field failed to stop an observed live pod on 2026-09-04 and
+must not be treated as the sole hard deadline. NADOC destroys pre-submit failures and
+terminal runs immediately. Workflows that must survive their controller need an
+independent exact-pod watchdog as well as the provider hint.
 
 The API key is resolved by ``resolve_api_key`` — ``$RUNPOD_API_KEY`` first, then
 ``~/.runpod_key`` — which is the same order every script in
@@ -144,7 +146,7 @@ def build_create_payload(
     *,
     name: str,
     gpu_type_ids: list[str],
-    network_volume_id: str,
+    network_volume_id: Optional[str],
     interruptible: bool = False,
     gpu_count: int = 1,
     image: str = DEFAULT_IMAGE,
@@ -158,9 +160,11 @@ def build_create_payload(
 
     Notes that are easy to get wrong:
 
-    * ``networkVolumeId`` must be set **at creation** — a volume cannot be attached to a
-      running pod. It also pins the pod to the volume's datacenter, so we do NOT pass
-      ``dataCenterIds`` and let RunPod resolve it.
+    * When a durable network volume is requested, ``networkVolumeId`` must be set **at
+      creation** — a volume cannot be attached to a running pod. It also pins the pod to
+      the volume's datacenter, so we do NOT pass ``dataCenterIds`` and let RunPod resolve
+      it. Self-contained jobs may deliberately pass ``None`` and use ephemeral container
+      storage so global capacity remains available.
     * ``ports`` must include ``22/tcp`` or there is no direct-TCP SSH, and the SSH
       *proxy* (``ssh.runpod.io``) does not reliably carry ``rsync``/``scp`` — which is
       how we stage a 2 GB package.
@@ -174,8 +178,6 @@ def build_create_payload(
         "cloudType": cloud_type,
         "gpuTypeIds": list(gpu_type_ids),
         "gpuCount": gpu_count,
-        "networkVolumeId": network_volume_id,
-        "volumeMountPath": VOLUME_MOUNT_PATH,
         "containerDiskInGb": container_disk_gb,
         "ports": ["22/tcp"],
         "interruptible": interruptible,
@@ -191,6 +193,9 @@ def build_create_payload(
         # a port — and refuses every SSH connection, because no sshd was ever started.
         # The image's default command already does the right thing.
     }
+    if network_volume_id:
+        payload["networkVolumeId"] = network_volume_id
+        payload["volumeMountPath"] = VOLUME_MOUNT_PATH
     if env:
         payload["env"] = dict(env)
     if terminate_after:
@@ -199,7 +204,7 @@ def build_create_payload(
 
 
 def termination_deadline(lifetime_s: int, *, now: Optional[datetime] = None) -> str:
-    """Absolute UTC deadline for RunPod's provider-owned ``terminateAfter`` guard."""
+    """Absolute UTC deadline requested through RunPod's ``terminateAfter`` field."""
     base = now or datetime.now(timezone.utc)
     if base.tzinfo is None:
         base = base.replace(tzinfo=timezone.utc)
@@ -515,7 +520,7 @@ class RunpodClient:
         return info
 
     async def _create_pod_graphql(self, payload: dict[str, Any]) -> PodInfo:
-        """Create a GPU pod with provider-enforced expiry.
+        """Create a GPU pod with a requested provider expiry.
 
         RunPod's REST create schema rejects ``terminateAfter``; its current CLI uses
         this GraphQL mutation for GPU pods requiring that field.
@@ -697,8 +702,10 @@ class RunpodClient:
     ):
         """Create a pod, yield it ready-for-SSH, and optionally terminate on exit.
 
-        Provider-expiring jobs pass ``terminate_on_exit=False`` after installing
-        ``terminateAfter``. Other callers retain the legacy finally-teardown contract.
+        Some jobs pass ``terminate_on_exit=False`` after requesting ``terminateAfter``.
+        Because that provider field has been observed to fail, such callers also require
+        an independent lifecycle owner; other callers retain the legacy finally-teardown
+        contract.
 
         ``on_created(PodInfo)`` fires the INSTANT the pod exists — before ``wait_for_ssh``.
         **This is not a nicety: billing starts at creation, not at the yield.** A pod that
@@ -710,9 +717,9 @@ class RunpodClient:
         bench pod billed ~10 min this way and appeared in no ledger at all.
         """
         info = await self.create_pod_first_available([payload, *(fallbacks or [])])
-        if on_created is not None:
-            on_created(info)  # it is BILLING from this moment
         try:
+            if on_created is not None:
+                on_created(info)  # it is BILLING from this moment
             yield await self.wait_for_ssh(info.id, timeout_s=wait_timeout_s)
         finally:
             if _handing_off():

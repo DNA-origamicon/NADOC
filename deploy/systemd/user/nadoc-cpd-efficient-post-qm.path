@@ -1,0 +1,10 @@
+[Unit]
+Description=Start NADOC efficient TT-CPD sequence when QM completion receipt appears
+RequiresMountsFor=/media/jojo/Archive
+
+[Path]
+PathExists=/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/fit/all-forms/fixed-geometry-qm-v1/remaining-all-forms-queue-report-v1.json
+Unit=nadoc-cpd-efficient-post-qm.service
+
+[Install]
+WantedBy=default.target

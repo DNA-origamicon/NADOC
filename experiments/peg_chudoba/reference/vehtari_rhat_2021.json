@@ -1,0 +1,6 @@
+{
+  "source": "https://arxiv.org/pdf/1903.08008",
+  "doi": "10.1214/20-BA1221",
+  "sha256": "d67a38f7644d7fc77dff8f727c873372f1c43fbb2a507ee146cdc139ae15a24e",
+  "purpose": "Sampling diagnostics, not PEG parameters"
+}

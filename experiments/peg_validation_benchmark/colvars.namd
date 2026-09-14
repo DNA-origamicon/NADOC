@@ -1,0 +1,64 @@
+###############################################################
+## NAMD3 BENCHMARK — GPUresident mode (no minimize)         ##
+## Same system as benchmark.namd but with GPUresident on.   ##
+## minimize is incompatible with GPUresident, so this       ##
+## config starts directly from MD.                          ##
+###############################################################
+## All paths relative to simulations/benchmark/ (NAMD cwd)
+
+structure /home/jojo/Work/AutoNAMD/data/topologies/ionized.psf
+coordinates /home/jojo/Work/AutoNAMD/data/topologies/ionized.pdb
+binCoordinates /home/jojo/Work/AutoNAMD/simulations/benchmark/output/bench_f1.coor
+extendedSystem /home/jojo/Work/AutoNAMD/simulations/benchmark/output/bench_f1.xsc
+
+seed               54321
+temperature        300
+
+paraTypeCharmm     on
+parameters /home/jojo/Work/AutoNAMD/data/forcefields/par_all36_na.prm
+parameters /home/jojo/Work/AutoNAMD/data/forcefields/par_water_ions_cufix.prm
+
+wrapAll            on
+exclude            scaled1-4
+oneFourScaling     1.0
+switching          on
+switchdist 10
+cutoff 12
+pairlistdist 14
+
+timestep           2.0
+rigidBonds         all
+nonbondedFreq      1
+fullElectFrequency 1
+stepspercycle      10
+
+PME                on
+PMEGridSpacing 1.0
+PMEInterpOrder     4
+
+langevin           on
+langevinDamping    0.1
+langevinTemp       300
+
+LangevinPiston off
+LangevinPistonTarget   1.0
+LangevinPistonTemp     300
+LangevinPistonPeriod   200
+LangevinPistonDecay    100
+
+## ── GPU-resident mode ───────────────────────────────────────
+GPUresident        on
+
+colvars            on
+colvarsConfig /home/jojo/Work/AutoNAMD/simulations/benchmark/benchmark.colvar
+
+useGroupPressure   yes
+outputName /home/jojo/Work/NADOC/experiments/peg_validation_benchmark/colvars
+
+xstFreq            999999999
+outputEnergies     2000
+dcdfreq            999999999
+restartfreq        999999999
+
+run 20000
+

@@ -1,0 +1,807 @@
+{
+  "schema": "nadoc.photoproduct-registry.v1",
+  "forcefield_target": {
+    "family": "CHARMM36 additive nucleic acid",
+    "water_model": "CHARMM-modified TIP3P",
+    "product_state": "electronic-ground-state",
+    "maximum_validated_timestep_fs": 2.0,
+    "hmr_validated": false
+  },
+  "catalog_basis": {
+    "design_level_isomer_count": 8,
+    "hydrolyzed_aglycone_isomer_count": 6,
+    "reason": "Ordered DNA nucleotide attachments distinguish two isomers in each cis/trans and syn/anti class; removal of the sugar-phosphate identity collapses cis-syn and trans-anti pairs by symmetry.",
+    "reference": {
+      "id": "Taylor-2023-CPD-stereochemistry",
+      "doi": "10.1111/php.13694",
+      "url": "https://onlinelibrary.wiley.com/doi/10.1111/php.13694",
+      "authority": "eight ordered DNA-level TT-CPD classes and C5 configurations"
+    }
+  },
+  "workflow_gates": [
+    "chemical_definition",
+    "qm_reference_data",
+    "parameter_fit",
+    "topology_patch",
+    "coordinate_templates",
+    "static_topology_audit",
+    "namd_smoke",
+    "solution_validation",
+    "release_review"
+  ],
+  "products": [
+    {
+      "id": "tt-cpd-cis-syn",
+      "product": "TT-CPD",
+      "stereochemistry": "cis-syn",
+      "label": "cis-syn-I TT-CPD",
+      "structural_class": {
+        "ring_substituent_relationship": "cis",
+        "double_bond_orientation": "syn",
+        "diastereomer": "I",
+        "ordered_c5_configurations": [
+          "R",
+          "S"
+        ],
+        "legacy_stereochemistry_key": "cis-syn"
+      },
+      "graph_delta": {
+        "atoms_added": 0,
+        "atoms_removed": 0,
+        "formal_charge_change": 0,
+        "bonds_added": [
+          "1:C5--2:C5",
+          "1:C6--2:C6"
+        ],
+        "bonds_retained": [
+          "1:C5--1:C6",
+          "2:C5--2:C6"
+        ]
+      },
+      "requested_contexts": [
+        "adjacent-intrastrand",
+        "interstrand"
+      ],
+      "validated_contexts": [],
+      "references": [
+        {
+          "id": "RCSB-1N4E",
+          "url": "https://www.rcsb.org/structure/1N4E",
+          "authority": "intrastrand-geometry"
+        },
+        {
+          "id": "PDB-CCD-TTD",
+          "url": "https://www.rcsb.org/ligand/TTD",
+          "authority": "connectivity-and-stereochemistry"
+        }
+      ],
+      "gates": {
+        "chemical_definition": {
+          "status": "passed",
+          "evidence": [
+            "RCSB-1N4E",
+            "PDB-CCD-TTD"
+          ]
+        },
+        "qm_reference_data": {
+          "status": "pending",
+          "evidence": []
+        },
+        "parameter_fit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "topology_patch": {
+          "status": "pending",
+          "evidence": []
+        },
+        "coordinate_templates": {
+          "status": "pending",
+          "evidence": []
+        },
+        "static_topology_audit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "namd_smoke": {
+          "status": "pending",
+          "evidence": []
+        },
+        "solution_validation": {
+          "status": "pending",
+          "evidence": []
+        },
+        "release_review": {
+          "status": "pending",
+          "evidence": []
+        }
+      },
+      "assets": {
+        "chemical_definition": {
+          "path": "photoproducts/tt-cpd-cis-syn/chemical_definition.json",
+          "sha256": "b583ce20398dff5bb6e1fa167f99842ed3e3947973f8d79ea41238f04ef14c55"
+        },
+        "patch_charge_scope": {
+          "path": "photoproducts/tt-cpd-cis-syn/patch_charge_scope.json",
+          "sha256": "d2b8c4edfccbbfe073bb7d87112f23045444f1e72b0e3c7f5207e3f7337ba99b"
+        }
+      }
+    },
+    {
+      "id": "tt-cpd-cis-syn-ii",
+      "product": "TT-CPD",
+      "stereochemistry": "cis-syn-II",
+      "label": "cis-syn-II TT-CPD",
+      "structural_class": {
+        "ring_substituent_relationship": "cis",
+        "double_bond_orientation": "syn",
+        "diastereomer": "II",
+        "ordered_c5_configurations": [
+          "S",
+          "R"
+        ]
+      },
+      "graph_delta": {
+        "atoms_added": 0,
+        "atoms_removed": 0,
+        "formal_charge_change": 0,
+        "bonds_added": [
+          "1:C5--2:C5",
+          "1:C6--2:C6"
+        ],
+        "bonds_retained": [
+          "1:C5--1:C6",
+          "2:C5--2:C6"
+        ]
+      },
+      "requested_contexts": [
+        "intrastrand",
+        "non-adjacent",
+        "interstrand"
+      ],
+      "validated_contexts": [],
+      "references": [
+        {
+          "id": "Taylor-2023-CPD-stereochemistry",
+          "url": "https://onlinelibrary.wiley.com/doi/10.1111/php.13694",
+          "authority": "ordered-DNA-C5-configuration"
+        }
+      ],
+      "gates": {
+        "chemical_definition": {
+          "status": "passed",
+          "evidence": [
+            {
+              "reviewer": "Jeffe",
+              "reviewed_at": "2026-09-05T05:25:58.681538+00:00",
+              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+              "path": "photoproducts/tt-cpd-cis-syn-ii/chemical_definition_review_audit.json",
+              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+            }
+          ]
+        },
+        "qm_reference_data": {
+          "status": "pending",
+          "evidence": []
+        },
+        "parameter_fit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "topology_patch": {
+          "status": "pending",
+          "evidence": []
+        },
+        "coordinate_templates": {
+          "status": "pending",
+          "evidence": []
+        },
+        "static_topology_audit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "namd_smoke": {
+          "status": "pending",
+          "evidence": []
+        },
+        "solution_validation": {
+          "status": "pending",
+          "evidence": []
+        },
+        "release_review": {
+          "status": "pending",
+          "evidence": []
+        }
+      },
+      "assets": {
+        "chemical_definition": {
+          "path": "photoproducts/tt-cpd-cis-syn-ii/chemical_definition.json",
+          "sha256": "cdcf91558952d1b0a6dd3c0df8ddd9ff5a8b5418a97cb4108b5d0765adc27a37"
+        },
+        "patch_charge_scope": {
+          "path": "tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+        }
+      }
+    },
+    {
+      "id": "tt-cpd-trans-syn-i",
+      "product": "TT-CPD",
+      "stereochemistry": "trans-syn-I",
+      "label": "trans-syn-I TT-CPD",
+      "structural_class": {
+        "ring_substituent_relationship": "trans",
+        "double_bond_orientation": "syn",
+        "diastereomer": "I",
+        "ordered_c5_configurations": [
+          "S",
+          "S"
+        ]
+      },
+      "graph_delta": {
+        "atoms_added": 0,
+        "atoms_removed": 0,
+        "formal_charge_change": 0,
+        "bonds_added": [
+          "1:C5--2:C5",
+          "1:C6--2:C6"
+        ],
+        "bonds_retained": [
+          "1:C5--1:C6",
+          "2:C5--2:C6"
+        ]
+      },
+      "requested_contexts": [
+        "intrastrand",
+        "non-adjacent",
+        "interstrand"
+      ],
+      "validated_contexts": [],
+      "references": [
+        {
+          "id": "PMID-3569163",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/3569163/",
+          "authority": "thymidylyl-thymidine-NMR"
+        }
+      ],
+      "gates": {
+        "chemical_definition": {
+          "status": "passed",
+          "evidence": [
+            {
+              "reviewer": "Jeffe",
+              "reviewed_at": "2026-09-05T05:25:59.325431+00:00",
+              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+              "path": "photoproducts/tt-cpd-trans-syn-i/chemical_definition_review_audit.json",
+              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+            }
+          ]
+        },
+        "qm_reference_data": {
+          "status": "pending",
+          "evidence": []
+        },
+        "parameter_fit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "topology_patch": {
+          "status": "pending",
+          "evidence": []
+        },
+        "coordinate_templates": {
+          "status": "pending",
+          "evidence": []
+        },
+        "static_topology_audit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "namd_smoke": {
+          "status": "pending",
+          "evidence": []
+        },
+        "solution_validation": {
+          "status": "pending",
+          "evidence": []
+        },
+        "release_review": {
+          "status": "pending",
+          "evidence": []
+        }
+      },
+      "assets": {
+        "chemical_definition": {
+          "path": "photoproducts/tt-cpd-trans-syn-i/chemical_definition.json",
+          "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b"
+        },
+        "patch_charge_scope": {
+          "path": "tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+        }
+      }
+    },
+    {
+      "id": "tt-cpd-trans-syn-ii",
+      "product": "TT-CPD",
+      "stereochemistry": "trans-syn-II",
+      "label": "trans-syn-II TT-CPD",
+      "structural_class": {
+        "ring_substituent_relationship": "trans",
+        "double_bond_orientation": "syn",
+        "diastereomer": "II",
+        "ordered_c5_configurations": [
+          "R",
+          "R"
+        ]
+      },
+      "graph_delta": {
+        "atoms_added": 0,
+        "atoms_removed": 0,
+        "formal_charge_change": 0,
+        "bonds_added": [
+          "1:C5--2:C5",
+          "1:C6--2:C6"
+        ],
+        "bonds_retained": [
+          "1:C5--1:C6",
+          "2:C5--2:C6"
+        ]
+      },
+      "requested_contexts": [
+        "intrastrand",
+        "non-adjacent",
+        "interstrand"
+      ],
+      "validated_contexts": [],
+      "references": [
+        {
+          "id": "PMC2580729",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2580729/",
+          "authority": "isolated-dinucleotide-stereoisomers"
+        }
+      ],
+      "gates": {
+        "chemical_definition": {
+          "status": "passed",
+          "evidence": [
+            {
+              "reviewer": "Jeffe",
+              "reviewed_at": "2026-09-05T05:26:00.003410+00:00",
+              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+              "path": "photoproducts/tt-cpd-trans-syn-ii/chemical_definition_review_audit.json",
+              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+            }
+          ]
+        },
+        "qm_reference_data": {
+          "status": "pending",
+          "evidence": []
+        },
+        "parameter_fit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "topology_patch": {
+          "status": "pending",
+          "evidence": []
+        },
+        "coordinate_templates": {
+          "status": "pending",
+          "evidence": []
+        },
+        "static_topology_audit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "namd_smoke": {
+          "status": "pending",
+          "evidence": []
+        },
+        "solution_validation": {
+          "status": "pending",
+          "evidence": []
+        },
+        "release_review": {
+          "status": "pending",
+          "evidence": []
+        }
+      },
+      "assets": {
+        "chemical_definition": {
+          "path": "photoproducts/tt-cpd-trans-syn-ii/chemical_definition.json",
+          "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29"
+        },
+        "patch_charge_scope": {
+          "path": "tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+        }
+      }
+    },
+    {
+      "id": "tt-cpd-cis-anti-i",
+      "product": "TT-CPD",
+      "stereochemistry": "cis-anti-I",
+      "label": "cis-anti-I TT-CPD",
+      "structural_class": {
+        "ring_substituent_relationship": "cis",
+        "double_bond_orientation": "anti",
+        "diastereomer": "I",
+        "ordered_c5_configurations": [
+          "S",
+          "S"
+        ]
+      },
+      "graph_delta": {
+        "atoms_added": 0,
+        "atoms_removed": 0,
+        "formal_charge_change": 0,
+        "bonds_added": [
+          "1:C5--2:C6",
+          "1:C6--2:C5"
+        ],
+        "bonds_retained": [
+          "1:C5--1:C6",
+          "2:C5--2:C6"
+        ]
+      },
+      "requested_contexts": [
+        "non-adjacent",
+        "interstrand"
+      ],
+      "validated_contexts": [],
+      "references": [
+        {
+          "id": "PMC2724876",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2724876/",
+          "authority": "interstrand-type-cis-anti-NMR"
+        }
+      ],
+      "gates": {
+        "chemical_definition": {
+          "status": "passed",
+          "evidence": [
+            {
+              "reviewer": "Jeffe",
+              "reviewed_at": "2026-09-05T05:26:00.667269+00:00",
+              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+              "path": "photoproducts/tt-cpd-cis-anti-i/chemical_definition_review_audit.json",
+              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+            }
+          ]
+        },
+        "qm_reference_data": {
+          "status": "pending",
+          "evidence": []
+        },
+        "parameter_fit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "topology_patch": {
+          "status": "pending",
+          "evidence": []
+        },
+        "coordinate_templates": {
+          "status": "pending",
+          "evidence": []
+        },
+        "static_topology_audit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "namd_smoke": {
+          "status": "pending",
+          "evidence": []
+        },
+        "solution_validation": {
+          "status": "pending",
+          "evidence": []
+        },
+        "release_review": {
+          "status": "pending",
+          "evidence": []
+        }
+      },
+      "assets": {
+        "chemical_definition": {
+          "path": "photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+          "sha256": "2ad8acdded5633ea84bf33c48cd7decbd3a1b6fab46f97bc54f0e9ca54a6e1c4"
+        },
+        "patch_charge_scope": {
+          "path": "tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+        }
+      }
+    },
+    {
+      "id": "tt-cpd-cis-anti-ii",
+      "product": "TT-CPD",
+      "stereochemistry": "cis-anti-II",
+      "label": "cis-anti-II TT-CPD",
+      "structural_class": {
+        "ring_substituent_relationship": "cis",
+        "double_bond_orientation": "anti",
+        "diastereomer": "II",
+        "ordered_c5_configurations": [
+          "R",
+          "R"
+        ]
+      },
+      "graph_delta": {
+        "atoms_added": 0,
+        "atoms_removed": 0,
+        "formal_charge_change": 0,
+        "bonds_added": [
+          "1:C5--2:C6",
+          "1:C6--2:C5"
+        ],
+        "bonds_retained": [
+          "1:C5--1:C6",
+          "2:C5--2:C6"
+        ]
+      },
+      "requested_contexts": [
+        "non-adjacent",
+        "interstrand"
+      ],
+      "validated_contexts": [],
+      "references": [
+        {
+          "id": "PMC2724876",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2724876/",
+          "authority": "interstrand-type-cis-anti-NMR"
+        }
+      ],
+      "gates": {
+        "chemical_definition": {
+          "status": "passed",
+          "evidence": [
+            {
+              "reviewer": "Jeffe",
+              "reviewed_at": "2026-09-05T05:26:01.355600+00:00",
+              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+              "path": "photoproducts/tt-cpd-cis-anti-ii/chemical_definition_review_audit.json",
+              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+            }
+          ]
+        },
+        "qm_reference_data": {
+          "status": "pending",
+          "evidence": []
+        },
+        "parameter_fit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "topology_patch": {
+          "status": "pending",
+          "evidence": []
+        },
+        "coordinate_templates": {
+          "status": "pending",
+          "evidence": []
+        },
+        "static_topology_audit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "namd_smoke": {
+          "status": "pending",
+          "evidence": []
+        },
+        "solution_validation": {
+          "status": "pending",
+          "evidence": []
+        },
+        "release_review": {
+          "status": "pending",
+          "evidence": []
+        }
+      },
+      "assets": {
+        "chemical_definition": {
+          "path": "photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
+          "sha256": "8668cfeaaa85d70f920f81f425dff79cb0de29228ddb62532352e4e0092e52c8"
+        },
+        "patch_charge_scope": {
+          "path": "tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+        }
+      }
+    },
+    {
+      "id": "tt-cpd-trans-anti-i",
+      "product": "TT-CPD",
+      "stereochemistry": "trans-anti-I",
+      "label": "trans-anti-I TT-CPD",
+      "structural_class": {
+        "ring_substituent_relationship": "trans",
+        "double_bond_orientation": "anti",
+        "diastereomer": "I",
+        "ordered_c5_configurations": [
+          "R",
+          "S"
+        ],
+        "legacy_stereochemistry_key": "trans-anti"
+      },
+      "graph_delta": {
+        "atoms_added": 0,
+        "atoms_removed": 0,
+        "formal_charge_change": 0,
+        "bonds_added": [
+          "1:C5--2:C6",
+          "1:C6--2:C5"
+        ],
+        "bonds_retained": [
+          "1:C5--1:C6",
+          "2:C5--2:C6"
+        ]
+      },
+      "requested_contexts": [
+        "non-adjacent",
+        "interstrand"
+      ],
+      "validated_contexts": [],
+      "references": [
+        {
+          "id": "PMC11305913",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11305913/",
+          "authority": "isolated-thymidine-dimer-isomer-discrimination"
+        }
+      ],
+      "gates": {
+        "chemical_definition": {
+          "status": "passed",
+          "evidence": [
+            {
+              "reviewer": "Jeffe",
+              "reviewed_at": "2026-09-05T05:26:02.028774+00:00",
+              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+              "path": "photoproducts/tt-cpd-trans-anti-i/chemical_definition_review_audit.json",
+              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+            }
+          ]
+        },
+        "qm_reference_data": {
+          "status": "pending",
+          "evidence": []
+        },
+        "parameter_fit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "topology_patch": {
+          "status": "pending",
+          "evidence": []
+        },
+        "coordinate_templates": {
+          "status": "pending",
+          "evidence": []
+        },
+        "static_topology_audit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "namd_smoke": {
+          "status": "pending",
+          "evidence": []
+        },
+        "solution_validation": {
+          "status": "pending",
+          "evidence": []
+        },
+        "release_review": {
+          "status": "pending",
+          "evidence": []
+        }
+      },
+      "assets": {
+        "chemical_definition": {
+          "path": "photoproducts/tt-cpd-trans-anti-i/chemical_definition.json",
+          "sha256": "27139365d5cfb64d2b90b2172c13c94eac02d5357dd46c4e1a8e686f00c3539f"
+        },
+        "patch_charge_scope": {
+          "path": "tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+        }
+      }
+    },
+    {
+      "id": "tt-cpd-trans-anti-ii",
+      "product": "TT-CPD",
+      "stereochemistry": "trans-anti-II",
+      "label": "trans-anti-II TT-CPD",
+      "structural_class": {
+        "ring_substituent_relationship": "trans",
+        "double_bond_orientation": "anti",
+        "diastereomer": "II",
+        "ordered_c5_configurations": [
+          "S",
+          "R"
+        ]
+      },
+      "graph_delta": {
+        "atoms_added": 0,
+        "atoms_removed": 0,
+        "formal_charge_change": 0,
+        "bonds_added": [
+          "1:C5--2:C6",
+          "1:C6--2:C5"
+        ],
+        "bonds_retained": [
+          "1:C5--1:C6",
+          "2:C5--2:C6"
+        ]
+      },
+      "requested_contexts": [
+        "non-adjacent",
+        "interstrand"
+      ],
+      "validated_contexts": [],
+      "references": [
+        {
+          "id": "Taylor-2023-CPD-stereochemistry",
+          "url": "https://onlinelibrary.wiley.com/doi/10.1111/php.13694",
+          "authority": "ordered-DNA-C5-configuration"
+        }
+      ],
+      "gates": {
+        "chemical_definition": {
+          "status": "passed",
+          "evidence": [
+            {
+              "reviewer": "Jeffe",
+              "reviewed_at": "2026-09-05T05:26:02.696607+00:00",
+              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+              "path": "photoproducts/tt-cpd-trans-anti-ii/chemical_definition_review_audit.json",
+              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+            }
+          ]
+        },
+        "qm_reference_data": {
+          "status": "pending",
+          "evidence": []
+        },
+        "parameter_fit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "topology_patch": {
+          "status": "pending",
+          "evidence": []
+        },
+        "coordinate_templates": {
+          "status": "pending",
+          "evidence": []
+        },
+        "static_topology_audit": {
+          "status": "pending",
+          "evidence": []
+        },
+        "namd_smoke": {
+          "status": "pending",
+          "evidence": []
+        },
+        "solution_validation": {
+          "status": "pending",
+          "evidence": []
+        },
+        "release_review": {
+          "status": "pending",
+          "evidence": []
+        }
+      },
+      "assets": {
+        "chemical_definition": {
+          "path": "photoproducts/tt-cpd-trans-anti-ii/chemical_definition.json",
+          "sha256": "f6933a888a07ed850dd469ab9f81f4d0dcbdf489924bfac5470092f46880b5c8"
+        },
+        "patch_charge_scope": {
+          "path": "tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+        }
+      }
+    }
+  ]
+}

@@ -144,6 +144,13 @@ def write_preconditioned_namd_inputs(
     copy_forcefield: bool = True,
 ) -> dict[str, str]:
     """Write PDB/PSF/maps/restraints/config files for a preconditioned NAMD test."""
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+
+    reject_photoproduct_design(
+        design,
+        path="mrDNA-preconditioned NAMD exporter",
+        supported_path="the full-topology explicit-solvent NAMD workflow",
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     safe_name = (name or design.metadata.name or "design").replace(" ", "_")
 

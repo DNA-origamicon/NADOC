@@ -1,0 +1,106 @@
+{
+  "source": "arXiv:1710.09191v1, Figure 7(a,b)",
+  "source_sha256": "5263417e76403cde6acfc587bb8a82b902d468b1b5b13d9cc1a75020f84b0368",
+  "method": "Piecewise-linear vector density paths, exact moments by Gauss quadrature; normalize each plotted curve area.",
+  "limitation": "Finite plot range, rounded vector coordinates and histogram smoothing; this is an observable-convention cross-check, not raw trajectory data.",
+  "results": [
+    {
+      "temperature_K": 294,
+      "plotted_density_area": 1.0001736626966058,
+      "mean_rg_nm": 8.2060506435999,
+      "rms_rg_nm": 8.333502384378539,
+      "panel_b_marker_nm": 8.332908096291332,
+      "mean_minus_marker_nm": -0.12685745269143212,
+      "rms_minus_marker_nm": 0.0005942880872069622,
+      "vector_points": 189,
+      "range_nm": [
+        2.0,
+        13.999999528078689
+      ]
+    },
+    {
+      "temperature_K": 320,
+      "plotted_density_area": 1.0003475411287592,
+      "mean_rg_nm": 8.055591164954647,
+      "rms_rg_nm": 8.199868061938094,
+      "panel_b_marker_nm": 8.19762910330779,
+      "mean_minus_marker_nm": -0.14203793835314293,
+      "rms_minus_marker_nm": 0.002238958630304211,
+      "vector_points": 197,
+      "range_nm": [
+        2.0,
+        13.999999528078689
+      ]
+    },
+    {
+      "temperature_K": 347,
+      "plotted_density_area": 1.000061543546714,
+      "mean_rg_nm": 6.517963161706213,
+      "rms_rg_nm": 6.680385361045246,
+      "panel_b_marker_nm": 6.681714551395493,
+      "mean_minus_marker_nm": -0.16375138968928038,
+      "rms_minus_marker_nm": -0.0013291903502468116,
+      "vector_points": 182,
+      "range_nm": [
+        2.0,
+        13.999999528078689
+      ]
+    },
+    {
+      "temperature_K": 361,
+      "plotted_density_area": 0.999899988835175,
+      "mean_rg_nm": 4.685497372810988,
+      "rms_rg_nm": 4.798352692677033,
+      "panel_b_marker_nm": 4.799751545331427,
+      "mean_minus_marker_nm": -0.11425417252043868,
+      "rms_minus_marker_nm": -0.0013988526543942115,
+      "vector_points": 196,
+      "range_nm": [
+        2.0,
+        13.999999528078689
+      ]
+    },
+    {
+      "temperature_K": 371,
+      "plotted_density_area": 0.9997193651223263,
+      "mean_rg_nm": 3.7463874350627684,
+      "rms_rg_nm": 3.831205402265372,
+      "panel_b_marker_nm": 3.832907610460581,
+      "mean_minus_marker_nm": -0.08652017539781243,
+      "rms_minus_marker_nm": -0.001702208195208943,
+      "vector_points": 202,
+      "range_nm": [
+        2.0,
+        13.999999528078689
+      ]
+    },
+    {
+      "temperature_K": 381,
+      "plotted_density_area": 1.0001225779356697,
+      "mean_rg_nm": 3.014687296983448,
+      "rms_rg_nm": 3.0437764222480035,
+      "panel_b_marker_nm": 3.04113046483583,
+      "mean_minus_marker_nm": -0.02644316785238221,
+      "rms_minus_marker_nm": 0.0026459574121733276,
+      "vector_points": 101,
+      "range_nm": [
+        2.0,
+        13.999999528078689
+      ]
+    },
+    {
+      "temperature_K": 396,
+      "plotted_density_area": 0.9998475293458969,
+      "mean_rg_nm": 2.7974260118915475,
+      "rms_rg_nm": 2.8114438011357508,
+      "panel_b_marker_nm": 2.8103617322039103,
+      "mean_minus_marker_nm": -0.012935720312362786,
+      "rms_minus_marker_nm": 0.0010820689318404852,
+      "vector_points": 102,
+      "range_nm": [
+        2.0,
+        13.999999528078689
+      ]
+    }
+  ]
+}

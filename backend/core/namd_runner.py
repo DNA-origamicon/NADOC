@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Optional
 
 from backend.core.md_job import MdJob, MdStatus, MdHealthSample
+from backend.core.namd_peg_health import health_result as peg_health_result, skip_decision as peg_skip_decision
 from backend.core.disk_guard import (
     ABORT_MIN_FREE_BYTES,
     DISK_ABORT_RC,
@@ -907,6 +908,7 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         return job
 
     reconcile_manifest = json.loads(manifest_path.read_text())
+    peg_only = bool(reconcile_manifest.get("peg_fast_relax"))
     graphene_only = bool(
         reconcile_manifest.get("graphene_only")
         or (reconcile_manifest.get("charge_audit") or {}).get("graphene_only")
@@ -934,6 +936,7 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         output_dir, active.name
     ):
         hresult = (
+            peg_health_result(package_dir, active.name) if peg_only else
             HealthCheckResult(
                 passed=True,
                 blocking=False,
@@ -948,6 +951,11 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
                 min_wc_ref_relative=spec.min_wc_ref_relative,
             )
         )
+        if peg_only and not hresult.passed:
+            job.status = MdStatus.failed
+            job.error = hresult.reason
+            job.save(workspace_dir)
+            return job
         append_health_jsonl(output_dir, active.name, active.stage, hresult)
         job.health_samples.append(
             MdHealthSample.from_result(
@@ -1671,6 +1679,10 @@ def _make_inflight_health_tick(
     failure is logged and swallowed, because a monitoring probe must never be able to
     disturb (let alone kill) the run it is watching.
     """
+    if job.run_kind == "peg_fast_relax":
+        _note_health_probe(job, workspace_dir, enabled=False,
+                           reason="PEG wall and polymer metrics are evaluated at chunk boundaries.")
+        return None
     if _INFLIGHT_HEALTH_INTERVAL_S <= 0:
         _note_health_probe(
             job,
@@ -2086,12 +2098,15 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     from backend.core.namd_graphene import validate_graphene_wall_package
 
     try:
+        from backend.core.namd_peg_relax import validate_relax_package
+        await asyncio.to_thread(validate_relax_package, package_dir)
         await asyncio.to_thread(validate_graphene_wall_package, package_dir)
     except (ValueError, OSError) as exc:
         job.status = MdStatus.failed
         job.error = str(exc)
         job.save(workspace_dir)
         return
+    peg_only = bool(manifest.get("peg_fast_relax"))
     graphene_only = bool(
         manifest.get("graphene_only")
         or (manifest.get("charge_audit") or {}).get("graphene_only")
@@ -2692,6 +2707,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         if run_check:
             logger.info("[%s] Health check: %s", job.job_id, spec.name)
             hresult = (
+                peg_health_result(package_dir, spec.name) if peg_only else
                 HealthCheckResult(
                     passed=True,
                     blocking=False,
@@ -2715,6 +2731,14 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 ("" if hresult.passed else f" WARN: {hresult.reason or hresult.error}"),
             )
             append_health_jsonl(output_dir, spec.name, spec.stage, hresult)
+
+            if peg_only and not hresult.passed:
+                job.status = MdStatus.failed
+                job.error = hresult.reason
+                job.segments[idx].status = "failed"
+                job.health_samples.append(MdHealthSample.from_result(hresult, spec.stage, spec.name, blocking=True))
+                job.save(workspace_dir)
+                return
 
             # ── the Aksimentiev box-trace criterion ──────────────────────────
             # "The box should shrink in the first 300 ps.  After that the box size
@@ -2771,11 +2795,17 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         # next stage.  Only fires when run_check ran (percent>=10, so wc_per_frame
         # exists), never on production/qualification stages, never on a stage's
         # last chunk.  Multi-criteria on purpose (see md_cutoff).
+        if peg_only and run_check:
+            peg_diag = peg_skip_decision(package_dir, spec.name, job.early_stop_relax,
+                                         _stage_last_chunk_idx(segments, idx) > idx and not _is_production_segment(spec.name))
         if job.early_stop_relax and run_check and not _is_production_segment(spec.name):
             last_idx = _stage_last_chunk_idx(segments, idx)
             if last_idx > idx:
                 frames = parse_namd_log_frames(seg_log)
-                if graphene_only:
+                if peg_only:
+                    diag = peg_diag
+                    decision = diag["skip"]
+                elif graphene_only:
                     decision = energy_plateaued(frames)
                     diag = {
                         "n_energy_frames": len(frames),

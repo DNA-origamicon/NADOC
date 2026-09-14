@@ -1,0 +1,14 @@
+{
+  "purpose": "NAMD timing proxy, not a PEG calibration trajectory",
+  "source_config": "/home/jojo/Work/AutoNAMD/simulations/benchmark/benchmark_gpures.namd",
+  "binary": "/home/jojo/Applications/NAMD_3.0.2/namd3",
+  "gpu": "RTX 3080 Ti",
+  "steps": 20000,
+  "timestep_fs": 2,
+  "cutoff_angstrom": 12,
+  "PME_grid_angstrom": 1,
+  "full_elect_frequency": 1,
+  "NVT": true,
+  "cpu_threads": 4,
+  "cloud_spend_usd": 0
+}

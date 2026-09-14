@@ -1,0 +1,105 @@
+{
+  "schema": "nadoc.photoproduct-candidate-assembly-policy.v3",
+  "version": "3.0.0",
+  "status": "workflow_policy",
+  "policy": "traceable-all-ordered-tt-cpd-full-boundary-smoke-candidates-v3",
+  "allowed_product_ids": [
+    "tt-cpd-cis-syn",
+    "tt-cpd-cis-syn-ii",
+    "tt-cpd-trans-syn-i",
+    "tt-cpd-trans-syn-ii",
+    "tt-cpd-cis-anti-i",
+    "tt-cpd-cis-anti-ii",
+    "tt-cpd-trans-anti-i",
+    "tt-cpd-trans-anti-ii"
+  ],
+  "patch_names": {
+    "tt-cpd-cis-syn": "TCPDCS1",
+    "tt-cpd-cis-syn-ii": "TCPDCS2",
+    "tt-cpd-trans-syn-i": "TCPDTS1",
+    "tt-cpd-trans-syn-ii": "TCPDTS2",
+    "tt-cpd-cis-anti-i": "TCPDCA1",
+    "tt-cpd-cis-anti-ii": "TCPDCA2",
+    "tt-cpd-trans-anti-i": "TCPDTA1",
+    "tt-cpd-trans-anti-ii": "TCPDTA2"
+  },
+  "candidate_nonbonded_limits": {
+    "maximum_charge_constraint_error_e": 1e-8,
+    "maximum_charge_change_e": 0.2,
+    "maximum_esp_rmse_atomic_unit": 0.02,
+    "maximum_dipole_vector_error_debye": 2.5,
+    "maximum_held_out_water_energy_error_kcal_mol": 0.5,
+    "maximum_held_out_water_distance_error_angstrom": 0.1
+  },
+  "model_compound_boundary_transfer": {
+    "policy": "full-dtpdt-direct-boundary-v1",
+    "stable_atom_substitutions": {},
+    "additional_boundary_dihedrals": [
+      {
+        "product_local_atoms": ["C6", "N1", "C1'", "O4'"],
+        "model_local_atoms": ["C6", "N1", "C1'", "O4'"],
+        "boundary_atom_types": {"C1'": "CN7B", "O4'": "ON6"}
+      },
+      {
+        "product_local_atoms": ["C6", "N1", "C1'", "C2'"],
+        "model_local_atoms": ["C6", "N1", "C1'", "C2'"],
+        "boundary_atom_types": {"C1'": "CN7B", "C2'": "CN8"}
+      },
+      {
+        "product_local_atoms": ["C6", "N1", "C1'", "H1'"],
+        "model_local_atoms": ["C6", "N1", "C1'", "H1'"],
+        "boundary_atom_types": {"C1'": "CN7B", "H1'": "HN7"}
+      }
+    ],
+    "required_dna_boundary_type": "CN7B",
+    "allowed_only_when_term_contains": "C1'",
+    "interpretation": "The fitted model is the complete charge -1 d(TpT) boundary itself. Lesion-to-sugar terms map by identical stable atom keys; no methyl-cap substitution or inferred boundary transfer is allowed."
+  },
+  "transfer_parameter_policy": {
+    "require_pinned_cgenff_release": true,
+    "require_exact_model_atom_path": true,
+    "require_unambiguous_bond_and_angle_values": true,
+    "retain_all_matching_fourier_terms": true,
+    "emit_self_contained_cgenff_mass_lj_and_bonded_records": true
+  },
+  "bonded_identity_type_aliases": {
+    "2:C5": {
+      "name": "CPD5B",
+      "reason": "Keep ordered endpoint-2 stereochemical terms distinct while copying mass and Lennard-Jones values exactly from its selected nonbonded source type."
+    },
+    "2:C6": {
+      "name": "CPD6B",
+      "reason": "Keep ordered endpoint-2 stereochemical terms distinct while copying mass and Lennard-Jones values exactly from its selected nonbonded source type."
+    }
+  },
+  "candidate_authorization": {
+    "authorizes": [
+      "real_psfgen_static_topology_audit",
+      "staged_local_and_global_minimization",
+      "ordinary-mass_2_fs_namd_smoke"
+    ],
+    "does_not_authorize": [
+      "force_field_release",
+      "production_scientific_interpretation",
+      "hmr_or_4_fs_dynamics",
+      "transfer_between_ordered_products_without_an_atom-mapped-equivalence-audit"
+    ]
+  },
+  "mandatory_post_assembly_metrics": [
+    "complete_parameter_workbook_audit",
+    "product_vs_reactant_psf_atom_count_and_charge_conservation",
+    "exact_ordered_product_crosslink_delta",
+    "expected_product_atom_types_and_four_stereochemical_impropers",
+    "warning_free_parameter_load_and_minimization",
+    "finite_energy_and_force_trace",
+    "crosslink_distance_and_signed_chirality_retention",
+    "no_new_severe_clashes_or_backbone_breaks"
+  ],
+  "release_blockers_retained": [
+    "independent conformer validation beyond deterministic response-row holdout",
+    "MM-minimum geometry and vibrational comparison",
+    "aqueous intrastrand and interstrand DNA validation with matched reactants",
+    "independent reproducibility audit"
+  ],
+  "provenance_note": "This policy removes the old N1-methyl boundary substitution because the fitting model now contains both complete deoxyribose termini and phosphate. It still authorizes only fail-closed engine smoke candidates."
+}

@@ -17,6 +17,10 @@ vi.mock('../api/client.js', () => ({
   deleteHelix: vi.fn(),
   getProteinValidation: vi.fn(),
   repairProteinDuplicate: vi.fn(),
+  getPhotoproductCatalog: vi.fn(),
+  preflightPhotoproduct: vi.fn(),
+  createPhotoproduct: vi.fn(),
+  deletePhotoproduct: vi.fn(),
 }))
 
 import { store } from '../state/store.js'
@@ -66,6 +70,10 @@ describe('properties panel — protein branch', () => {
     store.setState({ currentDesign: null, selection: { items: [] } })
     api.getProteinValidation.mockReset()
     api.repairProteinDuplicate.mockReset()
+    api.getPhotoproductCatalog.mockReset()
+    api.preflightPhotoproduct.mockReset()
+    api.createPhotoproduct.mockReset()
+    api.deletePhotoproduct.mockReset()
   })
 
   it('renders an imported protein without throwing (regression: used to hit _renderNucleotide)', () => {
@@ -245,6 +253,86 @@ describe('properties panel — protein branch', () => {
     expect(content.textContent).not.toContain('h1:34:REVERSE')
   })
 
+  it('preflights two selected bases and visibly gates chemistry-unavailable product intent', async () => {
+    api.getPhotoproductCatalog.mockResolvedValue({ products: [
+      { stereochemistry: 'cis-syn', label: 'cis-syn TT-CPD', simulation_ready: false },
+      { stereochemistry: 'trans-syn-I', label: 'trans-syn-I TT-CPD', simulation_ready: false },
+    ] })
+    api.preflightPhotoproduct.mockResolvedValue({
+      eligible: true, simulation_ready: false,
+      endpoints: [
+        { key: 'h1:34:REVERSE', base: 'T', source_class: 'ordinary' },
+        { key: 'h1:35:REVERSE', base: 'T', source_class: 'ordinary' },
+      ],
+      relationship: { strand_relationship: 'intrastrand', extra_pairing: 'native-native' },
+      reactant_geometry: { c5_c5_distance_nm: 0.42, c6_c6_distance_nm: 0.44 },
+      errors: [], warnings: [{ code: 'parameters_unavailable', message: 'Validated CPD parameters unavailable.' }],
+    })
+    api.createPhotoproduct.mockResolvedValue({ design: {} })
+    vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
+    store.setState({ currentDesign: DESIGN, currentGeometry: [] })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [
+      { kind: 'base', key: 'h1:34:REVERSE' },
+      { kind: 'base', key: 'h1:35:REVERSE' },
+    ] } })
+    await vi.waitFor(() => expect(content.querySelector('.cpd-form-btn')?.textContent)
+      .toBe('Form cis-syn TT-CPD'))
+    expect(content.textContent).toContain('intrastrand · native-native')
+    expect(content.textContent).toContain('Validated CPD parameters unavailable.')
+    content.querySelector('.cpd-form-btn').click()
+    await vi.waitFor(() => expect(api.createPhotoproduct).toHaveBeenCalledWith(
+      ['h1:34:REVERSE', 'h1:35:REVERSE'], 'cis-syn',
+    ))
+    globalThis.confirm.mockRestore()
+  })
+
+  it('re-preflights and records the selected TT-CPD stereoisomer', async () => {
+    api.getPhotoproductCatalog.mockResolvedValue({ products: [
+      { stereochemistry: 'cis-syn', label: 'cis-syn TT-CPD', simulation_ready: false },
+      { stereochemistry: 'trans-syn-I', label: 'trans-syn-I TT-CPD', simulation_ready: false },
+    ] })
+    api.preflightPhotoproduct.mockImplementation(async (_keys, stereochemistry) => ({
+      eligible: true, simulation_ready: false, stereochemistry,
+      endpoints: [], errors: [], warnings: [],
+    }))
+    api.createPhotoproduct.mockResolvedValue({ design: {} })
+    vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
+    store.setState({ currentDesign: DESIGN, currentGeometry: [] })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [
+      { kind: 'base', key: 'h1:34:REVERSE' },
+      { kind: 'base', key: 'h1:35:REVERSE' },
+    ] } })
+    await vi.waitFor(() => expect(content.querySelector('.cpd-stereochemistry-select')).not.toBeNull())
+    const select = content.querySelector('.cpd-stereochemistry-select')
+    select.value = 'trans-syn-I'
+    select.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(content.querySelector('.cpd-form-btn').textContent)
+      .toBe('Form trans-syn-I TT-CPD'))
+    content.querySelector('.cpd-form-btn').click()
+    await vi.waitFor(() => expect(api.createPhotoproduct).toHaveBeenCalledWith(
+      ['h1:34:REVERSE', 'h1:35:REVERSE'], 'trans-syn-I',
+    ))
+    globalThis.confirm.mockRestore()
+  })
+
+  it('shows a formed product separately and removes it through the undoable API', async () => {
+    const lesion = {
+      id: 'cpd1', base_key_1: 'h1:34:REVERSE', base_key_2: 'h1:35:REVERSE',
+      product: 'TT-CPD', stereochemistry: 'cis-syn',
+    }
+    api.deletePhotoproduct.mockResolvedValue({ design: {} })
+    vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
+    store.setState({ currentDesign: { ...DESIGN, photoproduct_junctions: [lesion] } })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [{ kind: 'base', key: 'h1:34:REVERSE' }] } })
+    expect(content.textContent).toContain('Formed product · cis-syn TT-CPD')
+    content.querySelector('.cpd-remove-btn').click()
+    await vi.waitFor(() => expect(api.deletePhotoproduct).toHaveBeenCalledWith('cpd1'))
+    globalThis.confirm.mockRestore()
+  })
+
   it('shows a single base, labeled location, and ordinal within its strand', () => {
     store.setState({
       currentDesign: DESIGN,
@@ -264,5 +352,8 @@ describe('properties panel — protein branch', () => {
       ['location', 'Staple - 1[4]'],
       ['position', '3 in staple S1'],
     ])
+    expect(content.querySelector('.cpd-form-btn').disabled).toBe(true)
+    expect(content.querySelector('.cpd-disabled-reason').textContent)
+      .toBe('Select exactly two nucleotide bases.')
   })
 })

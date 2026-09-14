@@ -1,0 +1,16 @@
+{
+  "final_article": "https://pubs.acs.org/doi/abs/10.1021/acs.jctc.7b00560",
+  "final_main_text_access": false,
+  "observed": "Publisher exposes abstract/metadata/SI links and offers $48 pay-per-view; no purchase made.",
+  "additional_leads": [
+    {
+      "url": "https://helmholtz-berlin.de/pubbin/oai_publication?ID=95782&typoid=23457%3Bsprache%3Den",
+      "result": "Metadata page, no PDF link found in retrieved page"
+    },
+    {
+      "url": "https://github.com/ForgoRew/PivotMoveSimulation",
+      "result": "Protein pivot Monte Carlo program; README does not establish an implementation of the complete Chudoba PEG Hamiltonian. Not used as a PEG parameter source."
+    }
+  ],
+  "indexed_parameter_search": "Exact DOI plus 0.9943 / 1.372 / cutoff searches returned irrelevant results; no parameter verification inferred."
+}

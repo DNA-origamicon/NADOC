@@ -200,6 +200,14 @@ def build_openmm_topology(design: "Design"):
     """
     from backend.core.streptavidin import require_coating_simulation_support
     require_coating_simulation_support(design, 'OpenMM')
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+
+    reject_photoproduct_design(
+        design,
+        path="OpenMM/OL15 implicit topology",
+        supported_path="the CHARMM full-topology explicit-solvent NAMD workflow",
+    )
+
     from openmm import Vec3, unit
     from openmm.app import Element, Topology
 

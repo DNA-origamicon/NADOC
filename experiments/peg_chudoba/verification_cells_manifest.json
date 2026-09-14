@@ -1,0 +1,10 @@
+{
+  "created_unix": 1788991915.3700845,
+  "result": "36 tests pass; exactly-full cells pass edge and non-edge force checks; actual overflow rejected; CPU/CUDA forces, HMC energy/distribution and solution shape regressions",
+  "hashes": {
+    "/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/build/bin/oxDNA": "435384b65cc8e0eeabd748c9bbc1b1ea41ffd2d8316f52742a60fc15240ca7b6",
+    "/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/build/src/liboxdna_common.so": "3b75aaec5004894b9c6724000b1f284a5636539aa71a6835fe3a42b368efcc2e",
+    "tools/oxdna_peg/patch_chudoba_cells.py": "a4069070ed372ea6e4a9c421cb9bfbcd8db325535fc71b8f3c1b648e1539bba2",
+    "tests/test_chudoba_engine.py": "de14f9eef1055f725e616177d899812e834126d623added26b8e7d51de44472d"
+  }
+}

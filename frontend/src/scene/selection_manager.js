@@ -5090,6 +5090,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Copy of the base-level pool — app-wide base keys (see scene/base_ref.js). */
     getSelectedBaseKeys() { return [..._baseKeys] },
 
+    /** Resolve any canonical base key (ordinary/loop/extension/linker/xover) to
+     * its current coarse world position. Used by persistent design annotations
+     * such as the formed-product glyph; never exposes mesh instance identity. */
+    getBaseWorldPosition(key) {
+      const candidate = _baseCandidates().find(item => item.key === key)
+      return candidate ? worldPosOf(candidate, new THREE.Vector3()).clone() : null
+    },
+
     /** Canonical Base and End refs resolved through one live base-element path. */
     getSelectedIndividualBases() {
       const refs = (store.getState().selection?.items ?? [])

@@ -1,0 +1,10 @@
+{
+  "created_unix": 1788993470.3459833,
+  "result": "8 focused checks passed; smooth molecular volume derivative for raw and zero-tail, periodic interacting NPT snapshots using CPU cells, CPU Verlet, and GPU HMC for both conventions. Raw derivative check is local and does not establish a thermodynamic raw virial without cutoff impulse.",
+  "hashes": {
+    "experiments/peg_chudoba/solution.py": "2fa6ef902fb411a0cf364e83717d3bcbf701797ffdba6be5fc6742a3094a43cd",
+    "tests/test_chudoba_solution.py": "930dcd133a48bd3268229b2de7ac4c10ba09969546b413dae4ba49756b78c575",
+    "tests/test_chudoba_engine.py": "e553b27aefebbd281574d0c48e7f4ac9149dfdabd142086441755492ab1b6a6d",
+    "/home/jojo/.local/share/nadoc/engines/oxdna-chudoba/build/src/liboxdna_common.so": "374d2dbbe0990256cfabc3049adf4ef9be9e6d8849a282a9212c14dff3f4ee5d"
+  }
+}

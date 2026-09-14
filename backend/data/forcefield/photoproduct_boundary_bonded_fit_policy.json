@@ -1,0 +1,51 @@
+{
+  "schema": "nadoc.photoproduct-boundary-bonded-fit-policy.v1",
+  "version": "1.0.0",
+  "status": "workflow_policy",
+  "scope": "independent full d(TpT) minimum response fit for each ordered TT-CPD",
+  "response_partition": {
+    "gradient": "hold out projected row indices divisible by five",
+    "hessian": "hold out projected upper-triangle row indices divisible by five",
+    "held_out_fraction": 0.2,
+    "warning": "Row holdout diagnoses numerical generalization within one minimum; it is not independent-conformer or DNA-context validation."
+  },
+  "objective": {
+    "dataset_weighting": "equal_block_rms",
+    "minimum_target_rms": 1e-12,
+    "ridge_lambdas": [0.0, 1e-08, 1e-06, 0.0001, 0.01, 1.0, 100.0]
+  },
+  "coefficient_rules": {
+    "r^2": {"scale": 300.0, "lower_bound": 0.0, "upper_bound": 1000.0},
+    "r": {"scale": 900.0, "lower_bound": -4000.0, "upper_bound": 0.0},
+    "theta^2": {"scale": 50.0, "lower_bound": 0.0, "upper_bound": 300.0},
+    "theta": {"scale": 100.0, "lower_bound": -1200.0, "upper_bound": 0.0},
+    "cosine_dihedral": {"scale": 1.0, "lower_bound": -20.0, "upper_bound": 20.0},
+    "wrapped_delta^2": {"scale": 20.0, "lower_bound": 0.0, "upper_bound": 200.0}
+  },
+  "candidate_selection": {
+    "score": "held_out_gradient_normalized_rmse_squared_plus_held_out_hessian_normalized_rmse_squared",
+    "near_best_relative_window": 0.05,
+    "tie_breakers": [
+      "fewest_active_bounds",
+      "smallest_scaled_coefficient_norm",
+      "largest_ridge_lambda",
+      "smallest_raw_validation_score"
+    ],
+    "require_physical_charmm_transform": true,
+    "require_stereochemical_basin": true
+  },
+  "representation": {
+    "torsion_periodicities": [1, 2, 3, 4, 5, 6],
+    "improper_equilibrium_mode": "fixed_qm_reference",
+    "angle_urey_bradley_mode": "omit"
+  },
+  "authorization": {
+    "authorizes": "candidate CHARMM assembly and fail-closed staged 2 fs engine smoke only",
+    "does_not_authorize": [
+      "force-field release",
+      "scientific production interpretation",
+      "independent conformer validation",
+      "DNA-context transferability"
+    ]
+  }
+}

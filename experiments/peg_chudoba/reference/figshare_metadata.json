@@ -1,0 +1,183 @@
+{
+  "files": [
+    {
+      "id": 9686908,
+      "name": "ct7b00560_si_002.pdf",
+      "size": 321543,
+      "is_link_only": false,
+      "download_url": "https://ndownloader.figshare.com/files/9686908",
+      "supplied_md5": "14461d39173319fa1b34fa53b83d1ab9",
+      "computed_md5": "14461d39173319fa1b34fa53b83d1ab9",
+      "mimetype": "application/pdf"
+    }
+  ],
+  "folder_structure": {},
+  "authors": [
+    {
+      "id": 4573162,
+      "full_name": "Richard Chudoba",
+      "first_name": "Richard",
+      "last_name": "Chudoba",
+      "is_active": false,
+      "url_name": "_",
+      "orcid_id": ""
+    },
+    {
+      "id": 1748932,
+      "full_name": "Jan Heyda",
+      "first_name": "Jan",
+      "last_name": "Heyda",
+      "is_active": false,
+      "url_name": "_",
+      "orcid_id": ""
+    },
+    {
+      "id": 1570597,
+      "full_name": "Joachim Dzubiella",
+      "first_name": "Joachim",
+      "last_name": "Dzubiella",
+      "is_active": false,
+      "url_name": "_",
+      "orcid_id": ""
+    }
+  ],
+  "custom_fields": [],
+  "figshare_url": "https://acs.figshare.com/articles/journal_contribution/Temperature-Dependent_Implicit-Solvent_Model_of_Polyethylene_Glycol_in_Aqueous_Solution/5573527",
+  "download_disabled": false,
+  "description": "A temperature\n(<i>T</i>)-dependent coarse-grained (CG)\nHamiltonian of polyethylene glycol/oxide (PEG/PEO) in aqueous solution\nis reported to be used in implicit-solvent material models in a wide\ntemperature (i.e., solvent quality) range. The <i>T</i>-dependent\nnonbonded CG interactions are derived from a combined \u201cbottom-up\u201d\nand \u201ctop-down\u201d approach. The pair potentials calculated\nfrom atomistic replica-exchange molecular dynamics simulations in\ncombination with the iterative Boltzmann inversion are postrefined\nby benchmarking to experimental data of the radius of gyration. For\nbetter handling and a fully continuous transferability in <i>T</i>-space, the pair potentials are conveniently truncated\nand mapped to an analytic formula with three structural parameters\nexpressed as explicit continuous functions of <i>T</i>.\nIt is then demonstrated that this model without further adjustments\nsuccessfully reproduces other experimentally known key thermodynamic\nproperties of semidilute PEG solutions such as the full equation of\nstate (i.e., <i>T</i>-dependent osmotic pressure) for various\nchain lengths as well as their cloud point (or collapse) temperature.",
+  "funding": null,
+  "funding_list": [],
+  "version": 1,
+  "status": "public",
+  "size": 321543,
+  "created_date": "2017-11-06T14:49:32Z",
+  "modified_date": "2023-06-02T16:43:05Z",
+  "is_public": true,
+  "is_confidential": false,
+  "is_metadata_record": false,
+  "confidential_reason": "",
+  "metadata_reason": "",
+  "license": {
+    "value": 10,
+    "name": "CC BY-NC 4.0",
+    "url": "https://creativecommons.org/licenses/by-nc/4.0/"
+  },
+  "tags": [
+    "pair potentials",
+    "implicit-solvent material models",
+    "iterative Boltzmann inversion",
+    "Temperature-Dependent Implicit-Solvent Model",
+    "i.e",
+    "nonbonded CG interactions",
+    "semidilute PEG solutions"
+  ],
+  "keywords": [
+    "pair potentials",
+    "implicit-solvent material models",
+    "iterative Boltzmann inversion",
+    "Temperature-Dependent Implicit-Solvent Model",
+    "i.e",
+    "nonbonded CG interactions",
+    "semidilute PEG solutions"
+  ],
+  "categories": [
+    {
+      "id": 1,
+      "title": "Biophysics",
+      "parent_id": 48,
+      "path": "",
+      "source_id": "",
+      "taxonomy_id": 10
+    },
+    {
+      "id": 4,
+      "title": "Biochemistry",
+      "parent_id": 38,
+      "path": "",
+      "source_id": "",
+      "taxonomy_id": 10
+    },
+    {
+      "id": 915,
+      "title": "Physical Sciences not elsewhere classified",
+      "parent_id": 6,
+      "path": "",
+      "source_id": "",
+      "taxonomy_id": 10
+    },
+    {
+      "id": 873,
+      "title": "Chemical Sciences not elsewhere classified",
+      "parent_id": 38,
+      "path": "",
+      "source_id": "",
+      "taxonomy_id": 10
+    },
+    {
+      "id": 39,
+      "title": "Ecology",
+      "parent_id": 33,
+      "path": "",
+      "source_id": "",
+      "taxonomy_id": 10
+    },
+    {
+      "id": 734,
+      "title": "Biological Sciences not elsewhere classified",
+      "parent_id": 48,
+      "path": "",
+      "source_id": "",
+      "taxonomy_id": 10
+    },
+    {
+      "id": 64,
+      "title": "Cancer",
+      "parent_id": 48,
+      "path": "",
+      "source_id": "",
+      "taxonomy_id": 10
+    }
+  ],
+  "references": [
+    "https://doi.org/10.1021/acs.jctc.7b00560"
+  ],
+  "has_linked_file": false,
+  "citation": "Chudoba, Richard; Heyda, Jan; Dzubiella, Joachim (2017). Temperature-Dependent Implicit-Solvent Model of Polyethylene\nGlycol in Aqueous Solution. ACS Publications. Journal contribution. https://doi.org/10.1021/acs.jctc.7b00560.s002",
+  "related_materials": [
+    {
+      "id": 32468897,
+      "identifier": "10.1021/acs.jctc.7b00560",
+      "title": "Temperature-Dependent Implicit-Solvent Model of Polyethylene\nGlycol in Aqueous Solution",
+      "relation": "IsSupplementTo",
+      "identifier_type": "DOI",
+      "is_linkout": true,
+      "link": "https://doi.org/10.1021/acs.jctc.7b00560"
+    }
+  ],
+  "is_embargoed": false,
+  "embargo_date": null,
+  "embargo_type": null,
+  "embargo_title": "",
+  "embargo_reason": "",
+  "embargo_options": [],
+  "id": 5573527,
+  "title": "Temperature-Dependent Implicit-Solvent Model of Polyethylene\nGlycol in Aqueous Solution",
+  "doi": "10.1021/acs.jctc.7b00560.s002",
+  "handle": "",
+  "url": "https://api.figshare.com/v2/articles/5573527",
+  "published_date": "2017-10-16T00:00:00Z",
+  "thumb": "https://ndownloader.figshare.com/files/9686908/preview/9686908/thumb.png",
+  "defined_type": 6,
+  "defined_type_name": "journal contribution",
+  "group_id": 2421,
+  "url_private_api": "https://api.figshare.com/v2/account/articles/5573527",
+  "url_public_api": "https://api.figshare.com/v2/articles/5573527",
+  "url_private_html": "https://figshare.com/account/articles/5573527",
+  "url_public_html": "https://acs.figshare.com/articles/journal_contribution/Temperature-Dependent_Implicit-Solvent_Model_of_Polyethylene_Glycol_in_Aqueous_Solution/5573527",
+  "timeline": {
+    "posted": "2017-10-16T00:00:00",
+    "firstOnline": "2017-11-06"
+  },
+  "resource_title": "Temperature-Dependent Implicit-Solvent Model of Polyethylene\nGlycol in Aqueous Solution",
+  "resource_doi": "10.1021/acs.jctc.7b00560"
+}

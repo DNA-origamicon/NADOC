@@ -1,0 +1,44 @@
+{
+  "schema": "nadoc.photoproduct-flexible-boundary-seed-policy.v1",
+  "version": "2.0.0",
+  "status": "workflow_policy",
+  "gate_id": "flexibly_relaxed_dna_boundary_seed",
+  "policy": "bounded-serialization-perturbation-uff-boundary-relaxation-v1",
+  "construction": "UFF relaxation of sugar, phosphate, terminal caps, and glycosidic attachments while every product-base atom is fixed to the SDF-serialized audited core",
+  "initial_coordinates": "sdf_serialized",
+  "requirements": [
+    "the input rigid graft, chemical definition, product minimum, stable atom map, and all outputs are hash-pinned",
+    "the exact 63-atom, charge -1 product graph is retained",
+    "SDF serialization moves no product-core atom more than 0.001 angstrom from the audited XYZ and the serialized core is then fixed coordinate-for-coordinate",
+    "no reflection, endpoint exchange, or stereochemical inversion is permitted",
+    "UFF reports parameters for every atom and converges; UFF is used only to repair a QM starting geometry and is not a parameter or energy authority",
+    "both glycosidic bonds and both product crosslinks lie within catastrophic-input bounds",
+    "all covalent bonds and nonbonded heavy-atom contacts pass broad covalent-radius overlap screens"
+  ],
+  "thresholds": {
+    "source_product_core_maximum_displacement_angstrom": 0.001,
+    "fixed_product_core_maximum_displacement_angstrom": 1e-08,
+    "glycosidic_bond_length_angstrom": {
+      "minimum": 1.3,
+      "maximum": 1.7
+    },
+    "product_crosslink_distance_angstrom": {
+      "minimum": 1.3,
+      "maximum": 1.7
+    },
+    "covalent_bond_radius_ratio": {
+      "minimum": 0.7,
+      "maximum": 1.35
+    },
+    "minimum_nonbonded_covalent_radius_ratio": 0.7
+  },
+  "known_limitations": [
+    "UFF emits a phosphate charge-state warning in RDKit even though every atom receives a UFF type",
+    "the tiny serialization perturbation selects a different local UFF basin and is not physical sampling",
+    "the 1N4E d(TpT) sugar/phosphate coordinates are a deterministic boundary seed, not structural or parameter authority for an anti photoproduct",
+    "a completed optimization still requires a frequency calculation and all force-field validation gates"
+  ],
+  "authorizes": "boundary_qm_evidence_generation_only",
+  "simulation_ready": false,
+  "gate_effect": "none"
+}

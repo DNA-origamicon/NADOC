@@ -3,6 +3,12 @@ import {
   XB_HELIX, baseKey, xbKey, atomBaseKey, parseBaseKey, baseFamily,
   toggleBaseKey, dedupeBaseKeys, mergeBaseKeys, pruneBaseKeys,
 } from './base_ref.js'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const here = dirname(fileURLToPath(import.meta.url))
+const sharedCases = JSON.parse(readFileSync(resolve(here, '../../../tests/fixtures/base_key_cases.json'), 'utf8'))
 
 const nuc = (helix_id, bp_index, direction = 'FORWARD') => ({ helix_id, bp_index, direction })
 
@@ -50,6 +56,13 @@ describe('atomBaseKey', () => {
 })
 
 describe('parseBaseKey — splits from the RIGHT', () => {
+  it('matches the shared Python/JavaScript grammar fixtures', () => {
+    for (const item of sharedCases.valid) {
+      expect(parseBaseKey(item.key), item.key).toEqual(item.parsed)
+      expect(baseFamily(item.key), item.key).toBe(item.family)
+    }
+    for (const key of sharedCases.invalid) expect(parseBaseKey(key), key).toBeNull()
+  })
   it('round-trips an ordinary bead', () => {
     expect(parseBaseKey('h1:12:FORWARD'))
       .toEqual({ helix_id: 'h1', bp_index: 12, direction: 'FORWARD', copy: 0 })

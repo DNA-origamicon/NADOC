@@ -1,9 +1,11 @@
 """Local native-OpenXR companion lifecycle for Linux VR.
 
 Stock Linux browsers do not currently bridge WebXR to SteamVR. These endpoints
-are therefore deliberately localhost-only: they snapshot the active NADOC part
-into a compact read-only scene file and launch/stop the bundled native viewer.
-No design data is mutated and no shell command is constructed from request data.
+therefore accept only a browser on localhost or the exact HTTPS Tailscale origin
+declared by ``start.sh --tailscale``. They snapshot the active NADOC part into a
+compact read-only scene file and launch/stop the bundled native viewer on this
+host. No design data is mutated and no shell command is constructed from request
+data.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ from __future__ import annotations
 import copy
 import gzip
 import hashlib
+import ipaddress
 import json
 import math
 import os
@@ -60,6 +63,10 @@ _TRAJECTORY_FEEDBACK_LOCK = threading.Lock()
 _COORDINATE_MAGIC = b"NVRCOORD"
 _COORDINATE_HEADER = struct.Struct("<8sIIQIII")
 _MAX_VR_TRAJECTORY_ATOMS = 1_000_000
+_TAILSCALE_NETWORKS = (
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("fd7a:115c:a1e0::/48"),
+)
 
 SelectionKind = Literal[
     "none",
@@ -305,6 +312,45 @@ class VRPlaneFeedbackRequest(BaseModel):
     )
 
 
+def _tailnet_origin(url: str | None) -> tuple[str, str, int] | None:
+    """Return one normalized HTTPS ``*.ts.net`` origin, never a URL path."""
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+        port = parsed.port or 443
+    except ValueError:
+        return None
+    if (
+        parsed.scheme.lower() != "https"
+        or not hostname.endswith(".ts.net")
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    return ("https", hostname, port)
+
+
+def _tailscale_client_ip(value: str | None) -> str | None:
+    """Normalize an address only when it belongs to Tailscale's address ranges."""
+    if not value:
+        return None
+    try:
+        address = ipaddress.ip_address(value.strip())
+    except ValueError:
+        return None
+    return (
+        str(address)
+        if any(address in network for network in _TAILSCALE_NETWORKS)
+        else None
+    )
+
+
 def _native_platform_reason() -> str | None:
     if platform.system() != "Linux":
         return "NADOC native VR requires a native Linux desktop with SteamVR; this operating system is not supported."
@@ -320,20 +366,46 @@ def _native_platform_reason() -> str | None:
 
 def _require_local(request: Request, *, check_platform: bool = True) -> None:
     host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1", "localhost"}:
+    configured_tailscale_ip = _tailscale_client_ip(
+        os.environ.get("NADOC_TAILSCALE_IP")
+    )
+    request_tailscale_ip = _tailscale_client_ip(host)
+    local_client = host in {"127.0.0.1", "::1", "localhost"}
+    self_tailscale_client = (
+        configured_tailscale_ip is not None
+        and request_tailscale_ip == configured_tailscale_ip
+    )
+    if not local_client and not self_tailscale_client:
         raise HTTPException(
-            403, detail="Native VR launch is available only from localhost."
+            403,
+            detail=(
+                "Native VR launch is available only from localhost or this "
+                "host's configured Tailscale URL."
+            ),
         )
-    # A local Vite reverse proxy makes every backend peer look loopback. Preserve
-    # the workstation-only boundary by also checking the browser's Origin.
+    # Vite may preserve Tailscale Serve's client address rather than presenting
+    # loopback. The launcher-declared self address admits that one local route;
+    # another tailnet peer address remains insufficient. Also bind browser writes
+    # to the exact launcher-declared Origin whenever the browser supplies one.
     origin = request.headers.get("origin")
-    if origin and (urlparse(origin).hostname or "") not in {
-        "127.0.0.1",
-        "::1",
-        "localhost",
-    }:
+    try:
+        origin_hostname = (urlparse(origin).hostname or "") if origin else ""
+    except ValueError:
+        origin_hostname = ""
+    local_origin = origin_hostname in {"127.0.0.1", "::1", "localhost"}
+    configured_tailnet_origin = _tailnet_origin(os.environ.get("NADOC_PUBLIC_URL"))
+    request_tailnet_origin = _tailnet_origin(origin)
+    tailnet_origin_allowed = (
+        configured_tailnet_origin is not None
+        and request_tailnet_origin == configured_tailnet_origin
+    )
+    if origin and not local_origin and not tailnet_origin_allowed:
         raise HTTPException(
-            403, detail="Native VR launch is available only from localhost."
+            403,
+            detail=(
+                "Native VR launch is available only from localhost or this "
+                "host's configured Tailscale URL."
+            ),
         )
 
     if check_platform:
@@ -2980,6 +3052,40 @@ def _detach_hmd_from_desktop() -> None:
     )
 
 
+def _assert_vr_display_lease_available() -> None:
+    """Fail before launch when the current Wayland compositor cannot lease an HMD."""
+    if os.environ.get("XDG_SESSION_TYPE", "x11").lower() != "wayland":
+        return
+    wayland_info = shutil.which("wayland-info")
+    if wayland_info:
+        try:
+            result = subprocess.run(
+                [wayland_info],
+                env=dict(os.environ),
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            result = None
+        if (
+            result is not None
+            and result.returncode == 0
+            and "wp_drm_lease_device_v1" in result.stdout
+        ):
+            return
+    raise HTTPException(
+        503,
+        detail=(
+            "This Wayland desktop does not expose wp_drm_lease_device_v1, so SteamVR "
+            "cannot lease the headset display. Restore this account's saved X11 "
+            "session, sign out and back in, then restart NADOC; no per-login session "
+            "choice is required."
+        ),
+    )
+
+
 def _start_steamvr() -> dict[str, bool]:
     """Start SteamVR through Steam so its dashboard owns the runtime lifecycle."""
     with _RUNTIME_LOCK:
@@ -2991,6 +3097,7 @@ def _start_steamvr() -> dict[str, bool]:
             and status["desktop_overlay_running"]
         ):
             return status
+        _assert_vr_display_lease_available()
         steam = Path("/usr/bin/steam")
         if not steam.is_file():
             raise HTTPException(503, detail="Steam is not installed at /usr/bin/steam.")

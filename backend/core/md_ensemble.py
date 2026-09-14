@@ -202,6 +202,20 @@ def build_replica_package(
     """
     parent_pkg = parent.package_dir(workspace)
     manifest = json.loads((parent_pkg / "manifest.json").read_text())
+    from backend.core.cpd_forcefield import (  # noqa: PLC0415
+        assert_packaged_photoproduct_integrator,
+        inject_packaged_photoproduct_parameters,
+        package_has_photoproducts,
+    )
+
+    product_package = package_has_photoproducts(parent_pkg)
+    requested_hmr = bool(fast) if hmr is None else bool(hmr)
+    assert_packaged_photoproduct_integrator(
+        parent_pkg,
+        timestep_fs=timestep_fs,
+        hmr=requested_hmr,
+        path="NAMD production replica",
+    )
     name_stem = manifest["name_stem"]
     box = tuple(float(x) for x in manifest["box_ang"])
     mgh_extrabonds = bool(manifest.get("mgh_extrabonds"))
@@ -242,7 +256,7 @@ def build_replica_package(
     # hmr=False at 4 fs is a legal, measured-but-warned choice (standard masses), and it
     # must NOT be treated as a failed repartition — only a PSF that cannot be built is
     # that, and only that downgrades the timestep below.
-    use_fast = bool(fast) if hmr is None else bool(hmr)
+    use_fast = requested_hmr
     if use_fast:
         if (parent_pkg / hmr_name).exists():
             _link_or_copy(parent_pkg / hmr_name, child_pkg / hmr_name)
@@ -280,6 +294,11 @@ def build_replica_package(
     # 21 phosphate-less 5' bases render un-positioned/un-coloured.  Immutable, shared.
     if (parent_pkg / "charge_audit.json").exists():
         _link_or_copy(parent_pkg / "charge_audit.json", child_pkg / "charge_audit.json")
+    if (parent_pkg / "photoproduct_forcefield_manifest.json").exists():
+        _link_or_copy(
+            parent_pkg / "photoproduct_forcefield_manifest.json",
+            child_pkg / "photoproduct_forcefield_manifest.json",
+        )
 
     # The graphene membrane is part of the simulated system, not merely preparation UI.
     # Carry its machine-readable descriptor into every production child just as we carry
@@ -369,18 +388,19 @@ def build_replica_package(
     # manifest is the record of how it was solvated.  The replica inherits that.
     npt_allowed = package_npt_allowed(parent_pkg) and not force_nvt
     reseed_name = f"{name_stem}_00_reseed"
+    reseed_conf = build_reseed_conf(
+        reseed_name,
+        name_stem,
+        box,
+        mgh_extrabonds,
+        seed=seed,
+        equil_base="equilibrated",
+        structure_psf=structure_psf,
+        preserve_velocities=continuation,
+        npt=npt_allowed,
+    )
     (child_pkg / f"{reseed_name}.conf").write_text(
-        build_reseed_conf(
-            reseed_name,
-            name_stem,
-            box,
-            mgh_extrabonds,
-            seed=seed,
-            equil_base="equilibrated",
-            structure_psf=structure_psf,
-            preserve_velocities=continuation,
-            npt=npt_allowed,
-        )
+        inject_packaged_photoproduct_parameters(reseed_conf, parent_pkg)
     )
 
     steps = max(100, int(total_steps))
@@ -493,10 +513,16 @@ def build_replica_package(
         colvars_file=colvars_file,
     )
     (child_pkg / f"{prod_name}.conf").write_text(
-        graphene_pressure_conf(
-            production_conf,
-            enabled=bool(graphene_nanopore and anchor_k is not None),
-            fixed_cell=bool(graphene_nanopore and graphene_nanopore.get("cell_policy") == "fixed_volume"),
+        inject_packaged_photoproduct_parameters(
+            graphene_pressure_conf(
+                production_conf,
+                enabled=bool(graphene_nanopore and anchor_k is not None),
+                fixed_cell=bool(
+                    graphene_nanopore
+                    and graphene_nanopore.get("cell_policy") == "fixed_volume"
+                ),
+            ),
+            parent_pkg,
         )
     )
 
@@ -596,6 +622,16 @@ def build_replica_package(
         "production_timestep_fs": eff_timestep_fs,
         "production_rigid_bonds": rigid_bonds,
         "production_hmr": use_fast,
+        "photoproduct_integrator_policy": (
+            {
+                "active": True,
+                "ordinary_mass_psf_required": True,
+                "maximum_timestep_fs": 2.0,
+                "hmr_4fs_validated": False,
+            }
+            if product_package
+            else None
+        ),
         "ensemble": {
             "parent_job_id": parent.job_id,
             "seed": int(seed),

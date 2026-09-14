@@ -112,7 +112,8 @@ experiments/**/run_logs/
 bp_health_runs/
 gromacs_run/
 runs/
-workspace/
+/workspace
+/timer.dat
 
 # ── Literature and large binary assets ───────────────────────────────────────
 Literature/

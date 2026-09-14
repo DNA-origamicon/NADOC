@@ -143,6 +143,8 @@ class LiveSession:
                 self._capture_frame()
                 while not self._stop.is_set():
                     self._apply_pending_reconfig()
+                    if self._stop.is_set():
+                        break
                     self._apply_pending_field()
                     self._session.run(self._burst)
                     self._n_bursts += 1
@@ -150,8 +152,9 @@ class LiveSession:
             finally:
                 self._session.__exit__(None, None, None)
         except Exception as exc:  # noqa: BLE001 — surfaced via /frame, not swallowed
-            self.error = f"{type(exc).__name__}: {exc}"
-            self.status = "error"
+            if not self._stop.is_set():
+                self.error = f"{type(exc).__name__}: {exc}"
+                self.status = "error"
         finally:
             if self.status != "error":
                 self.status = "stopped"
@@ -176,6 +179,8 @@ class LiveSession:
         new_session, new_builder = rebuild_fn()
         self._session = new_session
         self._frame_builder = new_builder
+        if self._stop.is_set():
+            return
         self._session.__enter__()
         self._session.set_field(field_oxdna=f_oxdna, field_dir=f_dir)
         with self._lock:
@@ -273,6 +278,9 @@ class LiveSession:
     def stop(self) -> None:
         """Signal the loop to stop, join the thread, and remove the temp rundir."""
         self._stop.set()
+        cancel = getattr(getattr(self._session, "stepper", None), "cancel", None)
+        if cancel:
+            cancel()
         t = self._thread
         if t is not None:
             t.join(timeout=10.0)

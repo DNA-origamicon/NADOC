@@ -1845,6 +1845,8 @@ def _completed_production_checkpoint(
 def _production_ready_checkpoint(
     job: MdJob,
 ) -> tuple[Optional[int], Optional[SegmentSpec], str, str]:
+    if job.run_kind in ('peg_wall_qualification', 'peg_fast_relax'):
+        return None, None, 'PEG wall qualification is a recorded validation result; production setup is not wired.', ''
     package_dir = job.package_dir(_workspace())
     manifest_path = package_dir / "manifest.json"
     if not manifest_path.exists():
@@ -2270,6 +2272,17 @@ def _append_production_segments(
         else:
             checkpoint_name = checkpoint.name
     package_dir = job.package_dir(_workspace())
+    from backend.core.cpd_forcefield import (  # noqa: PLC0415
+        assert_packaged_photoproduct_integrator,
+        inject_packaged_photoproduct_parameters,
+    )
+
+    assert_packaged_photoproduct_integrator(
+        package_dir,
+        timestep_fs=float(plan.get("timestep_fs") or 1.0),
+        hmr=bool(plan.get("hmr")),
+        path="NAMD production continuation",
+    )
     manifest_path = package_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     name_stem = manifest["name_stem"]
@@ -2388,7 +2401,9 @@ def _append_production_segments(
                 force_resident=plan.get("force_resident"),
                 package_dir=package_dir,
             )
-        (package_dir / f"{spec.name}.conf").write_text(conf)
+        (package_dir / f"{spec.name}.conf").write_text(
+            inject_packaged_photoproduct_parameters(conf, package_dir)
+        )
         segments.append(spec)
         previous = name
 
@@ -2550,6 +2565,57 @@ def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
         and (k == "protocol" or k in preset.locked or k not in explicit)
     }
     return body.model_copy(update=updates) if updates else body
+
+
+def _apply_photoproduct_integrator_policy(design, body: CreateJobRequest) -> CreateJobRequest:
+    """Reject explicit unsafe choices and normalize untouched CPD defaults."""
+
+    from backend.core.cpd_forcefield import CpdCapabilityError, design_has_photoproducts
+
+    if not design_has_photoproducts(design):
+        return body
+    if body.protocol == IMPLICIT_GBIS_PROTOCOL:
+        raise CpdCapabilityError(
+            "Formed photoproducts are supported only by the full-topology "
+            "explicit-solvent NAMD workflow; GBIS is intentionally unavailable."
+        )
+    explicit = set(body.model_fields_set)
+    conflicts: list[str] = []
+    if "fast" in explicit and body.fast:
+        conflicts.append("fast=true requests the unvalidated 4 fs/HMR ladder")
+    if (
+        "relax_timestep_fs" in explicit
+        and body.relax_timestep_fs is not None
+        and body.relax_timestep_fs > 2.0
+    ):
+        conflicts.append(f"relax_timestep_fs={body.relax_timestep_fs:g}")
+    if "relax_hmr" in explicit and body.relax_hmr:
+        conflicts.append("relax_hmr=true")
+    if (
+        "production_timestep_fs" in explicit
+        and body.production_timestep_fs > 2.0
+    ):
+        conflicts.append(f"production_timestep_fs={body.production_timestep_fs:g}")
+    if "production_hmr" in explicit and body.production_hmr:
+        conflicts.append("production_hmr=true")
+    if conflicts:
+        raise CpdCapabilityError(
+            "Product-specific HMR/4 fs behavior has not been validated. Use ordinary "
+            "masses at no more than 2 fs; conflicting explicit request: "
+            + ", ".join(conflicts)
+        )
+    updates = {
+        "fast": False,
+        "relax_timestep_fs": (
+            body.relax_timestep_fs
+            if body.relax_timestep_fs is not None and body.relax_timestep_fs <= 2.0
+            else 2.0
+        ),
+        "relax_hmr": False,
+        "production_timestep_fs": min(float(body.production_timestep_fs), 2.0),
+        "production_hmr": False,
+    }
+    return body.model_copy(update=updates)
 
 
 #: Public names for the three resolvers the Job Wizard's plan endpoint reuses
@@ -2873,6 +2939,16 @@ async def create_md_job(body: CreateJobRequest) -> dict:
             except ValueError as exc:
                 raise HTTPException(422, str(exc))
             body = _infer_graphene_only(body, design)
+            from backend.core.cpd_forcefield import (  # noqa: PLC0415
+                CpdCapabilityError,
+                assert_cpd_simulation_supported,
+            )
+
+            try:
+                assert_cpd_simulation_supported(design, path="NAMD job creation")
+                body = _apply_photoproduct_integrator_policy(design, body)
+            except CpdCapabilityError as exc:
+                raise HTTPException(400, str(exc)) from exc
         name = (design.metadata.name or "design").replace(" ", "_")
         size_factor = design_size_factor(design)
 
@@ -3170,6 +3246,13 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
     job = _load_job(job_id)
     if job.status != MdStatus.draft:
         raise HTTPException(400, "Job is not a draft (already prepared).")
+    snapshot_design = _md_snapshot_design(job)
+    if snapshot_design is not None:
+        from backend.core.cpd_forcefield import CpdCapabilityError, assert_cpd_simulation_supported
+        try:
+            assert_cpd_simulation_supported(snapshot_design, path="NAMD draft preparation")
+        except CpdCapabilityError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     try:
         find_namd()
@@ -3490,6 +3573,20 @@ async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> d
     package_dir = job.package_dir(_workspace())
     n_atoms = _psf_atom_count(package_dir / f"{job.name_stem}.psf")
     plan = _production_fast_plan(job, body)
+    from backend.core.cpd_forcefield import (
+        CpdCapabilityError,
+        assert_packaged_photoproduct_integrator,
+    )
+
+    try:
+        assert_packaged_photoproduct_integrator(
+            package_dir,
+            timestep_fs=plan["timestep_fs"],
+            hmr=plan["hmr"],
+            path="NAMD production disk estimate",
+        )
+    except CpdCapabilityError as exc:
+        raise HTTPException(400, str(exc)) from exc
     total_steps = plan["total_steps"]
     timestep_fs = float(plan["timestep_fs"])
     dcd_freq = int(body.dcd_freq or PRODUCTION_DCD_FREQ)
@@ -4047,6 +4144,10 @@ async def _prepare_job_bg(
         else:
             local_design = design
 
+        body = _apply_photoproduct_integrator_policy(local_design, body)
+        job = MdJob.load(job_id, ws)
+        job.prep_params = body.model_dump()
+        job.save(ws)
         if body.graphene_nanopore and seed_kwargs_graphene is None:
             seed_kwargs_graphene = {
                 "surface_axis": body.graphene_surface_axis or "-y",
@@ -4166,6 +4267,9 @@ async def _prepare_job_bg(
             relax_timestep_fs=body.relax_timestep_fs,
             relax_rigid_bonds=body.relax_rigid_bonds,
             relax_hmr=body.relax_hmr,
+            production_timestep_fs=body.production_timestep_fs,
+            production_rigid_bonds=body.production_rigid_bonds,
+            production_hmr=body.production_hmr,
             devices=body.devices,
             anchors=[*(body.anchors or []), *(body.surface_anchors or [])] or None,
             anchor_atoms=body.anchor_atoms,
@@ -5465,7 +5569,28 @@ async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
     if is_running(job_id) or job.status in (MdStatus.running, MdStatus.preparing):
         raise HTTPException(400, "Cannot append production while the job is running")
     _assert_md_job_current(job)
+    snapshot_design = _md_snapshot_design(job)
+    if snapshot_design is not None:
+        from backend.core.cpd_forcefield import CpdCapabilityError, assert_cpd_simulation_supported
+        try:
+            assert_cpd_simulation_supported(snapshot_design, path="NAMD production continuation")
+        except CpdCapabilityError as exc:
+            raise HTTPException(400, str(exc)) from exc
     plan = _production_fast_plan(job, body)
+    from backend.core.cpd_forcefield import (
+        CpdCapabilityError,
+        assert_packaged_photoproduct_integrator,
+    )
+
+    try:
+        assert_packaged_photoproduct_integrator(
+            job.package_dir(_workspace()),
+            timestep_fs=plan["timestep_fs"],
+            hmr=plan["hmr"],
+            path="NAMD production continuation",
+        )
+    except CpdCapabilityError as exc:
+        raise HTTPException(400, str(exc)) from exc
     total_steps, length_ns = plan["total_steps"], plan["length_ns"]
     _assert_cell_fits_a_free_run(job, length_ns, allow=body.allow_undersized_cell)
     segments = _append_production_segments(
@@ -6005,6 +6130,13 @@ async def _spawn_md_production_impl(
             "Production requires a completed relaxation (or production) to seed from.",
         )
     _assert_md_job_current(parent)
+    snapshot_design = _md_snapshot_design(parent)
+    if snapshot_design is not None:
+        from backend.core.cpd_forcefield import CpdCapabilityError, assert_cpd_simulation_supported
+        try:
+            assert_cpd_simulation_supported(snapshot_design, path="NAMD child production package")
+        except CpdCapabilityError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     spec, warning, reason = _production_seed_checkpoint(parent)
     if spec is None:
@@ -6031,6 +6163,20 @@ async def _spawn_md_production_impl(
             gpu_resident=body.gpu_resident,
         ),
     )
+    from backend.core.cpd_forcefield import (
+        CpdCapabilityError,
+        assert_packaged_photoproduct_integrator,
+    )
+
+    try:
+        assert_packaged_photoproduct_integrator(
+            parent.package_dir(_workspace()),
+            timestep_fs=plan["timestep_fs"],
+            hmr=plan["hmr"],
+            path="NAMD child production package",
+        )
+    except CpdCapabilityError as exc:
+        raise HTTPException(400, str(exc)) from exc
     restraints = _production_restraint_plan(
         parent, body.enm_restraints, body.langevin_damping
     )
@@ -6873,6 +7019,22 @@ async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> 
             autostart=False,
         ),
     )
+    snapshot_design = _md_snapshot_design(parent)
+    if snapshot_design is not None:
+        from backend.core.cpd_forcefield import (
+            CpdCapabilityError,
+            assert_packaged_photoproduct_integrator,
+        )
+
+        try:
+            assert_packaged_photoproduct_integrator(
+                parent.package_dir(_workspace()),
+                timestep_fs=plan["timestep_fs"],
+                hmr=plan["hmr"],
+                path="NAMD ensemble production package",
+            )
+        except CpdCapabilityError as exc:
+            raise HTTPException(400, str(exc)) from exc
     base_seed = body.base_seed if body.base_seed is not None else random_seed()
     seeds = md_ensemble.generate_seeds(base_seed, body.n_replicas)
 

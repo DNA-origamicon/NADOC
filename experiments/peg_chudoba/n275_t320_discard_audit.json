@@ -1,0 +1,86 @@
+{
+  "directories": [
+    "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r201_g1",
+    "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r202_g1",
+    "experiments/peg_chudoba/runs/zero_tail_chain_extensions_round8/n275_t320_r203_g1"
+  ],
+  "published_marker_nm": 3.9483160184747224,
+  "results": [
+    {
+      "rms_rg_nm": 4.3380218838900415,
+      "conservative_sem_nm": 0.02418139366580992,
+      "minimum_seed_effective_samples": 631.0300095855524,
+      "rank_folded_split_rhat": 1.0008915956170596,
+      "extension_recommended": false,
+      "largest_seed_half_difference_nm": 0.11049834056571584,
+      "discarded_fraction": 0.1,
+      "retained_frames_per_replica": [
+        1800,
+        1800,
+        1800
+      ],
+      "difference_from_published_marker_nm": 0.38970586541531915,
+      "two_sem_plus_digitization_overlaps_plotted_interval": false
+    },
+    {
+      "rms_rg_nm": 4.338222745741517,
+      "conservative_sem_nm": 0.023105776366634398,
+      "minimum_seed_effective_samples": 520.6970274522649,
+      "rank_folded_split_rhat": 1.000781003103684,
+      "extension_recommended": false,
+      "largest_seed_half_difference_nm": 0.1078615769126241,
+      "discarded_fraction": 0.25,
+      "retained_frames_per_replica": [
+        1500,
+        1500,
+        1500
+      ],
+      "difference_from_published_marker_nm": 0.3899067272667942,
+      "two_sem_plus_digitization_overlaps_plotted_interval": false
+    },
+    {
+      "rms_rg_nm": 4.303072927271477,
+      "conservative_sem_nm": 0.02731579748505768,
+      "minimum_seed_effective_samples": 399.08520569535375,
+      "rank_folded_split_rhat": 1.0002540416332766,
+      "extension_recommended": false,
+      "largest_seed_half_difference_nm": 0.12759814026760719,
+      "discarded_fraction": 0.5,
+      "retained_frames_per_replica": [
+        1000,
+        1000,
+        1000
+      ],
+      "difference_from_published_marker_nm": 0.35475690879675437,
+      "two_sem_plus_digitization_overlaps_plotted_interval": true
+    },
+    {
+      "rms_rg_nm": 4.337473980887947,
+      "conservative_sem_nm": 0.035576462759454794,
+      "minimum_seed_effective_samples": 188.53047941572217,
+      "rank_folded_split_rhat": 1.0001080477866133,
+      "extension_recommended": false,
+      "largest_seed_half_difference_nm": 0.0987419925681845,
+      "discarded_fraction": 0.75,
+      "retained_frames_per_replica": [
+        500,
+        500,
+        500
+      ],
+      "difference_from_published_marker_nm": 0.38915796241322465,
+      "two_sem_plus_digitization_overlaps_plotted_interval": false
+    }
+  ],
+  "scope": "Sensitivity analysis using the same three trajectories; these estimates are correlated and are not independent replications. Stability does not prove equilibrium.",
+  "published_plotted_interval": {
+    "n": 275,
+    "temperature_K": 320,
+    "figure": "7b",
+    "lower_nm": 3.6618045444237004,
+    "upper_nm": 4.234747353531808,
+    "marker_nm": 3.9483160184747224,
+    "half_width_nm": 0.28647140455405373,
+    "digitization_bound_nm": 0.025
+  },
+  "digitization_bound_nm": 0.025
+}

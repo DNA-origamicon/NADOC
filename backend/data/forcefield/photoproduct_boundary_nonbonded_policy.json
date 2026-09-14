@@ -1,0 +1,77 @@
+{
+  "schema": "nadoc.photoproduct-boundary-nonbonded-policy.v1",
+  "version": "1.1.0",
+  "status": "workflow_policy",
+  "target_forcefield": "CHARMM36 February 2026 additive nucleic acid",
+  "type_hypothesis": {
+    "id": "charmm36-hybrid-cyclobutane-v1",
+    "description": "Retain CHARMM36 thymine types except for saturated product C5/C6 and H6, which use pinned CGenFF cyclobutane/dihydrouracil transfer candidates.",
+    "product_local_types": {
+      "N1": "NN2B",
+      "C2": "CN1T",
+      "O2": "ON1",
+      "N3": "NN2U",
+      "H3": "HN2",
+      "C4": "CN1",
+      "O4": "ON1",
+      "C5": "CG3C41",
+      "C7": "CN9",
+      "C6": "CG3C41",
+      "H51": "HN9",
+      "H52": "HN9",
+      "H53": "HN9",
+      "H6": "HGA1"
+    },
+    "authority": "candidate atom-type/Lennard-Jones hypothesis only; every ordered product requires independent QM and NAMD validation"
+  },
+  "charge_scope": {
+    "variable_atoms": "exact registry patch charge scope (28 product-base atoms)",
+    "fixed_atoms": "all d(TpT) sugar, phosphate, and terminal-cap atoms at their effective CHARMM36 THY+DEOX+5TER/3TER values",
+    "variable_total_charge_e": 0.0,
+    "fixed_total_charge_e": -1.0,
+    "endpoint_exchange_symmetry": false,
+    "equal_charge_groups": [
+      ["1:H51", "1:H52", "1:H53"],
+      ["2:H51", "2:H52", "2:H53"]
+    ],
+    "reason": "Ordered CPD stereoisomers need not be endpoint-exchange symmetric; only methyl hydrogens within one endpoint are symmetry-equivalent."
+  },
+  "evidence_partition": {
+    "water_training_site_suffixes": ["h3-donor", "o2-acceptor"],
+    "water_held_out_site_suffixes": ["o4-acceptor"],
+    "esp_partition": "deterministic_surface-stratified_or_index_modulo_partition_required",
+    "minimum_held_out_esp_fraction": 0.2
+  },
+  "fit_hyperparameter_grid": {
+    "esp_sigma_atomic_unit": [0.0025, 0.005, 0.01],
+    "water_energy_sigma_kcal_mol": [0.1, 0.2, 0.4],
+    "water_distance_sigma_angstrom": [0.1],
+    "dipole_component_sigma_debye": [0.5, 1.0],
+    "initial_charge_restraint_sigma_e": [0.05, 0.1, 0.2],
+    "qm_dipole_scale": 1.0,
+    "water_distance_target_offset_angstrom": -0.2,
+    "esp_group_normalization": "divide residuals by sqrt(points in the split)",
+    "water_group_normalization": "divide energy and distance residuals separately by sqrt(training sites)",
+    "regularization_group_normalization": "divide residuals by sqrt(variable atoms)",
+    "rationale": "Finite preregistered grid spanning tight through permissive conventional charge regularization; fit choices are selected only with evidence not used by the optimizer. The charged d(TpT) dipole is compared at identical coordinates/origin and is not empirically scaled."
+  },
+  "selection": {
+    "held_out_score": "esp_rmse / initial_esp_rmse + water_energy_rmse / 0.2 + water_distance_rmse / 0.1",
+    "tie_break": "lexicographically smallest hyperparameter id",
+    "esp_split": "sort grid coordinates lexicographically, then hold out indices divisible by five",
+    "water_split": "train H3 donor and O2 acceptor sites from both endpoints; hold out both O4 acceptor sites",
+    "failed_grid_behavior": "retain the lowest-score diagnostic candidate but fail the release audit"
+  },
+  "acceptance": {
+    "water_energy_rmse_kcal_mol": 0.2,
+    "water_distance_rmse_angstrom": 0.1,
+    "charge_sum_tolerance_e": 0.000001,
+    "maximum_charge_change_e": 0.2,
+    "dipole_vector_error_debye": 2.5,
+    "held_out_esp_must_improve_over_initial": true,
+    "esp": "report training and held-out RMSE plus improvement over native-THY initial charges; no universal release cutoff",
+    "selection": "select regularization and objective weights only by preregistered held-out metrics; never by visual appearance"
+  },
+  "gate_effect": "none",
+  "simulation_ready": false
+}

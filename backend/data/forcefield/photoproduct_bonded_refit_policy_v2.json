@@ -1,0 +1,48 @@
+{
+  "schema": "nadoc.photoproduct-bonded-refit-policy.v2",
+  "version": "2.0.0",
+  "status": "workflow_policy",
+  "allowed_product_ids": [
+    "tt-cpd-cis-syn",
+    "tt-cpd-cis-syn-ii",
+    "tt-cpd-trans-syn-i",
+    "tt-cpd-trans-syn-ii",
+    "tt-cpd-cis-anti-i",
+    "tt-cpd-cis-anti-ii",
+    "tt-cpd-trans-anti-i",
+    "tt-cpd-trans-anti-ii"
+  ],
+  "variant_family": "all-ordered-tt-cpd-full-boundary-ring-refit-v2",
+  "purpose": "Promote each ordered product's complete four-carbon CPD ring block into a full d(TpT) coupled refit while keeping each product's numerical fit independent.",
+  "selection": {
+    "stable_ring_atoms": ["1:C5", "1:C6", "2:C5", "2:C6"],
+    "categories": ["bonds", "angles", "dihedrals"],
+    "rule": "promote every covered bond, angle, and proper whose atoms are all in stable_ring_atoms",
+    "expected_occurrence_counts": {"bonds": 4, "angles": 4, "dihedrals": 4},
+    "include_stereochemical_impropers": true,
+    "allow_partial_ring_promotion": false
+  },
+  "fit_requirements": {
+    "joint_coupled_response": true,
+    "full_dtpdt_minimum_hessian": true,
+    "fixed_qm_improper_equilibria": true,
+    "angle_urey_bradley_mode": "omit",
+    "nonnegative_harmonic_curvatures": true,
+    "ring_dihedrals_are_not_independent_rotor_scans": true,
+    "cross_product_parameter_sharing": false,
+    "generic_transfer_may_be_used_only_as_a_regularization_prior": true
+  },
+  "candidate_lineage": {
+    "require_exact_ordered_product_id": true,
+    "require_full_63_atom_boundary_hessian": true,
+    "require_product_specific_charge_fit_hash": true,
+    "require_topology_parameter_and_audit_hashes": true
+  },
+  "engine_validation": {
+    "candidate_runs_are_gate_neutral": true,
+    "ordinary_mass_only": true,
+    "maximum_timestep_fs": 2.0,
+    "production_registry_bypass_allowed": false
+  },
+  "release_rule": "Promotion and a full-boundary fit create only ordered smoke candidates. Explicit-solvent matched DNA validation and every registry gate remain required."
+}

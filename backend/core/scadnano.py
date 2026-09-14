@@ -437,11 +437,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
 
     # ── Photoproduct junctions (CPD fork) ────────────────────────────────────
     pj_list: List[PhotoproductJunction] = [
-        PhotoproductJunction(
-            t1_stable_id=pj["t1_stable_id"],
-            t2_stable_id=pj["t2_stable_id"],
-            photoproduct_id=pj.get("photoproduct_id", "TT-CPD"),
-        )
+        PhotoproductJunction.model_validate(pj)
         for pj in data.get("photoproduct_junctions", [])
     ]
 

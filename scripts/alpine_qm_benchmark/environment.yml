@@ -1,0 +1,9 @@
+name: nadoc-qm-benchmark
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - psi4=1.11
+  - qcengine=0.51.0
+  - qcelemental=0.51.0
+  - numpy=2.5.2

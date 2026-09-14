@@ -1,0 +1,97 @@
+{
+  "convention": "U(r) and dU/dr zero when r>mu(T) and analytic U(r)<0; nominal neighbor cutoff 0.9 nm",
+  "source": "Table 2 continuous functions at 294\u2013381 K; SI Table S1 at 396 K; outer tail rule reconstructed independently from Figure 4(b)",
+  "states": [
+    {
+      "temperature_K": 294,
+      "outer_zero_nm": 0.8653272961653447,
+      "parameters": {
+        "n": 8.0,
+        "m": 10.058215766111871,
+        "sigma": 0.407866,
+        "epsilon": 1.372,
+        "mu": 0.68926,
+        "gamma": 0.4841,
+        "delta": 0.1064
+      }
+    },
+    {
+      "temperature_K": 320,
+      "outer_zero_nm": 0.8562904927117707,
+      "parameters": {
+        "n": 8.0,
+        "m": 8.669107183509613,
+        "sigma": 0.41148,
+        "epsilon": 1.372,
+        "mu": 0.6968,
+        "gamma": 0.4841,
+        "delta": 0.1064
+      }
+    },
+    {
+      "temperature_K": 347,
+      "outer_zero_nm": 0.8444845743757142,
+      "parameters": {
+        "n": 8.0,
+        "m": 7.429254512574109,
+        "sigma": 0.41523299999999996,
+        "epsilon": 1.372,
+        "mu": 0.70463,
+        "gamma": 0.4841,
+        "delta": 0.1064
+      }
+    },
+    {
+      "temperature_K": 361,
+      "outer_zero_nm": 0.8375244426106205,
+      "parameters": {
+        "n": 8.0,
+        "m": 6.85787221558361,
+        "sigma": 0.41717899999999997,
+        "epsilon": 1.372,
+        "mu": 0.70869,
+        "gamma": 0.4841,
+        "delta": 0.1064
+      }
+    },
+    {
+      "temperature_K": 371,
+      "outer_zero_nm": 0.8322057248979875,
+      "parameters": {
+        "n": 8.0,
+        "m": 6.476849157653342,
+        "sigma": 0.41856899999999997,
+        "epsilon": 1.372,
+        "mu": 0.71159,
+        "gamma": 0.4841,
+        "delta": 0.1064
+      }
+    },
+    {
+      "temperature_K": 381,
+      "outer_zero_nm": 0.8265665746894565,
+      "parameters": {
+        "n": 8.0,
+        "m": 6.116995722910953,
+        "sigma": 0.41995899999999997,
+        "epsilon": 1.372,
+        "mu": 0.71449,
+        "gamma": 0.4841,
+        "delta": 0.1064
+      }
+    },
+    {
+      "temperature_K": 396,
+      "outer_zero_nm": 0.8194968753882635,
+      "parameters": {
+        "n": 8.0,
+        "m": 5.94,
+        "sigma": 0.4238,
+        "epsilon": 1.372,
+        "mu": 0.7154,
+        "gamma": 0.4841,
+        "delta": 0.1064
+      }
+    }
+  ]
+}

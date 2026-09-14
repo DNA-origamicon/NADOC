@@ -1,0 +1,49 @@
+{
+  "schema": "nadoc.photoproduct-nonbonded-fit-hypotheses.v1",
+  "status": "candidate_not_reviewed",
+  "gate_effect": "none",
+  "product_id": "tt-cpd-cis-syn",
+  "base_assignment": "Use the first exact_candidate source type in the audited atom-type candidate plan.",
+  "hypotheses": [
+    {
+      "id": "valence-matched-general-carbon-v1",
+      "unresolved_type_sources": {
+        "C5": "CG301",
+        "C6": "CG311",
+        "H6": "HGA1"
+      },
+      "rationale": "Match hydrogen count and exposed-atom Lennard-Jones class; ring strain remains a bonded-term target."
+    },
+    {
+      "id": "cyclobutane-carbon-v1",
+      "unresolved_type_sources": {
+        "C5": "CG3C41",
+        "C6": "CG3C41",
+        "H6": "HGA1"
+      },
+      "rationale": "Test the CGenFF cyclobutane carbon Lennard-Jones class despite its CH2 source environment."
+    }
+  ],
+  "objective": {
+    "training_endpoint": 1,
+    "held_out_endpoint": 2,
+    "water_energy_sigma_kcal_mol": 0.2,
+    "qm_dipole_scale": 1.3,
+    "dipole_component_sigma_debye": 0.5,
+    "initial_charge_restraint_sigma_e": 0.1,
+    "water_distance_target_offset_angstrom": -0.2
+  },
+  "method_sources": [
+    {
+      "id": "CGenFF-2010",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/",
+      "authority": "scaled HF water interactions, distance offset, dipole guideline, and iterative nonbonded/bonded workflow"
+    },
+    {
+      "id": "CGenFF-5.0-2025",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11938330/",
+      "authority": "water-energy/distance, scaled-dipole, ESP, and initial-charge-restraint objective components"
+    }
+  ],
+  "release_rule": "A hypothesis is a comparison candidate, not a final atom-type or Lennard-Jones decision. Review held-out water/dipole errors and later condensed-phase validation."
+}

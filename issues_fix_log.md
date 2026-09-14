@@ -156,3 +156,18 @@ ISSUE-24 (2026-09-04): [x] Released animation job rows from the performance idle
 with a bounded fallback for background requests. Pending-list and timing regressions
 pass; the ordered preparation/readiness follow-up passes 196 focused tests and two
 isolated browser checks. Full validation details: docs/animation_trajectory_loading_audit.md.
+
+ISSUE-25 (2026-09-11): [x] PEG inputs use sidebar tokens; 2 Playwright tests
+cover contrast, real input, API review and wizard request propagation. Root cause:
+PEG fields lacked the explicit styles present on adjacent surface fields; numeric
+steps also disagreed with the existing density default and fractional charge API.
+Initial fixture attempt bypassed normal file-open lifecycle and left Simulations
+disabled; corrected with an isolated scratch file and teardown. Follow-ups and
+validation limitations are recorded in docs/peg_coating_setup.md.
+
+ISSUE-26 (2026-09-11): [x] PEG Live frontend/backend path implemented. Root causes:
+explicit 409 rejection, PEG built without Python bindings, Live topology rewritten
+from DNA alone, and trailing PEG particles incompatible with stock Live readout.
+Bindings are isolated per process; topology and CM frames are preserved. Browser
+fixture initially targeted the hidden legacy job list; corrected to use the visible
+unified list. Real stepping is pending a user-opened test session; see docs/peg_live.md.

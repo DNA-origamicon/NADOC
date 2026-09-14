@@ -1,0 +1,63 @@
+{
+  "schema": "nadoc.photoproduct-qm-protocol.v1",
+  "version": "1.0.0",
+  "target_forcefield": "CHARMM36 additive plus compatible CGenFF terms",
+  "engine": {
+    "name": "Psi4",
+    "version": "1.11"
+  },
+  "jobs": {
+    "geometry_optimization": {
+      "method": "mp2",
+      "basis": "6-31G(d)",
+      "scf_type": "df",
+      "mp2_type": "df",
+      "freeze_core": true,
+      "geometry_convergence": "gau_tight"
+    },
+    "frequency": {
+      "method": "mp2",
+      "basis": "6-31G(d)",
+      "scf_type": "df",
+      "mp2_type": "df",
+      "freeze_core": true
+    },
+    "water_interaction": {
+      "method": "hf",
+      "basis": "6-31G(d)",
+      "water_geometry": "CHARMM-TIP3P",
+      "neutral_energy_scale": 1.16,
+      "counterpoise_corrected": false
+    },
+    "torsion_scan": {
+      "method": "mp2",
+      "basis": "6-31G(d)",
+      "scan_type": "relaxed-constrained",
+      "minimum_step_degrees": 15
+    },
+    "conformer_single_point": {
+      "method": "mp2",
+      "basis": "cc-pVTZ",
+      "scf_type": "df",
+      "mp2_type": "df",
+      "freeze_core": true
+    }
+  },
+  "rules": {
+    "charged_model_diffuse_basis": "6-31+G(d)",
+    "water_interaction_charge_scaling": "Scale neutral interaction energies only; do not scale charged compounds.",
+    "release_effect": "Generated or completed QM jobs do not pass a registry gate until parsed results and validation reports are attached and reviewed."
+  },
+  "references": [
+    {
+      "id": "CGenFF-2010",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/",
+      "authority": "additive-CHARMM-target-data-protocol"
+    },
+    {
+      "id": "ffTK-2013",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3874408/",
+      "authority": "reproducible-QM-and-fitting-workflow"
+    }
+  ]
+}

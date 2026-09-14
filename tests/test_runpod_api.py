@@ -598,6 +598,37 @@ class TestAPodThatNeverProvisionsSTILLBILLS:
         asyncio.run(go())
         assert seen == {"id": "P1", "rate": 0.74}
 
+    def test_on_created_failure_still_destroys_the_billing_pod(self):
+        terminated: list[str] = []
+
+        def handler(request):
+            if request.method == "DELETE":
+                terminated.append(request.url.path)
+                return httpx.Response(200, json={})
+            return httpx.Response(
+                200,
+                json={
+                    "id": "P-CALLBACK",
+                    "desiredStatus": "RUNNING",
+                    "costPerHr": 0.74,
+                    "publicIp": "1.2.3.4",
+                    "portMappings": {"22": 1234},
+                },
+            )
+
+        client = RunpodClient("k", transport=httpx.MockTransport(handler))
+
+        async def go():
+            async with client.pod(
+                {"x": 1},
+                on_created=lambda _pod: (_ for _ in ()).throw(RuntimeError("ledger failed")),
+            ):
+                pass
+
+        with pytest.raises(RuntimeError, match="ledger failed"):
+            asyncio.run(go())
+        assert terminated == ["/v1/pods/P-CALLBACK"]
+
 
 class TestNeverRentAHostThatCannotRunTheImage:
     def test_the_payload_pins_the_cuda_version(self):

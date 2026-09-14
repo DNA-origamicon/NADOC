@@ -1,0 +1,61 @@
+{
+  "schema": "nadoc.cpd-forcefield-manifest.v1",
+  "capability": "manual-ordered-tt-cpd",
+  "available": false,
+  "availability_note": "Legacy informational field only. Simulation readiness is derived per product from photoproduct_registry.json gates and verified assets; this value is not a release switch.",
+  "checked_at": "2026-09-03",
+  "base_forcefield": {
+    "family": "CHARMM36 additive nucleic acid",
+    "local_topology": {
+      "path": "top_all36_na.rtf",
+      "sha256": "57fed4acc6bc755f2f422b136a385f0c1b1b0a9958e79ea6c6e392b90227ee49"
+    },
+    "local_parameters": {
+      "path": "par_all36_na.prm",
+      "sha256": "1ada57015c112529aa985ee60163f11a94e991a334cc9928e030d2236899df05"
+    }
+  },
+  "evidence_spike": {
+    "official_release": "toppar_c36_feb26.tgz",
+    "official_release_url": "https://mackerell.umaryland.edu/charmm_ff.shtml",
+    "download_sha256": "7d4d21ebdb216a48f600fadee862dc77d369a10d5753150635f35e09c3209e08",
+    "archive_scan_terms": ["cyclobutane", "thymine dimer", "cis-syn", "TTD", "CPD"],
+    "result": "No cis-syn thymine CPD DNA residue, patch, or lesion-specific parameter stream found. Generic CGenFF cyclobutane entries are not a validated DNA-lesion model."
+  },
+  "structural_validation_references": [
+    {"id": "RCSB-1N4E", "url": "https://www.rcsb.org/structure/1N4E", "authority": "geometry-only"},
+    {"id": "PDB-CCD-TTD", "url": "https://www.rcsb.org/ligand/TTD", "authority": "connectivity-and-stereochemistry-only"},
+    {
+      "id": "Taylor-2023-CPD-stereochemistry",
+      "url": "https://onlinelibrary.wiley.com/doi/10.1111/php.13694",
+      "authority": "eight ordered DNA-level isomers and ordered C5 configurations",
+      "metadata_path": "photoproduct_structural_references.json",
+      "metadata_sha256": "668cfd76d562e439d448728345f144182f56a71195d065a0cd4146e8c7f11120"
+    },
+    {
+      "id": "JASMS-2026-SIX-TT-CPD",
+      "url": "https://doi.org/10.1021/jasms.6c00014",
+      "authority": "six hydrolysis-product catalog and syn/head-to-head versus anti/head-to-tail connectivity",
+      "metadata_path": "photoproduct_structural_references.json",
+      "metadata_sha256": "668cfd76d562e439d448728345f144182f56a71195d065a0cd4146e8c7f11120"
+    }
+  ],
+  "lesion_assets": {
+    "topology": null,
+    "parameters": null,
+    "coordinate_template": null,
+    "license": null,
+    "validation": null
+  },
+  "missing_requirements": [
+    "A redistributable CHARMM36-compatible ordered cis-syn TT-CPD topology/patch",
+    "Product-specific atom types and partial charges with conserved two-residue charge",
+    "All new/changed bond, angle, dihedral, improper, and nonbonded parameters",
+    "Documented cis-syn stereochemical/improper convention and a versioned coordinate template",
+    "License permitting the exact topology, parameter, and template assets to ship",
+    "Published or reproducible validation against target data",
+    "A warning-free psfgen build, complete NAMD parameter parse, topology audit, and 2 fs smoke test"
+  ],
+  "supported_paths": [],
+  "policy": "Design intent may be authored and persisted. Every atomistic product conversion, topology build, NAMD package, continuation, and legacy simulation/export path must fail closed."
+}

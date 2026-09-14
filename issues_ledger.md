@@ -815,3 +815,24 @@ independent row initialization. Regression tests cover stale timing and pending 
 the original panel fails the new pending-list regression. See
 [trajectory audit](docs/animation_trajectory_loading_audit.md) for validation and the
 subsequent ordered preparation/readiness feature. No topology changes; main.js delta 0.
+
+## ISSUE-25 — PEG coating setup UI and validation boundaries
+
+2026-09-11, user-requested PEG setup work. [x] Numerical fields now match adjacent
+sidebar colors and pass browser contrast checks; invalid raw PEG values are rejected
+by the new setup review. [x] Removed density/charge step constraints that rejected
+the existing density default and fractional charges.
+
+Open follow-ups: saved setup enablement after entering Simulations (PEG-06),
+frontend/backend half-count rounding (PEG-07), shared validation for legacy
+Store/New job (PEG-08), and older floor-stiffness step validity (PEG-09). Evidence,
+scope and next actions: [barrier catalogue](docs/peg_coating_setup.md).
+
+## ISSUE-26 — PEG Live rejected prepared coating jobs
+
+2026-09-11: [x] Replaced the unconditional PEG Live rejection with an isolated
+persistent PEG oxpy worker, job-specific capability gating, retained coating
+topology and PEG CM frame output. Reconfiguration preserves topology and current
+pose. Build script compiles bindings without replacing stock oxpy. Browser start/
+frame/stop test passes with mocked engine responses; real stepping remains gated.
+Evidence and unresolved validation: [PEG Live](docs/peg_live.md).

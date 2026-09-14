@@ -135,7 +135,7 @@ def validate_graphene_wall_package(package: Path) -> None:
         )
 
 
-def tile_graphene_to_cell(pdb_text: str, box_nm, spec: dict) -> str:
+def tile_graphene_to_cell(pdb_text: str, box_nm, spec: dict, *, cell_vectors_nm=None) -> str:
     """Replace the finite seed sheet with a commensurate, periodic restrained wall.
 
     A rectangular four-site honeycomb cell repeats exactly across both tangential
@@ -143,6 +143,10 @@ def tile_graphene_to_cell(pdb_text: str, box_nm, spec: dict) -> str:
     no duplicate boundary atoms or unfilled padding strips are introduced.
     Coordinates and the aperture remain in the caller's Cartesian frame.
     """
+    if cell_vectors_nm is not None:
+        from backend.core.graphene_cell_frame import tile_in_cell_frame
+        return tile_in_cell_frame(pdb_text, box_nm, spec, cell_vectors_nm)
+
     import numpy as np
     from backend.core.namd_solvate import _graphene_identity, _hetatm_record
 
@@ -157,7 +161,14 @@ def tile_graphene_to_cell(pdb_text: str, box_nm, spec: dict) -> str:
     if not old:
         raise ValueError('Periodic graphene has no seed wall sites')
     first = np.array([float(old[0][i:i + 8]) / 10 for i in (30, 38, 46)])
-    center = np.array(spec['pore_center_nm']) + first - np.array(spec.pop('_first_site_nm'))
+    from backend.core.surface_transforms import RigidTransform
+
+    recenter = RigidTransform(
+        translation_nm=first - np.array(spec.pop('_first_site_nm'))
+    )
+    from backend.core.surface_periodic import translate_coated_surface
+    translate_coated_surface(spec, recenter.translation_nm)
+    center = np.asarray(spec['pore_center_nm'])
     radius = float(spec.get('pore_diameter_nm', 2.1)) / 2
     if min(lengths[tangents]) <= 2 * radius + 0.6:
         raise ValueError('Graphene cell must leave at least 0.6 nm between periodic pore edges.')

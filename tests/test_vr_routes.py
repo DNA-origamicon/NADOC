@@ -149,12 +149,55 @@ def _semantic_extra_base_id(base_key: str, primitive: str) -> str:
     return quote(f"extra-base-ref:{payload}", safe="-_.:~")
 
 
-def test_native_vr_routes_are_workstation_only() -> None:
+def test_native_vr_routes_are_workstation_only(monkeypatch) -> None:
+    monkeypatch.delenv("NADOC_PUBLIC_URL", raising=False)
+    monkeypatch.delenv("NADOC_TAILSCALE_IP", raising=False)
     _require_local(_request("127.0.0.1", "http://localhost:5173"))
     with pytest.raises(HTTPException, match="localhost"):
         _require_local(_request("192.0.2.4"))
     with pytest.raises(HTTPException, match="localhost"):
         _require_local(_request("127.0.0.1", "http://192.0.2.4:5173"))
+
+
+def test_native_vr_routes_accept_only_configured_tailscale_origin(
+    monkeypatch,
+) -> None:
+    public_url = "https://workstation.example-tailnet.ts.net:5173"
+    monkeypatch.setenv("NADOC_PUBLIC_URL", public_url)
+    monkeypatch.setenv("NADOC_TAILSCALE_IP", "100.89.83.24")
+
+    _require_local(_request("127.0.0.1", public_url))
+    _require_local(_request("100.89.83.24", public_url))
+    # Same-origin GET requests may omit Origin; the exact launcher-declared self
+    # address must still support the native status/event polling loop.
+    _require_local(_request("100.89.83.24"))
+
+    for origin in (
+        "https://other.example-tailnet.ts.net:5173",
+        "https://workstation.example-tailnet.ts.net",
+        "http://workstation.example-tailnet.ts.net:5173",
+        "https://workstation.example-tailnet.ts.net:5173/not-an-origin",
+    ):
+        with pytest.raises(HTTPException, match="configured Tailscale URL"):
+            _require_local(_request("127.0.0.1", origin))
+
+    with pytest.raises(HTTPException, match="configured Tailscale URL"):
+        _require_local(_request("100.64.0.2", public_url))
+
+
+def test_native_vr_routes_ignore_non_tailnet_public_url(monkeypatch) -> None:
+    public_url = "https://public.example.com:5173"
+    monkeypatch.setenv("NADOC_PUBLIC_URL", public_url)
+    with pytest.raises(HTTPException, match="configured Tailscale URL"):
+        _require_local(_request("127.0.0.1", public_url))
+
+
+def test_native_vr_routes_ignore_non_tailnet_client_setting(monkeypatch) -> None:
+    public_url = "https://workstation.example-tailnet.ts.net:5173"
+    monkeypatch.setenv("NADOC_PUBLIC_URL", public_url)
+    monkeypatch.setenv("NADOC_TAILSCALE_IP", "192.0.2.4")
+    with pytest.raises(HTTPException, match="configured Tailscale URL"):
+        _require_local(_request("192.0.2.4", public_url))
 
 
 def test_expanded_quick_view_matches_desktop_centroid_spacing() -> None:
@@ -1466,6 +1509,38 @@ def test_build_environment_keeps_sbin_on_path_but_drops_conda() -> None:
         assert leaked not in env
 
 
+def test_vr_display_lease_preflight_rejects_wayland_without_protocol(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
+    monkeypatch.setattr(routes_vr.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        routes_vr.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="wl_compositor\n"),
+    )
+    with pytest.raises(HTTPException, match="saved X11 session"):
+        routes_vr._assert_vr_display_lease_available()
+
+
+def test_vr_display_lease_preflight_accepts_xorg_or_wayland_lease(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    routes_vr._assert_vr_display_lease_available()
+
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
+    monkeypatch.setattr(routes_vr.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        routes_vr.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0, stdout="interface: 'wp_drm_lease_device_v1'\n"
+        ),
+    )
+    routes_vr._assert_vr_display_lease_available()
+
+
 def test_start_steamvr_is_noop_when_runtime_and_dashboard_are_ready(
     monkeypatch,
 ) -> None:
@@ -1508,6 +1583,7 @@ def test_start_steamvr_launches_steam_with_sanitized_environment(
     payloads = iter([not_ready, ready])
     monkeypatch.setattr(routes_vr, "_runtime_payload", lambda: next(payloads))
     monkeypatch.setattr(routes_vr, "_detach_hmd_from_desktop", lambda: None)
+    monkeypatch.setattr(routes_vr, "_assert_vr_display_lease_available", lambda: None)
     monkeypatch.setattr(routes_vr.Path, "is_file", lambda self: True)
     monkeypatch.setattr(
         routes_vr, "_STEAMVR_LOG_PATH", tmp_path / "steamvr.log"
