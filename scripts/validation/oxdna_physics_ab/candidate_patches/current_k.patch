@@ -1,0 +1,22 @@
+--- a/src/Backends/Thermostats/BussiThermostat.cpp
++++ b/src/Backends/Thermostats/BussiThermostat.cpp
+@@ -88,6 +88,8 @@
+ 		if(p->is_rigid_body()) K_now_r += 0.5 * (p->L * p->L);
+ 	}
+ 
++	_K_t = K_now_t;
++	_K_r = K_now_r;
+ 	_update_K(_K_t, _current_translational_degrees_of_freedom());
+ 	_update_K(_K_r, _current_rotational_degrees_of_freedom());
+ 
+--- a/src/CUDA/Thermostats/CUDABussiThermostat.cu
++++ b/src/CUDA/Thermostats/CUDABussiThermostat.cu
+@@ -110,6 +110,8 @@
+ 	c_number4 K_now_t = thrust::transform_reduce(t_vels, t_vels + N, compute_K_without_com(v_com), zero, sum_K());
+ 	c_number4 K_now_r = thrust::transform_reduce(t_Ls, t_Ls + N, compute_K(), zero, sum_K());
+ 
++	_K_t = K_now_t.w;
++	_K_r = K_now_r.w;
+ 	_update_K(_K_t, _current_translational_degrees_of_freedom());
+ 	_update_K(_K_r, _current_rotational_degrees_of_freedom());
+ 

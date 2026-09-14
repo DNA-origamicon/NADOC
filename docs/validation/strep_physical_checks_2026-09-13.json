@@ -1,0 +1,2405 @@
+{
+  "nve": {
+    "ads5_CPU": {
+      "runs": [
+        {
+          "dt": 0.0001,
+          "steps": 10000,
+          "samples": 1001,
+          "sigma": 5.230813650366869e-06,
+          "range_kBT_per_dof": 1.6683638673383422e-07,
+          "drift_kBT_per_dof_per_reduced_time": -2.939889845901625e-08,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 5e-05,
+          "steps": 20000,
+          "samples": 1001,
+          "sigma": 1.1705807782034772e-06,
+          "range_kBT_per_dof": 4.140036275716978e-08,
+          "drift_kBT_per_dof_per_reduced_time": -3.888966036107535e-10,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 2.5e-05,
+          "steps": 40000,
+          "samples": 1001,
+          "sigma": 2.982198922963455e-07,
+          "range_kBT_per_dof": 1.1445574939198904e-08,
+          "drift_kBT_per_dof_per_reduced_time": -2.4001903761284705e-11,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        }
+      ],
+      "fluctuation_exponents": [
+        2.1598108805348355,
+        1.972776095179136
+      ],
+      "quadratic_scaling_pass": true
+    },
+    "ads5_CUDA": {
+      "runs": [
+        {
+          "dt": 0.0001,
+          "steps": 10000,
+          "samples": 1001,
+          "sigma": 0.00030707586511914724,
+          "range_kBT_per_dof": 9.509802059684258e-06,
+          "drift_kBT_per_dof_per_reduced_time": 2.203330227788841e-06,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 5e-05,
+          "steps": 20000,
+          "samples": 1001,
+          "sigma": 0.0006713875317402368,
+          "range_kBT_per_dof": 1.4880201302251264e-05,
+          "drift_kBT_per_dof_per_reduced_time": 1.156024868883703e-05,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 2.5e-05,
+          "steps": 40000,
+          "samples": 1001,
+          "sigma": 0.00069262815847336,
+          "range_kBT_per_dof": 1.5693337743314328e-05,
+          "drift_kBT_per_dof_per_reduced_time": 1.3319545447500349e-05,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        }
+      ],
+      "fluctuation_exponents": [
+        -1.128550618199369,
+        -0.044935295656116835
+      ],
+      "quadratic_scaling_pass": false
+    },
+    "ads10_CPU": {
+      "runs": [
+        {
+          "dt": 0.0001,
+          "steps": 10000,
+          "samples": 1001,
+          "sigma": 7.183958806721589e-06,
+          "range_kBT_per_dof": 2.39524630220589e-07,
+          "drift_kBT_per_dof_per_reduced_time": 6.993942055274135e-09,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 5e-05,
+          "steps": 20000,
+          "samples": 1001,
+          "sigma": 1.9998371988781554e-06,
+          "range_kBT_per_dof": 6.336949969816716e-08,
+          "drift_kBT_per_dof_per_reduced_time": 3.088928502069268e-08,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 2.5e-05,
+          "steps": 40000,
+          "samples": 1001,
+          "sigma": 5.761659795374955e-07,
+          "range_kBT_per_dof": 1.743265187207862e-08,
+          "drift_kBT_per_dof_per_reduced_time": 9.294725715768372e-09,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        }
+      ],
+      "fluctuation_exponents": [
+        1.8448965185628268,
+        1.795326176696446
+      ],
+      "quadratic_scaling_pass": true
+    },
+    "ads10_CUDA": {
+      "runs": [
+        {
+          "dt": 0.0001,
+          "steps": 10000,
+          "samples": 1001,
+          "sigma": 0.0005379272400433074,
+          "range_kBT_per_dof": 1.613393981433286e-05,
+          "drift_kBT_per_dof_per_reduced_time": 6.442481222933186e-07,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 5e-05,
+          "steps": 20000,
+          "samples": 1001,
+          "sigma": 0.00037452344857823107,
+          "range_kBT_per_dof": 1.178065143092839e-05,
+          "drift_kBT_per_dof_per_reduced_time": 2.412745199405546e-06,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 2.5e-05,
+          "steps": 40000,
+          "samples": 1001,
+          "sigma": 0.0007866081835229534,
+          "range_kBT_per_dof": 2.0798188918327352e-05,
+          "drift_kBT_per_dof_per_reduced_time": 1.5581629723014574e-05,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        }
+      ],
+      "fluctuation_exponents": [
+        0.5223549999078048,
+        -1.0705891481605065
+      ],
+      "quadratic_scaling_pass": false
+    },
+    "biotin10_CPU": {
+      "runs": [
+        {
+          "dt": 0.0001,
+          "steps": 10000,
+          "samples": 1001,
+          "sigma": 1.284181909208315e-05,
+          "range_kBT_per_dof": 4.7332995824064415e-07,
+          "drift_kBT_per_dof_per_reduced_time": -2.558970763475615e-07,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 5e-05,
+          "steps": 20000,
+          "samples": 1001,
+          "sigma": 2.8211076768972394e-06,
+          "range_kBT_per_dof": 1.837422434392352e-07,
+          "drift_kBT_per_dof_per_reduced_time": -1.449514314790656e-08,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 2.5e-05,
+          "steps": 40000,
+          "samples": 1001,
+          "sigma": 2.679758044263405e-06,
+          "range_kBT_per_dof": 1.884839088089536e-07,
+          "drift_kBT_per_dof_per_reduced_time": 2.1987662801323906e-08,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        }
+      ],
+      "fluctuation_exponents": [
+        2.186515942816095,
+        0.07415898677618553
+      ],
+      "quadratic_scaling_pass": false
+    },
+    "biotin10_CUDA": {
+      "runs": [
+        {
+          "dt": 0.0001,
+          "steps": 10000,
+          "samples": 1001,
+          "sigma": 0.010744456841375738,
+          "range_kBT_per_dof": 0.0008931942779593556,
+          "drift_kBT_per_dof_per_reduced_time": -3.705832257980077e-05,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 5e-05,
+          "steps": 20000,
+          "samples": 1001,
+          "sigma": 0.010757577175556508,
+          "range_kBT_per_dof": 0.0008955536563613826,
+          "drift_kBT_per_dof_per_reduced_time": -3.967094869306084e-05,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        },
+        {
+          "dt": 2.5e-05,
+          "steps": 40000,
+          "samples": 1001,
+          "sigma": 0.01075202275460698,
+          "range_kBT_per_dof": 0.0008949354695419515,
+          "drift_kBT_per_dof_per_reduced_time": -3.4497478957224364e-05,
+          "protein_rotation_max": 0.0,
+          "finite": true,
+          "conservation_pass": true
+        }
+      ],
+      "fluctuation_exponents": [
+        -0.0017606374719476442,
+        0.0007450938895216183
+      ],
+      "quadratic_scaling_pass": false
+    }
+  },
+  "snapshot": {
+    "ads5/relaxed": {
+      "parity": {
+        "force_all": {
+          "relative_L2": 1.3034343506096044e-05,
+          "p90_symmetric_relative": 2.67989600398988e-05,
+          "max_symmetric_relative": 0.00019156865507055293,
+          "pass": true
+        },
+        "force_DNA": {
+          "relative_L2": 1.0479044693812898e-05,
+          "p90_symmetric_relative": 2.0431300961322227e-05,
+          "max_symmetric_relative": 2.5818890117479848e-05,
+          "pass": true
+        },
+        "torque_DNA": {
+          "relative_L2": 1.0161033323237188e-05,
+          "p90_symmetric_relative": 1.2391859484385124e-05,
+          "max_symmetric_relative": 2.7757819139553946e-05,
+          "pass": true
+        }
+      },
+      "derivatives": {
+        "all_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -358.68782979697755,
+            "predicted": {
+              "CPU": -358.68782979118646,
+              "CUDA": -358.6875542397937
+            },
+            "relative_errors": {
+              "CPU": 1.6145219730424757e-11,
+              "CUDA": 7.682367812607862e-07
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -358.6878297872431,
+            "predicted": {
+              "CPU": -358.68782979118646,
+              "CUDA": -358.6875542397937
+            },
+            "relative_errors": {
+              "CPU": 1.0993798299506363e-11,
+              "CUDA": 7.68209642263605e-07
+            },
+            "pass": true
+          }
+        ],
+        "DNA_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -58.29142891357719,
+            "predicted": {
+              "CPU": -58.29142902461241,
+              "CUDA": -58.29084729830759
+            },
+            "relative_errors": {
+              "CPU": 1.904829268854763e-09,
+              "CUDA": 9.977715085095383e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -58.29142899827389,
+            "predicted": {
+              "CPU": -58.29142902461241,
+              "CUDA": -58.29084729830759
+            },
+            "relative_errors": {
+              "CPU": 4.518421741852804e-10,
+              "CUDA": 9.979168057693218e-06
+            },
+            "pass": true
+          }
+        ],
+        "anchor_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -18.02121775433818,
+            "predicted": {
+              "CPU": -18.02121762562082,
+              "CUDA": -18.021174738227753
+            },
+            "relative_errors": {
+              "CPU": 7.14254508660773e-09,
+              "CUDA": 2.3869702377901108e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -18.021217657775424,
+            "predicted": {
+              "CPU": -18.02121762562082,
+              "CUDA": -18.021174738227753
+            },
+            "relative_errors": {
+              "CPU": 1.7842635912154998e-09,
+              "CUDA": 2.381611969046505e-06
+            },
+            "pass": true
+          }
+        ],
+        "DNA_rotations": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -23.40512775340642,
+            "predicted": {
+              "CPU": -23.405126487947452,
+              "CUDA": -23.40490428340268
+            },
+            "relative_errors": {
+              "CPU": 5.406759490452766e-08,
+              "CUDA": 9.54790788128039e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -23.405126804618703,
+            "predicted": {
+              "CPU": -23.405126487947452,
+              "CUDA": -23.40490428340268
+            },
+            "relative_errors": {
+              "CPU": 1.3529995100771812e-08,
+              "CUDA": 9.507370666334153e-06
+            },
+            "pass": true
+          }
+        ]
+      },
+      "native_energy": {
+        "CPU_internal": 66.54915200726717,
+        "CUDA_internal": 32.731,
+        "relative_error": 0.5081680380175877,
+        "pass": false,
+        "CUDA_output_resolution_per_particle": 1e-06
+      }
+    },
+    "ads5/stressed": {
+      "parity": {
+        "force_all": {
+          "relative_L2": 5.5160641171782734e-05,
+          "p90_symmetric_relative": 0.6726938667973966,
+          "max_symmetric_relative": 1.9999999925073066,
+          "pass": true
+        },
+        "force_DNA": {
+          "relative_L2": 0.00028137473218184644,
+          "p90_symmetric_relative": 1.9999766146317417,
+          "max_symmetric_relative": 1.9999999925073066,
+          "pass": true
+        },
+        "torque_DNA": {
+          "relative_L2": 0.00029082352851509877,
+          "p90_symmetric_relative": 1.9999771070443768,
+          "max_symmetric_relative": 1.9999999980671699,
+          "pass": true
+        }
+      },
+      "derivatives": {
+        "all_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -77.21762203628302,
+            "predicted": {
+              "CPU": -77.21761807729362,
+              "CUDA": -77.21753189994983
+            },
+            "relative_errors": {
+              "CPU": 5.127054280445064e-08,
+              "CUDA": 1.1673026286996217e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -77.21761906690716,
+            "predicted": {
+              "CPU": -77.21761807729362,
+              "CUDA": -77.21753189994983
+            },
+            "relative_errors": {
+              "CPU": 1.281590330701353e-08,
+              "CUDA": 1.1288480321187983e-06
+            },
+            "pass": true
+          }
+        ],
+        "DNA_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -0.2538192923751126,
+            "predicted": {
+              "CPU": -0.2538192135681951,
+              "CUDA": -0.25380248461225746
+            },
+            "relative_errors": {
+              "CPU": 3.1048434795598394e-07,
+              "CUDA": 6.621940632582116e-05
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -0.25381923325795697,
+            "predicted": {
+              "CPU": -0.2538192135681951,
+              "CUDA": -0.25380248461225746
+            },
+            "relative_errors": {
+              "CPU": 7.757395538455903e-08,
+              "CUDA": 6.598651128412738e-05
+            },
+            "pass": true
+          }
+        ],
+        "anchor_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -61.107061575089716,
+            "predicted": {
+              "CPU": -61.10705591532141,
+              "CUDA": -61.106955728297876
+            },
+            "relative_errors": {
+              "CPU": 9.262052796667645e-08,
+              "CUDA": 1.7321531932887015e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -61.10705733060939,
+            "predicted": {
+              "CPU": -61.10705591532141,
+              "CUDA": -61.106955728297876
+            },
+            "relative_errors": {
+              "CPU": 2.3160794262301012e-08,
+              "CUDA": 1.662693573465839e-06
+            },
+            "pass": true
+          }
+        ],
+        "DNA_rotations": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -0.11824300488072481,
+            "predicted": {
+              "CPU": -0.1182429963735723,
+              "CUDA": -0.118234654480162
+            },
+            "relative_errors": {
+              "CPU": 7.194634912060145e-08,
+              "CUDA": 7.062067283584876e-05
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -0.11824299846807662,
+            "predicted": {
+              "CPU": -0.1182429963735723,
+              "CUDA": -0.118234654480162
+            },
+            "relative_errors": {
+              "CPU": 1.771355891780925e-08,
+              "CUDA": 7.056644387170052e-05
+            },
+            "pass": true
+          }
+        ]
+      },
+      "native_energy": {
+        "CPU_internal": 0.04111445540161185,
+        "CUDA_internal": 0.009000000000000001,
+        "relative_error": 0.0006509686905732131,
+        "pass": false,
+        "CUDA_output_resolution_per_particle": 1e-06
+      }
+    },
+    "ads10/relaxed": {
+      "parity": {
+        "force_all": {
+          "relative_L2": 1.8424053951583152e-05,
+          "p90_symmetric_relative": 4.4055952948642594e-05,
+          "max_symmetric_relative": 0.0006607534051633504,
+          "pass": true
+        },
+        "force_DNA": {
+          "relative_L2": 2.3019595560106747e-06,
+          "p90_symmetric_relative": 5.5835312763442e-06,
+          "max_symmetric_relative": 1.1210529535500855e-05,
+          "pass": true
+        },
+        "torque_DNA": {
+          "relative_L2": 2.8540557974764408e-06,
+          "p90_symmetric_relative": 8.150733646296625e-06,
+          "max_symmetric_relative": 1.0573843741244429e-05,
+          "pass": true
+        }
+      },
+      "derivatives": {
+        "all_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -366.58413305914905,
+            "predicted": {
+              "CPU": -366.5841330606828,
+              "CUDA": -366.5842272874871
+            },
+            "relative_errors": {
+              "CPU": 4.183893926059346e-12,
+              "CUDA": 2.5704416899813103e-07
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -366.58413306227544,
+            "predicted": {
+              "CPU": -366.5841330606828,
+              "CUDA": -366.5842272874871
+            },
+            "relative_errors": {
+              "CPU": 4.3445385820110245e-12,
+              "CUDA": 2.570356405678151e-07
+            },
+            "pass": true
+          }
+        ],
+        "DNA_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -22.703625765529978,
+            "predicted": {
+              "CPU": -22.703624487050885,
+              "CUDA": -22.703620982123482
+            },
+            "relative_errors": {
+              "CPU": 5.631167049976553e-08,
+              "CUDA": 2.106891007273444e-07
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -22.70362480686572,
+            "predicted": {
+              "CPU": -22.703624487050885,
+              "CUDA": -22.703620982123482
+            },
+            "relative_errors": {
+              "CPU": 1.4086509836714263e-08,
+              "CUDA": 1.684639465829053e-07
+            },
+            "pass": true
+          }
+        ],
+        "anchor_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -30.527383022658228,
+            "predicted": {
+              "CPU": -30.52738236029908,
+              "CUDA": -30.527591105568693
+            },
+            "relative_errors": {
+              "CPU": 2.1697213559717963e-08,
+              "CUDA": 6.816224370450459e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -30.527382526202018,
+            "predicted": {
+              "CPU": -30.52738236029908,
+              "CUDA": -30.527591105568693
+            },
+            "relative_errors": {
+              "CPU": 5.434561552859815e-09,
+              "CUDA": 6.832486911695812e-06
+            },
+            "pass": true
+          }
+        ],
+        "DNA_rotations": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -7.344492309400152,
+            "predicted": {
+              "CPU": -7.344492280598602,
+              "CUDA": -7.344490371217185
+            },
+            "relative_errors": {
+              "CPU": 3.921516867959051e-09,
+              "CUDA": 2.6389611226481575e-07
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -7.344492288012816,
+            "predicted": {
+              "CPU": -7.344492280598602,
+              "CUDA": -7.344490371217185
+            },
+            "relative_errors": {
+              "CPU": 1.0094930787292385e-09,
+              "CUDA": 2.6098408923263814e-07
+            },
+            "pass": true
+          }
+        ]
+      },
+      "native_energy": {
+        "CPU_internal": 70.88665775828274,
+        "CUDA_internal": 34.8,
+        "relative_error": 0.5090754579138865,
+        "pass": false,
+        "CUDA_output_resolution_per_particle": 1e-06
+      }
+    },
+    "ads10/stressed": {
+      "parity": {
+        "force_all": {
+          "relative_L2": 7.824837970027812e-05,
+          "p90_symmetric_relative": 0.9129204524557318,
+          "max_symmetric_relative": 2.0,
+          "pass": true
+        },
+        "force_DNA": {
+          "relative_L2": 0.00022026166612902355,
+          "p90_symmetric_relative": 1.999992563195201,
+          "max_symmetric_relative": 2.0,
+          "pass": true
+        },
+        "torque_DNA": {
+          "relative_L2": 0.00022751021406080011,
+          "p90_symmetric_relative": 1.9990395070376943,
+          "max_symmetric_relative": 2.0,
+          "pass": true
+        }
+      },
+      "derivatives": {
+        "all_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -80.8116965698602,
+            "predicted": {
+              "CPU": -80.81169259773151,
+              "CUDA": -80.8121511634153
+            },
+            "relative_errors": {
+              "CPU": 4.915289325551487e-08,
+              "CUDA": 5.6253118936476245e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -80.811693591194,
+            "predicted": {
+              "CPU": -80.81169259773151,
+              "CUDA": -80.8121511634153
+            },
+            "relative_errors": {
+              "CPU": 1.2293548725029282e-08,
+              "CUDA": 5.662171031285931e-06
+            },
+            "pass": true
+          }
+        ],
+        "DNA_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -0.25381929065204645,
+            "predicted": {
+              "CPU": -0.253819211843419,
+              "CUDA": -0.2538165859257221
+            },
+            "relative_errors": {
+              "CPU": 3.104910870043959e-07,
+              "CUDA": 1.065611016958465e-05
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -0.2538192315526544,
+            "predicted": {
+              "CPU": -0.253819211843419,
+              "CUDA": -0.2538165859257221
+            },
+            "relative_errors": {
+              "CPU": 7.765067796410697e-08,
+              "CUDA": 1.0423272169423289e-05
+            },
+            "pass": true
+          }
+        ],
+        "anchor_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -61.40788332668734,
+            "predicted": {
+              "CPU": -61.407877801768805,
+              "CUDA": -61.408248572682865
+            },
+            "relative_errors": {
+              "CPU": 8.997083494514047e-08,
+              "CUDA": 5.947832807712831e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -61.40787918251789,
+            "predicted": {
+              "CPU": -61.407877801768805,
+              "CUDA": -61.408248572682865
+            },
+            "relative_errors": {
+              "CPU": 2.2484884699644624e-08,
+              "CUDA": 6.015318358080582e-06
+            },
+            "pass": true
+          }
+        ],
+        "DNA_rotations": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -0.11824300402807353,
+            "predicted": {
+              "CPU": -0.11824299551557578,
+              "CUDA": -0.11824191327836786
+            },
+            "relative_errors": {
+              "CPU": 7.19915551734253e-08,
+              "CUDA": 9.224644744384502e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -0.11824299765095247,
+            "predicted": {
+              "CPU": -0.11824299551557578,
+              "CUDA": -0.11824191327836786
+            },
+            "relative_errors": {
+              "CPU": 1.8059223271852708e-08,
+              "CUDA": 9.170712906106895e-06
+            },
+            "pass": true
+          }
+        ]
+      },
+      "native_energy": {
+        "CPU_internal": 0.04111883071820088,
+        "CUDA_internal": 0.009000000000000001,
+        "relative_error": 0.0006510573794229908,
+        "pass": false,
+        "CUDA_output_resolution_per_particle": 1e-06
+      }
+    },
+    "biotin10/relaxed": {
+      "parity": {
+        "force_all": {
+          "relative_L2": 1.836584137128406e-05,
+          "p90_symmetric_relative": 4.0586106074023663e-05,
+          "max_symmetric_relative": 0.00011771657534637107,
+          "pass": true
+        },
+        "force_DNA": {
+          "relative_L2": 5.142950367774715e-06,
+          "p90_symmetric_relative": 1.3574094264853806e-05,
+          "max_symmetric_relative": 1.5744214129084253e-05,
+          "pass": true
+        },
+        "torque_DNA": {
+          "relative_L2": 4.350041025193286e-06,
+          "p90_symmetric_relative": 1.316406773259368e-05,
+          "max_symmetric_relative": 1.8754607076478338e-05,
+          "pass": true
+        }
+      },
+      "derivatives": {
+        "all_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -355.1416566701704,
+            "predicted": {
+              "CPU": -355.1416566677493,
+              "CUDA": -355.14197981473524
+            },
+            "relative_errors": {
+              "CPU": 6.817208994348e-12,
+              "CUDA": 9.09902470594583e-07
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -355.1416566645571,
+            "predicted": {
+              "CPU": -355.1416566677493,
+              "CUDA": -355.14197981473524
+            },
+            "relative_errors": {
+              "CPU": 8.98856176528937e-12,
+              "CUDA": 9.099182763509608e-07
+            },
+            "pass": true
+          }
+        ],
+        "DNA_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -12.646972896277475,
+            "predicted": {
+              "CPU": -12.646971235535855,
+              "CUDA": -12.646948674330282
+            },
+            "relative_errors": {
+              "CPU": 1.313153459162571e-07,
+              "CUDA": 1.9152367441223935e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -12.64697165154871,
+            "predicted": {
+              "CPU": -12.646971235535855,
+              "CUDA": -12.646948674330282
+            },
+            "relative_errors": {
+              "CPU": 3.2894266518950996e-08,
+              "CUDA": 1.8168158403005802e-06
+            },
+            "pass": true
+          }
+        ],
+        "anchor_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -17.468951708963232,
+            "predicted": {
+              "CPU": -17.468951313903034,
+              "CUDA": -17.469030470942407
+            },
+            "relative_errors": {
+              "CPU": 2.2614991699009256e-08,
+              "CUDA": 4.5086634490748375e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -17.468951412382694,
+            "predicted": {
+              "CPU": -17.468951313903034,
+              "CUDA": -17.469030470942407
+            },
+            "relative_errors": {
+              "CPU": 5.637411064783481e-09,
+              "CUDA": 4.525640953258576e-06
+            },
+            "pass": true
+          }
+        ],
+        "DNA_rotations": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -5.568811757825642,
+            "predicted": {
+              "CPU": -5.568811619504449,
+              "CUDA": -5.568809873068097
+            },
+            "relative_errors": {
+              "CPU": 2.4838547184818585e-08,
+              "CUDA": 3.3844878001860755e-07
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -5.5688116539442944,
+            "predicted": {
+              "CPU": -5.568811619504449,
+              "CUDA": -5.568809873068097
+            },
+            "relative_errors": {
+              "CPU": 6.184415595669309e-09,
+              "CUDA": 3.19794654279585e-07
+            },
+            "pass": true
+          }
+        ]
+      },
+      "native_energy": {
+        "CPU_internal": 68.09702883383288,
+        "CUDA_internal": 33.356079,
+        "relative_error": 0.5101683645934991,
+        "pass": false,
+        "CUDA_output_resolution_per_particle": 1e-06
+      }
+    },
+    "biotin10/stressed": {
+      "parity": {
+        "force_all": {
+          "relative_L2": 6.902227344545472e-05,
+          "p90_symmetric_relative": 0.861774275745258,
+          "max_symmetric_relative": 2.0,
+          "pass": true
+        },
+        "force_DNA": {
+          "relative_L2": 0.00028573036615687955,
+          "p90_symmetric_relative": 1.9995610380597348,
+          "max_symmetric_relative": 2.0,
+          "pass": true
+        },
+        "torque_DNA": {
+          "relative_L2": 0.00027834793674796855,
+          "p90_symmetric_relative": 1.9999999991766801,
+          "max_symmetric_relative": 2.0,
+          "pass": true
+        }
+      },
+      "derivatives": {
+        "all_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -84.03856871495918,
+            "predicted": {
+              "CPU": -84.0385645642723,
+              "CUDA": -84.03838807070221
+            },
+            "relative_errors": {
+              "CPU": 4.9390261404230944e-08,
+              "CUDA": 2.1495399045208023e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -84.038565602782,
+            "predicted": {
+              "CPU": -84.0385645642723,
+              "CUDA": -84.03838807070221
+            },
+            "relative_errors": {
+              "CPU": 1.2357537123475618e-08,
+              "CUDA": 2.1125072580143135e-06
+            },
+            "pass": true
+          }
+        ],
+        "DNA_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -0.2696222661313641,
+            "predicted": {
+              "CPU": -0.26962217844390307,
+              "CUDA": -0.2696158362940519
+            },
+            "relative_errors": {
+              "CPU": 3.2522336627711835e-07,
+              "CUDA": 2.3847575367018566e-05
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -0.2696222004772153,
+            "predicted": {
+              "CPU": -0.26962217844390307,
+              "CUDA": -0.2696158362940519
+            },
+            "relative_errors": {
+              "CPU": 8.171920632379823e-08,
+              "CUDA": 2.360407693485767e-05
+            },
+            "pass": true
+          }
+        ],
+        "anchor_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -77.72509082151657,
+            "predicted": {
+              "CPU": -77.72508563760277,
+              "CUDA": -77.72491142593182
+            },
+            "relative_errors": {
+              "CPU": 6.66955000600743e-08,
+              "CUDA": 2.3080781618348614e-06
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -77.72508693307145,
+            "predicted": {
+              "CPU": -77.72508563760277,
+              "CUDA": -77.72491142593182
+            },
+            "relative_errors": {
+              "CPU": 1.6667317197394846e-08,
+              "CUDA": 2.258050091104491e-06
+            },
+            "pass": true
+          }
+        ],
+        "DNA_rotations": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -0.1332714246160549,
+            "predicted": {
+              "CPU": -0.1332714153610594,
+              "CUDA": -0.13326831991510352
+            },
+            "relative_errors": {
+              "CPU": 6.944471043860845e-08,
+              "CUDA": 2.3296073860757895e-05
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -0.13327141758168182,
+            "predicted": {
+              "CPU": -0.1332714153610594,
+              "CUDA": -0.13326831991510352
+            },
+            "relative_errors": {
+              "CPU": 1.6662405551563666e-08,
+              "CUDA": 2.324329278182596e-05
+            },
+            "pass": true
+          }
+        ]
+      },
+      "native_energy": {
+        "CPU_internal": 0.07430028999958438,
+        "CUDA_internal": 0.025551,
+        "relative_error": 0.0009861889059634321,
+        "pass": false,
+        "CUDA_output_resolution_per_particle": 1e-06
+      }
+    },
+    "biotin10/energy_excursion": {
+      "parity": {
+        "force_all": {
+          "relative_L2": 0.2854445520920007,
+          "p90_symmetric_relative": 3.842744813598202e-06,
+          "max_symmetric_relative": 0.6779651339283759,
+          "pass": false
+        },
+        "force_DNA": {
+          "relative_L2": 1.0131446461634637,
+          "p90_symmetric_relative": 0.018380084335139005,
+          "max_symmetric_relative": 0.6779651339283759,
+          "pass": false
+        },
+        "torque_DNA": {
+          "relative_L2": 0.9733001350367916,
+          "p90_symmetric_relative": 0.019444309234441286,
+          "max_symmetric_relative": 0.6615143643643454,
+          "pass": false
+        }
+      },
+      "derivatives": {
+        "all_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -365.28385498989735,
+            "predicted": {
+              "CPU": -365.28383539731146,
+              "CUDA": -395.4184523737312
+            },
+            "relative_errors": {
+              "CPU": 5.3636605118153885e-08,
+              "CUDA": 0.07620938578595224
+            },
+            "pass": false
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -365.2838402973657,
+            "predicted": {
+              "CPU": -365.28383539731146,
+              "CUDA": -395.4184523737312
+            },
+            "relative_errors": {
+              "CPU": 1.3414374548754631e-08,
+              "CUDA": 0.07620942294287182
+            },
+            "pass": false
+          }
+        ],
+        "DNA_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -72.77252216439933,
+            "predicted": {
+              "CPU": -72.7722450974513,
+              "CUDA": -145.59839132105884
+            },
+            "relative_errors": {
+              "CPU": 3.8073017093450665e-06,
+              "CUDA": 0.5001831991129028
+            },
+            "pass": false
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -72.77231436418674,
+            "predicted": {
+              "CPU": -72.7722450974513,
+              "CUDA": -145.59839132105884
+            },
+            "relative_errors": {
+              "CPU": 9.51828123680727e-07,
+              "CUDA": 0.5001846263279338
+            },
+            "pass": false
+          }
+        ],
+        "anchor_positions": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -22.502884187574068,
+            "predicted": {
+              "CPU": -22.5028844075918,
+              "CUDA": -22.502873113267974
+            },
+            "relative_errors": {
+              "CPU": 9.77731245684472e-09,
+              "CUDA": 4.921282979577805e-07
+            },
+            "pass": true
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -22.50288435220682,
+            "predicted": {
+              "CPU": -22.5028844075918,
+              "CUDA": -22.502873113267974
+            },
+            "relative_errors": {
+              "CPU": 2.4612391529231548e-09,
+              "CUDA": 4.994443676792619e-07
+            },
+            "pass": true
+          }
+        ],
+        "DNA_rotations": [
+          {
+            "h": 0.0001,
+            "energy_derivative": -27.13340302811673,
+            "predicted": {
+              "CPU": -27.13339231957841,
+              "CUDA": -53.12858707583639
+            },
+            "relative_errors": {
+              "CPU": 3.9466256081660793e-07,
+              "CUDA": 0.4892880740572645
+            },
+            "pass": false
+          },
+          {
+            "h": 5e-05,
+            "energy_derivative": -27.13339499720746,
+            "predicted": {
+              "CPU": -27.13339231957841,
+              "CUDA": -53.12858707583639
+            },
+            "relative_errors": {
+              "CPU": 9.868389311741857e-08,
+              "CUDA": 0.4892882252171148
+            },
+            "pass": false
+          }
+        ]
+      },
+      "native_energy": {
+        "CPU_internal": 67.0760974310801,
+        "CUDA_internal": 32.696763000000004,
+        "relative_error": 0.5125422579392676,
+        "pass": false,
+        "CUDA_output_resolution_per_particle": 1e-06
+      }
+    }
+  },
+  "thermometry": {
+    "method": "Nine independent seed means/moments, Student t, Holm FWER .05 over all tests; second half retained",
+    "checks": {
+      "ads5/CPU/dna_rotational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 2.385537956279742,
+        "mean_temperature_K": 298.1922445349677,
+        "rms_about_expected_temperature_K": 285.2005426176281,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.017537956279741973,
+          "ci95_delta": [
+            -0.04466996174759428,
+            0.07974587430707822
+          ],
+          "p": 0.5338347368341121,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": -0.016737734641628005,
+          "ci95_delta": [
+            -0.054715221845365467,
+            0.021239752562109457
+          ],
+          "p": 0.3392248765124844,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.030673399590740964,
+          "ci95_delta": [
+            -0.05938750811475599,
+            0.12073430729623791
+          ],
+          "p": 0.45485345266751104,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "ads5/CPU/dna_translational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 2.9779460721161226,
+        "mean_temperature_K": 372.24325901451533,
+        "rms_about_expected_temperature_K": 557.0360756136531,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.6099460721161227,
+          "ci95_delta": [
+            0.3629072197020091,
+            0.8569849245302363
+          ],
+          "p": 0.00045775142041929665,
+          "holm_p": 0.022429819600545537,
+          "flag": true
+        },
+        "second_moment_about_expected": {
+          "delta": 0.5937951720934919,
+          "ci95_delta": [
+            0.22409187815556836,
+            0.9634984660314154
+          ],
+          "p": 0.006009974946830867,
+          "holm_p": 0.270448872607389,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.22211608674569364,
+          "ci95_delta": [
+            0.03976781450347319,
+            0.4044643589879141
+          ],
+          "p": 0.02288131745778163,
+          "holm_p": 0.9610153332268285,
+          "flag": false
+        }
+      },
+      "ads5/CPU/kinetic_per_particle": {
+        "replicas": 9,
+        "expected_energy": 76.368,
+        "observed_mean": 76.34644023904383,
+        "mean_temperature_K": 295.9164350350536,
+        "rms_about_expected_temperature_K": 297.77850776194293,
+        "samples_per_replica": [
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251
+        ],
+        "mean": {
+          "delta": -0.02155976095616552,
+          "ci95_delta": [
+            -0.27580467963402683,
+            0.2326851577216958
+          ],
+          "p": 0.8498399661404562,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": 0.09081941290393836,
+          "ci95_delta": [
+            -0.5028235922330286,
+            0.6844624180409054
+          ],
+          "p": 0.7333622429024814,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.011842905710486839,
+          "ci95_delta": [
+            -0.28700618218223345,
+            0.31069199360320715
+          ],
+          "p": 0.9294348758089316,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "ads5/CUDA/dna_rotational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 2.3846782187583813,
+        "mean_temperature_K": 298.0847773447977,
+        "rms_about_expected_temperature_K": 285.22970865139206,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.01667821875838138,
+          "ci95_delta": [
+            -0.04554674019364209,
+            0.07890317771040485
+          ],
+          "p": 0.5537066034293462,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": -0.016693368807045278,
+          "ci95_delta": [
+            -0.053998374479536954,
+            0.020611636865446398
+          ],
+          "p": 0.3323038586134138,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.030439375058279525,
+          "ci95_delta": [
+            -0.059658512875274836,
+            0.12053726299183389
+          ],
+          "p": 0.45835723656047206,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "ads5/CUDA/dna_translational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 3.0988098486299602,
+        "mean_temperature_K": 387.35123107874506,
+        "rms_about_expected_temperature_K": 618.3031552675983,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.7308098486299603,
+          "ci95_delta": [
+            0.4465816111085174,
+            1.0150380861514032
+          ],
+          "p": 0.00035004686804614935,
+          "holm_p": 0.01750234340230747,
+          "flag": true
+        },
+        "second_moment_about_expected": {
+          "delta": 0.7858207781703144,
+          "ci95_delta": [
+            0.29160626289169805,
+            1.2800352934489307
+          ],
+          "p": 0.0063401603303467405,
+          "holm_p": 0.2735731332785821,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.12554372314897355,
+          "ci95_delta": [
+            -0.04595136336881822,
+            0.2970388096667653
+          ],
+          "p": 0.12986552913587285,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "ads5/CUDA/kinetic_per_particle": {
+        "replicas": 9,
+        "expected_energy": 76.368,
+        "observed_mean": 76.34426029216468,
+        "mean_temperature_K": 295.9079856285453,
+        "rms_about_expected_temperature_K": 297.61180422417465,
+        "samples_per_replica": [
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251
+        ],
+        "mean": {
+          "delta": -0.023739707835318313,
+          "ci95_delta": [
+            -0.27197654257703574,
+            0.2244971269063991
+          ],
+          "p": 0.830981758502026,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": 0.08228359716688605,
+          "ci95_delta": [
+            -0.5275529599673132,
+            0.6921201543010853
+          ],
+          "p": 0.763645092653297,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.01673029216466975,
+          "ci95_delta": [
+            -0.26262167655532614,
+            0.29608226088466566
+          ],
+          "p": 0.8935697386328337,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "ads10/CPU/dna_rotational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 2.3852082279955558,
+        "mean_temperature_K": 298.1510284994445,
+        "rms_about_expected_temperature_K": 285.73949036881083,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.01720822799555588,
+          "ci95_delta": [
+            -0.04486094169190425,
+            0.079277397683016
+          ],
+          "p": 0.5404829672826611,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": -0.015917183050059375,
+          "ci95_delta": [
+            -0.05359832769793177,
+            0.02176396159781302
+          ],
+          "p": 0.3585379391063624,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.030740973448767434,
+          "ci95_delta": [
+            -0.059268467141931847,
+            0.12075041403946671
+          ],
+          "p": 0.4536473911935963,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "ads10/CPU/dna_translational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 3.1041403475717377,
+        "mean_temperature_K": 388.01754344646724,
+        "rms_about_expected_temperature_K": 597.4140526679836,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.7361403475717379,
+          "ci95_delta": [
+            0.52199630211125,
+            0.9502843930322257
+          ],
+          "p": 4.663967074289616e-05,
+          "holm_p": 0.0024252628786306,
+          "flag": true
+        },
+        "second_moment_about_expected": {
+          "delta": 0.7181001342004915,
+          "ci95_delta": [
+            0.3303151856717145,
+            1.1058850827292686
+          ],
+          "p": 0.002723224380554925,
+          "holm_p": 0.12526832150552655,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.1593563933393464,
+          "ci95_delta": [
+            -0.04353944489709288,
+            0.3622522315757857
+          ],
+          "p": 0.10769960084294225,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "ads10/CPU/kinetic_per_particle": {
+        "replicas": 9,
+        "expected_energy": 76.368,
+        "observed_mean": 76.31350951748561,
+        "mean_temperature_K": 295.7887965794016,
+        "rms_about_expected_temperature_K": 297.87467984313116,
+        "samples_per_replica": [
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251
+        ],
+        "mean": {
+          "delta": -0.05449048251438171,
+          "ci95_delta": [
+            -0.30761769696160474,
+            0.19863673193284132
+          ],
+          "p": 0.6329548413931892,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": 0.09574594068171738,
+          "ci95_delta": [
+            -0.5389565323741135,
+            0.7304484137375482
+          ],
+          "p": 0.7369176098800359,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.0061539619300564,
+          "ci95_delta": [
+            -0.2868571367907182,
+            0.29916506065083104
+          ],
+          "p": 0.9625593889033779,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "ads10/CUDA/dna_rotational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 2.3854838972435277,
+        "mean_temperature_K": 298.18548715544097,
+        "rms_about_expected_temperature_K": 285.9065143934454,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.017483897243527835,
+          "ci95_delta": [
+            -0.04526828553905997,
+            0.08023608002611564
+          ],
+          "p": 0.5385248677111484,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": -0.01566257340637503,
+          "ci95_delta": [
+            -0.054047603489233875,
+            0.022722456676483815
+          ],
+          "p": 0.37427609520374894,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.0315905022821692,
+          "ci95_delta": [
+            -0.05934549352475557,
+            0.12252649808909397
+          ],
+          "p": 0.44621789157159814,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "ads10/CUDA/dna_translational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 3.0259733962558917,
+        "mean_temperature_K": 378.2466745319865,
+        "rms_about_expected_temperature_K": 585.2655345912339,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.6579733962558918,
+          "ci95_delta": [
+            0.3855240812741486,
+            0.930422711237635
+          ],
+          "p": 0.0005290206644008921,
+          "holm_p": 0.02539299189124282,
+          "flag": true
+        },
+        "second_moment_about_expected": {
+          "delta": 0.6797859892809672,
+          "ci95_delta": [
+            0.2538310702887736,
+            1.1057409082731608
+          ],
+          "p": 0.006217571210876866,
+          "holm_p": 0.2735731332785821,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.1969011634172299,
+          "ci95_delta": [
+            -0.005752203713830728,
+            0.39955453054829054
+          ],
+          "p": 0.05537794833647892,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "ads10/CUDA/kinetic_per_particle": {
+        "replicas": 9,
+        "expected_energy": 76.368,
+        "observed_mean": 76.34788247011953,
+        "mean_temperature_K": 295.9220250779827,
+        "rms_about_expected_temperature_K": 297.02750472699876,
+        "samples_per_replica": [
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251
+        ],
+        "mean": {
+          "delta": -0.020117529880465668,
+          "ci95_delta": [
+            -0.2657734298023741,
+            0.22553837004144278
+          ],
+          "p": 0.8549164470765395,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": 0.052403116533863425,
+          "ci95_delta": [
+            -0.5570793405475585,
+            0.6618855736152853
+          ],
+          "p": 0.8477798793555279,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.019558025675078423,
+          "ci95_delta": [
+            -0.26837438230927513,
+            0.30749043365943196
+          ],
+          "p": 0.8794116903574951,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "biotin10/CPU/dna_rotational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 2.3768567183521756,
+        "mean_temperature_K": 297.10708979402193,
+        "rms_about_expected_temperature_K": 298.62851496776096,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.008856718352175719,
+          "ci95_delta": [
+            -0.05934244019519409,
+            0.07705587689954553
+          ],
+          "p": 0.772213999875447,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": 0.004167973204934006,
+          "ci95_delta": [
+            -0.03412881803781424,
+            0.042464764447682254
+          ],
+          "p": 0.8081628184703317,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.001966323235261481,
+          "ci95_delta": [
+            -0.04909891022081243,
+            0.0530315566913354
+          ],
+          "p": 0.9314272977392003,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "biotin10/CPU/dna_translational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 2.9842470949948936,
+        "mean_temperature_K": 373.0308868743617,
+        "rms_about_expected_temperature_K": 526.5788774385985,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.6162470949948937,
+          "ci95_delta": [
+            0.4961268038646457,
+            0.7363673861251417
+          ],
+          "p": 2.3893626574805416e-06,
+          "holm_p": 0.00012902558350394924,
+          "flag": true
+        },
+        "second_moment_about_expected": {
+          "delta": 0.5057848377719857,
+          "ci95_delta": [
+            0.3104664955542967,
+            0.7011031799896748
+          ],
+          "p": 0.00033384918877544075,
+          "holm_p": 0.01702630862754748,
+          "flag": true
+        },
+        "first_second_half_shift": {
+          "delta": 0.13622164188262154,
+          "ci95_delta": [
+            -0.09911042290963559,
+            0.37155370667487864
+          ],
+          "p": 0.2186704358142177,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "biotin10/CPU/kinetic_per_particle": {
+        "replicas": 9,
+        "expected_energy": 76.516,
+        "observed_mean": 76.47280921779549,
+        "mean_temperature_K": 295.8329176703887,
+        "rms_about_expected_temperature_K": 290.1380950793946,
+        "samples_per_replica": [
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251
+        ],
+        "mean": {
+          "delta": -0.043190782204518996,
+          "ci95_delta": [
+            -0.24265330074576316,
+            0.15627173633672517
+          ],
+          "p": 0.6309856291006362,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": -0.2960588250288332,
+          "ci95_delta": [
+            -0.8464774475477841,
+            0.2543597974901177
+          ],
+          "p": 0.24998815251534068,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": -0.050965959537847993,
+          "ci95_delta": [
+            -0.3438519857448472,
+            0.24192006666915122
+          ],
+          "p": 0.6987230522312837,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "biotin10/CUDA/dna_rotational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 2.377290200544277,
+        "mean_temperature_K": 297.1612750680346,
+        "rms_about_expected_temperature_K": 298.828131835231,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.009290200544277205,
+          "ci95_delta": [
+            -0.05945813535769194,
+            0.07803853644624635
+          ],
+          "p": 0.763296807056925,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": 0.004486006336357873,
+          "ci95_delta": [
+            -0.0339236124771926,
+            0.04289562514990834
+          ],
+          "p": 0.7944941783424958,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.0026052765905360234,
+          "ci95_delta": [
+            -0.04810854588915254,
+            0.05331909907022459
+          ],
+          "p": 0.9086203127462059,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "biotin10/CUDA/dna_translational_per_particle": {
+        "replicas": 9,
+        "expected_energy": 2.368,
+        "observed_mean": 3.071807132081217,
+        "mean_temperature_K": 383.9758915101521,
+        "rms_about_expected_temperature_K": 576.1949464889389,
+        "samples_per_replica": [
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50,
+          50
+        ],
+        "mean": {
+          "delta": 0.7038071320812169,
+          "ci95_delta": [
+            0.5434323204618744,
+            0.8641819437005595
+          ],
+          "p": 7.764769744021754e-06,
+          "holm_p": 0.000411532796433153,
+          "flag": true
+        },
+        "second_moment_about_expected": {
+          "delta": 0.6516923102917096,
+          "ci95_delta": [
+            0.3430912121412937,
+            0.9602934084421255
+          ],
+          "p": 0.0012403907858414501,
+          "holm_p": 0.05829836693454816,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": 0.19681877393986877,
+          "ci95_delta": [
+            -0.01423700845517678,
+            0.4078745563349143
+          ],
+          "p": 0.06373059454981783,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      },
+      "biotin10/CUDA/kinetic_per_particle": {
+        "replicas": 9,
+        "expected_energy": 76.516,
+        "observed_mean": 76.47729005179283,
+        "mean_temperature_K": 295.8502516510361,
+        "rms_about_expected_temperature_K": 289.5310906743799,
+        "samples_per_replica": [
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251,
+          251
+        ],
+        "mean": {
+          "delta": -0.03870994820717044,
+          "ci95_delta": [
+            -0.23874802523261637,
+            0.1613281288182755
+          ],
+          "p": 0.6672539877287946,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "second_moment_about_expected": {
+          "delta": -0.3263775790852286,
+          "ci95_delta": [
+            -0.8847088891170521,
+            0.231953730946595
+          ],
+          "p": 0.2145831090649429,
+          "holm_p": 1.0,
+          "flag": false
+        },
+        "first_second_half_shift": {
+          "delta": -0.050859857540506447,
+          "ci95_delta": [
+            -0.3458413928518808,
+            0.24412167777086793
+          ],
+          "p": 0.7013271891379104,
+          "holm_p": 1.0,
+          "flag": false
+        }
+      }
+    },
+    "flagged": [
+      "ads5/CPU/dna_translational_per_particle/mean",
+      "ads5/CUDA/dna_translational_per_particle/mean",
+      "ads10/CPU/dna_translational_per_particle/mean",
+      "ads10/CUDA/dna_translational_per_particle/mean",
+      "biotin10/CPU/dna_translational_per_particle/mean",
+      "biotin10/CPU/dna_translational_per_particle/second_moment_about_expected",
+      "biotin10/CUDA/dna_translational_per_particle/mean"
+    ]
+  },
+  "gas_distribution": {
+    "0/CPU/translation": {
+      "samples": 200,
+      "seeds": [
+        "CPU_202",
+        "CPU_303"
+      ],
+      "mean_temperature_K": 289.4309637920343,
+      "width_temperature_K": 286.70547333908524,
+      "KS_statistic": 0.0733205302769745,
+      "p": 0.2214288143441382,
+      "protein_rotation_max": 0.0,
+      "holm_p": 1,
+      "flag": false
+    },
+    "0/CPU/rotation": {
+      "samples": 200,
+      "seeds": [
+        "CPU_202",
+        "CPU_303"
+      ],
+      "mean_temperature_K": 298.1347348579144,
+      "width_temperature_K": 312.2877305180966,
+      "KS_statistic": 0.035314615341240474,
+      "p": 0.9567751905427818,
+      "protein_rotation_max": 0.0,
+      "holm_p": 1,
+      "flag": false
+    },
+    "0/CUDA/translation": {
+      "samples": 200,
+      "seeds": [
+        "CUDA_202",
+        "CUDA_303"
+      ],
+      "mean_temperature_K": 289.43096311269716,
+      "width_temperature_K": 286.70547230348245,
+      "KS_statistic": 0.0733204458382048,
+      "p": 0.221429920522768,
+      "protein_rotation_max": 0.0,
+      "holm_p": 1,
+      "flag": false
+    },
+    "0/CUDA/rotation": {
+      "samples": 200,
+      "seeds": [
+        "CUDA_202",
+        "CUDA_303"
+      ],
+      "mean_temperature_K": 298.1347346450715,
+      "width_temperature_K": 312.2877315302193,
+      "KS_statistic": 0.03531464799323264,
+      "p": 0.9567748591532994,
+      "protein_rotation_max": 0.0,
+      "holm_p": 1,
+      "flag": false
+    },
+    "484/CPU/translation": {
+      "samples": 200,
+      "seeds": [
+        "CPU_202",
+        "CPU_303"
+      ],
+      "mean_temperature_K": 295.90634584003,
+      "width_temperature_K": 285.0109499854298,
+      "KS_statistic": 0.04189015202374946,
+      "p": 0.8593678781816512,
+      "protein_rotation_max": 0.0,
+      "holm_p": 1,
+      "flag": false
+    },
+    "484/CPU/rotation": {
+      "samples": 200,
+      "seeds": [
+        "CPU_202",
+        "CPU_303"
+      ],
+      "mean_temperature_K": 295.60292734802294,
+      "width_temperature_K": 276.37150847698524,
+      "KS_statistic": 0.05475581181242084,
+      "p": 0.5673704313064722,
+      "protein_rotation_max": 0.0,
+      "holm_p": 1,
+      "flag": false
+    },
+    "484/CUDA/translation": {
+      "samples": 200,
+      "seeds": [
+        "CUDA_202",
+        "CUDA_303"
+      ],
+      "mean_temperature_K": 295.906345319723,
+      "width_temperature_K": 285.0109243966555,
+      "KS_statistic": 0.04189059785063931,
+      "p": 0.8593593926995701,
+      "protein_rotation_max": 0.0,
+      "holm_p": 1,
+      "flag": false
+    },
+    "484/CUDA/rotation": {
+      "samples": 200,
+      "seeds": [
+        "CUDA_202",
+        "CUDA_303"
+      ],
+      "mean_temperature_K": 295.6029274509644,
+      "width_temperature_K": 276.37149861291925,
+      "KS_statistic": 0.05475584494769403,
+      "p": 0.5673696576729743,
+      "protein_rotation_max": 0.0,
+      "holm_p": 1,
+      "flag": false
+    },
+    "64/CPU/translation": {
+      "samples": 200,
+      "seeds": [
+        "CPU_202",
+        "CPU_303"
+      ],
+      "mean_temperature_K": 294.7033937182285,
+      "width_temperature_K": 285.6112773340798,
+      "KS_statistic": 0.07010189313110898,
+      "p": 0.26669716004555344,
+      "protein_rotation_max": 0.0,
+      "holm_p": 1,
+      "flag": false
+    },
+    "64/CUDA/translation": {
+      "samples": 200,
+      "seeds": [
+        "CUDA_202",
+        "CUDA_303"
+      ],
+      "mean_temperature_K": 294.70339269751156,
+      "width_temperature_K": 285.6112934879393,
+      "KS_statistic": 0.07010188689805824,
+      "p": 0.2666972538171837,
+      "protein_rotation_max": 0.0,
+      "holm_p": 1,
+      "flag": false
+    }
+  },
+  "weak_coupling": {
+    "CPU": {
+      "initial_K": 18.648,
+      "final_K": 9.323982510992032,
+      "target_K": 9.324,
+      "fractional_change": -0.5000009378489901,
+      "pass_weak_coupling": false,
+      "margin": 0.001
+    },
+    "CUDA": {
+      "initial_K": 18.64800015393754,
+      "final_K": 9.323982411609585,
+      "target_K": 9.324,
+      "fractional_change": -0.5000009473058259,
+      "pass_weak_coupling": false,
+      "margin": 0.001
+    }
+  },
+  "contact_pair": {
+    "force": {
+      "GPU_CPU_norm_ratio": 2.000000670511363,
+      "relative_L2": 1.0000006705113664,
+      "pass": false,
+      "CPU": [
+        [
+          42.5706833271119,
+          -33.95545047534301,
+          -49.70606141223639
+        ],
+        [
+          -42.570683327111894,
+          33.95545047534301,
+          49.70606141223639
+        ]
+      ],
+      "CUDA": [
+        [
+          85.14139957505051,
+          -67.91092451940983,
+          -99.4121466302289
+        ],
+        [
+          -85.14140168891515,
+          67.9109269530187,
+          99.41215361131128
+        ]
+      ]
+    },
+    "torque": {
+      "GPU_CPU_norm_ratio": 2.0000010858466775,
+      "relative_L2": 1.0000010858466784,
+      "pass": false,
+      "CPU": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          -4.301339185275744e-16,
+          18.750602202398206,
+          18.59691010276792
+        ]
+      ],
+      "CUDA": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          7.105427357601002e-08,
+          37.50122581358539,
+          37.19383934175369
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "engine_install": "/home/joshua/.local/share/nadoc/engines/oxdna/8028cf33b3cba12992b771156085fa54879f50cd-adaptive-memory-bussi-v2/bin/oxDNA",
+    "python": "3.12.3",
+    "GPU": "RTX 2080 SUPER",
+    "precision": "mixed",
+    "remote_spend_this_check": 0,
+    "files": {
+      "/home/joshua/.local/share/nadoc/engines/oxdna/current/bin/oxDNA": "b66a26f43a6560dda204aef18599a24e44f6048ba9952b252ddb8df3383c53da",
+      "/home/joshua/NADOC/.venv/lib/python3.12/site-packages/oxpy/core.so": "767044c6110f50fad35bf0073e797f8ee1903a5e5bbc2faa43e555e3aca8bbf7",
+      "/home/joshua/.local/share/nadoc/engines/oxdna/source/src/Backends/Thermostats/BussiThermostat.cpp": "5416b6944d870d5c0422c1bccc77d27ff259345abaeb541779ac72de35790ff1",
+      "/home/joshua/.local/share/nadoc/engines/oxdna/source/src/CUDA/Thermostats/CUDABussiThermostat.cu": "c4229b753996c9f8cadb2b602c9286e85eaf842356d224011e0194afd7b34cfd"
+    },
+    "references": [
+      "https://doi.org/10.1371/journal.pone.0202764",
+      "https://docs.openmm.org/latest/userguide/library/07_testing_validation.html",
+      "https://doi.org/10.1063/1.2408420"
+    ]
+  },
+  "overall_pass": false,
+  "GPU_default_enabled": false,
+  "failed_checks": [
+    {
+      "check": "Protein-DNA excluded-volume CPU/GPU force and torque parity",
+      "status": "FAIL",
+      "evidence": "Minimal two-particle GPU/CPU force norm ratio 2.00000067 and torque ratio 2.00000109. CPU stiffness 1.0; CUDA helper uses EXCL_EPS=2.0."
+    },
+    {
+      "check": "Bussi weak-coupling limit",
+      "status": "FAIL_BOTH_BACKENDS",
+      "evidence": "tau=1e9, one force-free step changes kinetic energy from 18.648 to 9.3239825 (~-50%); required magnitude below 0.1%."
+    },
+    {
+      "check": "Interacting-model DNA translational equipartition",
+      "status": "FAIL_BOTH_BACKENDS",
+      "evidence": "Nine independent replicas per geometry: equivalent mean temperatures 372.24 to 388.02 K at target 296 K; all six mean tests survive Holm correction across 54 moment/stationarity tests."
+    },
+    {
+      "check": "Native CUDA internal-energy diagnostic",
+      "status": "FAIL",
+      "evidence": "All seven same-state checks fail; relaxed structures report approximately 49% of CPU internal energy. Nonbonded edge energy is not accumulated; ANM energy is halved again by backend normalization."
+    },
+    {
+      "check": "NVE quadratic timestep scaling",
+      "status": "FAIL_CRITERION_OR_UNRESOLVED_FLOOR",
+      "evidence": "Two adsorption CPU cases pass. Biotin CPU and all three CUDA cases fail the predeclared exponent interval 1.5..2.5; GPU biotin excursions accompany confirmed force mismatch. Other small-step floors not fully diagnosed."
+    }
+  ],
+  "scope": "Current installed DNANM bussi-v2 engine, local RTX 2080 SUPER mixed precision; reused completed 27 CPU/27 RTX4090 kinetic series and existing force-free controls. No engine changes or extra remote spending."
+}

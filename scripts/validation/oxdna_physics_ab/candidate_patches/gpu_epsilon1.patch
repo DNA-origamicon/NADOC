@@ -1,0 +1,49 @@
+--- a/src/CUDA/Interactions/CUDA_DNANM.cuh
++++ b/src/CUDA/Interactions/CUDA_DNANM.cuh
+@@ -1178,7 +1178,7 @@
+ 
+ }
+ 
+-__forceinline__ __device__ void excluded_volume_quart(const c_number4 &r, c_number4 &F, c_number sigma, c_number rstar, c_number b, c_number rc) {
++__forceinline__ __device__ void excluded_volume_quart(const c_number4 &r, c_number4 &F, c_number sigma, c_number rstar, c_number b, c_number rc, c_number epsilon = EXCL_EPS) {
+     c_number rsqr = CUDA_DOT(r, r);
+ 
+     F.x = F.y = F.z = F.w = (c_number) 0.f;
+@@ -1186,19 +1186,19 @@
+         if(rsqr > SQR(rstar)) {
+             c_number rmod = sqrt(rsqr);
+             c_number rrc = rmod - rc;
+-            c_number fmod = 4.f * EXCL_EPS * b * CUB(rrc) / rmod;
++            c_number fmod = 4.f * epsilon * b * CUB(rrc) / rmod;
+             F.x = r.x * fmod;
+             F.y = r.y * fmod;
+             F.z = r.z * fmod;
+-            F.w = EXCL_EPS * b * SQR(SQR(rrc));
++            F.w = epsilon * b * SQR(SQR(rrc));
+         }
+         else {
+             c_number lj_part = CUB(SQR(sigma)/rsqr);
+-            c_number fmod = 24.f * EXCL_EPS * (lj_part - 2.f*SQR(lj_part)) / rsqr;
++            c_number fmod = 24.f * epsilon * (lj_part - 2.f*SQR(lj_part)) / rsqr;
+             F.x = r.x * fmod;
+             F.y = r.y * fmod;
+             F.z = r.z * fmod;
+-            F.w = 4.f * EXCL_EPS * (SQR(lj_part) - lj_part);
++            F.w = 4.f * epsilon * (SQR(lj_part) - lj_part);
+         }
+     }
+ }
+@@ -1457,11 +1457,11 @@
+         c_number4 rbase = rnuc - nuc_base;
+ 
+         c_number4 Ftmp = make_c_number4(0, 0, 0, 0);
+-        excluded_volume_quart(rback, Ftmp, MD_pro_backbone_sigma, MD_pro_backbone_rstar, MD_pro_backbone_b, MD_pro_backbone_rc);
++        excluded_volume_quart(rback, Ftmp, MD_pro_backbone_sigma, MD_pro_backbone_rstar, MD_pro_backbone_b, MD_pro_backbone_rc, 1.0f);
+         dT += _cross(nuc_back, Ftmp);
+         dF += Ftmp;
+ 
+-        excluded_volume_quart(rbase, Ftmp, MD_pro_base_sigma, MD_pro_base_rstar, MD_pro_base_b, MD_pro_base_rc);
++        excluded_volume_quart(rbase, Ftmp, MD_pro_base_sigma, MD_pro_base_rstar, MD_pro_base_b, MD_pro_base_rc, 1.0f);
+         dT += _cross(nuc_base, Ftmp);
+         dF += Ftmp;
+ 

@@ -30,6 +30,8 @@ store; this table is the authoritative active queue.
 
 | Priority | Item | Current claim |
 |---|---|---|
+| P1 · accepted default, validation open | **TD-OXDNA-PHYSICS** | GPU default explicitly requested on 2026-09-13. Complete convergence, thermal/configurational sampling, and useful-sample performance validation for DNA/proteins and fixed gold/strep/DNA. Resolve protein–DNA contact amplitude with upstream/experimental evidence; retain both native amplitudes meanwhile. |
+| P1 · promote | **TD-STREP-NAMD** | Validate the original streptavidin-on-gold nanoparticle system in NAMD, including gold/coating attachment, biotin–DNA linkage, force-field completeness, stability, and experimentally informed orientation/accessibility. oxDNA smoke tests do not establish NAMD support or validation. |
 | P1 · parked | **TD-30** | Extra-base insert ring piercing. Dedicated topology session only; do not treat the 2026-08-07 suite totals as current without rerunning. |
 | P1 | **TD-07** | Two scripts still call removed `auto_scaffold(design, mode=…)`; retire or port them. |
 | P1 | **TD-08** | Divergent `CELLS_6HB` / `CELLS_18HB` fixture definitions still share misleading names. |

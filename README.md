@@ -4,6 +4,9 @@ A research-grade DNA origami design tool built for precision, extensibility, and
 scientific rigour.  Every design decision is grounded in peer-reviewed literature
 and validated through a systematic experiment pipeline.
 
+**Explore the [feature list](FEATURES.md)** — a compact, grouped inventory of
+design tools, assemblies, simulations, visualization, and more.
+
 ## Getting Started
 
 **Never used a terminal before?** Read [INSTALL.md](INSTALL.md) — a click-by-click

@@ -1,0 +1,405 @@
+{
+  "pass": false,
+  "deterministic_pass": true,
+  "stochastic_equivalence_pass": false,
+  "thermometry_pass": true,
+  "groups": {
+    "ads5": {
+      "replicas": 9,
+      "metrics": {
+        "anchor_rms_nm": {
+          "CPU_mean": 0.11050467987546994,
+          "CUDA_mean": 0.11117128773502157,
+          "difference": 0.0006666078595516332,
+          "paired_95ci": [
+            -0.006597061806160987,
+            0.007930277525264253
+          ],
+          "margin": 0.2,
+          "equivalence_pass": true
+        },
+        "tether_distance_nm": {
+          "CPU_mean": 2.130587435132574,
+          "CUDA_mean": 2.1617412041072424,
+          "difference": 0.031153768974667557,
+          "paired_95ci": [
+            -0.012738038924937346,
+            0.07504557687427246
+          ],
+          "margin": 0.25,
+          "equivalence_pass": true
+        },
+        "anm_rms_extension_nm": {
+          "CPU_mean": 0.011966491305060525,
+          "CUDA_mean": 0.011941176252936753,
+          "difference": -2.5315052123772025e-05,
+          "paired_95ci": [
+            -5.576276048570037e-05,
+            5.132656238156326e-06
+          ],
+          "margin": 0.05,
+          "equivalence_pass": true
+        },
+        "protein_rg_nm": {
+          "CPU_mean": 2.16739218766344,
+          "CUDA_mean": 2.1673784040337525,
+          "difference": -1.378362968730408e-05,
+          "paired_95ci": [
+            -4.452939943574687e-05,
+            1.6962140061138714e-05
+          ],
+          "margin": 0.1,
+          "equivalence_pass": true
+        },
+        "dna_tip_radius_nm": {
+          "CPU_mean": 8.897926393453837,
+          "CUDA_mean": 8.95309643061559,
+          "difference": 0.0551700371617513,
+          "paired_95ci": [
+            -0.5182529182129849,
+            0.6285929925364875
+          ],
+          "margin": 0.5,
+          "equivalence_pass": false
+        },
+        "potential_per_particle": {
+          "CPU_mean": 0.14173129252605898,
+          "CUDA_mean": 0.14136822089155024,
+          "difference": -0.00036307163450875605,
+          "paired_95ci": [
+            -0.001992089420281073,
+            0.001265946151263561
+          ],
+          "margin": 0.05,
+          "equivalence_pass": true
+        },
+        "kinetic_per_particle": {
+          "CPU_mean": 0.15268106121091152,
+          "CUDA_mean": 0.1526718236859614,
+          "difference": -9.237524950103352e-06,
+          "paired_95ci": [
+            -4.052355137277468e-05,
+            2.2048501472567976e-05
+          ],
+          "margin": 0.03,
+          "equivalence_pass": true
+        },
+        "dna_rotational_per_particle": {
+          "CPU_mean": 0.14909612226748387,
+          "CUDA_mean": 0.14904238867239883,
+          "difference": -5.3733595085046305e-05,
+          "paired_95ci": [
+            -0.00011504086505892332,
+            7.573674888830703e-06
+          ],
+          "margin": 0.03,
+          "equivalence_pass": true
+        },
+        "dna_translational_per_particle": {
+          "CPU_mean": 0.18612162950725766,
+          "CUDA_mean": 0.19367561553937251,
+          "difference": 0.007553986032114867,
+          "paired_95ci": [
+            -0.016038707623745208,
+            0.031146679687974944
+          ],
+          "margin": 0.03,
+          "equivalence_pass": false
+        }
+      },
+      "thermometry": {
+        "CPU": {
+          "DNA_rotational_expected": 0.148,
+          "DNA_rotational_mean": 0.14909612226748387,
+          "DNA_rotational_95ci": [
+            0.14520812739077535,
+            0.15298411714419238
+          ],
+          "protein_rotational_max": 0.0,
+          "pass": true
+        },
+        "CUDA": {
+          "DNA_rotational_expected": 0.148,
+          "DNA_rotational_mean": 0.14904238867239883,
+          "DNA_rotational_95ci": [
+            0.14515332873789735,
+            0.1529314486069003
+          ],
+          "protein_rotational_max": 0.0,
+          "pass": true
+        }
+      }
+    },
+    "ads10": {
+      "replicas": 9,
+      "metrics": {
+        "anchor_rms_nm": {
+          "CPU_mean": 0.10522921302603307,
+          "CUDA_mean": 0.11310402368870068,
+          "difference": 0.007874810662667623,
+          "paired_95ci": [
+            0.0011781512038719051,
+            0.014571470121463342
+          ],
+          "margin": 0.2,
+          "equivalence_pass": true
+        },
+        "tether_distance_nm": {
+          "CPU_mean": 2.117761812377952,
+          "CUDA_mean": 2.1359944231253425,
+          "difference": 0.018232610747390784,
+          "paired_95ci": [
+            -0.02164287340367043,
+            0.058108094898452
+          ],
+          "margin": 0.25,
+          "equivalence_pass": true
+        },
+        "anm_rms_extension_nm": {
+          "CPU_mean": 0.011938531610057732,
+          "CUDA_mean": 0.011958470803844629,
+          "difference": 1.9939193786898055e-05,
+          "paired_95ci": [
+            -4.158095628482939e-06,
+            4.403648320227905e-05
+          ],
+          "margin": 0.05,
+          "equivalence_pass": true
+        },
+        "protein_rg_nm": {
+          "CPU_mean": 2.1673866316094514,
+          "CUDA_mean": 2.167395572497318,
+          "difference": 8.940887866860771e-06,
+          "paired_95ci": [
+            -1.0168592838610446e-05,
+            2.8050368572331988e-05
+          ],
+          "margin": 0.1,
+          "equivalence_pass": true
+        },
+        "dna_tip_radius_nm": {
+          "CPU_mean": 11.251804357776612,
+          "CUDA_mean": 11.118823562188327,
+          "difference": -0.13298079558828432,
+          "paired_95ci": [
+            -2.049179256301479,
+            1.7832176651249103
+          ],
+          "margin": 0.5,
+          "equivalence_pass": false
+        },
+        "potential_per_particle": {
+          "CPU_mean": 0.14048853670436903,
+          "CUDA_mean": 0.14156241139942335,
+          "difference": 0.0010738746950543375,
+          "paired_95ci": [
+            -0.0004913980198887002,
+            0.002639147409997375
+          ],
+          "margin": 0.05,
+          "equivalence_pass": true
+        },
+        "kinetic_per_particle": {
+          "CPU_mean": 0.1526208773563983,
+          "CUDA_mean": 0.15267624595253937,
+          "difference": 5.536859614105327e-05,
+          "paired_95ci": [
+            1.931325986210152e-06,
+            0.00010880586629589639
+          ],
+          "margin": 0.03,
+          "equivalence_pass": true
+        },
+        "dna_rotational_per_particle": {
+          "CPU_mean": 0.14907551424972224,
+          "CUDA_mean": 0.14909274357772048,
+          "difference": 1.722932799825025e-05,
+          "paired_95ci": [
+            -5.727127435168644e-05,
+            9.172993034818695e-05
+          ],
+          "margin": 0.03,
+          "equivalence_pass": true
+        },
+        "dna_translational_per_particle": {
+          "CPU_mean": 0.1940087717232336,
+          "CUDA_mean": 0.18912333726599323,
+          "difference": -0.004885434457240366,
+          "paired_95ci": [
+            -0.02357254094961945,
+            0.013801672035138714
+          ],
+          "margin": 0.03,
+          "equivalence_pass": true
+        }
+      },
+      "thermometry": {
+        "CPU": {
+          "DNA_rotational_expected": 0.148,
+          "DNA_rotational_mean": 0.14907551424972224,
+          "DNA_rotational_95ci": [
+            0.14519619114425597,
+            0.1529548373551885
+          ],
+          "protein_rotational_max": 0.0,
+          "pass": true
+        },
+        "CUDA": {
+          "DNA_rotational_expected": 0.148,
+          "DNA_rotational_mean": 0.14909274357772048,
+          "DNA_rotational_95ci": [
+            0.14517073215380874,
+            0.15301475500163222
+          ],
+          "protein_rotational_max": 0.0,
+          "pass": true
+        }
+      }
+    },
+    "biotin10": {
+      "replicas": 9,
+      "metrics": {
+        "anchor_rms_nm": {
+          "CPU_mean": 0.11193768532220624,
+          "CUDA_mean": 0.11424125747675243,
+          "difference": 0.0023035721545461574,
+          "paired_95ci": [
+            -0.004961920686213503,
+            0.009569064995305819
+          ],
+          "margin": 0.2,
+          "equivalence_pass": true
+        },
+        "tether_distance_nm": {
+          "CPU_mean": 2.146968034627038,
+          "CUDA_mean": 2.1258157463986387,
+          "difference": -0.021152288228398566,
+          "paired_95ci": [
+            -0.04953124561474366,
+            0.0072266691579465255
+          ],
+          "margin": 0.25,
+          "equivalence_pass": true
+        },
+        "anm_rms_extension_nm": {
+          "CPU_mean": 0.011927137527801656,
+          "CUDA_mean": 0.011924076601163085,
+          "difference": -3.0609266385706047e-06,
+          "paired_95ci": [
+            -3.165175596122694e-05,
+            2.552990268408573e-05
+          ],
+          "margin": 0.05,
+          "equivalence_pass": true
+        },
+        "protein_rg_nm": {
+          "CPU_mean": 2.1662940716022034,
+          "CUDA_mean": 2.16630122890366,
+          "difference": 7.157301456641976e-06,
+          "paired_95ci": [
+            -1.7165424424612974e-05,
+            3.1480027337896924e-05
+          ],
+          "margin": 0.1,
+          "equivalence_pass": true
+        },
+        "dna_tip_radius_nm": {
+          "CPU_mean": 13.472721963600879,
+          "CUDA_mean": 12.501300507420602,
+          "difference": -0.9714214561802746,
+          "paired_95ci": [
+            -2.4160188042098416,
+            0.47317589184929243
+          ],
+          "margin": 0.5,
+          "equivalence_pass": false
+        },
+        "potential_per_particle": {
+          "CPU_mean": 0.1405804515413617,
+          "CUDA_mean": 0.1394201780882679,
+          "difference": -0.0011602734530938112,
+          "paired_95ci": [
+            -0.003660661305972695,
+            0.0013401143997850728
+          ],
+          "margin": 0.05,
+          "equivalence_pass": true
+        },
+        "kinetic_per_particle": {
+          "CPU_mean": 0.15269110046573522,
+          "CUDA_mean": 0.15269993856730982,
+          "difference": 8.838101574627006e-06,
+          "paired_95ci": [
+            -3.0417176471977727e-05,
+            4.8093379621231736e-05
+          ],
+          "margin": 0.03,
+          "equivalence_pass": true
+        },
+        "dna_rotational_per_particle": {
+          "CPU_mean": 0.14855354489701098,
+          "CUDA_mean": 0.14858063753401732,
+          "difference": 2.70926370063244e-05,
+          "paired_95ci": [
+            -6.177282751975757e-05,
+            0.00011595810153240637
+          ],
+          "margin": 0.03,
+          "equivalence_pass": true
+        },
+        "dna_translational_per_particle": {
+          "CPU_mean": 0.18651544343718085,
+          "CUDA_mean": 0.19198794575507608,
+          "difference": 0.005472502317895232,
+          "paired_95ci": [
+            -0.007814625775929927,
+            0.01875963041172039
+          ],
+          "margin": 0.03,
+          "equivalence_pass": true
+        }
+      },
+      "thermometry": {
+        "CPU": {
+          "DNA_rotational_expected": 0.148,
+          "DNA_rotational_mean": 0.14855354489701098,
+          "DNA_rotational_95ci": [
+            0.14429109748780036,
+            0.1528159923062216
+          ],
+          "protein_rotational_max": 0.0,
+          "pass": true
+        },
+        "CUDA": {
+          "DNA_rotational_expected": 0.148,
+          "DNA_rotational_mean": 0.14858063753401732,
+          "DNA_rotational_95ci": [
+            0.14428386654014425,
+            0.1528774085278904
+          ],
+          "protein_rotational_max": 0.0,
+          "pass": true
+        }
+      }
+    }
+  },
+  "cpu_reference_compatibility": {
+    "pass": true,
+    "CPU_source_unchanged": true,
+    "changed_source_files": [
+      "oxdna_source/src/CUDA/Backends/MD_CUDABackend.cu"
+    ],
+    "CPU_source_archive_sha256": "8b1f7b864cf571bf83219c764f8a8641b651eea218d5b44717ec3a2a4bfaa013",
+    "GPU_source_archive_sha256": "6e56ca75fdcebd17967f828fe09b09ef0c98011c2f53a09c610373441b42e0d3"
+  },
+  "protocol_stage_pairs": 108,
+  "CPU_cases": 27,
+  "CUDA_cases": 27,
+  "CPU_median_seconds": 3218.519151210785,
+  "CUDA_median_seconds": 114.99998116493225,
+  "cumulative_cost_with_reserve_usd": 2.557207901946703,
+  "pod": "7hoq4n8u33y77q",
+  "pod_terminated": true,
+  "default_enabled": false,
+  "relaxed_force_max_relative": 2.0934762322197666e-05
+}

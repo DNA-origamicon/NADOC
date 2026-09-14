@@ -1,0 +1,7 @@
+{
+  "variant": "baseline",
+  "build_seconds": 0.5170262770006957,
+  "binary_sha256": "10adaddb2e33a57f1797fc01a4aeb95196d7e5cca8b3708da8c32348462c7c6c",
+  "library_sha256": "e6dcf9dcebd133d59aa3c6ea3e9bf0825f10fddaf31135c5e4ca4b1dc40bcd87",
+  "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}
