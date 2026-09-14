@@ -1,0 +1,13 @@
+category,item,quantity,unit,unit_price_usd,cost_usd,basis
+oxDNA,H200 compatibility and matched timing,12,GPU-hour,4.59,55.08,Development allowance; actual H200 throughput unmeasured
+oxDNA,Targeted bulk GPU verification reserve,24,GPU-hour,4.59,110.16,Optional new verification only; does not extend the existing bounded run or resolve CPU EOS mixing by itself
+oxDNA,Grafted-brush pilots,216,GPU-hour,4.59,991.44,3 lengths x 3 densities x 3 replicas x 8 GPU-hours; proposed bounded allocations
+oxDNA,Exploratory compression sampling,360,GPU-hour,4.59,1652.4,3 lengths x 1 selected density x 5 heights x 3 replicas x 8 GPU-hours; coarse mechanical screening
+NAMD,Physical asset smoke checks and timing,12,GPU-hour,4.59,55.08,Allowance after parameterized PEG/gold assets exist
+NAMD,Isolated-chain reference sampling,90,GPU-hour,4.59,413.1,3 lengths x 3 replicas x 10 GPU-hours; duration determined by benchmark
+NAMD,Brush pilot matrix,287.712,GPU-hour,4.59,1320.6,27 cases x (2 ns equilibration + 0.2 ns benchmark + 20 ns pilot); assumed 50 ns/day/GPU
+NAMD,Small-system interface diagnostics,48,GPU-hour,4.59,220.32,6 diagnostic jobs x 8 GPU-hours; not complete interface-force-field validation
+CPU,QM/fitting pool,512,32-vCPU 128-GB node-hour,0.773,395.78,"Bounded resource allowance, e.g. 64 jobs x 8 node-hours; chemical scope not yet fixed"
+CPU,"Preparation, sampler diagnostics and analysis",160,16-vCPU 32-GB node-hour,0.194,31.04,Additional CPU-only allocation
+Storage,"Workspace, trajectories and backups allowance",1,pilot allowance,150,150,Budget allowance; not a fixed storage quote
+Contingency,Additional GPU sampling/overhead reserve,0.3,fraction of GPU subtotal,4818.17808,1445.45,Applied once; not a convergence guarantee

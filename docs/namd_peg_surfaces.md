@@ -1,34 +1,26 @@
 # Create PEG surfaces directly for NAMD
 
-Open **File → NAMD PEG Surfaces…**, including from an empty workspace. When a
-DNA part or assembly is open, the same setup is available under **Dynamics → NAMD
-→ PEG surfaces → New PEG surface…**. No oxDNA import or source job is needed.
+PEG coating is configured inline under **Simulations → NAMD → Hard surface →
+PEG coating → Settings**. The toggle enables coating intent; its settings contain
+patch shape and size, graft density, layout seed, representation, chain length,
+end groups and optional asset references. **Review coating** checks the inputs in
+place. Turning the coating off retains its values. No popup or separately named
+surface save is required.
 
-## Workflow
+Use the workspace **Setup preset** dropdown above Benchmark to reuse the whole
+NAMD sidebar configuration, including PEG, across designs. See
+[setup presets](namd_setup_presets.md) for capture scope, overwrite/delete behavior,
+and design-specific selection handling.
 
-1. Name the surface and select a hard barrier or graphene support.
-2. Set the allowed-side normal, absolute plane position, square/circular patch size,
-   graft density and layout seed. Graphene supports an optional pore and layer count.
-3. Select atomistic or coarse-grained PEG. Enter chemical repeat units for atomistic
-   PEG, or statistical segments for coarse-grained PEG. These are separate inputs;
-   changing the selection does not convert one model into the other.
-4. Record the grafted/free end groups and optional topology/force-field references.
-   References are draft notes; entering a path does not validate or load an asset.
-5. **Review surface** displays the requested chain count, coating area, a reproducible
-   top-view graft sample and the outstanding preparation requirements.
-6. **Create surface draft** saves the definition. Reopen it through **Open saved
-   surface** in the dialog or the NAMD sidebar library; use **Save changes** to update
-   the same draft. Closing an edited dialog retains its unsaved inputs for continuing.
+Valid coating edits persist in `metadata.namd_peg_coating` with an explicit enabled
+flag and `spec`; visibility is recorded in `metadata.namd_peg_visible`. Legacy
+coating records without the enabled flag remain readable. The scene still renders
+surfaces only after explicit selection of a surface-enabled job. Review does not
+build PEG conformations or alter DNA topology.
 
-The preview shows at most 256 sites. The requested chain count is graftable patch
-area × density, rounded to the nearest integer (halves round up). Graphene pores
-are excluded from both the area and preview sites. Circle layouts use uniform
-annulus sampling; square layouts reject sites inside the pore. The preview is
-schematic and does not represent built PEG conformations or atomistic placement.
+## Legacy surface-library persistence and API
 
-## Persistence and API
-
-Workspace-level drafts live in `workspace/namd_surfaces/<id>.json`, independently
+Existing workspace-level drafts live in `workspace/namd_surfaces/<id>.json`, independently
 of DNA documents, assemblies and simulation jobs. The stored record includes the
 surface/coating specification, the shared plane frame, review data, a stable ID and
 update timestamp. Writes replace the record atomically. Editing does not create a
@@ -55,8 +47,10 @@ provides pinned methyl-capped PEG assets, native harmonic point tethers and a
 GPU-resident-compatible repulsive-wall candidate. It has its own guarded experiment
 runner and does not change the draft API's `launch_ready: false` contract.
 
-Saving a surface draft does **not** attach it to an existing DNA system or to the
-normal NAMD job wizard. It does not create or start a simulation. The outstanding
+Saving through the UI attaches the editable record to `metadata.namd_peg_coating`
+in the current document; `metadata.namd_peg_visible` stores visibility. These fields
+survive save/reload. This document attachment is setup/display intent: incorporating
+the coating into the normal NAMD molecular job package remains unimplemented. It does not create or start a simulation. The outstanding
 work is explicit in the review:
 
 - Select and validate PEG topology/coordinates and force-field assets.
@@ -115,3 +109,66 @@ Validation results (2026-09-11):
 - Ruff passes for the new backend files. Repository-wide `just lint` still reports
   existing unused imports/variables in `tests/test_oxdna_peg.py` and
   `backend/api/routes_oxdna.py`. `git diff --check` passes.
+
+## Unified-card verification (2026-09-13)
+
+The card contains Add/Edit/Remove PEG coating and View PEG, plus Add surface charge.
+Salt mode, NaCl, magnesium and temperature are never supplied by the surface card.
+Those choices remain in the job wizard; unsupported charged-wall electrolyte choices
+are rejected by the existing API instead of silently being changed. A real browser
+job-creation test preserves custom NaCl at 175 mM and magnesium at 0 mM.
+
+Validation: 6,285 frontend tests and six dedicated browser checks passed; two focused
+backend tests verify persistent attachment/removal and explicit salt preservation.
+The backend selector ran FAST: 8,305 passed, 11 pre-existing missing-fixture failures,
+109 skipped. Main.js increased by two lines: preview-module import and initialization;
+the existing PEG initializer only gains its store dependency.
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+Ask the user to run `just test-session` (their terminal), then `just test-slow`.
+```
+
+The broader smoke run passed 22 tests and failed one assembly-exit console check because mrDNA job reconciliation raised `FileNotFoundError` while replacing a shared temporary job JSON file (HTTP 500). Repository lint still reports the unrelated unused `seq` in `routes_oxdna.py` and unused `Path` import in `test_oxdna_peg.py`; targeted lint for the changed backend persistence files passes. `git diff --check` passes. Browser teardown removed the test documents, coating drafts, and test job.
+
+## Surface selection and settings sections (2026-09-13)
+
+The NAMD card has four matching toggle rows: **Hard surface on**, **Add surface
+charge**, **Graphene nanopore**, and **PEG coating**.
+Each has a collapsed **Settings** disclosure.
+Hard surface owns placement, clearances, margin and representation; charge owns
+density and reservoir depth; nanopore owns pore/material/layer fields; PEG owns
+coating layout, representation, chain length and chemistry notes.
+Charge and open nanopore are mutually exclusive because the implemented charge
+model is a closed wall. Enabling either enables the support; disabling the support
+turns charge, nanopore and PEG off. Salt and temperature remain exclusively wizard inputs.
+
+The scene renders only after an explicit job-row selection with a saved surface.
+Automatic job selection, document loading and setup edits cannot turn it on.
+Deselecting, changing documents or selecting a non-surface job clears surface
+visibility in preview, solvent/ion-path and native PEG channels. Cached trajectory
+coordinates remain cached. Preview dimensions come from the selected job, not
+editable setup inputs. Native PEG review must match the selected job ID, including
+after an asynchronous load. No topology or simulation coordinates are modified.
+
+Verification: 6,387 frontend tests passed; all seven dedicated browser checks and
+all 23 smoke checks passed. Browser checks cover initial/draft invisibility,
+explicit job-row selection and deselection, setup/snapshot independence, collapsed
+settings, parameter containment, consistent styles, overflow, and wizard salt.
+Screenshots of each expanded section were reviewed; empty-coating Remove button
+visibility and truncated dropdown labels were corrected. FAST backend: 8,310
+passed, nine missing BigO/smallO fixture failures, 110 skipped, no timing violations.
+Repository lint retains two pre-existing unused-symbol errors. The mrDNA job-file
+race still appears in backend logs, although the smoke checks passed. No new lines
+were added to main.js for this change (the earlier PEG wiring remains +2 lines).
+The prepared master merge is applied as 1d893ea6; local work is restored and its
+pre-merge stash retained as a backup. No push was performed.
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+Ask the user to run `just test-session` (their terminal), then `just test-slow`.
+```
+
+Latest inline PEG and workspace preset workflow and verification: [NAMD setup presets](namd_setup_presets.md).

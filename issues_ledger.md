@@ -836,3 +836,19 @@ topology and PEG CM frame output. Reconfiguration preserves topology and current
 pose. Build script compiles bindings without replacing stock oxpy. Browser start/
 frame/stop test passes with mocked engine responses; real stepping remains gated.
 Evidence and unresolved validation: [PEG Live](docs/peg_live.md).
+
+
+## ISSUE-27 — First autosave erased a blank document's NAMD surface setup
+
+[x] Fixed 2026-09-13 within the requested blank-document charged-wall workflow.
+Playwright reproduced the enabled surface resetting after New job triggered the
+first save. `workspace-path-change` now preserves unsaved controls on that first
+save; actual file switches still reset. The charged-surface browser regression
+creates a real draft and checks persisted charge, salt and temperature.
+
+## ISSUE-29 — Process adoption matched the validation controller's shell text
+
+[x] Fixed 2026-09-14. `_segment_pid` searched the entire command string for both
+"namd" and a config filename, so a shell that mentioned them could be adopted as
+NAMD and stall launch. Matching now requires a native executable plus a real config
+argument. The same prepared job subsequently launched through the normal API.

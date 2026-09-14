@@ -186,6 +186,8 @@ def test_replica_persists_graphene_surface_descriptor(tmp_path):
     parent_pkg = parent.package_dir(tmp_path)
     descriptor = {
         "material": "graphene",
+        "temperature_K": 298.15,
+        "surface_charge": {"total_charge_e": -5, "realized_C_m2": -0.04},
         "pore_diameter_nm": 2.1,
         "pore_center_nm": [5.0, 5.05, 3.0],
         "dir": [0.0, 0.0, 1.0],
@@ -219,6 +221,7 @@ def test_replica_persists_graphene_surface_descriptor(tmp_path):
     assert saved["anchor_groups"] == {"structure": [], "surface": []}
     assert json.loads((pkg / "graphene_nanopore.json").read_text()) == descriptor
     conf = next(pkg.glob("demo_01_production_*.conf")).read_text()
+    assert "langevinTemp       298.15" in conf
     assert "constraints        on" in conf
     assert "consref            graphene_fixed.pdb" in conf
     assert "conskfile          graphene_fixed.pdb" in conf

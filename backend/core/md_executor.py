@@ -1016,6 +1016,10 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
     entire remote inventory.  The asyncio lock handles concurrent routes in this
     process; flock also covers a dev-server reload or a second server process.
     """
+    conn = conn or _default_conn()
+    from backend.core.alpine_worker import WorkerClient
+    if isinstance(conn, WorkerClient):
+        return await conn.fetch_outputs(job, workspace_dir)
     key = str(job.job_dir(workspace_dir).resolve())
     lock = _FETCH_LOCKS.setdefault(key, asyncio.Lock())
     async with lock:
@@ -1023,7 +1027,12 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_file = lock_path.open("a+b")
         try:
-            await asyncio.to_thread(fcntl.flock, lock_file.fileno(), fcntl.LOCK_EX)
+            while True:
+                try:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    await asyncio.sleep(0.1)
             return await _fetch_outputs_locked(job, workspace_dir, conn=conn)
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
@@ -1558,8 +1567,13 @@ async def resume_local_processing_jobs(workspace_dir: Path) -> list[str]:
         if (
             job.execution_target == "alpine"
             and job.slurm_state == "COMPLETED"
-            and (job.download_status or {}).get("state") == "processing"
+            and ((job.download_status or {}).get("state") == "processing"
+                 or ((job.download_status or {}).get("worker_transfer_id")
+                     and (job.download_status or {}).get("state") == "verified"
+                     and not (job.download_status or {}).get("processing_finished_at")))
         ):
+            job.download_status["state"] = "processing"
+            job.save(workspace_dir)
             await _finish_local_processing(job, workspace_dir)
             job.save(workspace_dir)
             finished.append(job.job_id)
@@ -1607,6 +1621,8 @@ async def poll_remote_jobs(
     conn = conn or _default_conn()
     if not getattr(conn, "is_connected", lambda: False)():
         return []
+    from backend.core.alpine_transfer_state import recover_downloads
+    await recover_downloads(workspace_dir, conn, reconnect=recover_incomplete)
     touched: list[str] = []
     for job in MdJob.list_jobs(workspace_dir):
         if job.execution_target != "alpine":

@@ -5,6 +5,11 @@ an explicit chemical linkage between DNA and PEG. Surface attachment may remain
 the existing mechanical spring reference; an explicit gold substrate is not a
 prerequisite for this next step.
 
+Follow-up: the [linker literature and QM plan](namd_dna_peg_linker_literature_qm.md)
+recommends a published 5′ DBCO–azido-PEG SPAAC architecture, with NHS–amine amide
+coupling as an alternative. Exact product identity and parameter validation remain
+open; the plan does not release a chemical patch or submit calculations.
+
 ## What is now demonstrated
 
 - Atomistic methyl-capped PEG8/TIP3P preparation, harmonic substrate grafts and
@@ -51,6 +56,60 @@ for angles/dihedrals where needed.
 [psfgen User's Guide](https://www.ks.uiuc.edu/Research/vmd/plugins/psfgen/ug.pdf).
 
 ## Recommended next experiment
+
+### Earlier mechanical force pilot (2026-09-13)
+
+For an initial brush force–separation estimate, precise covalent linker
+parameterization is not a prerequisite. Use an explicitly labeled **mechanical
+surrogate** with a pair-distance harmonic tether between a chosen PEG terminal
+heavy atom and a chosen DNA attachment atom. Keep the molecular topologies intact
+and retain nonbonded interactions; this is an external restraint, not a chemical
+patch. Select a nonoverlapping reference distance consistent with the omitted
+linker's effective reach. Attachment identities and placement still need a
+concrete review before integration; none are selected by this document.
+
+NAMD extraBonds provides this potential as U = k(r-r0)^2, hence the radial force
+is -2k(r-r0); its k differs by a factor of two from the conventional
+U = K(r-r0)^2/2 stiffness. Confirm support in the installed GPU-resident build
+with a bounded native qualification before adopting it. The existing substrate
+graft is a positional restraint and cannot directly implement a moving DNA–PEG
+pair tether. [NAMD restraint documentation](https://www.ks.uiuc.edu/Research/namd/2.9/ug/node27.html).
+
+Separate two physical questions:
+
+- **Compression:** substrate-grafted PEG against an unlinked origami gives the
+  brush's steric/osmotic resistance without artificial DNA–PEG bridges. Use this
+  as a control for the tethered case.
+- **Extension:** chains bridging substrate and DNA can supply restoring tension
+  during withdrawal. A permanent harmonic tether assumes attachment survives;
+  it cannot predict dissociation, rupture or adhesion strength. Without bridges
+  or attractive interactions, a repulsive brush does not supply a sustained
+  tensile restoring force after separation.
+
+Proposed measurement: hold the origami at successive surface separations with a
+calibrated vertical collective restraint, equilibrate each window and average
+its signed reaction force. Report force against actual mean separation, block
+uncertainties, approach/withdrawal agreement and independent initial seeds.
+Compare to a matched no-PEG control to distinguish direct wall/buffer effects.
+Force–distance measurements on simulated inclusions demonstrate this observable's
+dependence on probe geometry.
+[Geometry-Dependent Insertion Forces, 2016](https://pubs.acs.org/doi/10.1021/acs.macromol.5b01960).
+
+Vary PEG length, graft density, DNA-bound fraction and tether stiffness/reference
+distance. A credible approximate brush result should be insensitive to reasonable
+tether choices; a soft tether can dominate measured compliance, whereas a very
+stiff one introduces numerical requirements. Preserve rotational freedom at the
+surrogate attachment initially. Record DNA deformation and orientation, lateral
+cell-size effects, solvent/ion conditions and equilibration diagnostics. A fast
+pull mixes dissipative drag with equilibrium force and is not the first estimator.
+
+QM remains necessary for a chemically specific model, but is deferred from this
+pilot. Existing PEG-only relaxation establishes execution, not dense-brush force
+convergence. Mixed construction, force accounting and 2 fs/4 fs qualification
+remain required. No new restraint implementation or molecular placement was
+introduced by this planning update.
+
+### Chemically specific conjugate
 
 1. Resolve **one actual DNA–PEG chemical structure**. The first blocking input is
    the desired attachment site and linker chemistry, not an engine setting.

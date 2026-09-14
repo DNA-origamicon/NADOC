@@ -1725,7 +1725,7 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
       expect(previews.at(-1)).toBe(true)
       await panel.selectJob('plain')
       expect(previews.at(-1)).toBe(false)
-      await panel.selectJob('J9')
+      await panel.selectJob('J9', { explicit: true })
       expect(previews.at(-1)).toBe(true)
       panel.deselectJob()
       expect(previews.at(-1)).toBe(false)

@@ -58,7 +58,9 @@ The app is at `http://localhost:5173` when both servers run. See [START.md](STAR
   artifact needs an exact, failure-safe `afterEach`/global-teardown cleanup. After the run, query the
   relevant paths and verify that no test-created artifact remains; if cleanup cannot be proven, the
   Playwright run is not complete. Never rely on a successful test body to perform cleanup.
-- Heavy tests (`just test`, `just test-slow`, real simulations/solves/benchmarks) run only in a user-opened `just test-session`. Never bypass `scripts/test_guard.sh`, create its session marker, or set force/budget escape hatches.
+- Heavy automated test suites (`just test`, `just test-slow`, `just test-all`, and slow groups selected by `just test-smart`) run only in a user-opened `just test-session`. This gate prevents agents from unexpectedly launching time-consuming test suites; it is not a blanket restriction on native simulations.
+- User-requested native simulations, including job-specific validation, troubleshooting, retries, continuations, and monitoring, may run without a test-session marker. Authorization to own a simulation validation loop covers the necessary native retries within that task; do not repeatedly ask the user to open a test session or wrap these job launches in the test-suite guard. This does not authorize unrelated benchmarks or heavy test suites.
+- Preserve the guards on automated test suites: never bypass `scripts/test_guard.sh`, create its session marker, or set force/budget escape hatches to run gated tests.
 - If the guard identifies an unmarked test over its per-test budget or a fast-suite overrun, use the `triage-slow-tests` skill. Do not raise the budget.
 
 Detailed extraction verification lives in the path-scoped [main-init rule](.claude/rules/main-init.md). Test-session mechanics live in [test parallelization](memory/project_test_parallelization.md).

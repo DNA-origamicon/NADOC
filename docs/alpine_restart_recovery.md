@@ -103,3 +103,38 @@ changes. The final focused restart suite passed **19 tests**; existing cell-reco
 suite passed **12**. `just test-frontend`: **6406 passed**. Ruff and `git diff --check`
 passed. No Playwright artifacts were created; cleanup paths were checked empty.
 This task's `main.js` LOC delta is **0**.
+
+
+## Downloads across NADOC server restarts (2026-09-14)
+
+Alpine authentication and result downloads now live in a detached Python worker,
+`backend.core.alpine_worker`. The API communicates over a Unix socket in a private
+per-user, per-checkout directory under `/tmp`. Restarting uvicorn does not close the
+worker's SSH session or stop its result-transfer queue. The next server reads the
+session status and reattaches to outstanding transfers. A subroutine or background
+async task inside uvicorn would still die with uvicorn.
+
+The worker uses the existing SFTP partial-file validation and per-job filesystem
+lock. It downloads the whole inventory, even with no API client connected. Its
+`alpine_transfer.json` sidecar owns progress separately from `job.json`, so stale
+server saves cannot reset transfer progress and the worker cannot overwrite job
+edits. Completed results can be indexed locally after the API returns. Recovery
+also includes explicitly downloaded stopped jobs and preserved outage attempts.
+
+Passwords and Duo responses cross an owner-only local socket for authentication;
+they are never placed in command-line arguments, saved requests, or log files.
+Existing in-process sessions need one new login to move authentication into the
+worker. Future web-server restarts reuse that worker session. Explicit **Disconnect**
+cancels worker downloads and closes SSH, retaining resumable partial files.
+
+This survives a web-server restart, not workstation shutdown, worker termination,
+or loss of the Alpine connection. After those events, reconnect to Alpine to resume
+validated partials. An already-running transfer started by older server code cannot
+be migrated mid-stream; the worker applies when a download is next started/resumed.
+The worker remains an independent process and uses the code loaded when it started;
+updating its implementation requires restarting it after transfers have finished.
+
+Validation: dedicated tests exercise client cancellation and reattachment, a real
+client-process kill while the separate worker completes, stale job saves, stopped
+snapshot recovery, offline indexing, expired status, and cancelled lock waiters.
+The real app/server and live Alpine jobs were not restarted for these tests.

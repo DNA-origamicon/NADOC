@@ -687,3 +687,20 @@ describe('wizard parameter loading', () => {
     wiz.close()
   })
 })
+
+it('uses sidebar preparation and creates an explicit box without awaiting a geometry estimate',async()=>{
+  const values={padding_nm:3,box_mode:'bbox',box_size_nm:[10,15,20],salt_mode:'custom',ion_conc_mM:175,mg_conc_mM:0}
+  const preparation={keys:new Set(Object.keys(values)),payload:()=>({...values}),summary:()=> 'Box and solvent: sidebar settings',acceptPreview:vi.fn()}
+  const {wiz,api,launch}=setup({preparation})
+  api.fetchProtocolBoxPreview=vi.fn(()=>new Promise(()=>{}))
+  await wiz.open('relaxation')
+  expect(fieldControl('Water padding')).toBeUndefined()
+  expect(api.fetchProtocolPlan.mock.calls.at(-1)[0]).toMatchObject(values)
+  expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
+  ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
+  const create=footerButtons().find(b=>b.textContent.includes('Create job'))
+  expect(create.disabled).toBe(false);create.click()
+  await vi.waitFor(()=>expect(launch).toHaveBeenCalled())
+  expect(launch.mock.calls[0][0]).toMatchObject(values)
+  wiz.close()
+})

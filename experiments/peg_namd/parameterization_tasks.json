@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "status": "planning_not_submitted",
+  "fit_workflow": "PEG-specific adapter required; existing CPD chemical definitions are not reusable unchanged",
+  "tasks": [
+    {
+      "id": "peg_backbone_caps",
+      "priority": "P0",
+      "status": "candidate_assets_missing",
+      "fragments": [
+        "dimethoxyethane",
+        "capped triethylene glycol",
+        "actual PEG terminal groups"
+      ],
+      "training_targets": [
+        "torsion scans",
+        "water interaction geometries/energies",
+        "neutral charge constraints"
+      ],
+      "held_out_validation": [
+        "held-out conformers",
+        "N36/N45/N76 dimensions",
+        "solution osmotic response"
+      ]
+    },
+    {
+      "id": "gold_water_ether",
+      "priority": "P0",
+      "status": "model_selection_needed",
+      "fragments": [
+        "Au(111) or specified facet",
+        "water",
+        "dimethoxyethane"
+      ],
+      "training_targets": [
+        "existing surface model audit",
+        "hydrated adsorption targets"
+      ],
+      "held_out_validation": [
+        "interfacial water structure",
+        "held-out ether adsorption",
+        "surface cell-size dependence"
+      ]
+    },
+    {
+      "id": "au_linker_peg",
+      "priority": "P1",
+      "status": "chemical_identity_unselected",
+      "fragments": [
+        "actual thiol/thiolate linker",
+        "surface binding motif"
+      ],
+      "training_targets": [
+        "binding geometry",
+        "appropriate Au electronic structure",
+        "bonded response and terminal charges"
+      ],
+      "held_out_validation": [
+        "alternate conformers/coverage",
+        "linker flexibility",
+        "binding observables"
+      ]
+    },
+    {
+      "id": "peg_dna",
+      "priority": "P1",
+      "status": "cross_terms_unvalidated",
+      "fragments": [
+        "ether",
+        "nucleobases",
+        "sugar",
+        "phosphate fragment"
+      ],
+      "training_targets": [
+        "solvated interaction PMFs",
+        "chemical preferential interactions"
+      ],
+      "held_out_validation": [
+        "held-out DNA/PEG conditions",
+        "duplex/hairpin trends",
+        "PEG contact statistics"
+      ]
+    },
+    {
+      "id": "peg_ions",
+      "priority": "P1",
+      "status": "cross_terms_unvalidated",
+      "fragments": [
+        "PEG ether oligomer",
+        "Na",
+        "Cl",
+        "selected Mg model"
+      ],
+      "training_targets": [
+        "ion hydration/coordination",
+        "PEG ion affinity"
+      ],
+      "held_out_validation": [
+        "brush ion partitioning",
+        "salt-dependent chain/brush properties"
+      ]
+    },
+    {
+      "id": "electrode_response",
+      "priority": "P2",
+      "status": "engine_method_unqualified",
+      "fragments": [
+        "coated gold electrolyte interface"
+      ],
+      "training_targets": [
+        "constant-potential method qualification",
+        "capacitance and charge response"
+      ],
+      "held_out_validation": [
+        "potential-dependent force",
+        "reference/box dependence",
+        "measured coated-gold window"
+      ]
+    }
+  ]
+}

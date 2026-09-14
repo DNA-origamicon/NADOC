@@ -39,7 +39,7 @@ export function initGrapheneNanoporeOverlay(scene) {
     shape.lineTo(-half, half); shape.closePath()
     const hole = new THREE.Path()
     hole.absarc(0, 0, Math.max(0.05, Number(poreDiameterNm) / 2), 0, Math.PI * 2, true)
-    shape.holes.push(hole)
+    if (Number(poreDiameterNm) > 0) shape.holes.push(hole)
     const geometry = Number(layers) > 1
       ? new THREE.ExtrudeGeometry(shape, { depth: (Number(layers) - 1) * Number(layerSpacingNm),
           bevelEnabled: false, curveSegments: 48 })

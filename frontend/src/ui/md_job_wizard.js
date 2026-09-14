@@ -327,7 +327,7 @@ const PROVENANCE_TEXT = {
  *        is where settings are.
  */
 export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs, getPartPath,
-  onJobCreated, onOptimizeMount, onTargetChange = () => {}, getPreparationContext = () => ({}) } = {}) {
+  onJobCreated, onOptimizeMount, onTargetChange = () => {}, preparation = null, getPreparationContext = () => ({}) } = {}) {
   let modal = null
   let presets = []
   let plan = null
@@ -488,6 +488,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     const payload = {
       ...(!readOnly && state.mode !== 'production' ? getPreparationContext() : {}),
       ...planPayload({ ...state, touched: { ...ladderPin(), ...state.touched } }),
+      ...(!readOnly && state.mode !== 'production' ? preparation?.payload() : {}),
     }
     try {
       const next = await api.fetchProtocolPlan(payload)
@@ -526,6 +527,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     const entry = boxEstimates.get(boxKey)
     boxLoading = !!entry?.pending
     if (plan && entry?.result) {
+      if(!readOnly)preparation?.acceptPreview(entry.result.box_preview)
       plan = { ...plan, box_preview: entry.result.box_preview,
         warnings: [...new Set([...(plan.warnings || []), ...(entry.result.warnings || [])])],
       }
@@ -533,6 +535,11 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   }
 
   function updateBoxPreview(payload) {
+    const supplied=!readOnly && state.mode!=='production' ? preparation?.payload()?.box_size_nm : null
+    if(supplied?.every(v=>Number.isFinite(v) && v>0) && plan){
+      plan={...plan,box_preview:{calculated_nm:supplied,selected_nm:supplied,padding_nm:payload.padding_nm,box_mode:payload.box_mode}}
+      boxKey=null;boxLoading=false;return
+    }
     if (!plan || !api.fetchProtocolBoxPreview || state.mode === 'production'
         || plan.protocol === 'implicit_gbis_namd') {
       boxKey = null
@@ -604,6 +611,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
 
   /** The effective value of a field: what the user typed, else what the plan resolved. */
   function valueOf(key) {
+    if(preparation && !readOnly && state.mode!=='production' && preparation.keys.has(key))return preparation.payload()[key]
     if (!isForced(key) && Object.prototype.hasOwnProperty.call(state.touched, key)) {
       return state.touched[key]
     }
@@ -773,12 +781,14 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   function renderFields() {
     mounts.fields.replaceChildren()
     if (state.mode === 'production') { renderProductionFields(); return }
+    if(preparation && !readOnly)mounts.fields.append(el('p',{className:'wizard-help',text:preparation.summary()}))
 
     const fieldConds = conditionsByField(plan)
     // Grouped by WHICH RUN each setting governs. A flat list put the production timestep
     // between two ladder settings, so nothing on screen said which run a control changed.
     const groups = new Map(SCOPE_GROUPS.map(g => [g.scope, []]))
     for (const field of FIELDS) {
+      if(preparation && !readOnly && preparation.keys.has(field.key))continue
       // Hardware this machine has and a cluster node does not; and its mirror, a criterion
       // evaluated on a cluster node. Both keyed on step 1's answer.
       if (!fieldAppliesToTarget(field, state.target)) continue
@@ -1804,7 +1814,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     const needsBox = state.mode !== 'production' && plan?.protocol !== 'implicit_gbis_namd'
     const dimensions = submittedBoxSize()
     const waitingForBox = needsBox && !!api.fetchProtocolBoxPreview
-      && (planLoading || boxLoading || !dimensions)
+      && (planLoading || !dimensions || (boxLoading && !preparation?.payload()?.box_size_nm))
     const disabled = busy || !plan || blocked || waitingForBox
     if (createBtn) {
       createBtn.disabled = disabled
@@ -1844,6 +1854,8 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   }
 
   function submittedBoxSize() {
+    const sidebar=!readOnly && state.mode!=='production' ? preparation?.payload()?.box_size_nm : null
+    if(sidebar?.every(v=>Number.isFinite(v) && v>0))return sidebar
     const manual = valueOf('box_size_nm') || []
     const calculated = plan?.box_preview?.calculated_nm || []
     const sizes = [0, 1, 2].map(i => manual[i] ?? calculated[i])
@@ -1907,6 +1919,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
             if (plan.box_preview?.box_mode) request.box_mode = plan.box_preview.box_mode
           }
         }
+        if(preparation)Object.assign(request,preparation.payload())
         const pendingJob = state.editJobId
           ? updateJob?.(state.editJobId, request)
           : launch?.(request, { draftId: state.draftId })
@@ -2165,6 +2178,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     const wasReadOnly = readOnly
     readOnly = !!job
     editJob = editableJob
+    if(editableJob && preparation)preparation.restore(editableJob.prep_params || {})
     if (readOnly && !wasReadOnly) parkedLiveState = snapshotState(state)
     if (!readOnly && wasReadOnly && parkedLiveState) {
       applySnapshot(state, parkedLiveState)

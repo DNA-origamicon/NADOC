@@ -528,6 +528,8 @@ class MdJob:
         if job.restart_events:
             from backend.core.alpine_restart import apply_acknowledgments
             apply_acknowledgments(job, workspace_dir)
+        from backend.core.alpine_transfer_state import apply_transfer_state
+        apply_transfer_state(job, workspace_dir)
         return job
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["MdJob"]:

@@ -1,0 +1,186 @@
+{
+  "schema": "nadoc.peg-dna-qm-plan.v1",
+  "date": "2026-09-12",
+  "status": "planned_not_submitted",
+  "runner_compatible": false,
+  "documentation": "docs/namd_dna_peg_linker_literature_qm.md",
+  "recommended_target": "5prime_DNA_TEG_DBCO_azido_PEG_reacted_SPAAC_product",
+  "alternative_target": "amino_DNA_NHS_PEG_reacted_amide",
+  "chemical_graph": null,
+  "atom_map": null,
+  "net_charge": null,
+  "blocking_inputs": [
+    "supplier or reviewed exact product graph",
+    "DNA attachment and phosphate/spacer connectivity",
+    "product isomer and protonation enumeration",
+    "PEG repeat count and both end groups",
+    "fragment boundaries and fixed charge groups"
+  ],
+  "models": [
+    {
+      "id": "core",
+      "definition": "Complete reacted linker, intact ring system and short spacers; two EO units on PEG side",
+      "charge": "derive from reviewed graph"
+    },
+    {
+      "id": "dna_boundary",
+      "definition": "Actual terminal nucleotide/phosphate/spacer with explicit chemical caps",
+      "charge": "derive from reviewed graph"
+    },
+    {
+      "id": "transfer_holdout",
+      "definition": "Larger nucleotide-linker-PEG model and conformers excluded from fitting",
+      "charge": "derive from reviewed graph"
+    }
+  ],
+  "methods": {
+    "neutral_bonded": "MP2/6-31G(d)",
+    "neutral_water": "HF/6-31G(d)",
+    "charged_bonded_proposed": "MP2/6-31+G(d)",
+    "charged_water_proposed": "HF/6-31+G(d)",
+    "charged_branch_requires_benchmark": true,
+    "neutral_polar_water_energy_scale": 1.16,
+    "neutral_polar_water_distance_offset_angstrom": -0.2,
+    "charged_water_energy_scale": 1.0,
+    "charged_water_distance_offset_angstrom": 0.0,
+    "water_geometry": "CHARMM TIP3P",
+    "density_fitting_requires_direct_reference_calibration": true
+  },
+  "stages": [
+    {
+      "id": "identity",
+      "depends_on": [],
+      "output": "reviewed atom-mapped product and fragments"
+    },
+    {
+      "id": "coverage",
+      "depends_on": [
+        "identity"
+      ],
+      "output": "complete force-field provenance and deficient-term inventory"
+    },
+    {
+      "id": "conformers",
+      "depends_on": [
+        "coverage"
+      ],
+      "optimizations_per_model": [
+        6,
+        12
+      ]
+    },
+    {
+      "id": "hessians",
+      "depends_on": [
+        "conformers"
+      ],
+      "minima_per_model": [
+        2,
+        3
+      ],
+      "output": "full Cartesian Hessian, gradient and minimum audit"
+    },
+    {
+      "id": "hydration",
+      "depends_on": [
+        "conformers"
+      ],
+      "conformers_minimum": 2,
+      "orientations_per_accessible_site_minimum": 2,
+      "output": "raw/corrected water targets and monomer references"
+    },
+    {
+      "id": "torsions",
+      "depends_on": [
+        "conformers"
+      ],
+      "points_per_rotatable_torsion": 24,
+      "step_degrees": 15,
+      "scan_directions": 2
+    },
+    {
+      "id": "coupling",
+      "depends_on": [
+        "torsions"
+      ],
+      "conditional": "demonstrated adjacent torsion coupling",
+      "grid": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "fit",
+      "depends_on": [
+        "hessians",
+        "hydration",
+        "torsions"
+      ],
+      "output": "junction-only parameters with fixed established boundaries"
+    },
+    {
+      "id": "holdout",
+      "depends_on": [
+        "fit"
+      ],
+      "output": "independent conformer, hydration and transfer validation"
+    },
+    {
+      "id": "export_audit",
+      "depends_on": [
+        "holdout"
+      ],
+      "output": "versioned patch/stream, atom maps, coverage, static energy/force comparison"
+    },
+    {
+      "id": "namd_qualification",
+      "depends_on": [
+        "export_audit"
+      ],
+      "output": "soluble duplex-PEG then surface then origami; independent 2fs/4fs validation"
+    }
+  ],
+  "proposed_screening_gates": {
+    "missing_parameters": 0,
+    "charge_and_valence": "exact graph accounting",
+    "heldout_bond_error_angstrom_max": 0.03,
+    "heldout_angle_error_degrees_max": 5,
+    "heldout_relative_energy_rmse_kcal_mol_max": 1.0,
+    "heldout_low_energy_window_kcal_mol": 5.0,
+    "report_maximum_and_site_residuals": true
+  },
+  "example_core_budget": {
+    "optimized_conformers": 8,
+    "hessians": 3,
+    "polar_sites": 8,
+    "water_orientations": 2,
+    "water_conformers": 2,
+    "deficient_torsions": 6,
+    "scan_points": 24,
+    "scan_directions": 2,
+    "top_level_tasks": 331,
+    "excludes": [
+      "reference single points",
+      "holdouts",
+      "boundary models",
+      "other product isomers",
+      "retries",
+      "conditional coupled surfaces"
+    ],
+    "cpu_hours": null
+  },
+  "release_constraints": [
+    "No QM or MD submission from this plan",
+    "No automatic promotion of candidate geometry",
+    "No remote DNA or PEG repeat retuning",
+    "HMR only after final covalent topology",
+    "PEG-only 4fs success is not junction validation"
+  ],
+  "sources": [
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC8628367/",
+    "https://www.nature.com/articles/s41467-021-25890-z",
+    "https://www.nature.com/articles/ncomms15654",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC11531335/",
+    "https://mackerell.umaryland.edu/ff_dev.shtml"
+  ]
+}

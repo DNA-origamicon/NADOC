@@ -110,8 +110,10 @@ def validate_graphene_wall_package(package: Path) -> None:
             "Graphene wall LJ parameters or self-pair override are missing. " + remedy
         )
 
+    from backend.core.namd_surface_charge import validate_charged_sites
     found = False
     for psf in package.glob("*.psf"):
+        charges = []
         with psf.open() as stream:
             for line in stream:
                 if "!NATOM" not in line:
@@ -123,12 +125,14 @@ def validate_graphene_wall_package(package: Path) -> None:
                     if fields[3] != "GRP":
                         continue
                     found = True
-                    if fields[5] != GRAPHENE_ATOM_TYPE or float(fields[6]) != 0:
+                    charges.append(float(fields[6]))
+                    if fields[5] != GRAPHENE_ATOM_TYPE:
                         raise ValueError(
                             "Graphene wall PSF uses an unsafe atom type/charge. "
                             + remedy
                         )
                 break
+        validate_charged_sites(charges, spec.get("surface_charge"))
     if not found:
         raise ValueError(
             "Graphene wall package has no graphene sites in its PSF. " + remedy

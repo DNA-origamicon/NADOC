@@ -1,3 +1,4 @@
+import { initNamdPegAttachment } from './namd_peg_attachment.js'
 import { createModal } from './primitives/modal.js'
 import { NAMD_PEG_DEFAULTS, namdPegFormSpec, namdPegEstimate } from './namd_peg_surface_model.js'
 import './namd_peg_surfaces.css'
@@ -15,17 +16,19 @@ const button = (label, action, cls = 'btn') => {
 }
 
 /** Workspace-level surface library: works in blank, part and assembly documents. */
-export function initNamdPegSurfaces({ api, host = document.getElementById('namd-peg-surfaces') }) {
+export function initNamdPegSurfaces({ api, store, host = document.getElementById('namd-peg-surfaces') }) {
   if (!host) return null
   const launch = host.querySelector('[data-new-surface]')
   const menu = document.getElementById('menu-namd-peg-surfaces')
-  const library = host.querySelector('select')
-  const openSaved = host.querySelector('[data-open-surface]')
+  const library = host.querySelector('select') || document.createElement('select')
+  const openSaved = host.querySelector('[data-open-surface]') || document.createElement('button')
   const status = host.querySelector('[role=status]')
   let records = [], modal = null, revision = 0, busy = false, activeId = null, pending = null
   let form, setup, review, message, summary, back, next, save, opener, formLibrary, dirty = false, libraryRevision = 0, disposed = false
+  const attachment = initNamdPegAttachment({host,api,store,onReset:()=>{revision++;dirty=false;pending=null;activeId=null;if(modal && !busy)modal.close()}})
   const setBusy = value => {
     busy = value
+    attachment.setBusy(value)
     if (formLibrary) formLibrary.disabled = value
     if (form) for (const field of form.elements) field.disabled = value
     if (back) back.disabled = value
@@ -48,8 +51,8 @@ export function initNamdPegSurfaces({ api, host = document.getElementById('namd-
         formLibrary.value = activeId || ''
       }
       openSaved.disabled = !library.value
-      status.textContent = ''
-    } catch (error) { status.textContent = error.message }
+      status.textContent = ''; status.hidden = true
+    } catch (error) { status.textContent = error.message; status.hidden = false }
   }
   function field(label, key, options = {}) {
     const wrap = element('label', '', 'namd-peg-field')
@@ -133,16 +136,19 @@ export function initNamdPegSurfaces({ api, host = document.getElementById('namd-
   }
   async function saveDraft() {
     if (busy || review.hidden) return
+    const expectedDesignId=attachment.designId()
     setBusy(true); message.textContent = 'Saving surface draft…'
     try {
       const result = await api.saveNamdPegSurface(pending, activeId)
       if (!result) throw new Error('Surface was not saved. Your settings are still here; retry.')
       if (disposed) return
       activeId = result.id; pending = result.spec; dirty = false
+      await attachment.set(result,expectedDesignId)
       await refresh()
       library.value = result.id; openSaved.disabled = false
-      message.textContent = 'Surface draft saved. You can reopen it from PEG surfaces in the NAMD sidebar.'
-      status.textContent = `${result.spec.name} saved · simulation setup incomplete`
+      message.textContent = 'PEG coating saved. Use Edit PEG coating to reopen it.'
+      status.textContent = ''; status.hidden = true
+      launch.title = `${result.spec.name}: saved coating draft. Molecular preparation requires validated assets.`
       save.textContent = 'Save changes'
     } catch (e) { message.textContent = e.message }
     finally { setBusy(false) }
@@ -209,8 +215,7 @@ export function initNamdPegSurfaces({ api, host = document.getElementById('namd-
       actions: [close, back, next, save], onClose: () => {
         if (busy) return false
         if (dirty) pending = Object.fromEntries(Object.keys(NAMD_PEG_DEFAULTS).map(key => [key, form.elements.namedItem(key).value]))
-        launch.textContent = dirty ? 'Continue surface draft…' : 'New PEG surface…'
-        fresh.hidden = !dirty
+        attachment.render(dirty)
         revision++; opener?.focus()
       } })
     modal.root.setAttribute('aria-label', 'NAMD PEG surface setup')
@@ -227,22 +232,18 @@ export function initNamdPegSurfaces({ api, host = document.getElementById('namd-
     form.addEventListener('input', edited); form.addEventListener('change', edited)
     repaint(); modal.open(); form.elements.name.focus()
   }
-  const newSurface = () => { open(null, dirty); refresh() }
+  const newSurface = () => { open(attachment.get(), dirty); refresh() }
   const load = () => { const record = records.find(r => r.id === library.value); if (record) open(record) }
   const select = () => { openSaved.disabled = !library.value }
   launch.addEventListener('click', newSurface)
   menu?.addEventListener('click', newSurface)
   openSaved.addEventListener('click', load)
   library.addEventListener('change', select)
-  // A separate explicit action starts fresh without silently overwriting a saved draft.
-  const fresh = button('Start another surface', () => { pending = null; open() })
-  fresh.hidden = true
-  host.append(fresh)
   refresh()
   return { open, refresh, dispose() {
-    disposed = true; revision++; busy = false
+    disposed = true; revision++; busy = false; attachment.dispose()
     modal?.close(); launch.removeEventListener('click', newSurface)
     menu?.removeEventListener('click', newSurface)
-    openSaved.removeEventListener('click', load); library.removeEventListener('change', select); fresh.remove()
+    openSaved.removeEventListener('click', load); library.removeEventListener('change', select)
   } }
 }

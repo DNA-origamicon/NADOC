@@ -171,3 +171,15 @@ from DNA alone, and trailing PEG particles incompatible with stock Live readout.
 Bindings are isolated per process; topology and CM frames are preserved. Browser
 fixture initially targeted the hidden legacy job list; corrected to use the visible
 unified list. Real stepping is pending a user-opened test session; see docs/peg_live.md.
+
+
+ISSUE-27 (2026-09-13): [x] First-save NAMD form reset reproduced in the requested
+blank-file workflow and fixed in `md_jobs_panel.js`; no `main.js` change. Browser
+coverage verifies first save plus actual draft persistence. The charged-wall
+preparation audit separately exposed a rebuilt descriptor dropping charge and
+temperature; the API handoff now applies those fields after the final rebuild,
+with a regression at the molecular-builder boundary. Broader smoke remains red
+on an unrelated mrDNA job-save HTTP 500 race; see `docs/namd_charged_surface.md`.
+
+2026-09-14: [x] ISSUE-29: native-process adoption now requires an actual NAMD
+executable and config argument, preventing adoption of controller shell text.

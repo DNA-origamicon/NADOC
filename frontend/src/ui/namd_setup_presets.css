@@ -1,0 +1,12 @@
+.namd-setup-presets { padding:8px; margin-bottom:8px; border:1px solid #30363d; border-radius:4px; background:#0d1117; color:#c9d1d9; font-size:var(--text-xs); }
+.namd-setup-presets > label { display:block; margin-bottom:5px; font-weight:600; }
+.namd-setup-presets select,.namd-setup-presets input { box-sizing:border-box; width:100%; min-width:0; background:#161b22; color:#c9d1d9; border:1px solid #30363d; border-radius:3px; padding:4px; font-size:var(--text-xs); }
+.namd-preset-actions { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+.namd-setup-presets .btn { font-size:var(--text-xs); padding:4px 6px; }
+.namd-setup-presets form { margin-top:8px; }
+.namd-setup-presets [hidden] { display:none !important; }
+.namd-setup-presets p { margin:6px 0 0; color:#8b949e; overflow-wrap:anywhere; }
+.namd-peg-inline { display:flex; flex-direction:column; gap:7px; }
+.namd-peg-inline [hidden] { display:none !important; }
+#md-peg-settings [role=status] { font-size:var(--text-xs); color:#8b949e; margin:0; overflow-wrap:anywhere; }
+#md-peg-settings .btn { font-size:var(--text-xs); }

@@ -2306,6 +2306,10 @@ class DesignMetadata(BaseModel):
     peg_surface: Optional[dict] = None
     # Display-only, self-contained atomistic PEG qualification document. Never DNA topology.
     namd_peg_review: Optional[dict] = None
+    # Attached editable coating intent and display preference; never molecular coordinates.
+    namd_box_solvent: Optional[dict] = None
+    namd_peg_coating: Optional[dict] = None
+    namd_peg_visible: bool = True
 
 
 class TmSettings(BaseModel):

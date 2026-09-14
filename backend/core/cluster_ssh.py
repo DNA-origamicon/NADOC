@@ -714,5 +714,6 @@ _MANAGER: ClusterConnection | None = None
 def get_manager() -> ClusterConnection:
     global _MANAGER
     if _MANAGER is None:
-        _MANAGER = ClusterConnection()
+        from backend.core.alpine_worker import WorkerClient
+        _MANAGER = WorkerClient()
     return _MANAGER

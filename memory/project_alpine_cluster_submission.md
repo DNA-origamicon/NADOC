@@ -30,6 +30,13 @@ limitations, and the recovered 120.64 ns attempt. This supersedes historical tex
 that treats an interrupted segment rerun as acceptable or requires the backend for
 all mid-segment recovery; user-triggered new Slurm submissions remain unchanged.
 
+**2026-09-14 independent downloads:** The default Alpine manager is now a Unix-socket
+client of `backend.core.alpine_worker`, which owns authentication and full result
+transfers outside uvicorn. Server reloads retain SSH/downloads; transfer progress
+lives in `alpine_transfer.json` and overrides stale job records. Explicit Disconnect
+stops transfers; worker/workstation/transport loss requires reconnecting, with partial
+file validation/resume preserved. See the restart-recovery document above.
+
 Related: [[md-job-system]] (the local job system this extends), [[md-prep-relaxation-exp29]]
 (prep ladder that produces the package we ship), [[namd-solvate]], [[btube-benchmark]].
 

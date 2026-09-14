@@ -867,7 +867,11 @@ describe('engine-scoped list + Show-all-job-types toggle', () => {
     expect(mrdnaPanel.selectJob).toHaveBeenCalledWith('mr1')
     sim.selectJob('md1')
     expect(engineSelector.select).toHaveBeenCalledWith('namd')
-    expect(mdPanel.selectJob).toHaveBeenCalledWith('md1')
+    expect(mdPanel.selectJob).toHaveBeenCalledWith('md1', { explicit: false })
+    document.querySelector('#simulate-jobs-list [data-job-id="md1"]').click()
+    expect(mdPanel.selectJob).toHaveBeenLastCalledWith('md1', { explicit: true })
+    document.querySelector('#simulate-jobs-list [data-job-id="md1"]').click()
+    expect(mdPanel.deselectJob).toHaveBeenCalled()
   })
 
   it('collapsible card: clicking the header toggles the body + chevron', async () => {

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "box_nm": [30.0, 30.0, 25.0],
+  "repeat_units": [36, 45, 76],
+  "graft_density_nm2": [0.1, 0.3, 0.5],
+  "replicas": 3,
+  "temperature_K": 294.0,
+  "salt_NaCl_M": 0.15,
+  "graft_plane_nm": 2.0,
+  "tether_k_kcal_mol_A2": 5.0,
+  "timestep_fs": 2.0,
+  "equilibration_ns": 2.0,
+  "pilot_ns": 20.0,
+  "benchmark_steps": 100000,
+  "seed": 260910,
+  "surface_model": "neutral_fixed_gold_harmonic_grafts",
+  "claim": "Pilot equilibrium brush structure on a supplied neutral gold slab with harmonic graft proxies; no voltage, DNA, Au-S chemistry or validated kinetics claim"
+}

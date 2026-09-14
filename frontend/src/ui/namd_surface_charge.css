@@ -1,0 +1,4 @@
+#md-screening-controls > label { display:flex; justify-content:space-between; gap:6px; align-items:center; margin:7px 0; font-size:var(--text-xs); }
+#md-screening-controls input[type=number] { width:90px; min-width:0; background:#161b22; color:#c9d1d9; border:1px solid #30363d; border-radius:3px; padding:3px 5px; }
+#md-screening-controls input:disabled { opacity:.55; }
+#md-screening-controls p { color:#b1bac4; line-height:1.4; }

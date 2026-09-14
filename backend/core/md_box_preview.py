@@ -29,6 +29,13 @@ def box_preview_inputs(request) -> dict:
 
 
 def preview_box(design, request) -> dict:
+    if request.box_size_nm and all(v is not None and math.isfinite(v) and v > 0 for v in request.box_size_nm):
+        # Explicit cells exist independently of solute geometry; preparation still
+        # audits clearance. In particular a blank electrolyte setup needs no DNA fit.
+        dims = list(request.box_size_nm)
+        return dict(calculated_nm=dims, selected_nm=dims, padding_nm=request.padding_nm,
+                    box_mode=request.box_mode, center_nm=[0., 0., 0.], estimated=True,
+                    note='Explicit dimensions; solute clearance and exact ion counts are validated during preparation.')
     result = dict(_calculated_box(design.model_dump_json(), json.dumps(box_preview_inputs(request))))
     result['selected_nm'] = [v if v is not None else result['calculated_nm'][i]
                              for i, v in enumerate(request.box_size_nm or (None,) * 3)]
@@ -72,7 +79,13 @@ def _calculated_box(serialized: str, settings: str) -> dict:
         axis = int(max(range(3), key=lambda i: abs(spec['dir'][i])))
         pad_xyz = tuple(padding if i == axis else 0.08 for i in range(3))
     _, calculated = _recenter_pdb_in_padded_box(pdb, padding, 'bbox' if control else mode, pad_xyz)
+    coords = [[float(row[i:i+8])/10 for i in (30,38,46)] for row in pdb.splitlines()
+              if row.startswith(('ATOM  ', 'HETATM'))]
+    bounds = {'min': [min(p[i] for p in coords) for i in range(3)],
+              'max': [max(p[i] for p in coords) for i in range(3)]} if coords else None
     return {
+        'center_nm': [(a+b)/2 for a,b in zip(bounds['min'],bounds['max'])] if bounds else [0.,0.,0.],
+        'solute_bounds_nm': bounds,
         'calculated_nm': [math.ceil(v * 1000 - 1e-9) / 1000 for v in calculated],
         'padding_nm': padding, 'box_mode': 'bbox' if control else mode, 'estimated': True,
         'note': 'Sized from fast geometry without crossover optimization. Submitted dimensions stay fixed; preparation checks the final solute clearance.',

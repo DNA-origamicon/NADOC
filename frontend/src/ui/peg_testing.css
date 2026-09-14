@@ -27,3 +27,10 @@
   .peg-controls { display: grid; grid-template-columns: 1fr 1fr; }
   .peg-view { height: 280px; }
 }
+.peg-timeline { display: block; color: #b5c5d4; font-size: 13px; }
+.peg-timeline input { display: block; width: 100%; accent-color: #63dbbd; }
+.peg-actions label { color: #b5c5d4; font-size: 12px; align-self: center; }
+.peg-actions select { background: #151f2c; color: #e0edf8; padding: 5px; }
+.peg-actions button:disabled { opacity: .45; cursor: default; }
+.peg-controls select { max-width: 100%; }
+.peg-stats strong[data-peg=time] { font-size: 13px; overflow-wrap: anywhere; }

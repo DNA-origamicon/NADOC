@@ -1,0 +1,5 @@
+#md-box-solvent-body { font-size:var(--text-xs); color:#8b949e; }
+#md-box-solvent-body .box-solvent-field { display:grid; grid-template-columns:minmax(0,1fr) 110px; align-items:center; gap:6px; margin:7px 0; }
+#md-box-solvent-body input:not([type=checkbox]),#md-box-solvent-body select { box-sizing:border-box; width:100%; min-width:0; background:#161b22; color:#c9d1d9; border:1px solid #30363d; border-radius:3px; padding:2px 4px; font-size:var(--text-xs); }
+#md-box-solvent-body [role=status] { line-height:1.4; margin:7px 0 0; }
+#md-box-solvent-body output { display:block; margin:7px 0; }

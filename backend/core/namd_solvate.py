@@ -2550,6 +2550,7 @@ def _render_solvated_fast_namd_conf(
     nvt_only: bool = False,
     run_steps: int = 250000,
     capture_vel_force: bool = False,
+    temperature_K: float = 300.0,
 ) -> str:
     from backend.core.namd_helpers import vel_force_dcd_block
 
@@ -2574,14 +2575,14 @@ def _render_solvated_fast_namd_conf(
     piston = (
         "langevinPiston     off\n"
         if nvt_only
-        else """useGroupPressure   yes
+        else f"""useGroupPressure   yes
 useFlexibleCell    no
 useConstantArea    no
 langevinPiston     on
 langevinPistonTarget  1.01325
 langevinPistonPeriod  1000.0
 langevinPistonDecay   500.0
-langevinPistonTemp    300
+langevinPistonTemp    {temperature_K:g}
 """
     )
     return f"""\
@@ -2638,10 +2639,10 @@ stepspercycle      20
 {gpu_resident_block}
 
 # ── Thermostat / barostat ─────────────────────────────────────────────────────
-temperature        300
+temperature        {temperature_K:g}
 langevin           on
 langevinDamping    5
-langevinTemp       300
+langevinTemp       {temperature_K:g}
 langevinHydrogen   off
 {piston}
 # ── Output ────────────────────────────────────────────────────────────────────
@@ -3029,6 +3030,15 @@ def build_namd_solvated_package(
         box_nm=box_nm,
         mg_hexahydrate=mg_hexahydrate,
     )
+    from backend.core.namd_surface_charge import charge_plan, charge_psf
+    wall_charge = charge_plan(graphene_nanopore, box_nm, graphene_count) if graphene_nanopore else None
+    if wall_charge:
+        if not graphene_only or mg_conc_mM != 0:
+            raise ValueError("Charged wall pilot requires a DNA-free, NaCl-only control")
+        graphene_nanopore['surface_charge'] = wall_charge
+        q = wall_charge['total_charge_e']
+        ions = dataclasses.replace(ions, n_na=ions.n_na + max(0, -q),
+                                   n_cl=ions.n_cl + max(0, q))
     n_na, n_mg, n_cl = ions.as_tuple()
     ion_volume_nm3 = ions.volume_nm3
 
@@ -3079,6 +3089,7 @@ def build_namd_solvated_package(
         progress=progress,
         graphene_atoms=graphene_count,
     )
+    solvated_psf = charge_psf(solvated_psf, wall_charge)
     final_audit = audit_psf(
         solvated_psf,
         require_neutral=require_full_topology,
@@ -3144,6 +3155,7 @@ def build_namd_solvated_package(
             mg_hexahydrate=mg_hexahydrate and bool(mgh_clusters),
             n_hmr=n_hmr,
             nvt_only=False,
+            temperature_K=float((graphene_nanopore or {}).get("temperature_K", 300.0)),
         )
 
     if graphene_nanopore:
@@ -3218,7 +3230,8 @@ def build_namd_solvated_package(
             "n_mg_neutralising": ions.n_mg_neutralising,
             "n_mg_bulk": ions.n_mg_bulk,
             "net_ion_charge_e": 2 * n_mg + n_na - n_cl,
-            "neutral": (2 * n_mg + n_na - n_cl) == ions.dna_neg_charge,
+            "neutral": abs(2 * n_mg + n_na - n_cl + dna_charge + (wall_charge or {}).get("total_charge_e", 0)) < 1e-6,
+            "surface_charge": wall_charge,
             "mg_hexahydrate": mg_hexahydrate and bool(mgh_clusters),
             "n_waters": len(waters),
             "box_nm": list(box_nm),

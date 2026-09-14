@@ -30,10 +30,15 @@ def main():
     ap.add_argument('--concentration',type=float,default=20)
     ap.add_argument('--temperature',type=float,default=294)
     ap.add_argument('--steps',type=int,default=100000)
+    ap.add_argument('--trajectory-frames',type=int,default=40)
+    ap.add_argument('--observable-records',type=int,default=1000)
     ap.add_argument('--dt-fs',type=float,default=2)
     ap.add_argument('--seed',type=int,default=301)
     ap.add_argument('--output',type=Path,required=True)
-    args=ap.parse_args();args.output=create_run_directory(args.output)
+    args=ap.parse_args()
+    if args.trajectory_frames < 1 or args.observable_records < 1:
+        ap.error('Positive output record counts required')
+    args.output=create_run_directory(args.output)
     if args.list_type is None:
         args.list_type='cells' if args.sampling=='npt' else 'verlet'
     if args.sampling in ('md','hmc') and args.list_type!='verlet':
@@ -75,9 +80,9 @@ def main():
     inp='\n'.join(line for line in inp.splitlines() if not line.startswith('list_type ='))
     inp+=f'\nlist_type = {args.list_type}\n'
     inp='\n'.join(line for line in inp.splitlines() if not line.startswith(('T =','print_conf_interval =','print_energy_every =')))
-    interval=max(1,args.steps//1000)
+    interval=max(1,args.steps//args.observable_records)
     inp+=f'\nT = {args.temperature}K\nT_force_value = true\npeg_chudoba = true\npeg_chudoba_pure = true\ngamma_trans = {time_unit}\n'
-    inp+=f'print_conf_interval = {max(1,args.steps//40)}\nprint_energy_every = {max(1,args.steps//100)}\nCUDA_update_stress_tensor_every = {interval}\n'
+    inp+=f'print_conf_interval = {max(1,args.steps//args.trajectory_frames)}\nprint_energy_every = {max(1,args.steps//100)}\nCUDA_update_stress_tensor_every = {interval}\n'
     inp+='''data_output_1 = {
  name = thermo.dat
  print_every = '''+str(interval)+'''

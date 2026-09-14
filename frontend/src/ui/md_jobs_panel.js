@@ -1,3 +1,6 @@
+import { initBoxSolvent } from './md_box_solvent.js'
+import { initNamdSurfaceCard } from './namd_surface_card.js'
+import { initNamdSurfaceCharge } from './namd_surface_charge.js'
 import { initMdIonPathsControls } from './md_ion_paths_controls.js'
 /**
  * ui/md_jobs_panel.js — MD relaxation / production panel (Milestone 2).
@@ -1320,7 +1323,7 @@ export function mdJobRowCtx({ selectedId = null, collapsedIds = null, jobs = [],
       : null,
     rowAction: (job) => shouldShowFixButton(job)
       ? {
-          text: 'Fix', title: 'Ran out of GPU memory — adjust settings to fit this card',
+          text: 'Fix', title: 'Review the failure and available recovery options',
           styleText: `flex-shrink:0;font-size:10px;color:#fff;background:${warnColor};`
             + 'border:none;border-radius:3px;padding:1px 7px;cursor:pointer;font-weight:600',
         }
@@ -1406,6 +1409,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const forcesProvenanceEl = document.getElementById('md-anchors-provenance')
   const anchorAtomsSel     = document.getElementById('md-anchors-atoms')
   const anchorStiffnessSel = document.getElementById('md-anchors-stiffness')
+  const screeningCard = initNamdSurfaceCharge()
+  const boxSolvent = initBoxSolvent({api,store})
   const surfaceEnableChk   = document.getElementById('md-surface-enable')
   const surfaceAxisEl      = document.getElementById('md-surface-axis')
   const surfaceOffsetEl    = document.getElementById('md-surface-offset')
@@ -1415,8 +1420,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const surfaceDnaClearEl  = document.getElementById('md-surface-dna-clearance')
   const surfaceWaterClearEl = document.getElementById('md-surface-water-clearance')
   const surfaceMarginEl    = document.getElementById('md-surface-sheet-margin')
-  const surfaceReadyEl     = document.getElementById('md-surface-ready')
-  const surfaceControlsEl  = document.getElementById('md-surface-controls')
   let surfaceSeedSpec = null
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
@@ -2114,7 +2117,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   function _clearSelectedJob() {
     _grapheneSelectionId = null
+    surfaceCard.clear()
     if (_selectedId) {
+      surfaceCard.restore()
+      screeningCard.restore()
       if (surfaceEnableChk) surfaceEnableChk.checked = false
       surfaceSeedSpec = null
       _syncSurfaceCard()
@@ -2149,7 +2155,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // settings.  Job PARAMETERS are no longer here — the wizard starts from the protocol's
   // defaults on every open, which is the same guarantee without a reset to remember.
   function _resetControlsToDefaults() {
+    surfaceCard.clear()
+    surfaceCard.restore()
     resetControlsToDefaults([trajInterval])
+    screeningCard.restore()
     if (surfaceEnableChk) surfaceEnableChk.checked = false
     surfaceSeedSpec = null
     _syncSurfaceCard()
@@ -2895,10 +2904,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     else _refreshMdPrewarm(true)
   })
 
-  window.addEventListener('nadoc:workspace-path-change', () => {
-    _setTrajOff()
-    _clearSelectedJob()
-    _resetControlsToDefaults()   // drop the previous design's MD settings
+  window.addEventListener('nadoc:workspace-path-change', event => {
+    // First autosave names this same blank document; preserve its in-progress setup.
+    const firstSave = event.detail?.previousPath === null && !!event.detail?.path && !_selectedId
+    if (!firstSave) { _setTrajOff(); _clearSelectedJob(); _resetControlsToDefaults() }
     _renderList()
     if (displayToggle?.checked) _refreshMdDisplay()
     else _refreshMdPrewarm(true)
@@ -3680,7 +3689,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // A job created elsewhere (the oxDNA panel's "Use as NAMD seed") must show up
   // here even when this panel is already open — `_revealMdPanel` only refreshes
   // on a collapse→expand, so without this the new preparing job never appears.
-  window.addEventListener('nadoc:peg-job-selected', evt => _selectJob(evt.detail.jobId))
+  window.addEventListener('nadoc:peg-job-selected', evt => _selectJob(evt.detail.jobId, true))
   window.addEventListener('nadoc:md-job-created', async (evt) => {
     const jobId = evt.detail?.jobId
     await _fetchJobs()
@@ -3811,7 +3820,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       label.textContent = mdQueueRowLabel(job, entry, _fmtJobTime)
       label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer'
       label.title = 'Show this run in the list'
-      label.addEventListener('click', () => _selectJob(entry.job_id))
+      label.addEventListener('click', () => _selectJob(entry.job_id, true))
       const drop = document.createElement('button')
       drop.textContent = '✕'
       drop.title = 'Take this run out of the queue'
@@ -3879,6 +3888,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     return [n ? `${n} anchored atom${n === 1 ? '' : 's'}` : '', field ? 'E-field' : '']
       .filter(Boolean).join(' + ')
   }
+
 
   function _startSelected(btn = runBtn) {
     const runpod = mdRunpodStartable(_selectedJob())
@@ -3990,6 +4000,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // by hand and then finding it again in a picker that had silently defaulted to the
   // newest one instead.
   newBtn?.addEventListener('click', () => {
+    try { boxSolvent?.payload() } catch (error) { showToast(error.message, 'error'); return }
     const sel = _selectedJob()
     if (isProductionParent(sel)) {
       return void _wizard.open('production', { parentJobId: sel.job_id })
@@ -4094,6 +4105,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   const _wizard = initJobWizard({
     getPreparationContext: () => _physicalRelaxPayload(),
+    preparation: boxSolvent,
     api: {
       getRelaxPresets: () => api.getRelaxPresets(),
       fetchProtocolPlan: body => api.fetchProtocolPlan(body),
@@ -4172,17 +4184,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         ? mdAnchorStiffness(anchorStiffnessSel?.value) : null,
       field: fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
       ...mdHardSurfacePayload({
-        enabled: surfaceEnableChk?.checked,
+        enabled: surfaceCard.enabled(),
         grapheneOnly: false,
         surfaceAxis: surfaceAxisEl?.value || null,
         surfaceOffsetNm: surfaceOffsetEl?.value || 0,
-        poreDiameterNm: surfaceDiameterEl?.value || 2.1,
+        poreDiameterNm: surfaceCard.poreDiameter(surfaceDiameterEl?.value ?? 2.1),
         layers: surfaceLayersEl?.value || 1,
         layerSpacingNm: surfaceSpacingEl?.value || 0.335,
         atomisticClearanceNm: surfaceDnaClearEl?.value || 0.32,
         waterClearanceNm: surfaceWaterClearEl?.value || 0.30,
         sheetMarginNm: surfaceMarginEl?.value || 1.5,
       }),
+      ...screeningCard.payload(),
+      ...boxSolvent?.payload(),
     }
   }
 
@@ -4208,6 +4222,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // The device string comes from whichever surface supplied the protocol settings, so
     // the multi-GPU and busy-GPU checks below judge the run that will actually happen —
     // not whatever the (possibly hidden) Advanced form happens to hold.
+    let physicalPayload
+    try { physicalPayload = _physicalRelaxPayload() }
+    catch (error) { showToast(error.message, { severity: 'warning' }); return }
     const proto = protocolPayload ?? {}
     const deviceStr = String(proto.devices ?? '0').trim()
 
@@ -4245,7 +4262,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // availability/connectivity and cannot substitute a different GPU into the run.
       runpod_gpu_key: mdRunpodGpuKeyFor({
         runTarget, requested: proto.runpod_gpu_key }),
-      ..._physicalRelaxPayload(),
+      ...physicalPayload,
       run_dir:        getRunDir(),   // shared run-location: write this run into the chosen folder
     }
 
@@ -4485,7 +4502,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       onClick: (jobId) => {
         const unpickedSurface = surfaceEnableChk?.checked && _grapheneSelectionId !== jobId
         if (jobId === _selectedId && !unpickedSurface) _deselectJob()
-        else _selectJob(jobId)
+        else _selectJob(jobId, true)
       },
       onWarning: (jobId) => { void _handleJobWarning(jobId) },
       onChevron: (jobId) => _toggleCollapse(jobId),
@@ -4678,8 +4695,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   // ── Job selection + WS subscription ───────────────────────────────────────
-  function _selectJob(jobId, { automatic = false } = {}) {
-    _grapheneSelectionId = automatic ? null : jobId
+  function _selectJob(jobId, options = false) {
+    const explicit = options === true || (options && typeof options === 'object' && options.automatic === false)
+    _grapheneSelectionId = explicit ? jobId : null
+    const surfaceJob = _jobs.find(j => j.job_id === jobId) || null
+    surfaceCard.select(surfaceJob, mdInheritedPrepParams(surfaceJob, _jobs), explicit)
     _userDeselected = false   // an explicit pick supersedes a previous deselection
     if (_selectedId === jobId) { _syncSurfaceCard(); return }
     ionPaths?.off()
@@ -4701,7 +4721,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _metricsCard?.sync?.()
     _syncRunTargetToJob(selectedJob)
     const prep = mdInheritedPrepParams(selectedJob, _jobs)
-    if (surfaceEnableChk) surfaceEnableChk.checked = !!prep.graphene_nanopore
+    screeningCard.restore(prep)
+    boxSolvent?.restore(prep)
+    surfaceCard.restore(prep)
     if (surfaceAxisEl) surfaceAxisEl.value = prep.graphene_surface_axis || ''
     if (surfaceOffsetEl) surfaceOffsetEl.value = String(prep.graphene_surface_offset_nm ?? 0)
     if (surfaceDiameterEl) surfaceDiameterEl.value = String(prep.graphene_pore_diameter_nm ?? 2.1)
@@ -4719,6 +4741,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         if (jobId !== _selectedId) return
         const s = source?.run_config?.surface
         surfaceSeedSpec = s ? { dir: s.dir, positionNm: s.position_nm } : null
+        surfaceCard.setSeed(surfaceSeedSpec)
         _syncSurfaceCard()
       }).catch(() => {})
     }
@@ -4812,6 +4835,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    *  detail for a job that's no longer being shown — and reopens on re-selection. */
   function _deselectJob() {
     _grapheneSelectionId = null
+    surfaceCard.clear()
+    surfaceCard.restore()
+    screeningCard.restore()
     if (surfaceEnableChk) surfaceEnableChk.checked = false
     surfaceSeedSpec = null
     _syncSurfaceCard()
@@ -5688,48 +5714,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     structure: _anchorsCard, surface: _surfaceAnchorsCard,
     toSurfaceId: 'md-anchors-to-surface', toStructureId: 'md-anchors-to-structure',
   })
-  function _syncSurfaceCard() {
-    const enabled = !!surfaceEnableChk?.checked
-    if (surfaceControlsEl) surfaceControlsEl.style.display = enabled ? 'flex' : 'none'
-    if (surfaceReadyEl) {
-      const layers = Math.max(1, Number(surfaceLayersEl?.value || 1))
-      const thickness = (layers - 1) * Number(surfaceSpacingEl?.value || 0.335)
-      surfaceReadyEl.textContent = enabled
-        ? `Surface on · ${Number(surfaceDiameterEl?.value || 2.1).toFixed(2)} nm pore · ${layers} layer${layers === 1 ? '' : 's'}${layers > 1 ? ` · ${thickness.toFixed(3)} nm thick` : ''}.`
-        : 'Off — tick “Add graphene nanopore”.'
-      surfaceReadyEl.style.color = enabled ? '#e0a800' : '#8b949e'
-    }
+  const surfaceCard = initNamdSurfaceCard({ onChange: enabled => {
     setAnchorSectionEnabled(document.getElementById('md-surface-anchors-section'), enabled)
     _anchorTransfers.setSurfaceEnabled(enabled)
-    window.dispatchEvent(new CustomEvent('nadoc:graphene-nanopore-preview', { detail: {
-      enabled: enabled && !!_selectedId && _grapheneSelectionId === _selectedId,
-      poreDiameterNm: Number(surfaceDiameterEl?.value || 2.1),
-      layers: Number(surfaceLayersEl?.value || 1),
-      layerSpacingNm: Number(surfaceSpacingEl?.value || 0.335),
-      // Auto inherits a deposited seed when one exists; a native NAMD design uses the
-      // backend's standard -Y face, so it must still have an immediate preview.
-      surface: _selectedSurfaceSpec() || surfaceSeedSpec || {
-        dir: [0, 1, 0], positionNm: Number(surfaceOffsetEl?.value || 0), faceRelative: true,
-      },
-    }}))
     window.dispatchEvent(new CustomEvent('nadoc:anchors-change', { detail: {
       engine: 'namd-surface', highlighted: _surfaceAnchorsCard.getHighlighted?.() || [],
     }}))
-  }
-  function _selectedSurfaceSpec() {
-    const normals = {
-      '-x': [1, 0, 0], '+x': [-1, 0, 0], '-y': [0, 1, 0],
-      '+y': [0, -1, 0], '-z': [0, 0, 1], '+z': [0, 0, -1],
-    }
-    const dir = normals[surfaceAxisEl?.value]
-    return dir ? { dir, positionNm: Number(surfaceOffsetEl?.value || 0), faceRelative: true } : null
-  }
-  surfaceEnableChk?.addEventListener('change', _syncSurfaceCard)
-  surfaceAxisEl?.addEventListener('change', _syncSurfaceCard)
-  for (const el of [surfaceOffsetEl, surfaceDiameterEl, surfaceLayersEl, surfaceSpacingEl,
-                    surfaceDnaClearEl, surfaceWaterClearEl, surfaceMarginEl]) {
-    el?.addEventListener('input', _syncSurfaceCard)
-  }
+  } })
+  function _syncSurfaceCard() { surfaceCard.sync() }
   const surfaceToggle = document.getElementById('md-surface-toggle')
   const surfaceBody = document.getElementById('md-surface-body')
   const surfaceArrow = document.getElementById('md-surface-arrow')
@@ -5769,6 +5761,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
      *  main.js, because md_panel owns the socket and this panel owns the toggles. */
     acceptLiveSolvent: (buf) => solvent?.liveBlob(buf),
 
+    captureSetupSelections: () => ({anchors:_anchorsCard.getAnchors(),surfaceAnchors:_surfaceAnchorsCard.getAnchors(),occupancyScope:_occupancy.scope()?.getAnchors?.() || []}),
+    applySetupSelections: (settings, sameDesign) => {
+      _anchorsCard.applyConfig(sameDesign ? settings.anchors || [] : [])
+      _surfaceAnchorsCard.applyConfig(sameDesign ? settings.surfaceAnchors || [] : [])
+      _occupancy.scope()?.applyConfig?.(sameDesign ? settings.occupancyScope || [] : [])
+      return !sameDesign && (settings.anchors?.length || settings.surfaceAnchors?.length || settings.occupancyScope?.length)
+        ? 'Anchor or occupancy selections belong to another design; reselect them here.' : ''
+    },
     getSelectedJob: _selectedJob,
     // Immediately re-fetch the job list (used when a job is spawned from somewhere other
     // than this panel). A single fetch populates the list AND re-arms the poll once the
@@ -5780,10 +5780,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     },
     // Select a job in this panel's list (highlight + populate cards) as a row click does.
     // Refetches first if the job isn't listed yet (a just-spawned job).
-    selectJob: async (jobId) => {
+    selectJob: async (jobId, { explicit = false } = {}) => {
       if (!jobId) return
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
-      return _selectJob(jobId)
+      return _selectJob(jobId, explicit)
     },
     // Drop the selection without unloading anything (the unified Simulate list routes its own
     // click-the-selected-row-to-deselect here).

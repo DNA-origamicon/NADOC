@@ -982,6 +982,10 @@ def reassemble_to_posed_reference(
     p_box = np.asarray(p_box, dtype=np.float64)
     box = np.asarray(box_nm, dtype=np.float64)
     N = len(p_box)
+    if N == 0:
+        # Solvent-only trajectories have no DNA pose to recover. Keep an empty
+        # coordinate matrix and center their periodic cell in the viewer.
+        return np.empty((0, 3), dtype=np.float64), box / 2
     rigid = (
         rigid_mask
         if (rigid_mask is not None and np.any(rigid_mask))

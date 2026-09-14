@@ -1,5 +1,158 @@
 # PEG handoff — 2026-09-10
 
+## Latest status — September 11
+
+N36 passes the bounded CPU/GPU and timestep-equivalence checks. The N135/1 fs
+recovery completed successfully; its cohort remains inconclusive (RMS Rg
+2.9751 nm, conservative SEM 0.0758 nm, minimum effective samples 16.8). The
+recovery lease restored the historical scheduler. N135/2 fs long extensions
+have not started. All 27 EOS proposal diagnostics completed without resolving
+dense-state convergence. See [RESULTS_20260911.md](RESULTS_20260911.md).
+
+The next dense-solution convergence round and coupled brush–tile pilot have
+not launched. The proposed two-engine pilot targets reversible osmotic packing
+pressure over approximately 3 nm, including tile stability and chain-level
+bimodality; it is not yet an implemented gold-electrode voltage model. The
+self-contained [proposal briefing](../../docs/research/PEG_ACTUATOR_PILOT_PROPOSAL_BRIEF.md)
+records methods, limitations, sources and the approximately $7,500 compute budget.
+That budget differs in scope from the earlier generic PEG/NAMD development budget;
+reconcile overlapping allocations rather than adding them automatically.
+
+**Help → PEG testing** now displays 60 completed 294 K trajectories with length
+and run/replica selectors, play/pause, scrubbing and playback speed. See
+[viewer documentation](../../docs/peg_testing.md). The 125 MB display exports
+are regenerated locally with `python -m experiments.peg_chudoba.export_viewer`;
+they are gitignored. Validation verdicts remain separate from run completion.
+Frontend verification: 6,247 unit tests and the real-browser viewer check passed;
+export periodic-unwrapping test passed. Full smoke was blocked by the existing
+active-simulation guard; lint reports two existing unrelated issues.
+
+All running-status entries below describe historical launches. Current process
+state must be checked from runtime records and live processes, not inferred from
+these notes. Runtime scheduler PID snapshots should not be staged as source changes.
+
+## Revised diagnostics launched
+
+User authorized the revised next steps. `run_diagnostics.py` is running as PID
+3684311; inspect `workspace/peg_chudoba/scheduling_294_20260910/diagnostics_revision/driver.json`
+and `driver.log` for current state. The lease is parked with this driver as owner;
+historical N455 work is suspended and will restore on completion/failure.
+N36/1 fs round 1 is active, with 12 CPU EOS workers in parallel. See
+[DIAGNOSTIC_REVISION.md](DIAGNOSTIC_REVISION.md) for the frozen diagnostic allocation.
+The corrected classifier calls the existing N36/2 fs result inconclusive, not
+resolved disagreement. Its raw results are preserved and the pre-revision
+validation report is archived. Fourteen focused scheduling tests passed.
+N36 gets only its remaining original caps; N135 GPU requires N36 equivalence.
+EOS uses a separate 27 × 2,000-sweep proposal diagnostic; exhausted production
+caps remain exhausted. No automatic sampler promotion or force-field refit.
+Execution source snapshots are saved alongside the diagnostic driver record.
+
+
+## Latest status: bounded driver stopped; diagnostics needed
+
+At the 20:51 MDT check, the bounded campaign had stopped at 19:27 MDT on its first
+GPU comparison. See [STATUS_REASSESSMENT_20260910.md](STATUS_REASSESSMENT_20260910.md).
+All nine CPU chain lengths pass; all seven N135 EOS states exhausted caps without
+sampling convergence. N36/2 fs completed 3 × 20 ns: mean Rg differs from CPU by
+3.47%, but the uncertainty-inclusive bound is 6.10%, so 5% equivalence is unresolved.
+The driver's "disagreement" stop conflates inconclusive equivalence with demonstrated
+out-of-band bias. N36/1 fs and N135 GPU cohorts have not run. The lease restored the
+older serial controller, now running historical N455 EOS work. This assessment did
+not alter any processes or code; prior "running bounded validation" notes below
+are historical. Prioritize verdict classification, small N36 diagnostics and EOS
+mixing over expanding surface simulations or spending the H200 pilot allocation.
+
+## Parallel atomistic PEG infrastructure
+
+User authorized setting up NAMD PEG-brush infrastructure while bounded oxDNA
+validation continues. See [../peg_namd/README.md](../peg_namd/README.md) and
+[../peg_namd/GAPS.md](../peg_namd/GAPS.md). The planner produced 27 cases in
+`workspace/peg_namd/brush_plan_v1`: N36/N45/N76, three densities, three replicas.
+The isolated builder consumes parameterized chain/slab assets and writes VMD
+solvation plus staged NAMD inputs. Physical PEG/gold assets are still missing;
+no physical NAMD brush or force-field fit has been launched. The first protocol
+is neutral gold with harmonic graft proxies, not Au-S chemistry or actuation.
+Seventeen focused tests and a 6,560-atom synthetic VMD file-pipeline check passed;
+these are software checks, not model validation. Existing oxDNA runs/leases and
+force fields were not modified by this work.
+
+## Project deliverable: actuator feasibility map
+
+The user identified a PEG-supported DNA platform above gold as the motivating
+device and agreed that the deliverable is a parameter-space map of experimentally
+feasible actuation regimes. See [ACTUATOR_FEASIBILITY_MAP.md](ACTUATOR_FEASIBILITY_MAP.md)
+for inputs, outputs, evidence levels and staged modeling/experimental criteria.
+The approximately 50 × 50 platform's units remain provisional. No actuator sweep
+has yet been performed; this planning update does not alter bounded bulk runs.
+
+## Published limitations and prior art
+
+See [LITERATURE_GAP_ASSESSMENT.md](LITERATURE_GAP_ASSESSMENT.md) for the targeted
+literature check: relevant crowder-oxDNA and coarse-grained PEG–gold work exists;
+no retrieved paper establishes a fundamental incompatibility of this port.
+Cross interactions and interfacial solvation remain the key validation gaps.
+This assessment did not alter the running bounded simulations.
+
+## Twelve-worker benchmark and scheduler handoff
+
+The user subsequently authorized benchmarking twelve CPU workers first and
+adopting that count if scaling remains roughly linear. See
+[CPU12_SCHEDULING.md](CPU12_SCHEDULING.md). `scale_cpu.py` now owns the lease;
+it preserved running native replicas and retired the previous bounded driver.
+The eight matched timing batches precede automatic adoption of twelve or four
+workers according to the predeclared 2.4x threshold. Check `cpu12/selection.json`
+and `active_selection.json` for the result: all four comparisons passed,
+2.710x geometric-mean throughput versus four workers. Twelve NPT workers are
+now standard; ten reserved replicas resumed/started immediately. Progress is in `cpu12_driver.log`, not the older log.
+The updated validator adopts orphaned run wrappers and overlaps independent
+pressure cohorts without exceeding the selected worker count. Nine focused
+scheduling/recovery tests passed. Scientific limits and criteria are unchanged.
+
+## Bounded production revision
+
+User authorized completing bounded bulk validation after the gold-surface
+assessment. [BOUNDED_VALIDATION.md](BOUNDED_VALIDATION.md) supersedes production
+scope only; the original timing document stays frozen. GPU equilibrium now uses
+N36/N135, 20 ns then at most 80 ns per origin/timestep, not N795 multi-microsecond
+MD. EOS retains seven pressures with two additional 20k-sweep rounds maximum,
+after finishing the 12 reserved 20k replicas. Acceptance criteria are unchanged.
+N795 numerical energy checks passed at eight serial GPU timing endpoints;
+all seven prior implementation-manifest hashes match. Seven scheduling unit
+tests pass. These numerical checks do not establish GPU N795 equilibrium.
+
+`python -m experiments.peg_chudoba.run_bounded` waits for the existing benchmark
+owner to exit and its lease to restore, requires all 26 timing batches and the
+selected configuration, then runs production under a fresh lease. Inspect
+`bounded_driver.json`, `bounded_driver.log`, `validation.json`, and `REPORT.md`
+in the scheduling runtime directory. Do not start a duplicate driver. Completion
+of bounded allocations can result in an explicitly incomplete validation verdict.
+
+## New authorized work: matched scheduling and first 294 K claim
+
+The user subsequently requested serial-versus-parallel benchmarks, followed by
+validation using the best measured configuration. This supersedes the earlier
+serial-only preference for this experiment. See [NARROW_VALIDATION.md](NARROW_VALIDATION.md).
+The user also clarified that `just test-session` is a regression-test gate, not
+a gate for these explicitly requested experiments. No guard or marker was changed.
+
+Runner: `python -m experiments.peg_chudoba.benchmark_scheduling --execute`.
+Preparation is `--prepare`; `--benchmark-only` stops after matched timing.
+Runtime evidence and the frozen plan are under
+`workspace/peg_chudoba/scheduling_294_20260910`; `REPORT.md` is the readable report.
+This work is incomplete until `validation.json` records all required verdicts.
+Timing runs are deliberately outside the legacy `runs` discovery path.
+
+While `lease.json` there says `parked`, the historical serial controller and
+its trees are intentionally suspended. A PID/start-checked watchdog restores
+the old schedule if the owner dies, freezing any surviving new task trees.
+Do not resume the historical controller manually while the lease owner is live.
+Read-only inspect `lease.json` and `/proc`. For recovery after owner exit, use
+`/usr/bin/python3 -m experiments.peg_chudoba.scheduling_lease restore --state
+workspace/peg_chudoba/scheduling_294_20260910/lease.json` only after inspecting
+the surviving task trees. Suspended processes are not durable checkpoints.
+
+The remainder is the earlier checkpoint, preserved as history.
+
 Read this first in a fresh session. The user requested a summary and commit, not a claim that validation is finished. The persistent goal remains incomplete. This checkpoint does not stop the existing simulation queue.
 
 ## What exists

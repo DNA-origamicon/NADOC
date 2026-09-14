@@ -400,7 +400,7 @@ def _segment_pid(segment_name: str) -> Optional[int]:
     a running ``..._p100`` process.  Returns the PID so the caller can both detect AND
     stop/re-adopt the orphan.
     """
-    needles = (f"{segment_name}.conf".encode(), f"{segment_name}.resume".encode())
+    from backend.core.namd_process import is_segment_command
     try:
         proc_dirs = list(Path("/proc").iterdir())
     except OSError:
@@ -412,10 +412,7 @@ def _segment_pid(segment_name: str) -> Optional[int]:
             cmdline = (proc_dir / "cmdline").read_bytes()
         except OSError:
             continue
-        lower = cmdline.lower()
-        if any(n in cmdline for n in needles) and (
-            b"namd" in lower or b"srun" in lower
-        ):
+        if is_segment_command(cmdline, segment_name):
             try:
                 return int(proc_dir.name)
             except ValueError:
@@ -2398,6 +2395,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     # `error` from reconcile.  Clear it now that we are actively running again so
     # the UI never shows a stale "stopped — resume to continue" banner on a live job.
     job.error = None
+    job.decision = None
     job.save(workspace_dir)
 
     start_idx = job.current_segment_idx
