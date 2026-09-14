@@ -3,7 +3,7 @@ import { initAnimationDefaults } from './animation_defaults.js'
 
 function setup(context = {}) {
   const state = { currentDesign: { id: 'd', animations: [] }, currentAssembly: { id: 'a', animations: [] } }
-  const api = { createAnimation: vi.fn(), createAssemblyAnimation: vi.fn() }
+  const api = { ensureDefaultAnimation: vi.fn(), createAssemblyAnimation: vi.fn() }
   const onError = vi.fn()
   const defaults = initAnimationDefaults({ store: { getState: () => state }, api, getContext: () => context, onError })
   return { state, api, defaults, onError }
@@ -12,7 +12,7 @@ describe('initial animation', () => {
   it('creates animation 1 once despite repeated updates and concurrent views', async () => {
     const { defaults, api } = setup()
     await Promise.all([defaults.ensure(), defaults.ensure(), defaults.ensure()])
-    expect(api.createAnimation).toHaveBeenCalledExactlyOnceWith('animation 1')
+    expect(api.ensureDefaultAnimation).toHaveBeenCalledExactlyOnceWith()
     expect(api.createAssemblyAnimation).not.toHaveBeenCalled()
   })
   it('preserves existing animations and respects later deletion', async () => {
@@ -21,10 +21,10 @@ describe('initial animation', () => {
     await defaults.ensure()
     state.currentDesign = { id: 'd', animations: [] }
     await defaults.ensure()
-    expect(api.createAnimation).not.toHaveBeenCalled()
+    expect(api.ensureDefaultAnimation).not.toHaveBeenCalled()
     state.currentDesign = { id: 'next', animations: [] }
     await defaults.ensure()
-    expect(api.createAnimation).toHaveBeenCalledOnce()
+    expect(api.ensureDefaultAnimation).toHaveBeenCalledOnce()
   })
   it('uses separate assembly and embedded-part contexts', async () => {
     const context = { assemblyMode: true }
@@ -38,17 +38,17 @@ describe('initial animation', () => {
     await defaults.ensure()
     expect(context.partDesign.animations[0]).toMatchObject({ name: 'animation 1', keyframes: [], fps: 30, loop: false })
     expect(context.partDesign.animations[0].id).toBeTruthy()
-    expect(api.createAnimation).not.toHaveBeenCalled()
+    expect(api.ensureDefaultAnimation).not.toHaveBeenCalled()
   })
   it('waits for a document and reports failures without a retry loop', async () => {
     const { defaults, state, api, onError } = setup()
     state.currentDesign = null
     await defaults.ensure()
-    expect(api.createAnimation).not.toHaveBeenCalled()
+    expect(api.ensureDefaultAnimation).not.toHaveBeenCalled()
     state.currentDesign = { id: 'd' }
-    api.createAnimation.mockRejectedValue(new Error('offline'))
+    api.ensureDefaultAnimation.mockRejectedValue(new Error('offline'))
     await defaults.ensure(); await defaults.ensure()
     expect(onError).toHaveBeenCalledOnce()
-    expect(api.createAnimation).toHaveBeenCalledOnce()
+    expect(api.ensureDefaultAnimation).toHaveBeenCalledOnce()
   })
 })

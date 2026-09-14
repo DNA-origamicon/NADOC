@@ -34,6 +34,11 @@ export async function deleteAssemblyConfiguration(configId) {
 // ``getGeometry()`` refetch that ``_syncFromDesignResponse`` would otherwise
 // fire on every mutation.
 
+export async function ensureDefaultAnimation() {
+  const json = await _request('POST', '/design/animations', { ensure_default: true })
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
 export async function createAnimation(name = 'Animation', fps = 30, loop = false) {
   const json = await _request('POST', '/design/animations', { name, fps, loop })
   return _syncFromDesignResponse(json, { skipGeometry: true })

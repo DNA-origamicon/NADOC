@@ -1525,6 +1525,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   let _prewarmTimer = null
   let _remotePollTimer = null   // periodic SLURM-status poll for in-flight Alpine jobs
   let _hadActiveRemote = false  // did the last remote poll see an active Alpine job? (edge-trigger a final refresh)
+  let _grapheneSelectionId = null   // explicit selection owns the surface preview
   let _displayJobId = null
   let _displayKey   = null
   let _displayMeta  = null
@@ -1993,7 +1994,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
     if (_userDeselected) return   // the user deliberately cleared the selection — respect it
     const preferred = preferredMdSelection(jobs, _selectedId)
-    if (preferred && preferred !== _selectedId) _selectJob(preferred)
+    if (preferred && preferred !== _selectedId) _selectJob(preferred, { automatic: true })
   }
 
   function _onOpen() {
@@ -2107,6 +2108,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   function _clearSelectedJob() {
+    _grapheneSelectionId = null
     if (_selectedId) {
       if (surfaceEnableChk) surfaceEnableChk.checked = false
       surfaceSeedSpec = null
@@ -4470,7 +4472,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
     }
     renderJobList(listEl, buildJobListModel(jobs, ctx), {
-      onClick: (jobId) => (jobId === _selectedId ? _deselectJob() : _selectJob(jobId)),
+      onClick: (jobId) => {
+        const unpickedSurface = surfaceEnableChk?.checked && _grapheneSelectionId !== jobId
+        if (jobId === _selectedId && !unpickedSurface) _deselectJob()
+        else _selectJob(jobId)
+      },
       onWarning: (jobId) => { void _handleJobWarning(jobId) },
       onChevron: (jobId) => _toggleCollapse(jobId),
       onAction: (jobId) => _openVramFix(jobId),   // the "Fix" VRAM-OOM row action
@@ -4662,9 +4668,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   // ── Job selection + WS subscription ───────────────────────────────────────
-  function _selectJob(jobId) {
+  function _selectJob(jobId, { automatic = false } = {}) {
+    _grapheneSelectionId = automatic ? null : jobId
     _userDeselected = false   // an explicit pick supersedes a previous deselection
-    if (_selectedId === jobId) return
+    if (_selectedId === jobId) { _syncSurfaceCard(); return }
     ionPaths?.off()
     _gateBDismissed = null   // a fresh selection may re-show a pending decision
     _mdDebug(`[${_ts()}] md-jobs: selecting job ${jobId}`)
@@ -4695,8 +4702,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (surfaceMarginEl) surfaceMarginEl.value = String(prep.graphene_sheet_margin_nm ?? 1.5)
     _anchorsCard?.applyConfig?.(prep.anchors || [])
     _surfaceAnchorsCard?.applyConfig?.(prep.surface_anchors || [])
-    _syncSurfaceCard()
     surfaceSeedSpec = null
+    _syncSurfaceCard()
     if (selectedJob?.seed_oxdna_job_id) {
       void api.getOxdnaJob(selectedJob.seed_oxdna_job_id).then(source => {
         if (jobId !== _selectedId) return
@@ -4788,6 +4795,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    *  The status WebSocket does close — it streams
    *  detail for a job that's no longer being shown — and reopens on re-selection. */
   function _deselectJob() {
+    _grapheneSelectionId = null
     if (surfaceEnableChk) surfaceEnableChk.checked = false
     surfaceSeedSpec = null
     _syncSurfaceCard()
@@ -5678,7 +5686,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     setAnchorSectionEnabled(document.getElementById('md-surface-anchors-section'), enabled)
     _anchorTransfers.setSurfaceEnabled(enabled)
     window.dispatchEvent(new CustomEvent('nadoc:graphene-nanopore-preview', { detail: {
-      enabled, poreDiameterNm: Number(surfaceDiameterEl?.value || 2.1),
+      enabled: enabled && !!_selectedId && _grapheneSelectionId === _selectedId,
+      poreDiameterNm: Number(surfaceDiameterEl?.value || 2.1),
       layers: Number(surfaceLayersEl?.value || 1),
       layerSpacingNm: Number(surfaceSpacingEl?.value || 0.335),
       // Auto inherits a deposited seed when one exists; a native NAMD design uses the

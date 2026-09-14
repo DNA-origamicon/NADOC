@@ -287,3 +287,58 @@ def test_md_jobs_list_health_compaction_keeps_tail_and_each_segment_latest():
     assert len(compact) == 17
     assert compact[0] == {"segment": "min", "step": 1}
     assert compact[-1] == {"segment": "equil", "step": 199}
+
+
+@pytest.mark.parametrize("inherited", [False, True])
+def test_md_schema_defaults_do_not_count_as_design_edits(monkeypatch, tmp_path, inherited):
+    """Reproduce cube_pore: v4 predates native helix fields, with no design edit."""
+    import hashlib
+    import json
+
+    from backend.core.oxdna_staleness import _FINGERPRINT_FIELDS
+
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    prepared = make_6hb_design()
+    snapshot = prepared.model_dump(mode="json")
+    for helix in snapshot["helices"]:
+        helix.pop("native_residues")
+        helix.pop("native_source")
+    payload = {key: snapshot[key] for key in _FINGERPRINT_FIELDS}
+    # Use a separate copy: the actual snapshot retains presentation/identity fields.
+    payload = json.loads(json.dumps(payload))
+    for strand in payload["strands"]:
+        strand.pop("color", None)
+    for overhang in payload["overhangs"]:
+        for domain in overhang.get("sub_domains", []):
+            domain.pop("id", None)
+    for connection in payload["crossovers"] + payload["forced_ligations"]:
+        connection.pop("id", None)
+    old_hash = "v4:" + hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    assert old_hash != design_build_fingerprint(prepared)
+    job = _make_md_job(tmp_path, prepared, fingerprint=old_hash)
+    (job.job_dir(tmp_path) / "design.json").write_text(json.dumps(snapshot))
+    if inherited:
+        parent = job
+        job = new_job("6hb", "equilibrium_aware", "", "")
+        job.parent_job_id = parent.job_id
+        job.design_fingerprint = old_hash
+        job.save(tmp_path)
+
+    design_state.set_design(prepared)
+    client = TestClient(app)
+    assert client.get(f"/api/md/jobs/{job.job_id}").json()["out_of_date"] is False
+
+    # The same cached snapshot must continue to catch actual sequence/geometry edits.
+    for field in ("sequence", "geometry"):
+        edited = prepared.model_copy(deep=True)
+        if field == "sequence":
+            edited.strands[0].sequence = "ACGT"
+        else:
+            edited.helices[0].axis_start.x += 1.0
+        design_state.set_design(edited)
+        assert client.get(f"/api/md/jobs/{job.job_id}").json()["out_of_date"] is True
+        assert client.post(
+            f"/api/md/jobs/{job.job_id}/production", json={"steps": 1000}
+        ).status_code == 409

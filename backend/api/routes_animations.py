@@ -42,6 +42,7 @@ class CreateAnimationBody(BaseModel):
     name: str = "Animation"
     fps: int = 30
     loop: bool = False
+    ensure_default: bool = False
 
 
 class PatchAnimationBody(BaseModel):
@@ -122,6 +123,13 @@ class ReorderKeyframesBody(BaseModel):
 def create_animation(body: CreateAnimationBody) -> dict:
     """Create a new named animation. Pushes to the undo stack."""
     from backend.core.validator import validate_design
+
+    if body.ensure_default:
+        def seed(design):
+            if not design.animations:
+                design.animations = [DesignAnimation(name="animation 1", fps=30, loop=False)]
+        updated, _ = design_state.mutate_display_metadata(seed)
+        return _design_response(updated, validate_design(updated))
 
     design = design_state.get_or_404()
     anim = DesignAnimation(name=body.name, fps=body.fps, loop=body.loop)

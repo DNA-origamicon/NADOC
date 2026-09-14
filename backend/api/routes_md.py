@@ -689,7 +689,7 @@ def _load_job(job_id: str) -> MdJob:
 
 
 # ── Out-of-date detection (design edited after an MD job was prepared) ─────────
-_MD_DERIVED_FP_CACHE: dict[str, str] = {}
+_MD_DERIVED_FP_CACHE: dict[tuple[str, str, str | None], str] = {}
 
 
 def _md_snapshot_design(job: MdJob):
@@ -724,11 +724,12 @@ def _md_snapshot_design(job: MdJob):
 
 
 def _md_job_fingerprint(job: MdJob) -> "str | None":
-    if job.design_fingerprint and (
-        job.design_fingerprint.startswith("v2:") or len(job.design_fingerprint) != 64
-    ):
-        return job.design_fingerprint
-    cached = _MD_DERIVED_FP_CACHE.get(job.job_id)
+    # Always compare snapshots through the current model/schema. Even a matching
+    # hash version can predate new model fields: loading supplies their defaults,
+    # changing the hash without a user edit (cube_pore's native helix fields).
+    # The frozen snapshot is the source of truth; without one, staleness is unknown.
+    key = (str(_workspace().resolve()), job.job_id, job.design_fingerprint)
+    cached = _MD_DERIVED_FP_CACHE.get(key)
     if cached is not None:
         return cached
     snap = _md_snapshot_design(job)
@@ -737,7 +738,7 @@ def _md_job_fingerprint(job: MdJob) -> "str | None":
     from backend.core.oxdna_staleness import design_build_fingerprint
 
     fp = design_build_fingerprint(snap)
-    _MD_DERIVED_FP_CACHE[job.job_id] = fp
+    _MD_DERIVED_FP_CACHE[key] = fp
     return fp
 
 
