@@ -3936,7 +3936,7 @@
         <div class="dropdown">
           <button class="dropdown-item" id="menu-file-new">New Part</button>
           <button class="dropdown-item" id="menu-file-new-assembly">New Assembly…</button>
-          <button class="dropdown-item" id="menu-namd-peg-surfaces">NAMD PEG Surfaces…</button>
+
           <button class="dropdown-item" id="menu-file-open">Open File… <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+O]</span></button>
           <div class="submenu-item">Recent <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu" id="recent-files-submenu">
@@ -6021,6 +6021,13 @@
               </div>
 
               <!-- ── Benchmark (self-rendered collapsible card — auto-tune threads/devices) ── -->
+              <section id="md-setup-presets" class="namd-setup-presets" aria-label="NAMD setup presets">
+<label for="md-setup-preset-select">Setup preset</label>
+<select id="md-setup-preset-select" aria-label="Setup preset"><option value="">Custom settings</option></select>
+<div class="namd-preset-actions"><button type="button" class="btn" data-create-preset>Create</button><button type="button" class="btn" data-overwrite-preset disabled>Overwrite</button><button type="button" class="btn" data-delete-preset disabled>Delete</button></div>
+<form data-preset-name-form hidden><label>Preset name<input name="preset_name" maxlength="100" required></label><button class="btn" type="submit">Save preset</button><button class="btn" type="button" data-cancel-preset>Cancel</button></form>
+<p role="status" aria-live="polite"></p>
+</section>
               <div id="md-benchmark-mount" style="margin-bottom:8px"></div>
 
               <!-- ── Jobs — HIDDEN: the unified #simulate-jobs list above is the one
@@ -6107,13 +6114,22 @@
                 </div>
               </div>
 
-              <div class="ox-card" id="namd-peg-surfaces">
-                <strong>PEG surfaces</strong>
-                <p class="namd-peg-note">Create a PEG-coated support directly for NAMD. Save and reopen surface drafts here.</p>
-                <button class="btn" type="button" data-new-surface>New PEG surface…</button>
-                <select aria-label="Saved NAMD PEG surfaces"><option value="">Loading surface drafts…</option></select>
-                <button class="btn" type="button" data-open-surface disabled>Open surface draft</button>
-                <p role="status" class="namd-peg-note"></p>
+              <div class="ox-card">
+                <div id="md-box-solvent-toggle" class="ox-card__header" style="color:#c9d1d9"><span id="md-box-solvent-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Box and solvent</span></div>
+                <div id="md-box-solvent-body" class="ox-card__body" style="display:none">
+                  <label title="Display the estimated solvent region, margin, dimensions, bulk ion counts and boundary colors. This is a setup overlay, not a trajectory."><input id="md-box-view-details" type="checkbox"> View details</label>
+                  <label class="box-solvent-field">Box sizing<select id="md-box-sizing"><option value="rotation">Fit · rotation-safe</option><option value="bbox">Fit · bounding box</option><option value="explicit">Explicit dimensions</option></select></label>
+                  <label class="box-solvent-field" title="Water margin per face around the solute; for a charged single sheet, reservoir padding on each side.">Water margin (nm)<input id="md-box-padding" type="number" min="0.1" max="30" step="0.01" value="2"></label>
+                  <label class="box-solvent-field">Cell X (nm)<input id="md-box-x" type="number" min="0.1" max="1000" step="0.001" value="10"></label>
+                  <label class="box-solvent-field">Cell Y (nm)<input id="md-box-y" type="number" min="0.1" max="1000" step="0.001" value="10"></label>
+                  <label class="box-solvent-field">Cell Z (nm)<input id="md-box-z" type="number" min="0.1" max="1000" step="0.001" value="10"></label>
+                  <label class="box-solvent-field">Ionic conditions<select id="md-box-salt"><option value="screening">Origami screening</option><option value="custom">Custom</option></select></label>
+                  <label class="box-solvent-field">NaCl (mM)<input id="md-box-na" type="number" min="0" max="1000" step="0.1" value="0"></label>
+                  <label class="box-solvent-field">MgCl₂ (mM)<input id="md-box-mg" type="number" min="0" max="1000" step="0.1" value="12.5"></label>
+                  <label class="box-solvent-field" title="Surface-control temperature is editable; ordinary DNA relaxation remains protocol-controlled.">Temperature (K)<input id="md-box-temperature" type="number" min="270" max="350" step="0.01" value="300"></label>
+                  <output title="Blue: periodic faces. Amber: normal faces of the vacuum-padded slab cell. Boundary conditions follow the supported system model; colors do not change electrostatics."></output>
+                  <p role="status" aria-live="polite"></p>
+                </div>
               </div>
               <!-- ── Hard surface (graphene nanopore inherited from an oxDNA deposition) ── -->
               <div class="ox-card">
@@ -6121,24 +6137,38 @@
                   <span id="md-surface-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Hard surface</span>
                 </div>
                 <div id="md-surface-body" class="ox-card__body" style="display:none">
-                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">The same deposited plane used by oxDNA, materialized as neutral graphene atoms held by near-fixed harmonic restraints that remain compatible with GPU-resident NAMD.</div>
-                  <label style="display:grid;grid-template-columns:1fr 110px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs);margin-bottom:5px">Design face<select id="md-surface-axis" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"><option value="">Inherited / auto</option><option value="-y">−Y (bottom)</option><option value="+y">+Y (top)</option><option value="-x">−X</option><option value="+x">+X</option><option value="-z">−Z</option><option value="+z">+Z</option></select></label>
-                  <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs);margin-bottom:7px" title="Persistent outward displacement from the selected design face; atomistic clearance remains the minimum separation.">Face offset (nm)<input id="md-surface-offset" type="number" value="0" min="0" max="100" step="0.1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
-                  <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs);margin-bottom:7px">DNA clearance (nm)<input id="md-surface-dna-clearance" type="number" value="0.32" min="0" max="2" step="0.01" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
-                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px"><input type="checkbox" id="md-surface-enable"> Add graphene nanopore</label>
-                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px" title="Display only; does not change simulation inclusion."><input type="checkbox" id="md-graphene-show" checked> Show nanopore</label>
-                  <label style="display:grid;grid-template-columns:1fr 110px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs);margin-bottom:7px">Representation<select id="md-graphene-representation" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"><option value="plane">Simple plane</option><option value="ball">Ball</option><option value="stick">Stick</option></select></label>
-                  <div id="md-surface-controls" style="display:none;flex-direction:column;gap:5px">
-                    <label style="display:grid;grid-template-columns:1fr 110px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Material model<select id="md-surface-material" disabled style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"><option value="graphene">Neutral restrained graphene</option></select></label>
-                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Pore diameter (nm)<input id="md-surface-pore-diameter" type="number" value="2.1" min="0.1" max="100" step="0.1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
-                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Layers<input id="md-surface-layers" type="number" value="1" min="1" max="6" step="1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
-                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Layer spacing (nm)<input id="md-surface-layer-spacing" type="number" value="0.335" min="0.1" max="1" step="0.005" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
-                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Water clearance (nm)<input id="md-surface-water-clearance" type="number" value="0.30" min="0" max="1" step="0.01" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
-                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Sheet margin (nm)<input id="md-surface-sheet-margin" type="number" value="1.5" min="0.5" max="10" step="0.1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
-                    <div id="md-surface-ready" style="font-size:var(--text-xs);color:#8b949e;line-height:1.35">Off — tick “Add graphene nanopore”.</div>
-                    <div style="font-size:10px;color:#8fb3ff;line-height:1.35">Water reservoir padding and NaCl/MgCl₂ concentrations are run settings: choose them in <strong>＋ New job → 2 Setup → Settings</strong> (Water padding and Ionic conditions).</div>
-                    <div style="font-size:10px;color:#6e7681;line-height:1.35">Additional layers extend away from the DNA. If the design contains no DNA, NADOC automatically builds the graphene-only membrane-control protocol.</div>
-                  </div>
+<section class="namd-surface-option" id="md-hard-surface-option"><label class="namd-surface-option__toggle" title="A restrained surface compatible with GPU-resident NAMD. Setup changes apply to new jobs; rendering requires selecting a surface job."><input id="md-hard-surface-enable" type="checkbox"> Hard surface on</label>
+<details class="namd-surface-settings" id="md-hard-surface-settings"><summary>Settings</summary><div>
+<label class="namd-surface-field" title="Auto inherits the source surface when present; otherwise the native bottom face is used.">Design face<select id="md-surface-axis"><option value="">Auto</option><option value="-y">−Y (bottom)</option><option value="+y">+Y (top)</option><option value="-x">−X</option><option value="+x">+X</option><option value="-z">−Z</option><option value="+z">+Z</option></select></label>
+<label class="namd-surface-field" title="Persistent outward displacement from the selected design face; atomistic clearance remains the minimum separation.">Face offset (nm)<input id="md-surface-offset" type="number" value="0" min="0" max="100" step="0.1"></label>
+<label class="namd-surface-field">DNA clearance (nm)<input id="md-surface-dna-clearance" type="number" value="0.32" min="0" max="2" step="0.01"></label>
+<label class="namd-surface-field">Water clearance (nm)<input id="md-surface-water-clearance" type="number" value="0.30" min="0" max="1" step="0.01"></label>
+<label class="namd-surface-field">Sheet margin (nm)<input id="md-surface-sheet-margin" type="number" value="1.5" min="0.5" max="10" step="0.1"></label>
+<label class="namd-surface-field">Representation<select id="md-graphene-representation"><option value="plane">Simple plane</option><option value="ball">Ball</option><option value="stick">Stick</option></select></label>
+<label title="Visibility only; requires a selected surface job."><input type="checkbox" id="md-graphene-show" checked> View surface</label>
+
+</div></details></section>
+<section class="namd-surface-option" id="md-screening-option"><label class="namd-surface-option__toggle" title="A charged closed wall. Choose salt and temperature in the job wizard. This model cannot be combined with an open nanopore."><input id="md-screening-enable" type="checkbox"> Add surface charge</label>
+<details class="namd-surface-settings" id="md-screening-settings"><summary>Settings</summary><div>
+<label class="namd-surface-field" title="Total sheet charge divided by projected area. Both faces share the screening cloud. Preparation rounds the total to an integer elementary charge; realized density is saved in the job.">Sheet charge density (C/m²)<input id="md-screening-charge" aria-label="Sheet charge density (C/m²)" type="number" min="-0.5" max="0.5" step="0.0001" value="-0.0413"></label>
+<p id="md-screening-status" role="status" hidden></p>
+</div></details></section>
+<section class="namd-surface-option" id="md-nanopore-option"><label class="namd-surface-option__toggle" title="An open graphene pore. Choose Water padding and Ionic conditions in New job → Protocol & settings. Enabling this turns off the closed-wall charge model."><input id="md-surface-enable" type="checkbox"> Graphene nanopore</label>
+<details class="namd-surface-settings" id="md-nanopore-settings"><summary>Settings</summary><div>
+<label class="namd-surface-field" title="Restrained graphene. Fixed surface charge is available separately for a closed wall.">Material model<select id="md-surface-material" disabled><option value="graphene">Graphene</option></select></label>
+<label class="namd-surface-field">Pore diameter (nm)<input id="md-surface-pore-diameter" type="number" value="2.1" min="0" max="100" step="0.1"></label>
+<label class="namd-surface-field">Layers<input id="md-surface-layers" type="number" value="1" min="1" max="6" step="1"></label>
+<label class="namd-surface-field">Layer spacing (nm)<input id="md-surface-layer-spacing" type="number" value="0.335" min="0.1" max="1" step="0.005"></label>
+</div></details></section>
+<section class="namd-surface-option" id="md-peg-option">
+<label class="namd-surface-option__toggle" title="Coating intent for this setup. Atomistic preparation requires validated PEG assets."><input id="md-peg-enable" type="checkbox"> PEG coating</label>
+<details class="namd-surface-settings" id="md-peg-settings"><summary>Settings</summary><div id="namd-peg-surfaces">
+<form aria-label="PEG coating parameters" class="namd-peg-inline"></form>
+<label title="Only the explicitly selected prepared PEG job can be rendered."><input type="checkbox" data-view-peg checked> View PEG</label>
+<button type="button" class="btn" data-review-coating>Review coating</button>
+<p role="status" aria-live="polite"></p>
+</div></details></section>
+<div id="md-surface-ready" role="status">Surface off.</div>
                 </div>
               </div>
 
@@ -6502,10 +6532,13 @@
                   <label style="display:flex;gap:5px;align-items:center;margin:-2px 0 8px;font-size:var(--text-xs);color:#8b949e;cursor:pointer" title="Analyze every trajectory frame. Leave off for a fast 64-point uniform preview.">
                     <input type="checkbox" id="md-metrics-all-frames"> Analyze all frames (exact)
                   </label>
+                  <div id="md-metrics-surface-profiles" hidden></div>
                   <div id="md-metrics-ion-transport-row" style="display:none;margin-bottom:10px;padding:7px;border:1px solid #30363d;border-radius:4px;background:#0d1117">
                     <div style="display:flex;align-items:center;gap:6px">
                       <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9">Ion transport through nanopore</span>
-                      <button id="md-metrics-ion-transport-display" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Plot ion transport</button>
+                      <button id="md-metrics-ion-transport-gen" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
+                      <button id="md-metrics-ion-transport-display" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer" disabled>Display</button>
+                      <button id="md-metrics-ion-transport-export" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer" disabled>Export</button>
                     </div>
                     <div id="md-metrics-ion-transport-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:12px"></div>
                   </div>

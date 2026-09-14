@@ -33,7 +33,10 @@ from backend.api.routes_md import (
     _workspace,
 )
 
+from backend.api.routes_md_surface_profiles import router as surface_profiles_router
+
 router = APIRouter(tags=["md-metrics"])
+router.include_router(surface_profiles_router)
 
 # In-memory registry of metric-compute runs (one background pass each), polled by the card.
 _RUNS: dict[str, dict] = {}

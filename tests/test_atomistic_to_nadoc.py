@@ -1654,3 +1654,14 @@ def test_the_heavy_extractor_hands_over_its_transform():
     assert "frame_out" in sig.parameters
     # Optional, so every existing caller is unaffected.
     assert sig.parameters["frame_out"].default is None
+
+
+def test_solvent_only_pose_uses_cell_center():
+    """An empty DNA selection still yields a finite affine for solvent playback."""
+    coords, center = reassemble_to_posed_reference(
+        np.empty((0, 3)), np.array([4., 12., 4.]), np.array([]),
+        np.zeros(3), np.array([], dtype=bool), np.array([], dtype=bool),
+    )
+    assert coords.shape == (0, 3)
+    np.testing.assert_array_equal(center, [2., 6., 2.])
+    assert np.isfinite(coords - center).all()

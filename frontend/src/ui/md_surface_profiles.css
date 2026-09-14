@@ -1,0 +1,13 @@
+#md-metrics-surface-profiles {margin:8px 0;font-size:var(--text-xs);}
+#md-metrics-surface-profiles button,.surface-profile-dialog button {background:#21262d;border:1px solid #484f58;color:#c9d1d9;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:var(--text-xs);}
+.surface-profile-dialog {width:min(1000px,92vw);max-height:88vh;overflow:auto;box-sizing:border-box;background:#0d1117;color:#c9d1d9;border:1px solid #484f58;border-radius:8px;padding:18px;font-family:var(--font-ui,sans-serif);}
+.surface-profile-dialog::backdrop {background:rgba(0,0,0,.6);}
+.surface-profile-heading {display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px;}
+.surface-profile-actions {display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}
+.surface-profile-dialog button:disabled {color:#6e7681;cursor:default;}
+.surface-profile-inputs {display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:6px;}
+.surface-profile-inputs label {display:flex;flex-direction:column;gap:4px;font-size:12px;}
+.surface-profile-inputs input {width:100%;box-sizing:border-box;background:#161b22;border:1px solid #484f58;color:#e6edf3;padding:5px;border-radius:3px;}
+.surface-profile-dialog [data-status],.surface-profile-dialog [data-summary] {font-size:12px;line-height:1.5;margin:8px 0;}
+.surface-profile-dialog [data-plots] {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:12px;}
+.surface-profile-dialog canvas {width:100%;height:auto;}

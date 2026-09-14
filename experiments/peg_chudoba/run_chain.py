@@ -27,11 +27,13 @@ def main():
     ap.add_argument('--n',type=int,default=36)
     ap.add_argument('--temperature',type=float,default=294)
     ap.add_argument('--steps',type=int,default=1000000)
+    ap.add_argument('--trajectory-frames',type=int,default=2000)
     ap.add_argument('--seed',type=int,default=101)
     ap.add_argument('--dt-fs',type=float,default=10)
     ap.add_argument('--backend',choices=['CPU','CUDA'],default='CUDA')
     ap.add_argument('--output',type=Path,required=True)
     args=ap.parse_args()
+    if args.trajectory_frames < 1:ap.error('Positive trajectory frame count required')
     if args.sampling in ('mc','pivot'): args.backend="CPU"
     if args.sampling=='hmc':
         args.backend='CUDA'
@@ -75,7 +77,7 @@ def main():
     (args.output/'topology.top').write_text(f'{args.n} 1\n'+''.join(
         f'1 500 {i+1 if i+1<args.n else -1} {i-1}\n' for i in range(args.n)))
     unit_ps=np.sqrt(44*.8518**2/24.943387854)
-    interval=max(1,args.steps//2000)
+    interval=max(1,args.steps//args.trajectory_frames)
     stage=OxdnaStageSpec('chain','production','MD',args.steps,args.backend,
         dt=args.dt_fs/1000/unit_ps,thermostat='langevin',interaction='DNA2PEG',
         peg_parameters=PegParameters().engine_parameters(),seed=args.seed)

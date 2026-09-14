@@ -1405,7 +1405,7 @@ def build_production_conf(
     # inherit prod_e, i.e. one cell sample per 500 ps on a long run.
     prod_x = _xst_freq(spec.steps, ts, prod_e)
     # A cell with vacuum in it MUST run at constant volume — see _pressure_block.
-    pressure = _pressure_block(npt, period=200.0, decay=100.0)
+    pressure = _pressure_block(npt, period=200.0, decay=100.0, temp=spec.temp)
     return apply_conf_overrides(
         f"""\
 structure          {psf}
@@ -1449,7 +1449,7 @@ nonbondedFreq      {nbf}
 fullElectFrequency {fef}
 stepspercycle      {spc}
 {gpu_line}langevin           on
-langevinTemp       300
+langevinTemp       {spec.temp:g}
 langevinDamping    {damping:g}
 langevinHydrogen   off
 {pressure}outputEnergies     {prod_e}
@@ -1480,6 +1480,7 @@ def build_reseed_conf(
     structure_psf: Optional[str] = None,
     preserve_velocities: bool = False,
     npt: bool = True,
+    temperature_K: float = 300.0,
 ) -> str:
     """Velocity-reseed bridge conf for an ensemble replica (pure).
 
@@ -1509,7 +1510,7 @@ def build_reseed_conf(
     vel_block = (
         f"binVelocities      {equil_base}.vel\n"
         if preserve_velocities
-        else "temperature        300\nreinitvels         300\n"
+        else f"temperature        {temperature_K:g}\nreinitvels         {temperature_K:g}\n"
     )
     return f"""\
 structure          {psf}
@@ -1553,10 +1554,10 @@ nonbondedFreq      1
 fullElectFrequency 1
 stepspercycle      10
 langevin           on
-langevinTemp       300
+langevinTemp       {temperature_K:g}
 langevinDamping    5
 langevinHydrogen   off
-{_pressure_block(npt, period=200.0, decay=100.0)}outputEnergies     100
+{_pressure_block(npt, period=200.0, decay=100.0, temp=temperature_K)}outputEnergies     100
 xstFreq            1000
 restartfreq        1000
 binaryrestart      yes
@@ -4011,7 +4012,8 @@ def prepare_mgh_slow_release(
         control_stage = segments[0].stage
         segments = [s for s in segments if s.stage == control_stage]
         for control_segment in segments:
-            control_segment.stage = "300 K NVT graphene/solvent equilibration"
+            control_segment.temp = float((graphene_nanopore or {}).get("temperature_K", 300.0))
+            control_segment.stage = f"{control_segment.temp:g} K NVT graphene/solvent equilibration"
 
     # The HMR PSF enters at the first hard, rigid-bond segment; minimisation and
     # the soft strain-relief first segment keep the unmodified PSF.
@@ -4349,7 +4351,7 @@ def prepare_mgh_slow_release(
             "stage_length_steps": 2_400_000,
             "stage_length_ns_at_2fs": 4.8,
             "timestep_fs": 4.0 if fast else 2.0,
-            "temperature_k": 300.0,
+            "temperature_k": float((graphene_nanopore or {}).get("temperature_K", 300.0)),
             "langevin_damping_ps_inv": 5.0,
             "pme_grid_spacing_ang": PME_GRID_SPACING,
             "switch_cut_pairlist_ang": [

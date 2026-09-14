@@ -498,6 +498,12 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
 
 # Whole modules where every test is a heavy real-sim / trajectory test.
 _SLOW_MODULES = {
+    # Every HMC check launches the real CUDA Chudoba oxDNA engine; the harmonic
+    # distribution samples 5,000 trajectories (185,000 integration steps).
+    "test_chudoba_hmc",
+    # Every test launches the real Chudoba oxDNA CPU/CUDA engine. Snapshot
+    # sampling and cutoff probes reached 5.58–10.61 s in the merge fast gate.
+    "test_chudoba_engine",
     "test_md_trajectory",
     "test_md_display_ready_live",  # real-job load: parses 143 MB PSF + builds model
     # Setup-dominated: a ~16 s module/class-scoped fixture that EVERY test pays,
@@ -556,6 +562,14 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Real Chudoba CPU/CUDA runs, including MC/pivot/HMC sampling (5.24 s
+    # for MC). Keep the pure continuity/derivative checks in the fast suite.
+    "test_zero_tail_engine_pair",
+    "test_zero_tail_sampled_energy",
+    # Adjacent PEG engine checks also execute native CPU/CUDA simulations.
+    "test_solution_online_shape",
+    "test_engine_pair_forces",
+    "test_dna_only_unchanged_by_opt_in_model",
     # Full workspace BigO polymer: load/flatten thousands of strands, export all
     # particles, or reconstruct every nucleotide and the FEM mesh (9.8/16.9 s
     # in the 2026-09-10 fast gate). Smaller flatten/periodic pins stay fast.
@@ -921,7 +935,7 @@ def _slow_area_for(module: str) -> str:
     headless-build file lands in oxdna, not headless)."""
     if module == "test_assembly_flatten":
         return "cando"
-    if "oxdna" in module or "skip_twist" in module:
+    if "oxdna" in module or "skip_twist" in module or "chudoba" in module:
         return "oxdna"
     # snupi = the native FEM shape predictor; it shares the CanDo/FEM solver stack,
     # so its heavy tests belong to the same "cando" heavy group.

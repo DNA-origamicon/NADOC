@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "surface": {
+    "psf": null,
+    "pdb": null,
+    "parameters": [],
+    "source": null,
+    "model": "neutral_fixed_gold",
+    "box_xy_nm": [30.0, 30.0],
+    "top_z_nm": 1.8,
+    "periodic_xy_verified": false
+  },
+  "chains": {
+    "36": {"psf": null, "pdb": null, "parameters": [], "source": null, "repeat_units": 36, "anchor_index": null, "end_index": null, "chemistry": null},
+    "45": {"psf": null, "pdb": null, "parameters": [], "source": null, "repeat_units": 45, "anchor_index": null, "end_index": null, "chemistry": null},
+    "76": {"psf": null, "pdb": null, "parameters": [], "source": null, "repeat_units": 76, "anchor_index": null, "end_index": null, "chemistry": null}
+  },
+  "water_ions_parameters": ["../../backend/data/forcefield/toppar_water_ions_na.str"],
+  "compatibility_evidence": null
+}

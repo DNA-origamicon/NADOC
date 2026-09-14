@@ -156,3 +156,24 @@ it('sizes non-cubic barrier planes on each declared normal axis', () => {
     expect(plane.position.toArray()[axis]).toBeCloseTo(.2)
   }
 })
+it('View PEG hides polymer atoms and grafts while retaining visible water and walls',()=>{
+ const {scene}=setup()
+ document.querySelector('input[type=checkbox]').click()
+ window.dispatchEvent(new CustomEvent('nadoc:namd-peg-coating',{detail:{visible:false}}))
+ expect(scene.children[0].children[0].geometry.attributes.position.count).toBe(1)
+ expect(scene.children[0].children.length).toBeGreaterThan(1)
+ window.dispatchEvent(new CustomEvent('nadoc:namd-peg-coating',{detail:{visible:true}}))
+ expect(scene.children[0].children[0].geometry.attributes.position.count).toBe(3)
+})
+
+it('keeps saved PEG walls hidden until a matching surface job is explicitly selected',async()=>{
+ const data={...payload(),job_id:'job1',stage:'resident',frames:[]}
+ const {scene}=setup({getPegQualification:async()=>data})
+ const group=scene.getObjectByName('NAMD PEG qualification')
+ expect(group.visible).toBe(false)
+ await ui.loadJob('job1');expect(group.visible).toBe(false)
+ const select=detail=>window.dispatchEvent(new CustomEvent('nadoc:namd-surface-selection',{detail}))
+ select({enabled:true,jobId:'job1'});expect(group.visible).toBe(true)
+ select({enabled:true,jobId:'other'});expect(group.visible).toBe(false)
+ select({enabled:false});expect(group.visible).toBe(false)
+})

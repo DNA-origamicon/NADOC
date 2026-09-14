@@ -1715,9 +1715,9 @@ export async function deleteDeformation(opId, preview = false) {
 }
 
 
-export async function updateMetadata(fields) {
+export async function updateMetadata(fields, { skipGeometry = false } = {}) {
   const json = await _request('PUT', '/design/metadata', fields)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry, crossTabMetadataOnly: skipGeometry })
 }
 
 /**
@@ -5146,6 +5146,8 @@ export const saveNamdPegSurface = (body, id = null) => _request(id ? 'PUT' : 'PO
 
 export const createPegFastRelax = id => _request('POST', `/md/peg-qualifications/${encodeURIComponent(id)}/fast-relax`, undefined, { skipSimulationPrepare: true })
 
+export const generateMdSurfaceProfiles = (id, body) => _oxdnaJSON("POST", `/md/jobs/${id}/surface-profiles`, body)
+export const getMdSurfaceProfiles = (id) => _oxdnaJSON("GET", `/md/jobs/${id}/surface-profiles`)
 /** Binary path loads throw server/transport errors so window edits retain the previous scene. */
 export async function getMdIonPaths(id, before, after, signal, { requestId, onProgress } = {}) {
   const path = `/md/jobs/${id}/ion-paths?before=${before}&after=${after}${requestId ? `&request_id=${encodeURIComponent(requestId)}` : ''}`
@@ -5191,4 +5193,15 @@ export async function importAptamer(args) {
   return _request('POST', '/design/import/aptamer', {
     ...args, expected_revision: currentRevisionWatermark(),
   })
+}
+
+export const listNamdSetupPresets = () => _namdSetupPresetRequest('GET', '/md/setup-presets')
+export const createNamdSetupPreset = body => _namdSetupPresetRequest('POST', '/md/setup-presets', body)
+export const overwriteNamdSetupPreset = (id, body) => _namdSetupPresetRequest('PUT', `/md/setup-presets/${encodeURIComponent(id)}`, body)
+export const deleteNamdSetupPreset = (id, revision) => _namdSetupPresetRequest('DELETE', `/md/setup-presets/${encodeURIComponent(id)}?revision=${revision}`)
+
+async function _namdSetupPresetRequest(method, path, body) {
+  const result = await _request(method, path, body, { skipSimulationPrepare: true })
+  if (!result) throw new Error(lastErrorMessage() || 'Could not update setup presets.')
+  return result
 }

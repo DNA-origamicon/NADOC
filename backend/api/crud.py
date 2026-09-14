@@ -618,6 +618,9 @@ class CreateDesignRequest(BaseModel):
 
 
 class MetadataUpdateRequest(BaseModel):
+    namd_box_solvent: Optional[dict] = None
+    namd_peg_coating: Optional[dict] = None
+    namd_peg_visible: Optional[bool] = None
     peg_surface: Optional[dict] = None
     name: Optional[str] = None
     description: Optional[str] = None
@@ -1541,6 +1544,12 @@ def update_metadata(body: MetadataUpdateRequest) -> dict:
             d.metadata.author = body.author
         if body.tags is not None:
             d.metadata.tags = body.tags
+        if "namd_box_solvent" in body.model_fields_set:
+            d.metadata.namd_box_solvent = body.namd_box_solvent
+        if "namd_peg_coating" in body.model_fields_set:
+            d.metadata.namd_peg_coating = body.namd_peg_coating
+        if body.namd_peg_visible is not None:
+            d.metadata.namd_peg_visible = body.namd_peg_visible
         if "peg_surface" in body.model_fields_set:
             if body.peg_surface is not None:
                 from backend.physics.oxdna_peg import PegParameters

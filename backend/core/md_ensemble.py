@@ -398,6 +398,7 @@ def build_replica_package(
         structure_psf=structure_psf,
         preserve_velocities=continuation,
         npt=npt_allowed,
+        temperature_K=float((graphene_nanopore or {}).get("temperature_K", 300.0)),
     )
     (child_pkg / f"{reseed_name}.conf").write_text(
         inject_packaged_photoproduct_parameters(reseed_conf, parent_pkg)
@@ -470,7 +471,7 @@ def build_replica_package(
         stage=f"{length_ns:g} ns production replica (seed {seed})",
         percent=100.0,
         steps=steps,
-        temp=300.0,
+        temp=float((graphene_nanopore or {}).get("temperature_K", 300.0)),
         damping=damping,
         scale=None,
         npt=True,

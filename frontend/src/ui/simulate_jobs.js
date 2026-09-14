@@ -668,8 +668,9 @@ export function initSimulateJobs({
     _listSig = sig
     renderJobList(listEl, buildJobListModel(nodes, ctx), {
       onClick: (jobId) => {
-        if (jobId !== _sel.id) { _select(jobId); return }
+        if (jobId !== _sel.id) { _select(jobId, true); return }
         const node = _selectedNode()
+        if (node?.engine === 'namd' && !selectionExplicit) { selectionExplicit = true; _dispatchDetail(node, true); return }
         // A freshly launched SNUPI job remains highlighted while it transitions
         // preparing → running → completed. The user's first click after completion
         // is an intent to open its visualization controls, not to silently deselect
@@ -970,14 +971,16 @@ export function initSimulateJobs({
   }
 
   // ── selection ────────────────────────────────────────────────────────────
-  function _select(jobId) {
+  let selectionExplicit = false
+  function _select(jobId, explicit = false) {
     const node = _nodes.find((n) => n.job_id === jobId)
     if (!node) return
     if (_sel.engine === node.engine && _sel.id === jobId) return
+    selectionExplicit = explicit
     _sel = { engine: node.engine, id: jobId }
     _renderList()
     _renderMaster()
-    _dispatchDetail(node)
+    _dispatchDetail(node, explicit)
   }
 
   // Clicking the ALREADY-selected row deselects it: the highlight, master card and job
@@ -1002,7 +1005,8 @@ export function initSimulateJobs({
   // A LAMMPS run is the CPU fallback for oxDNA (same oxDNA2 bead model), so it shows in
   // the oxDNA panel's OWN viz card via selectLammpsJob — same display/RMSF/deviation/
   // trajectory tools, just a different loader.
-  function _dispatchDetail(node) {
+  function _dispatchDetail(node, explicit = false) {
+    if (node.engine !== 'namd') mdPanel?.deselectJob?.()
     if (node.engine === 'lammps') {
       engineSelector?.select?.('oxdna')
       oxdnaPanel?.selectLammpsJob?.(node)
@@ -1012,7 +1016,8 @@ export function initSimulateJobs({
                     blade: bladePanel, namd: mdPanel }[node.engine]
     if (!panel) return
     engineSelector?.select?.(node.engine)     // reveal that engine's detail host
-    panel?.selectJob?.(node.job_id)
+    if (node.engine === 'namd') panel?.selectJob?.(node.job_id, { explicit })
+    else panel?.selectJob?.(node.job_id)
   }
 
   // ── run / stop / resume (dispatch by node engine) ──────────────────────────
@@ -1244,6 +1249,7 @@ export function initSimulateJobs({
     _activeEngine = engine
     _updateEngineLabel()
     if (_sel.id && !_visibleNodes().some((n) => n.engine === _sel.engine && n.job_id === _sel.id)) {
+      if (_sel.engine === 'namd') mdPanel?.deselectJob?.()
       _sel = { engine: null, id: null }
     }
     // ALWAYS re-render the master block on a tab switch, not only when the selection was cleared:

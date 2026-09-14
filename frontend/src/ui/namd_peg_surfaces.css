@@ -20,3 +20,7 @@
 #namd-peg-surfaces p { margin: 0; }
 #namd-peg-surfaces button { min-height: 30px; }
 @media (max-width: 560px) { .namd-peg-grid { grid-template-columns: 1fr; } }
+
+.namd-peg-coating-actions {display:flex;flex-wrap:wrap;gap:6px;}
+#namd-peg-surfaces {padding:0 0 8px;}
+#namd-peg-surfaces label {font-size:var(--text-xs);color:#c9d1d9;}

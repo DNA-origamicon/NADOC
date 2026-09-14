@@ -35,6 +35,7 @@ it('changes the ion-path membrane in place without resurrecting the design previ
   })
   const simulation = { setGrapheneDisplay: vi.fn() }
   const ctrl = initGrapheneDisplayControls({ preview, simulation, ionPaths })
+  window.dispatchEvent(new CustomEvent('nadoc:namd-surface-selection',{detail:{enabled:true,jobId:'surface'}}))
   const graphene = Array.from({ length: 6 }, (_, i) => [Math.cos(i * Math.PI / 3) * 0.142, 0, Math.sin(i * Math.PI / 3) * 0.142]).flat()
   const data = { paths: [{ species: 'NA', positions: [0, -1, 0, 0, 1, 0] }],
     origami: { display_transform: new THREE.Matrix4().makeTranslation(3, 8, -2).toArray() }, graphene, pore: { radius_nm: 1, normal: [0, 1, 0] } }
@@ -79,4 +80,15 @@ it('changes the ion-path membrane in place without resurrecting the design previ
   expect(preview.mesh().userData.grapheneRepresentation).toBe('ball')
   expect(group.children).toHaveLength(0)
   ctrl.dispose(); ionPaths.dispose(); preview.dispose()
+})
+
+it('hides every surface channel again on deselection, regardless of saved visibility',()=>{
+ document.body.innerHTML='<input type="checkbox" id="md-graphene-show">'
+ const preview={setDisplay:vi.fn()},simulation={setGrapheneDisplay:vi.fn()},ionPaths={setGrapheneDisplay:vi.fn()}
+ const ctrl=initGrapheneDisplayControls({preview,simulation,ionPaths})
+ const selected=enabled=>window.dispatchEvent(new CustomEvent('nadoc:namd-surface-selection',{detail:{enabled}}))
+ for(const target of [simulation,ionPaths])expect(target.setGrapheneDisplay).toHaveBeenLastCalledWith(expect.objectContaining({visible:false}))
+ selected(true);expect(simulation.setGrapheneDisplay).toHaveBeenLastCalledWith(expect.objectContaining({visible:true}))
+ selected(false);expect(simulation.setGrapheneDisplay).toHaveBeenLastCalledWith(expect.objectContaining({visible:false}))
+ ctrl.dispose()
 })

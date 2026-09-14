@@ -242,6 +242,161 @@
       "event": "resume_campaign",
       "pid": 1394047,
       "unix": 1789017807.5849159
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1394047,
+      "unix": 1789033627.6081865
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1394140,
+      "unix": 1789033627.639399
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1394140,
+      "unix": 1789050727.3489347
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1394697,
+      "unix": 1789050727.3782525
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1394697,
+      "unix": 1789054379.3758636
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1394914,
+      "unix": 1789054379.4051926
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1394914,
+      "unix": 1789123067.3241024
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1395086,
+      "unix": 1789123067.3529387
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1395086,
+      "unix": 1789162736.4335089
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1445313,
+      "unix": 1789162736.4625075
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1445313,
+      "unix": 1789162751.5488749
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1458646,
+      "unix": 1789162751.578015
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1458646,
+      "unix": 1789163490.9156985
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1478701,
+      "unix": 1789163490.9448802
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1478701,
+      "unix": 1789163918.4293773
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1483819,
+      "unix": 1789163918.4573476
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1483819,
+      "unix": 1789164461.5564609
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1489332,
+      "unix": 1789164461.584496
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1489332,
+      "unix": 1789164471.639541
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1521176,
+      "unix": 1789164471.6685512
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1521176,
+      "unix": 1789175793.7717714
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1550934,
+      "unix": 1789175793.8011243
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1550934,
+      "unix": 1789202798.2928836
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1537046,
+      "unix": 1789202798.319881
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1537046,
+      "unix": 1789214698.089841
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1552776,
+      "unix": 1789214698.1153777
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1552776,
+      "unix": 1789217397.7852983
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1570932,
+      "unix": 1789217397.8147075
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1570932,
+      "unix": 1789225396.014054
+    },
+    {
+      "event": "resume_campaign",
+      "pid": 1582808,
+      "unix": 1789225396.039934
+    },
+    {
+      "event": "campaign_exited",
+      "pid": 1582808,
+      "unix": 1789225411.120846
     }
   ],
   "limitations": "SIGSTOP retains RAM/VRAM; elapsed_seconds includes pauses. Does not admit newly launched campaigns. Do not launch additional benchmarks.",
@@ -255,15 +410,7 @@
     "cwd": "/home/jojo/Work/NADOC",
     "stdout": "/proc/1606968/fd/pipe:[5732658]"
   },
-  "updated_unix": 1789017807.5849173,
-  "active_campaign": {
-    "pid": 1394047,
-    "start": "6870178",
-    "state": "S",
-    "name": "python",
-    "parent": 1394045,
-    "command": ".venv/bin/python -m experiments.peg_chudoba.run_chain_campaign --cutoff zero_tail --lengths 36 76 135 275 455 795 --temperatures 361 371 --output experiments/peg_chudoba/runs/equilibrium_zero_tail_361_371 ",
-    "cwd": "/home/jojo/Work/NADOC",
-    "stdout": "/tmp/nadoc-peg-zero-tail361371.log"
-  }
+  "updated_unix": 1789225411.1219392,
+  "active_campaign": null,
+  "finished_unix": 1789225411.121939
 }

@@ -1,8 +1,71 @@
-# PEG testing playground
+# PEG testing: completed simulation viewer
 
-Open **Help → PEG testing**. The toggle opens an isolated 3D playground; closing
-it releases the sampler, graphics resources, and animation loop. It does not
-modify a design or submit a production oxDNA/NAMD job.
+Open **Help → PEG testing** to view recorded 294 K oxDNA PEG trajectories.
+The length dropdown offers N9, N18, N27, N36, N76, N135, N275, N455 and N795;
+N is the number of ethylene oxide repeat units, not Kuhn segments. A second
+selector chooses the completed CPU/GPU allocation or N135 bulk solution and
+replica. The current catalog contains 60 trajectories: 27 CPU chains, 12 GPU
+chains and 21 bulk solutions.
+
+Use **Play/Pause**, **First frame**, the saved-frame slider, and playback speed.
+Scrubbing pauses playback; reaching the final frame stops it. Play at the end
+restarts at frame one. Drag to orbit and scroll to zoom. Changing a simulation
+resets playback and cancels stale downloads. Closing the toggle aborts loading
+and disposes graphics resources and animation callbacks.
+
+The viewer is read-only: it neither submits simulations nor changes a design.
+It distinguishes completed allocations from cohort validation passes. MC steps
+are labeled as sweeps, never converted to molecular time. MD time is local to
+the selected allocation. Snapshot RMS Rg is not an equilibrium estimate.
+
+## Recorded data and refresh
+
+The catalog takes completed sources from the current 294 K zero-tail
+`campaign_comparison.json` and bounded `validation.json`. It includes the
+completed N135 recovery and excludes failed/in-progress allocations. All original
+simulation files remain unchanged. Display exports use up to 160 actual saved
+frames for single chains and 32 for bulk solutions, without interpolation.
+Coordinates are in nm; chains are unwrapped across periodic boundaries. Single
+chains are centered; bulk chain centers are wrapped into a centered periodic
+box. These display operations do not feed back into analysis or the simulation.
+
+Refresh after new completed cohorts are recorded:
+
+```bash
+.venv/bin/python -m experiments.peg_chudoba.export_viewer
+```
+
+Generated files live in `frontend/public/peg-trajectories/` (gitignored; currently
+about 125 MB). Generate or copy this directory before serving/building on another
+machine. Vite serves it in development and includes it in the production build.
+The UI shows an explicit unavailable-catalog message if the export is absent.
+Each manifest entry records source path, source metadata hash, exact sampled
+steps, frame counts and the source cohort verdict. The catalog is a snapshot;
+it does not poll active jobs. Only the selected trajectory is downloaded.
+
+Implementation is isolated in `ui/peg_testing.js`, `ui/peg_playback.js` and
+`scene/peg_trajectory.js`; main.js remains unchanged (LOC delta 0).
+
+## Verification — September 11, 2026
+
+- `just test-frontend`: 399 files, 6,247 tests passed.
+- Real-browser Help-menu check passed: length/run selection, animation,
+  pause/scrub/reset on selection, bulk loading, orbit gesture, mobile overflow,
+  Escape and toggle close/reopen. No persistent test artifacts remained.
+- Export test passed for periodic-bond unwrapping, exact saved-frame selection
+  and source preservation; all 60 binary sizes/frame counts were verified.
+- `just smoke` was refused by the existing simulation guard while oxDNA ran.
+  No override or simulation interruption was used.
+- `just lint` reported two pre-existing issues in `backend/api/routes_oxdna.py`
+  and `tests/test_oxdna_peg.py`; changed Python files pass focused Ruff checks.
+
+## Historical ideal-chain playground
+
+The Help entry previously ran an illustrative ideal Kuhn-chain sampler. It now
+shows recorded simulations instead. The research and sampler notes below are
+retained as historical context; their interactive controls no longer describe
+the Help viewer. The old sampler modules remain available for their independent
+numerical tests.
 
 ## Initial research (2026-09-09)
 

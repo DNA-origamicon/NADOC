@@ -2,6 +2,7 @@
 export function initGrapheneDisplayControls({ preview, simulation, ionPaths, storage } = {}) {
   const toggle = document.getElementById('md-graphene-show')
   const select = document.getElementById('md-graphene-representation')
+  let selectedSurface = false
   let settings = { visible: true, representation: 'plane' }
   try {
     storage ??= globalThis.localStorage
@@ -12,9 +13,10 @@ export function initGrapheneDisplayControls({ preview, simulation, ionPaths, sto
   function apply() {
     if (toggle) toggle.checked = settings.visible
     if (select) select.value = settings.representation
-    preview?.setDisplay(settings)
-    simulation?.setGrapheneDisplay(settings)
-    ionPaths?.setGrapheneDisplay(settings)
+    const effective = { ...settings, visible: settings.visible && selectedSurface }
+    preview?.setDisplay(effective)
+    simulation?.setGrapheneDisplay(effective)
+    ionPaths?.setGrapheneDisplay(effective)
   }
   function change() {
     settings = { visible: toggle?.checked !== false, representation: select?.value || 'plane' }
@@ -23,8 +25,11 @@ export function initGrapheneDisplayControls({ preview, simulation, ionPaths, sto
   }
   toggle?.addEventListener('change', change)
   select?.addEventListener('change', change)
+  const onSelection = event => { selectedSurface = !!event.detail?.enabled; apply() }
+  window.addEventListener('nadoc:namd-surface-selection', onSelection)
   apply()
   return { dispose() {
+    window.removeEventListener('nadoc:namd-surface-selection', onSelection)
     toggle?.removeEventListener('change', change)
     select?.removeEventListener('change', change)
   } }

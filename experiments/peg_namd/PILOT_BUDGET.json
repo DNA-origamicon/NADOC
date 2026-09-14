@@ -1,0 +1,122 @@
+{
+  "date": "2026-09-10",
+  "currency": "USD",
+  "status": "estimate_only_no_rental_or_simulation_authorization",
+  "rate_sources": {
+    "gpu": "https://www.runpod.io/pricing",
+    "cpu_monthly": "https://www.e2enetworks.com/pricing"
+  },
+  "assumed_namd_ns_day_gpu": 50,
+  "items": [
+    {
+      "category": "oxDNA",
+      "item": "H200 compatibility and matched timing",
+      "quantity": 12,
+      "unit": "GPU-hour",
+      "unit_price_usd": 4.59,
+      "cost_usd": 55.08,
+      "basis": "Development allowance; actual H200 throughput unmeasured"
+    },
+    {
+      "category": "oxDNA",
+      "item": "Targeted bulk GPU verification reserve",
+      "quantity": 24,
+      "unit": "GPU-hour",
+      "unit_price_usd": 4.59,
+      "cost_usd": 110.16,
+      "basis": "Optional new verification only; does not extend the existing bounded run or resolve CPU EOS mixing by itself"
+    },
+    {
+      "category": "oxDNA",
+      "item": "Grafted-brush pilots",
+      "quantity": 216,
+      "unit": "GPU-hour",
+      "unit_price_usd": 4.59,
+      "cost_usd": 991.44,
+      "basis": "3 lengths x 3 densities x 3 replicas x 8 GPU-hours; proposed bounded allocations"
+    },
+    {
+      "category": "oxDNA",
+      "item": "Exploratory compression sampling",
+      "quantity": 360,
+      "unit": "GPU-hour",
+      "unit_price_usd": 4.59,
+      "cost_usd": 1652.4,
+      "basis": "3 lengths x 1 selected density x 5 heights x 3 replicas x 8 GPU-hours; coarse mechanical screening"
+    },
+    {
+      "category": "NAMD",
+      "item": "Physical asset smoke checks and timing",
+      "quantity": 12,
+      "unit": "GPU-hour",
+      "unit_price_usd": 4.59,
+      "cost_usd": 55.08,
+      "basis": "Allowance after parameterized PEG/gold assets exist"
+    },
+    {
+      "category": "NAMD",
+      "item": "Isolated-chain reference sampling",
+      "quantity": 90,
+      "unit": "GPU-hour",
+      "unit_price_usd": 4.59,
+      "cost_usd": 413.1,
+      "basis": "3 lengths x 3 replicas x 10 GPU-hours; duration determined by benchmark"
+    },
+    {
+      "category": "NAMD",
+      "item": "Brush pilot matrix",
+      "quantity": 287.712,
+      "unit": "GPU-hour",
+      "unit_price_usd": 4.59,
+      "cost_usd": 1320.6,
+      "basis": "27 cases x (2 ns equilibration + 0.2 ns benchmark + 20 ns pilot); assumed 50 ns/day/GPU"
+    },
+    {
+      "category": "NAMD",
+      "item": "Small-system interface diagnostics",
+      "quantity": 48,
+      "unit": "GPU-hour",
+      "unit_price_usd": 4.59,
+      "cost_usd": 220.32,
+      "basis": "6 diagnostic jobs x 8 GPU-hours; not complete interface-force-field validation"
+    },
+    {
+      "category": "CPU",
+      "item": "QM/fitting pool",
+      "quantity": 512,
+      "unit": "32-vCPU 128-GB node-hour",
+      "unit_price_usd": 0.773,
+      "cost_usd": 395.78,
+      "basis": "Bounded resource allowance, e.g. 64 jobs x 8 node-hours; chemical scope not yet fixed"
+    },
+    {
+      "category": "CPU",
+      "item": "Preparation, sampler diagnostics and analysis",
+      "quantity": 160,
+      "unit": "16-vCPU 32-GB node-hour",
+      "unit_price_usd": 0.194,
+      "cost_usd": 31.04,
+      "basis": "Additional CPU-only allocation"
+    },
+    {
+      "category": "Storage",
+      "item": "Workspace, trajectories and backups allowance",
+      "quantity": 1,
+      "unit": "pilot allowance",
+      "unit_price_usd": 150,
+      "cost_usd": 150,
+      "basis": "Budget allowance; not a fixed storage quote"
+    },
+    {
+      "category": "Contingency",
+      "item": "Additional GPU sampling/overhead reserve",
+      "quantity": 0.3,
+      "unit": "fraction of GPU subtotal",
+      "unit_price_usd": 4818.17808,
+      "cost_usd": 1445.45,
+      "basis": "Applied once; not a convergence guarantee"
+    }
+  ],
+  "total_usd": 6840.45,
+  "requested_ceiling_usd": 10000
+}

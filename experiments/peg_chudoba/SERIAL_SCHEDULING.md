@@ -1,5 +1,16 @@
 # Serial benchmark scheduling
 
+**2026-09-11 status:** the bounded diagnostic driver and N135 recovery have
+finished; the lease was restored to the historical controller. No next-stage
+brush or atomistic pilot is running. Consult HANDOFF.md for current results.
+
+**2026-09-10 historical update:** the user authorized matched serial/parallel experiments
+and production using the best measured strategy. The new
+[narrow validation runner](NARROW_VALIDATION.md) temporarily owns scheduling
+through `workspace/peg_chudoba/scheduling_294_20260910/lease.json`. If its owner
+is live and the lease is parked, leave the historical controller suspended.
+The serial-only policy below describes the previous allocation set.
+
 The user corrected the scheduling preference on September 9, 2026: serial
 benchmarks run faster on this system. Previously 16 native PEG simulations ran
 concurrently (nine CPU pivot, six CPU NPT and one GPU MD). Campaigns were

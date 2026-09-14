@@ -346,13 +346,16 @@ class CreateJobRequest(BaseModel):
         description="Carry a deposited oxDNA surface into this seeded NAMD job as a "
         "graphene-nanopore build descriptor. Requires an oxDNA surface-deposition seed.",
     )
+    graphene_temperature_K: float = Field(298.15, ge=270, le=350, allow_inf_nan=False)
+    graphene_charge_density_C_m2: float = Field(0.0, ge=-0.5, le=0.5, allow_inf_nan=False,
+        description="Total fixed sheet charge per projected cell area; screening control only.")
     graphene_only: bool = Field(
         False,
         description="Build a membrane/electrolyte control with no DNA. Requires "
         "graphene_nanopore; the pore is centered in an XY sheet at z=0.",
     )
     graphene_pore_diameter_nm: float = Field(
-        2.1, gt=0.0, le=100.0,
+        2.1, ge=0.0, le=100.0,
         description="Diameter of the aligned graphene aperture in nm.",
     )
     graphene_surface_axis: Optional[str] = Field(
@@ -2767,7 +2770,8 @@ def _harmonicize_seed_anchors(
         manifest["graphene_nanopore"]["restraint_mechanism"] = "harmonic_positional"
         manifest["graphene_nanopore"]["restraint_k_kcal_mol_A2"] = graphene_force_constant
         manifest["graphene_nanopore"]["model"] = (
-            "neutral graphene LJ sites held by GPUresident-compatible harmonic restraints"
+            ("fixed-charge" if manifest["graphene_nanopore"].get("surface_charge") else "neutral")
+            + " graphene LJ sites held by GPUresident-compatible harmonic restraints"
         )
         descriptor = package_path / "graphene_nanopore.json"
         if descriptor.exists():
@@ -2837,6 +2841,14 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         (body.oxdna_job_id, body.mrdna_job_id, body.blade_job_id)
     ):
         raise HTTPException(400, "A graphene-only control cannot also have a DNA seed.")
+
+    if body.graphene_charge_density_C_m2:
+        if not body.graphene_nanopore or body.graphene_pore_diameter_nm != 0 or body.graphene_layers != 1:
+            raise HTTPException(400, "Charged surface requires one closed wall layer (pore diameter 0).")
+        if body.mg_conc_mM != 0 or body.salt_mode != "custom":
+            raise HTTPException(400, "Charged surface requires custom NaCl-only conditions (MgCl2 = 0).")
+        if body.field:
+            raise HTTPException(400, "Screening control uses the surface field; disable the external E-field.")
 
     # E-field guards.  Both are physics/engine facts, not preferences, so they belong
     # here rather than only in the UI.  `field` is an untyped dict (mirroring CanDo's), so
@@ -4216,6 +4228,11 @@ async def _prepare_job_bg(
                 "edge_model": "neutral_cut",
                 "control": "graphene_only",
             }
+        if seed_kwargs_graphene is not None:
+            seed_kwargs_graphene["charge_density_C_m2"] = body.graphene_charge_density_C_m2
+            if body.graphene_only and body.graphene_pore_diameter_nm == 0:
+                seed_kwargs_graphene["temperature_K"] = body.graphene_temperature_K
+
         # A BLADE or vacuum-prestage seed feeds an EXACT all-atom conformation straight
         # into solvation via solute_coords — which only aligns under the full psfgen
         # topology (with hydrogens), so force it.  The equilibrium-aware protocol ALREADY

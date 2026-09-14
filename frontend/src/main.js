@@ -16,7 +16,10 @@ import { initMdIonPaths } from './scene/md_ion_paths.js'
 
 import * as THREE from 'three'
 import { initPegCoatingSetup } from './ui/peg_coating_setup.js'
-import { initNamdPegSurfaces } from './ui/namd_peg_surfaces.js'
+import { initNamdPegCoating } from './ui/namd_peg_coating.js'
+import { initNamdSetupPresets } from './ui/namd_setup_presets.js'
+import { initPreparationDetails } from './scene/md_preparation_details.js'
+import { initNamdPegCoatingPreview } from './scene/namd_peg_coating_preview.js'
 import { initNamdPegReview } from './ui/namd_peg_review.js'
 import { initSectionView } from './scene/section_view.js'
 import { initScene }                 from './scene/scene.js'
@@ -311,6 +314,7 @@ async function main() {
     addFrameCallback, removeFrameCallback,
     setRenderFn, resetRenderFn,
   } = initScene(canvas)
+  initNamdPegCoatingPreview({ scene })
   initNamdPegReview({ scene, camera, controls, store, api })
 
   initSectionView({ scene, camera, renderer, controls, addFrameCallback, removeFrameCallback, getRenderCamera,
@@ -1204,6 +1208,7 @@ async function main() {
   // builds its own initMdOverlay instance below — that one is a real standalone rep.)
   const mdSolventOverlay  = initMdSolventOverlay(scene)
   const mdBoxOverlay      = initMdBoxOverlay(scene)
+  initPreparationDetails({scene,camera,controls,getEntries:()=>designRenderer.getBackboneEntries?.() || []})
   const mdIonPaths = initMdIonPaths(scene, () => controls.target, {
     // The preview is initialized below; this callback runs only when a loaded
     // ion-path visualization acquires/releases its scene.
@@ -1242,7 +1247,7 @@ async function main() {
     clusterMemberStrandIds: id => selectionManager?.clusterMemberStrandIds?.(id) || [],
   })
 
-  initNamdPegSurfaces({ api })
+  const namdPegCoating = initNamdPegCoating({ api, store })
   const mdPanel = initMdJobsPanel({
     mdDisplayController,
     getWorkspacePath: () => _workspacePath,
@@ -1267,6 +1272,8 @@ async function main() {
       simulateJobs?.selectJob?.(jobId)
     },
   })
+
+  initNamdSetupPresets({ api, store, peg: namdPegCoating, panel: mdPanel })
 
   // ── Benchmark controls (auto-tune oxDNA/NAMD hardware config per machine) ─────
   const benchmarkPanel = initBenchmarkPanel({ api, getWorkspacePath: () => _workspacePath })

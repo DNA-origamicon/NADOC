@@ -1,6 +1,6 @@
 /** Canonical order for the cards inside every simulation-engine panel. */
 export const SIMULATION_CARD_ORDER = [
-  'Jobs', 'Clusters', 'Advanced', 'Anchors', 'Electric field', 'Hard surface',
+  'Jobs', 'Clusters', 'Advanced', 'Anchors', 'Electric field', 'Box and solvent', 'Hard surface',
   'Visualizations', 'Graphs and Metrics', 'Export trajectory', 'Health', 'Details',
 ]
 

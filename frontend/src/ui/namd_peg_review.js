@@ -33,6 +33,9 @@ export function initNamdPegReview({ scene, camera, controls, store, api }) {
   const scaleLabel = document.createElement('p'); scaleLabel.className = 'peg-rmsf-scale'; scaleLabel.hidden = true
   card.append(title, status, jobs, stages, waterLabel, fit, play, slider, frameLabel, scaleLabel, representationLabel, create, refresh); document.body.append(card)
   let data = null, initial = null, designId = null, frames = [], index = 0, timer = null, generation = 0
+  let surfaceJobId = null
+  group.visible = false
+  let pegVisible = store.getState()?.currentDesign?.metadata?.namd_peg_visible !== false
   let representation = 'full'
   let mode = 'traj', liveTimer = null, rmsf = null, selectedJobId = null
   const sidebar = initPegVizControls({ onMode: setMode, onAction: sidebarAction })
@@ -44,13 +47,14 @@ export function initNamdPegReview({ scene, camera, controls, store, api }) {
     }
   }
   const fitView = () => {
-    if (!data) return
+    if (!data || !group.visible) return
     const box = data.slit.box_nm, center = new THREE.Vector3(...box).multiplyScalar(.5), scale = Math.max(...box)
     controls.target.copy(center); camera.position.copy(center).add(new THREE.Vector3(scale*1.2, -scale*1.4, scale*1.1))
     camera.lookAt(center); camera.updateProjectionMatrix(); controls.update()
   }
   function draw() {
     clear()
+    group.visible = !!surfaceJobId && surfaceJobId === data?.job_id
     if (!data) return
     const xyz = mode === 'flex' && rmsf ? rmsf.mean : wholePegCoordinates(data,
       mode === 'off' ? data.coordinates_nm : frames[index]?.coordinates_nm || data.coordinates_nm)
@@ -60,13 +64,13 @@ export function initNamdPegReview({ scene, camera, controls, store, api }) {
     const indices = [], colors = [], bonds = []
     const color = new THREE.Color()
     xyz.forEach((p, i) => {
-      if (!peg.has(i) && !waters.has(i)) return
+      if (!(pegVisible && peg.has(i)) && !waters.has(i)) return
       indices.push(i)
       color.set(anchors.has(i) ? '#ffbf47' : data.elements[i] === 'O' ? (peg.has(i) ? '#ff6655' : '#58a6ff') : data.elements[i] === 'H' ? '#dddddd' : '#a7b1c2')
       if (mode === 'flex' && peg.has(i) && rmsf) color.setHSL((1-rmsf.angstrom[i]/(rmsf.max || 1))*2/3, .85, .55)
       colors.push(color.r, color.g, color.b)
     })
-    for (const [a, b] of data.bonds) if (peg.has(a) && peg.has(b)) bonds.push([a, b])
+    for (const [a, b] of data.bonds) if (pegVisible && peg.has(a) && peg.has(b)) bonds.push([a, b])
     for (const node of pegMoleculeNodes({ xyz, indices, colors, elements: data.elements, bonds, representation })) group.add(node)
     const box = data.slit.box_nm, inset = data.slit.inset_nm, axis = data.slit.axis ?? 2
     const tangents = [0, 1, 2].filter(a => a !== axis)
@@ -79,7 +83,7 @@ export function initNamdPegReview({ scene, camera, controls, store, api }) {
       plane.position.set(...center); group.add(plane)
     }
     const grafts = []
-    for (const i of anchors) { const p = [...data.coordinates_nm[i]]; p[axis] = inset; grafts.push(...p, ...xyz[i]) }
+    for (const i of pegVisible ? anchors : []) { const p = [...data.coordinates_nm[i]]; p[axis] = inset; grafts.push(...p, ...xyz[i]) }
     const graftGeometry = new THREE.BufferGeometry(); graftGeometry.setAttribute('position', new THREE.Float32BufferAttribute(grafts, 3))
     group.add(new THREE.LineSegments(graftGeometry, new THREE.LineBasicMaterial({ color: '#ffbf47' })))
     if (solvent.box) {
@@ -172,6 +176,7 @@ export function initNamdPegReview({ scene, camera, controls, store, api }) {
     const next = state.currentDesign?.metadata?.namd_peg_review || null
     const id = state.currentDesign?.id || null
     if (id === designId && next === initial) return
+    surfaceJobId = null; group.visible = false
     designId = id; initial = next; generation++; selectedJobId = null; stopLive(); mode = 'off'; apply(next)
   }
   create.addEventListener('click', async () => {
@@ -198,8 +203,12 @@ export function initNamdPegReview({ scene, camera, controls, store, api }) {
   slider.addEventListener('input', () => { stop(); index = Number(slider.value); draw() })
   play.addEventListener('click', togglePlay)
   const onRepresentation = event => { representation = event.detail?.representation || 'full'; draw(); sidebar.sync() }
+  const onSurfaceSelection = event => { surfaceJobId = event.detail?.enabled ? event.detail.jobId : null; draw() }
+  window.addEventListener('nadoc:namd-surface-selection', onSurfaceSelection)
+  const onVisibility = event => { pegVisible=event.detail?.visible!==false;draw() }
+  window.addEventListener('nadoc:namd-peg-coating', onVisibility)
   window.addEventListener('nadoc:representation-change', onRepresentation)
   window.addEventListener('nadoc:peg-qualification', onJob)
   const unsubscribe = store.subscribe(onState); onState(store.getState())
-  return { loadJob: (id, segment) => { mode = 'traj'; return loadJob(id, segment) }, setMode, dispose() { generation++; stop(); stopLive(); sidebar.dispose(); unsubscribe?.(); clear(); scene.remove(group); card.remove(); window.removeEventListener('nadoc:peg-qualification', onJob); window.removeEventListener('nadoc:representation-change', onRepresentation) } }
+  return { loadJob: (id, segment) => { mode = 'traj'; return loadJob(id, segment) }, setMode, dispose() { generation++; stop(); stopLive(); sidebar.dispose(); unsubscribe?.(); clear(); scene.remove(group); card.remove(); window.removeEventListener('nadoc:peg-qualification', onJob); window.removeEventListener('nadoc:representation-change', onRepresentation); window.removeEventListener('nadoc:namd-peg-coating', onVisibility); window.removeEventListener('nadoc:namd-surface-selection', onSurfaceSelection) } }
 }

@@ -1,0 +1,33 @@
+import {expect,test} from '@playwright/test'
+// Only __e2e__ documents persist outside the report directory; global teardown removes them.
+test('box and solvent details work for an empty document',async({page},testInfo)=>{
+  await page.goto('/')
+  await page.waitForSelector('#canvas')
+  await page.locator('#menu-file-new').evaluate(el=>el.click())
+  await page.fill('#new-design-name','__e2e__box-solvent')
+  await page.getByRole('button',{name:'Create',exact:true}).click()
+  await expect.poll(()=>page.evaluate(()=>window.__nadocTest.store.getState().currentDesign?.metadata?.name)).toBe('__e2e__box-solvent')
+  await page.locator('.left-tab-btn[data-tab="dynamics"]').click()
+  if(await page.locator('#simulate-body').evaluate(el=>getComputedStyle(el).display==='none'))await page.click('#simulate-heading')
+  await page.click('.engine-selector-btn[data-engine="namd"]')
+  await expect(page.locator('#md-box-solvent-body')).not.toBeVisible()
+  await page.click('#md-box-solvent-toggle')
+  await page.selectOption('#md-box-sizing','explicit')
+  await page.fill('#md-box-x','10');await page.fill('#md-box-y','15');await page.fill('#md-box-z','20')
+  await page.selectOption('#md-box-salt','custom')
+  await page.fill('#md-box-na','175');await page.fill('#md-box-mg','0')
+  await page.check('#md-box-view-details')
+  const snapshot=()=>page.evaluate(()=>{
+    const g=window.__nadocScene.getObjectByName('NAMD box and solvent details')
+    return {visible:g?.visible,preview:g?.userData.preview,faces:g?.children.filter(o=>o.userData.boundary).map(o=>o.userData.boundary),labels:g?.children.filter(o=>o.name.startsWith('Cell dimension')).length,callout:g?.getObjectByName('Solvent conditions callout')?.userData.annotation}
+  })
+  await expect.poll(async()=>(await snapshot()).preview?.dimensions).toEqual([10,15,20])
+  const regular=await snapshot()
+  expect(regular.visible).toBe(true);expect(regular.faces).toHaveLength(6);expect(regular.labels).toBe(3)
+  expect(regular.callout).toContain('NaCl 175 mM');expect(regular.preview.numbers.na).toBe(316)
+  await expect.poll(()=>page.evaluate(()=>window.__nadocTest.store.getState().currentDesign?.metadata?.namd_box_solvent?.na)).toBe('175')
+  await page.locator('#md-box-solvent-toggle').scrollIntoViewIfNeeded()
+  await page.screenshot({path:testInfo.outputPath('box-solvent.png')})
+  await page.uncheck('#md-box-view-details')
+  await expect.poll(async()=>(await snapshot()).visible).toBe(false)
+})

@@ -21,7 +21,7 @@ beforeEach(() => {
 afterEach(() => ui?.dispose())
 
 it('creates a native draft, shows barriers, and preserves explicit chemistry', async () => {
-  findButton('New PEG surface…').click()
+  findButton('Add PEG coating').click()
   change('name', 'My support'); change('material', 'graphene'); change('repeat_units', '45')
   change('pore_diameter_nm', '3'); change('end_groups', 'OH / linker')
   findButton('Review surface').click()
@@ -33,6 +33,10 @@ it('creates a native draft, shows barriers, and preserves explicit chemistry', a
   expect(api.saveNamdPegSurface.mock.calls[0]).toEqual([expect.objectContaining({ name: 'My support', repeat_units: 45,
     material: 'graphene', end_groups: 'OH / linker', pore_diameter_nm: 3 }), null])
   expect(api.saveNamdPegSurface.mock.calls[0][0]).not.toHaveProperty('oxdna_job_id')
+  await vi.waitFor(()=>expect(findButton('Edit PEG coating')).toBeTruthy())
+  findButton('Close').click()
+  findButton('Remove PEG coating').click()
+  await vi.waitFor(()=>expect(findButton('Add PEG coating')).toBeTruthy())
 })
 
 it('reopens a saved surface and updates its identity', async () => {
@@ -50,7 +54,7 @@ it('reopens a saved surface and updates its identity', async () => {
 
 it('keeps edits when review fails and allows retry', async () => {
   api.reviewNamdPegSurface.mockRejectedValueOnce(new Error('Review unavailable'))
-  findButton('New PEG surface…').click(); change('size_nm', '30')
+  findButton('Add PEG coating').click(); change('size_nm', '30')
   findButton('Review surface').click()
   await vi.waitFor(() => expect(document.body.textContent).toContain('Review unavailable'))
   expect(document.querySelector('[name=size_nm]').value).toBe('30')
@@ -60,7 +64,7 @@ it('keeps edits when review fails and allows retry', async () => {
 
 it('rejects empty numbers and distinguishes segments from repeat units', () => {
   expect(namdPegEstimate(NAMD_PEG_DEFAULTS).chains).toBe(20)
-  findButton('New PEG surface…').click(); change('representation', 'coarse_grained')
+  findButton('Add PEG coating').click(); change('representation', 'coarse_grained')
   change('segments', '12')
   const form = document.querySelector('.modal--namd-peg form')
   expect(namdPegFormSpec(form)).toMatchObject({ segments: 12, repeat_units: 36 })
@@ -71,14 +75,14 @@ it('rejects empty numbers and distinguishes segments from repeat units', () => {
 })
 
 it('resumes unsaved edits after close without silently editing a saved surface', () => {
-  findButton('New PEG surface…').click(); change('name', 'Unfinished')
+  findButton('Add PEG coating').click(); change('name', 'Unfinished')
   findButton('Close').click()
-  findButton('Continue surface draft…').click()
+  findButton('Edit PEG coating').click()
   expect(document.querySelector('[name=name]').value).toBe('Unfinished')
 })
 
 it('does not let inactive representation fields block review', async () => {
-  findButton('New PEG surface…').click()
+  findButton('Add PEG coating').click()
   change('representation', 'coarse_grained'); change('segments', '')
   change('representation', 'atomistic')
   findButton('Review surface').click()
@@ -87,7 +91,7 @@ it('does not let inactive representation fields block review', async () => {
 })
 
 it('keeps a failed save editable and prevents duplicate in-flight saves', async () => {
-  findButton('New PEG surface…').click(); findButton('Review surface').click()
+  findButton('Add PEG coating').click(); findButton('Review surface').click()
   await vi.waitFor(() => expect(findButton('Create surface draft').hidden).toBe(false))
   let reject
   api.saveNamdPegSurface.mockReturnValueOnce(new Promise((_, fail) => { reject = fail }))

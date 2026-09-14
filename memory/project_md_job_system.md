@@ -6,11 +6,60 @@ review_after: 2026-10-01
 ---
 # MD job system
 
+## Box and solvent sidebar (2026-09-13)
+
+`md_box_solvent.js` owns preparation controls shared with the live relaxation wizard;
+metadata `namd_box_solvent` persists current document choices, while named setup presets
+remain workspace-global. Explicit cell dimensions bypass geometry estimation for blank
+parts. Production inherits its source preparation. `md_preparation_details.js` is a
+setup-only overlay with compact green offset dimensions with edge extension lines, a green-bordered
+conditions callout and camera-following 45-degree leader, margin/solvent volume, approximate bulk ion counts,
+temperature and periodic face colors. See `docs/namd_box_solvent.md`.
+
+
 Canonical current-state guide for managed NAMD jobs, the Job Wizard, local/remote execution,
 queueing, production spawning, health reporting, and resume behavior. Historical implementation
 narratives are in [the archive](project_md_job_system_archive.md).
 
 ## Current state
+
+- NAMD Setup presets above Benchmark create/select/overwrite/delete workspace-wide
+  snapshots of all lower-card configuration fields plus PEG, anchors and occupancy
+  scope. Stored under `workspace/namd_setup_presets`; revision checks reject stale
+  writes. No wizard salt/protocol override or execution action. Cross-design anchor
+  and scope references require reselection. See [setup presets](../docs/namd_setup_presets.md).
+- PEG now has its own toggle and inline collapsible Settings, with document metadata
+  autosave and inline review. No popup or new PEG surface-library save. Disabled
+  coating values and both repeat-unit/segment parameter sets are preserved.
+
+
+- Hard surface uses four toggle rows (Hard surface on / Add surface charge /
+  Graphene nanopore / PEG coating), each with collapsed Settings. PEG has its own layout and chain settings; charge and open pore are mutually exclusive. Surface
+  rendering requires an explicit selected job with saved surface inclusion, and
+  follows its snapshot rather than editable inputs. Auto-selection and document
+  loading stay hidden; deselection/non-surface jobs clear all NAMD surface channels.
+  Native PEG review additionally matches the selected job ID after asynchronous loads.
+  Coating intent lives in `metadata.namd_peg_coating`; removal retains the library
+  draft. Draft parameters and review remain in inline settings, outside the scene. Arbitrary draft
+  molecular incorporation remains a gap. Box sizing, water margin, NaCl/Mg and surface-control temperature now live in the collapsible Box and solvent card; ordinary DNA temperature remains protocol-controlled.
+
+- Surface ions and screening opens an interactive parameter/graph popup with
+  Calculate and JSON export. Ion transport uses Generate → Display / Export
+  (PNG/CSV), with generated results scoped to the selected job.
+  Surface profiles measure closed-wall NaCl
+  controls (including production children): per-face mM profiles, ionic charge,
+  pooled compensation, finite-slit diagnostic fit, bulk Debye reference and block
+  estimates. Per-job JSON persists; the native monitor saves periodic snapshots.
+  See [method and validation](../experiments/charged_surface/README.md). Ion-only
+  screening excludes water polarization and does not certify equilibration.
+
+- Charged closed-wall controls now support blank documents: editable sheet charge and
+  reservoir padding with Box and solvent-owned NaCl and surface-control temperature; exact counterions and PSF charge audit;
+  standard NVT relaxation and production inheritance. See
+  [charged-surface scope and qualification](../docs/namd_charged_surface.md).
+  Prepared review: `NAMD_charged_wall_control.nadoc`, job `6ed2945c805e`, native relaxation running with periodic profile snapshots.
+  This is a periodic carbon-like surrogate, not a silica/slab-corrected literature
+  reproduction. Initial native concentration bins match an independent reader; Debye recovery remains unvalidated.
 
 - PEG qualification/fast-relax visualization now routes the shared Display MD, RMSF,
   trajectory, solvent/cell and atomistic representation controls to saved PEG atom
