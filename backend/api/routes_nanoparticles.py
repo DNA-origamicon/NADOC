@@ -946,24 +946,28 @@ def bind_surface_strand(nanoparticle_id: str, strand_id: str, body: SurfaceStran
 
 class BiotinDNARequest(BaseModel):
     sequence: str
+    dna_per_strep: int = Field(default=1, ge=1, le=4, strict=True)
     pocket: Literal['auto','A','B','C','D'] = 'auto'
-    linker_nm: float = Field(default=2., ge=1., le=10.)
+    linker_nm: float = Field(default=1.8, ge=1., le=10.)
 
 
 @router.post('/design/nanoparticles/{nanoparticle_id}/biotin-dna')
 def create_biotin_dna(nanoparticle_id: str, body: BiotinDNARequest):
-    from backend.core.gold_strep_dna import build_dna
-    design = design_state.get_or_404()
-    particle = _particle_or_404(design, nanoparticle_id)
-    try:
-        record, helix, strand = build_dna(particle, body.sequence, body.pocket, body.linker_nm)
-    except ValueError as exc:
-        raise HTTPException(422, str(exc))
+    from backend.core.gold_strep_dna import build_dna_set
     def mutate(d):
         p = _particle_or_404(d, nanoparticle_id)
-        p.biotin_dna = [record]; p.oxdna_fixed_core = True
-        d.helices.append(helix); d.strands.append(strand)
-    updated, report, _ = design_state.mutate_with_feature_log('nanoparticle-biotin-dna', 'Attach 5′ biotinylated DNA to streptavidin', {'nanoparticle_id':nanoparticle_id, **body.model_dump()}, mutate)
+        # Build against the same locked design that will receive the complete set.
+        # A placement failure changes neither the design nor its undo history.
+        placed = build_dna_set(p, body.sequence, body.pocket, body.linker_nm, body.dna_per_strep, d)
+        p.biotin_dna = [r for r, _, _ in placed]; p.oxdna_fixed_core = True
+        d.helices.extend(h for _, h, _ in placed)
+        d.strands.extend(s for _, _, s in placed)
+        from backend.core.biotin_atomistic import prepare_biotin_display
+        prepare_biotin_display(d)
+    try:
+        updated, report, _ = design_state.mutate_with_feature_log('nanoparticle-biotin-dna', f'Attach {body.dna_per_strep} biotinylated DNA per streptavidin', {'nanoparticle_id':nanoparticle_id, **body.model_dump()}, mutate)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     return _design_response(updated, report)
 
 

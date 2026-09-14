@@ -1,4 +1,4 @@
-import { addStreptavidinCoating } from '../scene/streptavidin_renderer.js'
+import { addStreptavidinCoating, addBiotinMarkers } from '../scene/streptavidin_renderer.js'
 import { generateRandomSequence } from '../api/overhang_endpoints.js'
 import { openStreptavidinDialog } from './streptavidin_dialog.js'
 import * as THREE from 'three'
@@ -22,8 +22,8 @@ export function initNanoparticleConjugateManager({ api, store } = {}) {
 
   async function open(nanoparticleId) {
     close()
-    const design = store.getState().currentDesign
-    const particle = design?.nanoparticles?.find(p => p.id === nanoparticleId)
+    let design = store.getState().currentDesign
+    let particle = design?.nanoparticles?.find(p => p.id === nanoparticleId)
     if (particle?.kind === 'quantum_dot') return
     if (!particle) throw new Error('Nanoparticle not found')
     const existing = (await api.getNanoparticleConjugation(nanoparticleId))?.conjugations?.[0]
@@ -51,14 +51,14 @@ export function initNanoparticleConjugateManager({ api, store } = {}) {
       <div id="np-conj-overhangs" style="flex:1;min-height:80px;overflow-y:auto;border:1px solid ${BORDER};border-radius:4px;margin-bottom:10px"></div>
       <label style="font-size:12px;color:${TEXT};display:block;margin-bottom:3px">ssDNA handle</label>
       <input id="np-conj-sequence" maxlength="500" placeholder="Enter DNA or select an overhang" style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid ${BORDER};border-radius:4px;color:${CYAN};font-family:monospace;font-size:12px;padding:5px 7px;margin-bottom:10px">
-      <div style="margin-bottom:10px"><label>Length <input id="np-conj-length" type="number" min="1" max="500" value="16" style="width:60px"></label> <button id="np-conj-generate">Generate sequence</button></div>
+      <div style="margin-bottom:10px"><label>Length <input id="np-conj-length" type="number" min="1" max="500" step="1" value="16" style="width:60px"></label> <button id="np-conj-generate">Generate sequence</button></div>
       <div style="font-size:12px;color:${TEXT};margin-bottom:10px">Thiol modification &nbsp;<label style="margin-right:8px"><input type="radio" name="np-thiol-end" value="5p" checked> 5′ end</label><label><input type="radio" name="np-thiol-end" value="3p"> 3′ end</label></div>
       <button id="np-conj-create-handle" disabled style="width:100%;background:#1f6feb;color:#fff;border:none;border-radius:5px;padding:8px;cursor:pointer;font-size:13px">Create ssDNA handle</button>
       <div id="np-conj-status" style="font-size:11px;color:${DIM};margin:8px 0;min-height:28px"></div>`
     right.innerHTML = `<div style="font-size:12px;color:${DIM};text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Surface coverage</div>
       <label style="font-size:12px;color:${TEXT}">Density<input id="np-conj-density" type="range" min="0" max="8" step="1" style="display:block;width:100%;margin-top:7px"></label>
       <div style="display:flex;justify-content:space-between;color:${DIM};font-size:9px"><span>1</span><span>2</span><span>3</span><span>5</span><span>10</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
-      <label style="font-size:12px;color:${TEXT};margin-top:10px"><input id="np-conj-count" type="number" min="1" max="10000" style="width:72px;background:#0d1117;border:1px solid ${BORDER};border-radius:4px;color:${TEXT};padding:4px"> strands</label>
+      <label style="font-size:12px;color:${TEXT};margin-top:10px"><input id="np-conj-count" type="number" min="1" max="10000" step="1" style="width:72px;background:#0d1117;border:1px solid ${BORDER};border-radius:4px;color:${TEXT};padding:4px"> strands</label>
       <div id="np-conj-summary" style="font-size:11px;color:${DIM};line-height:1.55;margin-top:12px"></div><div id="np-conj-error" style="font-size:11px;color:#ff7b72;min-height:28px;margin-top:8px"></div>
       <div style="display:flex;gap:8px;margin-top:auto"><button id="np-conj-cancel" style="flex:1;background:#21262d;color:${TEXT};border:1px solid ${BORDER};border-radius:5px;padding:8px;cursor:pointer;font-size:13px">Cancel</button><button id="np-conj-apply" disabled style="flex:1;background:#238636;color:#fff;border:none;border-radius:5px;padding:8px;cursor:pointer;font-size:13px">Apply</button></div>
       <button id="np-conj-remove" style="margin-top:8px;background:#21262d;color:${TEXT};border:1px solid ${BORDER};border-radius:5px;padding:6px;cursor:pointer">Remove conjugation</button>`
@@ -92,15 +92,27 @@ export function initNanoparticleConjugateManager({ api, store } = {}) {
       previewCoating = coating
       if (scheme.value !== 'streptavidin') return
       clearStrepPreview(); addStreptavidinCoating(strepRoot, coating)
+      addBiotinMarkers(strepRoot, { ...particle, coating }, 'full', store.getState().currentGeometry ?? [])
       const dnaCount = particle.biotin_dna?.length ?? 0, n = coating.poses.length
       census.textContent = `${particle.diameter_nm} nm gold · ${n} strep · ${n ? dnaCount / n : 0} DNA / strep`
       census.title = `Requested ${coating.target_count}; placed ${n}. DNA count shows attached strands.`
       const inverse = new THREE.Matrix4().set(...(particle.pose.values ?? particle.pose)).invert()
+      const nativeGeometry = store.getState().currentGeometry ?? []
       for (const record of particle.biotin_dna ?? []) {
         const h = design.helices.find(h => h.id === record.helix_id)
         if (!h) continue
-        const points = [h.axis_start, h.axis_end].map(p => new THREE.Vector3(p.x, p.y, p.z).applyMatrix4(inverse))
-        strepRoot.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0x39c0ff })))
+        // Reuse the scene's native nucleotide positions, including the saved
+        // phase. An axis-only line hides clashes and suggests straight ssDNA.
+        const frames = nativeGeometry.filter(n => n.helix_id === h.id && n.direction === 'FORWARD').sort((a, b) => a.bp_index - b.bp_index)
+        const points = frames.map(n => new THREE.Vector3(...n.backbone_position).applyMatrix4(inverse))
+        if (!points.length) continue
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0x39c0ff }))
+        line.name = 'strep-preview-dna'; line.userData = { tetramerIndex: record.tetramer_index ?? 0, pocket: record.chain, nucleotideCount: points.length }
+        strepRoot.add(line)
+        const beadGeometry = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6), beadMaterial = new THREE.MeshPhongMaterial({ color: 0x39c0ff })
+        const beads = new THREE.InstancedMesh(beadGeometry, beadMaterial, points.length)
+        points.forEach((p, i) => beads.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y, p.z)))
+        beads.instanceMatrix.needsUpdate = true; strepRoot.add(beads)
       }
     }
     async function requestCoatingPreview(spec) {
@@ -226,9 +238,18 @@ export function initNanoparticleConjugateManager({ api, store } = {}) {
       scheme.value = 'streptavidin'
       left.style.display = 'none'; right.style.display = 'none'; strepPanel.style.display = 'contents'
       strepRoot.visible = true; corona.visible = false
-      scheme.title = 'PDB 1STP tetramers with publication-based coverage. Source: https://www.rcsb.org/structure/1STP. Current DNA attachment supports one tetramer and one DNA on fixed gold (CPU/GPU oxDNA).'
+      scheme.title = 'PDB 1STP tetramers with publication-based coverage and explicit DNA occupancy on fixed gold (CPU/GPU oxDNA). Source: https://www.rcsb.org/structure/1STP.'
       scheme.selectedOptions[0].title = scheme.title
-      if (!strepPanel.children.length) openStreptavidinDialog(particle, { container: strepPanel, onSaved: close, compact: true, onPreview: queueCoatingPreview })
+      if (!strepPanel.children.length) openStreptavidinDialog(particle, {
+        container: strepPanel, onSaved: close, compact: true, onPreview: queueCoatingPreview,
+        onChanged: result => {
+          if (!overlay.isConnected) return
+          design = result.design
+          particle = design.nanoparticles.find(p => p.id === nanoparticleId)
+          clearTimeout(previewTimer); pendingPreview = null; previewVersion++
+          displayCoating(particle.coating)
+        },
+      })
       else if (previewCoating ?? particle.coating) displayCoating(previewCoating ?? particle.coating)
       resize()
     }
@@ -240,6 +261,7 @@ export function initNanoparticleConjugateManager({ api, store } = {}) {
   return {
     open, close, isOpen: () => Boolean(ctx),
     previewCamera: () => ctx ? { position: ctx.camera.position.toArray(), target: ctx.controls.target.toArray() } : null,
+    strepDnaPreview: () => ctx?.scene.getObjectsByProperty('name', 'strep-preview-dna').map(o => o.userData) ?? [],
     fullHandleCensus: () => ctx ? {
       beads: ctx.scene.getObjectsByProperty('name', 'np-preview-handle-bead').length,
       slabs: ctx.scene.getObjectsByProperty('name', 'np-preview-handle-slab').length,

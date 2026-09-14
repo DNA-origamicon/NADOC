@@ -2791,8 +2791,12 @@ class StreptavidinCoating(BaseModel):
 class BiotinDNA(BaseModel):
     strand_id: str
     helix_id: str
+    tetramer_index: int = Field(default=0, ge=0)
+    placement_version: Literal[1, 2] = 1  # v1 preserves existing oxDNA seed geometry
     chain: Literal["A", "B", "C", "D"]
     linker_nm: float = Field(default=2., ge=1., le=10.)
+    # Display chemistry; reach remains the independent coarse-grained restraint.
+    linker_chemistry: Literal["biotin_teg"] = "biotin_teg"
 
 
 class Nanoparticle(BaseModel):

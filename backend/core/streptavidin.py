@@ -139,7 +139,7 @@ def coating_simulation_gaps(design):
         'engines': {
             'NAMD': 'Missing coating expansion into PSF, terminal/missing-residue preparation, biotin/linker parameters, gold/QD core interactions and protein–core attachment forces.',
             'OpenMM': 'Implicit builder currently constructs DNA-only Amber topology. Needs protein/cofactor topology, core interactions and attachment forces.',
-            'oxDNA/DNANM': 'CPU/GPU job support: fixed gold core, one PDB tetramer and one biotinylated DNA per particle, with core repulsion, ANM, positional anchors and a prescribed DNA tether. Configure in Conjugate Manager. Mobile cores, multiple tetramers, live oxpy and calibrated adsorption/binding energetics remain unsupported. GPU convergence and sampling validation remain open.',
+            'oxDNA/DNANM': 'CPU/GPU job support: fixed gold core, PDB tetramers and explicitly occupied biotin-DNA pockets, with core repulsion, ANM, positional anchors and a prescribed DNA tether. Configure in Conjugate Manager. Mobile cores, live oxpy and calibrated adsorption/binding energetics remain unsupported. GPU convergence and sampling validation remain open.',
             'mrDNA': 'DNA multiresolution/ARBD mapping lacks coating rigid bodies, core excluded volume, tether forces and persistent identity across resolution changes.',
             'CanDo': 'DNA elastic-beam model lacks particle/protein rigid bodies, their mass and hydrodynamic drag, contact and attachment constraints.',
             'SNUPI': 'DNA mechanics/hydrodynamics lacks coating bodies, attachment constraints and protein/core contact and drag contributions.',

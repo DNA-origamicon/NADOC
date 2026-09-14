@@ -61,6 +61,7 @@ export function installTestApi({
       selectionController?.replace([ref])
     },
     nanoparticles: {
+      importDesign: content => api.importDesign(content),
       create: (diameterNm, coating = null) => api.createGoldNanosphere(diameterNm, coating),
       coat: (id, coating) => api.patchNanoparticle(id, { coating }),
       createQuantumDot: (catalogId, diameterNm) => api.createQuantumDot(catalogId, diameterNm),
@@ -84,6 +85,7 @@ export function installTestApi({
         isOpen: () => nanoparticleConjugateManager?.isOpen() ?? false,
         previewCamera: () => nanoparticleConjugateManager?.previewCamera?.() ?? null,
         fullHandleCensus: () => nanoparticleConjugateManager?.fullHandleCensus?.() ?? null,
+        strepDnaPreview: () => nanoparticleConjugateManager?.strepDnaPreview?.() ?? [],
         loadDesign: path => api.loadDesign(path),
         saveDesign: path => api.saveDesign(path),
       },
@@ -93,13 +95,45 @@ export function installTestApi({
         position: mesh.getWorldPosition(new THREE.Vector3()).toArray(),
         metalness: mesh.material?.metalness, color: mesh.material?.color?.getHex(),
         emissiveIntensity: mesh.material?.emissiveIntensity,
+        biotin: (mesh.getObjectByName('biotin-pockets')?.children ?? []).map(marker => ({
+          strandId: marker.userData.strandId, pocket: marker.userData.pocket,
+          tetramerIndex: marker.userData.tetramerIndex, visible: mesh.visible && marker.parent.visible,
+          position: marker.getWorldPosition(new THREE.Vector3()).toArray(),
+          linker: (() => {
+            const group = marker.getObjectByName('biotin-linker')
+            if (!group) return null
+            group.updateWorldMatrix(true, true)
+            return {
+              bead: group.children[0].getWorldPosition(new THREE.Vector3()).toArray(),
+              segments: group.children.slice(1).map(c => ({
+                start: new THREE.Vector3(0, -.5, 0).applyMatrix4(c.matrixWorld).toArray(),
+                end: new THREE.Vector3(0, .5, 0).applyMatrix4(c.matrixWorld).toArray(),
+              })),
+            }
+          })(),
+        })),
+        coatingAtoms: (() => {
+          const renderer = mesh.userData.strepAtoms
+          if (!renderer) return null
+          const root = renderer.root
+          const group = root.children[0]
+          const spheres = group?.children.filter(c => c.name === 'atomSpheres') ?? []
+          const bonds = group?.children.find(c => c.name === 'atomBonds')
+          const first = spheres[0], matrix = new THREE.Matrix4()
+          if (first) { first.getMatrixAt(0, matrix); first.updateWorldMatrix(true, false) }
+          return { visible: root.visible, atomCount: renderer.atomCount, bondCount: renderer.bondCount,
+            sphereInstances: spheres.reduce((n, c) => n + c.count, 0) * root.children.length,
+            bondInstances: (bonds?.count ?? 0) * root.children.length,
+            firstElement: first?.userData.element,
+            firstPosition: first ? new THREE.Vector3().setFromMatrixPosition(matrix).applyMatrix4(first.matrixWorld).toArray() : null }
+        })(),
         coating: (() => {
           const group = mesh.children.find(child => child.name === 'streptavidin-coating')
           if (!group) return null
           const first = group.children[0]
           const matrix = new THREE.Matrix4(); first.getMatrixAt(0, matrix)
           first.updateWorldMatrix(true, false)
-          return { count: group.userData.tetramerCount, chains: group.children.length,
+          return { count: group.userData.tetramerCount, chains: group.children.length, visible: group.visible,
             firstPosition: new THREE.Vector3().setFromMatrixPosition(matrix).applyMatrix4(first.matrixWorld).toArray() }
         })(),
         fluorescence: mesh.children.filter(child => child.isSprite).map(child => ({

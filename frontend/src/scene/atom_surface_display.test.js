@@ -351,6 +351,10 @@ describe('initAtomSurfaceDisplay', () => {
     expect(deps._root.visible).toBe(false)
     expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(deps.atomisticRenderer.update).toHaveBeenCalled()
+    // No retained previous-document atoms may be rebuilt while fetch is pending.
+    expect(deps.atomisticRenderer.update).toHaveBeenNthCalledWith(1, null)
+    expect(deps.atomisticRenderer.update.mock.invocationCallOrder[0])
+      .toBeLessThan(deps.atomisticRenderer.setMode.mock.invocationCallOrder[0])
     // second apply reuses the cache — no second fetch
     deps.atomisticRenderer._setMode('vdw')
     await api.applyAtomisticMode('vdw')
@@ -485,10 +489,12 @@ describe('initAtomSurfaceDisplay', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1)
     // design change → cache invalidated by the subscriber
     deps.atomisticRenderer._setMode('vdw')
+    deps.atomisticRenderer.update.mockClear()
     store.setState({ currentDesign: { a: 2 } })
     // subscriber re-applies on design change (designChanged path); allow microtasks
     await Promise.resolve()
     expect(global.fetch.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(deps.atomisticRenderer.update).not.toHaveBeenCalledWith(null)
   })
 
   it('view-volume-only card saves retain the atom cache and wait for the layer event', async () => {
@@ -506,6 +512,25 @@ describe('initAtomSurfaceDisplay', () => {
     } })
     await Promise.resolve()
     expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('an initial autosave during loading does not invalidate the in-flight atom model', async () => {
+    mountIds(DOM)
+    let finish
+    global.fetch = vi.fn(() => new Promise(resolve => { finish = resolve }))
+    const original = { id: 'old', metadata: { name: 'part' }, helices: [{ id: 'h', length_bp: 8 }] }
+    const store = createMockStore({ currentDesign: original, currentGeometry: null })
+    const deps = makeDeps({ store })
+    const api = initAtomSurfaceDisplay(deps)
+    const applying = api.applyAtomisticMode('ballstick')
+    deps.atomisticRenderer._setMode('ballstick')
+    const saved = structuredClone(original)
+    saved.id = 'new'; saved.metadata.identity_confirmed_at = 'now'
+    store.setState({ currentDesign: saved })
+    finish({ ok: true, json: async () => ({ atoms: [], bonds: [], source: 'correct part' }) })
+    await applying
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(deps.atomisticRenderer.update).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'correct part' }))
   })
 
   it('discards a pre-edit atom response that finishes after the post-edit model', async () => {
@@ -526,7 +551,8 @@ describe('initAtomSurfaceDisplay', () => {
     await vi.waitFor(() => expect(pending).toHaveLength(2))
 
     pending[1]({ ok: true, json: async () => ({ revision: 2, atoms: [], bonds: [] }) })
-    await vi.waitFor(() => expect(deps.atomisticRenderer.update).toHaveBeenCalledTimes(1))
+    const paintedModels = () => deps.atomisticRenderer.update.mock.calls.filter(([data]) => data !== null)
+    await vi.waitFor(() => expect(paintedModels()).toHaveLength(1))
     expect(deps.atomisticRenderer.update).toHaveBeenLastCalledWith(
       expect.objectContaining({ revision: 2 }),
     )
@@ -535,6 +561,6 @@ describe('initAtomSurfaceDisplay', () => {
     pending[0]({ ok: true, json: async () => ({ revision: 1, atoms: [], bonds: [] }) })
     await oldApply
     await Promise.resolve()
-    expect(deps.atomisticRenderer.update).toHaveBeenCalledTimes(1)
+    expect(paintedModels()).toHaveLength(1)
   })
 })

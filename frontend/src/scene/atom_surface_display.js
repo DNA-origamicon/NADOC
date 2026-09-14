@@ -55,6 +55,18 @@ export function isViewVolumeOnlyDesignChange(next, previous) {
   return true
 }
 
+/** Save/Save As may replace every object while changing only document identity.
+ * Atom coordinates/topology do not depend on those fields. Compare remaining
+ * inputs by value so an initial autosave cannot cancel a first-view atom fetch.
+ */
+export function atomisticDesignInputsChanged(next, previous) {
+  if (next === previous) return false
+  if (!next || !previous) return true
+  const ignored = new Set(['metadata', 'id', 'view_volumes'])
+  return [...new Set([...Object.keys(next), ...Object.keys(previous)])].some(key =>
+    !ignored.has(key) && next[key] !== previous[key] && JSON.stringify(next[key]) !== JSON.stringify(previous[key]))
+}
+
 /** Compile canonical refs to the small renderer-neutral predicate descriptor used by
  * every atomistic representation. Rich domain ranges are derived from live design. */
 export function atomSelectionForState(state) {
@@ -591,6 +603,14 @@ export function initAtomSurfaceDisplay({
     // it when its atoms land (onHeavyApplied → setCGVisible(false)).  If the overlay
     // never lands (build fails), the relaxed CG stays up — a sane fallback.
     const _deferToOverlay = mode !== 'off' && !!getSimOverlayWillDriveHeavy('atomistic')
+    // The renderer retains its previous atom table while Full is visible. After
+    // a document/edit invalidates the cache, setMode would otherwise rebuild and
+    // paint those stale atoms while awaiting the new model (especially expensive
+    // after viewing a large DNA part). Clear only the native path; job overlays
+    // own their atom tables and must retain control of them.
+    // An already-visible native model stays on screen during background refresh;
+    // clearing it on every refresh would introduce flicker between mode events.
+    if (mode !== 'off' && atomisticRenderer.getMode() === 'off' && !_deferToOverlay && !_atomDataCache) atomisticRenderer.update(null)
     atomisticRenderer.setMode(mode)
     // Hide CG model when any atomistic mode is active; restore when off — but keep it
     // up while deferring to the overlay.
@@ -626,7 +646,10 @@ export function initAtomSurfaceDisplay({
       } finally {
         // An invalidation may have started a newer load with its own toast. The older
         // request must not dismiss that newer owner's progress indicator.
-        if (toastToken === _atomToastToken) dismissToast()
+        if (toastToken === _atomToastToken) {
+          dismissToast()
+          if (_atomDataCache?.warnings?.length) showToast(_atomDataCache.warnings[0], { severity: 'warning', duration: 12000 })
+        }
       }
     }
   }
@@ -680,13 +703,13 @@ export function initAtomSurfaceDisplay({
     const designChanged   = newState.currentDesign   !== prevState.currentDesign
     const geometryChanged = newState.currentGeometry !== prevState.currentGeometry ||
                             newState.currentHelixAxes !== prevState.currentHelixAxes
-    const volumeOnly = designChanged && isViewVolumeOnlyDesignChange(
+    const atomsChanged = designChanged && atomisticDesignInputsChanged(
       newState.currentDesign, prevState.currentDesign)
-    if (designChanged && !volumeOnly) _invalidateAtomData()
-    if (((designChanged && !volumeOnly) || geometryChanged) && atomisticRenderer.getMode() !== 'off') {
+    if (atomsChanged) _invalidateAtomData()
+    if ((atomsChanged || geometryChanged) && atomisticRenderer.getMode() !== 'off') {
       // The renderer just created a fresh root with visible=true — re-hide it.
       _setCGVisible(false)
-      if (designChanged) _applyAtomisticMode(atomisticRenderer.getMode())
+      if (atomsChanged) _applyAtomisticMode(atomisticRenderer.getMode())
     }
   })
 

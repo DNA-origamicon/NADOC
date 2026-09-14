@@ -25,6 +25,9 @@ test('create one gold, one strep and one biotin DNA through conjugation manager'
   const response = await attached
   expect(response.status(), await response.text()).toBe(200)
   expect((await response.json()).design.strands).toHaveLength(1)
+  await expect(page.locator('#nanoparticle-conjugate-overlay')).toBeVisible()
+  await expect(page.locator('#np-conj-preview-census')).toContainText('1 strep · 1 DNA / strep')
+  await page.click('#strep-apply')
   await expect(page.locator('#nanoparticle-conjugate-overlay')).toHaveCount(0, { timeout: 60000 })
   const audit = () => page.evaluate(() => {
     const d=window.__nadocTest.store.getState().currentDesign

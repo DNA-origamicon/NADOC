@@ -137,6 +137,8 @@ test('gold/strep/DNA: conjugate, configure local bath, run default GPU, display'
   })
   await page.fill('#strep-dna-sequence', 'ACGTACGTACGTACGT')
   await page.click('#strep-dna-create')
+  await expect(page.locator('#strep-dna-current')).toContainText('1 attached', { timeout: 60000 })
+  await page.click('#strep-apply')
   await expect(page.locator('#nanoparticle-conjugate-overlay')).toHaveCount(0, { timeout: 60000 })
   await runPrepared(page, await openNewWizard(page), { hybrid: true })
 })

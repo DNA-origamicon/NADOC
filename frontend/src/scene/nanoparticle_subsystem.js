@@ -5,7 +5,9 @@ import { primaryRefOfKind } from './selection_model.js'
 import { deferrableContextMenu } from './right_click_menu.js'
 import { patchNanoparticle, deleteNanoparticle } from '../api/client.js'
 import { promptGoldNanosphereDiameter } from '../ui/nanoparticle_dialog.js'
-import { addStreptavidinCoating } from './streptavidin_renderer.js'
+import { addStreptavidinCoating, addBiotinMarkers, applyCoatingTransforms } from './streptavidin_renderer.js'
+import { nanoparticleRenderInputsChanged } from './nanoparticle_render_dependencies.js'
+import { createStreptavidinAtomicRenderer } from './streptavidin_atomic_renderer.js'
 import { openStreptavidinDialog } from '../ui/streptavidin_dialog.js'
 
 const GOLD = 0xd4af37
@@ -24,6 +26,8 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   const connectorRoot = new THREE.Group(); connectorRoot.name = 'nanoparticle-connections'; scene.add(connectorRoot)
   const linkerAtomRoot = new THREE.Group(); linkerAtomRoot.name = 'nanoparticle-linker-atoms'; linkerAtomRoot.visible = false; scene.add(linkerAtomRoot)
   const meshes = new Map()
+  let representation = 'full'
+  let coatingTransforms = {}
   let highlighted = null
   let moveRotatePanel = null
   let liveHelixIds = []
@@ -100,8 +104,9 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     for (const glow of dotGlows.values()) glow.clear()
     dotGlows.clear()
     for (const mesh of meshes.values()) {
+      mesh.userData.strepAtoms?.dispose()
       root.remove(mesh); mesh.geometry.dispose()
-      for (const child of mesh.children) if (child.name === 'streptavidin-coating') child.traverse(obj => { obj.geometry?.dispose(); obj.material?.dispose() })
+      for (const child of mesh.children) if (['streptavidin-coating', 'biotin-pockets'].includes(child.name)) child.traverse(obj => { obj.geometry?.dispose(); obj.material?.dispose() })
     }
     meshes.clear()
     const ids = new Set((store.getState().currentDesign?.nanoparticles ?? []).map(p => p.id))
@@ -119,6 +124,13 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
       if (particle.kind !== 'quantum_dot') mesh.userData.photoMaterialKind = 'gold-nanoparticle'
       mesh.applyMatrix4(poseMatrix(particle))
       addStreptavidinCoating(mesh, particle.coating)
+      if (particle.coating) {
+        mesh.userData.strepAtoms = createStreptavidinAtomicRenderer(mesh, particle.coating)
+        mesh.userData.strepAtoms.setMode(representation)
+        mesh.getObjectByName('streptavidin-coating').visible = !['vdw', 'ballstick', 'stick'].includes(representation)
+      }
+      addBiotinMarkers(mesh, particle, representation, store.getState().currentGeometry ?? [])
+      if (particle.coating) applyCoatingTransforms(mesh, particle, coatingTransforms)
       root.add(mesh)
       meshes.set(particle.id, mesh)
     }
@@ -380,14 +392,9 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   }, { capture: true }), { capture: true })
 
   store.subscribe((next, prev) => {
-    const linked = [next.currentDesign, prev.currentDesign].some(design =>
-      design?.nanoparticle_conjugations?.length || design?.nanoparticle_connection_versions?.length)
-    // Free particles do not depend on DNA geometry or display metadata. An
-    // autosave/animation response must not discard an in-progress dot move.
-    const particlesChanged = next.currentDesign !== prev.currentDesign &&
-      JSON.stringify(next.currentDesign?.nanoparticles) !== JSON.stringify(prev.currentDesign?.nanoparticles)
-    if (particlesChanged || (linked && (next.currentDesign !== prev.currentDesign ||
-        next.currentGeometry !== prev.currentGeometry))) rebuild()
+    // Persisted metadata and identical geometry responses must retain the PDB
+    // prototype and compiled materials. Actual placement/topology edits rebuild.
+    if (nanoparticleRenderInputsChanged(next, prev)) rebuild()
     else if (next.selection !== prev.selection) syncSelection()
   })
   document.addEventListener('keydown', event => {
@@ -400,19 +407,20 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     // from the backend model.  Keep this legacy overlay hidden or it would draw a
     // second, non-topological linker on top of the simulation structure.
     linkerAtomRoot.visible = false
+    representation = event.detail?.representation ?? representation
+    for (const mesh of meshes.values()) {
+      const group = mesh.getObjectByName('biotin-pockets')
+      if (group) group.visible = representation === 'full'
+      mesh.userData.strepAtoms?.setMode(representation)
+      const trace = mesh.getObjectByName('streptavidin-coating')
+      if (trace) trace.visible = !['vdw', 'ballstick', 'stick'].includes(representation)
+    }
   })
   window.addEventListener('nadoc:coating-oxdna-transforms', event => {
-    for (const [id, mesh] of meshes) {
-      const group = mesh.children.find(c => c.name === 'streptavidin-coating')
-      if (!group) continue
-      const transform = event.detail?.[`${id}:strep:0`]
-      group.matrixAutoUpdate = false
-      group.matrix.identity()
-      if (transform) {
-        mesh.updateWorldMatrix(true, false)
-        group.matrix.copy(mesh.matrixWorld).invert().multiply(new THREE.Matrix4().set(...transform)).multiply(mesh.matrixWorld)
-      }
-      group.matrixWorldNeedsUpdate = true
+    coatingTransforms = event.detail ?? {}
+    for (const particle of store.getState().currentDesign?.nanoparticles ?? []) {
+      const mesh = meshes.get(particle.id)
+      if (mesh && particle.coating) applyCoatingTransforms(mesh, particle, coatingTransforms)
     }
   })
   rebuild()

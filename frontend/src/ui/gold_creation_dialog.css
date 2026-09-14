@@ -31,12 +31,20 @@
 #streptavidin-dialog button:disabled { opacity: .5; }
 #streptavidin-dialog.strep-compact { display: contents; }
 .strep-controls { flex: 0 0 230px; min-height: 0; display: flex; flex-direction: column; gap: 8px; font: 12px/1.3 monospace; color: #c9d1d9; overflow-y: auto; }
-.strep-dna-controls { order: 0; }
-.strep-coating-controls { order: 2; }
+.strep-dna-controls { order: 2; }
+.strep-coating-controls { order: 0; }
 .strep-heading { text-transform: uppercase; color: #8b949e; letter-spacing: .5px; }
 #streptavidin-dialog.strep-compact label { display: flex; flex-direction: column; gap: 3px; }
 #streptavidin-dialog.strep-compact input, #streptavidin-dialog.strep-compact select { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; }
 #streptavidin-dialog.strep-compact p { margin: 0; font-size: 11px; }
-.strep-actions { display: flex; gap: 8px; margin-top: auto; }
+.strep-length-row { display: flex; align-items: flex-end; gap: 8px; }
+.strep-length-row > label { flex: 0 0 76px; }
+#streptavidin-dialog .strep-length-row > button { flex: 1; min-width: 0; white-space: nowrap; font: inherit; }
+/* Keep native, keyboard-accessible steppers visible even without hover. */
+#nanoparticle-conjugate-overlay input[type="number"],
+#streptavidin-dialog input[type="number"] { appearance: auto; color-scheme: dark; }
+#nanoparticle-conjugate-overlay input[type="number"]::-webkit-inner-spin-button,
+#streptavidin-dialog input[type="number"]::-webkit-inner-spin-button { opacity: 1; }
+.strep-actions { display: flex; gap: 8px; margin-top: auto; position: sticky; bottom: 0; padding-top: 8px; background: #161b22; flex-shrink: 0; }
 .strep-actions button { flex: 1; }
 #streptavidin-dialog.strep-compact #strep-apply { background: #238636; }

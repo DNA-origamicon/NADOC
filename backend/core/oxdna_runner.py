@@ -589,10 +589,11 @@ def prepare_oxdna_job(
     (jd / AVERAGE_SEQUENCE_FILE).write_bytes(AVERAGE_SEQUENCE_PATH.read_bytes())
     if fixed_cores:
         (jd / 'nanoparticles.json').write_text(json.dumps({
-            'model': 'fixed_gold_strep_dna_v1', 'gold_representation': 'external_exclusion_body',
+            'model': 'fixed_gold_strep_dna_v2', 'gold_representation': 'external_exclusion_body',
             'mobile_core': False, 'binding_model': 'prescribed_ANM_and_harmonic_tethers',
             'particles': [{'id': p.id, 'diameter_nm':p.diameter_nm, 'pose':p.pose.values,
-                'protein_attachment_id':f'{p.id}:strep:0', 'dna': [r.model_dump() for r in p.biotin_dna]}
+                'protein_attachment_id':f'{p.id}:strep:0',
+                'protein_attachment_ids':[f'{p.id}:strep:{i}' for i in range(len(p.coating.poses))], 'dna': [r.model_dump() for r in p.biotin_dna]}
                 for p in design.nanoparticles]}, indent=2))
 
     # ── Hybrid protein+DNA (upstream DNANM) ─────────────────────────────────────

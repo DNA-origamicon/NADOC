@@ -577,7 +577,7 @@ def protein_forces_text(
     offset = dna_index_offset(blocks)
     parts: list[str] = []
     for att, beads, base in zip(attachments, blocks, offsets):
-        if any(att.id == f'{p.id}:strep:0' for p in getattr(design, "nanoparticles", [])):
+        if any(att.id == f'{p.id}:strep:{i}' for p in getattr(design, "nanoparticles", []) if p.coating for i in range(len(p.coating.poses))):
             continue
         conj_local = conjugation_bead_index(beads)
         nt_key = binder_terminus_nuc_key(design, att, geometry)

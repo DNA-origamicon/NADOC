@@ -3,7 +3,7 @@ import { patchNanoparticle, createNanoparticleBiotinDNA, removeNanoparticleBioti
 import './gold_creation_dialog.css'
 import coverage from '../../../backend/data/proteins/streptavidin_coverage.json'
 
-export function openStreptavidinDialog(particle, { container = null, onSaved = null, compact = false, onPreview = null } = {}) {
+export function openStreptavidinDialog(particle, { container = null, onSaved = null, compact = false, onPreview = null, onChanged = null } = {}) {
   if (document.getElementById('streptavidin-dialog')) return
   const dialog = document.createElement(container ? 'div' : 'dialog')
   dialog.id = 'streptavidin-dialog'
@@ -16,17 +16,18 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
     <p><label>Surface spacer (nm) <input id="strep-spacer" type="number" min="0.2" max="20" step="0.1" value="0.3"></label></p>
     <p id="strep-estimate" role="status"></p>
     <p>Imports the complete PDB 1STP biological tetramer. Packing is an estimate; colliding placements are omitted and the final count is saved. Adsorption does not imply a unique experimental orientation. Biotin mode occupies one binding pocket; its linker is a geometric spacer.</p>
-    <p id="strep-scope"></p><p>Simulation support is incomplete: particle-core forces, coating attachment mechanics and linker parameters are not implemented. NAMD remains unsupported. The fixed-core oxDNA example below uses a simplified excluded-volume and restraint model.</p>
+    <p id="strep-scope"></p><p>NAMD coating simulation remains unsupported. Fixed-core oxDNA uses simplified core excluded volume, protein anchors and DNA attachment restraints; equilibrium sampling and experimental validation remain open.</p>
     <p><a href="https://www.rcsb.org/structure/1STP" target="_blank" rel="noopener noreferrer">PDB structure</a> · <a href="https://doi.org/10.1016/j.mee.2007.01.247" target="_blank" rel="noopener noreferrer">40 nm² coverage reference</a></p>
-    <details open id="strep-dna-panel"><summary>Biotinylated DNA · oxDNA fixed-core example</summary>
-    <p>Apply a coating with exactly one tetramer, then attach one DNA strand. Gold stays fixed; DNANM models the protein and DNA with prescribed attachment restraints. The oxDNA job uses GPU by default; CPU is also available.</p>
+    <details open id="strep-dna-panel"><summary>Biotinylated DNA</summary>
+    <p>Apply the streptavidin coating first, then choose the number of DNA strands per applied tetramer. Gold stays fixed; DNANM models the protein and DNA with prescribed attachment restraints. The oxDNA job uses GPU by default; CPU is also available.</p>
     <p id="strep-dna-current"></p><label>5′ biotin DNA sequence <input id="strep-dna-sequence" value="ACGTACGTACGTACGT" maxlength="200"></label>
-    <label>Sequence length <input id="strep-dna-length" type="number" min="2" max="200" value="16"></label> <button id="strep-dna-generate">Generate sequence</button>
-    <label>Pocket <select id="strep-dna-pocket"><option value="auto">Most outward core-clear pocket</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
-    <label>Linker reach (nm) <input id="strep-dna-linker" type="number" min="1" max="10" step="0.1" value="2"></label>
+    <label>Length <input id="strep-dna-length" type="number" min="2" max="200" step="1" value="16"></label> <button id="strep-dna-generate">Generate sequence</button>
+    <label>DNA per strep <input id="strep-dna-count" type="number" min="1" max="4" step="1" value="1"></label>
+    <label>Pocket <select id="strep-dna-pocket"><option value="auto">Automatic clash-screened pockets</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
+    <label>Linker reach (nm) <input id="strep-dna-linker" type="number" min="1" max="10" step="0.1" value="1.8"></label>
     <p>Linker and biotin binding are represented by a coarse-grained spring; pocket selection is a geometric screen, not a binding-affinity prediction.</p>
     <button id="strep-dna-create">Attach biotinylated DNA</button> <button id="strep-dna-remove">Remove DNA</button></details>
-    <p id="strep-error" role="alert"></p><button id="strep-cancel">Cancel</button> <button id="strep-remove">Remove coating</button> <button id="strep-apply">Apply coating</button>`
+    <p id="strep-error" role="alert"></p><button id="strep-cancel">Cancel</button> <button id="strep-remove">Remove coating</button> <button id="strep-apply">Apply</button>`
   ;(container ?? document.body).append(dialog)
   if (container) {
     dialog.style.cssText = 'position:static;inset:auto;margin:0;width:100%;max-height:none;box-sizing:border-box;overflow:auto;border:0;padding:12px'
@@ -39,19 +40,22 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
     dna.className = 'strep-controls strep-dna-controls'; coating.className = 'strep-controls strep-coating-controls'
     const move = (target, id, parent = false) => { const node = $(id); target.append(parent ? node.closest('label') : node) }
     const heading = (target, text) => { const h = document.createElement('div'); h.className = 'strep-heading'; h.textContent = text; target.append(h) }
-    heading(dna, 'Biotinylated DNA')
-    move(dna, 'strep-dna-sequence', true); move(dna, 'strep-dna-length', true); move(dna, 'strep-dna-generate')
-    move(dna, 'strep-dna-pocket', true); move(dna, 'strep-dna-linker', true)
+    heading(dna, '2. Attach biotinylated DNA')
+    move(dna, 'strep-dna-sequence', true)
+    const lengthRow = document.createElement('div'); lengthRow.className = 'strep-length-row'
+    move(lengthRow, 'strep-dna-length', true); move(lengthRow, 'strep-dna-generate'); dna.append(lengthRow)
+    move(dna, 'strep-dna-count', true); move(dna, 'strep-dna-pocket', true); move(dna, 'strep-dna-linker', true)
     move(dna, 'strep-dna-current'); move(dna, 'strep-dna-create'); move(dna, 'strep-dna-remove')
-    heading(coating, 'Surface coverage')
+    heading(coating, '1. Apply strep coating')
     move(coating, 'strep-mode', true); move(coating, 'strep-reference', true)
     move(coating, 'strep-count', true); move(coating, 'strep-reset'); move(coating, 'strep-spacer', true)
-    move(coating, 'strep-estimate'); move(coating, 'strep-error')
+    move(coating, 'strep-estimate'); move(coating, 'strep-remove')
+    move(dna, 'strep-error')
     const actions = document.createElement('div'); actions.className = 'strep-actions'
-    move(actions, 'strep-cancel'); move(actions, 'strep-apply'); coating.append(actions); move(coating, 'strep-remove')
+    move(actions, 'strep-cancel'); move(actions, 'strep-apply'); dna.append(actions)
     const hidden = document.createElement('div'); hidden.hidden = true
     while (dialog.firstChild) hidden.append(dialog.firstChild)
-    dialog.append(hidden, dna, coating)
+    dialog.append(hidden, coating, dna)
     $('strep-mode').options[0].textContent = 'Adsorption'
     $('strep-mode').options[1].textContent = 'Biotin tether'
     $('strep-dna-pocket').options[0].textContent = 'Auto (outward)'
@@ -60,9 +64,10 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
     'strep-mode': 'Adsorption samples contact orientations; biotin tether points occupied pocket A toward gold. Geometric placement does not predict adsorption energy. PDB 1STP: https://www.rcsb.org/structure/1STP',
     'strep-count': 'Requested tetramers; colliding placements are omitted. The preview reports the actual count. Coverage depends on preparation and curvature.',
     'strep-spacer': 'Geometric distance from the gold surface in nm, not an atomistic linker or adsorption potential.',
-    'strep-dna-pocket': 'Auto selects the most outward core-clear linker path; this does not certify protein clearance or binding affinity. Pocket A is occupied in biotin-tether mode. Structure: https://www.rcsb.org/structure/1STP',
-    'strep-dna-linker': 'Biotin and linker are a prescribed coarse-grained spring in CPU DNANM, not explicit ligand atoms.',
-    'strep-dna-create': 'Apply exactly one tetramer first, then attach one DNA. Current oxDNA support is one DNA per tetramer on a fixed gold core using CPU or GPU DNANM. Multiple DNA occupancy and NAMD coatings are not yet supported.',
+    'strep-dna-pocket': 'Automatic selection searches unoccupied PDB pockets and rigid DNA orientations/phases. Native B-form beads and connecting segments are screened against cores, coatings and other DNA. A finite geometric search does not predict binding affinity or equilibrium ssDNA structure. Pocket A is occupied in biotin-tether mode. Structure: https://www.rcsb.org/structure/1STP',
+    'strep-dna-count': 'Exact number on every applied tetramer: up to four for adsorption or three when pocket A tethers the protein. If the requested occupancy cannot be placed without clashes, nothing is attached. The entered sequence is used for every strand.',
+    'strep-dna-linker': 'Atomistic views use 5′ biotin-TEG (IDT /5BiotinTEG/), fitted to the actual DNA phosphate without stretching bonds. An unreachable spacer is shown unconnected with a warning. Reach from the bound biotin carboxyl tail to the first native DNA backbone bead. The ideal B-form strand may turn at this flexible connection. oxDNA uses a prescribed coarse-grained spring, not explicit ligand atoms.',
+    'strep-dna-create': 'Apply the coating first; unsaved coating edits must be applied before attaching DNA. All requested strands are created together with one undo action. Fixed gold CPU/GPU DNANM remains a simplified restraint model; NAMD coating validation is pending.',
   }
   for (const [id, text] of Object.entries(tips)) { $(id).title = text; for (const option of $(id).options ?? []) option.title = text }
 
@@ -77,19 +82,49 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
   let manual = Boolean(old && (old.count_override != null || !old.coverage_reference))
   const estimate = () => Math.max(1, Math.floor(Math.PI * particle.diameter_nm ** 2 / coverage.presets.find(p => p.id === $('strep-reference').value).effective_area_nm2 + 1e-9))
   $('strep-count').value = old?.count_override ?? (manual ? old.target_count : estimate())
-  const hasDNA = Boolean(particle.biotin_dna?.length)
+  let hasDNA = Boolean(particle.biotin_dna?.length)
+  if (hasDNA) $('strep-dna-linker').value = String(particle.biotin_dna[0].linker_nm ?? 2)
   $('strep-dna-panel').hidden = particle.kind === 'quantum_dot'
-  $('strep-dna-current').textContent = hasDNA ? `1 DNA / strep · pocket ${particle.biotin_dna[0].chain}` : '0 DNA / strep'
-  $('strep-dna-create').disabled = hasDNA || old?.poses.length !== 1
-  $('strep-dna-remove').disabled = !hasDNA
+  const appliedCount = old?.poses.length ?? 0
+  const maxDNA = old?.mode === 'biotin_tether' ? 3 : 4
+  $('strep-dna-count').max = String(maxDNA)
+  $('strep-dna-count').value = String(hasDNA ? particle.biotin_dna.length / appliedCount : 1)
+  const coatingValues = () => JSON.stringify(['strep-mode', 'strep-reference', 'strep-count', 'strep-spacer'].map(id => $(id).value))
+  const appliedValues = coatingValues()
+  function updateDNA() {
+    const applied = particle.kind === 'gold_nanosphere' && appliedCount > 0
+    const dirty = coatingValues() !== appliedValues
+    const count = Number($('strep-dna-count').value)
+    const seq = $('strep-dna-sequence').value.trim().toUpperCase()
+    const linker = Number($('strep-dna-linker').value)
+    const valid = Number.isInteger(count) && count >= 1 && count <= maxDNA && /^[ACGT]{2,200}$/.test(seq) && linker >= 1 && linker <= 10
+    const locked = !applied || dirty || busy || hasDNA
+    for (const id of ['strep-dna-count', 'strep-dna-sequence', 'strep-dna-length', 'strep-dna-generate', 'strep-dna-linker']) $(id).disabled = locked
+    if (count > 1) $('strep-dna-pocket').value = 'auto'
+    $('strep-dna-pocket').disabled = locked || count > 1
+    for (const option of $('strep-dna-pocket').options) option.disabled = old?.mode === 'biotin_tether' && option.value === 'A'
+    $('strep-dna-create').disabled = locked || !valid || $('strep-dna-pocket').selectedOptions[0]?.disabled
+    $('strep-dna-remove').disabled = busy || !hasDNA
+    $('strep-dna-current').textContent = !applied ? 'Apply the strep coating first.' : dirty ? 'Apply coating changes before attaching DNA.' : hasDNA
+      ? `${particle.biotin_dna.length / appliedCount} DNA / strep · ${particle.biotin_dna.length} attached`
+      : `Applied: ${appliedCount} strep · ${valid ? count * appliedCount : '—'} DNA requested`
+  }
+  for (const id of ['strep-dna-count', 'strep-dna-sequence', 'strep-dna-linker', 'strep-dna-pocket']) $(id).addEventListener('input', updateDNA)
   async function changeDNA(remove) {
-    if (busy) return
-    busy = true; $('strep-error').textContent = 'Updating biotinylated DNA…'
+    updateDNA()
+    if (busy || $(remove ? 'strep-dna-remove' : 'strep-dna-create').disabled) return
+    busy = true; updateDNA(); $('strep-error').textContent = 'Updating biotinylated DNA…'
     try {
-      const result = remove ? await removeNanoparticleBiotinDNA(particle.id) : await createNanoparticleBiotinDNA(particle.id, { sequence: $('strep-dna-sequence').value, pocket: $('strep-dna-pocket').value, linker_nm: Number($('strep-dna-linker').value) })
+      const result = remove ? await removeNanoparticleBiotinDNA(particle.id) : await createNanoparticleBiotinDNA(particle.id, { sequence: $('strep-dna-sequence').value, dna_per_strep: Number($('strep-dna-count').value), pocket: $('strep-dna-pocket').value, linker_nm: Number($('strep-dna-linker').value) })
       if (!result) throw new Error('DNA update failed; check the sequence and pocket selection.')
-      busy = false; dialog.close()
-    } catch (error) { busy = false; $('strep-error').textContent = error.message }
+      const updated = result.design?.nanoparticles?.find(p => p.id === particle.id)
+      if (!updated) throw new Error('Could not refresh the nanoparticle after updating DNA.')
+      particle = updated
+      hasDNA = Boolean(particle.biotin_dna?.length)
+      busy = false
+      update(); $('strep-error').textContent = ''
+      onChanged?.(result)
+    } catch (error) { busy = false; updateDNA(); $('strep-error').textContent = error.message }
   }
   $('strep-dna-generate').onclick = async () => {
     const length = Number($('strep-dna-length').value)
@@ -101,15 +136,18 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
       $('strep-dna-sequence').value = generated; $('strep-error').textContent = ''
     }
     catch (error) { $('strep-error').textContent = error.message }
-    finally { $('strep-dna-generate').disabled = false }
+    finally { updateDNA() }
   }
   $('strep-dna-create').onclick = () => changeDNA(false)
   $('strep-dna-remove').onclick = () => changeDNA(true)
   let busy = false
   function update() {
+    updateDNA()
     const count = Number($('strep-count').value), spacer = Number($('strep-spacer').value)
     const valid = particle.diameter_nm >= 5 && particle.diameter_nm <= 100 && Number.isInteger(count) && count >= 1 && count <= 1500 && spacer >= .2 && spacer <= 20
-    $('strep-apply').disabled = busy || !valid || hasDNA
+    $('strep-apply').disabled = busy || !valid
+    for (const id of ['strep-mode', 'strep-reference', 'strep-count', 'strep-reset', 'strep-spacer']) $(id).disabled = busy || hasDNA
+    $('strep-remove').disabled = busy || !old || hasDNA
     const preset = coverage.presets.find(p => p.id === $('strep-reference').value)
     $('strep-reference').title = `${preset.note} Source: ${preset.url}`
     $('strep-source').href = preset.url
@@ -140,6 +178,9 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
   }
   $('strep-apply').onclick = () => {
     update(); if ($('strep-apply').disabled) return
+    // DNA edits are already saved. Final Apply finishes without recreating the
+    // coating (which would invalidate attached strands or add an undo entry).
+    if (old && coatingValues() === appliedValues) { dialog.close(); return }
     apply({ mode: $('strep-mode').value, coverage_reference: $('strep-reference').value, count_override: manual ? Number($('strep-count').value) : null, spacer_nm: Number($('strep-spacer').value), seed: old?.seed ?? 1 })
   }
   $('strep-remove').onclick = () => apply(null)

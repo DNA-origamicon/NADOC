@@ -69,7 +69,7 @@ def oxdna_design_fingerprint(design: Design) -> str:
                    mode=p.coating.mode, spacer_nm=p.coating.spacer_nm,
                    poses=[pose.values for pose in p.coating.poses],
                    atoms=[a.model_dump(mode='json') for a in p.coating.protein.atoms],
-                   bonds=p.coating.protein.bonds, **({'oxdna_fixed_core': p.oxdna_fixed_core, 'biotin_dna': [r.model_dump() for r in p.biotin_dna]} if p.oxdna_fixed_core or p.biotin_dna else {}))
+                   bonds=p.coating.protein.bonds, **({'oxdna_fixed_core': p.oxdna_fixed_core, 'biotin_dna': [r.model_dump(exclude={'linker_chemistry'} | ({'tetramer_index'} if r.tetramer_index == 0 else set()) | ({'placement_version'} if r.placement_version == 1 else set())) for r in p.biotin_dna]} if p.oxdna_fixed_core or p.biotin_dna else {}))
               for p in design.nanoparticles if p.coating]
     if coated:
         payload['streptavidin_coated_particles'] = coated

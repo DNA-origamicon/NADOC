@@ -282,12 +282,26 @@ def _reposition_owned_helices(design: Design, old: Nanoparticle, new: Nanopartic
         if record.helix_id.startswith("__np__") and record.bound_overhang_id is None
     }
     if old.biotin_dna:
+        from backend.core.geometry import _frame_from_helix_axis
         delta = new.pose.to_array() @ np.linalg.inv(old.pose.to_array())
         ids = {r.helix_id for r in old.biotin_dna}
-        design = design.copy_with(helices=[h.model_copy(update={
-            'axis_start': Vec3(**dict(zip(('x','y','z'), _point(delta, h.axis_start.to_array())))),
-            'axis_end': Vec3(**dict(zip(('x','y','z'), _point(delta, h.axis_end.to_array())))),
-        }) if h.id in ids else h for h in design.helices])
+        helices = []
+        for h in design.helices:
+            if h.id not in ids:
+                helices.append(h)
+                continue
+            axis = h.axis_end.to_array() - h.axis_start.to_array()
+            old_frame = _frame_from_helix_axis(axis)
+            radial = delta[:3, :3] @ (np.cos(h.phase_offset)*old_frame[:, 0] + np.sin(h.phase_offset)*old_frame[:, 1])
+            new_frame = _frame_from_helix_axis(delta[:3, :3] @ axis)
+            helices.append(h.model_copy(update={
+                'axis_start': Vec3(**dict(zip(('x','y','z'), _point(delta, h.axis_start.to_array())))),
+                'axis_end': Vec3(**dict(zip(('x','y','z'), _point(delta, h.axis_end.to_array())))),
+                # Rotate the actual B-form strand, including its 5′ attachment,
+                # rather than only its axis (whose implicit frame may change).
+                'phase_offset': float(np.arctan2(radial @ new_frame[:, 1], radial @ new_frame[:, 0])),
+            }))
+        design = design.copy_with(helices=helices)
     if not owned:
         return design
     matrix = new.pose.to_array()

@@ -38,7 +38,7 @@ Extraction tool: scripts/extract_all_templates.py.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import functools as _functools
@@ -451,6 +451,7 @@ class Atom:
 class AtomisticModel:
     atoms: list[Atom]
     bonds: list[tuple[int, int]]  # 0-based serial pairs
+    warnings: list[str] = field(default_factory=list)
 
 
 def apply_nucleotide_transforms(atoms: list[Atom], design: Design) -> set[str]:
@@ -1985,6 +1986,9 @@ def build_atomistic_model(
                 from backend.core.nanoparticle_atomistic import append_nanoparticle_linkers
 
                 model = append_nanoparticle_linkers(model, design)
+            if any(p.biotin_dna for p in design.nanoparticles):
+                from backend.core.biotin_atomistic import append_biotin_linkers
+                model = append_biotin_linkers(model, design)
             return model
 
     from backend.core.deformation import effective_helix_for_geometry
@@ -2722,6 +2726,10 @@ def build_atomistic_model(
         from backend.core.nanoparticle_atomistic import append_nanoparticle_linkers
 
         model = append_nanoparticle_linkers(model, design)
+    if any(p.biotin_dna for p in design.nanoparticles):
+        from backend.core.biotin_atomistic import append_biotin_linkers
+        model = append_biotin_linkers(model, design)
+
     return model
 
 
@@ -3016,6 +3024,18 @@ def surface_atom_cloud(
     key3_to_off: dict[tuple, int] = {keys_hbd[i]: int(offsets[i]) for i in range(n)}
     _apply_cloud_bridges(design, helix_map, positions_out, key3_to_off)
 
+    # The vectorised nucleotide stamp has no ligand template. Append the same
+    # fitted biotin/spacer atoms used by the three atomistic representations.
+    owned = {r.helix_id for p in design.nanoparticles if p.visible for r in p.biotin_dna}
+    if owned:
+        model = build_atomistic_model(design, exclude_helix_ids=set(helix_map) - owned, fast_bridges=True)
+        ligands = [a for a in model.atoms if a.residue == "BTE"]
+        if ligands:
+            positions_out = _np.vstack([positions_out, [[a.x, a.y, a.z] for a in ligands]])
+            radii_out = _np.r_[radii_out, [VDW_RADIUS.get(a.element, DEFAULT_VDW_RADIUS) for a in ligands]]
+            sids_out = _np.r_[sids_out, [a.strand_id for a in ligands]]
+            nkeys_out = _np.r_[nkeys_out, [f"{a.helix_id}:{a.bp_index}:{a.direction}" for a in ligands]]
+
     return (
         positions_out.astype(_np.float32),
         radii_out.astype(_np.float32),
@@ -3226,7 +3246,7 @@ def _classify_stamp(model, sink: dict, thash: str) -> StampDescriptor:
     for s in range(n):
         a = atoms[s]
         # Inserts / tails / proteins: never a plain nucleotide stamp.
-        if a.extra_base_k is not None or a.extension_id is not None or not a.helix_id:
+        if a.extra_base_k is not None or a.extension_id is not None or not a.helix_id or a.residue == "BTE":
             nonrigid.append(s)
             continue
         key = (a.helix_id, a.bp_index, a.direction, a.copy_k or 0)
@@ -4533,6 +4553,7 @@ def atomistic_to_json(model: AtomisticModel) -> dict:
         ],
         "bonds": [[i, j] for i, j in model.bonds],
         "element_meta": _element_meta(model),
+        "warnings": model.warnings,
     }
 
 
