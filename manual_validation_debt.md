@@ -282,3 +282,16 @@ Appearance synchronization, width/scroll independence, capacity, closing and
 lighting persistence; full real-file engine/plot coverage remains user validation.
 Animation geometry ownership and unified exports remain stages 2–3. Detached
 browser controls were assessed but are not implemented.
+
+
+## MV-ALPINE-RESTART — PENDING (2026-09-13)
+
+Verify the NAMD restart warning and preserved-attempt row in the running app after
+local NAMD simulations finish. `just smoke` was refused by `sim_guard` because a NAMD
+simulation was active; the guard was not overridden. Fixture: active `2f281ba1a83a`
+and preserved `594917c0d119` / 24hb_0xT. Open the warning, verify 120.64 ns preserved,
+close without acknowledging, reopen and explicitly choose **I understand**, then
+refresh and verify history remains accessible without an alert. Verify the preserved
+entry has disabled run controls and is not an independent ensemble replica. Use
+`frontend/e2e/alpine_restart_notice.spec.js` for the mocked acknowledgment check;
+do not acknowledge a real user's incident merely to run an automated test.

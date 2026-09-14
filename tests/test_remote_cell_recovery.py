@@ -150,7 +150,7 @@ def test_helper_parses_on_alpine_python36():
 )
 def test_generated_alpine_loop_runs_only_cell_recovery(package, fatal, expected):
     import subprocess
-    from backend.core import cluster_config, slurm_script, remote_resume_conf
+    from backend.core import cluster_config, slurm_script, remote_resume_conf, remote_alpine_restart
 
     profile = cluster_config.alpine_profile()
     (package / "output/min.coor").touch()
@@ -191,8 +191,22 @@ def test_generated_alpine_loop_runs_only_cell_recovery(package, fatal, expected)
     (package / slurm_script.RESUME_CONF_NAME).write_text(
         Path(remote_resume_conf.__file__).read_text()
     )
+    (package / "nadoc_alpine_restart.py").write_text(Path(remote_alpine_restart.__file__).read_text())
+    remote_alpine_restart.begin(package)
     result = subprocess.run(
         ["bash", "-euc", ladder], cwd=package, capture_output=True, text=True
     )
     assert result.returncode == expected, result.stdout + result.stderr
     assert (package / "settle.cell_retry.conf").exists() == (expected == 0)
+
+
+def test_cell_retry_after_outage_never_overwrites_pre_outage_trajectory(package):
+    checkpoint(package, step=5000)
+    source = (package/'settle.conf').read_text().replace('output/settle.dcd','output/settle.cont1.dcd')
+    (package/'settle.alpine_resume.conf').write_text(source)
+    (package/'output/settle.dcd').write_bytes(b'pre-outage')
+    (package/'output/settle.cont1.dcd').write_bytes(b'post-outage')
+    name = recovery.recover(package,'settle','settle.alpine_resume',125000,1)
+    assert 'dcdFile output/settle.cont2.dcd' in (package/(name+'.conf')).read_text()
+    assert (package/'output/settle.dcd').read_bytes() == b'pre-outage'
+    assert (package/'output/settle.cont1.dcd').read_bytes() == b'post-outage'

@@ -510,6 +510,8 @@ export function mdRunControl(selectedJob, {
       title: 'Select a run in the list, or create one with ＋ New job.',
     }
   }
+  if (selectedJob.restart_snapshot) return { action: RUN_ACTION.RUN, label: 'Preserved attempt', disabled: true,
+    title: 'This entry holds the interrupted trajectory. The linked active job owns the Alpine allocation.' }
   if (selectedJob.awaiting_sequence) {
     return {
       action: RUN_ACTION.RUN, label: '▶ Run', disabled: busy,

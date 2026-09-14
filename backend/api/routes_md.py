@@ -5383,10 +5383,10 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
     # that record, deliberately accept the shortened trajectory, then use the existing
     # background archive mover for the selected storage location.
     job = _load_job(job_id)
-    job.status = MdStatus.completed
+    job.status = MdStatus.stopped if job.restart_snapshot else MdStatus.completed
     job.resumable = False
     job.user_stopped = True
-    job.error = None
+    job.error = job.error if job.restart_snapshot else None
     job.save(_workspace())
     # Downloads already land in the job's current directory, including default-workspace
     # and archive-from-birth runs. Moving to that same directory would fail even though
@@ -5397,7 +5397,7 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
         return {
             "ok": True,
             "job_id": job_id,
-            "status": "completed",
+            "status": job.status.value,
             "action": "download",
             "archive_path": job.archive_path,
             "verified": True,
@@ -5410,7 +5410,7 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
     return {
         "ok": True,
         "job_id": job_id,
-        "status": "completed",
+        "status": job.status.value,
         "action": "archive",
         "verified": True,
         "download_status": job.download_status,
@@ -7207,6 +7207,8 @@ async def roll_md_job_design(job_id: str) -> dict:
 async def start_md_job(job_id: str) -> dict:
     """Start or resume a queued/stopped/failed job."""
     job = _load_job(job_id)
+    if job.restart_snapshot:
+        raise HTTPException(409, "Preserved attempts are read-only; use the active job")
 
     if job.awaiting_sequence:
         prepared = _prepare_sequence_deferred_job(job, autostart=True)
@@ -8030,7 +8032,7 @@ async def fetch_md_job_remote(job_id: str) -> dict:
     job = _load_job(job_id)
     if job.execution_target == "local":
         raise HTTPException(400, "This is a local job; there is nothing to fetch.")
-    if not job.slurm_job_id:
+    if not job.slurm_job_id and not job.restart_snapshot:
         raise HTTPException(400, "Job was never submitted to the cluster.")
     mgr = cluster_ssh.get_manager()
     if not mgr.is_connected():

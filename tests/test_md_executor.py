@@ -906,7 +906,7 @@ def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine):
     sbatch = next(
         v for k, v in conn.put_contents.items() if k.endswith(ex._SBATCH_NAME)
     )
-    assert "6hb_demo_01_p50.resume.conf" in sbatch
+    assert "--source 6hb_demo_01_p50.resume --total" in sbatch
 
 
 def test_resume_job_applies_resource_override(tmp_path, alpine):

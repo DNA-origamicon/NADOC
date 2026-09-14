@@ -398,6 +398,8 @@ async def submit_job(
     Populates ``execution_target``/``cluster_name``/``slurm_job_id``/remote dirs/
     ``resources`` and leaves the job ``queued`` (SLURM will move it to running).
     """
+    if job.restart_snapshot:
+        raise ValueError("Preserved attempts are read-only")
     conn = conn or _default_conn()
     if job.slurm_job_id:
         logger.info(
@@ -559,9 +561,9 @@ async def submit_job(
 
     # Same implementation imported by the local runner and staged by RunPod. Keeping
     # this outside the prepared package prevents target choice from changing physics.
-    from backend.core import remote_settle_retarget, remote_cell_recovery, remote_resume_conf  # noqa: PLC0415
+    from backend.core import remote_settle_retarget, remote_cell_recovery, remote_resume_conf, remote_alpine_restart  # noqa: PLC0415
 
-    for module, filename in ((remote_cell_recovery, CELL_RECOVERY_NAME), (remote_resume_conf, RESUME_CONF_NAME)):
+    for module, filename in ((remote_cell_recovery, CELL_RECOVERY_NAME), (remote_resume_conf, RESUME_CONF_NAME), (remote_alpine_restart, "nadoc_alpine_restart.py")):
         await _put_text(conn, Path(module.__file__).read_text(), f"{scratch_dir}/{filename}", workspace_dir, job)
 
     await _put_text(
@@ -744,6 +746,8 @@ def apply_live_metrics(job: MdJob, blob: str) -> bool:
     # extrapolated from this reading between sign-ins, so it needs an anchor on
     # NADOC's own clock — otherwise any host/node skew becomes fake progress.
     old = job.live_metrics or {}
+    from backend.core.alpine_restart import note_progress_regression
+    note_progress_regression(job, old, data)
     prior = {k: v for k, v in old.items() if k != "retrieved_at"}
     if data == prior:
         # Identical blob = the collector has not rewritten it, so the run HAS advanced
@@ -842,6 +846,8 @@ async def resume_job(
     4. Regenerate + upload the sbatch (completed segments skip; the interrupted one
        runs its resume conf) and submit.  New SLURM id, ``resubmit_count`` bumped.
     """
+    if job.restart_snapshot:
+        raise ValueError("A preserved attempt is read-only; resume the active job instead")
     conn = conn or _default_conn()
     scratch = job.remote_scratch_dir
     if not scratch:
@@ -914,9 +920,9 @@ async def resume_job(
     # Re-stage transition helpers straight into scratch. A recovery must not depend on
     # the original helper surviving scratch cleanup or on the exact source version
     # uploaded by the failed attempt.
-    from backend.core import remote_settle_retarget, remote_cell_recovery, remote_resume_conf  # noqa: PLC0415
+    from backend.core import remote_settle_retarget, remote_cell_recovery, remote_resume_conf, remote_alpine_restart  # noqa: PLC0415
 
-    for module, filename in ((remote_cell_recovery, CELL_RECOVERY_NAME), (remote_resume_conf, RESUME_CONF_NAME)):
+    for module, filename in ((remote_cell_recovery, CELL_RECOVERY_NAME), (remote_resume_conf, RESUME_CONF_NAME), (remote_alpine_restart, "nadoc_alpine_restart.py")):
         await _put_text(conn, Path(module.__file__).read_text(), f"{scratch}/{filename}", workspace_dir, job)
 
     await _put_text(
@@ -1291,7 +1297,8 @@ async def remote_output_inventory(job: MdJob, *, conn=None) -> dict[str, int]:
                 out[rel] = int(size_text)
         except (ValueError, TypeError):
             continue
-    return out
+    from backend.core.alpine_restart import owned_inventory
+    return owned_inventory(job, out)
 
 
 async def cancel_job(job: MdJob, *, conn=None) -> bool:
@@ -1363,6 +1370,12 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
     - failed           → fetch what exists (for logs), mark failed.
     """
     conn = conn or _default_conn()
+    from backend.core.alpine_restart import observe
+
+    try:
+        await observe(job, workspace_dir, conn)
+    except Exception:
+        logger.exception("[%s] Alpine restart inspection failed", job.job_id)
     raw, bucket = await poll_status(job, conn=conn)
     prev_state = job.slurm_state
     # poll_status deliberately treats a job absent from both squeue and aged-out sacct

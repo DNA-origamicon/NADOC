@@ -20,6 +20,16 @@ JS). What transfers is the lifecycle design, the CURC/Alpine specifics, and two
 pieces of portable *data* — all captured in the Appendix below so the reference
 clone is not needed.
 
+**2026-09-13 restart recovery:** Slurm requeues are now detected and journaled on the
+compute node. Interrupted dynamics resume from a validated checkpoint without NADOC
+connected; outputs and input checkpoints are preserved per attempt. Legacy resets
+produce linked preserved-job entries and revisioned acknowledgment notices. The live
+24hb_0xT allocation was protected through an atomic Tcl config wrapper, without
+cancel/requeue. See [restart recovery](../docs/alpine_restart_recovery.md) for behavior,
+limitations, and the recovered 120.64 ns attempt. This supersedes historical text below
+that treats an interrupted segment rerun as acceptable or requires the backend for
+all mid-segment recovery; user-triggered new Slurm submissions remain unchanged.
+
 Related: [[md-job-system]] (the local job system this extends), [[md-prep-relaxation-exp29]]
 (prep ladder that produces the package we ship), [[namd-solvate]], [[btube-benchmark]].
 

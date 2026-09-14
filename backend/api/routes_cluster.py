@@ -31,7 +31,10 @@ from backend.core import cluster_config, cluster_ssh
 
 logger = logging.getLogger(__name__)
 
+from backend.api.routes_alpine_restart import router as restart_router
+
 router = APIRouter()
+router.include_router(restart_router)
 
 # Strong references for post-authentication reconciliation tasks. Authentication and
 # connection UI must not wait while a multi-GB remote job is inspected/downloaded.

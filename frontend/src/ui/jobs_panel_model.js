@@ -86,7 +86,9 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
     isActive,
     indexLabel: isChild || ctx.showIndex === false
       || (typeof ctx.showIndex === 'function' && !ctx.showIndex(job)) ? '' : `[${listIndex}]`,
-    label,
+    label: job.restart_snapshot ? `${label} · interrupted attempt${job.live_metrics?.step && job.live_metrics?.timestep_fs ? ` (${(job.live_metrics.step * job.live_metrics.timestep_fs / 1e6).toFixed(2)} ns)` : ''}` : label,
+    restartEvents: job.restart_events || [],
+    restartHistoryOnly: !!job.restart_snapshot,
     title: isChild && ctx.childTitle ? ctx.childTitle(job) : null,
     timeStr: ctx.formatTime ? ctx.formatTime(job.created_at) : '',
     sizeStr: ctx.sizeLabel
@@ -151,7 +153,7 @@ export function buildJobListModel(jobs, ctx) {
 export function jobListSignature(jobs, ctx) {
   const sorted = (jobs || []).slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
   const per = ctx.rowSig || ((j) => `${j.job_id}:${j.status}`)
-  return sorted.map(per).join(',') + `|sel=${ctx.selectedId ?? ''}`
+  return sorted.map(j => per(j) + JSON.stringify(j.restart_events || [])).join(',') + `|sel=${ctx.selectedId ?? ''}`
 }
 
 /**
