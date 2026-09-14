@@ -309,6 +309,12 @@ class MdJob:
     # that file as a snapshot, not results: health recompute skips a marked segment,
     # and `fetch_outputs` clears this the moment the real trajectory lands.
     live_frame: Optional[dict] = None
+    restart_events: list = field(default_factory=list)
+    alpine_execution: Optional[dict] = None
+    restart_snapshot: bool = False
+    restart_of_job_id: Optional[str] = None
+    restart_snapshot_evidence: Optional[dict] = None
+    sampling_relationship: Optional[str] = None
     slurm_job_id: Optional[str] = None
     slurm_state: Optional[str] = None
     # Accounting evidence captured while sacct still retains the submission.  A job can
@@ -518,7 +524,11 @@ class MdJob:
         # crash loading a job saved under a prior schema.
         known = {f.name for f in fields(cls)}
         data = {k: v for k, v in data.items() if k in known}
-        return cls(**data)
+        job = cls(**data)
+        if job.restart_events:
+            from backend.core.alpine_restart import apply_acknowledgments
+            apply_acknowledgments(job, workspace_dir)
+        return job
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["MdJob"]:
         from backend.core.job_archive import archived_job_ids

@@ -132,11 +132,11 @@ def test_generate_resume_sbatch_runs_resume_conf_for_interrupted(alpine, gpu_res
     # completed-segment skip guard still keys on the segment's final .coor
     assert f'if [ -f "output/{interrupted}.coor" ]; then' in script
     # the interrupted segment runs its resume conf + logs to .resume.log
-    assert f"{interrupted}.resume.conf" in script
+    assert f"--source {interrupted}.resume --total" in script
     assert f"{interrupted}.resume.log" in script
     assert "resuming from checkpoint" in script
     # a NON-resumed segment still runs its normal conf
-    assert "6hb_demo_02_p100.conf" in script
+    assert "--source 6hb_demo_02_p100 --total" in script
 
 
 # ── sanitize_job_name ─────────────────────────────────────────────────────────
@@ -174,9 +174,9 @@ def test_generate_has_shebang_and_directives(alpine, gpu_resources):
 
 def test_generate_runs_min_then_all_segments_in_order(alpine, gpu_resources):
     script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/x")
-    i_min = script.index("6hb_demo_00_min.conf")
-    i_s1 = script.index("6hb_demo_01_p100.conf")
-    i_s2 = script.index("6hb_demo_02_p100.conf")
+    i_min = script.index("--source 6hb_demo_00_min --total")
+    i_s1 = script.index("--source 6hb_demo_01_p100 --total")
+    i_s2 = script.index("--source 6hb_demo_02_p100 --total")
     assert i_min < i_s1 < i_s2
 
 
@@ -187,8 +187,8 @@ def test_alpine_retargets_settle_reference_after_minimization(alpine, gpu_resour
         '"output/6hb_demo_00_min.coor" "restraints_settle.pdb"'
     )
     assert retarget in script
-    assert script.index("6hb_demo_00_min.conf") < script.index(retarget)
-    assert script.index(retarget) < script.index("6hb_demo_01_p100.conf")
+    assert script.index("--source 6hb_demo_00_min --total") < script.index(retarget)
+    assert script.index(retarget) < script.index("--source 6hb_demo_01_p100 --total")
     assert "NADOC_CURRENT_STAGE='settle-restraint-retarget'" in script
     assert "NADOC_CURRENT_LOG='output/settle-restraint-retarget.log'" in script
     assert '"restraints_settle.pdb" > "$NADOC_CURRENT_LOG" 2>&1' in script
@@ -440,9 +440,10 @@ def test_early_stop_emits_health_step_and_wc_gate_for_every_nonfinal_chunk(
             conf = f"6hb_demo_0{stage_idx}_{stage}_p{pct}"
             assert f'--log "{conf}.log"' in script
             wc = f"output/{conf}.wc.json"
+            assert f"nadoc_alpine_restart.py latest --segment {conf}" in script
             assert (
                 f'python3 {ss.ALPINE_WC_EVAL_NAME} '
-                f'--dcd "output/{conf}.dcd" --plan "{ss.ALPINE_WC_PLAN_NAME}" '
+                f'--dcd "$nadoc_health_dcd" --plan "{ss.ALPINE_WC_PLAN_NAME}" '
                 f'--out "{wc}" || true' in script
             )
             assert (

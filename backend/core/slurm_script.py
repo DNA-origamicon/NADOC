@@ -162,7 +162,7 @@ def _early_stop_block(
     elif portable_wc:
         health_line = (
             f'    python3 {ALPINE_WC_EVAL_NAME} '
-            f'--dcd "output/{conf}.dcd" --plan "{ALPINE_WC_PLAN_NAME}" '
+            f'--dcd "$nadoc_health_dcd" --plan "{ALPINE_WC_PLAN_NAME}" '
             f'--out "{wc}" || true'
         )
     else:
@@ -172,9 +172,10 @@ def _early_stop_block(
             f'    {health_python} {EARLY_STOP_HEALTH_NAME} --seg "{conf}" '
             f'--stem "{name_stem}" --out "{wc}" || true'
         )
-    lines = [
+    health_dcd = '$nadoc_health_dcd' if portable_wc else f'output/{conf}.dcd'
+    lines = ([f'nadoc_health_dcd=$(python3 nadoc_alpine_restart.py latest --segment {conf})'] if portable_wc else []) + [
         f'if [ -f "{conf}.log" ] && [ -f "output/{conf}.coor" ]; then',
-        f'  if [ -f "output/{conf}.dcd" ]; then',
+        f'  if [ -f "{health_dcd}" ]; then',
         health_line,
         "  fi",
         (
@@ -487,6 +488,7 @@ def generate_sbatch(
         "  return $rc",
         "}",
         "trap nadoc_on_exit EXIT",
+        "python3 nadoc_alpine_restart.py begin",
         "",
         *_module_block(profile, gpu),
         "",
@@ -497,10 +499,8 @@ def generate_sbatch(
         "",
         "# NADOC MD ladder: minimization, then each relaxation segment in order.",
         "# Each conf reads the previous segment's restart coords by relative path.",
-        "# Each step is skipped if its final output/<conf>.coor already exists, so a",
-        "# resubmit onto the same scratch resumes at the first unfinished step (the",
-        "# interrupted one re-runs in full from the previous step's coords). This is",
-        "# what makes auto-resubmit-on-TIMEOUT a slowdown, not a lost run.",
+        "# Completed stages skip; interrupted stages resume from a validated checkpoint.",
+        "# The node journal and immutable checkpoint copies survive NADOC disconnection.",
     ]
     for i, conf in enumerate(chain):
         resume_conf = resume_conf_for.get(conf)
@@ -515,6 +515,7 @@ def generate_sbatch(
         lines.append(f"  NADOC_CURRENT_LOG='{log}'")
         total = next((int(s.get("steps", 0)) for s in manifest.get("segments", [])
                       if s["name"] == conf), 0)
+        lines.append(f'  nadoc_run_conf=$(python3 nadoc_alpine_restart.py prepare --segment {conf} --source {run_conf} --total {total})')
         if total:
             # Recovery happens inside this allocation, never by submitting another
             # Slurm job. Other NAMD failures still reach the diagnostic EXIT trap.
@@ -523,7 +524,7 @@ def generate_sbatch(
                 "  while true; do",
                 "    nadoc_rc=0",
                 '    if [ "$nadoc_attempt" -eq 0 ]; then',
-                "      " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu)) + " || nadoc_rc=$?",
+                "      " + _exec_line('"$nadoc_run_conf"', log, resources, gpu, profile.namd_command(gpu)) + " || nadoc_rc=$?",
                 "    else",
                 "      " + _exec_line(conf + ".cell_retry", log, resources, gpu, profile.namd_command(gpu)) + " || nadoc_rc=$?",
                 "    fi",
@@ -532,12 +533,12 @@ def generate_sbatch(
                 f'    if ! grep -q "Periodic cell has become too small" "{log}" || [ "$nadoc_attempt" -ge 4 ]; then exit "$nadoc_rc"; fi',
                 "    nadoc_attempt=$((nadoc_attempt + 1))",
                 f'    cp "{log}" "output/{conf}.cell_failure_${{nadoc_attempt}}.log"',
-                f'    python3 {CELL_RECOVERY_NAME} --segment {conf} --source {run_conf} --total {total} --attempt "$nadoc_attempt" >> "{log}" 2>&1 || exit "$nadoc_rc"',
+                f'    python3 {CELL_RECOVERY_NAME} --segment {conf} --source "$nadoc_run_conf" --total {total} --attempt "$nadoc_attempt" >> "{log}" 2>&1 || exit "$nadoc_rc"',
                 "  done",
             ]
         else:
             lines.append(
-                "  " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu))
+                "  " + _exec_line('"$nadoc_run_conf"', log, resources, gpu, profile.namd_command(gpu))
             )
         lines.append("fi")
         # Local and RunPod retarget the restrained settle reference to the completed

@@ -79,6 +79,21 @@ def recover(package, segment, source, total, attempt):
             raise ValueError("no complete checkpoint for cell recovery")
         text = original
 
+    # An Alpine outage continuation is part of the scientific trajectory chain.
+    # Keep every earlier piece and write the cell retry to another fresh piece.
+    # Resetting dcdFile to the base here would overwrite the pre-outage trajectory.
+    if re.search(r"\.cont[0-9]+\.dcd$", directive(original, "dcdFile") or ""):
+        index = 1
+        while list(out.glob(segment + ".cont" + str(index) + ".*")):
+            index += 1
+        for key, extension in (("dcdFile", "dcd"), ("xstFile", "xst")):
+            text = re.sub(
+                r"^" + key + r"\s+[^\n]+",
+                key + " output/" + segment + ".cont" + str(index) + "." + extension,
+                text,
+                flags=re.M,
+            )
+
     # Soften ONCE relative to the original conf, never exponentially per retry.
     for key in ("langevinPistonPeriod", "langevinPistonDecay"):
         value = directive(original, key)

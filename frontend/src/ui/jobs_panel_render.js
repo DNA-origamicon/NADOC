@@ -9,6 +9,8 @@
  * `_renderList` in jobs_panel_model.test.js.
  */
 
+import { appendRestartNotice } from './alpine_restart_notice.js'
+
 import { statusBadge, makeSpinner, makeStatusLegend } from './job_status_symbol.js'
 
 /**
@@ -83,6 +85,7 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onWarning, 
     row.append(chev)
   }
   row.append(idx)
+  appendRestartNotice(row, m, { doc })
   for (const t of m.tags) {
     const tag = Object.assign(doc.createElement('span'), { textContent: t.text })
     tag.style.cssText = `flex-shrink:0;color:${t.color};font-family:var(--font-mono);font-weight:600`
