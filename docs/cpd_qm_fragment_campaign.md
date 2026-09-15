@@ -474,6 +474,49 @@ the fail-closed completion trigger is
 photoproduct evidence archive. Both remain gate-neutral and explicitly report
 `simulation_ready: false`.
 
+## Physical-equilibrium refit and NAMD smoke preflight (2026-09-15)
+
+The failed v3 transform was followed by a separately registered v4 response-fit policy.
+It retains the same training and held-out partitions, ridge grid, fixed stereochemical
+impropers, and prohibition on Urey-Bradley terms, while constraining the coupled harmonic
+coefficients to positive curvature and physical bond/angle equilibrium intervals during
+the fit. The implementation uses linear inequalities with SLSQP and keeps held-out data
+outside the optimization. The selected ridge-0.01 candidate was full rank and had the
+best held-out normalized score among the seven registered candidates. The local service
+peaked at 166 MiB under its 1 GiB memory cap.
+
+Because several fitted angle equilibria were close to the allowed limits, continuation
+required a geometry refinement and an independent numerical audit before CHARMM mapping.
+The refinement converged to a local minimum with 0.05935 angstrom heavy-atom RMSD from
+the QM geometry, positive projected curvature, zero negative projected modes, and all
+four expected stereochemical signs. A wrapper filename mismatch stopped after writing
+that result; the failed attempt is preserved under
+`geometry-refinement-v1/attempts/attempt-001-wrapper-report-name-mismatch`. Recovery reused
+the hash-identical refinement output and ran the independent audit without repeating the
+optimization.
+
+The independent audit passed stored-minimum reproduction, finite-difference Hessian
+symmetry, actual-minimum curvature, heavy-atom RMSD, and stereochemistry. It failed its
+unchanged maximum-force limit: 1.09362e-5 kcal mol-1 angstrom-1 against a required maximum
+of 1.0e-5. The fail-closed geometry trigger therefore stopped continuation before a
+CHARMM transform was generated.
+
+The D4 smoke preflight also found an independent downstream blocker in the selected anti
+nonbonded fit. Its held-out endpoint-2 O4 water energy error is 0.55791 kcal/mol, above the
+candidate-assembly policy maximum of 0.50000 kcal/mol. Earlier joint and multi-orientation
+anti candidates do not supply an accepted substitute; their reserved validation sets also
+failed. The screened anti chain-B boundary and real `psfgen`/NAMD executables are present,
+but no workbook, CHARMM candidate, PSF, or NAMD trajectory was generated while these two
+gates remain closed.
+
+The combined assessment is
+`alpine-qm-primary-syn-anti-fit-v1/local-run-v1/namd-smoke-preflight-v1/stage_assessment.json`;
+its completion trigger is `gates/namd_smoke_preflight.json` in the same directory. Both
+report `blocked_before_candidate_assembly`, `automatic_continuation: stopped`, and
+`simulation_ready: false`. Recovery requires a passing independent geometry audit without
+relaxing its registered limits and an independently validated anti nonbonded candidate
+within the registered held-out water bounds.
+
 ## Verification of this review
 
 Targeted monitor tests exercise input/source corruption, interrupted execution, stage

@@ -233,6 +233,7 @@ def materialize_quantitative_response_fit_specification(
             "dimensionless-heldout-bounded-ridge-v1",
             "dimensionless-heldout-bounded-ridge-v2",
             "dimensionless-heldout-fixed-qm-improper-v3",
+            "dimensionless-heldout-physical-equilibria-v4",
         }
     ):
         raise ValueError("unsupported quantitative response-fit policy")
@@ -288,6 +289,23 @@ def materialize_quantitative_response_fit_specification(
                 "lower_bound": rule["lower_bound"],
                 "upper_bound": rule["upper_bound"],
             }
+        )
+    if policy.get("physical_equilibrium_constraints") is not None:
+        specification_scales = np.asarray(
+            [item["scale"] for item in report["parameters"]], dtype=float
+        )
+        specification_lower = np.asarray(
+            [item["lower_bound"] for item in report["parameters"]], dtype=float
+        )
+        specification_upper = np.asarray(
+            [item["upper_bound"] for item in report["parameters"]], dtype=float
+        )
+        _physical_equilibrium_constraint_system(
+            report["parameters"],
+            specification_scales,
+            specification_lower / specification_scales,
+            specification_upper / specification_scales,
+            policy,
         )
     report["instructions"] = (
         "Objective normalization, coefficient bounds, and ridge grid were fixed by the "
@@ -531,6 +549,145 @@ def _metrics(
     }
 
 
+def _physical_equilibrium_constraint_system(
+    parameters: Sequence[dict[str, Any]],
+    scales: np.ndarray,
+    lower_scaled: np.ndarray,
+    upper_scaled: np.ndarray,
+    policy: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray] | None, list[dict[str, Any]]]:
+    """Build linear constraints that keep harmonic equilibria in physical domains."""
+
+    configuration = policy.get("physical_equilibrium_constraints")
+    if configuration is None:
+        return lower_scaled, upper_scaled, None, []
+    if (
+        configuration.get("method") != "scaled-linear-inequalities-slsqp-v1"
+        or configuration.get("require_no_urey_bradley") is not True
+    ):
+        raise ValueError("unsupported physical-equilibrium constraint policy")
+    curvature_floor = float(configuration.get("minimum_scaled_curvature", 0.0))
+    bond_domain = configuration.get("bond_equilibrium_angstrom") or {}
+    angle_domain = configuration.get("angle_equilibrium_degrees") or {}
+    bond_minimum = float(bond_domain.get("minimum", 0.0))
+    bond_maximum = float(bond_domain.get("maximum", 0.0))
+    angle_minimum = math.radians(float(angle_domain.get("minimum", 0.0)))
+    angle_maximum = math.radians(float(angle_domain.get("maximum", 0.0)))
+    if (
+        not math.isfinite(curvature_floor)
+        or curvature_floor <= 0.0
+        or not 0.5 < bond_minimum < bond_maximum < 3.0
+        or not 0.0 < angle_minimum < angle_maximum < math.pi
+    ):
+        raise ValueError("physical-equilibrium domains are invalid")
+
+    lower = np.asarray(lower_scaled, dtype=float).copy()
+    upper = np.asarray(upper_scaled, dtype=float).copy()
+    groups: dict[str, dict[str, int]] = {}
+    categories: dict[str, str] = {}
+    for index, parameter in enumerate(parameters):
+        group_id = str(parameter.get("group_id") or "")
+        basis = str(parameter.get("basis") or "")
+        category = str(parameter.get("category") or "")
+        if not group_id or not basis or not category:
+            raise ValueError("parameter identity is incomplete")
+        if basis in groups.setdefault(group_id, {}):
+            raise ValueError("parameter group repeats a basis function")
+        groups[group_id][basis] = index
+        if group_id in categories and categories[group_id] != category:
+            raise ValueError("parameter group spans multiple categories")
+        categories[group_id] = category
+
+    rows: list[np.ndarray] = []
+    constraint_lower: list[float] = []
+    constraint_upper: list[float] = []
+    records: list[dict[str, Any]] = []
+    for group_id, by_basis in groups.items():
+        category = categories[group_id]
+        if category == "bonds":
+            quadratic_basis, linear_basis = "r^2", "r"
+            minimum, maximum = bond_minimum, bond_maximum
+            units = "angstrom"
+        elif category == "angles":
+            if any(basis in by_basis for basis in ("r13^2", "r13")):
+                raise ValueError("physical-equilibrium policy excludes Urey-Bradley terms")
+            quadratic_basis, linear_basis = "theta^2", "theta"
+            minimum, maximum = angle_minimum, angle_maximum
+            units = "radian"
+        elif category == "impropers":
+            quadratic = by_basis.get("wrapped_delta^2")
+            if quadratic is None or set(by_basis) != {"wrapped_delta^2"}:
+                raise ValueError("physical-equilibrium policy requires fixed impropers")
+            lower[quadratic] = max(lower[quadratic], curvature_floor)
+            continue
+        else:
+            continue
+        if quadratic_basis not in by_basis or linear_basis not in by_basis:
+            raise ValueError(f"{group_id} lacks a complete harmonic basis")
+        quadratic = by_basis[quadratic_basis]
+        linear = by_basis[linear_basis]
+        lower[quadratic] = max(lower[quadratic], curvature_floor)
+        maximum_row = np.zeros(len(parameters), dtype=float)
+        maximum_row[linear] = scales[linear]
+        maximum_row[quadratic] = 2.0 * maximum * scales[quadratic]
+        rows.append(maximum_row)
+        constraint_lower.append(0.0)
+        constraint_upper.append(np.inf)
+        minimum_row = np.zeros(len(parameters), dtype=float)
+        minimum_row[linear] = scales[linear]
+        minimum_row[quadratic] = 2.0 * minimum * scales[quadratic]
+        rows.append(minimum_row)
+        constraint_lower.append(-np.inf)
+        constraint_upper.append(0.0)
+        records.append(
+            {
+                "group_id": group_id,
+                "category": category,
+                "quadratic_index": quadratic,
+                "linear_index": linear,
+                "minimum": minimum,
+                "maximum": maximum,
+                "units": units,
+            }
+        )
+    if np.any(lower >= upper) or not rows:
+        raise ValueError("physical-equilibrium constraints are empty or incompatible")
+    return (
+        lower,
+        upper,
+        (
+            np.vstack(rows),
+            np.asarray(constraint_lower, dtype=float),
+            np.asarray(constraint_upper, dtype=float),
+        ),
+        records,
+    )
+
+
+def _project_physical_equilibrium_start(
+    values: np.ndarray,
+    scales: np.ndarray,
+    lower_scaled: np.ndarray,
+    upper_scaled: np.ndarray,
+    records: Sequence[dict[str, Any]],
+) -> np.ndarray:
+    """Project a box-constrained seed into the coupled equilibrium intervals."""
+
+    projected = np.clip(np.asarray(values, dtype=float), lower_scaled, upper_scaled)
+    for record in records:
+        quadratic = int(record["quadratic_index"])
+        linear = int(record["linear_index"])
+        curvature = projected[quadratic] * scales[quadratic]
+        minimum = float(record["minimum"])
+        maximum = float(record["maximum"])
+        linear_value = projected[linear] * scales[linear]
+        linear_value = float(
+            np.clip(linear_value, -2.0 * curvature * maximum, -2.0 * curvature * minimum)
+        )
+        projected[linear] = linear_value / scales[linear]
+    return projected
+
+
 def evaluate_reviewed_response_fit(
     *, campaign_path: Path, specification_path: Path, output_dir: Path
 ) -> dict[str, Any]:
@@ -542,7 +699,7 @@ def evaluate_reviewed_response_fit(
         )
     try:
         import scipy
-        from scipy.optimize import lsq_linear
+        from scipy.optimize import LinearConstraint, lsq_linear, minimize
     except (
         ImportError
     ) as exc:  # pragma: no cover - pinned fitting environment has SciPy
@@ -558,6 +715,21 @@ def evaluate_reviewed_response_fit(
     scaled_design = design * scales[None, :]
     lower_scaled = lower / scales
     upper_scaled = upper / scales
+    quantitative = spec.get("quantitative_specification") or {}
+    if spec.get("status") == "quantitatively_specified":
+        policy_path = _checked(
+            quantitative.get("policy_source"), "response-fit policy"
+        )
+        policy = json.loads(policy_path.read_text())
+    else:
+        policy = {}
+    lower_scaled, upper_scaled, constraint_system, constraint_records = (
+        _physical_equilibrium_constraint_system(
+            parameters, scales, lower_scaled, upper_scaled, policy
+        )
+    )
+    lower = lower_scaled * scales
+    upper = upper_scaled * scales
     candidates = []
     coefficient_rows = []
     for ridge_lambda in (float(value) for value in objective["ridge_lambdas"]):
@@ -568,7 +740,7 @@ def evaluate_reviewed_response_fit(
             augmented_target = np.concatenate((target, np.zeros(len(scales))))
         else:
             augmented_design, augmented_target = scaled_design, target
-        fit = lsq_linear(
+        box_fit = lsq_linear(
             augmented_design,
             augmented_target,
             bounds=(lower_scaled, upper_scaled),
@@ -577,20 +749,83 @@ def evaluate_reviewed_response_fit(
             lsmr_tol=1.0e-12,
             max_iter=2000,
         )
+        if not box_fit.success or not np.all(np.isfinite(box_fit.x)):
+            raise ValueError(
+                f"bounded fit failed for ridge lambda {ridge_lambda}: "
+                f"{box_fit.message}"
+            )
+        fit = box_fit
+        maximum_constraint_violation = None
+        if constraint_system is not None:
+            matrix, constraint_lower, constraint_upper = constraint_system
+            optimizer = policy["physical_equilibrium_constraints"].get("optimizer") or {}
+            if optimizer.get("method") != "SLSQP":
+                raise ValueError("unsupported physical-equilibrium optimizer")
+            start = _project_physical_equilibrium_start(
+                box_fit.x,
+                scales,
+                lower_scaled,
+                upper_scaled,
+                constraint_records,
+            )
+
+            def scalar_objective(values: np.ndarray) -> float:
+                residual = scaled_design @ values - target
+                return 0.5 * float(
+                    residual @ residual + ridge_lambda * (values @ values)
+                )
+
+            def scalar_gradient(values: np.ndarray) -> np.ndarray:
+                residual = scaled_design @ values - target
+                return scaled_design.T @ residual + ridge_lambda * values
+
+            fit = minimize(
+                scalar_objective,
+                start,
+                jac=scalar_gradient,
+                method="SLSQP",
+                bounds=list(zip(lower_scaled, upper_scaled, strict=True)),
+                constraints=[
+                    LinearConstraint(matrix, constraint_lower, constraint_upper)
+                ],
+                options={
+                    "ftol": float(optimizer["ftol"]),
+                    "maxiter": int(optimizer["maximum_iterations"]),
+                },
+            )
+            values = matrix @ fit.x
+            maximum_constraint_violation = float(
+                max(
+                    np.max(np.maximum(constraint_lower - values, 0.0)),
+                    np.max(np.maximum(values - constraint_upper, 0.0)),
+                )
+            )
         if not fit.success or not np.all(np.isfinite(fit.x)):
             raise ValueError(
                 f"bounded fit failed for ridge lambda {ridge_lambda}: {fit.message}"
             )
+        if (
+            maximum_constraint_violation is not None
+            and maximum_constraint_violation > 1.0e-8
+        ):
+            raise ValueError("physical-equilibrium constraint tolerance was exceeded")
         coefficients = fit.x * scales
         coefficient_rows.append(coefficients)
+        active_bound_count = int(
+            np.count_nonzero(
+                np.isclose(fit.x, lower_scaled, rtol=0.0, atol=1.0e-8)
+                | np.isclose(fit.x, upper_scaled, rtol=0.0, atol=1.0e-8)
+            )
+        )
         candidates.append(
             {
                 "ridge_lambda": ridge_lambda,
                 "solver_status": int(fit.status),
                 "solver_message": str(fit.message),
                 "iterations": int(fit.nit or 0),
-                "active_bound_count": int(np.count_nonzero(fit.active_mask)),
+                "active_bound_count": active_bound_count,
                 "coefficient_l2_scaled": float(np.linalg.norm(fit.x)),
+                "maximum_physical_constraint_violation": maximum_constraint_violation,
                 "training": _metrics(training, coefficients),
                 "validation": _metrics(validation, coefficients),
             }
@@ -617,10 +852,17 @@ def evaluate_reviewed_response_fit(
         "software": {
             "numpy": np.__version__,
             "scipy": scipy.__version__,
-            "solver": "scipy.optimize.lsq_linear",
-            "method": "trf",
+            "solver": (
+                "scipy.optimize.minimize"
+                if constraint_system is not None
+                else "scipy.optimize.lsq_linear"
+            ),
+            "method": "SLSQP" if constraint_system is not None else "trf",
         },
         "objective": objective,
+        "physical_equilibrium_constraints": policy.get(
+            "physical_equilibrium_constraints"
+        ),
         "candidates": candidates,
         "sources": {
             "campaign": _source(campaign_path),

@@ -14,6 +14,8 @@ from backend.parameterization.photoproduct_response_campaign import (
     build_openmm_response_campaign,
 )
 from backend.parameterization.photoproduct_response_fit import (
+    _physical_equilibrium_constraint_system,
+    _project_physical_equilibrium_start,
     build_charmm_bonded_transform_candidate,
     build_response_fit_selection_template,
     build_response_fit_specification_template,
@@ -28,6 +30,75 @@ from backend.parameterization.photoproduct_response_fit import (
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_physical_equilibrium_constraints_project_harmonic_pairs() -> None:
+    parameters = [
+        {
+            "name": "bond-k",
+            "group_id": "bond:test",
+            "category": "bonds",
+            "basis": "r^2",
+            "coefficient_units": "kcal/mol/angstrom^2",
+            "occurrence_count": 1,
+        },
+        {
+            "name": "bond-linear",
+            "group_id": "bond:test",
+            "category": "bonds",
+            "basis": "r",
+            "coefficient_units": "kcal/mol/angstrom",
+            "occurrence_count": 1,
+        },
+        {
+            "name": "angle-k",
+            "group_id": "angle:test",
+            "category": "angles",
+            "basis": "theta^2",
+            "coefficient_units": "kcal/mol/rad^2",
+            "occurrence_count": 1,
+        },
+        {
+            "name": "angle-linear",
+            "group_id": "angle:test",
+            "category": "angles",
+            "basis": "theta",
+            "coefficient_units": "kcal/mol/rad",
+            "occurrence_count": 1,
+        },
+    ]
+    scales = np.asarray([300.0, 900.0, 50.0, 100.0])
+    lower = np.asarray([0.0, -4000.0, 0.0, -1200.0]) / scales
+    upper = np.asarray([1000.0, 0.0, 300.0, 0.0]) / scales
+    policy = json.loads(
+        Path(
+            "backend/data/forcefield/photoproduct_response_fit_policy_v4.json"
+        ).read_text()
+    )
+
+    lower, upper, system, records = _physical_equilibrium_constraint_system(
+        parameters, scales, lower, upper, policy
+    )
+    assert system is not None
+    projected = _project_physical_equilibrium_start(
+        np.asarray([0.0, -4.0, 0.0, -12.0]),
+        scales,
+        lower,
+        upper,
+        records,
+    )
+    matrix, constraint_lower, constraint_upper = system
+    values = matrix @ projected
+    assert np.all(values >= constraint_lower)
+    assert np.all(values <= constraint_upper)
+    transformed = transform_linear_coefficients_to_charmm(
+        [
+            {**parameter, "coefficient": float(value)}
+            for parameter, value in zip(parameters, projected * scales, strict=True)
+        ]
+    )
+    assert 0.5 < transformed["bonds"][0]["r0_angstrom"] < 3.0
+    assert 0.0 < transformed["angles"][0]["theta0_degrees"] < 180.0
 
 
 def _response_fixture(
