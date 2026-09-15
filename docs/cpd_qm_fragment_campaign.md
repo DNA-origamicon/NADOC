@@ -604,6 +604,53 @@ polarizable nonbonded model, a fresh independent water-orientation set that pass
 unchanged bounds, full d(TpT)/duplex validation for that accepted model, and independent
 reproducibility and release review.
 
+## Nonbonded model-form reassessment (2026-09-15)
+
+A second preregistered leave-one-orientation-out diagnostic tested whether a minimal,
+charge-conserving static anisotropy extension could recover the failed transferability.
+The four fixed-geometry families were an axial carbonyl site, paired in-plane carbonyl
+sites, paired in-plane carbonyl sites plus axial donor sites, and paired out-of-plane
+carbonyl sites plus axial donor sites. Virtual sites carried no Lennard-Jones term. Their
+charges, the constrained atomic charges, and the same ordered N3/H3/O2/O4 Lennard-Jones
+terms were bounded and regularized; the original folds and acceptance limits were left
+unchanged.
+
+All four families failed all three held-out orientations. The variants with donor sites
+reduced some distance errors, but held-out energy RMSE remained 0.35--0.43 kcal/mol. The
+largest errors continued to change with orientation: canonical held-out data failed at
+the endpoint-2 O2 acceptor, the alternate plane failed at endpoint-2 O4, and azimuth +120
+failed at endpoint-2 H3. Optimized carbonyl virtual charges often collapsed toward zero.
+This result closes further tuning of the fixed additive model; it does not close the
+possibility of a polarizable model.
+
+The official CHARMM Drude nucleic-acid release was then hash-pinned and inspected. Its
+thymine model uses asymmetric carbonyl lone-pair charges together with atomic
+polarizabilities, atom-specific Thole screening, and anisotropic carbonyl Drude springs.
+That is materially different from a fixed equal-site charge split. The published Drude
+nucleobase procedure fits charges, polarizabilities, and Thole factors to perturbed
+B3LYP/aug-cc-pVDZ ESP maps on MP2/6-31G(d) geometries and scales the fitted gas-phase
+polarizabilities by 0.85. The current CPD evidence has the geometry, zero-field ESP,
+dipole, and water curves, but no perturbed ESP set or polarizability tensor. Those are now
+the required next QM targets.
+
+An engine-only probe established the implementation boundary. psfgen 2.0 built two
+standard MTHY residues with 64 total particles, including 20 Drude particles, eight lone
+pairs, and four anisotropy entries. The installed NAMD 3.0.2 CUDA binary rejected
+NBTHOLE, while the local NAMD Git-2025-12-04 build loaded the same PSF and returned a
+finite zero-step energy. The full 2018 nucleic-acid topology also exposed an unsupported
+`DELETE ANISOTROPY` patch statement in psfgen. Thus the newer NAMD build can execute a
+Drude model compound, but the complete DNA structure-builder path still needs either a
+validated preprocessing correction or a CHARMM-GUI/CHARMM-generated PSF.
+
+The next campaign has four reassessment triggers: finish and audit fit/held-out perturbed
+ESP and polarizability QM targets; require a fitted Drude electrostatic model to predict
+the held-out perturbations; require unchanged three-orientation water cross-validation
+plus a new frozen fourth orientation; then require a full Drude d(TpT), SWM4-NDP solution,
+and duplex-context validation at no more than 1 fs. Additive-to-Drude parameter transfer
+does not satisfy any of these triggers. The hash-pinned result, engine evidence, missing
+targets, and trigger definitions are recorded in
+`docs/audits/cpd_nonbonded_model_form_20260915.json`.
+
 ## Verification of this review
 
 Targeted monitor tests exercise input/source corruption, interrupted execution, stage
