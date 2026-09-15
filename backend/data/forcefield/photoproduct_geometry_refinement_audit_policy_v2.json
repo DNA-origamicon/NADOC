@@ -1,0 +1,20 @@
+{
+  "schema": "nadoc.photoproduct-geometry-refinement-audit-policy.v1",
+  "version": "2.0.0",
+  "status": "workflow_policy",
+  "method": "strict-reminimization-newton-polish-and-finite-difference-hessian-v2",
+  "platform": "Reference",
+  "openmm_force_tolerance": 1e-7,
+  "openmm_maximum_iterations": 100000,
+  "cartesian_finite_difference_step_angstrom": 5e-5,
+  "maximum_stored_minimum_displacement_angstrom": 1e-4,
+  "maximum_force_kcal_mol_angstrom": 1e-5,
+  "maximum_raw_hessian_asymmetry": 1e-4,
+  "minimum_vibrational_projected_curvature": 1e-4,
+  "newton_polish": {
+    "relative_eigenvalue_cutoff": 1e-9,
+    "maximum_step_angstrom": 1e-4,
+    "maximum_steps": 1
+  },
+  "decision_rule": "Run the original strict Reference-platform minimization and finite-difference Hessian. If the maximum atom force alone remains above its unchanged limit, apply one Hessian Newton correction in the complete positive vibrational subspace, capped at 1e-4 angstrom per atom, then recompute every audit metric. Every unchanged numerical check must pass."
+}

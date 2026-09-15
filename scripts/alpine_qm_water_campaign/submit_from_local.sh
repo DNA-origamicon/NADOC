@@ -36,10 +36,12 @@ submission=$(ssh -S "$control_socket" "$host" "
   tar -xzf '$(basename "$archive")'
   cd bundle
   sha256sum -c MANIFEST.sha256 >/dev/null
-  sbatch --test-only --export=ALL,NADOC_CAMPAIGN_REMOTE_ROOT='$remote_root' \
+  sbatch --test-only --array='$array_range' \
+    --export=ALL,NADOC_CAMPAIGN_REMOTE_ROOT='$remote_root' \
     --output='$remote_root/logs/%A_%a.out' --error='$remote_root/logs/%A_%a.out' \
     campaign_64.sbatch
-  sbatch --parsable --export=ALL,NADOC_CAMPAIGN_REMOTE_ROOT='$remote_root' \
+  sbatch --parsable --array='$array_range' \
+    --export=ALL,NADOC_CAMPAIGN_REMOTE_ROOT='$remote_root' \
     --output='$remote_root/logs/%A_%a.out' --error='$remote_root/logs/%A_%a.out' \
     campaign_64.sbatch
 ")

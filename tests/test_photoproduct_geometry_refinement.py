@@ -5,6 +5,7 @@ import pytest
 
 from backend.parameterization.photoproduct_geometry_refinement import (
     _aligned_difference,
+    _positive_curvature_newton_step,
     geometry_variable_indices,
 )
 
@@ -87,3 +88,28 @@ def test_alignment_uses_proper_rotation_without_reflection() -> None:
     reflected[:, 2] *= -1.0
     reflected[2, 2] = 1.0
     assert np.linalg.norm(_aligned_difference(reference, reflected)) > 0.1
+
+
+def test_newton_polish_removes_gradient_in_positive_subspace() -> None:
+    hessian = np.diag([0.0, 2.0, 4.0])
+    gradient = np.asarray([0.0, 6.0, -8.0])
+    correction, diagnostics = _positive_curvature_newton_step(
+        gradient,
+        hessian,
+        vibrational_dimension=2,
+        relative_eigenvalue_cutoff=1e-9,
+    )
+
+    assert np.allclose(correction, [0.0, -3.0, 2.0])
+    assert np.allclose(gradient + hessian @ correction, 0.0)
+    assert diagnostics["positive_eigenvalue_count"] == 2
+
+
+def test_newton_polish_requires_complete_positive_rank() -> None:
+    with pytest.raises(ValueError, match="expected positive rank"):
+        _positive_curvature_newton_step(
+            np.asarray([0.0, 1.0, 1.0]),
+            np.diag([0.0, 2.0, 4.0]),
+            vibrational_dimension=1,
+            relative_eigenvalue_cutoff=1e-9,
+        )

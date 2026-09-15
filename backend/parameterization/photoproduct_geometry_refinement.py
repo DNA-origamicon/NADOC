@@ -38,6 +38,43 @@ AUDIT_POLICY_PATH = (
 )
 
 
+def _positive_curvature_newton_step(
+    gradient: np.ndarray,
+    hessian: np.ndarray,
+    *,
+    vibrational_dimension: int,
+    relative_eigenvalue_cutoff: float,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Return a Newton correction restricted to the positive vibrational subspace."""
+
+    gradient = np.asarray(gradient, dtype=float)
+    hessian = np.asarray(hessian, dtype=float)
+    if (
+        gradient.ndim != 1
+        or hessian.shape != (len(gradient), len(gradient))
+        or not np.all(np.isfinite(gradient))
+        or not np.all(np.isfinite(hessian))
+        or vibrational_dimension <= 0
+        or not 0.0 < relative_eigenvalue_cutoff < 1.0
+    ):
+        raise ValueError("Newton-polish inputs are invalid")
+    symmetric = (hessian + hessian.T) / 2.0
+    eigenvalues, eigenvectors = np.linalg.eigh(symmetric)
+    cutoff = float(np.max(np.abs(eigenvalues)) * relative_eigenvalue_cutoff)
+    positive = eigenvalues > cutoff
+    if int(np.count_nonzero(positive)) != vibrational_dimension:
+        raise ValueError("Newton-polish Hessian does not have the expected positive rank")
+    correction = -eigenvectors[:, positive] @ (
+        (eigenvectors[:, positive].T @ gradient) / eigenvalues[positive]
+    )
+    return correction, {
+        "relative_eigenvalue_cutoff": relative_eigenvalue_cutoff,
+        "absolute_eigenvalue_cutoff": cutoff,
+        "positive_eigenvalue_count": int(np.count_nonzero(positive)),
+        "lowest_retained_eigenvalue": float(eigenvalues[positive][0]),
+    }
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -142,7 +179,10 @@ def _audit_policy(path: Path) -> dict[str, Any]:
         != "nadoc.photoproduct-geometry-refinement-audit-policy.v1"
         or payload.get("status") != "workflow_policy"
         or payload.get("method")
-        != "strict-remiminization-and-finite-difference-hessian-v1"
+        not in {
+            "strict-remiminization-and-finite-difference-hessian-v1",
+            "strict-reminimization-newton-polish-and-finite-difference-hessian-v2",
+        }
     ):
         raise ValueError("unsupported geometry-refinement audit policy")
     return payload
@@ -664,12 +704,72 @@ def audit_geometry_refinement(
         dtype=float,
     )
     energy = float(state.getPotentialEnergy().value_in_unit(unit.kilocalorie_per_mole))
-    _gradient, hessian, asymmetry = cartesian_gradient_hessian(
+    gradient, hessian, asymmetry = cartesian_gradient_hessian(
         context,
         positions,
         unit,
         step_angstrom=float(audit_policy["cartesian_finite_difference_step_angstrom"]),
     )
+    pre_polish_maximum_force = float(np.max(np.linalg.norm(forces, axis=1)))
+    numerical_polish = None
+    if (
+        audit_policy["method"]
+        == "strict-reminimization-newton-polish-and-finite-difference-hessian-v2"
+        and pre_polish_maximum_force
+        > float(audit_policy["maximum_force_kcal_mol_angstrom"])
+    ):
+        correction, numerical_polish = _positive_curvature_newton_step(
+            gradient,
+            hessian,
+            vibrational_dimension=positions.size - 6,
+            relative_eigenvalue_cutoff=float(
+                audit_policy["newton_polish"]["relative_eigenvalue_cutoff"]
+            ),
+        )
+        correction = correction.reshape(positions.shape)
+        maximum_correction = float(np.max(np.linalg.norm(correction, axis=1)))
+        maximum_allowed = float(
+            audit_policy["newton_polish"]["maximum_step_angstrom"]
+        )
+        if maximum_correction > maximum_allowed:
+            correction *= maximum_allowed / maximum_correction
+        positions = positions + correction
+        context.setPositions(positions * unit.angstrom)
+        state = context.getState(getPositions=True, getForces=True, getEnergy=True)
+        positions = np.asarray(
+            state.getPositions(asNumpy=True).value_in_unit(unit.angstrom), dtype=float
+        )
+        forces = np.asarray(
+            state.getForces(asNumpy=True).value_in_unit(
+                unit.kilocalorie_per_mole / unit.angstrom
+            ),
+            dtype=float,
+        )
+        energy = float(
+            state.getPotentialEnergy().value_in_unit(unit.kilocalorie_per_mole)
+        )
+        gradient, hessian, asymmetry = cartesian_gradient_hessian(
+            context,
+            positions,
+            unit,
+            step_angstrom=float(
+                audit_policy["cartesian_finite_difference_step_angstrom"]
+            ),
+        )
+        numerical_polish.update(
+            {
+                "applied": True,
+                "pre_polish_maximum_force_kcal_mol_angstrom": pre_polish_maximum_force,
+                "unbounded_maximum_step_angstrom": maximum_correction,
+                "applied_maximum_step_angstrom": float(
+                    np.max(np.linalg.norm(correction, axis=1))
+                ),
+                "maximum_step_angstrom": maximum_allowed,
+                "post_polish_maximum_force_kcal_mol_angstrom": float(
+                    np.max(np.linalg.norm(forces, axis=1))
+                ),
+            }
+        )
     masses = np.asarray(
         [
             system.getParticleMass(index).value_in_unit(unit.dalton)
@@ -786,6 +886,7 @@ def audit_geometry_refinement(
         ],
         "vibrational_dimension": int(len(eigenvalues)),
         "lowest_projected_curvatures": eigenvalues[:10].tolist(),
+        "numerical_polish": numerical_polish,
         "checks": checks,
         "sources": {
             "refinement": _source(refinement_report_path),
@@ -798,10 +899,15 @@ def audit_geometry_refinement(
             "stable_atom_map": _source(atom_map_path),
         },
         "interpretation": (
-            "Passing independently confirms the refined isolated-model local minimum "
-            "and stereochemistry. It does not validate nonbonded terms, CHARMM export, "
-            "DNA-context transfer, or NAMD readiness."
-        ),
+            (
+                "Passing independently confirms the refined isolated-model local minimum "
+                "and stereochemistry."
+            )
+            if passed
+            else "The independent numerical audit failed at least one registered check."
+        )
+        + " It does not validate nonbonded terms, CHARMM export, DNA-context transfer, "
+        "or NAMD readiness.",
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2) + "\n")

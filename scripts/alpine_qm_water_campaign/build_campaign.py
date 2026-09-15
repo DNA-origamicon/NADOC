@@ -17,6 +17,7 @@ import shutil
 import sys
 import tarfile
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 
@@ -38,6 +39,17 @@ PRODUCTS = (
 )
 
 _RADII = {"H": 0.31, "C": 0.76, "N": 0.71, "O": 0.66}
+
+
+def _selected_products(product_ids: Sequence[str] | None) -> tuple[str, ...]:
+    selected = tuple(product_ids or PRODUCTS)
+    if (
+        not selected
+        or len(selected) != len(set(selected))
+        or any(product_id not in PRODUCTS for product_id in selected)
+    ):
+        raise ValueError("water-probe campaign product selection is invalid")
+    return selected
 
 
 def _alternate_plane_sites(sites: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -97,7 +109,11 @@ def _cross_clash_ratio(model_xyz: Path, water_xyz: Path, target_index: int) -> f
 
 
 def build(
-    *, repository: Path, output_root: Path, probe_variant: str = "canonical"
+    *,
+    repository: Path,
+    output_root: Path,
+    probe_variant: str = "canonical",
+    product_ids: Sequence[str] | None = None,
 ) -> dict[str, object]:
     if output_root.exists():
         raise FileExistsError(f"refusing to overwrite campaign: {output_root}")
@@ -115,6 +131,7 @@ def build(
         raise ValueError("canonical cis-syn water-probe plan is not reviewed/complete")
     if probe_variant not in {"canonical", "alternate-plane", "azimuth-120"}:
         raise ValueError("unsupported water-probe campaign variant")
+    selected_products = _selected_products(product_ids)
     site_template = copy.deepcopy(canonical["sites"])
     if probe_variant == "alternate-plane":
         site_template = _alternate_plane_sites(site_template)
@@ -132,7 +149,7 @@ def build(
     cases_root.mkdir(parents=True)
     records: list[dict[str, object]] = []
     case_lines = []
-    for index, product_id in enumerate(PRODUCTS):
+    for index, product_id in enumerate(selected_products):
         product_dir = (
             repository / "backend/data/forcefield/photoproducts" / product_id
         )
@@ -309,6 +326,12 @@ def main() -> int:
         choices=("canonical", "alternate-plane", "azimuth-120"),
         default="canonical",
     )
+    parser.add_argument(
+        "--product-id",
+        action="append",
+        choices=PRODUCTS,
+        help="Build only the selected product; repeat for multiple products.",
+    )
     args = parser.parse_args()
     print(
         json.dumps(
@@ -316,6 +339,7 @@ def main() -> int:
                 repository=args.repository.resolve(),
                 output_root=args.output_root.resolve(),
                 probe_variant=args.probe_variant,
+                product_ids=args.product_id,
             ),
             indent=2,
         )

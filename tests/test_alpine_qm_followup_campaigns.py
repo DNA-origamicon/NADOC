@@ -99,6 +99,19 @@ def test_water_azimuth_variant_is_explicit_and_deterministic() -> None:
     assert original == [{"id": "endpoint1-o2-acceptor", "plane_atom": "1:N1"}]
 
 
+def test_water_campaign_accepts_an_explicit_product_subset() -> None:
+    module = _load(
+        "scripts/alpine_qm_water_campaign/build_campaign.py",
+        "water_campaign_product_subset",
+    )
+    assert module._selected_products(["tt-cpd-cis-anti-i"]) == (
+        "tt-cpd-cis-anti-i",
+    )
+    assert module._selected_products(None) == module.PRODUCTS
+    with pytest.raises(ValueError, match="product selection"):
+        module._selected_products(["tt-cpd-cis-anti-i", "tt-cpd-cis-anti-i"])
+
+
 def test_boundary_campaign_is_three_pinned_independent_optimizations() -> None:
     module = _load(
         "scripts/alpine_qm_boundary_campaign/build_campaign.py",
@@ -146,6 +159,7 @@ def test_boundary_recovery_cycle_is_prioritized_and_checkpointed() -> None:
     assert "Final optimized geometry and variables" in runner
     assert "failed_preserved" in runner
     assert 'array_range="0-$((case_count - 1))"' in submitter
+    assert "--array='$array_range'" in submitter
     assert "audit_optimized_model" in collector
     assert "passed_first_wave_optimization_identity_audits" in collector
     assert "Do not launch all-eight Hessians" in collector

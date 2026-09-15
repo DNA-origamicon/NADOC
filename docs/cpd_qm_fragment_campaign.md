@@ -517,6 +517,48 @@ report `blocked_before_candidate_assembly`, `automatic_continuation: stopped`, a
 relaxing its registered limits and an independently validated anti nonbonded candidate
 within the registered held-out water bounds.
 
+## Failed-gate troubleshooting and independent-water recovery (2026-09-15)
+
+The D4a troubleshooting stage kept every previous acceptance limit. The geometry audit
+failure was numerical termination noise: the original strict OpenMM minimization stopped
+at 1.09362e-5 kcal mol-1 angstrom-1 maximum atom force, only above the 1.0e-5 limit. A
+versioned audit adds one finite-difference-Hessian Newton correction restricted to all 102
+positive vibrational directions and capped at 1e-4 angstrom per atom. The actual correction
+was 9.47e-7 angstrom, after which the maximum force was 1.36e-10 kcal mol-1 angstrom-1.
+Stored-minimum reproduction, Hessian symmetry, positive curvature, 0.05935 angstrom
+heavy-atom RMSD, and all four stereochemical signs also passed. This resolves the bonded
+geometry gate and produced a hash-linked CHARMM bonded transform candidate.
+
+Removing only the contradicted cross-endpoint charge equalities did not resolve the
+nonbonded gate. The endpoint-1-trained ordered candidate overbound the held-out endpoint-2
+H3 water probe by 1.454 kcal/mol; its alternate-plane independent energy RMSE was
+1.055 kcal/mol. Total charge, neutral methyl caps, within-endpoint equivalent hydrogens,
+the fixed pinned Lennard-Jones library, training/held-out site identities, and all limits
+were unchanged. The D4a trigger therefore remains fail-closed for candidate assembly.
+
+A subsequent capacity-only comparison fit all 12 conventional and alternate-plane water
+curves and cannot serve as validation. Fixed Lennard-Jones values failed the maximum
+distance target at 0.1424 angstrom. Shared and O2/O4 role-distinct carbonyl oxygen values
+also failed at 0.1164 and 0.1073 angstrom. The only model form within all smoke-capacity
+targets used ordered endpoint- and role-distinct O2/O4 Lennard-Jones values: 0.1630 kcal/mol
+energy RMSE, 0.2767 kcal/mol maximum energy error, 0.05263 angstrom distance RMSE,
+0.099999996 angstrom maximum distance error, and 0.1513 e maximum charge change. Its full
+charge and Lennard-Jones vector is frozen in
+`gate-troubleshooting-v1/model-form-diagnostic-v1/selected_capacity_candidate.json` for
+independent validation only.
+
+The required independent evidence is a third, azimuth-120 water orientation. A one-product
+Alpine bundle containing 54 counterpoise-corrected HF/6-31G(d) points was built at
+`alpine-qm-water-validation-campaign-v3-cis-anti-i-azimuth120`. Its non-target clash ratio
+is 1.7649, its archive checksum passes, and the submission helper now derives and overrides
+the Slurm array range from `cases.tsv`, allowing this one-case campaign to submit as task
+0 only. Alpine job `32590755` was submitted as array `0-0`. Upload verification initially
+paused during extraction in Alpine scratch, then recovered without a duplicate submission.
+The resource-capped user service `nadoc-alpine-cpd-water-v3-watch.service` monitors that
+job, collects its results, and runs the frozen-candidate evaluator. A failure stops, while
+a pass authorizes implementation of the custom Lennard-Jones CHARMM assembly stage. Neither
+the capacity fit nor the new evidence generation makes the product simulation ready.
+
 ## Verification of this review
 
 Targeted monitor tests exercise input/source corruption, interrupted execution, stage
