@@ -2,6 +2,10 @@
 from functools import lru_cache
 import json
 import math
+from threading import Lock
+
+# lru_cache alone allows concurrent misses to build the same atomistic model.
+_design_pdb_lock = Lock()
 
 
 @lru_cache(maxsize=4)
@@ -58,7 +62,11 @@ def _calculated_box(serialized: str, settings: str) -> dict:
         resolve_padding_nm, resolve_box_mode,
     )
     control = request.graphene_only or (request.graphene_nanopore and not design.strands)
-    pdb = 'END\n' if control else _design_pdb(design.model_dump_json())
+    if control:
+        pdb = 'END\n'
+    else:
+        with _design_pdb_lock:
+            pdb = _design_pdb(design.model_dump_json())
     if request.graphene_nanopore:
         spec = {
             'surface_axis': request.graphene_surface_axis or ('-z' if control else '-y'),

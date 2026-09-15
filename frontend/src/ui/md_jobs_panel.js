@@ -1944,7 +1944,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   }
 
-  const notifyBoxSizeFailures = createBoxSizeFailureNotifier()
+  const notifyBoxSizeFailures = createBoxSizeFailureNotifier(warnings => boxSolvent?.setJobWarnings(warnings))
 
   // ── Job list fetch ─────────────────────────────────────────────────────────
   async function _fetchJobs() {
@@ -1952,7 +1952,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       const jobs = await api.listMdJobs()
       if (!jobs) throw new Error(api.lastErrorMessage() ?? 'HTTP error')
       _jobs = jobs
-      notifyBoxSizeFailures(jobs)
+      notifyBoxSizeFailures(_visibleJobs(), store.getState()?.currentDesign?.id)
       _jobs.sort((a, b) => b.created_at - a.created_at)
       _mdDebug(`[${_ts()}] md-jobs: fetched ${_jobs.length} jobs`)
       if (_fetchFails > 0) { _fetchFails = 0; _setBackendStale(false); _checkEngines() }  // reconnected → restore status line
@@ -2117,8 +2117,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   function _clearSelectedJob() {
     _grapheneSelectionId = null
-    surfaceCard.clear()
+    // Empty job-list refreshes must not clear the setup the user is editing.
     if (_selectedId) {
+      surfaceCard.clear()
       surfaceCard.restore()
       screeningCard.restore()
       if (surfaceEnableChk) surfaceEnableChk.checked = false
@@ -5714,7 +5715,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     structure: _anchorsCard, surface: _surfaceAnchorsCard,
     toSurfaceId: 'md-anchors-to-surface', toStructureId: 'md-anchors-to-structure',
   })
-  const surfaceCard = initNamdSurfaceCard({ onChange: enabled => {
+  const surfaceCard = initNamdSurfaceCard({
+    onSetupPreview: () => {
+      // Editing a new surface returns to native geometry, so an old trajectory
+      // cannot suppress the preview or display a membrane in another frame.
+      if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
+      _setFlexOff()
+      _setTrajOff()
+      _setPhotoproductOff()
+      if (_occupancyIsActive()) _setOccupancyOff()
+    },
+    onChange: enabled => {
     setAnchorSectionEnabled(document.getElementById('md-surface-anchors-section'), enabled)
     _anchorTransfers.setSurfaceEnabled(enabled)
     window.dispatchEvent(new CustomEvent('nadoc:anchors-change', { detail: {

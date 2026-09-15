@@ -1,0 +1,62 @@
+{
+  "verified_at_utc": "2026-09-14T22:15:44.833484+00:00",
+  "application_tracked_diff_unchanged": true,
+  "original_input_checks": {
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore.psf": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_hmr.psf": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore.pdb": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/graphene_nanopore.json": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.coor": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_04_300K_NPT_MGHH_only_p10.coor": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_04_300K_NPT_MGHH_only_p10.vel": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/live_metrics.json": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/toppar_water_ions_cufix.str": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36m_prot.prm": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/top_all36_na.rtf": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_stub_ions_nbfix.str": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_np_thiol.prm": {
+      "size_matches": true,
+      "sha256_matches": true
+    },
+    "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36_na.prm": {
+      "size_matches": true,
+      "sha256_matches": true
+    }
+  }
+}

@@ -572,3 +572,31 @@ describe('initAtomSurfaceDisplay', () => {
     expect(paintedModels()).toHaveLength(1)
   })
 })
+
+
+describe('authoring metadata preserves simulation representations', () => {
+  for (const field of ['camera_poses', 'animations']) {
+    for (const mode of ['vdw', 'ballstick', 'stick', 'surface']) {
+      it(`${field} changes keep the active ${mode} overlay and Full hidden`, async () => {
+        mountIds(DOM)
+        const design = { helices: [], strands: [], camera_poses: [], animations: [] }
+        const store = createMockStore({ currentDesign: design, currentGeometry: null })
+        const deps = makeDeps({ store, getSimOverlayWillDriveHeavy: () => true })
+        const display = initAtomSurfaceDisplay(deps)
+        if (mode === 'surface') await display.applySurfaceMode('on')
+        else await display.applyAtomisticMode(mode)
+        // The simulation has delivered its heavy representation.
+        display.setCGVisible(false)
+        vi.clearAllMocks()
+        store.setState({ currentDesign: { ...design, [field]: [{ id: 'new' }] } })
+        await Promise.resolve()
+        expect(deps._root.visible).toBe(false)
+        expect(deps.atomisticRenderer.setMode).not.toHaveBeenCalled()
+        expect(deps.surfaceRenderer.setMode).not.toHaveBeenCalled()
+        expect(deps.atomisticRenderer.update).not.toHaveBeenCalled()
+        expect(deps.surfaceRenderer.update).not.toHaveBeenCalled()
+        expect(global.fetch).not.toHaveBeenCalled()
+      })
+    }
+  }
+})

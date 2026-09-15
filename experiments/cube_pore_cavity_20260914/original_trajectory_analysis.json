@@ -1,0 +1,306 @@
+[
+  {
+    "stage": "cube_pore_01_300K_NPT_ENM_k0p5_p10",
+    "frame": 0,
+    "time_in_stage_ps": 8,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      664,
+      706,
+      767,
+      799,
+      669
+    ],
+    "water_void_grid_nm3": 415.83159617356745,
+    "dna_extent_nm": [
+      15.341050148010254,
+      15.366311073303223,
+      22.008207321166992
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_01_300K_NPT_ENM_k0p5_p10",
+    "frame": 4,
+    "time_in_stage_ps": 40,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      611,
+      567,
+      696,
+      828,
+      684
+    ],
+    "water_void_grid_nm3": 419.76951567299636,
+    "dna_extent_nm": [
+      15.9013671875,
+      15.976605415344238,
+      21.876712799072266
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_01_300K_NPT_ENM_k0p5_p10",
+    "frame": 14,
+    "time_in_stage_ps": 120,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      436,
+      401,
+      521,
+      682,
+      743
+    ],
+    "water_void_grid_nm3": 456.6716322724836,
+    "dna_extent_nm": [
+      16.673114776611328,
+      16.807382583618164,
+      21.48928451538086
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_01_300K_NPT_ENM_k0p5_p10",
+    "frame": 29,
+    "time_in_stage_ps": 240,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      350,
+      249,
+      365,
+      552,
+      661
+    ],
+    "water_void_grid_nm3": 479.72751579333357,
+    "dna_extent_nm": [
+      17.27277374267578,
+      17.18350601196289,
+      21.074766159057617
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_02_300K_NPT_ENM_k0p1_p10",
+    "frame": 0,
+    "time_in_stage_ps": 16,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      340,
+      237,
+      343,
+      550,
+      682
+    ],
+    "water_void_grid_nm3": 488.0479586066431,
+    "dna_extent_nm": [
+      17.406814575195312,
+      17.320350646972656,
+      21.20757293701172
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_02_300K_NPT_ENM_k0p1_p10",
+    "frame": 4,
+    "time_in_stage_ps": 80,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      314,
+      213,
+      276,
+      465,
+      669
+    ],
+    "water_void_grid_nm3": 494.2088971783303,
+    "dna_extent_nm": [
+      17.612245559692383,
+      17.401174545288086,
+      21.284549713134766
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_02_300K_NPT_ENM_k0p1_p10",
+    "frame": 14,
+    "time_in_stage_ps": 240,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      177,
+      103,
+      164,
+      268,
+      521
+    ],
+    "water_void_grid_nm3": 520.8216112147935,
+    "dna_extent_nm": [
+      17.520715713500977,
+      17.612899780273438,
+      21.299102783203125
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_02_300K_NPT_ENM_k0p1_p10",
+    "frame": 29,
+    "time_in_stage_ps": 480,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      81,
+      38,
+      47,
+      146,
+      410
+    ],
+    "water_void_grid_nm3": 567.0604079177654,
+    "dna_extent_nm": [
+      17.84158706665039,
+      17.773887634277344,
+      20.87478256225586
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_03_300K_NPT_ENM_k0p01_p10",
+    "frame": 0,
+    "time_in_stage_ps": 16,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      76,
+      19,
+      51,
+      128,
+      421
+    ],
+    "water_void_grid_nm3": 566.5522892726777,
+    "dna_extent_nm": [
+      17.904951095581055,
+      17.821613311767578,
+      20.896968841552734
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_03_300K_NPT_ENM_k0p01_p10",
+    "frame": 4,
+    "time_in_stage_ps": 80,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      64,
+      17,
+      29,
+      139,
+      369
+    ],
+    "water_void_grid_nm3": 568.2036748692125,
+    "dna_extent_nm": [
+      18.075191497802734,
+      17.9300479888916,
+      21.130964279174805
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_03_300K_NPT_ENM_k0p01_p10",
+    "frame": 14,
+    "time_in_stage_ps": 240,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      43,
+      7,
+      7,
+      66,
+      317
+    ],
+    "water_void_grid_nm3": 600.5327236629113,
+    "dna_extent_nm": [
+      18.02482795715332,
+      18.03944969177246,
+      21.25927734375
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_03_300K_NPT_ENM_k0p01_p10",
+    "frame": 29,
+    "time_in_stage_ps": 480,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      20,
+      0,
+      1,
+      1,
+      219
+    ],
+    "water_void_grid_nm3": 633.7509800855133,
+    "dna_extent_nm": [
+      18.226648330688477,
+      18.31052589416504,
+      21.260353088378906
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_04_300K_NPT_MGHH_only_p10",
+    "frame": 0,
+    "time_in_stage_ps": 16,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      18,
+      0,
+      0,
+      1,
+      211
+    ],
+    "water_void_grid_nm3": 629.8130605860845,
+    "dna_extent_nm": [
+      18.334606170654297,
+      18.266895294189453,
+      21.293254852294922
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_04_300K_NPT_MGHH_only_p10",
+    "frame": 4,
+    "time_in_stage_ps": 80,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      13,
+      0,
+      0,
+      0,
+      185
+    ],
+    "water_void_grid_nm3": 635.0212766982324,
+    "dna_extent_nm": [
+      18.253847122192383,
+      18.521835327148438,
+      21.433534622192383
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_04_300K_NPT_MGHH_only_p10",
+    "frame": 14,
+    "time_in_stage_ps": 240,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      1,
+      0,
+      0,
+      0,
+      179
+    ],
+    "water_void_grid_nm3": 635.2753360207762,
+    "dna_extent_nm": [
+      18.237899780273438,
+      18.357093811035156,
+      21.082420349121094
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  },
+  {
+    "stage": "cube_pore_04_300K_NPT_MGHH_only_p10",
+    "frame": 29,
+    "time_in_stage_ps": 480,
+    "slice_counts_z_minus3_minus2_minus1_0_1": [
+      0,
+      0,
+      0,
+      0,
+      146
+    ],
+    "water_void_grid_nm3": 642.0079080681869,
+    "dna_extent_nm": [
+      18.564769744873047,
+      18.411399841308594,
+      21.472902297973633
+    ],
+    "water_OH_median_nm": 0.09572000056505203
+  }
+]

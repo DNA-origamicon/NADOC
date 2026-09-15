@@ -1,0 +1,74 @@
+{
+  "full_npzat": {
+    "window_after_ps": 4,
+    "last_time_ps": 10.0,
+    "samples": 15,
+    "mean_averaged_pressure_tensor_bar": [
+      [
+        -85.27477999999999,
+        -8.596012533333333,
+        -0.2897055333333329
+      ],
+      [
+        11.90000466666667,
+        -108.69230666666667,
+        -1.8972374666666667
+      ],
+      [
+        -5.271432000000001,
+        -3.341399333333332,
+        -0.9893861599999999
+      ]
+    ],
+    "std_interval_normal_pressure_bar": 8.273680623855391,
+    "interpretation": "GPRESSAVG interval-averaged tensor, not aliased instantaneous GPRESSURE samples."
+  },
+  "open_pore/fill_92_npzat": {
+    "window_after_ps": 50,
+    "last_time_ps": 200.0,
+    "samples": 75,
+    "mean_averaged_pressure_tensor_bar": [
+      [
+        -244.94924346666662,
+        -106.4181182666667,
+        -0.40817055999999996
+      ],
+      [
+        -95.73384034666664,
+        -156.34931186666662,
+        -0.6066989213333336
+      ],
+      [
+        5.310879701333341,
+        -107.55385066666668,
+        -1.966727332
+      ]
+    ],
+    "std_interval_normal_pressure_bar": 18.88476538536184,
+    "interpretation": "GPRESSAVG interval-averaged tensor, not aliased instantaneous GPRESSURE samples."
+  },
+  "open_pore/fill_92_nvt_offload": {
+    "window_after_ps": 50,
+    "last_time_ps": 200.0,
+    "samples": 75,
+    "mean_averaged_pressure_tensor_bar": [
+      [
+        -627.03124,
+        3.6651966133333325,
+        -1.1938790733333333
+      ],
+      [
+        1.9149235333333343,
+        -631.5237599999999,
+        2.552606707999999
+      ],
+      [
+        2.939889513333334,
+        8.223351346666666,
+        -527.78764
+      ]
+    ],
+    "std_interval_normal_pressure_bar": 28.640347592749528,
+    "interpretation": "GPRESSAVG interval-averaged tensor, not aliased instantaneous GPRESSURE samples."
+  }
+}

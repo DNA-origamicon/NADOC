@@ -312,7 +312,9 @@ def _xst_freq(steps: int, timestep_fs: float, fallback: int) -> int:
 #:   3  (2026-07-30)    Vacuum pre-stage RETIRED (NADOC geometry is already physical,
 #:                      and the step swelled dense bundles); relax packages bbox-sized;
 #:                      declash ladders run the 2 fs gentle tier, not 1 fs flexible.
-RELAX_RECIPE_VERSION = 3
+#:   4  (2026-09-14)    Graphene: restore solvent settling and pressure-controlled
+#:                      restraint release at fixed lateral area; retain NVT production.
+RELAX_RECIPE_VERSION = 4
 
 #: The pairlist buffer _common_header actually emits for the explicit ladder.  Named so
 #: the manifest can report it instead of a stale literal (it said 12.0 for a long time).
@@ -643,7 +645,9 @@ def _box_check(
 
 
 def package_npt_allowed(package_dir: "str | Path") -> bool:
-    """May this package's stages run under a barostat?
+    """May production/reseed stages run under a barostat?
+
+    New membrane packages equilibrate under NPzAT but explicitly produce under NVT.
 
     ``False`` when it was solvated with a water-shell carve — the cell then has vacuum
     corners and a barostat will collapse it.  Packages built before ``solvation`` was
@@ -659,7 +663,8 @@ def package_npt_allowed(package_dir: "str | Path") -> bool:
     except (json.JSONDecodeError, OSError):
         return True
     if (
-        manifest.get("graphene_only")
+        (manifest.get("graphene_nanopore") or {}).get("production_ensemble") == "NVT"
+        or manifest.get("graphene_only")
         or (manifest.get("charge_audit") or {}).get("graphene_only")
         or (manifest.get("graphene_nanopore") or {}).get("control") == "graphene_only"
     ):
@@ -3316,6 +3321,13 @@ def adaptive_minimization_parameters(
     }
 
 
+def _graphene_relaxation_pressure(conf: str, wall: dict | None) -> str:
+    from backend.core.namd_graphene import graphene_pressure_conf
+
+    return graphene_pressure_conf(conf, enabled=bool(wall), wall=wall,
+                                  fixed_cell=bool(wall and wall.get("cell_policy") == "fixed_volume"))
+
+
 def mgh_slow_release_segments(
     name_stem: str,
     *,
@@ -4002,21 +4014,24 @@ def prepare_mgh_slow_release(
         name_stem,
         soft=force_soft,
         gentle=gentle_ladder,
-        # Fixed Cartesian wall restraints require a fixed cell so periodic seams
-        # cannot reopen. Solvent density must be validated before transport.
-        nvt_only=bool(graphene_nanopore),
+        nvt_only=False,
+        settle_ps=0 if graphene_only else SETTLE_STAGE_PS,
         timestep_fs=ladder_dt,
         high_aspect_ratio=high_aspect_ratio,
     )
+    if graphene_nanopore:
+        for segment in segments:
+            segment.stage = segment.stage.replace("NPT", graphene_nanopore.get("relaxation_ensemble", "NPzAT"))
     if graphene_only and segments:
         # There is no DNA ENM or Mg-hexahydrate restraint to release.  Retain one
-        # NVT equilibration stage (chunked so the energy plateau accelerator can
+        # NPzAT equilibration stage (chunked so the energy plateau accelerator can
         # stop it early), rather than running four numerically identical stages.
         control_stage = segments[0].stage
         segments = [s for s in segments if s.stage == control_stage]
         for control_segment in segments:
             control_segment.temp = float((graphene_nanopore or {}).get("temperature_K", 300.0))
-            control_segment.stage = f"{control_segment.temp:g} K NVT graphene/solvent equilibration"
+            ensemble = graphene_nanopore.get("relaxation_ensemble", "NPzAT")
+            control_segment.stage = f"{control_segment.temp:g} K {ensemble} graphene/solvent equilibration"
 
     # The HMR PSF enters at the first hard, rigid-bond segment; minimisation and
     # the soft strain-relief first segment keep the unmodified PSF.
@@ -4079,7 +4094,8 @@ def prepare_mgh_slow_release(
         overrides=overrides_for_stage(stage_overrides, 0),
     )
     (package_dir / f"{min_name}.conf").write_text(
-        inject_photoproduct_parameters(min_conf, design)
+        inject_photoproduct_parameters(
+            _graphene_relaxation_pressure(min_conf, graphene_nanopore), design)
     )
 
     # Write segment confs.  Stamp each spec with the timestep it will actually run at
@@ -4117,7 +4133,8 @@ def prepare_mgh_slow_release(
             ),
         )
         (package_dir / f"{spec.name}.conf").write_text(
-            inject_photoproduct_parameters(segment_conf, design)
+            inject_photoproduct_parameters(
+                _graphene_relaxation_pressure(segment_conf, graphene_nanopore), design)
         )
 
     charge_audit = {}
@@ -4155,6 +4172,7 @@ def prepare_mgh_slow_release(
     manifest = {
         "nadoc_md_run_manifest_version": 1,
         "protocol": protocol,
+        **({"graphene_nanopore": graphene_nanopore} if graphene_nanopore else {}),
         "package_dir": str(package_dir.resolve()),
         "name_stem": name_stem,
         "namd_seed": int(seed),
@@ -4193,7 +4211,7 @@ def prepare_mgh_slow_release(
             "padding_nm": float(padding_nm),
             "requested_box_size_nm": box_size_nm,
             "carved": False,
-            "npt_allowed": not bool(graphene_nanopore),
+            "npt_allowed": True,
             # Unrestrained ns the cell was sized for.  A production child re-uses this
             # cell verbatim, so this is the record of the decision every descendant
             # inherits — without it, a package that cannot host a long free run is

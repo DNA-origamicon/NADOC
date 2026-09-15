@@ -1,0 +1,134 @@
+[
+  {
+    "stage": "cube_pore_00_min_enm_k0p5",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_0S_300K_NPT_settle_fixed_dna_p100",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_01_300K_NPT_ENM_k0p5_p10",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_01_300K_NPT_ENM_k0p5_p25",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_01_300K_NPT_ENM_k0p5_p50",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_01_300K_NPT_ENM_k0p5_p75",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_01_300K_NPT_ENM_k0p5_p100",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_02_300K_NPT_ENM_k0p1_p10",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_02_300K_NPT_ENM_k0p1_p25",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_02_300K_NPT_ENM_k0p1_p50",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_02_300K_NPT_ENM_k0p1_p75",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_02_300K_NPT_ENM_k0p1_p100",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_03_300K_NPT_ENM_k0p01_p10",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_03_300K_NPT_ENM_k0p01_p25",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_03_300K_NPT_ENM_k0p01_p50",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_03_300K_NPT_ENM_k0p01_p75",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_03_300K_NPT_ENM_k0p01_p100",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_04_300K_NPT_MGHH_only_p10",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_04_300K_NPT_MGHH_only_p25",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_04_300K_NPT_MGHH_only_p50",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_04_300K_NPT_MGHH_only_p75",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  },
+  {
+    "stage": "cube_pore_04_300K_NPT_MGHH_only_p100",
+    "exit_code": 0,
+    "completed": true,
+    "fatal": []
+  }
+]

@@ -59,7 +59,7 @@ def test_md_binary_trajectory_matches_full_json_path(monkeypatch, tmp_path):
     frames = np.frombuffer(payload, dtype="<f4", offset=body_offset).reshape(
         n_frames, (n_p + n_term) * 6
     )
-    assert header == {k: legacy[k] for k in ("keys", "stages", "markers")}
+    assert header == {k: legacy[k] for k in ("keys", "stages", "markers", "frame_start", "total_n_frames")}
     assert np.allclose(frames, legacy["frames"], rtol=1e-6, atol=2e-5)
     assert len(payload) < len(orjson.dumps(legacy)) * 0.45
     assert json.loads(progress.read_text()) == {
@@ -67,3 +67,25 @@ def test_md_binary_trajectory_matches_full_json_path(monkeypatch, tmp_path):
         "done": 1,
         "total": 1,
     }
+
+
+def test_range_extracts_only_selected_composite_frames(monkeypatch, tmp_path):
+    from backend.core import md_trajectory as mt
+    monkeypatch.setitem(sys.modules, "MDAnalysis", SimpleNamespace(
+        Universe=lambda *_: SimpleNamespace(trajectory=range(10))))
+    monkeypatch.setattr(mt, "_build_md_nadoc_ctx", lambda *_a, **_k: {
+        "p_order": [("h", 0, "F")], "term_specs": []})
+    seen = []
+    def extract(_ctx, frame, **_):
+        seen.append(frame)
+        return np.array([[frame, 0, 0]]), np.array([[0, 0, 1]]), [], []
+    monkeypatch.setattr(mt, "_extract_md_nadoc_frame", extract)
+    segments = [("a", "md", tmp_path / "a.dcd"), ("b", "md", tmp_path / "b.dcd")]
+    payload = mt.md_composite_trajectory_bin("x.psf", segments, "x.pdb", object(),
+        stride=2, frame_start=3, frame_end=6)
+    _, _, count, _, header_len = struct.unpack_from("<5I", payload)
+    header = json.loads(payload[20:20 + header_len])
+    assert count == 4
+    assert header["frame_start"] == 3
+    assert header["total_n_frames"] == 10
+    assert seen == [6, 8, 10, 12]

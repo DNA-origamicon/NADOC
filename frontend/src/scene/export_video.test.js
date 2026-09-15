@@ -334,3 +334,16 @@ describe('efficiency', () => {
     spy.mockRestore()
   })
 })
+
+
+it('waits for companion coordinates before encoding and rejects a missing ion frame', async () => {
+  const player = makePlayer(0.1)
+  let ready
+  player.settleFrame = vi.fn(() => new Promise(resolve => { ready = resolve }))
+  const exporting = run({ player })
+  await vi.waitFor(() => expect(player.settleFrame).toHaveBeenCalled())
+  expect(writeFrame).not.toHaveBeenCalled()
+  ready(false)
+  await expect(exporting).rejects.toThrow('ions / bounding box are not ready')
+  expect(writeFrame).not.toHaveBeenCalled()
+})

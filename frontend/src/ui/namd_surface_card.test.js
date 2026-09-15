@@ -6,12 +6,12 @@ const setup=()=>{
  ui=initNamdSurfaceCard();return ui
 }
 afterEach(()=>{ui?.dispose();document.body.replaceChildren()})
-it('only an explicit selection of a surface job renders; setup and automatic selection do not',()=>{
+it('previews setup while keeping selected job descriptors immutable',()=>{
  const events=[],listen=e=>events.push(e.detail)
  window.addEventListener('nadoc:graphene-nanopore-preview',listen)
  const card=setup(), job={job_id:'surface'},prep={graphene_nanopore:true,graphene_pore_diameter_nm:0,graphene_surface_axis:'+z',graphene_surface_offset_nm:2}
  document.querySelector('#md-hard-surface-enable').click()
- expect(events.at(-1).enabled).toBe(false)
+ expect(events.at(-1)).toMatchObject({enabled:true,poreDiameterNm:0})
  card.select(job,prep);expect(events.at(-1).enabled).toBe(false)
  card.select(job,prep,true);expect(events.at(-1)).toMatchObject({enabled:true,poreDiameterNm:0,surface:{dir:[0,0,-1],positionNm:2}})
  document.querySelector('#md-surface-enable').click()
@@ -26,4 +26,23 @@ it('groups dependent options without mixing closed charge and open nanopore',()=
  pore.click();expect(charge.checked).toBe(false);expect(card.poreDiameter(3)).toBe(3)
  hard.click();expect(pore.checked).toBe(false);expect(card.enabled()).toBe(false)
  card.restore({graphene_nanopore:true,graphene_pore_diameter_nm:0});expect(hard.checked).toBe(true);expect(pore.checked).toBe(false)
+})
+
+it('does not rebuild unchanged previews during repeated job selection or sync',()=>{
+ const card=setup(),listen=vi.fn()
+ window.addEventListener('nadoc:graphene-nanopore-preview',listen)
+ const job={job_id:'surface'},prep={graphene_nanopore:true}
+ card.select(job,prep,true)
+ for(let i=0;i<5;i++){card.select({...job},{...prep});card.sync()}
+ expect(listen).toHaveBeenCalledTimes(1)
+ window.removeEventListener('nadoc:graphene-nanopore-preview',listen)
+})
+
+it('turns all dependencies off together without re-enabling the hard surface',()=>{
+ setup();ui.dispose()
+ document.body.insertAdjacentHTML('beforeend','<input type="checkbox" id="md-peg-enable">')
+ ui=initNamdSurfaceCard()
+ const hard=document.querySelector('#md-hard-surface-enable'),pore=document.querySelector('#md-surface-enable'),peg=document.querySelector('#md-peg-enable')
+ pore.click();peg.click();hard.click()
+ expect([hard,pore,peg].map(el=>el.checked)).toEqual([false,false,false])
 })

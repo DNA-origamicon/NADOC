@@ -1,0 +1,54 @@
+{
+  "source_time_ps": 8,
+  "velocities": "300 K initialized; original velocities unavailable; static comparisons only",
+  "results": {
+    "original_stage_forces": {
+      "temperature_K": 299.7715,
+      "instantaneous_group_pressure_bar": -986.7815,
+      "potential_kcal": -6123945.2633,
+      "group_pressure_tensor_bar": [
+        -394.285,
+        177.769,
+        279.021,
+        491.135,
+        -1097.01,
+        -171.914,
+        -340.979,
+        161.96,
+        -1469.05
+      ]
+    },
+    "without_ENM": {
+      "temperature_K": 299.7715,
+      "instantaneous_group_pressure_bar": -380.8999,
+      "potential_kcal": -6138786.148,
+      "group_pressure_tensor_bar": [
+        -74.162,
+        176.977,
+        280.509,
+        490.345,
+        -771.5,
+        -173.298,
+        -339.212,
+        160.651,
+        -297.038
+      ]
+    },
+    "without_ENM_or_wall_restraints": {
+      "temperature_K": 299.7715,
+      "instantaneous_group_pressure_bar": -344.8877,
+      "potential_kcal": -6161556.6763,
+      "group_pressure_tensor_bar": [
+        -479.81,
+        6.3928,
+        49.0716,
+        5.28896,
+        -418.823,
+        10.1949,
+        34.477,
+        1.89701,
+        -136.03
+      ]
+    }
+  }
+}

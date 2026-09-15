@@ -2,7 +2,7 @@
 export function initGrapheneDisplayControls({ preview, simulation, ionPaths, storage } = {}) {
   const toggle = document.getElementById('md-graphene-show')
   const select = document.getElementById('md-graphene-representation')
-  let selectedSurface = false
+  let selectedSurface = false, previewSurface = false
   let settings = { visible: true, representation: 'plane' }
   try {
     storage ??= globalThis.localStorage
@@ -14,7 +14,7 @@ export function initGrapheneDisplayControls({ preview, simulation, ionPaths, sto
     if (toggle) toggle.checked = settings.visible
     if (select) select.value = settings.representation
     const effective = { ...settings, visible: settings.visible && selectedSurface }
-    preview?.setDisplay(effective)
+    preview?.setDisplay({ ...settings, visible: settings.visible && previewSurface })
     simulation?.setGrapheneDisplay(effective)
     ionPaths?.setGrapheneDisplay(effective)
   }
@@ -25,7 +25,14 @@ export function initGrapheneDisplayControls({ preview, simulation, ionPaths, sto
   }
   toggle?.addEventListener('change', change)
   select?.addEventListener('change', change)
-  const onSelection = event => { selectedSurface = !!event.detail?.enabled; apply() }
+  const onSelection = event => {
+    const wasPreview = previewSurface
+    selectedSurface = !!event.detail?.enabled
+    previewSurface = event.detail?.previewEnabled ?? selectedSurface
+    // Explicitly enabling a new setup reveals it even if the last job's wall was hidden.
+    if (previewSurface && !wasPreview && !selectedSurface) settings.visible = true
+    apply()
+  }
   window.addEventListener('nadoc:namd-surface-selection', onSelection)
   apply()
   return { dispose() {

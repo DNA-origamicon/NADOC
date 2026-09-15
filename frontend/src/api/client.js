@@ -2903,11 +2903,11 @@ export const getOxdnaOccupancyProgress = (id) =>
  *  no stride — the slow view). Scope must match whatever getOxdnaTrajectoryMeta was given. */
 export const getOxdnaTrajectory = (id, opts) => {
   const { align, signal, scope } = _vizOpts(opts, 'getOxdnaTrajectory')
-  return _oxdnaTrajectoryBin(id, { align, signal, scope })
+  return _oxdnaTrajectoryBin(id, { ...opts, align, signal, scope })
 }
 
-async function _oxdnaTrajectoryBin(id, { align, signal, scope }) {
-  const r = await fetch(`${BASE}/oxdna/jobs/${id}/trajectory?align=${align}&scope=${scope}&transport=bin`, {
+async function _oxdnaTrajectoryBin(id, { align, signal, scope, ...range }) {
+  const r = await fetch(`${BASE}/oxdna/jobs/${id}/trajectory?align=${align}&scope=${scope}&transport=bin${_trajectoryRangeQuery(range)}`, {
     headers: { ...docHeaders() }, signal,
   }).catch(err => err?.name === 'AbortError' ? null : Promise.reject(err))
   if (!r?.ok) return null
@@ -2941,7 +2941,7 @@ async function _oxdnaTrajectoryBin(id, { align, signal, scope }) {
 export const getOxdnaTrajectoryBin = (id, opts) => {
   const { align, signal, scope } = _vizOpts(opts, 'getOxdnaTrajectoryBin')
   return _oxdnaBin(
-    'GET', `/oxdna/jobs/${id}/trajectory-bin?align=${align}&scope=${scope}`,
+    'GET', `/oxdna/jobs/${id}/trajectory-bin?align=${align}&scope=${scope}${_trajectoryRangeQuery(opts)}`,
     undefined, { signal, onProgress: opts?.onProgress },
   )
 }
@@ -3222,6 +3222,14 @@ export const fsMkdir             = (path, name)  => _oxdnaJSON('POST', '/fs/mkdi
 /** `?stride=N` when N is a usable frame interval, else ''. Kept out of the two
  *  fetchers below so they can't disagree about what counts as "no interval" —
  *  omitting it is what preserves the legacy 200-frame budget server-side. */
+function _trajectoryRangeQuery(opts) {
+  return ['frameStart', 'frameEnd'].filter(k => Number.isInteger(opts?.[k]) && opts[k] >= 0)
+    .map(k => `&${k === 'frameStart' ? 'frame_start' : 'frame_end'}=${opts[k]}`).join('')
+}
+function _trajectoryQuery(opts) {
+  const query = `${_strideQuery(opts)}${_trajectoryRangeQuery(opts)}`
+  return query.startsWith('&') ? `?${query.slice(1)}` : query
+}
 function _strideQuery(opts) {
   const s = _strideOrNull(opts)
   return s == null ? '' : `?stride=${s}`
@@ -3242,11 +3250,11 @@ function _strideBody(opts) {
  *  omit it for the legacy ≤200-frame budget. It is a third positional OBJECT, never
  *  a bare value, so it can't be mistaken for `signal` (see _oxdnaJSON's type check). */
 export const getMdTrajectory     = (id, signal, opts = {}) =>
-  _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory${_strideQuery(opts)}`, undefined, { signal })
+  _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory${_trajectoryQuery(opts)}`, undefined, { signal })
 /** Compact float32 sibling used by the interactive NAMD scrubber. */
 export const getMdTrajectoryBin = (id, signal, opts = {}) =>
   _oxdnaBin(
-    'GET', `/md/jobs/${id}/trajectory-bin${_strideQuery(opts)}`, undefined,
+    'GET', `/md/jobs/${id}/trajectory-bin${_trajectoryQuery(opts)}`, undefined,
     { signal, onProgress: opts?.onProgress },
   )
 /** Frame count + segment markers only (no coordinates) — sizes the trajectory slider fast.
@@ -3960,11 +3968,23 @@ export async function snapshotDesign() {
 // ``getGeometry()`` refetch that ``_syncFromDesignResponse`` would otherwise
 // fire on every mutation.
 
+// Authoring metadata must not replace the currently displayed simulation projection.
+export function _syncDesignAuthoringResponse(json, field) {
+  if (!json || !_acceptMetadataRevision(json)) return json
+  const current = store.getState().currentDesign
+  if (current && json.design) {
+    store.setState({ currentDesign: { ...current, [field]: json.design[field] } })
+    _signalDesignChanged({ geometryUnchanged: true, metadataOnly: true })
+    persistDesign()
+  }
+  return json
+}
+
 export async function createCameraPose(name, { position, target, up, fov, orbitMode }) {
   const json = await _request('POST', '/design/camera-poses', {
     name, position, target, up, fov, orbit_mode: orbitMode,
   })
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'camera_poses')
 }
 
 export async function updateCameraPose(poseId, patch) {
@@ -3972,17 +3992,17 @@ export async function updateCameraPose(poseId, patch) {
   const body = { ...patch }
   if (body.orbitMode !== undefined) { body.orbit_mode = body.orbitMode; delete body.orbitMode }
   const json = await _request('PATCH', `/design/camera-poses/${poseId}`, body)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'camera_poses')
 }
 
 export async function deleteCameraPose(poseId) {
   const json = await _request('DELETE', `/design/camera-poses/${poseId}`)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'camera_poses')
 }
 
 export async function reorderCameraPoses(orderedIds) {
   const json = await _request('PUT', '/design/camera-poses/reorder', { ordered_ids: orderedIds })
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'camera_poses')
 }
 
 export async function createAssemblyCameraPose(name, { position, target, up, fov, orbitMode }) {

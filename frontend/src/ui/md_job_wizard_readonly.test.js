@@ -636,16 +636,14 @@ describe('wizard parameter loading', () => {
     wiz.close()
   })
 
-  it('waits for geometry before creating and submits the exact displayed cell', async () => {
+  it('submits the exact displayed cell when its estimate is ready', async () => {
     const { wiz, api, launch } = setup()
     const geometry = deferred()
     api.fetchProtocolBoxPreview = vi.fn(() => geometry.promise)
     await wiz.open('relaxation')
     ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
     const create = footerButtons().find(b => b.textContent.includes('Create job'))
-    expect(create.disabled).toBe(true)
-    create.click()
-    expect(launch).not.toHaveBeenCalled()
+    expect(create.disabled).toBe(false)
     geometry.resolve({ box_preview: {
       calculated_nm: [10.123, 11.456, 12.789], padding_nm: 1.2, box_mode: 'bbox',
     } })
@@ -703,4 +701,31 @@ it('uses sidebar preparation and creates an explicit box without awaiting a geom
   await vi.waitFor(()=>expect(launch).toHaveBeenCalled())
   expect(launch.mock.calls[0][0]).toMatchObject(values)
   wiz.close()
+})
+
+it('creates a draft while automatic box sizing is pending',async()=>{
+ const {wiz,api,launch}=setup()
+ api.fetchProtocolBoxPreview=vi.fn(()=>new Promise(()=>{}))
+ await wiz.open('relaxation')
+ ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
+ const create=footerButtons().find(b=>b.textContent.includes('Create job'))
+ expect(create.disabled).toBe(false)
+ create.click()
+ await vi.waitFor(()=>expect(launch).toHaveBeenCalledTimes(1))
+ expect(launch.mock.calls[0][0].box_size_nm).toBeUndefined()
+ wiz.close()
+})
+
+it('does not freeze an automatic sidebar estimate when creating a draft',async()=>{
+ const values={padding_nm:2,box_mode:'bbox',box_size_nm:null}
+ const preparation={keys:new Set(['padding_nm','box_mode','box_size_nm']),payload:()=>({...values}),summary:()=> 'Automatic fit',acceptPreview:vi.fn()}
+ const {wiz,api,launch}=setup({preparation})
+ api.fetchProtocolBoxPreview=vi.fn(async()=>({box_preview:{calculated_nm:[10,15,20],selected_nm:[10,15,20]}}))
+ await wiz.open('relaxation')
+ await vi.waitFor(()=>expect(preparation.acceptPreview).toHaveBeenCalled())
+ ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
+ footerButtons().find(b=>b.textContent.includes('Create job')).click()
+ await vi.waitFor(()=>expect(launch).toHaveBeenCalled())
+ expect(launch.mock.calls[0][0]).toMatchObject(values)
+ wiz.close()
 })

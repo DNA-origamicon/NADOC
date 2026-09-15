@@ -6358,6 +6358,7 @@ def test_composite_trajectory_binary_matches_json_and_reports_each_phase(
         "keys": legacy["keys"],
         "stages": legacy["stages"],
         "markers": legacy["markers"],
+        "frame_start": 0, "total_n_frames": legacy["n_frames"],
     }
     off = 20 + header_len
     off += (4 - (off % 4)) % 4
@@ -6602,3 +6603,20 @@ def test_the_native_seed_reproduces_oxdnas_own_equilibrium_pair_geometry():
     assert np.median(seps) - 2 * _POS_BASE_NM == pytest.approx(
         OXDNA_NATIVE_HBOND_NM, abs=1e-6
     )
+
+
+def test_composite_selected_range_matches_full(design, geometry, tmp_path):
+    from backend.core import oxdna_health as oh
+    ref, traj = tmp_path / "ref.dat", tmp_path / "traj.dat"
+    _write_traj(design, geometry, ref, 1)
+    _write_traj(design, geometry, traj, 6)
+    stages = [("production", "production", traj)]
+    full = oh.composite_trajectory(design, stages, ref, max_frames=0)
+    progress = []
+    selected = oh.composite_trajectory(design, stages, ref, max_frames=0,
+        frame_start=2, frame_end=4, progress=lambda done, total: progress.append((done, total)))
+    assert selected["frame_start"] == 2
+    assert selected["total_n_frames"] == 7
+    assert selected["n_frames"] == 3
+    assert selected["frames"] == full["frames"][2:5]
+    assert max(total for _, total in progress) == 3

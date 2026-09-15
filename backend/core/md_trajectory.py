@@ -2389,6 +2389,8 @@ def md_composite_trajectory(
     max_frames: int = 200,
     stride: int | None = None,
     progress_path: str | None = None,
+    frame_start: int | None = None,
+    frame_end: int | None = None,
 ) -> dict:
     """JSON-compatible composite retained for API compatibility and exports."""
     return _md_composite_trajectory_data(
@@ -2399,7 +2401,7 @@ def md_composite_trajectory(
         max_frames,
         stride,
         progress_path,
-        binary=False,
+        binary=False, frame_start=frame_start, frame_end=frame_end,
     )
 
 
@@ -2411,6 +2413,8 @@ def md_composite_trajectory_bin(
     max_frames: int = 200,
     stride: int | None = None,
     progress_path: str | None = None,
+    frame_start: int | None = None,
+    frame_end: int | None = None,
 ) -> bytes:
     """Pack the interactive NAMD scrub trajectory as float32 typed-array data.
 
@@ -2431,10 +2435,10 @@ def md_composite_trajectory_bin(
         max_frames,
         stride,
         progress_path,
-        binary=True,
+        binary=True, frame_start=frame_start, frame_end=frame_end,
     )
     frames = result.pop("frames")
-    header = orjson.dumps({k: result[k] for k in ("keys", "stages", "markers")})
+    header = orjson.dumps({k: result[k] for k in ("keys", "stages", "markers", "frame_start", "total_n_frames")})
     prefix = struct.pack(
         "<5I",
         _TRAJECTORY_BIN_MAGIC,
@@ -2462,6 +2466,8 @@ def _md_composite_trajectory_data(
     progress_path: str | None,
     *,
     binary: bool,
+    frame_start: int | None = None,
+    frame_end: int | None = None,
 ) -> dict:
     """Composite scrub-able NAMD trajectory for a trajectory keyframe.
 
@@ -2481,6 +2487,17 @@ def _md_composite_trajectory_data(
                 json.dumps({"phase": phase, "done": done, "total": total})
             )
 
+    def select_range(picked):
+        total = sum(len(v) for v in picked)
+        start = min(max(0, frame_start or 0), max(0, total - 1))
+        end = min(total, max(start + 1, frame_end + 1)) if frame_end is not None else total
+        offset = 0
+        selected = []
+        for indices in picked:
+            selected.append(indices[max(0, start - offset):max(0, end - offset)])
+            offset += len(indices)
+        return selected, start, total
+
     write_phase("initialize", 0, 1)
 
     # A graphene-only control has a real all-atom trajectory but intentionally no NADOC
@@ -2493,6 +2510,7 @@ def _md_composite_trajectory_data(
             for name, stage, dcd in segments
         ]
         picked = _composite_indices([row[2] for row in counts], max_frames, stride)
+        picked, range_start, range_total = select_range(picked)
         stages: list[dict] = []
         markers: list[dict] = []
         n_out = 0
@@ -2513,7 +2531,7 @@ def _md_composite_trajectory_data(
         write_phase("initialize", 1, 1)
         frames = np.empty((n_out, 0), dtype="<f4") if binary else [[] for _ in range(n_out)]
         return {
-            "n_frames": n_out,
+            "n_frames": n_out, "frame_start": range_start, "total_n_frames": range_total,
             "n_nucleotides": 0,
             "keys": [],
             "frames": frames,
@@ -2543,7 +2561,7 @@ def _md_composite_trajectory_data(
     total = sum(seg_counts)
     if total == 0:
         return {
-            "n_frames": 0,
+            "n_frames": 0, "frame_start": 0, "total_n_frames": 0,
             "n_nucleotides": len(key_list),
             "keys": key_list,
             "frames": np.empty((0, len(key_list) * 6), dtype="<f4") if binary else [],
@@ -2552,6 +2570,7 @@ def _md_composite_trajectory_data(
         }
 
     seg_picked = _composite_indices(seg_counts, max_frames, stride)
+    seg_picked, range_start, range_total = select_range(seg_picked)
     picked_total = sum(len(v) for v in seg_picked)
 
     def report(done: int, phase: str = "extract") -> None:
@@ -2639,6 +2658,7 @@ def _md_composite_trajectory_data(
 
     return {
         "n_frames": picked_total if binary else len(out_frames),
+        "frame_start": range_start, "total_n_frames": range_total,
         "n_nucleotides": len(key_list),
         "keys": key_list,
         "frames": out_frames,

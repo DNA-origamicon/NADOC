@@ -1,0 +1,656 @@
+[
+  {
+    "case": "original/cube_pore_00_min_enm_k0p5.conf",
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "NAMD initialization directive after execution: cellOrigin"
+  },
+  {
+    "case": "corrected/cube_pore_00_min_enm_k0p5.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=32",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_01_300K_NPT_ENM_k0p5_p10.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_01_300K_NPT_ENM_k0p5_p100.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_01_300K_NPT_ENM_k0p5_p25.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_01_300K_NPT_ENM_k0p5_p50.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_01_300K_NPT_ENM_k0p5_p75.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_02_300K_NPT_ENM_k0p1_p10.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_02_300K_NPT_ENM_k0p1_p100.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_02_300K_NPT_ENM_k0p1_p25.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_02_300K_NPT_ENM_k0p1_p50.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_02_300K_NPT_ENM_k0p1_p75.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_03_300K_NPT_ENM_k0p01_p10.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_03_300K_NPT_ENM_k0p01_p100.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_03_300K_NPT_ENM_k0p01_p25.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_03_300K_NPT_ENM_k0p01_p50.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_03_300K_NPT_ENM_k0p01_p75.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_04_300K_NPT_MGHH_only_p10.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_04_300K_NPT_MGHH_only_p100.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_04_300K_NPT_MGHH_only_p25.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_04_300K_NPT_MGHH_only_p50.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_04_300K_NPT_MGHH_only_p75.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/cube_pore_0S_300K_NPT_settle_fixed_dna_p100.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "original/namd.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=2",
+    "stderr": ""
+  },
+  {
+    "case": "original/namd_fast.conf",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_0S_300K_NPT_settle_fixed_dna_p100/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_0S_300K_NPT_settle_fixed_dna_p100/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_0S_300K_NPT_settle_fixed_dna_p100/124980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_0S_300K_NPT_settle_fixed_dna_p100/124980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_01_300K_NPT_ENM_k0p5_p10/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_01_300K_NPT_ENM_k0p5_p10/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_01_300K_NPT_ENM_k0p5_p10/119980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_01_300K_NPT_ENM_k0p5_p10/119980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_01_300K_NPT_ENM_k0p5_p25/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_01_300K_NPT_ENM_k0p5_p25/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_01_300K_NPT_ENM_k0p5_p25/179980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_01_300K_NPT_ENM_k0p5_p25/179980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_01_300K_NPT_ENM_k0p5_p50/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_01_300K_NPT_ENM_k0p5_p50/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_01_300K_NPT_ENM_k0p5_p50/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_01_300K_NPT_ENM_k0p5_p50/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_01_300K_NPT_ENM_k0p5_p75/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_01_300K_NPT_ENM_k0p5_p75/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_01_300K_NPT_ENM_k0p5_p75/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_01_300K_NPT_ENM_k0p5_p75/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_01_300K_NPT_ENM_k0p5_p100/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_01_300K_NPT_ENM_k0p5_p100/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_01_300K_NPT_ENM_k0p5_p100/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_01_300K_NPT_ENM_k0p5_p100/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_02_300K_NPT_ENM_k0p1_p10/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_02_300K_NPT_ENM_k0p1_p10/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_02_300K_NPT_ENM_k0p1_p10/119980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_02_300K_NPT_ENM_k0p1_p10/119980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_02_300K_NPT_ENM_k0p1_p25/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_02_300K_NPT_ENM_k0p1_p25/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_02_300K_NPT_ENM_k0p1_p25/179980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_02_300K_NPT_ENM_k0p1_p25/179980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_02_300K_NPT_ENM_k0p1_p50/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_02_300K_NPT_ENM_k0p1_p50/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_02_300K_NPT_ENM_k0p1_p50/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_02_300K_NPT_ENM_k0p1_p50/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_02_300K_NPT_ENM_k0p1_p75/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_02_300K_NPT_ENM_k0p1_p75/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_02_300K_NPT_ENM_k0p1_p75/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_02_300K_NPT_ENM_k0p1_p75/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_02_300K_NPT_ENM_k0p1_p100/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_02_300K_NPT_ENM_k0p1_p100/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_02_300K_NPT_ENM_k0p1_p100/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_02_300K_NPT_ENM_k0p1_p100/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_03_300K_NPT_ENM_k0p01_p10/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_03_300K_NPT_ENM_k0p01_p10/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_03_300K_NPT_ENM_k0p01_p10/119980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_03_300K_NPT_ENM_k0p01_p10/119980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_03_300K_NPT_ENM_k0p01_p25/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_03_300K_NPT_ENM_k0p01_p25/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_03_300K_NPT_ENM_k0p01_p25/179980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_03_300K_NPT_ENM_k0p01_p25/179980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_03_300K_NPT_ENM_k0p01_p50/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_03_300K_NPT_ENM_k0p01_p50/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_03_300K_NPT_ENM_k0p01_p50/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_03_300K_NPT_ENM_k0p01_p50/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_03_300K_NPT_ENM_k0p01_p75/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_03_300K_NPT_ENM_k0p01_p75/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_03_300K_NPT_ENM_k0p01_p75/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_03_300K_NPT_ENM_k0p01_p75/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_03_300K_NPT_ENM_k0p01_p100/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_03_300K_NPT_ENM_k0p01_p100/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_03_300K_NPT_ENM_k0p01_p100/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_03_300K_NPT_ENM_k0p01_p100/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_04_300K_NPT_MGHH_only_p10/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_04_300K_NPT_MGHH_only_p10/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_04_300K_NPT_MGHH_only_p10/119980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_04_300K_NPT_MGHH_only_p10/119980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_04_300K_NPT_MGHH_only_p25/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_04_300K_NPT_MGHH_only_p25/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_04_300K_NPT_MGHH_only_p25/179980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_04_300K_NPT_MGHH_only_p25/179980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_04_300K_NPT_MGHH_only_p50/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_04_300K_NPT_MGHH_only_p50/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_04_300K_NPT_MGHH_only_p50/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_04_300K_NPT_MGHH_only_p50/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_04_300K_NPT_MGHH_only_p75/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_04_300K_NPT_MGHH_only_p75/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_04_300K_NPT_MGHH_only_p75/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_04_300K_NPT_MGHH_only_p75/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_04_300K_NPT_MGHH_only_p100/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_04_300K_NPT_MGHH_only_p100/5000",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "alpine/cube_pore_04_300K_NPT_MGHH_only_p100/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  },
+  {
+    "case": "continuation/cube_pore_04_300K_NPT_MGHH_only_p100/299980",
+    "exit_code": 0,
+    "stdout": "execution_calls=1",
+    "stderr": ""
+  }
+]

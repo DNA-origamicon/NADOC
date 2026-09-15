@@ -117,6 +117,10 @@ PARAM_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "usegrouppressure",
             "useflexiblecell",
             "useconstantarea",
+            "fixcelldims",
+            "fixcelldimx",
+            "fixcelldimy",
+            "fixcelldimz",
             "langevinpiston",
             "langevinpistontarget",
             "langevinpistonperiod",
@@ -215,6 +219,10 @@ class PlanContext:
     mgh_extrabonds: bool = True
     fast: bool = False
     carved: bool = False
+    graphene: bool = False
+    graphene_axis: str = "z"
+    graphene_only: bool = False
+    graphene_temperature_K: float = 300.0
     fill_fraction: float = 1.0
     structure_psf: Optional[str] = None
     #: The two axes the timestep used to imply.  None = follow the segment's own tier, so
@@ -251,36 +259,41 @@ def _strip(params: dict) -> dict:
 def stage_parameters(
     spec: SegmentSpec, ctx: PlanContext, overrides: Optional[dict] = None
 ) -> dict:
-    """Every directive ``_segment_conf`` would write for this segment (pure)."""
-    return _strip(
-        parse_conf_directives(
-            _p._segment_conf(
-                spec,
-                ctx.name_stem,
-                ctx.box,
-                ctx.mgh_extrabonds,
-                seed=ctx.seed,
-                fast=ctx.fast,
-                carved=ctx.carved,
-                fill_fraction=ctx.fill_fraction,
-                structure_psf=ctx.structure_psf,
-                colvars_file=ctx.colvars_file,
-                rigid_bonds=ctx.rigid_bonds,
-                hmr=ctx.hmr,
-                base_timestep_fs=ctx.base_timestep_fs,
-                pinned=ctx.timestep_pinned,
-                anchors_file=ctx.anchors_file,
-                field=ctx.field,
-                gbis=ctx.gbis,
-                vacuum=ctx.vacuum,
-                capture_vel_force=ctx.capture_vel_force,
-                n_atoms=ctx.n_atoms,
-                force_resident=ctx.force_resident,
-                overrides=overrides,
-                npt_margin_ang=ctx.npt_margin_ang,
-            )
-        )
+    """Every directive the package writer would emit for this segment (pure)."""
+    conf = _p._segment_conf(
+        spec,
+        ctx.name_stem,
+        ctx.box,
+        ctx.mgh_extrabonds,
+        seed=ctx.seed,
+        fast=ctx.fast,
+        carved=ctx.carved,
+        fill_fraction=ctx.fill_fraction,
+        structure_psf=ctx.structure_psf,
+        colvars_file=ctx.colvars_file,
+        rigid_bonds=ctx.rigid_bonds,
+        hmr=ctx.hmr,
+        base_timestep_fs=ctx.base_timestep_fs,
+        pinned=ctx.timestep_pinned,
+        anchors_file=ctx.anchors_file,
+        field=ctx.field,
+        gbis=ctx.gbis,
+        vacuum=ctx.vacuum,
+        capture_vel_force=ctx.capture_vel_force,
+        n_atoms=ctx.n_atoms,
+        force_resident=ctx.force_resident,
+        overrides=overrides,
+        npt_margin_ang=ctx.npt_margin_ang,
     )
+    if ctx.graphene:
+        # Geometry is deferred until solvation and stripped from the preview.
+        wall = {
+            "cell_policy": "fixed_area_normal_pressure",
+            "dir": [int(a == ctx.graphene_axis) for a in "xyz"],
+            "plane_point_nm": [0, 0, 0],
+        }
+        conf = _p._graphene_relaxation_pressure(conf, wall)
+    return _strip(parse_conf_directives(conf))
 
 
 def minimization_parameters(
@@ -648,10 +661,13 @@ def relaxation_stages(
         soft=soft,
         gentle=gentle,
         nvt_only=nvt_only,
+        settle_ps=0 if ctx.graphene_only else _p.SETTLE_STAGE_PS,
         timestep_fs=ladder_dt,
         high_aspect_ratio=high_aspect_ratio,
     )
 
+    if ctx.graphene_only and segments:
+        segments = [s for s in segments if s.stage == segments[0].stage]
     rows: list[dict] = []
     # Emitted TWICE for any stage the user has edited: once as the protocol writes it and
     # once with the edits on top. Diffing the two is what makes "you have departed from
@@ -675,6 +691,11 @@ def relaxation_stages(
 
     prev_params = min_params
     for i, spec in enumerate(segments, start=1):
+        if ctx.graphene:
+            spec.stage = spec.stage.replace("NPT", f"NP{ctx.graphene_axis}AT")
+        if ctx.graphene_only:
+            spec.temp = ctx.graphene_temperature_K
+            spec.stage = f"{spec.temp:g} K NP{ctx.graphene_axis}AT graphene/solvent equilibration"
         stage_ctx = replace(ctx, seed=_p.namd_stage_seed(ctx.seed, i))
         ov = _p.overrides_for_stage(stage_overrides, i)
         params = stage_parameters(spec, stage_ctx, ov)

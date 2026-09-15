@@ -197,3 +197,20 @@ describe('binary trajectory streaming', () => {
     expect(Array.from(new Uint8Array(out))).toEqual([1, 2, 3, 4, 5, 6])
   })
 })
+
+
+it('sends selected frame bounds to both trajectory transports and engines', async () => {
+  const urls = []
+  global.fetch = async url => { urls.push(String(url)); return new Response('{}', { headers: { 'Content-Type': 'application/json' } }) }
+  const range = { frameStart: 10, frameEnd: 12, stride: 2 }
+  await getMdTrajectory('M', undefined, range)
+  await getMdTrajectoryBin('M', undefined, range)
+  await getOxdnaTrajectory('O', { ...range, scope: 'job' })
+  await getOxdnaTrajectoryBin('O', { ...range, scope: 'job' })
+  expect(urls).toHaveLength(4)
+  for (const url of urls) {
+    const query = new URL(url, 'http://localhost').searchParams
+    expect(query.get('frame_start')).toBe('10')
+    expect(query.get('frame_end')).toBe('12')
+  }
+})

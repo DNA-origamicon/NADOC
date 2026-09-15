@@ -178,6 +178,16 @@ export function initMdSolventControls({
   let _frameIdx = 0
   let _inflight = null
   let _generation = 0
+  let _frameStart = 0, _frameEnd = null
+  const selectedFrames = () => Array.from({ length: Math.max(0, Math.min(_nFrames, (_frameEnd ?? (_nFrames - 1)) + 1) - _frameStart) }, (_, i) => i + _frameStart)
+  const preparationListeners = new Set()
+  let preparationStarted = 0
+  const reportPreparation = () => {
+    const frames = selectedFrames(), done = frames.filter(i => _cache.has(i)).length
+    const elapsedMs = Date.now() - preparationStarted
+    for (const cb of preparationListeners) cb({ phase: 'companions', done, total: frames.length, elapsedMs,
+      etaMs: done > 0 ? elapsedMs * (frames.length - done) / done : null })
+  }
   let _preparation = null
   let _frameBytes = 0
   let _enabled = false
@@ -333,7 +343,7 @@ export function initMdSolventControls({
     // byte-bounded batches, amortizing the backend's per-request topology setup.
     const foreground = !_cache.has(i)
     const want = foreground ? [i]
-      : Array.from({ length: _nFrames }, (_, k) => k).filter(k => !_cache.has(k))
+      : selectedFrames().filter(k => !_cache.has(k))
         .slice(0, Math.max(1, Math.floor(128 * 1024 * 1024 / Math.max(1, _frameBytes))))
     if (!want.length) return
     const generation = _generation
@@ -376,8 +386,8 @@ export function initMdSolventControls({
       // Measure the complete payload, including graphene, before preparing all
       // frames. The metadata's ion count alone misses most of P1's bytes.
       _frameBytes = Math.max(_frameBytes, Math.ceil(buf.byteLength / parsed.frames.size))
-      if (_frameBytes * Math.max(1, _nFrames) > _plan().budgetBytes) {
-        _setStatus(`Ion/box trajectory needs ${formatBytes(_frameBytes * _nFrames)}. Increase the frame interval to fit memory.`, '#d29922')
+      if (_frameBytes * Math.max(1, selectedFrames().length) > _plan().budgetBytes) {
+        _setStatus(`Ion/box trajectory needs ${formatBytes(_frameBytes * selectedFrames().length)}. Increase the frame interval to fit memory.`, '#d29922')
         return false
       }
       for (const [id, f] of parsed.frames) _cache.set(id, f)
@@ -398,9 +408,13 @@ export function initMdSolventControls({
 
   /** One background preparation shared by Play and scrubbing. Every frame must
    * be present: a nearby window is not a complete playable trajectory. */
-  function prepareAll() {
-    if (!_needsFrames()) return Promise.resolve(true)
-    if (_preparation?.generation === _generation) return _preparation.promise
+  function prepareAll({ onProgress } = {}) {
+    if (onProgress) preparationListeners.add(onProgress)
+    const join = promise => promise.finally(() => preparationListeners.delete(onProgress))
+    reportPreparation()
+    if (!_needsFrames()) return join(Promise.resolve(true))
+    if (_preparation?.generation === _generation) return join(_preparation.promise)
+    preparationStarted = Date.now()
     const generation = _generation
     const live = () => generation === _generation && _needsFrames()
     const promise = (async () => {
@@ -408,8 +422,9 @@ export function initMdSolventControls({
         // A stale request from the previous settings must finish before starting
         // the next worker; otherwise the backend kills the competing request.
         if (_inflight) { await _inflight; if (!live()) return false }
-        const total = Math.max(1, _nFrames)
-        if (_cache.size >= total) {
+        const frames = selectedFrames(), total = frames.length
+        reportPreparation()
+        if (frames.every(i => _cache.has(i))) {
           _setStatus(`Ions / box ready · ${total}/${total} frames`, '#3fb950')
           return true
         }
@@ -423,7 +438,7 @@ export function initMdSolventControls({
     void promise.finally(() => {
       if (_preparation?.promise === promise) _preparation = null
     })
-    return promise
+    return join(promise)
   }
 
   /** Gate a scene seek without drawing ions ahead of the DNA. */
@@ -525,20 +540,32 @@ export function initMdSolventControls({
      * sphere fallback is required by graphene-only documents, which have no native
      * DNA representation to select an ordinary solvent draw mode. */
     setKeyframeOptions({ ions = false, box = false } = {}) {
+      const unchanged = _keyframeOptions && !waterToggle?.checked && !!ionsToggle?.checked === !!ions && !!boxToggle?.checked === !!box
       _keyframeOptions = true
+      if (unchanged) return
       if (waterToggle) waterToggle.checked = false
       if (ionsToggle) ionsToggle.checked = !!ions
       if (boxToggle) boxToggle.checked = !!box
       _refresh()
     },
     /** Point the controls at a job + its trajectory density. */
-    async setJob(jobId, { stride = null, nFrames = 0, frameIdx = null } = {}) {
+    async setJob(jobId, { stride = null, nFrames = 0, frameIdx = null, frameStart = 0, frameEnd = null, keyframeOptions = null } = {}) {
       const changed = jobId !== _jobId
-      const reset = changed || stride !== _stride || nFrames !== _nFrames
+      const optionsChanged = keyframeOptions && (!_keyframeOptions ||
+        !!ionsToggle?.checked !== !!keyframeOptions.ions || !!boxToggle?.checked !== !!keyframeOptions.box)
+      if (keyframeOptions) {
+        _keyframeOptions = true
+        if (waterToggle) waterToggle.checked = false
+        if (ionsToggle) ionsToggle.checked = !!keyframeOptions.ions
+        if (boxToggle) boxToggle.checked = !!keyframeOptions.box
+      }
+      const reset = optionsChanged || changed || stride !== _stride || nFrames !== _nFrames || frameStart !== _frameStart || frameEnd !== _frameEnd
       if (reset) _invalidate()
       _jobId = jobId
       _stride = stride
       _nFrames = nFrames
+      _frameStart = frameStart ?? 0
+      _frameEnd = frameEnd ?? null
       if (reset && frameIdx === null) _frameIdx = 0
       if (frameIdx !== null && Number.isFinite(Number(frameIdx))) {
         _frameIdx = Math.max(0, Number(frameIdx) | 0)
@@ -560,7 +587,10 @@ export function initMdSolventControls({
       }
       _renderCount()
       _renderLegend()
-      if (_enabled && _anyOn()) _refresh()
+      if (_enabled && _anyOn()) {
+        if (reset) _refresh()
+        else if (!_draw(_frameIdx)) void prepareAll()
+      }
     },
 
     /**
@@ -683,6 +713,7 @@ export function initMdSolventControls({
 
     isAnyOn: _anyOn,
     prepareAll,
+    cancelPreparation() { _generation++; _preparation = null },
     ensureFrame,
     plan: _plan,
   }

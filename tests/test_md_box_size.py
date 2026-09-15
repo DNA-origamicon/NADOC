@@ -137,7 +137,12 @@ def test_real_solvation_preserves_cell_and_magnesium_restraint_indices():
         for path in archive.namelist():
             if path.endswith('.conf'):
                 params = parse_conf_directives(archive.read(path).decode())
-                assert params.get('langevinpiston', 'off') == 'off'
+                if path.endswith('namd_fast.conf'):
+                    assert params['langevinpiston'] == 'on'
+                    assert params['fixcelldimx'] == params['fixcelldimz'] == 'yes'
+                    assert params['fixcelldimy'] == 'no'
+                else:
+                    assert params.get('langevinpiston', 'off') == 'off'
         assert len(xyz(read('.pdb'))) == count
 
 
@@ -181,3 +186,39 @@ def test_final_check_preserves_rotation_clearance_not_only_initial_pose():
     _, automatic = _recenter_pdb_in_padded_box(DNA, 1.2, 'rotation')
     _, fixed = _recenter_pdb_in_padded_box(DNA, 1.2, 'rotation', box_size_nm=automatic)
     assert fixed == automatic
+
+
+def test_concurrent_box_estimates_reuse_atomistic_model(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from functools import lru_cache
+    from threading import Barrier
+    import time
+    from backend.core import md_box_preview
+    from backend.api.routes_md import CreateJobRequest
+    from tests.reciprocal_design import reciprocal_design
+
+    calls = []
+
+    @lru_cache(maxsize=4)
+    def model(serialized):
+        calls.append(serialized)
+        time.sleep(0.1)  # concurrent cache misses would both enter here without the lock
+        return DNA
+
+    monkeypatch.setattr(md_box_preview, '_design_pdb', model)
+    md_box_preview._calculated_box.cache_clear()
+    design = reciprocal_design(None)
+    start = Barrier(2)
+
+    def estimate(padding):
+        start.wait()
+        return md_box_preview.preview_box(design, CreateJobRequest(
+            devices='cpu', box_mode='bbox', padding_nm=padding))
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(estimate, [1.2, 2.0]))
+        assert len(calls) == 1
+        assert results[0]['selected_nm'] != results[1]['selected_nm']
+    finally:
+        md_box_preview._calculated_box.cache_clear()

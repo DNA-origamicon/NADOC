@@ -201,20 +201,21 @@ export function installTestApi({
       renderer.setRenderTarget(previousTarget)
       renderer.setClearColor(previousClear, previousAlpha)
       target.dispose()
-      let visible = 0, colorful = 0, black = 0
+      let visible = 0, colorful = 0, black = 0, pixelHash = 2166136261
       // Sample the clear color after the renderer's active color-space transform.
       // A corner is background for the editor camera and is more robust than
       // assuming literal sRGB bytes for #0d1117.
       const bgR = pixels[0], bgG = pixels[1], bgB = pixels[2]
       for (let i = 0; i < pixels.length; i += 4) {
         const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2], a = pixels[i + 3]
+        pixelHash = Math.imul(pixelHash ^ (r | (g << 8) | (b << 16) | (a << 24)), 16777619) >>> 0
         if (a < 8) continue
         if (Math.abs(r - bgR) < 4 && Math.abs(g - bgG) < 4 && Math.abs(b - bgB) < 4) continue
         visible++
         if (Math.max(r, g, b) < 12) black++
         if (Math.max(r, g, b) - Math.min(r, g, b) > 18 && Math.max(r, g, b) > 35) colorful++
       }
-      return { width, height, visible, colorful, black }
+      return { width, height, visible, colorful, black, pixelHash }
     },
     nativeBackboneColorCensus() {
       const referenceIds = new Set((store.getState().currentDesign?.strands ?? [])

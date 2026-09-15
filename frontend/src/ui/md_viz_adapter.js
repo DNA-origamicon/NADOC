@@ -48,10 +48,10 @@ export function mdVizApiAdapter(api) {
     heavyBatch: true,
     trajectoryImpostors: true,
     preferTrajectoryBin: true,
-    getOxdnaTrajectory: (id, { signal, stride } = {}) => api.getMdTrajectory(id, signal, { stride }),
+    getOxdnaTrajectory: (id, { signal, stride, frameStart, frameEnd } = {}) => api.getMdTrajectory(id, signal, { stride, frameStart, frameEnd }),
     ...(api.getMdTrajectoryBin ? {
-      getOxdnaTrajectoryBin: (id, { signal, stride, onProgress } = {}) =>
-        api.getMdTrajectoryBin(id, signal, { stride, onProgress }),
+      getOxdnaTrajectoryBin: (id, { signal, stride, frameStart, frameEnd, onProgress } = {}) =>
+        api.getMdTrajectoryBin(id, signal, { stride, frameStart, frameEnd, onProgress }),
     } : {}),
     // The shared controller asks for a lightweight companion display before applying
     // frame 0 (surface capture strands / hybrid proteins on oxDNA). A graphene control

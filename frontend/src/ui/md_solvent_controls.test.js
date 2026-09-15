@@ -567,6 +567,23 @@ describe('ion legend precedence', () => {
     expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
   })
 
+  it('loads only the keyframe range, reports its progress, and reuses it at export setup', async () => {
+    await boot({ nFrames: 1000 })
+    api.getMdFramesSolventBin.mockImplementation(async (_job, ids) => packIonFrame([0], ids))
+    const spec = { stride: 1, nFrames: 1000, frameStart: 10, frameEnd: 12,
+      frameIdx: 10, keyframeOptions: { ions: true, box: false } }
+    await made.setJob('job-1', spec)
+    const progress = []
+    expect(await made.prepareAll({ onProgress: p => progress.push(p) })).toBe(true)
+    expect(api.getMdFramesSolventBin.mock.calls.flatMap(c => c[1])).toEqual([10, 11, 12])
+    expect(progress.at(-1)).toMatchObject({ phase: 'companions', done: 3, total: 3, etaMs: 0 })
+    api.getMdFramesSolventBin.mockClear()
+    await made.setJob('job-1', spec)
+    made.setKeyframeOptions(spec.keyframeOptions)
+    expect(await made.settleFrame(12)).toBe(true)
+    expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
+  })
+
   it('holds Play until all companions are ready, then DNA and ions pass frame 17 together', async () => {
     await boot({ nFrames: 70 })
     let release

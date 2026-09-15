@@ -2815,6 +2815,8 @@ async def get_oxdna_trajectory(
     align: bool = True,
     scope: str = "lineage",
     transport: str = "json",
+    frame_start: int | None = None,
+    frame_end: int | None = None,
 ):
     """Composite scrub-able trajectory for the WHOLE lineage: every stage of the
     selected job AND all of its ancestors (relax → field1 → field2 → …), each
@@ -2868,6 +2870,7 @@ async def get_oxdna_trajectory(
                 _capture_strand_length(job),
                 _phase_prog,
                 transport == "bin",
+                frame_start, frame_end,
             )
         )
         while not task.done():
@@ -2915,7 +2918,8 @@ async def get_oxdna_trajectory(
 
 @router.get("/oxdna/jobs/{job_id}/trajectory-bin")
 async def get_oxdna_trajectory_bin(
-    job_id: str, request: Request, align: bool = True, scope: str = "lineage"
+    job_id: str, request: Request, align: bool = True, scope: str = "lineage",
+    frame_start: int | None = None, frame_end: int | None = None
 ) -> Response:
     """Compact binary sibling of ``/trajectory`` for the interactive scrubber.
 
@@ -2962,6 +2966,7 @@ async def get_oxdna_trajectory_bin(
                 align,
                 _capture_bead_count(job),
                 _capture_strand_length(job),
+                frame_start, frame_end,
             )
         )
         while not task.done():

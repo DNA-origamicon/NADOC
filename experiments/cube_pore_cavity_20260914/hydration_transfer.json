@@ -1,0 +1,57 @@
+[
+  {
+    "stage": "00_min_enm_k0p5",
+    "water_within_nm_of_DNA_heavy": {
+      "0.35": 32053,
+      "0.4": 42088,
+      "0.5": 61704,
+      "0.6": 77960,
+      "1": 118324
+    },
+    "water_in_pore_cavity_cylinder": 15386
+  },
+  {
+    "stage": "01_300K_NPT_ENM_k0p5_p10",
+    "water_within_nm_of_DNA_heavy": {
+      "0.35": 39062,
+      "0.4": 50429,
+      "0.5": 73265,
+      "0.6": 93374,
+      "1": 146571
+    },
+    "water_in_pore_cavity_cylinder": 12531
+  },
+  {
+    "stage": "02_300K_NPT_ENM_k0p1_p10",
+    "water_within_nm_of_DNA_heavy": {
+      "0.35": 39497,
+      "0.4": 50802,
+      "0.5": 74254,
+      "0.6": 95086,
+      "1": 153983
+    },
+    "water_in_pore_cavity_cylinder": 8393
+  },
+  {
+    "stage": "03_300K_NPT_ENM_k0p01_p10",
+    "water_within_nm_of_DNA_heavy": {
+      "0.35": 39833,
+      "0.4": 51606,
+      "0.5": 75271,
+      "0.6": 96518,
+      "1": 157506
+    },
+    "water_in_pore_cavity_cylinder": 5958
+  },
+  {
+    "stage": "04_300K_NPT_MGHH_only_p10",
+    "water_within_nm_of_DNA_heavy": {
+      "0.35": 40123,
+      "0.4": 52076,
+      "0.5": 75777,
+      "0.6": 97492,
+      "1": 159426
+    },
+    "water_in_pore_cavity_cylinder": 4436
+  }
+]

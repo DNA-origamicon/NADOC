@@ -272,3 +272,29 @@ describe('mdVizApiAdapter', () => {
     })
   })
 })
+
+
+it('keeps ranged CG and atomistic frames in the original composite frame space', async () => {
+  const api = {
+    getMdTrajectory: vi.fn(async () => ({ ready: true, n_frames: 3, total_n_frames: 100,
+      frame_start: 10, keys: [['h', 0, 'FORWARD']],
+      frames: [10, 11, 12].map(x => [x, 0, 0, 1, 0, 0]) })),
+    getMdDisplayMeta: vi.fn(async () => ({})),
+    getMdAtomisticModel: vi.fn(async () => ({ n_serials: 1, atoms: [{ serial: 0, element: 'P', x: 0, y: 0, z: 0 }], bonds: [] })),
+    getMdFramesAtomistic: vi.fn(async (_job, frames) => Object.fromEntries(frames.map(i => [i, [i, 0, 0]]))),
+  }
+  const designRenderer = { applyFemPositions: vi.fn(), clearScalarColors() {} }
+  const ar = { getMode: () => 'ballstick', update: vi.fn(), applyPositionLerp: vi.fn(), clearScalarColors() {} }
+  const ctrl = initOxdnaDisplay({ api: mdVizApiAdapter(api), designRenderer, getCurrentRepr: () => 'ballstick', getAtomisticRenderer: () => ar })
+  const range = { frameStart: 10, frameEnd: 12 }
+  const loaded = await ctrl.loadTrajectory('job', true, 'lineage', 1, null, range)
+  expect(loaded.n_frames).toBe(100)
+  expect(api.getMdTrajectory).toHaveBeenCalledWith('job', expect.any(AbortSignal), { stride: 1, ...range })
+  ctrl.showFrame(12)
+  expect(designRenderer.applyFemPositions.mock.calls.at(-1)[0][0].backbone_position[0]).toBe(12)
+  await ctrl.prebuildHeavy(() => {})
+  expect([...new Set(api.getMdFramesAtomistic.mock.calls.flatMap(c => c[1]))].sort()).toEqual([10, 11, 12])
+  expect(ctrl.trajectoryInfo().frame).toBe(13)
+  expect(ctrl.trajSpecMatches({ scope: 'lineage', stride: 1, ...range })).toBe(true)
+  expect(ctrl.trajSpecMatches({ scope: 'lineage', stride: 1 })).toBe(false)
+})

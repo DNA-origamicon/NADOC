@@ -552,6 +552,8 @@ export function initOxdnaDisplay({
   // MD does (one context build serves the whole call); oxDNA rebuilds each frame
   // independently and is deliberately fetched one at a time.
   const _heavyBatch = api?.heavyBatch === true
+  let _trajRange = {}
+  const sourceFrame = i => i + (_traj?.frame_start ?? 0)
   let _frameIdx = 0          // current trajectory frame (for re-apply on rep change)
   let _granularity = 'coarse'  // 'coarse' = downsample+snap | 'fine' = exact frame
   let _playing = false       // play loop running → force coarse (every frame must be instant)
@@ -985,12 +987,12 @@ export function initOxdnaDisplay({
       // _trajStride is repeated on every heavy fetch for the same reason _trajScope is:
       // a composite frame index only addresses the same frame within one interval.
       const resp = kind === 'atomistic'
-        ? await api.getOxdnaFramesAtomistic(_jobId, want, _align, _trajScope, _trajStride)
-        : await api.getOxdnaFramesSurface(_jobId, want, { stride: _trajStride }, _align, _trajScope)
+        ? await api.getOxdnaFramesAtomistic(_jobId, want.map(sourceFrame), _align, _trajScope, _trajStride)
+        : await api.getOxdnaFramesSurface(_jobId, want.map(sourceFrame), { stride: _trajStride }, _align, _trajScope)
       if (epoch !== _epoch) return
       let first = null
       for (const g of want) {
-        const data = resp?.[String(g)]
+        const data = resp?.[String(sourceFrame(g))]
         if (!data) continue
         const narrowed = _narrowFrame(data)
         bake.byIdx.set(g, narrowed)
@@ -1207,12 +1209,12 @@ export function initOxdnaDisplay({
           }
           if (kind === 'atomistic') {
             const r = await _queueFrameFetch(() => live()
-              ? api.getOxdnaFramesAtomistic(_jobId, [idx], _align, _trajScope, _trajStride) : null)
-            if (live()) await _pushAtomistic(r?.[String(idx)], epoch, live)
+              ? api.getOxdnaFramesAtomistic(_jobId, [sourceFrame(idx)], _align, _trajScope, _trajStride) : null)
+            if (live()) await _pushAtomistic(r?.[String(sourceFrame(idx))], epoch, live)
           } else {
             const r = await _queueFrameFetch(() => live()
-              ? api.getOxdnaFramesSurface(_jobId, [idx], { stride: _trajStride }, _align, _trajScope) : null)
-            if (live()) _pushSurface(r?.[String(idx)])
+              ? api.getOxdnaFramesSurface(_jobId, [sourceFrame(idx)], { stride: _trajStride }, _align, _trajScope) : null)
+            if (live()) _pushSurface(r?.[String(sourceFrame(idx))])
           }
         } else {
           const bake = _ensureGrid(kind)
@@ -1303,12 +1305,15 @@ export function initOxdnaDisplay({
   /** The composite resolution the held trajectory was loaded at. `scope` is the oxDNA
    *  lineage/job distinction; `stride` the MD frame interval (undefined = backend
    *  default). Callers that cache frame INDICES must compare this before reusing. */
-  function trajSpec() { return { scope: _trajScope, stride: _trajStride } }
+  function trajSpec() { return { scope: _trajScope, stride: _trajStride, ..._trajRange } }
 
   /** True when the held trajectory's resolution matches `spec`. Fields left undefined on
    *  `spec` are "don't care", so `{scope:'job'}` ignores stride (oxDNA has none). */
   function trajSpecMatches(spec = {}) {
     const norm = (v) => (v == null ? null : v)
+    for (const key of ['frameStart', 'frameEnd']) {
+      if (norm(spec[key]) !== norm(_trajRange[key])) return false
+    }
     if ('scope'  in spec && norm(spec.scope)  !== norm(_trajScope))  return false
     if ('stride' in spec && norm(spec.stride) !== norm(_trajStride)) return false
     return true
@@ -1742,12 +1747,12 @@ export function initOxdnaDisplay({
    * (n_frames + stage markers).  The actual scrubbing is driven by showFrame().
    */
   const trajectoryDownloads = initTrajectoryDownloads(async (jobId, {
-    align = true, scope = 'lineage', stride, signal, onProgress,
+    align = true, scope = 'lineage', stride, frameStart, frameEnd, signal, onProgress,
   }) => {
     let resp = null
     if (api.preferTrajectoryBin && api.getOxdnaTrajectoryBin) {
       const buf = await api.getOxdnaTrajectoryBin(
-        jobId, { align, signal, scope, stride, onProgress },
+        jobId, { align, signal, scope, stride, frameStart, frameEnd, onProgress },
       )
       if (buf) {
         onProgress?.({ phase: 'decode', done: 0, total: 1 })
@@ -1758,7 +1763,7 @@ export function initOxdnaDisplay({
     // Compatibility with older backends and with the NAMD adapter, which intentionally
     // exposes only the shared JSON-shaped getOxdnaTrajectory contract.
     if (!resp && !signal.aborted) {
-      resp = await api.getOxdnaTrajectory(jobId, { align, signal, scope, stride })
+      resp = await api.getOxdnaTrajectory(jobId, { align, signal, scope, stride, frameStart, frameEnd })
     }
     return resp
   })
@@ -1777,8 +1782,8 @@ export function initOxdnaDisplay({
 
   function trajectoryPreparationProgress() {
     const kind = _repKind(), bake = _bakeFor(kind)
-    return { kind, trajectoryFrames: _traj?.n_frames || 0,
-      grid: bake?.grid || [], readyIndices: [...(bake?.byIdx.keys() || [])],
+    return { kind, trajectoryFrames: _traj?.total_n_frames ?? _traj?.n_frames ?? 0,
+      grid: (bake?.grid || []).map(sourceFrame), readyIndices: [...(bake?.byIdx.keys() || [])].map(sourceFrame),
       capped: !!bake?.capped }
   }
 
@@ -1789,8 +1794,8 @@ export function initOxdnaDisplay({
       budget: _atomBudget }
   }
 
-  function adoptTrajectoryPreparation(jobId, { scope, stride }) {
-    const prepared = preparationCache?.snapshot(jobId, { scope, stride })
+  function adoptTrajectoryPreparation(jobId, spec) {
+    const prepared = preparationCache?.snapshot(jobId, spec)
     if (prepared) {
       _bakedAtom = prepared.atom; _bakedSurf = prepared.surface
       _pendingTopoModel = prepared.topology; _pendingTopoJob = prepared.topologyJob
@@ -1802,21 +1807,21 @@ export function initOxdnaDisplay({
   }
 
   async function loadTrajectory(
-    jobId, align = true, scope = 'lineage', stride = undefined, onProgress = null,
+    jobId, align = true, scope = 'lineage', stride = undefined, onProgress = null, range = {},
   ) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
     const signal = _beginLoad()
-    const resp = await trajectoryDownloads.get(jobId, { align, scope, stride }, { signal, onProgress })
+    const resp = await trajectoryDownloads.get(jobId, { align, scope, stride, ...range }, { signal, onProgress })
     if (epoch !== _epoch || signal.aborted) return { ok: false, reason: 'superseded' }
     if (!resp?.ready || !Array.isArray(resp.frames) || !resp.frames.length) {
       return { ok: false, reason: resp?.reason || 'no trajectory yet' }
     }
-    trajectoryDownloads.consumed(jobId, { align, scope, stride })
+    trajectoryDownloads.consumed(jobId, { align, scope, stride, ...range })
     _traj = resp
     _bakedAtom = null     // new job → drop the previous job's heavy bakes
     _bakedSurf = null
-    adoptTrajectoryPreparation(jobId, { scope, stride })
+    adoptTrajectoryPreparation(jobId, { scope, stride, ...range })
     designRenderer.clearScalarColors?.()
     _active = true
     _mode = 'trajectory'
@@ -1824,9 +1829,10 @@ export function initOxdnaDisplay({
     _align = align
     _trajScope = scope
     _trajStride = stride
+    _trajRange = { frameStart: range.frameStart, frameEnd: range.frameEnd }
     if (preparationOnly) {
       _active = false
-      return { ok: true, n_frames: resp.n_frames }
+      return { ok: true, n_frames: resp.total_n_frames ?? resp.n_frames }
     }
     // Replace setup-preview strands before showFrame's FEM move; otherwise the rebuild
     // leaves the origami at design coordinates and the preview caps at seed coordinates.
@@ -1844,7 +1850,7 @@ export function initOxdnaDisplay({
     }
     showFrame(0)
     onProgress?.({ phase: 'display', done: 1, total: 1 })
-    return { ok: true, n_frames: resp.n_frames, markers: resp.markers || [], stages: resp.stages || [] }
+    return { ok: true, n_frames: resp.total_n_frames ?? resp.n_frames, markers: resp.markers || [], stages: resp.stages || [] }
   }
 
   /** Deform the model to composite-trajectory frame i (clamped). No-op off mode. */
@@ -1905,7 +1911,7 @@ export function initOxdnaDisplay({
     if (_mode === 'trajectory') {
       trajectoryDownloads.clear() // a growing run may have new frames
       _dropJobCompanions(_jobId) // refresh origami, protein pose, and real caps
-      return loadTrajectory(_jobId, _align, _trajScope, _trajStride)
+      return loadTrajectory(_jobId, _align, _trajScope, _trajStride, null, _trajRange)
     }
     // refresh re-fetches: more production frames may have accumulated → bypass cache.
     return _mode === 'rmsf'
@@ -1971,7 +1977,7 @@ export function initOxdnaDisplay({
       return trajectoryDownloads.get(jobId, spec, options)
     },
     retainTrajectoryDownloads: requests => trajectoryDownloads.retain(requests),
-    showFrame,
+    showFrame: i => showFrame(i - (_traj?.frame_start ?? 0)),
     refresh,
     stopAndRestore,
     setGranularity,
@@ -1993,7 +1999,7 @@ export function initOxdnaDisplay({
       // atomSerials/nNucleotides let a caller price an all-atom prebuild: the exact
       // serial span once the topology has been fetched, the nucleotide count (which the
       // trajectory payload always carries) as the estimate before that.
-      ? { frame: _frameIdx + 1, total: _traj.frames.length,
+      ? { frame: sourceFrame(_frameIdx) + 1, total: _traj.total_n_frames ?? _traj.frames.length,
           atomSerials: _atomSerials, nNucleotides: _traj.n_nucleotides || 0 }
       : null,
     coloringInfo: () => {

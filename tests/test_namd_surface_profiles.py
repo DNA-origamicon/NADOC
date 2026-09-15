@@ -81,3 +81,34 @@ def test_api_persists_and_reloads_result_and_reports_pending(tmp_path, monkeypat
     monkeypatch.setattr(routes,'analyze_surface_package',pending)
     assert client.post('/md/jobs/test/surface-profiles',json={}).status_code==409
     assert client.get('/md/jobs/test/surface-profiles').json()==posted.json()
+
+
+@pytest.mark.parametrize('changing', [False, True])
+def test_pressure_equilibrated_profiles_use_actual_nvt_cell(tmp_path, monkeypatch, changing):
+    import io, json, struct
+    from backend.core.dcd_fast import write_header, append_frame
+    from backend.core import namd_graphene
+    from backend.core.namd_surface_profiles import analyze_surface_package
+    monkeypatch.setattr(namd_graphene, 'validate_graphene_wall_package', lambda p: None)
+    spec = dict(pore_diameter_nm=0, layers=1, cell_policy='fixed_area_normal_pressure',
+                periodic_box_nm=[2, 2, 6], dir=[0, 0, 1], plane_point_nm=[1, 1, 1])
+    (tmp_path/'manifest.json').write_text(json.dumps({'graphene_nanopore': spec}))
+    (tmp_path/'test.psf').write_text('PSF\n\n3 !NATOM\n1 G 1 GRP C NGRC 0 12 0\n2 I 1 SOD NA SOD 1 23 0\n3 I 2 CLA CL CLA -1 35 0\n')
+    stream = io.BytesIO(); write_header(stream, 3, 2)
+    header = bytearray(stream.getvalue()); struct.pack_into('<i', header, 48, 1)
+    path = tmp_path/'production.dcd'
+    with path.open('wb') as f:
+        f.write(header)
+        for z in [50, 52 if changing else 50]:
+            f.write(struct.pack('<i6di', 48, 20, 0, 20, 0, 0, z, 48))
+            append_frame(f, np.array([[10, 10, 10], [10, 10, 12.5], [10, 10, 7.5]], dtype=np.float32))
+    def analyze():
+        return analyze_surface_package(tmp_path, 'test', [('production', 'NVT', path)], bins=25, discard_fraction=0)
+    if changing:
+        with pytest.raises(ValueError, match='cell changed'):
+            analyze()
+    else:
+        result = analyze()
+        assert result['half_depth_nm'] == 2.5
+        assert result['net_charge_e'] == 0
+        assert result['concentration_mM']['positive']['Na+'][2] == pytest.approx(1660.539067 / .4)

@@ -779,7 +779,7 @@ def _recenter_pdb_in_padded_box(
             if not np.isfinite(value) or value <= 0:
                 raise ValueError("Box dimensions must be finite and positive")
             if value * 10 <= minimum_span[i]:
-                raise ValueError(f"Final box-size check failed: Box {'XYZ'[i]} must exceed the solute extent ({minimum_span[i] / 10:.3f} nm). Increase the initial box dimension in wizard tab 2.")
+                raise ValueError(f"Final box-size check failed: Box {'XYZ'[i]} must exceed the solute extent ({minimum_span[i] / 10:.3f} nm). Increase the initial box dimension in the Box and solvent card.")
             lengths[i] = value * 10
 
     # The finite graphene seed is resized later, but actual solute atoms must fit.
@@ -801,7 +801,7 @@ def _recenter_pdb_in_padded_box(
                     f"Final box-size check failed: Box {'XYZ'[i]} is {selected:.3f} nm; "
                     f"the prepared solute needs at least {np.ceil(required * 100) / 1000:.3f} nm "
                     f"to retain {pad_a[i] / 10:.3f} nm padding on each side. "
-                    "Increase this initial box dimension in wizard tab 2 and prepare again. "
+                    "Increase this initial box dimension in the Box and solvent card and prepare again. "
                     "The submitted box was not resized."
                 )
     # Translation that centres the structure in the selected cell.
@@ -3159,9 +3159,11 @@ def build_namd_solvated_package(
         )
 
     if graphene_nanopore:
-        from backend.core.namd_graphene import graphene_pressure_conf
-        namd_conf = graphene_pressure_conf(namd_conf, enabled=True, fixed_cell=True)
-        fast_conf = graphene_pressure_conf(fast_conf, enabled=True, fixed_cell=True)
+        from backend.core.namd_graphene import configure_graphene_equilibration, graphene_pressure_conf
+        configure_graphene_equilibration(graphene_nanopore)
+        namd_conf = graphene_pressure_conf(namd_conf, enabled=True, wall=graphene_nanopore)
+        if fast_conf is not None:
+            fast_conf = graphene_pressure_conf(fast_conf, enabled=True, wall=graphene_nanopore)
 
     readme = _README.format(name=name)
     if has_photoproducts:

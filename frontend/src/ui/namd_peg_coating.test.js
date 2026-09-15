@@ -11,7 +11,7 @@ function setup(){
 it('edits and persists inline coating settings without creating a surface draft or popup',async()=>{
  const {api}=setup();document.getElementById('md-peg-enable').click()
  const units=document.getElementById('md-peg-repeat_units');units.value='80';units.dispatchEvent(new Event('input',{bubbles:true}))
- await ui.flush();expect(api.updateMetadata).toHaveBeenLastCalledWith(expect.objectContaining({namd_peg_coating:expect.objectContaining({enabled:true,spec:expect.objectContaining({repeat_units:80})})}))
+ await ui.flush();expect(api.updateMetadata).toHaveBeenLastCalledWith(expect.objectContaining({namd_peg_coating:expect.objectContaining({enabled:true,spec:expect.objectContaining({repeat_units:80})})}),{skipGeometry:true})
  document.querySelector('[data-review-coating]').click();await vi.waitFor(()=>expect(api.reviewNamdPegSurface).toHaveBeenCalled())
  expect(document.querySelector('[role=dialog]')).toBeNull()
  document.getElementById('md-peg-enable').click();await ui.flush();expect(ui.capture().enabled).toBe(false);expect(ui.capture().spec.repeat_units).toBe(80)

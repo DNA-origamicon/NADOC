@@ -58,11 +58,13 @@ export function isViewVolumeOnlyDesignChange(next, previous) {
 /** Save/Save As may replace every object while changing only document identity.
  * Atom coordinates/topology do not depend on those fields. Compare remaining
  * inputs by value so an initial autosave cannot cancel a first-view atom fetch.
+ * Pose and animation authoring also leaves live representation inputs unchanged;
+ * restarting a simulation handoff here would expose CG without a new heavy frame.
  */
 export function atomisticDesignInputsChanged(next, previous) {
   if (next === previous) return false
   if (!next || !previous) return true
-  const ignored = new Set(['metadata', 'id', 'view_volumes'])
+  const ignored = new Set(['metadata', 'id', 'view_volumes', 'camera_poses', 'animations'])
   return [...new Set([...Object.keys(next), ...Object.keys(previous)])].some(key =>
     !ignored.has(key) && next[key] !== previous[key] && JSON.stringify(next[key]) !== JSON.stringify(previous[key]))
 }
@@ -258,7 +260,7 @@ export function initAtomSurfaceDisplay({
 
   // Invalidate surface cache on design/geometry change
   store.subscribe((newState, prevState) => {
-    const designChanged   = newState.currentDesign   !== prevState.currentDesign
+    const designChanged   = atomisticDesignInputsChanged(newState.currentDesign, prevState.currentDesign)
     const geometryChanged = newState.currentGeometry !== prevState.currentGeometry ||
                             newState.currentHelixAxes !== prevState.currentHelixAxes
     if (designChanged || geometryChanged) {
@@ -856,7 +858,7 @@ export function initAtomSurfaceDisplay({
   // on a design change, forcing a re-fetch.) Surface recompute is forced when the
   // geometry moved; otherwise the signature-cache skips unchanged columns.
   store.subscribe((n, p) => {
-    const designChanged = n.currentDesign   !== p.currentDesign
+    const designChanged = atomisticDesignInputsChanged(n.currentDesign, p.currentDesign)
     const geoChanged    = n.currentGeometry !== p.currentGeometry ||
                           n.currentHelixAxes !== p.currentHelixAxes
     if (!designChanged && !geoChanged) return

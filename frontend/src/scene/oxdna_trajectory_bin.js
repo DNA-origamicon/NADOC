@@ -38,6 +38,8 @@ export function parseOxdnaTrajectoryBin(buf) {
     all.subarray(i * frameSize, (i + 1) * frameSize))
   return {
     ready: true,
+    frame_start: header.frame_start ?? 0,
+    total_n_frames: header.total_n_frames ?? nFrames,
     n_frames: nFrames,
     n_nucleotides: nKeys,
     keys: header.keys,

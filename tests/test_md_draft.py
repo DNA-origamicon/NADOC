@@ -159,7 +159,8 @@ def test_seed_anchor_harmonic_composition_keeps_anchor_constant(tmp_path):
     )
 
     conf = (pkg / "stage.conf").read_text()
-    combined = (pkg / "restraints_combined_stage.pdb").read_text().splitlines()
+    combined_name = next(line.split()[1] for line in conf.splitlines() if line.startswith("conskfile"))
+    combined = (pkg / combined_name).read_text().splitlines()
     assert "GPUresident        on" in conf
     assert "fixedAtoms" not in conf
     assert "constraintScaling  1" in conf
@@ -174,6 +175,33 @@ def test_seed_anchor_harmonic_composition_keeps_anchor_constant(tmp_path):
     assert manifest["relax_protocol_settings"]["ladder_piston_period_decay_fs"] == [10000.0, 5000.0]
     assert manifest["relax_protocol_settings"]["production_piston_period_decay_fs"] == [10000.0, 5000.0]
     routes_md._audit_external_force_configs(pkg)
+
+
+def test_identical_anchor_coefficients_share_file_but_keep_mutable_references(tmp_path):
+    pdb = ("ATOM      1  P    DA A   1       0.000   0.000   0.000  1.00  1.00          P \n"
+           "HETATM    2  C   GRP G   1       1.000   0.000   0.000  1.00  0.00          C GR00\n")
+    (tmp_path / "demo.pdb").write_text(pdb)
+    (tmp_path / "restraints_settle.pdb").write_text(pdb)
+    # Only graphene is anchored; DNA coefficients differ between release scales.
+    (tmp_path / "anchors.pdb").write_text(pdb.replace("1.00  1.00", "1.00  0.00"))
+    (tmp_path / "manifest.json").write_text(json.dumps({"files": {"anchors": "anchors.pdb"}}))
+    for name, ref, scale in [("a", "demo.pdb", 0), ("b", "demo.pdb", 0),
+                             ("c", "restraints_settle.pdb", 0),
+                             ("d", "restraints_settle.pdb", 1)]:
+        (tmp_path / f"{name}.conf").write_text(
+            f"coordinates demo.pdb\nconsref {ref}\nconstraintScaling {scale}\nrun 20\n")
+    routes_md._harmonicize_seed_anchors(tmp_path, name_stem="demo")
+    def directive(stage, key):
+        return next(line.split()[1] for line in (tmp_path / f"{stage}.conf").read_text().splitlines()
+                    if line.startswith(key))
+    shared = directive("a", "conskfile")
+    assert shared == directive("b", "conskfile") == directive("c", "conskfile")
+    assert shared != directive("d", "conskfile")
+    assert len(list(tmp_path.glob("restraints_combined_*.pdb"))) == 2
+    assert directive("c", "consref") == "restraints_settle.pdb"
+    original = (tmp_path / shared).read_bytes()
+    (tmp_path / "restraints_settle.pdb").write_text(pdb.replace("0.000", "3.000"))
+    assert (tmp_path / shared).read_bytes() == original
 
 
 def test_final_package_audit_rejects_remote_fatal_fixed_resident_pair(tmp_path):

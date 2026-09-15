@@ -55,6 +55,18 @@ describe('pose-preserving presentation edits', () => {
     expect(actualScale.x).toBeCloseTo(4, 6)
     expect(actualScale.y).toBeCloseTo(5, 6)
     expect(actualScale.z).toBeCloseTo(6, 6)
+
+    // Repeated visibility refreshes must retain the rotation through zero scale.
+    rescaleInstanceInPlace(mesh, 0, new THREE.Vector3(0, 0, 0))
+    rescaleInstanceInPlace(mesh, 0, new THREE.Vector3(0, 0, 0))
+    rescaleInstanceInPlace(mesh, 0, new THREE.Vector3(4, 5, 6))
+    mesh.getMatrixAt(0, matrix)
+    matrix.decompose(actualPosition, actualQuaternion, actualScale)
+    expect(actualPosition.toArray()).toEqual(position.toArray())
+    expect(Math.abs(actualQuaternion.dot(quaternion))).toBeCloseTo(1, 6)
+    expect(actualScale.toArray()).toEqual(expect.arrayContaining([
+      expect.closeTo(4, 6), expect.closeTo(5, 6), expect.closeTo(6, 6),
+    ]))
   })
 
 })

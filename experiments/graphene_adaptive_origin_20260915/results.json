@@ -1,0 +1,19 @@
+[
+  {
+    "case": "broken",
+    "exit_code": -6,
+    "chunks": [
+      "20"
+    ],
+    "cell_origin_abort": true
+  },
+  {
+    "case": "fixed",
+    "exit_code": 0,
+    "chunks": [
+      "20",
+      "40"
+    ],
+    "cell_origin_abort": false
+  }
+]

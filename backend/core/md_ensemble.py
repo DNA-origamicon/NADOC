@@ -474,7 +474,7 @@ def build_replica_package(
         temp=float((graphene_nanopore or {}).get("temperature_K", 300.0)),
         damping=damping,
         scale=None,
-        npt=True,
+        npt=npt_allowed,
         previous=reseed_name,
         reinit=False,
         dcd_freq=dcd_freq,
@@ -518,6 +518,7 @@ def build_replica_package(
             graphene_pressure_conf(
                 production_conf,
                 enabled=bool(graphene_nanopore and anchor_k is not None),
+                wall=graphene_nanopore,
                 fixed_cell=bool(
                     graphene_nanopore
                     and graphene_nanopore.get("cell_policy") == "fixed_volume"
@@ -603,7 +604,7 @@ def build_replica_package(
         # block describes the ladder and cannot know what production ended up doing.
         "protocol_fidelity": protocol_fidelity(
             fast=use_fast,
-            carved=not npt_allowed,
+            carved=bool((manifest.get("solvation") or {}).get("carved")),
             padding_nm=float(
                 ((manifest.get("solvation") or {}).get("padding_nm")) or 2.0
             ),

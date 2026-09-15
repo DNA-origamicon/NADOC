@@ -25,3 +25,15 @@ describe('preparation details overlay',()=>{
     vi.restoreAllMocks()
   })
 })
+
+it('keeps transparent annotations from occluding surfaces rendered later',()=>{
+  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({
+    measureText:text=>({width:text.length*12}),fillRect(){},strokeRect(){},fillText(){},
+  })
+  const scene=new THREE.Scene(),ui=initPreparationDetails({scene})
+  window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{enabled:true,dimensions:[12,13,14],numbers:{na:0,mg:0,cl:0},na:0,mg:0,temperature:300,temperatureLabel:'K'}}))
+  const group=scene.getObjectByName('NAMD box and solvent details')
+  expect(group.getObjectByName('Solvent conditions callout').isSprite).toBe(true)
+  group.traverse(node=>{if(node.material)expect(node.material.depthWrite,node.name).toBe(false)})
+  ui.dispose();vi.restoreAllMocks()
+})

@@ -19,16 +19,79 @@ GRAPHENE_PARAMS = (GRAPHENE_ATOM_TYPE, 0.0, 12.01100)
 # both resident and offload modes. Its recovered predecessor used 10000/5000 fs.
 GRAPHENE_PISTON_PERIOD_FS = 10000.0
 GRAPHENE_PISTON_DECAY_FS = 5000.0
+GRAPHENE_EQUILIBRATION_POLICY = "fixed_area_normal_pressure"
 
 
-def graphene_pressure_conf(conf: str, *, enabled: bool, fixed_cell: bool = False) -> str:
-    """Keep restrained-wall NPT coupling gentle across stage/process boundaries.
+def configure_graphene_equilibration(spec: dict) -> None:
+    """Opt a newly solvated package into membrane-compatible density equilibration.
 
-    Leave NVT and non-wall configurations unchanged, and retain already slower
-    piston settings. This changes neither the ensemble nor the integration timestep.
+    NAMD's constant-area shorthand scales z; fixCellDimX/Y/Z supplies the same
+    constraint for X/Y-normal sheets without rotating coordinates or fields.
+    Existing package descriptors are never upgraded by a restart/config writer.
+    """
+    import numpy as np
+
+    normal = np.asarray(spec["dir"], dtype=float)
+    axis = int(np.argmax(np.abs(normal))) if normal.shape == (3,) else -1
+    if axis < 0 or not np.isfinite(normal).all() or not np.allclose(np.abs(normal), np.eye(3)[axis]):
+        raise ValueError(
+            "Graphene pressure equilibration requires a Cartesian membrane normal (±X, ±Y or ±Z). "
+            "Orient the complete assembly along a Cartesian axis before preparing a new simulation."
+        )
+    spec.update(cell_policy=GRAPHENE_EQUILIBRATION_POLICY,
+                relaxation_ensemble=f"NP{'xyz'[axis]}AT", production_ensemble="NVT",
+                pressure_normal_axis="xyz"[axis])
+
+
+def _normal_pressure_conf(conf: str, wall: dict) -> str:
+    """Set the scaling origin even for minimization, so its XSC seeds the ladder."""
+    checked = dict(wall)
+    configure_graphene_equilibration(checked)  # validate, without mutating metadata
+    import numpy as np
+
+    center = np.asarray(wall.get("plane_point_nm", wall.get("pore_center_nm")), float)
+    if center.shape != (3,) or not np.isfinite(center).all():
+        raise ValueError("Graphene pressure control needs a finite membrane plane point")
+    settings = {"cellOrigin": " ".join(f"{v * 10:.10g}" for v in center)}
+    piston = re.findall(r"^\s*langevinPiston\s+(\S+)", conf, re.M | re.I)
+    if piston and piston[-1].lower() in {"on", "yes", "true", "1"}:
+        axis = checked["pressure_normal_axis"]
+        energies = re.findall(r"^\s*outputEnergies\s+(\d+)", conf, re.M | re.I)
+        settings.update(useGroupPressure="yes", useFlexibleCell="yes",
+                        useConstantArea="yes" if axis == "z" else "no", fixCellDims="yes",
+                        useConstantRatio="no", BerendsenPressure="off",
+                        langevinPistonTarget="1.01325", langevinPistonPeriod="1000.0",
+                        langevinPistonDecay="500.0", margin="4",
+                        outputPressure=energies[-1] if energies else "1000")
+        settings.update({f"fixCellDim{a.upper()}": "no" if a == axis else "yes" for a in "xyz"})
+        # A recovery may already have softened the piston or enlarged the patch
+        # margin. Rewriting anchors must not undo that stabilization.
+        for key, floor in (("langevinPistonPeriod", 1000.0), ("langevinPistonDecay", 500.0), ("margin", 4.0)):
+            existing = re.findall(r"^\s*" + key + r"\s+(\S+)", conf, re.M | re.I)
+            value = max(floor, float(existing[-1])) if existing else floor
+            settings[key] = f"{value:g}" if key == "margin" else f"{value:.1f}"
+    # Initialization directives must run once, at top level. The first minimize
+    # command may be inside the adaptive loop; inserting there attempts to change
+    # cellOrigin after NAMD initializes and aborts on the second chunk.
+    owned = {key.lower() for key in settings}
+    lines = [line for line in conf.splitlines(keepends=True)
+             if not line.split() or line.split()[0].lower() not in owned]
+    lines.insert(0, "".join(f"{key} {value}\n" for key, value in settings.items()))
+    return "".join(lines)
+
+
+def graphene_pressure_conf(conf: str, *, enabled: bool, fixed_cell: bool = False,
+                           wall: dict | None = None) -> str:
+    """Apply recorded membrane pressure geometry without upgrading existing jobs.
+
+    New packages use normal-pressure equilibration; legacy fixed-volume packages
+    retain their ensemble. Explicit NVT and minimization keep the piston off.
+    Older non-fixed wall packages retain their slower isotropic piston settings.
     """
     if not enabled:
         return conf
+    if wall and wall.get("cell_policy") == GRAPHENE_EQUILIBRATION_POLICY:
+        return _normal_pressure_conf(conf, wall)
     if fixed_cell:
         # Fixed Cartesian wall references cannot follow cell dilation. Preserve the
         # periodic seam by disabling every supported barostat, including overrides.

@@ -1043,9 +1043,10 @@ async function main() {
     },
     onEvent: (evt) => {
       animPanel?.onPlayerEvent(evt)
-      // When animation stops or finishes, restore all heavy representations to
-      // the live (deformed) design state rather than holding the last lerped frame.
-      if (evt.type === 'stopped' || evt.type === 'finished') {
+      // Restore heavy geometry only when the player owned it. Camera-only and
+      // idle stops must leave simulation atoms/surfaces in place: re-entering the
+      // overlay handoff here exposes CG without scheduling a new heavy frame.
+      if ((evt.type === 'stopped' || evt.type === 'finished') && evt.geometryChanged !== false) {
         if (atomisticRenderer.getMode() !== 'off') {
           _atomSurface.invalidateAtomCache()
           _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())

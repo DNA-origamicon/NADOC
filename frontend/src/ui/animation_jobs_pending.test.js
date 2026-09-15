@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import { initAnimationPanel } from './animation_panel.js'
-it('shows selected trajectory readiness before the job discovery requests finish', async () => {
+it('loads only metadata before job discovery finishes, leaving frame loading explicit', async () => {
   document.body.innerHTML = `<div id="animation-panel"><div id="animation-panel-heading"><span id="animation-panel-arrow"></span></div><div id="animation-panel-body"><select id="animation-select"></select><div id="animation-kf-list"></div><button id="anim-playpause-btn"></button><span id="anim-time-display"></span><input id="anim-scrub" type="range"></div></div>`
   const kf = { id: 'k', is_trajectory: true, trajectory_job_id: 'a', trajectory_engine: 'oxdna', trajectory_scope: 'job', hold_duration_s: 2, transition_duration_s: 0 }
   const design = { animations: [{ id: 'anim', name: 'Animation', fps: 30, keyframes: [kf] }], helices: [], strands: [], clusters: [], camera_poses: [], feature_log: [], feature_log_cursor: -1, overhangs: [] }
@@ -14,7 +14,8 @@ it('shows selected trajectory readiness before the job discovery requests finish
   }) }
   initAnimationPanel({ getState: () => ({ currentDesign: design }), subscribeSlice() {} }, { api, player, trajectoryKeyframes: trajectories })
   try {
-    await vi.waitFor(() => expect(document.querySelector('[data-role="trajectory-download-status"]').textContent).toBe('Trajectory preview frames ready'))
+    await vi.waitFor(() => expect(document.querySelector('[data-role="trajectory-download-status"]').textContent).toBe('Choose frames, then Load'))
+    expect(trajectories.prefetch).not.toHaveBeenCalled()
     expect(api.getOxdnaTrajectoryMeta).toHaveBeenCalled()
     expect(api.listOxdnaJobs).toHaveBeenCalledWith({ waitForIdle: false })
     expect(api.listMdJobs).toHaveBeenCalledWith({ waitForIdle: false })

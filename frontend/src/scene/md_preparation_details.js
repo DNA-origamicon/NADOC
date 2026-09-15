@@ -16,8 +16,9 @@ function label(text, {callout=false}={}) {
   ctx.fillStyle='#61d9b4'
   lines.forEach((line,i)=>ctx.fillText(line,12,38+i*40))
   const texture=new THREE.CanvasTexture(canvas)
-  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false,transparent:true,sizeAttenuation:false}))
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false,depthWrite:false,transparent:true,sizeAttenuation:false}))
   sprite.scale.set(canvas.width*(callout?.00055:.00063),canvas.height*(callout?.00055:.00063),1)
+  sprite.renderOrder=30
   sprite.userData.annotation=text
   return sprite
 }
@@ -31,7 +32,7 @@ export function initPreparationDetails({scene,camera,controls,getEntries=()=>[]}
   function clear(){refreshLeader=()=>{};group.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose()});group.clear();group.visible=false}
   function outline(size,center,color,name){
     const geometry=new THREE.BoxGeometry(...size)
-    const mesh=new THREE.LineSegments(new THREE.EdgesGeometry(geometry),new THREE.LineBasicMaterial({color,transparent:true,opacity:.65}))
+    const mesh=new THREE.LineSegments(new THREE.EdgesGeometry(geometry),new THREE.LineBasicMaterial({color,transparent:true,opacity:.65,depthWrite:false}))
     geometry.dispose();mesh.position.copy(center);mesh.name=name;group.add(mesh)
   }
   function update({detail:d}={}){
@@ -73,8 +74,8 @@ export function initPreparationDetails({scene,camera,controls,getEntries=()=>[]}
       fill.position.copy(center);fill.name='Solvent region highlight';group.add(fill)
     }
     function line(points,name){
-      const o=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineBasicMaterial({color:0x61d9b4,depthTest:false,transparent:true,opacity:.9}))
-      o.name=name;group.add(o);return o
+      const o=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineBasicMaterial({color:0x61d9b4,depthTest:false,depthWrite:false,transparent:true,opacity:.9}))
+      o.renderOrder=30;o.name=name;group.add(o);return o
     }
     for(let axis=0;axis<3;axis++){
       const lateral=[0,1,2].filter(i=>i!==axis)

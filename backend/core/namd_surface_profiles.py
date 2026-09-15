@@ -91,7 +91,8 @@ def analyze_surface_package(package: Path, name_stem: str, segments, *, bins=48,
                             discard_fraction=.5, fit_min_nm=.6, fit_max_nm=2., dielectric=78.4):
     manifest = json.loads((package/'manifest.json').read_text())
     spec = manifest.get('graphene_nanopore') or {}
-    if spec.get('pore_diameter_nm') != 0 or spec.get('layers',1) != 1 or spec.get('cell_policy') != 'fixed_volume':
+    pressure_equilibrated = spec.get('cell_policy') == 'fixed_area_normal_pressure'
+    if spec.get('pore_diameter_nm') != 0 or spec.get('layers',1) != 1 or spec.get('cell_policy') not in {'fixed_volume', 'fixed_area_normal_pressure'}:
         raise ValueError('Profiles require one closed, fixed-volume periodic wall.')
     if manifest.get('field') or manifest.get('ion_transport'):
         raise ValueError('Equilibrium screening analysis requires no external E-field.')
@@ -100,9 +101,6 @@ def analyze_surface_package(package: Path, name_stem: str, segments, *, bins=48,
     axis = int(np.argmax(np.abs(normal)))
     if not np.isclose(np.abs(normal[axis]),1) or np.count_nonzero(np.abs(normal)>1e-8)!=1:
         raise ValueError('Profiles require a Cartesian surface normal.')
-    half = box[axis]/2
-    if not 0 <= fit_min_nm < fit_max_nm < half:
-        raise ValueError(f'Fit window must lie between 0 and reservoir midpoint {half:g} nm.')
     lines=(package/f'{name_stem}.psf').read_text().splitlines()
     start=next(i for i,line in enumerate(lines) if '!NATOM' in line)
     n=int(lines[start].split()[0]); atoms=[s.split() for s in lines[start+1:start+1+n]]
@@ -138,13 +136,25 @@ def analyze_surface_package(package: Path, name_stem: str, segments, *, bins=48,
     refs=refs[int(total*discard_fraction):]
     if not refs: raise ValueError('No complete trajectory frames yet. Run dynamics before generating profiles.')
     refs=[refs[i] for i in np.unique(np.linspace(0,len(refs)-1,min(len(refs),max_frames),dtype=int))]
+    if pressure_equilibrated:
+        # Production inherits the equilibrated cell, which differs from the original
+        # solvation descriptor. Never normalize its density by that original volume.
+        path, layout, index, _ = refs[0]
+        _, raw = read_frame(path, layout, index)
+        dims = cell_to_dimensions(raw)
+        if dims is None:
+            raise ValueError('Pressure-equilibrated wall profiles require saved trajectory cell dimensions.')
+        box = np.asarray(dims[:3], float) / 10
+    half = box[axis]/2
+    if not 0 <= fit_min_nm < fit_max_nm < half:
+        raise ValueError(f'Fit window must lie between 0 and reservoir midpoint {half:g} nm.')
     area=float(np.prod(np.delete(box,axis))); edges=np.linspace(0,half,bins+1); counts=[]
     plane=float(spec['plane_point_nm'][axis]); sign=float(normal[axis])
     for path,layout,index,_ in refs:
         xyz,raw=read_frame(path,layout,index); xyz=xyz.astype(float)/10
         dims=cell_to_dimensions(raw)
         if dims is not None and (not np.allclose(dims[:3]/10,box,atol=.005) or not np.allclose(dims[3:],90,atol=.01)):
-            raise ValueError('Trajectory cell changed or is nonorthogonal; fixed-slab normalization is invalid.')
+            raise ValueError('Trajectory cell changed or is nonorthogonal; fixed-slab normalization is invalid. Use the subsequent NVT production trajectory for screening profiles.')
         # Track the restrained wall's mean displacement, using periodic offsets.
         wall_offset=(xyz[wall,axis]-plane+half)%(2*half)-half
         center=plane+float(wall_offset.mean())

@@ -3,3 +3,11 @@
 #md-box-solvent-body input:not([type=checkbox]),#md-box-solvent-body select { box-sizing:border-box; width:100%; min-width:0; background:#161b22; color:#c9d1d9; border:1px solid #30363d; border-radius:3px; padding:2px 4px; font-size:var(--text-xs); }
 #md-box-solvent-body [role=status] { line-height:1.4; margin:7px 0 0; }
 #md-box-solvent-body output { display:block; margin:7px 0; }
+
+.md-box-spinner { width:12px; height:12px; border:2px solid #484f58; border-top-color:#58a6ff; border-radius:50%; animation:md-box-spin .8s linear infinite; flex-shrink:0; }
+.md-box-spinner[hidden],.md-box-warning-icon[hidden],.md-box-warnings[hidden] { display:none; }
+@keyframes md-box-spin { to { transform:rotate(360deg); } }
+.md-box-warning-icon { color:#e3b341; border:0; background:none; padding:0 4px; cursor:pointer; }
+.md-box-warnings { color:#e3b341; border-left:2px solid #e3b341; padding-left:8px; margin:8px 0; overflow-wrap:anywhere; }
+.md-box-warnings p { margin:5px 0; }
+#md-box-sizing-help { line-height:1.4; }
