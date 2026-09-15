@@ -1,7 +1,7 @@
 import './md_box_solvent.css'
 
 export const PREPARATION_KEYS = new Set(['padding_nm','box_mode','box_size_nm','salt_mode','mg_conc_mM','ion_conc_mM','graphene_temperature_K'])
-const DEFAULTS = {sizing:'rotation',padding:2,x:10,y:10,z:10,salt:'screening',na:0,mg:12.5,temperature:300}
+const DEFAULTS = {sizing:'auto',padding:2,x:10,y:10,z:10,salt:'screening',na:0,mg:12.5,temperature:300}
 
 /** Bulk-salt estimate only: excluded molecular volume/counterions require preparation. */
 export function solventNumbers(dimensions, na, mg) {
@@ -15,6 +15,22 @@ export function initBoxSolvent({api,store,root=document}={}) {
   if(!host)return null
   const inputs=Object.fromEntries(Object.keys(DEFAULTS).map(k=>[k,host.querySelector(`#md-box-${k}`)]))
   const view=host.querySelector('#md-box-view-details'),status=host.querySelector('[role=status]'),boundary=host.querySelector('output')
+  const spinner=root.querySelector('#md-box-loading'),warningIcon=root.querySelector('#md-box-warning'),warningPanel=host.querySelector('#md-box-warnings')
+  let loading=false,calculationWarning='',jobWarnings=[]
+  const dismissed=new Set()
+  function paintFeedback(){
+    if(spinner)spinner.hidden=!loading
+    host.setAttribute('aria-busy',String(loading))
+    const warnings=[...(calculationWarning?[calculationWarning]:[]),...jobWarnings.filter(w=>!dismissed.has(w.key)).map(w=>`Previous preparation failed — ${w.name}: ${w.message}`)]
+    if(warningIcon){warningIcon.hidden=!warnings.length;warningIcon.title=warnings.join('\n') || 'Box and solvent needs attention'}
+    if(warningPanel){
+      warningPanel.replaceChildren();warningPanel.hidden=!warnings.length
+      for(const message of warnings){const p=document.createElement('p');p.textContent=message;warningPanel.append(p)}
+      if(jobWarnings.some(w=>!dismissed.has(w.key))){const button=document.createElement('button');button.type='button';button.textContent='Dismiss previous job warnings';button.onclick=()=>{for(const w of jobWarnings)dismissed.add(w.key);paintFeedback()};warningPanel.append(button)}
+    }
+  }
+  function openWarnings(event){event.stopPropagation();host.style.display='';root.querySelector('#md-box-solvent-arrow')?.classList.remove('is-collapsed');warningPanel?.scrollIntoView?.({block:'nearest'})}
+  warningIcon?.addEventListener('click',openWarnings)
   let preview=null,version=0,timer=null,saveTimer=null,designId=store?.getState()?.currentDesign?.id,disposed=false
   let pairActive=false,unpairedSizes=null
   let writes=Promise.resolve(),geometry=store?.getState()?.currentGeometry
@@ -22,7 +38,7 @@ export function initBoxSolvent({api,store,root=document}={}) {
   const isCharged=()=>!!root.querySelector('#md-screening-enable')?.checked
   const read=()=>Object.fromEntries(Object.entries(inputs).map(([k,el])=>[k,el.value]))
   function settings(){
-    const raw=read(),p={padding_nm:Number(raw.padding),box_mode:raw.sizing==='rotation'?'rotation':'bbox',salt_mode:raw.salt,
+    const raw=read(),p={padding_nm:Number(raw.padding),box_mode:raw.sizing==='rotation' || (raw.sizing==='auto' && !surfaceContext().graphene_nanopore)?'rotation':'bbox',salt_mode:raw.salt,box_size_nm:null,
       ion_conc_mM:raw.salt==='screening'?0:Number(raw.na),mg_conc_mM:raw.salt==='screening'?12.5:Number(raw.mg)}
     for(const input of Object.values(inputs))if(!input.disabled && (!input.checkValidity() || !input.value.trim()))throw Error('Correct the Box and solvent settings.')
     if(isCharged() || isPair())p.graphene_temperature_K=Number(raw.temperature)
@@ -74,11 +90,11 @@ export function initBoxSolvent({api,store,root=document}={}) {
     inputs.temperature.title=inputs.temperature.disabled?'Ordinary DNA relaxation targets 300 K; stage temperatures remain controlled by the protocol.':'Target temperature for the surface control.'
     boundary.textContent=pair?'Slab: lateral periodic · normal vacuum padding (3×)':'Periodic on all six faces'
     if(preview && (pair || !explicit))for(const [i,k] of ['x','y','z'].entries())inputs[k].value=(preview.selected_nm || preview.calculated_nm)[i].toFixed(3)
-    emit()
+    paintFeedback();emit()
   }
   async function calculate(){
     const current=++version
-    preview=null;paint()
+    preview=null;loading=true;calculationWarning='';status.textContent='Calculating box dimensions and solvent details…';paint()
     try{
       const p=settings()
       if(isPair())preview=pairBox()
@@ -88,11 +104,12 @@ export function initBoxSolvent({api,store,root=document}={}) {
         if(!result?.box_preview)throw Error(result?.warnings?.join(' ') || 'Choose explicit dimensions for an empty system, or load a structure to fit.')
         preview=result.box_preview
       }
+      calculationWarning=(preview.sizing_notes || []).filter(Boolean).join(' ')
       status.textContent=isPair()?'Cell dimensions follow Two-electrode settings; salt and temperature are setup intent until qualification.':'Ion counts are approximate bulk-salt counts; preparation accounts for excluded volume and neutralizing ions.'
-    }catch(e){if(current===version)status.textContent=e.message}
-    if(current===version)paint()
+    }catch(e){if(current===version){calculationWarning=e.message;status.textContent='Box calculation could not finish. Review the warning above.'}}
+    if(current===version && !disposed){loading=false;paint()}
   }
-  function schedule(){clearTimeout(timer);version++;preview=null;emit();timer=setTimeout(calculate,250)}
+  function schedule(){clearTimeout(timer);version++;preview=null;loading=true;calculationWarning='';status.textContent='Calculating box dimensions and solvent details…';paintFeedback();emit();timer=setTimeout(calculate,250)}
   function save(){
     clearTimeout(saveTimer)
     const id=designId,values=read()
@@ -114,14 +131,16 @@ export function initBoxSolvent({api,store,root=document}={}) {
     paint();schedule()
   }
   function restoreDocument(){
+    jobWarnings=[];dismissed.clear()
     const saved=store?.getState()?.currentDesign?.metadata?.namd_box_solvent || DEFAULTS
     for(const k of Object.keys(DEFAULTS))inputs[k].value=saved[k] ?? DEFAULTS[k]
     view.checked=false;paint();schedule()
   }
   const unsub=store?.subscribe(()=>{const state=store.getState(),id=state?.currentDesign?.id;if(id!==designId){designId=id;geometry=state.currentGeometry;clearTimeout(saveTimer);restoreDocument()}else if(state.currentGeometry!==geometry){geometry=state.currentGeometry;schedule()}})
   restoreDocument()
-  return {keys:PREPARATION_KEYS,payload(){const p=settings();if(isPair())p.box_size_nm=pairBox().calculated_nm;if(!isPair() && !p.box_size_nm && preview)p.box_size_nm=preview.selected_nm || preview.calculated_nm;return p},
-    restore,refresh:schedule,summary:()=>isPair()?'Box and solvent: dimensions linked to Two-electrode settings.':`Box and solvent: ${['x','y','z'].map(k=>inputs[k].value).join(' × ')} nm; NaCl ${settings().ion_conc_mM} mM; MgCl₂ ${settings().mg_conc_mM} mM. Edit in the sidebar.`,
+  return {keys:PREPARATION_KEYS,payload(){const p=settings();if(isPair())p.box_size_nm=pairBox().calculated_nm;return p},
+    setJobWarnings(warnings){jobWarnings=warnings || [];paintFeedback()},
+    restore,refresh:schedule,summary:()=>isPair()?'Box and solvent: dimensions linked to Two-electrode settings.':`Box and solvent: ${inputs.sizing.value==='explicit'?['x','y','z'].map(k=>inputs[k].value).join(' × ')+' nm':`automatic ${settings().box_mode==='rotation'?'rotation-safe':'bounding-box'} fit; final dimensions set during preparation`}; NaCl ${settings().ion_conc_mM} mM; MgCl₂ ${settings().mg_conc_mM} mM. Edit in the sidebar.`,
     acceptPreview(value){if(value && inputs.sizing.value!=='explicit' && !isPair()){preview={...preview,...value,center_nm:preview?.center_nm || value.center_nm,solute_bounds_nm:preview?.solute_bounds_nm || value.solute_bounds_nm};paint()}},
-    dispose(){disposed=true;version++;clearTimeout(timer);clearTimeout(saveTimer);unsub?.();root.removeEventListener('input',change);root.removeEventListener('change',change);window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{enabled:false}}))}}
+    dispose(){disposed=true;loading=false;paintFeedback();warningIcon?.removeEventListener('click',openWarnings);version++;clearTimeout(timer);clearTimeout(saveTimer);unsub?.();root.removeEventListener('input',change);root.removeEventListener('change',change);window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{enabled:false}}))}}
 }

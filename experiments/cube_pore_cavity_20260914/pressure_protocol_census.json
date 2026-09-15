@@ -1,0 +1,3470 @@
+[
+  {
+    "job_id": "0bbdf9466999",
+    "package": "workspace/md_jobs/0bbdf9466999/package/VoltronCoreArm_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": {
+      "padding_nm": 1.2,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          90.026,
+          89.892,
+          4079.973
+        ],
+        "extent_ang": [
+          66.026,
+          65.892,
+          4055.973
+        ],
+        "radius_ang": 2040.6112920761923,
+        "clearance_as_built_ang": [
+          12.0,
+          12.0,
+          12.0
+        ],
+        "clearance_rotated_ang": [
+          -1995.5982920761924,
+          -1995.6652920761924,
+          -0.6247920761923069
+        ],
+        "image_gap_as_built_ang": 24.0,
+        "image_gap_rotated_ang": -3991.3305841523847,
+        "fits_as_built": true,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 1
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/0bbdf9466999/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_01_production_1000ns_k0.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "0d96d961b549",
+    "package": "workspace/md_jobs/0d96d961b549/package/2hb_1xT_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": {
+      "padding_nm": 1.2,
+      "water_shell_nm": 0.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 10.0,
+      "box_check": {
+        "box_ang": [
+          44.93000000000001,
+          67.438,
+          112.285
+        ],
+        "extent_ang": [
+          20.93,
+          43.438,
+          88.285
+        ],
+        "radius_ang": 46.909587804279006,
+        "clearance_as_built_ang": [
+          12.000000000000004,
+          12.0,
+          12.0
+        ],
+        "clearance_rotated_ang": [
+          -24.444587804279003,
+          -13.190587804279005,
+          9.232912195720992
+        ],
+        "image_gap_as_built_ang": 24.0,
+        "image_gap_rotated_ang": -48.889175608558006,
+        "fits_as_built": true,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 2
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/0d96d961b549/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_100ns_k0.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/0d96d961b549/package/2hb_1xT_namd_solvated/2hb_1xT_01_production_100ns_k0.resume1.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "156805234fcc",
+    "package": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": {
+      "padding_nm": 1.2,
+      "water_shell_nm": 0.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          44.06,
+          44.053,
+          93.504
+        ],
+        "extent_ang": [
+          20.060000000000002,
+          20.052999999999997,
+          69.504
+        ],
+        "radius_ang": 35.511532435327744,
+        "clearance_as_built_ang": [
+          12.0,
+          12.0,
+          12.0
+        ],
+        "clearance_rotated_ang": [
+          -13.481532435327743,
+          -13.485032435327746,
+          11.240467564672258
+        ],
+        "image_gap_as_built_ang": 24.0,
+        "image_gap_rotated_ang": -26.97006487065549,
+        "fits_as_built": true,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 22
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/duplex_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/156805234fcc/package/duplex_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "1590eb4435fa",
+    "package": "workspace/md_jobs/1590eb4435fa/package/cube_pore_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "requested_box_size_nm": null,
+      "carved": false,
+      "npt_allowed": false,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          267.492,
+          268.239,
+          242.394
+        ],
+        "extent_ang": [
+          133.52599999999998,
+          133.519,
+          215.19400000000002
+        ],
+        "radius_ang": 138.25842666530758,
+        "clearance_as_built_ang": [
+          66.98300000000002,
+          67.35999999999999,
+          13.599999999999994
+        ],
+        "clearance_rotated_ang": [
+          -4.512426665307572,
+          -4.138926665307594,
+          -17.06142666530758
+        ],
+        "image_gap_as_built_ang": 27.19999999999999,
+        "image_gap_rotated_ang": -34.12285333061516,
+        "fits_as_built": false,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "off": 1
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/1590eb4435fa/package/cube_pore_namd_solvated/cube_pore_01_production_200ns_k0.conf",
+        "langevinPiston": "off"
+      }
+    ]
+  },
+  {
+    "job_id": "206df8f55d95",
+    "package": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 12
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/206df8f55d95/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "29ac138f08a4",
+    "package": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": {
+      "padding_nm": 1.2,
+      "water_shell_nm": 0.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 10.0,
+      "box_check": {
+        "box_ang": [
+          44.93000000000001,
+          67.438,
+          112.285
+        ],
+        "extent_ang": [
+          20.93,
+          43.438,
+          88.285
+        ],
+        "radius_ang": 46.909587804279006,
+        "clearance_as_built_ang": [
+          12.000000000000004,
+          12.0,
+          12.0
+        ],
+        "clearance_rotated_ang": [
+          -24.444587804279003,
+          -13.190587804279005,
+          9.232912195720992
+        ],
+        "image_gap_as_built_ang": 24.0,
+        "image_gap_rotated_ang": -48.889175608558006,
+        "fits_as_built": true,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 22
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/2hb_1xT_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/29ac138f08a4/package/2hb_1xT_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "42d26607b1c3",
+    "package": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": {
+      "padding_nm": 1.2,
+      "water_shell_nm": 0.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          44.081,
+          44.081,
+          93.504
+        ],
+        "extent_ang": [
+          20.081000000000003,
+          20.081000000000003,
+          69.504
+        ],
+        "radius_ang": 35.52146356589252,
+        "clearance_as_built_ang": [
+          12.0,
+          12.0,
+          12.0
+        ],
+        "clearance_rotated_ang": [
+          -13.480963565892516,
+          -13.480963565892516,
+          11.230536434107485
+        ],
+        "image_gap_as_built_ang": 24.0,
+        "image_gap_rotated_ang": -26.961927131785032,
+        "fits_as_built": true,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 22
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/duplex_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/42d26607b1c3/package/duplex_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "4a293b5d915b",
+    "package": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          348.655,
+          70.726,
+          349.18
+        ],
+        "extent_ang": [
+          133.519,
+          43.525999999999996,
+          295.20099999999996
+        ],
+        "radius_ang": 162.15719254674622,
+        "clearance_as_built_ang": [
+          107.56799999999998,
+          13.600000000000001,
+          26.98950000000002
+        ],
+        "clearance_rotated_ang": [
+          12.17030745325377,
+          -126.79419254674622,
+          12.432807453253787
+        ],
+        "image_gap_as_built_ang": 27.200000000000003,
+        "image_gap_rotated_ang": -253.58838509349243,
+        "fits_as_built": false,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 24
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_0S_300K_NPT_settle_fixed_dna_p100.resume1.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4a293b5d915b/package/small_plate_namd_solvated/small_plate_0S_300K_NPT_settle_fixed_dna_p100.resume2.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "4c9376f96306",
+    "package": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/2x3x100_Sq_test_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4c9376f96306/package/2x3x100_Sq_test_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "4dbc788c1b54",
+    "package": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": {
+      "padding_nm": 2.0,
+      "water_shell_nm": 0.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          99.119,
+          105.119,
+          229.307
+        ],
+        "extent_ang": [
+          59.119,
+          65.119,
+          189.307
+        ],
+        "radius_ang": 101.40215438981977,
+        "clearance_as_built_ang": [
+          20.0,
+          20.0,
+          20.0
+        ],
+        "clearance_rotated_ang": [
+          -51.84265438981977,
+          -48.84265438981977,
+          13.251345610180223
+        ],
+        "image_gap_as_built_ang": 40.0,
+        "image_gap_rotated_ang": -103.68530877963954,
+        "fits_as_built": true,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 22
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/6hbx32_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4dbc788c1b54/package/6hbx32_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "4ec1e4cb93ba",
+    "package": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": {
+      "padding_nm": 1.2,
+      "water_shell_nm": 0.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          44.07600000000001,
+          44.069,
+          93.504
+        ],
+        "extent_ang": [
+          20.076,
+          20.069000000000003,
+          69.504
+        ],
+        "radius_ang": 35.50628962184882,
+        "clearance_as_built_ang": [
+          12.000000000000004,
+          12.0,
+          12.0
+        ],
+        "clearance_rotated_ang": [
+          -13.468289621848818,
+          -13.47178962184882,
+          11.24571037815118
+        ],
+        "image_gap_as_built_ang": 24.0,
+        "image_gap_rotated_ang": -26.94357924369764,
+        "fits_as_built": true,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 22
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/duplex_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/4ec1e4cb93ba/package/duplex_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "5c6a87247a60",
+    "package": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 12
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/5c6a87247a60/package/2hb_namd_solvated/2hb_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "60e854232e8c",
+    "package": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "requested_box_size_nm": null,
+      "carved": false,
+      "npt_allowed": false,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          267.492,
+          268.239,
+          242.394
+        ],
+        "extent_ang": [
+          133.52599999999998,
+          133.519,
+          215.19400000000002
+        ],
+        "radius_ang": 138.25842666530758,
+        "clearance_as_built_ang": [
+          66.98300000000002,
+          67.35999999999999,
+          13.599999999999994
+        ],
+        "clearance_rotated_ang": [
+          -4.512426665307572,
+          -4.138926665307594,
+          -17.06142666530758
+        ],
+        "image_gap_as_built_ang": 27.19999999999999,
+        "image_gap_rotated_ang": -34.12285333061516,
+        "fits_as_built": false,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "off": 21
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/namd_fast.conf",
+        "langevinPiston": "off"
+      }
+    ]
+  },
+  {
+    "job_id": "6522d046066d",
+    "package": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 12
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6522d046066d/package/3x6Sq_oxDNA_namd_solvated/3x6Sq_oxDNA_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "67fa301eade0",
+    "package": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/67fa301eade0/package/ssdna24_namd_solvated/ssdna24_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "6f5d343b632f",
+    "package": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/6f5d343b632f/package/duplex_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "76255d977f6e",
+    "package": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "measured": false,
+        "reason": "no DNA atoms in the built PDB"
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "off": 21,
+      "on": 1
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p25.resume1.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/graphene_control_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/76255d977f6e/package/graphene_control_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "79c6dfa66d73",
+    "package": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "requested_box_size_nm": [
+        35.0,
+        25.0,
+        35.0
+      ],
+      "carved": false,
+      "npt_allowed": false,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          350.0,
+          250.0,
+          350.0
+        ],
+        "extent_ang": [
+          133.51999999999998,
+          43.525999999999996,
+          295.201
+        ],
+        "radius_ang": 162.15734265791198,
+        "clearance_as_built_ang": [
+          108.24000000000001,
+          103.237,
+          27.39949999999999
+        ],
+        "clearance_rotated_ang": [
+          12.842657342088017,
+          -37.15734265791198,
+          12.842657342088017
+        ],
+        "image_gap_as_built_ang": 54.79899999999998,
+        "image_gap_rotated_ang": -74.31468531582397,
+        "fits_as_built": false,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "off": 21
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/namd_fast.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/79c6dfa66d73/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "off"
+      }
+    ]
+  },
+  {
+    "job_id": "7dce6541ffba",
+    "package": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 12
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/7dce6541ffba/package/VoltronCore_namd_solvated/VoltronCore_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "82a3cd08ed4f",
+    "package": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": {
+      "padding_nm": 1.2,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          90.026,
+          89.892,
+          4079.973
+        ],
+        "extent_ang": [
+          66.026,
+          65.892,
+          4055.973
+        ],
+        "radius_ang": 2040.6112920761923,
+        "clearance_as_built_ang": [
+          12.0,
+          12.0,
+          12.0
+        ],
+        "clearance_rotated_ang": [
+          -1995.5982920761924,
+          -1995.6652920761924,
+          -0.6247920761923069
+        ],
+        "image_gap_as_built_ang": 24.0,
+        "image_gap_rotated_ang": -3991.3305841523847,
+        "fits_as_built": true,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 22
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/VoltronCoreArm_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/82a3cd08ed4f/package/VoltronCoreArm_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "8553cf4fa9a0",
+    "package": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": 1.2,
+    "dynamics_configuration_counts": {
+      "off": 16
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_01_300K_NPT_ENM_k0p5_p100.resume1.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_01_300K_NPT_ENM_k0p5_p100.resume2.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_01_300K_NPT_ENM_k0p5_p100.resume3.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/6hbx100_90deg_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/8553cf4fa9a0/package/6hbx100_90deg_namd_solvated/namd_fast.conf",
+        "langevinPiston": "off"
+      }
+    ]
+  },
+  {
+    "job_id": "90ad54edddec",
+    "package": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": 0.6,
+    "dynamics_configuration_counts": {
+      "off": 14
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/GT_corner_v2_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/_th.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/90ad54edddec/package/GT_corner_v2_namd_solvated/namd_fast.conf",
+        "langevinPiston": "off"
+      }
+    ]
+  },
+  {
+    "job_id": "95d4b7d8fa46",
+    "package": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95d4b7d8fa46/package/duplex_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "95f45d69ca31",
+    "package": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/exp43_bracketed_crossovers_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/95f45d69ca31/package/exp43_bracketed_crossovers_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "9d38efc306bf",
+    "package": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis",
+    "protocol": "implicit_gbis_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "off": 20
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/9d38efc306bf/package/smallO-poly_namd_gbis/smallO-poly_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "off"
+      }
+    ]
+  },
+  {
+    "job_id": "a4cb52583c26",
+    "package": "workspace/md_jobs/a4cb52583c26/package/cube_pore_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "requested_box_size_nm": null,
+      "carved": false,
+      "npt_allowed": false,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          267.492,
+          268.239,
+          242.394
+        ],
+        "extent_ang": [
+          133.52599999999998,
+          133.519,
+          215.19400000000002
+        ],
+        "radius_ang": 138.25842666530758,
+        "clearance_as_built_ang": [
+          66.98300000000002,
+          67.35999999999999,
+          13.599999999999994
+        ],
+        "clearance_rotated_ang": [
+          -4.512426665307572,
+          -4.138926665307594,
+          -17.06142666530758
+        ],
+        "image_gap_as_built_ang": 27.19999999999999,
+        "image_gap_rotated_ang": -34.12285333061516,
+        "fits_as_built": false,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "off": 1
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/a4cb52583c26/package/cube_pore_namd_solvated/cube_pore_01_production_200ns_k0.conf",
+        "langevinPiston": "off"
+      }
+    ]
+  },
+  {
+    "job_id": "a5e2cf157a76",
+    "package": "workspace/md_jobs/a5e2cf157a76/package/small_plate_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "requested_box_size_nm": [
+        35.0,
+        25.0,
+        35.0
+      ],
+      "carved": false,
+      "npt_allowed": false,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          350.0,
+          250.0,
+          350.0
+        ],
+        "extent_ang": [
+          133.51999999999998,
+          43.525999999999996,
+          295.201
+        ],
+        "radius_ang": 162.15734265791198,
+        "clearance_as_built_ang": [
+          108.24000000000001,
+          103.237,
+          27.39949999999999
+        ],
+        "clearance_rotated_ang": [
+          12.842657342088017,
+          -37.15734265791198,
+          12.842657342088017
+        ],
+        "image_gap_as_built_ang": 54.79899999999998,
+        "image_gap_rotated_ang": -74.31468531582397,
+        "fits_as_built": false,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "off": 1
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/a5e2cf157a76/package/small_plate_namd_solvated/small_plate_01_production_200ns_k0.conf",
+        "langevinPiston": "off"
+      }
+    ]
+  },
+  {
+    "job_id": "a81b371be69d",
+    "package": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_01_300K_NPT_ENM_k0p5_p50.resume1.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/a81b371be69d/package/6hb_sim_v2_namd_solvated/6hb_sim_v2_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "ab3f163b7431",
+    "package": "workspace/md_jobs/ab3f163b7431/package/graphene_control_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "measured": false,
+        "reason": "no DNA atoms in the built PDB"
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "off": 3
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/ab3f163b7431/package/graphene_control_namd_solvated/graphene_control_01_production_50ns_k0.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/ab3f163b7431/package/graphene_control_namd_solvated/graphene_control_01_production_50ns_k0.resume1.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/ab3f163b7431/package/graphene_control_namd_solvated/graphene_control_01_production_50ns_k0.resume2.conf",
+        "langevinPiston": "off"
+      }
+    ]
+  },
+  {
+    "job_id": "b6dc0c458867",
+    "package": "workspace/md_jobs/b6dc0c458867/package/graphene_control_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "measured": false,
+        "reason": "no DNA atoms in the built PDB"
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "off": 5,
+      "on": 1
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/b6dc0c458867/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/b6dc0c458867/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/b6dc0c458867/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/b6dc0c458867/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/b6dc0c458867/package/graphene_control_namd_solvated/graphene_control_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/b6dc0c458867/package/graphene_control_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "c4789083783f",
+    "package": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/exp43_left_crossover_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/c4789083783f/package/exp43_left_crossover_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "d04efabaed17",
+    "package": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d04efabaed17/package/duplex_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "d12c80241e21",
+    "package": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/1hbx300_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d12c80241e21/package/1hbx300_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "d163b098341d",
+    "package": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/exp43_no_crossover_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/d163b098341d/package/exp43_no_crossover_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "dbd8ad3b7d4f",
+    "package": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dbd8ad3b7d4f/package/duplex_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "dc8d035b3dda",
+    "package": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 12
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/dc8d035b3dda/package/VoltronCore_namd_solvated/VoltronCore_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "e75ffd56c6f8",
+    "package": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          348.655,
+          70.726,
+          349.18
+        ],
+        "extent_ang": [
+          133.519,
+          43.525999999999996,
+          295.20099999999996
+        ],
+        "radius_ang": 162.15719254674622,
+        "clearance_as_built_ang": [
+          107.56799999999998,
+          13.600000000000001,
+          26.98950000000002
+        ],
+        "clearance_rotated_ang": [
+          12.17030745325377,
+          -126.79419254674622,
+          12.432807453253787
+        ],
+        "image_gap_as_built_ang": 27.200000000000003,
+        "image_gap_rotated_ang": -253.58838509349243,
+        "fits_as_built": false,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 22
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "e8bc4c569393",
+    "package": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": {
+      "padding_nm": 1.2,
+      "water_shell_nm": 0.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "box_ang": [
+          44.084,
+          44.084,
+          93.504
+        ],
+        "extent_ang": [
+          20.084000000000003,
+          20.084000000000003,
+          69.504
+        ],
+        "radius_ang": 35.54007053286261,
+        "clearance_as_built_ang": [
+          12.0,
+          12.0,
+          12.0
+        ],
+        "clearance_rotated_ang": [
+          -13.498070532862606,
+          -13.498070532862606,
+          11.211929467137395
+        ],
+        "image_gap_as_built_ang": 24.0,
+        "image_gap_rotated_ang": -26.99614106572521,
+        "fits_as_built": true,
+        "fits_rotated": false,
+        "image_clearance_ok": false,
+        "percentile": "max",
+        "measured": true
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 22
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p25.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p75.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/duplex_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/e8bc4c569393/package/duplex_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "f6b191b31c33",
+    "package": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/duplex_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f6b191b31c33/package/duplex_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "f702f4a3282f",
+    "package": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 15
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_05_production_0p5ns_k0_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_05_production_0p5ns_k0_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f702f4a3282f/package/VoltronCore_namd_solvated/VoltronCore_05_production_0p5ns_k0_p50.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "f716e1f42b9b",
+    "package": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated",
+    "protocol": "propagator_reference",
+    "graphene": false,
+    "solvation": null,
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "on": 13
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_01_300K_NPT_ENM_k0p5_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_01_300K_NPT_ENM_k0p5_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_01_300K_NPT_ENM_k0p5_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_02_300K_NPT_ENM_k0p1_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_02_300K_NPT_ENM_k0p1_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_02_300K_NPT_ENM_k0p1_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_03_300K_NPT_ENM_k0p01_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_03_300K_NPT_ENM_k0p01_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_03_300K_NPT_ENM_k0p01_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_04_300K_NPT_MGHH_only_p10.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_04_300K_NPT_MGHH_only_p100.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/6hb_04_300K_NPT_MGHH_only_p50.conf",
+        "langevinPiston": "on"
+      },
+      {
+        "file": "workspace/md_jobs/f716e1f42b9b/package/6hb_namd_solvated/namd_fast.conf",
+        "langevinPiston": "on"
+      }
+    ]
+  },
+  {
+    "job_id": "fda9af0d6011",
+    "package": "workspace/md_jobs/fda9af0d6011/package/graphene_control_namd_solvated",
+    "protocol": "equilibrium_aware_namd",
+    "graphene": true,
+    "solvation": {
+      "padding_nm": 3.0,
+      "carved": false,
+      "npt_allowed": true,
+      "sized_for_free_ns": 4.8,
+      "box_check": {
+        "measured": false,
+        "reason": "no DNA atoms in the built PDB"
+      }
+    },
+    "water_shell_nm": null,
+    "dynamics_configuration_counts": {
+      "off": 3
+    },
+    "configurations": [
+      {
+        "file": "workspace/md_jobs/fda9af0d6011/package/graphene_control_namd_solvated/graphene_control_01_production_10ns_k0.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/fda9af0d6011/package/graphene_control_namd_solvated/graphene_control_01_production_10ns_k0.resume1.conf",
+        "langevinPiston": "off"
+      },
+      {
+        "file": "workspace/md_jobs/fda9af0d6011/package/graphene_control_namd_solvated/graphene_control_01_production_10ns_k0.resume2.conf",
+        "langevinPiston": "off"
+      }
+    ]
+  }
+]

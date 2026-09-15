@@ -176,6 +176,8 @@ export function syncPatchedBeadPosition(entry, backbonePosition) {
   return entry.pos
 }
 
+const _hiddenInstanceRotations = new WeakMap()
+
 /**
  * Change only an instance's scale, preserving its currently rendered position
  * and orientation.  Appearance controls must use the live matrix as their
@@ -187,7 +189,22 @@ export function rescaleInstanceInPlace(
   quaternion = new THREE.Quaternion(), currentScale = new THREE.Vector3(),
 ) {
   mesh.getMatrixAt(id, matrix)
-  matrix.decompose(position, quaternion, currentScale)
+  position.setFromMatrixPosition(matrix)
+  currentScale.setFromMatrixScale(matrix)
+  let hiddenRotations = _hiddenInstanceRotations.get(mesh)
+  if (currentScale.lengthSq() > 1e-12) {
+    matrix.decompose(position, quaternion, currentScale)
+    if (scale.lengthSq() < 1e-12) {
+      if (!hiddenRotations) _hiddenInstanceRotations.set(mesh, hiddenRotations = new Map())
+      hiddenRotations.set(id, quaternion.clone())
+    } else {
+      hiddenRotations?.delete(id)
+    }
+  } else {
+    // A zero-scale matrix has no recoverable rotation; decomposing it produces NaNs.
+    quaternion.copy(hiddenRotations?.get(id) ?? ID_QUAT)
+    if (scale.lengthSq() > 1e-12) hiddenRotations?.delete(id)
+  }
   matrix.compose(position, quaternion, scale)
   mesh.setMatrixAt(id, matrix)
   return position
@@ -6223,13 +6240,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       for (const entry of slabEntries) {
         const hidden = _isNucHidden(entry.nuc, entry._copy ?? 0)
-        _tMatrix.compose(
-          entry.center, entry.quat,
-          hidden
-            ? _tScale.set(0, 0, 0)
+        // Visibility must not re-seat slabs at their authored pose while the
+        // corresponding beads are displaying a simulation frame.
+        rescaleInstanceInPlace(
+          entry.instMesh, entry.id,
+          hidden ? _tScale.set(0, 0, 0)
             : _tScale.set(slabParams.length, slabParams.width, slabParams.thickness),
+          _tMatrix, _tPos, _slabRescaleQ, _physDir,
         )
-        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       if (slabEntries.length) iSlabs.instanceMatrix.needsUpdate = true
       _refreshSlabConnectors()

@@ -28,7 +28,7 @@ const ENGINE_VARIANTS = [
 
 const EDITABLE_STAGE_FIELDS = new Set([
   'backend', 'steps', 'temperature', 'salt_concentration', 'device', 'ensemble',
-  'delta_translation', 'delta_rotation', 'dt', 'thermostat', 'bussi_tau',
+  'delta_translation', 'delta_rotation', 'dt', 'thermostat', 'diff_coeff', 'refresh_vel', 'bussi_tau',
   'newtonian_steps', 'max_backbone_force', 'max_backbone_force_far',
   'external_forces', 'min_bp_retained', 'print_conf_interval', 'print_energy_every',
 ])
@@ -37,6 +37,8 @@ const ROW_LABELS = {
   steps: 'Steps', temperature: 'Temperature', salt_concentration: 'Salt concentration (M)',
   device: 'CUDA device', ensemble: 'Ensemble', delta_translation: 'MC translation delta',
   delta_rotation: 'MC rotation delta', dt: 'Time step', thermostat: 'Thermostat',
+  diff_coeff: 'Diffusion coefficient', refresh_vel: 'Refresh velocities',
+  use_average_seq: 'Use built-in average strengths', seq_dep_file: 'Sequence parameter file',
   bussi_tau: 'Bussi tau', newtonian_steps: 'Newtonian steps',
   max_backbone_force: 'Backbone force cap', max_backbone_force_far: 'Far-force cap',
   external_forces: 'External forces', forces_file: 'Forces file', min_bp_retained: 'BP retention gate',
@@ -132,7 +134,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
     if (value === undefined) delete values.stage_overrides[stage][key]
     else values.stage_overrides[stage][key] = value
     if (!Object.keys(values.stage_overrides[stage]).length) delete values.stage_overrides[stage]
-    renderConfig(); targetStep?.refreshSizing?.()
+    renderConfig(); paintValidation(); targetStep?.refreshSizing?.()
   }
 
   function editStageCell(td, stage, key, value) {
@@ -182,13 +184,13 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
             type: 'button', title: `Set ${ROW_LABELS[key] || key} for every applicable stage`,
           }, on: { click: () => editEveryStage(key, stages) } }) : null] }),
         ...stages.map((stage, index) => {
-          const present = stage[key] != null
+          const present = stage[key] != null || (stage.sim_type === 'MD' && ['diff_coeff', 'max_backbone_force', 'max_backbone_force_far'].includes(key))
           const overridden = Object.prototype.hasOwnProperty.call(values.stage_overrides?.[stage.name] || {}, key)
           const changed = index > 0 && displayValue(stage[key]) !== displayValue(stages[index - 1][key])
           const classes = ['wizard-cell', !present ? 'wizard-cell--absent' : '', changed ? 'wizard-cell--changed' : '',
             overridden ? 'wizard-cell--overridden' : '', !editable || !present ? 'wizard-cell--locked' : ''].filter(Boolean)
           const td = el('td', { className: classes.join(' '), text: displayValue(stage[key]), attrs: {
-            title: editable && present ? 'Click to edit this stage. Blank restores the protocol value.' : 'Resolved by the job builder.',
+            title: editable && present ? (key === 'diff_coeff' ? 'Required for John/Brownian/Langevin; ignored by Bussi. Enter a positive value.' : key === 'refresh_vel' ? 'true generates new velocities; false carries velocities from the preceding stage.' : key === 'bussi_tau' ? 'Coupling time in integration steps. Scale with timestep changes to preserve physical coupling time.' : 'Click to edit. Blank restores the protocol value; (none) removes a force cap.') : 'Resolved by the job builder.',
           } })
           if (editable && present) {
             td.tabIndex = 0

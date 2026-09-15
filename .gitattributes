@@ -1,1 +1,5 @@
 tools/oxdna_memory/*.patch -whitespace
+# Preserve fixed-column PDB records and literal upstream patch context.
+backend/data/proteins/*.pdb -whitespace
+tools/oxdna_thermostat/*.patch -whitespace
+scripts/validation/**/*.patch -whitespace

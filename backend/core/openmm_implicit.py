@@ -198,6 +198,8 @@ def build_openmm_topology(design: "Design"):
     Routine and crossover phosphodiester bonds come from ``AtomisticModel.bonds``;
     no connectivity is inferred from geometric proximity or PDB records.
     """
+    from backend.core.streptavidin import require_coating_simulation_support
+    require_coating_simulation_support(design, 'OpenMM')
     from backend.core.cpd_forcefield import reject_photoproduct_design
 
     reject_photoproduct_design(

@@ -151,11 +151,11 @@ class CampaignLedger:
 
 
 def engine_dir(cuda_arch: str) -> str:
-    return f"{REMOTE_ROOT}/engines/{OXDNA_REV}-adaptive-sm{cuda_arch}"
+    return f"{REMOTE_ROOT}/engines/{OXDNA_REV}-adaptive-portable-physics-v3-sm{cuda_arch}"
 
 
 def render_build_script(cuda_arch: str, patch_remote_path: str) -> str:
-    """Idempotent remote build, persisted on the RunPod network volume."""
+    """Persist a host-portable build: later pods may have different CPU features."""
     if cuda_arch not in {"90", "120"}:
         raise RunpodOxdnaError(f"unsupported CUDA architecture sm_{cuda_arch}")
     install = engine_dir(cuda_arch)
@@ -165,9 +165,13 @@ def render_build_script(cuda_arch: str, patch_remote_path: str) -> str:
 set -euo pipefail
 install={q(install)}
 source_dir={q(source)}
-if [ -x "$install/bin/oxDNA" ]; then
-  "$install/bin/oxDNA" --help >/dev/null 2>&1 || true
-  exit 0
+if [ -x "$install/bin/oxDNA" ] && [ -x "$install/bin/DNAnalysis" ] && \
+   [ -s "$install/lib/liboxdna_common.so" ] && \
+   [ "$(cat "$install/bussi-rigid-dofs" 2>/dev/null)" = v1 ] && [ "$(cat "$install/bussi-cuda-rng" 2>/dev/null)" = v1 ] && [ "$(cat "$install/physics-corrections" 2>/dev/null)" = v3 ]; then
+  if (LD_LIBRARY_PATH="$install/lib:${{LD_LIBRARY_PATH:-}}" "$install/bin/oxDNA" --help 2>&1 || true) | \
+     grep -Fq "Input file '--help' not found"; then
+    exit 0
+  fi
 fi
 for cuda_bin in /usr/local/cuda/bin /usr/local/cuda-12.8/bin /usr/local/cuda-12.9/bin /usr/local/cuda-13.0/bin; do
   if [ -x "$cuda_bin/nvcc" ]; then export PATH="$cuda_bin:$PATH"; break; fi
@@ -179,8 +183,14 @@ git -C "$source_dir" checkout --detach {q(OXDNA_REV)}
 git -C "$source_dir" reset --hard {q(OXDNA_REV)}
 git -C "$source_dir" apply --check {q(patch_remote_path)}
 git -C "$source_dir" apply {q(patch_remote_path)}
+git -C "$source_dir" apply --check {q(REMOTE_ROOT + "/rigid-body-bussi.patch")}
+git -C "$source_dir" apply {q(REMOTE_ROOT + "/rigid-body-bussi.patch")}
+git -C "$source_dir" apply --check {q(REMOTE_ROOT + "/cuda-bussi-rng.patch")}
+git -C "$source_dir" apply {q(REMOTE_ROOT + "/cuda-bussi-rng.patch")}
+git -C "$source_dir" apply --check {q(REMOTE_ROOT + "/physics-corrections.patch")}
+git -C "$source_dir" apply {q(REMOTE_ROOT + "/physics-corrections.patch")}
 cmake -S "$source_dir" -B "$source_dir/build-sm{cuda_arch}" \
-  -DCMAKE_BUILD_TYPE=Release -DCUDA=ON -DCMAKE_CUDA_ARCHITECTURES={cuda_arch}
+  -DCMAKE_BUILD_TYPE=Release -DCUDA=ON -DCMAKE_CUDA_ARCHITECTURES={cuda_arch} -DNATIVE_COMPILATION=OFF
 cmake --build "$source_dir/build-sm{cuda_arch}" -j"$(nproc)" --target oxDNA DNAnalysis
 mkdir -p "$install/bin" "$install/lib"
 install -m 0755 "$source_dir/build-sm{cuda_arch}/bin/oxDNA" "$install/bin/oxDNA"
@@ -188,6 +198,9 @@ install -m 0755 "$source_dir/build-sm{cuda_arch}/bin/DNAnalysis" "$install/bin/D
 install -m 0755 "$source_dir/build-sm{cuda_arch}/src/liboxdna_common.so" "$install/lib/liboxdna_common.so"
 printf '%s\n' {q(OXDNA_REV)} > "$install/source-revision"
 printf '%s\n' adaptive-memory > "$install/build-flavor"
+printf '%s\n' v1 > "$install/bussi-rigid-dofs"
+printf '%s\n' v1 > "$install/bussi-cuda-rng"
+printf '%s\n' v3 > "$install/physics-corrections"
 """
 
 
@@ -221,7 +234,9 @@ def render_chain_script(job_id: str, specs: list[OxdnaStageSpec], cuda_arch: str
 
 def stage_inputs(job_dir: Path, specs: list[OxdnaStageSpec], remote_job_dir: str) -> dict[str, str]:
     """Render remote-path inputs without mutating the prepared local job."""
-    result: dict[str, str] = {}
+    from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_FILE, AVERAGE_SEQUENCE_PATH
+    recorded_parameters = job_dir / AVERAGE_SEQUENCE_FILE
+    result: dict[str, str] = {AVERAGE_SEQUENCE_FILE: (recorded_parameters if recorded_parameters.exists() else AVERAGE_SEQUENCE_PATH).read_text()}
     for idx, spec in enumerate(specs):
         conf = "conf.dat" if idx == 0 else f"{specs[idx - 1].name}/last_conf.dat"
         forces = (
@@ -235,6 +250,7 @@ def stage_inputs(job_dir: Path, specs: list[OxdnaStageSpec], remote_job_dir: str
             f"{remote_job_dir}/{conf}",
             forces_name=forces,
             parfile_name=parfile,
+            sequence_parameters_name=f"{remote_job_dir}/oxDNA2_average_sequence_parameters.txt",
         )
         if spec.backend == "CUDA" and "use_edge = true" in text:
             text = text.rstrip() + "\n" + "\n".join(
@@ -259,6 +275,10 @@ def manifest(job_id: str, specs: list[OxdnaStageSpec], target: OxdnaGpuTarget) -
         "engine": "oxdna-adaptive-memory",
         "source_url": OXDNA_URL,
         "source_revision": OXDNA_REV,
+        "bussi_rigid_dofs": "v1",
+        "bussi_cuda_rng": "CPU-matched-v1",
+        "physics_corrections": "v3",
+        "cpu_portability": "generic-v1",
         "cuda_arch": target.cuda_arch,
         "gpu_type_id": target.gpu_id,
         "stages": [asdict(spec) for spec in specs],
@@ -350,6 +370,11 @@ async def stage_prepared_job(
     await conn.mkdir_p(remote)
     patch_remote = f"{REMOTE_ROOT}/adaptive-neighbor-lists.patch"
     await conn.sftp_put(str(patch_path), patch_remote)
+    thermostat_patch = Path(__file__).resolve().parents[2] / "tools/oxdna_thermostat/rigid-body-bussi.patch"
+    await conn.sftp_put(str(thermostat_patch), f"{REMOTE_ROOT}/rigid-body-bussi.patch")
+    rng_patch = thermostat_patch.with_name("cuda-bussi-rng.patch")
+    await conn.sftp_put(str(rng_patch), f"{REMOTE_ROOT}/cuda-bussi-rng.patch")
+    await conn.sftp_put(str(thermostat_patch.with_name("physics-corrections.patch")), f"{REMOTE_ROOT}/physics-corrections.patch")
     # One level-1 gzip stream avoids paying for many minutes of verbose coordinate
     # text over SFTP (the 451k-nt validation seed shrinks from 72 MB to ~20 MB).
     root_files = sorted(p for p in job_dir.iterdir() if p.is_file())

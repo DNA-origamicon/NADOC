@@ -178,6 +178,11 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
         )
 
     design = design_state.get_or_404().without_reference_geometry()
+    from backend.core.streptavidin import require_coating_simulation_support
+    try:
+        require_coating_simulation_support(design, 'mrDNA')
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
     if not design.helices:
         raise HTTPException(400, "Design has no helices to relax.")
 

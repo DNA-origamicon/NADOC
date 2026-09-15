@@ -1,0 +1,86 @@
+{
+  "controls_complete": true,
+  "timings": [
+    {
+      "geometry": "biotin10",
+      "thermostat": "bussi",
+      "backend": "CPU",
+      "pairs": 12,
+      "ratio": 1.0004317916653498,
+      "ci95": [
+        0.9785828933120408,
+        1.0227685121158112
+      ],
+      "resolved_slowdown": false
+    },
+    {
+      "geometry": "biotin10",
+      "thermostat": "bussi",
+      "backend": "CUDA",
+      "pairs": 12,
+      "ratio": 0.9964064250716717,
+      "ci95": [
+        0.9798331248978697,
+        1.0132600528560345
+      ],
+      "resolved_slowdown": false
+    },
+    {
+      "geometry": "biotin10",
+      "thermostat": "john",
+      "backend": "CPU",
+      "pairs": 12,
+      "ratio": 0.9945664760796854,
+      "ci95": [
+        0.9817794054233225,
+        1.0075200904372785
+      ],
+      "resolved_slowdown": false
+    },
+    {
+      "geometry": "biotin10",
+      "thermostat": "john",
+      "backend": "CUDA",
+      "pairs": 12,
+      "ratio": 1.007122448522244,
+      "ci95": [
+        0.9888094590437186,
+        1.0257745989792304
+      ],
+      "resolved_slowdown": false
+    },
+    {
+      "geometry": "dna",
+      "thermostat": "bussi",
+      "backend": "CPU",
+      "pairs": 12,
+      "ratio": 0.9820115826209985,
+      "ci95": [
+        0.9692711885395987,
+        0.9949194403010987
+      ],
+      "resolved_slowdown": false
+    },
+    {
+      "geometry": "dna",
+      "thermostat": "bussi",
+      "backend": "CUDA",
+      "pairs": 12,
+      "ratio": 1.0191780072489545,
+      "ci95": [
+        0.99534529888755,
+        1.0435813698229972
+      ],
+      "resolved_slowdown": false
+    }
+  ],
+  "engine_sha256": {
+    "baseline": "10adaddb2e33a57f1797fc01a4aeb95196d7e5cca8b3708da8c32348462c7c6c",
+    "v3": "a5b85da6d1b57c9eb7e52644c5f9d5f1ce9929dc3a444d89b7bfc18ec02f88f3"
+  },
+  "limitation": "Step throughput does not establish time to equilibrium or experimental agreement; useful-sample validation remains tech debt.",
+  "engine_library_sha256": {
+    "baseline": "e6dcf9dcebd133d59aa3c6ea3e9bf0825f10fddaf31135c5e4ca4b1dc40bcd87",
+    "v3": "067454ccede1c5e3257c02367f922af3193934233c6421b934e62bb682863b97"
+  }
+}

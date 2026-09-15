@@ -175,6 +175,27 @@ describe('atomistic_renderer applyPositionLerp bond cutoff', () => {
     expect(bondCylinderScaleY(scene)).toBeCloseTo(0.15, 5)
   })
 
+  it('shares a unit sphere shader across coating elements/modes while preserving physical radii', () => {
+    const { scene, ar } = makeTwoAtomBond()
+    ar.update({ sphereImpostors: true, unitSphereImpostors: true, atoms: [
+      { serial: 0, element: 'C', x: 0, y: 0, z: 0 },
+      { serial: 1, element: 'O', x: 1, y: 0, z: 0 },
+    ], bonds: [] })
+    const material = scene.children.find(m => m.name === 'atomSpheres').material
+    expect(material.userData.impostorRadius).toBe(1)
+    for (const mode of ['ballstick', 'vdw', 'ballstick']) {
+      ar.setMode(mode)
+      for (const mesh of scene.children.filter(m => m.name === 'atomSpheres')) {
+        expect(mesh.material).toBe(material)
+        expect(mesh.geometry).toBe(IMPOSTOR_QUAD)
+        const matrix = new THREE.Matrix4(); mesh.getMatrixAt(0, matrix)
+        expect(matrix.elements[0] * material.userData.impostorRadius)
+          .toBeCloseTo(mode === 'vdw' ? ELEMENTS[mesh.userData.element].vdw : BALL_RADIUS, 6)
+      }
+    }
+    ar.dispose()
+  })
+
   it('hides a bond stretched across the structure (un-overridden nucleotide)', () => {
     const { scene, ar } = makeTwoAtomBond()
     // serial 1 stranded 5 nm away (its design position) while serial 0 relaxed.

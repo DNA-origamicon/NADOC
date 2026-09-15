@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "reviewed": "2026-09-12",
+  "profiles": [
+    {
+      "id": "breshike-fam",
+      "donor": "fam",
+      "donor_label": "FAM",
+      "emission_peak_nm": 520,
+      "quantum_yield": 0.8,
+      "exponent": 4,
+      "distance_basis": "donor-center-to-gold-surface",
+      "source": "https://doi.org/10.1021/jp407259r",
+      "data_source": "https://www.chem.fsu.edu/~strouse/Theses_StrouseLab/BreshikeThesis.pdf#page=85",
+      "location": "Table 3.4, printed page 67; experimental d0 column",
+      "points": [
+        { "gold_diameter_nm": 1.89, "d0_nm": 7.25 },
+        { "gold_diameter_nm": 3, "d0_nm": 10.62 },
+        { "gold_diameter_nm": 4.3, "d0_nm": 11.56 },
+        { "gold_diameter_nm": 5.3, "d0_nm": 14.7 },
+        { "gold_diameter_nm": 6.6, "d0_nm": 18.3 },
+        { "gold_diameter_nm": 8, "d0_nm": 20.7 },
+        { "gold_diameter_nm": 16.5, "d0_nm": 32.08 }
+      ]
+    },
+    {
+      "id": "breshike-cy3b",
+      "donor": "cy3b",
+      "donor_label": "Cy3B (not Cy3)",
+      "emission_peak_nm": 570,
+      "quantum_yield": 0.7,
+      "exponent": 4,
+      "distance_basis": "donor-center-to-gold-surface",
+      "source": "https://doi.org/10.1021/jp407259r",
+      "data_source": "https://www.chem.fsu.edu/~strouse/Theses_StrouseLab/BreshikeThesis.pdf#page=85",
+      "location": "Table 3.4, printed page 67; experimental d0 column",
+      "points": [
+        { "gold_diameter_nm": 1.89, "d0_nm": 5.76 },
+        { "gold_diameter_nm": 3, "d0_nm": 10.8 },
+        { "gold_diameter_nm": 8, "d0_nm": 16 },
+        { "gold_diameter_nm": 16.5, "d0_nm": 22.4 }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "donor": "Fluorescent dyes",
+      "gold_diameter_nm": [1.5],
+      "exponent": 4,
+      "source": "https://doi.org/10.1021/ja0583665",
+      "finding": "Lifetime measurements support a donor-to-surface inverse-fourth-power nonradiative transfer model."
+    },
+    {
+      "donor": "CdSe/ZnS QDs",
+      "gold_diameter_nm": [3, 15, 80],
+      "exponents_by_diameter": [4, 6, 6],
+      "source": "https://doi.org/10.1021/jz201002g",
+      "finding": "The measured distance law changes with gold size and plasmon overlap; 80 nm gold quenches more strongly than 15 nm in this system.",
+      "render_enabled": false,
+      "reason": "No verified fitted characteristic distances for these donor/acceptor systems in the imported data."
+    },
+    {
+      "donor": "DNA-conjugated QDs on DNA origami",
+      "gold_diameter_nm": [30],
+      "exponent": 2.7,
+      "reported_half_quenching_nm": 28,
+      "reported_distance_range_nm": [15, 70],
+      "source": "https://doi.org/10.1021/nl501709s",
+      "finding": "Long-range nonradiative quenching with approximately 28 nm half-quenching distance, rather than a universal sixth-power law.",
+      "render_enabled": false,
+      "reason": "Donor identity and geometric distance convention were not verified from the accessible abstract; this radius cannot be assigned to vendor QDs."
+    },
+    {
+      "donor": "Streptavidin-coated CdSe/ZnS Qdot 585 and Qdot 605",
+      "gold_diameter_nm": [10, 15, 20],
+      "source": "https://doi.org/10.1002/anie.201206253",
+      "data_source": "https://tsapps.nist.gov/publication/get_pdf.cfm?pub_id=911962",
+      "finding": "Gold size, arrangement and spectral overlap change QD lifetime and photon count rate. Enhancement and quenching require more than a universal radius.",
+      "render_enabled": false,
+      "reason": "These coated dots and experimental geometries do not match the currently importable oleic-acid-coated vendor dots."
+    }
+  ],
+  "limitations": [
+    "Rendered values are literature-based estimates, not sample-specific calibrations. The dye quantum yields, environment and linker geometry are assumed to match the reference experiment.",
+    "Between measured gold diameters, d0 is linearly interpolated as a display approximation. Gold size is never extrapolated outside the tabulated range.",
+    "Curves use donor-center-to-gold-surface distance in nm. The QD radius must not be subtracted from that distance.",
+    "The fitted distance law is evaluated at the scene separation; this does not establish experimental validity at every separation. Contact and overlap are not modeled.",
+    "Multiple acceptors are treated as independent added decay rates. Collective plasmon coupling, excitation enhancement, altered radiative rates, orientation, inner-filter effects and chemical quenching are not modeled.",
+    "Vendor spectrum images and emission peaks alone are insufficient to calculate a validated QD–gold radius. Uncalibrated pairs remain at reference brightness and are explicitly marked unknown, never zero quenching."
+  ]
+}

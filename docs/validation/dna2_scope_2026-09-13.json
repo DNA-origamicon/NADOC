@@ -1,0 +1,20 @@
+{
+  "weak_coupling": {
+    "CPU": {
+      "initial_K": 9.176000000000002,
+      "final_K": 4.5880036560999535,
+      "fractional_change": -0.4999996015584184
+    },
+    "CUDA": {
+      "initial_K": 9.175999929934939,
+      "final_K": 4.588003592275793,
+      "fractional_change": -0.4999996046961256
+    }
+  },
+  "nonbonded_contact": {
+    "force_relative_error": 3.6735391144729283e-05,
+    "CPU_potential": 30.702722052812142,
+    "CUDA_native_potential": 0.0,
+    "CUDA_host_evaluated_potential": 30.703966690716214
+  }
+}

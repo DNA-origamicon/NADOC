@@ -4,7 +4,7 @@
 // existing caller (`import { createAnimation } from '../api/client.js'`,
 // `import * as api from '../api/client.js'`) continues working unchanged.
 
-import { _request, _syncFromDesignResponse, _syncFromAssemblyResponse } from './client.js'
+import { _request, _syncDesignAuthoringResponse, _syncFromAssemblyResponse } from './client.js'
 
 // ── Assembly configurations ──────────────────────────────────────────────────
 
@@ -30,43 +30,47 @@ export async function deleteAssemblyConfiguration(configId) {
 
 // ── Animations ────────────────────────────────────────────────────────────────
 // Animation / keyframe mutations only touch ``design.animations`` — they
-// never move any nucleotide. ``skipGeometry: true`` avoids the multi-second
-// ``getGeometry()`` refetch that ``_syncFromDesignResponse`` would otherwise
-// fire on every mutation.
+// never move any nucleotide. Merge only that field so the authored design in
+// the response cannot replace the live simulation topology or slab frames.
+
+export async function ensureDefaultAnimation() {
+  const json = await _request('POST', '/design/animations', { ensure_default: true })
+  return _syncDesignAuthoringResponse(json, 'animations')
+}
 
 export async function createAnimation(name = 'Animation', fps = 30, loop = false) {
   const json = await _request('POST', '/design/animations', { name, fps, loop })
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'animations')
 }
 
 export async function updateAnimation(animId, patch) {
   const json = await _request('PATCH', `/design/animations/${animId}`, patch)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'animations')
 }
 
 export async function deleteAnimation(animId) {
   const json = await _request('DELETE', `/design/animations/${animId}`)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'animations')
 }
 
 export async function createKeyframe(animId, kf) {
   const json = await _request('POST', `/design/animations/${animId}/keyframes`, kf)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'animations')
 }
 
 export async function updateKeyframe(animId, kfId, patch) {
   const json = await _request('PATCH', `/design/animations/${animId}/keyframes/${kfId}`, patch)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'animations')
 }
 
 export async function deleteKeyframe(animId, kfId) {
   const json = await _request('DELETE', `/design/animations/${animId}/keyframes/${kfId}`)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'animations')
 }
 
 export async function reorderKeyframes(animId, orderedIds) {
   const json = await _request('PUT', `/design/animations/${animId}/keyframes/reorder`, { ordered_ids: orderedIds })
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncDesignAuthoringResponse(json, 'animations')
 }
 
 // ── Assembly animations ───────────────────────────────────────────────────────

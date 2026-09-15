@@ -1,0 +1,83 @@
+[
+  {
+    "stage": "00_min_enm_k0p5",
+    "dna_heavy_min_nm": [
+      6.032446355440519,
+      6.099324777524301,
+      1.2647761304126823
+    ],
+    "dna_heavy_max_nm": [
+      20.832225013068047,
+      20.840855478773456,
+      23.109031996235597
+    ],
+    "dna_heavy_z_relative_to_membrane_quantiles_nm": [
+      0.06477613041268238,
+      0.6689247491496333,
+      10.297985556213952,
+      20.780309624472526,
+      21.909031996235598
+    ],
+    "nearest_axial_periodic_DNA_image_atom_distance_nm": {
+      "x": 12.00610862639435,
+      "y": 12.147280738565014,
+      "z": 2.5714786826791407
+    },
+    "normal_gap_between_DNA_extents_nm": 2.3951441341770803,
+    "normal_DNA_to_next_membrane_plane_nm": 2.3303680037643986
+  },
+  {
+    "stage": "01_300K_NPT_ENM_k0p5_p10",
+    "dna_heavy_min_nm": [
+      4.752521012923839,
+      4.918427034898033,
+      1.692289891698881
+    ],
+    "dna_heavy_max_nm": [
+      22.02529647684927,
+      22.101933216570018,
+      22.767056612993265
+    ],
+    "dna_heavy_z_relative_to_membrane_quantiles_nm": [
+      0.49228989169888115,
+      1.2076539044026209,
+      10.429021498662252,
+      20.603797567684985,
+      21.567056612993266
+    ],
+    "nearest_axial_periodic_DNA_image_atom_distance_nm": {
+      "x": 9.617529452610247,
+      "y": 9.793727506666245,
+      "z": 3.621677616219624
+    },
+    "normal_gap_between_DNA_extents_nm": 3.1646332787056117,
+    "normal_DNA_to_next_membrane_plane_nm": 2.6723433870067304
+  },
+  {
+    "stage": "04_300K_NPT_MGHH_only_p10",
+    "dna_heavy_min_nm": [
+      4.0139112562372405,
+      4.41514109912862,
+      1.5375103353705901
+    ],
+    "dna_heavy_max_nm": [
+      22.578681634089257,
+      22.826539471560082,
+      23.01041259260215
+    ],
+    "dna_heavy_z_relative_to_membrane_quantiles_nm": [
+      0.33751033537059016,
+      1.3637298995159108,
+      10.439231965474423,
+      20.504397092481263,
+      21.81041259260215
+    ],
+    "nearest_axial_periodic_DNA_image_atom_distance_nm": {
+      "x": 8.36775214710097,
+      "y": 8.691306310834793,
+      "z": 3.5737657812453723
+    },
+    "normal_gap_between_DNA_extents_nm": 2.7664977427684363,
+    "normal_DNA_to_next_membrane_plane_nm": 2.4289874073978446
+  }
+]

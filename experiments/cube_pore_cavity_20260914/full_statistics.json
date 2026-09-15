@@ -1,0 +1,36 @@
+{
+  "npzat": {
+    "last_time_ps": 50.0,
+    "initial_box_z_nm": 24.239399999999996,
+    "final_box_z_nm": 23.96330541682674,
+    "volume_change_percent": -1.1390322498628591,
+    "initial_unexcluded_void_nm3": 373.9520000000001,
+    "final_unexcluded_void_nm3": 365.1840000000001,
+    "pore_plane_water_count_range": [
+      0,
+      2
+    ],
+    "mean_temperature_after_10ps_K": 300.86489884523337,
+    "sampled_mean_normal_pressure_after_10ps_bar": -231.42648934714018,
+    "normal_pressure_sample_count": 9,
+    "box_z_slope_last_20ps_nm_per_ps": -0.007320653852491786,
+    "completed": true
+  },
+  "nvt": {
+    "last_time_ps": 50.0,
+    "initial_box_z_nm": 24.239399999999996,
+    "final_box_z_nm": 24.239399999999996,
+    "volume_change_percent": 0.0,
+    "initial_unexcluded_void_nm3": 373.9520000000001,
+    "final_unexcluded_void_nm3": 378.9440000000001,
+    "pore_plane_water_count_range": [
+      0,
+      1
+    ],
+    "mean_temperature_after_10ps_K": 300.78242563141583,
+    "sampled_mean_normal_pressure_after_10ps_bar": -398.73796615368167,
+    "normal_pressure_sample_count": 9,
+    "box_z_slope_last_20ps_nm_per_ps": 5.89914918035037e-17,
+    "completed": true
+  }
+}

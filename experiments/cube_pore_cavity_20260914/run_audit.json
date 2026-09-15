@@ -1,0 +1,122 @@
+{
+  "updated_at_utc": "2026-09-14T22:14:54.982832+00:00",
+  "runs": {
+    "bulk/npt_4fs_pme4fs": {
+      "requested_dynamics_ps": 200.0,
+      "last_energy_step": 50000,
+      "final_output_step": 50000,
+      "fatal_error": false,
+      "completed": true
+    },
+    "bulk/nvt": {
+      "requested_dynamics_ps": 200.0,
+      "last_energy_step": 100000,
+      "final_output_step": 100500,
+      "fatal_error": false,
+      "completed": true
+    },
+    "bulk/npt_4fs_pme8fs": {
+      "requested_dynamics_ps": 200.0,
+      "last_energy_step": 50000,
+      "final_output_step": 50000,
+      "fatal_error": false,
+      "completed": true
+    },
+    "bulk/npt": {
+      "requested_dynamics_ps": 200.0,
+      "last_energy_step": 100000,
+      "final_output_step": 100500,
+      "fatal_error": false,
+      "completed": true
+    },
+    "open_pore/fill_92": {
+      "requested_dynamics_ps": 500.0,
+      "last_energy_step": 96000,
+      "final_output_step": 96000,
+      "fatal_error": true,
+      "completed": false
+    },
+    "open_pore/hydrated_300mv": {
+      "requested_dynamics_ps": 500.0,
+      "last_energy_step": 250000,
+      "final_output_step": 250000,
+      "fatal_error": false,
+      "completed": true
+    },
+    "open_pore/fill_96": {
+      "requested_dynamics_ps": 500.0,
+      "last_energy_step": 252000,
+      "final_output_step": 252000,
+      "fatal_error": false,
+      "completed": true
+    },
+    "open_pore/fill_92_nvt_offload": {
+      "requested_dynamics_ps": 344.0,
+      "last_energy_step": 172000,
+      "final_output_step": 172000,
+      "fatal_error": false,
+      "completed": true
+    },
+    "open_pore/fill_92_npzat": {
+      "requested_dynamics_ps": 200.0,
+      "last_energy_step": 100000,
+      "final_output_step": 100000,
+      "fatal_error": false,
+      "completed": true
+    },
+    "open_pore/fill_100_npzat": {
+      "requested_dynamics_ps": 200.0,
+      "last_energy_step": 100000,
+      "final_output_step": 100000,
+      "fatal_error": false,
+      "completed": true
+    },
+    "open_pore/fill_100": {
+      "requested_dynamics_ps": 500.0,
+      "last_energy_step": 252000,
+      "final_output_step": 252000,
+      "fatal_error": false,
+      "completed": true
+    },
+    "full_npzat": {
+      "requested_dynamics_ps": 10.0,
+      "last_energy_step": 2500,
+      "final_output_step": 2500,
+      "fatal_error": false,
+      "completed": true
+    },
+    "full_wet_static": {
+      "requested_dynamics_ps": 0.0,
+      "last_energy_step": 0,
+      "final_output_step": 0,
+      "fatal_error": false,
+      "completed": true
+    },
+    "full_wet_static_no_enm": {
+      "requested_dynamics_ps": 0.0,
+      "last_energy_step": 0,
+      "final_output_step": 0,
+      "fatal_error": false,
+      "completed": true
+    },
+    "full_wet_static_physical": {
+      "requested_dynamics_ps": 0.0,
+      "last_energy_step": 0,
+      "final_output_step": 0,
+      "fatal_error": false,
+      "completed": true
+    },
+    "openmm_full/npzat": {
+      "requested_dynamics_ps": 50.0,
+      "last_time_ps": 50.0,
+      "completed": true,
+      "exception": false
+    },
+    "openmm_full/nvt": {
+      "requested_dynamics_ps": 50.0,
+      "last_time_ps": 50.0,
+      "completed": true,
+      "exception": false
+    }
+  }
+}

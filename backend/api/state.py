@@ -265,7 +265,7 @@ def copy_for_workspace_save() -> tuple[Design, int, dict[str, set[str]]]:
         return design, s.revision, known
 
 
-def acknowledge_workspace_save(before: Design, saved: Design, revision: int) -> None:
+def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, include_snapshot: bool = True) -> Design | None:
     """Advance save cursors without overwriting edits made during disk I/O."""
     with _lock:
         s = _session()
@@ -296,6 +296,9 @@ def acknowledge_workspace_save(before: Design, saved: Design, revision: int) -> 
                 })
             s.design = s.design.model_copy(update=updates)
         _bump_revision(s)
+        # Pair the acknowledgement revision with the merged current content,
+        # never the pre-I/O snapshot when a concurrent edit was preserved.
+        return s.design.model_copy(deep=True) if include_snapshot else None
 
 
 def workspace_heads_for_doc(doc_id: str) -> dict[str, dict[str, list[str]]]:
@@ -347,6 +350,9 @@ def _assert_active_loadout_editable(
 
 def load_design(d: Design) -> None:
     """Establish a file/new-design baseline without making navigation undoable."""
+    if any(p.biotin_dna for p in d.nanoparticles):
+        from backend.core.biotin_atomistic import prepare_biotin_display
+        prepare_biotin_display(d)
     with _lock:
         s = _session()
         s.history.clear()

@@ -2904,6 +2904,8 @@ def _aligned_downsampled_frames(
     trailing_extra_strand_length: int = 0,
     phase_progress=None,
     frame_transform=None,
+    frame_start=None,
+    frame_end=None,
 ):
     """Shared core for the composite trajectory: per stage, downsample to a ≤
     ``max_frames`` budget FIRST (cheap header count → stride), then PBC-unwrap +
@@ -2928,6 +2930,7 @@ def _aligned_downsampled_frames(
         _ALIGNED_CACHE = OrderedDict()
     cache_key = (
         _aligned_cache_key(stages, reference_conf_path, max_frames, copies),
+        frame_start, frame_end,
         bool(align),
         int(n_trailing_extra),
         int(trailing_extra_strand_length),
@@ -3067,6 +3070,8 @@ def _aligned_downsampled_frames(
     total_kept = sum(_keep_for(e) for e in eff_lens if e > 0)  # progress denominator
     if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
         total_kept += 1  # raw frame 0 supplies capture coordinates for the design seed
+    total_kept = max(0, min(total_kept, frame_end + 1 if frame_end is not None else total_kept) - (frame_start or 0))
+    composite_offset = 0
     done = 0
     if progress:
         progress(0, total_kept)
@@ -3085,6 +3090,13 @@ def _aligned_downsampled_frames(
         picked = _stride_pick(
             list(range(eff)), keep
         )  # positions into this stage's eff list
+
+        sampled_count = len(picked)
+        picked = picked[max(0, (frame_start or 0) - composite_offset):
+                        max(0, frame_end + 1 - composite_offset) if frame_end is not None else None]
+        composite_offset += sampled_count
+        if not picked:
+            continue
 
         # Map each kept eff-position to a raw trajectory-header index (position 0 of the
         # first non-empty stage is the prepended seed ref, which needs no parse), then parse
@@ -3362,6 +3374,8 @@ def pack_composite_trajectory_bin(
     align: bool = True,
     n_trailing_extra: int = 0,
     trailing_extra_strand_length: int = 0,
+    frame_start=None,
+    frame_end=None,
 ) -> bytes:
     """Build the View-trajectory payload in a compact typed-array wire format.
 
@@ -3397,7 +3411,7 @@ def pack_composite_trajectory_bin(
         stages,
         reference_conf_path,
         max_frames,
-        copies=True,
+        copies=True, frame_start=frame_start, frame_end=frame_end,
         progress=_align_progress,
         align=align,
         n_trailing_extra=n_trailing_extra,
@@ -3419,6 +3433,8 @@ def pack_composite_trajectory_bin(
 
     header = orjson.dumps(
         {
+            "frame_start": frame_start or 0,
+            "total_n_frames": composite_trajectory_meta(design, stages, max_frames)["n_frames"],
             "keys": [list(k) for k in key_list],
             "stages": out_stages,
             "markers": markers,
@@ -3447,6 +3463,8 @@ def composite_trajectory(
     trailing_extra_strand_length: int = 0,
     phase_progress=None,
     packed: bool = False,
+    frame_start=None,
+    frame_end=None,
 ) -> dict:
     """Build the composite scrub-able trajectory for the View-trajectory player.
 
@@ -3477,7 +3495,7 @@ def composite_trajectory(
         stages,
         reference_conf_path,
         max_frames,
-        copies=True,
+        copies=True, frame_start=frame_start, frame_end=frame_end,
         progress=progress,
         align=align,
         n_trailing_extra=n_trailing_extra,
@@ -3489,6 +3507,8 @@ def composite_trajectory(
         return {
             "n_frames": 0,
             "n_nucleotides": len(key_list),
+            "frame_start": frame_start or 0,
+            "total_n_frames": composite_trajectory_meta(design, stages, max_frames)["n_frames"],
             "keys": [list(k) for k in key_list],
             "frames": [],
             "stages": [],
@@ -3510,6 +3530,8 @@ def composite_trajectory(
     return {
         "n_frames": len(out_frames),
         "n_nucleotides": len(key_list),
+        "frame_start": frame_start or 0,
+        "total_n_frames": composite_trajectory_meta(design, stages, max_frames)["n_frames"],
         "keys": [list(k) for k in key_list],
         "frames": out_frames,
         "stages": out_stages,
@@ -4300,12 +4322,16 @@ def iter_composite_trajectory_atomistic(
     display cache to retain ~6 export frames nobody will request again — all cost, no hit.
     Interactive callers (which re-request the frames they just scrubbed) keep ``cache=True``.
     """
+    wanted = sorted(set(int(i) for i in frame_indices if int(i) >= 0))
+    if not wanted:
+        return
+    first = wanted[0]
     _, ordered, _, _ = _aligned_downsampled_frames(
         design,
         stages,
         reference_conf_path,
         max_frames,
-        copies=True,
+        copies=True, frame_start=first, frame_end=wanted[-1],
         align=align,
         n_trailing_extra=n_trailing_extra,
         trailing_extra_strand_length=trailing_extra_strand_length,
@@ -4316,15 +4342,14 @@ def iter_composite_trajectory_atomistic(
         int(n_trailing_extra),
         int(trailing_extra_strand_length),
     )
-    wanted = sorted(set(int(i) for i in frame_indices))
     # Count against every requested index (not just the in-range ones) so a range that
     # overruns the trajectory still walks the bar to 100% instead of stopping short.
     for done, idx in enumerate(wanted, start=1):
-        if 0 <= idx < len(ordered):
+        if 0 <= idx - first < len(ordered):
             ck = ("cta", akey, idx)
             payload = _display_out_get(ck) if cache else None
             if payload is None:
-                payload = frame_atomistic_flat(design, ordered[idx])
+                payload = frame_atomistic_flat(design, ordered[idx - first])
                 if cache:
                     _display_out_put(ck, payload)
             yield idx, payload
@@ -4352,12 +4377,16 @@ def composite_trajectory_surface(
     Returns ``{ "<idx>": {vertices, faces, vertex_colors?} }`` — the SAME wire
     format as ``/design/features/surface-batch``. Topology can vary per frame
     (marching cubes); the frontend rebuilds the buffer on a count change."""
+    wanted = sorted(set(int(i) for i in frame_indices if int(i) >= 0))
+    if not wanted:
+        return {}
+    first = wanted[0]
     _, ordered, _, _ = _aligned_downsampled_frames(
         design,
         stages,
         reference_conf_path,
         max_frames,
-        copies=True,
+        copies=True, frame_start=first, frame_end=wanted[-1],
         align=align,
         n_trailing_extra=n_trailing_extra,
         trailing_extra_strand_length=trailing_extra_strand_length,
@@ -4376,15 +4405,15 @@ def composite_trajectory_surface(
         int(smooth),
     )
     out: dict[str, dict] = {}
-    for idx in sorted(set(int(i) for i in frame_indices)):
-        if idx < 0 or idx >= len(ordered):
+    for idx in wanted:
+        if idx < first or idx - first >= len(ordered):
             continue
         ck = ("cts", akey, idx, sparams)
         payload = _display_out_get(ck)
         if payload is None:
             payload = frame_surface_json(
                 design,
-                ordered[idx],
+                ordered[idx - first],
                 color_mode,
                 probe_radius,
                 grid_spacing,

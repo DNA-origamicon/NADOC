@@ -1,0 +1,45 @@
+.qd-overlay { position: fixed; inset: 0; z-index: 10050; background: #0009; display: grid; place-items: center; padding: 20px; }
+.qd-dialog { width: min(1160px, 96vw); height: min(850px, 92vh); display: flex; flex-direction: column; overflow: hidden; background: #161b22; color: #e6edf3; border: 1px solid #48525e; border-radius: 10px; box-shadow: 0 20px 70px #0008; font: 13px/1.45 system-ui, sans-serif; }
+.qd-dialog header, .qd-dialog footer { display: flex; align-items: center; gap: 14px; padding: 12px 20px; flex-shrink: 0; }
+.qd-dialog header { justify-content: space-between; border-bottom: 1px solid #30363d; }
+.qd-dialog h2 { font-size: 20px; margin: 0 0 4px; }
+.qd-dialog h3 { margin: 0 0 10px; font-size: 16px; }
+.qd-dialog p { margin: 6px 0; }
+.qd-dialog header p, #qd-diameter-note, #qd-status, .qd-dialog figcaption { color: #aab6c4; }
+.qd-dialog button, .qd-dialog input, .qd-dialog select { font: inherit; color: inherit; border: 1px solid #48525e; border-radius: 5px; background: #21262d; padding: 7px 10px; }
+.qd-dialog button { cursor: pointer; }
+.qd-dialog :focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
+.qd-dialog button:disabled, .qd-dialog input:disabled { opacity: .45; cursor: not-allowed; }
+.qd-dialog #qd-close { font-size: 23px; padding: 0 9px; }
+.qd-filters { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px 20px 6px; }
+.qd-filters label { display: flex; align-items: center; gap: 8px; }
+#qd-count { margin-left: auto; color: #aab6c4; }
+#qd-status { flex-shrink: 0; padding: 6px 20px 12px; }
+.qd-table-wrap { height: clamp(110px, 25vh, 230px); flex-shrink: 0; overflow: auto; border-block: 1px solid #30363d; }
+.qd-dialog table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.qd-dialog th { position: sticky; top: 0; background: #21262d; z-index: 1; white-space: nowrap; }
+.qd-dialog th, .qd-dialog td { padding: 9px 12px; border-bottom: 1px solid #30363d; }
+.qd-dialog td { white-space: pre-line; vertical-align: middle; }
+.qd-dialog td:first-child { min-width: 145px; }
+.qd-dialog td label { cursor: pointer; white-space: nowrap; }
+.qd-dialog small { display: block; color: #aab6c4; margin-left: 24px; }
+.qd-dialog tbody tr { cursor: pointer; }
+.qd-dialog tbody tr:hover { background: #253142; }
+.qd-dialog tr.qd-selected { background: #183452; }
+.qd-detail { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 14px 20px; }
+.qd-detail[hidden] { display: none; }
+.qd-detail figure { margin: 0; align-self: start; }
+.qd-detail img { width: 100%; max-height: min(235px, 25vh); object-fit: contain; background: white; border-radius: 5px; }
+.qd-dialog figcaption { font-size: 11px; margin-top: 5px; }
+.qd-links { display: flex; flex-wrap: wrap; gap: 16px; padding: 8px 0; }
+.qd-dialog a { color: #79bdff; }
+.qd-diameter-label { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+#qd-diameter { width: 95px; }
+#qd-diameter-note, #qd-policy { font-size: 12px; }
+.qd-dialog footer { border-top: 1px solid #30363d; justify-content: flex-end; background: #161b22; }
+#qd-error { margin-right: auto; color: #ff928d; }
+.qd-dialog .qd-primary { background: #1f6feb; border-color: #388bfd; color: white; }
+@media (max-width: 720px) { .qd-detail { grid-template-columns: 1fr; } .qd-filters input { width: 150px; } .qd-dialog footer { flex-wrap: wrap; } }
+
+.qd-detail details { font-size: 12px; color: #aab6c4; }
+.qd-detail summary { cursor: pointer; color: #b9d8fa; }

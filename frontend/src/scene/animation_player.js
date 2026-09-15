@@ -95,6 +95,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   // True only while THIS player holds `trajectoryKeyframes` (a bake loaded a job).
   // The Animations panel's authoring preview holds the same module independently.
   let _ownsTrajectory = false
+  let _cameraOnly = false
 
   // Joint update callback — set by play() when assemblyActive
   let _onJointUpdate  = null   // (jointId: string, value: number) => void
@@ -432,7 +433,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _bakeAbort = abort
     const signal = abort.signal
     try {
-      const positionSet = new Set([liveFeatureLogIndex])
+      const positionSet = new Set(_cameraOnly ? [] : [liveFeatureLogIndex])
       for (const kf of animation.keyframes) {
         if (kf.feature_log_index != null) positionSet.add(kf.feature_log_index)
       }
@@ -514,7 +515,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       // user was just scrubbing it in the jobs panel) and prebuilds its heavy frames
       // within this machine's memory budget. Its progress has its own denominator, so it
       // reports as a labelled second phase rather than being folded into the unit count.
-      if (trajectoryKeyframes) {
+      if (trajectoryKeyframes && !_cameraOnly) {
         _ownsTrajectory = animation.keyframes.some(kf => !!kf.trajectory_job_id)
         const held = await trajectoryKeyframes.prepare(animation, {
           strict: true,
@@ -908,6 +909,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       controls.update()
     }
 
+    if (_cameraOnly) return
+
     // Trajectory keyframe — geometry comes from the job's trajectory, not the design
     // state. The frame range plays across the HOLD window; during the transition window
     // the model is frozen at the range's first frame while the camera (handled above)
@@ -1138,7 +1141,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         _playing = false
         _raf     = null
         onEvent?.({ type: 'tick', currentTime: boundTime, totalDuration: _totalDur })
-        onEvent?.({ type: 'finished' })
+        onEvent?.({ type: 'finished', geometryChanged: !_cameraOnly })
       }
     } else {
       onEvent?.({ type: 'tick', currentTime: elapsed, totalDuration: _totalDur })
@@ -1168,6 +1171,12 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _liveJointValues = opts.liveJointValues ?? null
 
     _animation = animation
+    // Camera-only animations orbit the live visualization without taking geometry ownership.
+    _cameraOnly = animation.keyframes.every(kf =>
+      kf.feature_log_index == null && !kf.trajectory_job_id &&
+      !Object.keys(kf.joint_values ?? {}).length &&
+      !Object.keys(kf.binding_states ?? {}).length &&
+      !Object.keys(kf.strand_anim_phi ?? {}).length)
     // Initialize _loopMode from the animation's persisted flag — the panel
     // can later override via setLoopMode without waiting for an API
     // roundtrip + store replacement.
@@ -1204,13 +1213,13 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       _startTime  = performance.now()
       _playing    = true
 
-      _captureAllBases()
+      if (!_cameraOnly) _captureAllBases()
       // After _captureAllBases, so cluster ownership is known.
       _computeLerpHelixIds()
 
       // Heavy reps must step the pre-built coarse grid while the loop runs — an exact
       // per-frame rebuild takes seconds and would stall it.
-      trajectoryKeyframes?.setPlaying(true)
+      if (_ownsTrajectory) trajectoryKeyframes?.setPlaying(true)
 
       onEvent?.({ type: 'baking_done' })
       _raf = requestAnimationFrame(_loop)
@@ -1251,6 +1260,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
   /** Stop completely, reset position, and restore the model's visual state. */
   function stop() {
+    const geometryChanged = !!_animation && !_cameraOnly
     _loopEpoch++
     _playGeneration++
     // ORDER MATTERS. Hand the display controllers back FIRST: a trajectory segment drives
@@ -1272,13 +1282,13 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _restoreBaseClusters()
     // Restore overhang link arcs to full visibility — playback may have
     // scaled them down for linker creation/deletion fade-outs.
-    getOverhangLinkArcs?.()?.resetConnectionScales?.()
+    if (_animation && !_cameraOnly) getOverhangLinkArcs?.()?.resetConnectionScales?.()
     // Tear down the bind/unbind unzip overlay (the hinge itself is restored by
     // _restoreBaseClusters above — it used the same applyClusterTransform path).
-    getOverhangUnzipOverlay?.()?.clear?.()
+    if (_animation && !_cameraOnly) getOverhangUnzipOverlay?.()?.clear?.()
     // Tear down the rich strand-anim drivers: restores moved beads to authored
     // positions and hides any displacement-mode synthetic invaders.
-    getMultiOverhangStrandAnim?.()?.clear?.()
+    if (_animation && !_cameraOnly) getMultiOverhangStrandAnim?.()?.clear?.()
 
     // Restore assembly joints to pre-play values if callback is set
     if (_onJointUpdate && _liveJointValues) {
@@ -1308,7 +1318,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     if (_raf) { cancelAnimationFrame(_raf); _raf = null }
 
     onTextOverlayUpdate?.(null)
-    onEvent?.({ type: 'stopped' })
+    onEvent?.({ type: 'stopped', geometryChanged })
   }
 
   function setBounce(enabled) { _bounce = enabled }

@@ -120,6 +120,8 @@ import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
 import { initProteinSubsystem }    from './scene/protein_subsystem.js'
 import { initNanoparticleSubsystem } from './scene/nanoparticle_subsystem.js'
 import { promptGoldNanosphereDiameter } from './ui/nanoparticle_dialog.js'
+import { openGoldCreationDialog } from './ui/gold_creation_dialog.js'
+import { openQuantumDotDialog } from './ui/quantum_dot_dialog.js'
 import { initConjugateManager }    from './ui/conjugate_manager.js'
 import { initNanoparticleConjugateManager } from './ui/nanoparticle_conjugate_manager.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
@@ -1043,9 +1045,10 @@ async function main() {
     },
     onEvent: (evt) => {
       animPanel?.onPlayerEvent(evt)
-      // When animation stops or finishes, restore all heavy representations to
-      // the live (deformed) design state rather than holding the last lerped frame.
-      if (evt.type === 'stopped' || evt.type === 'finished') {
+      // Restore heavy geometry only when the player owned it. Camera-only and
+      // idle stops must leave simulation atoms/surfaces in place: re-entering the
+      // overlay handoff here exposes CG without scheduling a new heavy frame.
+      if ((evt.type === 'stopped' || evt.type === 'finished') && evt.geometryChanged !== false) {
         if (atomisticRenderer.getMode() !== 'off') {
           _atomSurface.invalidateAtomCache()
           _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
@@ -3579,12 +3582,11 @@ async function main() {
       _clearScaffoldChecks()
       _clearStapleChecks()
       const { currentDesign } = store.getState()
-      // If we undid back to an empty design, return to the empty scene (origin
-      // triad + welcome). The axes subscriber re-shows the triad.
+      // Undo keeps the document open, even when empty, so Redo stays available.
+      // DNA-only tools can close independently of nanoparticles and proteins.
       if (!currentDesign?.helices?.length) {
         slicePlane.hide()
         _extrudePanel?.hide()
-        _showWelcome()
       }
       // If undo removed the last deformation and deformed view is OFF, restore it.
       if (!currentDesign?.deformations?.length && !deformView.isActive()) {
@@ -3833,11 +3835,11 @@ async function main() {
     conjugateManager.open(assetId, { sourceAttachmentId })
   })
 
-  document.getElementById('menu-tools-gold-nanosphere')?.addEventListener('click', async () => {
-    const diameter = await promptGoldNanosphereDiameter()
-    if (diameter == null) return
-    const response = await api.createGoldNanosphere(diameter)
-    if (response?.nanoparticle_id) nanoparticleSubsystem.select(response.nanoparticle_id)
+  document.getElementById('menu-tools-gold-nanosphere')?.addEventListener('click', () => {
+    openGoldCreationDialog({ onCreated: id => nanoparticleSubsystem.select(id) })
+  })
+  document.getElementById('menu-tools-quantum-dot')?.addEventListener('click', () => {
+    openQuantumDotDialog({ onImported: id => nanoparticleSubsystem.select(id) })
   })
 
   initAssemblyOverhangsManagerPopup({ store })
@@ -5713,7 +5715,9 @@ async function main() {
       const particle = store.getState().currentDesign?.nanoparticles?.find(item => item.id === id)
       if (!particle) return
       const diameter = await promptGoldNanosphereDiameter({
-        current: particle.diameter_nm, title: 'Edit gold nanosphere diameter',
+        current: particle.diameter_nm, title: particle.kind === 'quantum_dot'
+          ? `Edit ${particle.quantum_dot?.product_name ?? 'quantum dot'} scene diameter (${particle.quantum_dot?.diameter_range_nm?.join('–')} nm)`
+          : 'Edit gold nanosphere diameter',
       })
       if (diameter != null && diameter !== particle.diameter_nm) {
         await api.patchNanoparticle(id, { diameter_nm: diameter })
@@ -6180,7 +6184,7 @@ async function main() {
   })
 
   // ── Fluorescence + FRET Checker ──────────────────────────────────────────────
-  const fretChecker = initFretChecker({ designRenderer, store, setMenuToggle: _setMenuToggle })
+  const fretChecker = initFretChecker({ designRenderer, store, setMenuToggle: _setMenuToggle, nanoparticleSubsystem })
 
   document.getElementById('menu-view-joints')?.addEventListener('click', () => {
     const on = !jointRenderer?.isVisible()

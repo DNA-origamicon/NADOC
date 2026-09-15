@@ -1,0 +1,19 @@
+--- a/src/Interactions/DNANMInteraction.cpp
++++ b/src/Interactions/DNANMInteraction.cpp
+@@ -514,14 +514,14 @@
+     _pro_backbone_rstar= 0.569f;
+     _pro_backbone_b = 178699253.5f;
+     _pro_backbone_rcut = 0.572934f;
+-    _pro_backbone_stiffness = 1.0f;
++    _pro_backbone_stiffness = 2.0f;
+     _pro_backbone_sqr_rcut = 0.3283f;
+     //Base-Protein Excluded Volume Parameters
+     _pro_base_sigma = 0.36f;
+     _pro_base_rstar= 0.359f;
+     _pro_base_b = 296866090.f;
+     _pro_base_rcut = 0.362897f;
+-    _pro_base_stiffness = 1.0f;
++    _pro_base_stiffness = 2.0f;
+     _pro_base_sqr_rcut = 0.1317f;
+     //Protein-Protein Excluded Volume Parameters
+     _pro_sigma = 0.35f;

@@ -52,7 +52,7 @@ export function initNamdPegCoating({api,store,host=document.getElementById('namd
   if(!data || !id || !api.updateMetadata)return
   chain=chain.catch(()=>{}).then(async()=>{
    if(disposed || id!==designId || token!==revision)return
-   try{await api.updateMetadata({namd_peg_coating:data,namd_peg_visible:data.visible})}
+   try{await api.updateMetadata({namd_peg_coating:data,namd_peg_visible:data.visible},{skipGeometry:true})}
    catch(e){if(id===designId)status.textContent=`Could not save coating settings: ${e.message}`;throw e}
   })
   await chain.catch(()=>{})

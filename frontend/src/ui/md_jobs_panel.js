@@ -1538,6 +1538,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   let _prewarmTimer = null
   let _remotePollTimer = null   // periodic SLURM-status poll for in-flight Alpine jobs
   let _hadActiveRemote = false  // did the last remote poll see an active Alpine job? (edge-trigger a final refresh)
+  let _grapheneSelectionId = null   // explicit selection owns the surface preview
   let _displayJobId = null
   let _displayKey   = null
   let _displayMeta  = null
@@ -1948,7 +1949,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   }
 
-  const notifyBoxSizeFailures = createBoxSizeFailureNotifier()
+  const notifyBoxSizeFailures = createBoxSizeFailureNotifier(warnings => boxSolvent?.setJobWarnings(warnings))
 
   // ── Job list fetch ─────────────────────────────────────────────────────────
   async function _fetchJobs() {
@@ -1956,7 +1957,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       const jobs = await api.listMdJobs()
       if (!jobs) throw new Error(api.lastErrorMessage() ?? 'HTTP error')
       _jobs = jobs
-      notifyBoxSizeFailures(jobs)
+      notifyBoxSizeFailures(_visibleJobs(), store.getState()?.currentDesign?.id)
       _jobs.sort((a, b) => b.created_at - a.created_at)
       _mdDebug(`[${_ts()}] md-jobs: fetched ${_jobs.length} jobs`)
       if (_fetchFails > 0) { _fetchFails = 0; _setBackendStale(false); _checkEngines() }  // reconnected → restore status line
@@ -2006,7 +2007,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
     if (_userDeselected) return   // the user deliberately cleared the selection — respect it
     const preferred = preferredMdSelection(jobs, _selectedId)
-    if (preferred && preferred !== _selectedId) _selectJob(preferred)
+    if (preferred && preferred !== _selectedId) _selectJob(preferred, { automatic: true })
   }
 
   function _onOpen() {
@@ -2120,8 +2121,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   function _clearSelectedJob() {
-    surfaceCard.clear()
+    _grapheneSelectionId = null
+    // Empty job-list refreshes must not clear the setup the user is editing.
     if (_selectedId) {
+      surfaceCard.clear()
       surfaceCard.restore()
       screeningCard.restore()
       if (surfaceEnableChk) surfaceEnableChk.checked = false
@@ -4507,7 +4510,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
     }
     renderJobList(listEl, buildJobListModel(jobs, ctx), {
-      onClick: (jobId) => (jobId === _selectedId ? _deselectJob() : _selectJob(jobId, true)),
+      onClick: (jobId) => {
+        const unpickedSurface = surfaceEnableChk?.checked && _grapheneSelectionId !== jobId
+        if (jobId === _selectedId && !unpickedSurface) _deselectJob()
+        else _selectJob(jobId, true)
+      },
       onWarning: (jobId) => { void _handleJobWarning(jobId) },
       onChevron: (jobId) => _toggleCollapse(jobId),
       onAction: (jobId) => _openVramFix(jobId),   // the "Fix" VRAM-OOM row action
@@ -4708,10 +4715,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   // ── Job selection + WS subscription ───────────────────────────────────────
-  function _selectJob(jobId, explicit = false) {
-    surfaceCard.select(_jobs.find(j => j.job_id === jobId) || null, mdInheritedPrepParams(_jobs.find(j => j.job_id === jobId), _jobs), explicit)
+  function _selectJob(jobId, options = false) {
+    const explicit = options === true || (options && typeof options === 'object' && options.automatic === false)
+    _grapheneSelectionId = explicit ? jobId : null
+    const surfaceJob = _jobs.find(j => j.job_id === jobId) || null
+    surfaceCard.select(surfaceJob, mdInheritedPrepParams(surfaceJob, _jobs), explicit)
     _userDeselected = false   // an explicit pick supersedes a previous deselection
-    if (_selectedId === jobId) return
+    if (_selectedId === jobId) { _syncSurfaceCard(); return }
     ionPaths?.off()
     _gateBDismissed = null   // a fresh selection may re-show a pending decision
     _mdDebug(`[${_ts()}] md-jobs: selecting job ${jobId}`)
@@ -4744,8 +4754,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (surfaceMarginEl) surfaceMarginEl.value = String(prep.graphene_sheet_margin_nm ?? 1.5)
     _anchorsCard?.applyConfig?.(prep.anchors || [])
     _surfaceAnchorsCard?.applyConfig?.(prep.surface_anchors || [])
-    _syncSurfaceCard()
     surfaceSeedSpec = null
+    _syncSurfaceCard()
     if (selectedJob?.seed_oxdna_job_id) {
       void api.getOxdnaJob(selectedJob.seed_oxdna_job_id).then(source => {
         if (jobId !== _selectedId) return
@@ -4844,6 +4854,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    *  The status WebSocket does close — it streams
    *  detail for a job that's no longer being shown — and reopens on re-selection. */
   function _deselectJob() {
+    _grapheneSelectionId = null
     surfaceCard.clear()
     surfaceCard.restore()
     screeningCard.restore()
@@ -5723,9 +5734,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     structure: _anchorsCard, surface: _surfaceAnchorsCard,
     toSurfaceId: 'md-anchors-to-surface', toStructureId: 'md-anchors-to-structure',
   })
-  const surfaceCard = initNamdSurfaceCard({ onChange: enabled => {
+  const surfaceCard = initNamdSurfaceCard({
+    onSetupPreview: () => {
+      // Editing a new surface returns to native geometry, so an old trajectory
+      // cannot suppress the preview or display a membrane in another frame.
+      if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
+      _setFlexOff()
+      _setTrajOff()
+      _setPhotoproductOff()
+      if (_occupancyIsActive()) _setOccupancyOff()
+    },
+    onChange: enabled => {
     setAnchorSectionEnabled(document.getElementById('md-surface-anchors-section'), enabled)
     _anchorTransfers.setSurfaceEnabled(enabled)
+    window.dispatchEvent(new CustomEvent('nadoc:anchors-change', { detail: {
+      engine: 'namd-surface', highlighted: _surfaceAnchorsCard.getHighlighted?.() || [],
+    }}))
   } })
   function _syncSurfaceCard() { surfaceCard.sync() }
   const surfaceToggle = document.getElementById('md-surface-toggle')

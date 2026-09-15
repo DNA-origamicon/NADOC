@@ -20,6 +20,7 @@ GET   /md/jobs/{job_id}/display     latest displayable NADOC MD trajectory
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import shutil
@@ -696,7 +697,7 @@ def _load_job(job_id: str) -> MdJob:
 
 
 # ── Out-of-date detection (design edited after an MD job was prepared) ─────────
-_MD_DERIVED_FP_CACHE: dict[str, str] = {}
+_MD_DERIVED_FP_CACHE: dict[tuple[str, str, str | None], str] = {}
 
 
 def _md_snapshot_design(job: MdJob):
@@ -731,11 +732,12 @@ def _md_snapshot_design(job: MdJob):
 
 
 def _md_job_fingerprint(job: MdJob) -> "str | None":
-    if job.design_fingerprint and (
-        job.design_fingerprint.startswith("v2:") or len(job.design_fingerprint) != 64
-    ):
-        return job.design_fingerprint
-    cached = _MD_DERIVED_FP_CACHE.get(job.job_id)
+    # Always compare snapshots through the current model/schema. Even a matching
+    # hash version can predate new model fields: loading supplies their defaults,
+    # changing the hash without a user edit (cube_pore's native helix fields).
+    # The frozen snapshot is the source of truth; without one, staleness is unknown.
+    key = (str(_workspace().resolve()), job.job_id, job.design_fingerprint)
+    cached = _MD_DERIVED_FP_CACHE.get(key)
     if cached is not None:
         return cached
     snap = _md_snapshot_design(job)
@@ -744,7 +746,7 @@ def _md_job_fingerprint(job: MdJob) -> "str | None":
     from backend.core.oxdna_staleness import design_build_fingerprint
 
     fp = design_build_fingerprint(snap)
-    _MD_DERIVED_FP_CACHE[job.job_id] = fp
+    _MD_DERIVED_FP_CACHE[key] = fp
     return fp
 
 
@@ -971,6 +973,8 @@ async def get_md_job_trajectory(
     job_id: str,
     request: Request,
     stride: int | None = None,
+    frame_start: int | None = None,
+    frame_end: int | None = None,
 ) -> dict:
     """Composite scrub-able NAMD trajectory (every written segment, CG/nadoc beads)
     for an animation trajectory keyframe — SAME payload shape as the oxDNA
@@ -1010,7 +1014,7 @@ async def get_md_job_trajectory(
             job_id,
             "trajectory",
             "md_composite_trajectory",
-            (psf, segments, ref, design, 200, stride, str(progress_path)),
+            (psf, segments, ref, design, 200, stride, str(progress_path), frame_start, frame_end),
             timeout_s=180.0 if stride is None else 900.0,
         )
     finally:
@@ -1037,6 +1041,8 @@ async def get_md_job_trajectory_bin(
     job_id: str,
     request: Request,
     stride: int | None = None,
+    frame_start: int | None = None,
+    frame_end: int | None = None,
 ) -> Response | dict:
     """Typed-array sibling of the composite NAMD trajectory for interactive display."""
     stride = _traj_stride(stride)
@@ -1060,7 +1066,7 @@ async def get_md_job_trajectory_bin(
             job_id,
             "trajectory",
             "md_composite_trajectory_bin",
-            (psf, segments, ref, design, 200, stride, str(progress_path)),
+            (psf, segments, ref, design, 200, stride, str(progress_path), frame_start, frame_end),
             timeout_s=180.0 if stride is None else 900.0,
         )
     finally:
@@ -2044,6 +2050,7 @@ def _conservative_production_conf(
         if manifest_path and manifest_path.exists() else None
     )
     return graphene_pressure_conf(conf, enabled=bool(wall and anchor_k is not None),
+                                  wall=wall,
                                   fixed_cell=bool(wall and wall.get("cell_policy") == "fixed_volume"))
 
 
@@ -2694,8 +2701,8 @@ def _harmonicize_seed_anchors(
 ) -> None:
     """Compose ladder release restraints with constant, GPU-safe physical anchors.
 
-    NAMD has one positional-restraint channel. Each stage therefore gets a combined
-    PDB whose ordinary DNA weights already include that stage's release scaling while
+    NAMD has one positional-restraint channel. Stages share identical combined
+    PDBs whose ordinary DNA weights already include the stage's release scaling while
     DNA anchors retain ``force_constant`` and graphene retains its independently stiff
     ``graphene_force_constant``. Configs then run at scaling 1.
     """
@@ -2714,17 +2721,15 @@ def _harmonicize_seed_anchors(
         except (ValueError, IndexError):
             return 0.0
 
-    for conf_path in package_path.glob("*.conf"):
-        conf = conf_path.read_text(encoding="utf-8")
-        scale_match = re.search(r"^\s*constraintScaling\s+(\S+)", conf, re.MULTILINE | re.IGNORECASE)
-        scale = float(scale_match.group(1)) if scale_match else 0.0
-        ref_match = re.search(r"^\s*consref\s+(\S+)", conf, re.MULTILINE | re.IGNORECASE)
-        ref_name = ref_match.group(1) if ref_match else f"{name_stem}.pdb"
-        ref_path = package_path / ref_name
-        if not ref_path.exists():
-            ref_name = f"{name_stem}.pdb"
-            ref_path = package_path / f"{name_stem}.pdb"
-        ref_lines = ref_path.read_text().splitlines(keepends=True)
+    composed = {}
+
+    def combined_file(ref_name, scale):
+        # The marker and force constants are fixed for this invocation. Avoid
+        # rereading/recomposing million-atom files for every checkpoint of a stage.
+        key = (ref_name, scale)
+        if key in composed:
+            return composed[key]
+        ref_lines = (package_path / ref_name).read_text().splitlines(keepends=True)
         if len(ref_lines) != len(marker_lines):
             raise RuntimeError("Anchor/restraint PDB rows do not align for harmonic composition.")
         combined = []
@@ -2742,8 +2747,27 @@ def _harmonicize_seed_anchors(
                 ref = ref.rstrip("\n").ljust(80)
                 ref = ref[:60] + f"{value:6.2f}" + ref[66:] + "\n"
             combined.append(ref)
-        combined_name = f"restraints_combined_{conf_path.stem}.pdb"
-        (package_path / combined_name).write_text("".join(combined), encoding="utf-8")
+        data = "".join(combined).encode("utf-8")
+        # Share only immutable coefficient files. consref stays stage-specific,
+        # notably the settle reference retargeted after minimization.
+        name = f"restraints_combined_{hashlib.sha256(data).hexdigest()}.pdb"
+        target = package_path / name
+        if not target.exists():
+            target.write_bytes(data)
+        composed[key] = name
+        return name
+
+    for conf_path in sorted(package_path.glob("*.conf")):
+        conf = conf_path.read_text(encoding="utf-8")
+        scale_match = re.search(r"^\s*constraintScaling\s+(\S+)", conf, re.MULTILINE | re.IGNORECASE)
+        scale = float(scale_match.group(1)) if scale_match else 0.0
+        ref_match = re.search(r"^\s*consref\s+(\S+)", conf, re.MULTILINE | re.IGNORECASE)
+        ref_name = ref_match.group(1) if ref_match else f"{name_stem}.pdb"
+        ref_path = package_path / ref_name
+        if not ref_path.exists():
+            ref_name = f"{name_stem}.pdb"
+            ref_path = package_path / f"{name_stem}.pdb"
+        combined_name = combined_file(ref_name, scale)
 
         owned = {"fixedatoms", "fixedatomsfile", "fixedatomscol", "constraints",
                  "consref", "conskfile", "conskcol", "consexp", "constraintscaling"}
@@ -2771,6 +2795,7 @@ def _harmonicize_seed_anchors(
         conf_path.write_text(
             graphene_pressure_conf(
                 "".join(kept), enabled=bool(manifest.get("graphene_nanopore")),
+                wall=manifest.get("graphene_nanopore"),
                 fixed_cell=(manifest.get("graphene_nanopore") or {}).get("cell_policy") == "fixed_volume"
             ),
             encoding="utf-8",
@@ -2785,10 +2810,16 @@ def _harmonicize_seed_anchors(
             GRAPHENE_PISTON_PERIOD_FS,
         )
 
-        piston_defaults = [GRAPHENE_PISTON_PERIOD_FS, GRAPHENE_PISTON_DECAY_FS]
+        normal_pressure = manifest["graphene_nanopore"].get("cell_policy") == "fixed_area_normal_pressure"
+        piston_defaults = ([1000.0, 500.0] if normal_pressure else
+                           [GRAPHENE_PISTON_PERIOD_FS, GRAPHENE_PISTON_DECAY_FS])
         settings = manifest.setdefault("relax_protocol_settings", {})
         settings["ladder_piston_period_decay_fs"] = piston_defaults
         settings["production_piston_period_decay_fs"] = piston_defaults
+        if normal_pressure:
+            settings["production_piston_period_decay_fs"] = None
+            settings["relaxation_ensemble"] = manifest["graphene_nanopore"].get("relaxation_ensemble", "NPzAT")
+            settings["production_ensemble"] = "NVT"
         manifest["graphene_nanopore"]["restraint_mechanism"] = "harmonic_positional"
         manifest["graphene_nanopore"]["restraint_k_kcal_mol_A2"] = graphene_force_constant
         manifest["graphene_nanopore"]["model"] = (
@@ -2972,6 +3003,11 @@ async def create_md_job(body: CreateJobRequest) -> dict:
             design = Design(metadata=DesignMetadata(name="graphene_control"))
         else:
             design = design_state.get_or_404().without_reference_geometry()
+            from backend.core.streptavidin import require_coating_simulation_support
+            try:
+                require_coating_simulation_support(design, 'NAMD')
+            except ValueError as exc:
+                raise HTTPException(422, str(exc))
             body = _infer_graphene_only(body, design)
             from backend.core.cpd_forcefield import (  # noqa: PLC0415
                 CpdCapabilityError,

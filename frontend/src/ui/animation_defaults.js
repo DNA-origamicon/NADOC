@@ -18,7 +18,7 @@ export function initAnimationDefaults({ store, api, getContext, onError = () => 
           d.animations = [{ id: crypto.randomUUID(), name: 'animation 1', keyframes: [], fps: 30, loop: false }]
         })
       } else {
-        request = (assemblyMode ? api.createAssemblyAnimation : api.createAnimation)('animation 1')
+        request = assemblyMode ? api.createAssemblyAnimation('animation 1') : api.ensureDefaultAnimation()
       }
     } catch (error) { request = Promise.reject(error) }
     const pending = Promise.resolve(request).catch(onError)

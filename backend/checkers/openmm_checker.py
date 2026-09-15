@@ -379,6 +379,8 @@ def verify_design_with_openmm(
     RuntimeError
         If PDB export fails or AMBER14 template matching fails (e.g. unknown residue).
     """
+    from backend.core.streptavidin import require_coating_simulation_support
+    require_coating_simulation_support(design, 'OpenMM verification')
     try:
         from openmm import app, LangevinMiddleIntegrator, Platform
         from openmm import unit

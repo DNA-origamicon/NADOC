@@ -1,0 +1,14 @@
+{
+  "original": {
+    "gmx_waters": 519616,
+    "wall_removed": 4778,
+    "water_sites_after_wall_exclusion": 514838,
+    "expected_waters_after_replacing_6619_ions": 508219
+  },
+  "relaxed": {
+    "gmx_waters": 517262,
+    "wall_removed": 4777,
+    "water_sites_after_wall_exclusion": 512485,
+    "expected_waters_after_replacing_6619_ions": 505866
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "parent_checkpoint_time_ps": 156,
+  "comparison_elapsed_ps": 200,
+  "initial": {
+    "frame": 15,
+    "step": 80000,
+    "time_ps": 156.0,
+    "box_nm": [
+      12.354,
+      12.297560733739028,
+      12.0
+    ],
+    "pore_slice_water": 550,
+    "pore_core_density_nm3": 23.438001415328916,
+    "total_water_void_nm3": 80.51200000000001,
+    "largest_water_void_nm3": 16.704000000000004
+  },
+  "branches": {
+    "fill_92_nvt_offload": {
+      "matched_200ps": {
+        "frame": 19,
+        "step": 100000,
+        "time_ps": 200.0,
+        "box_nm": [
+          12.354000000000001,
+          12.2975607337,
+          12.0
+        ],
+        "pore_slice_water": 504,
+        "pore_core_density_nm3": 21.723025702012166,
+        "total_water_void_nm3": 114.30400000000003,
+        "largest_water_void_nm3": 55.360000000000014
+      },
+      "last_saved_frame": {
+        "frame": 33,
+        "step": 170000,
+        "time_ps": 340.0,
+        "box_nm": [
+          12.354000000000001,
+          12.2975607337,
+          12.0
+        ],
+        "pore_slice_water": 526,
+        "pore_core_density_nm3": 21.411211935954576,
+        "total_water_void_nm3": 128.57600000000002,
+        "largest_water_void_nm3": 61.31200000000001
+      },
+      "mean_void_last_50ps_of_common_window_nm3": 111.16800000000003
+    },
+    "fill_92_npzat": {
+      "matched_200ps": {
+        "frame": 19,
+        "step": 100000,
+        "time_ps": 200.0,
+        "box_nm": [
+          12.354000000000001,
+          12.2975607337,
+          10.578540347981727
+        ],
+        "pore_slice_water": 806,
+        "pore_core_density_nm3": 33.31210400715263,
+        "total_water_void_nm3": 0.0,
+        "largest_water_void_nm3": 0
+      },
+      "last_saved_frame": {
+        "frame": 19,
+        "step": 100000,
+        "time_ps": 200.0,
+        "box_nm": [
+          12.354000000000001,
+          12.2975607337,
+          10.578540347981727
+        ],
+        "pore_slice_water": 806,
+        "pore_core_density_nm3": 33.31210400715263,
+        "total_water_void_nm3": 0.0,
+        "largest_water_void_nm3": 0
+      },
+      "mean_void_last_50ps_of_common_window_nm3": 0.0
+    }
+  },
+  "limitations": [
+    "Single stochastic continuation in each condition; no independent replicates.",
+    "NVT uses CPU integration/GPU force offload after the source GPU-resident run failed; NPzAT uses GPU-resident integration.",
+    "Both branches use the same 4 A patch margin, force field, composition, restraints, and immutable starting coordinates, velocities, and cell.",
+    "Grid void volumes are geometric diagnostics; connected components are not stitched across periodic boundaries."
+  ],
+  "starting_binary_files_identical": true,
+  "starting_sha256": {
+    "coor": "3ab281a0fcb6d956c53feb9bf5606257da70485e19f260a8bc713f29c52d3999",
+    "vel": "da5105eadb3584f80bfdfb05426ca34e61279fa155b0b79e2864dae340082b52",
+    "xsc": "016b4a26455d379c2079fed713688d693d4a7cc8468411a14fac7b9ef31da7f8"
+  }
+}

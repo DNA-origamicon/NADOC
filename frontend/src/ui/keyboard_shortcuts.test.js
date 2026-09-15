@@ -41,6 +41,7 @@ function makeDeps(overrides = {}) {
       undo: vi.fn(async () => ({})), redo: vi.fn(async () => ({})),
       undoAssembly: vi.fn(async () => ({})), redoAssembly: vi.fn(async () => ({})),
       saveAssemblyAs: vi.fn(async () => ({})), saveAssemblyToWorkspace: vi.fn(async () => ({})),
+      deleteNanoparticle: vi.fn(async () => ({})),
       deleteStrand: vi.fn(async () => ({})), deleteStrandsBatch: vi.fn(async () => ({})),
       deleteOverhangs: vi.fn(async () => ({})), deleteStrandExtensionsBatch: vi.fn(async () => ({})),
       addNick: vi.fn(async () => ({})),
@@ -487,6 +488,26 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     document.getElementById('menu-file-save-as').click = click
     await press('s', { ctrl: true, shift: true })
     expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it('Delete removes selected nanoparticles through the undoable API', async () => {
+    const d = makeDeps()
+    d.store.setState({ selection: { items: [{ kind: 'nanoparticle', id: 'dot' }] } })
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.api.deleteNanoparticle).toHaveBeenCalledExactlyOnceWith('dot')
+    expect(d.api.deleteStrand).not.toHaveBeenCalled()
+  })
+
+  it.each([[], [{ id: 'dot', kind: 'quantum_dot' }]])('Ctrl+Z keeps a document without DNA open for redo (%j)', async nanoparticles => {
+    const d = makeDeps()
+    d.store.setState({ currentDesign: { helices: [], nanoparticles } })
+    initKeyboardShortcuts(d)
+    await press('z', { ctrl: true })
+    expect(d.api.undo).toHaveBeenCalledOnce()
+    expect(d.showWelcome).not.toHaveBeenCalled()
+    await press('y', { ctrl: true })
+    expect(d.api.redo).toHaveBeenCalledOnce()
   })
 
   it('Ctrl+Z undoes (design), is blocked during deform, short-circuits on group-undo, and undoes assembly in assembly mode', async () => {

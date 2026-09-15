@@ -352,6 +352,8 @@ def _build_live_engine(
     when a GPU is present) and stages a CPU fallback input; that backend is threaded
     into the stepper and returned.  Returns ``(engine, frame_builder, info, backend)``."""
     from backend.physics.oxdna_live import LiveOxdnaSession, _OxpyStepper
+    from backend.core.streptavidin import require_coating_simulation_support
+    require_coating_simulation_support(design, 'Live oxDNA')
 
     info, backend = _prepare_live_rundir(
         design,

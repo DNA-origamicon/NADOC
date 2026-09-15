@@ -1404,9 +1404,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
         const isNanoparticle = entry.op_kind === 'nanoparticle-create'
         const isEditable = (_EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd || isNanoparticle) && !isEvicted
         const hasLaterSnapshot = isEditable && log.slice(i + 1).some(e => e.feature_type === 'snapshot')
-        // linker-add isn't a topology replay — Overhangs Manager just opens —
-        // so a later snapshot is fine.
-        const editAllowed = isEditable && (isLinkerAdd || !hasLaterSnapshot)
+        // Linker and nanoparticle editors change the current object; they do
+        // not replay the original creation snapshot. Later operations are fine.
+        const particle = isNanoparticle
+          ? store.getState().currentDesign?.nanoparticles?.find(p => p.id === entry.params?.nanoparticle_id)
+          : null
+        const editAllowed = isEditable && (isNanoparticle ? !!particle : (isLinkerAdd || !hasLaterSnapshot))
 
         let editBtn = null
         if (isEditable) {
@@ -1415,8 +1418,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
           editBtn.title = editAllowed
             ? (isLinkerAdd
                 ? `Open Overhangs Manager for this linker`
-                : `Edit ${entry.label} parameters (currently length_bp=${entry.params?.length_bp ?? '?'})`)
-            : 'Cannot edit: a later snapshot exists. Revert to this point first.'
+                : isNanoparticle
+                  ? `Edit scene diameter (currently ${particle.diameter_nm} nm)`
+                  : `Edit ${entry.label} parameters (currently length_bp=${entry.params?.length_bp ?? '?'})`)
+            : isNanoparticle ? 'Cannot edit: this nanoparticle has been deleted.'
+              : 'Cannot edit: a later snapshot exists. Revert to this point first.'
           editBtn.disabled = !editAllowed
           editBtn.style.cssText = [
             editAllowed

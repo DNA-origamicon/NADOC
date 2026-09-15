@@ -155,6 +155,8 @@ def test_save_acknowledgement_preserves_edit_made_during_save(monkeypatch, tmp_p
     response = client.post('/api/design/save-workspace', json={"path": "race.nadoc", "overwrite": True})
     assert response.status_code == 200
     assert design_state.get_or_404().metadata.description == 'Newer edit'
+    assert response.json()['design']['metadata']['description'] == 'Newer edit'
+    assert response.json()['revision'] == design_state.revision()
     assert Design.from_json((tmp_path / 'race.nadoc').read_text()).metadata.description == ''
     monkeypatch.setattr(project_revisions, 'refresh_active_revision', refresh)
     response = client.post('/api/design/save-workspace', json={"path": "race.nadoc", "overwrite": True})

@@ -1,0 +1,762 @@
+{
+  "version": "2026-09-12",
+  "entries": [
+    {
+      "catalog_id": "nn-hecz-450",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 450",
+      "product_code": "HECZ450-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdS/ZnS",
+      "emission_peak_nm": 450,
+      "absorption_peak_nm": 440,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        7,
+        8
+      ],
+      "core_diameter_range_nm": [
+        2,
+        2.5
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#5252ff",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 1,
+        "plot_file": "hecz-450.png",
+        "sha256": "b9b1e5f41352ed4861cd1ed86c903cdcd8122b8edafaafc9fc894ac0b71aa3de",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "nn-hecz-470",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 470",
+      "product_code": "HECZ470-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 470,
+      "absorption_peak_nm": 460,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        8,
+        9
+      ],
+      "core_diameter_range_nm": [
+        2,
+        2.5
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#328aff",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 2,
+        "plot_file": "hecz-470.png",
+        "sha256": "2d86d392358c20d115549009587e2118f21c48462960751a90c8765d13a37064",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "nn-hecz-500",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 500",
+      "product_code": "HECZ500-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 500,
+      "absorption_peak_nm": 490,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        8,
+        9
+      ],
+      "core_diameter_range_nm": [
+        2.5,
+        3
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#00c9b7",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 3,
+        "plot_file": "hecz-500.png",
+        "sha256": "9a33fb5ad19ce0b35aa1c3193ce4d8308b2a87c32ac89c74f79999ca367623a3",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "nn-hecz-520",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 520",
+      "product_code": "HECZ520-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 520,
+      "absorption_peak_nm": 510,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        9,
+        10
+      ],
+      "core_diameter_range_nm": [
+        2.5,
+        3
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#45ce65",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 4,
+        "plot_file": "hecz-520.png",
+        "sha256": "080e1585b0af607d7c22c1b3ccb4994e8a0608607e4c6f47446f034619a19466",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "nn-hecz-540",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 540",
+      "product_code": "HECZ540-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 540,
+      "absorption_peak_nm": 530,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        10,
+        11
+      ],
+      "core_diameter_range_nm": [
+        2.5,
+        3
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#85ca35",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 5,
+        "plot_file": "hecz-540.png",
+        "sha256": "3b752e20a5a7a14168d8b4e000dafd38fbd07f3cee2aafebdb92e739e896605d",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "nn-hecz-560",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 560",
+      "product_code": "HECZ560-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 560,
+      "absorption_peak_nm": 550,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        8,
+        9
+      ],
+      "core_diameter_range_nm": [
+        3,
+        3.5
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#b9bc28",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 6,
+        "plot_file": "hecz-560.png",
+        "sha256": "f9c5c6a0da5fec3b2c0985c2f916d83c15a116eeb5ffb7cd2a76a4ca2fb9712b",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "nn-hecz-580",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 580",
+      "product_code": "HECZ580-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 580,
+      "absorption_peak_nm": 570,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        9,
+        10
+      ],
+      "core_diameter_range_nm": [
+        3,
+        3.5
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#e5ac25",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 7,
+        "plot_file": "hecz-580.png",
+        "sha256": "d9f48f52ec6cd242e2e9d487702e61170d78cb7ab7c271c7afb836bfb6d8de0e",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "nn-hecz-600",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 600",
+      "product_code": "HECZ600-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 600,
+      "absorption_peak_nm": 590,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        9,
+        10
+      ],
+      "core_diameter_range_nm": [
+        3.5,
+        4
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#f78d29",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 8,
+        "plot_file": "hecz-600.png",
+        "sha256": "45fd76174ead1e2549ab57447a81c4ddf392c864889bf55f689af914e308e5e2",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "nn-hecz-620",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 620",
+      "product_code": "HECZ620-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 620,
+      "absorption_peak_nm": 610,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        10,
+        11
+      ],
+      "core_diameter_range_nm": [
+        3.5,
+        4
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#f25f36",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 9,
+        "plot_file": "hecz-620.png",
+        "sha256": "940e0d20679b6d0fa01291b7548ee1f530a6025c70e412e589cf5784d7fc88c2",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "nn-hecz-650",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 650",
+      "product_code": "HECZ650-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 650,
+      "absorption_peak_nm": 640,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        11,
+        12
+      ],
+      "core_diameter_range_nm": [
+        4,
+        4.5
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#e63946",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 10,
+        "plot_file": "hecz-650.png",
+        "sha256": "6eedc586298c68e45e9b7fcdc4715ea31685762ac18744a7524e7106bb18fddb",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "nn-hecz-660",
+      "catalog_version": "2026-09-12",
+      "vendor": "NN-Labs / NNCrystal",
+      "product_name": "HECZ 660",
+      "product_code": "HECZ660-10",
+      "product_url": "https://nn-labs.com/products/high-efficiency-cadmium-selenide-zinc-sulfide-cdse-zns-quantum-dots-cz",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 660,
+      "absorption_peak_nm": 650,
+      "emission_tolerance_nm": 10,
+      "diameter_range_nm": [
+        14,
+        16
+      ],
+      "core_diameter_range_nm": [
+        4.5,
+        5
+      ],
+      "size_basis": "Vendor total nanocrystal diameter (core + shell); ligand envelope not specified.",
+      "size_source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Technical_Specifications_updated_9-16-22.pdf?v=1663343923",
+      "surface_coating": "Oleic acid stabilizing ligands",
+      "functionalization": "None (no affinity ligand)",
+      "import_enabled": true,
+      "display_color": "#ce365b",
+      "spectra": {
+        "source_url": "https://cdn.shopify.com/s/files/1/0255/7306/4776/files/HECZ_Sample_Spectra_d3e1c293-0715-493a-a198-993a73d1ee31.pdf?v=1660058100",
+        "source_page": 11,
+        "plot_file": "hecz-660.png",
+        "sha256": "7c90f7e71397fee75d38351371c80abea305eda24b6157fb9967d612204592c0",
+        "format": "vendor_plot",
+        "note": "Original vendor absorption and emission curves in arbitrary units. Generic product spectra; actual lots vary by \u00b110 nm. Full published plot, not numerical samples."
+      },
+      "absorption_tolerance_nm": 10
+    },
+    {
+      "catalog_id": "thermo-qdot-525-streptavidin",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 525",
+      "product_code": "Q10141MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q10141MP",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 525,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer + PEG",
+      "functionalization": "Streptavidin",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#58d65d",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-565-streptavidin",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 565",
+      "product_code": "Q10131MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q10131MP",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 565,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer + PEG",
+      "functionalization": "Streptavidin",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#c5c731",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-585-streptavidin",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 585",
+      "product_code": "Q10111MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q10111MP",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 585,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer + PEG",
+      "functionalization": "Streptavidin",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#efb02e",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-605-streptavidin",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 605",
+      "product_code": "Q10101MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q10101MP",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 605,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer + PEG",
+      "functionalization": "Streptavidin",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#f18a32",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-625-streptavidin",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 625",
+      "product_code": "Q22063",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q22063",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 625,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer + PEG",
+      "functionalization": "Streptavidin",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#eb593e",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-655-streptavidin",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 655",
+      "product_code": "Q10121MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q10121MP",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 655,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer + PEG",
+      "functionalization": "Streptavidin",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#da3b51",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-705-streptavidin",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 705",
+      "product_code": "Q10161MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q10161MP",
+      "composition": "CdSeTe/ZnS",
+      "emission_peak_nm": 705,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer + PEG",
+      "functionalization": "Streptavidin",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#aa547d",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-800-streptavidin",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 800",
+      "product_code": "Q10171MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q10171MP",
+      "composition": "CdSeTe/ZnS",
+      "emission_peak_nm": 800,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer + PEG",
+      "functionalization": "Streptavidin",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#9369bf",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-525-carboxyl",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 525",
+      "product_code": "Q21341MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q21341MP",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 525,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer",
+      "functionalization": "Carboxyl",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#58d65d",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-605-carboxyl",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 605",
+      "product_code": "Q21301MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q21301MP",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 605,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer",
+      "functionalization": "Carboxyl",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#f18a32",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-655-carboxyl",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 655",
+      "product_code": "Q21321MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q21321MP",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 655,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer",
+      "functionalization": "Carboxyl",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#da3b51",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    },
+    {
+      "catalog_id": "thermo-qdot-525-amine-peg",
+      "catalog_version": "2026-09-12",
+      "vendor": "Thermo Fisher / Invitrogen",
+      "product_name": "Qdot 525",
+      "product_code": "Q21541MP",
+      "product_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP",
+      "composition": "CdSe/ZnS",
+      "emission_peak_nm": 525,
+      "absorption_peak_nm": null,
+      "diameter_range_nm": [
+        15,
+        21
+      ],
+      "core_diameter_range_nm": null,
+      "size_basis": "Approximate family-wide hydrodynamic diameter of fully functionalized Qdots; not a product-specific core size.",
+      "size_source_url": "https://www.thermofisher.com/order/catalog/product/Q21541MP/faqs",
+      "surface_coating": "Amphiphilic polymer + PEG",
+      "functionalization": "Amine (PEG)",
+      "import_enabled": false,
+      "disabled_reason": "Functionalized-dot import is not enabled yet.",
+      "display_color": "#58d65d",
+      "spectra": {
+        "source_url": "https://documents.thermofisher.com/TFS-Assets/LSG/manuals/mp19020.pdf",
+        "source_page": 3,
+        "plot_file": "qdot-family.png",
+        "sha256": "c098bdc8ecbead60d3b5f71ac0885bae58e77ebc01cd1c74e66dedd35345d24f",
+        "format": "vendor_plot",
+        "note": "Vendor family reference curves, Figure 2: 525 (1), 565 (2), 585 (3), 605 (4), 625 (5), 655 (6), 705 (7), 800 (8). Not a lot-specific measurement or numerical dataset."
+      }
+    }
+  ]
+}

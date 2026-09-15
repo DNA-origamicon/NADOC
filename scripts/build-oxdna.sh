@@ -14,7 +14,7 @@ BUILD_FLAVOR="upstream"
 if [ "${NADOC_OXDNA_ADAPTIVE_MEMORY:-0}" = "1" ]; then
   BUILD_FLAVOR="adaptive-memory"
 fi
-INSTALL_DIR="$ENGINE_ROOT/$OXDNA_REV-$BUILD_FLAVOR"
+INSTALL_DIR="$ENGINE_ROOT/$OXDNA_REV-$BUILD_FLAVOR-physics-v3"
 CURRENT="$ENGINE_ROOT/current"
 BUILD_DIR="$SOURCE_DIR/build-nadoc-$BUILD_FLAVOR"
 JOBS="${NADOC_BUILD_JOBS:-$(nproc)}"
@@ -25,12 +25,19 @@ echo "    source:  $OXDNA_URL"
 echo "    install: $INSTALL_DIR"
 
 mkdir -p "$ENGINE_ROOT"
-if [ ! -d "$SOURCE_DIR/.git" ]; then
+if [ ! -e "$SOURCE_DIR/.git" ]; then
   git clone "$OXDNA_URL" "$SOURCE_DIR"
 fi
 git -C "$SOURCE_DIR" remote set-url origin "$OXDNA_URL"
 git -C "$SOURCE_DIR" fetch --depth 1 origin "$OXDNA_REV"
 git -C "$SOURCE_DIR" checkout --detach "$OXDNA_REV"
+
+# Remove only our dependent patch before checking/reapplying its prerequisites.
+# Their original context changes under v3, so reverse-checking v1/v2 directly fails.
+PHYSICS_PATCH="$PROJECT_ROOT/tools/oxdna_thermostat/physics-corrections.patch"
+if git -C "$SOURCE_DIR" apply --reverse --check "$PHYSICS_PATCH" >/dev/null 2>&1; then
+  git -C "$SOURCE_DIR" apply --reverse "$PHYSICS_PATCH"
+fi
 
 if [ "${NADOC_OXDNA_ADAPTIVE_MEMORY:-0}" = "1" ]; then
   ADAPTIVE_PATCH="$SCRIPT_DIR/../tools/oxdna_memory/adaptive-neighbor-lists.patch"
@@ -58,6 +65,33 @@ else
   echo "==> applied oxpy live-steering bindings"
 fi
 
+THERMOSTAT_PATCH="$PROJECT_ROOT/tools/oxdna_thermostat/rigid-body-bussi.patch"
+if git -C "$SOURCE_DIR" apply --reverse --check "$THERMOSTAT_PATCH" >/dev/null 2>&1; then
+  echo "==> rigid-body Bussi thermostat patch already applied"
+else
+  git -C "$SOURCE_DIR" apply --check "$THERMOSTAT_PATCH"
+  git -C "$SOURCE_DIR" apply "$THERMOSTAT_PATCH"
+  echo "==> applied rigid-body Bussi thermostat fix"
+fi
+
+RNG_PATCH="$PROJECT_ROOT/tools/oxdna_thermostat/cuda-bussi-rng.patch"
+if git -C "$SOURCE_DIR" apply --reverse --check "$RNG_PATCH" >/dev/null 2>&1; then
+  echo "==> CPU-matched CUDA Bussi RNG patch already applied"
+else
+  git -C "$SOURCE_DIR" apply --check "$RNG_PATCH"
+  git -C "$SOURCE_DIR" apply "$RNG_PATCH"
+  echo "==> applied CPU-matched CUDA Bussi initialization"
+fi
+
+PHYSICS_PATCH="$PROJECT_ROOT/tools/oxdna_thermostat/physics-corrections.patch"
+if git -C "$SOURCE_DIR" apply --reverse --check "$PHYSICS_PATCH" >/dev/null 2>&1; then
+  echo "==> physics corrections already applied"
+else
+  git -C "$SOURCE_DIR" apply --check "$PHYSICS_PATCH"
+  git -C "$SOURCE_DIR" apply "$PHYSICS_PATCH"
+  echo "==> applied current-energy, point-rotation and zero-vector corrections"
+fi
+
 if [ ! -x "$OXPY_PYTHON" ]; then
   echo "ERROR: NADOC Python not found at $OXPY_PYTHON" >&2
   echo "Run 'uv sync', or set NADOC_OXPY_PYTHON to the backend interpreter." >&2
@@ -73,7 +107,7 @@ if [ "${NADOC_OXDNA_CPU_ONLY:-0}" != "1" ]; then
   fi
   cmake_args+=(-DCUDA=ON)
   if [ -n "${OXDNA_CUDA_ARCH:-}" ]; then
-    cmake_args+=("-DCMAKE_CUDA_ARCHITECTURES=${OXDNA_CUDA_ARCH}")
+    cmake_args+=(-DCUDA_COMMON_ARCH=OFF "-DCMAKE_CUDA_ARCHITECTURES=${OXDNA_CUDA_ARCH}")
   fi
 fi
 
@@ -91,6 +125,9 @@ cmake -D "BINARY=$INSTALL_DIR/bin/DNAnalysis" \
 printf '%s\n' "$OXDNA_URL" > "$INSTALL_DIR/source-url"
 printf '%s\n' "$OXDNA_REV" > "$INSTALL_DIR/source-revision"
 printf '%s\n' "$BUILD_FLAVOR" > "$INSTALL_DIR/build-flavor"
+printf '%s\n' v1 > "$INSTALL_DIR/bussi-rigid-dofs"
+printf '%s\n' v1 > "$INSTALL_DIR/bussi-cuda-rng"
+printf '%s\n' v3 > "$INSTALL_DIR/physics-corrections"
 ln -sfn "$INSTALL_DIR" "$CURRENT"
 
 if command -v uv >/dev/null 2>&1; then

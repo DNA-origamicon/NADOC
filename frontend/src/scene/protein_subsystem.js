@@ -107,9 +107,11 @@ export function initProteinSubsystem({
     applyLiveTransform: (...args) => allRenderers().forEach(r => r.applyLiveTransform(...args)),
     endLiveTransform: (...args) => allRenderers().forEach(r => r.endLiveTransform(...args)),
     applyOxdnaTransforms(transforms) {
+      window.dispatchEvent(new CustomEvent('nadoc:coating-oxdna-transforms', { detail: transforms }))
       allRenderers().forEach(r => r.applyOxdnaTransforms(transforms))
     },
     clearOxdnaTransforms() {
+      window.dispatchEvent(new CustomEvent('nadoc:coating-oxdna-transforms', { detail: null }))
       allRenderers().forEach(r => r.clearOxdnaTransforms())
     },
     dispose() {

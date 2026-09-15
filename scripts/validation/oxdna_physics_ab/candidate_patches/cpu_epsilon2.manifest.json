@@ -1,0 +1,7 @@
+{
+  "variant": "cpu_epsilon2",
+  "build_seconds": 6.027531989999261,
+  "binary_sha256": "10adaddb2e33a57f1797fc01a4aeb95196d7e5cca8b3708da8c32348462c7c6c",
+  "library_sha256": "579a1e9112ca881fadf63702b1b063a7dea27a685a995eb9b943f884cb42482d",
+  "patch_sha256": "a76120180b3dd484c92e59325bbb35aa660141829a4acb5b86c55bf6ac5a7b0c"
+}

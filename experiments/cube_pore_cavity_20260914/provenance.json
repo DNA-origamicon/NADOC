@@ -1,0 +1,6 @@
+{
+  "source_job": "60e854232e8c",
+  "production_job": "a4cb52583c26",
+  "purpose": "Isolated cavity cause investigation. No application or existing job changes.",
+  "baseline": "Parent stage 01 from minimized coordinates and original velocities; same field-free physics, reduced run/output cadence."
+}

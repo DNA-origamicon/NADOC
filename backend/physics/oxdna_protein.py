@@ -162,7 +162,7 @@ Block = list[ProteinBead]
 
 def has_proteins(design: Design) -> bool:
     """True when *design* has at least one VISIBLE protein attachment to simulate."""
-    return any(
+    return any(p.oxdna_fixed_core for p in getattr(design, "nanoparticles", [])) or any(
         getattr(a, "visible", True) for a in getattr(design, "protein_attachments", [])
     )
 
@@ -179,6 +179,8 @@ def build_protein_blocks(
     persisted protein attachments and the hybrid file writers.
     """
     from backend.core.protein import resolve_overhang_anchor
+    from backend.core.streptavidin import require_coating_simulation_support
+    require_coating_simulation_support(design, 'oxDNA/DNANM')
 
     assets = {a.id: a for a in getattr(design, "protein_assets", [])}
     attachments: list = []
@@ -201,6 +203,10 @@ def build_protein_blocks(
             continue
         attachments.append(att)
         blocks.append(beads)
+    if any(p.oxdna_fixed_core for p in getattr(design, "nanoparticles", [])):
+        from backend.physics.oxdna_nanoparticle import coating_blocks
+        coat_atts, coat_blocks = coating_blocks(design)
+        attachments.extend(coat_atts); blocks.extend(coat_blocks)
     return attachments, blocks
 
 
@@ -346,6 +352,9 @@ def hybrid_configuration_text(
     resolved = resolved_nuc_map(design, geometry)
     if oxdna_native_seed:
         resolved = oxdna_native_seed_map(design, resolved)
+    if any(p.oxdna_fixed_core for p in getattr(design, "nanoparticles", [])):
+        from backend.physics.oxdna_nanoparticle import seed_fixed_dna
+        resolved = seed_fixed_dna(design, resolved)
     order = _strand_nucleotide_order(design)
     if box_nm is None:
         dna_pos = [n["backbone_position"] for n in resolved.values()]
@@ -568,6 +577,8 @@ def protein_forces_text(
     offset = dna_index_offset(blocks)
     parts: list[str] = []
     for att, beads, base in zip(attachments, blocks, offsets):
+        if any(att.id == f'{p.id}:strep:{i}' for p in getattr(design, "nanoparticles", []) if p.coating for i in range(len(p.coating.poses))):
+            continue
         conj_local = conjugation_bead_index(beads)
         nt_key = binder_terminus_nuc_key(design, att, geometry)
         dna_p = (
@@ -579,4 +590,7 @@ def protein_forces_text(
             )
         else:
             parts.append(protein_anchor_trap_text(beads, base, anchor_stiff))
+    if any(p.oxdna_fixed_core for p in getattr(design, "nanoparticles", [])):
+        from backend.physics.oxdna_nanoparticle import fixed_core_forces
+        parts.append(fixed_core_forces(design, attachments, blocks, geometry))
     return "".join(parts)

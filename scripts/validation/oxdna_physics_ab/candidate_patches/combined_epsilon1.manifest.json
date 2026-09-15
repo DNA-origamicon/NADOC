@@ -1,0 +1,7 @@
+{
+  "variant": "combined_epsilon1",
+  "build_seconds": 10.478853969998454,
+  "binary_sha256": "10adaddb2e33a57f1797fc01a4aeb95196d7e5cca8b3708da8c32348462c7c6c",
+  "library_sha256": "b6414eb118a8db799d6d27092dd2984820bfabb97b2819f535396d21d444a0d3",
+  "patch_sha256": "8f58f3d362eee7b895d8259d5bbf68fb2dcc8ff0dec7e8307c7bcf0fea2edee8"
+}

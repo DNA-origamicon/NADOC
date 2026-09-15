@@ -878,18 +878,20 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
             },
         ) from exc
     dest.write_text(saved.to_json(), encoding="utf-8")
-    design_state.acknowledge_workspace_save(design, saved, save_revision)
+    acknowledged = design_state.acknowledge_workspace_save(
+        design, saved, save_revision, include_snapshot=disposition != "confirmed"
+    )
     # Same-path autosave is an acknowledgement, not a state sync: the frontend
     # deliberately keeps its current Design object to avoid an autosave loop.
     # Returning the full multi-megabyte design here made it JSON.parse data it
     # immediately discarded (notably ~142 ms for VoltronCoreArm).
-    if disposition == "confirmed":
+    if disposition == "confirmed" or acknowledged is None:
         return {
             "path": body.path,
             "identity_disposition": disposition,
             "previous_path": previous,
         }
-    response = _design_response(saved, validate_design(saved))
+    response = _design_response(acknowledged, validate_design(acknowledged))
     response.update(
         {
             "path": body.path,

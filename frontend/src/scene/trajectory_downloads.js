@@ -5,8 +5,8 @@ export function initTrajectoryDownloads(fetchTrajectory) {
   const entries = new Map()
   const jobTails = new Map()
   let retained = new Set()
-  const key = (jobId, { align = true, scope = 'lineage', stride } = {}) =>
-    JSON.stringify([jobId, align, scope, stride ?? null])
+  const key = (jobId, { align = true, scope = 'lineage', stride, frameStart, frameEnd } = {}) =>
+    JSON.stringify([jobId, align, scope, stride ?? null, frameStart ?? null, frameEnd ?? null])
 
   function get(jobId, spec = {}, { signal, onProgress } = {}) {
     if (signal?.aborted) return Promise.reject(new DOMException('cancelled', 'AbortError'))

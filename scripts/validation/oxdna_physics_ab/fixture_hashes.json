@@ -1,0 +1,23 @@
+{
+  "fixtures/cage/topology.top": "0011c7a82743224fdeda34b3f16117a38337484fc4a726e27c35e653a08852ed",
+  "fixtures/cage/forces.txt": "85aede39e49ff5c730ab55187ef98ff5420ac0d43f67492f90209a1597dd22b2",
+  "fixtures/cage/anm.par": "36ba7c57cca59c698c93a4772c75255d850cc783b627e5b64655873f7da9e006",
+  "fixtures/cage/conf.dat": "47cfec04a0cae85c2b730863543dcead2073e60caa80f9be94713d23c4c38c80",
+  "fixtures/ads5/topology.top": "082d3ebc07efc7fd8f9481cb63848a66d71eadaaf894e3344a30e96c026883a8",
+  "fixtures/ads5/forces.txt": "1153f07de754db9bedd6cccb1bb4a10fce90d457ff933dc504bf338513896304",
+  "fixtures/ads5/anm.par": "525b44a46e6c49fd5102d83bc05332aa4f4b3d17d060b89ac116bdc829b2baa9",
+  "fixtures/ads5/conf.dat": "da23894c2c8a9daf958ef92802423a8bae8b80f14c0a6bdfe7e2c44bd330cad9",
+  "fixtures/dna/topology.top": "3544f3ed689d2ba6554d0bc9e287041b139019b8f3bff4a2172726aefd360e69",
+  "fixtures/dna/conf.dat": "30ae2e667c4285a87c043ecb9087b35e4baf9cc691d20eb3d61c222ba621f9b6",
+  "fixtures/ads10/topology.top": "082d3ebc07efc7fd8f9481cb63848a66d71eadaaf894e3344a30e96c026883a8",
+  "fixtures/ads10/forces.txt": "0ee0c2bac14168c8f5e37ebe90d25292c77c03ed6bcdb87b0a9d52cbda420e8e",
+  "fixtures/ads10/anm.par": "525b44a46e6c49fd5102d83bc05332aa4f4b3d17d060b89ac116bdc829b2baa9",
+  "fixtures/ads10/conf.dat": "264bd67b2822898128582dbf1f5bea01a12694c8b82f9cd1aa263e20705748bb",
+  "fixtures/biotin10/topology.top": "708fec13f3441003e9fc5dc9f80a753b80820cec44b067b935f800f9aad8512f",
+  "fixtures/biotin10/forces.txt": "7b72e23a4f018aab8fa0b949c67373b07920c8fa764cc1a2dafada43d8b37ac1",
+  "fixtures/biotin10/anm.par": "f955f162fb11fd58109798caea741f24f14415a75ff889f5d8a2e4f1a980f34a",
+  "fixtures/biotin10/conf.dat": "b0027b2a0a2457680a2ba4f8b3967acb4c93e85481561eb1fa2be906b9d26414",
+  "fixtures/protein/topology.top": "7b105821a8f1be27ec9c34e9604ee323d675863986c350303b1c7893dd9329dc",
+  "fixtures/protein/anm.par": "43d61e49d365f47983425403f0e931e6a7f405637e8266252b20231a14acc5a0",
+  "fixtures/protein/conf.dat": "d0520f3aebbdfc0026898e49abd171cbd3f7748775634bfdc8a4f7a548d33e60"
+}

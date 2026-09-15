@@ -1,0 +1,14 @@
+[
+  {
+    "file": "src/Interactions/DNA2Interaction.cpp",
+    "url": "https://raw.githubusercontent.com/lorenzo-rovigatti/oxDNA/8028cf33b3cba12992b771156085fa54879f50cd/src/Interactions/DNA2Interaction.cpp",
+    "download_sha256": "98ca040d7dd2ef137e75a011081ca5ad7824b611146434ad9acd3c3a74f617ea",
+    "local_sha256": "98ca040d7dd2ef137e75a011081ca5ad7824b611146434ad9acd3c3a74f617ea"
+  },
+  {
+    "file": "src/CUDA/Interactions/CUDADNAInteraction.cu",
+    "url": "https://raw.githubusercontent.com/lorenzo-rovigatti/oxDNA/8028cf33b3cba12992b771156085fa54879f50cd/src/CUDA/Interactions/CUDADNAInteraction.cu",
+    "download_sha256": "edff32e6684cb1eb6ff242e3216b598a6660ddc8649190af8f7b17d948eda9e6",
+    "local_sha256": "edff32e6684cb1eb6ff242e3216b598a6660ddc8649190af8f7b17d948eda9e6"
+  }
+]

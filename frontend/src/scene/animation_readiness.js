@@ -2,7 +2,7 @@ import { keyframeTrajSpec } from './trajectory_keyframes.js'
 import { clampRange } from './trajectory_range.js'
 
 export function readinessKey(jobId, spec) {
-  return JSON.stringify([jobId, spec.engine || 'oxdna', spec.scope || 'lineage', spec.stride ?? null])
+  return JSON.stringify([jobId, spec.engine || 'oxdna', spec.scope || 'lineage', spec.stride ?? null, spec.frameStart ?? null, spec.frameEnd ?? null])
 }
 
 /** Availability of the exact playback cache cells covering this authored range.

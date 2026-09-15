@@ -1,0 +1,147 @@
+--- a/src/Backends/Thermostats/BrownianThermostat.cpp
++++ b/src/Backends/Thermostats/BrownianThermostat.cpp
+@@ -63,6 +63,7 @@
+ 		}
+ 		if(drand48() < _pr) {
+ 			p->L = LR_vector(Utils::gaussian(), Utils::gaussian(), Utils::gaussian()) * _rescale_factor;
++			if(!p->is_rigid_body()) p->L = LR_vector(0., 0., 0.);
+ 		}
+ 	}
+ }
+--- a/src/CUDA/Thermostats/CUDABaseThermostat.h
++++ b/src/CUDA/Thermostats/CUDABaseThermostat.h
+@@ -28,6 +28,10 @@
+ 	CUDA_kernel_cfg _launch_cfg;
+ 	curandState *_d_rand_state;
+ 	llint _seed;
++	int _rigidity_mode = 1;
++	int *_d_rigid_flags = nullptr;
++	int *_thermostat_particle_ids = nullptr;
++	void _setup_rigid_flags();
+ 
+ 	/**
+ 	 * @brief This method initialize _d_rand_state
+@@ -42,6 +46,7 @@
+ 	CUDABaseThermostat();
+ 	virtual ~CUDABaseThermostat();
+ 
++	void set_particle_ids(int *ids) { _thermostat_particle_ids = ids; }
+ 	virtual void set_seed(llint seed) { _seed = seed; }
+ 	virtual void get_cuda_settings(input_file &inp);
+ 	virtual void apply_cuda(c_number4 *d_pos, GPU_quat *d_orientations, c_number4 *d_vel, c_number4 *d_L, llint curr_step) = 0;
+--- a/src/CUDA/Thermostats/CUDABaseThermostat.cu
++++ b/src/CUDA/Thermostats/CUDABaseThermostat.cu
+@@ -6,6 +6,8 @@
+  */
+ 
+ #include "CUDABaseThermostat.h"
++#include "../../Utilities/ConfigInfo.h"
++#include "../../Particles/BaseParticle.h"
+ 
+ __global__ void setup_curand(curandState *rand_state, const llint seed, const int N) {
+ 	if(IND >= N) return;
+@@ -20,6 +22,7 @@
+ }
+ 
+ CUDABaseThermostat::~CUDABaseThermostat() {
++	if(_d_rigid_flags) CUDA_SAFE_CALL(cudaFree(_d_rigid_flags));
+ 	if(_d_rand_state != NULL) CUDA_SAFE_CALL(cudaFree(_d_rand_state));
+ }
+ 
+@@ -38,3 +41,18 @@
+ setup_curand<<<_launch_cfg.blocks, _launch_cfg.threads_per_block>>>(_d_rand_state, _seed, N);
+ }
+ 
++
++void CUDABaseThermostat::_setup_rigid_flags() {
++    std::vector<int> flags(CONFIG_INFO->N());
++    int n_rigid = 0;
++    for(auto p: CONFIG_INFO->particles()) {
++        flags[p->index] = p->is_rigid_body() ? 1 : 0;
++        n_rigid += flags[p->index];
++    }
++    _rigidity_mode = (n_rigid == 0) ? 0 : ((n_rigid == CONFIG_INFO->N()) ? 1 : 2);
++    if(_rigidity_mode == 2) {
++        if(!_thermostat_particle_ids) throw oxDNAException("Rigid mask requires stable CUDA particle IDs");
++        CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<int>(&_d_rigid_flags, flags.size()*sizeof(int)));
++        CUDA_SAFE_CALL(cudaMemcpy(_d_rigid_flags, flags.data(), flags.size()*sizeof(int), cudaMemcpyHostToDevice));
++    }
++}
+--- a/src/CUDA/Thermostats/CUDABrownianThermostat.cu
++++ b/src/CUDA/Thermostats/CUDABrownianThermostat.cu
+@@ -12,7 +12,7 @@
+ 
+ #include <curand_kernel.h>
+ 
+-__global__ void brownian_thermostat(curandState *rand_state, c_number4 *vels, c_number4 *Ls, c_number rescale_factor, c_number pt, c_number pr, int N) {
++__global__ void brownian_thermostat(curandState *rand_state, c_number4 *vels, c_number4 *Ls, c_number rescale_factor, c_number pt, c_number pr, int N, int rigidity_mode, const int *rigid_flags, const int *particle_ids) {
+ 	if(IND < N) {
+ 		curandState state = rand_state[IND];
+ 
+@@ -46,6 +46,7 @@
+ 			Ls[IND] = L;
+ 		}
+ 
++		if(rigidity_mode == 0 || (rigidity_mode == 2 && !rigid_flags[particle_ids[IND]])) Ls[IND] = make_c_number4(0, 0, 0, 0);
+ 		rand_state[IND] = state;
+ 	}
+ }
+@@ -69,6 +70,7 @@
+ 	BrownianThermostat::init();
+ 
+ 	this->_setup_rand(CONFIG_INFO->N());
++	this->_setup_rigid_flags();
+ }
+ 
+ bool CUDABrownianThermostat::would_activate(llint curr_step) {
+@@ -80,5 +82,5 @@
+ 
+ 	brownian_thermostat
+ 		<<<this->_launch_cfg.blocks, this->_launch_cfg.threads_per_block>>>
+-		(this->_d_rand_state, d_vels, d_Ls, this->_rescale_factor, this->_pt, this->_pr, CONFIG_INFO->N());
++		(this->_d_rand_state, d_vels, d_Ls, this->_rescale_factor, this->_pt, this->_pr, CONFIG_INFO->N(), _rigidity_mode, _d_rigid_flags, _thermostat_particle_ids);
+ }
+--- a/src/CUDA/Thermostats/CUDALangevinThermostat.cu
++++ b/src/CUDA/Thermostats/CUDALangevinThermostat.cu
+@@ -11,7 +11,7 @@
+ 
+ #include <curand_kernel.h>
+ 
+-__global__ void langevin_thermostat(curandState *rand_state, c_number4 *vels, c_number4 *Ls, c_number _dt, c_number gamma_trans, c_number rescale_factor_trans, c_number gamma_rot, c_number rescale_factor_rot, int N) {
++__global__ void langevin_thermostat(curandState *rand_state, c_number4 *vels, c_number4 *Ls, c_number _dt, c_number gamma_trans, c_number rescale_factor_trans, c_number gamma_rot, c_number rescale_factor_rot, int N, int rigidity_mode, const int *rigid_flags, const int *particle_ids) {
+ 	if(IND < N) {
+ 		curandState state = rand_state[IND];
+ 		c_number f_vx, f_vy, f_vz;
+@@ -34,6 +34,7 @@
+ 
+ 		//if (IND==5) printf("Diff is: %f %f %f \n",L.x-Ls[IND].x, L.y-Ls[IND].y, L.z-Ls[IND].z);
+ 
++		if(rigidity_mode == 0 || (rigidity_mode == 2 && !rigid_flags[particle_ids[IND]])) L = make_c_number4(0, 0, 0, 0);
+ 		vels[IND] = v;
+ 		Ls[IND] = L;
+ 	}
+@@ -58,6 +59,7 @@
+ 	LangevinThermostat::init();
+ 
+ 	this->_setup_rand(CONFIG_INFO->N());
++	this->_setup_rigid_flags();
+ }
+ 
+ bool CUDALangevinThermostat::would_activate(llint curr_step) {
+@@ -69,5 +71,5 @@
+ 
+ 	langevin_thermostat
+ 		<<<this->_launch_cfg.blocks, this->_launch_cfg.threads_per_block>>>
+-		(this->_d_rand_state, d_vels, d_Ls, this->_dt, this->_gamma_trans, this-> _rescale_factor_trans, this->_gamma_rot, this->_rescale_factor_rot, CONFIG_INFO->N());
++		(this->_d_rand_state, d_vels, d_Ls, this->_dt, this->_gamma_trans, this-> _rescale_factor_trans, this->_gamma_rot, this->_rescale_factor_rot, CONFIG_INFO->N(), _rigidity_mode, _d_rigid_flags, _thermostat_particle_ids);
+ }
+--- a/src/CUDA/Backends/MD_CUDABackend.cu
++++ b/src/CUDA/Backends/MD_CUDABackend.cu
+@@ -738,6 +738,7 @@
+ 		OX_LOG(Logger::LOG_INFO, "CUDA Bussi CPU-matched RNG v1");
+ 	}
+ 	else _cuda_thermostat->set_seed(lrand48());
++	_cuda_thermostat->set_particle_ids(_d_particle_ids);
+ 	_cuda_thermostat->init();
+ 
+ 	if(_use_barostat) {

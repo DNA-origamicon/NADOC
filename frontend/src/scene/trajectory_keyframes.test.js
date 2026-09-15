@@ -420,7 +420,7 @@ describe('initTrajectoryKeyframes.show', () => {
     md.shown.length = 0
     tk.show('A', 'namd', 3, { ions: true, box: false })
     await Promise.resolve(); await Promise.resolve()
-    expect(companion.setJob).toHaveBeenCalledWith('A', { stride: 2, nFrames: 100, frameIdx: 3 })
+    expect(companion.setJob).toHaveBeenCalledWith('A', expect.objectContaining({ stride: 2, nFrames: 100, frameIdx: 3, keyframeOptions: { ions: true, box: false } }))
     expect(companion.setKeyframeOptions).toHaveBeenCalledWith({ ions: true, box: false })
     tk.show('A', 'namd', 4, { ions: true, box: false })
     expect(companion.showFrame).toHaveBeenLastCalledWith(4)
@@ -674,4 +674,12 @@ it('does not activate an abandoned animation after a later-job download complete
   finish({ ready: true, n_frames: 10 })
   await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   expect(ox.loads).toEqual([])
+})
+
+
+it('loads the enclosing range while preserving a reverse keyframe’s authored direction', () => {
+  const kf = { trajectory_engine: 'namd', trajectory_stride: 1,
+    trajectory_frame_start: 12, trajectory_frame_end: 10 }
+  expect(keyframeTrajSpec(kf)).toMatchObject({ frameStart: 10, frameEnd: 12 })
+  expect(kf.trajectory_frame_start).toBe(12)
 })

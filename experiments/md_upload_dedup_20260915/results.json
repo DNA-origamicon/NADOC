@@ -1,0 +1,13 @@
+{
+  "job_template": "75af92defc27",
+  "stage_configs_verified": 24,
+  "original_combined_files": 24,
+  "new_combined_files": 2,
+  "original_package_bytes": 4136295736,
+  "new_package_bytes": 1256783201,
+  "original_uploads": 76,
+  "new_uploads": 12,
+  "small_files_bundled": 43,
+  "bundle_bytes": 1761280,
+  "composition_seconds": 7.224343739995675
+}

@@ -41,7 +41,7 @@ def _alpine_script(job: OxdnaJob, specs, remote: str, engine: str, resources: di
     if resources.get("gpus", 0):
         gres = resources.get("gres") or f"gpu:{resources['gpus']}"
         lines.append(f"#SBATCH --gres={gres}")
-    lines += ["", "set -euo pipefail", "source /etc/profile", "module purge"]
+    lines += ["", "set -eo pipefail", "source /etc/profile", "module purge"]
     if modules:
         lines.append("module load " + " ".join(map(shlex.quote, modules)))
     lines += [f"export LD_LIBRARY_PATH={q(str(Path(engine).parent.parent / 'lib'))}:${{LD_LIBRARY_PATH:-}}",
@@ -98,6 +98,23 @@ async def submit_alpine(job: OxdnaJob, workspace: Path, specs) -> None:
         await _put_text(conn, content, f"{remote}/{relative}")
     build_dir = cluster_oxdna_build.build_dir_for(profile, conn.user, "oxdna-adaptive")
     engine = f"{build_dir}/install/bin/oxDNA"
+    if any(spec.parfile for spec in specs):
+        marker = f"{build_dir}/install/bussi-rigid-dofs"
+        checked = await conn.run(f"test \"$(cat {shlex.quote(marker)} 2>/dev/null)\" = v1")
+        if checked.rc:
+            raise RuntimeError(
+                "The Alpine oxDNA installation needs the protein thermostat fix. "
+                "Rebuild oxDNA in MD Engines before submitting protein-DNA jobs."
+            )
+    if any(spec.parfile and spec.backend == "CUDA" and spec.sim_type == "MD" for spec in specs):
+        marker = f"{build_dir}/install/bussi-cuda-rng"
+        checked = await conn.run(f"test \"$(cat {shlex.quote(marker)} 2>/dev/null)\" = v1")
+        if checked.rc:
+            raise RuntimeError("Rebuild Alpine oxDNA in MD Engines for the validated CUDA Bussi initialization.")
+    marker = f"{build_dir}/install/physics-corrections"
+    checked = await conn.run(f"test \"$(cat {shlex.quote(marker)} 2>/dev/null)\" = v3")
+    if checked.rc:
+        raise RuntimeError("Rebuild Alpine oxDNA in MD Engines for the current physics corrections.")
     script = _alpine_script(job, specs, remote, engine, resources,
                              profile.modules_for(partition.kind == "gpu"))
     await _put_text(conn, script, f"{remote}/submit.sbatch")

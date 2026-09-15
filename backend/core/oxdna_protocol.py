@@ -32,6 +32,8 @@ and spawns oxDNA.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from pathlib import Path
+import math
 
 from backend.core.oxdna_job import OXDNA_SEED_MAX, OxdnaStageStatus
 
@@ -62,6 +64,9 @@ class OxdnaStageSpec:
     # Molecular dynamics keys (sim_type == MD)
     dt: float = 0.002
     thermostat: str = "bussi"
+    # Explicit local-bath diffusion; required when John/Brownian/Langevin is selected.
+    diff_coeff: float | None = None
+    refresh_vel: bool = True
     bussi_tau: int = 1000
     newtonian_steps: int = 53
     # Mutual-trap external forces holding designed WC pairs together (relax aid).
@@ -102,6 +107,11 @@ class OxdnaStageSpec:
 
 
 # ── Standard defaults (oxDNA origami relaxation docs) ─────────────────────────
+AVERAGE_SEQUENCE_FILE = "oxDNA2_average_sequence_parameters.txt"
+AVERAGE_SEQUENCE_PATH = Path(__file__).resolve().parents[1] / "data/oxdna" / AVERAGE_SEQUENCE_FILE
+
+# GPU default is user-authorized; further convergence and sampling checks are required,
+# especially for fixed gold/strep/DNA. See TD-OXDNA-PHYSICS in the tech-debt ledger.
 DEFAULT_MC_STEPS: int = 1_000  # 10²–10⁴ per docs
 DEFAULT_MD_RELAX_STEPS: int = 1_000_000  # ~1e6 per docs
 DEFAULT_EQUIL_STEPS: int = 100_000  # short unbiased settle
@@ -117,6 +127,15 @@ DEFAULT_EQUIL_STEPS: int = 100_000  # short unbiased settle
 # escalate-and-retry is the quality half (it tries to remove the over-stretch first).
 DEFAULT_EQUIL_BACKBONE_FORCE: float = 50.0
 DEFAULT_EQUIL_BACKBONE_FORCE_FAR: float = 100.0
+
+
+def constrain_fixed_core_stages(specs: list[OxdnaStageSpec]) -> None:
+    """Preserve the fixed-gold model on either backend, including edited jobs."""
+    for spec in specs:
+        spec.absolute_forces = True
+        spec.external_forces = True
+        if spec.sim_type == "MD":
+            spec.dt = min(spec.dt, 0.0001)
 
 
 def assign_stage_seeds(
@@ -247,7 +266,7 @@ _STAGE_OVERRIDE_FIELDS = {
     "backend", "steps", "temperature", "salt_concentration", "device", "ensemble",
     "delta_translation", "delta_rotation", "dt", "thermostat", "bussi_tau",
     "newtonian_steps", "max_backbone_force", "max_backbone_force_far",
-    "external_forces", "min_bp_retained",
+    "external_forces", "min_bp_retained", "diff_coeff", "refresh_vel",
 }
 _STAGE_OVERRIDE_ALIASES = {
     "print_conf_interval": "print_conf_interval_override",
@@ -277,22 +296,52 @@ def apply_stage_overrides(
             if target not in _STAGE_OVERRIDE_FIELDS and key not in _STAGE_OVERRIDE_ALIASES:
                 raise ValueError(f"{key!r} is not an editable oxDNA stage parameter")
             current = getattr(spec, target)
-            if isinstance(current, bool):
-                value = bool(value)
-            elif isinstance(current, int) and not isinstance(current, bool):
+            if value is None:
+                if target not in {"max_backbone_force", "max_backbone_force_far", "diff_coeff"}:
+                    raise ValueError(f"{target} cannot be unset")
+            elif isinstance(current, bool):
+                if not isinstance(value, bool) and value not in ("true", "false"):
+                    raise ValueError(f"{target} must be true or false")
+                value = value is True or value == "true"
+            elif (isinstance(current, int) and not isinstance(current, bool)) or target in _STAGE_OVERRIDE_ALIASES.values():
+                if float(value) != int(value):
+                    raise ValueError(f"{target} must be an integer")
                 value = int(value)
-            elif isinstance(current, float):
+            elif isinstance(current, float) or target in {"diff_coeff", "max_backbone_force", "max_backbone_force_far"}:
                 value = float(value)
             elif current is not None:
                 value = str(value)
             changes[target] = value
         updated = replace(spec, **changes)
-        if updated.steps < 1 or updated.salt_concentration <= 0 or not 0 <= updated.min_bp_retained <= 1:
-            raise ValueError(f"invalid override values for {spec.name}")
-        if updated.backend not in {"CPU", "CUDA"}:
-            raise ValueError(f"invalid backend override for {spec.name}: {updated.backend!r}")
+        validate_stage_spec(updated)
         result.append(updated)
     return result
+
+
+def validate_stage_spec(spec: OxdnaStageSpec) -> None:
+    """Reject invalid physical settings before a native engine or remote job starts."""
+    if spec.backend not in {"CPU", "CUDA"}:
+        raise ValueError(f"invalid backend override for {spec.name}: {spec.backend!r}")
+    if spec.sim_type == "MC" and spec.backend != "CPU":
+        raise ValueError("Monte Carlo stages require CPU")
+    if spec.steps < 1 or not math.isfinite(spec.salt_concentration) or spec.salt_concentration <= 0 or not 0 <= spec.min_bp_retained <= 1:
+        raise ValueError(f"invalid override values for {spec.name}")
+    for cadence in (spec.print_conf_interval_override, spec.print_energy_every_override):
+        if cadence is not None and (not isinstance(cadence, int) or cadence < 1):
+            raise ValueError("Output intervals must be positive integers")
+    for cap in (spec.max_backbone_force, spec.max_backbone_force_far):
+        if cap is not None and (not math.isfinite(cap) or cap <= 0):
+            raise ValueError("Force caps must be positive or unset")
+    if spec.sim_type == "MD":
+        if not math.isfinite(spec.dt) or spec.dt <= 0 or spec.newtonian_steps < 1:
+            raise ValueError("MD timestep and thermostat update interval must be positive")
+        if spec.thermostat not in {"bussi", "john", "brownian", "langevin", "no"}:
+            raise ValueError(f"Unsupported thermostat: {spec.thermostat}")
+        if spec.thermostat == "bussi" and spec.bussi_tau <= 0:
+            raise ValueError("Bussi tau must be positive")
+        if spec.thermostat in {"john", "brownian", "langevin"}:
+            if spec.diff_coeff is None or not math.isfinite(spec.diff_coeff) or spec.diff_coeff <= 0:
+                raise ValueError("An explicit positive diffusion coefficient is required")
 
 
 def escalate_md_relax_spec(base: OxdnaStageSpec, attempt: int) -> OxdnaStageSpec:
@@ -321,6 +370,7 @@ def render_stage_input(
     conf_name: str,
     forces_name: str | None = None,
     parfile_name: str | None = None,
+    sequence_parameters_name: str | None = None,
 ) -> str:
     """Render the oxDNA input-file text for *spec*.
 
@@ -333,6 +383,7 @@ def render_stage_input(
     ``print_energy_every`` is sized to ~100 energy samples over the stage so the
     runner can derive live progress from the energy.dat line count.
     """
+    validate_stage_spec(spec)
     print_energy_every = spec.print_energy_every_override or max(1, spec.steps // 100)
     conf_interval = spec.print_conf_interval_override or print_conf_interval(spec)
     is_md = spec.sim_type == "MD"
@@ -362,8 +413,10 @@ def render_stage_input(
         lines.append(f"thermostat = {spec.thermostat}")
         if spec.thermostat == "bussi":
             lines.append(f"bussi_tau = {spec.bussi_tau}")
+        if spec.thermostat in {"john", "brownian", "langevin"}:
+            lines.append(f"diff_coeff = {spec.diff_coeff}")
         lines.append(f"newtonian_steps = {spec.newtonian_steps}")
-        lines.append("refresh_vel = true")
+        lines.append(f"refresh_vel = {str(spec.refresh_vel).lower()}")
     else:  # Monte Carlo
         lines.append(f"ensemble = {spec.ensemble}")
         lines.append(f"delta_translation = {spec.delta_translation}")
@@ -377,6 +430,11 @@ def render_stage_input(
     lines.append("")
     interaction = spec.interaction or "DNA2"
     lines.append(f"interaction_type = {interaction}")
+    if interaction == "DNA2":
+        # Pinned CUDA DNA2 omits the average-strength overrides in its initializer.
+        # Upstream's equal-strength file reproduces the average model on both backends.
+        lines.append("use_average_seq = false")
+        lines.append(f"seq_dep_file = {sequence_parameters_name or AVERAGE_SEQUENCE_PATH}")
     if spec.peg_parameters:
         if interaction != "DNA2PEG":
             raise ValueError("PEG parameters require the DNA2PEG interaction")

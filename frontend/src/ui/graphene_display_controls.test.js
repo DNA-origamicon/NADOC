@@ -92,3 +92,13 @@ it('hides every surface channel again on deselection, regardless of saved visibi
  selected(false);expect(simulation.setGrapheneDisplay).toHaveBeenLastCalledWith(expect.objectContaining({visible:false}))
  ctrl.dispose()
 })
+
+it('shows setup previews without authorizing a simulation membrane',()=>{
+ document.body.innerHTML='<input type="checkbox" id="md-graphene-show">'
+ const preview={setDisplay:vi.fn()},simulation={setGrapheneDisplay:vi.fn()}
+ const ctrl=initGrapheneDisplayControls({preview,simulation})
+ window.dispatchEvent(new CustomEvent('nadoc:namd-surface-selection',{detail:{enabled:false,previewEnabled:true}}))
+ expect(preview.setDisplay).toHaveBeenLastCalledWith(expect.objectContaining({visible:true}))
+ expect(simulation.setGrapheneDisplay).toHaveBeenLastCalledWith(expect.objectContaining({visible:false}))
+ ctrl.dispose()
+})

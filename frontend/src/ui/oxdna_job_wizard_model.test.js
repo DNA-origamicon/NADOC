@@ -100,3 +100,19 @@ describe('oxDNA copied-job seed display', () => {
     wizard.close()
   })
 })
+
+it('requires explicit diffusion when changing a stage to a local bath', () => {
+  const stage_overrides = { '3_equil': { thermostat: 'john', refresh_vel: false } }
+  expect(validateOxdnaWizard({ stage_overrides }).valid).toBe(false)
+  stage_overrides['3_equil'].diff_coeff = 0.1
+  expect(validateOxdnaWizard({ stage_overrides }).valid).toBe(true)
+  expect(oxdnaStagePlan({ stage_overrides })[2]).toMatchObject({ thermostat: 'john', diff_coeff: 0.1, refresh_vel: false })
+})
+
+it('previews the fixed-gold hybrid with GPU MD and persistent model forces', () => {
+  const stages = oxdnaStagePlan({ protein_present: true, fixed_core_present: true })
+  expect(stages[0].backend).toBe('CPU')
+  for (const stage of stages.slice(1)) expect(stage).toMatchObject({ backend: 'CUDA', interaction_type: 'DNANM', dt: 0.0001, external_forces: true, fix_diffusion: false })
+  expect(stages[2].forces_file).toBe('equil_forces.txt')
+  expect(stages[2].seq_dep_file).toBeUndefined()
+})

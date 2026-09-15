@@ -298,10 +298,16 @@ export function initAtomisticRenderer(scene) {
       if (!rows.length) continue
       const meta = ELEMENTS[el] ?? DEFAULT_ELEMENT
       const radius = (isVdw ? meta.vdw : BALL_RADIUS) * _vdwScale
-      const scale  = atomInstanceScale(radius, useImpostors)
+      // Rigid PDB coatings opt into one unit-radius impostor material. Instance
+      // scale carries the physical radius, allowing all elements and VDW/balls
+      // to share one shader without rebinding per-material radius uniforms.
+      const unitImpostor = useImpostors && data?.unitSphereImpostors === true
+      const materialRadius = unitImpostor ? 1 : radius
+      const scale = unitImpostor ? radius : atomInstanceScale(radius, useImpostors)
       const mesh   = new THREE.InstancedMesh(
         atomSphereGeometry(useImpostors),
-        _material(`${useImpostors}|${el}|${radius.toFixed(4)}`, () => makeAtomSphereMaterial(radius, useImpostors)),
+        _material(unitImpostor ? 'unit-impostor' : `${useImpostors}|${el}|${radius.toFixed(4)}`,
+          () => makeAtomSphereMaterial(materialRadius, useImpostors)),
         rows.length,
       )
       mesh.frustumCulled = false

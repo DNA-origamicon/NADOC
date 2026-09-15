@@ -1811,7 +1811,9 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
 
   function paintActions() {
     const blocked = plan ? blockingConditions(plan).length > 0 : false
-    const needsBox = state.mode !== 'production' && plan?.protocol !== 'implicit_gbis_namd'
+    // New jobs and saved settings are drafts. Automatic sizing is deferred to Run
+    // if the optional estimate is still loading or unavailable.
+    const needsBox = !!state.draftId && state.mode !== 'production' && plan?.protocol !== 'implicit_gbis_namd'
     const dimensions = submittedBoxSize()
     const waitingForBox = needsBox && !!api.fetchProtocolBoxPreview
       && (planLoading || !dimensions || (boxLoading && !preparation?.payload()?.box_size_nm))
@@ -1828,7 +1830,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
         ? 'Resolve the blocking condition on the next tab first.'
         : submitting
           ? 'Creating the job record. Preparation progress will appear in the jobs panel.'
-          : 'Prepare the job and leave it ready to run.'
+          : 'Save job settings as a draft; Run prepares the simulation.'
     }
     // The first step must be ANSWERED before the rest of the wizard means anything:
     // an Alpine run with no node picked would be sized against nothing. A locked view has
@@ -1929,6 +1931,8 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
           onJobCreated?.(job.job_id)
         }
       }
+    } catch (error) {
+      mounts.status.textContent = `Could not create job: ${error?.message || error}`
     } finally {
       submitting = false
       busy = false

@@ -1,0 +1,62 @@
+{
+  "fill_100_npzat": {
+    "box_nm": [
+      12.354000000000001,
+      12.2975607337,
+      11.472475381399999
+    ],
+    "lateral_box_matches_original": true,
+    "wall_reference_rms_displacement_nm": 0.013530221384976417,
+    "wall_reference_max_displacement_nm": 0.0357302813538499,
+    "wall_normal_min_max_nm": [
+      -0.029831776667666787,
+      0.029164419826657628
+    ],
+    "closest_graphene_site_to_pore_axis_nm": 3.9953253262510575
+  },
+  "hydrated_300mv": {
+    "box_nm": [
+      12.354000000000001,
+      12.2975607337,
+      11.472475381399999
+    ],
+    "lateral_box_matches_original": true,
+    "wall_reference_rms_displacement_nm": 0.013376543325941605,
+    "wall_reference_max_displacement_nm": 0.03594960675643269,
+    "wall_normal_min_max_nm": [
+      -0.02717623152502746,
+      0.026892034277794963
+    ],
+    "closest_graphene_site_to_pore_axis_nm": 3.9944374272330445
+  },
+  "fill_92_npzat": {
+    "box_nm": [
+      12.354000000000001,
+      12.2975607337,
+      10.578540348
+    ],
+    "lateral_box_matches_original": true,
+    "wall_reference_rms_displacement_nm": 0.013481605053653613,
+    "wall_reference_max_displacement_nm": 0.03273108514093253,
+    "wall_normal_min_max_nm": [
+      -0.028256520124771534,
+      0.027706150921583905
+    ],
+    "closest_graphene_site_to_pore_axis_nm": 4.001448537118326
+  },
+  "fill_92_nvt_offload": {
+    "box_nm": [
+      12.354000000000001,
+      12.2975607337,
+      12.0
+    ],
+    "lateral_box_matches_original": true,
+    "wall_reference_rms_displacement_nm": 0.01336615113018575,
+    "wall_reference_max_displacement_nm": 0.03306037319455681,
+    "wall_normal_min_max_nm": [
+      -0.027061593584713606,
+      0.03238918249857203
+    ],
+    "closest_graphene_site_to_pore_axis_nm": 3.997457096833058
+  }
+}

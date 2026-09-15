@@ -28,7 +28,10 @@ import asyncio
 import fcntl
 import json
 import logging
+import io
 import re
+import tarfile
+import tempfile
 import time
 from pathlib import Path, PurePosixPath
 
@@ -293,6 +296,63 @@ def stage_plan(package_dir: Path) -> list[tuple[Path, str]]:
     return plan
 
 
+def _bundle_setup_files(files, archive: Path, *, gpu: bool) -> None:
+    """Coalesce small inputs into one transfer; preserve their remote paths/modes."""
+    with tarfile.open(archive, "w", dereference=True) as bundle:
+        for local, relative in files:
+            if not gpu and local.suffix == ".conf":
+                data = strip_gpu_resident(local.read_text()).encode()
+                info = bundle.gettarinfo(str(local), arcname=relative)
+                info.size = len(data)
+                bundle.addfile(info, io.BytesIO(data))
+            else:
+                bundle.add(local, arcname=relative, recursive=False)
+
+
+async def _upload_package(conn, plan, scratch_dir, workspace_dir, job, *, gpu,
+                          submit_progress):
+    # Opening an SFTP channel per tiny config dominated Alpine submission time.
+    # Keep large files individually streamed; batch small files without requiring a
+    # new worker RPC or changing the final package layout.
+    small = [(p, rel) for p, rel in plan if p.stat().st_size <= 1024 * 1024]
+    with tempfile.TemporaryDirectory(prefix="nadoc-upload-") as temporary:
+        units = [(p, rel, 1, False) for p, rel in plan]
+        if len(small) >= 8:
+            submit_progress("upload", "Bundling small setup files…", 0.08,
+                            files_done=0, files_total=len(plan))
+            archive = Path(temporary) / "setup.tar"
+            await asyncio.to_thread(_bundle_setup_files, small, archive, gpu=gpu)
+            small_names = {rel for _, rel in small}
+            units = [(archive, ".nadoc_setup.tar", len(small), True)] + [
+                unit for unit in units if unit[1] not in small_names]
+        total_bytes = sum(p.stat().st_size for p, _, _, _ in units)
+        uploaded_bytes = files_done = 0
+        submit_progress("upload", "Uploading prepared package to Alpine…", 0.08,
+                        files_done=0, files_total=len(plan), bytes_done=0,
+                        bytes_total=total_bytes)
+        await conn.mkdir_p(scratch_dir)
+        for local, relative, count, bundled in units:
+            remote = f"{scratch_dir}/{relative}"
+            if not gpu and local.suffix == ".conf":
+                await _put_text(conn, strip_gpu_resident(local.read_text()), remote,
+                                workspace_dir, job)
+            else:
+                await conn.sftp_put(str(local), remote)
+            if bundled:
+                result = await conn.run(
+                    f"tar -xf {_shq(remote)} -C {_shq(scratch_dir)} && rm -- {_shq(remote)}")
+                if result.rc:
+                    raise RuntimeError("Could not unpack uploaded setup files: "
+                                       + (result.stderr or result.stdout).strip())
+            files_done += count
+            uploaded_bytes += local.stat().st_size
+            fraction = uploaded_bytes / total_bytes if total_bytes else 1
+            submit_progress("upload", f"Uploading package file {files_done} of {len(plan)}…",
+                            0.08 + 0.67 * fraction, files_done=files_done,
+                            files_total=len(plan), bytes_done=uploaded_bytes,
+                            bytes_total=total_bytes)
+
+
 # ── Async orchestration (drive from the main-loop async endpoints/supervisor) ──
 
 
@@ -523,31 +583,11 @@ async def submit_job(
             )
 
     plan = stage_plan(package_dir)
-    total_bytes = sum(p.stat().st_size for p, _ in plan)
-    uploaded_bytes = 0
-    submit_progress(
-        "upload", "Uploading prepared package to Alpine…", 0.08,
-        files_done=0, files_total=len(plan), bytes_done=0, bytes_total=total_bytes,
-    )
     logger.info(
         "[%s] staging %d files → %s (gpu=%s)", job.job_id, len(plan), scratch_dir, gpu
     )
-    await conn.mkdir_p(scratch_dir)
-    for index, (local_path, rel) in enumerate(plan, 1):
-        remote = f"{scratch_dir}/{rel}"
-        if not gpu and local_path.suffix == ".conf":
-            amended = strip_gpu_resident(local_path.read_text())
-            await _put_text(conn, amended, remote, workspace_dir, job)
-        else:
-            await conn.sftp_put(str(local_path), remote)
-        uploaded_bytes += local_path.stat().st_size
-        byte_fraction = uploaded_bytes / total_bytes if total_bytes else index / max(1, len(plan))
-        submit_progress(
-            "upload", f"Uploading package file {index} of {len(plan)}…",
-            0.08 + 0.67 * byte_fraction,
-            files_done=index, files_total=len(plan),
-            bytes_done=uploaded_bytes, bytes_total=total_bytes,
-        )
+    await _upload_package(conn, plan, scratch_dir, workspace_dir, job, gpu=gpu,
+                          submit_progress=submit_progress)
 
     # 1b) the node live-metrics collector — ALWAYS staged, independent of early-stop.
     #     Without it a remote run shows no speed/temp/pressure at all while it runs.

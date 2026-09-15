@@ -1,17 +1,16 @@
-/** Preparation happens after the wizard closes; report fixed-cell failures on job polls. */
-export function createBoxSizeFailureNotifier(alert = message => window.alert(message)) {
-  const shown = new Set()
-  return jobs => {
-    for (const job of jobs || []) {
-      const error = String(job.error || '')
-      if (job.status !== 'failed' || !error.includes('Final box-size check failed:')) continue
-      const key = `${job.job_id}:${job.created_at}:${error}`
-      if (shown.has(key)) continue
-      shown.add(key)
-      alert(`Initial box size needs attention — ${job.design_name || job.job_id}\n\n`
-        + error.replace(/^Preparation failed:\s*/, '')
-        + '\n\nPreparation stopped before solvation or submission. Open the job settings, '
-        + 'increase the indicated dimensions in tab 2, and prepare again.')
-    }
+/** Preparation failures belong to the Box and solvent card, not modal alerts. */
+export function createBoxSizeFailureNotifier(report) {
+  let previous = null
+  return (jobs, scope = null) => {
+    const warnings = (jobs || []).filter(job => job.status === 'failed'
+      && String(job.error || '').includes('Final box-size check failed:')).map(job => {
+      const error = String(job.error)
+      const message = error.replace(/^Preparation failed:\s*/, '')
+        .replace(/Increase[^.]*wizard tab 2[^.]*\./g, '')
+        .trim() + ' Adjust Box and solvent, then update the affected job’s settings before preparing again.'
+      return {key:`${job.job_id}:${job.created_at}:${error}`,name:job.design_name || job.job_id,message}
+    })
+    const signature = JSON.stringify([scope,warnings])
+    if(signature !== previous){previous=signature;report?.(warnings)}
   }
 }

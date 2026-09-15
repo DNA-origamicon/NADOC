@@ -1,0 +1,621 @@
+{
+  "job": "d49d12f98a47",
+  "managed_stages": 22,
+  "auxiliary_configs": 2,
+  "resume_variants_checked": 84,
+  "errors": [],
+  "configs": [
+    {
+      "file": "cube_pore_00_min_enm_k0p5.conf",
+      "sha256": "bb830ed645c2ebc0d1f9fe2200ba5b06d523951dbc0f7adf7bab1ed91da441d7",
+      "timestep": "2",
+      "piston": "off",
+      "duplicates": {
+        "print": [
+          [
+            97,
+            "\"NADOC_ADAPTIVE_MIN step=$nadoc_min_done energy=$nadoc_min_energy improvement=$nadoc_min_improvement stable=$nadoc_min_stable/$nadoc_min_required\""
+          ],
+          [
+            104,
+            "\"NADOC_ADAPTIVE_MIN_STOP reason=$nadoc_min_reason steps=$nadoc_min_done max=$nadoc_min_max\""
+          ]
+        ]
+      },
+      "inputs": {
+        "cube_pore.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.5.enm.extra": true,
+        "restraints_combined_cube_pore_00_min_enm_k0p5.pdb": true
+      },
+      "origin_before_adaptive_loop": false
+    },
+    {
+      "file": "cube_pore_01_300K_NPT_ENM_k0p5_p10.conf",
+      "sha256": "a153f5b1d3be2fe9488e9293e337a862f47241fcf389d0033c16a17c0abac887",
+      "timestep": "2",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.5.enm.extra": true,
+        "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p10.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_01_300K_NPT_ENM_k0p5_p100.conf",
+      "sha256": "a8d75ef640f5b3a8d9c9cec38a0ae7c918dcc4b5ae18cf2e7d2776d796efba66",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.5.enm.extra": true,
+        "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p100.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_01_300K_NPT_ENM_k0p5_p25.conf",
+      "sha256": "16281b46b13476254a2b67232265c80b1ee00de98415fb152ea4e1a0dfd284ac",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.5.enm.extra": true,
+        "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p25.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_01_300K_NPT_ENM_k0p5_p50.conf",
+      "sha256": "22301ae91057f986f1cc37378948d890d4ad71f5e2ee1ab6982fcfaab5a19ef4",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.5.enm.extra": true,
+        "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p50.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_01_300K_NPT_ENM_k0p5_p75.conf",
+      "sha256": "040d12153d6ef67261a297848143bfaefc5b58bffd3157fd85013e25496bc9a6",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.5.enm.extra": true,
+        "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p75.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_02_300K_NPT_ENM_k0p1_p10.conf",
+      "sha256": "7117b1cc873ed07ad4d37861951d51265f37d0b5756a2fd367a6fbda98d4d4ae",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.1.enm.extra": true,
+        "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p10.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_02_300K_NPT_ENM_k0p1_p100.conf",
+      "sha256": "bf920c7ad2fc6fc75fa9098e57adf077155280f0a7503c6b34e196930fd7bbb5",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.1.enm.extra": true,
+        "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p100.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_02_300K_NPT_ENM_k0p1_p25.conf",
+      "sha256": "12770f6798b5f974f3564e23b947b64a356ef322e052320572fc2d9bea6b5ab3",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.1.enm.extra": true,
+        "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p25.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_02_300K_NPT_ENM_k0p1_p50.conf",
+      "sha256": "2b4b5b9c1862ddfb43806b5b2ee7cfcd8d4db587e435224aa1b9313c16adb9c8",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.1.enm.extra": true,
+        "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p50.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_02_300K_NPT_ENM_k0p1_p75.conf",
+      "sha256": "e5cc48c0a411f1c727e67c95ec263c4fc0eb70f6f172314885e47b7335ec3329",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.1.enm.extra": true,
+        "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p75.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_03_300K_NPT_ENM_k0p01_p10.conf",
+      "sha256": "638a13d29161051d7fe073931e278545eb3f9c64120514538f84dfb21fe2e253",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.01.enm.extra": true,
+        "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p10.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_03_300K_NPT_ENM_k0p01_p100.conf",
+      "sha256": "26748f690bcc6b4175eb27a0b9d1a31e888bab0e82b6a85aa8a00a6f9baf09cf",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.01.enm.extra": true,
+        "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p100.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_03_300K_NPT_ENM_k0p01_p25.conf",
+      "sha256": "1929a2cc4f3b26cdac980b43a6cfc366c5b57eb8d4368cc192e8df17f5fd4ffa",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.01.enm.extra": true,
+        "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p25.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_03_300K_NPT_ENM_k0p01_p50.conf",
+      "sha256": "d511f741620bbd0c2fcf019c89e7e6fecd9c6b6197e2bb0b3c86852d90263af2",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.01.enm.extra": true,
+        "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p50.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_03_300K_NPT_ENM_k0p01_p75.conf",
+      "sha256": "e7198a9fd32c18de2adced1d3a488b6d779af719f74ec1ff78e387ea077f0e0b",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "cube_pore_k0.01.enm.extra": true,
+        "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p75.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_04_300K_NPT_MGHH_only_p10.conf",
+      "sha256": "a7005df6512b1ca9f7b977785f26a6d885aa318af846262e94e506be436db8ba",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p10.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_04_300K_NPT_MGHH_only_p100.conf",
+      "sha256": "ec9ec4b234ce6531b7c2b53417b0965b359370580c5aa1d680f3a3c2e8146dc8",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p100.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_04_300K_NPT_MGHH_only_p25.conf",
+      "sha256": "9f3d5ae49ed4b7a70a91b159a45a2391a63dc5f1954bdfacbe538098e91ab9d5",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p25.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_04_300K_NPT_MGHH_only_p50.conf",
+      "sha256": "6550c01de020ad7ccb5c73179051ab6a76d826511fadee2044ec106ed74d65a1",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p50.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_04_300K_NPT_MGHH_only_p75.conf",
+      "sha256": "ec18bd17cfb5b96a0672bcc41dc2b4dc238cc006e59b8a15a089248fabba94ee",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p75.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "cube_pore_0S_300K_NPT_settle_fixed_dna_p100.conf",
+      "sha256": "eccac0952c3e745183fdf186a42dd67cdd13bc1bb34ea517b2abca9f0591585f",
+      "timestep": "4",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "restraints_settle.pdb": true,
+        "restraints_combined_cube_pore_0S_300K_NPT_settle_fixed_dna_p100.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "namd.conf",
+      "sha256": "ff8635bc0af7ab81805ca6e27aaf0490961d9a1575f3e01b4d08f513f15f89d0",
+      "timestep": "1.0",
+      "piston": "off",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "restraints_combined_namd.pdb": true
+      },
+      "initialization_after_execution": []
+    },
+    {
+      "file": "namd_fast.conf",
+      "sha256": "25697c5d6b822ef2dd82719b02a459faef67c6591d141083a07ccd6d46f973ee",
+      "timestep": "4.0",
+      "piston": "on",
+      "duplicates": {},
+      "inputs": {
+        "cube_pore_hmr.psf": true,
+        "cube_pore.pdb": true,
+        "forcefield/par_all36_na.prm": true,
+        "forcefield/par_all36m_prot.prm": true,
+        "forcefield/par_np_thiol.prm": true,
+        "forcefield/toppar_water_ions_cufix.str": true,
+        "forcefield/par_stub_ions_nbfix.str": true,
+        "mgh_extrabonds.txt": true,
+        "restraints_combined_namd_fast.pdb": true
+      },
+      "initialization_after_execution": []
+    }
+  ],
+  "pdb_atom_counts": {
+    "cube_pore.pdb": 1615887,
+    "restraints_combined_cube_pore_00_min_enm_k0p5.pdb": 1615887,
+    "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p10.pdb": 1615887,
+    "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p100.pdb": 1615887,
+    "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p25.pdb": 1615887,
+    "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p50.pdb": 1615887,
+    "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p75.pdb": 1615887,
+    "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p10.pdb": 1615887,
+    "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p100.pdb": 1615887,
+    "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p25.pdb": 1615887,
+    "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p50.pdb": 1615887,
+    "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p75.pdb": 1615887,
+    "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p10.pdb": 1615887,
+    "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p100.pdb": 1615887,
+    "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p25.pdb": 1615887,
+    "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p50.pdb": 1615887,
+    "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p75.pdb": 1615887,
+    "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p10.pdb": 1615887,
+    "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p100.pdb": 1615887,
+    "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p25.pdb": 1615887,
+    "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p50.pdb": 1615887,
+    "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p75.pdb": 1615887,
+    "restraints_combined_cube_pore_0S_300K_NPT_settle_fixed_dna_p100.pdb": 1615887,
+    "restraints_combined_namd.pdb": 1615887,
+    "restraints_combined_namd_fast.pdb": 1615887,
+    "restraints_settle.pdb": 1615887
+  },
+  "nonzero_restraint_residues": {
+    "restraints_combined_cube_pore_00_min_enm_k0p5.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p10.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p100.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p25.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p50.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_01_300K_NPT_ENM_k0p5_p75.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p10.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p100.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p25.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p50.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_02_300K_NPT_ENM_k0p1_p75.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p10.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p100.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p25.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p50.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_03_300K_NPT_ENM_k0p01_p75.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p10.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p100.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p25.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p50.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_04_300K_NPT_MGHH_only_p75.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_cube_pore_0S_300K_NPT_settle_fixed_dna_p100.pdb": {
+      "CYT": 16408,
+      "ADE": 22344,
+      "GUA": 18541,
+      "THY": 22027,
+      "GRP": 24618
+    },
+    "restraints_combined_namd.pdb": {
+      "GRP": 24618
+    },
+    "restraints_combined_namd_fast.pdb": {
+      "GRP": 24618
+    },
+    "restraints_settle.pdb": {
+      "CYT": 16408,
+      "ADE": 22344,
+      "GUA": 18541,
+      "THY": 22027
+    }
+  },
+  "psfs": {
+    "cube_pore.psf": {
+      "atoms": 1615887,
+      "identity_charge_sha256": "7f30b7b6adc2d3caf53b96b61698aead3b17da9f02feb99296c062c9fb695526",
+      "charge": 1.0593339538900182e-09,
+      "mass": 10399460.251569308,
+      "minimum_mass": 1.008
+    },
+    "cube_pore_hmr.psf": {
+      "atoms": 1615887,
+      "identity_charge_sha256": "7f30b7b6adc2d3caf53b96b61698aead3b17da9f02feb99296c062c9fb695526",
+      "charge": 1.0593339538900182e-09,
+      "mass": 10399460.291399695,
+      "minimum_mass": 1.008
+    }
+  }
+}

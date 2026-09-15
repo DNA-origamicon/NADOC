@@ -61,7 +61,10 @@ export function installTestApi({
       selectionController?.replace([ref])
     },
     nanoparticles: {
-      create: diameterNm => api.createGoldNanosphere(diameterNm),
+      importDesign: content => api.importDesign(content),
+      create: (diameterNm, coating = null) => api.createGoldNanosphere(diameterNm, coating),
+      coat: (id, coating) => api.patchNanoparticle(id, { coating }),
+      createQuantumDot: (catalogId, diameterNm) => api.createQuantumDot(catalogId, diameterNm),
       resize: (id, diameterNm) => api.patchNanoparticle(id, { diameter_nm: diameterNm }),
       move: (id, gizmoMove) => api.patchNanoparticle(id, { gizmo_move: gizmoMove }),
       remove: id => api.deleteNanoparticle(id),
@@ -82,14 +85,61 @@ export function installTestApi({
         isOpen: () => nanoparticleConjugateManager?.isOpen() ?? false,
         previewCamera: () => nanoparticleConjugateManager?.previewCamera?.() ?? null,
         fullHandleCensus: () => nanoparticleConjugateManager?.fullHandleCensus?.() ?? null,
+        strepDnaPreview: () => nanoparticleConjugateManager?.strepDnaPreview?.() ?? [],
         loadDesign: path => api.loadDesign(path),
         saveDesign: path => api.saveDesign(path),
       },
       select: id => nanoparticleSubsystem?.select(id),
       rendered: () => [...(nanoparticleSubsystem?.meshes?.entries?.() ?? [])].map(([id, mesh]) => ({
-        id, diameterNm: mesh.geometry?.parameters?.radius * 2,
+        id, kind: mesh.userData.nanoparticleKind, diameterNm: mesh.geometry?.parameters?.radius * 2,
         position: mesh.getWorldPosition(new THREE.Vector3()).toArray(),
         metalness: mesh.material?.metalness, color: mesh.material?.color?.getHex(),
+        emissiveIntensity: mesh.material?.emissiveIntensity,
+        biotin: (mesh.getObjectByName('biotin-pockets')?.children ?? []).map(marker => ({
+          strandId: marker.userData.strandId, pocket: marker.userData.pocket,
+          tetramerIndex: marker.userData.tetramerIndex, visible: mesh.visible && marker.parent.visible,
+          position: marker.getWorldPosition(new THREE.Vector3()).toArray(),
+          linker: (() => {
+            const group = marker.getObjectByName('biotin-linker')
+            if (!group) return null
+            group.updateWorldMatrix(true, true)
+            return {
+              bead: group.children[0].getWorldPosition(new THREE.Vector3()).toArray(),
+              segments: group.children.slice(1).map(c => ({
+                start: new THREE.Vector3(0, -.5, 0).applyMatrix4(c.matrixWorld).toArray(),
+                end: new THREE.Vector3(0, .5, 0).applyMatrix4(c.matrixWorld).toArray(),
+              })),
+            }
+          })(),
+        })),
+        coatingAtoms: (() => {
+          const renderer = mesh.userData.strepAtoms
+          if (!renderer) return null
+          const root = renderer.root
+          const group = root.children[0]
+          const spheres = group?.children.filter(c => c.name === 'atomSpheres') ?? []
+          const bonds = group?.children.find(c => c.name === 'atomBonds')
+          const first = spheres[0], matrix = new THREE.Matrix4()
+          if (first) { first.getMatrixAt(0, matrix); first.updateWorldMatrix(true, false) }
+          return { visible: root.visible, atomCount: renderer.atomCount, bondCount: renderer.bondCount,
+            sphereInstances: spheres.reduce((n, c) => n + c.count, 0) * root.children.length,
+            bondInstances: (bonds?.count ?? 0) * root.children.length,
+            firstElement: first?.userData.element,
+            firstPosition: first ? new THREE.Vector3().setFromMatrixPosition(matrix).applyMatrix4(first.matrixWorld).toArray() : null }
+        })(),
+        coating: (() => {
+          const group = mesh.children.find(child => child.name === 'streptavidin-coating')
+          if (!group) return null
+          const first = group.children[0]
+          const matrix = new THREE.Matrix4(); first.getMatrixAt(0, matrix)
+          first.updateWorldMatrix(true, false)
+          return { count: group.userData.tetramerCount, chains: group.children.length, visible: group.visible,
+            firstPosition: new THREE.Vector3().setFromMatrixPosition(matrix).applyMatrix4(first.matrixWorld).toArray() }
+        })(),
+        fluorescence: mesh.children.filter(child => child.isSprite).map(child => ({
+          color: child.material.color.getHex(),
+          position: child.getWorldPosition(new THREE.Vector3()).toArray(),
+        })),
       })),
       gizmoSetTransform: (translation, rotation) =>
         nanoparticleSubsystem?.gizmo?.setTransform?.(translation, rotation) ?? false,
@@ -151,20 +201,21 @@ export function installTestApi({
       renderer.setRenderTarget(previousTarget)
       renderer.setClearColor(previousClear, previousAlpha)
       target.dispose()
-      let visible = 0, colorful = 0, black = 0
+      let visible = 0, colorful = 0, black = 0, pixelHash = 2166136261
       // Sample the clear color after the renderer's active color-space transform.
       // A corner is background for the editor camera and is more robust than
       // assuming literal sRGB bytes for #0d1117.
       const bgR = pixels[0], bgG = pixels[1], bgB = pixels[2]
       for (let i = 0; i < pixels.length; i += 4) {
         const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2], a = pixels[i + 3]
+        pixelHash = Math.imul(pixelHash ^ (r | (g << 8) | (b << 16) | (a << 24)), 16777619) >>> 0
         if (a < 8) continue
         if (Math.abs(r - bgR) < 4 && Math.abs(g - bgG) < 4 && Math.abs(b - bgB) < 4) continue
         visible++
         if (Math.max(r, g, b) < 12) black++
         if (Math.max(r, g, b) - Math.min(r, g, b) > 18 && Math.max(r, g, b) > 35) colorful++
       }
-      return { width, height, visible, colorful, black }
+      return { width, height, visible, colorful, black, pixelHash }
     },
     nativeBackboneColorCensus() {
       const referenceIds = new Set((store.getState().currentDesign?.strands ?? [])

@@ -1,0 +1,7 @@
+{
+  "variant": "current_k",
+  "build_seconds": 9.79071176099751,
+  "binary_sha256": "10adaddb2e33a57f1797fc01a4aeb95196d7e5cca8b3708da8c32348462c7c6c",
+  "library_sha256": "32493ef0232f6a57af597ebe0cb01e162a31084c3d8a48f02efc61086a09151b",
+  "patch_sha256": "f8c40b0eb5feb87c42e3a632c63eda9c024594d70692aeb86e7da2810667b47b"
+}

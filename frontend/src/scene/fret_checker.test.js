@@ -71,6 +71,32 @@ function makeDeps() {
 beforeEach(() => clearDom())
 
 describe('initFretChecker', () => {
+  it('uses live gold surface distance, resets on toggle and reports uncalibrated QDs', () => {
+    mountMenu()
+    const deps = makeDeps()
+    deps.designRenderer.getFluoroEntries.mockReturnValue([{ nuc: { modification: 'fam' }, pos: new THREE.Vector3() }])
+    const gold = { id: 'au', kind: 'gold_nanosphere', diameter_nm: 3, pos: new THREE.Vector3(12.12, 0, 0) }
+    const dot = { id: 'qd', kind: 'quantum_dot', diameter_nm: 8, pos: new THREE.Vector3(30, 0, 0) }
+    deps.nanoparticleSubsystem = { getQuenchingParticles: () => [gold, dot], setGoldQuenching: vi.fn(), setFluorescence: vi.fn() }
+    const fret = initFretChecker(deps)
+    document.getElementById('menu-view-fluorescence').click()
+    const brightness = () => deps.designRenderer.setFluorescenceGlow.mock.calls.at(-1)[0][0].brightness
+    expect(brightness()).toBe(1)
+    document.getElementById('menu-view-fret').click()
+    expect(brightness()).toBeCloseTo(0.5)
+    expect(document.getElementById('gold-quenching-status').textContent).toContain('1 estimated · 1 uncalibrated')
+    expect(fret.getGoldQuenchingResults()[0].pairs[0].quenching).toBeNull()
+    gold.pos.x = 1.5 + 2 * 10.62 // represents a live gizmo preview
+    fret.refreshIfFret()
+    expect(brightness()).toBeCloseTo(16 / 17)
+    gold.pos.x = 12.12 // cancel / undo
+    fret.refreshIfFret()
+    expect(brightness()).toBeCloseTo(0.5)
+    document.getElementById('menu-view-fret').click()
+    expect(brightness()).toBe(1)
+    expect(document.getElementById('gold-quenching-status').hidden).toBe(true)
+    expect(deps.nanoparticleSubsystem.setGoldQuenching).toHaveBeenLastCalledWith([])
+  })
   it('does not glow anything before any mode is toggled on', () => {
     mountMenu()
     const deps = makeDeps()
@@ -101,6 +127,18 @@ describe('initFretChecker', () => {
     btn.click()                                  // off
     expect(deps.setMenuToggle).toHaveBeenLastCalledWith('menu-view-fluorescence', false)
     expect(deps.designRenderer.clearFluorescenceGlow).toHaveBeenCalled()
+  })
+
+  it('quantum-dot emission follows Fluorescence independently of FRET', () => {
+    mountMenu()
+    const deps = { ...makeDeps(), nanoparticleSubsystem: { setFluorescence: vi.fn() } }
+    initFretChecker(deps)
+    document.getElementById('menu-view-fret').click()
+    expect(deps.nanoparticleSubsystem.setFluorescence).not.toHaveBeenCalled()
+    document.getElementById('menu-view-fluorescence').click()
+    expect(deps.nanoparticleSubsystem.setFluorescence).toHaveBeenLastCalledWith(true)
+    document.getElementById('menu-view-fluorescence').click()
+    expect(deps.nanoparticleSubsystem.setFluorescence).toHaveBeenLastCalledWith(false)
   })
 
   it('FRET mode quenches a donor within Förster radius of a compatible acceptor', () => {

@@ -337,6 +337,10 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             else None
         ),
         carved=carved,
+        graphene=wall,
+        graphene_axis=(resolved.graphene_surface_axis or "z")[-1].lower(),
+        graphene_only=bool(resolved.graphene_only),
+        graphene_temperature_K=resolved.graphene_temperature_K,
         gbis=gbis,
         minimize_steps=int(resolved.minimize_steps),
         npt_margin_ang=(
@@ -357,7 +361,7 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             ctx,
             soft=force_soft,
             gentle=gentle_ladder,
-            nvt_only=carved or wall or bool(resolved.two_electrodes),
+            nvt_only=carved or bool(resolved.two_electrodes),
             fixed_cell_settle=resolved.protocol == "electrode_equilibration_namd" and flags.get("has_dna",False),
             timestep_fs=ladder_dt,
             stage_overrides=body.stage_overrides or None,
@@ -577,6 +581,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         manifest = {}
     name_stem = manifest.get("name_stem") or "design"
     carved = bool((manifest.get("solvation") or {}).get("carved"))
+    production_npt = _p.package_npt_allowed(package_dir) and not bool(body.ion_transport_mode)
     ladder_fast = bool((manifest.get("fast_relaxation") or {}).get("enabled"))
     # The child runs the parent's PSF verbatim, so the solvated atom count is a FACT here,
     # not something solvation has yet to decide. Reading it turns GPU-resident from a
@@ -630,7 +635,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         ctx,
         total_steps=int(plan["total_steps"]),
         timestep_fs=timestep_fs,
-        npt=not carved,
+        npt=production_npt,
         damping=restraints["damping"],
         enm_file=enm_file,
         dcd_freq=plan.get("dcd_freq"),
@@ -651,6 +656,8 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     source_ctx = md_plan.PlanContext(
         name_stem=name_stem,
         fast=ladder_fast,
+        graphene=(manifest.get("graphene_nanopore") or {}).get("cell_policy") == "fixed_area_normal_pressure",
+        graphene_axis=(manifest.get("graphene_nanopore") or {}).get("pressure_normal_axis", "z"),
         carved=carved,
         mgh_extrabonds=ctx.mgh_extrabonds,
         n_atoms=n_atoms,
@@ -669,7 +676,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             spec,
             source_ctx,
             timestep_fs=spec.timestep_fs or timestep_fs,
-            npt=not carved,
+            npt=bool(spec.npt),
             damping=float(
                 parent_recipe.get("langevin_damping") or _p.PRODUCTION_LANGEVIN_DAMPING
             ),
@@ -1042,7 +1049,7 @@ def _inherited_from_parent(
         "n_atoms": n_atoms,
         "box_ang": [round(float(v), 2) for v in box] if box else [],
         "carved": bool(solvation.get("carved")),
-        "npt_allowed": bool(solvation.get("npt_allowed", not solvation.get("carved"))),
+        "npt_allowed": _p.package_npt_allowed(parent.package_dir(_workspace_dir())),
         "padding_nm": solvation.get("padding_nm"),
         "water_shell_nm": solvation.get("water_shell_nm"),
         "sized_for_free_ns": solvation.get("sized_for_free_ns"),

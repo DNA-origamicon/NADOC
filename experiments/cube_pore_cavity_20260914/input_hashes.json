@@ -1,0 +1,58 @@
+{
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore.psf": {
+    "bytes": 210016355,
+    "sha256": "bc7bcf0f3b7ef02cb3735858292cbb6f49d3c83dc54ea2a431c7be322467dfb3"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_hmr.psf": {
+    "bytes": 210016355,
+    "sha256": "dd5948f3dece3e945f2d92431375bb3cd12341e0961f380e2f80e376f37b8f9a"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore.pdb": {
+    "bytes": 129605454,
+    "sha256": "6fb4dfdd67df2e0ac28004c96234ecdb6e288cbe612641f602e6ff4c26d51261"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/graphene_nanopore.json": {
+    "bytes": 1209,
+    "sha256": "c53e24f43c08f002dc0af0b8f977af7d4229733c371cf74b1181509210590115"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.coor": {
+    "bytes": 40319692,
+    "sha256": "ad1e29cbe4098da2251ad62295253f390c4d4a4ea84dfe40ad1b8cb6ff650eef"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_04_300K_NPT_MGHH_only_p10.coor": {
+    "bytes": 40319692,
+    "sha256": "dc403ae20010e1e5389a6155385b704f4c1645fee3fab343baa31a66820bc84d"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_04_300K_NPT_MGHH_only_p10.vel": {
+    "bytes": 40319692,
+    "sha256": "b2b66a19ffb40941478bd0b2eef85cfff7c8fbc6dce8aebca835eb09ffb0b76c"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/live_metrics.json": {
+    "bytes": 394,
+    "sha256": "422f059d0dd0a62a82dc68ebd09d19df83581b84112070c180daadb8dc2110f4"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/toppar_water_ions_cufix.str": {
+    "bytes": 23586,
+    "sha256": "45bbca02dabdffa30559c3b29c3954f710cbf9da4a679de9452a72784a909e9d"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36m_prot.prm": {
+    "bytes": 181061,
+    "sha256": "b1d1c70b5f350a2d5758bf3ce7ec86e50cdc3f69d8cc3097f98f279cdaeb5aaa"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/top_all36_na.rtf": {
+    "bytes": 38099,
+    "sha256": "57fed4acc6bc755f2f422b136a385f0c1b1b0a9958e79ea6c6e392b90227ee49"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_stub_ions_nbfix.str": {
+    "bytes": 1879,
+    "sha256": "bfc8c05c4a615936c7a20d656754c17c6634c24693efb138a41f72cb8616edc0"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_np_thiol.prm": {
+    "bytes": 912,
+    "sha256": "4b5dd4823bbab28db0252e7745f9c82060f5bfc4e3aa16c5842a9acbb0850796"
+  },
+  "workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36_na.prm": {
+    "bytes": 64738,
+    "sha256": "1ada57015c112529aa985ee60163f11a94e991a334cc9928e030d2236899df05"
+  }
+}

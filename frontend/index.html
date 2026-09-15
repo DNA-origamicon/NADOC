@@ -4039,7 +4039,7 @@
             <div class="submenu">
               <button class="dropdown-item" id="menu-tools-gold-nanosphere">Gold nanosphere…</button>
               <button class="dropdown-item" id="menu-tools-gold-nanorod" disabled>Gold nanorod <span class="dim">(coming soon)</span></button>
-              <button class="dropdown-item" id="menu-tools-quantum-dot" disabled>Quantum dot <span class="dim">(coming soon)</span></button>
+              <button class="dropdown-item" id="menu-tools-quantum-dot">Quantum dot…</button>
             </div>
           </div>
           <div class="submenu-item">Proteins <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
@@ -6115,10 +6115,12 @@
               </div>
 
               <div class="ox-card">
-                <div id="md-box-solvent-toggle" class="ox-card__header" style="color:#c9d1d9"><span id="md-box-solvent-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Box and solvent</span></div>
+                <div id="md-box-solvent-toggle" class="ox-card__header" style="color:#c9d1d9"><span id="md-box-solvent-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Box and solvent</span><span id="md-box-loading" class="md-box-spinner" role="img" aria-label="Calculating box details" title="Calculating box details…" hidden></span><button id="md-box-warning" type="button" class="md-box-warning-icon" aria-label="Box and solvent needs attention" title="Box and solvent needs attention" hidden>⚠</button></div>
                 <div id="md-box-solvent-body" class="ox-card__body" style="display:none">
                   <label title="Display the estimated solvent region, margin, dimensions, bulk ion counts and boundary colors. This is a setup overlay, not a trajectory."><input id="md-box-view-details" type="checkbox"> View details</label>
-                  <label class="box-solvent-field">Box sizing<select id="md-box-sizing"><option value="rotation">Fit · rotation-safe</option><option value="bbox">Fit · bounding box</option><option value="explicit">Explicit dimensions</option></select></label>
+                  <div id="md-box-warnings" class="md-box-warnings" hidden></div>
+                  <label class="box-solvent-field">Box sizing<select id="md-box-sizing"><option value="auto">Recommended for setup</option><option value="rotation">Free DNA · rotation-safe</option><option value="bbox">Surfaces / fixed geometry</option><option value="explicit">Custom dimensions</option></select></label>
+                  <p id="md-box-sizing-help">Selecting a fit calculates X, Y and Z below. Free DNA allows rotation; surfaces and fixed geometry use the current orientation. Water margin and salt settings are preserved.</p>
                   <label class="box-solvent-field" title="Water margin per face around the solute; for a charged single sheet, reservoir padding on each side. Two-electrode geometry owns its own compartment.">Water margin (nm)<input id="md-box-padding" type="number" min="0.1" max="30" step="0.01" value="2"></label>
                   <label class="box-solvent-field">Cell X (nm)<input id="md-box-x" type="number" min="0.1" max="1000" step="0.001" value="10"></label>
                   <label class="box-solvent-field">Cell Y (nm)<input id="md-box-y" type="number" min="0.1" max="1000" step="0.001" value="10"></label>
@@ -6137,7 +6139,7 @@
                   <span id="md-surface-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Hard surface</span>
                 </div>
                 <div id="md-surface-body" class="ox-card__body" style="display:none">
-<section class="namd-surface-option" id="md-hard-surface-option"><label class="namd-surface-option__toggle" title="A restrained surface compatible with GPU-resident NAMD. Setup changes apply to new jobs; rendering requires selecting a surface job."><input id="md-hard-surface-enable" type="checkbox"> Hard surface on</label>
+<section class="namd-surface-option" id="md-hard-surface-option"><label class="namd-surface-option__toggle" title="A restrained surface compatible with GPU-resident NAMD. Preview the surface for a new job. Selecting an existing job shows its saved surface."><input id="md-hard-surface-enable" type="checkbox"> Hard surface on</label>
 <details class="namd-surface-settings" id="md-hard-surface-settings"><summary>Settings</summary><div>
 <label class="namd-surface-field" title="Auto inherits the source surface when present; otherwise the native bottom face is used.">Design face<select id="md-surface-axis"><option value="">Auto</option><option value="-y">−Y (bottom)</option><option value="+y">+Y (top)</option><option value="-x">−X</option><option value="+x">+X</option><option value="-z">−Z</option><option value="+z">+Z</option></select></label>
 <label class="namd-surface-field" title="Persistent outward displacement from the selected design face; atomistic clearance remains the minimum separation.">Face offset (nm)<input id="md-surface-offset" type="number" value="0" min="0" max="100" step="0.1"></label>
@@ -6145,7 +6147,7 @@
 <label class="namd-surface-field">Water clearance (nm)<input id="md-surface-water-clearance" type="number" value="0.30" min="0" max="1" step="0.01"></label>
 <label class="namd-surface-field">Sheet margin (nm)<input id="md-surface-sheet-margin" type="number" value="1.5" min="0.5" max="10" step="0.1"></label>
 <label class="namd-surface-field">Representation<select id="md-graphene-representation"><option value="plane">Simple plane</option><option value="ball">Ball</option><option value="stick">Stick</option></select></label>
-<label title="Visibility only; requires a selected surface job."><input type="checkbox" id="md-graphene-show" checked> View surface</label>
+<label title="Show the setup preview or the selected job’s surface."><input type="checkbox" id="md-graphene-show" checked> View surface</label>
 
 </div></details></section>
 <section class="namd-surface-option" id="md-screening-option"><label class="namd-surface-option__toggle" title="A charged closed wall. Choose salt and temperature in the job wizard. This model cannot be combined with an open nanopore."><input id="md-screening-enable" type="checkbox"> Add surface charge</label>

@@ -1,0 +1,134 @@
+{
+  "x": [
+    {
+      "stage": "equilibrate",
+      "completed_steps": 2000,
+      "box_angstrom": [
+        114.775322591,
+        123.54,
+        122.975607337
+      ],
+      "origin_angstrom": [
+        12.0,
+        61.77,
+        61.48780367
+      ]
+    },
+    {
+      "stage": "resume",
+      "completed_steps": 2000,
+      "box_angstrom": [
+        114.694243917,
+        123.54,
+        122.975607337
+      ],
+      "origin_angstrom": [
+        12.0,
+        61.77,
+        61.48780367
+      ]
+    },
+    {
+      "stage": "production",
+      "completed_steps": 2000,
+      "box_angstrom": [
+        114.694243917,
+        123.54,
+        122.975607337
+      ],
+      "origin_angstrom": [
+        12.0,
+        61.77,
+        61.48780367
+      ]
+    }
+  ],
+  "y": [
+    {
+      "stage": "equilibrate",
+      "completed_steps": 2000,
+      "box_angstrom": [
+        122.975607337,
+        115.113063178,
+        123.54
+      ],
+      "origin_angstrom": [
+        61.48780367,
+        12.0,
+        61.77
+      ]
+    },
+    {
+      "stage": "resume",
+      "completed_steps": 2000,
+      "box_angstrom": [
+        122.975607337,
+        114.781342354,
+        123.54
+      ],
+      "origin_angstrom": [
+        61.48780367,
+        12.0,
+        61.77
+      ]
+    },
+    {
+      "stage": "production",
+      "completed_steps": 2000,
+      "box_angstrom": [
+        122.975607337,
+        114.781342354,
+        123.54
+      ],
+      "origin_angstrom": [
+        61.48780367,
+        12.0,
+        61.77
+      ]
+    }
+  ],
+  "z": [
+    {
+      "stage": "equilibrate",
+      "completed_steps": 2000,
+      "box_angstrom": [
+        123.54,
+        122.975607337,
+        114.798021756
+      ],
+      "origin_angstrom": [
+        61.77,
+        61.48780367,
+        12.0
+      ]
+    },
+    {
+      "stage": "resume",
+      "completed_steps": 2000,
+      "box_angstrom": [
+        123.54,
+        122.975607337,
+        114.604187856
+      ],
+      "origin_angstrom": [
+        61.77,
+        61.48780367,
+        12.0
+      ]
+    },
+    {
+      "stage": "production",
+      "completed_steps": 2000,
+      "box_angstrom": [
+        123.54,
+        122.975607337,
+        114.604187856
+      ],
+      "origin_angstrom": [
+        61.77,
+        61.48780367,
+        12.0
+      ]
+    }
+  ]
+}

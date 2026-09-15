@@ -192,7 +192,7 @@ async function _captureWebMPhoto({ animation, player, session, w, h, fps, totalD
     if (signal?.aborted) { aborted = true; break }
     const t = Math.min((i / frameCount) * totalDur, totalDur)
     player.seekTo(t)
-    await player.settleFrame?.()
+    if (await player.settleFrame?.() === false) throw new Error('Trajectory ions / bounding box are not ready for export')
     // Single shared offscreen renderer (see beginFrameSession).
     await _frameToCanvas(session, w, h, scratch, ctx)
     _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
@@ -235,7 +235,7 @@ async function _captureGIFPhoto({ animation, player, session, w, h, fps, totalDu
     if (signal?.aborted) { const e = new Error('Aborted'); e.name = 'AbortError'; throw e }
     const t = Math.min((i / frameCount) * totalDur, totalDur)
     player.seekTo(t)
-    await player.settleFrame?.()
+    if (await player.settleFrame?.() === false) throw new Error('Trajectory ions / bounding box are not ready for export')
     await _frameToCanvas(session, w, h, scratch, ctx)
     _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
     const { data } = ctx.getImageData(0, 0, w, h)
@@ -291,7 +291,7 @@ async function _captureWebM({ animation, canvas, renderer, scene, camera, player
     if (signal?.aborted) { aborted = true; break }
     const t = Math.min((i / frameCount) * totalDur, totalDur)
     player.seekTo(t)
-    await player.settleFrame?.()
+    if (await player.settleFrame?.() === false) throw new Error('Trajectory ions / bounding box are not ready for export')
     renderer.render(scene, camera)
     ctx.clearRect(0, 0, w, h)
     ctx.drawImage(canvas, 0, 0, w, h)
@@ -341,7 +341,7 @@ async function _captureGIF({ animation, canvas, renderer, scene, camera, player,
     }
     const t = Math.min((i / frameCount) * totalDur, totalDur)
     player.seekTo(t)
-    await player.settleFrame?.()
+    if (await player.settleFrame?.() === false) throw new Error('Trajectory ions / bounding box are not ready for export')
     renderer.render(scene, camera)
     ctx.clearRect(0, 0, w, h)
     ctx.drawImage(canvas, 0, 0)

@@ -215,6 +215,56 @@ def oxdna_supports_dnanm(path: str) -> bool:
     return result
 
 
+_BUSSI_CAP_CACHE: dict[tuple, bool] = {}
+
+
+def _oxdna_contains_signature(path: str, signature: bytes) -> bool:
+    """Inspect the executable and library, invalidating cached results on replacement."""
+    import mmap
+    if not path:
+        return False
+    executable = Path(path).resolve()
+    candidates = [executable, executable.parent.parent / "lib/liboxdna_common.so",
+                  executable.parent.parent / "src/liboxdna_common.so"]
+    available = []
+    for candidate in candidates:
+        try:
+            stat = candidate.stat()
+            available.append((candidate, stat.st_mtime_ns, stat.st_size))
+        except OSError:
+            continue
+    key = (signature, tuple(available))
+    if key not in _BUSSI_CAP_CACHE:
+        supported = False
+        for candidate, _, size in available:
+            if not size:
+                continue
+            try:
+                with candidate.open("rb") as stream, mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
+                    if data.find(signature) >= 0:
+                        supported = True
+                        break
+            except OSError:
+                continue
+        _BUSSI_CAP_CACHE[key] = supported
+    return _BUSSI_CAP_CACHE[key]
+
+
+def oxdna_supports_rigid_bussi(path: str) -> bool:
+    """Whether protein point beads are excluded from rotational temperature control."""
+    return _oxdna_contains_signature(path, b"Bussi rigid-body DOF fix v1")
+
+
+def oxdna_supports_matched_bussi_rng(path: str) -> bool:
+    """Whether CUDA Bussi preserves the CPU host random stream at initialization."""
+    return _oxdna_contains_signature(path, b"CUDA Bussi CPU-matched RNG v1")
+
+
+def oxdna_supports_physics_v3(path: str) -> bool:
+    """Current-K Bussi, physical point rotations, and zero-vector CUDA normalization."""
+    return _oxdna_contains_signature(path, b"NADOC physics corrections v3")
+
+
 def oxdna_build_flavor(path: str) -> str:
     """Return the managed build flavor recorded beside an oxDNA install."""
     try:
@@ -476,6 +526,9 @@ def oxdna_available() -> dict:
         "build_flavor": oxdna_build_flavor(bin_path) if bin_path else None,
         "cuda_capable": oxdna_supports_cuda(bin_path) if bin_path else False,
         "dnanm_capable": oxdna_supports_dnanm(bin_path) if bin_path else False,
+        "rigid_bussi_capable": oxdna_supports_rigid_bussi(bin_path) if bin_path else False,
+        "matched_bussi_rng_capable": oxdna_supports_matched_bussi_rng(bin_path) if bin_path else False,
+        "physics_v3_capable": oxdna_supports_physics_v3(bin_path) if bin_path else False,
         "recommended_device": os.environ.get("OXDNA_DEVICE", "0"),
     }
 
@@ -520,8 +573,28 @@ def prepare_oxdna_job(
         protein_forces_text,
     )
 
+    fixed_cores = any(p.oxdna_fixed_core for p in design.nanoparticles)
+    if fixed_cores:
+        from backend.core.gold_strep_dna import validate_fixed_core_design
+        validate_fixed_core_design(design)
+        if surface or surface_strands:
+            raise ValueError('Fixed-core gold examples do not yet support additional surface/capture models.')
+        # GPU is the default by user request; convergence and sampling validation
+        # remains open (TD-OXDNA-PHYSICS). Keep absolute forces and the small timestep.
+        from backend.core.oxdna_protocol import constrain_fixed_core_stages
+        constrain_fixed_core_stages(specs)
     jd = job.job_dir(workspace_dir)
     jd.mkdir(parents=True, exist_ok=True)
+    from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_FILE, AVERAGE_SEQUENCE_PATH
+    (jd / AVERAGE_SEQUENCE_FILE).write_bytes(AVERAGE_SEQUENCE_PATH.read_bytes())
+    if fixed_cores:
+        (jd / 'nanoparticles.json').write_text(json.dumps({
+            'model': 'fixed_gold_strep_dna_v2', 'gold_representation': 'external_exclusion_body',
+            'mobile_core': False, 'binding_model': 'prescribed_ANM_and_harmonic_tethers',
+            'particles': [{'id': p.id, 'diameter_nm':p.diameter_nm, 'pose':p.pose.values,
+                'protein_attachment_id':f'{p.id}:strep:0',
+                'protein_attachment_ids':[f'{p.id}:strep:{i}' for i in range(len(p.coating.poses))], 'dna': [r.model_dump() for r in p.biotin_dna]}
+                for p in design.nanoparticles]}, indent=2))
 
     # ── Hybrid protein+DNA (upstream DNANM) ─────────────────────────────────────
     # Protein beads occupy the LEADING particle indices, so the topology/conf are
@@ -1620,6 +1693,30 @@ async def run_job(
         job.save(workspace_dir)
         return
 
+    if is_hybrid and not oxdna_supports_rigid_bussi(oxdna_bin):
+        job.status = OxdnaStatus.failed
+        job.error = (
+            "This oxDNA build lacks the protein rotational-degree thermostat fix. "
+            "Rebuild with scripts/build-oxdna.sh before running protein-DNA simulations."
+        )
+        job.save(workspace_dir)
+        return
+
+    if is_hybrid and any(s.backend == "CUDA" and s.sim_type == "MD" for s in specs) and not oxdna_supports_matched_bussi_rng(oxdna_bin):
+        job.status = OxdnaStatus.failed
+        job.error = (
+            "This CUDA build predates the validated Bussi random-stream initialization. "
+            "Rebuild with scripts/build-oxdna.sh before running protein-DNA GPU jobs."
+        )
+        job.save(workspace_dir)
+        return
+
+    if not oxdna_supports_physics_v3(oxdna_bin):
+        job.status = OxdnaStatus.failed
+        job.error = "Rebuild oxDNA with scripts/build-oxdna.sh for the current physics corrections."
+        job.save(workspace_dir)
+        return
+
     design = _load_snapshot_design(jd)
     if design is None:
         job.status = OxdnaStatus.failed
@@ -1747,6 +1844,14 @@ async def run_job(
         # The ANM parameter file (hybrid stages) is resolved to an absolute path in
         # the job dir, like topology/conf/forces (oxDNA runs with cwd=stage_dir).
         parfile = str((jd / spec.parfile).resolve()) if spec.parfile else None
+        if (jd / 'nanoparticles.json').exists():
+            if not spec.external_forces or spec.interaction != 'DNANM' or forces is None or 'repulsive_sphere_moving' not in forces.read_text():
+                job.status = OxdnaStatus.failed
+                job.error = 'Fixed-core gold requires DNANM with its gold exclusion and attachment forces in every stage.'
+                job.save(workspace_dir)
+                return
+            spec.absolute_forces = True
+            if spec.sim_type == 'MD': spec.dt = min(spec.dt, .0001)
         input_path.write_text(
             render_stage_input(
                 spec,
@@ -1754,6 +1859,8 @@ async def run_job(
                 str(conf),
                 forces_name=str(forces) if forces else None,
                 parfile_name=parfile,
+                sequence_parameters_name=str(jd / "oxDNA2_average_sequence_parameters.txt")
+                    if (jd / "oxDNA2_average_sequence_parameters.txt").exists() else None,
             )
         )
 

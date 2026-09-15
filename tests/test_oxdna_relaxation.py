@@ -1164,6 +1164,7 @@ def test_run_job_recovers_from_production_explosion(
     r.prepare_oxdna_job(design, geometry, job, tmp_path, [spec])
 
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
+    monkeypatch.setattr(r, "oxdna_supports_physics_v3", lambda _: True)
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
     monkeypatch.setattr(
         r,
@@ -1220,6 +1221,7 @@ def test_run_job_recovers_from_md_relax_bp_melt(
     r.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
 
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
+    monkeypatch.setattr(r, "oxdna_supports_physics_v3", lambda _: True)
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
 
     md_health_calls = {"n": 0}
@@ -1281,6 +1283,7 @@ def test_run_job_fails_after_exhausting_melt_retries(
     r.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
 
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
+    monkeypatch.setattr(r, "oxdna_supports_physics_v3", lambda _: True)
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
     monkeypatch.setattr(
         r,
@@ -4087,6 +4090,7 @@ def test_bp_retention_drops_when_melted(design, geometry, tmp_path):
 # ── Mock oxDNA binary ─────────────────────────────────────────────────────────
 
 _MOCK_OXDNA = """#!/usr/bin/env python3
+# NADOC physics corrections v3
 import sys, re, shutil
 from pathlib import Path
 inp = Path(sys.argv[1])
@@ -4184,6 +4188,7 @@ def test_runner_gate_fails_on_melted(design, geometry, tmp_path, monkeypatch):
     # Mock that writes a MELTED last_conf (reverse strands shoved away).
     melt = tmp_path / "melt_oxdna.py"
     melt.write_text("""#!/usr/bin/env python3
+# NADOC physics corrections v3
 import sys, re
 from pathlib import Path
 inp = Path(sys.argv[1]); text = inp.read_text()
@@ -6353,6 +6358,7 @@ def test_composite_trajectory_binary_matches_json_and_reports_each_phase(
         "keys": legacy["keys"],
         "stages": legacy["stages"],
         "markers": legacy["markers"],
+        "frame_start": 0, "total_n_frames": legacy["n_frames"],
     }
     off = 20 + header_len
     off += (4 - (off % 4)) % 4
@@ -6597,3 +6603,20 @@ def test_the_native_seed_reproduces_oxdnas_own_equilibrium_pair_geometry():
     assert np.median(seps) - 2 * _POS_BASE_NM == pytest.approx(
         OXDNA_NATIVE_HBOND_NM, abs=1e-6
     )
+
+
+def test_composite_selected_range_matches_full(design, geometry, tmp_path):
+    from backend.core import oxdna_health as oh
+    ref, traj = tmp_path / "ref.dat", tmp_path / "traj.dat"
+    _write_traj(design, geometry, ref, 1)
+    _write_traj(design, geometry, traj, 6)
+    stages = [("production", "production", traj)]
+    full = oh.composite_trajectory(design, stages, ref, max_frames=0)
+    progress = []
+    selected = oh.composite_trajectory(design, stages, ref, max_frames=0,
+        frame_start=2, frame_end=4, progress=lambda done, total: progress.append((done, total)))
+    assert selected["frame_start"] == 2
+    assert selected["total_n_frames"] == 7
+    assert selected["n_frames"] == 3
+    assert selected["frames"] == full["frames"][2:5]
+    assert max(total for _, total in progress) == 3

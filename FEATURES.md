@@ -1,0 +1,475 @@
+# NADOC Feature List
+
+A skimmable inventory of user-facing features in the current source tree.
+Main features are bold; subfeatures appear underneath. Titles use five words
+or fewer. Simulation engines and VR require their respective dependencies.
+
+[Getting started](README.md#getting-started) · [Setup guide](INSTALL.md)
+
+[Design](#design-and-editing) · [Sequences](#sequences-and-ordering) ·
+[Attachments](#overhangs-and-attachments) · [Assemblies](#assemblies-and-mechanisms) ·
+[Visualization](#visualization-and-navigation) · [Simulation](#simulation-and-analysis) ·
+[Presentation](#rendering-animation-and-vr) · [Files](#files-history-and-collaboration) ·
+[Automation](#automation-and-diagnostics)
+
+## Design and Editing
+
+- **Lattice Design**
+  - Honeycomb lattice
+  - Square lattice
+  - Interactive helix painting
+  - Slice-plane editing
+  - Helix labels
+- **Extrude**
+  - Fit scaffold lengths (7249/8064)
+  - Length in bp/nm
+  - XY/XZ/YZ origin planes
+  - Forward/reverse extrusion
+  - Scaffold/staple/both extrusion
+  - Adjacent-end ligation
+  - Existing-bundle continuation
+  - Deformed-end continuation
+- **Primitive Library**
+  - 6-helix bundles
+  - 18-helix bundles
+  - Interactive placement
+- **Scaffold Routing**
+  - Automatic scaffold routing
+  - Seamless routing
+  - Polymerization routing
+  - Manual scaffold drawing
+- **Staple Design**
+  - Full autostaple
+  - Automatic staple breaking
+  - Strand-length histogram
+- **Strand Editing**
+  - Draw strands
+  - Resize strand ends
+  - Shift domains
+  - Split strands
+  - Ligate strand ends
+  - Create crossovers
+  - Crossover extra bases
+  - Reference/active strands
+  - Scaffold/binder conversion
+- **2D Origami Editor**
+  - Interactive sliceview
+  - Interactive pathview
+  - Strand spreadsheet
+  - Zoom and pan
+  - Synchronized 2D/3D editing
+  - Multiple synchronized tabs
+- **Move/Rotate**
+  - Translation gizmos
+  - Rotation gizmos
+  - Numeric transforms
+  - Individual nucleotide transforms
+- **Bend and Twist**
+  - Geometric bending
+  - Geometric twisting
+  - Cluster-specific deformation
+  - Loop/skip bending
+  - Loop/skip twisting
+  - Physical-limit enforcement
+  - Clear loops/skips
+- **Clusters and Joints**
+  - Named helix clusters
+  - Cluster colors
+  - Cluster transforms
+  - Cluster rotation joints
+  - Joint-angle controls
+- **Dimensions**
+  - Base-to-base distances
+  - Assembly endpoint gizmos
+  - Persistent dimension lines
+  - Individual dimension visibility
+
+## Sequences and Ordering
+
+- **Sequence Assignment**
+  - M13mp18 scaffold (7249)
+  - p7560 scaffold (7560)
+  - p8064 scaffold (8064)
+  - Custom scaffold sequences
+  - Staple sequence assignment
+  - Individual strand sequences
+  - Reverse-complement synchronization
+- **Sequence Spreadsheet**
+  - Inline sequence editing
+  - Sequence search
+  - Strand sorting
+  - Strand groups
+  - Selected-base highlighting
+  - Overhang sequence editing
+- **Overhang Sequence Generation**
+  - Individual sequence generation
+  - Batch sequence generation
+  - Rare 5-mer selection
+  - GC-content filtering
+  - Hairpin/self-dimer filtering
+  - Corpus-diversity filtering
+- **Ordering and Plates**
+  - 96-well plate layout
+  - IDT tube layout
+  - CSV sequence export
+  - Excel sequence export
+  - Bold overhang annotations
+  - IDT order spreadsheets
+
+## Overhangs and Attachments
+
+- **Overhang Design**
+  - Overhang manager
+  - Named, colored overhangs
+  - Terminal extensions
+  - ssDNA/dsDNA linkers
+  - Subdomain editing
+  - Orientation controls
+  - Overhang pathview
+  - Flexible-chain relaxation
+- **Overhang Connections**
+  - Complementary overhang binding
+  - Dedicated binder strands
+  - Linker binding domains
+  - Connection versions
+  - Apply/unapply connections
+  - Connection geometry validation
+  - Collective attachment relaxation
+- **Proteins**
+  - PDB import
+  - Overhang attachment
+  - Reactive-site mapping
+  - Conjugation manager
+  - Constrained move/rotate
+  - Streptavidin attachment
+  - Biotin binding
+- **Aptamers**
+  - Aptamer structure import
+  - Native-coordinate preservation
+  - Origami attachment
+  - Cadnano editing
+- **Gold Nanospheres**
+  - Editable particle diameter
+  - Thiolated ssDNA handles
+  - Handle naming/coloring
+  - Overhang connections
+  - Move/rotate controls
+  - Metallic rendering
+- **Quantum Dots**
+  - Vendor catalog
+  - Size selection
+  - Absorption/emission plot previews
+  - Streptavidin coatings
+  - Move/rotate controls
+- **Fluorescence**
+  - Terminal fluorophore labels
+  - Fluorophore emission colors
+  - FRET checker
+  - Förster-radius pairs
+  - Gold quenching visualization
+
+## Assemblies and Mechanisms
+
+- **Assembly Workspace**
+  - Parts library
+  - Multiple part instances
+  - Part positioning
+  - Instance-specific visualization
+  - Assembly groups
+  - Saved configurations
+  - Assembly validation
+- **Connectors and Mates**
+  - Connector definition
+  - Mate definition
+  - Rigid mates
+  - Revolute mates
+  - Prismatic mates
+  - Spherical mates
+  - Joint limits
+  - Joint indicators
+- **Assembly Strand Connections**
+  - Cross-part overhang binding
+  - Assembly overhang manager
+  - Assembly linker strands
+  - Connection versions
+- **Polymerization**
+  - Repeating origami units
+  - Periodic seam connections
+  - Polymerization-aware routing
+- **Gears**
+  - Coupled revolute joints
+  - Gear ratios
+  - Driven rotation
+  - RPM spin
+- **Belts and Pulleys**
+  - Belt-path definition
+  - Rim-defined pulley radii
+  - Coupled pulley rotation
+  - Belt riders
+  - Polymerize along belt
+
+## Visualization and Navigation
+
+- **Representations**
+  - Hull prism
+  - Helix cylinders
+  - Nucleotide beads
+  - Full beads/slabs
+  - Molecular surfaces
+  - VDW space-fill
+  - Ball and stick
+  - Atomic sticks
+  - mrDNA coarse
+  - mrDNA fine
+  - oxDNA preview
+- **Coloring**
+  - Strand colors
+  - Base colors
+  - Cluster colors
+  - Overhang highlighting
+  - Atomic CPK colors
+  - Part/source colors
+  - Adjustable scalar legends
+- **Comparison Views**
+  - Two-to-four-panel multi-view
+  - Synchronized panel navigation
+  - Independent panel representations
+  - Independent panel coloring
+  - Four-layer multi-overlay
+  - Per-layer opacity
+  - Overlay separation
+- **Spatial Views**
+  - Box view volumes
+  - Hexagonal view volumes
+  - Regional representation overrides
+  - Regional opacity controls
+  - Volume outlines
+  - Movable section plane
+  - Hatched section intersections
+- **Display Overlays**
+  - Sequence letters
+  - Undefined-base highlights
+  - Loop/skip highlights
+  - Overhang names
+  - Helical axes
+  - Reference geometry
+  - Deformed geometry
+  - Extra-base spacing
+  - Staple visibility
+  - 2D unfold
+  - Cadnano mode
+- **Selection and Navigation**
+  - Hierarchical selection
+  - Selection-level filters
+  - Multiscale orbit
+  - Turntable orbit
+  - Trackball orbit
+  - Frame selection
+  - View cube
+  - Keyboard shortcuts
+  - Resizable sidebar panels
+
+## Simulation and Analysis
+
+- **Simulation Workspace**
+  - Unified simulation launcher
+  - Engine installation/status
+  - Local CPU/GPU execution
+  - Remote cluster execution
+  - RunPod GPU execution
+  - Resource estimates
+  - Job queues
+  - Job folders
+  - Progress and ETA
+  - Job cancellation
+  - Job archives
+  - Stale-result detection
+- **oxDNA**
+  - Staged relaxation
+  - Live relaxation
+  - Equilibration and production
+  - Automatic refinement
+  - Salt controls
+  - Electric fields
+  - Positional anchors
+  - Hard-surface constraints
+  - Surface-attached strands
+  - LAMMPS CPU fallback
+  - NAMD seed generation
+- **mrDNA**
+  - Coarse relaxation
+  - Fine relaxation
+  - Electric fields
+  - Positional anchors
+  - Hard-surface constraints
+  - Relaxed geometry display
+- **CanDo FEM**
+  - Coarse/fine structural analysis
+  - Automatic refinement
+  - Electric fields
+  - Positional anchors
+  - RMSF flexibility maps
+- **SNUPI FEM**
+  - Anisotropic structural analysis
+  - Electric fields
+  - Positional anchors
+  - Structural metrics
+- **NAMD**
+  - Atomistic relaxation
+  - Production dynamics
+  - Explicit-solvent preparation
+  - GBIS implicit solvent
+  - Deferred sequence preparation
+  - oxDNA-seeded relaxation
+  - Live MD display
+  - Water/ion/cell display
+- **Nanopore Transport**
+  - Graphene membrane setup
+  - Graphene-only control systems
+  - DNA-blocked pores
+  - Applied voltage
+  - Ion-current analysis
+  - Ion-crossing paths
+  - Crossing-window controls
+  - Ion-path sampling
+- **Trajectory Analysis**
+  - Playback and scrubbing
+  - Frame stepping
+  - Frame-range selection
+  - Aligned trajectory display
+  - Average-structure display
+  - RMSF flexibility maps
+  - Deviation maps
+  - Strain maps
+  - Conformational occupancy clustering
+  - Selection-scoped clustering
+  - Metrics graphs
+  - Metric export
+- **Simulation Health**
+  - Base-pair retention
+  - Energy convergence
+  - Clash monitoring
+  - Resource monitoring
+- **Photocrosslink Analysis**
+  - Thymine CPD geometry screening
+  - Intended/off-target pair screening
+  - Reciprocal weld analysis
+  - KIMMDY analysis command
+
+## Rendering, Animation, and VR
+
+- **Photo Mode**
+  - PBR material presets
+  - Per-representation materials
+  - HDRI environment import
+  - Built-in studio environment
+  - Subsurface scattering
+  - Translucency controls
+  - Lighting presets
+  - Light-angle controls
+  - Fluorophore light sources
+  - Ambient occlusion
+  - Bloom
+  - Progressive path tracing
+  - Shadow catcher
+  - Custom backgrounds
+  - 300/600 DPI PNG export
+- **Animation**
+  - Saved camera poses
+  - Keyframe timeline
+  - Keyframe reordering
+  - Camera interpolation
+  - Cluster deformation animation
+  - Assembly configuration animation
+  - Joint animation
+  - Camera spin
+  - Text overlays
+  - Trajectory clips
+  - Video export
+- **Strand Animation**
+  - Overhang unzipping
+  - Toehold strand displacement
+  - Helical/straight forms
+  - Reaction-coordinate controls
+  - Melt-width controls
+  - Strand-splay controls
+  - Unequal-length strand support
+- **Native VR**
+  - SteamVR viewer
+  - Atomistic viewing
+  - Controller selection volumes
+  - Shared desktop selection
+  - Grab/move/rotate navigation
+  - Two-handed scaling
+  - In-headset tools
+  - Desktop mirror
+  - Shared trajectory controls
+
+## Files, History, and Collaboration
+
+- **File Management**
+  - Native parts and assemblies
+  - File library
+  - Recent files
+  - Save as
+  - File metadata
+  - Simulation-inclusive packages
+  - Selective simulation packaging
+- **Import and Export**
+  - caDNAno import/export
+  - scadnano import/export
+  - PDB structure import/export
+  - PSF topology export
+  - NAMD package export
+  - GROMACS package export (API)
+  - Simulation-coordinate PDB export
+  - Scalar-map B-factors
+  - ChimeraX coloring commands
+- **3D Printing**
+  - Watertight STL surfaces
+  - Multicolor 3MF surfaces
+  - Staple map coloring
+  - Printer-bed scaling
+- **Feature History**
+  - Undo/redo
+  - Feature log
+  - Feature editing
+  - Snapshot restoration
+  - Dependency-aware changes
+- **Loadouts and Versions**
+  - Design loadouts
+  - Assembly loadouts
+  - Named immutable versions
+  - Revision history
+  - Branch promotion
+  - Recovery versions
+- **Workspace Collaboration**
+  - Tailscale pairing
+  - Remote file libraries
+  - Server online status
+  - Pull/push/sync
+  - Local project checkouts
+  - Branch-history synchronization
+  - Conflict-preserving sync
+  - Single-writer leases
+  - Read-only access
+  - Automatic busy-branch forks
+  - On-demand simulation artifacts
+
+## Automation and Diagnostics
+
+- **Automation**
+  - In-app script runner
+  - Backend API
+  - Headless design construction
+  - Headless assembly construction
+  - Headless simulation workflows
+  - VR automation scripts
+- **Diagnostics**
+  - Debug overlay
+  - Molecular placement audit
+  - Extra-base metrics audit
+  - Hull audit
+  - Wireframe inspection
+  - Mesh inspection
+  - Performance benchmarks

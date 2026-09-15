@@ -1,0 +1,26 @@
+diff --git a/src/CUDA/Backends/MD_CUDABackend.cu b/src/CUDA/Backends/MD_CUDABackend.cu
+--- a/src/CUDA/Backends/MD_CUDABackend.cu
++++ b/src/CUDA/Backends/MD_CUDABackend.cu
+@@ -12,6 +12,7 @@
+ #include "../../Interactions/DNAInteraction.h"
+ #include "../../Observables/ObservableOutput.h"
+ #include "../Thermostats/CUDAThermostatFactory.h"
++#include "../Thermostats/CUDABussiThermostat.h"
+ 
+ #include <typeinfo>
+ 
+@@ -730,7 +731,13 @@
+ 	apply_changes_to_simulation_data();
+ 	_init_CUDA_MD_symbols();
+ 
+-	_cuda_thermostat->set_seed(lrand48());
++	// Bussi draws its noise on the host and never uses the device RNG.
++	// Do not advance the host stream merely to seed that unused generator.
++	if(dynamic_cast<CUDABussiThermostat *>(_cuda_thermostat.get()) != nullptr) {
++		_cuda_thermostat->set_seed(0);
++		OX_LOG(Logger::LOG_INFO, "CUDA Bussi CPU-matched RNG v1");
++	}
++	else _cuda_thermostat->set_seed(lrand48());
+ 	_cuda_thermostat->init();
+ 
+ 	if(_use_barostat) {

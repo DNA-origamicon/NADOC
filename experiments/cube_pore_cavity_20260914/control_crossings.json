@@ -1,0 +1,51 @@
+{
+  "fill_100": {
+    "frames": 50,
+    "saved_plane_crossings": 42,
+    "positive_z": 22,
+    "negative_z": 20,
+    "distinct_crossing_ions": 10
+  },
+  "fill_100_npzat": {
+    "frames": 20,
+    "saved_plane_crossings": 2,
+    "positive_z": 1,
+    "negative_z": 1,
+    "distinct_crossing_ions": 1
+  },
+  "fill_92": {
+    "frames": 19,
+    "saved_plane_crossings": 13,
+    "positive_z": 6,
+    "negative_z": 7,
+    "distinct_crossing_ions": 8
+  },
+  "fill_92_npzat": {
+    "frames": 20,
+    "saved_plane_crossings": 8,
+    "positive_z": 2,
+    "negative_z": 6,
+    "distinct_crossing_ions": 6
+  },
+  "fill_92_nvt_offload": {
+    "frames": 34,
+    "saved_plane_crossings": 27,
+    "positive_z": 16,
+    "negative_z": 11,
+    "distinct_crossing_ions": 8
+  },
+  "fill_96": {
+    "frames": 50,
+    "saved_plane_crossings": 65,
+    "positive_z": 33,
+    "negative_z": 32,
+    "distinct_crossing_ions": 14
+  },
+  "hydrated_300mv": {
+    "frames": 500,
+    "saved_plane_crossings": 139,
+    "positive_z": 68,
+    "negative_z": 71,
+    "distinct_crossing_ions": 16
+  }
+}

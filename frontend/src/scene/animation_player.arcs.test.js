@@ -32,7 +32,7 @@ function geoAt(pos) {
 }
 
 function makeHarness({ design, clusterTransforms = [], cameraPoses = [] } = {}) {
-  const calls = { arc: [], extArc: [], xover: [], lerp: [], order: [] }
+  const calls = { arc: [], extArc: [], xover: [], lerp: [], order: [], events: [] }
 
   const helixCtrl = {
     applyPositionLerp: vi.fn((from, to, t, exclude) => {
@@ -83,7 +83,7 @@ function makeHarness({ design, clusterTransforms = [], cameraPoses = [] } = {}) 
     getAtomisticRenderer:  () => ({ getMode: () => 'off' }),
     onFetchSurfaceBatch:   null,
     getSurfaceRenderer:    () => ({ getMode: () => 'off' }),
-    onEvent: () => {},
+    onEvent: event => calls.events.push(event),
     onTextOverlayUpdate: () => {},
   })
 
@@ -91,18 +91,23 @@ function makeHarness({ design, clusterTransforms = [], cameraPoses = [] } = {}) 
 }
 
 describe('independent pose + spin camera channels', () => {
-  it('currently reapplies authored geometry even for a camera-only keyframe (visualization audit)', async () => {
+  it('preserves simulation geometry during camera-only playback and export seeks', async () => {
     const h = makeHarness({ design: design(3) })
     await h.player.play({ id: 'camera-only', keyframes: [kf({ spin_axis: 'y', spin_rotations: 1 })] })
     h.player.pause()
     h.calls.lerp.length = 0
     h.player.seekTo(0.5)
-    // Characterization of the gap: these are backend design positions, not a
-    // snapshot of the currently displayed simulation deformation.
-    expect(h.calls.lerp.length).toBeGreaterThan(0)
-    expect(h.calls.lerp.at(-1).from.posMap.get('h0:0:fwd').z).toBe(3)
-    expect(h.calls.lerp.at(-1).to.posMap.get('h0:0:fwd').z).toBe(3)
+    expect(h.calls.lerp).toHaveLength(0)
+    expect(h.trajectoryKeyframes.prepare).not.toHaveBeenCalled()
+    expect(h.trajectoryKeyframes.suspend).not.toHaveBeenCalled()
     h.player.stop()
+    expect(h.calls.lerp).toHaveLength(0)
+    expect(h.helixCtrl.applyClusterTransform).not.toHaveBeenCalled()
+    expect(h.calls.events.filter(event => event.type === 'stopped')).toEqual([
+      { type: 'stopped', geometryChanged: false },
+      { type: 'stopped', geometryChanged: false },
+    ])
+
   })
 
   it('uses the selected pose as the spin perspective instead of clearing/ignoring it', async () => {
@@ -181,14 +186,12 @@ describe('crossover arcs follow the feature-log lerp', () => {
   })
 
   it('does not sync arcs on a frame where nothing moved the beads', async () => {
-    // No keyframe pins a feature-log index and there are no clusters, so the lerp still
-    // runs (base state against itself) — the sync is keyed on the lerp having run, which
-    // is the honest signal that bead positions were written.
+    // Camera-only frames leave the displayed beads and arcs untouched.
     const bare = makeHarness({ design: design(3) })
     await bare.player.play({ id: 'a', name: 'A', fps: 30, loop: false, keyframes: [kf(), kf()] })
     bare.calls.arc.length = 0
     bare.player.seekTo(1.0)
-    expect(bare.calls.arc.length).toBe(1)
+    expect(bare.calls.arc.length).toBe(0)
   })
 })
 

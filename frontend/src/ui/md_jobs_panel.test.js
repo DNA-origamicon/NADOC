@@ -1700,6 +1700,40 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     return panel
   }
 
+  it('keeps graphene hidden on load until a graphene job is explicitly picked', async () => {
+    const surfaceToggle = document.createElement('input')
+    surfaceToggle.id = 'md-surface-enable'
+    surfaceToggle.type = 'checkbox'
+    document.body.appendChild(surfaceToggle)
+    const part = '/w/D.nadoc'
+    const pore = { ...JOB, design_source_path: part, prep_params: { graphene_nanopore: true } }
+    const plain = { ...JOB, job_id: 'plain', design_source_path: part }
+    mdApi.listMdJobs.mockResolvedValue([pore, plain])
+    mdApi.getMdJob.mockImplementation(async id => id === 'plain' ? plain : pore)
+    const previews = []
+    const listen = event => previews.push(event.detail.enabled)
+    window.addEventListener('nadoc:graphene-nanopore-preview', listen)
+    try {
+      const panel = initMdJobsPanel({ getMdViz: () => viz, getWorkspacePath: () => part })
+      await flushMicro()
+      expect(panel.getSelectedJob()?.job_id).toBe('J9')
+      expect(previews.length).toBeGreaterThan(0)
+      expect(previews.every(enabled => !enabled)).toBe(true)
+      // The auto-picked row's first click selects its graphene.
+      $('md-jobs-list').querySelector('[data-job-id="J9"]').click()
+      await flushMicro()
+      expect(previews.at(-1)).toBe(true)
+      await panel.selectJob('plain')
+      expect(previews.at(-1)).toBe(false)
+      await panel.selectJob('J9', { explicit: true })
+      expect(previews.at(-1)).toBe(true)
+      panel.deselectJob()
+      expect(previews.at(-1)).toBe(false)
+    } finally {
+      window.removeEventListener('nadoc:graphene-nanopore-preview', listen)
+    }
+  })
+
   it('enables ion paths only for nanopore jobs and restores when trajectory is selected', async () => {
     for (const suffix of ['toggle', 'before', 'after', 'width', 'options', 'status']) {
       const el = document.createElement(['options', 'status'].includes(suffix) ? 'div' : 'input')

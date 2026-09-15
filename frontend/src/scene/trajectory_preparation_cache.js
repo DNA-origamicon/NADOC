@@ -4,7 +4,7 @@
 export function initTrajectoryPreparationCache({ context, download, createSession }) {
   const entries = new Map()
   let tail = Promise.resolve()
-  const key = (jobId, spec) => JSON.stringify([jobId, spec.scope, spec.stride ?? null, context()])
+  const key = (jobId, spec) => JSON.stringify([jobId, spec.scope, spec.stride ?? null, spec.frameStart ?? null, spec.frameEnd ?? null, context()])
 
   function prepare(jobId, spec, { onProgress, planPrebuild, schedule } = {}) {
     const id = key(jobId, spec)
@@ -27,9 +27,9 @@ export function initTrajectoryPreparationCache({ context, download, createSessio
         if (entry.cancelled) throw new DOMException('cancelled', 'AbortError')
         report({ phase: 'load', done: data?.n_frames || 0, total: data?.n_frames || 0 })
         entry.session = createSession(data, settings)
-        const loaded = await entry.session.loadTrajectory(jobId, true, spec.scope, spec.stride)
+        const loaded = await entry.session.loadTrajectory(jobId, true, spec.scope, spec.stride, null, spec)
         if (!loaded?.ok) throw new Error(loaded?.reason || 'Trajectory unavailable')
-        report({ phase: 'frames', done: 0, total: 0, trajectoryFrames: data.n_frames })
+        report({ phase: 'frames', done: 0, total: 0, trajectoryFrames: data.total_n_frames ?? data.n_frames })
         const plan = await planPrebuild?.(entry.session)
         if (entry.cancelled) throw new DOMException('cancelled', 'AbortError')
         const result = await entry.session.prebuildHeavy(
@@ -42,8 +42,8 @@ export function initTrajectoryPreparationCache({ context, download, createSessio
         entry.state = 'ready'
         report({ phase: 'ready', done: result.frames ?? result.n ?? 0,
           total: result.frames ?? result.n ?? 0, capped: !!result.capped,
-          trajectoryFrames: data.n_frames })
-        return { n_frames: data.n_frames, ...result }
+          trajectoryFrames: data.total_n_frames ?? data.n_frames })
+        return { n_frames: data.n_frames, total_n_frames: data.total_n_frames ?? data.n_frames, ...result }
       }
       const work = (schedule ? schedule(run) : tail.catch(() => {}).then(run)).catch(error => {
         entry.state = 'error'

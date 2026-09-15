@@ -363,7 +363,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   function _rebuildKfList(keyframes) {
     kfListEl.innerHTML = ''
     reportReadiness = readinessBar.setAnimation(_getActiveAnim()) || (() => {})
-    void trajectoryKeyframes?.prefetch?.(_getActiveAnim(), { onProgress: reportReadiness }).catch(() => {})
+    trajectoryKeyframes?.retain?.(_getActiveAnim())
     // Bind/Unbind pose authoring (design editor only) — shown even with no
     // keyframes so the user can set open/closed angles before building the timeline.
     const posesSection = _makeBindingPosesSection(_bindingsDesign())
@@ -727,8 +727,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     strideWrap.append(strideLbl, strideIn, strideSuffix)
 
     const previewBtn = document.createElement('button')
-    previewBtn.textContent = '▶ Preview'
-    previewBtn.title = 'Show this trajectory and scrub it with the bar below'
+    previewBtn.textContent = 'Load'
+    previewBtn.title = 'Load only the selected frames and scrub them below'
     previewBtn.style.cssText = _editStyle
     resRow.append(scopeSel, strideWrap, previewBtn)
     const reportRowReadiness = reportReadiness
@@ -755,6 +755,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       // state — repainting the row from the store would throw the widget away and take
       // the playhead with it.
       onRangeCommit: async ({ start, end }) => {
+        if (_previewing()) { _stopPreview(); _renderPreviewBtn() }
+        downloadStatus.textContent = 'Range changed — Load selected frames'
         kf.trajectory_frame_start = start
         kf.trajectory_frame_end   = end
         await _patchKfNoRebuild(kf, { trajectory_frame_start: start, trajectory_frame_end: end })
@@ -784,6 +786,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         bar.setRange(next.start, next.end)
         _syncRangeInputs(next.start, next.end)
         _setLabel(next.start, next.end, _nFrames)
+        if (_previewing()) { _stopPreview(); _renderPreviewBtn() }
+        downloadStatus.textContent = 'Range changed — Load selected frames'
         kf.trajectory_frame_start = next.start
         kf.trajectory_frame_end = next.end
         await _patchKfNoRebuild(kf, {
@@ -824,7 +828,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       input.addEventListener('change', async () => {
         kf[field] = input.checked
         await _patchKfNoRebuild(kf, { [field]: input.checked })
-        if (_previewing()) _scrubTo(bar.getPlayhead())
+        if (_previewing()) await _loadSelected()
+        else { downloadStatus.textContent = 'Options changed — Load to prepare selected frames'; downloadBar.hidden = true }
       })
       lab.append(input, document.createTextNode(label))
       return lab
@@ -879,45 +884,10 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         downloadStatus.textContent = ''
         downloadBar.hidden = true
         cancelPreparation.hidden = true
-        void trajectoryKeyframes?.prefetch?.(_getActiveAnim()).catch(() => {})
         _nFrames = 0; bar.setFrames(0); bar.setEnabled(false); _setLabel(0, 0, 0); return }
-      // Download in parallel with metadata. This must not activate the preview or
-      // steal the scene from another sidebar; Play joins the same download.
-      const generation = ++downloadGeneration
-      let rowReady = false
-      downloadStatus.textContent = 'Loading trajectory…'
-      downloadBar.hidden = false
-      cancelPreparation.hidden = false
-      downloadBar.removeAttribute('value')
-      Promise.resolve(trajectoryKeyframes?.prefetch?.(_getActiveAnim(), {
-        onProgress: event => {
-          reportRowReadiness(event)
-          if (generation !== downloadGeneration || event.jobId !== kf.trajectory_job_id) return
-          if (event.phase === 'ready') {
-            rowReady = true
-            downloadBar.value = 1
-            cancelPreparation.hidden = true
-            downloadStatus.textContent = event.capped ? 'Trajectory preview ready · detail frames limited by memory' : 'Trajectory preview frames ready'
-            return
-          }
-          const phase = event.phase === 'queued' ? 'Queued — earlier keyframes first' : ['load', 'download', 'decode'].includes(event.phase) ? 'Loading trajectory' : 'Preparing preview frames'
-          downloadStatus.textContent = event.total > 0 ? `${phase} · ${event.done} / ${event.total}` : `${phase}…`
-          if (event.total > 0) downloadBar.value = Math.max(0, Math.min(1, event.done / event.total))
-          else downloadBar.removeAttribute('value')
-        },
-      })).then(results => {
-        if (generation !== downloadGeneration || rowReady) return
-        downloadBar.value = 1
-        cancelPreparation.hidden = true
-        const capped = results?.some?.(result => result?.capped)
-        downloadStatus.textContent = capped ? 'Trajectory preview ready · detail frames limited by memory' : 'Trajectory preview frames ready'
-      }).catch(error => {
-        if (generation === downloadGeneration && !rowReady) {
-          downloadStatus.textContent = error?.name === 'AbortError' ? 'Preparation cancelled — Play to retry' : 'Preparation failed — Play to retry'
-          cancelPreparation.hidden = true
-          downloadBar.hidden = true
-        }
-      })
+      downloadStatus.textContent = 'Choose frames, then Load'
+      downloadBar.hidden = true
+      cancelPreparation.hidden = true
       const spec = _spec()
       if (!_trajMetaCached(kf.trajectory_job_id, spec)) _setLoading('Loading trajectory…')
       await _applyMeta(await _trajMeta(kf.trajectory_job_id, spec))
@@ -958,6 +928,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     function _scrubTo(i) {
       if (!_previewing() || i == null) return
+      i = Math.max(_previewSpec?.frameStart ?? 0, Math.min(_previewSpec?.frameEnd ?? (_nFrames - 1), i))
+      bar.setPlayhead(i)
       _previewFrame = i
       trajectoryKeyframes?.previewShow(kf.trajectory_job_id, _spec().engine, i, {
         ions: !!kf.trajectory_show_ions,
@@ -967,43 +939,66 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     function _renderPreviewBtn() {
       const on = _previewing()
-      previewBtn.textContent = on ? '■ Stop' : '▶ Preview'
+      previewBtn.textContent = on ? '■ Stop' : 'Load'
       previewBtn.title = on
         ? 'Stop previewing and restore the design'
-        : 'Load this trajectory and scrub it with the bar below'
+        : 'Load only the selected frames and scrub them below'
       // On a row rebuilt mid-preview, the panel-scope frame is the truth — the widget
       // is brand new and knows nothing.
       bar.setPlayhead(on ? (bar.getPlayhead() ?? _previewFrame) : null)
     }
 
-    previewBtn.addEventListener('click', async () => {
-      if (_previewing()) { _stopPreview(); _renderPreviewBtn(); _setLabel(bar.getRange().start, bar.getRange().end, _nFrames); return }
-      if (!kf.trajectory_job_id) return
-      if (player?.isPlaying?.()) {
-        rangeLbl.textContent = 'stop playback first'
-        return
-      }
-      _stopPreview()
+    async function _loadSelected() {
+      if (!kf.trajectory_job_id || player?.isPlaying?.()) return
+      trajectoryKeyframes?.retain?.(_getActiveAnim())
+      const generation = ++downloadGeneration
       previewBtn.disabled = true
-      _setLoading('Loading trajectory…')
+      downloadBar.hidden = false
+      downloadBar.removeAttribute('value')
+      cancelPreparation.hidden = false
+      const started = Date.now()
+      let phase = 'Loading selected frames', counts = '', eta = ''
+      const paint = () => { downloadStatus.textContent = `${phase}${counts} · ${Math.floor((Date.now() - started) / 1000)}s elapsed${eta}` }
+      const timer = setInterval(paint, 1000)
+      paint()
       const spec = _spec()
-      const n = await (trajectoryKeyframes?.previewLoad(kf.trajectory_job_id, spec, {
-        onProgress: (p) => {
-          if (p?.phase === 'frames' && p.total) _setLoading(`Preparing frames ${p.done}/${p.total}…`)
-        },
-      }) ?? 0)
-      previewBtn.disabled = false
-      if (!n) { _setLabel(bar.getRange().start, bar.getRange().end, _nFrames); return }
-      _previewKfId = kf.id
-      _previewJob  = kf.trajectory_job_id
-      _previewSpec = spec
-      _previewFrame = Math.min(bar.getRange().start, Math.max(0, n - 1))
-      // The download is authoritative about the frame count — the meta call and it can
-      // disagree while a job is still writing.
-      if (n !== _nFrames) { _nFrames = n; bar.setFrames(n); bar.setEnabled(true) }
-      _renderPreviewBtn()
-      _scrubTo(bar.getPlayhead())
-      _setLabel(bar.getRange().start, bar.getRange().end, _nFrames)
+      try {
+        const n = await trajectoryKeyframes?.previewLoad(kf.trajectory_job_id, spec, {
+          companions: { ions: !!kf.trajectory_show_ions, box: !!kf.trajectory_show_box },
+          onProgress: p => {
+            if (generation !== downloadGeneration) return
+            reportRowReadiness(p)
+            phase = p.phase === 'companions' ? 'Loading ions / bounding box' : p.phase === 'frames' ? 'Preparing selected frames' : 'Loading selected frames'
+            counts = p.total > 0 ? ` · ${p.done}/${p.total}` : ''
+            eta = p.etaMs > 0 ? ` · ~${Math.ceil(p.etaMs / 1000)}s remaining` : ''
+            if (p.total > 0) downloadBar.value = p.done / p.total
+            else downloadBar.removeAttribute('value')
+            paint()
+          },
+        })
+        if (generation !== downloadGeneration) return
+        if (!n) throw new Error('No trajectory frames available')
+        _previewKfId = kf.id
+        _previewJob = kf.trajectory_job_id
+        _previewSpec = spec
+        _previewFrame = bar.getRange().start
+        bar.setPlayhead(_previewFrame)
+        _renderPreviewBtn()
+        _scrubTo(_previewFrame)
+        if (await trajectoryKeyframes.settle?.() === false) throw new Error('Selected frame is not ready')
+        downloadBar.value = 1
+        downloadStatus.textContent = `Selected frames loaded${kf.trajectory_show_ions || kf.trajectory_show_box ? ' · ions / bounding box ready' : ''}`
+        _setLabel(bar.getRange().start, bar.getRange().end, _nFrames)
+      } catch (error) {
+        if (generation === downloadGeneration) downloadStatus.textContent = error?.name === 'AbortError' ? 'Load cancelled — Load to retry' : `Load failed: ${error.message}`
+      } finally {
+        clearInterval(timer)
+        if (generation === downloadGeneration) { previewBtn.disabled = false; cancelPreparation.hidden = true }
+      }
+    }
+    previewBtn.addEventListener('click', async () => {
+      if (_previewing()) { _stopPreview(); _renderPreviewBtn(); return }
+      await _loadSelected()
     })
 
     // A saved job's frame metadata/progress is independent of discovering other jobs.

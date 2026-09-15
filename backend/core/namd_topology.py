@@ -797,6 +797,8 @@ def build_charmm_psfgen_topology(
     instead of ideal B-DNA (the Phase-2 NAMD seed).  Default: build ideal B-DNA.
     """
     design = design.without_reference_geometry()
+    from backend.core.streptavidin import require_coating_simulation_support
+    require_coating_simulation_support(design, 'NAMD CHARMM topology')
     from backend.core.cpd_forcefield import assert_cpd_simulation_supported
 
     assert_cpd_simulation_supported(design, path="full CHARMM/psfgen topology builder")

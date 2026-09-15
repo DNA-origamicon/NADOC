@@ -150,6 +150,11 @@ class CreateCandoJobRequest(BaseModel):
 async def create_cando_job(body: CreateCandoJobRequest) -> dict:
     """Prepare + run a new CanDo FEM shape-prediction job from the active design."""
     design = design_state.get_or_404().without_reference_geometry()
+    from backend.core.streptavidin import require_coating_simulation_support
+    try:
+        require_coating_simulation_support(design, 'CanDo')
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
     if not design.helices:
         raise HTTPException(400, "Design has no helices to predict a shape for.")
 

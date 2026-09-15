@@ -178,7 +178,7 @@ export function initKeyboardShortcuts(deps) {
         if (!currentDesign?.helices?.length) {
           slicePlane.hide()
           extrudePanel?.hide()
-          showWelcome()
+          // Keep the document open so Undo of an import can still be redone.
         }
         if (!currentDesign?.deformations?.length && !deformView.isActive()) {
           await deformView.activate()
@@ -552,6 +552,12 @@ export function initKeyboardShortcuts(deps) {
       e.preventDefault()
       const state = store.getState()
       const refs = canonicalSelection(state).items
+
+      const particleIds = [...new Set(refs.filter(ref => ref.kind === 'nanoparticle').map(ref => ref.id))]
+      if (particleIds.length) {
+        for (const id of particleIds) await api.deleteNanoparticle(id)
+        return
+      }
 
       const overhangIds = refs.filter(ref => ref.kind === 'overhang').map(ref => ref.id)
       if (overhangIds.length > 0) {

@@ -94,6 +94,8 @@ def build_namd_gbis_package(
     # Lazy imports to avoid pulling namd_solvate's heavy module tail unless a GBIS
     # job actually runs (and to sidestep any import-order coupling).
     from backend.core.namd_solvate import _FF_DIR, _FF_FILES, _check_ff_files  # noqa: PLC0415
+    from backend.core.streptavidin import require_coating_simulation_support
+    require_coating_simulation_support(design, 'NAMD GBIS')
 
     _check_ff_files()
     minimize_steps = _round_up_to_cycle(minimize_steps)
