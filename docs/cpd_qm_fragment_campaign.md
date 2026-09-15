@@ -642,6 +642,16 @@ finite zero-step energy. The full 2018 nucleic-acid topology also exposed an uns
 Drude model compound, but the complete DNA structure-builder path still needs either a
 validated preprocessing correction or a CHARMM-GUI/CHARMM-generated PSF.
 
+The first P1 response pilot is Alpine job **32603453**. It requests a
+B3LYP/aug-cc-pVDZ molecular polarizability tensor and dipole at the audited
+MP2/6-31G(d) N-methyl CPD geometry using 32 CPUs and 70 GB on `acpu`. Submission and
+resource checks passed; the job entered `PENDING (Priority)`. Its completion audit
+requires normal Psi4 termination, nine finite tensor components, tensor symmetry within
+1e-6 atomic units, and three finite dipole components. The enabled
+`nadoc-cpd-drude-response-watch.timer` polls every five minutes, collects terminal output,
+and writes an immutable completion trigger. A pass authorizes preparation of the
+fit/held-out +0.5 e perturbed-ESP campaign only and has no registry effect.
+
 The next campaign has four reassessment triggers: finish and audit fit/held-out perturbed
 ESP and polarizability QM targets; require a fitted Drude electrostatic model to predict
 the held-out perturbations; require unchanged three-orientation water cross-validation

@@ -266,5 +266,30 @@
       "reassess": "Only this stage may request a simulation-ready release review."
     }
   ],
-  "decision": "Keep the additive integration-only candidate and all production registry entries blocked. Continue with a fully consistent Drude response campaign rather than further atom-centered or fixed-site tuning."
+  "decision": "Keep the additive integration-only candidate and all production registry entries blocked. Continue with a fully consistent Drude response campaign rather than further atom-centered or fixed-site tuning.",
+  "active_continuation": {
+    "stage": "P1_QM_response_pilot",
+    "status": "submitted",
+    "cluster": "alpine",
+    "job_id": "32603453",
+    "slurm_state_at_submission_check": "PENDING (Priority)",
+    "target": "B3LYP/aug-cc-pVDZ molecular polarizability tensor and dipole on the audited MP2/6-31G(d) N-methyl CPD geometry",
+    "campaign_manifest": {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-cpd-drude-response-v1/campaign_manifest.json",
+      "sha256": "95a215d8c4e7599a56155247cb38f0cb896f50050a7cd85da25ed9aa8bb2ef55"
+    },
+    "submission_receipt": {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-cpd-drude-response-v1/submission_receipt.json",
+      "sha256": "379d3751324a5b989d2720f0be312dead1495260c9a0503b8e58ad72ae9bcfe8"
+    },
+    "completion_effect": "A passed audit authorizes construction of the preregistered fit/held-out +0.5 e perturbed-ESP campaign; it does not open a simulation gate.",
+    "watcher": {
+      "service": "nadoc-cpd-drude-response-watch.service",
+      "timer": "nadoc-cpd-drude-response-watch.timer",
+      "poll_interval_minutes": 5,
+      "status": "enabled_active",
+      "completion_trigger_path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-cpd-drude-response-v1/completion_trigger.json",
+      "behavior": "Collect output, log, and response audit after terminal Slurm state; pass only on COMPLETED 0:0 plus passed response audit; never submit dependent work on failure."
+    }
+  }
 }
