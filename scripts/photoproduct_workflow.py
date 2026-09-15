@@ -1159,6 +1159,14 @@ def _parser() -> argparse.ArgumentParser:
     candidate_workbook.add_argument("--cgenff-topology", type=Path, required=True)
     candidate_workbook.add_argument("--cgenff-parameters", type=Path, required=True)
     candidate_workbook.add_argument("--policy", type=Path)
+    candidate_workbook.add_argument(
+        "--integration-nonbonded-override",
+        type=Path,
+        help=(
+            "Frozen, explicitly non-accepted nonbonded model used only to prove "
+            "custom CHARMM type and engine integration with a v4 policy."
+        ),
+    )
     candidate_workbook.add_argument("--output", type=Path, required=True)
     improper_convention = sub.add_parser(
         "audit-namd-improper-convention",
@@ -2339,6 +2347,10 @@ def main(argv: list[str] | None = None) -> int:
         keyword = {}
         if args.policy is not None:
             keyword["policy_path"] = args.policy
+        if args.integration_nonbonded_override is not None:
+            keyword["integration_nonbonded_override_path"] = (
+                args.integration_nonbonded_override
+            )
         result = assemble_quantitative_parameter_workbook(
             fit_plan_path=args.fit_plan,
             nonbonded_fit_path=args.nonbonded_fit,

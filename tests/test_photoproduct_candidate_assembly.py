@@ -173,7 +173,14 @@ def _inputs(
     cgenff_topology = tmp_path / "cgenff.rtf"
     cgenff_parameters = tmp_path / "cgenff.prm"
     cgenff_topology.write_text("* synthetic\n")
-    cgenff_parameters.write_text("* synthetic\n")
+    cgenff_parameters.write_text(
+        "* synthetic\n"
+        "BONDS\nTSTC TSTO 500.0 1.2\n"
+        "ANGLES\nTSTN TSTC TSTO 100.0 120.0\n"
+        "DIHEDRALS\nX TSTN TSTC TSTO 0.2 2 180.0\n"
+        "IMPROPER\nTSTC TSTN TSTC TSTO 10.0 0 0.0\n"
+        "NONBONDED\nTSTO 0.0 -0.1 1.5\nEND\n"
+    )
     hessian = tmp_path / "hessian-targets.json"
     hessian.write_text("{}\n")
     nonbonded = tmp_path / "nonbonded.json"
@@ -367,6 +374,88 @@ def test_quantitative_candidate_assembly_rejects_failed_heldout_metric(
         assembly.assemble_quantitative_parameter_workbook(
             **inputs, output_path=tmp_path / "rejected.json"
         )
+
+
+def test_integration_only_override_emits_custom_lj_types_without_passing_gate(
+    tmp_path, monkeypatch
+):
+    inputs = _inputs(
+        tmp_path,
+        monkeypatch,
+        product_id="tt-cpd-cis-anti-i",
+        stereochemistry="cis-anti-I",
+    )
+    nonbonded = json.loads(inputs["nonbonded_fit_path"].read_text())
+    hypothesis = nonbonded["results"][0]
+    hypothesis["water_metrics"][0]["energy_error_kcal_mol"] = 0.7
+    inputs["nonbonded_fit_path"].write_text(json.dumps(nonbonded))
+    coverage_path = tmp_path / "coverage.json"
+    coverage = json.loads(coverage_path.read_text())
+    coverage["sources"]["nonbonded_fit"] = _source(inputs["nonbonded_fit_path"])
+    coverage_path.write_text(json.dumps(coverage))
+    fit_plan = json.loads(inputs["fit_plan_path"].read_text())
+    fit_plan["sources"]["model_coverage"] = _source(coverage_path)
+    inputs["fit_plan_path"].write_text(json.dumps(fit_plan))
+    override = tmp_path / "integration-override.json"
+    override.write_text(
+        json.dumps(
+            {
+                "schema": "nadoc.photoproduct-nonbonded-engine-integration-candidate.v1",
+                "status": "frozen_for_engine_integration_not_scientifically_accepted",
+                "product_id": "tt-cpd-cis-anti-i",
+                "atom_types": hypothesis["atom_types"],
+                "charges_e": hypothesis["charges_e"],
+                "lj_parameters": {
+                    atom: {
+                        "epsilon_kcal_mol": -0.15,
+                        "rmin_half_angstrom": 1.75,
+                    }
+                    for atom in ("1:O2", "1:O4", "2:O2", "2:O4")
+                },
+                "sources": {
+                    "source_nonbonded_fit": _source(inputs["nonbonded_fit_path"])
+                },
+            }
+        )
+    )
+    output = tmp_path / "integration-workbook.json"
+    policy = (
+        assembly.CANDIDATE_ASSEMBLY_POLICY_PATH.parent
+        / "photoproduct_candidate_assembly_policy_v4.json"
+    )
+
+    workbook = assembly.assemble_quantitative_parameter_workbook(
+        **inputs,
+        output_path=output,
+        policy_path=policy,
+        integration_nonbonded_override_path=override,
+    )
+
+    assert audit_parameter_workbook(output)["passed"] is True
+    assert workbook["release_status"] == (
+        "integration_smoke_candidate_not_scientifically_accepted"
+    )
+    assembly_record = workbook["quantitative_candidate_assembly"]
+    assert assembly_record["nonbonded_checks_passed"] is False
+    by_atom = {item["atom"]: item for item in workbook["atoms"]}
+    assert by_atom["1:O2"]["final_type"] == "CA1O2"
+    assert by_atom["2:O4"]["final_type"] == "CA2O4"
+    custom = {
+        item["name"]: item for item in workbook["charmm_patch"]["custom_atom_types"]
+    }
+    assert custom["CA1O2"]["epsilon_kcal_mol"] == -0.15
+    assert custom["CA1O2"]["rmin_half_angstrom"] == 1.75
+    assert custom["CA1O2"]["bonded_alias_source_type"] == hypothesis["atom_types"][
+        "1:O2"
+    ]
+    export_charmm_candidate_assets(
+        workbook_path=output,
+        workbook_audit_path=output.with_name("integration-workbook_audit.json"),
+        output_dir=tmp_path / "integration-charmm",
+    )
+    parameters = (tmp_path / "integration-charmm/photoproduct.prm").read_text()
+    assert "TSTC CA1O2" in parameters
+    assert "TSTN TSTC CA1O2" in parameters
 
 
 @pytest.mark.parametrize(

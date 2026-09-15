@@ -22,6 +22,82 @@ from backend.core.photoproduct_registry import photoproduct_registry
 _VARIANT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,79}$")
 
 
+def _parse_bonded_alias_records(workbook: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """Clone pinned bonded records for custom types whose LJ values differ.
+
+    CHARMM atom types identify both bonded and nonbonded parameters.  Giving one atom
+    a distinct LJ type therefore also hides the bonded records carried by its source
+    type.  Integration-only LJ types retain those bonded identities explicitly in the
+    exported, self-contained parameter file.
+    """
+
+    aliases: dict[str, list[dict[str, Any]]] = {
+        "bonds": [],
+        "angles": [],
+        "dihedrals": [],
+        "impropers": [],
+    }
+    widths = {"bonds": 2, "angles": 3, "dihedrals": 4, "impropers": 4}
+    headers = {
+        "BONDS": "bonds",
+        "ANGLES": "angles",
+        "DIHEDRALS": "dihedrals",
+        "DIHEDRAL": "dihedrals",
+        "IMPROPER": "impropers",
+        "IMPROPERS": "impropers",
+    }
+    stop = {"CMAP", "NONBONDED", "NBFIX", "HBOND", "END"}
+    for alias in workbook["charmm_patch"]["custom_atom_types"]:
+        source_type = alias.get("bonded_alias_source_type")
+        source = alias.get("bonded_alias_parameters")
+        if source_type is None and source is None:
+            continue
+        if (
+            not isinstance(source_type, str)
+            or not source_type
+            or not isinstance(source, dict)
+            or not isinstance(source.get("path"), str)
+            or not isinstance(source.get("sha256"), str)
+        ):
+            raise ValueError(f"custom type {alias.get('name')} has an invalid bonded alias")
+        source_path = Path(source["path"])
+        if not source_path.is_file() or _sha256(source_path) != source["sha256"]:
+            raise ValueError(
+                f"custom type {alias['name']} bonded alias source is missing or stale"
+            )
+        section = None
+        matched = 0
+        for raw in source_path.read_text(errors="replace").splitlines():
+            content = raw.split("!", 1)[0].strip()
+            if not content:
+                continue
+            fields = content.split()
+            keyword = fields[0].upper()
+            if keyword in headers and len(fields) == 1:
+                section = headers[keyword]
+                continue
+            if keyword in stop:
+                section = None
+                continue
+            if section is None:
+                continue
+            width = widths[section]
+            if len(fields) <= width or source_type not in fields[:width]:
+                continue
+            try:
+                values = tuple(float(value) for value in fields[width:])
+            except ValueError:
+                continue
+            types = [alias["name"] if value == source_type else value for value in fields[:width]]
+            aliases[section].append({"types": types, "values": values})
+            matched += 1
+        if not matched:
+            raise ValueError(
+                f"custom type {alias['name']} source {source_type} has no bonded records"
+            )
+    return aliases
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -56,6 +132,7 @@ def _finite(record: dict[str, Any], field: str) -> float:
 
 def _parameter_lines(workbook: dict[str, Any]) -> list[str]:
     bonded = workbook["bonded_terms"]
+    bonded_aliases = _parse_bonded_alias_records(workbook)
     emitted: dict[tuple[Any, ...], tuple[float, ...]] = {}
 
     def should_emit(
@@ -98,6 +175,11 @@ def _parameter_lines(workbook: dict[str, Any]) -> list[str]:
         if not should_emit("bond", types, values, reversible=True):
             continue
         lines.append(f"{' '.join(types):<19} {values[0]:12.6f} {values[1]:11.6f}")
+    for record in bonded_aliases["bonds"]:
+        types, values = record["types"], record["values"]
+        if len(values) < 2 or not should_emit("bond", types, values[:2], reversible=True):
+            continue
+        lines.append(f"{' '.join(types):<19} {values[0]:12.6f} {values[1]:11.6f}")
     lines.extend(["", "ANGLES"])
     for record in bonded["angles"]:
         if not record["emit_parameter"]:
@@ -119,6 +201,16 @@ def _parameter_lines(workbook: dict[str, Any]) -> list[str]:
         line = f"{' '.join(types):<28} {values[0]:12.6f} {values[1]:11.6f}"
         if ub_k is not None:
             line += f" {float(ub_k):12.6f} {float(ub_r):11.6f}"
+        lines.append(line)
+    for record in bonded_aliases["angles"]:
+        types, values = record["types"], record["values"]
+        if len(values) not in {2, 4} or not should_emit(
+            "angle", types, values, reversible=True
+        ):
+            continue
+        line = f"{' '.join(types):<28} {values[0]:12.6f} {values[1]:11.6f}"
+        if len(values) == 4:
+            line += f" {values[2]:12.6f} {values[3]:11.6f}"
         lines.append(line)
     lines.extend(["", "DIHEDRALS"])
     for record in bonded["dihedrals"]:
@@ -145,6 +237,23 @@ def _parameter_lines(workbook: dict[str, Any]) -> list[str]:
                 f"{' '.join(types):<37} {k_value:12.6f} "
                 f"{int(multiplicity):3d} {delta:11.6f}"
             )
+    for record in bonded_aliases["dihedrals"]:
+        types, values = record["types"], record["values"]
+        if len(values) < 3:
+            continue
+        k_value, multiplicity, delta = values[:3]
+        if not multiplicity.is_integer() or not should_emit(
+            "dihedral",
+            types,
+            (k_value,),
+            reversible=True,
+            suffix=(int(multiplicity), delta),
+        ):
+            continue
+        lines.append(
+            f"{' '.join(types):<37} {k_value:12.6f} "
+            f"{int(multiplicity):3d} {delta:11.6f}"
+        )
     lines.extend(["", "IMPROPER"])
     for record in bonded["impropers_added"]:
         if not record["emit_parameter"]:
@@ -157,6 +266,16 @@ def _parameter_lines(workbook: dict[str, Any]) -> list[str]:
         if not should_emit("improper", types, values, reversible=False):
             continue
         lines.append(f"{' '.join(types):<37} {values[0]:12.6f} 0 {values[1]:11.6f}")
+    for record in bonded_aliases["impropers"]:
+        types, values = record["types"], record["values"]
+        if len(values) < 3 or not should_emit(
+            "improper", types, values, reversible=False
+        ):
+            continue
+        lines.append(
+            f"{' '.join(types):<37} {values[0]:12.6f} "
+            f"{int(values[1]):d} {values[2]:11.6f}"
+        )
 
     custom_types = workbook["charmm_patch"]["custom_atom_types"]
     if custom_types:

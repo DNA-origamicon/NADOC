@@ -559,6 +559,51 @@ job, collects its results, and runs the frozen-candidate evaluator. A failure st
 a pass authorizes implementation of the custom Lennard-Jones CHARMM assembly stage. Neither
 the capacity fit nor the new evidence generation makes the product simulation ready.
 
+## Alpine water result and NAMD integration completion (2026-09-15)
+
+Alpine job **32590755** completed normally in 19 minutes 47 seconds with exit code 0, and
+the completion watcher collected and evaluated it. The independent azimuth-120 gate
+failed under its unchanged limits: energy RMSE was 0.41249 kcal/mol (limit 0.2), maximum
+energy error was 0.69876 kcal/mol (limit 0.5), distance RMSE was 0.06171 angstrom (pass),
+and maximum distance error was 0.11153 angstrom (limit 0.1). The endpoint-2 H3 donor was
+the worst energy case. Automatic scientific continuation stopped as designed.
+
+A leave-one-orientation-out diagnostic then fitted each registered atom-centered additive
+model on two water orientations and predicted the third. Ordered carbonyl-O LJ, ordered
+H3/O2/O4 LJ, and ordered N3/H3/O2/O4 LJ variants all failed every held-out orientation.
+Their all-orientation fits approached some aggregate targets, but those same orientations
+were used in fitting and therefore provide no independent validation. This supports the
+existing model-form diagnosis: fixed atom-centered additive charges do not reproduce the
+carbonyl/donor anisotropy across arbitrary water azimuths. The registered acceptance
+limits were not relaxed.
+
+To finish the requested engine implementation without converting that failed scientific
+gate into a pass, policy v4 introduces an explicit integration-only candidate. It records
+the failing nonbonded checks, emits distinct fitted O2/O4 LJ types, keeps
+`simulation_ready: false`, and prohibits force-field release, production use, or
+scientific interpretation. Its first real NAMD parameter load found that distinct LJ atom
+types also hide the source ON1 bonded parameters. The preserved failed attempt stopped on
+the missing `CA1O2 CN1T NN2B` angle. The exporter now copies hash-pinned bonded identity
+records for each integration-only LJ type into the self-contained candidate parameter
+file; the focused candidate assembly and engine tests pass 33/33.
+
+The corrected `tt-cpd-cis-anti-i-integration-v2` candidate passes the complete local NAMD
+implementation path:
+
+| Gate | Result |
+|---|---|
+| Real psfgen product/reactant construction and static topology audit | Pass; 63 atoms, charge conserved at -1 e, and exactly the two ordered CPD crosslinks were added. |
+| Vacuum NAMD | Pass; warning-classified load, 2,000 minimization steps, and 1,000 ordinary-mass steps at 2 fs. All 100 frames retained chirality; minimum nonbonded covalent-radius ratio was 1.675. |
+| Explicit solution NAMD | Pass; 1,084 TIP3P waters, 4 Na+, 3 Cl-, neutral total charge, 1,000 minimization steps, 1,000 heating steps at 1 fs, and 5,000 production-smoke steps at 2 fs. All 50 frames retained chirality; minimum ratio was 1.613. |
+
+The machine-readable assessment is
+`gate-troubleshooting-v1/namd-integration-v2/stage_assessment.json`; its trigger is
+`gates/namd_integration_smoke.json`. The NAMD implementation stage is complete, while the
+scientific campaign remains held. Reassessment requires a preregistered anisotropic or
+polarizable nonbonded model, a fresh independent water-orientation set that passes the
+unchanged bounds, full d(TpT)/duplex validation for that accepted model, and independent
+reproducibility and release review.
+
 ## Verification of this review
 
 Targeted monitor tests exercise input/source corruption, interrupted execution, stage
