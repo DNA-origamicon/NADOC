@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from backend.parameterization.photoproduct_fit_identifiability import (
+    _matrix_diagnostics,
     audit_openmm_fit_identifiability,
 )
 
@@ -185,6 +186,29 @@ def test_wide_gradient_block_retains_omitted_exact_null_directions(
     assert gradient["nullity"] == 2
     assert len(gradient["null_directions"]) == 2
     assert gradient["null_directions"][-1]["singular_value"] == 0.0
+
+
+def test_matrix_diagnostics_only_requests_full_svd_for_wide_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parameters = [
+        {"name": name, "group_id": f"angle:{name}", "category": "angles"}
+        for name in ("a", "b", "c")
+    ]
+    original_svd = np.linalg.svd
+    calls: list[tuple[tuple[int, ...], bool]] = []
+
+    def tracked_svd(
+        values: np.ndarray, *, full_matrices: bool = True
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        calls.append((values.shape, full_matrices))
+        return original_svd(values, full_matrices=full_matrices)
+
+    monkeypatch.setattr(np.linalg, "svd", tracked_svd)
+    _matrix_diagnostics(np.eye(4, 3), parameters, relative_threshold=1.0e-8)
+    _matrix_diagnostics(np.eye(2, 3), parameters, relative_threshold=1.0e-8)
+
+    assert calls == [((4, 3), False), ((2, 3), True)]
 
 
 def test_ring_dihedral_requires_coupled_evidence_not_a_torsion_scan(

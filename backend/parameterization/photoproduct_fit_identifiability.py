@@ -39,10 +39,14 @@ def _matrix_diagnostics(
         or not 0.0 < relative_threshold < 1.0
     ):
         raise ValueError("fit response matrix, parameter count, or threshold is invalid")
-    # Full right singular vectors are required when a block has fewer rows than
-    # parameters (the projected-gradient block is 3N by P). The omitted vectors in a
-    # reduced SVD are real, exact parameter-space null directions.
-    _left, singular_values, right = np.linalg.svd(values, full_matrices=True)
+    # Full right singular vectors are required only when a block has fewer rows than
+    # parameters (the projected-gradient block can be 3N by P). In that wide case,
+    # the vectors omitted by a reduced SVD are real, exact parameter-space null
+    # directions. For tall blocks a reduced SVD still returns the complete P by P
+    # right basis and avoids allocating an unused row_count by row_count left basis.
+    _left, singular_values, right = np.linalg.svd(
+        values, full_matrices=values.shape[0] < values.shape[1]
+    )
     largest = float(singular_values[0]) if len(singular_values) else 0.0
     smallest = (
         0.0

@@ -438,6 +438,42 @@ only synchronizes results and writes a gate-neutral trigger. A favorable result 
 to D4 CHARMM mapping and primary-fit freeze; it does not make either product simulation
 ready.
 
+## Primary syn/anti fitting reassessment (2026-09-14)
+
+The Alpine chain did not wait on ordinary queue priority. Environment job **32491760**
+timed out after 1:00:20 while installing and verifying its packages, leaving prepare job
+**32492585** in `DependencyNeverSatisfied` and the response and finalize jobs pending on
+dependencies that could never pass. After a bounded local fallback was established, the
+three dependent Alpine jobs were cancelled to prevent duplicate execution.
+
+The local fallback completed charge/bonded-basis preparation and all five OpenMM response
+sets. Its first finalize attempt exposed an avoidable allocation in the identifiability
+diagnostic: a full left singular-vector matrix was requested for the 17,982 by 120 tall
+design even though only the complete 120 by 120 right basis is used. The diagnostic now
+requests a full SVD only for wide matrices, preserving exact parameter-space null vectors
+without allocating the unused tall left basis. The focused identifiability tests pass
+**5/5**. A subsequent preflight also corrected the campaign runner to use the existing
+fixed-QM-improper v3 response-fit policy, which includes the bond basis present in this
+campaign.
+
+The corrected run completed the full-rank response campaign (**rank 120, nullity 0**) and
+evaluated all seven preregistered ridge candidates. The reassessment is unfavorable: zero
+of seven candidates passes the physical CHARMM transform screen. Candidates with ridge
+values through 0.01 produce an invalid equilibrium for
+`angles:CG3C41-NN2B-CN1T`; ridge 1.0 fails at
+`angles:CG3C41-CG3C41-NN2B`; ridge 100.0 fails at
+`bonds:CG331-NN2B`. Automatic continuation therefore stopped. The existing full-rank QM
+responses can be reused, but the bond/angle equilibrium treatment must be revised and
+preregistered before candidate selection, CHARMM mapping, MM-minimum validation, psfgen,
+or staged NAMD smoke testing.
+
+The machine-readable assessment is
+`alpine-qm-primary-syn-anti-fit-v1/local-run-v1/bundle/results/stage_assessment.json`, and
+the fail-closed completion trigger is
+`alpine-qm-primary-syn-anti-fit-v1/local-run-v1/gates/primary_syn_anti_fit.json` in the
+photoproduct evidence archive. Both remain gate-neutral and explicitly report
+`simulation_ready: false`.
+
 ## Verification of this review
 
 Targeted monitor tests exercise input/source corruption, interrupted execution, stage
