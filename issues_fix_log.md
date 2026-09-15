@@ -181,5 +181,8 @@ temperature; the API handoff now applies those fields after the final rebuild,
 with a regression at the molecular-builder boundary. Broader smoke remains red
 on an unrelated mrDNA job-save HTTP 500 race; see `docs/namd_charged_surface.md`.
 
-2026-09-14: [x] ISSUE-29: native-process adoption now requires an actual NAMD
-executable and config argument, preventing adoption of controller shell text.
+2026-09-14: [x] ISSUE-28/29/30: managed CUDA electrode library/restart initialization,
+false native-process adoption and cadence-dependent screening metrics corrected.
+Real Start-API pilot completed at 4 fs; longer runs remain visible under the source
+nadoc. Regression and scientific-analysis tests cover the corrected contracts.
+See docs/namd_electrode_gpu.md and workspace/electrode_gpu_screening_4fs_20260914/.

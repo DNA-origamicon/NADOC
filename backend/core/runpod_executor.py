@@ -359,6 +359,8 @@ async def submit_job(
     after a spot-pod reclaim IS the resume path — no separate resume codepath, unlike
     Alpine (which needs one because SLURM walltimes cut MID-segment).
     """
+    if job.protocol == "gold_qualification_v1":
+        raise ValueError("Gold remote execution requires separate runtime and restart qualification")
     remote = remote_dir_for(job)
     pkg = job.package_dir(workspace_dir)
 

@@ -84,6 +84,12 @@ class RelaxPreset:
 
 
 PRESETS: dict[str, RelaxPreset] = {
+    "electrode": RelaxPreset(
+        id="electrode", label="Electrode relaxation (fixed cell)",
+        summary="Confined solvent equilibration and shared DNA restraint release with fixed electrodes and slab electrostatics. Native qualification in progress.",
+        defaults={"protocol":"electrode_equilibration_namd", "early_stop_relax":True, "fast":False},
+        reference="NADOC fixed-volume electrode protocol; validation required",
+    ),
     FAST_SHAPE: RelaxPreset(
         id=FAST_SHAPE,
         label="Fast Shape Check (Vacuum)",
@@ -250,6 +256,7 @@ PRESET_ORDER = (
     STANDARD,
     LITERATURE,
     FULL_PHYSICS,
+    "electrode",
 )
 
 

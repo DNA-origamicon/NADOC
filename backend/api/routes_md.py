@@ -106,10 +106,13 @@ from backend.core.md_vram import (
     required_vram_mb,
 )
 
+from backend.api.routes_md_electrode import router as electrode_router
+
 logger = logging.getLogger(__name__)
 
 
 router = APIRouter(tags=["md"])
+router.include_router(electrode_router)
 
 # Background preparation tasks, kept referenced so the event loop doesn't GC them
 # mid-run (asyncio only holds weak references to tasks).
@@ -346,14 +349,15 @@ class CreateJobRequest(BaseModel):
         description="Carry a deposited oxDNA surface into this seeded NAMD job as a "
         "graphene-nanopore build descriptor. Requires an oxDNA surface-deposition seed.",
     )
-    graphene_temperature_K: float = Field(298.15, ge=270, le=350, allow_inf_nan=False)
-    graphene_charge_density_C_m2: float = Field(0.0, ge=-0.5, le=0.5, allow_inf_nan=False,
-        description="Total fixed sheet charge per projected cell area; screening control only.")
+    two_electrodes: Optional[dict] = None
     graphene_only: bool = Field(
         False,
         description="Build a membrane/electrolyte control with no DNA. Requires "
         "graphene_nanopore; the pore is centered in an XY sheet at z=0.",
     )
+    graphene_temperature_K: float = Field(298.15, ge=270, le=350, allow_inf_nan=False)
+    graphene_charge_density_C_m2: float = Field(0.0, ge=-0.5, le=0.5, allow_inf_nan=False,
+        description="Total fixed sheet charge per projected cell area; screening control only.")
     graphene_pore_diameter_nm: float = Field(
         2.1, ge=0.0, le=100.0,
         description="Diameter of the aligned graphene aperture in nm.",
@@ -1853,6 +1857,10 @@ def _production_ready_checkpoint(
     manifest_path = package_dir / "manifest.json"
     if not manifest_path.exists():
         return None, None, "manifest.json not found", ""
+    manifest = json.loads(manifest_path.read_text())
+    electrodes = manifest.get("two_electrodes")
+    if electrodes and job.status != MdStatus.completed:
+        return None, None, "Complete electrode equilibration and its solvent/profile checks before production.", ""
     _, specs = segments_from_manifest(manifest_path)
     done = {s.name for s in job.segments if s.status == "done"}
     # LAST sample per segment, not "any sample that passed".  Health is now also sampled
@@ -1880,6 +1888,20 @@ def _production_ready_checkpoint(
         )
         if not has_restart:
             continue
+        if electrodes:
+            if "production" in spec.stage.lower() or "prod" in spec.name.lower():
+                continue
+            report_path = output / f"{spec.name}.electrode-health.json"
+            try:
+                electrode_report = json.loads(report_path.read_text())
+            except (OSError, ValueError):
+                electrode_report = {}
+            if not electrode_report.get("passed"):
+                return None, None, "Electrode checkpoint has no passing solvent/profile validation; extend equilibration before production.", ""
+            if electrodes.get("dna_atoms") == 0:
+                # Legacy solvent-only manifests inherited an ENM scale despite
+                # having no DNA restraints. Electrode evidence is their gate.
+                return idx, spec, "", ""
         stage_l = spec.stage.lower()
         name_l = spec.name.lower()
         if spec.scale is not None:
@@ -2831,6 +2853,12 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     # Preset supplies defaults for anything the caller did not set explicitly.
     body = _apply_relax_preset(body)
 
+    if body.two_electrodes:
+        from backend.core.namd_two_electrode_package import electrode_layout
+        try: electrode_layout(body.two_electrodes)
+        except (ValueError, KeyError, TypeError) as exc: raise HTTPException(400, f"Invalid two-electrode settings: {exc}") from exc
+    if body.protocol == "electrode_equilibration_namd" and not body.two_electrodes:
+        raise HTTPException(400, "Enable and configure Two-electrode system before choosing the electrode protocol.")
     if body.protocol not in SUPPORTED_PROTOCOLS:
         raise HTTPException(400, f"Unknown protocol: {body.protocol!r}")
     if body.salt_mode not in {"screening", "custom"}:
@@ -2963,7 +2991,7 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         # boundary: it re-reads the live design and prepares from the now-current
         # sequence, so exact atom count, storage/throughput projections and every other
         # package consumer all see the updated topology before NAMD can start.
-        if not body.graphene_only and _sequence_problem(design):
+        if not body.graphene_only and not (body.two_electrodes and not design.strands) and _sequence_problem(design):
             job = _spawn_draft_job(body, name=name)
             job.awaiting_sequence = True
             job.save(_workspace())
@@ -4189,7 +4217,7 @@ async def _prepare_job_bg(
                 vac.n_atoms,
             )
 
-        if _sequenced_base_count(local_design) == 0 and not body.graphene_only:
+        if _sequenced_base_count(local_design) == 0 and not body.graphene_only and not body.two_electrodes:
             raise RuntimeError(_NO_SEQUENCE_MSG)
 
         # Persist the EXACT design this run is prepared from + its out-of-date
@@ -4206,7 +4234,10 @@ async def _prepare_job_bg(
         job.feature_log_position = effective_feature_log_position(local_design)
         job.save(ws)
 
-        if body.protocol == IMPLICIT_GBIS_PROTOCOL:
+        if body.protocol == "electrode_equilibration_namd":
+            from backend.core.namd_electrode_protocol import prepare_electrode_namd
+            prepare = prepare_electrode_namd
+        elif body.protocol == IMPLICIT_GBIS_PROTOCOL:
             from backend.core.namd_gbis import prepare_implicit_gbis_namd  # noqa: PLC0415
 
             prepare = prepare_implicit_gbis_namd
@@ -4241,6 +4272,9 @@ async def _prepare_job_bg(
         # False).  GBIS is rejected up front for both seeds, so it never reaches here with
         # solute_coords.
         seed_kwargs: dict = {}
+        if body.protocol == "electrode_equilibration_namd":
+            seed_kwargs["two_electrodes"] = body.two_electrodes
+            seed_kwargs["electrode_temperature_K"] = body.graphene_temperature_K
         if seed_solute_coords is not None:
             seed_kwargs["solute_coords"] = seed_solute_coords
             if body.protocol != EQUILIBRIUM_AWARE_PROTOCOL:
@@ -5577,6 +5611,8 @@ def _assert_cell_fits_a_free_run(job: MdJob, length_ns: float, *, allow: bool) -
 async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
     """Append a final production stage after the restraint-release ladder passes."""
     job = _load_job(job_id)
+    if job.protocol == "gold_qualification_v1":
+        raise HTTPException(409, "Gold is not physically qualified; use the gold qualification continuation API")
     if is_running(job_id) or job.status in (MdStatus.running, MdStatus.preparing):
         raise HTTPException(400, "Cannot append production while the job is running")
     _assert_md_job_current(job)
@@ -6135,6 +6171,8 @@ async def _spawn_md_production_impl(
     body = _apply_runpod_gpu_resident_default(body)
 
     parent = _load_job(parent_id)
+    if parent.protocol == "gold_qualification_v1":
+        raise HTTPException(409, "Gold is not physically qualified; use the gold qualification continuation API")
     if is_running(parent_id) or parent.status != MdStatus.completed:
         raise HTTPException(
             400,
@@ -6864,6 +6902,8 @@ async def update_md_job_settings(job_id: str, body: dict) -> dict:
     from backend.core import md_queue
 
     job = _load_job(job_id)
+    if job.protocol == "gold_qualification_v1":
+        raise HTTPException(409, "Create a new gold qualification to change its material or preparation settings")
     if not _job_settings_editable(job):
         raise HTTPException(
             409,
@@ -7224,6 +7264,8 @@ async def roll_md_job_design(job_id: str) -> dict:
 async def start_md_job(job_id: str) -> dict:
     """Start or resume a queued/stopped/failed job."""
     job = _load_job(job_id)
+    if job.protocol == "gold_qualification_v1" and job.execution_target != "local":
+        raise HTTPException(409, "Gold remote qualification is pending; no remote resources may be allocated for this job")
     if job.restart_snapshot:
         raise HTTPException(409, "Preserved attempts are read-only; use the active job")
 
@@ -7827,6 +7869,13 @@ def _fix_advice(job: MdJob) -> dict:
         }
     out["failure_kind"] = kind
     out["remedy"] = _REMEDY_BY_KIND.get(kind, "none")
+    if kind == "electrode_equilibration":
+        from backend.core.namd_electrode_continue import can_extend
+        try:
+            report=json.loads((job.package_dir(_workspace())/'output'/f'{job.segments[-1].name}.electrode-health.json').read_text())
+        except (OSError,ValueError,IndexError):
+            report={}
+        out["remedy"] = "extend_equilibration" if can_extend(report) else "none"
     out["log_excerpt"] = _failed_log_excerpt(job)
     return out
 

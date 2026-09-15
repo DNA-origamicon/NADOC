@@ -19,6 +19,7 @@ import { initPegCoatingSetup } from './ui/peg_coating_setup.js'
 import { initNamdPegCoating } from './ui/namd_peg_coating.js'
 import { initNamdSetupPresets } from './ui/namd_setup_presets.js'
 import { initPreparationDetails } from './scene/md_preparation_details.js'
+import { initTwoElectrodePreview } from './scene/namd_two_electrode_preview.js'
 import { initNamdPegCoatingPreview } from './scene/namd_peg_coating_preview.js'
 import { initNamdPegReview } from './ui/namd_peg_review.js'
 import { initSectionView } from './scene/section_view.js'
@@ -315,6 +316,7 @@ async function main() {
     setRenderFn, resetRenderFn,
   } = initScene(canvas)
   initNamdPegCoatingPreview({ scene })
+  initTwoElectrodePreview({ scene, camera, controls })
   initNamdPegReview({ scene, camera, controls, store, api })
 
   initSectionView({ scene, camera, renderer, controls, addFrameCallback, removeFrameCallback, getRenderCamera,

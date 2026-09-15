@@ -2647,3 +2647,10 @@ describe('a rented run stays visible while it provisions', () => {
     })).toBe('disarm')
   })
 })
+
+it('primary NAMD run control offers electrode continuation instead of replaying finished chunks', () => {
+  const rc = mdRunControl({job_id:'control',status:'failed',failure_kind:'electrode_equilibration'})
+  expect(rc.label).toBe('Continue equilibration…')
+  expect(rc.disabled).toBe(false)
+  expect(mdRunControl({status:'failed',failure_kind:'electrode_equilibration'},{busy:true}).disabled).toBe(true)
+})

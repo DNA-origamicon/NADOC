@@ -12,8 +12,8 @@ test('surface options use matching collapsed Settings sections with no orphan pa
  await page.click('.engine-selector-btn[data-engine="namd"]')
  await page.click('#md-surface-toggle')
  const card=page.locator('#md-surface-body')
- for(const label of ['Hard surface on','Add surface charge','Graphene nanopore','PEG coating'])await expect(card.getByLabel(label,{exact:true})).toBeVisible()
- for(const section of ['hard-surface','screening','nanopore','peg']){
+ for(const label of ['Hard surface on','Add surface charge','Graphene nanopore','PEG coating','Two-electrode system'])await expect(card.getByLabel(label,{exact:true})).toBeVisible()
+ for(const section of ['hard-surface','screening','nanopore','peg','two-electrodes']){
   const details=card.locator(`#md-${section}-settings`)
   await expect(details).not.toHaveAttribute('open','')
   await expect(details.locator('summary')).toHaveText('Settings')
@@ -22,10 +22,11 @@ test('surface options use matching collapsed Settings sections with no orphan pa
  expect(await card.locator('input[type=number],select').evaluateAll(nodes=>nodes.every(n=>n.closest('details.namd-surface-settings')))).toBe(true)
  await page.screenshot({path:info.outputPath('surface-sections-collapsed.png')})
  await card.getByLabel('Hard surface on',{exact:true}).check()
- for(const section of ['hard-surface','screening','nanopore','peg'])await card.locator(`#md-${section}-settings > summary`).click()
+ for(const section of ['hard-surface','screening','nanopore','peg','two-electrodes'])await card.locator(`#md-${section}-settings > summary`).click()
  const mapping={
   'hard-surface':['md-surface-axis','md-surface-offset','md-surface-dna-clearance','md-surface-water-clearance','md-surface-sheet-margin','md-graphene-representation'],
   screening:['md-screening-charge'],
+  'two-electrodes':['md-two-electrodes-model','md-two-electrodes-axis','md-two-electrodes-gap','md-two-electrodes-width','md-two-electrodes-depth','md-two-electrodes-charge'],
   peg:['md-peg-shape','md-peg-size_nm','md-peg-density_per_nm2','md-peg-repeat_units'],
   nanopore:['md-surface-material','md-surface-pore-diameter','md-surface-layers','md-surface-layer-spacing'],
  }
@@ -36,7 +37,7 @@ test('surface options use matching collapsed Settings sections with no orphan pa
  expect(overflow).toEqual([])
  expect(await page.evaluate(()=>!!window.__nadocScene.getObjectByName('Graphene nanopore preview')?.visible)).toBe(false)
  await expect(card.locator('[data-remove-coating]')).not.toBeVisible()
- for(const section of ['hard-surface','screening','nanopore','peg']){
+ for(const section of ['hard-surface','screening','nanopore','peg','two-electrodes']){
   await card.locator('details').evaluateAll((nodes,selected)=>{for(const n of nodes)n.open=n.id===`md-${selected}-settings`},section)
   await card.screenshot({path:info.outputPath(`surface-settings-${section}.png`)})
  }
@@ -44,3 +45,46 @@ test('surface options use matching collapsed Settings sections with no orphan pa
 })
 
 // Only __e2e__ document persistence; no job requests or preset writes.
+test('two electrodes exclude old surfaces, expose the opposite charge and default the wizard to electrode relaxation',async({page},info)=>{
+ await page.goto('/')
+ await page.locator('#menu-file-new').evaluate(el=>el.click())
+ await page.fill('#new-design-name','__e2e__two-electrodes')
+ await page.getByRole('button',{name:'Create',exact:true}).click()
+ await page.locator('.left-tab-btn[data-tab="dynamics"]').click()
+ if(await page.locator('#simulate-body').evaluate(el=>getComputedStyle(el).display==='none'))await page.click('#simulate-heading')
+ await page.click('.engine-selector-btn[data-engine="namd"]')
+ await page.click('#md-surface-toggle')
+ const pair=page.locator('#md-two-electrodes-enable')
+ await page.locator('#md-two-electrodes-settings > summary').click()
+ for(const id of ['md-hard-surface-enable','md-screening-enable','md-surface-enable']){
+  await page.check(`#${id}`);await pair.check()
+  await expect(page.locator(`#${id}`)).not.toBeChecked()
+  await page.check(`#${id}`);await expect(pair).not.toBeChecked()
+ }
+ await pair.check()
+ await page.fill('#md-two-electrodes-gap','15')
+ await page.fill('#md-two-electrodes-charge','0.025')
+ await expect(page.locator('#md-two-electrodes-counter')).toHaveText('-0.0250 C/m²')
+ await expect(page.locator('#md-two-electrodes-settings [role=status]')).toContainText('Electrode relaxation')
+ const posted=[];page.on('request',r=>{if(r.method()==='POST' && /\/md\/jobs(?:\?|$)/.test(r.url()))posted.push(r.url())})
+ await page.click('#md-jobs-new-btn')
+ await expect(page.getByRole('dialog')).toBeVisible()
+ await page.getByRole('tab',{name:/Protocol & settings/}).click()
+ await expect(page.getByRole('dialog')).toContainText('Electrode relaxation')
+ await page.keyboard.press('Escape')
+ expect(posted).toEqual([])
+ expect(await page.evaluate(()=>!!window.__nadocScene.getObjectByName('Graphene nanopore preview')?.visible)).toBe(false)
+ const preview=await page.evaluate(()=>{
+  const group=window.__nadocScene.getObjectByName('NAMD two-electrode setup preview')
+  return {visible:group?.visible,faces:group?.children.filter(c=>c.isMesh).length,
+   signs:group?.children.filter(c=>c.userData.chargeSign).map(c=>({sign:c.userData.chargeSign,y:c.position.y}))}
+ })
+ expect(preview.visible).toBe(true);expect(preview.faces).toBe(2);expect(preview.signs).toHaveLength(32)
+ for(const glyph of preview.signs){expect(Math.abs(glyph.y)).toBeGreaterThan(7.5);expect(Math.sign(glyph.y)).toBe(-glyph.sign)}
+ await page.locator('.toast button').evaluateAll(nodes=>nodes.forEach(n=>n.click()))
+ await page.screenshot({path:info.outputPath('two-electrode-scene.png')})
+ await pair.uncheck()
+ expect(await page.evaluate(()=>window.__nadocScene.getObjectByName('NAMD two-electrode setup preview')?.visible)).toBe(false)
+ await pair.check()
+ await page.locator('#md-surface-body').screenshot({path:info.outputPath('two-electrodes.png')})
+})

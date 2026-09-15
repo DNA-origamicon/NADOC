@@ -49,7 +49,9 @@ PROPAGATOR_REFERENCE_PROTOCOL = "propagator_reference"
 # In-vacuo ENRG-MD shape relaxation — step §3.2 of the Aksimentiev tutorial, which runs
 # BEFORE solvation.  Builder lives in backend.core.namd_vacuum.
 VACUUM_ENRGMD_PROTOCOL = "vacuum_enrgmd_namd"
+ELECTRODE_PROTOCOL = "electrode_equilibration_namd"
 SUPPORTED_PROTOCOLS = {
+    ELECTRODE_PROTOCOL,
     LEGACY_PROTOCOL,
     EQUILIBRIUM_AWARE_PROTOCOL,
     IMPLICIT_GBIS_PROTOCOL,
@@ -3322,6 +3324,7 @@ def mgh_slow_release_segments(
     soft: bool = False,
     gentle: bool = False,
     nvt_only: bool = False,
+    fixed_cell_settle: bool = False,
     timestep_fs: float = 2.0,
     chunk_pcts=LADDER_CHUNK_PCTS,
     settle_ps: float = SETTLE_STAGE_PS,
@@ -3407,7 +3410,7 @@ def mgh_slow_release_segments(
     #
     # Skipped for a carved cell: there the barostat is off throughout (vacuum corners),
     # so there is no box for this stage to settle.
-    if settle_ps > 0 and not nvt_only:
+    if settle_ps > 0 and (not nvt_only or fixed_cell_settle):
         settle_dt = min(1.0, sizing_dt) if high_aspect_ratio else sizing_dt
         settle_steps = _round_up_to_cycle(
             max(100, int(round(settle_ps * 1000.0 / settle_dt)))
@@ -3424,7 +3427,7 @@ def mgh_slow_release_segments(
         segments.append(
             SegmentSpec(
                 name=seg_name,
-                stage="300K NPT settle (DNA restrained)",
+                stage="300K NVT solvent settle (DNA restrained)" if nvt_only else "300K NPT settle (DNA restrained)",
                 percent=100.0,
                 steps=settle_steps,
                 temp=300.0,
@@ -3432,7 +3435,7 @@ def mgh_slow_release_segments(
                 # Not the ENM: this is the position restraint that holds the solute still.
                 # `extra_bonds_file=None` leaves the constraints channel free for it.
                 scale=SETTLE_RESTRAINT_K,
-                npt=True,
+                npt=not nvt_only,
                 previous=previous,
                 reinit=False,
                 dcd_freq=_display_dcd_freq(settle_steps),
@@ -3608,6 +3611,9 @@ def prepare_mgh_slow_release(
     stage_overrides: Optional[dict] = None,
     graphene_nanopore: Optional[dict] = None,
     graphene_only: bool = False,
+    fixed_cell: bool = False,
+    target_temperature_K: Optional[float] = None,
+    package_builder=None,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -3723,7 +3729,7 @@ def prepare_mgh_slow_release(
     # gets what it needs.
     minimize_steps = _round_up_to_cycle(minimize_steps)
 
-    zip_bytes = build_namd_solvated_package(
+    zip_bytes = (package_builder or build_namd_solvated_package)(
         design,
         padding_nm=padding_nm,
         ion_conc_mM=ion_conc_mM,
@@ -4001,7 +4007,8 @@ def prepare_mgh_slow_release(
         gentle=gentle_ladder,
         # Fixed Cartesian wall restraints require a fixed cell so periodic seams
         # cannot reopen. Solvent density must be validated before transport.
-        nvt_only=bool(graphene_nanopore),
+        nvt_only=bool(graphene_nanopore) or fixed_cell,
+        fixed_cell_settle=fixed_cell and not graphene_only,
         timestep_fs=ladder_dt,
         high_aspect_ratio=high_aspect_ratio,
     )
@@ -4014,6 +4021,14 @@ def prepare_mgh_slow_release(
         for control_segment in segments:
             control_segment.temp = float((graphene_nanopore or {}).get("temperature_K", 300.0))
             control_segment.stage = f"{control_segment.temp:g} K NVT graphene/solvent equilibration"
+            if protocol == ELECTRODE_PROTOCOL:
+                control_segment.scale = None
+                control_segment.stage = f"{control_segment.temp:g} K NVT electrode/solvent equilibration"
+
+    if target_temperature_K is not None:
+        for segment in segments:
+            segment.temp = target_temperature_K
+            segment.stage = segment.stage.replace("300K", f"{target_temperature_K:g}K").replace("300 K", f"{target_temperature_K:g} K")
 
     # The HMR PSF enters at the first hard, rigid-bond segment; minimisation and
     # the soft strain-relief first segment keep the unmodified PSF.
@@ -4190,7 +4205,7 @@ def prepare_mgh_slow_release(
             "padding_nm": float(padding_nm),
             "requested_box_size_nm": box_size_nm,
             "carved": False,
-            "npt_allowed": not bool(graphene_nanopore),
+            "npt_allowed": not (bool(graphene_nanopore) or fixed_cell),
             # Unrestrained ns the cell was sized for.  A production child re-uses this
             # cell verbatim, so this is the record of the decision every descendant
             # inherits — without it, a package that cannot host a long free run is
@@ -4351,7 +4366,7 @@ def prepare_mgh_slow_release(
             "stage_length_steps": 2_400_000,
             "stage_length_ns_at_2fs": 4.8,
             "timestep_fs": 4.0 if fast else 2.0,
-            "temperature_k": float((graphene_nanopore or {}).get("temperature_K", 300.0)),
+            "temperature_k": target_temperature_K if target_temperature_K is not None else float((graphene_nanopore or {}).get("temperature_K", 300.0)),
             "langevin_damping_ps_inv": 5.0,
             "pme_grid_spacing_ang": PME_GRID_SPACING,
             "switch_cut_pairlist_ang": [

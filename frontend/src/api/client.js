@@ -3416,6 +3416,7 @@ export const spawnMdProduction   = (id, body)    => _oxdnaJSON('POST',   `/md/jo
  *  so relax + production become separate entries. */
 export const revertMdProduction  = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/revert-production`)
 export const refitMdJob          = (id, body)    => _oxdnaJSON('POST',   `/md/jobs/${id}/refit`, body)
+export const extendElectrodeEquilibration = (id, body) => _oxdnaJSON('POST', `/md/jobs/${id}/extend-electrode-equilibration`, body)
 /** Resolve a paused job's GPU-resident fallback decision (Gate B). choice: "offload"
  *  (run the slower GPU mode, then resume) or "cancel" (stop the job). */
 export const resolveMdGpuDecision = (id, choice)  => _oxdnaJSON('POST',   `/md/jobs/${id}/gpu-decision`, { choice })

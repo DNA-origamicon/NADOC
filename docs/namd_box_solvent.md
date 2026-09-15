@@ -14,11 +14,19 @@ Production retains the prepared source job's box, solvent and protocol behavior.
 
 - Cell outline with X/Y/Z dimension labels.
 - Cyan water-margin slabs around a structure, or a solvent-volume highlight for
-  an empty system.
+  an empty system; paired surfaces also show the separate liquid compartment.
 - Salt, approximate bulk ion counts and temperature callout. Counts use liquid
   volume and salt stoichiometry; excluded molecular volume and neutralizing
   counterions are resolved during preparation.
-- Faint blue periodic faces.
+- Faint blue periodic faces. For the two-electrode setup, amber normal faces
+  identify the slab-corrected periodic direction with vacuum padding. They do
+  not represent open/nonperiodic boundaries.
+
+The two-electrode card owns its gap and lateral dimensions; Box and solvent shows
+its derived simulation cell with 3× normal padding. Salt counts exclude this
+vacuum. Two-electrode jobs now select the experimental Electrode relaxation protocol;
+see `namd_electrode_protocol.md`. Native qualification remains pending, and this
+overlay does not imply completed validation.
 
 The live relaxation wizard summarizes these settings and uses the same values
 when creating the job, rather than providing competing preparation controls.
@@ -35,7 +43,8 @@ document is opened.
 
 - `just test-frontend`: 6,399 passed (428 files).
 - Focused browser checks: all five box/charged-wall/preset/surface tests passed;
-  the final annotation revision passed its separate visual rerun. Ordinary-box screenshots were inspected and removed after review.
+  the final annotation revision passed its separate visual rerun. Ordinary and
+  slab screenshots were inspected and removed after review.
 - `just smoke`: 23 passed.
 - `just test-smart`: FAST; 8,321 passed, 110 skipped, nine pre-existing failures
   involving absent BigO/smallO workspace fixtures. Slow/full work remains deferred
@@ -50,3 +59,8 @@ scale) on offset dimension lines with extension lines to the measured cell edges
 to the liquid compartment with horizontal/vertical and 45-degree screen-space
 leader segments that update when the camera orbits. Labels describe the padded cell;
 the green liquid outline distinguishes the solvent volume.
+
+The user-provided `2electrode_solvent_only.nadoc` workflow was checked in Playwright
+at 300 mM NaCl and 300 K. Persistent prepared job `8395d215579b` and its qualification
+record are described in `workspace/2electrode_solvent_only_validation/README.md`.
+Native dynamics remain pending a user-opened test session.

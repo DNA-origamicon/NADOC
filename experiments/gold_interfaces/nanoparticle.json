@@ -1,0 +1,8 @@
+{
+  "geometry": {"kind": "nanoparticle", "radius_nm": 0.85, "solvent_padding_nm": 1.5},
+  "mobility": "restrained",
+  "restraint_k": 10.0,
+  "salt_mM": 150.0,
+  "temperature_K": 298.15,
+  "seed": 17
+}

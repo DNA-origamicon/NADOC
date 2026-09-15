@@ -36,6 +36,7 @@ def test_presets_are_listed_cheapest_first():
         STANDARD,
         LITERATURE,
         FULL_PHYSICS,
+        "electrode",
     )
     assert set(PRESETS) == set(PRESET_ORDER)
 

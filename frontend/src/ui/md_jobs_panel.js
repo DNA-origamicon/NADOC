@@ -1,3 +1,4 @@
+import {confirmElectrodeProtocol} from './namd_electrode_protocol.js'
 import { initBoxSolvent } from './md_box_solvent.js'
 import { initNamdSurfaceCard } from './namd_surface_card.js'
 import { initNamdSurfaceCharge } from './namd_surface_charge.js'
@@ -515,6 +516,10 @@ export function mdRunControl(selectedJob, {
   }
   if (selectedJob.restart_snapshot) return { action: RUN_ACTION.RUN, label: 'Preserved attempt', disabled: true,
     title: 'This entry holds the interrupted trajectory. The linked active job owns the Alpine allocation.' }
+  if (selectedJob.status === 'failed' && selectedJob.failure_kind === 'electrode_equilibration') {
+    return {action: RUN_ACTION.RESUME, label: 'Continue equilibration…', disabled: busy,
+      title: 'Review the electrode checks and continue from the saved checkpoint.'}
+  }
   if (selectedJob.awaiting_sequence) {
     return {
       action: RUN_ACTION.RUN, label: '▶ Run', disabled: busy,
@@ -3833,7 +3838,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
   function _queueSelected(btn = runBtn) {
     return runExclusive(btn, async () => {
-      if (!_selectedId) return
+      if (!_selectedId || !_confirmElectrodeProtocol()) return
       const res = await api.enqueueMdJob(_selectedId)
       if (!res) { showToast(`Could not queue: ${api.lastErrorMessage() ?? 'Server error'}`, 'error'); return }
       _applyQueue(res)
@@ -3887,11 +3892,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       .filter(Boolean).join(' + ')
   }
 
+  const _confirmElectrodeProtocol = () => confirmElectrodeProtocol({enabled:!!surfaceCard.electrodePayload(),job:_selectedJob()})
 
   function _startSelected(btn = runBtn) {
     const runpod = mdRunpodStartable(_selectedJob())
     return runExclusive(btn, async () => {
-      if (!_selectedId) return
+      if (!_selectedId || !_confirmElectrodeProtocol()) return
       const awaitingSequence = !!_selectedJob()?.awaiting_sequence
       // The concurrency confirm is about THIS machine's single GPU. A rented pod is a
       // different computer, so asking "another job is already running here, continue?"
@@ -3922,7 +3928,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   function _resumeSelected(btn = runBtn) {
     return runExclusive(btn, async () => {
-      if (!_selectedId) return
+      if (!_selectedId || !_confirmElectrodeProtocol()) return
       // Resuming a GPU-decision job: reassess if the design changed (roll back / rebuild
       // via the shared stale-guard), and clear the dismiss so the gate re-appears. If
       // nothing changed, the resume re-hits the cached probe → the same gate pops.
@@ -3953,6 +3959,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   runBtn?.addEventListener('click', () => {
     const sel = _selectedJob()
     if (!sel) return
+    if (sel.status === 'failed' && sel.failure_kind === 'electrode_equilibration') return _openVramFix(sel.job_id)
     const act = runBtn.dataset.runAction
     if (act === RUN_ACTION.STOP) return _stopSelected(runBtn)
     if (act === RUN_ACTION.RESUME) {
@@ -3998,7 +4005,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // by hand and then finding it again in a picker that had silently defaulted to the
   // newest one instead.
   newBtn?.addEventListener('click', () => {
-    try { boxSolvent?.payload() } catch (error) { showToast(error.message, 'error'); return }
+    try { surfaceCard.assertReady(); boxSolvent?.payload() } catch (error) { showToast(error.message, 'error'); return }
     const sel = _selectedJob()
     if (isProductionParent(sel)) {
       return void _wizard.open('production', { parentJobId: sel.job_id })
@@ -4017,6 +4024,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    * so it asks rather than making the user hand-craft a request.
    */
   async function _spawnProductionFromWizard(parentId, body) {
+    try { surfaceCard.assertReady() } catch (error) { showToast(error.message, 'error'); return null }
     if (!parentId) return null
     const parent = _jobs.find(j => j.job_id === parentId)
 
@@ -4169,6 +4177,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   })
 
   function _physicalRelaxPayload() {
+    surfaceCard.assertReady()
     const anchors = _anchorsCard?.getAnchors?.() ?? []
     const surfaceAnchors = _surfaceAnchorsCard?.getAnchors?.() ?? []
     const fieldSpec = _efieldCard?.getFieldSpec?.()
@@ -4195,6 +4204,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }),
       ...screeningCard.payload(),
       ...boxSolvent?.payload(),
+      two_electrodes: surfaceCard.electrodePayload(),
     }
   }
 
@@ -4595,6 +4605,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     openVramFixModal({
       advice,
       onApply: async (action) => {
+        if (action.type === 'extend_equilibration') {
+          const extended = await api.extendElectrodeEquilibration(jobId, {duration_ns: 2.4})
+          if (!extended) throw new Error(api.lastErrorMessage() ?? 'Could not extend equilibration')
+          const started = await api.startMdJob(jobId)
+          if (!started) throw new Error(api.lastErrorMessage() ?? 'Extension queued; start it from the job list')
+          await _fetchJobs()
+          _reselectJob(jobId)
+          return
+        }
         if (action.type === 'retry') {
           const d = await api.startMdJob(jobId)
           if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')

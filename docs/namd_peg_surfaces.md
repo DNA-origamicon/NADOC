@@ -134,9 +134,10 @@ The broader smoke run passed 22 tests and failed one assembly-exit console check
 
 ## Surface selection and settings sections (2026-09-13)
 
-The NAMD card has four matching toggle rows: **Hard surface on**, **Add surface
-charge**, **Graphene nanopore**, and **PEG coating**.
-Each has a collapsed **Settings** disclosure.
+The NAMD card has five matching toggle rows: **Hard surface on**, **Add surface
+charge**, **Graphene nanopore**, **Two-electrode system**, and **PEG coating**.
+The two-electrode setup is mutually exclusive with the single-support modes; see
+[two-electrode scope and barriers](namd_two_electrodes.md). Each has a collapsed **Settings** disclosure.
 Hard surface owns placement, clearances, margin and representation; charge owns
 density and reservoir depth; nanopore owns pore/material/layer fields; PEG owns
 coating layout, representation, chain length and chemistry notes.

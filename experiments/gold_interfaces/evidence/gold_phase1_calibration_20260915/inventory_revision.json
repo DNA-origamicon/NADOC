@@ -1,0 +1,86 @@
+{
+  "slab": {
+    "bulk_density_reference": 33.76000592463925,
+    "target_water": 2028,
+    "operational_layer_boundaries_nm": [
+      0.6,
+      0.65,
+      0.8
+    ],
+    "pilots": [
+      {
+        "seed": 317,
+        "initial_water": 1775,
+        "initial_density": 26.893564882911896,
+        "response_volumes_nm3": [
+          37.3338406532561,
+          35.259738394741866,
+          29.037431619199182
+        ],
+        "target_water_sensitivity": [
+          2031.3506157068268,
+          2017.1089148342253,
+          1974.383812216421
+        ]
+      },
+      {
+        "seed": 719,
+        "initial_water": 1768,
+        "initial_density": 26.084540109273927,
+        "response_volumes_nm3": [
+          37.3338406532561,
+          35.259738394741866,
+          29.037431619199182
+        ],
+        "target_water_sensitivity": [
+          2054.5546176903636,
+          2038.6349167075655,
+          1990.8758137591715
+        ]
+      }
+    ],
+    "note": "Mass-balance first update assuming adsorbed inventory changes little; validated by new independent NVT runs"
+  },
+  "nanoparticle": {
+    "bulk_density_reference": 33.76000592463925,
+    "target_water": 3431,
+    "operational_layer_boundaries_nm": [
+      0.6,
+      0.65,
+      0.8
+    ],
+    "pilots": [
+      {
+        "seed": 317,
+        "initial_water": 3357,
+        "initial_density": 32.97443771112128,
+        "response_volumes_nm3": [
+          91.05294946193311,
+          89.68583305884596,
+          85.00643080132396
+        ],
+        "target_water_sensitivity": [
+          3428.5283028443528,
+          3427.4543396539084,
+          3423.778349982135
+        ]
+      },
+      {
+        "seed": 719,
+        "initial_water": 3362,
+        "initial_density": 32.95216739371291,
+        "response_volumes_nm3": [
+          91.05294946193311,
+          89.68583305884596,
+          85.00643080132396
+        ],
+        "target_water_sensitivity": [
+          3435.556080929838,
+          3434.451671623163,
+          3430.6714701778333
+        ]
+      }
+    ],
+    "note": "Mass-balance first update assuming adsorbed inventory changes little; validated by new independent NVT runs"
+  }
+}

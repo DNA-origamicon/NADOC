@@ -1,0 +1,56 @@
+{
+  "particle_2.0": {
+    "duration_ps": 4.0,
+    "energy_std_kcal_mol": 0.4308912576994247,
+    "energy_range_kcal_mol": 2.858725899102865,
+    "slope_kcal_mol_ps": -0.0033167876080484556,
+    "detrended_std_kcal_mol": 0.4308758801102262,
+    "initial_energy_kcal_mol": -32081.1262904807,
+    "final_energy_kcal_mol": -32081.3723631321
+  },
+  "particle_1.0": {
+    "duration_ps": 4.0,
+    "energy_std_kcal_mol": 0.112710383803322,
+    "energy_range_kcal_mol": 0.8013081925018923,
+    "slope_kcal_mol_ps": 0.0008068662316761632,
+    "detrended_std_kcal_mol": 0.11270690659831,
+    "initial_energy_kcal_mol": -32081.1671843971,
+    "final_energy_kcal_mol": -32081.3141565564
+  },
+  "particle_0.5": {
+    "duration_ps": 4.0,
+    "energy_std_kcal_mol": 0.04491045095046123,
+    "energy_range_kcal_mol": 0.29901315410097595,
+    "slope_kcal_mol_ps": 0.008342234457430514,
+    "detrended_std_kcal_mol": 0.043967978571434724,
+    "initial_energy_kcal_mol": -32081.1697291669,
+    "final_energy_kcal_mol": -32081.1475692843
+  },
+  "slab_2.0": {
+    "duration_ps": 4.0,
+    "energy_std_kcal_mol": 0.31707325194483926,
+    "energy_range_kcal_mol": 1.969711392899626,
+    "slope_kcal_mol_ps": -0.022671532686027816,
+    "detrended_std_kcal_mol": 0.31609537268428123,
+    "initial_energy_kcal_mol": -126055.9089146035,
+    "final_energy_kcal_mol": -126055.6874049011
+  },
+  "slab_1.0": {
+    "duration_ps": 4.0,
+    "energy_std_kcal_mol": 0.07963394760908446,
+    "energy_range_kcal_mol": 0.6105181274033384,
+    "slope_kcal_mol_ps": 0.01388499169911545,
+    "detrended_std_kcal_mol": 0.07816296612429466,
+    "initial_energy_kcal_mol": -126055.9361668168,
+    "final_energy_kcal_mol": -126055.8919668074
+  },
+  "slab_0.5": {
+    "duration_ps": 4.0,
+    "energy_std_kcal_mol": 0.0348956973688474,
+    "energy_range_kcal_mol": 0.26200972199148964,
+    "slope_kcal_mol_ps": 0.005981582654197963,
+    "detrended_std_kcal_mol": 0.03427307841031085,
+    "initial_energy_kcal_mol": -126055.9378723425,
+    "final_energy_kcal_mol": -126055.9435111169
+  }
+}

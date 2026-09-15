@@ -626,6 +626,7 @@ def relaxation_stages(
     soft: bool = False,
     gentle: bool = False,
     nvt_only: bool = False,
+    fixed_cell_settle: bool = False,
     timestep_fs: Optional[float] = None,
     stage_overrides: Optional[dict] = None,
     high_aspect_ratio: bool = False,
@@ -648,6 +649,7 @@ def relaxation_stages(
         soft=soft,
         gentle=gentle,
         nvt_only=nvt_only,
+        fixed_cell_settle=fixed_cell_settle,
         timestep_fs=ladder_dt,
         high_aspect_ratio=high_aspect_ratio,
     )

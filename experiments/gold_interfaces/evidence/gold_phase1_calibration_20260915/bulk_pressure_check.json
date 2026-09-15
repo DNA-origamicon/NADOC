@@ -1,0 +1,38 @@
+{
+  "317": {
+    "target_pressure_bar": 1.01325,
+    "late_group_pressure_mean_bar": -35.327554000000006,
+    "pressure_blocks": {
+      "block_ps": 20,
+      "block_means": [
+        14.892829999999995,
+        94.38923,
+        -113.84679000000001,
+        -65.77985,
+        -106.29319000000001
+      ],
+      "mean": -35.327554000000006,
+      "conditional_95_halfwidth": 110.14697902293024,
+      "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+    },
+    "late_native_temperature_K": 298.207933
+  },
+  "719": {
+    "target_pressure_bar": 1.01325,
+    "late_group_pressure_mean_bar": -35.81979,
+    "pressure_blocks": {
+      "block_ps": 20,
+      "block_means": [
+        -36.585215,
+        13.196185000000003,
+        -68.94191499999998,
+        -24.625570000000007,
+        -62.14243499999999
+      ],
+      "mean": -35.81979,
+      "conditional_95_halfwidth": 40.797775582459806,
+      "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+    },
+    "late_native_temperature_K": 298.04275
+  }
+}

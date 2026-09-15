@@ -158,3 +158,13 @@ describe('openVramFixModal (DOM)', () => {
     expect(labels.some(t => /Re-run|Retry/.test(t))).toBe(false)
   })
 })
+
+it('offers checkpoint continuation only for extendable electrode convergence failures', () => {
+  const advice = {failure_kind:'electrode_equilibration',remedy:'extend_equilibration',error:'Cl profile drift 0.23 exceeds 0.10'}
+  const message = fixMessage(advice)
+  expect(message.canApply).toBe(true)
+  expect(message.action.type).toBe('extend_equilibration')
+  expect(message.applyLabel).toContain('2.4 ns')
+  expect(message.lines[0]).toContain('Cl profile drift')
+  expect(fixMessage({...advice,remedy:'none'}).canApply).toBe(false)
+})

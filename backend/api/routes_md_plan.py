@@ -275,6 +275,7 @@ def _design_flags(*, padding_nm: float = 1.2) -> dict:
             aspect_ratio = max(box_extents) / min(box_extents)
         return {
             "known": True,
+            "has_dna": bool(design.strands),
             "extra_bases": bool(_p.design_has_extra_bases(design)),
             "extra_base_declash": bool(_p.design_requires_extra_base_declash(design)),
             "extensions": bool(_p.design_has_extensions(design)),
@@ -356,13 +357,37 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             ctx,
             soft=force_soft,
             gentle=gentle_ladder,
-            nvt_only=carved or wall,
+            nvt_only=carved or wall or bool(resolved.two_electrodes),
+            fixed_cell_settle=resolved.protocol == "electrode_equilibration_namd" and flags.get("has_dna",False),
             timestep_fs=ladder_dt,
             stage_overrides=body.stage_overrides or None,
             high_aspect_ratio=high_aspect_ratio,
         )
     except ValueError as exc:  # a protected directive — say which, do not 500
         raise HTTPException(400, str(exc)) from exc
+    if resolved.protocol == "electrode_equilibration_namd":
+        from backend.core.namd_electrode_protocol import electrode_force_block
+        forces = md_plan.parse_conf_directives(electrode_force_block())
+        if flags.get("known") and not flags.get("has_dna", True) and len(stages)>1:
+            first = stages[1]["stage"]
+            stages = [row for row in stages if row["role"]=="minimization" or row["stage"]==first]
+        for row in stages:
+            row["params"].update(forces)
+            if row["role"]!="minimization":
+                row["params"]["langevintemp"]=str(resolved.graphene_temperature_K)
+                row["stage"]=row["stage"].replace("300K",f"{resolved.graphene_temperature_K:g}K")
+            if resolved.two_electrodes and resolved.two_electrodes.get("peg_coating",{}).get("enabled"):
+                row["params"].setdefault("parameters",[]).append("forcefield/par_all35_ethers.prm")
+    if resolved.protocol == "electrode_equilibration_namd":
+        from backend.core.namd_electrode_reference import reference_conf
+        reference_stages=[]
+        for stem,label,steps,dt,ns in [('bulk_min','Separate bulk electrolyte: minimization',4800,1.,0.),('bulk_heat','Separate bulk electrolyte: 25 ps NVT',12500,2.,.025),('bulk','Separate bulk electrolyte: 500 ps NPT',250000,2.,.5)]:
+            reference_stages.append({"index":0,"name":stem,"stage":label,"role":"calibration",
+                "accepts_overrides":False,"steps":steps,"timestep_fs":dt,"ns":ns,"percent":100.,
+                "params":md_plan.parse_conf_directives(reference_conf(resolved.graphene_temperature_K,resolved.seed or 42,stage=stem,salt_mM=resolved.ion_conc_mM,mg_mM=resolved.mg_conc_mM)),
+                "diff_vs_previous":{},"conditional_params":{},"overridden":{}})
+        stages[:0]=reference_stages
+        for index,row in enumerate(stages):row["index"]=index
     conditions = md_plan.protocol_conditions(
         carved=carved,
         gbis=gbis,

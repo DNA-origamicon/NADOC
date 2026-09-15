@@ -648,7 +648,8 @@ def _write_resume_conf(
         # stepspercycle), so the remainder stays cycle-aligned.
         f"run                {int(total_steps) - int(resume_step)}",
     ]
-    (package_dir / f"{resume_base}.conf").write_text("\n".join(kept) + "\n")
+    from backend.core.namd_electrode_gpu import order_initialization
+    (package_dir / f"{resume_base}.conf").write_text(order_initialization("\n".join(kept) + "\n"))
     return resume_base
 
 
@@ -819,8 +820,7 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     ):
         return job
     if not (0 <= job.current_segment_idx < len(job.segments)):
-        job.status = MdStatus.completed
-        job.save(workspace_dir)
+        _finish_job(job, workspace_dir)
         return job
 
     package_dir = job.package_dir(workspace_dir)
@@ -972,8 +972,7 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     active.status = "done"
     job.current_segment_idx += 1
     if job.current_segment_idx >= len(job.segments):
-        job.status = MdStatus.completed
-        job.error = None
+        _finish_job(job, workspace_dir)
     else:
         # Stay running so the supervisor relaunches the next pending segment.
         job.status = MdStatus.running
@@ -1425,6 +1424,8 @@ def downgrade_gpu_resident_confs(package_dir: Path, job_id: str = "") -> list[st
     """
     from backend.core.md_protocols import downgrade_gpu_resident  # noqa: PLC0415
 
+    from backend.core.namd_electrode_gpu import restore_cpu_correction
+    restore_cpu_correction(package_dir)
     rewritten: list[str] = []
     for conf in sorted(package_dir.glob("*.conf")):
         if conf.name.startswith("_") or not _has_gpu_resident(conf):
@@ -2057,6 +2058,9 @@ def _alias_skipped_stage_outputs(
 
 async def run_job(job: MdJob, workspace_dir: Path) -> None:
     """Async coroutine — runs until completion, failure, or cancellation."""
+    if job.protocol == "gold_qualification_v1":
+        from backend.core.namd_gold_job import run_job as run_gold_job
+        return await run_gold_job(job, workspace_dir)
     package_dir = job.package_dir(workspace_dir)
     output_dir = package_dir / "output"
     output_dir.mkdir(exist_ok=True)
@@ -2068,7 +2072,14 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     # otherwise Compute=CPU (devices "cpu") uses it too, and GPU uses the CUDA build.
     want_cpu = job_wants_cpu(job.protocol, job.devices)
     try:
-        namd_bin, run_devices = resolve_namd_launch(job.protocol, job.devices)
+        from backend.core.namd_experimental_engine import experimental_engine
+        selected_engine = experimental_engine(job, package_dir)
+        if selected_engine:
+            if want_cpu:
+                raise RuntimeError('This experimental electrode engine requires the recorded GPU execution target.')
+            namd_bin, run_devices = selected_engine, job.devices
+        else:
+            namd_bin, run_devices = resolve_namd_launch(job.protocol, job.devices)
         logger.info(
             "[%s] NAMD binary: %s%s",
             job.job_id,
@@ -2096,6 +2107,9 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
 
     try:
         from backend.core.namd_peg_relax import validate_relax_package
+        from backend.core.namd_electrode_gpu import configure_package
+        await asyncio.to_thread(configure_package, package_dir, namd_bin, run_devices)
+        manifest = json.loads(manifest_path.read_text())
         await asyncio.to_thread(validate_relax_package, package_dir)
         await asyncio.to_thread(validate_graphene_wall_package, package_dir)
     except (ValueError, OSError) as exc:
@@ -2201,6 +2215,33 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         )
         job.save(workspace_dir)
         return False
+
+    if manifest.get("two_electrodes"):
+        from backend.core.namd_electrode_reference import ensure_reference, reference_process
+        async def _run_reference(folder, stem):
+            if not _disk_floor_ok("bulk electrolyte reference"):return 1
+            existing_pid=reference_process(folder,stem)
+            if existing_pid is not None:
+                _ACTIVE_PIDS[job.job_id]=existing_pid
+                _persist_pid(existing_pid)
+                try:
+                    return await wait_external_proc_with_disk_guard(
+                        lambda: reference_process(folder,stem)==existing_pid,folder,
+                        kill=lambda: _kill_process_group(existing_pid),poll_s=5.)
+                finally:
+                    _ACTIVE_PIDS.pop(job.job_id,None)
+                    _persist_pid(None)
+            rc, _ = await _run_namd_async(namd_bin, stem, folder, folder/f"{stem}.log",
+                job.threads, run_devices, job_id=job.job_id, on_spawn=_persist_pid)
+            return rc
+        try:
+            manifest["electrode_validation"]["bulk_reference_result"] = await ensure_reference(package_dir, manifest, _run_reference)
+            manifest_path.write_text(json.dumps(manifest, indent=2)+"\n")
+        except (ValueError, OSError) as exc:
+            job.status = MdStatus.failed
+            job.error = f"Electrode solvent calibration failed: {exc}"
+            job.save(workspace_dir)
+            return
 
     # ── Minimization ─────────────────────────────────────────────────────────
 
@@ -2494,6 +2535,14 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 )
             else:
                 conf_name = spec.name
+            from backend.core.namd_electrode_gpu import validate_package
+            try:
+                validate_package(package_dir, namd_bin, run_devices)
+            except (ValueError, OSError) as exc:
+                job.status = MdStatus.failed
+                job.error = str(exc)
+                job.save(workspace_dir)
+                return
             _free_host_ram_for_namd(job.job_id, spec.name)
             rc, pid = await _run_namd_async(
                 namd_bin,
@@ -2697,6 +2746,10 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 job.save(workspace_dir)
                 return
 
+        if manifest.get("two_electrodes"):
+            from backend.core.namd_electrode_health import electrode_skip_check
+            await asyncio.to_thread(electrode_skip_check, package_dir, spec.name)
+
         # Append performance metrics
         _append_metrics_jsonl(output_dir, spec.name, spec.stage, seg_log)
 
@@ -2812,6 +2865,11 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     }
                 else:
                     decision, diag = should_early_stop_stage(frames, hresult.wc_per_frame)
+                if decision and manifest.get("two_electrodes"):
+                    from backend.core.namd_electrode_health import electrode_skip_check
+                    electrode_diag = electrode_skip_check(package_dir, spec.name)
+                    diag["electrode"] = electrode_diag
+                    decision = electrode_diag["passed"]
                 if decision:
                     # Every remaining graphene rung differs only in DNA restraint
                     # files that are empty for this control, so one stable energy
@@ -2841,8 +2899,30 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     )
 
     logger.info("[%s] All segments completed", job.job_id)
-    job.status = MdStatus.completed
-    job.current_segment_idx = len(segments)
+    _finish_job(job, workspace_dir)
+
+
+def _finish_job(job, workspace_dir):
+    """Use the same electrode qualification gate after normal exit or worker recovery."""
+    package=job.package_dir(workspace_dir)
+    path=package/'manifest.json'
+    manifest=json.loads(path.read_text()) if path.exists() else {}
+    if manifest.get('two_electrodes') and not any(_is_production_segment(s.name) for s in job.segments):
+        from backend.core.namd_electrode_health import electrode_skip_check, validation_failure
+        latest=next((s for s in reversed(job.segments) if not s.skipped),None)
+        report=electrode_skip_check(package,latest.name) if latest else {}
+        if not report.get('passed'):
+            job.status=MdStatus.failed
+            job.failure_kind='electrode_equilibration'
+            job.error=('Electrode dynamics finished, but equilibration checks did not pass: '
+                +validation_failure(report)
+                +'. Inspect *.electrode-health.json; extend equilibration for drifting profiles or correct solvent loading for a density mismatch.')
+            job.save(workspace_dir)
+            return
+    job.status=MdStatus.completed
+    job.error=None
+    job.failure_kind=None
+    job.current_segment_idx=len(job.segments)
     job.save(workspace_dir)
 
 

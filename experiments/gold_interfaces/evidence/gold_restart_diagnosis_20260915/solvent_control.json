@@ -1,0 +1,8 @@
+{
+  "default": {
+    "max_velocity_difference_A_per_AKMA": 1.693959759663244e-05
+  },
+  "preserved": {
+    "max_velocity_difference_A_per_AKMA": 1.3450538649650845e-05
+  }
+}

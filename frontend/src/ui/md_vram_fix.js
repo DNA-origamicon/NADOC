@@ -37,6 +37,17 @@ export function fixMessage(advice) {
 
   if (kind === 'vram_oom') return _vramMessage(advice, remedy, logExcerpt)
 
+  if (kind === 'electrode_equilibration') return {
+    title: 'Electrode equilibration needs more evidence',
+    lines: [advice?.error || 'The dynamics finished, but the electrode checks did not pass.',
+      remedy === 'extend_equilibration'
+        ? 'Continue for up to 2.4 ns from the saved checkpoint, keeping the same system and convergence limits. This adds equilibration time; it does not qualify the current result for production.'
+        : 'Correct the solvent loading or confinement issue before continuing.'],
+    logExcerpt, canApply: remedy === 'extend_equilibration',
+    applyLabel: 'Continue equilibration (+2.4 ns)',
+    action: {type: 'extend_equilibration'},
+  }
+
   if (kind === 'host_oom') {
     return {
       title: 'Ran out of host (CPU) memory — not GPU',

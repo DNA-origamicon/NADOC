@@ -82,7 +82,7 @@ const GPU_FALLBACK_KEY = 'nadoc:md-jobs-gpu-fallback'
 /** The protocol tiers that answer the question a run actually turns on — are you
  *  reproducing the literature, or getting an answer about your design? The rest stay
  *  available under a disclosure rather than being hidden. */
-const HEADLINE_PRESETS = ['literature', 'design_speed']
+const HEADLINE_PRESETS = ['electrode', 'literature', 'design_speed']
 
 /** Rows with no per-stage meaning — the backend refuses them and the table renders them
  *  read-only, so they get no set-for-every-stage affordance either. */
@@ -2290,6 +2290,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
         presets = []
       }
     }
+    if (!replayJob && state.mode !== 'production' && getPreparationContext()?.two_electrodes) state.presetId = 'electrode'
     if (modal.header) {
       const t = modal.header.querySelector('.modal__title')
       if (t) t.textContent = modalTitle()

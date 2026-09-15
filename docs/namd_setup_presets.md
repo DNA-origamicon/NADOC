@@ -25,7 +25,7 @@ updates; reload the page/list if another client has changed a record.
 All identified configuration inputs in the cards below the dropdown are captured:
 cluster execution-target choices, anchors and hold/stiffness settings, electric
 field and conversion inputs, hard-surface geometry, charge and reservoir depth,
-graphene pore/layer settings, PEG coating, visualization preferences, analysis
+graphene pore/layer settings, two-electrode intent, PEG coating, visualization preferences, analysis
 parameters, occupancy scope, and trajectory-export settings. Benchmark has actions
 and results but no editable configuration fields to capture.
 
@@ -55,7 +55,8 @@ existing legacy library files are left intact. The preset captures the complete
 coating settings and View PEG preference. A coating remains an editable intent,
 not a built atomistic package: arbitrary coating incorporation into NAMD jobs is
 still a separate preparation gap. Single-surface and PEG rendering still require explicit
-selection of a surface-enabled job.
+selection of a surface-enabled job. The two-electrode toggle additionally displays
+a schematic setup preview with external charge markers, independent of jobs.
 
 ## Persistence/API
 

@@ -1,0 +1,22 @@
+{
+  "authorized_items_2_4": "completed",
+  "bulk_density_reference": 33.76000592463925,
+  "calibration_case_ids": [
+    "bulk_317",
+    "bulk_719",
+    "nanoparticle_317_revised",
+    "nanoparticle_719_revised",
+    "slab_317_calibrated_fixed_ions",
+    "slab_719_calibrated_fixed_ions"
+  ],
+  "constant_potential_design": "docs/namd_constant_potential_design.md",
+  "physical_qualification": false,
+  "constant_potential_implemented": false,
+  "remaining": [
+    "sampling_and_size_convergence",
+    "matched_hydration_reference",
+    "ion_adsorption",
+    "numerical_and_mode_temperature_qualification",
+    "native_constant_potential_solver"
+  ]
+}

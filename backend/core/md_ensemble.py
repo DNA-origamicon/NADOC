@@ -398,7 +398,7 @@ def build_replica_package(
         structure_psf=structure_psf,
         preserve_velocities=continuation,
         npt=npt_allowed,
-        temperature_K=float((graphene_nanopore or {}).get("temperature_K", 300.0)),
+        temperature_K=float((manifest.get("two_electrodes") or graphene_nanopore or {}).get("temperature_K", 300.0)),
     )
     (child_pkg / f"{reseed_name}.conf").write_text(
         inject_packaged_photoproduct_parameters(reseed_conf, parent_pkg)
@@ -471,7 +471,7 @@ def build_replica_package(
         stage=f"{length_ns:g} ns production replica (seed {seed})",
         percent=100.0,
         steps=steps,
-        temp=float((graphene_nanopore or {}).get("temperature_K", 300.0)),
+        temp=float((manifest.get("two_electrodes") or graphene_nanopore or {}).get("temperature_K", 300.0)),
         damping=damping,
         scale=None,
         npt=True,
@@ -527,6 +527,14 @@ def build_replica_package(
         )
     )
 
+    if manifest.get("two_electrodes"):
+        from backend.core.namd_electrode_protocol import apply_electrode_forces
+        shutil.copy2(parent_pkg/"electrode_forces.tcl",child_pkg/"electrode_forces.tcl")
+        if (parent_pkg/"electrode_native.so").exists():
+            shutil.copy2(parent_pkg/"electrode_native.so",child_pkg/"electrode_native.so")
+        for path in child_pkg.glob("*.conf"):
+            path.write_text(apply_electrode_forces(path.read_text(),peg=bool(manifest["two_electrodes"].get("peg"))))
+
     # ── Manifest (production-only; total_ns == length_ns) ───────────────────────
     child_manifest = {
         "nadoc_md_run_manifest_version": 1,
@@ -544,6 +552,7 @@ def build_replica_package(
         "box_ang": list(box),
         "mgh_extrabonds": mgh_extrabonds,
         "graphene_nanopore": graphene_nanopore,
+        **({"two_electrodes":manifest["two_electrodes"],"electrode_validation":manifest.get("electrode_validation",{})} if manifest.get("two_electrodes") else {}),
         "anchor_groups": manifest.get("anchor_groups"),
         # The child's OWN external forces, so the run record states what it ran under
         # instead of leaving an analysis to assume "production = unrestrained".

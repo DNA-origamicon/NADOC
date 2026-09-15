@@ -1,0 +1,82 @@
+{
+  "particle": {
+    "source": "seed",
+    "continuous_steps": 40,
+    "split_steps": [
+      20,
+      20
+    ],
+    "thermostat": "off",
+    "max_coordinate_difference_A": 3.459531271232663e-06,
+    "max_velocity_difference_A_per_AKMA": 1.4628000037486544e-05,
+    "timestep_fs": 1.0,
+    "legacy_threshold_comparison": {
+      "coordinate_A": 0.0001,
+      "velocity_A_per_AKMA": 0.0001,
+      "within": true,
+      "status": "Historical diagnostic only; thresholds have no literature validation"
+    },
+    "physical_validation": "not established",
+    "interpretation": "Restart sensitivity diagnostic; assess momentum/energy continuity and NVE timestep convergence separately",
+    "repeat_difference": {
+      "coor": {
+        "max": 3.5178328907647938e-06,
+        "rms": 3.056657378530853e-07,
+        "CLA": 7.611365981929907e-08,
+        "HT": 3.5178328907647938e-06,
+        "NAUI": 1.2292169060401648e-08,
+        "OT": 6.807635060113171e-07,
+        "SOD": 1.4151935090467305e-07
+      },
+      "vel": {
+        "max": 1.1188880070678309e-05,
+        "rms": 1.514306257358369e-06,
+        "CLA": 9.241354574918148e-07,
+        "HT": 1.1188880070678309e-05,
+        "NAUI": 3.6324375646268336e-08,
+        "OT": 3.2758836099044952e-06,
+        "SOD": 3.332804656142052e-07
+      }
+    }
+  },
+  "slab": {
+    "source": "seed",
+    "continuous_steps": 40,
+    "split_steps": [
+      20,
+      20
+    ],
+    "thermostat": "off",
+    "max_coordinate_difference_A": 3.6874108957363205e-06,
+    "max_velocity_difference_A_per_AKMA": 1.8263287577036103e-05,
+    "timestep_fs": 1.0,
+    "legacy_threshold_comparison": {
+      "coordinate_A": 0.0001,
+      "velocity_A_per_AKMA": 0.0001,
+      "within": true,
+      "status": "Historical diagnostic only; thresholds have no literature validation"
+    },
+    "physical_validation": "not established",
+    "interpretation": "Restart sensitivity diagnostic; assess momentum/energy continuity and NVE timestep convergence separately",
+    "repeat_difference": {
+      "coor": {
+        "max": 2.8486062575439064e-06,
+        "rms": 2.7278162665276563e-07,
+        "CLA": 9.759712327195302e-08,
+        "HT": 2.8486062575439064e-06,
+        "NAUI": 5.188147156331979e-08,
+        "OT": 7.19300842888515e-07,
+        "SOD": 2.529200244794083e-07
+      },
+      "vel": {
+        "max": 1.1701636272176685e-05,
+        "rms": 1.3530382692527746e-06,
+        "CLA": 4.1663830480098696e-07,
+        "HT": 1.1701636272176685e-05,
+        "NAUI": 1.1208450137467629e-07,
+        "OT": 3.7239462465921136e-06,
+        "SOD": 1.0854333435811325e-06
+      }
+    }
+  }
+}

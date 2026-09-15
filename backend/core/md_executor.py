@@ -398,6 +398,8 @@ async def submit_job(
     Populates ``execution_target``/``cluster_name``/``slurm_job_id``/remote dirs/
     ``resources`` and leaves the job ``queued`` (SLURM will move it to running).
     """
+    if job.protocol == "gold_qualification_v1":
+        raise ValueError("Gold remote execution requires separate runtime and restart qualification")
     if job.restart_snapshot:
         raise ValueError("Preserved attempts are read-only")
     conn = conn or _default_conn()

@@ -1,0 +1,46 @@
+{
+  "particle_rigid": {
+    "com_velocity_A_per_AKMA": [
+      0.00015065051012005075,
+      0.0001630234634264592,
+      -0.00025296608879348643
+    ],
+    "max_residual_after_predicted_com_removal": 1.375578047009638e-08,
+    "kinetic_change_kcal_mol": -0.004916468962600623,
+    "predicted_com_kinetic_loss_kcal_mol": -0.0049163550540889086,
+    "potential_change_kcal_mol": -0.00029999999969732016
+  },
+  "particle_preserve_com": {
+    "com_velocity_A_per_AKMA": [
+      0.00017628362864792173,
+      0.004709314755359204,
+      -0.0019640430363873852
+    ],
+    "max_residual_after_predicted_com_removal": 0.0047093226256697185,
+    "kinetic_change_kcal_mol": -1.0905079389541603e-07,
+    "predicted_com_kinetic_loss_kcal_mol": -1.1314323224681377,
+    "potential_change_kcal_mol": -0.00029999999969732016
+  },
+  "slab_rigid": {
+    "com_velocity_A_per_AKMA": [
+      -0.00023372574702656894,
+      0.00011670455971843193,
+      -4.08053074695254e-05
+    ],
+    "max_residual_after_predicted_com_removal": 1.6664599603765295e-08,
+    "kinetic_change_kcal_mol": -0.021123327164915537,
+    "predicted_com_kinetic_loss_kcal_mol": -0.021123288609989528,
+    "potential_change_kcal_mol": 0.0018999999738298357
+  },
+  "slab_preserve_com": {
+    "com_velocity_A_per_AKMA": [
+      0.001443148304921363,
+      -9.866518153279921e-05,
+      0.0014332189325360668
+    ],
+    "max_residual_after_predicted_com_removal": 0.001443158835491945,
+    "kinetic_change_kcal_mol": -4.32376493034742e-08,
+    "predicted_com_kinetic_loss_kcal_mol": -1.2528231610173008,
+    "potential_change_kcal_mol": 0.0022000000171829015
+  }
+}

@@ -846,9 +846,26 @@ first save. `workspace-path-change` now preserves unsaved controls on that first
 save; actual file switches still reset. The charged-surface browser regression
 creates a real draft and checks persisted charge, salt and temperature.
 
+## ISSUE-28 — GPU electrode loading and restart initialization
+
+[x] Fixed 2026-09-14. Managed launch exposed the loader's need for `./electrode_gpu.so`;
+client creation also freezes NAMD settings before the existing restart writer adds
+new coordinates/output settings. Package conversion now uses explicit relative
+loading and initializes after all settings. Force inputs/engine are checksum-pinned.
+Native managed 4 fs pilot passes; config and fallback regressions pass. Details:
+[managed GPU electrodes](docs/namd_electrode_gpu.md).
+
 ## ISSUE-29 — Process adoption matched the validation controller's shell text
 
 [x] Fixed 2026-09-14. `_segment_pid` searched the entire command string for both
 "namd" and a config filename, so a shell that mentioned them could be adopted as
 NAMD and stall launch. Matching now requires a native executable plus a real config
 argument. The same prepared job subsequently launched through the normal API.
+
+## ISSUE-30 — Screening time and stationarity depended on an assumed cadence
+
+[x] Fixed 2026-09-14. Standalone screening used a hardcoded 2 fs time axis, and the
+managed health window was 60 frames. A 4 fs run with 2 ps output would mislabel time
+and shorten the health question to 120 ps. DCD/segment timing is now cross-checked;
+restart rollback is respected; health retains 600 ps and reports its actual span.
+Sampling diagnostics use physical-time blocks and report correlation explicitly.

@@ -1,0 +1,9 @@
+{
+  "geometry": {"kind": "slab", "facet": "111", "repeats": [16, 9], "layers": 5, "gap_nm": 3.0},
+  "mobility": "restrained",
+  "restraint_k": 10.0,
+  "water_loading_scale": 1.18,
+  "salt_mM": 150.0,
+  "temperature_K": 298.15,
+  "seed": 17
+}

@@ -1,0 +1,1617 @@
+{
+  "bulk_density_reference": 33.76000592463925,
+  "cases": [
+    {
+      "case": "bulk_317",
+      "prefix": "npt",
+      "kind": "bulk",
+      "frames": 200,
+      "duration_ps": 200.0,
+      "n_water": 3367,
+      "n_na": 9,
+      "n_cl": 9,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            33.83675605102021,
+            33.71448671653779,
+            33.79114658141382,
+            33.72437065389645,
+            33.73049021243739,
+            33.76685391610844,
+            33.86362811814753,
+            33.70801117510952,
+            33.639714586473346,
+            33.77673576199372
+          ],
+          "mean": 33.75521937731382,
+          "conditional_95_halfwidth": 0.04714007312112918,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            33.77562138377899,
+            33.757758617655135,
+            33.74867206427292,
+            33.785819646628525,
+            33.70822517423353
+          ],
+          "mean": 33.755219377313814,
+          "conditional_95_halfwidth": 0.037303627288925924,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            33.75945004306113,
+            33.75098871156651
+          ],
+          "mean": 33.75521937731382,
+          "conditional_95_halfwidth": 0.05375570515565807,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 33.777698439924386,
+      "late_density": 33.755219377313814,
+      "late_na_mM": 149.82677293539626,
+      "late_cl_mM": 149.82677293539626,
+      "late_translational_K": 298.49763445532705,
+      "late_rotational_K": 297.9676772062711,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            298.68655671281164,
+            298.48266335507503,
+            298.45471915473837,
+            298.7234734609519,
+            298.14075959305814
+          ],
+          "mean": 298.49763445532705,
+          "conditional_95_halfwidth": 0.28861704423904516,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            298.20363055141104,
+            297.94096506855146,
+            297.2386286398234,
+            298.36847072588665,
+            298.0866910456833
+          ],
+          "mean": 297.9676772062712,
+          "conditional_95_halfwidth": 0.5421889996699354,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "path": "bulk_317/npt_analysis.json"
+    },
+    {
+      "case": "bulk_719",
+      "prefix": "npt",
+      "kind": "bulk",
+      "frames": 200,
+      "duration_ps": 200.0,
+      "n_water": 3367,
+      "n_na": 9,
+      "n_cl": 9,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            33.71069231829059,
+            33.68611831217538,
+            33.83025616708918,
+            33.83446567512064,
+            33.77863536473548,
+            33.72270410479298,
+            33.735423559069126,
+            33.76225684600211,
+            33.783698276792975,
+            33.80367409557841
+          ],
+          "mean": 33.76479247196468,
+          "conditional_95_halfwidth": 0.0361296783666401,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            33.69840531523299,
+            33.8323609211049,
+            33.75066973476423,
+            33.74884020253562,
+            33.793686186185695
+          ],
+          "mean": 33.76479247196469,
+          "conditional_95_halfwidth": 0.06288977045614869,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            33.768033567482256,
+            33.761551376447116
+          ],
+          "mean": 33.76479247196468,
+          "conditional_95_halfwidth": 0.04118202321574127,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 33.78930003551938,
+      "late_density": 33.76479247196469,
+      "late_na_mM": 149.86926431613685,
+      "late_cl_mM": 149.86926431613685,
+      "late_translational_K": 298.60949937698865,
+      "late_rotational_K": 297.4496156108995,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            299.2519600875478,
+            299.30371611506706,
+            298.2602257917295,
+            298.050510666747,
+            298.1810842238518
+          ],
+          "mean": 298.6094993769886,
+          "conditional_95_halfwidth": 0.7635710161726127,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            298.2536120245544,
+            297.39793681512447,
+            296.85838069412455,
+            298.106488214646,
+            296.6316603060479
+          ],
+          "mean": 297.44961561089946,
+          "conditional_95_halfwidth": 0.8994936917685613,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "path": "bulk_719/npt_analysis.json"
+    },
+    {
+      "case": "nanoparticle_317_initial",
+      "prefix": "pilot",
+      "kind": "nanoparticle",
+      "frames": 100,
+      "duration_ps": 100.0,
+      "n_water": 3357,
+      "n_na": 9,
+      "n_cl": 9,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            32.83435023064921,
+            32.98162168447883,
+            32.816390297255346,
+            33.00317360455146,
+            33.236652738671594
+          ],
+          "mean": 32.97443771112129,
+          "conditional_95_halfwidth": 0.20983530938169628,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            32.907985957564016,
+            32.9097819509034
+          ],
+          "mean": 32.90888395423371,
+          "conditional_95_halfwidth": 0.011410129537518516,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            32.97443771112128
+          ],
+          "mean": 32.97443771112128,
+          "conditional_95_halfwidth": null,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 32.9176843215967,
+      "late_density": 32.97443771112128,
+      "late_na_mM": 67.99682998109422,
+      "late_cl_mM": 58.453415246905585,
+      "late_translational_K": 298.4648600967639,
+      "late_rotational_K": 299.71528883085904,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            298.64545582878986,
+            297.64140443264193
+          ],
+          "mean": 298.1434301307159,
+          "conditional_95_halfwidth": 6.378841302548816,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            299.21254564251626,
+            300.72563283145297
+          ],
+          "mean": 299.9690892369846,
+          "conditional_95_halfwidth": 9.61279780315643,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "operational_accessible_volume_nm3": {
+        "OT": 100.06253094000002,
+        "SOD": 100.55776665000002,
+        "CLA": 99.48008391000002
+      },
+      "accessible_volume_MC_standard_error_nm3": {
+        "OT": 0.06134183333298436,
+        "SOD": 0.05730135890771681,
+        "CLA": 0.06572926722908826
+      },
+      "accessible_volume_definition": "Monte Carlo volume outside initial Au pair exclusion at 6 kcal/mol; preparation convention, not thermodynamic volume",
+      "geometric_liquid_volume_nm3": 103.82300000000002,
+      "inventory_correction_waters": null,
+      "path": "nanoparticle_317_initial/pilot_analysis.json"
+    },
+    {
+      "case": "nanoparticle_317_revised",
+      "prefix": "pilot",
+      "kind": "nanoparticle",
+      "frames": 200,
+      "duration_ps": 200.0,
+      "n_water": 3431,
+      "n_na": 9,
+      "n_cl": 9,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            33.83292252734765,
+            33.58507544651243,
+            33.71797895362697,
+            33.41266008593139,
+            33.66769114012417,
+            33.90476226092308,
+            33.82214656731134,
+            33.886802327529224,
+            33.883210340850454,
+            33.64973120673031
+          ],
+          "mean": 33.7362980856887,
+          "conditional_95_halfwidth": 0.11422520616679283,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            33.70899898693004,
+            33.56531951977918,
+            33.78622670052363,
+            33.85447444742028,
+            33.76647077379038
+          ],
+          "mean": 33.7362980856887,
+          "conditional_95_halfwidth": 0.1350902768390779,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            33.64326563070853,
+            33.82933054066888
+          ],
+          "mean": 33.7362980856887,
+          "conditional_95_halfwidth": 1.1820894200870626,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 33.7833531111806,
+      "late_density": 33.7362980856887,
+      "late_na_mM": 130.62548917420736,
+      "late_cl_mM": 69.78622024375463,
+      "late_translational_K": 298.24833875120817,
+      "late_rotational_K": 298.29025684398107,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            298.34484974834606,
+            299.8507960321348,
+            297.19196512342586,
+            298.2973065718746,
+            297.5567762802599
+          ],
+          "mean": 298.2483387512082,
+          "conditional_95_halfwidth": 1.2683470793972897,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            299.21053428057246,
+            299.1530330004691,
+            298.69157012712657,
+            298.2784172551525,
+            296.11772955658495
+          ],
+          "mean": 298.2902568439811,
+          "conditional_95_halfwidth": 1.5794484138420637,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "operational_accessible_volume_nm3": {
+        "OT": 100.06253094000002,
+        "SOD": 100.55776665000002,
+        "CLA": 99.48008391000002
+      },
+      "accessible_volume_MC_standard_error_nm3": {
+        "OT": 0.06134183333298436,
+        "SOD": 0.05730135890771681,
+        "CLA": 0.06572926722908826
+      },
+      "accessible_volume_definition": "Monte Carlo volume outside initial Au pair exclusion at 6 kcal/mol; preparation convention, not thermodynamic volume",
+      "geometric_liquid_volume_nm3": 103.82300000000002,
+      "inventory_correction_waters": null,
+      "path": "nanoparticle_317_revised/pilot_analysis.json"
+    },
+    {
+      "case": "nanoparticle_719_initial",
+      "prefix": "pilot",
+      "kind": "nanoparticle",
+      "frames": 100,
+      "duration_ps": 100.0,
+      "n_water": 3362,
+      "n_na": 9,
+      "n_cl": 9,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            32.71581467024975,
+            33.085789298163206,
+            32.99958161787269,
+            33.15762903173864,
+            32.80202235054027
+          ],
+          "mean": 32.95216739371291,
+          "conditional_95_halfwidth": 0.23289356318014107,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            32.900801984206474,
+            33.078605324805665
+          ],
+          "mean": 32.98970365450607,
+          "conditional_95_halfwidth": 1.1296028242145586,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            32.95216739371291
+          ],
+          "mean": 32.95216739371291,
+          "conditional_95_halfwidth": null,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 32.92630508962575,
+      "late_density": 32.95216739371291,
+      "late_na_mM": 62.03219577222632,
+      "late_cl_mM": 106.17048891784893,
+      "late_translational_K": 299.95533442431775,
+      "late_rotational_K": 297.0862883531024,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            300.8769238116017,
+            300.0105883208378
+          ],
+          "mean": 300.44375606621975,
+          "conditional_95_halfwidth": 5.5039180579302585,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            297.7520964025115,
+            297.46276897970245
+          ],
+          "mean": 297.60743269110696,
+          "conditional_95_halfwidth": 1.8381267350007064,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "operational_accessible_volume_nm3": {
+        "OT": 100.06253094000002,
+        "SOD": 100.55776665000002,
+        "CLA": 99.48008391000002
+      },
+      "accessible_volume_MC_standard_error_nm3": {
+        "OT": 0.06134183333298436,
+        "SOD": 0.05730135890771681,
+        "CLA": 0.06572926722908826
+      },
+      "accessible_volume_definition": "Monte Carlo volume outside initial Au pair exclusion at 6 kcal/mol; preparation convention, not thermodynamic volume",
+      "geometric_liquid_volume_nm3": 103.82300000000002,
+      "inventory_correction_waters": null,
+      "path": "nanoparticle_719_initial/pilot_analysis.json"
+    },
+    {
+      "case": "nanoparticle_719_revised",
+      "prefix": "pilot",
+      "kind": "nanoparticle",
+      "frames": 200,
+      "duration_ps": 200.0,
+      "n_water": 3431,
+      "n_na": 9,
+      "n_cl": 9,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            33.437803992682795,
+            33.68205908683925,
+            33.703611006911885,
+            33.570707499797344,
+            33.976601994498516,
+            33.635363260015225,
+            33.86165842077783,
+            33.68205908683926,
+            33.764674780450996,
+            33.67487511348171
+          ],
+          "mean": 33.69894142422949,
+          "conditional_95_halfwidth": 0.1060356893817833,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            33.559931539761024,
+            33.6371592533546,
+            33.80598262725686,
+            33.77185875380853,
+            33.71977494696635
+          ],
+          "mean": 33.698941424229474,
+          "conditional_95_halfwidth": 0.1247077900522547,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            33.67415671614595,
+            33.723726132313
+          ],
+          "mean": 33.698941424229474,
+          "conditional_95_halfwidth": 0.3149195752355652,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 33.675234312149584,
+      "late_density": 33.69894142422948,
+      "late_na_mM": 163.4309773229809,
+      "late_cl_mM": 124.06439154445266,
+      "late_translational_K": 298.38363219737107,
+      "late_rotational_K": 297.9152578667787,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            298.7198015516273,
+            296.5872572353026,
+            298.69760533620894,
+            299.0811283608501,
+            298.8323685028665
+          ],
+          "mean": 298.38363219737107,
+          "conditional_95_halfwidth": 1.2611323256563627,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            299.0056505463151,
+            298.6484868896017,
+            299.08532228043504,
+            296.59880404004696,
+            296.2380255774941
+          ],
+          "mean": 297.9152578667786,
+          "conditional_95_halfwidth": 1.716214862476639,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "operational_accessible_volume_nm3": {
+        "OT": 100.06253094000002,
+        "SOD": 100.55776665000002,
+        "CLA": 99.48008391000002
+      },
+      "accessible_volume_MC_standard_error_nm3": {
+        "OT": 0.06134183333298436,
+        "SOD": 0.05730135890771681,
+        "CLA": 0.06572926722908826
+      },
+      "accessible_volume_definition": "Monte Carlo volume outside initial Au pair exclusion at 6 kcal/mol; preparation convention, not thermodynamic volume",
+      "geometric_liquid_volume_nm3": 103.82300000000002,
+      "inventory_correction_waters": null,
+      "path": "nanoparticle_719_revised/pilot_analysis.json"
+    },
+    {
+      "case": "slab_317_calibrated_fixed_ions",
+      "prefix": "pilot",
+      "kind": "slab",
+      "frames": 300,
+      "duration_ps": 300.0,
+      "n_water": 2017,
+      "n_na": 6,
+      "n_cl": 6,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            34.04364676196502,
+            33.98579040151416,
+            33.99061176488506,
+            34.067753578819556,
+            33.99061176488506,
+            33.884541770725136,
+            33.88936313409605,
+            33.61454542195442,
+            33.87489904398332,
+            33.937576767805105,
+            33.7688290498234,
+            33.64829496555076,
+            33.60972405858352,
+            33.8507922271288,
+            33.97614767477235
+          ],
+          "mean": 33.875541892432786,
+          "conditional_95_halfwidth": 0.08378972398273471,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            34.014718581739594,
+            34.02918267185231,
+            33.937576767805105,
+            33.75195427802524,
+            33.906237905894216,
+            33.70856200768708,
+            33.73025814285615
+          ],
+          "mean": 33.868355765122814,
+          "conditional_95_halfwidth": 0.12617072111573155,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            34.01568285441377,
+            33.8401852277128,
+            33.770757595171766
+          ],
+          "mean": 33.87554189243278,
+          "conditional_95_halfwidth": 0.31357912920912884,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 33.95011231256946,
+      "late_density": 33.875541892432786,
+      "late_na_mM": 313.30390210735584,
+      "late_cl_mM": 93.40405940168188,
+      "late_translational_K": 299.0226135050385,
+      "late_rotational_K": 298.4517574761718,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            300.2585708811147,
+            301.6411400295189,
+            298.5271908339862,
+            296.8306069165,
+            298.8877470004397,
+            298.85711898500267,
+            298.99610338505397
+          ],
+          "mean": 299.14263971880234,
+          "conditional_95_halfwidth": 1.3810915158218438,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            298.4600901368109,
+            299.59682092661876,
+            299.057283047437,
+            297.22593769735107,
+            297.1265064396839,
+            299.8526990014614,
+            298.09667759456397
+          ],
+          "mean": 298.48800212056096,
+          "conditional_95_halfwidth": 1.0001134248634511,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "operational_accessible_volume_nm3": {
+        "OT": 51.93832457713568,
+        "SOD": 53.65825739428165,
+        "CLA": 50.300438025118595
+      },
+      "accessible_volume_MC_standard_error_nm3": {
+        "OT": 0.36173431868223194,
+        "SOD": 0.3664177586542681,
+        "CLA": 0.357140229571541
+      },
+      "accessible_volume_definition": "Monte Carlo volume outside initial Au pair exclusion at 6 kcal/mol; preparation convention, not thermodynamic volume",
+      "geometric_liquid_volume_nm3": 62.223067755426825,
+      "inventory_correction_waters": null,
+      "path": "slab_317_calibrated_fixed_ions/pilot_analysis.json"
+    },
+    {
+      "case": "slab_317_initial",
+      "prefix": "pilot",
+      "kind": "slab",
+      "frames": 100,
+      "duration_ps": 100.0,
+      "n_water": 1775,
+      "n_na": 5,
+      "n_cl": 5,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            27.20213213864986,
+            26.85981533931556,
+            26.61874717077028,
+            26.68142489459205,
+            27.10570487123175
+          ],
+          "mean": 26.893564882911896,
+          "conditional_95_halfwidth": 0.3177084976532528,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            27.03097373898271,
+            26.650086032681163
+          ],
+          "mean": 26.840529885831934,
+          "conditional_95_halfwidth": 2.4198185888797132,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            26.893564882911896
+          ],
+          "mean": 26.893564882911896,
+          "conditional_95_halfwidth": null,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 28.02754954774891,
+      "late_density": 26.893564882911896,
+      "late_na_mM": 102.47759660070241,
+      "late_cl_mM": 75.25698500364082,
+      "late_translational_K": 300.49011487860173,
+      "late_rotational_K": 298.44689741058164,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            299.5183286787884,
+            302.6892108514019
+          ],
+          "mean": 301.1037697650952,
+          "conditional_95_halfwidth": 20.14493903975689,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            296.3162024425687,
+            298.18579365309336
+          ],
+          "mean": 297.250998047831,
+          "conditional_95_halfwidth": 11.877704346939602,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "operational_accessible_volume_nm3": {
+        "OT": 51.93832457713568,
+        "SOD": 53.65825739428165,
+        "CLA": 50.300438025118595
+      },
+      "accessible_volume_MC_standard_error_nm3": {
+        "OT": 0.36173431868223194,
+        "SOD": 0.3664177586542681,
+        "CLA": 0.357140229571541
+      },
+      "accessible_volume_definition": "Monte Carlo volume outside initial Au pair exclusion at 6 kcal/mol; preparation convention, not thermodynamic volume",
+      "geometric_liquid_volume_nm3": 62.223067755426825,
+      "inventory_correction_waters": null,
+      "path": "slab_317_initial/pilot_analysis.json"
+    },
+    {
+      "case": "slab_317_revised",
+      "prefix": "pilot",
+      "kind": "slab",
+      "frames": 200,
+      "duration_ps": 200.0,
+      "n_water": 2028,
+      "n_na": 6,
+      "n_cl": 6,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            34.04364676196502,
+            34.308821747364846,
+            34.05328948870683,
+            34.07257494219046,
+            34.342571290961175,
+            34.05328948870684,
+            34.005075854997784,
+            33.83632813701608,
+            33.86043495387061,
+            33.79293586667793
+          ],
+          "mean": 34.03689685324575,
+          "conditional_95_halfwidth": 0.13085190056999388,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            34.17623425466494,
+            34.062932215448654,
+            34.197930389834006,
+            33.920701996006926,
+            33.82668541027427
+          ],
+          "mean": 34.03689685324576,
+          "conditional_95_halfwidth": 0.1999374460265245,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            34.16418084623767,
+            33.90961286025385
+          ],
+          "mean": 34.036896853245764,
+          "conditional_95_halfwidth": 1.6172964745930258,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 34.10728875846099,
+      "late_density": 34.036896853245764,
+      "late_na_mM": 132.90063309153592,
+      "late_cl_mM": 204.95519320140488,
+      "late_translational_K": 299.03348241192316,
+      "late_rotational_K": 298.8894243436366,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            300.84992764122006,
+            299.3403756547216,
+            298.5589074008386,
+            297.9485313098603,
+            298.4696700529754
+          ],
+          "mean": 299.03348241192316,
+          "conditional_95_halfwidth": 1.4039428231847015,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            297.81438856113164,
+            301.809102355666,
+            298.99937067131526,
+            297.9134266779136,
+            297.91083345215645
+          ],
+          "mean": 298.8894243436366,
+          "conditional_95_halfwidth": 2.1147073872377464,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "operational_accessible_volume_nm3": {
+        "OT": 51.93832457713568,
+        "SOD": 53.65825739428165,
+        "CLA": 50.300438025118595
+      },
+      "accessible_volume_MC_standard_error_nm3": {
+        "OT": 0.36173431868223194,
+        "SOD": 0.3664177586542681,
+        "CLA": 0.357140229571541
+      },
+      "accessible_volume_definition": "Monte Carlo volume outside initial Au pair exclusion at 6 kcal/mol; preparation convention, not thermodynamic volume",
+      "geometric_liquid_volume_nm3": 62.223067755426825,
+      "inventory_correction_waters": null,
+      "path": "slab_317_revised/pilot_analysis.json"
+    },
+    {
+      "case": "slab_719_calibrated_fixed_ions",
+      "prefix": "pilot",
+      "kind": "slab",
+      "frames": 300,
+      "duration_ps": 300.0,
+      "n_water": 2017,
+      "n_na": 6,
+      "n_cl": 6,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            33.96168358465963,
+            33.870077680612425,
+            33.95686222128872,
+            33.74954359633978,
+            33.961683584659625,
+            34.135252666012235,
+            34.0243613084814,
+            33.73990086959797,
+            33.97614767477235,
+            33.86525631724152,
+            34.02918267185231,
+            33.927934041063295,
+            33.86525631724152,
+            33.60972405858352,
+            33.927934041063295
+          ],
+          "mean": 33.906720042231306,
+          "conditional_95_halfwidth": 0.0726369723344075,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            33.915880632636025,
+            33.853202908814254,
+            34.04846812533593,
+            33.88213108903969,
+            33.92070199600693,
+            33.978558356457796,
+            33.73749018791251
+          ],
+          "mean": 33.90520475660045,
+          "conditional_95_halfwidth": 0.09063491876389632,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            33.899970133512035,
+            33.948183767221096,
+            33.87200622596079
+          ],
+          "mean": 33.906720042231306,
+          "conditional_95_halfwidth": 0.09572557544854048,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 33.83504244011718,
+      "late_density": 33.906720042231306,
+      "late_na_mM": 194.2804435554983,
+      "late_cl_mM": 84.33052220266137,
+      "late_translational_K": 298.0220850437777,
+      "late_rotational_K": 297.6546155072876,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            299.20256245181724,
+            298.03077600945846,
+            299.55387699682746,
+            297.2778675387428,
+            296.7050049576421,
+            299.6526844566703,
+            298.66114757497576
+          ],
+          "mean": 298.4405599980191,
+          "conditional_95_halfwidth": 1.0592044693287908,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            296.86297215480744,
+            296.22723376301946,
+            299.4209093232027,
+            298.21507920290185,
+            298.4282978733101,
+            297.1517450573517,
+            296.87759560020015
+          ],
+          "mean": 297.5976904249705,
+          "conditional_95_halfwidth": 1.036114218017894,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "operational_accessible_volume_nm3": {
+        "OT": 51.93832457713568,
+        "SOD": 53.65825739428165,
+        "CLA": 50.300438025118595
+      },
+      "accessible_volume_MC_standard_error_nm3": {
+        "OT": 0.36173431868223194,
+        "SOD": 0.3664177586542681,
+        "CLA": 0.357140229571541
+      },
+      "accessible_volume_definition": "Monte Carlo volume outside initial Au pair exclusion at 6 kcal/mol; preparation convention, not thermodynamic volume",
+      "geometric_liquid_volume_nm3": 62.223067755426825,
+      "inventory_correction_waters": null,
+      "path": "slab_719_calibrated_fixed_ions/pilot_analysis.json"
+    },
+    {
+      "case": "slab_719_initial",
+      "prefix": "pilot",
+      "kind": "slab",
+      "frames": 100,
+      "duration_ps": 100.0,
+      "n_water": 1768,
+      "n_na": 5,
+      "n_cl": 5,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            25.818400851199932,
+            26.05464765637431,
+            26.40178581907952,
+            26.372857638854082,
+            25.775008580861783
+          ],
+          "mean": 26.084540109273927,
+          "conditional_95_halfwidth": 0.3679733994765538,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            25.93652425378712,
+            26.387321728966803
+          ],
+          "mean": 26.16192299137696,
+          "conditional_95_halfwidth": 2.8639625070918453,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            26.084540109273927
+          ],
+          "mean": 26.084540109273927,
+          "conditional_95_halfwidth": null,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 27.15681132296335,
+      "late_density": 26.084540109273927,
+      "late_na_mM": 99.27517170693046,
+      "late_cl_mM": 6.4048497875439,
+      "late_translational_K": 298.72689453851024,
+      "late_rotational_K": 299.1136216347887,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            297.4986672901338,
+            299.72050306930294
+          ],
+          "mean": 298.60958517971835,
+          "conditional_95_halfwidth": 14.115550150140479,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            298.730783009854,
+            300.20077449987565
+          ],
+          "mean": 299.4657787548648,
+          "conditional_95_halfwidth": 9.339006416324736,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "operational_accessible_volume_nm3": {
+        "OT": 51.93832457713568,
+        "SOD": 53.65825739428165,
+        "CLA": 50.300438025118595
+      },
+      "accessible_volume_MC_standard_error_nm3": {
+        "OT": 0.36173431868223194,
+        "SOD": 0.3664177586542681,
+        "CLA": 0.357140229571541
+      },
+      "accessible_volume_definition": "Monte Carlo volume outside initial Au pair exclusion at 6 kcal/mol; preparation convention, not thermodynamic volume",
+      "geometric_liquid_volume_nm3": 62.223067755426825,
+      "inventory_correction_waters": null,
+      "path": "slab_719_initial/pilot_analysis.json"
+    },
+    {
+      "case": "slab_719_revised",
+      "prefix": "pilot",
+      "kind": "slab",
+      "frames": 200,
+      "duration_ps": 200.0,
+      "n_water": 2028,
+      "n_na": 6,
+      "n_cl": 6,
+      "density_blocks": [
+        {
+          "block_ps": 10.0,
+          "block_means": [
+            34.087039032303174,
+            33.98096903814324,
+            34.04364676196502,
+            34.36667810781571,
+            34.04846812533593,
+            34.15935948286676,
+            34.31364311073574,
+            34.13525266601223,
+            33.98579040151416,
+            33.942398131176006
+          ],
+          "mean": 34.1063244857868,
+          "conditional_95_halfwidth": 0.10093510439198912,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 20.0,
+          "block_means": [
+            34.03400403522322,
+            34.20516243489036,
+            34.103913804101346,
+            34.22444788837398,
+            33.964094266345086
+          ],
+          "mean": 34.1063244857868,
+          "conditional_95_halfwidth": 0.13768980635796774,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        {
+          "block_ps": 50.0,
+          "block_means": [
+            34.10536021311262,
+            34.10728875846099
+          ],
+          "mean": 34.1063244857868,
+          "conditional_95_halfwidth": 0.012252246019695772,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      ],
+      "early_density": 34.1217528485737,
+      "late_density": 34.1063244857868,
+      "late_na_mM": 108.88244638824634,
+      "late_cl_mM": 88.06668457872865,
+      "late_translational_K": 297.0617331798876,
+      "late_rotational_K": 296.5542977741095,
+      "maximum_waters_outside_slit": 0,
+      "mode_blocks": {
+        "translation": {
+          "block_ps": 20.0,
+          "block_means": [
+            296.4606361568766,
+            294.8606907434019,
+            297.5626169601807,
+            299.0803976327141,
+            297.3443244062647
+          ],
+          "mean": 297.0617331798876,
+          "conditional_95_halfwidth": 1.9247448094401634,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        },
+        "rotation": {
+          "block_ps": 20.0,
+          "block_means": [
+            297.0817846188382,
+            295.7588335296832,
+            296.72055062976693,
+            296.68313423617406,
+            296.5271858560849
+          ],
+          "mean": 296.55429777410944,
+          "conditional_95_halfwidth": 0.607013590003761,
+          "note": "Conditional on stationary, independent block means; not an equilibrium certificate"
+        }
+      },
+      "operational_accessible_volume_nm3": {
+        "OT": 51.93832457713568,
+        "SOD": 53.65825739428165,
+        "CLA": 50.300438025118595
+      },
+      "accessible_volume_MC_standard_error_nm3": {
+        "OT": 0.36173431868223194,
+        "SOD": 0.3664177586542681,
+        "CLA": 0.357140229571541
+      },
+      "accessible_volume_definition": "Monte Carlo volume outside initial Au pair exclusion at 6 kcal/mol; preparation convention, not thermodynamic volume",
+      "geometric_liquid_volume_nm3": 62.223067755426825,
+      "inventory_correction_waters": null,
+      "path": "slab_719_revised/pilot_analysis.json"
+    }
+  ],
+  "native_wall_seconds": 1533.2047131977743,
+  "runs": [
+    {
+      "file": "nanoparticle_719_revised/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "17f314655eb27641a5a925f9f6eee12893e81a0f04d90deddb906805dbc4af72",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "671731f65d6fa841d3ef57004b31cf46b1eafcbbcb5588b5d023dda173328041",
+        "system.pdb": "62b1ddfe8bc6ed86f4db7e6eef28fc4dbe9a1482009ce482cdc18e6167a6c7e4"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.9654644390102476
+    },
+    {
+      "file": "nanoparticle_719_revised/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "3353b01a8f1b2b7abd14f4ade8ca2587c42f13afe1a9d3b8431cfdbb13f2d6b9",
+      "steps": 200000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "671731f65d6fa841d3ef57004b31cf46b1eafcbbcb5588b5d023dda173328041",
+        "system.pdb": "62b1ddfe8bc6ed86f4db7e6eef28fc4dbe9a1482009ce482cdc18e6167a6c7e4"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 200500,
+      "wall_s": 150.64626804203726
+    },
+    {
+      "file": "slab_317_calibrated_fixed_ions/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "5c611c77a8acb62c7353cad3727565e3c7781647f6efa71f90149111f85893b3",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "43bf5a0843455ab821625289d65f38fe6da60cbb02a97a83976d5a6c98c23a09",
+        "system.pdb": "b0681803f78860ba417c5bf1b497d781699bc84082323eebcd7ca0dd966691ee"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.7652787510305643
+    },
+    {
+      "file": "slab_317_calibrated_fixed_ions/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "40b5e658383a1820e4a08f82794eaa62f7a7fe37bd8c92c7aec9052721224559",
+      "steps": 300000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "43bf5a0843455ab821625289d65f38fe6da60cbb02a97a83976d5a6c98c23a09",
+        "system.pdb": "b0681803f78860ba417c5bf1b497d781699bc84082323eebcd7ca0dd966691ee"
+      },
+      "status": "complete",
+      "restart_input_sha256": {
+        "coor": "7efc6a5dd9e29cf6feee49d1e60d4713e524b3c3b9d471461541eb830a0ec5a2",
+        "vel": "a34e22ad97c6c7b85c2a40c22ed12a958fe7822ddc26bd054de40a869c390341",
+        "xsc": "c945d2fa6ccc8def93561d4cb3d4ac5336c21953b6b241a1976a9f10bac2d51a"
+      },
+      "returncode": 0,
+      "final_step": 300500,
+      "wall_s": 148.99872301099822
+    },
+    {
+      "file": "slab_317_calibrated/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "5c611c77a8acb62c7353cad3727565e3c7781647f6efa71f90149111f85893b3",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "752a80215be05bb1a8bc76323d3bc5c8baa20c83be6a9dc407dbb34f75be4c04",
+        "system.pdb": "8dd5ded1d7adcb4bb813730a8d8f1b8bea74eacf9120fbcd3ae1a96dfa0273bf"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.815456700976938
+    },
+    {
+      "file": "slab_317_calibrated/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "40b5e658383a1820e4a08f82794eaa62f7a7fe37bd8c92c7aec9052721224559",
+      "steps": 300000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "752a80215be05bb1a8bc76323d3bc5c8baa20c83be6a9dc407dbb34f75be4c04",
+        "system.pdb": "8dd5ded1d7adcb4bb813730a8d8f1b8bea74eacf9120fbcd3ae1a96dfa0273bf"
+      },
+      "status": "stopped",
+      "restart_input_sha256": {
+        "coor": "e6ac187901ef076d03ba9a3934760baaf02f25d18e0e53d58058a2c82812b313",
+        "vel": "1d429154938bc44712e363ddcdb7139ab18eeda6ac0dac3cd7ef87c58e31fdc8",
+        "xsc": "c945d2fa6ccc8def93561d4cb3d4ac5336c21953b6b241a1976a9f10bac2d51a"
+      },
+      "returncode": -15,
+      "wall_s": 47.033439759979956,
+      "stop_reason": "Automatic ion rounding changed six pairs to five; stopped to isolate water inventory with fixed six-pair controls. Not a dynamics failure."
+    },
+    {
+      "file": "slab_719_calibrated_fixed_ions/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "0de7223726527fb5d1933060418c90a5fc2d197dd5a0710869834ca8528457ea",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "43bf5a0843455ab821625289d65f38fe6da60cbb02a97a83976d5a6c98c23a09",
+        "system.pdb": "a91a9f937718997e01c72022646d0a9662460fb2fe483bd9e954e4eba05fd50d"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.7651792429387569
+    },
+    {
+      "file": "slab_719_calibrated_fixed_ions/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "07c8a51459ac54991b9b60df52c15b094e1b17c2e86d0c76efe624d552d91d14",
+      "steps": 300000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "43bf5a0843455ab821625289d65f38fe6da60cbb02a97a83976d5a6c98c23a09",
+        "system.pdb": "a91a9f937718997e01c72022646d0a9662460fb2fe483bd9e954e4eba05fd50d"
+      },
+      "status": "complete",
+      "restart_input_sha256": {
+        "coor": "1c6ab51aa7acdf17cfc2471dcd75088661049958389433fd40df399f296b8683",
+        "vel": "e547c1c6d154d765a96d5343e0c20c122423f60fb5d9f6db399fbf623cef5b7a",
+        "xsc": "c945d2fa6ccc8def93561d4cb3d4ac5336c21953b6b241a1976a9f10bac2d51a"
+      },
+      "returncode": 0,
+      "final_step": 300500,
+      "wall_s": 152.35725635895506
+    },
+    {
+      "file": "slab_719_revised/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "0de7223726527fb5d1933060418c90a5fc2d197dd5a0710869834ca8528457ea",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "731f8b7c468ec6e403c44b7dde707f0f6f0040bc702bd8ce50e28fdcfad80d16",
+        "system.pdb": "d891cdb810cb9a778317bbd155b1061f49b1c89226334bd01ca4b829f2731232"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.7652423740364611
+    },
+    {
+      "file": "slab_719_revised/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "c36937eac4c5f8f7becf80285571bf00193ae74ee493e66ce8224e682b01d3c8",
+      "steps": 200000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "731f8b7c468ec6e403c44b7dde707f0f6f0040bc702bd8ce50e28fdcfad80d16",
+        "system.pdb": "d891cdb810cb9a778317bbd155b1061f49b1c89226334bd01ca4b829f2731232"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 200500,
+      "wall_s": 101.02180382795632
+    },
+    {
+      "file": "bulk_719/minimize_v2.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "3c54ba879716d05b106cabfacc4a3bbdf20ec0f46c94a1442a6dca2ad3b8f88f",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "a9e02853122729a86cc5f892b17b45cf42a674dde0b7f053e0a37a307522de48",
+        "system.pdb": "3e2b0fc23cc1e5ec7d17de79eb66180a3f827ee30ea20761cf35fa6197539295"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.9153288500383496
+    },
+    {
+      "file": "bulk_719/npt.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "30b9e1312aba76323ad22c37aedc683cb922f7c2dcb39dba0b5b58d3b3e47afe",
+      "steps": 200000,
+      "previous": "minimize_v2",
+      "npt": true,
+      "input_hashes": {
+        "system.psf": "a9e02853122729a86cc5f892b17b45cf42a674dde0b7f053e0a37a307522de48",
+        "system.pdb": "3e2b0fc23cc1e5ec7d17de79eb66180a3f827ee30ea20761cf35fa6197539295"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 200500,
+      "wall_s": 201.72761706798337
+    },
+    {
+      "file": "slab_317_revised/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "5c611c77a8acb62c7353cad3727565e3c7781647f6efa71f90149111f85893b3",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "731f8b7c468ec6e403c44b7dde707f0f6f0040bc702bd8ce50e28fdcfad80d16",
+        "system.pdb": "3a07026a701b39617308b237c479d9ed61f93b3473f8f763a488956268d71a48"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.7653135260334238
+    },
+    {
+      "file": "slab_317_revised/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "2869f7bfac6ba0fbb9c817f3d57e86a0952198cfddaedb0a096e9f982b90712c",
+      "steps": 200000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "731f8b7c468ec6e403c44b7dde707f0f6f0040bc702bd8ce50e28fdcfad80d16",
+        "system.pdb": "3a07026a701b39617308b237c479d9ed61f93b3473f8f763a488956268d71a48"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 200500,
+      "wall_s": 103.17072995204944
+    },
+    {
+      "file": "slab_719_initial/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "0de7223726527fb5d1933060418c90a5fc2d197dd5a0710869834ca8528457ea",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "409692353625a3eaf694e5c0da2d47f3d8a90488a7880cb4de06dc4a94f2c593",
+        "system.pdb": "f2ea187255ef900a93973d53f13700cd3b00227f7b96340e3bda3be078baafd3"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.715261653997004
+    },
+    {
+      "file": "slab_719_initial/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "c26edc59f8bd942e5724dc355b7e99439b68c589f434f9fc964ffb37e75fb52d",
+      "steps": 100000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "409692353625a3eaf694e5c0da2d47f3d8a90488a7880cb4de06dc4a94f2c593",
+        "system.pdb": "f2ea187255ef900a93973d53f13700cd3b00227f7b96340e3bda3be078baafd3"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 100500,
+      "wall_s": 46.1818881490035
+    },
+    {
+      "file": "nanoparticle_317_revised/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "37dc4a00c1e7a5f175deccc606befcc9eb231f23c8f341374c2cdda5080d6c5c",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "671731f65d6fa841d3ef57004b31cf46b1eafcbbcb5588b5d023dda173328041",
+        "system.pdb": "d86eb2512ebb087c0c4b7fbe4708ccedb462ffa6f30f9f459304a2b4e799fbb2"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.9654781830031425
+    },
+    {
+      "file": "nanoparticle_317_revised/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "1f906c50ac5c8ab2c8d18ccab0e4d22c572cd106b65dfc46d233b7dcd0c1ab0b",
+      "steps": 200000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "671731f65d6fa841d3ef57004b31cf46b1eafcbbcb5588b5d023dda173328041",
+        "system.pdb": "d86eb2512ebb087c0c4b7fbe4708ccedb462ffa6f30f9f459304a2b4e799fbb2"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 200500,
+      "wall_s": 155.85844495601486
+    },
+    {
+      "file": "slab_317_initial/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "5c611c77a8acb62c7353cad3727565e3c7781647f6efa71f90149111f85893b3",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "ebcbd48493af05e59b720c3fb9b82da221351b0a86285afc36d5c4b7f06b73bf",
+        "system.pdb": "73572e9394d8191f6900ef2449d152ab68ab5088abdeeccf1f60200e6158e2b2"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.7662480800645426
+    },
+    {
+      "file": "slab_317_initial/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "f3689b6207b44b97bbf3fd42bcb7a3a710728a1b3924e0f3c2f887828bff84cc",
+      "steps": 100000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "ebcbd48493af05e59b720c3fb9b82da221351b0a86285afc36d5c4b7f06b73bf",
+        "system.pdb": "73572e9394d8191f6900ef2449d152ab68ab5088abdeeccf1f60200e6158e2b2"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 100500,
+      "wall_s": 46.13875679997727
+    },
+    {
+      "file": "nanoparticle_317_initial/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "37dc4a00c1e7a5f175deccc606befcc9eb231f23c8f341374c2cdda5080d6c5c",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "085350071eb3a183d3bd6639762329343d4e5412e909e23c7a54f63b48be397a",
+        "system.pdb": "aadb75103ee5ec51f363d2324417622a97da0bcb1108eb4a562da99f269e2fc0"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.9157440880080685
+    },
+    {
+      "file": "nanoparticle_317_initial/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "d7087dbebb5da53a6b357f17550af6b53287afd2cfacb413d8ff70dcd36043e5",
+      "steps": 100000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "085350071eb3a183d3bd6639762329343d4e5412e909e23c7a54f63b48be397a",
+        "system.pdb": "aadb75103ee5ec51f363d2324417622a97da0bcb1108eb4a562da99f269e2fc0"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 100500,
+      "wall_s": 84.49750774796121
+    },
+    {
+      "file": "nanoparticle_719_initial/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "17f314655eb27641a5a925f9f6eee12893e81a0f04d90deddb906805dbc4af72",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "9d576287447cd777401249a9058e96fff880e697b8ffdb8dceae88a86a4b9c20",
+        "system.pdb": "7af8de4b6bd25ead0a83aab992176891bf70c5aa9cbe6db75f116d1091437a97"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.915520561975427
+    },
+    {
+      "file": "nanoparticle_719_initial/pilot.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "45193d8ba7623787222070d44ea14d50646fa5be2d7baada939f63d3f81b9ee6",
+      "steps": 100000,
+      "previous": "minimize",
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "9d576287447cd777401249a9058e96fff880e697b8ffdb8dceae88a86a4b9c20",
+        "system.pdb": "7af8de4b6bd25ead0a83aab992176891bf70c5aa9cbe6db75f116d1091437a97"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 100500,
+      "wall_s": 82.54279722191859
+    },
+    {
+      "file": "bulk_317/minimize_v2.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "f21449f9badace1fbf937a3b3616f830207f797501bd145c284f88e486fa7944",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "a9e02853122729a86cc5f892b17b45cf42a674dde0b7f053e0a37a307522de48",
+        "system.pdb": "95ff14bf24643cd87172e61eb9c9fca689ad0a9ffe33d00dc60ec789349c2b25"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 500,
+      "wall_s": 0.8656124419067055
+    },
+    {
+      "file": "bulk_317/npt.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "f1ea6cf13600958e471ebd429c528601910ae342f21b33f6d6327b8ac2b333b2",
+      "steps": 200000,
+      "previous": "minimize_v2",
+      "npt": true,
+      "input_hashes": {
+        "system.psf": "a9e02853122729a86cc5f892b17b45cf42a674dde0b7f053e0a37a307522de48",
+        "system.pdb": "95ff14bf24643cd87172e61eb9c9fca689ad0a9ffe33d00dc60ec789349c2b25"
+      },
+      "status": "complete",
+      "returncode": 0,
+      "final_step": 200500,
+      "wall_s": 200.11122152290773
+    },
+    {
+      "file": "bulk_317/minimize.run.json",
+      "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+      "config_sha256": "b9e3e65111801ebbaed7fde453838fe3b8d08a91c30bc7ea16fadc651d5d64dc",
+      "steps": 0,
+      "previous": null,
+      "npt": false,
+      "input_hashes": {
+        "system.psf": "a9e02853122729a86cc5f892b17b45cf42a674dde0b7f053e0a37a307522de48",
+        "system.pdb": "95ff14bf24643cd87172e61eb9c9fca689ad0a9ffe33d00dc60ec789349c2b25"
+      },
+      "status": "running",
+      "returncode": -6,
+      "wall_s": 2.0171298870118335
+    }
+  ],
+  "physical_qualification": false
+}

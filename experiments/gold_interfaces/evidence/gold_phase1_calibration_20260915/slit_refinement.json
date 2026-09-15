@@ -1,0 +1,7 @@
+{
+  "target_water": 2017,
+  "bulk_density": 33.76000592463925,
+  "observed_response_dN_drho_nm3": 33.82763364731238,
+  "previous_density_mean": 34.07161066951628,
+  "note": "Secant inventory update from the two pilot levels; no force-field fit"
+}

@@ -1,3 +1,4 @@
+import { initNamdTwoElectrodes } from './namd_two_electrodes.js'
 import './namd_surface_card.css'
 
 const normals = { '-x': [1,0,0], '+x': [-1,0,0], '-y': [0,1,0], '+y': [0,-1,0], '-z': [0,0,1], '+z': [0,0,-1] }
@@ -8,6 +9,8 @@ export function initNamdSurfaceCard({ root=document, onChange=()=>{} }={}) {
   const pore=root.querySelector('#md-surface-enable')
   const charge=root.querySelector('#md-screening-enable')
   const peg=root.querySelector('#md-peg-enable')
+  const pair=root.querySelector('#md-two-electrodes-enable')
+  const electrodes=initNamdTwoElectrodes({root})
   let job=null, prep={}, authorizedId=null, seed=null
   const pegJob=()=>['peg_wall_qualification','peg_fast_relax'].includes(job?.run_kind)
   function emit() {
@@ -25,32 +28,40 @@ export function initNamdSurfaceCard({ root=document, onChange=()=>{} }={}) {
     }}))
   }
   function sync() {
-    for (const [id,toggle] of [['md-hard-surface-settings',hard],['md-screening-settings',charge],['md-nanopore-settings',pore],['md-peg-settings',peg]]) {
+    for (const [id,toggle] of [['md-hard-surface-settings',hard],['md-screening-settings',charge],['md-nanopore-settings',pore],['md-peg-settings',peg],['md-two-electrodes-settings',pair]]) {
       const details=root.querySelector(`#${id}`)
       if(details)details.dataset.enabled=String(!!toggle?.checked)
     }
     const status=root.querySelector('#md-surface-ready')
-    if(status)status.textContent=hard?.checked || pore?.checked || charge?.checked?'Surface configured for the next job.':'Surface off.'
+    if(status)status.textContent=pair?.checked?'Two-electrode setup · preparation pending.':hard?.checked || pore?.checked || charge?.checked?'Surface configured for the next job.':'Surface off.'
     onChange(!!(hard?.checked || pore?.checked || charge?.checked))
   }
   function change(event) {
+    if(event.target===pair && pair.checked){
+      for(const toggle of [hard,pore,charge])if(toggle)toggle.checked=false
+      for(const toggle of [charge])toggle?.dispatchEvent(new Event('change'))
+    } else if([hard,pore,charge].includes(event.target) && event.target.checked && pair?.checked){
+      pair.checked=false;pair.dispatchEvent(new Event('change'))
+    }
     if(event.target===hard && !hard.checked){if(peg){peg.checked=false;peg.dispatchEvent(new Event('change'))}if(pore)pore.checked=false;if(charge){charge.checked=false;charge.dispatchEvent(new Event('change'))}}
-    else if((pore?.checked || charge?.checked || peg?.checked) && hard)hard.checked=true
+    else if((pore?.checked || charge?.checked || (peg?.checked && !pair?.checked)) && hard)hard.checked=true
     // The supported charge model is a closed wall, not a charged nanopore.
     if(event.target===pore && pore.checked && charge){charge.checked=false;charge.dispatchEvent(new Event('change'))}
     if(event.target===charge && charge.checked && pore)pore.checked=false
     sync()
   }
-  for(const toggle of [hard,pore,charge,peg])toggle?.addEventListener('change',change)
+  for(const toggle of [hard,pore,charge,peg,pair])toggle?.addEventListener('change',change)
   sync();emit()
   return {
     sync,
+    assertReady:()=>electrodes.assertReady(),
+    electrodePayload:()=>electrodes.payload?.() || null,
     enabled:()=>!!(hard?.checked || pore?.checked || charge?.checked),
     poreDiameter:value=>pore?.checked?value:0,
-    restore(p={}){if(hard)hard.checked=!!p.graphene_nanopore;if(pore)pore.checked=!!p.graphene_nanopore && Number(p.graphene_pore_diameter_nm ?? 2.1)>0;sync()},
+    restore(p={}){electrodes.restore(p.two_electrodes);if(hard)hard.checked=!!p.graphene_nanopore;if(pore)pore.checked=!!p.graphene_nanopore && Number(p.graphene_pore_diameter_nm ?? 2.1)>0;sync()},
     select(next,params={},explicit=false){job=next;prep=params;seed=null;if(explicit)authorizedId=next?.job_id || null;else if(authorizedId!==next?.job_id)authorizedId=null;emit()},
     setSeed(value){seed=value;emit()},
     clear(){job=null;prep={};authorizedId=null;seed=null;emit()},
-    dispose(){for(const toggle of [hard,pore,charge,peg])toggle?.removeEventListener('change',change)},
+    dispose(){electrodes.dispose();for(const toggle of [hard,pore,charge,peg,pair])toggle?.removeEventListener('change',change)},
   }
 }

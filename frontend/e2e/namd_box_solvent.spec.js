@@ -1,6 +1,6 @@
 import {expect,test} from '@playwright/test'
 // Only __e2e__ documents persist outside the report directory; global teardown removes them.
-test('box and solvent details work for an empty document',async({page},testInfo)=>{
+test('box and solvent details work for an empty document and a slab cell',async({page},testInfo)=>{
   await page.goto('/')
   await page.waitForSelector('#canvas')
   await page.locator('#menu-file-new').evaluate(el=>el.click())
@@ -28,6 +28,18 @@ test('box and solvent details work for an empty document',async({page},testInfo)
   await expect.poll(()=>page.evaluate(()=>window.__nadocTest.store.getState().currentDesign?.metadata?.namd_box_solvent?.na)).toBe('175')
   await page.locator('#md-box-solvent-toggle').scrollIntoViewIfNeeded()
   await page.screenshot({path:testInfo.outputPath('box-solvent.png')})
+  await page.click('#md-surface-toggle')
+  await page.check('#md-two-electrodes-enable')
+  await expect.poll(async()=>(await snapshot()).faces?.filter(x=>x==='slab').length).toBe(2)
+  const slab=await snapshot()
+  expect(slab.faces.filter(x=>x==='slab')).toHaveLength(2)
+  expect(slab.faces.filter(x=>x==='periodic')).toHaveLength(4)
+  expect(slab.preview.numbers.volume_nm3).toBe(1000)
+  expect(slab.preview.dimensions.reduce((a,b)=>a*b,1)).toBe(3000)
+  await page.screenshot({path:testInfo.outputPath('box-solvent-slab.png')})
+  await page.uncheck('#md-two-electrodes-enable')
+  await expect(page.locator('#md-box-y')).toHaveValue('15')
+  await expect(page.locator('#md-box-z')).toHaveValue('20')
   await page.uncheck('#md-box-view-details')
   await expect.poll(async()=>(await snapshot()).visible).toBe(false)
 })
