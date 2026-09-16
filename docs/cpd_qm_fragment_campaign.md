@@ -713,9 +713,24 @@ multipole table, and the default CPHF solver tolerance of 1e-6 produced maximum 
 asymmetry of 8.86e-6 atomic units against the preregistered 1e-6 audit limit.
 
 Recovery job **32603776** repeats the same property calculation, geometry, method, basis,
-threads, and memory with only the documented CPHF convergence tightened to 1e-10 and the
-parser corrected to read Psi4's multipole table. Its archive is
+threads, and memory with an attempted CPHF convergence override of 1e-10 and the parser
+corrected to read Psi4's multipole table. Its archive is
 `alpine-qm-cpd-drude-response-v2`; hashes were verified after upload. The five-minute
 completion watcher was moved to the recovery archive. A pass completes the P1 target
 only. Consistent with the literature reassessment, it does not automatically launch the
 perturbed-ESP campaign or make the anti product a prerequisite for cis-syn-I release.
+
+Job **32603776** ran for 2 minutes 53 seconds and Psi4 exited normally. The corrected
+parser recovered all three finite dipole components, and all nine polarizability
+components were finite. The tensor was positive definite after symmetrization, and the
+largest component difference from job 32603453 was only 5.54e-10 atomic units. Remote and
+collected output/audit hashes match. The registered gate still failed because the output
+showed that the solver remained at the default 1e-6 convergence and 100 iterations; the
+maximum tensor asymmetry was consequently unchanged at 8.86e-6 atomic units.
+
+The recovery input had applied `SOLVER_CONVERGENCE` to Psi4's `CPHF` module. A direct
+Psi4 1.11 option probe confirmed that this DFT response path instead reads the `SCF`
+module's solver options. Job **32603908** (`cpd-drude-pol3`) was therefore submitted with
+the same scientific target and `SCF` solver convergence set to 1e-10. The prior outputs
+and failed triggers remain immutable. The watcher now follows the v3 archive and will not
+launch dependent jobs.
