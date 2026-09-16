@@ -824,3 +824,47 @@ or holdout result. The enabled `nadoc-anti-drude-p2.timer` checks the independen
 and trigger every five minutes. Only a double pass starts the one-core, low-priority fit;
 a failure leaves every P2 target unread. Even a statistical holdout pass still requires
 the frozen OpenMM/NAMD response spot check before P2 closes.
+
+### Anti-Drude P1/P2 closeout (2026-09-16)
+
+Alpine array **32608183** completed all 95 remaining perturbed-ESP cases and final audit
+job **32608184** passed. The collected P1 archive contains all 97 case audits, 72 frozen
+fit cases, and 24 untouched holdouts. All 96 response maps are finite and the 96-by-60
+field-signature matrix retains rank 60. Archive and campaign hashes were independently
+verified, the completion trigger is
+`alpine-qm-cpd-drude-perturbed-esp-v2/completion_trigger.json`, and its watcher is
+disabled.
+
+The original P2 family (`anti-cpd-drude-electrostatic-fit-v1`) passed its permanent
+charge, training response, dipole-response, and displacement limits but failed the
+scaled molecular-polarizability tensor gate. The registered carbonyl-anisotropy expansion
+(`...-fit-v2`) improved the response fit but again failed only that tensor gate; neither
+attempt read a holdout. A training-only scale diagnostic then established that the model
+family had a feasible solution and that the joint optimizer had missed the tradeoff.
+Both failures and the diagnostic are preserved in their stage assessments.
+
+Recovery `anti-cpd-drude-electrostatic-fit-v3` preregistered one bounded uniform atomic-
+polarizability scale while freezing the v2 atomic ratios, Thole factors, anisotropy,
+partitions, and every acceptance threshold. Two scale/charge cycles selected a scale of
+**0.9394538624**. The hashed pre-holdout fit passed with training response relative RMS
+**0.16492**, training dipole-response RMS **0.14880**, tensor Frobenius error **0.06249**,
+and maximum Drude displacement **0.15267 Å**. Only then was the holdout opened. All
+holdout gates passed: response RMS **0.16328**, fit ratio **0.9900**, dipole-response RMS
+**0.14449**, maximum tensor-eigenvalue error **0.08834**, static ESP RMS
+**0.0002798 au**, and maximum displacement **0.14429 Å**.
+
+The final engine check used eight preregistered cases spanning both perturbation layers
+and both data partitions. A CPU-only NAMD Git-2025-12-04 build loaded 20 Drudes, eight
+lone pairs, four anisotropy records, and NBTHOLE. Fixed nuclei and virtual sites were
+retained while zero-temperature damped Drude dynamics converged the induced particles;
+this avoids NAMD's ill-conditioned conjugate-gradient path for hard-fixed Drude parents.
+Against the frozen OpenMM implementation, worst-case relative errors were **0.000347**
+for induced dipole, **0.000674** for per-Drude response magnitudes, and **0.000353** for
+the response ESP, all far below the unchanged **0.02** limit.
+
+P2 is therefore complete. Its immutable closeout and trigger are
+`anti-cpd-drude-electrostatic-fit-v3/stage_assessment.json` and
+`completion_trigger.json`. This passes the electrostatic-model stage only; the model is
+not production or simulation ready. The next anti-Drude stage is a separately frozen P3
+water-orientation validation, followed by bonded fitting, nucleotide assembly, duplex,
+and reproducibility gates before any registry change.
