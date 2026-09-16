@@ -642,18 +642,20 @@ finite zero-step energy. The full 2018 nucleic-acid topology also exposed an uns
 Drude model compound, but the complete DNA structure-builder path still needs either a
 validated preprocessing correction or a CHARMM-GUI/CHARMM-generated PSF.
 
-The first P1 response pilot is Alpine job **32603453**. It requests a
+The first P1 response pilot was Alpine job **32603453**. It requested a
 B3LYP/aug-cc-pVDZ molecular polarizability tensor and dipole at the audited
 MP2/6-31G(d) N-methyl CPD geometry using 32 CPUs and 70 GB on `acpu`. Submission and
-resource checks passed; the job entered `PENDING (Priority)`. Its completion audit
-requires normal Psi4 termination, nine finite tensor components, tensor symmetry within
-1e-6 atomic units, and three finite dipole components. The enabled
-`nadoc-cpd-drude-response-watch.timer` polls every five minutes, collects terminal output,
-and writes an immutable completion trigger. A pass authorizes preparation of the
-fit/held-out +0.5 e perturbed-ESP campaign only and has no registry effect.
+resource checks passed. Its completion audit
+required normal Psi4 termination, nine finite tensor components, tensor symmetry within
+1e-6 atomic units, and three finite dipole components. A five-minute watcher collected
+terminal output and wrote an immutable completion trigger. Under the policy in force at
+submission, a pass would have authorized preparation of the fit/held-out +0.5 e
+perturbed-ESP campaign only and had no registry effect; the later literature reassessment
+below superseded that automatic continuation.
 
-The next campaign has four reassessment triggers: finish and audit fit/held-out perturbed
-ESP and polarizability QM targets; require a fitted Drude electrostatic model to predict
+The then-proposed next campaign had four reassessment triggers: finish and audit
+fit/held-out perturbed ESP and polarizability QM targets; require a fitted Drude
+electrostatic model to predict
 the held-out perturbations; require unchanged three-orientation water cross-validation
 plus a new frozen fourth orientation; then require a full Drude d(TpT), SWM4-NDP solution,
 and duplex-context validation at no more than 1 fs. Additive-to-Drude parameter transfer
@@ -729,8 +731,28 @@ showed that the solver remained at the default 1e-6 convergence and 100 iteratio
 maximum tensor asymmetry was consequently unchanged at 8.86e-6 atomic units.
 
 The recovery input had applied `SOLVER_CONVERGENCE` to Psi4's `CPHF` module. A direct
-Psi4 1.11 option probe confirmed that this DFT response path instead reads the `SCF`
-module's solver options. Job **32603908** (`cpd-drude-pol3`) was therefore submitted with
-the same scientific target and `SCF` solver convergence set to 1e-10. The prior outputs
-and failed triggers remain immutable. The watcher now follows the v3 archive and will not
-launch dependent jobs.
+Psi4 1.11 option probe initially suggested trying the `SCF` module's solver options. Job
+**32603908** (`cpd-drude-pol3`) used that scope with the same scientific target, but Psi4
+again reported the default 1e-6 convergence and returned the same 8.86e-6 atomic-unit
+asymmetry. Source inspection then established that `run_scf_property` reads the global
+`SOLVER_CONVERGENCE` and `SOLVER_MAXITER` options.
+
+Final recovery job **32607643** (`cpd-drude-pol4`) set those global options to 1e-10 and
+200 without changing the geometry, method, basis, resources, or acceptance criteria. It
+completed normally on Alpine in 7 minutes 38 seconds. Psi4 reported the requested solver
+settings and normal termination; the audit recovered all tensor and dipole components,
+measured maximum tensor asymmetry of **1.2010e-9 atomic units**, and passed the unchanged
+1e-6 limit. The symmetrized tensor is positive definite, with eigenvalues 141.214204,
+182.676046, and 210.980607 atomic units. Its largest component difference from any of the
+three preserved calculations is 1.265e-5 atomic units, confirming that the recovery
+removed numerical asymmetry without materially changing the response target. Remote and
+collected hashes match.
+
+The P1 response-target stage is therefore complete. The immutable closeout is
+`alpine-qm-cpd-drude-response-v4/stage_assessment.json`; it preserves all four job IDs,
+inputs, outputs, audits, completion triggers, and hashes. This result has no registry
+effect and is not simulation-ready. The completion watcher is disabled. Consistent with
+the literature reassessment, no perturbed-ESP expansion is launched automatically and
+the anti Drude research path does not block the canonical cis-syn-I release path. The
+accepted response target remains available if that separate research path is explicitly
+resumed under a new versioned campaign decision.
