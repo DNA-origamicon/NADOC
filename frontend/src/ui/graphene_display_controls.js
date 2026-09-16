@@ -2,7 +2,7 @@
 export function initGrapheneDisplayControls({ preview, simulation, ionPaths, storage } = {}) {
   const toggle = document.getElementById('md-graphene-show')
   const select = document.getElementById('md-graphene-representation')
-  let selectedSurface = false, previewSurface = false
+  let selectedSurface = false, previewSurface = false, engineActive = true
   let settings = { visible: true, representation: 'plane' }
   try {
     storage ??= globalThis.localStorage
@@ -13,10 +13,11 @@ export function initGrapheneDisplayControls({ preview, simulation, ionPaths, sto
   function apply() {
     if (toggle) toggle.checked = settings.visible
     if (select) select.value = settings.representation
-    const effective = { ...settings, visible: settings.visible && selectedSurface }
-    preview?.setDisplay({ ...settings, visible: settings.visible && previewSurface })
+    const effective = { ...settings, visible: settings.visible && selectedSurface && engineActive }
+    preview?.setDisplay({ ...settings, visible: settings.visible && previewSurface && engineActive })
     simulation?.setGrapheneDisplay(effective)
     ionPaths?.setGrapheneDisplay(effective)
+    window.dispatchEvent(new CustomEvent('nadoc:hard-surface-display', { detail: effective }))
   }
   function change() {
     settings = { visible: toggle?.checked !== false, representation: select?.value || 'plane' }
@@ -33,9 +34,12 @@ export function initGrapheneDisplayControls({ preview, simulation, ionPaths, sto
     if (previewSurface && !wasPreview && !selectedSurface) settings.visible = true
     apply()
   }
+  const onEngine = event => { engineActive = event.detail?.engine === 'namd'; apply() }
+  window.addEventListener('nadoc:simulation-engine', onEngine)
   window.addEventListener('nadoc:namd-surface-selection', onSelection)
   apply()
   return { dispose() {
+    window.removeEventListener('nadoc:simulation-engine', onEngine)
     window.removeEventListener('nadoc:namd-surface-selection', onSelection)
     toggle?.removeEventListener('change', change)
     select?.removeEventListener('change', change)

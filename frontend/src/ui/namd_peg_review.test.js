@@ -177,3 +177,19 @@ it('keeps saved PEG walls hidden until a matching surface job is explicitly sele
  select({enabled:true,jobId:'other'});expect(group.visible).toBe(false)
  select({enabled:false});expect(group.visible).toBe(false)
 })
+
+it('loads a selected PEG job without a visualization action and honors View surface independently of PEG visibility',async()=>{
+ const data={...payload(),job_id:'job1',stage:'resident',frames:[]}
+ const fetch=vi.fn(async()=>data),{scene}=setup({getPegQualification:fetch})
+ window.dispatchEvent(new CustomEvent('nadoc:namd-surface-selection',{detail:{enabled:true,jobId:'job1',kind:'peg_wall_qualification'}}))
+ await Promise.resolve();await Promise.resolve()
+ expect(fetch).toHaveBeenCalledWith('job1',undefined,1)
+ const group=scene.getObjectByName('NAMD PEG qualification')
+ expect(group.visible).toBe(true)
+ const walls=()=>group.children.filter(n=>n.name==='NAMD PEG hard surface')
+ expect(walls()).toHaveLength(2);expect(walls().every(n=>n.visible)).toBe(true)
+ window.dispatchEvent(new CustomEvent('nadoc:hard-surface-display',{detail:{visible:false}}))
+ expect(walls().every(n=>!n.visible)).toBe(true)
+ window.dispatchEvent(new CustomEvent('nadoc:hard-surface-display',{detail:{visible:true}}))
+ expect(walls().every(n=>n.visible)).toBe(true)
+})

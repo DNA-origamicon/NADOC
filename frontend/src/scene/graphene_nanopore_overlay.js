@@ -76,7 +76,7 @@ export function initGrapheneNanoporeOverlay(scene) {
     if (changed && spec) update(spec)
     if (mesh) mesh.visible = display.visible && simulationOwners.size === 0
   }
-  function reset() { clear(); spec = null }
+  function reset() { clear(); spec = null; simulationOwners.clear() }
   return { update, clear: reset, setSimulationActive, setDisplay, dispose: reset, mesh: () => mesh }
 }
 

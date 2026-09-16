@@ -603,8 +603,6 @@ export function initMdSolventControls({
       const wasLive = _live
       _enabled = !!on
       if (!on) { _generation++; _preparation = null }
-      if (simulationGraphene) window.dispatchEvent(new CustomEvent(
-        "nadoc:graphene-md-active", { detail: { active: _enabled } }))
       if (!_enabled) _keyframeOptions = false
       _live = _enabled && transport === 'live'
       if (waterToggle) {

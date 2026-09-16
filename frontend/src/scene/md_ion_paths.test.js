@@ -176,3 +176,12 @@ it('colors complete path segments from earliest to latest saved frame', () => {
   const species = lines.geometry.attributes.instanceColorStart.array
   expect([...species.slice(0, 3)]).toEqual([...species.slice(6, 9)])
 })
+
+it('does not suppress the setup surface for ion data without replacement graphene',()=>{
+ const states=[],overlay=initMdIonPaths(new THREE.Scene(),undefined,{onActiveChange:value=>states.push(value)})
+ const data={paths:[],pore:{radius_nm:2,normal:[0,0,1]}}
+ overlay.setData(data);expect(states).toEqual([])
+ overlay.setData({...data,graphene:[0,0,0,.142,0,0]});expect(states).toEqual([true])
+ overlay.setData(data);expect(states).toEqual([true,false])
+ overlay.dispose()
+})

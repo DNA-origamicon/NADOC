@@ -363,3 +363,16 @@ it('draws actual graphene coordinates independently of water and ions and clears
   expect(mesh.visible).toBe(false)
   overlay.dispose()
 })
+
+it('reports membrane ownership only when a frame supplies graphene and releases it on clear',()=>{
+ const states=[],scene=new THREE.Scene()
+ const overlay=initMdSolventOverlay(scene,{onGrapheneChange:value=>states.push(value)})
+ overlay.setMode('sphere')
+ expect(states).toEqual([])
+ overlay.setFrame(sphereFrame(0));expect(states).toEqual([])
+ const frame={...sphereFrame(0),graphene:new Float32Array([0,0,0,.142,0,0])}
+ overlay.setFrame(frame);overlay.setFrame(frame);expect(states).toEqual([true])
+ overlay.setFrame(sphereFrame(0));expect(states).toEqual([true,false])
+ overlay.setFrame(frame);overlay.clear();expect(states).toEqual([true,false,true,false])
+ overlay.dispose()
+})

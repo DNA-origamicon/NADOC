@@ -5061,6 +5061,8 @@ async def list_md_jobs() -> list[dict]:
         # dataclasses.asdict recursively copies them; no persisted record is changed.
         j.health_samples = compact_health
         d = j.to_dict()
+        from backend.core.md_surface_display import surface_prep_params
+        d["surface_prep_params"] = surface_prep_params(j, ws)
         if truncated:
             d["health_samples_truncated"] = True
             d["health_samples_total"] = full_health_count
@@ -5157,6 +5159,8 @@ async def get_md_job(job_id: str) -> dict:
 
     job = _load_job(job_id)
     d = job.to_dict()
+    from backend.core.md_surface_display import surface_prep_params
+    d["surface_prep_params"] = surface_prep_params(job, _workspace())
     d["failure_details"] = _failure_diagnostics(job)
     _decorate_terminal_segment_progress(job, d, _workspace())
     _decorate_preparation_progress(job, d, _workspace())

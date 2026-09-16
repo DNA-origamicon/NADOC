@@ -33,7 +33,7 @@ export function initNamdPegReview({ scene, camera, controls, store, api }) {
   const scaleLabel = document.createElement('p'); scaleLabel.className = 'peg-rmsf-scale'; scaleLabel.hidden = true
   card.append(title, status, jobs, stages, waterLabel, fit, play, slider, frameLabel, scaleLabel, representationLabel, create, refresh); document.body.append(card)
   let data = null, initial = null, designId = null, frames = [], index = 0, timer = null, generation = 0
-  let surfaceJobId = null
+  let surfaceJobId = null, surfaceVisible = true
   group.visible = false
   let pegVisible = store.getState()?.currentDesign?.metadata?.namd_peg_visible !== false
   let representation = 'full'
@@ -80,6 +80,7 @@ export function initNamdPegReview({ scene, camera, controls, store, api }) {
       const v = new THREE.Vector3(...[0, 1, 2].map(a => +(a === tangents[1])))
       plane.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(u, v, u.clone().cross(v)))
       const center = box.map(v => v/2); center[axis] = z
+      plane.name = 'NAMD PEG hard surface'; plane.visible = surfaceVisible
       plane.position.set(...center); group.add(plane)
     }
     const grafts = []
@@ -129,7 +130,7 @@ export function initNamdPegReview({ scene, camera, controls, store, api }) {
     if (!id) { apply(initial, false); return }
     status.textContent = 'Loading recorded PEG trajectory…'
     try {
-      const result = await api.getPegQualification(id, segment, mode === 'display' ? 1 : 100)
+      const result = await api.getPegQualification(id, segment, ['off', 'display'].includes(mode) ? 1 : 100)
       if (token !== generation) return
       if (!result || result.schema !== 'nadoc.namd_peg_review.v1') throw new Error('PEG trajectory is unavailable.')
       apply(result, resetCamera)
@@ -203,12 +204,20 @@ export function initNamdPegReview({ scene, camera, controls, store, api }) {
   slider.addEventListener('input', () => { stop(); index = Number(slider.value); draw() })
   play.addEventListener('click', togglePlay)
   const onRepresentation = event => { representation = event.detail?.representation || 'full'; draw(); sidebar.sync() }
-  const onSurfaceSelection = event => { surfaceJobId = event.detail?.enabled ? event.detail.jobId : null; draw() }
+  const onSurfaceSelection = event => {
+    surfaceJobId = event.detail?.enabled ? event.detail.jobId : null
+    if (surfaceJobId && isPegJob({ run_kind: event.detail?.kind }) && selectedJobId !== surfaceJobId) {
+      mode = 'off'; void loadJob(surfaceJobId, undefined, false)
+    } else if (!surfaceJobId) { generation++; stop(); stopLive(); selectedJobId = null }
+    draw()
+  }
+  const onSurfaceDisplay = event => { surfaceVisible = event.detail?.visible !== false; draw() }
+  window.addEventListener('nadoc:hard-surface-display', onSurfaceDisplay)
   window.addEventListener('nadoc:namd-surface-selection', onSurfaceSelection)
   const onVisibility = event => { pegVisible=event.detail?.visible!==false;draw() }
   window.addEventListener('nadoc:namd-peg-coating', onVisibility)
   window.addEventListener('nadoc:representation-change', onRepresentation)
   window.addEventListener('nadoc:peg-qualification', onJob)
   const unsubscribe = store.subscribe(onState); onState(store.getState())
-  return { loadJob: (id, segment) => { mode = 'traj'; return loadJob(id, segment) }, setMode, dispose() { generation++; stop(); stopLive(); sidebar.dispose(); unsubscribe?.(); clear(); scene.remove(group); card.remove(); window.removeEventListener('nadoc:peg-qualification', onJob); window.removeEventListener('nadoc:representation-change', onRepresentation); window.removeEventListener('nadoc:namd-peg-coating', onVisibility); window.removeEventListener('nadoc:namd-surface-selection', onSurfaceSelection) } }
+  return { loadJob: (id, segment) => { mode = 'traj'; return loadJob(id, segment) }, setMode, dispose() { window.removeEventListener('nadoc:hard-surface-display', onSurfaceDisplay); generation++; stop(); stopLive(); sidebar.dispose(); unsubscribe?.(); clear(); scene.remove(group); card.remove(); window.removeEventListener('nadoc:peg-qualification', onJob); window.removeEventListener('nadoc:representation-change', onRepresentation); window.removeEventListener('nadoc:namd-peg-coating', onVisibility); window.removeEventListener('nadoc:namd-surface-selection', onSurfaceSelection) } }
 }

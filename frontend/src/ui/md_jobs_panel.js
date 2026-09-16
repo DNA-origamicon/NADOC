@@ -815,12 +815,14 @@ export function mdDraftLaunchPayload(job) {
  * (nanopore geometry, surface anchors, solvation) from the relaxation ancestor. */
 export function mdInheritedPrepParams(job, jobs = []) {
   let current = job
-  const seen = new Set()
-  while (current && !current.prep_params && current.parent_job_id && !seen.has(current.job_id)) {
-    seen.add(current.job_id)
-    current = jobs.find(candidate => candidate.job_id === current.parent_job_id) || null
+  const seen = new Set(), chain = []
+  while (current && !seen.has(current.job_id)) {
+    seen.add(current.job_id); chain.unshift(current)
+    current = jobs.find(candidate => candidate.job_id === current.parent_job_id)
   }
-  return { ...(current?.prep_params || {}) }
+  return Object.assign({}, ...chain.map(record => ({
+    ...(record.prep_params || {}), ...(record.surface_prep_params || {}),
+  })))
 }
 
 /** Raw-frame plan for a graphene-only Display MD view. There is no DNA trajectory to
@@ -1538,7 +1540,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   let _prewarmTimer = null
   let _remotePollTimer = null   // periodic SLURM-status poll for in-flight Alpine jobs
   let _hadActiveRemote = false  // did the last remote poll see an active Alpine job? (edge-trigger a final refresh)
-  let _grapheneSelectionId = null   // explicit selection owns the surface preview
+  let _grapheneSelectionId = null   // selected job owns the surface preview
   let _displayJobId = null
   let _displayKey   = null
   let _displayMeta  = null
@@ -1963,6 +1965,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (_fetchFails > 0) { _fetchFails = 0; _setBackendStale(false); _checkEngines() }  // reconnected → restore status line
       _renderList()
       _selectBestJob()
+      const selected = _jobs.find(j => j.job_id === _selectedId)
+      if (selected) surfaceCard.select(selected, mdInheritedPrepParams(selected, _jobs))
       _notifyIfJobsChanged()
       _renderReconnectPrompt()   // in-flight Alpine runs + a down session → nudge to reconnect
       void _fetchQueue()         // who's waiting, and is the machine busy (▶ Run vs ＋ Queue)
@@ -4717,7 +4721,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // ── Job selection + WS subscription ───────────────────────────────────────
   function _selectJob(jobId, options = false) {
     const explicit = options === true || (options && typeof options === 'object' && options.automatic === false)
-    _grapheneSelectionId = explicit ? jobId : null
+    _grapheneSelectionId = jobId
     const surfaceJob = _jobs.find(j => j.job_id === jobId) || null
     surfaceCard.select(surfaceJob, mdInheritedPrepParams(surfaceJob, _jobs), explicit)
     _userDeselected = false   // an explicit pick supersedes a previous deselection
@@ -4961,7 +4965,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         _mdDebug(`[${_ts()}] md-jobs: WS state status=${msg.job.status} seg=${msg.job.current_segment_idx}/${msg.job.segments?.length ?? 0}`,
                     msg.job.live_metrics ? `T=${msg.job.live_metrics.temperature_k?.toFixed(1)}K` : '')
         const idx = _jobs.findIndex(j => j.job_id === msg.job.job_id)
-        if (idx >= 0) _jobs[idx] = msg.job; else _jobs.unshift(msg.job)
+        if (idx >= 0) _jobs[idx] = { ..._jobs[idx], ...msg.job }; else _jobs.unshift(msg.job)
+        if (msg.job.job_id === _selectedId) {
+          const selected = _jobs.find(j => j.job_id === _selectedId)
+          surfaceCard.select(selected, mdInheritedPrepParams(selected, _jobs))
+        }
         _renderList()
         // Wake the (possibly idle) master job card + progress bar on a status transition
         // pushed over the WS — the master self-polls only while it holds an active node,

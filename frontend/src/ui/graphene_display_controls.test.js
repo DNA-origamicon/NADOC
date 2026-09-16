@@ -102,3 +102,16 @@ it('shows setup previews without authorizing a simulation membrane',()=>{
  expect(simulation.setGrapheneDisplay).toHaveBeenLastCalledWith(expect.objectContaining({visible:false}))
  ctrl.dispose()
 })
+
+it('prevents background surface refreshes leaking across engine tabs',()=>{
+ document.body.innerHTML='<input type="checkbox" id="md-graphene-show">'
+ const preview={setDisplay:vi.fn()},simulation={setGrapheneDisplay:vi.fn()}
+ const ctrl=initGrapheneDisplayControls({preview,simulation})
+ const engine=engine=>window.dispatchEvent(new CustomEvent('nadoc:simulation-engine',{detail:{engine}}))
+ engine('oxdna')
+ window.dispatchEvent(new CustomEvent('nadoc:namd-surface-selection',{detail:{enabled:true,previewEnabled:true}}))
+ expect(preview.setDisplay).toHaveBeenLastCalledWith(expect.objectContaining({visible:false}))
+ engine('namd')
+ expect(preview.setDisplay).toHaveBeenLastCalledWith(expect.objectContaining({visible:true}))
+ ctrl.dispose()
+})

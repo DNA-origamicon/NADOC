@@ -1211,7 +1211,10 @@ async function main() {
   // (No md_overlay bead cloud here: that served md_panel's deleted "Beads Only" view.
   // The live CG path moves the design's OWN beads via applyFemPositions. mrDNA still
   // builds its own initMdOverlay instance below — that one is a real standalone rep.)
-  const mdSolventOverlay  = initMdSolventOverlay(scene)
+  const grapheneNanoporeOverlay = initGrapheneNanoporeOverlay(scene)
+  const mdSolventOverlay  = initMdSolventOverlay(scene, {
+    onGrapheneChange: active => grapheneNanoporeOverlay.setSimulationActive(active),
+  })
   const mdBoxOverlay      = initMdBoxOverlay(scene)
   initPreparationDetails({scene,camera,controls,getEntries:()=>designRenderer.getBackboneEntries?.() || []})
   const mdIonPaths = initMdIonPaths(scene, () => controls.target, {
@@ -1650,7 +1653,6 @@ async function main() {
       oxdnaPanel?.refreshControls?.()
     },
   })
-  const grapheneNanoporeOverlay = initGrapheneNanoporeOverlay(scene)
   initGrapheneDisplayControls({ preview: grapheneNanoporeOverlay, simulation: mdSolventOverlay, ionPaths: mdIonPaths })
   window.addEventListener("nadoc:graphene-md-active", (event) => {
     grapheneNanoporeOverlay.setSimulationActive(event.detail?.active)
@@ -1666,6 +1668,7 @@ async function main() {
       bounds: _oxdnaStructureBounds(),
     })
   })
+  window.dispatchEvent(new Event('nadoc:namd-surface-request'))
   // Surface capture strands — sub-section of the Hard-surface card (immobilization).
   // See memory/project_surface_strands.md.
   const oxdnaSurfaceStrandsSetup = initOxdnaSurfaceStrandsSetup({
@@ -1866,6 +1869,7 @@ async function main() {
         _resetSimulationSceneVisuals()
       }
       _sceneVisualEngine = engine
+      window.dispatchEvent(new CustomEvent('nadoc:simulation-engine', { detail: { engine } }))
       simulateJobs?.setActiveEngine?.(engine)
       const namdLiveHost = document.getElementById('namd-live-controls-host')
       if (namdLiveHost) namdLiveHost.style.display = engine === 'namd' ? '' : 'none'

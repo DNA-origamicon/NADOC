@@ -1700,7 +1700,7 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     return panel
   }
 
-  it('keeps graphene hidden on load until a graphene job is explicitly picked', async () => {
+  it('shows the automatically selected surface job and hides it on deselection', async () => {
     const surfaceToggle = document.createElement('input')
     surfaceToggle.id = 'md-surface-enable'
     surfaceToggle.type = 'checkbox'
@@ -1718,11 +1718,11 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
       await flushMicro()
       expect(panel.getSelectedJob()?.job_id).toBe('J9')
       expect(previews.length).toBeGreaterThan(0)
-      expect(previews.every(enabled => !enabled)).toBe(true)
-      // The auto-picked row's first click selects its graphene.
+      expect(previews.at(-1)).toBe(true)
+      // Clicking the already-selected row consistently deselects it.
       $('md-jobs-list').querySelector('[data-job-id="J9"]').click()
       await flushMicro()
-      expect(previews.at(-1)).toBe(true)
+      expect(previews.at(-1)).toBe(false)
       await panel.selectJob('plain')
       expect(previews.at(-1)).toBe(false)
       await panel.selectJob('J9', { explicit: true })
@@ -2687,4 +2687,14 @@ it('primary NAMD run control offers electrode continuation instead of replaying 
   expect(rc.label).toBe('Continue equilibration…')
   expect(rc.disabled).toBe(false)
   expect(mdRunControl({status:'failed',failure_kind:'electrode_equilibration'},{busy:true}).disabled).toBe(true)
+})
+
+it('inherits build settings through partial child controls and uses the prepared package without a parent',()=>{
+ const parent={job_id:'root',prep_params:{graphene_nanopore:true,graphene_pore_diameter_nm:0}}
+ const child={job_id:'child',parent_job_id:'root',prep_params:{temperature:300}}
+ expect(mdInheritedPrepParams(child,[parent,child])).toMatchObject({...parent.prep_params,temperature:300})
+ child.surface_prep_params={graphene_nanopore:true,graphene_pore_diameter_nm:4}
+ expect(mdInheritedPrepParams(child,[child])).toMatchObject({graphene_nanopore:true,graphene_pore_diameter_nm:4})
+ parent.parent_job_id='child'
+ expect(mdInheritedPrepParams(child,[parent,child]).graphene_pore_diameter_nm).toBe(4)
 })

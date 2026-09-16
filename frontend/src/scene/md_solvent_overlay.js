@@ -77,7 +77,11 @@ export function capacityFor(n, current = 0) {
   return Math.max(1, Math.ceil(n * GROWTH))
 }
 
-export function initMdSolventOverlay(scene) {
+export function initMdSolventOverlay(scene, { onGrapheneChange = () => {} } = {}) {
+  let hasGraphene = false
+  function grapheneChanged(value) {
+    if (value !== hasGraphene) { hasGraphene = value; onGrapheneChange(value) }
+  }
   const graphene = initGrapheneRepresentation(scene)
   const _geom = createGeometryState()
   const _matCache = new Map()
@@ -283,6 +287,7 @@ export function initMdSolventOverlay(scene) {
       _drawWater(frame)
       _drawIons(frame)
       graphene.setFrame(frame.graphene)
+      grapheneChanged(!!frame.graphene?.length)
       _stats = { nWater: _waterVisible ? (frame.nWater | 0) : 0,
                  nIons: _ionsVisible ? (frame.ions.length / 3) | 0 : 0 }
     },
@@ -304,12 +309,14 @@ export function initMdSolventOverlay(scene) {
     /** Hide everything, keeping the allocated meshes for the next frame. */
     clear() {
       graphene.clear()
+      grapheneChanged(false)
       for (const key of _meshes.keys()) _hide(key)
       _stats = { nWater: 0, nIons: 0 }
     },
 
     dispose() {
       graphene.dispose()
+      grapheneChanged(false)
       for (const { mesh } of _meshes.values()) { scene.remove(mesh); mesh.dispose() }
       _meshes.clear()
       for (const m of _matCache.values()) m.dispose()

@@ -11,7 +11,7 @@ export function initNamdSurfaceCard({ root=document, onChange=()=>{}, onSetupPre
   const peg=root.querySelector('#md-peg-enable')
   const pair=root.querySelector('#md-two-electrodes-enable')
   const electrodes=initNamdTwoElectrodes({root})
-  let job=null, prep={}, authorizedId=null, seed=null
+  let job=null, prep={}, seed=null
   let lastSelection=null,lastPreview=null,setupActive=false
   const fields=['axis','offset','pore-diameter','layers','layer-spacing'].map(name=>root.querySelector(`#md-surface-${name}`)).filter(Boolean)
   const setupEnabled=()=>!!(hard?.checked || pore?.checked || charge?.checked)
@@ -23,11 +23,11 @@ export function initNamdSurfaceCard({ root=document, onChange=()=>{}, onSetupPre
   }
   const pegJob=()=>['peg_wall_qualification','peg_fast_relax'].includes(job?.run_kind)
   function emit() {
-    const enabled=!!job?.job_id && authorizedId===job.job_id && (!!prep.graphene_nanopore || pegJob())
+    const enabled=!!job?.job_id && (!!prep.graphene_nanopore || pegJob())
     // Setup previews never authorize a job/coating or change its immutable descriptor.
     const previewEnabled=enabled || (setupActive && setupEnabled())
     lastSelection=dispatchChanged('nadoc:namd-surface-selection', {
-      enabled,previewEnabled,jobId:enabled?job.job_id:null,coating:enabled?prep.namd_peg_coating || null:null,
+      enabled,previewEnabled,jobId:enabled?job.job_id:null,coating:enabled?prep.namd_peg_coating || null:null, kind:job?.run_kind || null,
     },lastSelection)
     const p=enabled?prep:{
       graphene_pore_diameter_nm:pore?.checked?Number(value('pore-diameter',2.1)):0,
@@ -49,7 +49,9 @@ export function initNamdSurfaceCard({ root=document, onChange=()=>{}, onSetupPre
       if(details)details.dataset.enabled=String(!!toggle?.checked)
     }
     const status=root.querySelector('#md-surface-ready')
-    if(status)status.textContent=pair?.checked?'Two-electrode setup · preparation pending.':hard?.checked || pore?.checked || charge?.checked?'Surface configured for the next job.':'Surface off.'
+    if(status)status.textContent=job
+      ? (prep.graphene_nanopore || pegJob()?'Selected job contains a hard surface.':'Selected job has no hard surface.')
+      : (pair?.checked?'Two-electrode setup · preparation pending.':setupEnabled()?'Surface configured for the next job.':'Surface off.')
     onChange(setupEnabled())
     emit()
   }
@@ -78,6 +80,8 @@ export function initNamdSurfaceCard({ root=document, onChange=()=>{}, onSetupPre
   }
   for(const toggle of [hard,pore,charge,peg,pair])toggle?.addEventListener('change',change)
   for(const field of fields){field.addEventListener('input',edit);field.addEventListener('change',edit)}
+  const replay=()=>{lastSelection=null;lastPreview=null;emit()}
+  window.addEventListener('nadoc:namd-surface-request',replay)
   sync()
   return {
     sync,
@@ -86,9 +90,9 @@ export function initNamdSurfaceCard({ root=document, onChange=()=>{}, onSetupPre
     enabled:()=>!!(hard?.checked || pore?.checked || charge?.checked),
     poreDiameter:value=>pore?.checked?value:0,
     restore(p={}){electrodes.restore(p.two_electrodes);if(hard)hard.checked=!!p.graphene_nanopore;if(pore)pore.checked=!!p.graphene_nanopore && Number(p.graphene_pore_diameter_nm ?? 2.1)>0;sync()},
-    select(next,params={},explicit=false){if(job?.job_id!==next?.job_id){setupActive=false;seed=null}job=next;prep=params;if(explicit)authorizedId=next?.job_id || null;else if(authorizedId!==next?.job_id)authorizedId=null;emit()},
+    select(next,params={}){if(job?.job_id!==next?.job_id){setupActive=false;seed=null}job=next;prep=params;emit()},
     setSeed(value){seed=value;emit()},
-    clear(){setupActive=false;job=null;prep={};authorizedId=null;seed=null;lastPreview=null;emit()},
-    dispose(){electrodes.dispose();for(const field of fields){field.removeEventListener('input',edit);field.removeEventListener('change',edit)}for(const toggle of [hard,pore,charge,peg,pair])toggle?.removeEventListener('change',change)},
+    clear(){setupActive=false;job=null;prep={};seed=null;lastPreview=null;emit()},
+    dispose(){electrodes.dispose();window.removeEventListener('nadoc:namd-surface-request',replay);for(const field of fields){field.removeEventListener('input',edit);field.removeEventListener('change',edit)}for(const toggle of [hard,pore,charge,peg,pair])toggle?.removeEventListener('change',change)},
   }
 }

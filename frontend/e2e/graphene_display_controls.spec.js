@@ -10,10 +10,12 @@ test('nanopore display controls affect preview and MD independently of inclusion
   await page.waitForFunction(() => !!window.__nadocTest)
   // Show the actual MD card without creating or editing a workspace document.
   await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('nadoc:simulation-engine', { detail: { engine: 'namd' } }))
     const card = document.getElementById('md-surface-body').parentElement
     document.body.appendChild(card)
     Object.assign(card.style, { position: 'fixed', zIndex: '99999', top: '40px', right: '10px', width: '280px', background: '#161b22' })
     document.getElementById('md-surface-body').style.display = 'block'
+    document.getElementById('md-hard-surface-settings').open = true
     const include = document.getElementById('md-surface-enable')
     include.checked = true
     include.dispatchEvent(new Event('change'))

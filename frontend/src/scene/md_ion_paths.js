@@ -293,7 +293,7 @@ export function initMdIonPaths(scene, _getCenter = () => new THREE.Vector3(), { 
       const nextBatches = ionPathBatches(nextData)
       clearGeometry()
       data = nextData; batches = nextBatches
-      if (!active) { active = true; onActiveChange(true) }
+
       group.matrixAutoUpdate = false
       if (data.origami?.display_transform) group.matrix.fromArray(data.origami.display_transform)
       else group.matrix.identity()
@@ -313,6 +313,8 @@ export function initMdIonPaths(scene, _getCenter = () => new THREE.Vector3(), { 
       rim.name = 'nanoporeAperture'
       rim.visible = grapheneDisplay.visible !== false
       group.add(rim)
+      const hasSurface = !!data.graphene?.length
+      if (active !== hasSurface) { active = hasSurface; onActiveChange(active) }
     },
     dispose() { clear(); scene.remove(group) },
   }

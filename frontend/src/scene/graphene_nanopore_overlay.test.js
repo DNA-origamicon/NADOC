@@ -72,3 +72,11 @@ it('keeps the preview suppressed until all simulation owners release it', () => 
   expect(view.mesh().visible).toBe(true)
   view.dispose()
 })
+
+it('does not retain suppression from a previous document',()=>{
+ const view=initGrapheneNanoporeOverlay(new THREE.Scene())
+ view.setSimulationActive(true);view.setSimulationActive(true,'ion-paths');view.clear()
+ view.update({enabled:true,surface:{positionNm:0}})
+ expect(view.mesh().visible).toBe(true)
+ view.dispose()
+})
