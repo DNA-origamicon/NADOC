@@ -1041,3 +1041,31 @@ recorded in `backend/data/forcefield/photoproduct_qm_fragment_policy_v1.json` ve
 `docs/cpd_qm_fragment_campaign.md` and stored under the Archive-backed
 `tt-cpd-local-fragment-campaign-v1` evidence directory. Input preparation does not pass
 the force-field or NAMD gates.
+
+## Anti-CPD Drude research branch checkpoint (2026-09-16)
+
+The ordered cis-anti-I research branch now has a frozen polarizable electrostatic model.
+Its P2 record contains 20 Drude particles, eight carbonyl lone pairs, four anisotropic
+carbonyl springs, fitted permanent charges, atom-specific polarizabilities and Thole
+factors, and a bounded global polarizability scale of `0.9394538624`. Training and sealed
+perturbation holdouts passed the registered response, dipole, tensor, static-ESP, and
+maximum-displacement limits. An eight-case CPU NAMD/OpenMM comparison also passed the
+unchanged 2% implementation tolerance. The immutable fitted-parameter SHA-256 is
+`5a084ba6aca495ae26321ecbdbe1bc383bfbc54eff092cba97fa26da673ec942`.
+
+P3 holds those electrostatics fixed and fits six ordered CPD-target/ODW NBFIX pairs for
+SWM4-NDP water. The recovery family passes leave-one-orientation-out validation on the
+canonical, alternate-plane, and azimuth +120-degree sets. Its all-orientation parameter
+file was frozen before the independent +240-degree QM set became readable, with SHA-256
+`ab523c2208f67c953f5c0e976e938896e1047a081882d35a672291172ad4c8a2`.
+Alpine array `32610248` supplies that final 54-point set; while it remains pending, P3 is
+incomplete and has no registry effect.
+
+The subsequent bonded stage can reuse the five audited cis-anti-I QM force/Hessian
+datasets and their three-training/two-validation partition, but it cannot reuse the old
+additive fitted coefficients. That candidate ended at `blocked_numerical_validation`.
+The Drude branch must recompute the nonbonded contribution and refit the bonded basis
+before assembling a full nucleotide. Consequently these parameters support fragment
+engine checks, not scientific NAMD validation or production simulation. Full readiness
+still requires bonded geometry/Hessian passage, Drude d(TpT) assembly, SWM4-NDP solution
+testing, duplex-context validation, and the normal registry review.

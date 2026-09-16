@@ -898,3 +898,21 @@ and audits every output, and scores the frozen +240-degree set. It writes
 A pass authorizes P4 bonded fitting; a failure stops automatic continuation for model
 reassessment. P3 remains incomplete and no production or simulation readiness follows
 while array 32610248 is pending.
+
+The P4 input inventory was audited while that array waits. All five existing cis-anti-I
+force/Hessian datasets are available with the original disjoint split of three training
+and two validation structures, so a favorable P3 result requires no additional QM before
+bonded fitting. P4 must rebuild the fixed nonbonded baseline from the frozen P2 Drude
+electrostatics and P3 NBFIX terms and then refit the coupled bond, angle, and proper basis.
+Only the audited QM targets, graph basis, and partition may be reused. The earlier
+additive bonded coefficients are not transferable: their independent refinement ended at
+`blocked_numerical_validation`. The hash-linked decision is recorded in
+`anti-cpd-drude-water-fit-v2/p4_readiness_assessment.json`.
+
+At this checkpoint the anti-Drude branch has completed P1 perturbed-response QM and P2
+electrostatic fitting, holdout validation, and OpenMM/NAMD response agreement. P3 has a
+frozen three-orientation water candidate but still awaits its sealed fourth orientation.
+It is suitable for fragment-level engine checks only. Scientific NAMD validation still
+requires P3 passage, the Drude-aware P4 bonded refit and geometry/Hessian audit, full
+d(TpT) Drude topology assembly, SWM4-NDP solution smoke testing, and duplex-context
+validation.
