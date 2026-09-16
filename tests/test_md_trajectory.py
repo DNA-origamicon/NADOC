@@ -78,7 +78,7 @@ def _load_2hb() -> Design:
 
 @skip_no_fixture
 def test_md_composite_trajectory_shape_and_alignment():
-    """Composite NAMD trajectory matches the oxDNA payload shape (6 floats/nuc) and
+    """Composite NAMD trajectory carries measured base frames (12 floats/nuc) and
     frame 0 sits ON the design geometry (rigid RMSD < 1 nm → alignment correct)."""
     from backend.core.md_trajectory import (
         md_composite_trajectory,
@@ -94,7 +94,7 @@ def test_md_composite_trajectory_shape_and_alignment():
     assert r["n_frames"] > 0
     M = r["n_nucleotides"]
     assert M > 0 and len(r["keys"]) == M
-    assert all(len(f) == 6 * M for f in r["frames"])  # backbone xyz + a1 per nuc
+    assert all(len(f) == 12 * M for f in r["frames"])  # backbone, inward direction, plane, center
 
     ctx = _build_md_nadoc_ctx(_PSF, [d for _, _, d in segments], _REF, design)
     p0, normals = _extract_md_nadoc_frame(ctx, 0)

@@ -239,6 +239,16 @@ describe('live transport', () => {
     expect(setSolvent.mock.calls.at(-1)[0]).toBeNull()
   })
 
+  it('does not prepare invisible companions when the package proves graphene absent', async () => {
+    api.getMdSolventMeta.mockResolvedValueOnce({ready:true, has_graphene:false, n_waters:100, n_ions:10})
+    const controls = initMdSolventControls({api, simulationGraphene:true, getCurrentRepr:()=> 'ballstick'})
+    await controls.setJob('p5', {stride:20,nFrames:302})
+    controls.setEnabled(true, 'traj')
+    expect(await controls.prepareAll()).toBe(true)
+    expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
+    controls.setEnabled(false)
+  })
+
   it('requests solvent over the socket instead of fetching', () => {
     made.setEnabled(true, 'live')
     document.getElementById('md-jobs-box-toggle').checked = true

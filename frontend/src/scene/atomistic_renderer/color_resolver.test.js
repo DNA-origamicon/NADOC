@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { nucleotideColorKey } from '../nucleotide_color_key.js'
+import { atomColorsFromLetters, BASE_HEX } from '../color_util.js'
 import { resolveAtomColor } from './color_resolver.js'
 import { ELEMENTS, C_HIGHLIGHT } from './atom_palette.js'
 
@@ -31,7 +33,7 @@ describe('resolveAtomColor — scalar overlay (oxDNA flexibility map)', () => {
     const cases = [
       [{ colorMode: 'cpk', strandColors: new Map(), baseColors: new Map(), scalarColors: null }, ELEMENTS.C.color],
       [{ colorMode: 'strand', strandColors: new Map([['s0', 0xabcdef]]), baseColors: new Map(), scalarColors: null }, 0xabcdef],
-      [{ colorMode: 'base', strandColors: new Map(), baseColors: new Map([['s0:3:FORWARD', 0x123456]]), scalarColors: null }, 0x123456],
+      [{ colorMode: 'base', strandColors: new Map(), baseColors: new Map([[nucleotideColorKey(atom()), 0x123456]]), scalarColors: null }, 0x123456],
     ]
     for (const [ctx, expected] of cases) {
       expect(resolveAtomColor(ctx, atom(), sel, true)).toBe(expected)
@@ -84,7 +86,7 @@ describe('resolveAtomColor — crossover extra bases and extension tails', () =>
   it('base mode keeps an extra base on its strand colour — it has no letter key', () => {
     // Its stored key is the SOURCE nucleotide's, so a base lookup would paint it with a
     // neighbouring base's letter.  Strand colour is the honest fallback.
-    const base = new Map([['s0:3:FORWARD', 0x00ff00]])
+    const base = new Map([[nucleotideColorKey(atom()), 0x00ff00]])
     expect(resolveAtomColor(ctxFor('base', base), XB, null, false)).toBe(0xff0000)
   })
 
@@ -115,7 +117,7 @@ describe('resolveAtomColor — crossover extra bases and extension tails', () =>
   })
 
   it('an ordinary atom is unaffected in every mode', () => {
-    const base = new Map([['s0:3:FORWARD', 0x00ff00]])
+    const base = new Map([[nucleotideColorKey(atom()), 0x00ff00]])
     expect(resolveAtomColor(ctxFor('cpk'), atom(), null, false)).toBe(ELEMENTS.C.color)
     expect(resolveAtomColor(ctxFor('strand'), atom(), null, false)).toBe(0xff0000)
     expect(resolveAtomColor(ctxFor('base', base), atom(), null, false)).toBe(0x00ff00)
@@ -144,4 +146,16 @@ describe('resolveAtomColor — compiled selection membership', () => {
     expect(resolveAtomColor(ctx, atom({ strand_id: 'domain-strand', helix_id: 'domain-helix',
       direction: 'FORWARD', bp_index: 10 }), selection, true)).toBe(ELEMENTS.C.color)
   })
+})
+
+// One scaffold visits the same bp index/direction on multiple helices.
+it('matches Full letters across helices and loop copies, including selected views', () => {
+  const bases = [atom(), atom({ helix_id: 'h1' }), atom({ helix_id: 'h1', copy_k: 1 })]
+  const letters = new Map(bases.map((n, i) => [n, ['A', 'T', 'G'][i]]))
+  const ctx = { colorMode: 'base', strandColors: new Map(), baseColors: atomColorsFromLetters(letters) }
+  expect(ctx.baseColors.size).toBe(3)
+  for (const [n, letter] of letters) {
+    expect(resolveAtomColor(ctx, n, null, false)).toBe(BASE_HEX[letter])
+    expect(resolveAtomColor(ctx, n, { strandIds: ['other'] }, true)).toBe(BASE_HEX[letter])
+  }
 })

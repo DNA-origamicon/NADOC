@@ -1,0 +1,295 @@
+{
+  "schema": "nadoc.cpd-nonbonded-model-form-reassessment.v1",
+  "version": "1.0.0",
+  "status": "polarizable_reparameterization_required",
+  "gate_effect": "closed",
+  "simulation_ready": false,
+  "product_id": "tt-cpd-cis-anti-i",
+  "recorded_at": "2026-09-15T23:42:42.164357+00:00",
+  "question": "Can a bounded, charge-conserving static off-center additive extension recover leave-one-orientation-out water interaction transferability?",
+  "answer": "No. Four preregistered static anisotropy families failed all three held-out orientations under the unchanged acceptance limits.",
+  "evidence": {
+    "policy": {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-primary-syn-anti-fit-v1/local-run-v1/gate-troubleshooting-v1/anisotropic-offcenter-crossvalidation-v1/policy.json",
+      "sha256": "e1fbe8750c84afe889e6581a8cc4b7ad5479939197ec7bb5c1929263e499b63f"
+    },
+    "results": {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-primary-syn-anti-fit-v1/local-run-v1/gate-troubleshooting-v1/anisotropic-offcenter-crossvalidation-v1/results.json",
+      "sha256": "23cadbb10d5cbc2fdab17505258046bcd0adc28c6ab490a8acd2043fe9314872"
+    },
+    "engine_probe": {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-primary-syn-anti-fit-v1/local-run-v1/gate-troubleshooting-v1/anisotropic-offcenter-crossvalidation-v1/drude-engine-probe-v1/probe_report.json",
+      "sha256": "3e11ed0a6ec62b8374cd35ad7b7faf2d7cab1ac09c4e70e131ec49a08843eda5"
+    },
+    "official_drude_release": {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-primary-syn-anti-fit-v1/local-run-v1/gate-troubleshooting-v1/anisotropic-offcenter-crossvalidation-v1/reference/drude_toppar_2018_10.tgz",
+      "sha256": "84f96491d01257d9db1827a291389b9124e790d0b750d2dbf23f82654ac39da7"
+    }
+  },
+  "variants": [
+    {
+      "variant_id": "axial-carbonyl",
+      "passed_all_folds": false,
+      "held_out": [
+        {
+          "orientation": "canonical",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.34955379777995094,
+            "distance_rmse_angstrom": 0.042830024545907265,
+            "maximum_absolute_energy_error_kcal_mol": 0.5653516008514998,
+            "maximum_absolute_distance_error_angstrom": 0.09784792864133873
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error"
+          ]
+        },
+        {
+          "orientation": "alternate_plane",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.43010551608159353,
+            "distance_rmse_angstrom": 0.06968145174524112,
+            "maximum_absolute_energy_error_kcal_mol": 0.8321776345832386,
+            "maximum_absolute_distance_error_angstrom": 0.15943212262029993
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error",
+            "maximum_distance_error"
+          ]
+        },
+        {
+          "orientation": "azimuth_plus_120",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.39830953065849845,
+            "distance_rmse_angstrom": 0.048127815454263576,
+            "maximum_absolute_energy_error_kcal_mol": 0.6677213888706319,
+            "maximum_absolute_distance_error_angstrom": 0.11357178130710288
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error",
+            "maximum_distance_error"
+          ]
+        }
+      ]
+    },
+    {
+      "variant_id": "planar-carbonyl-pair",
+      "passed_all_folds": false,
+      "held_out": [
+        {
+          "orientation": "canonical",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.34873816825518467,
+            "distance_rmse_angstrom": 0.04290485833686133,
+            "maximum_absolute_energy_error_kcal_mol": 0.5624484550329569,
+            "maximum_absolute_distance_error_angstrom": 0.09785187704745568
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error"
+          ]
+        },
+        {
+          "orientation": "alternate_plane",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.43018347347984165,
+            "distance_rmse_angstrom": 0.06969385254311292,
+            "maximum_absolute_energy_error_kcal_mol": 0.8322465955448801,
+            "maximum_absolute_distance_error_angstrom": 0.1594656249075983
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error",
+            "maximum_distance_error"
+          ]
+        },
+        {
+          "orientation": "azimuth_plus_120",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.3949704676752405,
+            "distance_rmse_angstrom": 0.04822643378846075,
+            "maximum_absolute_energy_error_kcal_mol": 0.6571126040023998,
+            "maximum_absolute_distance_error_angstrom": 0.11358509228960223
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error",
+            "maximum_distance_error"
+          ]
+        }
+      ]
+    },
+    {
+      "variant_id": "planar-carbonyl-pair-plus-donor",
+      "passed_all_folds": false,
+      "held_out": [
+        {
+          "orientation": "canonical",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.34555310013455265,
+            "distance_rmse_angstrom": 0.04300856889654707,
+            "maximum_absolute_energy_error_kcal_mol": 0.560456566300978,
+            "maximum_absolute_distance_error_angstrom": 0.0978478378345804
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error"
+          ]
+        },
+        {
+          "orientation": "alternate_plane",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.4253968009117804,
+            "distance_rmse_angstrom": 0.06955245128781204,
+            "maximum_absolute_energy_error_kcal_mol": 0.8244794628960714,
+            "maximum_absolute_distance_error_angstrom": 0.1594097864606714
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error",
+            "maximum_distance_error"
+          ]
+        },
+        {
+          "orientation": "azimuth_plus_120",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.39626910237764934,
+            "distance_rmse_angstrom": 0.04866806178066902,
+            "maximum_absolute_energy_error_kcal_mol": 0.658358245342356,
+            "maximum_absolute_distance_error_angstrom": 0.11482739223813909
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error",
+            "maximum_distance_error"
+          ]
+        }
+      ]
+    },
+    {
+      "variant_id": "out-of-plane-carbonyl-pair-plus-donor",
+      "passed_all_folds": false,
+      "held_out": [
+        {
+          "orientation": "canonical",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.3452344878030747,
+            "distance_rmse_angstrom": 0.04301958240995714,
+            "maximum_absolute_energy_error_kcal_mol": 0.5591501076352969,
+            "maximum_absolute_distance_error_angstrom": 0.09784630222312862
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error"
+          ]
+        },
+        {
+          "orientation": "alternate_plane",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.4253475485979027,
+            "distance_rmse_angstrom": 0.06954660329418477,
+            "maximum_absolute_energy_error_kcal_mol": 0.82442975365641,
+            "maximum_absolute_distance_error_angstrom": 0.15939466920826284
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error",
+            "maximum_distance_error"
+          ]
+        },
+        {
+          "orientation": "azimuth_plus_120",
+          "passed": false,
+          "metrics": {
+            "energy_rmse_kcal_mol": 0.3964447448437448,
+            "distance_rmse_angstrom": 0.04862074082230499,
+            "maximum_absolute_energy_error_kcal_mol": 0.6600623080680919,
+            "maximum_absolute_distance_error_angstrom": 0.11469964241948882
+          },
+          "failed_checks": [
+            "energy_rmse",
+            "maximum_energy_error",
+            "maximum_distance_error"
+          ]
+        }
+      ]
+    }
+  ],
+  "scientific_interpretation": [
+    "The fixed virtual-site fits remain orientation dependent; optimized carbonyl virtual charges often collapse toward zero and donor-site terms do not remove the held-out energy reversals.",
+    "The official Drude thymine topology uses asymmetric carbonyl lone pairs, atom-centered polarizabilities, atom-specific Thole screening, and anisotropic carbonyl response. A static equal-site split is not an adequate proxy.",
+    "A lesion-only Drude patch inside additive CHARMM36 DNA is prohibited because the published nucleic-acid development reports imbalance and structural drift for mixed or incompletely reoptimized models."
+  ],
+  "engine_findings": [
+    "psfgen 2.0 generated a standard two-MTHY model with 64 particles, including 20 Drude particles, 8 lone pairs, and 4 anisotropy entries.",
+    "The installed NAMD 3.0.2 CUDA binary rejects NBTHOLE; the local NAMD Git-2025-12-04 build loads the same PSF and produces a finite zero-step energy.",
+    "The full 2018 nucleic-acid topology triggers an unsupported DELETE ANISOTROPY statement in psfgen, so full-DNA construction requires a validated preprocessing fix or CHARMM-GUI/CHARMM-generated PSF."
+  ],
+  "missing_targets": [
+    "B3LYP/aug-cc-pVDZ unperturbed and perturbed ESP maps on the existing MP2/6-31G(d) optimized N-methyl CPD geometry, partitioned into fit and held-out perturbations.",
+    "The molecular polarizability tensor and dipole response, with the registered 0.85 condensed-phase polarizability scaling used by the nucleic-acid Drude protocol.",
+    "CPD-specific charges, atomic polarizabilities, Thole factors, carbonyl anisotropy, and asymmetric lone-pair charges fitted without changing the standard Drude DNA environment.",
+    "Drude-consistent LJ and bonded validation; additive candidate parameters cannot be promoted by direct transfer."
+  ],
+  "continuation_triggers": [
+    {
+      "stage": "P1_QM_response",
+      "finish_when": "All perturbed/unperturbed ESP and polarizability jobs pass hash, SCF, atom-map, geometry, and finite-tensor audits.",
+      "reassess": "Verify perturbation coverage and identifiability before fitting."
+    },
+    {
+      "stage": "P2_electrostatic_fit",
+      "finish_when": "A preregistered training fit satisfies charge, dipole, scaled-polarizability, and perturbed-ESP objectives and predicts held-out perturbations.",
+      "reassess": "Run the unchanged three-orientation water cross-validation; no gate change on training fit."
+    },
+    {
+      "stage": "P3_nonbonded_validation",
+      "finish_when": "Every leave-one-orientation-out fold passes existing water energy/distance limits and a new fourth orientation also passes frozen parameters.",
+      "reassess": "Only then fit/validate Drude-consistent LJ and bonded terms."
+    },
+    {
+      "stage": "P4_engine_context",
+      "finish_when": "A full Drude d(TpT) PSF, SWM4-NDP solution smoke at <=1 fs, and both duplex contexts pass topology, chirality, finite-energy, and reproducibility audits.",
+      "reassess": "Only this stage may request a simulation-ready release review."
+    }
+  ],
+  "decision": "Keep the additive integration-only candidate and all production registry entries blocked. Continue with a fully consistent Drude response campaign rather than further atom-centered or fixed-site tuning.",
+  "active_continuation": {
+    "stage": "P1_QM_response_pilot",
+    "status": "submitted",
+    "cluster": "alpine",
+    "job_id": "32603453",
+    "slurm_state_at_submission_check": "PENDING (Priority)",
+    "target": "B3LYP/aug-cc-pVDZ molecular polarizability tensor and dipole on the audited MP2/6-31G(d) N-methyl CPD geometry",
+    "campaign_manifest": {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-cpd-drude-response-v1/campaign_manifest.json",
+      "sha256": "95a215d8c4e7599a56155247cb38f0cb896f50050a7cd85da25ed9aa8bb2ef55"
+    },
+    "submission_receipt": {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-cpd-drude-response-v1/submission_receipt.json",
+      "sha256": "379d3751324a5b989d2720f0be312dead1495260c9a0503b8e58ad72ae9bcfe8"
+    },
+    "completion_effect": "A passed audit authorizes construction of the preregistered fit/held-out +0.5 e perturbed-ESP campaign; it does not open a simulation gate.",
+    "watcher": {
+      "service": "nadoc-cpd-drude-response-watch.service",
+      "timer": "nadoc-cpd-drude-response-watch.timer",
+      "poll_interval_minutes": 5,
+      "status": "enabled_active",
+      "completion_trigger_path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-cpd-drude-response-v1/completion_trigger.json",
+      "behavior": "Collect output, log, and response audit after terminal Slurm state; pass only on COMPLETED 0:0 plus passed response audit; never submit dependent work on failure."
+    }
+  }
+}

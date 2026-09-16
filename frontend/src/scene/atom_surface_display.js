@@ -390,12 +390,12 @@ export function initAtomSurfaceDisplay({
     return computeAtomStrandColors(state, staplePalette)
   }
 
-  // Build per-atom base-letter colour map (key: "strand_id:bp_index:direction").
+  // Build per-atom base-letter colour map (key: strand/helix/bp/direction/copy identity).
   // The store/geometry read lives here; the pure mapping is atomColorsFromLetters.
   function _getAtomBaseColors() {
     const { currentDesign, currentGeometry } = store.getState()
     if (!currentDesign || !currentGeometry) return new Map()
-    return atomColorsFromLetters(buildNucLetterMap(currentDesign, currentGeometry))
+    return atomColorsFromLetters(buildNucLetterMap(currentDesign, currentGeometry), currentGeometry)
   }
 
   // Dispatch atomistic colouring based on the global coloringMode.

@@ -227,11 +227,12 @@ export function initMdSolventControls({
   }
   const _repMode = () => {
     const normal = solventRepMode(getCurrentRepr?.())
-    return (_keyframeOptions || simulationGraphene) && normal === 'off' ? 'sphere' : normal
+    return (_keyframeOptions || _hasGraphene()) && normal === 'off' ? 'sphere' : normal
   }
+  const _hasGraphene = () => simulationGraphene && _meta?.has_graphene !== false
   // Graphene rides the cell channel even when the optional box outline is hidden.
   const _waterOn = () => _live && !!waterToggle?.checked
-  const _anyOn = () => !!(simulationGraphene || _waterOn() || ionsToggle?.checked || boxToggle?.checked)
+  const _anyOn = () => !!(_hasGraphene() || _waterOn() || ionsToggle?.checked || boxToggle?.checked)
 
   function _requestSig() {
     const mode = _repMode()
@@ -248,7 +249,7 @@ export function initMdSolventControls({
   function _plan() {
     return solventFetchPlan({
       repMode: _repMode(),
-      water: _waterOn(), ions: !!ionsToggle?.checked, box: simulationGraphene || !!boxToggle?.checked,
+      water: _waterOn(), ions: !!ionsToggle?.checked, box: _hasGraphene() || !!boxToggle?.checked,
       scope: _scope(), shellAng: _shellAng(),
       nWatersTotal: _meta?.n_waters ?? 0, nIons: _meta?.n_ions ?? 0,
       nFrames: _nFrames || 1, availableBytes: getAvailableBytes?.() ?? null,
@@ -308,7 +309,7 @@ export function initMdSolventControls({
     return {
       water: _waterOn(),
       ions: !!ionsToggle?.checked,
-      box: simulationGraphene || !!boxToggle?.checked,
+      box: _hasGraphene() || !!boxToggle?.checked,
       shellAng: _scope() === 'all' ? null : _shellAng(),
       atomistic: p.atomistic,
       maxWaters: p.maxWaters,
@@ -362,7 +363,7 @@ export function initMdSolventControls({
         stride: _stride,
         water: false,
         ions: ionsOn,
-        box: simulationGraphene || !!boxToggle?.checked,
+        box: _hasGraphene() || !!boxToggle?.checked,
         shellAng: _scope() === 'all' ? null : _shellAng(),
         atomistic: false, // Trajectory companions contain no water; ion coordinates are unchanged by representation.
         maxWaters: p.maxWaters,

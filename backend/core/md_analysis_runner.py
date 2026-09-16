@@ -37,6 +37,7 @@ _active: dict[tuple[str, str], tuple[multiprocessing.process.BaseProcess, Path]]
 _lock = threading.Lock()
 
 DEFAULT_TIMEOUT_S = 180.0
+_PLAYBACK = {"md_composite_trajectory_bin", "md_frames_atomistic_bin", "md_atomistic_model_bin"}
 
 
 def _target(
@@ -60,7 +61,15 @@ def _target(
         pass
     try:
         fn = getattr(importlib.import_module(module), qualname)
-        out: tuple[str, Any] = ("ok", fn(*args))
+        # Playback uses many tiny three-column fits. A BLAS thread team per fit
+        # costs more than its arithmetic and competes with the browser renderer.
+        if qualname in {"md_composite_trajectory_bin", "md_frames_atomistic_bin", "md_atomistic_model_bin"}:
+            from threadpoolctl import threadpool_limits
+
+            with threadpool_limits(limits=1, user_api="blas"):
+                out: tuple[str, Any] = ("ok", fn(*args))
+        else:
+            out = ("ok", fn(*args))
     except BaseException as exc:  # noqa: BLE001 — report any failure to the parent
         out = ("err", f"{type(exc).__name__}: {exc}")
     try:
@@ -126,21 +135,32 @@ async def run_analysis(
     fd, result_name = tempfile.mkstemp(suffix=".pkl", prefix="md_analysis_")
     os.close(fd)
     result_path = Path(result_name)
-    proc = _CTX.Process(
-        target=_target,
-        args=(result_name, module, qualname, args, timeout_s),
-        daemon=True,
-    )
-    proc.start()
+    from backend.core import md_playback_workers
+
+    connection = None
+    successful = False
+    if qualname in _PLAYBACK:
+        proc, connection = md_playback_workers.acquire(_CTX)
+    else:
+        proc = _CTX.Process(
+            target=_target,
+            args=(result_name, module, qualname, args, timeout_s),
+            daemon=True,
+        )
+        proc.start()
     with _lock:
         _active[(job_id, kind)] = (proc, result_path)
 
     deadline = time.monotonic() + timeout_s
     try:
-        while proc.is_alive():
+        if connection is not None:
+            connection.send((result_name, module, qualname, args, timeout_s))
+        while proc.is_alive() and not (connection is not None and connection.poll()):
             if time.monotonic() > deadline:
                 raise TimeoutError(f"{kind} analysis exceeded {timeout_s:.0f}s")
-            await asyncio.sleep(0.1)  # cancellation point — disconnect raises here
+            await asyncio.sleep(0.01 if connection is not None else 0.1)  # cancellation point — disconnect raises here
+        if connection is not None and proc.is_alive():
+            connection.recv()
         try:
             status, payload = pickle.loads(result_path.read_bytes())
         except (FileNotFoundError, EOFError, pickle.UnpicklingError):
@@ -149,6 +169,7 @@ async def run_analysis(
             ) from None
         if status == "err":
             raise RuntimeError(payload)
+        successful = True
         return payload
     except BaseException:
         _kill(proc)
@@ -158,6 +179,11 @@ async def run_analysis(
             if _active.get((job_id, kind), (None, None))[0] is proc:
                 _active.pop((job_id, kind), None)
         result_path.unlink(missing_ok=True)
+        if connection is not None:
+            if successful:
+                md_playback_workers.release(proc, connection)
+            else:
+                connection.close()
 
 
 def active_count() -> int:

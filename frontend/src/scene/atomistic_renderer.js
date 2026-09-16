@@ -58,7 +58,7 @@ import { makeAtomTable } from './atom_table.js'
 let _colorMode    = 'cpk'    // 'cpk' | 'strand' | 'base'
 let _vdwScale     = 1.0      // multiplier on VdW / ball radii
 let _strandColors = new Map()  // strand_id → hex number (used when _colorMode==='strand')
-let _baseColors   = new Map()  // "strand_id:bp_index:direction" → hex (used when _colorMode==='base')
+let _baseColors   = new Map()  // strand/helix/bp/direction/copy identity → hex (used when _colorMode==='base')
 let _scalarColors = null       // "helix:bp:dir" → hex; oxDNA flexibility-map overlay (null = off)
 
 // Spurious-bond guard for position overlays (applyPositionLerp) — now a BACKSTOP,
@@ -896,7 +896,7 @@ export function initAtomisticRenderer(scene) {
      *              and extension tails (they used to be pinned to strand colour).
      *   'strand' — strandColors is the primary lookup (also used for 'cluster',
      *              just with a cluster-keyed map).
-     *   'base'   — baseColors keyed by "strand_id:bp_index:direction"; atoms
+     *   'base'   — baseColors keyed by strand/helix/bp/direction/copy identity; atoms
      *              without a letter fall back to strandColors then CPK.
      *
      * @param {'cpk'|'strand'|'base'} mode

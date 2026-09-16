@@ -947,7 +947,7 @@ async def _run_md_analysis(
                 md_analysis_runner.cancel(job_id, kind)
                 task.cancel()
                 break
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(0.01 if qualname.endswith("_bin") else 0.25)
         return await task
     except asyncio.CancelledError:
         md_analysis_runner.cancel(job_id, kind)
@@ -1576,6 +1576,36 @@ async def md_frames_atomistic_route(
     )
 
 
+@router.post("/md/jobs/{job_id}/frames-atomistic-bin")
+async def md_frames_atomistic_bin_route(job_id: str, body: MdFramesAtomisticBody, request: Request):
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        raise HTTPException(404, "No trajectory")
+    psf, ref, segments, design = inputs
+    payload = await _run_md_analysis(
+        request, job_id, "atomistic", "md_frames_atomistic_bin",
+        (psf, segments, ref, design, body.frame_indices, 200, _traj_stride(body.stride)),
+        timeout_s=min(3600.0, 180.0 + 20.0 * len(body.frame_indices)),
+    )
+    # Dense float64 mantissas compress poorly (~6% at ~1 s per 16 P5 frames).
+    # Avoid GZipMiddleware's CPU stall; the binary values remain lossless.
+    return Response(payload, media_type="application/octet-stream",
+                    headers={"Content-Encoding": "identity"})
+
+
+@router.get("/md/jobs/{job_id}/atomistic-model-bin")
+async def md_atomistic_model_bin_route(job_id: str, request: Request):
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        raise HTTPException(404, "No trajectory")
+    psf, ref, segments, design = inputs
+    payload = await _run_md_analysis(
+        request, job_id, "atomistic-model", "md_atomistic_model_bin",
+        (psf, segments, ref, design), timeout_s=600.0,
+    )
+    return Response(payload, media_type="application/octet-stream")
+
+
 @router.get("/md/jobs/{job_id}/atomistic-model")
 async def md_atomistic_model_route(job_id: str, request: Request) -> dict:
     """The job's STATIC heavy-atom set ({atoms, bonds, n_serials}) — fetched once, then
@@ -1771,6 +1801,10 @@ async def md_solvent_meta(job_id: str) -> dict:
             mg_hexahydrate=hexa,
             box_nm=ion.get("box_nm"),
         )
+
+    residue_counts = (ca.get("final_solvated") or {}).get("residue_counts")
+    if isinstance(residue_counts, dict):
+        out["has_graphene"] = bool(residue_counts.get("GRP", 0))
 
     if out.get("box_nm") is None and mf.get("box_ang"):
         out["box_nm"] = [float(v) / 10.0 for v in mf["box_ang"]]

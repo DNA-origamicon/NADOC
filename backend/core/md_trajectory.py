@@ -1,8 +1,9 @@
 """Composite NAMD/MD trajectory for animation **trajectory keyframes**.
 
 This is the MD analogue of ``oxdna_health.composite_trajectory``: it produces the
-same compact ``{keys, frames, markers, stages}`` payload (6 floats per nucleotide —
-backbone xyz + base-normal a1) the animation player's trajectory path consumes, but
+same compact ``{keys, frames, markers, stages}`` payload (12 floats per nucleotide —
+backbone xyz, inward direction, measured ring-plane normal and ring center) the
+animation player's trajectory path consumes, but
 from a NAMD PSF/DCD run instead of an oxDNA trajectory.
 
 The per-frame DNA→NADOC bead extraction (PBC unwrap → hybrid design-eq correction →
@@ -29,55 +30,48 @@ import orjson
 
 
 _TRAJECTORY_BIN_MAGIC = 0x4E54524A  # "NTRJ", shared with the browser decoder
-_TRAJECTORY_BIN_VERSION = 1
+_TRAJECTORY_BIN_VERSION = 2
 
 
 class _DcdPrefixFile:
     """Minimal NAMD DCD reader that decodes only an atom-prefix from each frame."""
 
     def __init__(self, path, prefix_atoms: int):
+        from backend.core.dcd_fast import read_layout, UnsupportedDCD
+
+        self.fd = None
         self.path = os.fspath(path)
-        self.fd = os.open(self.path, os.O_RDONLY)
-        with open(self.path, "rb") as fh:
-
-            def record():
-                size = struct.unpack("<i", fh.read(4))[0]
-                payload = fh.read(size)
-                if struct.unpack("<i", fh.read(4))[0] != size:
-                    raise ValueError("invalid DCD Fortran record")
-                return payload
-
-            header = record()
-            if header[:4] != b"CORD":
-                raise ValueError("unsupported DCD header")
-            ints = struct.unpack("<20i", header[4:84])
-            self.n_frames = int(ints[0])
-            if ints[8] != 0:
-                raise ValueError("fixed-atom DCD is not supported by the prefix reader")
-            record()  # title
-            self.n_atoms = struct.unpack("<i", record())[0]
-            self.frame_start = fh.tell()
+        try:
+            layout = read_layout(path)
+        except UnsupportedDCD as exc:
+            raise ValueError(str(exc)) from exc
+        self.n_frames, self.n_atoms = layout.n_frames, layout.n_atoms
+        self.endian = layout.endian
+        self.frame_start, self.frame_bytes = layout.header_bytes, layout.frame_bytes
         self.prefix_atoms = min(int(prefix_atoms), self.n_atoms)
         self.coord_record_bytes = 8 + 4 * self.n_atoms
-        self.cell_record_bytes = 56 if ints[10] else 0
-        self.frame_bytes = self.cell_record_bytes + 3 * self.coord_record_bytes
-        expected = self.frame_start + self.n_frames * self.frame_bytes
-        if os.path.getsize(self.path) < expected:
-            raise ValueError("truncated or unsupported DCD layout")
+        self.cell_record_bytes = 56 if layout.has_cell else 0
+        self.fd = os.open(self.path, os.O_RDONLY)
+        if hasattr(os, 'posix_fadvise'):
+            os.posix_fadvise(self.fd, 0, 0, os.POSIX_FADV_RANDOM)
 
     def frame(self, index: int) -> tuple[np.ndarray, np.ndarray | None]:
+        if index < 0 or index >= self.n_frames:
+            raise IndexError(index)
         base = self.frame_start + int(index) * self.frame_bytes
         dims = None
         if self.cell_record_bytes:
             raw_cell = os.pread(self.fd, 48, base + 4)
-            cell = struct.unpack("<6d", raw_cell)
-            dims = np.asarray([cell[0], cell[2], cell[5], 90.0, 90.0, 90.0])
+            from backend.core.dcd_fast import cell_to_dimensions
+
+            cell = struct.unpack(self.endian + "6d", raw_cell)
+            dims = cell_to_dimensions(cell)
         coord_base = base + self.cell_record_bytes
         nbytes = 4 * self.prefix_atoms
         xyz = np.empty((self.prefix_atoms, 3), dtype=np.float32)
         for axis in range(3):
             offset = coord_base + axis * self.coord_record_bytes + 4
-            xyz[:, axis] = np.frombuffer(os.pread(self.fd, nbytes, offset), dtype="<f4")
+            xyz[:, axis] = np.frombuffer(os.pread(self.fd, nbytes, offset), dtype=self.endian + "f4")
         return xyz, dims
 
     def close(self):
@@ -326,6 +320,16 @@ def _build_md_nadoc_ctx(
 
         model = build_atomistic_model(design)
         cm = build_chain_map(model)
+        # Atom metadata still needs the model, but alignment must use exactly the
+        # same displayed phosphate reference as the lightweight Full path. Native
+        # model P atoms differ slightly after measured/junction-balanced placement.
+        # Retain model-only synthetic keys for periodic imaging of extra bases.
+        from backend.core.atomistic_to_nadoc import md_pkey
+
+        p_reference = {
+            md_pkey(a): np.array([a.x, a.y, a.z]) for a in model.atoms if a.name == "P"
+        }
+        p_reference.update(build_active_design_reference(design))
 
     paths = [str(p) for p in trajectory_paths]
     trajectory_arg = paths if len(paths) > 1 else paths[0]
@@ -773,6 +777,7 @@ def _extract_md_nadoc_frame(
     with_termini: bool = False,
     with_base_centers: bool = False,
     frame_out: dict | None = None,
+    rotation_out: dict | None = None,
 ):
     """Per-frame DNA P-atom positions (nm, NADOC frame) + base normals for one DCD
     frame. Ported from ws.py ``_seek_sync`` (nadoc path). Returns ``(p_nm, normals)``
@@ -787,7 +792,8 @@ def _extract_md_nadoc_frame(
     ``with_base_centers=True`` adds the aligned centroid of each residue's measured
     base-ring atoms. It is used by Full slabs so their center is reconstructed from
     live geometry instead of translating an equilibrium offset from the phosphate.
-    ``frame_out`` optionally receives the actual periodic-cell display affine."""
+    ``frame_out`` optionally receives the actual periodic-cell display affine.
+    ``rotation_out`` receives the applied rotation even for nonperiodic frames."""
     from backend.core.atomistic_to_nadoc import (
         _unwrap_min_image,
         reassemble_to_posed_reference,
@@ -807,8 +813,13 @@ def _extract_md_nadoc_frame(
 
     prefix_xyz = None
     prefix_reader = ctx.get("dcd_prefix")
-    if prefix_reader is not None and not with_base_centers and not with_termini:
+    if prefix_reader is not None and (ctx.get("playback_only") or
+                                      (not with_base_centers and not with_termini)):
         prefix_xyz, dims = prefix_reader.frame(frame_idx)
+        if dims is not None:
+            dims = np.asarray(dims, dtype=np.float32)
+        if rotation_out is not None:
+            rotation_out.update(raw_xyz=prefix_xyz, dimensions=dims)
         p_raw = prefix_xyz[ctx["dna_p_idx"]] / 10.0
     else:
         u.trajectory[frame_idx]
@@ -915,6 +926,9 @@ def _extract_md_nadoc_frame(
             eq_centroid=np.asarray(eq_centroid) if R_align is not None else np.zeros(3),
         )
 
+    if rotation_out is not None:
+        rotation_out["R_align"] = R_align
+
     # Base normals (P→C1') rotated into the aligned frame.
     c1p_idx = ctx.get("c1p_idx")
     normals = None
@@ -965,7 +979,8 @@ def _extract_md_nadoc_frame(
 
         _box = (dims[:3] / 10.0) if (dims is not None and dims[0] > 0) else None
         term_pos, term_norm = recover_termini(
-            u, ctx.get("term_specs") or [], p_raw, p_nm, R_align, _box
+            u, ctx.get("term_specs") or [], p_raw, p_nm,
+            R_align if R_align is not None else np.eye(3), _box, all_pos_A=prefix_xyz
         )
         out = [p_nm, normals]
         if with_c1p:
@@ -981,6 +996,38 @@ def _extract_md_nadoc_frame(
     if with_base_centers:
         out.append(base_centers)
     return tuple(out)
+
+
+def _extract_md_full_frame(ctx: dict, frame_idx: int) -> np.ndarray:
+    """12 floats/site: backbone, inward direction, measured plane normal, center."""
+    from backend.core.md_base_frames import base_frame_layout, measured_base_frames
+
+    affine = {}
+    p, normals, tpos, tnorm = _extract_md_nadoc_frame(
+        ctx, frame_idx, with_termini=True, rotation_out=affine,
+    )
+    anchors, groups = base_frame_layout(ctx)
+    frame = np.full((len(anchors), 12), np.nan, dtype="<f4")
+    n = len(p)
+    frame[:n, :3] = p
+    frame[:n, 3:6] = normals if normals is not None else (0, 0, 1)
+    nt = min(len(anchors) - n, len(tpos))
+    frame[n:n + nt, :3] = tpos[:nt]
+    frame[n:n + nt, 3:6] = tnorm[:nt]
+    u = ctx["universe"]
+    # The coarse extraction with termini has advanced this Universe to frame_idx.
+    # Read only the DNA prefix needed by these rings, not the solvated system.
+    last = max([int(anchors.max())] + [int(idx.max()) for _, idx in groups]) if len(anchors) else -1
+    raw = (affine["raw_xyz"][:last + 1] if "raw_xyz" in affine
+           else u.atoms[:last + 1].positions) / 10.0
+    dims = affine.get("dimensions") if "raw_xyz" in affine else u.dimensions
+    box = np.asarray(dims[:3]) / 10 if dims is not None and dims[0] > 0 else None
+    centers, tangents = measured_base_frames(
+        raw, anchors, groups, frame[:, :3], affine.get("R_align"), box,
+    )
+    frame[:, 6:9] = tangents
+    frame[:, 9:12] = centers
+    return frame
 
 
 def _extract_md_atoms_frame(
@@ -1026,7 +1073,8 @@ def _extract_md_atoms_frame(
     eq_centroid = ctx["eq_centroid"]
     eq_centered = ctx["eq_centered"]
 
-    prefix = ctx.get("dcd_prefix") if positions_only and frame_out is None else None
+    prefix = ctx.get("dcd_prefix") if (ctx.get("playback_only") or
+                                     (positions_only and frame_out is None)) else None
     if prefix is not None:
         xyz, dims = prefix.frame(frame_idx)
         # MDAnalysis stores unit-cell dimensions as float32. Match that rounding
@@ -1208,14 +1256,7 @@ def composite_raw_frame_map(
     Reads DCD headers only (no coordinates), and takes the SAME ``max_frames``/
     ``stride`` the trajectory was built with, since a frame index only means the same
     thing within one downsample."""
-    from MDAnalysis.coordinates.DCD import DCDReader  # type: ignore
-
-    counts = []
-    for _name, _kind, dcd in segments:
-        try:
-            counts.append(len(DCDReader(str(dcd))))
-        except Exception:
-            counts.append(0)
+    counts = [_dcd_complete_frame_count(dcd) for _name, _kind, dcd in segments]
     return [g for seg in _composite_indices(counts, max_frames, stride) for g in seg]
 
 
@@ -1262,6 +1303,22 @@ def heavy_bond_pairs(u, heavy_indices, *, nested: bool = False):
     return kept.tolist() if nested else kept.ravel().tolist()
 
 
+def _build_playback_ctx(topology_path, paths, coordinate_path, design, **kwargs):
+    from backend.core.md_playback_context import playback_context
+
+    try:
+        return playback_context(topology_path, paths, coordinate_path, design)
+    except (OSError, ValueError, KeyError, IndexError, StopIteration):
+        # Older/non-NAMD packages and synthetic mappings keep their original path.
+        return _build_md_nadoc_ctx(topology_path, paths, coordinate_path, design, **kwargs)
+
+
+def md_atomistic_model_bin(*args):
+    from backend.core.md_atom_model_bin import md_atomistic_model_bin as pack
+
+    return pack(*args)
+
+
 def md_atomistic_model(topology_path, segments, coordinate_path, design) -> dict:
     """The NAMD job's STATIC heavy-atom set → ``{atoms, bonds, n_serials}``.
 
@@ -1279,7 +1336,7 @@ def md_atomistic_model(topology_path, segments, coordinate_path, design) -> dict
 
     Positions are frame 0's, so the model alone renders a valid structure."""
     seg_paths = [s[2] for s in segments]
-    ctx = _build_md_nadoc_ctx(
+    ctx = _build_playback_ctx(
         topology_path, seg_paths, coordinate_path, design, with_atoms=True
     )
     atoms = _extract_md_atoms_frame(ctx, 0) if ctx["n_frames"] > 0 else []
@@ -1290,7 +1347,8 @@ def md_atomistic_model(topology_path, segments, coordinate_path, design) -> dict
     bonds = None
     if atoms and ctx.get("heavy_idx") is not None:
         try:
-            bonds = heavy_bond_pairs(ctx["universe"], ctx["heavy_idx"], nested=True)
+            bonds = (ctx["heavy_bonds"].tolist() if "heavy_bonds" in ctx else
+                     heavy_bond_pairs(ctx["universe"], ctx["heavy_idx"], nested=True))
         except Exception:  # noqa: BLE001 - never fail the model over sticks
             bonds = None
     # The scrub view DOES serve sticks now (2026-07-31). It used to return bonds: [] with
@@ -1309,6 +1367,12 @@ def md_atomistic_model(topology_path, segments, coordinate_path, design) -> dict
         "n_serials": n_serials,
         "n_atoms": len(atoms),
     }
+
+
+def md_frames_atomistic_bin(*args):
+    from backend.core.md_atom_frames_bin import md_frames_atomistic_bin as pack
+
+    return pack(*args)
 
 
 def md_frames_atomistic(
@@ -1340,7 +1404,7 @@ def md_frames_atomistic(
     costs ~32 s on a 300 k-atom system against ~2.8 s per additional frame, and it is
     paid once per CALL, not once per frame."""
     seg_paths = [s[2] for s in segments]
-    ctx = _build_md_nadoc_ctx(
+    ctx = _build_playback_ctx(
         topology_path, seg_paths, coordinate_path, design, with_atoms=True
     )
     n = ctx["n_frames"]
@@ -2438,7 +2502,7 @@ def md_composite_trajectory_bin(
         binary=True, frame_start=frame_start, frame_end=frame_end,
     )
     frames = result.pop("frames")
-    header = orjson.dumps({k: result[k] for k in ("keys", "stages", "markers", "frame_start", "total_n_frames")})
+    header = orjson.dumps({k: result[k] for k in ("keys", "stages", "markers", "frame_start", "total_n_frames", "frame_format")})
     prefix = struct.pack(
         "<5I",
         _TRAJECTORY_BIN_MAGIC,
@@ -2477,8 +2541,6 @@ def _md_composite_trajectory_data(
     the legacy ``max_frames`` budget or, when ``stride`` is given, a user-set frame
     INTERVAL (every Nth frame of each segment) — with a boundary marker at each segment
     start. Returns the same shape as ``oxdna_health.composite_trajectory``."""
-    import MDAnalysis as mda  # type: ignore
-
     progress_file = Path(progress_path) if progress_path else None
 
     def write_phase(phase: str, done: int, total: int) -> None:
@@ -2532,6 +2594,7 @@ def _md_composite_trajectory_data(
         frames = np.empty((n_out, 0), dtype="<f4") if binary else [[] for _ in range(n_out)]
         return {
             "n_frames": n_out, "frame_start": range_start, "total_n_frames": range_total,
+            "frame_format": "namd-measured-bases",
             "n_nucleotides": 0,
             "keys": [],
             "frames": frames,
@@ -2543,7 +2606,7 @@ def _md_composite_trajectory_data(
     # with_termini: recover each strand's 5'-terminal base (no P atom) so the scrubbable
     # trajectory positions + colours every nucleotide, matching the flexibility map + the
     # ghost-free render (single-stranded regions no longer draw phantom bases).
-    ctx = _build_md_nadoc_ctx(
+    ctx = _build_playback_ctx(
         topology_path, seg_paths, coordinate_path, design, with_termini=True
     )
     p_order = ctx["p_order"]
@@ -2555,16 +2618,16 @@ def _md_composite_trajectory_data(
     # Per-segment frame counts (for boundary markers + per-segment downsample).
     seg_counts: list[int] = []
     for _, _, dcd in segments:
-        su = mda.Universe(str(topology_path), str(dcd))
-        seg_counts.append(len(su.trajectory))
+        seg_counts.append(_dcd_complete_frame_count(dcd))
     write_phase("initialize", 1, 1)
     total = sum(seg_counts)
     if total == 0:
         return {
             "n_frames": 0, "frame_start": 0, "total_n_frames": 0,
+            "frame_format": "namd-measured-bases",
             "n_nucleotides": len(key_list),
             "keys": key_list,
-            "frames": np.empty((0, len(key_list) * 6), dtype="<f4") if binary else [],
+            "frames": np.empty((0, len(key_list) * 12), dtype="<f4") if binary else [],
             "stages": [],
             "markers": [],
         }
@@ -2578,80 +2641,45 @@ def _md_composite_trajectory_data(
 
     report(0)
     n_keys = len(key_list)
-    out_frames = np.empty((picked_total, n_keys * 6), dtype="<f4") if binary else []
+    out_frames = np.empty((picked_total, n_keys * 12), dtype="<f4") if binary else []
     out_stages: list[dict] = []
     markers: list[dict] = []
     run_no = 0
     frame_idx = 0
-    for (name, stage, _dcd), count, picked in zip(segments, seg_counts, seg_picked):
-        if count <= 0:
-            continue
-        same_logical_stage = bool(out_stages and out_stages[-1]["name"] == name)
-        n_out = frame_idx if binary else len(out_frames)
-        if n_out and not same_logical_stage:
-            run_no += 1
-            markers.append(
-                {
-                    "frame": n_out,
-                    "label": f"→ {name}",
-                    "kind": stage or "md",
-                    "stage_name": name,
-                }
-            )
-        if same_logical_stage:
-            out_stages[-1]["n_frames"] += len(picked)
-        else:
-            out_stages.append(
-                {"name": name, "kind": stage or "md", "n_frames": len(picked)}
-            )
-        for gidx in picked:
-            p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(
-                ctx, gidx, with_termini=True
-            )
-            if binary:
-                frame = out_frames[frame_idx].reshape(n_keys, 6)
-                n_p = len(p_order)
-                frame[:n_p, :3] = p_nm
-                if normals is None:
-                    frame[:n_p, 3:] = (0.0, 0.0, 1.0)
-                else:
-                    frame[:n_p, 3:] = normals
-                n_t = min(len(term_specs), len(tpos))
-                if n_t:
-                    frame[n_p : n_p + n_t, :3] = tpos[:n_t]
-                    frame[n_p : n_p + n_t, 3:] = tnorm[:n_t]
-                if n_t < len(term_specs):
-                    frame[n_p + n_t :, :] = (0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
-                frame_idx += 1
-                report(frame_idx)
+    from backend.core.md_read_ahead import read_ahead
+
+    with read_ahead(ctx, [i for picked in seg_picked for i in picked]):
+        for (name, stage, _dcd), count, picked in zip(segments, seg_counts, seg_picked):
+            if count <= 0:
+                continue
+            same_logical_stage = bool(out_stages and out_stages[-1]["name"] == name)
+            n_out = frame_idx if binary else len(out_frames)
+            if n_out and not same_logical_stage:
+                run_no += 1
+                markers.append(
+                    {
+                        "frame": n_out,
+                        "label": f"→ {name}",
+                        "kind": stage or "md",
+                        "stage_name": name,
+                    }
+                )
+            if same_logical_stage:
+                out_stages[-1]["n_frames"] += len(picked)
             else:
-                flat: list[float] = []
-                for i in range(len(p_order)):
-                    flat.extend(
-                        (float(p_nm[i, 0]), float(p_nm[i, 1]), float(p_nm[i, 2]))
-                    )
-                    if normals is not None:
-                        flat.extend(
-                            (
-                                float(normals[i, 0]),
-                                float(normals[i, 1]),
-                                float(normals[i, 2]),
-                            )
-                        )
-                    else:
-                        flat.extend((0.0, 0.0, 1.0))
-                for j in range(len(term_specs)):
-                    if j < len(tpos):
-                        flat.extend(
-                            (float(tpos[j, 0]), float(tpos[j, 1]), float(tpos[j, 2]))
-                        )
-                        flat.extend(
-                            (float(tnorm[j, 0]), float(tnorm[j, 1]), float(tnorm[j, 2]))
-                        )
-                    else:
-                        flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 1.0))
-                out_frames.append(flat)
-                report(len(out_frames))
+                out_stages.append(
+                    {"name": name, "kind": stage or "md", "n_frames": len(picked)}
+                )
+            for gidx in picked:
+                frame = _extract_md_full_frame(ctx, gidx).reshape(-1)
+                if binary:
+                    out_frames[frame_idx] = frame
+                    frame_idx += 1
+                    report(frame_idx)
+                else:
+                    # JSON has no NaN: null preserves missing-site fallback semantics.
+                    out_frames.append([float(v) if np.isfinite(v) else None for v in frame])
+                    report(len(out_frames))
 
     if binary:
         write_phase("pack", 0, 1)
@@ -2659,6 +2687,7 @@ def _md_composite_trajectory_data(
     return {
         "n_frames": picked_total if binary else len(out_frames),
         "frame_start": range_start, "total_n_frames": range_total,
+        "frame_format": "namd-measured-bases",
         "n_nucleotides": len(key_list),
         "keys": key_list,
         "frames": out_frames,
@@ -2963,7 +2992,7 @@ def md_occupancy(
         v = pos[need] if sel_idx is not None else pos
         rows.append(np.asarray(v, dtype=float))
         kept.append(gidx)
-        # Same 6-float stride as md_composite_trajectory / _flatten_cg_frame, so the
+        # Legacy 6-float CG stride (backbone and inward direction), so the
         # frontend consumes an MD medoid with the oxDNA code path unchanged.
         if picked_row in render_rows:
             flat: list[float] = []

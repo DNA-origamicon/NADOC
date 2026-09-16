@@ -209,7 +209,7 @@ def build_chain_map(model: "AtomisticModel") -> ChainMap:
     return chain_map
 
 
-def build_namd_coarse_reference(design: "Design", pdb_path, seg2chain: dict[str, str]):
+def build_namd_coarse_reference(design: "Design", pdb_path, seg2chain: dict[str, str], *, mapping_only=False):
     """Build NAMD residue mapping + exact equilibrium P positions without atoms.
 
     The package PDB already contains the exact phosphate coordinates used to build
@@ -256,6 +256,11 @@ def build_namd_coarse_reference(design: "Design", pdb_path, seg2chain: dict[str,
                     if copy_k:
                         key = (*key, int(copy_k))
                     chain_map[(chain, seq)] = key
+
+    # Playback validates every DNA residue against the PSF itself and uses the
+    # active display reference, so it does not need to scan the solvent PDB.
+    if mapping_only:
+        return chain_map, {}
 
     p_ref: dict[tuple, np.ndarray] = {}
     n_p = 0

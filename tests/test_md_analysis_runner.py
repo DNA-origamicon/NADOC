@@ -108,3 +108,24 @@ def test_cancel_for_whole_job_kills_every_view():
         assert R.active_count() == 0
 
     asyncio.run(scenario())
+
+
+def test_playback_reuses_idle_interpreter_but_cancellation_kills_it(monkeypatch):
+    from backend.core import md_playback_workers as pool
+    monkeypatch.setattr(R, '_PLAYBACK', {'getpid', 'sleep'})
+    async def scenario():
+        pid = await R.run_analysis('pool', 'atoms', 'os', 'getpid', ())
+        assert await R.run_analysis('pool', 'atoms', 'os', 'getpid', ()) == pid
+        task = asyncio.create_task(R.run_analysis('pool', 'atoms', 'time', 'sleep', (30,)))
+        await asyncio.sleep(.1)
+        assert R.cancel('pool') == 1
+        try:
+            await task
+        except RuntimeError:
+            pass
+        assert await R.run_analysis('pool', 'atoms', 'os', 'getpid', ()) != pid
+        assert R.active_count() == 0
+    try:
+        asyncio.run(scenario())
+    finally:
+        pool.close()

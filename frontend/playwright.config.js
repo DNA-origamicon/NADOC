@@ -71,7 +71,8 @@ export default defineConfig({
       // clutter that would be restored on the user's next dev-server restart.
       command: `uv run uvicorn backend.api.main:app --port ${BACKEND_PORT} --host 127.0.0.1`,
       cwd: REPO_ROOT,
-      env: { NADOC_DISABLE_SESSION_CACHE: '1' },
+      env: { NADOC_DISABLE_SESSION_CACHE: '1',
+        NADOC_MD_PLAYBACK_CACHE_DIR: path.join(REPO_ROOT, 'workspace/playwright_tests/__e2e__md-playback') },
       url: `http://127.0.0.1:${BACKEND_PORT}/docs`,
       reuseExistingServer: false,
       timeout: 30_000,

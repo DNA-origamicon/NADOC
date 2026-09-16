@@ -32,6 +32,9 @@ CANDIDATE_ASSEMBLY_POLICY_PATH = (
     / "forcefield"
     / "photoproduct_candidate_assembly_policy.json"
 )
+_FORCEFIELD_DIR = Path(__file__).resolve().parents[1] / "data" / "forcefield"
+_NUCLEIC_TOPOLOGY_PATH = _FORCEFIELD_DIR / "top_all36_na.rtf"
+_NUCLEIC_PARAMETERS_PATH = _FORCEFIELD_DIR / "par_all36_na.prm"
 
 
 def _sha256(path: Path) -> str:
@@ -131,7 +134,7 @@ def _apply_transformed_angle(record: dict[str, Any], transformed: dict[str, Any]
 
 
 def _nonbonded_metrics(
-    hypothesis: dict[str, Any], limits: dict[str, Any]
+    hypothesis: dict[str, Any], limits: dict[str, Any], *, require_pass: bool = True
 ) -> dict[str, Any]:
     held_out = [
         item
@@ -166,7 +169,7 @@ def _nonbonded_metrics(
         }
         for name, value in observed.items()
     }
-    if not all(item["passed"] for item in checks.values()):
+    if require_pass and not all(item["passed"] for item in checks.values()):
         failed = ", ".join(name for name, item in checks.items() if not item["passed"])
         raise ValueError(f"nonbonded smoke-candidate limits failed: {failed}")
     return checks
@@ -182,6 +185,7 @@ def assemble_quantitative_parameter_workbook(
     cgenff_parameters_path: Path,
     output_path: Path,
     policy_path: Path = CANDIDATE_ASSEMBLY_POLICY_PATH,
+    integration_nonbonded_override_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build a complete candidate workbook without asserting scientific release."""
 
@@ -203,6 +207,7 @@ def assemble_quantitative_parameter_workbook(
     elif schema in {
         "nadoc.photoproduct-candidate-assembly-policy.v2",
         "nadoc.photoproduct-candidate-assembly-policy.v3",
+        "nadoc.photoproduct-candidate-assembly-policy.v4",
     }:
         product_id = fit_plan.get("product_id")
         allowed = policy.get("allowed_product_ids") or []
@@ -284,8 +289,31 @@ def assemble_quantitative_parameter_workbook(
     )
     if hypothesis is None:
         raise ValueError("selected nonbonded hypothesis is absent")
+    integration_override = None
+    integration_override_source = None
+    override_policy = policy.get("integration_nonbonded_override")
+    if integration_nonbonded_override_path is not None:
+        integration_override = json.loads(integration_nonbonded_override_path.read_text())
+        integration_override_source = _source(integration_nonbonded_override_path)
+        parent = (integration_override.get("sources") or {}).get("source_nonbonded_fit") or {}
+        if (
+            schema != "nadoc.photoproduct-candidate-assembly-policy.v4"
+            or not isinstance(override_policy, dict)
+            or override_policy.get("mode") != "engine_integration_only"
+            or integration_override.get("schema")
+            != "nadoc.photoproduct-nonbonded-engine-integration-candidate.v1"
+            or integration_override.get("status")
+            != "frozen_for_engine_integration_not_scientifically_accepted"
+            or integration_override.get("product_id") != product_id
+            or parent.get("sha256") != _sha256(nonbonded_fit_path)
+        ):
+            raise ValueError("invalid integration-only nonbonded override")
+    elif schema == "nadoc.photoproduct-candidate-assembly-policy.v4":
+        raise ValueError("integration-only candidate policy requires a nonbonded override")
     nonbonded_checks = _nonbonded_metrics(
-        hypothesis, policy["candidate_nonbonded_limits"]
+        hypothesis,
+        policy["candidate_nonbonded_limits"],
+        require_pass=integration_override is None,
     )
 
     boundary_transfer = policy["model_compound_boundary_transfer"]
@@ -328,8 +356,16 @@ def assemble_quantitative_parameter_workbook(
             stereochemistry=registry_entry["stereochemistry"],
             output_path=scaffold_path,
         )
-    types_by_atom = hypothesis["atom_types"]
-    charges_by_atom = hypothesis["charges_e"]
+    types_by_atom = (
+        integration_override["atom_types"]
+        if integration_override is not None
+        else hypothesis["atom_types"]
+    )
+    charges_by_atom = (
+        integration_override["charges_e"]
+        if integration_override is not None
+        else hypothesis["charges_e"]
+    )
     expected_atoms = {item["atom"] for item in workbook["atoms"]}
     patch_types = {
         key: value for key, value in types_by_atom.items() if key in expected_atoms
@@ -360,6 +396,50 @@ def assemble_quantitative_parameter_workbook(
     } | workbook["charmm_patch"]["boundary_atom_types"]
     atom_records = {item["atom"]: item for item in workbook["atoms"]}
     standard_types = _standard_charmm_atom_types()
+    override_lj_by_type: dict[str, dict[str, Any]] = {}
+    override_source_type_by_type: dict[str, str] = {}
+    if integration_override is not None:
+        lj_parameters = integration_override.get("lj_parameters") or {}
+        custom_names = override_policy.get("custom_lj_type_names") or {}
+        if set(lj_parameters) != set(custom_names):
+            raise ValueError("integration-only LJ override/type mapping is incomplete")
+        for atom, values in lj_parameters.items():
+            record = atom_records.get(atom)
+            custom_name = custom_names.get(atom)
+            epsilon = values.get("epsilon_kcal_mol") if isinstance(values, dict) else None
+            rmin_half = values.get("rmin_half_angstrom") if isinstance(values, dict) else None
+            if (
+                record is None
+                or not isinstance(custom_name, str)
+                or not custom_name
+                or len(custom_name) > 8
+                or custom_name in standard_types
+                or custom_name in override_lj_by_type
+                or not isinstance(epsilon, (int, float))
+                or not math.isfinite(float(epsilon))
+                or float(epsilon) > 0.0
+                or not isinstance(rmin_half, (int, float))
+                or not math.isfinite(float(rmin_half))
+                or float(rmin_half) <= 0.0
+            ):
+                raise ValueError(f"invalid integration-only LJ override for {atom}")
+            source_type = record["final_type"]
+            record["final_type"] = custom_name
+            record["lj_source_or_fit"] = json.dumps(
+                {
+                    "kind": "integration_only_fitted_lj",
+                    "source_type": source_type,
+                    "override": integration_override_source,
+                    "policy": _source(policy_path),
+                },
+                sort_keys=True,
+            )
+            actual_types[atom] = custom_name
+            override_source_type_by_type[custom_name] = source_type
+            override_lj_by_type[custom_name] = {
+                "epsilon_kcal_mol": float(epsilon),
+                "rmin_half_angstrom": float(rmin_half),
+            }
     alias_source_by_type: dict[str, str] = {}
     aliases = policy.get("bonded_identity_type_aliases") or {}
     for atom, alias in aliases.items():
@@ -448,32 +528,62 @@ def assemble_quantitative_parameter_workbook(
 
     masses = parse_charmm_masses(cgenff_topology_path)
     nonbonded = parse_charmm_nonbonded(cgenff_parameters_path)
+    nucleic_masses = parse_charmm_masses(_NUCLEIC_TOPOLOGY_PATH)
+    nucleic_nonbonded = parse_charmm_nonbonded(_NUCLEIC_PARAMETERS_PATH)
     custom_types = sorted(
         {item["final_type"] for item in workbook["atoms"]} - standard_types
     )
     for atom_type in custom_types:
-        source_type = alias_source_by_type.get(atom_type, atom_type)
-        if source_type not in masses or source_type not in nonbonded:
-            raise ValueError(f"CGenFF mass/LJ record is missing for {source_type}")
-        lj = nonbonded[source_type]
+        source_type = alias_source_by_type.get(
+            atom_type, override_source_type_by_type.get(atom_type, atom_type)
+        )
+        source_masses = masses if source_type in masses else nucleic_masses
+        source_nonbonded = nonbonded if source_type in nonbonded else nucleic_nonbonded
+        source_topology = (
+            cgenff_topology_path if source_type in masses else _NUCLEIC_TOPOLOGY_PATH
+        )
+        source_parameters = (
+            cgenff_parameters_path
+            if source_type in nonbonded
+            else _NUCLEIC_PARAMETERS_PATH
+        )
+        if source_type not in source_masses or source_type not in source_nonbonded:
+            raise ValueError(f"pinned CHARMM mass/LJ record is missing for {source_type}")
+        lj = override_lj_by_type.get(atom_type, source_nonbonded[source_type])
         workbook["charmm_patch"]["custom_atom_types"].append(
             {
                 "name": atom_type,
-                "element": masses[source_type]["element"],
-                "mass_amu": masses[source_type]["mass_amu"],
+                "element": source_masses[source_type]["element"],
+                "mass_amu": source_masses[source_type]["mass_amu"],
                 **lj,
+                **(
+                    {
+                        "bonded_alias_source_type": source_type,
+                        "bonded_alias_parameters": _source(source_parameters),
+                    }
+                    if atom_type in override_lj_by_type
+                    else {}
+                ),
                 "source": (
                     json.dumps(
                         {
-                            "kind": "bonded_identity_alias",
+                            "kind": (
+                                "integration_only_fitted_lj"
+                                if atom_type in override_lj_by_type
+                                else "bonded_identity_alias"
+                            ),
                             "source_type": source_type,
-                            "cgenff_parameters": _source(cgenff_parameters_path),
-                            "cgenff_topology": _source(cgenff_topology_path),
+                            "source_parameters": _source(source_parameters),
+                            "source_topology": _source(source_topology),
                             "policy": _source(policy_path),
+                            "override": integration_override_source
+                            if atom_type in override_lj_by_type
+                            else None,
                         },
                         sort_keys=True,
                     )
                     if atom_type in alias_source_by_type
+                    or atom_type in override_lj_by_type
                     else cgenff_source
                 ),
             }
@@ -638,8 +748,10 @@ def assemble_quantitative_parameter_workbook(
     selected_source = _source(selected_path)
     workbook["required_qm_targets"] = {
         "optimized_minima_and_frequencies": [fit_targets],
-        "dipole": [_source(nonbonded_fit_path)],
-        "water_interactions": [_source(nonbonded_fit_path)],
+        "dipole": [integration_override_source or _source(nonbonded_fit_path)],
+        "water_interactions": [
+            integration_override_source or _source(nonbonded_fit_path)
+        ],
         "hessian_or_internal_coordinate_response": [
             selected_source,
             _source(charmm_transform_path),
@@ -663,7 +775,11 @@ def assemble_quantitative_parameter_workbook(
     }
     workbook.update(
         {
-            "release_status": "quantitative_smoke_candidate_not_released",
+            "release_status": (
+                "integration_smoke_candidate_not_scientifically_accepted"
+                if integration_override is not None
+                else "quantitative_smoke_candidate_not_released"
+            ),
             "gate_effect": "none",
             "quantitative_candidate_assembly": {
                 "schema": "nadoc.photoproduct-quantitative-candidate-assembly.v1",
@@ -672,6 +788,10 @@ def assemble_quantitative_parameter_workbook(
                 "policy": _source(policy_path),
                 "resolved_scope": scope,
                 "nonbonded_checks": nonbonded_checks,
+                "nonbonded_checks_passed": all(
+                    item["passed"] for item in nonbonded_checks.values()
+                ),
+                "integration_nonbonded_override": integration_override_source,
                 "dna_boundary_model": boundary_source,
                 "model_boundary_transfer": boundary_transfer,
                 "candidate_authorization": policy["candidate_authorization"],

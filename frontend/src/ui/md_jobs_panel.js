@@ -2941,7 +2941,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
     loadProgressEl: trajLoadProgress,
     prevBtn: trajPrev, nextBtn: trajNext,
-    onBeforeSeek: (i) => solvent?.ensureFrame(i) ?? true,
+    onBeforeSeek: async (i) => {
+      if (await getMdViz?.()?.ensureTrajectoryFrame?.(i) === false) return false
+      return solvent?.ensureFrame(i) ?? true
+    },
     onSeek: (i) => { getMdViz?.()?.showFrame(i); solvent?.showFrame(i) },
     onBeforePlay: async () => {
       const v = getMdViz?.()
@@ -2955,6 +2958,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // button sitting on a bare ⏳ with nothing moving anywhere, which reads as "play is
       // broken", not "play is waiting". Same status line the toggle's own prebuild uses.
       const base = (trajStatus?.textContent || '').split(' · preparing')[0].split(' · atoms')[0]
+      if (v.isProgressiveTrajectory?.()) return v.ensureTrajectoryFrame(v.trajectoryInfo().frame - 1)
       const r = await v.prebuildHeavy((done, total) => {
         if (total) _setTrajStatus(`${base} · preparing atoms ${done}/${total}…`, _C.accent)
       })
@@ -3450,7 +3454,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // frame endpoint produces an avoidable empty-DNA 500 after the trajectory itself
       // has loaded successfully.
       const grapheneOnly = !!mdInheritedPrepParams(_jobs.find(j => j.job_id === jobId), _jobs).graphene_only
-      if (!grapheneOnly) await _prebuildTrajHeavy(v, base)
+      if (!grapheneOnly && !v.isProgressiveTrajectory?.()) await _prebuildTrajHeavy(v, base)
+      else if (v.isProgressiveTrajectory?.()) {
+        _setTrajStatus(`${base} · buffered playback`, _C.ok)
+        v.bufferTrajectory?.(p => {
+          if (_trajJobId !== jobId || !trajToggle?.checked) return
+          _setTrajStatus(`${base} · ${p.complete ? 'fully buffered' : `${p.buffered}/${p.total} buffered${p.limited ? ' · memory limit' : ' · loading remaining frames…'}`}`, _C.ok)
+        })?.catch(err => {
+          if (_trajJobId === jobId) _setTrajStatus(`${base} · background buffering stopped: ${err.message}`, _C.warn)
+        })
+      }
     } else {
       if (trajToggle) trajToggle.checked = false
       if (trajControls) trajControls.style.display = 'none'

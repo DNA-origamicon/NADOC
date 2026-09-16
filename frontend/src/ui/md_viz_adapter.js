@@ -25,7 +25,10 @@
  *
  * Display-state only — never writes topology.
  */
+import { initMdTrajectoryPrefetch } from '../scene/md_trajectory_prefetch.js'
+
 export function mdVizApiAdapter(api) {
+  const prefetch = initMdTrajectoryPrefetch(api)
   // The controller calls these as `(id, { align, signal })`.  Take the OPTIONS OBJECT —
   // taking `(id, signal)` here is what silently broke this adapter once: the controller's
   // `align` bound to `signal`, the real AbortSignal was dropped, and `fetch` then rejected
@@ -46,6 +49,9 @@ export function mdVizApiAdapter(api) {
     // tells the controller it may batch its prebuild; oxDNA leaves it unset and keeps
     // fetching one frame at a time, which is right for a per-frame reconstruction.
     heavyBatch: true,
+    prefetchTrajectory: (jobId, stride) => prefetch.start(jobId, stride),
+    progressiveTrajectory: typeof api.getMdTrajectoryMeta === 'function',
+    getTrajectoryMeta: (id, stride) => api.getMdTrajectoryMeta(id, { stride }),
     trajectoryImpostors: true,
     preferTrajectoryBin: true,
     getOxdnaTrajectory: (id, { signal, stride, frameStart, frameEnd } = {}) => api.getMdTrajectory(id, signal, { stride, frameStart, frameEnd }),
@@ -72,9 +78,9 @@ export function mdVizApiAdapter(api) {
     // the per-frame mesh rebuild disappears, and a whole all-atom trajectory becomes
     // small enough to hold in memory (5.4 MB/frame of Float64 coords for a 300 k-atom
     // system, against ~72 MB/frame of JavaScript atom objects).
-    getOxdnaAtomisticModel: (id) => api.getMdAtomisticModel(id),
+    getOxdnaAtomisticModel: (id) => prefetch.model(id),
     getOxdnaFramesAtomistic: (id, frameIndices, _align, _scope, stride) =>
-      api.getMdFramesAtomistic(id, frameIndices, { stride, positionsOnly: true }),
+      prefetch.frames(id, frameIndices, stride),
     getOxdnaFramesSurface: (id, frameIndices, params = {}) =>
       api.getMdFramesSurface(id, frameIndices, params),
   }

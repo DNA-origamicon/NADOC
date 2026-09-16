@@ -9,6 +9,7 @@
  * don't need try/catch unless they need the error value directly.
  */
 
+import { parseMdAtomFrames, parseMdAtomModel } from '../scene/md_atom_frames_bin.js'
 import { store } from '../state/store.js'
 import { geometryQuerySuffix, isNewPositioningOn } from '../ui/new_positioning.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
@@ -3305,14 +3306,17 @@ export const cancelMdAnalysis = (id, kind) =>
  *  indices. `opts.stride` must repeat the interval the trajectory was loaded with —
  *  a frame index only addresses the same frame within one interval. */
 export const getMdFramesAtomistic = (id, frameIndices, opts = {}) =>
-  _oxdnaJSON('POST', `/md/jobs/${id}/frames-atomistic`,
+  opts.positionsOnly
+    ? _oxdnaBin('POST', `/md/jobs/${id}/frames-atomistic-bin`,
+        { frame_indices: frameIndices, ..._strideBody(opts) }).then(buffer => parseMdAtomFrames(buffer, { compact: opts.compact }))
+    : _oxdnaJSON('POST', `/md/jobs/${id}/frames-atomistic`,
     { frame_indices: frameIndices, ..._strideBody(opts),
       ...(opts.positionsOnly ? { positions_only: true } : {}) })
 /** The NAMD job's STATIC heavy-atom set ({atoms, bonds, n_serials}) — fetch once, then
  *  stream coordinates with getMdFramesAtomistic(..., {positionsOnly:true}). Same
  *  contract as getOxdnaAtomisticModel. */
 export const getMdAtomisticModel = (id) =>
-  _oxdnaJSON('GET', `/md/jobs/${id}/atomistic-model`)
+  _oxdnaBin('GET', `/md/jobs/${id}/atomistic-model-bin`).then(parseMdAtomModel)
 /** The design's intended extra-base UV weld pairs + their C5/C6 atom serials
  *  ({ready, pairs, constants}). Identity only — the viewer computes d_mid/eta from the
  *  frame it is already rendering, so the markers can't drift off the atoms. `pairs` is

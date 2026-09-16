@@ -559,6 +559,108 @@ job, collects its results, and runs the frozen-candidate evaluator. A failure st
 a pass authorizes implementation of the custom Lennard-Jones CHARMM assembly stage. Neither
 the capacity fit nor the new evidence generation makes the product simulation ready.
 
+## Alpine water result and NAMD integration completion (2026-09-15)
+
+Alpine job **32590755** completed normally in 19 minutes 47 seconds with exit code 0, and
+the completion watcher collected and evaluated it. The independent azimuth-120 gate
+failed under its unchanged limits: energy RMSE was 0.41249 kcal/mol (limit 0.2), maximum
+energy error was 0.69876 kcal/mol (limit 0.5), distance RMSE was 0.06171 angstrom (pass),
+and maximum distance error was 0.11153 angstrom (limit 0.1). The endpoint-2 H3 donor was
+the worst energy case. Automatic scientific continuation stopped as designed.
+
+A leave-one-orientation-out diagnostic then fitted each registered atom-centered additive
+model on two water orientations and predicted the third. Ordered carbonyl-O LJ, ordered
+H3/O2/O4 LJ, and ordered N3/H3/O2/O4 LJ variants all failed every held-out orientation.
+Their all-orientation fits approached some aggregate targets, but those same orientations
+were used in fitting and therefore provide no independent validation. This supports the
+existing model-form diagnosis: fixed atom-centered additive charges do not reproduce the
+carbonyl/donor anisotropy across arbitrary water azimuths. The registered acceptance
+limits were not relaxed.
+
+To finish the requested engine implementation without converting that failed scientific
+gate into a pass, policy v4 introduces an explicit integration-only candidate. It records
+the failing nonbonded checks, emits distinct fitted O2/O4 LJ types, keeps
+`simulation_ready: false`, and prohibits force-field release, production use, or
+scientific interpretation. Its first real NAMD parameter load found that distinct LJ atom
+types also hide the source ON1 bonded parameters. The preserved failed attempt stopped on
+the missing `CA1O2 CN1T NN2B` angle. The exporter now copies hash-pinned bonded identity
+records for each integration-only LJ type into the self-contained candidate parameter
+file; the focused candidate assembly and engine tests pass 33/33.
+
+The corrected `tt-cpd-cis-anti-i-integration-v2` candidate passes the complete local NAMD
+implementation path:
+
+| Gate | Result |
+|---|---|
+| Real psfgen product/reactant construction and static topology audit | Pass; 63 atoms, charge conserved at -1 e, and exactly the two ordered CPD crosslinks were added. |
+| Vacuum NAMD | Pass; warning-classified load, 2,000 minimization steps, and 1,000 ordinary-mass steps at 2 fs. All 100 frames retained chirality; minimum nonbonded covalent-radius ratio was 1.675. |
+| Explicit solution NAMD | Pass; 1,084 TIP3P waters, 4 Na+, 3 Cl-, neutral total charge, 1,000 minimization steps, 1,000 heating steps at 1 fs, and 5,000 production-smoke steps at 2 fs. All 50 frames retained chirality; minimum ratio was 1.613. |
+
+The machine-readable assessment is
+`gate-troubleshooting-v1/namd-integration-v2/stage_assessment.json`; its trigger is
+`gates/namd_integration_smoke.json`. The NAMD implementation stage is complete, while the
+scientific campaign remains held. Reassessment requires a preregistered anisotropic or
+polarizable nonbonded model, a fresh independent water-orientation set that passes the
+unchanged bounds, full d(TpT)/duplex validation for that accepted model, and independent
+reproducibility and release review.
+
+## Nonbonded model-form reassessment (2026-09-15)
+
+A second preregistered leave-one-orientation-out diagnostic tested whether a minimal,
+charge-conserving static anisotropy extension could recover the failed transferability.
+The four fixed-geometry families were an axial carbonyl site, paired in-plane carbonyl
+sites, paired in-plane carbonyl sites plus axial donor sites, and paired out-of-plane
+carbonyl sites plus axial donor sites. Virtual sites carried no Lennard-Jones term. Their
+charges, the constrained atomic charges, and the same ordered N3/H3/O2/O4 Lennard-Jones
+terms were bounded and regularized; the original folds and acceptance limits were left
+unchanged.
+
+All four families failed all three held-out orientations. The variants with donor sites
+reduced some distance errors, but held-out energy RMSE remained 0.35--0.43 kcal/mol. The
+largest errors continued to change with orientation: canonical held-out data failed at
+the endpoint-2 O2 acceptor, the alternate plane failed at endpoint-2 O4, and azimuth +120
+failed at endpoint-2 H3. Optimized carbonyl virtual charges often collapsed toward zero.
+This result closes further tuning of the fixed additive model; it does not close the
+possibility of a polarizable model.
+
+The official CHARMM Drude nucleic-acid release was then hash-pinned and inspected. Its
+thymine model uses asymmetric carbonyl lone-pair charges together with atomic
+polarizabilities, atom-specific Thole screening, and anisotropic carbonyl Drude springs.
+That is materially different from a fixed equal-site charge split. The published Drude
+nucleobase procedure fits charges, polarizabilities, and Thole factors to perturbed
+B3LYP/aug-cc-pVDZ ESP maps on MP2/6-31G(d) geometries and scales the fitted gas-phase
+polarizabilities by 0.85. The current CPD evidence has the geometry, zero-field ESP,
+dipole, and water curves, but no perturbed ESP set or polarizability tensor. Those are now
+the required next QM targets.
+
+An engine-only probe established the implementation boundary. psfgen 2.0 built two
+standard MTHY residues with 64 total particles, including 20 Drude particles, eight lone
+pairs, and four anisotropy entries. The installed NAMD 3.0.2 CUDA binary rejected
+NBTHOLE, while the local NAMD Git-2025-12-04 build loaded the same PSF and returned a
+finite zero-step energy. The full 2018 nucleic-acid topology also exposed an unsupported
+`DELETE ANISOTROPY` patch statement in psfgen. Thus the newer NAMD build can execute a
+Drude model compound, but the complete DNA structure-builder path still needs either a
+validated preprocessing correction or a CHARMM-GUI/CHARMM-generated PSF.
+
+The first P1 response pilot is Alpine job **32603453**. It requests a
+B3LYP/aug-cc-pVDZ molecular polarizability tensor and dipole at the audited
+MP2/6-31G(d) N-methyl CPD geometry using 32 CPUs and 70 GB on `acpu`. Submission and
+resource checks passed; the job entered `PENDING (Priority)`. Its completion audit
+requires normal Psi4 termination, nine finite tensor components, tensor symmetry within
+1e-6 atomic units, and three finite dipole components. The enabled
+`nadoc-cpd-drude-response-watch.timer` polls every five minutes, collects terminal output,
+and writes an immutable completion trigger. A pass authorizes preparation of the
+fit/held-out +0.5 e perturbed-ESP campaign only and has no registry effect.
+
+The next campaign has four reassessment triggers: finish and audit fit/held-out perturbed
+ESP and polarizability QM targets; require a fitted Drude electrostatic model to predict
+the held-out perturbations; require unchanged three-orientation water cross-validation
+plus a new frozen fourth orientation; then require a full Drude d(TpT), SWM4-NDP solution,
+and duplex-context validation at no more than 1 fs. Additive-to-Drude parameter transfer
+does not satisfy any of these triggers. The hash-pinned result, engine evidence, missing
+targets, and trigger definitions are recorded in
+`docs/audits/cpd_nonbonded_model_form_20260915.json`.
+
 ## Verification of this review
 
 Targeted monitor tests exercise input/source corruption, interrupted execution, stage
@@ -576,3 +678,59 @@ DEFERRED: this change would have needed the FULL suite, but no test-dedicated
 session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 Ask the user to run `just test-session` (their terminal), then `just test-slow`.
 ```
+
+## Literature and conventional-practice reassessment (2026-09-15)
+
+A focused review of modified-nucleotide guides, force-field reviews, and CPD-specific
+simulation precedents changes the scope of the nonbonded conclusion. The completed QM
+evidence is not a failed QM campaign. It demonstrates that the registered fixed-charge
+anti model does not predict unseen water azimuths within the NADOC limits. Leave-one-
+azimuth-out prediction is a useful model-form stress test, but it is not a universal
+CHARMM additive release gate in the established workflows; those workflows fit selected
+water poses and then validate the assembled nucleotide in condensed phase and against
+experiment.
+
+The campaign will therefore be reassessed as two deliverables. The canonical cis-syn-I
+path should compare the existing NADOC fit with a fully audited reconstruction of the
+published Ma/van der Vaart CHARMM-compatible CPD tables, then advance to d(TpT) and duplex
+validation under a new versioned policy. The water-orientation limitation remains visible
+and cannot be relabeled as a pass. Ordered anti and other design stereoisomers remain a
+separate research path; Drude response work is justified there when orientation-dependent
+electrostatics are part of the intended observable, but those products no longer block
+the canonical cis-syn-I release path by default.
+
+The full evidence review and recommended gates are in
+`docs/cpd_parameterization_literature_reassessment.md`.
+
+### Polarizability-pilot numerical recovery
+
+Alpine job **32603453** completed the B3LYP/aug-cc-pVDZ property calculation normally in
+about five minutes, returning all nine finite polarizability components. The Slurm job
+was nevertheless marked failed by its post-calculation audit. Two numerical plumbing
+issues were preserved rather than treated as scientific failures: the dipole parser
+looked for scalar variable lines even though Psi4 printed the three components in its
+multipole table, and the default CPHF solver tolerance of 1e-6 produced maximum tensor
+asymmetry of 8.86e-6 atomic units against the preregistered 1e-6 audit limit.
+
+Recovery job **32603776** repeats the same property calculation, geometry, method, basis,
+threads, and memory with an attempted CPHF convergence override of 1e-10 and the parser
+corrected to read Psi4's multipole table. Its archive is
+`alpine-qm-cpd-drude-response-v2`; hashes were verified after upload. The five-minute
+completion watcher was moved to the recovery archive. A pass completes the P1 target
+only. Consistent with the literature reassessment, it does not automatically launch the
+perturbed-ESP campaign or make the anti product a prerequisite for cis-syn-I release.
+
+Job **32603776** ran for 2 minutes 53 seconds and Psi4 exited normally. The corrected
+parser recovered all three finite dipole components, and all nine polarizability
+components were finite. The tensor was positive definite after symmetrization, and the
+largest component difference from job 32603453 was only 5.54e-10 atomic units. Remote and
+collected output/audit hashes match. The registered gate still failed because the output
+showed that the solver remained at the default 1e-6 convergence and 100 iterations; the
+maximum tensor asymmetry was consequently unchanged at 8.86e-6 atomic units.
+
+The recovery input had applied `SOLVER_CONVERGENCE` to Psi4's `CPHF` module. A direct
+Psi4 1.11 option probe confirmed that this DFT response path instead reads the `SCF`
+module's solver options. Job **32603908** (`cpd-drude-pol3`) was therefore submitted with
+the same scientific target and `SCF` solver convergence set to 1e-10. The prior outputs
+and failed triggers remain immutable. The watcher now follows the v3 archive and will not
+launch dependent jobs.

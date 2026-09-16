@@ -1,0 +1,174 @@
+{
+  "colors": [
+    {
+      "job": "2f281ba1a83a",
+      "nucleotides": 6720,
+      "mapEntries": 6720,
+      "mismatches": 0,
+      "scaffoldMismatches": 0,
+      "totalScaffold": 3528,
+      "examples": []
+    },
+    {
+      "job": "4aab8c445579",
+      "nucleotides": 94,
+      "mapEntries": 94,
+      "mismatches": 0,
+      "scaffoldMismatches": 0,
+      "totalScaffold": 52,
+      "examples": []
+    },
+    {
+      "job": "594917c0d119",
+      "nucleotides": 6720,
+      "mapEntries": 6720,
+      "mismatches": 0,
+      "scaffoldMismatches": 0,
+      "totalScaffold": 3528,
+      "examples": []
+    }
+  ],
+  "coordinate_extraction": [
+    {
+      "job": "594917c0d119",
+      "status": "stopped",
+      "design": "24hb_0xT",
+      "frames": 6032,
+      "dcd_bytes": 95559957652,
+      "layout": "DcdLayout(endian='<', n_atoms=1320174, has_cell=True, header_bytes=276, frame_bytes=15842168, n_frames=6032, istart=5000, nsavc=5000, delta_ps=20.000000059628114, first_ps=20.000000059628114)",
+      "mapped_phosphates": 6644,
+      "samples": [
+        {
+          "frame": 0,
+          "phosphate_alignment_nm": {
+            "median": 4.574446962757086e-07,
+            "p95": 1.5966412196963134e-06,
+            "max": 1.9612150992794393e-06
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.24342840629275753,
+            "p95": 0.4298330265998809,
+            "max": 1.0380840834334826
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 5.952678942391437e-07,
+            "p95": 2.195032606173942e-06,
+            "max": 3.768566229678982e-06
+          }
+        },
+        {
+          "frame": 3016,
+          "phosphate_alignment_nm": {
+            "median": 4.560988158580495e-07,
+            "p95": 1.601849881968962e-06,
+            "max": 1.966819496342956e-06
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.25853702827938374,
+            "p95": 0.5589243596805311,
+            "max": 1.3431485824644658
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 5.824998259097808e-07,
+            "p95": 2.3198514930424394e-06,
+            "max": 3.7424829468375834e-06
+          }
+        },
+        {
+          "frame": 6031,
+          "phosphate_alignment_nm": {
+            "median": 4.5575873485586243e-07,
+            "p95": 1.5954031678165116e-06,
+            "max": 1.9486698754333376e-06
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.2653032538482388,
+            "p95": 0.6035761267365539,
+            "max": 1.2937454595537623
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 5.951313565180627e-07,
+            "p95": 2.321885939863666e-06,
+            "max": 3.7356781296473308e-06
+          }
+        }
+      ]
+    },
+    {
+      "job": "4aab8c445579",
+      "status": "completed",
+      "design": "2hb_1-0xT",
+      "frames": 2000,
+      "dcd_bytes": 1504312276,
+      "layout": "DcdLayout(endian='<', n_atoms=62673, has_cell=True, header_bytes=276, frame_bytes=752156, n_frames=2000, istart=25000, nsavc=25000, delta_ps=100.00000029814058, first_ps=100.00000029814058)",
+      "mapped_phosphates": 92,
+      "samples": [
+        {
+          "frame": 0,
+          "phosphate_alignment_nm": {
+            "median": 1.334975731929839e-07,
+            "p95": 3.886969436918847e-07,
+            "max": 4.735407226228449e-07
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.29677302821191026,
+            "p95": 0.5073670134391643,
+            "max": 0.9818464050418629
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 1.4618873720990986e-07,
+            "p95": 5.421834108780198e-07,
+            "max": 8.944075339259785e-07
+          }
+        },
+        {
+          "frame": 1000,
+          "phosphate_alignment_nm": {
+            "median": 1.3391461897347653e-07,
+            "p95": 4.1657102882886054e-07,
+            "max": 4.529960537287977e-07
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.26758974543809705,
+            "p95": 0.8046577526266183,
+            "max": 1.2011816837703502
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 1.8985933615000525e-07,
+            "p95": 4.452137997971997e-07,
+            "max": 8.015830824262262e-07
+          }
+        },
+        {
+          "frame": 1999,
+          "phosphate_alignment_nm": {
+            "median": 1.20957501176311e-07,
+            "p95": 3.682424413858601e-07,
+            "max": 4.5108337453019254e-07
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.26589864377033456,
+            "p95": 0.7851560214724449,
+            "max": 1.1738046184730313
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 1.8431509617154352e-07,
+            "p95": 4.346794092697894e-07,
+            "max": 7.31256198340108e-07
+          }
+        }
+      ]
+    }
+  ],
+  "running_app": {
+    "job": "594917c0d119",
+    "frame": 6031,
+    "atoms_checked": 137493,
+    "color_mismatches": 0,
+    "base_rings_checked": 6720,
+    "max_rendered_center_difference_nm": 5.206167358412754e-05,
+    "full_ballstick_full_preserves_frame": true,
+    "playwright_passed": true,
+    "artifacts_cleaned": true
+  }
+}
