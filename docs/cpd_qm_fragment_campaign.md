@@ -701,3 +701,21 @@ the canonical cis-syn-I release path by default.
 
 The full evidence review and recommended gates are in
 `docs/cpd_parameterization_literature_reassessment.md`.
+
+### Polarizability-pilot numerical recovery
+
+Alpine job **32603453** completed the B3LYP/aug-cc-pVDZ property calculation normally in
+about five minutes, returning all nine finite polarizability components. The Slurm job
+was nevertheless marked failed by its post-calculation audit. Two numerical plumbing
+issues were preserved rather than treated as scientific failures: the dipole parser
+looked for scalar variable lines even though Psi4 printed the three components in its
+multipole table, and the default CPHF solver tolerance of 1e-6 produced maximum tensor
+asymmetry of 8.86e-6 atomic units against the preregistered 1e-6 audit limit.
+
+Recovery job **32603776** repeats the same property calculation, geometry, method, basis,
+threads, and memory with only the documented CPHF convergence tightened to 1e-10 and the
+parser corrected to read Psi4's multipole table. Its archive is
+`alpine-qm-cpd-drude-response-v2`; hashes were verified after upload. The five-minute
+completion watcher was moved to the recovery archive. A pass completes the P1 target
+only. Consistent with the literature reassessment, it does not automatically launch the
+perturbed-ESP campaign or make the anti product a prerequisite for cis-syn-I release.
