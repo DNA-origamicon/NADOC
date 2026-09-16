@@ -756,3 +756,49 @@ the literature reassessment, no perturbed-ESP expansion is launched automaticall
 the anti Drude research path does not block the canonical cis-syn-I release path. The
 accepted response target remains available if that separate research path is explicitly
 resumed under a new versioned campaign decision.
+
+### Anti-Drude P1 expansion (2026-09-15)
+
+The user explicitly resumed the ordered anti Drude research track after the response
+pilot closed. Campaign `alpine-qm-cpd-drude-perturbed-esp-v1` preregisters the remaining
+P1 targets without changing any prior additive or release gate. It uses the same audited
+MP2/6-31G(d) N-methyl cis-anti-I geometry and calculates B3LYP/aug-cc-pVDZ ESP maps and
+dipoles for one unperturbed density and 96 independent +0.5 e perturbations.
+
+The perturbations use reproducible exposed scaled-Bondi surfaces as a deterministic
+Connolly-surface approximation. Seventy-two positions are frozen for fitting and 24 are
+untouched holdouts. Both partitions span the conventional 2.2 and 4.0 scaled perturbing-
+charge layers; every calculation is sampled on the same 1,136-point readout grid spanning
+the 3.0, 5.0, and 6.0 layers. Maximin selection leaves the holdouts in the largest gaps
+not occupied by the fit set. The 96-by-60 heavy-atom electric-field signature has full
+rank before execution. The exact positions, atom map, grids, thresholds, and hashes are
+frozen in `bundle/shared/design.json` and `campaign_manifest.json`.
+
+The first submission was preserved and cancelled after both pilot tasks entered an
+uninterruptible read while loading the shared Psi4 environment on node
+`c3cpu-c13-u9-1`; neither reached input execution or produced a QM output. The recovery
+excludes that node without changing any scientific input or threshold.
+
+Recovery pilot array **32608030** then ran the unperturbed case normally, but its
+perturbed case reached external-field integral setup and exited with signal 11. The input
+used Psi4's legacy `q, array` point-charge representation. Diagnostic job **32608094**
+replaced only that representation with the current documented N-by-4 array, completed in
+6 minutes 32 seconds, and produced all 1,136 finite ESP values. Its response relative to
+the unperturbed map has RMS 0.001442 atomic units; the dipole changed from
+(-0.893044, -0.716273, -0.541146) to (-1.449088, -0.768390, -0.195208) atomic units.
+Both cases pass the frozen audit.
+
+Execution-recovery campaign `alpine-qm-cpd-drude-perturbed-esp-v2` applies the validated
+N-by-4 representation to all perturbations without changing a position, QM target,
+partition, or threshold. Main array **32608183** contains cases 2--96, is limited to 24
+concurrent 16-CPU/40-GB tasks, and excludes the node from the preserved filesystem-stall
+attempt. Final audit job **32608184** has an `afterany:32608183` dependency so failed or
+incomplete cases produce a recorded campaign failure rather than disappearing. The final
+audit requires all 97 case audits, all 96 responses above the frozen numerical floor, the
+72/24 partition, matching geometry and atom-map provenance, and full-rank field coverage.
+
+The enabled `nadoc-cpd-drude-perturbed-esp-v2-watch.timer` writes independent pilot,
+main, and completion triggers. A passed final trigger closes P1 and permits preparation
+of a versioned P2 electrostatic fit that is scored against the untouched perturbations.
+It has no simulation or registry effect; water-orientation, Drude-consistent nonbonded
+and bonded, SWM4-NDP, d(TpT), duplex, and reproducibility gates remain downstream.
