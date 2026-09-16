@@ -678,3 +678,26 @@ DEFERRED: this change would have needed the FULL suite, but no test-dedicated
 session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 Ask the user to run `just test-session` (their terminal), then `just test-slow`.
 ```
+
+## Literature and conventional-practice reassessment (2026-09-15)
+
+A focused review of modified-nucleotide guides, force-field reviews, and CPD-specific
+simulation precedents changes the scope of the nonbonded conclusion. The completed QM
+evidence is not a failed QM campaign. It demonstrates that the registered fixed-charge
+anti model does not predict unseen water azimuths within the NADOC limits. Leave-one-
+azimuth-out prediction is a useful model-form stress test, but it is not a universal
+CHARMM additive release gate in the established workflows; those workflows fit selected
+water poses and then validate the assembled nucleotide in condensed phase and against
+experiment.
+
+The campaign will therefore be reassessed as two deliverables. The canonical cis-syn-I
+path should compare the existing NADOC fit with a fully audited reconstruction of the
+published Ma/van der Vaart CHARMM-compatible CPD tables, then advance to d(TpT) and duplex
+validation under a new versioned policy. The water-orientation limitation remains visible
+and cannot be relabeled as a pass. Ordered anti and other design stereoisomers remain a
+separate research path; Drude response work is justified there when orientation-dependent
+electrostatics are part of the intended observable, but those products no longer block
+the canonical cis-syn-I release path by default.
+
+The full evidence review and recommended gates are in
+`docs/cpd_parameterization_literature_reassessment.md`.
