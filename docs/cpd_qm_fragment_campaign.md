@@ -868,3 +868,33 @@ P2 is therefore complete. Its immutable closeout and trigger are
 not production or simulation ready. The next anti-Drude stage is a separately frozen P3
 water-orientation validation, followed by bonded fitting, nucleotide assembly, duplex,
 and reproducibility gates before any registry change.
+
+### Anti-Drude P3 water validation (2026-09-16)
+
+P3 freezes the P2 electrostatics and uses SWM4-NDP water. Its only adjustable terms are
+six ordered CPD-target/ODW NBFIX pairs (endpoint 1/2 by H3, O2, and O4), each with a
+bounded well depth and pair Rmin. The three existing QM orientations are canonical,
+alternate-plane, and azimuth +120 degrees. A fourth azimuth +240-degree set was generated
+before fitting and submitted as Alpine array **32610248**; its 54 QM targets remain sealed
+until a three-orientation model is frozen.
+
+The first preregistered fit family is preserved under `anti-cpd-drude-water-fit-v1`. It
+passed the canonical and +120-degree folds but narrowly failed the alternate-plane fold:
+energy RMSE **0.20929 kcal/mol** against a **0.20** limit and distance RMSE **0.10501 Å**
+against a **0.10 Å** limit. Maximum Drude displacement remained safe at **0.16615 Å**.
+No fourth-orientation energy was read.
+
+Recovery `anti-cpd-drude-water-fit-v2` changed only the fit objective's minimum-distance
+scale from 0.05 to 0.03 Å; model terms, parameter bounds, data partitions, and acceptance
+limits are unchanged. All leave-one-orientation-out folds now pass. Canonical,
+alternate-plane, and +120-degree held-out energy/distance RMSE values are respectively
+**0.14132/0.05787**, **0.19016/0.09161**, and **0.16362/0.06254** in kcal/mol and Å.
+The all-orientation parameters were then frozen before holdout under SHA-256
+`ab523c2208f67c953f5c0e976e938896e1047a081882d35a672291172ad4c8a2`.
+
+Transient user service `nadoc-anti-drude-p3-v2.service` watches the Alpine array, imports
+and audits every output, and scores the frozen +240-degree set. It writes
+`anti-cpd-drude-water-fit-v2/completion_trigger.json` only after the independent score.
+A pass authorizes P4 bonded fitting; a failure stops automatic continuation for model
+reassessment. P3 remains incomplete and no production or simulation readiness follows
+while array 32610248 is pending.

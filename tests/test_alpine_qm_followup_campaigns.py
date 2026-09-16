@@ -99,6 +99,25 @@ def test_water_azimuth_variant_is_explicit_and_deterministic() -> None:
     assert original == [{"id": "endpoint1-o2-acceptor", "plane_atom": "1:N1"}]
 
 
+def test_fourth_water_orientation_is_distinct_and_deterministic() -> None:
+    module = _load(
+        "scripts/alpine_qm_water_campaign/build_campaign.py",
+        "water_campaign_fourth_orientation",
+    )
+    original = [{"id": "endpoint1-o2-acceptor", "plane_atom": "1:N1"}]
+    rotated = module._azimuth_rotated_sites(original, azimuth_degrees=240.0)
+    assert rotated == [
+        {
+            "id": "endpoint1-o2-acceptor-azimuth-+240",
+            "plane_atom": "1:N1",
+            "azimuth_degrees": 240.0,
+        }
+    ]
+    assert rotated != module._azimuth_rotated_sites(
+        original, azimuth_degrees=120.0
+    )
+
+
 def test_water_campaign_accepts_an_explicit_product_subset() -> None:
     module = _load(
         "scripts/alpine_qm_water_campaign/build_campaign.py",
