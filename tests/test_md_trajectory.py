@@ -283,7 +283,9 @@ def test_md_trajectory_route_uses_active_design():
     assert r.status_code == 200, r.text
     j = r.json()
     assert j["ready"] is True and j["n_frames"] > 0
-    assert len(j["frames"][0]) == j["n_nucleotides"] * 6
+    # Full frames include measured base normals and centers alongside the
+    # backbone position and inward direction (four three-component vectors).
+    assert len(j["frames"][0]) == j["n_nucleotides"] * 12
 
 
 @skip_no_fixture
