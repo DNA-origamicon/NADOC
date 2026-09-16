@@ -71,7 +71,7 @@ def test_graphene_only_binary_trajectory_has_empty_cg_frames(tmp_path):
         stride=2,
     )
     magic, version, n_frames, n_keys, header_len = struct.unpack_from("<5I", payload)
-    assert (magic, version, n_frames, n_keys) == (0x4E54524A, 1, 3, 0)
+    assert (magic, version, n_frames, n_keys) == (0x4E54524A, 2, 3, 0)
     header = json.loads(payload[20 : 20 + header_len])
     assert header["keys"] == []
     assert header["stages"] == [{"name": "production", "kind": "md", "n_frames": 3}]

@@ -4309,14 +4309,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()  // tangential
             _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
             _slabQuatS.setFromRotationMatrix(_slabBasis)
-            // liveBaseMap converts oxDNA's interaction site to its visual base center.
-            // Always finish through the canonical slab abstraction: it places paired
-            // faces in a shared plane and extends each base body toward its live
-            // backbone. Bypassing it put both slabs at the central H-bond sites and
-            // made paired 0.70-nm bodies overlap.
-            const center = _slabCenterAt(
-              slab, _slabAxisDir, liveBaseMap, null, _slabCenterD, _slabBnS, _slabQuatS,
-            )
+            // oxDNA interaction sites and native geometry retain the existing
+            // slab abstraction; only measured atomistic centroids bypass it.
+            // A measured NAMD ring centroid is authoritative for this frame.
+            // The native local offset is only a fallback for overlays that do not
+            // supply measured atoms; reusing it here loses residue deformation.
+            const center = upd.measured_base && upd.base_position
+              ? _slabCenterD.fromArray(upd.base_position)
+              : _slabCenterAt(
+                slab, _slabAxisDir, liveBaseMap, null, _slabCenterD, _slabBnS, _slabQuatS,
+              )
             _tMatrix.compose(center, _slabQuatS, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
           } else {
             _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()

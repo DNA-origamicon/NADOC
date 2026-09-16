@@ -179,6 +179,12 @@ class TestSolventMeta:
         monkeypatch.setattr(routes_md, "_load_job", lambda job_id: _Job())
         monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
 
+    def test_reports_graphene_presence_only_with_a_complete_residue_census(self, monkeypatch, tmp_path):
+        self._job(monkeypatch, tmp_path, audit={"final_solvated":{"residue_counts":{"ADE":20}}})
+        assert client.get("/api/md/jobs/testjob/solvent-meta").json()["has_graphene"] is False
+        self._job(monkeypatch, tmp_path, audit={"final_solvated":{"residue_counts":{"GRP":20}}})
+        assert client.get("/api/md/jobs/testjob/solvent-meta").json()["has_graphene"] is True
+
     def test_reports_counts_from_the_charge_audit(self, monkeypatch, tmp_path):
         self._job(
             monkeypatch,

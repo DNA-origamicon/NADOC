@@ -20,11 +20,34 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
   the header; water, ions, and box can be enabled independently.
 - Water is shell-filtered or whole-box; ions are complete and rendered per species; the periodic
   box uses the same display affine as DNA.
-- Trajectory playback prebuild is visible on the play button. Scrubbing may fetch one frame, while
-  smooth playback requires the prepared runway/cache.
+- Interactive NAMD playback starts with eight exact strided frames, then reads ahead in 16-frame
+  pages. The rest of the selected trajectory fills in the background and remains cached for
+  random scrubbing, within a 1.5 GiB coordinate budget. Dense float64 heavy-atom caches omit
+  empty serial slots; only the displayed frame expands into a reusable sparse scratch array.
+  Foreground seeks precede the next background page. The panel reports the loaded count,
+  fully buffered state, or memory limitation; stopping releases the retained stream.
+  Frame readiness gates the shared playback clock; missing frames
+  show buffering and stall rather than snap to a different sampled frame. Authored/ranged exports
+  retain their full-preparation contract. Optional visible ion/box companions retain their own
+  readiness gate; a package residue census proving no graphene suppresses invisible companion work.
+- Playback uses a DNA-only PSF identity/bond table cached by file identities and complete design,
+  direct DCD prefix reads with one-frame I/O lookahead, columnar MDAM topology, and MDAF v2 dense
+  float64 coordinates plus original sparse serials. Synthetic/unsupported mappings fall back to
+  the original reader. Metadata cache is private and bounded; up to three idle killable workers
+  reuse imports/tables and expire after 30 seconds. No geometry is regenerated for supported jobs.
 - The flexibility map drives every representation. For NAMD, all-atom modes use the simulation's
   own atom topology at trajectory-average, PBC-repaired/Kabsch-aligned coordinates; surface mode
   builds the mean molecular envelope and carries the same per-nucleotide RMSF onto its vertices.
+
+- NAMD composite playback uses NTRJ v2: 12 floats per nucleotide (backbone,
+  inward direction, measured ring-plane normal, measured ring centroid). Full applies
+  those centers directly; native slab offsets remain the fallback for other overlays.
+  Ring atoms are imaged relative to their residue anchor before centroid/plane fitting,
+  including phosphate-less O5′ termini. Coarse and all-atom playback align against the
+  same measured/junction-balanced display reference. Legacy NTRJ v1 and oxDNA frames
+  remain readable.
+- Atomistic base colors use strand/helix/bp/direction/copy identity. A strand can revisit
+  the same bp index and direction on many helices; strand/bp/direction alone collides.
 
 ## Binding invariants
 
@@ -43,8 +66,6 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Open work
 
-- A runway-ahead playback mode could start before the entire atomistic trajectory is cached, but
-  it needs an explicit stall/resume design; it is not currently selected work.
 - Continue consolidating duplicated trajectory/display mapping paths when a concrete caller is
   touched, with an integration test through that caller.
 
@@ -52,3 +73,15 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 Run focused frontend/backend tests and exercise the affected representation in the app. Solvent,
 alignment, and overlay changes require visual comparison on a representative completed job.
+
+### P5 loading performance audit (2026-09-15)
+
+Real GPU browser, P5 stride 20: about 3.17 s from selecting trajectory loading to actual
+ball-and-stick frame advance, with advisory cold archive pages and empty derived topology cache.
+250 selected frames preserve every extracted atom/base value; cold read + alignment (~10.7 s)
+matches raw HDD reads (~10.9 s). See `docs/audits/24hb_p5_trajectory_performance_20260915.md`
+and `scripts/benchmark_md_playback.py` for scope, research, reproduction, and buffering limits.
+
+Full-buffer follow-up: P5 stride 20 reaches first playback in 3.13 s and buffers all 302
+selected frames in 32.09 s on the advisory-cold HDD. Six distant cached scrubs take 115–135 ms
+including browser rendering, with zero coordinate requests. See the audit follow-up section.

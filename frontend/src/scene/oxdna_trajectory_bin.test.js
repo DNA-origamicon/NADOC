@@ -2,23 +2,25 @@ import { describe, expect, it } from 'vitest'
 
 import { parseOxdnaTrajectoryBin } from './oxdna_trajectory_bin.js'
 
-function fixture() {
+function fixture(version = 1) {
+  const stride = version === 2 ? 12 : 6
   const header = new TextEncoder().encode(JSON.stringify({
+    frame_format: version === 2 ? 'namd-measured-bases' : undefined,
     keys: [['h0', 1, 'FORWARD'], ['h0', 1, 'REVERSE', 2]],
     stages: [{ name: 'relax', kind: 'mc', n_frames: 2, field: null }],
     markers: [{ frame: 1, label: 'run', kind: 'production' }],
   }))
   let off = 20 + header.byteLength
   off += (4 - (off % 4)) % 4
-  const buf = new ArrayBuffer(off + 2 * 2 * 6 * 4)
+  const buf = new ArrayBuffer(off + 2 * 2 * stride * 4)
   const dv = new DataView(buf)
   dv.setUint32(0, 0x4E54524A, true)
-  dv.setUint32(4, 1, true)
+  dv.setUint32(4, version, true)
   dv.setUint32(8, 2, true)
   dv.setUint32(12, 2, true)
   dv.setUint32(16, header.byteLength, true)
   new Uint8Array(buf, 20, header.byteLength).set(header)
-  new Float32Array(buf, off).set(Array.from({ length: 24 }, (_, i) => i + 0.25))
+  new Float32Array(buf, off).set(Array.from({ length: 4 * stride }, (_, i) => i + 0.25))
   return buf
 }
 
@@ -42,7 +44,7 @@ describe('parseOxdnaTrajectoryBin', () => {
     expect(parseOxdnaTrajectoryBin(null)).toBeNull()
     expect(parseOxdnaTrajectoryBin(new ArrayBuffer(4))).toBeNull()
     const version = fixture()
-    new DataView(version).setUint32(4, 2, true)
+    new DataView(version).setUint32(4, 99, true)
     expect(parseOxdnaTrajectoryBin(version)).toBeNull()
     expect(parseOxdnaTrajectoryBin(fixture().slice(0, -4))).toBeNull()
     const keyDrift = fixture()
@@ -67,4 +69,14 @@ describe('parseOxdnaTrajectoryBin', () => {
     expect(out.frames).toHaveLength(3)
     expect(out.frames.every(frame => frame.length === 0)).toBe(true)
   })
+})
+
+it('decodes measured NAMD base frames separately from legacy NTRJ and oxDNA sites', () => {
+  const result = parseOxdnaTrajectoryBin(fixture(2))
+  expect(result.frame_format).toBe('namd-measured-bases')
+  expect(result.frames[0]).toHaveLength(24)
+  expect(result.frames[1][0]).toBe(24.25)
+  const mislabeled = fixture()
+  new DataView(mislabeled).setUint32(4, 2, true)
+  expect(parseOxdnaTrajectoryBin(mislabeled)).toBeNull()
 })

@@ -1,0 +1,376 @@
+{
+  "coordinates": [
+    {
+      "job": "594917c0d119",
+      "status": "stopped",
+      "design": "24hb_0xT",
+      "frames": 6032,
+      "dcd_bytes": 95559957652,
+      "layout": "DcdLayout(endian='<', n_atoms=1320174, has_cell=True, header_bytes=276, frame_bytes=15842168, n_frames=6032, istart=5000, nsavc=5000, delta_ps=20.000000059628114, first_ps=20.000000059628114)",
+      "mapped_phosphates": 6644,
+      "samples": [
+        {
+          "frame": 0,
+          "phosphate_alignment_nm": {
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.2434283952364736,
+            "p95": 0.42983309270924264,
+            "max": 1.0380836876474269
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 1.0633568427170591e-06,
+            "p95": 3.4370058695830936e-06,
+            "max": 7.682193733914079e-06
+          }
+        },
+        {
+          "frame": 3016,
+          "phosphate_alignment_nm": {
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.25853744586995114,
+            "p95": 0.5589249605054181,
+            "max": 1.3431484626352548
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 1.123915961239547e-06,
+            "p95": 3.814697269667023e-06,
+            "max": 8.059695656749067e-06
+          }
+        },
+        {
+          "frame": 6031,
+          "phosphate_alignment_nm": {
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.2653034177608423,
+            "p95": 0.6035759903207554,
+            "max": 1.2937454689900583
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 1.080623098821639e-06,
+            "p95": 3.5103255432919355e-06,
+            "max": 7.68879381616473e-06
+          }
+        }
+      ]
+    },
+    {
+      "job": "2f281ba1a83a",
+      "status": "completed",
+      "design": "24hb_0xT",
+      "frames": 2399,
+      "dcd_bytes": 38005361308,
+      "layout": "DcdLayout(endian='<', n_atoms=1320174, has_cell=True, header_bytes=276, frame_bytes=15842168, n_frames=2399, istart=5000, nsavc=5000, delta_ps=20.000000059628114, first_ps=20.000000059628114)",
+      "mapped_phosphates": 6644,
+      "samples": [
+        {
+          "frame": 0,
+          "phosphate_alignment_nm": {
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.2437990921683892,
+            "p95": 0.4364533320136722,
+            "max": 0.9746021866816509
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 1.0649231427236076e-06,
+            "p95": 3.5321488890689762e-06,
+            "max": 7.2064279461841895e-06
+          }
+        },
+        {
+          "frame": 1199,
+          "phosphate_alignment_nm": {
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.26476749763020957,
+            "p95": 0.553336704766133,
+            "max": 1.302036652553672
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 1.115454740931668e-06,
+            "p95": 3.4233649649963103e-06,
+            "max": 7.644097560308988e-06
+          }
+        },
+        {
+          "frame": 2398,
+          "phosphate_alignment_nm": {
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.259451128424421,
+            "p95": 0.5602375669660692,
+            "max": 1.3513798216007293
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 1.0780223195798363e-06,
+            "p95": 3.5109858170871076e-06,
+            "max": 8.11868845245552e-06
+          }
+        }
+      ]
+    },
+    {
+      "job": "4aab8c445579",
+      "status": "completed",
+      "design": "2hb_1-0xT",
+      "frames": 2000,
+      "dcd_bytes": 1504312276,
+      "layout": "DcdLayout(endian='<', n_atoms=62673, has_cell=True, header_bytes=276, frame_bytes=752156, n_frames=2000, istart=25000, nsavc=25000, delta_ps=100.00000029814058, first_ps=100.00000029814058)",
+      "mapped_phosphates": 92,
+      "samples": [
+        {
+          "frame": 0,
+          "phosphate_alignment_nm": {
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.2967729670235247,
+            "p95": 0.5073671007464062,
+            "max": 0.981846604094155
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 3.4641416299556324e-07,
+            "p95": 8.706261532549407e-07,
+            "max": 1.2084637441235695e-06
+          }
+        },
+        {
+          "frame": 1000,
+          "phosphate_alignment_nm": {
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.26758973861325774,
+            "p95": 0.8046578318111177,
+            "max": 1.2011818270658374
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 3.1928536738523087e-07,
+            "p95": 7.764739335683395e-07,
+            "max": 1.1189096285591328e-06
+          }
+        },
+        {
+          "frame": 1999,
+          "phosphate_alignment_nm": {
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "full_base_target_vs_atom_ring_nm": {
+            "median": 0.2658986510618449,
+            "p95": 0.7851557750742801,
+            "max": 1.1738046091080085
+          },
+          "measured_center_vs_atom_ring_nm": {
+            "median": 3.4387257245983754e-07,
+            "p95": 9.96742636967674e-07,
+            "max": 1.2943345283573043e-06
+          }
+        }
+      ]
+    }
+  ],
+  "colors": [
+    {
+      "job": "2f281ba1a83a",
+      "nucleotides": 6720,
+      "mapEntries": 1701,
+      "mismatches": 3744,
+      "scaffoldMismatches": 2390,
+      "totalScaffold": 3528,
+      "examples": [
+        {
+          "helix": "h_XY_0_1",
+          "bp": 68,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "G",
+          "actual": "C"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 67,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "A",
+          "actual": "T"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 66,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "T",
+          "actual": "G"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 63,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "A",
+          "actual": "T"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 62,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "C",
+          "actual": "G"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 61,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "G",
+          "actual": "A"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 60,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "G",
+          "actual": "C"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 59,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "T",
+          "actual": "G"
+        }
+      ]
+    },
+    {
+      "job": "4aab8c445579",
+      "nucleotides": 94,
+      "mapEntries": 94,
+      "mismatches": 0,
+      "scaffoldMismatches": 0,
+      "totalScaffold": 52,
+      "examples": []
+    },
+    {
+      "job": "594917c0d119",
+      "nucleotides": 6720,
+      "mapEntries": 1701,
+      "mismatches": 3744,
+      "scaffoldMismatches": 2390,
+      "totalScaffold": 3528,
+      "examples": [
+        {
+          "helix": "h_XY_0_1",
+          "bp": 68,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "G",
+          "actual": "C"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 67,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "A",
+          "actual": "T"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 66,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "T",
+          "actual": "G"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 63,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "A",
+          "actual": "T"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 62,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "C",
+          "actual": "G"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 61,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "G",
+          "actual": "A"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 60,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "G",
+          "actual": "C"
+        },
+        {
+          "helix": "h_XY_0_1",
+          "bp": 59,
+          "direction": "REVERSE",
+          "strand": "scaf_seed_h_XY_2_3_0_h_XY_2_3_67_r_h_XY_0_1_70_r",
+          "expected": "T",
+          "actual": "G"
+        }
+      ]
+    }
+  ],
+  "integrity": {
+    "594917c0d119": {
+      "partial_frame_bytes": 0,
+      "n_frames": 6032,
+      "sequenceCheck": {
+        "compared": 6720,
+        "mismatch": 0
+      }
+    },
+    "2f281ba1a83a": {
+      "partial_frame_bytes": 0,
+      "n_frames": 2399,
+      "sequenceCheck": {
+        "compared": 6720,
+        "mismatch": 0
+      }
+    }
+  }
+}

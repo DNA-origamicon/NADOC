@@ -1738,3 +1738,15 @@ it('prepares atomistic trajectory frames off-screen and adopts them on Play with
   expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(fetched)
   expect(ar.update).toHaveBeenCalled()
 })
+
+it('applies NAMD measured ring centers and planes without oxDNA offsets', () => {
+  const updates = framesToUpdates([['h', 7, 'REVERSE', 1]],
+    new Float32Array([1, 2, 3, 1, 0, 0, 0, 1, 0, 4, 5, 6]))
+  expect(updates).toEqual([{
+    helix_id: 'h', bp_index: 7, direction: 'REVERSE', copy: 1,
+    backbone_position: [1, 2, 3], nx: 1, ny: 0, nz: 0,
+    tx: 0, ty: 1, tz: 0, base_position: [4, 5, 6], measured_base: true,
+  }])
+  expect(framesToUpdates([['h', 7, 'REVERSE']],
+    [1,2,3,1,0,0,NaN,NaN,NaN,null,null,null])[0].base_position).toBeUndefined()
+})

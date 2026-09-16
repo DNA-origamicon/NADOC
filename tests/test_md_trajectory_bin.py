@@ -16,6 +16,7 @@ def test_md_binary_trajectory_matches_full_json_path(monkeypatch, tmp_path):
     from backend.core import md_trajectory as mt
 
     n_p, n_term, n_frames = 96, 4, 20
+    monkeypatch.setattr(mt, "_dcd_complete_frame_count", lambda _: n_frames)
     p_order = [("h", i, "F") for i in range(n_p)]
     term_specs = [(("t", i, "R"),) for i in range(n_term)]
     ctx = {"p_order": p_order, "term_specs": term_specs}
@@ -29,15 +30,16 @@ def test_md_binary_trajectory_matches_full_json_path(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(mt, "_build_md_nadoc_ctx", lambda *_a, **_k: ctx)
 
-    def extract(_ctx, frame, *, with_termini):
-        assert with_termini is True
+    def extract(_ctx, frame):
         base = np.arange(n_p * 3, dtype=np.float64).reshape(n_p, 3) / 17 + frame
         normals = np.tile([0.0, 0.0, 1.0], (n_p, 1))
         tpos = np.arange(n_term * 3, dtype=np.float64).reshape(n_term, 3) / 11 + frame
         tnorm = np.tile([1.0, 0.0, 0.0], (n_term, 1))
-        return base, normals, tpos, tnorm
+        p = np.vstack([base, tpos])
+        n = np.vstack([normals, tnorm])
+        return np.hstack([p, n, np.tile([0., 1., 0.], (len(p), 1)), p + 0.4])
 
-    monkeypatch.setattr(mt, "_extract_md_nadoc_frame", extract)
+    monkeypatch.setattr(mt, "_extract_md_full_frame", extract)
     segments = [("production", "md", tmp_path / "run.dcd")]
     legacy = mt.md_composite_trajectory("x.psf", segments, "x.pdb", object())
     progress = tmp_path / "progress.json"
@@ -57,9 +59,9 @@ def test_md_binary_trajectory_matches_full_json_path(monkeypatch, tmp_path):
     header = json.loads(payload[20 : 20 + header_len])
     body_offset = (20 + header_len + 3) & ~3
     frames = np.frombuffer(payload, dtype="<f4", offset=body_offset).reshape(
-        n_frames, (n_p + n_term) * 6
+        n_frames, (n_p + n_term) * 12
     )
-    assert header == {k: legacy[k] for k in ("keys", "stages", "markers", "frame_start", "total_n_frames")}
+    assert header == {k: legacy[k] for k in ("keys", "stages", "markers", "frame_start", "total_n_frames", "frame_format")}
     assert np.allclose(frames, legacy["frames"], rtol=1e-6, atol=2e-5)
     assert len(payload) < len(orjson.dumps(legacy)) * 0.45
     assert json.loads(progress.read_text()) == {
@@ -75,11 +77,12 @@ def test_range_extracts_only_selected_composite_frames(monkeypatch, tmp_path):
         Universe=lambda *_: SimpleNamespace(trajectory=range(10))))
     monkeypatch.setattr(mt, "_build_md_nadoc_ctx", lambda *_a, **_k: {
         "p_order": [("h", 0, "F")], "term_specs": []})
+    monkeypatch.setattr(mt, "_dcd_complete_frame_count", lambda _: 10)
     seen = []
     def extract(_ctx, frame, **_):
         seen.append(frame)
-        return np.array([[frame, 0, 0]]), np.array([[0, 0, 1]]), [], []
-    monkeypatch.setattr(mt, "_extract_md_nadoc_frame", extract)
+        return np.array([[frame, 0, 0, 0, 0, 1, 0, 1, 0, frame + 0.4, 0, 0]])
+    monkeypatch.setattr(mt, "_extract_md_full_frame", extract)
     segments = [("a", "md", tmp_path / "a.dcd"), ("b", "md", tmp_path / "b.dcd")]
     payload = mt.md_composite_trajectory_bin("x.psf", segments, "x.pdb", object(),
         stride=2, frame_start=3, frame_end=6)

@@ -3,6 +3,8 @@
  * color_util.test.js.
  */
 
+import { nucleotideColorKey } from './nucleotide_color_key.js'
+
 import { isAutoCluster } from './cluster_entries.js'
 
 // Strand-length heatmap domain (nt): clamps below 14 / above 60.
@@ -21,14 +23,22 @@ export function hexFromInt(value) {
 export const BASE_HEX = { A: 0x44dd88, T: 0xff5555, G: 0xffcc00, C: 0x55aaff }
 
 /**
- * Build the per-atom base-letter colour map keyed "strand_id:bp_index:direction".
+ * Build the per-atom base-letter colour map keyed by strand, helix, bp, direction and insertion copy.
  * `nucLetter` is the iterable of [nuc, baseLetter] pairs from buildNucLetterMap.
  * Pure — the store/geometry read stays in the caller.
  */
-export function atomColorsFromLetters(nucLetter) {
+export function atomColorsFromLetters(nucLetter, geometry = null) {
   const out = new Map()
+  const copies = new Map()
+  const copyOf = new Map()
+  for (const nuc of geometry ?? Array.from(nucLetter ?? [], ([n]) => n)) {
+    const site = nucleotideColorKey(nuc, 0)
+    const copy = nuc.copy_k ?? nuc.copy ?? copies.get(site) ?? 0
+    copies.set(site, Number(copy) + 1)
+    copyOf.set(nuc, copy)
+  }
   for (const [nuc, ch] of (nucLetter ?? [])) {
-    out.set(`${nuc.strand_id}:${nuc.bp_index}:${nuc.direction}`, BASE_HEX[ch])
+    out.set(nucleotideColorKey(nuc, copyOf.get(nuc)), BASE_HEX[ch])
   }
   return out
 }

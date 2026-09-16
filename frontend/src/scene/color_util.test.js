@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { nucleotideColorKey } from './nucleotide_color_key.js'
 import { heatmapHex, hexFromInt, atomColorsFromLetters, BASE_HEX, computeAtomStrandColors, ATOM_STAPLE_PALETTE, resolveStrandClusters, computeAtomStrandAlphas, buildNucClusterIndex, computeAtomNucColors, computeAtomNucAlphas, clusterOfNucKey } from './color_util.js'
 
 const rgb = (hex) => [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff]
@@ -49,14 +50,14 @@ describe('hexFromInt', () => {
 })
 
 describe('atomColorsFromLetters', () => {
-  it('keys colours by strand:bp:dir using the base palette', () => {
+  it('keys colours by nucleotide identity using the base palette', () => {
     const nucLetter = new Map([
       [{ strand_id: 's1', bp_index: 0, direction: 'FORWARD' }, 'A'],
       [{ strand_id: 's1', bp_index: 1, direction: 'REVERSE' }, 'G'],
     ])
     const out = atomColorsFromLetters(nucLetter)
-    expect(out.get('s1:0:FORWARD')).toBe(BASE_HEX.A)
-    expect(out.get('s1:1:REVERSE')).toBe(BASE_HEX.G)
+    expect(out.get(nucleotideColorKey({strand_id:'s1', bp_index:0, direction:'FORWARD'}))).toBe(BASE_HEX.A)
+    expect(out.get(nucleotideColorKey({strand_id:'s1', bp_index:1, direction:'REVERSE'}))).toBe(BASE_HEX.G)
     expect(out.size).toBe(2)
   })
   it('returns an empty map for null/empty input', () => {
@@ -460,4 +461,12 @@ describe('clusterOfNucKey', () => {
     expect(clusterOfNucKey(new Map(), 'hA:5:FORWARD')).toBeUndefined()
     expect(clusterOfNucKey(map, '')).toBeUndefined()
   })
+})
+
+it('uses original geometry copy order even when reverse sequence order differs', () => {
+  const a = {strand_id:'s', helix_id:'h', bp_index:2, direction:'REVERSE'}
+  const b = {...a}
+  const map = atomColorsFromLetters(new Map([[b, 'T'], [a, 'A']]), [a, b])
+  expect(map.get(nucleotideColorKey(a, 0))).toBe(BASE_HEX.A)
+  expect(map.get(nucleotideColorKey(b, 1))).toBe(BASE_HEX.T)
 })

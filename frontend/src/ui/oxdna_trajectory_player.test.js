@@ -339,3 +339,19 @@ describe('background prepare is visible on the play button', () => {
     expect(spinner()).toBeNull()
   })
 })
+
+it('reports buffering without advancing the scene and clears it after the exact frame arrives',async()=>{
+  const label=document.createElement('span'),slider=document.createElement('input')
+  let release
+  const onSeek=vi.fn(),p=initOxdnaTrajectoryPlayer({label,slider,onSeek,
+    onBeforeSeek:()=>new Promise(resolve=>{release=resolve})})
+  p.setTrajectory(250)
+  const pending=p.seek(249)
+  expect(label.textContent).toBe('Frame 1 / 250 · buffering…')
+  expect(p.current()).toBe(0)
+  expect(onSeek).not.toHaveBeenCalled()
+  release(true);await pending
+  expect(label.textContent).toBe('Frame 250 / 250')
+  expect(onSeek).toHaveBeenCalledWith(249)
+  p.stop()
+})

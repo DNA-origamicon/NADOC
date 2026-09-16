@@ -1,0 +1,125 @@
+{
+  "date": "2026-09-15",
+  "job": "594917c0d119",
+  "design": "24hb_0xT",
+  "research_sources": [
+    "https://www.ks.uiuc.edu/Research/vmd/script_library/scripts/bigdcd/",
+    "https://www.ovito.org/manual/reference/pipelines/data_sources/external_file.html",
+    "https://userguide.mdanalysis.org/1.1.1/trajectories/slicing_trajectories.html",
+    "https://docs.mdanalysis.org/stable/documentation_pages/coordinates/DCD.html"
+  ],
+  "accuracy": {
+    "frames": 250,
+    "atoms": 137493,
+    "bases": 6720,
+    "metadata_equal": true,
+    "bonds_equal": true,
+    "max_atom_error_nm": 0.0,
+    "max_full_error": 0.0,
+    "seconds": 32.04240488796495
+  },
+  "io_initial": {
+    "disk_cold": 10.748006562003866,
+    "disk_warm": 0.07603074400685728,
+    "atoms_warm": 3.0345885599963367,
+    "full_warm": 3.8452933080261573,
+    "coordinate_bytes": 640332000,
+    "frames": 250,
+    "first_raw": 0,
+    "last_raw": 4980,
+    "cold_read_ahead_aligned_250": 10.700752070988528
+  },
+  "io_reproduction": {
+    "job": "594917c0d119",
+    "dcd": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/594917c0d119/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_production_200ns_k0.dcd",
+    "dcd_bytes": 95559957652,
+    "source_frames": 6032,
+    "selected_frames": 250,
+    "stride": 20,
+    "setup_seconds": 0.8897426839685068,
+    "advisory_cold": true,
+    "prefix_bytes": 640332000,
+    "heavy_atoms": 137493,
+    "seconds": {
+      "read_only": 10.930142741999589,
+      "atoms_aligned": 10.674926056992263,
+      "full_measured_bases": 10.855694875004701
+    }
+  },
+  "browser": {
+    "advisory_cold_immediately_before_loading": true,
+    "empty_derived_topology_cache": true,
+    "renderer": "ANGLE NVIDIA GeForce RTX 3080 Ti OpenGL 4.5.0",
+    "source_frames": 6032,
+    "stride": 20,
+    "selected_frames": 302,
+    "initial_representation": "ballstick",
+    "trials": [
+      {
+        "buffered_ms": 2874,
+        "first_advance_ms": 3160,
+        "past_64_frames_ms": 12842
+      },
+      {
+        "buffered_ms": 2912,
+        "first_advance_ms": 3167,
+        "past_64_frames_ms": 8040
+      }
+    ],
+    "timer_excludes_initial_app_and_native_design_load": true,
+    "passed": true,
+    "page_errors": []
+  },
+  "verification": {
+    "frontend": {
+      "files_passed": 445,
+      "passed": 6493
+    },
+    "backend": {
+      "decision": "FAST",
+      "passed": 8536,
+      "skipped": 110,
+      "failed": 27,
+      "errors": 9,
+      "failures_match_preexisting_baseline": true,
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nAsk the user to run `just test-session` (their terminal), then `just test-slow`."
+    },
+    "representation_browser": {
+      "passed": true,
+      "atoms_checked": 137493,
+      "wrong_colors": 0,
+      "bases_checked": 6720,
+      "max_centroid_error_nm": 4.498472758e-06
+    },
+    "playwright_artifacts_cleaned": true
+  },
+  "full_buffer_followup": {
+    "initial_buffer_ms": 2876,
+    "first_advance_ms": 3130,
+    "fully_buffered_ms": 32088,
+    "selected_frames": 302,
+    "scrub_indices": [
+      0,
+      301,
+      149,
+      2,
+      249,
+      0
+    ],
+    "scrub_ms": [
+      128,
+      132,
+      115,
+      117,
+      117,
+      135
+    ],
+    "scrub_coordinate_requests": 0,
+    "coordinate_budget_bytes": 1610612736,
+    "float64_precision_preserved": true,
+    "frontend_tests_passed": 6496,
+    "main_js_loc_delta": 0,
+    "smoke_tests_passed": 23,
+    "artifacts_cleaned": true
+  }
+}

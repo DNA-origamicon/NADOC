@@ -54,7 +54,7 @@ describe('mdVizApiAdapter', () => {
     const api = { getMdFramesAtomistic: vi.fn(), getMdFramesSurface: vi.fn() }
     const a = mdVizApiAdapter(api)
     a.getOxdnaFramesAtomistic('J1', [3], true, 'lineage', 20)
-    expect(api.getMdFramesAtomistic).toHaveBeenCalledWith('J1', [3], { stride: 20, positionsOnly: true })
+    expect(api.getMdFramesAtomistic).toHaveBeenCalledWith('J1', [3], { stride: 20, positionsOnly: true, compact: true })
     a.getOxdnaFramesSurface('J1', [3], { stride: 20, probe_radius: 0.3 }, true, 'lineage')
     expect(api.getMdFramesSurface).toHaveBeenCalledWith('J1', [3], { stride: 20, probe_radius: 0.3 })
   })
@@ -181,6 +181,33 @@ describe('mdVizApiAdapter', () => {
       applyPositionLerp: vi.fn(), clearScalarColors: vi.fn(),
     })
 
+    it('starts from a small exact page and gates a far seek on both representations', async () => {
+      const api=heavyApi({
+        getMdTrajectoryMeta:vi.fn(async()=>({n_frames:250,stages:[],markers:[]})),
+        getMdTrajectory:vi.fn(async (_id,_signal,opts)=>({ready:true,keys:[['h',0,'FORWARD']],
+          frames:Array.from({length:opts.frameEnd-opts.frameStart+1},(_,i)=>[opts.frameStart+i,0,0,0,0,1]),
+          frame_start:opts.frameStart,total_n_frames:250})),
+      })
+      const ar=AR(),ctrl=heavyCtrl(api,ar)
+      const result=await ctrl.loadTrajectory('p5',true,'lineage',20)
+      expect(result.n_frames).toBe(250)
+      expect(api.getMdTrajectory.mock.calls[0][2]).toMatchObject({frameStart:0,frameEnd:7,stride:20})
+      expect(api.getMdAtomisticModel).toHaveBeenCalledOnce()
+      expect(await ctrl.ensureTrajectoryFrame(249)).toBe(true)
+      ctrl.showFrame(249)
+      await new Promise(r=>setTimeout(r,0))
+      expect(Array.from(ar.applyPositionLerp.mock.calls.at(-1)[0])).toEqual([249,249,249])
+      expect(api.getMdFramesAtomistic.mock.calls.every(call=>call[1].length<=16)).toBe(true)
+      expect(await ctrl.bufferTrajectory()).toMatchObject({complete:true,buffered:250})
+      const requests=api.getMdFramesAtomistic.mock.calls.length
+      for (const i of [0,249,125,1]) await ctrl.ensureTrajectoryFrame(i)
+      expect(api.getMdFramesAtomistic).toHaveBeenCalledTimes(requests)
+      ctrl.suspendToDesign()
+      ctrl.stopAndRestore()
+      expect(ctrl.bufferTrajectory()).toBeUndefined()
+      expect(ctrl.resumeTrajectory('p5')).toBe(false)
+    })
+
     it('paints the frame\'s coordinates instead of leaving design positions', async () => {
       const api = heavyApi(); const ar = AR()
       const ctrl = heavyCtrl(api, ar)
@@ -196,7 +223,7 @@ describe('mdVizApiAdapter', () => {
       const ctrl = heavyCtrl(api, ar)
       await ctrl.loadTrajectory('J1', true, 'lineage', 20)
       await new Promise(r => setTimeout(r, 0))
-      expect(api.getMdFramesAtomistic.mock.calls[0][2]).toEqual({ stride: 20, positionsOnly: true })
+      expect(api.getMdFramesAtomistic.mock.calls[0][2]).toEqual({ stride: 20, positionsOnly: true, compact: true })
     })
 
     it('repeats the frame INTERVAL on the heavy fetch, so atoms and beads agree', async () => {

@@ -11,6 +11,8 @@
 // object snapshotting those refs into a per-call read-only handle.
 // Pass 14+ may relocate the mutable state itself — out of scope for 13-F.
 
+import { nucleotideColorKey } from '../nucleotide_color_key.js'
+
 import {
   ELEMENTS,
   DEFAULT_ELEMENT,
@@ -111,7 +113,7 @@ function _colorByMode(ctx, atom, cpk) {
   if (ctx.colorMode === 'strand') return ctx.strandColors.get(atom.strand_id) ?? cpk
   if (ctx.colorMode === 'base') {
     if (atom.aux_helix_id) return ctx.strandColors.get(atom.strand_id) ?? cpk
-    const k = `${atom.strand_id}:${atom.bp_index}:${atom.direction}`
+    const k = nucleotideColorKey(atom)
     return ctx.baseColors.get(k) ?? ctx.strandColors.get(atom.strand_id) ?? cpk
   }
   return cpk

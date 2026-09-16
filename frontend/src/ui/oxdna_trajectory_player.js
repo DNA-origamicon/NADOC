@@ -143,7 +143,7 @@ export function initOxdnaTrajectoryPlayer({
   })
 
   function _setLabel() {
-    if (label) label.textContent = _n ? `Frame ${_i + 1} / ${_n}` : ''
+    if (label) label.textContent = _n ? `Frame ${_i + 1} / ${_n}${_waitingForFrame ? ' · buffering…' : ''}` : ''
   }
 
   /**
@@ -223,6 +223,7 @@ export function initOxdnaTrajectoryPlayer({
     const ready = fire ? onBeforeSeek?.(target) : true
     if (ready?.then) {
       _waitingForFrame = true
+      _setLabel()
       // Keep the displayed frame number with the unchanged scene while buffering.
       if (slider) slider.value = String(_i)
       return Promise.resolve(ready).then(ok => {
@@ -230,7 +231,7 @@ export function initOxdnaTrajectoryPlayer({
         if (ok === false) { pause(); return false }
         return apply()
       }, () => { if (token === _seekToken) pause(); return false })
-        .finally(() => { if (token === _seekToken) _waitingForFrame = false })
+        .finally(() => { if (token === _seekToken) { _waitingForFrame = false; _setLabel() } })
     }
     _waitingForFrame = false
     if (ready === false) return false
@@ -266,6 +267,7 @@ export function initOxdnaTrajectoryPlayer({
   function pause() {
     _seekToken++
     _waitingForFrame = false
+    _setLabel()
     _prepToken++   // cancel any in-flight prepare so it won't start the loop on resolve
     const wasActive = !!_timer || _preparing
     _preparing = false
