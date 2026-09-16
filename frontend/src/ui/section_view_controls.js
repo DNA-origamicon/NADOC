@@ -1,14 +1,31 @@
 import './section_view_controls.css'
 
 /** Compact controls shared by numeric entry and the canvas plane gizmo. */
-export function createSectionViewControls({ document, parent, readPose, writeValue, setMode, flip, reset, setControlsHidden }) {
+export function createSectionViewControls({ document, parent, readPose, writeValue, setMode, flip, reset, setControlsHidden, readPlanes, addPlane, selectPlane, deletePlane, togglePlane }) {
   const panel = document.createElement('fieldset')
   panel.id = 'section-view-controls'
   panel.className = 'section-view-controls'
   panel.hidden = true
   const legend = document.createElement('legend')
-  legend.textContent = 'Section plane'
+  legend.textContent = 'Section planes'
   panel.append(legend)
+  const list = document.createElement('div')
+  list.className = 'section-view-controls__planes'
+  list.setAttribute('role', 'group')
+  list.setAttribute('aria-label', 'Section planes')
+  const actions = document.createElement('div')
+  actions.className = 'section-view-controls__toolbar'
+  const add = document.createElement('button')
+  add.type = 'button'; add.textContent = '+'; add.id = 'section-add-plane'
+  add.setAttribute('aria-label', 'Add section plane')
+  add.addEventListener('click', addPlane)
+  const remove = document.createElement('button')
+  remove.type = 'button'; remove.textContent = 'Delete'; remove.id = 'section-delete-plane'
+  remove.setAttribute('aria-label', 'Delete selected plane')
+  remove.addEventListener('click', deletePlane)
+  actions.append(add, remove)
+  panel.append(list, actions)
+  let listKey = '', selectedId = null
   const toolbar = document.createElement('div')
   toolbar.className = 'section-view-controls__toolbar'
   const modes = []
@@ -86,6 +103,45 @@ export function createSectionViewControls({ document, parent, readPose, writeVal
   panel.append(hideLabel)
   parent.append(panel)
   function sync(force = false) {
+    const entries = readPlanes()
+    const key = JSON.stringify(entries)
+    if (key !== listKey) {
+      listKey = key
+      const focusedId = list.contains(document.activeElement) ? document.activeElement.id : null
+      list.replaceChildren(...entries.map(entry => {
+        const row = document.createElement('div')
+        row.className = 'section-view-controls__plane'
+        const select = document.createElement('button')
+        select.id = `section-select-${entry.id}`
+        select.type = 'button'; select.textContent = `plane ${entry.id}`
+        select.setAttribute('aria-pressed', String(entry.selected))
+        select.addEventListener('click', () => selectPlane(entry.id))
+        const eye = document.createElement('button')
+        eye.id = `section-toggle-${entry.id}`
+        eye.type = 'button'
+        eye.setAttribute('aria-label', `Toggle plane ${entry.id} visibility`)
+        eye.setAttribute('aria-pressed', String(entry.visible))
+        eye.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>${entry.visible ? '' : '<path d="m3 3 18 18"/>'}</svg>`
+        eye.addEventListener('click', () => togglePlane(entry.id))
+        row.append(select, eye)
+        return row
+      }))
+      if (focusedId) document.getElementById(focusedId)?.focus({ preventScroll: true })
+      const nextSelectedId = entries.find(entry => entry.selected)?.id
+      if (nextSelectedId !== selectedId) {
+        selectedId = nextSelectedId
+        const row = document.getElementById(`section-select-${selectedId}`)?.parentElement
+        if (row) {
+          const top = row.offsetTop, bottom = top + row.offsetHeight
+          if (top < list.scrollTop) list.scrollTop = top
+          else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight
+        }
+      }
+    }
+    const hasSelection = entries.some(p => p.selected)
+    remove.disabled = !hasSelection
+    for (const element of panel.querySelectorAll('.section-view-controls__row button, .section-view-controls__row input')) element.disabled = !hasSelection
+    for (const element of toolbar.querySelectorAll('button')) element.disabled = !hasSelection
     const pose = readPose()
     for (const { input, kind, axis } of inputs) {
       if (!force && document.activeElement === input) continue

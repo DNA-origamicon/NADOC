@@ -181,3 +181,95 @@ test('section panel edits the plane, steps values, hides the gizmo, and fits a n
   await expect(panel).toBeHidden()
   await page.evaluate(() => { window.sectionTest.view.dispose(); window.sectionTest.renderer.dispose() })
 })
+
+test('intersecting planes cap both faces and independently toggle, edit and delete', async ({ page }) => {
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+  await page.route('**/section-view-test', route => route.fulfill({ contentType: 'text/html', body:
+    '<div id="right-view-actions" style="width:260px"><div class="ox-card__body"></div></div><canvas></canvas>' }))
+  await page.goto('/section-view-test')
+  await page.evaluate(async () => {
+    const THREE = await import('/node_modules/three/build/three.module.js')
+    const { initSectionView } = await import('/src/scene/section_view.js')
+    const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('canvas'), stencil: true })
+    renderer.setSize(400, 400); renderer.setClearColor(0xffffff)
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(40, 1, .1, 100)
+    camera.position.set(4, 3, 5); camera.lookAt(0, 0, 0)
+    scene.add(new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshBasicMaterial({ color: 0xdd4444 })))
+    const view = initSectionView({ scene, camera, renderer, controls: { target: new THREE.Vector3(), enabled: true },
+      document, addFrameCallback() {}, removeFrameCallback() {} })
+    window.sectionTest = { view, renderer, scene, camera, THREE }
+    view.setEnabled(true)
+  })
+  await page.locator('#section-rotation-x').fill('180')
+  await page.locator('#section-rotation-x').press('Enter')
+  for (const axis of ['y', 'z']) {
+    await page.locator(`#section-rotation-${axis}`).fill('0')
+    await page.locator(`#section-rotation-${axis}`).press('Enter')
+  }
+  await page.getByRole('button', { name: 'Add section plane', exact: true }).click()
+  await expect(page.locator('#section-rotation-x')).toHaveValue('180')
+  await page.locator('#section-rotation-y').fill('-90')
+  await page.locator('#section-rotation-y').press('Enter')
+  await page.getByRole('checkbox', { name: 'Hide controls' }).check()
+  const samples = await page.evaluate(() => {
+    const { view, renderer, scene, camera, THREE } = window.sectionTest
+    view.sync(); renderer.render(scene, camera)
+    const gl = renderer.getContext(), pixels = new Uint8Array(400 * 400 * 4)
+    gl.readPixels(0, 0, 400, 400, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+    function region(x, y, z) {
+      const point = new THREE.Vector3(x, y, z).project(camera)
+      const px = Math.round((point.x + 1) * 200), py = Math.round((point.y + 1) * 200)
+      let blue = 0, hatch = 0, white = 0
+      for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) {
+        const i = ((py + dy) * 400 + px + dx) * 4
+        if (pixels[i + 2] > pixels[i] + 10) blue++
+        if (pixels[i] < 180 && pixels[i + 2] > pixels[i]) hatch++
+        if (pixels[i] === 255 && pixels[i + 1] === 255 && pixels[i + 2] === 255) white++
+      }
+      return { blue, hatch, white }
+    }
+    return { front: region(-.5, 0, 0), side: region(0, 0, -.5), removed: region(.85, 0, -.65) }
+  })
+  expect(samples.front.blue).toBeGreaterThan(140)
+  expect(samples.front.hatch).toBeGreaterThan(10)
+  expect(samples.side.blue).toBeGreaterThan(140)
+  expect(samples.side.hatch).toBeGreaterThan(10)
+  expect(samples.removed.white).toBe(169)
+  const thirdFace = await page.evaluate(() => {
+    const { view, renderer, scene, camera, THREE } = window.sectionTest
+    const third = view.addPlane()
+    third.anchor.rotation.set(Math.PI / 2, 0, 0)
+    view.sync(); renderer.render(scene, camera)
+    const point = new THREE.Vector3(-.5, 0, -.5).project(camera)
+    const gl = renderer.getContext(), pixels = new Uint8Array(13 * 13 * 4)
+    gl.readPixels(Math.round((point.x + 1) * 200) - 6, Math.round((point.y + 1) * 200) - 6,
+      13, 13, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+    let blue = 0, hatch = 0
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 2] > pixels[i] + 10) blue++
+      if (pixels[i] < 180 && pixels[i + 2] > pixels[i]) hatch++
+    }
+    view.deletePlane()
+    return { blue, hatch }
+  })
+  expect(thirdFace.blue).toBeGreaterThan(140)
+  expect(thirdFace.hatch).toBeGreaterThan(10)
+  await page.getByRole('button', { name: 'Toggle plane 1 visibility' }).click()
+  expect(await page.evaluate(() => window.sectionTest.scene.children.find(o => o.isMesh).material.clippingPlanes.length)).toBe(1)
+  await page.getByRole('button', { name: 'plane 1', exact: true }).click()
+  await expect(page.locator('#section-rotation-y')).toHaveValue('0')
+  await page.getByRole('button', { name: 'Delete selected plane' }).click()
+  await expect(page.getByRole('button', { name: 'plane 1', exact: true })).toHaveCount(0)
+  await expect(page.locator('#section-rotation-y')).toHaveValue('-90')
+  await page.getByRole('button', { name: 'Delete selected plane' }).click()
+  await expect(page.locator('#section-position-x')).toBeDisabled()
+  expect(await page.evaluate(() => window.sectionTest.scene.children.find(o => o.isMesh).material.clippingPlanes.length)).toBe(0)
+  await page.getByRole('button', { name: 'Add section plane', exact: true }).click()
+  await expect(page.locator('#section-position-x')).toBeEnabled()
+  for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Add section plane', exact: true }).click()
+  expect(await page.locator('.section-view-controls__planes').evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true)
+  expect(errors).toEqual([])
+  await page.evaluate(() => { window.sectionTest.view.dispose(); window.sectionTest.renderer.dispose() })
+})

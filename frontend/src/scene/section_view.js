@@ -73,12 +73,12 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
   const root = new THREE.Group()
   root.userData.helper = true
   root.visible = false
-  // Group order makes all stencil passes precede the cap and ordinary content.
+  // Each child group renders its winding passes and cap before ordinary content.
   root.renderOrder = -10000
   scene.add(root)
-  const anchor = new THREE.Object3D()
-  root.add(anchor)
-  const plane = new THREE.Plane()
+  let selected = null, nextId = 1
+  const planes = []
+  let anchor = new THREE.Object3D(), plane = new THREE.Plane()
   const normal = new THREE.Vector3(0, 0, 1)
   const gizmo = new TransformControls(camera, renderer.domElement)
   gizmo.setSpace('local')
@@ -89,30 +89,36 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
   scene.add(helper)
   let enabled = false, flipped = false, previousControls = null, previousClipping = false
   const saved = new Map(), proxies = new Map(), stencilGeometries = new Map()
-  const capMaterial = new THREE.MeshBasicMaterial({ color: 0x94bdd0, side: THREE.DoubleSide,
-    stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
-    stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp })
-  capMaterial.onBeforeCompile = shader => {
-    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-      float stripe = mod(gl_FragCoord.x + gl_FragCoord.y, 12.0);
-      float ink = 1.0 - smoothstep(0.7, 1.8, min(stripe, 12.0 - stripe));
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.18, 0.27, 0.32), ink * 0.8);`)
+  function createPlaneVisuals(group) {
+    const capMaterial = new THREE.MeshBasicMaterial({ color: 0x94bdd0, side: THREE.DoubleSide,
+      stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
+      stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp })
+    capMaterial.onBeforeCompile = shader => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        float stripe = mod(gl_FragCoord.x + gl_FragCoord.y, 12.0);
+        float ink = 1.0 - smoothstep(0.7, 1.8, min(stripe, 12.0 - stripe));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.18, 0.27, 0.32), ink * 0.8);`)
+    }
+    const cap = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), capMaterial)
+    cap.renderOrder = 2
+    cap.frustumCulled = false
+    cap.raycast = () => {}
+    cap.onAfterRender = r => r.clearStencil()
+    group.add(cap)
+    const outline = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-0.5, -0.5, 0), new THREE.Vector3(0.5, -0.5, 0),
+      new THREE.Vector3(0.5, 0.5, 0), new THREE.Vector3(-0.5, 0.5, 0),
+    ]), new THREE.LineBasicMaterial({ color: 0x73cfff, transparent: true, opacity: 0.65 }))
+    outline.raycast = () => {}
+    group.add(outline)
+    return { cap, outline }
   }
-  const cap = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), capMaterial)
-  cap.renderOrder = 2
-  cap.frustumCulled = false
-  cap.raycast = () => {}
-  cap.onAfterRender = r => r.clearStencil()
-  root.add(cap)
-  const outline = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-0.5, -0.5, 0), new THREE.Vector3(0.5, -0.5, 0),
-    new THREE.Vector3(0.5, 0.5, 0), new THREE.Vector3(-0.5, 0.5, 0),
-  ]), new THREE.LineBasicMaterial({ color: 0x73cfff, transparent: true, opacity: 0.65 }))
-  outline.raycast = () => {}
-  root.add(outline)
 
   let controlsHidden = false
   const options = createSectionViewControls({ document, parent: body,
+    readPlanes: () => planes.map(p => ({ id: p.id, visible: p.visible, selected: p === selected })),
+    addPlane, selectPlane, deletePlane,
+    togglePlane(id) { const p = planes.find(p => p.id === id); p.visible = !p.visible; rebuild(); },
     readPose: () => ({ position: anchor.position, rotation: {
       x: THREE.MathUtils.radToDeg(anchor.rotation.x),
       y: THREE.MathUtils.radToDeg(anchor.rotation.y),
@@ -124,20 +130,74 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
       updatePlane()
     },
     setMode(mode) { gizmo.setMode(mode); gizmo.showX = gizmo.showY = mode === 'rotate' },
-    flip() { flipped = !flipped; updatePlane() },
+    flip() { flipped = !flipped; selected.flipped = flipped; updatePlane() },
     reset() {
       const bounds = contentBounds()
       const center = bounds.isEmpty() ? controls.target.clone() : bounds.getCenter(new THREE.Vector3())
       anchor.position.copy(getPartCentroid?.(center) ?? center)
       anchor.rotation.set(Math.PI, 0, 0, 'XYZ')
       flipped = false
+      selected.flipped = false
       updatePlane()
     },
     setControlsHidden(hidden) { controlsHidden = hidden; updateControlsVisibility() },
   })
+  function selectPlane(id) {
+    selected = planes.find(p => p.id === id) || null
+    anchor = selected?.anchor || new THREE.Object3D()
+    plane = selected?.plane || new THREE.Plane()
+    flipped = selected?.flipped || false
+    updateControlsVisibility()
+    options.sync(true)
+  }
+  function addPlane() {
+    const previous = planes.at(-1)
+    const group = new THREE.Group()
+    group.renderOrder = -10000 + planes.length
+    root.add(group)
+    const pose = new THREE.Object3D()
+    group.add(pose)
+    if (previous) {
+      pose.position.copy(previous.anchor.position)
+      pose.quaternion.copy(previous.anchor.quaternion)
+    } else {
+      const bounds = contentBounds()
+      pose.position.copy(bounds.isEmpty() ? controls.target : bounds.getCenter(new THREE.Vector3()))
+      pose.quaternion.setFromUnitVectors(normal, (getRenderCamera?.() || camera).getWorldDirection(new THREE.Vector3()))
+    }
+    const entry = { id: nextId++, anchor: pose, plane: new THREE.Plane(), flipped: previous?.flipped || false,
+      visible: true, group, ...createPlaneVisuals(group) }
+    planes.push(entry)
+    selectPlane(entry.id)
+    rebuild()
+    return entry
+  }
+  function deletePlane() {
+    if (!selected) return
+    const index = planes.indexOf(selected)
+    const entry = selected
+    planes.splice(index, 1)
+    disposePlane(entry)
+    selectPlane(planes[Math.min(index, planes.length - 1)]?.id)
+    rebuild()
+  }
+  function disposePlane(entry) {
+    entry.group.removeFromParent()
+    for (const object of [entry.cap, entry.outline]) { object.geometry.dispose(); object.material.dispose() }
+  }
+  function rebuild() {
+    for (const object of proxies.keys()) removeProxy(object)
+    for (const [material, clippingPlanes] of saved) { material.clippingPlanes = clippingPlanes; material.needsUpdate = true }
+    saved.clear()
+    planes.forEach((p, i) => { p.group.renderOrder = -10000 + i })
+    boundsDirty = true
+    updateControlsVisibility()
+    sync()
+    options.sync(true)
+  }
   function updateControlsVisibility() {
-    outline.visible = !controlsHidden
-    if (enabled && !controlsHidden) { gizmo.enabled = true; gizmo.attach(anchor) }
+    for (const p of planes) p.outline.visible = p === selected && !controlsHidden && p.visible
+    if (enabled && selected?.visible && !controlsHidden) { gizmo.enabled = true; gizmo.attach(anchor) }
     else {
       gizmo.detach(); gizmo.enabled = false
       if (previousControls !== null) { controls.enabled = previousControls; previousControls = null }
@@ -145,11 +205,14 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
   }
 
   function updatePlane() {
-    plane.setFromNormalAndCoplanarPoint(normal.clone().applyQuaternion(anchor.quaternion).multiplyScalar(flipped ? -1 : 1), anchor.position)
-    cap.position.copy(anchor.position)
-    cap.quaternion.copy(anchor.quaternion)
-    outline.position.copy(anchor.position)
-    outline.quaternion.copy(anchor.quaternion)
+    for (const p of planes) {
+      p.plane.setFromNormalAndCoplanarPoint(normal.clone().applyQuaternion(p.anchor.quaternion).multiplyScalar(p.flipped ? -1 : 1), p.anchor.position)
+      p.cap.position.copy(p.anchor.position)
+      p.cap.quaternion.copy(p.anchor.quaternion)
+      p.outline.position.copy(p.anchor.position)
+      p.outline.quaternion.copy(p.anchor.quaternion)
+      p.group.visible = p.visible
+    }
     options.sync()
   }
   gizmo.addEventListener('objectChange', updatePlane)
@@ -164,10 +227,28 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
     }
     proxies.delete(object)
   }
+  let boundsDirty = true
+  let capBounds = new THREE.Box3()
   function sync() {
     if (!enabled) return
     gizmo.camera = getRenderCamera?.() || camera
     scene.updateMatrixWorld(true)
+    updatePlane()
+    const activePlanes = planes.filter(p => p.visible)
+    for (const p of planes) {
+      const others = activePlanes.filter(other => other !== p).map(other => other.plane)
+      if (p.cap.material.clippingPlanes?.length !== others.length || others.some((v, i) => p.cap.material.clippingPlanes[i] !== v)) {
+        p.cap.material.clippingPlanes = others
+        p.cap.material.needsUpdate = true
+      }
+    }
+    if (boundsDirty) { capBounds = contentBounds(); boundsDirty = false }
+    const bounds = capBounds
+    const size = bounds.isEmpty() ? 10 : Math.max(bounds.getSize(new THREE.Vector3()).length() * 2, 1)
+    for (const p of planes) {
+      const extent = size + (bounds.isEmpty() ? 0 : p.anchor.position.distanceTo(bounds.getCenter(new THREE.Vector3())) * 2)
+      p.cap.scale.set(extent, extent, 1); p.outline.scale.copy(p.cap.scale)
+    }
     const active = new Set()
     scene.traverseVisible(object => {
       if (!isSectionContent(object)) return
@@ -175,7 +256,7 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
       for (const material of materials(object)) {
         if (!saved.has(material)) {
           saved.set(material, material.clippingPlanes)
-          material.clippingPlanes = [...(material.clippingPlanes || []), plane]
+          material.clippingPlanes = [...(material.clippingPlanes || []), ...activePlanes.map(p => p.plane)]
           material.needsUpdate = true
         }
       }
@@ -191,9 +272,16 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
       let entry = proxies.get(object)
       if (entry && (entry.material !== object.material || entry.geometry !== object.geometry || entry.stencilKey !== stencilKey)) { removeProxy(object); entry = null }
       if (!entry) {
-        const meshes = [THREE.BackSide, THREE.FrontSide].map((side, index) => {
+        boundsDirty = true
+        const meshes = activePlanes.flatMap(p => [THREE.BackSide, THREE.FrontSide].map((side, index) => {
           const mesh = object.clone(false)
-          const ms = materials(object).map(m => sectionStencilMaterial(m, plane, side))
+          // Winding must use the original closed solid, clipped only by this plane.
+          // Clipping winding geometry by other section planes opens it and leaks caps.
+          const ms = materials(object).map(m => {
+            const stencil = sectionStencilMaterial(m, p.plane, side)
+            stencil.clippingPlanes = [...(saved.get(m) || []), p.plane]
+            return stencil
+          })
           mesh.geometry = stencilGeometry
           mesh.material = Array.isArray(object.material) ? ms : ms[0]
           mesh.matrixAutoUpdate = false
@@ -201,9 +289,9 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
           mesh.renderOrder = index
           mesh.raycast = () => {}
           mesh.onBeforeRender = object.onBeforeRender
-          root.add(mesh)
+          p.group.add(mesh)
           return mesh
-        })
+        }))
         entry = { meshes, material: object.material, geometry: object.geometry, stencilKey }
         proxies.set(object, entry)
       }
@@ -221,8 +309,7 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
         }
       }
     })
-    for (const object of proxies.keys()) if (!active.has(object)) removeProxy(object)
-    updatePlane()
+    for (const object of proxies.keys()) if (!active.has(object)) { removeProxy(object); boundsDirty = true }
   }
   function contentBounds() {
     scene.updateMatrixWorld(true)
@@ -247,14 +334,8 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
     if (value) {
       previousClipping = renderer.localClippingEnabled
       renderer.localClippingEnabled = true
-      const bounds = contentBounds()
-      anchor.position.copy(bounds.isEmpty() ? controls.target : bounds.getCenter(new THREE.Vector3()))
-      const direction = (getRenderCamera?.() || camera).getWorldDirection(new THREE.Vector3())
-      anchor.quaternion.setFromUnitVectors(normal, direction)
-      flipped = false
-      const size = bounds.isEmpty() ? 10 : Math.max(bounds.getSize(new THREE.Vector3()).length() * 2, 1)
-      cap.scale.set(size, size, 1)
-      outline.scale.copy(cap.scale)
+      boundsDirty = true
+      if (!planes.length) addPlane()
       updateControlsVisibility()
       sync()
       options.sync(true)
@@ -271,9 +352,9 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
   }
   button.addEventListener('click', () => setEnabled(!enabled))
   addFrameCallback(sync)
-  return { setEnabled, plane, anchor, sync, get enabled() { return enabled }, dispose() {
+  return { setEnabled, addPlane, selectPlane, deletePlane, get planes() { return planes }, get plane() { return plane }, get anchor() { return anchor }, sync, get enabled() { return enabled }, dispose() {
     setEnabled(false); removeFrameCallback(sync); gizmo.dispose(); helper.removeFromParent(); root.removeFromParent()
-    cap.geometry.dispose(); capMaterial.dispose(); outline.geometry.dispose(); outline.material.dispose()
+    planes.forEach(disposePlane)
     button.remove(); options.dispose()
   } }
 }

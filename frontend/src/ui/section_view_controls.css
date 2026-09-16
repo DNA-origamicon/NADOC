@@ -45,3 +45,9 @@
 .section-view-controls__hide input { width: auto; margin: 0; }
 
 .section-view-controls__row input:focus-visible { outline: 2px solid #58a6ff; outline-offset: 1px; border-color: #58a6ff; }
+
+.section-view-controls__planes { position: relative; max-height: 144px; overflow-y: auto; border: 1px solid #526170; border-radius: 4px; min-height: 34px; }
+.section-view-controls__plane { display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: 4px; padding: 2px; }
+.section-view-controls__plane button:first-child { text-align: left; padding-left: 8px; }
+.section-view-controls__plane button[aria-pressed="true"]:first-child { background: #1f6feb; }
+.section-view-controls button:disabled { opacity: .4; cursor: default; }

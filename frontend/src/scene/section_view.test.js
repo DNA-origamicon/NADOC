@@ -85,4 +85,46 @@ describe('section view', () => {
     view.dispose()
     expect(callbacks.size).toBe(0)
   })
+  it('keeps three independent planes, isolates winding passes, and preserves session poses', () => {
+    document.body.innerHTML = '<div id="right-view-actions"><div class="ox-card__body"></div></div><canvas></canvas>'
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera()
+    const renderer = { domElement: document.querySelector('canvas'), localClippingEnabled: false }
+    const material = new THREE.MeshBasicMaterial()
+    scene.add(new THREE.Mesh(new THREE.BoxGeometry(), material))
+    const view = initSectionView({ scene, camera, renderer, document,
+      controls: { target: new THREE.Vector3(), enabled: true }, addFrameCallback() {}, removeFrameCallback() {} })
+    view.setEnabled(true)
+    const first = view.planes[0]
+    first.anchor.rotation.set(.2, .3, .4)
+    const second = view.addPlane()
+    expect(second.anchor.quaternion.equals(first.anchor.quaternion)).toBe(true)
+    second.anchor.rotation.set(0, Math.PI / 2, 0)
+    view.selectPlane(first.id)
+    const third = view.addPlane()
+    expect(third.anchor.quaternion.equals(second.anchor.quaternion)).toBe(true)
+    third.anchor.rotation.set(Math.PI / 2, 0, 0)
+    view.sync()
+    expect(material.clippingPlanes).toHaveLength(3)
+    for (const entry of view.planes) {
+      expect(entry.cap.material.clippingPlanes).toEqual(view.planes.filter(p => p !== entry).map(p => p.plane))
+      const winding = entry.group.children.filter(o => o.isMesh && o !== entry.cap)
+      expect(winding).toHaveLength(2)
+      for (const mesh of winding) expect(mesh.material.clippingPlanes).toEqual([entry.plane])
+    }
+    document.querySelector('[aria-label="Toggle plane 2 visibility"]').click()
+    expect(material.clippingPlanes).toEqual([first.plane, third.plane])
+    expect(second.group.visible).toBe(false)
+    const pose = third.anchor.quaternion.clone()
+    view.setEnabled(false)
+    expect(material.clippingPlanes).toBeNull()
+    view.setEnabled(true)
+    expect(view.planes).toHaveLength(3)
+    expect(third.anchor.quaternion.equals(pose)).toBe(true)
+    expect(material.clippingPlanes).toEqual([first.plane, third.plane])
+    view.deletePlane()
+    expect(material.clippingPlanes).toEqual([first.plane])
+    view.dispose()
+    expect(material.clippingPlanes).toBeNull()
+  })
+
 })
