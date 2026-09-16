@@ -802,3 +802,25 @@ main, and completion triggers. A passed final trigger closes P1 and permits prep
 of a versioned P2 electrostatic fit that is scored against the untouched perturbations.
 It has no simulation or registry effect; water-orientation, Drude-consistent nonbonded
 and bonded, SWM4-NDP, d(TpT), duplex, and reproducibility gates remain downstream.
+
+P2 was prepared while the array ran, without reading any held-out target values. The
+immutable first-family policy is
+`anti-cpd-drude-electrostatic-fit-v1/policy.json` (SHA-256
+`a67f17ec66389aaa016989a150746c7a929e5d456d9c521d7589d1550e3a2505`). It fits
+neutral permanent atomic and asymmetric carbonyl lone-pair charges, then fits a bounded
+response family around the official MTHY Drude parameters. The first family varies the
+four ordered crosslink C5/C6 polarizabilities and Thole factors plus bounded endpoint and
+carbonyl polarizability scales. Carbonyl lone-pair geometry and the published first-family
+anisotropy ratios remain fixed. Exactly two charge/response block-refinement cycles must
+finish before the parameter file is hashed and the 24 holdouts become readable.
+
+The fitting evaluator uses OpenMM's `DrudeForce` equations with CHARMM 1-2/1-3
+exclusions and screened pairs, full Coulomb response otherwise, and tightly minimized
+Drude coordinates at the fixed QM geometry. An implementation preflight using untouched
+MTHY priors and fit case 1 gave response-ESP relative RMS **0.0766** and induced-dipole
+relative error **0.0721**; the largest zero-field or perturbed Drude displacement was
+below **0.140 Å**. This favorable diagnostic permits the registered fit but is not a fit
+or holdout result. The enabled `nadoc-anti-drude-p2.timer` checks the independent P1 audit
+and trigger every five minutes. Only a double pass starts the one-core, low-priority fit;
+a failure leaves every P2 target unread. Even a statistical holdout pass still requires
+the frozen OpenMM/NAMD response spot check before P2 closes.
