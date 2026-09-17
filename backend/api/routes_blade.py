@@ -278,16 +278,34 @@ async def create_blade_job(body: CreateBladeJobRequest) -> dict:
 
 @router.get("/blade/jobs")
 async def list_blade_jobs() -> list[dict]:
-    from backend.core.design_disk_usage import dir_size_bytes_cached
+    # Disk scans and status reconciliation must not occupy the HTTP event loop.
+    from fastapi.concurrency import run_in_threadpool
+    from backend.core.design_disk_usage import schedule_dir_size_warm
+
+    out, to_warm = await run_in_threadpool(_list_blade_jobs)
+    schedule_dir_size_warm(to_warm)
+    return out
+
+
+def _list_blade_jobs() -> tuple[list[dict], list]:
+    from backend.core.design_disk_usage import dir_size_bytes_cached_only
 
     ws = _workspace()
     jobs = [reconcile_blade_status(j, ws) for j in BladeJob.list_jobs(ws)]
     current_fp = _current_fingerprint()
     out: list[dict] = []
+    to_warm: list = []
     for j in jobs:
         d = j.to_dict()
         d["out_of_date"] = _is_out_of_date(j, current_fp)
-        d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
+        # Cache-only: never block the poll on a multi-GB job-tree stat-walk. An
+        # uncached size comes back None (frontend renders it blank) and is filled
+        # in by the background warm scheduled above, appearing on the next poll.
+        job_dir = j.job_dir(ws)
+        size = dir_size_bytes_cached_only(job_dir)
+        d["size_bytes"] = size
+        if size is None:
+            to_warm.append(job_dir)
         # A RUNNING job carries its live fraction + ETA so the ONE master progress bar in the unified
         # Jobs card advances during the run. Unlike the FEM engines this fraction is REAL — streamed
         # out of the OpenMM process — so the bar tracks actual work rather than a wall-clock guess.
@@ -307,7 +325,7 @@ async def list_blade_jobs() -> list[dict]:
             except Exception:  # noqa: BLE001 — progress is advisory, never sink the list
                 pass
         out.append(d)
-    return out
+    return out, to_warm
 
 
 @router.get("/blade/jobs/{job_id}")

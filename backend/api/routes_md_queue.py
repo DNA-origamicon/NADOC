@@ -61,6 +61,12 @@ def _response(workspace: Path) -> dict:
 
 @router.get("/md/queue")
 async def get_md_queue() -> dict:
+    from fastapi.concurrency import run_in_threadpool
+
+    return await run_in_threadpool(_get_md_queue)
+
+
+def _get_md_queue() -> dict:
     ws = _workspace()
     md_queue.prune(ws, MdJob.list_jobs(ws))
     return _response(ws)

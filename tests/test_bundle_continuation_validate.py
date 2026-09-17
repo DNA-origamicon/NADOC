@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from backend.api import state as design_state
+from backend.api.crud import _strip_feature_log_payloads
 from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
@@ -24,6 +25,11 @@ def _single_cell_bundle() -> tuple[dict, str]:
     )
     assert response.status_code == 201
     design = response.json()["design"]
+    # POST /design/bundle preserves its own brand-new feature-log entry's body (the
+    # client has never seen it before to reconstruct it from), but a later GET /design
+    # strips it by default (full_feature_log=False — see crud.py). Strip it here too so
+    # "did /validate leave the design untouched" compares topology, not wire stripping.
+    _strip_feature_log_payloads(design)
     return design, design["helices"][0]["id"]
 
 

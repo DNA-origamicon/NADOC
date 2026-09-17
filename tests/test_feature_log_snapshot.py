@@ -203,24 +203,38 @@ def test_ordinary_mutation_strips_feature_log_bodies_by_default():
     assert canonical_after.post_state_gz_b64 == canonical_before.post_state_gz_b64
 
 
-def test_get_design_cold_load_retains_full_feature_log_bodies():
-    """GET /design is the app's cold-load/restart-recovery fetch — the client
-    may have no prior cache to reconstruct a stripped body from, so it must
-    never be slimmed (FL-02)."""
+def test_get_design_cold_load_ships_slim_body_and_full_feature_log_backfills_it():
+    """GET /design is the app's cold-load/restart-recovery fetch. It used to ship every
+    feature-log body up front because the client has no prior cache to reconstruct a
+    stripped one from (FL-02) — but on a design with real edit history that made the
+    cold-load response the dominant cost of opening it (measured: 42 MB vs 2.4 MB slim
+    on a 109-entry log). It now ships slim, and GET /design/feature-log/full is the
+    client's background backfill after geometry has already rendered."""
     r = client.post("/api/design/auto-break")
     assert r.status_code == 200, r.text
 
     r = client.get("/api/design")
     assert r.status_code == 200, r.text
     body = r.json()
-    assert "feature_log_payloads_partial" not in body
-    assert body["design"]["feature_log"][0]["design_snapshot_gz_b64"]
-    assert body["design"]["feature_log"][0]["post_state_gz_b64"]
+    assert body["feature_log_payloads_partial"] is True
+    assert body["design"]["feature_log"][0]["design_snapshot_gz_b64"] == ""
+    assert body["design"]["feature_log"][0]["post_state_gz_b64"] == ""
+
+    # The backend's own retained state is untouched — only the response was slimmed.
+    canonical = design_state.get_or_404().feature_log[0]
+    assert canonical.design_snapshot_gz_b64
+    assert canonical.post_state_gz_b64
+
+    r = client.get("/api/design/feature-log/full")
+    assert r.status_code == 200, r.text
+    full = r.json()["feature_log"][0]
+    assert full["design_snapshot_gz_b64"] == canonical.design_snapshot_gz_b64
+    assert full["post_state_gz_b64"] == canonical.post_state_gz_b64
 
 
-def test_load_design_cold_load_retains_full_feature_log_bodies(tmp_path):
-    """POST /design/load installs a lineage the client has never seen — same
-    cold-load exemption as GET /design (FL-02)."""
+def test_load_design_cold_load_ships_slim_body_and_full_feature_log_backfills_it(tmp_path):
+    """POST /design/load installs a lineage the client has never seen — same slim
+    cold-load response + background-backfill contract as GET /design above (FL-02)."""
     r = client.post("/api/design/auto-break")
     assert r.status_code == 200, r.text
     saved = design_state.get_or_404()
@@ -232,9 +246,15 @@ def test_load_design_cold_load_retains_full_feature_log_bodies(tmp_path):
     r = client.post("/api/design/load", json={"path": str(probe_path)})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert "feature_log_payloads_partial" not in body
-    assert body["design"]["feature_log"][0]["design_snapshot_gz_b64"]
-    assert body["design"]["feature_log"][0]["post_state_gz_b64"]
+    assert body["feature_log_payloads_partial"] is True
+    assert body["design"]["feature_log"][0]["design_snapshot_gz_b64"] == ""
+    assert body["design"]["feature_log"][0]["post_state_gz_b64"] == ""
+
+    r = client.get("/api/design/feature-log/full")
+    assert r.status_code == 200, r.text
+    full = r.json()["feature_log"][0]
+    assert full["design_snapshot_gz_b64"] == saved.feature_log[0].design_snapshot_gz_b64
+    assert full["post_state_gz_b64"] == saved.feature_log[0].post_state_gz_b64
 
 
 # ── Test 1: snapshot entry is appended ────────────────────────────────────────

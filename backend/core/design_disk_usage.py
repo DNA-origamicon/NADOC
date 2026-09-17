@@ -12,6 +12,7 @@ One reason to change: how a design's on-disk footprint is measured and grouped.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 import time
@@ -110,6 +111,27 @@ def warm_dir_sizes(paths, ttl: float = _SIZE_TTL_S) -> None:
         finally:
             with _warm_lock:
                 _warming.discard(key)
+
+
+_warm_tasks: set = set()
+
+
+def schedule_dir_size_warm(paths) -> None:
+    """Fire-and-forget :func:`warm_dir_sizes` for every path not already cached-fresh.
+
+    For polled job-list routes: call this AFTER building the response (whose
+    ``size_bytes`` came from :func:`dir_size_bytes_cached_only` and may be ``None``
+    for a cold entry) so the walk never holds up that response. Keeps a reference to
+    the created task so the event loop doesn't garbage-collect it mid-walk; a no-op
+    for an empty ``paths``.
+    """
+    if not paths:
+        return
+    from fastapi.concurrency import run_in_threadpool
+
+    task = asyncio.create_task(run_in_threadpool(warm_dir_sizes, paths))
+    _warm_tasks.add(task)
+    task.add_done_callback(_warm_tasks.discard)
 
 
 def _status_str(job) -> str | None:

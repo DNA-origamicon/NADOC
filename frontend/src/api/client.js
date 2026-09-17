@@ -364,19 +364,28 @@ async function _ensureAssemblySimulation(path, { timeoutMs = _REQUEST_TIMEOUT_MS
   })
 }
 
-export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false } = {}) {
+export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false } = {}) {
   if (!skipSimulationPrepare && docId === undefined) {
     await _ensureAssemblySimulation(path, { timeoutMs, protectedRetry })
   }
   const diagnosticId = ++_diagnosticRequestSeq
   _emitRequestDiagnostic({ phase: 'start', id: diagnosticId, method, path, suppressBusy })
-  const isTimedOperation = method !== 'GET' && (
-    path === '/design/load' || path === '/design/import' ||
-    path === '/design/bundle' || path === '/design/bundle-segment' ||
-    path === '/design/bundle-continuation' || path === '/design/bundle-deformed-continuation' ||
-    path === '/design/flexible-segment' || path === '/design/flexible-segment/batch' ||
-    path.startsWith('/design/flexible-segment/') ||
-    path === '/design/overhang/extrude' || /\/assembly\/instances\/[^/]+\/overhang\/extrude$/.test(path)
+  const isTimedOperation = !excludeFromTiming && (
+    (method !== 'GET' && (
+      path === '/design/load' || path === '/design/import' ||
+      path === '/design/bundle' || path === '/design/bundle-segment' ||
+      path === '/design/bundle-continuation' || path === '/design/bundle-deformed-continuation' ||
+      path === '/design/flexible-segment' || path === '/design/flexible-segment/batch' ||
+      path.startsWith('/design/flexible-segment/') ||
+      path === '/design/overhang/extrude' || /\/assembly\/instances\/[^/]+\/overhang\/extrude$/.test(path)
+    )) ||
+    // The two requests that carry a fresh part's full payload — the actual cost a
+    // welcome→loaded / cross-tab-restore window is spent waiting on. Tracing them
+    // lets whenOperationIdle() (job lists, peer status, MD queue) defer background
+    // polling for their duration instead of racing them for the same connection
+    // budget. design_renderer's post-rebuild finishOperationAfterRender() closes
+    // the trace whichever of the two calls started it last (see operation_timing.js).
+    (method === 'GET' && (path === '/design' || path.startsWith('/design/geometry')))
   )
   // An optimistic UI may start the trace immediately before calling the API so
   // click→preview and preview→confirmation live in one measurement. Reuse that
@@ -568,6 +577,43 @@ export function _mergeFeatureLogPayloads(incoming, previous) {
   return incoming
 }
 
+/** Fetch the active design's full feature log and merge real bodies into the store's
+ * currentDesign, after a cold load rendered it stripped. Called from both
+ * _syncFromDesignResponse (import/load/undo/etc.) and getDesign (restart recovery,
+ * a freshly opened cross-tab window) — the two ways a cold load reaches the store.
+ * Fire-and-forget: never throws, never blocks, and discards its result if the
+ * document moved on (new import/undo/another tab's edit) while it was in flight.
+ * Waits for the page's current operation (typically the geometry fetch that
+ * follows a cold load) to go idle first, so this never competes with it for the
+ * browser's connection budget — best-effort: whenOperationIdle caps its own wait,
+ * so a very slow geometry build may still overlap the tail of it.
+ */
+async function _backfillFullFeatureLog() {
+  const designId = store.getState().currentDesign?.id
+  if (!designId) return
+  try {
+    await whenOperationIdle()
+    const full = await _request('GET', '/design/feature-log/full', undefined, { suppressBusy: true })
+    const current = store.getState().currentDesign
+    if (!full?.feature_log || !current || current.id !== designId) return
+    // Shallow-clone entries/children (not the array's own objects) so the merge's
+    // in-place body assignment below never mutates what's already live in the store.
+    const clonedEntries = current.feature_log?.map(e => ({
+      ...e,
+      children: Array.isArray(e.children) ? e.children.map(c => ({ ...c })) : e.children,
+    })) ?? []
+    const merged = _mergeFeatureLogPayloads(
+      { feature_log: clonedEntries },
+      { feature_log: full.feature_log },
+    )
+    store.setState({ currentDesign: { ...current, feature_log: merged.feature_log } })
+  } catch {
+    // Best-effort: history scrubbing is server-authoritative regardless (routes_feature_log.py
+    // reads its own in-memory design), so a missed backfill only means a future response's
+    // own merge has less to draw on — never a correctness break.
+  }
+}
+
 export async function _syncFromDesignResponse(json, {
   skipGeometry = false,
   transient = false,
@@ -576,6 +622,10 @@ export async function _syncFromDesignResponse(json, {
 } = {}) {
   if (!json) return null
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
+  // A cold load (no prior design in this tab) has nothing to merge stripped bodies
+  // from below — that's exactly when the background backfill after geometry (below)
+  // is needed, rather than the merge silently leaving every body empty.
+  const _wasColdLoad = json.feature_log_payloads_partial && !store.getState().currentDesign
   if (json.feature_log_payloads_partial && json.design) {
     json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
   }
@@ -787,6 +837,10 @@ export async function _syncFromDesignResponse(json, {
         axes0 ? `(${axes0.start[0]?.toFixed(3)}, ${axes0.start[1]?.toFixed(3)})` : 'none')
     }
   }
+  // Backfill the real feature-log bodies now that design + geometry have already
+  // rendered — fire-and-forget, off the critical path. Never blocks or re-throws;
+  // a failure just leaves history scrubbing to fall back to its own round trip.
+  if (_wasColdLoad) _backfillFullFeatureLog()
   // Notify other tabs (cadnano editor, second 3D windows) that the design changed.
   if (json.design && !simulationProjection) _signalDesignChanged({
     geometryUnchanged: skipGeometry,
@@ -916,9 +970,20 @@ export function _syncFromAssemblyResponse(json) {
 // ── Design ────────────────────────────────────────────────────────────────────
 
 export async function getDesign({ metadataOnly = false } = {}) {
-  const json = await _request('GET', '/design')
+  // A metadata-only sync never touches geometry, so design_renderer never rebuilds
+  // and never fires the finishOperationAfterRender() that would close this trace —
+  // exclude it rather than leave background polling deferred until an unrelated
+  // later rebuild happens to finish it.
+  const json = await _request('GET', '/design', undefined, { excludeFromTiming: metadataOnly })
   if (!json) return null
   if (_isStaleDesignResponse(json)) return json
+  // A cold load (no prior design in this tab — restart recovery, a freshly opened
+  // cross-tab window) has nothing to merge stripped bodies from below; that's exactly
+  // when the background backfill after this function returns is needed.
+  const wasColdLoad = json.feature_log_payloads_partial && !store.getState().currentDesign
+  if (json.feature_log_payloads_partial && json.design) {
+    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
+  }
   if (metadataOnly) {
     // A sibling tab told us its mutation cannot affect geometry/topology-derived
     // renderer state (for example, an overhang label rename).  Keep the existing
@@ -931,6 +996,7 @@ export async function getDesign({ metadataOnly = false } = {}) {
     })
     _clearStaleSelections()
     persistDesign()
+    if (wasColdLoad) _backfillFullFeatureLog()
     return json
   }
   const updates = {
@@ -978,6 +1044,7 @@ export async function getDesign({ metadataOnly = false } = {}) {
   store.setState(updates)
   _clearStaleSelections()
   persistDesign()
+  if (wasColdLoad) _backfillFullFeatureLog()
   return json
 }
 
@@ -3423,7 +3490,7 @@ export const setMdEarlyStop      = (id, enabled) => _oxdnaJSON('POST',   `/md/jo
 // one that's going. The queue lives on the SERVER (backend/core/md_queue.py) and the
 // server starts the next job itself — closing the tab does not cancel what's waiting.
 // All four return {queue, running_job_id, busy}.
-export const getMdQueue          = ()            => _oxdnaJSON('GET',    '/md/queue')
+export const getMdQueue          = ()            => _backgroundJobList('/md/queue')
 export const enqueueMdJob        = (id)          => _oxdnaJSON('POST',   '/md/queue', { job_id: id })
 export const dequeueMdJob        = (id)          => _oxdnaJSON('DELETE', `/md/queue/${id}`)
 export const reorderMdQueue      = (ids)         => _oxdnaJSON('PUT',    '/md/queue', { job_ids: ids })
@@ -5063,7 +5130,13 @@ export function subscribeLibraryEvents(onEvent) {
 export function getCollaborationIdentity() { return _request('GET', '/collaboration/identity') }
 export function listCollaborationProjects() { return _request('GET', '/collaboration/projects') }
 export function listCollaborationPeers() { return _request('GET', '/collaboration/peers') }
-export function getCollaborationPeerStatuses() { return _request('GET', '/collaboration/peers/status') }
+export async function getCollaborationPeerStatuses() {
+  // Background reachability must never cover an open editor with the operation modal,
+  // and must never compete with a fresh part's design/geometry fetch for the browser's
+  // shared per-origin connection budget — this poll runs every 4s regardless of view.
+  await whenOperationIdle()
+  return _request('GET', '/collaboration/peers/status', undefined, { suppressBusy: true })
+}
 export function startCollaborationPairing() { return _request('POST', '/collaboration/pairing/start') }
 export function connectCollaborationPeer(baseUrl, code) {
   return _request('POST', '/collaboration/pairing/connect', { base_url: baseUrl, code })

@@ -324,16 +324,34 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
 
 @router.get("/snupi/jobs")
 async def list_snupi_jobs() -> list[dict]:
-    from backend.core.design_disk_usage import dir_size_bytes_cached
+    # Disk scans and status reconciliation must not occupy the HTTP event loop.
+    from fastapi.concurrency import run_in_threadpool
+    from backend.core.design_disk_usage import schedule_dir_size_warm
+
+    out, to_warm = await run_in_threadpool(_list_snupi_jobs)
+    schedule_dir_size_warm(to_warm)
+    return out
+
+
+def _list_snupi_jobs() -> tuple[list[dict], list]:
+    from backend.core.design_disk_usage import dir_size_bytes_cached_only
 
     ws = _workspace()
     jobs = [reconcile_snupi_status(j, ws) for j in SnupiJob.list_jobs(ws)]
     current_fp = _current_fingerprint()
     out: list[dict] = []
+    to_warm: list = []
     for j in jobs:
         d = j.to_dict()
         d["out_of_date"] = _is_out_of_date(j, current_fp)
-        d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
+        # Cache-only: never block the poll on a multi-GB job-tree stat-walk. An
+        # uncached size comes back None (frontend renders it blank) and is filled
+        # in by the background warm scheduled above, appearing on the next poll.
+        job_dir = j.job_dir(ws)
+        size = dir_size_bytes_cached_only(job_dir)
+        d["size_bytes"] = size
+        if size is None:
+            to_warm.append(job_dir)
         # A RUNNING job carries its live fraction + ETA so the ONE master progress bar in the unified
         # Jobs card advances during the solve. Without this the card falls back to counting completed
         # STAGES — and a SNUPI job has exactly one stage, so it would sit at 0 % for the whole run and
@@ -353,7 +371,7 @@ async def list_snupi_jobs() -> list[dict]:
             except Exception:  # noqa: BLE001 — progress is advisory, never sink the list
                 pass
         out.append(d)
-    return out
+    return out, to_warm
 
 
 @router.get("/snupi/jobs/{job_id}")

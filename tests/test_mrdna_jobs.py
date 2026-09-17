@@ -725,3 +725,30 @@ def test_curvature_endpoint(monkeypatch, tmp_path):
     r = TestClient(app).get(f"/api/mrdna/jobs/{job.job_id}/curvature").json()
     assert r["ready"] is True and r["fine"] is True
     assert r["analytic"]["radius_nm"] == 36.0 and r["ratio"] == 0.8
+
+
+def test_arbd_discovery_skips_unrelated_process_cwd(monkeypatch, tmp_path):
+    from pathlib import Path
+    from types import SimpleNamespace
+    from backend.core import mrdna_runner
+
+    job_dir = tmp_path / 'job'
+    job_dir.mkdir()
+    unrelated, arbd = tmp_path / '101', tmp_path / '202'
+    for path, command in ((unrelated, b'python\0server.py'), (arbd, b'arbd\0fine.conf')):
+        path.mkdir()
+        (path / 'cmdline').write_bytes(command)
+        (path / 'cwd').symlink_to(job_dir, target_is_directory=True)
+    original_iterdir, original_resolve = Path.iterdir, Path.resolve
+
+    def iterdir(path):
+        return iter([unrelated, arbd]) if path == Path('/proc') else original_iterdir(path)
+
+    def resolve(path, *args, **kwargs):
+        assert path != unrelated / 'cwd', 'unrelated mounts must not be resolved'
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'iterdir', iterdir)
+    monkeypatch.setattr(Path, 'resolve', resolve)
+    job = SimpleNamespace(job_dir=lambda workspace: job_dir)
+    assert mrdna_runner._external_arbd_pid(job, tmp_path) == 202

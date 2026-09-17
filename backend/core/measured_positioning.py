@@ -276,32 +276,6 @@ FULL_REP = _from_atomistic_template("O5'") or _FULL_REP_FALLBACK
 # and ``_FRAME_ROT_RAD`` for no production purpose (TD-27 Stage 1).
 
 
-def _axis_point_for(
-    bead: np.ndarray,
-    axis_origin: np.ndarray,
-    axis_hat: np.ndarray,
-) -> np.ndarray:
-    """The point on the helix axis level with this nucleotide — the foot of the
-    perpendicular from its backbone bead.
-
-    The axis is passed in rather than recovered from the beads, because it CANNOT be
-    recovered from them.  Two beads on a circle of known radius admit two circumcentres,
-    mirror images across their chord and ``2h`` = 0.52 nm apart, and nothing else in the
-    nucleotide arrays breaks the tie: the base beads are offset along the CROSS-STRAND
-    direction, so the pair's base midpoint coincides with its backbone midpoint exactly
-    (verified: |base_mid − bead_mid| = 0).
-
-    The previous code chose by reproducing the CCW angle the legacy groove was built
-    with, which depends on the sign convention of ``axis_tangent`` relative to the
-    helix's lattice cell type — and silently picked the MIRRORED circumcentre for one of
-    the two cell types.  Measured on ``6hb_test``: mean displacement 0.2588 nm = h, max
-    0.5176 = 2h, i.e. exactly half the base pairs were placed about a phantom axis.  The
-    caller has the real helix in hand, so it simply hands it over.
-    """
-    d = bead - axis_origin
-    return axis_origin + float(np.dot(d, axis_hat)) * axis_hat
-
-
 def apply_measured_positioning(
     arrs: dict,
     *,
@@ -366,81 +340,95 @@ def apply_measured_positioning(
     base_normals = np.array(arrs["base_normals"], dtype=float, copy=True)
     tangents = np.asarray(arrs["axis_tangents"], dtype=float)
 
-    n_pairs = len(positions) // 2
+    # Batched over every pair at once — same per-pair formula as before (see the
+    # per-pair derivation this replaced in git history), but one array op instead of
+    # a Python loop calling np.cross/np.dot/np.linalg.norm on 3-vectors one pair at a
+    # time. That loop cost ~4 s of wall time on a 71-helix design from call overhead
+    # alone (measured: 38k individual np.cross calls), and being CPU-bound Python it
+    # held the GIL for that whole span, serializing every other request the server
+    # was concurrently trying to run in a threadpool. Every skip/guard below fires at
+    # exactly the same per-pair condition as the loop version; `valid` is that
+    # condition's array form, applied via `np.where` so a rejected pair's positions/
+    # base_positions/base_normals are untouched (not overwritten with garbage from
+    # dividing by a ~0 norm) — see the fail-safe tests this must keep passing.
+    axis_origin = np.asarray(axis_origin, dtype=float)
+    axis_hat = np.asarray(axis_hat, dtype=float)
+    pos_f = positions[0::2]
+    pos_r = positions[1::2]
+    t_raw = tangents[0::2]
 
-    for k in range(n_pairs):
-        i, j = 2 * k, 2 * k + 1
-        t = tangents[i]
-        nt = np.linalg.norm(t)
-        if nt < 1e-12:
-            continue
-        t = t / nt
+    nt = np.linalg.norm(t_raw, axis=1)
+    valid_nt = nt >= 1e-12
+    t = t_raw / np.where(valid_nt, nt, 1.0)[:, None]
 
-        axis_pt = _axis_point_for(positions[i], axis_origin, axis_hat)
+    # Foot of the perpendicular from each forward bead onto the helix axis. The axis is
+    # taken from the caller rather than recovered from the beads because it CANNOT be:
+    # two beads on a circle of known radius admit two circumcentres (mirror images,
+    # 2h = 0.52 nm apart) that nothing else in the nucleotide arrays breaks the tie on.
+    # Legacy code picked by reproducing the CCW groove angle, which silently chose the
+    # mirrored circumcentre for one lattice cell type (measured on 6hb_test: half the
+    # base pairs placed about a phantom axis, mean displacement 0.2588 nm = h).
+    axis_pt = axis_origin + ((pos_f - axis_origin) @ axis_hat)[:, None] * axis_hat
 
-        radial_f = positions[i] - axis_pt
-        radial_f = radial_f - np.dot(radial_f, t) * t
-        n = np.linalg.norm(radial_f)
-        if n < 1e-9:
-            continue
-        # Both beads must actually belong to this centreline — see the docstring.
-        radial_r = positions[j] - axis_pt
-        radial_r = radial_r - np.dot(radial_r, t) * t
-        if (
-            abs(n - legacy_radius) > 1e-3
-            or abs(float(np.linalg.norm(radial_r)) - legacy_radius) > 1e-3
-        ):
-            continue
-        radial_f = radial_f / n
-        perp_f = np.cross(t, radial_f)  # +90° CCW about t, completing the frame
+    radial_f = pos_f - axis_pt
+    radial_f = radial_f - np.sum(radial_f * t, axis=1)[:, None] * t
+    n = np.linalg.norm(radial_f, axis=1)
+    valid_n = n >= 1e-9
+    radial_f = radial_f / np.where(valid_n, n, 1.0)[:, None]
 
-        def at(site: Site) -> np.ndarray:
-            a = site.azimuth_rad()
-            return (
-                axis_pt
-                + site.radius_nm * (math.cos(a) * radial_f + math.sin(a) * perp_f)
-                + site.axial_nm * t
-            )
+    # Both beads must actually belong to this centreline — see the docstring.
+    radial_r = pos_r - axis_pt
+    radial_r = radial_r - np.sum(radial_r * t, axis=1)[:, None] * t
+    nr = np.linalg.norm(radial_r, axis=1)
+    valid_radius = (np.abs(n - legacy_radius) <= 1e-3) & (np.abs(nr - legacy_radius) <= 1e-3)
 
-        # Backbone bead = the configured sugar landmark; base bead = base-ring centroid. Each
-        # strand from its own measured site, neither derived from the other.
-        positions[i] = at(params.backbone_fwd)
-        base_positions[i] = at(params.base_fwd)
-        if groove_rad is None:
-            positions[j] = at(params.backbone_rev)
-            base_positions[j] = at(params.base_rev)
-        else:
-            # Re-register BOTH strands onto the lattice groove: forward to azimuth 0 (the
-            # legacy bead direction this frame is quoted in) and reverse to the groove.
-            # Each keeps its own measured RADIUS, AXIAL offset and base-to-backbone
-            # azimuth; only the angles between them come from the lattice.
-            #
-            # It has to be both.  Re-registering the reverse strand alone changes NOTHING
-            # — measured on 6hbx100_noT, the junction asymmetry stayed at +0.7948 nm for
-            # reverse azimuths of 130.2, 150 and 174.5 deg alike, because the asymmetry is
-            # driven by the FORWARD bead's +24.52 deg swing off the lattice direction.
-            # Putting both back gives +0.0003 nm.
-            g = math.degrees(groove_rad)
-            d_base_f = params.base_fwd.azimuth_deg - params.backbone_fwd.azimuth_deg
-            d_base_r = params.base_rev.azimuth_deg - params.backbone_rev.azimuth_deg
-            positions[i] = at(
-                Site(params.backbone_fwd.radius_nm, 0.0, params.backbone_fwd.axial_nm)
-            )
-            base_positions[i] = at(
-                Site(params.base_fwd.radius_nm, d_base_f, params.base_fwd.axial_nm)
-            )
-            positions[j] = at(
-                Site(params.backbone_rev.radius_nm, g, params.backbone_rev.axial_nm)
-            )
-            base_positions[j] = at(
-                Site(params.base_rev.radius_nm, g + d_base_r, params.base_rev.axial_nm)
-            )
+    valid = valid_nt & valid_n & valid_radius
+    perp_f = np.cross(t, radial_f)  # +90° CCW about t, completing the frame
 
-        cross = base_positions[j] - base_positions[i]
-        nc = np.linalg.norm(cross)
-        if nc > 1e-9:
-            base_normals[i] = cross / nc
-            base_normals[j] = -base_normals[i]
+    def at(radius_nm: float, azimuth_deg: float, axial_nm: float) -> np.ndarray:
+        a = math.radians(azimuth_deg)
+        return axis_pt + radius_nm * (math.cos(a) * radial_f + math.sin(a) * perp_f) + axial_nm * t
+
+    # Backbone bead = the configured sugar landmark; base bead = base-ring centroid. Each
+    # strand from its own measured site, neither derived from the other.
+    if groove_rad is None:
+        new_pos_f = at(params.backbone_fwd.radius_nm, params.backbone_fwd.azimuth_deg, params.backbone_fwd.axial_nm)
+        new_base_f = at(params.base_fwd.radius_nm, params.base_fwd.azimuth_deg, params.base_fwd.axial_nm)
+        new_pos_r = at(params.backbone_rev.radius_nm, params.backbone_rev.azimuth_deg, params.backbone_rev.axial_nm)
+        new_base_r = at(params.base_rev.radius_nm, params.base_rev.azimuth_deg, params.base_rev.axial_nm)
+    else:
+        # Re-register BOTH strands onto the lattice groove: forward to azimuth 0 (the
+        # legacy bead direction this frame is quoted in) and reverse to the groove.
+        # Each keeps its own measured RADIUS, AXIAL offset and base-to-backbone
+        # azimuth; only the angles between them come from the lattice.
+        #
+        # It has to be both.  Re-registering the reverse strand alone changes NOTHING
+        # — measured on 6hbx100_noT, the junction asymmetry stayed at +0.7948 nm for
+        # reverse azimuths of 130.2, 150 and 174.5 deg alike, because the asymmetry is
+        # driven by the FORWARD bead's +24.52 deg swing off the lattice direction.
+        # Putting both back gives +0.0003 nm.
+        g = math.degrees(groove_rad)
+        d_base_f = params.base_fwd.azimuth_deg - params.backbone_fwd.azimuth_deg
+        d_base_r = params.base_rev.azimuth_deg - params.backbone_rev.azimuth_deg
+        new_pos_f = at(params.backbone_fwd.radius_nm, 0.0, params.backbone_fwd.axial_nm)
+        new_base_f = at(params.base_fwd.radius_nm, d_base_f, params.base_fwd.axial_nm)
+        new_pos_r = at(params.backbone_rev.radius_nm, g, params.backbone_rev.axial_nm)
+        new_base_r = at(params.base_rev.radius_nm, g + d_base_r, params.base_rev.axial_nm)
+
+    mask = valid[:, None]
+    positions[0::2] = np.where(mask, new_pos_f, pos_f)
+    positions[1::2] = np.where(mask, new_pos_r, pos_r)
+    base_f = np.where(mask, new_base_f, base_positions[0::2])
+    base_r = np.where(mask, new_base_r, base_positions[1::2])
+    base_positions[0::2] = base_f
+    base_positions[1::2] = base_r
+
+    cross = base_r - base_f
+    nc = np.linalg.norm(cross, axis=1)
+    valid_nc = valid & (nc > 1e-9)
+    normal_f = cross / np.where(valid_nc, nc, 1.0)[:, None]
+    base_normals[0::2] = np.where(valid_nc[:, None], normal_f, base_normals[0::2])
+    base_normals[1::2] = np.where(valid_nc[:, None], -normal_f, base_normals[1::2])
 
     out = dict(arrs)
     out["positions"] = positions

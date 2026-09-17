@@ -909,9 +909,11 @@ def get_active_design() -> dict:
 
     design = design_state.get_or_404()
     report = validate_design(design)
-    # Cold-load path: the client may have no prior cache to reconstruct stripped
-    # feature-log bodies from (fresh tab, restart recovery), so ship them in full.
-    return _design_response(design, report, full_feature_log=True)
+    # Cold-load path: the client has no prior cache to reconstruct stripped feature-log
+    # bodies from (fresh tab, restart recovery). Ship the slim response so the design
+    # and geometry render immediately; GET /design/feature-log/full backfills the real
+    # bodies once the client is idle (see client.js's post-geometry background fetch).
+    return _design_response(design, report, full_feature_log=False)
 
 
 @router.delete("/design", status_code=200)
@@ -919,6 +921,20 @@ def close_session() -> dict:
     """Erase the active design and all history, returning the server to an empty state."""
     design_state.close_session()
     return {"ok": True}
+
+
+@router.get("/design/feature-log/full")
+def get_full_feature_log() -> dict:
+    """The active design's feature log with every snapshot/diff body intact.
+
+    Backfills what a slim (``full_feature_log=False``) response stripped. The client
+    calls this once, in the background, after a cold load's design + geometry have
+    already rendered — see client.js's post-geometry background fetch — and merges the
+    bodies into its in-memory design so later responses can reconstruct stripped
+    entries from it (``_mergeFeatureLogPayloads``). Read-only; never mutates state.
+    """
+    design = design_state.get_or_404()
+    return {"feature_log": design.to_dict()["feature_log"]}
 
 
 @router.get("/design/export")
@@ -1704,8 +1720,12 @@ def load_design(body: FilePathRequest) -> dict:
     design = _recompute_flexible_connections(design)
     design_state.load_design(design)
     report = validate_design(design)
-    # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
-    return _design_response(design, report, full_feature_log=True)
+    # New lineage (fresh load/import) — nothing in the client's cache matches this
+    # design's history, but shipping every feature-log snapshot body up front made a
+    # design with heavy edit history (e.g. VoltronCoreArmV2: 42 MB vs 2.4 MB slim) the
+    # dominant cost of opening it. Ship the slim response; the client backfills full
+    # bodies from GET /design/feature-log/full once geometry has rendered.
+    return _design_response(design, report, full_feature_log=False)
 
 
 @router.post("/design/import", status_code=200)
@@ -1742,8 +1762,9 @@ def import_design(body: DesignImportRequest) -> dict:
     design = _recompute_flexible_connections(design)
     design_state.load_design(design)
     report = validate_design(design)
-    # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
-    return _design_response(design, report, full_feature_log=True)
+    # New lineage (fresh load/import) — see the matching comment in load_design above:
+    # slim response now, GET /design/feature-log/full backfills bodies in the background.
+    return _design_response(design, report, full_feature_log=False)
 
 
 class CadnanoImportRequest(BaseModel):

@@ -182,6 +182,13 @@ async def create_lammps_job(body: CreateLammpsJobRequest) -> dict:
 
 @router.get("/lammps/jobs")
 async def list_lammps_jobs() -> list[dict]:
+    # Disk scans and status reconciliation must not occupy the HTTP event loop.
+    from fastapi.concurrency import run_in_threadpool
+
+    return await run_in_threadpool(_list_lammps_jobs)
+
+
+def _list_lammps_jobs() -> list[dict]:
     ws = _workspace()
     return [
         lammps_runner.reconcile_lammps_status(j, ws).to_dict()

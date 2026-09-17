@@ -34,7 +34,7 @@ from backend.core.constants import (
     SQUARE_TWIST_PER_BP_DEG,
 )
 from backend.core.geometry import nucleotide_positions, helix_axis_point
-from backend.core.models import ClusterRigidTransform, Design, Direction, Helix, Vec3
+from backend.core.models import ClusterRigidTransform, Design, Direction, Helix, LoopSkip, Vec3
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -812,6 +812,58 @@ def test_the_scalar_and_array_bead_paths_agree():
                 (arrays["base_normals"][i], nuc.base_normal, "base_normal"),
             ):
                 assert np.allclose(got, want, atol=1e-12), f"{direction} {name} @ {i}"
+
+
+def test_the_scalar_and_loop_skip_fast_paths_agree():
+    """A loop_skips-bearing helix used to run its ENTIRE length through the scalar
+    Python-object path just for a handful of skip/loop entries (a 165 bp helix with
+    3 skips, say). ``_nuc_arrays_loop_skip_fast`` vectorises the index/offset
+    bookkeeping but keeps ``math.cos``/``math.sin`` for every trig evaluation, so it
+    must be BIT-IDENTICAL to the scalar path — not merely close (see
+    test_the_scalar_and_array_bead_paths_agree above and LESSONS H15/H19)."""
+    from backend.core.geometry import (
+        _nuc_arrays_from_list,
+        nucleotide_positions,
+        nucleotide_positions_arrays,
+    )
+
+    cases = [
+        ("single_skip", [LoopSkip(bp_index=5, delta=-1)]),
+        ("single_loop", [LoopSkip(bp_index=5, delta=1)]),
+        ("double_loop", [LoopSkip(bp_index=5, delta=2)]),
+        ("skip_and_loop_cancel", [LoopSkip(bp_index=5, delta=-1), LoopSkip(bp_index=5, delta=1)]),
+        ("skip_at_start", [LoopSkip(bp_index=0, delta=-1)]),
+        ("loop_at_end", [LoopSkip(bp_index=23, delta=1)]),
+        ("multiple_mixed", [
+            LoopSkip(bp_index=2, delta=-1), LoopSkip(bp_index=9, delta=1),
+            LoopSkip(bp_index=15, delta=-1), LoopSkip(bp_index=20, delta=2),
+        ]),
+        ("adjacent_skips", [LoopSkip(bp_index=5, delta=-1), LoopSkip(bp_index=6, delta=-1)]),
+        ("out_of_range_ignored", [LoopSkip(bp_index=999, delta=-1), LoopSkip(bp_index=5, delta=1)]),
+    ]
+    for direction in (Direction.FORWARD, Direction.REVERSE):
+        for compact_skips in (False, True):
+            for name, loop_skips in cases:
+                helix = Helix(
+                    id="h_ls", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+                    axis_end=Vec3(x=0.0, y=0.0, z=24 * BDNA_RISE_PER_BP),
+                    phase_offset=0.37, twist_per_bp_rad=math.radians(34.3),
+                    length_bp=24, bp_start=0, direction=direction, loop_skips=loop_skips,
+                )
+                scalar = nucleotide_positions(helix, compact_skips=compact_skips)
+                scalar_arrs = _nuc_arrays_from_list(
+                    helix.id, helix.bp_start, scalar, helix.axis_end.to_array(),
+                )
+                fast_arrs = nucleotide_positions_arrays(helix, compact_skips=compact_skips)
+                label = f"{direction} compact_skips={compact_skips} {name}"
+                for key, want in scalar_arrs.items():
+                    got = fast_arrs[key]
+                    if key == "helix_id":
+                        assert got == want, label
+                    else:
+                        assert np.array_equal(np.asarray(got), np.asarray(want)), (
+                            f"{label} field={key}"
+                        )
 
 
 # ── Python is authoritative; the JS mirrors are pinned to it ──────────────────

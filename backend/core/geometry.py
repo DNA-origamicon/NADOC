@@ -449,6 +449,139 @@ def nucleotide_positions(
 # ── Vectorised position array API ──────────────────────────────────────────────
 
 
+def _nuc_arrays_loop_skip_fast(helix: Helix, compact_skips: bool) -> dict:
+    """Vectorised ``nucleotide_positions_arrays`` for a helix WITH loop_skips.
+
+    Mirrors ``nucleotide_positions()``'s index/offset bookkeeping (skip removal, loop
+    duplication, ``compact_skips`` renumbering) with array ops instead of a Python loop —
+    but keeps ``math.cos``/``math.sin`` (not ``np.cos``/``np.sin``) for every trig
+    evaluation. ``_strand_beads``' docstring and LESSONS H15/H19 record that the two trig
+    implementations can differ at the last ULP and the backbone-bridge solve can amplify
+    that into 0.1-1.3 Å at a junction — this function's numbers must be bit-identical to
+    ``nucleotide_positions()``, not merely close, which is what
+    ``test_the_scalar_and_loop_skip_fast_paths_agree`` pins.
+
+    A design's loop_skips are typically a handful of entries on an otherwise-plain
+    100+ bp helix (e.g. 3 skips on a 165 bp helix), so the previous fallback ran the
+    entire helix through the Python-object scalar path for those few entries' sake.
+    """
+    start = helix.axis_start.to_array()
+    end = helix.axis_end.to_array()
+    axis_vec = end - start
+    length = np.linalg.norm(axis_vec)
+    if length == 0.0:
+        raise ValueError(f"Helix {helix.id!r} has zero-length axis.")
+    axis_hat = axis_vec / length
+    frame = _frame_from_helix_axis(axis_hat)
+    twist = helix.twist_per_bp_rad
+    minor_groove_rad = groove_offset_rad(helix.direction)
+
+    N = helix.length_bp
+    if N == 0:
+        return _nuc_arrays_from_list(helix.id, helix.bp_start, [], axis_hat)
+
+    local_i = np.arange(N, dtype=np.intp)
+    global_bp = local_i + helix.bp_start
+
+    # Multiple LoopSkip entries at the same bp_index sum (matches ls_map in
+    # nucleotide_positions); entries outside this helix's own [bp_start, bp_start+N)
+    # range never match there either, so they're equally ignored here.
+    deltas = np.zeros(N, dtype=np.int64)
+    for ls in helix.loop_skips:
+        pos = ls.bp_index - helix.bp_start
+        if 0 <= pos < N:
+            deltas[pos] += ls.delta
+
+    # delta<=-1 (any negative) → 0 copies (skip); delta==0 → 1; delta>=1 → delta+1.
+    n_copies = np.maximum(0, deltas + 1)
+    kept = n_copies > 0
+    # eff_i[local_i] = count of earlier NOT-skipped local_i's — exactly what the scalar
+    # loop's `eff_i` holds (pre-increment) at that iteration, since `continue` on a skip
+    # is the only way the scalar loop's increment is bypassed.
+    eff_i = np.concatenate(([0], np.cumsum(kept)[:-1])).astype(np.intp)
+    idx_per_local = eff_i if compact_skips else local_i
+
+    kept_local = np.flatnonzero(kept)
+    if kept_local.size == 0:
+        return _nuc_arrays_from_list(helix.id, helix.bp_start, [], axis_hat)
+    rep_counts = n_copies[kept_local]
+
+    # Expand each kept local_i into its n_copies output rows.
+    src = np.repeat(kept_local, rep_counts)                            # source local_i per row
+    group_starts = np.repeat(np.cumsum(rep_counts) - rep_counts, rep_counts)
+    k_in_group = np.arange(src.size) - group_starts                    # 0..n_copies-1 within a loop
+    n_row = np.repeat(rep_counts, rep_counts)
+
+    row_idx = idx_per_local[src]
+    row_global_bp = global_bp[src]
+    # Same two-step addition and 0.0-offset-is-a-no-op as the scalar path: a plain
+    # (non-loop) row has n_row=1, k_in_group=0, so offset is exactly 0.0.
+    offset = (k_in_group.astype(np.float64) - (n_row.astype(np.float64) - 1) / 2.0) * BDNA_RISE_PER_BP
+    axis_pts = (
+        start
+        + axis_hat * (row_idx.astype(np.float64) * BDNA_RISE_PER_BP)[:, None]
+        + axis_hat * offset[:, None]
+    )
+
+    fwd_angle = helix.phase_offset + row_idx.astype(np.float64) * twist
+    rev_angle = fwd_angle + minor_groove_rad
+    # Scalar per-element math.cos/math.sin — see the docstring above.
+    cos_f = np.fromiter((math.cos(a) for a in fwd_angle), dtype=np.float64, count=fwd_angle.size)
+    sin_f = np.fromiter((math.sin(a) for a in fwd_angle), dtype=np.float64, count=fwd_angle.size)
+    cos_r = np.fromiter((math.cos(a) for a in rev_angle), dtype=np.float64, count=rev_angle.size)
+    sin_r = np.fromiter((math.sin(a) for a in rev_angle), dtype=np.float64, count=rev_angle.size)
+
+    fx = frame[:, 0]
+    fy = frame[:, 1]
+    fwd_radial = cos_f[:, None] * fx + sin_f[:, None] * fy
+    rev_radial = cos_r[:, None] * fx + sin_r[:, None] * fy
+
+    fwd_bb = axis_pts + HELIX_RADIUS * fwd_radial
+    rev_bb = axis_pts + HELIX_RADIUS * rev_radial
+
+    bp_vec = rev_bb - fwd_bb
+    bp_hat = bp_vec / np.linalg.norm(bp_vec, axis=1, keepdims=True)
+
+    fwd_base = fwd_bb + BASE_DISPLACEMENT * bp_hat
+    rev_base = rev_bb - BASE_DISPLACEMENT * bp_hat
+
+    M = 2 * src.size
+    positions = np.empty((M, 3), dtype=np.float64)
+    base_positions = np.empty((M, 3), dtype=np.float64)
+    base_normals = np.empty((M, 3), dtype=np.float64)
+    axis_points_out = np.empty((M, 3), dtype=np.float64)
+    radial_hats_out = np.empty((M, 3), dtype=np.float64)
+    azimuths_out = np.empty(M, dtype=np.float64)
+
+    positions[0::2] = fwd_bb
+    positions[1::2] = rev_bb
+    base_positions[0::2] = fwd_base
+    base_positions[1::2] = rev_base
+    base_normals[0::2] = bp_hat
+    base_normals[1::2] = -bp_hat
+    axis_points_out[0::2] = axis_pts
+    axis_points_out[1::2] = axis_pts
+    radial_hats_out[0::2] = fwd_radial
+    radial_hats_out[1::2] = rev_radial
+    azimuths_out[0::2] = fwd_angle
+    azimuths_out[1::2] = rev_angle
+
+    bp_indices = np.repeat(row_global_bp, 2)
+    return {
+        "helix_id": helix.id,
+        "bp_indices": bp_indices,
+        "local_bps": bp_indices - helix.bp_start,
+        "directions": np.tile(np.array([0, 1], dtype=np.intp), src.size),
+        "positions": positions,
+        "base_positions": base_positions,
+        "base_normals": base_normals,
+        "axis_tangents": np.broadcast_to(axis_hat, (M, 3)).copy(),
+        "axis_points": axis_points_out,
+        "radial_hats": radial_hats_out,
+        "azimuths": azimuths_out,
+    }
+
+
 def nucleotide_positions_arrays(helix: Helix, compact_skips: bool = False) -> dict:
     """
     Vectorised nucleotide position computation.
@@ -494,15 +627,7 @@ def nucleotide_positions_arrays(helix: Helix, compact_skips: bool = False) -> di
     twist = helix.twist_per_bp_rad
 
     if helix.loop_skips:
-        # Rare slow path — fall back to the scalar loop and convert.
-        # compact_skips is honoured here (the fast path below has no skips to
-        # compact, so it needs no flag).
-        return _nuc_arrays_from_list(
-            helix.id,
-            helix.bp_start,
-            nucleotide_positions(helix, compact_skips=compact_skips),
-            axis_hat,
-        )
+        return _nuc_arrays_loop_skip_fast(helix, compact_skips)
 
     # ── Fast path: no loop/skips ─────────────────────────────────────────────
     N = helix.length_bp

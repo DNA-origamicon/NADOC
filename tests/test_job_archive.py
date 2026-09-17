@@ -216,13 +216,24 @@ class TestRoutes:
         assert r.status_code == 202
         _wait("oxdna_jobs", job.job_id)
 
-        # Job still listed, now archived with the right size + path.
+        # Job still listed, now archived with the right size + path. The archived
+        # directory is a cache-cold path the first time it's listed — oxdna/jobs
+        # reports size_bytes eventually-consistently (like md/jobs above), so poll
+        # rather than assume the first response already ran the background warm.
         entry = next(
             e for e in c.get("/api/oxdna/jobs").json() if e["job_id"] == job.job_id
         )
         assert entry["archived"] is True
         assert entry["archive_path"] == str(dest_root / job.job_id)
-        assert entry["size_bytes"] >= 3000
+        size = entry["size_bytes"]
+        for _ in range(100):
+            if size is not None:
+                break
+            time.sleep(0.02)
+            size = next(
+                e for e in c.get("/api/oxdna/jobs").json() if e["job_id"] == job.job_id
+            )["size_bytes"]
+        assert size is not None and size >= 3000
 
         st = c.get(f"/api/oxdna/jobs/{job.job_id}/archive-status").json()
         assert st["state"] == "done"

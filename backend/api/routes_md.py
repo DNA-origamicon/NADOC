@@ -4955,11 +4955,6 @@ def _decorate_terminal_segment_progress(job: MdJob, payload: dict, ws: Path) -> 
             seg["status"] = "done"
 
 
-# Strong refs to in-flight background dir-size walks so the event loop can't GC them
-# mid-walk (asyncio.create_task only holds a weak ref).
-_SIZE_WARM_TASKS: set = set()
-
-
 def _decorate_preparation_progress(job: MdJob, payload: dict, ws: Path) -> None:
     """Expose the preparation sidecar through the common job-card contract."""
     if job.status != MdStatus.preparing:
@@ -5007,15 +5002,10 @@ def _compact_list_health_samples(samples: list) -> tuple[list, bool]:
 
 @router.get("/md/jobs")
 async def list_md_jobs() -> list[dict]:
-    from backend.core.oxdna_staleness import current_active_design_fingerprint
-    from backend.core.design_disk_usage import (
-        dir_size_bytes_cached_only,
-        warm_dir_sizes,
-    )
+    from backend.core.design_disk_usage import schedule_dir_size_warm
 
     ws = _workspace()
-    jobs = MdJob.list_jobs(ws)
-    jobs = [reconcile_job_status(j, ws) for j in jobs]
+    jobs = await run_in_threadpool(_load_md_jobs_for_list, ws)
     # A persisted pod id is only a handle, not proof that the pod still exists.  The
     # cross-engine /jobs/active route used to perform this reconciliation, but the MD
     # panel polls THIS endpoint; consequently a launcher/pod that disappeared left its
@@ -5075,6 +5065,22 @@ async def list_md_jobs() -> list[dict]:
                     j.resumable = False
                     j.error = None
                     j.save(ws)
+    out, to_warm = await run_in_threadpool(
+        _md_job_list_rows, jobs, ws, runpod_connected, runpod_ids
+    )
+    schedule_dir_size_warm(to_warm)
+    return out
+
+
+def _load_md_jobs_for_list(ws):
+    return [reconcile_job_status(job, ws) for job in MdJob.list_jobs(ws)]
+
+
+def _md_job_list_rows(jobs, ws, runpod_connected, runpod_ids):
+    """Read manifests, fingerprints, logs and download state in a worker thread."""
+    from backend.core.oxdna_staleness import current_active_design_fingerprint
+    from backend.core.design_disk_usage import dir_size_bytes_cached_only
+
     current_fp = current_active_design_fingerprint()
     out: list[dict] = []
     to_warm: list = []
@@ -5177,14 +5183,7 @@ async def list_md_jobs() -> list[dict]:
                     "recorded status."
                 )
         out.append(d)
-    if to_warm:
-        # Fire-and-forget: walk the uncached dirs in a threadpool AFTER returning, keeping
-        # a task ref so the loop doesn't GC it mid-walk.  warm_dir_sizes dedups, so
-        # overlapping polls never stampede the same directory.
-        task = asyncio.create_task(run_in_threadpool(warm_dir_sizes, to_warm))
-        _SIZE_WARM_TASKS.add(task)
-        task.add_done_callback(_SIZE_WARM_TASKS.discard)
-    return out
+    return out, to_warm
 
 
 @router.get("/md/jobs/{job_id}")

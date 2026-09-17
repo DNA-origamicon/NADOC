@@ -96,6 +96,10 @@ def _external_arbd_pid(job: MrdnaJob, workspace_dir: Path) -> Optional[int]:
             cmdline = (proc_dir / "cmdline").read_bytes()
         except OSError:
             continue
+        # Most processes are unrelated. Avoid resolving every process's cwd (which
+        # can traverse slow mounted filesystems) for every historical job poll.
+        if b"arbd" not in cmdline.lower():
+            continue
         # mrDNA chdirs into the job directory and launches ARBD with RELATIVE config
         # paths, so the job path is normally absent from cmdline. Match either the
         # absolute command or the process cwd; both are self-verifying.

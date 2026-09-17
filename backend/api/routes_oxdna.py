@@ -1190,18 +1190,36 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 
 @router.get("/oxdna/jobs")
 async def list_oxdna_jobs() -> list[dict]:
-    from backend.core.design_disk_usage import dir_size_bytes_cached
+    # Disk scans and status reconciliation must not occupy the HTTP event loop.
+    from fastapi.concurrency import run_in_threadpool
+    from backend.core.design_disk_usage import schedule_dir_size_warm
+
+    out, to_warm = await run_in_threadpool(_list_oxdna_jobs)
+    schedule_dir_size_warm(to_warm)
+    return out
+
+
+def _list_oxdna_jobs() -> tuple[list[dict], list]:
+    from backend.core.design_disk_usage import dir_size_bytes_cached_only
 
     ws = _workspace()
     jobs = [reconcile_oxdna_status(j, ws) for j in OxdnaJob.list_jobs(ws)]
     current_fp = _current_design_fingerprint()  # computed once for the whole list
     out: list[dict] = []
+    to_warm: list = []
     for j in jobs:
         d = j.to_dict()
         d["out_of_date"] = _job_is_out_of_date(j, current_fp)
-        d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
+        # Cache-only: never block the poll on a multi-GB job-tree stat-walk. An
+        # uncached size comes back None (frontend renders it blank) and is filled
+        # in by the background warm scheduled above, appearing on the next poll.
+        job_dir = j.job_dir(ws)
+        size = dir_size_bytes_cached_only(job_dir)
+        d["size_bytes"] = size
+        if size is None:
+            to_warm.append(job_dir)
         out.append(d)
-    return out
+    return out, to_warm
 
 
 @router.get("/oxdna/jobs/{job_id}")

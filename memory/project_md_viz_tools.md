@@ -12,6 +12,15 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- Job-list disk reads, status reconciliation and MD manifest/fingerprint decoration run in
+  worker threads, preserving per-document context so polling cannot occupy the HTTP event
+  loop while a part loads. mrDNA process discovery checks the command before resolving cwd.
+  Peer reachability polls share in-flight work across tabs and cache completed results for
+  10 seconds; healthy saved addresses skip reverse DNS, and probes have an 8-second total
+  deadline. Background peer polls also suppress the editor operation modal. These probes
+  do not transfer shared files. Regression coverage:
+  `test_status_poll_responsiveness.py`, `test_collaboration_status.py`, and the existing
+  cross-host checkout/address-migration tests in `test_project_collaboration_api.py`.
 - Readiness is an explicit state with a reason, not a generic on/off dot.
 - All representations honor the same “Align to design pose” choice.
 - NAMD atom mapping prefers the persisted segid-to-chain metadata and frozen `design.json`; child
