@@ -440,9 +440,10 @@ def _geometry_for_helices(
         # duplex frame, independent of lattice-cell direction.
         roll -= math.radians(ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG)
 
-    # Suppress is_five_prime on the real-helix terminal for strands with a 5' extension.
+    # Only nucleotide tails replace the terminal DNA nucleotide. A modification
+    # remains outside the DNA walk and must not hide its attachment endpoint.
     five_prime_ext_strands = {
-        ext.strand_id for ext in design.extensions if ext.end == "five_prime"
+        ext.strand_id for ext in design.extensions if ext.end == "five_prime" and ext.sequence
     }
     for strand in design.strands:
         if strand.id not in five_prime_ext_strands or not strand.domains:

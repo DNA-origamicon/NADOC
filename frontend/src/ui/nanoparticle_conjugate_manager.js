@@ -51,7 +51,7 @@ export function initNanoparticleConjugateManager({ api, store } = {}) {
       <div id="np-conj-overhangs" style="flex:1;min-height:80px;overflow-y:auto;border:1px solid ${BORDER};border-radius:4px;margin-bottom:10px"></div>
       <label style="font-size:12px;color:${TEXT};display:block;margin-bottom:3px">ssDNA handle</label>
       <input id="np-conj-sequence" maxlength="500" placeholder="Enter DNA or select an overhang" style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid ${BORDER};border-radius:4px;color:${CYAN};font-family:monospace;font-size:12px;padding:5px 7px;margin-bottom:10px">
-      <div style="margin-bottom:10px"><label>Length <input id="np-conj-length" type="number" min="1" max="500" step="1" value="16" style="width:60px"></label> <button id="np-conj-generate">Generate sequence</button></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><label style="display:flex;align-items:center;gap:6px">Length <input id="np-conj-length" type="number" min="1" max="500" step="1" value="16" style="width:60px"></label><button id="np-conj-generate" style="flex-shrink:0">Generate</button></div>
       <div style="font-size:12px;color:${TEXT};margin-bottom:10px">Thiol modification &nbsp;<label style="margin-right:8px"><input type="radio" name="np-thiol-end" value="5p" checked> 5′ end</label><label><input type="radio" name="np-thiol-end" value="3p"> 3′ end</label></div>
       <button id="np-conj-create-handle" disabled style="width:100%;background:#1f6feb;color:#fff;border:none;border-radius:5px;padding:8px;cursor:pointer;font-size:13px">Create ssDNA handle</button>
       <div id="np-conj-status" style="font-size:11px;color:${DIM};margin:8px 0;min-height:28px"></div>`
@@ -238,7 +238,7 @@ export function initNanoparticleConjugateManager({ api, store } = {}) {
       scheme.value = 'streptavidin'
       left.style.display = 'none'; right.style.display = 'none'; strepPanel.style.display = 'contents'
       strepRoot.visible = true; corona.visible = false
-      scheme.title = 'PDB 1STP tetramers with publication-based coverage and explicit DNA occupancy on fixed gold (CPU/GPU oxDNA). Source: https://www.rcsb.org/structure/1STP.'
+      scheme.title = 'PDB 1STP tetramers with publication-based coverage and explicit DNA occupancy on mobile gold (experimental CUDA oxDNA). Source: https://www.rcsb.org/structure/1STP.'
       scheme.selectedOptions[0].title = scheme.title
       if (!strepPanel.children.length) openStreptavidinDialog(particle, {
         container: strepPanel, onSaved: close, compact: true, onPreview: queueCoatingPreview,

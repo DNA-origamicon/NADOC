@@ -1,0 +1,55 @@
+{
+  "chemical_roundtrip": true,
+  "graph_connected": true,
+  "heavy_atoms": 33,
+  "hydrogens": 35,
+  "rings": 2,
+  "phosphate_coordination": 4,
+  "formal_charge": -1,
+  "reference_hashes_verified": true,
+  "native_reference_checks": {
+    "DME": {
+      "atoms": 16,
+      "charge": -0.0,
+      "bonds": 15,
+      "angles": 26,
+      "dihedrals": 21,
+      "parameters_resolved": true
+    },
+    "DMEP": {
+      "atoms": 13,
+      "charge": -1.0,
+      "bonds": 12,
+      "angles": 20,
+      "dihedrals": 12,
+      "parameters_resolved": true
+    },
+    "NMA": {
+      "atoms": 12,
+      "charge": -0.0,
+      "bonds": 11,
+      "angles": 18,
+      "dihedrals": 16,
+      "parameters_resolved": true
+    },
+    "UREA": {
+      "atoms": 8,
+      "charge": 0.0,
+      "bonds": 7,
+      "angles": 9,
+      "dihedrals": 8,
+      "parameters_resolved": true
+    }
+  },
+  "ligand_parameters_validated": false,
+  "simulation_ready": false,
+  "molecular_dynamics_run": false,
+  "assignment_auditor_tests": {
+    "passed": 4,
+    "warnings": "ParmEd unsupported COLINEAR lone-pair definitions in reference library; no such atoms in the four controls"
+  },
+  "coordinate_stereochemistry_verified": true,
+  "evidence": "experiments/strep_biotin_namd/ws/parameterization_final/",
+  "runpod_attempts": 0,
+  "runpod_spend_usd": 0
+}

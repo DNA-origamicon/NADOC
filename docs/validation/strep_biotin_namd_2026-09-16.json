@@ -1,0 +1,49 @@
+{
+  "simulation_ready": false,
+  "protein_atoms": 6976,
+  "mapped_protein_heavy_atoms": 3604,
+  "protein_hydrogens": 3368,
+  "protein_charge": -8.0,
+  "protein_bonds": 7064,
+  "protein_angles": 12576,
+  "protein_dihedrals": 18420,
+  "protein_cmaps": 476,
+  "protein_parameters_resolved": true,
+  "parameter_sha256": "b1d1c70b5f350a2d5758bf3ce7ec86e50cdc3f69d8cc3097f98f279cdaeb5aaa",
+  "ligand_heavy_atoms": 28,
+  "covalent_links": [
+    {
+      "ligand": [
+        "L000",
+        1,
+        "O4T"
+      ],
+      "dna": [
+        "D000",
+        1,
+        "P"
+      ],
+      "strand_id": "55352e33-64c6-4070-814b-edfe638c5afc",
+      "bond_nm": 0.1600000195506536
+    }
+  ],
+  "blocked_by": [
+    "Missing qualified all-hydrogen BTE topology, charges and parameters",
+    "Missing qualified BTE5 DNA phosphodiester boundary patch and cross terms"
+  ],
+  "public_reference_audit": {
+    "url": "https://mackerell.umaryland.edu/download.php?filename=CHARMM_ff_params_files/toppar_c36_feb26.tgz",
+    "files": {
+      "par_all36_cgenff.prm": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+      "top_all36_cgenff.rtf": "18b0f76e4d9fba1918e321327984850b1bb216403a2fe21e251d038f84b48069",
+      "toppar_c36_feb26.tgz": "7d4d21ebdb216a48f600fadee862dc77d369a10d5753150635f35e09c3209e08"
+    },
+    "result": "No ready Biotin-TEG/DNA residue and boundary package found; CGenFF reference library is not a molecule-specific assignment."
+  },
+  "tests": {
+    "focused": 14,
+    "final_mapping_regression": 4,
+    "test_smart": "FAST selected, filtered invocation collected zero tests; not counted as passing verification"
+  },
+  "namd_simulations_run": 0
+}

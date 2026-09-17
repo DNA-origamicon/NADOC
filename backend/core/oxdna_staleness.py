@@ -71,6 +71,11 @@ def oxdna_design_fingerprint(design: Design) -> str:
                    atoms=[a.model_dump(mode='json') for a in p.coating.protein.atoms],
                    bonds=p.coating.protein.bonds, **({'oxdna_fixed_core': p.oxdna_fixed_core, 'biotin_dna': [r.model_dump(exclude={'linker_chemistry'} | ({'tetramer_index'} if r.tetramer_index == 0 else set()) | ({'placement_version'} if r.placement_version == 1 else set())) for r in p.biotin_dna]} if p.oxdna_fixed_core or p.biotin_dna else {}))
               for p in design.nanoparticles if p.coating]
+    from backend.physics.oxdna_mobile_gold import has_mobile_gold
+    if has_mobile_gold(design):
+        payload["mobile_gold"] = {"model": "mobile_gold_v1",
+            "cores": [p.model_dump(include={"id", "kind", "diameter_nm", "pose"}) for p in design.nanoparticles],
+            "conjugations": [c.model_dump() for c in design.nanoparticle_conjugations]}
     if coated:
         payload['streptavidin_coated_particles'] = coated
     # Strand colours are persisted on the Strand model so they survive a file

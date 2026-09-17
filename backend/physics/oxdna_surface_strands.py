@@ -624,7 +624,7 @@ def append_capture_strands(
 
 
 def capture_bead_count(job) -> int:
-    """Number of NON-design capture particles appended to every frame of *job*.
+    """Number of non-design capture particles or mobile gold cores after the DNA.
 
     Capture strands are appended AFTER the design's nucleotide walk, so every reader
     that maps design keys onto configuration lines has to be told how many trailing
@@ -635,4 +635,5 @@ def capture_bead_count(job) -> int:
     built = ((getattr(job, "run_config", None) or {}).get("surface_strands") or {}).get(
         "built"
     ) or {}
-    return int(built.get("n_beads") or 0)
+    gold = (getattr(job, "run_config", None) or {}).get("mobile_gold") or {}
+    return int(built.get("n_beads") or 0) + int(gold.get("n_cores") or 0)

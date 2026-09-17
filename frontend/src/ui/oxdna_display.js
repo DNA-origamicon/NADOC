@@ -292,6 +292,7 @@ export function framesToUpdates(keys, frame) {
   if (![6, 9, 12].includes(stride)) return []
   const updates = []
   for (let j = 0; j < keys.length; j++) {
+    if (keys[j][0] === "__gold__") continue
     const o = j * stride
     const update = {
       helix_id: keys[j][0], bp_index: keys[j][1], direction: keys[j][2],
@@ -457,7 +458,7 @@ export function prebuildMemoryPlan({
 }
 
 export function initOxdnaDisplay({
-  designRenderer, api, proteinRenderer = null, preparationOnly = false, sharedFrameQueue = null,
+  designRenderer, api, proteinRenderer = null, nanoparticleRenderer = null, preparationOnly = false, sharedFrameQueue = null,
   getAtomisticRenderer = null, getSurfaceRenderer = null,
   getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
   applyOxdnaFrame = null,
@@ -1301,6 +1302,7 @@ export function initOxdnaDisplay({
     onOccupancyClear?.()
     _applyFem(null)
     onSurfaceStrands?.(null)
+    nanoparticleRenderer?.clearOxdnaPoses?.()
     proteinRenderer?.clearOxdnaTransforms?.()
     releaseHeavyToDesign()
     restoreDesignVisible?.()
@@ -1401,6 +1403,7 @@ export function initOxdnaDisplay({
       if (_active && _jobId !== jobId) {
         _applyFem(null)
         designRenderer.clearScalarColors?.()
+        nanoparticleRenderer?.clearOxdnaPoses?.()
         proteinRenderer?.clearOxdnaTransforms?.()
         _active = false; _mode = null; _jobId = null
       }
@@ -1416,6 +1419,7 @@ export function initOxdnaDisplay({
     _applyFem(updates)
     // Hybrid (protein) jobs: move each protein to its relaxed pose (design→relaxed
     // rigid 4×4 from the backend); DNA-only jobs send no proteins → clears to design.
+    nanoparticleRenderer?.applyOxdnaPoses?.(resp.nanoparticles || [])
     proteinRenderer?.applyOxdnaTransforms?.(proteinTransformMap(resp))
     _active = true
     _mode = 'relaxed'
@@ -1429,11 +1433,12 @@ export function initOxdnaDisplay({
   /** Ensure non-relaxed display modes use the REAL job strands, never the setup preview.
    *  setExtraNucleotides rebuilds the CG geometry, so callers MUST await this before _applyFem. */
   async function _applyJobCompanions(jobId, align, epoch, signal) {
-    if (!onSurfaceStrands && !proteinRenderer) return true
+    if (!onSurfaceStrands && !proteinRenderer && !nanoparticleRenderer) return true
     const key = _companionKey(jobId, align)
     if (_displayCompanionByJob.has(key)) {
       const display = _displayCompanionByJob.get(key)
       onSurfaceStrands?.(display?.surface_strands || null)
+      nanoparticleRenderer?.applyOxdnaPoses?.(display?.nanoparticles || [])
       proteinRenderer?.applyOxdnaTransforms?.(proteinTransformMap(display))
       return epoch === _epoch
     }
@@ -1441,6 +1446,7 @@ export function initOxdnaDisplay({
     if (epoch !== _epoch) return false
     _displayCompanionByJob.set(key, display || {})
     onSurfaceStrands?.(display?.surface_strands || null)
+    nanoparticleRenderer?.applyOxdnaPoses?.(display?.nanoparticles || [])
     proteinRenderer?.applyOxdnaTransforms?.(proteinTransformMap(display))
     return true
   }
@@ -1465,6 +1471,7 @@ export function initOxdnaDisplay({
     _cancelLoad()
     designRenderer.clearScalarColors?.()
     _applyFem(updates)
+    nanoparticleRenderer?.clearOxdnaPoses?.()
     proteinRenderer?.clearOxdnaTransforms?.()
     _active = true
     _mode = 'live'
@@ -1905,6 +1912,7 @@ export function initOxdnaDisplay({
     }
     _frameIdx = idx
     _stream?.prefetch(idx)
+    nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, _traj.frames[idx])
     _applyFem(framesToUpdates(_traj.keys, _traj.frames[idx]))
     _applyHeavy()   // atomistic/surface follow the scrub (coarse=snap, fine=exact)
   }
@@ -2006,6 +2014,7 @@ export function initOxdnaDisplay({
     onOccupancyClear?.()   // drop any superposed configuration ghosts with the model
     _applyFem(null)
     onSurfaceStrands?.(null)   // drop the real strands → seed preview resumes
+    nanoparticleRenderer?.clearOxdnaPoses?.()
     proteinRenderer?.clearOxdnaTransforms?.()   // proteins back to design pose
     _restoreHeavy()   // atomistic/surface back to the plain design (rebuild from design)
     restoreDesignVisible?.()

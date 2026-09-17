@@ -2989,7 +2989,7 @@ def _aligned_downsampled_frames(
             (k if copies else k[:3]) for k in _strand_nucleotide_order(design)
         )
     )
-    if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
+    if n_trailing_extra > 0 and trailing_extra_strand_length != 0:
         key_list.extend(
             _capture_particle_key(i, trailing_extra_strand_length)
             for i in range(int(n_trailing_extra))
@@ -3068,7 +3068,7 @@ def _aligned_downsampled_frames(
         return max(1, round(e * max_frames / total))
 
     total_kept = sum(_keep_for(e) for e in eff_lens if e > 0)  # progress denominator
-    if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
+    if n_trailing_extra > 0 and trailing_extra_strand_length != 0:
         total_kept += 1  # raw frame 0 supplies capture coordinates for the design seed
     total_kept = max(0, min(total_kept, frame_end + 1 if frame_end is not None else total_kept) - (frame_start or 0))
     composite_offset = 0
@@ -3105,7 +3105,7 @@ def _aligned_downsampled_frames(
         needed = sorted(
             {(p - 1 if seed_here else p) for p in picked if not (seed_here and p == 0)}
         )
-        if seed_here and n_trailing_extra > 0 and trailing_extra_strand_length > 0:
+        if seed_here and n_trailing_extra > 0 and trailing_extra_strand_length != 0:
             needed = sorted(set(needed) | {0})
 
         # Reuse any aligned frame already cached from a previously-viewed lineage that
@@ -3155,7 +3155,7 @@ def _aligned_downsampled_frames(
                         {
                             k: v
                             for k, v in af.items()
-                            if isinstance(k[0], str) and k[0].startswith("cap")
+                            if isinstance(k[0], str) and (k[0].startswith("cap") or k[0] == "__gold__")
                         }
                     )
                 aligned[idx] = _transform(af) if _transform is not None else af
@@ -3207,7 +3207,7 @@ def _aligned_downsampled_frames(
                     {
                         k: v
                         for k, v in first.items()
-                        if isinstance(k[0], str) and k[0].startswith("cap")
+                        if isinstance(k[0], str) and (k[0].startswith("cap") or k[0] == "__gold__")
                     }
                 )
                 stage_frames.append(
@@ -3265,6 +3265,8 @@ def _flatten_cg_frame_array(frame: dict, key_list):
         a3[i] = v["a3"]
     out = np.zeros((n, 9))
     out[:, 0:3] = oxdna_backbone_sites(cm, a1, a3)
+    for i, key in enumerate(key_list):
+        if key[0] == "__gold__": out[i, 0:3] = cm[i]
     out[:, 3:6] = a1
     out[:, 6:9] = a3
     return out.astype(np.float32, copy=False).reshape(-1)
@@ -3302,6 +3304,8 @@ def _flatten_cg_frame_ntrj_array(
     a3 = np.asarray([v["a3"] if v is not None else zero for v in values], dtype=dtype)
     out = np.empty((n, 6), dtype=dtype)
     out[:, 0:3] = oxdna_backbone_sites(cm, a1, a3)
+    for i, key in enumerate(key_list):
+        if key[0] == "__gold__": out[i, 0:3] = cm[i]
     out[:, 3:6] = a1
     return np.ascontiguousarray(out.reshape(-1))
 

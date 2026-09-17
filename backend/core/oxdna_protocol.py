@@ -92,6 +92,7 @@ class OxdnaStageSpec:
     # ANM parameter-file name in the job dir (the protein spring network); emitted
     # as `parfile = <name>` only for hybrid stages.
     parfile: str | None = None
+    gold_file: str | None = None
     peg_parameters: dict | None = None
     # ── Output-cadence overrides (benchmark trials) ─────────────────────────────
     # None → derive from `steps` as usual (~100 trajectory + energy samples).  A
@@ -430,11 +431,15 @@ def render_stage_input(
     lines.append("")
     interaction = spec.interaction or "DNA2"
     lines.append(f"interaction_type = {interaction}")
-    if interaction == "DNA2":
+    if interaction in ("DNA2", "DNA2GOLD"):
         # Pinned CUDA DNA2 omits the average-strength overrides in its initializer.
         # Upstream's equal-strength file reproduces the average model on both backends.
         lines.append("use_average_seq = false")
         lines.append(f"seq_dep_file = {sequence_parameters_name or AVERAGE_SEQUENCE_PATH}")
+    if interaction == "DNA2GOLD":
+        if spec.backend != "CUDA" or spec.sim_type != "MD" or not spec.gold_file or spec.refresh_vel or spec.thermostat not in ("langevin", "no"):
+            raise ValueError("Mobile gold requires GPU MD and its persistent core model")
+        lines.extend([f"gold_file = {spec.gold_file}", "CUDA_sort_every = 0", "CUDA_avoid_cpu_calculations = true", "configuration_print_energy = false", "print_initial_energy = false", "no_stdout_energy = true"])
     if spec.peg_parameters:
         if interaction != "DNA2PEG":
             raise ValueError("PEG parameters require the DNA2PEG interaction")

@@ -1,0 +1,33 @@
+{
+  "status": "assignment_graph_and_coverage_checked",
+  "sha256": "ccfd4c2d4c0f3b4178ad4f6e4f64e1e55f72a3a49fdfdf4ff6a77d972e0e6bef",
+  "cgenff_library": "5.0",
+  "atoms": 68,
+  "charge": -0.9999999999999999,
+  "parameters_resolved": true,
+  "psf_terms": {
+    "bonds": 69,
+    "angles": 129,
+    "dihedrals": 171,
+    "impropers": 2
+  },
+  "max_charge_penalty": 16.547,
+  "max_parameter_penalty": 26.0,
+  "simulation_ready": false,
+  "cgenff_program_version": "4.0",
+  "high_penalty_gt50_count": 0,
+  "moderate_charge_atoms": [
+    "C2",
+    "S1",
+    "C6",
+    "C5",
+    "N1",
+    "N2",
+    "C4"
+  ],
+  "raw_source": "experiments/strep_biotin_namd/ws/parameterization_final/BTMP.str",
+  "full_audit": "experiments/strep_biotin_namd/ws/parameterization_final/assignment_audit.json",
+  "qualification_plan": "experiments/strep_biotin_namd/ws/parameterization_final/assignment_qualification_plan.json",
+  "molecular_dynamics_run": false,
+  "runpod_spend_usd": 0
+}

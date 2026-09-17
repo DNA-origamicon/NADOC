@@ -295,3 +295,5 @@ refresh and verify history remains accessible without an alert. Verify the prese
 entry has disabled run controls and is not an independent ensemble replica. Use
 `frontend/e2e/alpine_restart_notice.spec.js` for the mocked acknowledgment check;
 do not acknowledge a real user's incident merely to run an automated test.
+
+- **MV-38 — PENDING — Mobile gold/strep/biotin/DNA playback (2026-09-16).** In an isolated review workspace, apply one streptavidin tetramer, generate biotinylated DNA, create a CUDA oxDNA job and inspect trajectory playback: core, coating and bound pocket must move together while DNA flexes; restore must recover the authored display. API and native CUDA checks pass; live browser gesture/display was not exercised. See `docs/oxdna_mobile_strep.md`. Delete disposable review outputs afterward.

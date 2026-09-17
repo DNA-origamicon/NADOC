@@ -1,0 +1,494 @@
+{
+  "date": "2026-09-16",
+  "junction": {
+    "schema": "nadoc.biotin-dna-junction.v1",
+    "simulation_ready": false,
+    "status": "candidate_topology_and_parameter_coverage_verified",
+    "source_stream_sha256": "ccfd4c2d4c0f3b4178ad4f6e4f64e1e55f72a3a49fdfdf4ff6a77d972e0e6bef",
+    "charge_method": "One equivalent methyl-cap H charge folded into C5; unchanged supplied ligand charges; native DNA types retained.",
+    "dna_atom_updates": {
+      "P": {
+        "atom_type": "P2",
+        "charge": 1.499,
+        "source_atom": "P"
+      },
+      "O1P": {
+        "atom_type": "ON3",
+        "charge": -0.784,
+        "source_atom": "OP1"
+      },
+      "O2P": {
+        "atom_type": "ON3",
+        "charge": -0.784,
+        "source_atom": "OP2"
+      },
+      "O5'": {
+        "atom_type": "ON2",
+        "charge": -0.567,
+        "source_atom": "O5C"
+      },
+      "C5'": {
+        "atom_type": "CN8B",
+        "charge": -0.07900000000000001,
+        "source_atom": "C5C + one equivalent cap H"
+      },
+      "H5'": {
+        "atom_type": "HN8",
+        "charge": 0.09,
+        "source_atom": "H065"
+      },
+      "H5''": {
+        "atom_type": "HN8",
+        "charge": 0.09,
+        "source_atom": "H066"
+      }
+    },
+    "ligand_charge": -0.465,
+    "mixed_terms": [
+      {
+        "kind": "bonds",
+        "atoms": [
+          "LIG:1:O4T",
+          "DNA:1:P"
+        ],
+        "target_types": [
+          "OG303",
+          "P2"
+        ],
+        "source_types": [
+          "ON2",
+          "P2"
+        ],
+        "source_family": "CHARMM_DNA"
+      },
+      {
+        "kind": "angles",
+        "atoms": [
+          "DNA:1:P",
+          "LIG:1:O4T",
+          "LIG:1:C8T"
+        ],
+        "target_types": [
+          "P2",
+          "OG303",
+          "CG321"
+        ],
+        "source_types": [
+          "PG1",
+          "OG303",
+          "CG321"
+        ],
+        "source_family": "CGenFF"
+      },
+      {
+        "kind": "angles",
+        "atoms": [
+          "LIG:1:O4T",
+          "DNA:1:P",
+          "DNA:1:O5'"
+        ],
+        "target_types": [
+          "OG303",
+          "P2",
+          "ON2"
+        ],
+        "source_types": [
+          "ON2",
+          "P2",
+          "ON2"
+        ],
+        "source_family": "CHARMM_DNA"
+      },
+      {
+        "kind": "angles",
+        "atoms": [
+          "LIG:1:O4T",
+          "DNA:1:P",
+          "DNA:1:O2P"
+        ],
+        "target_types": [
+          "OG303",
+          "P2",
+          "ON3"
+        ],
+        "source_types": [
+          "ON2",
+          "P2",
+          "ON3"
+        ],
+        "source_family": "CHARMM_DNA"
+      },
+      {
+        "kind": "angles",
+        "atoms": [
+          "LIG:1:O4T",
+          "DNA:1:P",
+          "DNA:1:O1P"
+        ],
+        "target_types": [
+          "OG303",
+          "P2",
+          "ON3"
+        ],
+        "source_types": [
+          "ON2",
+          "P2",
+          "ON3"
+        ],
+        "source_family": "CHARMM_DNA"
+      },
+      {
+        "kind": "dihedrals",
+        "atoms": [
+          "DNA:1:P",
+          "LIG:1:O4T",
+          "LIG:1:C8T",
+          "LIG:1:H064"
+        ],
+        "target_types": [
+          "P2",
+          "OG303",
+          "CG321",
+          "HGA2"
+        ],
+        "source_types": [
+          "PG1",
+          "OG303",
+          "CG321",
+          "HGA2"
+        ],
+        "source_family": "CGenFF"
+      },
+      {
+        "kind": "dihedrals",
+        "atoms": [
+          "DNA:1:P",
+          "LIG:1:O4T",
+          "LIG:1:C8T",
+          "LIG:1:H063"
+        ],
+        "target_types": [
+          "P2",
+          "OG303",
+          "CG321",
+          "HGA2"
+        ],
+        "source_types": [
+          "PG1",
+          "OG303",
+          "CG321",
+          "HGA2"
+        ],
+        "source_family": "CGenFF"
+      },
+      {
+        "kind": "dihedrals",
+        "atoms": [
+          "DNA:1:P",
+          "LIG:1:O4T",
+          "LIG:1:C8T",
+          "LIG:1:C7T"
+        ],
+        "target_types": [
+          "P2",
+          "OG303",
+          "CG321",
+          "CG321"
+        ],
+        "source_types": [
+          "PG1",
+          "OG303",
+          "CG321",
+          "CG321"
+        ],
+        "source_family": "CGenFF"
+      },
+      {
+        "kind": "dihedrals",
+        "atoms": [
+          "DNA:1:O1P",
+          "DNA:1:P",
+          "LIG:1:O4T",
+          "LIG:1:C8T"
+        ],
+        "target_types": [
+          "ON3",
+          "P2",
+          "OG303",
+          "CG321"
+        ],
+        "source_types": [
+          "OG2P1",
+          "PG1",
+          "OG303",
+          "CG321"
+        ],
+        "source_family": "CGenFF"
+      },
+      {
+        "kind": "dihedrals",
+        "atoms": [
+          "DNA:1:O2P",
+          "DNA:1:P",
+          "LIG:1:O4T",
+          "LIG:1:C8T"
+        ],
+        "target_types": [
+          "ON3",
+          "P2",
+          "OG303",
+          "CG321"
+        ],
+        "source_types": [
+          "OG2P1",
+          "PG1",
+          "OG303",
+          "CG321"
+        ],
+        "source_family": "CGenFF"
+      },
+      {
+        "kind": "dihedrals",
+        "atoms": [
+          "DNA:1:O5'",
+          "DNA:1:P",
+          "LIG:1:O4T",
+          "LIG:1:C8T"
+        ],
+        "target_types": [
+          "ON2",
+          "P2",
+          "OG303",
+          "CG321"
+        ],
+        "source_types": [
+          "OG303",
+          "PG1",
+          "OG303",
+          "CG321"
+        ],
+        "source_family": "CGenFF"
+      },
+      {
+        "kind": "dihedrals",
+        "atoms": [
+          "DNA:1:C5'",
+          "DNA:1:O5'",
+          "DNA:1:P",
+          "LIG:1:O4T"
+        ],
+        "target_types": [
+          "CN8B",
+          "ON2",
+          "P2",
+          "OG303"
+        ],
+        "source_types": [
+          "CN8B",
+          "ON2",
+          "P2",
+          "ON2"
+        ],
+        "source_family": "CHARMM_DNA"
+      }
+    ],
+    "controls": [
+      {
+        "bases": [
+          "ADE"
+        ],
+        "atoms": 93,
+        "charge": -1.0,
+        "unmodified_charge": 0.0,
+        "preserved_dna_atoms": 26,
+        "parameters_resolved": true,
+        "phosphate_coordination": 4
+      },
+      {
+        "bases": [
+          "CYT"
+        ],
+        "atoms": 91,
+        "charge": -1.0,
+        "unmodified_charge": -0.0,
+        "preserved_dna_atoms": 24,
+        "parameters_resolved": true,
+        "phosphate_coordination": 4
+      },
+      {
+        "bases": [
+          "GUA"
+        ],
+        "atoms": 94,
+        "charge": -1.0,
+        "unmodified_charge": -0.0,
+        "preserved_dna_atoms": 27,
+        "parameters_resolved": true,
+        "phosphate_coordination": 4
+      },
+      {
+        "bases": [
+          "THY"
+        ],
+        "atoms": 93,
+        "charge": -1.0,
+        "unmodified_charge": -0.0,
+        "preserved_dna_atoms": 26,
+        "parameters_resolved": true,
+        "phosphate_coordination": 4
+      },
+      {
+        "bases": [
+          "ADE",
+          "CYT",
+          "GUA",
+          "THY"
+        ],
+        "atoms": 188,
+        "charge": -4.0,
+        "unmodified_charge": -3.0,
+        "preserved_dna_atoms": 121,
+        "parameters_resolved": true,
+        "phosphate_coordination": 4
+      }
+    ],
+    "sources": [
+      "https://mackerell.umaryland.edu/cgenff_faq.php",
+      "https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/"
+    ],
+    "remaining": [
+      "actual complex coordinate/H completion and mapping",
+      "junction conformational/energetic validation",
+      "GPU NAMD physical validation"
+    ],
+    "files": {
+      "biotin_teg.rtf": "2a7c79f6abfa7c9b454f9efed39f9e20e984372d64c1351bf653079905ff0a79",
+      "biotin_teg_boundary.prm": "4403bf3ee95871de9bee7ee6839038774e5dc144755ca1595394cc0b543b0416",
+      "biotin_dA.psf": "e931a8189163e9d86e2e998eb0d1b47af32083afd68bed96a4b8d19205f265ac"
+    }
+  },
+  "complex": {
+    "status": "isolated_complex_topology_complete",
+    "simulation_ready": false,
+    "atoms": 7291,
+    "charge": -16.0,
+    "mapped_heavy_atoms": 3796,
+    "preserved_heavy_atoms": 3796,
+    "maximum_heavy_displacement_angstrom": 0.0,
+    "parameters_resolved": true,
+    "bonds": 7400,
+    "angles": 13190,
+    "dihedrals": 19306,
+    "impropers": 1280,
+    "cmaps": 476,
+    "source_design_sha256": "dec30719097390c5e86e918c060041e09c3088aff0d2e0d534de268ab03d115c",
+    "junction_manifest_sha256": "85d34eb30f6d2222fff1e69023ad73c50208d3a07a365e84963a9361b4bd3b72",
+    "remaining": [
+      "junction conformational/energetic validation",
+      "GPU NAMD physical validation"
+    ]
+  },
+  "gpu": {
+    "status": "numerical_check_completed",
+    "simulation_ready": false,
+    "returncode": 0,
+    "elapsed_seconds": 113.22545246699883,
+    "atoms": 94121,
+    "solute_atoms": 7291,
+    "water_molecules": 28880,
+    "sodium": 103,
+    "chloride": 87,
+    "box_nm": [
+      10.1831,
+      10.4465,
+      9.007200000000001
+    ],
+    "gpu_log_evidence": [
+      "Info: Built with CUDA version 12060",
+      "Pe 0 physical rank 0 will use CUDA device of pe 2",
+      "Pe 2 physical rank 2 binding to CUDA device 0 on DESKTOP-T44QS0K: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 8191MB  Rev: 7.5  PCI: 0:7:0",
+      "Pe 1 physical rank 1 will use CUDA device of pe 2",
+      "Pe 3 physical rank 3 will use CUDA device of pe 2",
+      "Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA",
+      "Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  4    DESKTOP-T44QS0K  joshua",
+      "Info: Tuning parameters to improve GPU-resident performance",
+      "Warning: Disabling lonepair support due to incompatability with GPU-resident.",
+      "Info: Running with GPU-resident mode",
+      "Info: PME CALCULATION WILL BE PERFORMED ON GPU",
+      "Info: Updated CUDA force table with 4096 elements.",
+      "Info: Updated CUDA LJ table with 278 x 278 elements."
+    ],
+    "intended_md_steps": 20000,
+    "intended_md_ps": 20,
+    "last_energy": "ENERGY:   22000      1495.0417      3980.3048      4255.1322       239.9424        -344717.7932     27973.0590         0.0000         0.0000     57074.1601        -249700.1530       298.8163   -306774.3131   -249376.4281       299.1086           -671.4009      -637.0203    958165.7072      -705.2648      -673.7064",
+    "forcefield_sha256": {
+      "/home/joshua/NADOC/experiments/strep_biotin_namd/ws/junction_gpu_final/forcefield/par_all36_na.prm": "1ada57015c112529aa985ee60163f11a94e991a334cc9928e030d2236899df05",
+      "/home/joshua/NADOC/experiments/strep_biotin_namd/ws/junction_gpu_final/forcefield/par_all36m_prot.prm": "b1d1c70b5f350a2d5758bf3ce7ec86e50cdc3f69d8cc3097f98f279cdaeb5aaa",
+      "/home/joshua/NADOC/experiments/strep_biotin_namd/ws/junction_gpu_final/forcefield/par_all36_cgenff.prm": "9d661c12d147513272411ae893118fa3a543c61db811b67c3b24132000d69b28",
+      "/home/joshua/NADOC/experiments/strep_biotin_namd/ws/junction_gpu_final/forcefield/BTMP.str": "ccfd4c2d4c0f3b4178ad4f6e4f64e1e55f72a3a49fdfdf4ff6a77d972e0e6bef",
+      "/home/joshua/NADOC/experiments/strep_biotin_namd/ws/junction_gpu_final/forcefield/biotin_teg_boundary.prm": "4403bf3ee95871de9bee7ee6839038774e5dc144755ca1595394cc0b543b0416",
+      "/home/joshua/NADOC/experiments/strep_biotin_namd/ws/junction_gpu_final/forcefield/water_ions_active.str": "b679d5626bd548b6bb655844732557eb731677a18c8d7c6b8de52eb49a8ea8ec"
+    },
+    "limitation": "Short GPU numerical check; no claim of binding affinity, lifetime, or equilibrium conformational accuracy."
+  },
+  "trajectory": {
+    "gpu_resident_verified": true,
+    "complete_20000_step_run": true,
+    "frames": 220,
+    "md_samples": 200,
+    "dcd_first_step": 100,
+    "dcd_stride": 100,
+    "bond_statistics_md": {
+      "linker_C_O": {
+        "min_nm": 0.13511592149734497,
+        "max_nm": 0.14996196329593658,
+        "mean_nm": 0.14388589560985565,
+        "std_nm": 0.002758957212790847
+      },
+      "junction_O_P": {
+        "min_nm": 0.14996133744716644,
+        "max_nm": 0.1664278358221054,
+        "mean_nm": 0.15810702741146088,
+        "std_nm": 0.0032623675651848316
+      },
+      "DNA_P_O5": {
+        "min_nm": 0.14901556074619293,
+        "max_nm": 0.1692582070827484,
+        "mean_nm": 0.15763525664806366,
+        "std_nm": 0.0034804518800228834
+      },
+      "DNA_O5_C5": {
+        "min_nm": 0.13746976852416992,
+        "max_nm": 0.1533239334821701,
+        "mean_nm": 0.14468801021575928,
+        "std_nm": 0.002820003079250455
+      }
+    },
+    "biotin_ring_max_rmsd_after_protein_alignment_nm": 0.11358249187469482,
+    "median_md_seconds_per_step": 0.004103505,
+    "simulation_ready": false,
+    "qualification": "20 ps numerical stability only; no equilibrium or affinity claim"
+  },
+  "focused_tests": {
+    "passed": 4,
+    "seconds": 1.16
+  },
+  "test_smart": {
+    "decision": "FAST",
+    "passed": 8615,
+    "failed": 29,
+    "errors": 9,
+    "skipped": 43,
+    "pytest_seconds": 87.65,
+    "wrapper_seconds": 95,
+    "per_test_violators": 0,
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "triage": "Aggregate timing warning with no per-test violator; native development work ran concurrently. No test relegation or budget changes."
+  },
+  "runpod_attempts": 0,
+  "runpod_spend_usd": 0,
+  "local_cuda_attempts": 3,
+  "local_md_runs": 1,
+  "experimental_namd_junction_available": true,
+  "production_export_enabled": false
+}

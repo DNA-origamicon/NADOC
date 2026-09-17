@@ -16,7 +16,7 @@ import shlex
 import tarfile
 import tempfile
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -150,16 +150,34 @@ class CampaignLedger:
         self._write(rows)
 
 
-def engine_dir(cuda_arch: str) -> str:
-    return f"{REMOTE_ROOT}/engines/{OXDNA_REV}-adaptive-portable-physics-v3-sm{cuda_arch}"
+def _gold_build_id() -> str:
+    import hashlib
+    root = Path(__file__).resolve().parents[2] / "tools/oxdna_mobile_gold"
+    digest = hashlib.sha256()
+    for path in sorted(root.glob("*")):
+        if path.is_file(): digest.update(path.name.encode() + path.read_bytes())
+    return digest.hexdigest()[:16]
 
 
-def render_build_script(cuda_arch: str, patch_remote_path: str) -> str:
+def _gold_stages(specs) -> bool:
+    gold = any(s.interaction == "DNA2GOLD" for s in specs)
+    if gold and any(s.interaction != "DNA2GOLD" or s.backend != "CUDA" or s.sim_type != "MD" for s in specs):
+        raise RunpodOxdnaError("Every mobile-gold RunPod stage must use CUDA MD with DNA2GOLD")
+    return gold
+
+
+def engine_dir(cuda_arch: str, mobile_gold: bool = False) -> str:
+    suffix = f"-gold-{_gold_build_id()}" if mobile_gold else ""
+    return f"{REMOTE_ROOT}/engines/{OXDNA_REV}-adaptive-portable-physics-v3-sm{cuda_arch}{suffix}"
+
+
+def render_build_script(cuda_arch: str, patch_remote_path: str, mobile_gold: bool = False) -> str:
     """Persist a host-portable build: later pods may have different CPU features."""
     if cuda_arch not in {"90", "120"}:
         raise RunpodOxdnaError(f"unsupported CUDA architecture sm_{cuda_arch}")
-    install = engine_dir(cuda_arch)
-    source = f"{REMOTE_ROOT}/source-{OXDNA_REV}"
+    install = engine_dir(cuda_arch, mobile_gold)
+    source = f"{REMOTE_ROOT}/source-{OXDNA_REV}" + (f"-gold-{_gold_build_id()}" if mobile_gold else "")
+    gold_patch = f'python3 {REMOTE_ROOT}/mobile_gold/patch_engine.py "$source_dir"\npython3 {REMOTE_ROOT}/mobile_gold/patch_mixed.py "$source_dir"' if mobile_gold else ""
     q = shlex.quote
     return f"""#!/usr/bin/env bash
 set -euo pipefail
@@ -189,6 +207,7 @@ git -C "$source_dir" apply --check {q(REMOTE_ROOT + "/cuda-bussi-rng.patch")}
 git -C "$source_dir" apply {q(REMOTE_ROOT + "/cuda-bussi-rng.patch")}
 git -C "$source_dir" apply --check {q(REMOTE_ROOT + "/physics-corrections.patch")}
 git -C "$source_dir" apply {q(REMOTE_ROOT + "/physics-corrections.patch")}
+{gold_patch}
 cmake -S "$source_dir" -B "$source_dir/build-sm{cuda_arch}" \
   -DCMAKE_BUILD_TYPE=Release -DCUDA=ON -DCMAKE_CUDA_ARCHITECTURES={cuda_arch} -DNATIVE_COMPILATION=OFF
 cmake --build "$source_dir/build-sm{cuda_arch}" -j"$(nproc)" --target oxDNA DNAnalysis
@@ -209,7 +228,7 @@ def render_chain_script(job_id: str, specs: list[OxdnaStageSpec], cuda_arch: str
     if not specs:
         raise RunpodOxdnaError("oxDNA job has no stages")
     root = f"{REMOTE_ROOT}/jobs/{job_id}"
-    binary = f"{engine_dir(cuda_arch)}/bin/oxDNA"
+    binary = f"{engine_dir(cuda_arch, _gold_stages(specs))}/bin/oxDNA"
     lines = [
         "#!/usr/bin/env bash", "set -euo pipefail", f"root={shlex.quote(root)}",
         f"oxdna={shlex.quote(binary)}", "cd \"$root\"",
@@ -237,7 +256,10 @@ def stage_inputs(job_dir: Path, specs: list[OxdnaStageSpec], remote_job_dir: str
     from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_FILE, AVERAGE_SEQUENCE_PATH
     recorded_parameters = job_dir / AVERAGE_SEQUENCE_FILE
     result: dict[str, str] = {AVERAGE_SEQUENCE_FILE: (recorded_parameters if recorded_parameters.exists() else AVERAGE_SEQUENCE_PATH).read_text()}
+    _gold_stages(specs)
     for idx, spec in enumerate(specs):
+        if spec.interaction == "DNA2GOLD":
+            spec = replace(spec, gold_file=f"{remote_job_dir}/mobile_gold.dat")
         conf = "conf.dat" if idx == 0 else f"{specs[idx - 1].name}/last_conf.dat"
         forces = (
             f"{remote_job_dir}/{spec.forces_file or 'forces.txt'}"
@@ -272,7 +294,7 @@ def manifest(job_id: str, specs: list[OxdnaStageSpec], target: OxdnaGpuTarget) -
     return {
         "schema": 1,
         "job_id": job_id,
-        "engine": "oxdna-adaptive-memory",
+        "engine": "oxdna-mobile-gold-" + _gold_build_id() if _gold_stages(specs) else "oxdna-adaptive-memory",
         "source_url": OXDNA_URL,
         "source_revision": OXDNA_REV,
         "bussi_rigid_dofs": "v1",
@@ -366,8 +388,15 @@ async def stage_prepared_job(
     if not patch_path.is_file():
         raise RunpodOxdnaError(f"adaptive-memory patch is missing: {patch_path}")
 
+    mobile_gold = _gold_stages(specs)
     remote = f"{REMOTE_ROOT}/jobs/{job_id}"
     await conn.mkdir_p(remote)
+    if mobile_gold:
+        await conn.mkdir_p(f"{REMOTE_ROOT}/mobile_gold")
+        gold_root = Path(__file__).resolve().parents[2] / "tools/oxdna_mobile_gold"
+        for path in sorted(gold_root.glob("*")):
+            if path.is_file():
+                await conn.sftp_put(str(path), f"{REMOTE_ROOT}/mobile_gold/{path.name}")
     patch_remote = f"{REMOTE_ROOT}/adaptive-neighbor-lists.patch"
     await conn.sftp_put(str(patch_path), patch_remote)
     thermostat_patch = Path(__file__).resolve().parents[2] / "tools/oxdna_thermostat/rigid-body-bussi.patch"
@@ -409,7 +438,7 @@ async def stage_prepared_job(
         f"{remote}/nadoc_chain.sh",
     )
     await _upload_text(
-        conn, render_build_script(target.cuda_arch, patch_remote),
+        conn, render_build_script(target.cuda_arch, patch_remote, mobile_gold),
         f"{remote}/build_engine.sh",
     )
     return remote
@@ -456,6 +485,9 @@ async def run_prepared_job_on_pod(
     ``terminateAfter`` is provider-owned and the context manager also destroys the pod.
     The ledger is opened at pod creation (billing start), including failed SSH boots.
     """
+    if (job_dir / "mobile_gold.dat").exists() and not _gold_stages(specs):
+        raise RunpodOxdnaError("Mobile gold model present but CUDA DNA2GOLD stages are missing")
+    _gold_stages(specs)  # reject mixed/CPU stages BEFORE renting anything
     spent_before = ledger.spent_usd()
     allowed_lifetime = budgeted_lifetime_s(
         ledger, quoted_rate_usd_per_hour, lifetime_s

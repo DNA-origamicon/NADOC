@@ -84,6 +84,14 @@ avoiding a hidden animation-creation step after dot import.
 - `scripts/build_gold_optics.py` generates the bundled 5–100 nm, 400–800 nm Mie reference grid using miepython 3.0.2 and CC0 Johnson–Christy bulk n/k; water n=1.333, no coating/surface-damping correction. Fractional sizes interpolate cross sections; out-of-range scene sizes can be created but have no optical estimate. See `docs/gold_optics.md` for provenance and units.
 # Streptavidin coatings (2026-09-12)
 
+Update 2026-09-16: mobile CUDA `DNA2GOLD` now includes a rough rigid strep coating,
+permanent biotin pockets, flexible effective 5′ DNA linkers and monomer-sphere
+sterics. New biotin-DNA creation sets `oxdna_fixed_core=False`; existing fixed
+documents retain legacy behavior. See `docs/oxdna_mobile_strep.md`. Other engines
+and plain DNA-only exports still reject coatings. Parameters, coating drag/mass
+and origami equilibration remain unqualified. Development runs belong in
+`experiments/mobile_gold/ws/`, never the main user workspace.
+
 - Gold creation enables strep; right-click either gold or a custom QD → Streptavidin coating supports apply/change/remove. Default target floor(pi*d²/40), supported core sizes 5–100 nm, adjustable footprint 25–100 nm²; actual count excludes PDB heavy-atom clashes. No mixed thiol-DNA/strep layers yet.
 - `backend/core/streptavidin.py` imports bundled `backend/data/proteins/1STP-assembly1.pdb`: flatten four biological-assembly MODELs into A–D, 484 CA/3604 protein heavy atoms. Adsorption uses seeded isotropic rotations; biotin mode retains one BTN and points its C10→C11 tail inward with a default geometric 4 nm spacer. Linker atoms/force field are not invented.
 - `Nanoparticle.coating` owns one full ProteinAsset and local Mat4x4 poses. `streptavidin_renderer.js` instances the PDB chain traces under the particle mesh, following live transforms. Snapshot history handles create, resize, coat/remove, delete, undo/redo and save/load. Vendor functionalized Qdot presets still lack verified core/coating geometry and stay deferred; custom coatings work on imported QDs.
@@ -161,6 +169,43 @@ Playwright clicks all five integer steppers and verifies no vertical overflow
 in the DNA column at the standard 960×600 manager size.
 
 ### Biotin visualization (2026-09-14)
+
+NAMD follow-up (2026-09-16): `backend/core/strep_biotin_namd.py` and
+`scripts/prepare_strep_biotin_namd.py` export isolated gold-free atomistic
+components and explicit ligand/DNA/protein identity. Preserve the biotinylated
+5′ phosphate: standard CHARMM 5TER deletes it. Native protein psfgen mapping and
+CHARMM36m coverage pass, but full-complex NAMD remains blocked on qualified
+Biotin-TEG/BTE5 charges and parameters. Do not treat the generated preparation
+recipe as a runnable NAMD package. See `docs/strep_biotin_namd.md`.
+Literature audit (2026-09-16): published models exist: Comer et al. 2012
+(10.1002/elps.201200164) used custom CHARMM-compatible biotin/linker/DNA patches;
+Sedlak et al. 2020 (10.1126/sciadv.aay5999) used CGenFF biotin/PEG in GPU NAMD.
+Raw assignments and exact Biotin-TEG–5′-DNA equivalence remain unverified.
+Prefer reuse plus targeted qualification; do not infer missing published
+parameters from the local library audit. See `docs/strep_biotin_parameter_literature.md`.
+Parameterization setup: `experiments/strep_biotin_namd/prepare_parameterization.py`
+builds an isolated all-H, charge -1 methyl-phosphodiester model, preserves biotin
+stereochemistry, copies unchanged CHARMM references with hashes, and defines
+boundary/QM targets. `validate_parameterization.py` checks chemical roundtrip and
+native psfgen coverage of reference NMA/DME/DMEP/UREA. Final evidence stays in
+`experiments/strep_biotin_namd/ws/parameterization_final/`. Literature ligand files
+not recovered; no licensed CGenFF executable found. User supplied website-generated
+`ws/parameterization_final/BTMP.str` (program 4.0/library 5.0). Atom graph, charge
+−1 and coverage pass: 68 atoms, 69 bonds, 129 angles, 171 dihedrals, two impropers.
+Maximum bonded/charge penalties 26/16.547; preserve this unvalidated seed and
+prioritize biotin ring/pocket and actual DNA boundary checks. See
+`assignment_qualification_plan.json` and `docs/validation/biotin_cgenff_assignment_2026-09-16.json`.
+`audit_assignment.py` handles current/legacy version headers; five importer tests
+pass. Subsequent junction work adds a 60-atom BTE/BTE5 candidate with explicit
+mixed-term source families, methyl-H charge folding into C5′, native DNA P2/types,
+and unchanged ligand charges. All four bases and ACGT controls pass coverage and
+−1 e attachment-charge checks. Full complex: 7,291 atoms, −16 e, 3,796 source
+heavy atoms preserved exactly; complete coverage. C7 ligand-name alias regression
+fixed in preparation formatter. Local GPU-resident NAMD passes 20 ps on 94,121
+atoms (~244 steps/s); O–P 1.500–1.664 Å. No RunPod spending. Two earlier CUDA
+initialization failures were unused NBFIX type references; the isolated runner
+filters only pairs absent from the actual PSF. This is experimental numerical
+validation, not production/affinity qualification. See `docs/biotin_dna_junction.md`.
 - Full and manager preview: one yellow bound-ring marker per occupied DNA pocket, using shared PDB-derived `biotin_pockets.json`; per-tetramer simulation deltas now independent.
 - Native atomistic/VDW/sticks/surface: actual biotin-TEG heavy-atom graph, constrained tail/spacer fit with fixed ring and tetrahedral 5′ phosphate approach. New manager/API reach default 1.8 nm; saved values unchanged. Failed fits show a real unconnected spacer + warning rather than stretched DNA bond. Display chemistry does not stale oxDNA jobs.
 - `docs/biotin_display.md` describes sources, assumptions and limitations. This is display geometry, not NAMD parameters or an equilibrium model. Dynamic atomistic protein/ligand reconstruction still needs integration/validation; do not interpret native-pose biotin in atomistic trajectory display as simulated ligand motion.
@@ -171,3 +216,12 @@ in the DNA column at the standard 960×600 manager size.
 - Backend prepared 6-strand build ~14 ms vs same DNA-only ~13 ms; cold fit formerly seconds. Native-view and matched-atom-count browser benchmark: `frontend/e2e/biotin_loading.spec.js`, fixtures from `scripts/biotin_loading_fixtures.py`, results in `workspace/validation/biotin_loading_20260914/`; details in `docs/biotin_display.md`.
 - Protein spheres use existing analytic sphere impostors. Native cache misses clear the renderer's retained previous-part atoms before switching; identity-only saves preserve the in-flight atom request. `nanoparticle_render_dependencies.js` prevents identical save responses rebuilding coating GPU resources, while molecular/placement edits and undo still invalidate them.
 - Coatings opt into `unitSphereImpostors`: one material/program across elements and sphere modes, with actual radii in instance transforms. Final headless matched-atom benchmark: first painted Ball & Stick 956 ms coated / 1504 ms DNA; VDW 1263 / 1651 ms. Repeat switch setup faster in all three modes, but Stick painting remains slower (317 / 214 ms). Do not claim universal frame-time parity. 18 backend, 95 frontend, and two Playwright checks passed; final log and full metrics retained in the validation directory above.
+
+### Biotin terminal extensions and Alpine validation (2026-09-16)
+- `biotin_extensions.ensure_biotin_extensions` adds missing modification-only 5′ Biotin-TEG extension records on create/Design parsing (stable strand-based ID, idempotent, existing explicit extensions preserved). Biotin counts as an extension, never a nucleotide; canonical duplex relocation/reversion retains it. Generic 3′ extension metadata works, but existing conjugate chemistry/atomistic patch remains 5′ only.
+- Modification-only extensions retain the real DNA 5′ terminal flag; nucleotide tails still replace it. Handle/particle deletion removes owned extensions and undo restores them. 59 focused tests + live bound-handle extension rendering/editor passed; FAST broad suite still has 29 failures/9 errors (8619 passes).
+- Alpine Slurm **32611941**, `ah200` H200, 5 ns continuation from the validated local 20 ps checkpoint; 94,121 atoms, NVT300K/1fs, GPUresident, 8h limit. Last observed pending on Priority, not yet validated. Remote `/scratch/alpine/jojo6687/nadoc_validation/biotin_dna_5ns_20260916`; receipt/config/hashes/logs in ignored `experiments/strep_biotin_namd/ws/junction_alpine_5ns/`. No RunPod spend. Check receipt before submitting anything else; do not duplicate. See `docs/biotin_dna_junction.md` for monitoring/qualification limits.
+
+- **Alpine replacement 2026-09-16:** user reports H200 concurrency prevents this validation alongside their other H200 job. Canceled **32611941** (sacct confirmed), submitted **32620740** on `artxpro6000`, `gpu:rtx_pro_6000:1`, GPU-resident NAMD; same 5 ns/checkpoint/8h limit. Latest status PENDING (Priority). Authoritative receipt/evidence: `experiments/strep_biotin_namd/ws/junction_alpine_5ns_rtx6000/`; remote `/scratch/alpine/jojo6687/nadoc_validation/biotin_dna_5ns_rtx6000_20260916`. Monitor replacement, never resubmit original.
+
+- Latest Alpine result: **32620740 FAILED (6 s, exit 1:0)** before NAMD because `gcc/11.2.0` is unavailable on the RTX Pro 6000 node. Zero MD steps; module environment must be corrected before retry. No replacement of this failed job has been submitted. Supersedes the pending status above.

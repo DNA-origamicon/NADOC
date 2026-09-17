@@ -1,0 +1,272 @@
+{
+  "mechanics": [
+    {
+      "name": "graft_False_float",
+      "steps": 1,
+      "wall_s": 0.6158843070006697,
+      "steps_per_s": 1.6236815723880957,
+      "directory": "workspace/mobile_gold_validation_final/graft_False_float",
+      "force_error": 1.7016720624111106e-06,
+      "reciprocal_error": 4.246473476525632e-07,
+      "core_torque_error": 1.5906620127736915e-06
+    },
+    {
+      "name": "graft_False_mixed",
+      "steps": 1,
+      "wall_s": 0.6165586710048956,
+      "steps_per_s": 1.6219056628790154,
+      "directory": "workspace/mobile_gold_validation_final/graft_False_mixed",
+      "force_error": 1.7016720624111106e-06,
+      "reciprocal_error": 4.246473476525632e-07,
+      "core_torque_error": 1.5906620127736915e-06
+    },
+    {
+      "name": "graft_True_float",
+      "steps": 1,
+      "wall_s": 0.7671022919967072,
+      "steps_per_s": 1.3036071074655224,
+      "directory": "workspace/mobile_gold_validation_final/graft_True_float",
+      "force_error": 1.7016720624111106e-06,
+      "reciprocal_error": 4.246473476525632e-07,
+      "core_torque_error": 1.5906620127736915e-06
+    },
+    {
+      "name": "graft_True_mixed",
+      "steps": 1,
+      "wall_s": 0.5656556429967168,
+      "steps_per_s": 1.7678600264680897,
+      "directory": "workspace/mobile_gold_validation_final/graft_True_mixed",
+      "force_error": 1.7016720624111106e-06,
+      "reciprocal_error": 4.246473476525632e-07,
+      "core_torque_error": 1.5906620127736915e-06
+    },
+    {
+      "name": "dna_exclusion",
+      "steps": 1,
+      "wall_s": 0.566580979997525,
+      "steps_per_s": 1.764972767007407,
+      "directory": "workspace/mobile_gold_validation_final/dna_exclusion"
+    },
+    {
+      "name": "core_exclusion",
+      "steps": 1,
+      "wall_s": 0.5168512199961697,
+      "steps_per_s": 1.9347927630071395,
+      "directory": "workspace/mobile_gold_validation_final/core_exclusion"
+    },
+    {
+      "name": "restart_full",
+      "steps": 200,
+      "wall_s": 0.7160134369987645,
+      "steps_per_s": 279.32436692573566,
+      "directory": "workspace/mobile_gold_validation_final/restart_full"
+    },
+    {
+      "name": "restart_half",
+      "steps": 100,
+      "wall_s": 0.6656641860026866,
+      "steps_per_s": 150.22589783671552,
+      "directory": "workspace/mobile_gold_validation_final/restart_half"
+    },
+    {
+      "name": "restart_split",
+      "steps": 100,
+      "wall_s": 0.5661820300010731,
+      "steps_per_s": 176.62164233614138,
+      "directory": "workspace/mobile_gold_validation_final/restart_split"
+    }
+  ],
+  "sweep": [
+    {
+      "name": "nve_dt0.001_k3.0",
+      "steps": 10000,
+      "wall_s": 2.470045483998547,
+      "steps_per_s": 4048.5084443918213,
+      "directory": "workspace/mobile_gold_sweep_v1/nve_dt0.001_k3.0",
+      "dt": 0.001,
+      "k": 3.0,
+      "relative_energy_span": 2.516566403309272e-06,
+      "max_linker": 1.4935072192000083,
+      "core_displacement": 0.013768603421581257,
+      "core_rotation": 0.007939021378358724
+    },
+    {
+      "name": "nve_dt0.001_k10.0",
+      "steps": 10000,
+      "wall_s": 2.470886046998203,
+      "steps_per_s": 4047.1311949608794,
+      "directory": "workspace/mobile_gold_sweep_v1/nve_dt0.001_k10.0",
+      "dt": 0.001,
+      "k": 10.0,
+      "relative_energy_span": 6.6470859913629375e-06,
+      "max_linker": 1.4932056014753878,
+      "core_displacement": 0.0033773929652294995,
+      "core_rotation": 0.00034102456688735145
+    },
+    {
+      "name": "nve_dt0.001_k30.0",
+      "steps": 10000,
+      "wall_s": 2.321893923995958,
+      "steps_per_s": 4306.828962621209,
+      "directory": "workspace/mobile_gold_sweep_v1/nve_dt0.001_k30.0",
+      "dt": 0.001,
+      "k": 30.0,
+      "relative_energy_span": 1.875099040212989e-05,
+      "max_linker": 1.4924409187427916,
+      "core_displacement": 0.01123341550259372,
+      "core_rotation": 0.008392328026842142
+    },
+    {
+      "name": "nve_dt0.002_k3.0",
+      "steps": 10000,
+      "wall_s": 2.2693626429972937,
+      "steps_per_s": 4406.523580908318,
+      "directory": "workspace/mobile_gold_sweep_v1/nve_dt0.002_k3.0",
+      "dt": 0.002,
+      "k": 3.0,
+      "relative_energy_span": 1.6211104105173674e-05,
+      "max_linker": 1.4935076336403341,
+      "core_displacement": 0.012950446963226104,
+      "core_rotation": 0.006971155474341852
+    },
+    {
+      "name": "nve_dt0.002_k10.0",
+      "steps": 10000,
+      "wall_s": 2.3697219339956064,
+      "steps_per_s": 4219.904393229345,
+      "directory": "workspace/mobile_gold_sweep_v1/nve_dt0.002_k10.0",
+      "dt": 0.002,
+      "k": 10.0,
+      "relative_energy_span": 7.252954966199678e-05,
+      "max_linker": 1.4889515784082312,
+      "core_displacement": 0.01268643053453147,
+      "core_rotation": 0.015836978073572906
+    },
+    {
+      "name": "nve_dt0.002_k30.0",
+      "steps": 10000,
+      "wall_s": 2.519450574000075,
+      "steps_per_s": 3969.1193402231443,
+      "directory": "workspace/mobile_gold_sweep_v1/nve_dt0.002_k30.0",
+      "dt": 0.002,
+      "k": 30.0,
+      "relative_energy_span": 0.00011723188370984355,
+      "max_linker": 1.4832834640786652,
+      "core_displacement": 0.007799025572796212,
+      "core_rotation": 0.05656492180164592
+    },
+    {
+      "name": "nve_dt0.004_k3.0",
+      "steps": 10000,
+      "wall_s": 2.4730953670004965,
+      "steps_per_s": 4043.5157226179026,
+      "directory": "workspace/mobile_gold_sweep_v1/nve_dt0.004_k3.0",
+      "dt": 0.004,
+      "k": 3.0,
+      "relative_energy_span": 0.00025062985982046747,
+      "max_linker": 1.4917909729606011,
+      "core_displacement": 0.018199062537712363,
+      "core_rotation": 0.02810570041817402
+    },
+    {
+      "name": "nve_dt0.004_k10.0",
+      "steps": 10000,
+      "wall_s": 2.6706563329935307,
+      "steps_per_s": 3744.397913149323,
+      "directory": "workspace/mobile_gold_sweep_v1/nve_dt0.004_k10.0",
+      "dt": 0.004,
+      "k": 10.0,
+      "relative_energy_span": 0.00027157087507231794,
+      "max_linker": 1.4909279268355575,
+      "core_displacement": 0.014760034675502666,
+      "core_rotation": 0.018269338509932315
+    },
+    {
+      "name": "nve_dt0.004_k30.0",
+      "steps": 10000,
+      "wall_s": 2.8223028689972125,
+      "steps_per_s": 3543.205837278932,
+      "directory": "workspace/mobile_gold_sweep_v1/nve_dt0.004_k30.0",
+      "dt": 0.004,
+      "k": 30.0,
+      "relative_energy_span": 0.0004970439796716718,
+      "max_linker": 1.483308721455776,
+      "core_displacement": 0.01549308787048174,
+      "core_rotation": 0.06283515051010735
+    },
+    {
+      "name": "thermal",
+      "steps": 100000,
+      "wall_s": 28.64929703400412,
+      "steps_per_s": 3490.487039919655,
+      "directory": "workspace/mobile_gold_sweep_v1/thermal",
+      "translational_temperature_ratio": 0.9394939269601991,
+      "rotational_temperature_ratio": 0.9883299696342768,
+      "max_core_displacement": 8.58340016889003
+    }
+  ],
+  "benchmark": [
+    {
+      "name": "dna",
+      "n_dna": 6012,
+      "steps": 20000,
+      "wall_s": 6.582899534005264,
+      "steps_per_s": 3038.1748797298305
+    },
+    {
+      "name": "gold",
+      "n_dna": 6012,
+      "steps": 20000,
+      "wall_s": 6.98430992300564,
+      "steps_per_s": 2863.5613568810772,
+      "linker_nm": 0.8162407886577642,
+      "core_displacement_nm": 0.09166044286443217,
+      "core_rotation_rad": 0.0327048940066193
+    }
+  ],
+  "generated_handles": [
+    {
+      "end": "5p",
+      "steps": 30000,
+      "graft_lengths_nm": [
+        0.48588780387632013,
+        0.7409172065480378,
+        0.593412279889533
+      ],
+      "core_translation_nm": 0.1674893222168493
+    },
+    {
+      "end": "3p",
+      "steps": 30000,
+      "graft_lengths_nm": [
+        0.6032095818960027,
+        0.8531319874512292,
+        0.674984455967139
+      ],
+      "core_translation_nm": 0.1643521820886661
+    }
+  ],
+  "dna_control": [
+    {
+      "stage": "1_gpu_relax",
+      "bp_retained_fraction": 0.8538194444444445
+    },
+    {
+      "stage": "2_equil",
+      "bp_retained_fraction": 0.47881944444444446
+    }
+  ],
+  "parameters_qualified": false,
+  "hardware": "RTX 2080 SUPER",
+  "runpod_spend_usd": 0,
+  "runpod_budget_usd": 5,
+  "long_origami": {
+    "job": "b9ea567b8dd7",
+    "status": "failed",
+    "relax_steps": 200000,
+    "equil_steps": 50000,
+    "relax_retention": 0.5947916666666667,
+    "equil_retention": 0.5444444444444444,
+    "required_retention": 0.8
+  }
+}

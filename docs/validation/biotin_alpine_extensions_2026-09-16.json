@@ -1,0 +1,58 @@
+{
+  "job_id": "32611941",
+  "remote_dir": "/scratch/alpine/jojo6687/nadoc_validation/biotin_dna_5ns_20260916",
+  "submitted_utc": "2026-09-16T08:16:40.679507+00:00",
+  "additional_ns": 5,
+  "first_step": 22000,
+  "final_step": 5022000,
+  "timestep_fs": 1,
+  "ensemble": "NVT 300 K",
+  "gpu": "H200, GPUresident on",
+  "source": "junction_gpu_final validated 20 ps checkpoint",
+  "parameter_qualification": "experimental transfer; this tests stability, not QM accuracy",
+  "input_sha256": {
+    "system.psf": "c9047a5c9e499e109a98a9a67d9bdaf502d327ea89369781c95014d8acfc6fe2",
+    "system.pdb": "d21e8d32cce5d0852a813fbbf795ba844ea24792ed9aee1c6e022d73a412bbe9",
+    "check.coor": "8c67042783c9f65e38a19a4b8fdf65e5c97e0dec122cb070f9f004c26d78c0e8",
+    "check.vel": "e41ff57c8b3733eb7044cb80901156fedc15a3e761a09a4135221e8700ec7ded",
+    "check.xsc": "2311d2bc150d113d74b69a54c89e108df88e9d77a34c1cae4fb594be57d7ed18",
+    "forcefield/par_all36_cgenff.prm": "9d661c12d147513272411ae893118fa3a543c61db811b67c3b24132000d69b28",
+    "forcefield/par_all36m_prot.prm": "b1d1c70b5f350a2d5758bf3ce7ec86e50cdc3f69d8cc3097f98f279cdaeb5aaa",
+    "forcefield/water_ions_active.str": "b679d5626bd548b6bb655844732557eb731677a18c8d7c6b8de52eb49a8ea8ec",
+    "forcefield/biotin_teg_boundary.prm": "4403bf3ee95871de9bee7ee6839038774e5dc144755ca1595394cc0b543b0416",
+    "forcefield/par_all36_na.prm": "1ada57015c112529aa985ee60163f11a94e991a334cc9928e030d2236899df05",
+    "forcefield/BTMP.str": "ccfd4c2d4c0f3b4178ad4f6e4f64e1e55f72a3a49fdfdf4ff6a77d972e0e6bef",
+    "continuation.conf": "d5a309937fd6f25ef5e1a72d5ffd3b24440255f939feac890059df7a86e4d195",
+    "submit.sbatch": "25e078d6a3e10142dbaa4f6d6361556e206181133f421873142c188b09493102"
+  },
+  "last_observed_status": "CANCELLED",
+  "verification": {
+    "targeted_passed": 59,
+    "browser_bound_extension": "passed, one rendered Biotin bead and 5-prime modification-only editor",
+    "workspace_artifacts_created": false,
+    "test_smart": {
+      "decision": "FAST",
+      "passed": 8619,
+      "failed": 29,
+      "errors": 9,
+      "skipped": 43
+    },
+    "main_js_loc_delta": 0
+  },
+  "replacement": {
+    "status": "FAILED",
+    "replaces_job_id": "32611941",
+    "remote_dir": "/scratch/alpine/jojo6687/nadoc_validation/biotin_dna_5ns_rtx6000_20260916",
+    "partition": "artxpro6000",
+    "gres": "gpu:rtx_pro_6000:1",
+    "additional_ns": 5,
+    "GPUresident": true,
+    "job_id": "32620740",
+    "submitted_utc": "2026-09-16T15:38:07.039007+00:00",
+    "old_job_status": "CANCELLED confirmed by sacct",
+    "elapsed_seconds": 6,
+    "exit_code": "1:0",
+    "failure": "Unknown module gcc/11.2.0; NAMD not launched",
+    "md_steps_run": 0
+  }
+}

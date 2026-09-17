@@ -73,20 +73,23 @@ def test_api_history_move_remove_and_safety():
         assert result.status_code==201
         p=state.get_design().nanoparticles[0];url=f'/api/design/nanoparticles/{p.id}'
         assert client.post(url+'/biotin-dna',json={'sequence':'ACGTACGT'}).status_code==200
-        d=state.get_design(); assert len(d.strands)==1 and d.nanoparticles[0].oxdna_fixed_core
+        d=state.get_design(); assert len(d.strands)==1 and not d.nanoparticles[0].oxdna_fixed_core
+        assert len(d.extensions)==1 and d.extensions[0].modification=="biotin"
+        assert d.extensions[0].end=="five_prime" and d.extensions[0].sequence is None
         before=d.helices[0].axis_start.to_array()
-        require_coating_simulation_support(d,'oxDNA')
+        require_coating_simulation_support(d,'oxDNA mobile CUDA')
         with pytest.raises(ValueError): require_coating_simulation_support(d,'NAMD')
         assert client.patch(url,json={'diameter_nm':20}).status_code==409
         pose=np.eye(4);pose[:3,3]=[1,2,3]
         assert client.patch(url,json={'pose':pose.ravel().tolist()}).status_code==200
         assert np.allclose(state.get_design().helices[0].axis_start.to_array(),before+[1,2,3])
         assert client.delete(url+'/biotin-dna').status_code==200
-        assert not state.get_design().strands
+        assert not state.get_design().strands and not state.get_design().extensions
         assert client.post('/api/design/undo').status_code==200
-        assert len(state.get_design().strands)==1
+        assert len(state.get_design().strands)==1 and len(state.get_design().extensions)==1
         assert client.delete(url).status_code==200
         assert not state.get_design().strands and not state.get_design().helices
+        assert not state.get_design().extensions
     finally: state.close_session()
 
 

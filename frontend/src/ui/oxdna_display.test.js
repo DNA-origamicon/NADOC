@@ -6,6 +6,12 @@ import { colormapHex } from './colormaps.js'
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
 describe('framesToUpdates', () => {
+  it('keeps mobile gold out of nucleotide updates without shifting DNA indices', () => {
+    const keys = [['h0', 0, 'FORWARD'], ['__gold__', 0, 'CORE']]
+    const updates = framesToUpdates(keys, [1,2,3, 1,0,0, 0,0,1, 20,30,40, 1,0,0, 0,0,1])
+    expect(updates).toHaveLength(1)
+    expect(updates[0].backbone_position).toEqual([1,2,3])
+  })
   it('zips the shared key list with a flat frame into applyFemPositions updates', () => {
     const keys = [['h0', 0, 'FORWARD'], ['h0', 0, 'REVERSE']]
     const frame = [1, 2, 3, 1, 0, 0,  4, 5, 6, 0, 1, 0]

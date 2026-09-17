@@ -846,7 +846,8 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     design = design_state.get_or_404().without_reference_geometry()
     from backend.core.streptavidin import require_coating_simulation_support
     try:
-        require_coating_simulation_support(design, 'oxDNA')
+        from backend.physics.oxdna_mobile_gold import has_mobile_gold
+        require_coating_simulation_support(design, 'oxDNA mobile CUDA' if has_mobile_gold(design) else 'oxDNA')
         # GPU default explicitly requested; convergence/sampling checks remain
         # outstanding for fixed gold/strep/DNA (TD-OXDNA-PHYSICS).
     except ValueError as exc:
@@ -1679,6 +1680,9 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
         prod.external_forces = True
         prod.absolute_forces = True
         prod.forces_file = specs[-1].forces_file or "equil_forces.txt"
+    if (job.run_config or {}).get("mobile_gold"):
+        from backend.physics.oxdna_mobile_gold import configure_mobile_gold_stages
+        configure_mobile_gold_stages([prod])
     specs.append(prod)
 
     # Persist the extended spec list + append the stage status; resume into it.
@@ -1741,6 +1745,8 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     nets a centre-of-mass drift that streams the whole structure across the
     periodic box, so the UI shows a warning notice — but the run is allowed."""
     parent = _load_job(job_id)
+    if (parent.run_config or {}).get("mobile_gold"):
+        raise HTTPException(400, "Mobile gold currently supports relaxation and appended production; field/deposition child jobs require core-aware placement.")
     from backend.physics.oxdna_peg import is_peg
     if is_peg((parent.run_config or {}).get("surface_strands")):
         raise HTTPException(409, "For PEG use the consolidated Run action; it preserves the surface and grafts")
@@ -1864,6 +1870,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     centre-of-mass drift that streams the whole structure across the periodic
     box, so the UI shows a warning notice — but the run is not blocked."""
     parent = _load_job(job_id)
+    mobile_gold = (parent.run_config or {}).get("mobile_gold")
+    if mobile_gold and (body.field or body.surface or body.anchors or body.surface_anchors or body.surface_strands):
+        raise HTTPException(400, "Mobile gold production currently supports free solution without additional field/surface/anchor elements")
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
         raise HTTPException(
             400, "A production run requires a completed relaxation job."
@@ -1996,6 +2005,14 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
 
     cjd = child.job_dir(ws)
     cjd.mkdir(parents=True, exist_ok=True)
+    if mobile_gold:
+        from backend.physics.oxdna_mobile_gold import configure_mobile_gold_stages
+        configure_mobile_gold_stages([stage])
+        child.backend = "CUDA"
+        child.stages = [stage.to_status()]
+        child.run_config["mobile_gold"] = mobile_gold
+        for filename in ("mobile_gold.dat", "mobile_gold.json", "oxDNA2_average_sequence_parameters.txt"):
+            shutil.copy(pjd / filename, cjd / filename)
     shutil.copy(pjd / "topology.top", cjd / "topology.top")
     shutil.copy(pjd / "design.json", cjd / "design.json")
     shutil.copy(relaxed_conf, cjd / "conf.dat")
@@ -2065,6 +2082,8 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
 async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) -> dict:
     """Branch a relaxed job into force-ramp → contact-restraint → equilibration stages."""
     parent = _load_job(job_id)
+    if (parent.run_config or {}).get("mobile_gold"):
+        raise HTTPException(400, "Mobile gold currently supports relaxation and appended production; field/deposition child jobs require core-aware placement.")
     from backend.physics.oxdna_peg import is_peg
     if is_peg((parent.run_config or {}).get("surface_strands")):
         raise HTTPException(409, "PEG is already grafted; use Run to continue this surface simulation")
@@ -3621,6 +3640,8 @@ def _capture_bead_count(job) -> int:
 
 
 def _capture_strand_length(job) -> int:
+    if (job.run_config or {}).get("mobile_gold"):
+        return -1  # appended mobile rigid cores, not DNA capture chains
     ss = (job.run_config or {}).get("surface_strands") or {}
     if ss.get("material") == "PEG":
         return int((ss.get("built") or {}).get("beads_per_chain") or int(ss.get("segments", 8)) + 1)
@@ -3738,6 +3759,7 @@ def _relaxed_full_map(
             include_extra_bases=_extra_b,
             include_extensions=_exts,
             n_trailing_extra=cap_beads,
+            trailing_extra_strand_length=-1 if (job.run_config or {}).get("mobile_gold") else 0,
         )
     else:
         full_map = read_configuration_unwrapped(
@@ -3749,6 +3771,7 @@ def _relaxed_full_map(
             include_extra_bases=include_extra_bases,
             include_extensions=include_extensions,
             n_trailing_extra=cap_beads,
+            trailing_extra_strand_length=-1 if (job.run_config or {}).get("mobile_gold") else 0,
         )
     return (design, full_map, stage_name, conf_path, ref_conf)
 
@@ -3857,9 +3880,18 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
             "ty": float(v["a3"][1]),
             "tz": float(v["a3"][2]),
         }
-        for key, v in full_map.items()
+        for key, v in full_map.items() if key[0] != "__gold__"
     ]
+    nanoparticles = []
+    for key, v in full_map.items():
+        if key[0] != "__gold__": continue
+        import numpy as np
+        pose = np.eye(4)
+        pose[:3, :3] = np.column_stack((v["a1"], np.cross(v["a3"], v["a1"]), v["a3"]))
+        pose[:3, 3] = v["backbone_position"]
+        nanoparticles.append({"id": design.nanoparticles[key[1]].id, "pose": pose.ravel().tolist()})
     return {
+        "nanoparticles": nanoparticles,
         "job_id": job.job_id,
         "ready": True,
         "status": job.status.value,

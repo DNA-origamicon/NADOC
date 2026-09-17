@@ -255,6 +255,7 @@ def delete_nanoparticle(nanoparticle_id: str) -> dict:
             item for item in design.nanoparticles if item.id != nanoparticle_id
         ]
         design.strands = [s for s in design.strands if s.id not in owned_strands]
+        design.extensions = [e for e in design.extensions if e.strand_id not in owned_strands]
         design.helices = [h for h in design.helices if h.id not in owned_helices]
         design.overhangs = [o for o in design.overhangs if o.strand_id not in owned_strands]
         design.duplexes = [dx for dx in design.duplexes if dx.id not in removed_duplex_ids]
@@ -959,9 +960,11 @@ def create_biotin_dna(nanoparticle_id: str, body: BiotinDNARequest):
         # Build against the same locked design that will receive the complete set.
         # A placement failure changes neither the design nor its undo history.
         placed = build_dna_set(p, body.sequence, body.pocket, body.linker_nm, body.dna_per_strep, d)
-        p.biotin_dna = [r for r, _, _ in placed]; p.oxdna_fixed_core = True
+        p.biotin_dna = [r for r, _, _ in placed]; p.oxdna_fixed_core = False
         d.helices.extend(h for _, h, _ in placed)
         d.strands.extend(s for _, _, s in placed)
+        from backend.core.biotin_extensions import ensure_biotin_extensions
+        ensure_biotin_extensions(d)
         from backend.core.biotin_atomistic import prepare_biotin_display
         prepare_biotin_display(d)
     try:
@@ -977,6 +980,7 @@ def remove_biotin_dna(nanoparticle_id: str):
         p = _particle_or_404(d, nanoparticle_id)
         sids={r.strand_id for r in p.biotin_dna}; hids={r.helix_id for r in p.biotin_dna}
         d.strands=[s for s in d.strands if s.id not in sids]
+        d.extensions=[e for e in d.extensions if e.strand_id not in sids]
         d.helices=[h for h in d.helices if h.id not in hids]
         p.biotin_dna=[]; p.oxdna_fixed_core=False
     updated, report, _ = design_state.mutate_with_feature_log('nanoparticle-biotin-dna', 'Remove biotinylated DNA', {'nanoparticle_id':nanoparticle_id}, mutate)

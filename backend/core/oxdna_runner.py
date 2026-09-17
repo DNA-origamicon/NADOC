@@ -573,6 +573,12 @@ def prepare_oxdna_job(
         protein_forces_text,
     )
 
+    from backend.physics.oxdna_mobile_gold import has_mobile_gold, configure_mobile_gold_stages, append_mobile_gold
+    mobile_gold = has_mobile_gold(design)
+    if mobile_gold:
+        if surface or surface_strands or has_proteins(design):
+            raise ValueError("Mobile gold v1 cannot combine proteins or surface/capture models")
+        configure_mobile_gold_stages(specs)
     fixed_cores = any(p.oxdna_fixed_core for p in design.nanoparticles)
     if fixed_cores:
         from backend.core.gold_strep_dna import validate_fixed_core_design
@@ -616,7 +622,7 @@ def prepare_oxdna_job(
         (jd / "anm.par").write_text(anm_par_text(blocks), encoding="utf-8")
         prot_traps = protein_forces_text(design, atts, blocks, geometry)
     else:
-        write_topology(design, jd / "topology.top")
+        write_topology(design, jd / "topology.top", mobile_gold=mobile_gold)
         write_configuration(design, geometry, jd / "conf.dat", oxdna_native_seed=True)
 
     # Optional hard surface + anchors held throughout the relax (a structure relaxed
@@ -686,6 +692,12 @@ def prepare_oxdna_job(
     write_mutual_traps(
         design, jd / "forces.txt", extra_text=equil_extra, particle_offset=prot_offset
     )
+    if mobile_gold:
+        manifest = append_mobile_gold(design, jd)
+        job.run_config = {**(job.run_config or {}), "backend": "CUDA", "mobile_gold": manifest}
+        job.stages = [stage.to_status() for stage in specs]
+        info["mobile_gold"] = manifest
+        job.backend = "CUDA"
     # Self-contained design snapshot for health checks (decoupled from live state).
     (jd / "design.json").write_text(design.model_dump_json())
     (jd / "stages_spec.json").write_text(
@@ -1675,13 +1687,19 @@ async def run_job(
 
     from backend.physics.oxdna_peg import configure_peg_stages
     configure_peg_stages(specs, (job.run_config or {}).get("surface_strands"))
+    if (job.run_config or {}).get("mobile_gold"):
+        from backend.physics.oxdna_mobile_gold import configure_mobile_gold_stages
+        configure_mobile_gold_stages(specs)
     is_hybrid = any(s.parfile for s in specs)
     is_peg_job = any(s.interaction == "DNA2PEG" for s in specs)
     from backend.physics.oxdna_peg import find_peg_oxdna
-    oxdna_bin = find_peg_oxdna() if is_peg_job else find_oxdna()
+    is_gold_job = any(s.interaction == "DNA2GOLD" for s in specs)
+    from backend.physics.oxdna_mobile_gold import find_mobile_gold_oxdna
+    oxdna_bin = find_mobile_gold_oxdna() if is_gold_job else (find_peg_oxdna() if is_peg_job else find_oxdna())
     if oxdna_bin is None:
         job.status = OxdnaStatus.failed
         job.error = "PEG engine missing; run bash scripts/build-oxdna-peg.sh." if is_peg_job else "oxDNA binary not found. Set $OXDNA_BIN or run scripts/build-oxdna.sh."
+        if is_gold_job: job.error = "Mobile gold CUDA engine missing; run scripts/build-oxdna-mobile-gold.sh"
         job.save(workspace_dir)
         return
     if is_hybrid and not oxdna_supports_dnanm(oxdna_bin):
@@ -1852,6 +1870,10 @@ async def run_job(
                 return
             spec.absolute_forces = True
             if spec.sim_type == 'MD': spec.dt = min(spec.dt, .0001)
+        if is_gold_job:
+            if spec.interaction != "DNA2GOLD" or spec.backend != "CUDA" or spec.sim_type != "MD":
+                raise ValueError("Mobile gold cannot fall back to DNA-only or CPU dynamics")
+            spec.gold_file = str((jd / "mobile_gold.dat").resolve())
         input_path.write_text(
             render_stage_input(
                 spec,
@@ -2011,7 +2033,7 @@ async def run_job(
             kind=spec.kind,
             min_bp_retained=spec.min_bp_retained,
             topology_path=topo,
-            dnanalysis_bin=None if (is_hybrid or is_peg_job) else find_dnanalysis(),
+            dnanalysis_bin=None if (is_hybrid or is_peg_job or is_gold_job) else find_dnanalysis(),
             salt_concentration=spec.salt_concentration,
             # Surface capture strands are appended AFTER the design walk; without this
             # the reader mistakes them for a leading protein block and every geometric

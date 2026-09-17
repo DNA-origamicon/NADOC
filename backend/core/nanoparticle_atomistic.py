@@ -6,8 +6,9 @@ chemistry is an ordinary terminal phosphodiester followed by a propyl thiolate::
 
     DNA-O-P(O2)-O-CH2-CH2-CH2-S-Au(implicit)
 
-The C3 linker matches the ``-S(CH2)3-`` construct used in the NAMD AuNS-DNA
-model of Lee et al. (Nature Communications 2016, doi:10.1038/ncomms13344).
+The C3 linker is the currently implemented molecular construct. The previously
+cited DOI 10.1038/ncomms13344 is unrelated and cannot support its parameters;
+this topology must not be treated as a literature-qualified Au-S force field.
 """
 
 from __future__ import annotations

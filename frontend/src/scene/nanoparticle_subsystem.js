@@ -28,6 +28,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   const meshes = new Map()
   let representation = 'full'
   let coatingTransforms = {}
+  let oxdnaPoses = new Map()
   let highlighted = null
   let moveRotatePanel = null
   let liveHelixIds = []
@@ -123,6 +124,10 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
       mesh.userData.nanoparticleKind = particle.kind
       if (particle.kind !== 'quantum_dot') mesh.userData.photoMaterialKind = 'gold-nanoparticle'
       mesh.applyMatrix4(poseMatrix(particle))
+      if (oxdnaPoses.has(particle.id)) {
+        mesh.matrix.copy(new THREE.Matrix4().fromArray(oxdnaPoses.get(particle.id)).transpose())
+        mesh.matrixAutoUpdate = false
+      }
       addStreptavidinCoating(mesh, particle.coating)
       if (particle.coating) {
         mesh.userData.strepAtoms = createStreptavidinAtomicRenderer(mesh, particle.coating)
@@ -426,6 +431,46 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   rebuild()
   return {
     root, meshes, gizmo, rebuild, connectorRoot, linkerAtomRoot,
+    applyOxdnaPoses(poses) {
+      if (!poses?.length) { this.clearOxdnaPoses(); return }
+      oxdnaPoses = new Map((poses || []).map(p => [p.id, p.pose]))
+      for (const p of poses || []) {
+        const mesh = meshes.get(p.id)
+        if (!mesh || p.pose?.length !== 16) continue
+        mesh.matrix.copy(new THREE.Matrix4().fromArray(p.pose).transpose())
+        mesh.matrixAutoUpdate = false
+      }
+      if (poses?.length) { connectorRoot.visible = false; linkerAtomRoot.visible = false }
+    },
+    applyOxdnaCoreFrame(keys, frame) {
+      const stride = keys.length ? frame.length / keys.length : 0
+      if (stride !== 9) return
+      const particles = store.getState().currentDesign?.nanoparticles || []
+      const poses = []
+      for (let i = 0; i < keys.length; i++) {
+        if (keys[i][0] !== '__gold__') continue
+        const particle = particles[keys[i][1]]
+        if (!particle) continue
+        const j = i * stride
+        const a1 = new THREE.Vector3(frame[j+3], frame[j+4], frame[j+5])
+        const a3 = new THREE.Vector3(frame[j+6], frame[j+7], frame[j+8])
+        const a2 = new THREE.Vector3().crossVectors(a3, a1)
+        const pose = new THREE.Matrix4().makeBasis(a1, a2, a3)
+        pose.setPosition(frame[j], frame[j+1], frame[j+2])
+        poses.push({ id: particle.id, pose: pose.transpose().toArray() })
+      }
+      this.applyOxdnaPoses(poses)
+    },
+    clearOxdnaPoses() {
+      oxdnaPoses = new Map()
+      for (const p of store.getState().currentDesign?.nanoparticles || []) {
+        const mesh = meshes.get(p.id)
+        if (!mesh) continue
+        mesh.matrix.copy(poseMatrix(p)); mesh.matrixAutoUpdate = false
+      }
+      connectorRoot.visible = true
+      linkerAtomRoot.visible = false
+    },
     setFluorescence(on) {
       fluorescenceOn = Boolean(on)
       refreshAppearance()

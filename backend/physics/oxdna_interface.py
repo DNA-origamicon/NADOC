@@ -769,6 +769,8 @@ def _strand_nucleotide_order(design: Design) -> list[tuple]:
 
 def _capture_particle_key(index: int, strand_length: int) -> tuple[str, int, str]:
     """Stable identity shared with the CG renderer for an appended capture bead."""
+    if strand_length == -1:
+        return ("__gold__", int(index), "CORE")
     length = max(1, int(strand_length))
     strand, bead = divmod(int(index), length)
     return (f"cap{strand}", 1_000_000 + strand * 1000 + bead, "FORWARD")
@@ -935,7 +937,7 @@ def topology_rows(design: Design) -> tuple[list[tuple[int, str, int, int]], int]
     return rows, n_strands
 
 
-def write_topology(design: Design, path: str | Path) -> None:
+def write_topology(design: Design, path: str | Path, *, mobile_gold: bool = False) -> None:
     """
     Write an oxDNA topology (.top) file for *design*.
 
@@ -944,7 +946,7 @@ def write_topology(design: Design, path: str | Path) -> None:
     sequence string.
     """
     from backend.core.streptavidin import require_coating_simulation_support
-    require_coating_simulation_support(design, 'oxDNA topology')
+    require_coating_simulation_support(design, 'oxDNA mobile CUDA' if mobile_gold else 'oxDNA topology')
     rows, n_strands = topology_rows(design)
     lines = [f"{len(rows)} {n_strands}"]
     for si, base, n3, n5 in rows:
@@ -1716,7 +1718,7 @@ def read_configuration_full(
             "a3": a3 / (np.linalg.norm(a3) + 1e-14),
         }
 
-    if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
+    if n_trailing_extra > 0 and trailing_extra_strand_length != 0:
         start = offset + len(order)
         for i in range(int(n_trailing_extra)):
             if start + i >= len(data_lines):
@@ -1888,6 +1890,7 @@ def read_configuration_unwrapped(
     include_extra_bases: bool = False,
     include_extensions: bool = False,
     n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
 ) -> dict[tuple, dict]:
     """Read a relaxed oxDNA config and undo periodic-boundary wrapping for display.
 
@@ -1921,6 +1924,7 @@ def read_configuration_unwrapped(
         include_extra_bases=include_extra_bases,
         include_extensions=include_extensions,
         n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
     )
     # Reference stays design-keyed (no extra bases, no extension tails) so the Kabsch
     # fit aligns on the rigid duplex, not the floppy single-stranded inserts/tails;
@@ -2018,6 +2022,27 @@ def _build_unwrap_adjacency(
         if ra is not None and rb is not None and ra != rb:
             adj[ra].append(rb)
             adj[rb].append(ra)
+    if any(k[0] == "__gold__" for k in relax):
+        core_indices = {p.id: i for i, p in enumerate(design.nanoparticles)}
+        strand_keys = {}
+        for step in _walk_strand_nucleotides(design):
+            strand_keys.setdefault(step.strand.id, []).append(step.key)
+        for conj in design.nanoparticle_conjugations:
+            ck = ("__gold__", core_indices.get(conj.nanoparticle_id, -1), "CORE")
+            for record in conj.surface_strands:
+                keys = strand_keys.get(record.strand_id, [])
+                if not keys or ck not in adj: continue
+                dk = _present(keys[0] if conj.attach_end == "5p" else keys[-1])
+                if dk is not None:
+                    adj[ck].append(dk); adj[dk].append(ck)
+        for j, particle in enumerate(design.nanoparticles):
+            ck = ('__gold__', j, 'CORE')
+            for record in particle.biotin_dna:
+                keys = strand_keys.get(record.strand_id, [])
+                if keys and ck in adj:
+                    dk = _present(keys[0])
+                    if dk is not None:
+                        adj[ck].append(dk); adj[dk].append(ck)
     # WC pairs only between canonical 3-tuple nucleotides.  With copies kept, loop
     # copies are already backbone-threaded above; keying WC here would collide
     # multiple copies onto one (h,bp).
@@ -2303,7 +2328,7 @@ def _parse_trajectory_frame_lines(
     """
     offset = _protein_lead_offset(data, order, n_trailing_extra)
     rows = data[offset : offset + len(order)]
-    extra_count = int(n_trailing_extra) if trailing_extra_strand_length > 0 else 0
+    extra_count = int(n_trailing_extra) if trailing_extra_strand_length != 0 else 0
     parse_rows = data[offset : offset + len(order) + extra_count]
 
     # FAST PATH: a complete, well-formed frame parses in one vectorized shot — split
@@ -2362,7 +2387,7 @@ def _parse_trajectory_frame_lines(
             "a1": a1 / (np.linalg.norm(a1) + 1e-14),
             "a3": a3 / (np.linalg.norm(a3) + 1e-14),
         }
-    if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
+    if n_trailing_extra > 0 and trailing_extra_strand_length != 0:
         start = offset + len(order)
         for i in range(int(n_trailing_extra)):
             if start + i >= len(data):

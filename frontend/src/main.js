@@ -1290,7 +1290,7 @@ async function main() {
 
   // ── oxDNA relaxation panel + display (deforms NADOC model to relaxed CG) ──────
   const oxdnaDisplay = initOxdnaDisplay({
-    designRenderer, api, proteinRenderer,
+    designRenderer, api, proteinRenderer, nanoparticleRenderer: nanoparticleSubsystem,
     setDesignVisible: _setSimulationVisualizationVisible,
     restoreDesignVisible: _restoreNativeAfterSimulation,
     getAtomisticRenderer: () => atomisticRenderer,

@@ -3019,6 +3019,11 @@ class Design(BaseModel):
     sub_cursor+1 children active. Lets the slider thumb land on the
     specific sub-notch the user scrubbed to."""
 
+    @model_validator(mode="after")
+    def _biotin_terminal_extensions(self):
+        from backend.core.biotin_extensions import ensure_biotin_extensions
+        return ensure_biotin_extensions(self)
+
     @field_validator("feature_log", mode="before")
     @classmethod
     def _drop_checkpoint_entries(cls, v: object) -> object:

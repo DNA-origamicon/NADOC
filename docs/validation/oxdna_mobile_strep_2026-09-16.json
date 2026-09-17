@@ -1,0 +1,157 @@
+{
+  "date": "2026-09-16",
+  "hardware": "RTX 2080 SUPER",
+  "parameters_qualified": false,
+  "runpod_spend_usd": 0,
+  "strep": [
+    {
+      "name": "coat_contact_float",
+      "steps": 1,
+      "wall_s": 0.4151149719982641,
+      "steps_per_s": 2.40897117053196,
+      "directory": "experiments/mobile_gold/ws/strep_validation_final_20260916/coat_contact_float"
+    },
+    {
+      "name": "pocket_graft_float",
+      "steps": 1,
+      "wall_s": 0.415125633997377,
+      "steps_per_s": 2.408909299025168,
+      "directory": "experiments/mobile_gold/ws/strep_validation_final_20260916/pocket_graft_float"
+    },
+    {
+      "name": "coat_contact_mixed",
+      "steps": 1,
+      "wall_s": 0.36481244699825766,
+      "steps_per_s": 2.741134542497603,
+      "directory": "experiments/mobile_gold/ws/strep_validation_final_20260916/coat_contact_mixed"
+    },
+    {
+      "name": "pocket_graft_mixed",
+      "steps": 1,
+      "wall_s": 0.3647358099988196,
+      "steps_per_s": 2.741710500000634,
+      "directory": "experiments/mobile_gold/ws/strep_validation_final_20260916/pocket_graft_mixed"
+    },
+    {
+      "name": "composite_contact",
+      "steps": 1,
+      "wall_s": 0.41473483000299893,
+      "steps_per_s": 2.411179210563938,
+      "directory": "experiments/mobile_gold/ws/strep_validation_final_20260916/composite_contact"
+    },
+    {
+      "mode": "adsorption",
+      "steps": 30000,
+      "wall_s": 8.78668402999756,
+      "steps_per_s": 3414.257289505417,
+      "linker_nm": 2.1162074923626446,
+      "core_displacement_nm": 0.09379920275890699
+    },
+    {
+      "mode": "biotin_tether",
+      "steps": 30000,
+      "wall_s": 9.141354434003006,
+      "steps_per_s": 3281.7893909035292,
+      "linker_nm": 2.274520236377282,
+      "core_displacement_nm": 0.0957587655904885
+    }
+  ],
+  "thiol_regression": [
+    {
+      "name": "graft_False_float",
+      "steps": 1,
+      "wall_s": 0.415386711996689,
+      "steps_per_s": 2.4073952563219474,
+      "directory": "experiments/mobile_gold/ws/strep_engine_thiol_regression_20260916/graft_False_float",
+      "force_error": 1.7016720624111106e-06,
+      "reciprocal_error": 4.246473476525632e-07,
+      "core_torque_error": 1.5906620127736915e-06
+    },
+    {
+      "name": "graft_False_mixed",
+      "steps": 1,
+      "wall_s": 0.4650111740047578,
+      "steps_per_s": 2.1504859579777937,
+      "directory": "experiments/mobile_gold/ws/strep_engine_thiol_regression_20260916/graft_False_mixed",
+      "force_error": 1.7016720624111106e-06,
+      "reciprocal_error": 4.246473476525632e-07,
+      "core_torque_error": 1.5906620127736915e-06
+    },
+    {
+      "name": "graft_True_float",
+      "steps": 1,
+      "wall_s": 0.4652924850015552,
+      "steps_per_s": 2.1491857965353933,
+      "directory": "experiments/mobile_gold/ws/strep_engine_thiol_regression_20260916/graft_True_float",
+      "force_error": 1.7016720624111106e-06,
+      "reciprocal_error": 4.246473476525632e-07,
+      "core_torque_error": 1.5906620127736915e-06
+    },
+    {
+      "name": "graft_True_mixed",
+      "steps": 1,
+      "wall_s": 0.4651083450007718,
+      "steps_per_s": 2.150036675859558,
+      "directory": "experiments/mobile_gold/ws/strep_engine_thiol_regression_20260916/graft_True_mixed",
+      "force_error": 1.7016720624111106e-06,
+      "reciprocal_error": 4.246473476525632e-07,
+      "core_torque_error": 1.5906620127736915e-06
+    },
+    {
+      "name": "dna_exclusion",
+      "steps": 1,
+      "wall_s": 0.4653524660025141,
+      "steps_per_s": 2.14890878002696,
+      "directory": "experiments/mobile_gold/ws/strep_engine_thiol_regression_20260916/dna_exclusion"
+    },
+    {
+      "name": "core_exclusion",
+      "steps": 1,
+      "wall_s": 0.4651910219981801,
+      "steps_per_s": 2.149654556325277,
+      "directory": "experiments/mobile_gold/ws/strep_engine_thiol_regression_20260916/core_exclusion"
+    },
+    {
+      "name": "restart_full",
+      "steps": 200,
+      "wall_s": 0.5152584290044615,
+      "steps_per_s": 388.1547370053179,
+      "directory": "experiments/mobile_gold/ws/strep_engine_thiol_regression_20260916/restart_full"
+    },
+    {
+      "name": "restart_half",
+      "steps": 100,
+      "wall_s": 0.5153621790013858,
+      "steps_per_s": 194.03829786999387,
+      "directory": "experiments/mobile_gold/ws/strep_engine_thiol_regression_20260916/restart_half"
+    },
+    {
+      "name": "restart_split",
+      "steps": 100,
+      "wall_s": 0.4659944250015542,
+      "steps_per_s": 214.59484198693252,
+      "directory": "experiments/mobile_gold/ws/strep_engine_thiol_regression_20260916/restart_split"
+    }
+  ],
+  "timing": [
+    {
+      "name": "dna",
+      "coating_count": 0,
+      "n_dna": 6012,
+      "steps": 20000,
+      "wall_s": 7.836876289999054,
+      "steps_per_s": 2552.0372224738044
+    },
+    {
+      "name": "gold",
+      "coating_count": 7,
+      "n_dna": 6012,
+      "steps": 20000,
+      "wall_s": 11.254731334003736,
+      "steps_per_s": 1777.0304244912827,
+      "linker_nm": 0.686610017090779,
+      "core_displacement_nm": 0.0787772712976173,
+      "core_rotation_rad": 0.039437387023973494
+    }
+  ]
+}
