@@ -6231,6 +6231,13 @@ async function main() {
     showToast('SteamVR is ready. In NADOC VR, open the controller menu and select Desktop for the live interactive desktop.')
   })
 
+  const _scrywriteBrowserTrace = []
+  const _recordScrywriteBrowser = (kind, value) => {
+    if (!import.meta.env.DEV || !new URLSearchParams(window.location.search).has('scrywrite')) return
+    _scrywriteBrowserTrace.push({ kind, at: performance.now(), ...structuredClone(value) })
+    if (_scrywriteBrowserTrace.length > 128) _scrywriteBrowserTrace.shift()
+  }
+  let _handleNativeVREvent = null
   let _vrToolShellState = initialVRToolShellState
   let _vrToolConfigState = initialVRToolConfigState
   let _vrToolExecutionSequence = 0
@@ -6254,6 +6261,7 @@ async function main() {
       feature_log_entry_id: status === 'succeeded'
         ? transaction?.featureLogEntryId ?? null : null,
     }
+    _recordScrywriteBrowser('execution_verdict', payload)
     let result
     try {
       result = await api.sendVRToolExecutionFeedback(payload)
@@ -6405,6 +6413,10 @@ async function main() {
       status: api.getVRStatus,
       event: api.getVREvent,
       launch: () => api.launchNativeVR({
+        // Explicit development opt-in; normal documents never expose agent control.
+        scrywrite_live: ['inspect', 'transactions'].includes(
+          new URLSearchParams(window.location.search).get('scrywrite'))
+          ? new URLSearchParams(window.location.search).get('scrywrite') : 'off',
         ..._vrCompanionState(),
         camera: captureCurrentCamera(),
         measured_positioning: isNewPositioningOn(),
@@ -6451,7 +6463,8 @@ async function main() {
         throw error
       }
     },
-    onNativeEvent: event => {
+    onNativeEvent: (_handleNativeVREvent = event => {
+      _recordScrywriteBrowser('native_event', event)
       const button = document.getElementById('menu-help-view-vr')
       if (event?.type === 'style') {
         // Native menu choices are requests, not local renderer mutations. Route
@@ -6660,7 +6673,7 @@ async function main() {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
         selectionManager.previewVRIdentity?.(event?.identity ?? null)
       }
-    },
+    }),
   })
   const _publishVRRepresentation = () => { void vrSession.publishNativeState?.() }
   // Ordinary representation changes publish immediately. A held live-MD switch
@@ -6923,6 +6936,20 @@ async function main() {
   // Dev-only Playwright facade; implementation lives outside the composition root.
   if (import.meta.env.DEV) {
     installTestApi({
+      scrywrite: new URLSearchParams(window.location.search).has('scrywrite') ? {
+        dispatch: event => _handleNativeVREvent(event),
+        select: ref => selectionController.replace([ref]),
+        snapshot: () => structuredClone({
+          shell: _vrToolShellState,
+          transaction: _vrToolTransaction.snapshot(),
+          trace: _scrywriteBrowserTrace,
+          selection: store.getState().selection,
+          clusterTransforms: store.getState().currentDesign?.cluster_transforms ?? [],
+          featureLog: store.getState().currentDesign?.feature_log ?? [],
+          pendingClusterTransforms: store.getState().currentDesign?.cluster_transforms?.map(
+            cluster => ({ id: cluster.id, pending: clusterGizmo.getPendingTransform(cluster.id) })),
+        }),
+      } : null,
       scene,
       store,
       visibilityController,

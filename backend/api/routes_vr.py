@@ -126,6 +126,8 @@ class VRLaunchRequest(BaseModel):
     representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     show_periodic_seam_arcs: bool = False
+    # Developer-only opt-in. Paths are server-generated, never client supplied.
+    scrywrite_live: Literal["off", "inspect", "transactions"] = "off"
     mirror_eye: Literal["off", "left", "right"] = "left"
     reference_grid: Literal["off", "room"] = "off"
     selection_level: Literal[
@@ -3196,6 +3198,8 @@ def _status_payload() -> dict:
         "available": True,
         "pid": int(state["pid"]),
         "started_at": state.get("started_at"),
+        "scrywrite_live": state.get("scrywrite_live", "off"),
+        "scrywrite_socket": state.get("scrywrite_socket"),
         "mirror_eye": state.get("mirror_eye", "off"),
         "reference_grid": state.get("reference_grid", "off"),
         "timing": _runtime_timing(state, _event_payload(state)),
@@ -4597,6 +4601,7 @@ def _viewer_command(
     trajectory_path: Path,
     coordinate_path: Path,
     body: VRLaunchRequest,
+    live_socket_path: Path | None = None,
 ) -> list[str]:
     command = [
         str(_VIEWER),
@@ -4628,6 +4633,13 @@ def _viewer_command(
         "--reference-grid",
         body.reference_grid,
     ]
+    if body.scrywrite_live != "off":
+        if live_socket_path is None:
+            raise ValueError("ScryWrite launch requires a private socket path")
+        command.extend([
+            "--scrywrite-live", str(live_socket_path),
+            "--scrywrite-live-mode", body.scrywrite_live,
+        ])
     for token in body.selected_owner_tokens:
         command.extend(["--selected-owner", token])
     command.extend(["--selected-kind", body.selected_selection_kind])
@@ -4882,6 +4894,9 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         )
         trajectory_path, coordinate_path = _write_trajectory_feeds(body, view_rotation)
 
+        live_socket_path = None
+        if body.scrywrite_live != "off":
+            live_socket_path = Path(tempfile.mkdtemp(prefix="nadoc-scry-")) / "viewer.sock"
         log = _LOG_PATH.open("ab")
         try:
             process = subprocess.Popen(
@@ -4889,7 +4904,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                     scene_path, event_path, feedback_path, tool_feedback_path,
                     plane_feedback_path, preflight_feedback_path,
                     tool_execution_feedback_path, job_path,
-                    visualization_path, trajectory_path, coordinate_path, body
+                    visualization_path, trajectory_path, coordinate_path, body, live_socket_path
                 ),
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
@@ -4966,6 +4981,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "snapshot_ready_at": snapshot_ready_at,
             "process_started_at": process_started_at,
             "view_rotation": view_rotation.tolist(),
+            "scrywrite_live": body.scrywrite_live,
+            "scrywrite_socket": str(live_socket_path) if live_socket_path else None,
             "mirror_eye": body.mirror_eye,
             "reference_grid": body.reference_grid,
         }

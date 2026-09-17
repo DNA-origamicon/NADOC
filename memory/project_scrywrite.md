@@ -266,3 +266,37 @@ environment issue without a source change.
   native RSS near 2.9–3.3 GiB. A future versioned format may deduplicate identical
   atomistic bond/ownership blocks only if semantic identity and Expanded parity remain
   strict.
+
+## Live agent interface (2026-09-16)
+
+- Runbook: [`docs/scrywrite_live_agent.md`](../docs/scrywrite_live_agent.md).
+- Production viewer has opt-in private Unix-socket control (`--scrywrite-live`,
+  modes inspect/control/transactions). `frontend/scrywrite/mcp_bridge.py` provides
+  stdio MCP tools and follows the backend's private state file across relaunches.
+- Browser launch opt-in: `?doc=<isolated-copy>&scrywrite=transactions`, then View in VR.
+  Observe supplies session/sequence; stale actions and unsafe input fail closed.
+- Native application/IPC gates exercise actual viewer handlers for lattice targets,
+  paint/erase, wheel detents/input priority, panel drag, cancellation and input leases.
+- Isolated browser gate exercises actual native-event receiver and real backend
+  Move/Rotate Cancel/Confirm/Undo. Only the missing headset feedback transport is
+  intercepted. This does not close combined native/browser/headset execution.
+- Submitted stereo capture adds color, window depth, coarse render classes and
+  semantic/transaction metadata. Same-pass uint32 primitive IDs now map to canonical
+  owner tokens in `objects.json`, stable within the viewer session. Final overlay
+  stencil masks IDs; decorative glow creates none. Compositor acknowledgement is
+  still not claimed.
+- Painted Extrude footprints remain explicitly unresolved/noncommittable. No new
+  extrusion geometry mutation executor was added. Physical comfort/reach gates stay open.
+- `just test-scrywrite-browser` uses dedicated ports/workspace and disables backend
+  lifespan to avoid cloud autoconnection/job supervision alongside CPD work.
+
+- Physical Vive validation 2026-09-16 passed on the existing SteamVR/X11 direct-mode
+  path: focused/tracked submitted stereo, paint/erase, +21 bp wheel adjustment,
+  0.10 m real grip drag, Cancel/release. Framed panels occluded design IDs correctly;
+  baseline/final identity mappings stayed consistent. The diagnostic scene was the
+  chiral fixture, standalone control mode, not browser-linked design editing.
+- Retained report/images: `docs/generated/scrywrite/live_agent_20260916/README.md`.
+  Raw stereo color/depth/classes/IDs and command traces are under
+  `/tmp/nadoc-scrywrite-physical-20260916/` (ephemeral).
+- New real-GL regression covers primitive shaders, front/rear occlusion, impostor
+  discard, identity persistence, owner mapping, glow exclusion and overlay masking.

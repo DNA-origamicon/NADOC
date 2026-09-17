@@ -3397,3 +3397,21 @@ def test_native_linux_platform_supported(monkeypatch):
     assert routes_vr._native_platform_reason() is None
     monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
     assert "WSL" in routes_vr._native_platform_reason()
+
+
+def test_scrywrite_launch_is_opt_in_and_uses_server_owned_path(tmp_path):
+    paths = [tmp_path / name for name in (
+        "scene", "events", "feedback", "tool", "plane", "preflight",
+        "execution", "jobs", "visualization", "trajectory", "coordinates",
+    )]
+    assert "--scrywrite-live" not in _viewer_command(*paths, VRLaunchRequest())
+    with pytest.raises(ValueError, match="private socket"):
+        _viewer_command(*paths, VRLaunchRequest(scrywrite_live="transactions"))
+    for mode in ("inspect", "transactions"):
+        command = _viewer_command(
+            *paths, VRLaunchRequest(scrywrite_live=mode), tmp_path / "viewer.sock",
+        )
+        assert command[command.index("--scrywrite-live") + 1] == str(tmp_path / "viewer.sock")
+        assert command[command.index("--scrywrite-live-mode") + 1] == mode
+    with pytest.raises(ValueError):
+        VRLaunchRequest(scrywrite_live="control")

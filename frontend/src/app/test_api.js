@@ -4,6 +4,7 @@ import { clientToNdc } from '../scene/ndc.js'
 import { parseBaseKey } from '../scene/base_ref.js'
 
 export function installTestApi({
+  scrywrite = null,
   scene,
   store,
   visibilityController,
@@ -43,6 +44,7 @@ export function installTestApi({
   multiView,
 }) {
   window.__nadocTest = {
+    scrywrite,
     scene,
     dimensions: {
       open: () => dimensionsTool?.open?.(),

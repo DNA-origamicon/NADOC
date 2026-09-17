@@ -182,3 +182,14 @@ if(BUILD_TESTING)
   )
   set_tests_properties(nadoc-vr-scene-v12-corrupt-gzip PROPERTIES WILL_FAIL TRUE)
 endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-scrywrite-live-test tests/scrywrite_live_test.cpp)
+  target_link_libraries(nadoc-vr-scrywrite-live-test PRIVATE
+    PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
+  target_compile_options(nadoc-vr-scrywrite-live-test PRIVATE -Wall -Wextra -Wpedantic -Wno-missing-field-initializers)
+  add_test(NAME nadoc-vr-scrywrite-object-ids-gl COMMAND nadoc-vr-scrywrite-live-test --gl-ids)
+  set_tests_properties(nadoc-vr-scrywrite-object-ids-gl PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME nadoc-vr-scrywrite-live-unit COMMAND nadoc-vr-scrywrite-live-test
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_chiral_perspective.nadocvr)
+endif()

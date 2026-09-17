@@ -380,3 +380,10 @@ Cylinders representation.
 
 The controllers pulse when an interaction begins. Press Escape in the companion
 window, close that window, or select Help → Exit VR in NADOC to end the session.
+
+## Live agent interface
+
+The opt-in ScryWrite interface exposes the running Linux viewer through MCP,
+including semantic targets, controller input, Extrude draft inspection, browser
+transaction identifiers, and submitted stereo capture. Setup, isolated tests, and
+remaining evidence limits are in [the live-agent guide](../../docs/scrywrite_live_agent.md).
