@@ -729,3 +729,35 @@ it('does not freeze an automatic sidebar estimate when creating a draft',async()
  expect(launch.mock.calls[0][0]).toMatchObject(values)
  wiz.close()
 })
+
+describe('nanopore-only production controls', () => {
+  const REPLICA = {
+    job_id: 'rep1', design_name: '3x6SQ', created_at: 1_785_100_000,
+    execution_target: 'alpine', partition: 'ah200', parent_job_id: 'parent1',
+    ensemble_seed: 1, ensemble_index: 0, run_kind: null, prep_params: null,
+    spawn_params: null,
+    segments: [{ name: 'x_01_production_1ns_k0', stage: '1 ns production', steps: 250000 }],
+  }
+  const NANOPORE_LABELS = ['Production protocol', 'Transmembrane voltage', 'Current sampling']
+  const labels = () => [...modalRoot().querySelectorAll('.wizard-field__label')]
+    .map(l => l.textContent)
+
+  async function open(plan) {
+    const { wiz, api } = setup({ getJobs: () => [] })
+    api.fetchProtocolPlan.mockResolvedValue({ ...PLAN, ...plan })
+    await wiz.openReadOnly(REPLICA)
+  }
+
+  it('are absent when the parent chain has no nanopore', async () => {
+    await open({ ion_transport_available: false })
+    const shown = labels()
+    expect(shown.some(t => t.includes('Run length'))).toBe(true)
+    for (const name of NANOPORE_LABELS) expect(shown.some(t => t.includes(name))).toBe(false)
+  })
+
+  it('appear when the plan reports a nanopore', async () => {
+    await open({ ion_transport_available: true })
+    const shown = labels()
+    for (const name of NANOPORE_LABELS) expect(shown.some(t => t.includes(name))).toBe(true)
+  })
+})

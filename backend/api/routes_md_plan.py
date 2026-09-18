@@ -581,7 +581,16 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         manifest = {}
     name_stem = manifest.get("name_stem") or "design"
     carved = bool((manifest.get("solvation") or {}).get("carved"))
-    production_npt = _p.package_npt_allowed(package_dir) and not bool(body.ion_transport_mode)
+    # A pore lives on the relaxation the chain descends from; a chained parent's own
+    # manifest is production-only and never carries it.
+    from backend.api.routes_md import _read_manifest, root_relaxation  # noqa: PLC0415
+
+    ion_transport_available = bool(
+        _read_manifest(root_relaxation(parent)).get("graphene_nanopore")
+    )
+    production_npt = (
+        _p.package_npt_allowed(package_dir) and body.ion_transport_mode != "voltage"
+    )
     ladder_fast = bool((manifest.get("fast_relaxation") or {}).get("enabled"))
     # The child runs the parent's PSF verbatim, so the solvated atom count is a FACT here,
     # not something solvation has yet to decide. Reading it turns GPU-resident from a
@@ -869,7 +878,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         }
     )
     if body.ion_transport_mode == "voltage":
-        has_membrane = bool(manifest.get("graphene_nanopore"))
+        has_membrane = ion_transport_available
         conditions.append(
             {
                 "id": "ion_transport_geometry",
@@ -964,6 +973,9 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         "inherited": _inherited_from_parent(
             parent, manifest, spec, n_atoms=n_atoms, chained=chained
         ),
+        # Whether the wizard should offer the voltage-driven protocol at all: only a chain
+        # rooted in a relaxation prepared with the NAMD hard surface can run it.
+        "ion_transport_available": ion_transport_available,
         "limits": {"max_steps": _max_steps(), "max_ns": _max_ns()},
         "defaults": {
             "length_ns": WIZARD_DEFAULT_PRODUCTION_NS,
@@ -971,7 +983,8 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         },
         "field_scopes": dict(FIELD_SCOPE),
         "production_request": _production_provenance(
-            body, plan, restraints, choice, manifest=manifest, chained=chained
+            body, plan, restraints, choice, manifest=manifest, chained=chained,
+            ion_transport_available=ion_transport_available,
         ),
         "conditions": conditions + integrator_warnings(choice, scope="production"),
         "retries": md_plan.retry_policy(),
@@ -1123,6 +1136,7 @@ def _production_provenance(
     *,
     manifest: dict,
     chained: bool = False,
+    ion_transport_available: bool = False,
 ) -> dict:
     explicit = set(body.model_fields_set)
     relax_integrator = manifest.get("relax_integrator") or {}
@@ -1162,7 +1176,7 @@ def _production_provenance(
             "reason": "compatibility default",
         }
 
-    return {
+    provenance = {
         "length_ns": entry(
             float(plan["length_ns"]),
             "length_ns",
@@ -1257,6 +1271,12 @@ def _production_provenance(
             reason="off — an undersized cell refuses by default",
         ),
     }
+    if not ion_transport_available:
+        # No pore, no voltage-driven protocol: its settings are not part of this run.
+        for key in ("ion_transport_mode", "ion_transport_voltage_mV",
+                    "ion_transport_current_stride_ps"):
+            provenance.pop(key, None)
+    return provenance
 
 
 def _box_fit_condition(

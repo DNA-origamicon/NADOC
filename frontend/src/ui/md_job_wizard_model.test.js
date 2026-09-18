@@ -34,6 +34,8 @@ import {
   productionComparison,
   productionField,
   productionPayload,
+  productionFieldApplies,
+  withoutInapplicableProduction,
   randomNAMDSeed,
   pushUndo,
   relaxRunLabel,
@@ -1517,5 +1519,26 @@ describe('productionSteps', () => {
 
   it('is 0 for a relaxation, so nothing is sent for one', () => {
     expect(productionSteps({ segments: [seg('d_01_k0p5', 1000)] })).toBe(0)
+  })
+})
+
+describe('nanopore-only production settings', () => {
+  const field = { key: 'ion_transport_voltage_mV', requires: 'nanopore' }
+  it('are hidden until the plan says the parent chain has a pore', () => {
+    expect(productionFieldApplies(field, null)).toBe(false)
+    expect(productionFieldApplies(field, {})).toBe(false)
+    expect(productionFieldApplies(field, { ion_transport_available: false })).toBe(false)
+    expect(productionFieldApplies(field, { ion_transport_available: true })).toBe(true)
+  })
+  it('never hide an ordinary production setting', () => {
+    expect(productionFieldApplies({ key: 'length_ns' }, null)).toBe(true)
+  })
+  it('are stripped from a payload only when the plan reports no pore', () => {
+    const touched = { length_ns: 50, ion_transport_mode: 'voltage',
+      ion_transport_voltage_mV: 200, ion_transport_current_stride_ps: 5 }
+    expect(withoutInapplicableProduction(touched, { ion_transport_available: false }))
+      .toEqual({ length_ns: 50 })
+    expect(withoutInapplicableProduction(touched, { ion_transport_available: true })).toBe(touched)
+    expect(withoutInapplicableProduction(touched, null)).toBe(touched)
   })
 })

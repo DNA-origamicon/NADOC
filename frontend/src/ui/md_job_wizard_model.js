@@ -569,6 +569,28 @@ export const PRODUCTION_FIELDS = [
   'allow_undersized_cell',
 ]
 
+/** Production settings that exist only for a chain rooted in a NAMD hard-surface (nanopore)
+ *  relaxation. Everything else about production is meaningful for any design. */
+export const NANOPORE_ONLY_PRODUCTION_FIELDS = [
+  'ion_transport_mode', 'ion_transport_voltage_mV', 'ion_transport_current_stride_ps',
+]
+
+/** Pure: whether a production control belongs on screen for this plan. A field tagged
+ *  `requires: 'nanopore'` shows only once the plan reports the parent chain has a pore —
+ *  until the plan lands it is hidden too, so a pore-less design never flashes them. */
+export function productionFieldApplies(field, plan) {
+  return field?.requires !== 'nanopore' || plan?.ion_transport_available === true
+}
+
+/** Pure: `touched` without the nanopore-only settings when the plan says there is no pore,
+ *  so a value left over from another parent can never ride along on a plain production. */
+export function withoutInapplicableProduction(touched = {}, plan = null) {
+  if (plan?.ion_transport_available !== false) return touched
+  const out = { ...touched }
+  for (const key of NANOPORE_ONLY_PRODUCTION_FIELDS) delete out[key]
+  return out
+}
+
 /** Pure: the production-spawn body for `POST /md/jobs/{parent}/production-run`.
  *
  *  Like the relaxation payload, this sends ONLY what the user touched: everything else is

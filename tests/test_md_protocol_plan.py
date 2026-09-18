@@ -1624,3 +1624,36 @@ def test_box_preview_dependencies_ignore_unrelated_edits_and_track_geometry():
     assert inputs(padding_nm=1.2, box_size_nm=[20, None, None]) == original
     assert inputs(padding_nm=2) != original
     assert inputs(padding_nm=1.2, graphene_nanopore=True) != original
+
+
+def test_production_offers_ion_transport_only_when_the_chain_has_a_pore(client, parent_job):
+    plain = _prod_plan(client, parent_job)
+    assert plain["ion_transport_available"] is False
+    assert not [k for k in plain["production_request"] if k.startswith("ion_transport")]
+
+    manifest_path = parent_job.package_dir(rm_workspace(parent_job)) / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["graphene_nanopore"] = {"dir": [0, 0, 1]}
+    manifest_path.write_text(json.dumps(manifest))
+    pored = _prod_plan(client, parent_job)
+    assert pored["ion_transport_available"] is True
+    assert {"ion_transport_mode", "ion_transport_voltage_mV",
+            "ion_transport_current_stride_ps"} <= set(pored["production_request"])
+
+
+def test_an_ordinary_production_plan_is_not_forced_to_nvt_by_the_default_off_mode(
+    client, parent_job
+):
+    """`ion_transport_mode` defaults to the truthy string "off"."""
+    off = _prod_plan(client, parent_job, ion_transport_mode="off")
+    omitted = _prod_plan(client, parent_job)
+    assert off["stages"] == omitted["stages"]
+    assert any(s["params"].get("langevinpiston") == "on" for s in omitted["stages"]), (
+        "an NPT-allowed package must plan an NPT production"
+    )
+
+
+def rm_workspace(_job):
+    import backend.api.routes_md as rm
+
+    return rm._workspace()

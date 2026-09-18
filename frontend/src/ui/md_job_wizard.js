@@ -43,6 +43,8 @@ import {
   productionColumns,
   productionField,
   productionPayload,
+  productionFieldApplies,
+  withoutInapplicableProduction,
   randomNAMDSeed,
   planPayload,
   pushUndo,
@@ -215,14 +217,14 @@ export function fieldAppliesToTarget(field, target = 'local') {
  * axes on the way out (see its comment).
  */
 const PRODUCTION_FIELD_DEFS = [
-  { key: 'ion_transport_mode', label: 'Production protocol', type: 'select', group: 'run',
+  { key: 'ion_transport_mode', requires: 'nanopore', label: 'Production protocol', type: 'select', group: 'run',
     options: [{ value: 'off', label: 'Standard molecular dynamics' },
               { value: 'voltage', label: 'Voltage-driven ion transport' }],
     help: 'Uses equal bulk electrolyte on both sides, a voltage drop normal to the membrane, and charge-displacement current analysis. Requires a parent with a NAMD hard surface.' },
-  { key: 'ion_transport_voltage_mV', label: 'Transmembrane voltage', unit: 'mV',
+  { key: 'ion_transport_voltage_mV', requires: 'nanopore', label: 'Transmembrane voltage', unit: 'mV',
     type: 'number', step: 25, min: -2000, group: 'run',
     help: 'Voltage across the periodic cell, emitted with NAMD eFieldNormalized so cell fluctuations do not change it or add field forces to the pressure.' },
-  { key: 'ion_transport_current_stride_ps', label: 'Current sampling', unit: 'ps',
+  { key: 'ion_transport_current_stride_ps', requires: 'nanopore', label: 'Current sampling', unit: 'ps',
     type: 'number', step: 1, min: 0.1, group: 'run',
     help: 'Analysis interval recorded in ion_transport.json. The established default is 10 ps; trajectory frames must be at least this frequent for offline analysis.' },
   { key: 'length_ns', label: 'Run length', unit: 'ns', type: 'number', step: 1, min: 0.001,
@@ -487,7 +489,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     paintActions()
     const payload = {
       ...(!readOnly && state.mode !== 'production' ? getPreparationContext() : {}),
-      ...planPayload({ ...state, touched: { ...ladderPin(), ...state.touched } }),
+      ...planPayload({ ...state, touched: { ...ladderPin(), ...withoutInapplicableProduction(state.touched, plan) } }),
       ...(!readOnly && state.mode !== 'production' ? preparation?.payload() : {}),
     }
     try {
@@ -1078,7 +1080,8 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   function renderProductionSettings() {
     const fieldConds = conditionsByField(plan)
     for (const group of PRODUCTION_GROUPS) {
-      const fields = PRODUCTION_FIELD_DEFS.filter(f => f.group === group.key)
+      const fields = PRODUCTION_FIELD_DEFS.filter(
+        f => f.group === group.key && productionFieldApplies(f, plan))
       if (!fields.length) continue
       const body = el('div', { className: 'wizard-scope__fields' })
       mounts.fields.appendChild(el('section', {
@@ -1872,7 +1875,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     try {
       if (state.mode === 'production') {
         const body = productionPayload({
-          touched: state.touched, autostart,
+          touched: withoutInapplicableProduction(state.touched, plan), autostart,
           // The run length always reaches the request: it is the one production setting
           // with no server-side inheritance, so an omitted one would silently fall to the
           // API's 1 ns default rather than to what the form is showing.
