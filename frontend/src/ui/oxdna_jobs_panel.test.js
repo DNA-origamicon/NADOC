@@ -690,7 +690,7 @@ describe('stageChips — timeline glyphs reflect stage status', () => {
 describe('initOxdnaJobsPanel — per-design job filtering', () => {
   const IDS = [
     'oxdna-jobs-panel', 'oxdna-jobs-heading', 'oxdna-jobs-arrow', 'oxdna-jobs-body',
-    'oxdna-jobs-status', 'oxdna-jobs-run-btn', 'oxdna-jobs-prod-btn', 'oxdna-jobs-prod-status',
+    'oxdna-jobs-status', 'oxdna-jobs-run-btn', 'oxdna-jobs-prod-status',
     'oxdna-jobs-list', 'oxdna-jobs-detail', 'oxdna-jobs-show-all',
   ]
   let currentPath
@@ -771,8 +771,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     'oxdna-jobs-detail-error': 'div', 'oxdna-jobs-errorlog-btn': 'button',
     'oxdna-jobs-progress': 'div', 'oxdna-jobs-timeline': 'div',
     'oxdna-jobs-health': 'div', 'oxdna-jobs-show-all': 'input',
-    'oxdna-jobs-run-btn': 'button', 'oxdna-jobs-prod-btn': 'button', 'oxdna-jobs-prod-steps': 'input',
-    'oxdna-jobs-prod-steps-per-frame': 'input', 'oxdna-jobs-prod-frames-hint': 'div',
+    'oxdna-jobs-run-btn': 'button',
     'oxdna-jobs-stop-btn': 'button',   // production-phase Stop (Archive/Delete consolidated into the master card)
     'oxdna-jobs-display-toggle': 'input', 'oxdna-jobs-align-toggle': 'input',
     'oxdna-jobs-display-status': 'div',
@@ -868,12 +867,14 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect(api.deleteOxdnaJob).toHaveBeenCalledWith('j1')
   })
 
-  it('a completed relaxation → Production enabled, Flexibility map disabled (waiting for production)', async () => {
+  it('a completed relaxation → status line reads production ready, Flexibility map disabled (waiting for production)', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
-    expect($('oxdna-jobs-prod-btn').disabled).toBe(false)     // production ready
+    // "Full Sim" is gone — production launches via "+ New job"'s production mode.
+    // The status line still reflects readiness (used to seed the wizard's mode).
+    expect($('oxdna-jobs-prod-status').textContent.toLowerCase()).toContain('production ready')
     expect($('oxdna-jobs-flex-toggle').disabled).toBe(true)   // no production/field run yet
     expect($('oxdna-jobs-flex-status').textContent.toLowerCase()).toContain('waiting for a production or field run')
   })
@@ -1016,14 +1017,16 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     window.removeEventListener('nadoc:oxdna-job-selected', spy)
   })
 
-  it('while production runs → both Relax and Production greyed; bar shows steps + ETA', async () => {
+  it('while production runs → the single Run button reads Stop (enabled); bar shows steps + ETA', async () => {
     api.getOxdnaProgress.mockResolvedValue({ overall: 0.8, stage_fraction: 0.4, eta_seconds: 200 })
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j2', design_source_path: 'A.nadoc', status: 'running',
       created_at: 1, current_stage_idx: 3, stages: relaxStages({ kind: 'production', status: 'running', steps: 5000000 }) }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
-    expect($('oxdna-jobs-run-btn').disabled).toBe(true)
-    expect($('oxdna-jobs-prod-btn').disabled).toBe(true)
+    // Full Sim's own button is gone — Run now covers production too: a running
+    // production job shows "Stop", not disabled.
+    expect($('oxdna-jobs-run-btn').disabled).toBe(false)
+    expect($('oxdna-jobs-run-btn').dataset.runAction).toBe('stop')
     const prog = $('oxdna-jobs-progress').textContent
     expect(prog).toContain('2,000,000 / 5,000,000 steps')   // 0.4 × 5e6
     expect(prog).toContain('ETA ~3m 20s')                    // 200 s
@@ -1033,33 +1036,37 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
   // The Run button is the context control (▶ Run ⇄ ■ Stop ⇄ ↻ Resume) tied to the
   // SELECTED job, so with nothing selected it reads "▶ Run" (disabled, no spinner); a running relax
   // still shows activity on its list row. SELECTING the running relax flips it to Stop.
-  it('a running relaxation spins its list row; the Relax button reflects the selected job', async () => {
+  it('a running relaxation spins its list row; the Run button reflects the selected job', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jRlx', design_source_path: 'A.nadoc', status: 'running',
       created_at: 1, current_stage_idx: 1, stages: [{ kind: 'mc', status: 'done' }, { kind: 'md_relax', status: 'running' }] }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await panel.refresh()
     await Promise.resolve(); await Promise.resolve()
     expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeTruthy()   // row shows activity
-    expect($('oxdna-jobs-run-btn').textContent.trim()).toBe('▶ Run')
-    expect($('oxdna-jobs-prod-btn').querySelector('.nadoc-spinner')).toBeFalsy()
+    expect($('oxdna-jobs-run-btn').textContent.trim()).toBe('▶ Run')   // nothing selected yet
 
     await selectFirstJob(panel)   // select the running relaxation → Run flips to Stop
     expect($('oxdna-jobs-run-btn').textContent).toContain('Stop Run')
     expect($('oxdna-jobs-run-btn').dataset.runAction).toBe('stop')
   })
 
-  it('a running production spins the list row + Production button, not Relax', async () => {
+  it('a running production spins the list row, and Run flips to Stop once selected', async () => {
+    // Full Sim's own button (and its list-wide ambient spinner) is gone — the single
+    // Run button reflects only the SELECTED job, matching NAMD's pattern.
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jPrd', design_source_path: 'A.nadoc', status: 'running',
       created_at: 1, current_stage_idx: 3, stages: relaxStages({ kind: 'production', status: 'running', steps: 5000000 }) }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await panel.refresh()
     await Promise.resolve(); await Promise.resolve()
-    expect($('oxdna-jobs-prod-btn').querySelector('.nadoc-spinner')).toBeTruthy()
     expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeTruthy()
-    expect($('oxdna-jobs-run-btn').querySelector('.nadoc-spinner')).toBeFalsy()
+    expect($('oxdna-jobs-run-btn').querySelector('.nadoc-spinner')).toBeFalsy()   // nothing selected yet
+
+    await selectFirstJob(panel)
+    expect($('oxdna-jobs-run-btn').textContent).toContain('Stop Run')
+    expect($('oxdna-jobs-run-btn').dataset.runAction).toBe('stop')
   })
 
-  it('a completed job shows no spinners (static status dot, idle buttons)', async () => {
+  it('a completed job shows no spinners (static status dot, idle Run button)', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jFin', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
@@ -1067,17 +1074,17 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     await Promise.resolve(); await Promise.resolve()
     expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeFalsy()
     expect($('oxdna-jobs-run-btn').querySelector('.nadoc-spinner')).toBeFalsy()
-    expect($('oxdna-jobs-prod-btn').querySelector('.nadoc-spinner')).toBeFalsy()
     expect($('oxdna-jobs-run-btn').textContent.trim()).toBe('▶ Run')
   })
 
   // ── Continue production + View trajectory ─────────────────────────────────
-  it('a completed job WITH a production run keeps Production enabled to continue', async () => {
+  it('a completed job WITH a production run keeps production status readable to continue', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jc', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 5, stages: relaxStages({ kind: 'production', status: 'done', steps: 5000000 }) }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
-    expect($('oxdna-jobs-prod-btn').disabled).toBe(false)                       // continue allowed
+    // Continuing again is now via "+ New job" (production mode); the status line
+    // still reflects it.
     expect($('oxdna-jobs-prod-status').textContent.toLowerCase()).toContain('continue')
   })
 
@@ -1232,7 +1239,6 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const run = $('oxdna-jobs-run-btn')
     expect(run.textContent).toContain('Resume')
     expect(run.dataset.runAction).toBe('resume')
-    expect($('oxdna-jobs-prod-btn').textContent).toBe('Full Sim')
   })
 
   it('a prepared job is selected first, then started from the Run control', async () => {
@@ -1251,7 +1257,9 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect(api.startOxdnaJob).toHaveBeenCalledWith('jReady')
   })
 
-  it('an interrupted full run is resumed from Full Sim, not Relax', async () => {
+  it('an interrupted production run is resumed from the single Run control, not a separate Full Sim button', async () => {
+    // Full Sim's own button is gone — the generalized _runControl() now covers
+    // BOTH kinds, so an interrupted production stage correctly resumes from Run.
     const job = { job_id: 'jRun2', design_source_path: 'voltronCoreArm.nadoc', status: 'stopped',
       created_at: 1, current_stage_idx: 3,
       stages: relaxStages({ kind: 'production', status: 'running', steps: 5000 }) }
@@ -1259,18 +1267,17 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'voltronCoreArm.nadoc' })
     await selectFirstJob(panel)
 
-    expect($('oxdna-jobs-run-btn').textContent).toContain('Run')
-    expect($('oxdna-jobs-run-btn').dataset.runAction).toBe('run')
-    expect($('oxdna-jobs-prod-btn').textContent).toContain('Resume Run')
     expect(isProductionResumable(job)).toBe(true)
     expect(isRelaxResumable(job)).toBe(false)
+    expect($('oxdna-jobs-run-btn').textContent).toContain('Resume Run')
+    expect($('oxdna-jobs-run-btn').dataset.runAction).toBe('resume')
 
-    $('oxdna-jobs-prod-btn').click()
+    $('oxdna-jobs-run-btn').click()
     await flush()
     expect(api.startOxdnaJob).toHaveBeenCalledWith('jRun2')
   })
 
-  it('a completed full run stays production done and offers a new Full Sim', async () => {
+  it('a completed full run stays production done and status invites a new run via "+ New job"', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jRun2', design_source_path: 'voltronCoreArm.nadoc',
       status: 'completed', created_at: 1, current_stage_idx: 4,
       stages: relaxStages({ kind: 'production', status: 'done', steps: 5000 }) }])
@@ -1280,8 +1287,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const badge = $('oxdna-jobs-list').querySelector('[title="Production done"]')
     expect(badge?.textContent).toBe('■')
     expect(badge?.style.color).toBe('rgb(74, 158, 255)')
-    expect($('oxdna-jobs-prod-btn').textContent).toBe('Full Sim')
-    expect($('oxdna-jobs-prod-btn').disabled).toBe(false)
+    expect($('oxdna-jobs-prod-status').textContent).toContain('+ New job')
   })
 
   it('flexibility map unlocks mid-run + flags the map preliminary while production runs', async () => {
@@ -1422,7 +1428,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
 describe('initOxdnaJobsPanel — permanently-open section (no per-engine collapse) + poll', () => {
   const IDS = [
     'oxdna-jobs-panel', 'oxdna-jobs-heading', 'oxdna-jobs-arrow', 'oxdna-jobs-body',
-    'oxdna-jobs-status', 'oxdna-jobs-run-btn', 'oxdna-jobs-prod-btn', 'oxdna-jobs-prod-status',
+    'oxdna-jobs-status', 'oxdna-jobs-run-btn', 'oxdna-jobs-prod-status',
     'oxdna-jobs-list', 'oxdna-jobs-detail', 'oxdna-jobs-show-all',
   ]
   const $ = (id) => document.getElementById(id)

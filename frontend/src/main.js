@@ -1787,14 +1787,12 @@ async function main() {
     if (clusterBody && clusterMount) clusterBody.prepend(clusterMount)
   }
 
-  // oxDNA: tuck the Production-steps field + the auto-policy resource line ("GPU: free ·
-  // N cores · Engine …") into the oxDNA Advanced card. Its body is a 2-col grid, so each
-  // moved block spans the full row. Prepend so they read at the top of Advanced.
+  // oxDNA: tuck the auto-policy resource line ("GPU: free · N cores · Engine …") into
+  // the oxDNA Advanced card. Its body is a 2-col grid, so the moved block spans the
+  // full row. Prepend so it reads at the top of Advanced.
   {
     const advBody = document.getElementById('oxdna-jobs-adv-body')
-    const prodParams = document.getElementById('oxdna-prod-params')
     const statusLine = document.getElementById('simulate-status-line')
-    if (advBody && prodParams) { prodParams.style.gridColumn = '1 / -1'; advBody.prepend(prodParams) }
     if (advBody && statusLine) { statusLine.style.gridColumn = '1 / -1'; advBody.prepend(statusLine) }
   }
 

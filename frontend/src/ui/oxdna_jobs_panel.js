@@ -572,11 +572,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const statusEl      = document.getElementById('oxdna-jobs-status')
   const newBtn        = document.getElementById('oxdna-jobs-new-btn')
   const runBtn        = document.getElementById('oxdna-jobs-run-btn')
-  const prodBtn       = document.getElementById('oxdna-jobs-prod-btn')
   const depositionBtn = document.getElementById('oxdna-surface-deposition-run')
-  const prodStepsInput = document.getElementById('oxdna-jobs-prod-steps')
-  const prodSpfInput   = document.getElementById('oxdna-jobs-prod-steps-per-frame')
-  const prodFramesHint = document.getElementById('oxdna-jobs-prod-frames-hint')
   const prodStatus    = document.getElementById('oxdna-jobs-prod-status')
   const autorefineBtn     = document.getElementById('oxdna-jobs-autorefine-btn')
   const autorefineStopBtn = document.getElementById('oxdna-jobs-autorefine-stop-btn')
@@ -1455,12 +1451,15 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
   // ── Primary run control: ▶ Run ⇄ ■ Stop ⇄ ↻ Resume (Phase C) ───────────────
   // One button, three meanings driven by the SELECTED job's state (job_run_control).
+  // Covers BOTH relaxation and production — a production run is always its own child
+  // job with a single kind:"production" stage, so isProductionRunning/-Resumable are
+  // already correct per-job; Full Sim's own button is gone, this is now the only
+  // control that starts, stops, or resumes either kind.
   function _runControl() {
-    // Gated to the relaxation phase: production still owns its Advanced control.
     return runControlState(_selectedJob(), {
       verb: 'Run',
-      isActive: isRelaxRunning,
-      isResumable: isRelaxResumable,
+      isActive: job => isRelaxRunning(job) || isProductionRunning(job),
+      isResumable: job => isRelaxResumable(job) || isProductionResumable(job),
       busy: _launching,
     })
   }
@@ -1478,6 +1477,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         excludeJobId: _selectedId,
         usesGpu: (_selectedJob()?.backend || 'CUDA') === 'CUDA',
       }))) return
+      oxdnaLive?.stop()   // any job start/resume supersedes a live session (shared overlay)
       await api.startOxdnaJob(_selectedId)
       await _fetchJobs()
     }, { label: 'Resuming…' })
@@ -1490,6 +1490,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         excludeJobId: _selectedId,
         usesGpu: (job.backend || 'CUDA') === 'CUDA',
       }))) return
+      oxdnaLive?.stop()   // any job start/resume supersedes a live session (shared overlay)
       const started = await api.startOxdnaJob(_selectedId)
       if (!started) {
         showToast(api.lastErrorMessage?.() || 'Could not start oxDNA job', 'error')
@@ -1505,7 +1506,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (action === RUN_ACTION.RESUME) return _resumeSelected()
     return _startSelected()
   })
-  newBtn?.addEventListener('click', () => _wizard.open())
+  // Pre-seed the wizard's mode from the currently selected job: continuing a
+  // completed relaxation is the common case once one exists (NAMD parity). The
+  // mode toggle inside the wizard stays live/overridable regardless.
+  newBtn?.addEventListener('click', () => {
+    const sel = _selectedJob()
+    if (sel && seedReady(sel)) return void _wizard.open('production', { parentJobId: sel.job_id })
+    void _wizard.open('relax')
+  })
 
   // ── Launch ─────────────────────────────────────────────────────────────────
   async function _launchRelax(wizardPayload = null) {
@@ -1606,6 +1614,19 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }),
     getInitialTarget: _currentRunTarget,
     launch: payload => _launchRelax(payload),
+    spawnProduction: (parentJobId, payload) => _launchProduction(parentJobId, payload),
+    getJobs: () => _jobs,
+    getPartPath: () => _currentPartPath(),
+    estimateRunSize: (steps, stepsPerFrame, parentJobId) =>
+      trajectoryFrameEstimate(steps, stepsPerFrame, _jobs.find(j => j.job_id === parentJobId)?.n_nucleotides),
+    // The wizard's "Continue from" parent is independent of whatever's selected in the
+    // main list — re-sync the shared Anchors/Electric-field/Hard-surface/PEG panels to
+    // it (same as clicking that row) so _launchProduction's getRunElements() reflects
+    // the ACTUAL chosen parent, not stale/unrelated list-selection state.
+    onParentChange: (parentJobId) => {
+      const parent = _jobs.find(j => j.job_id === parentJobId)
+      if (parent) _applyRunControls(parent)
+    },
     updateJob: async (jobId, payload) => {
       const current = _jobs.find(job => job.job_id === jobId)
       if (!current) return null
@@ -1797,8 +1818,6 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (equilStepsInput && a.equilSteps != null) equilStepsInput.value = String(a.equilSteps)
       if (bpGateInput && a.bpGate != null) bpGateInput.value = String(a.bpGate)
     }
-    if (prodStepsInput && cfg.prodSteps != null) prodStepsInput.value = String(cfg.prodSteps)
-    _renderFramesHint()   // steps changed → re-derive the frame count / size line
     // Alignment is disallowed for surface jobs — the backend forces it off (a Kabsch
     // superpose onto the design pose makes the relaxed structure look like it clips through
     // the surface). Reflect that in the toggle so the user isn't misled.
@@ -1821,35 +1840,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     applyRunConfig?.({ advanced: null, field: null, surface: null, surfaceStrands: null, anchors: [] }, null)
   }
 
-  // ── Trajectory-density hint (Advanced card) ────────────────────────────────
-  // "Steps / frame" is oxDNA's print_conf_interval: how often the run writes a
-  // trajectory frame.  It is ABSOLUTE, so doubling the run doubles the frames rather
-  // than halving the resolution — which also means the disk cost scales with run
-  // length.  The hint line makes both consequences visible BEFORE launching.
-  function _stepsPerFrame() {
-    const v = parseInt(prodSpfInput?.value || '10000', 10)
-    return Number.isFinite(v) && v >= 1 ? v : 10000
-  }
-  function _renderFramesHint() {
-    if (!prodFramesHint) return
-    const steps = parseInt(prodStepsInput?.value || '0', 10)
-    // n_nucleotides comes from the selected job (the run branches off it, so it has
-    // the same structure). Unknown → report frames only, never a bogus size.
-    const { frames, bytes } = trajectoryFrameEstimate(
-      steps, _stepsPerFrame(), _selectedJob()?.n_nucleotides)
-    if (!frames) { prodFramesHint.textContent = ''; return }
-    // The shared formatBytes returns '0 B' (not '') for an unknown size, so gate on
-    // the byte count itself — an unknown nucleotide count shows frames only.
-    prodFramesHint.textContent =
-      `→ ${frames.toLocaleString()} frames${bytes > 0 ? ` · ~${formatBytes(bytes)} trajectory` : ''}`
-    // Flag a run that will write a lot: the disk forecast still gates the launch, but
-    // a warning here lets the number be tuned before the modal appears.
-    prodFramesHint.style.color = bytes > 5e9 ? _C.warn : _C.dim
-  }
-  prodSpfInput?.addEventListener('input', _renderFramesHint)
-  prodStepsInput?.addEventListener('input', _renderFramesHint)
-
-  // Reset every relaxation/production INPUT back to its index.html default — used
+  // Reset every relaxation INPUT back to its index.html default — used
   // when a design is closed or a different one is opened, so the panel doesn't
   // carry the previous design's (or last-selected job's) settings.  Also clears
   // the run cards (field/surface/anchors) and drops the device "user set" flag so
@@ -1857,9 +1848,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   function _resetControlsToDefaults() {
     resetControlsToDefaults([
       backendSel, deviceInput, saltInput, mcStepsInput, mdStepsInput,
-      equilStepsInput, bpGateInput, prodStepsInput, prodSpfInput,
+      equilStepsInput, bpGateInput,
     ])
-    _renderFramesHint()
     if (deviceInput) delete deviceInput.dataset.userSet
     _clearRunCards()
     _checkAvailable()   // re-apply the recommended device into the now-default field
@@ -2039,9 +2029,6 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   }
 
   function _updateButtons(job) {
-    // Selecting a different job can change n_nucleotides, which the size estimate
-    // depends on — refresh it here since this runs on every selection/state change.
-    _renderFramesHint()
     const ps = productionState(job)
     const prodRunning = job?.status === 'running' && ps === 'running'
     // Production is allowed whenever the job is completed — the first run starts
@@ -2058,8 +2045,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
     // Run — the primary CONTEXT control: ▶ Run ⇄ ■ Stop ⇄ ↻ Resume (Phase C).
     // Label + action come from the selected job's state; a spinner shows only while a
-    // fresh launch is in flight. RUN is gated by availability + an active production.
-    const prodActive  = _visibleJobs().some(isProductionRunning)
+    // fresh launch is in flight. Covers BOTH relaxation and production — the single
+    // Run button starts, stops, or resumes whichever job is selected, regardless of
+    // kind (Full Sim's own button is gone; production is created via the wizard).
     if (runBtn) {
       const rc = _runControl()
       if (_launching) {
@@ -2073,11 +2061,6 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         (rc.action === RUN_ACTION.RUN && (!canStart || prodRunning))
       runBtn.dataset.runAction = rc.action
     }
-    const prodLabel = prodResume ? '↻ Resume Run' : 'Full Sim'
-    if (prodBtn) {
-      if (prodActive) _setBtnSpinner(prodBtn, true, prodLabel, 'Running…')
-      else { prodBtn.dataset.spinning = '0'; prodBtn.textContent = prodLabel }  // repaint idle label directly
-    }
     if (depositionBtn) {
       const el = getRunElements?.() || {}
       const enabled = prodReady && !!el.surface?.enabled && !!el.surfaceAnchors?.length
@@ -2089,19 +2072,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }
     _updateAutorefineButton()   // gate by lattice + availability + in-flight autorefine
 
-    if (prodBtn) {
-      const prodEnabled = prodReady
-      prodBtn.disabled = !prodEnabled
-      prodBtn.style.cursor = prodEnabled ? 'pointer' : 'not-allowed'
-      prodBtn.style.background = prodEnabled ? '#1a4a1a' : '#122117'
-      prodBtn.style.borderColor = prodEnabled ? '#3fb950' : '#30363d'
-      prodBtn.style.color = prodEnabled ? '#3fb950' : '#484f58'
-    }
     if (prodRunning) _setProdStatus('Production running…', _C.warn)
     else if (ps === 'failed') _setProdStatus('Production failed.', _C.err)
     else if (prodReady && hasRun)
-      _setProdStatus(`Production complete (${productionRunCount(job)} run${productionRunCount(job) > 1 ? 's' : ''}). Start again to continue from the last frame.`, _C.ok)
-    else _setProdStatus(prodReady ? 'Ready to run production from the relaxed structure.' : '', _C.dim)
+      _setProdStatus(`Production complete (${productionRunCount(job)} run${productionRunCount(job) > 1 ? 's' : ''}). "+ New job" to continue from the last frame.`, _C.ok)
+    else _setProdStatus(prodReady ? 'Production ready — "+ New job" to continue from this relaxed structure.' : '', _C.dim)
 
     // In LAMMPS-viz mode the viz radios are owned by selectLammpsJob (gated on the LAMMPS
     // run's own viewability) — skip the oxDNA sampling/trajectory gates below so a poll
@@ -2229,27 +2204,39 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // topology and crash.  Offer to non-destructively ROLL the feature log back to the
   // relaxation stage (later edits kept — a persistent toast lets the user return), or
   // cancel.  Returns true to proceed, false to abort.  Shared by production + Live.
-  function _ensureJobCurrent(actionLabel) {
+  // `job` defaults to the current selection (Live/deposition always act on it); a
+  // production launch from the wizard passes its own "Continue from" parent, which
+  // may differ from whatever row happens to be selected in the list.
+  function _ensureJobCurrent(actionLabel, job = _selectedJob()) {
     return ensureJobCurrent({
-      job: _selectedJob(),
+      job,
       rollFn: api.rollOxdnaJobDesign,
       refetch: _fetchJobs,
-      isStale: () => jobOutOfDate(_selectedJob()),
+      isStale: () => jobOutOfDate(job),
       actionLabel,
     })
   }
 
-  prodBtn?.addEventListener('click', async () => {
-    if (!_selectedId || prodBtn.disabled) return
-    if (isProductionResumable(_selectedJob())) return _resumeSelected()
-    if (!(await _ensureJobCurrent('a production run'))) return
+  // Launches a production run branched from `parentJobId` (a completed relaxation),
+  // via the wizard's production mode. Ported from the removed "Full Sim" button —
+  // same staleness/concurrency/capture-strand/disk-estimate safeguards, same
+  // api.appendOxdnaRun call — but the child is created queued (backend no longer
+  // auto-starts it); the single Run button starts it. Returns the created child job
+  // (truthy) to close the wizard, or null to keep it open for correction.
+  async function _launchProduction(parentJobId, wizardPayload) {
+    const parent = _jobs.find(j => j.job_id === parentJobId)
+    if (!parent) {
+      showToast('Select a completed relaxation to continue from', 'error')
+      return null
+    }
+    if (!(await _ensureJobCurrent('a production run', parent))) return null
     if (!(await confirmNoConcurrentJob({
-      excludeJobId: _selectedId,
-      usesGpu: (_selectedJob()?.backend || 'CUDA') === 'CUDA',   // run inherits the job's backend
-    }))) return
+      excludeJobId: parentJobId,
+      usesGpu: (parent.backend || 'CUDA') === 'CUDA',   // run inherits the job's backend
+    }))) return null
     oxdnaLive?.stop()   // a production run supersedes any live session (shared overlay)
-    const steps = parseInt(prodStepsInput?.value || '5000000', 10)
-    const stepsPerFrame = _stepsPerFrame()
+    const steps = Number(wizardPayload?.steps) || 5_000_000
+    const stepsPerFrame = Number(wizardPayload?.steps_per_frame) || 10_000
 
     // Compose the run from the independently-enabled elements (field / surface /
     // anchors).  Each is optional — with none enabled this is a plain production.
@@ -2269,7 +2256,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // Capture strands can only be INHERITED from the relaxed parent (they are built
     // into the system before relaxation so the origami hybridises to them as it
     // settles). Refuse rather than launch a run that quietly has none.
-    const capPlan = captureStrandRunPlan(_selectedJob(), el.surfaceStrands)
+    const capPlan = captureStrandRunPlan(parent, el.surfaceStrands)
     if (capPlan.mode === 'unbuilt') {
       await showConfirm({
         title: 'This relaxation has no capture strands',
@@ -2283,7 +2270,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         cancelLabel: '',
       })
       _setProdStatus('Run cancelled — relax with capture strands first.', _C.err)
-      return
+      return null
     }
     if (capPlan.mode === 'inherit') {
       // Intent, not a build request: the backend re-pins the inherited beads and
@@ -2298,31 +2285,28 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // card shows a warning notice, but the run is allowed (no longer blocked here).
 
     try {
-      const fc = await api.estimateOxdnaRunDisk(_selectedId, { steps, steps_per_frame: stepsPerFrame })
-      if (!(await confirmDiskSpaceOk(fc))) return
+      const fc = await api.estimateOxdnaRunDisk(parentJobId, { steps, steps_per_frame: stepsPerFrame })
+      if (!(await confirmDiskSpaceOk(fc))) return null
     } catch { /* forecast is best-effort — never block a launch on it */ }
 
-    prodBtn.disabled = true
-    if (runBtn) runBtn.disabled = true     // grey out both immediately on press
     const what = [body.field && 'field', body.surface && 'surface',
       productionRunAnchors(el).length && 'anchors',
       body.surface_strands && `${capPlan.nBeads} capture beads`].filter(Boolean).join(' + ') || 'production'
-    _setProdStatus(`Starting run (${what})…`, _C.accent)
-    // The consolidated run branches a CHILD job from the relaxed parent (success =
-    // the child dict carries a job_id; it starts queued/running in the background).
-    const r = await api.appendOxdnaRun(_selectedId, body)
-    if (r && (r.job_id || r.ok)) {
-      showToast('oxDNA run started', 'ok')
-      _setProdStatus(`Run started (${what}) — see the new sub-item.`, _C.warn)
+    _setProdStatus(`Creating run (${what})…`, _C.accent)
+    // The consolidated run branches a CHILD job from the relaxed parent, created
+    // queued — the wizard autoselects it and the single Run button starts it.
+    const r = await api.appendOxdnaRun(parentJobId, body)
+    if (r && r.job_id) {
+      showToast('oxDNA run created — press Run when ready', 'ok')
+      _setProdStatus(`Run created (${what}) — press Run to start it.`, _C.ok)
+      _selectedId = r.job_id
       await _fetchJobs()
-      // Select the new run so its list item is highlighted and every card (incl.
-      // the E-field arrow) reflects the run that was just started.
-      if (r.job_id) await _selectJob(r.job_id)
-    } else {
-      _setProdStatus(api.lastErrorMessage?.() || 'Failed to start run (see console)', _C.err)
-      prodBtn.disabled = false
+      await _selectJob(r.job_id)
+      return r
     }
-  })
+    _setProdStatus(api.lastErrorMessage?.() || 'Failed to create run (see console)', _C.err)
+    return null
+  }
 
   depositionBtn?.addEventListener('click', async () => {
     if (!_selectedId || depositionBtn.disabled) return
@@ -2344,7 +2328,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         stiff: el.surface.stiff,
       },
       surface_anchors: el.surfaceAnchors,
-      steps_per_frame: _stepsPerFrame(),
+      // steps_per_frame omitted — the backend's own DEFAULT_STEPS_PER_FRAME (10,000)
+      // applies (formerly read from the now-removed #oxdna-jobs-prod-steps-per-frame
+      // input, which the wizard's production mode owns now).
     })
     depositionBtn.textContent = 'Run surface deposition'
     if (r?.job_id) {

@@ -418,6 +418,22 @@ def _run_client(monkeypatch, tmp_path):
     return TestClient(app), routes_oxdna
 
 
+def test_run_creates_child_queued_without_autostarting(design, monkeypatch, tmp_path):
+    """append_oxdna_run creates the child queued but does NOT start it — the panel's
+    single Run button (NAMD-parity job creation flow) starts it explicitly, matching
+    how a freshly-created local relaxation already behaves."""
+    from unittest.mock import MagicMock
+
+    client, routes_oxdna = _run_client(monkeypatch, tmp_path)
+    start_job_mock = MagicMock()
+    monkeypatch.setattr(routes_oxdna, "start_job", start_job_mock)
+    parent = _completed_parent(tmp_path, design)
+    r = client.post(f"/api/oxdna/jobs/{parent.job_id}/run", json={"steps": 1000})
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "queued"
+    start_job_mock.assert_not_called()
+
+
 def test_run_field_without_anchor_allowed(design, monkeypatch, tmp_path):
     """A field with no anchor is no longer rejected — it branches a child job with a
     field-only forces file (the UI warns about the resulting COM drift)."""

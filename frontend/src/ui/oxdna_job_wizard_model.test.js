@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { oxdnaConfigDocument, oxdnaRunpodPlanShape, oxdnaStagePlan, oxdnaWizardPayload, validateOxdnaWizard } from './oxdna_job_wizard_model.js'
+import {
+  oxdnaConfigDocument, oxdnaRunpodPlanShape, oxdnaStagePlan, oxdnaWizardPayload, validateOxdnaWizard,
+  oxdnaProductionDefaults, oxdnaProductionPayload, oxdnaProductionParents, oxdnaProductionStagePlan, validateOxdnaProductionWizard,
+} from './oxdna_job_wizard_model.js'
 import { initOxdnaJobWizard } from './oxdna_job_wizard.js'
 
 describe('oxDNA job wizard model', () => {
@@ -115,4 +118,45 @@ it('previews the fixed-gold hybrid with GPU MD and persistent model forces', () 
   for (const stage of stages.slice(1)) expect(stage).toMatchObject({ backend: 'CUDA', interaction_type: 'DNANM', dt: 0.0001, external_forces: true, fix_diffusion: false })
   expect(stages[2].forces_file).toBe('equil_forces.txt')
   expect(stages[2].seq_dep_file).toBeUndefined()
+})
+
+describe('oxDNA production wizard model', () => {
+  it('defaults match the prior Full Sim UI (5,000,000 steps / 10,000 per frame)', () => {
+    expect(oxdnaProductionDefaults()).toEqual({ steps: 5_000_000, steps_per_frame: 10_000 })
+    expect(oxdnaProductionDefaults({ steps: 1_000_000 })).toMatchObject({ steps: 1_000_000, steps_per_frame: 10_000 })
+  })
+
+  it('requires a parent job and bounds steps/steps_per_frame like RunRequest', () => {
+    expect(validateOxdnaProductionWizard({}).valid).toBe(false)
+    expect(validateOxdnaProductionWizard({}).errors).toHaveProperty('parentJobId')
+    expect(validateOxdnaProductionWizard({ parentJobId: 'p1', steps: 500 }).errors).toHaveProperty('steps')
+    expect(validateOxdnaProductionWizard({ parentJobId: 'p1', steps_per_frame: 0 }).errors).toHaveProperty('steps_per_frame')
+    expect(validateOxdnaProductionWizard({ parentJobId: 'p1' })).toEqual({ valid: true, errors: {} })
+  })
+
+  it('inherits backend/device/salt from the parent and maps steps_per_frame to print_conf_interval', () => {
+    const parent = { backend: 'CUDA', device: '1', salt_concentration: 0.3 }
+    const [stage] = oxdnaProductionStagePlan({ steps: 2_000_000, steps_per_frame: 5000 }, parent)
+    expect(stage).toMatchObject({
+      name: '1_production', sim_type: 'MD', backend: 'CUDA', device: '1',
+      salt_concentration: 0.3, steps: 2_000_000, print_conf_interval: 5000,
+    })
+  })
+
+  it('payload excludes field/surface/anchors — those stay sourced from the shared run-elements panel', () => {
+    expect(oxdnaProductionPayload({ steps: 3_000_000, steps_per_frame: 20_000 }))
+      .toEqual({ steps: 3_000_000, steps_per_frame: 20_000 })
+  })
+
+  it('lists only completed jobs for the current design, newest first, with an includeId escape hatch', () => {
+    const jobs = [
+      { job_id: 'a', status: 'completed', design_source_path: 'X.nadoc', created_at: 1 },
+      { job_id: 'b', status: 'running', design_source_path: 'X.nadoc', created_at: 2 },
+      { job_id: 'c', status: 'completed', design_source_path: 'X.nadoc', created_at: 3 },
+      { job_id: 'd', status: 'completed', design_source_path: 'Other.nadoc', created_at: 4 },
+    ]
+    expect(oxdnaProductionParents(jobs, 'X.nadoc').map(j => j.job_id)).toEqual(['c', 'a'])
+    // A chosen parent from another design's path still survives via includeJobId.
+    expect(oxdnaProductionParents(jobs, 'X.nadoc', { includeJobId: 'd' }).map(j => j.job_id)).toEqual(['d', 'c', 'a'])
+  })
 })

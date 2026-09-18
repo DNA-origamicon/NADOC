@@ -83,7 +83,7 @@ def test_production_child_keeps_core_model(tmp_path,monkeypatch):
     import asyncio
     from backend.api import routes_oxdna as routes
     from backend.api.crud import _geometry_for_design
-    from backend.core.oxdna_job import new_oxdna_job,OxdnaStatus
+    from backend.core.oxdna_job import new_oxdna_job,OxdnaStatus,OxdnaJob
     from backend.core.oxdna_runner import prepare_oxdna_job,load_stage_specs
     d=design_with_handles();stage=OxdnaStageSpec('relax','md_relax','MD',100,'CUDA')
     parent=new_oxdna_job('gold',[stage.to_status()],n_nucleotides=16)
@@ -94,10 +94,13 @@ def test_production_child_keeps_core_model(tmp_path,monkeypatch):
     monkeypatch.setattr(routes,'_assert_job_current',lambda _:None)
     monkeypatch.setattr(routes,'find_oxdna',lambda:'test-binary')
     monkeypatch.setattr(routes,'_latest_relaxed_conf',lambda *a:(parent.job_dir(tmp_path)/'conf.dat','relax'))
-    created=[]
-    monkeypatch.setattr(routes,'start_job',lambda job,ws,specs:created.append((job,specs)))
-    asyncio.run(routes.append_oxdna_run(parent.job_id,routes.RunRequest(steps=1000)))
-    child,specs=created[0]
+    # append_oxdna_run no longer auto-starts (NAMD-parity job creation — the panel's
+    # Run button starts it), so read the created child back instead of intercepting
+    # start_job's args.
+    result=asyncio.run(routes.append_oxdna_run(parent.job_id,routes.RunRequest(steps=1000)))
+    child=OxdnaJob.load(result['job_id'],tmp_path)
+    specs=load_stage_specs(child.job_dir(tmp_path))
+    assert child.status==OxdnaStatus.queued
     assert child.run_config['mobile_gold']==parent.run_config['mobile_gold']
     assert specs[0].interaction=='DNA2GOLD' and specs[0].backend=='CUDA'
     assert (child.job_dir(tmp_path)/'mobile_gold.dat').read_bytes()==(parent.job_dir(tmp_path)/'mobile_gold.dat').read_bytes()

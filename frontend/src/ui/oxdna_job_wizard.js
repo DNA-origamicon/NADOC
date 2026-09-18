@@ -1,8 +1,18 @@
 import { createButton, createModal, el } from './primitives/index.js'
 import { initWizardTargetStep } from './md_job_wizard_target.js'
-import { oxdnaConfigDocument, oxdnaRunpodPlanShape, oxdnaStagePlan, oxdnaWizardDefaults, oxdnaWizardPayload, validateOxdnaWizard } from './oxdna_job_wizard_model.js'
+import { formatBytes } from './format_bytes.js'
+import {
+  oxdnaConfigDocument, oxdnaRunpodPlanShape, oxdnaStagePlan, oxdnaWizardDefaults, oxdnaWizardPayload, validateOxdnaWizard,
+  oxdnaProductionDefaults, oxdnaProductionPayload, oxdnaProductionParents, oxdnaProductionStagePlan, validateOxdnaProductionWizard,
+} from './oxdna_job_wizard_model.js'
 
-const TABS = [['target', 'Where it runs'], ['settings', 'Parameters & options'], ['config', 'Full configuration']]
+const ALL_TABS = [['target', 'Where it runs'], ['settings', 'Parameters & options'], ['config', 'Full configuration']]
+const PRODUCTION_TABS = [['settings', 'Run parameters'], ['config', 'Summary']]
+const PRODUCTION_FIELDS = [
+  { key: 'steps', label: 'Production steps', unit: 'steps', type: 'number', min: 1000, step: 1_000_000 },
+  { key: 'steps_per_frame', label: 'Steps / frame', unit: 'steps', type: 'number', min: 1, step: 1000,
+    help: 'oxDNA print_conf_interval — simulation steps between saved trajectory frames.' },
+]
 const FIELDS = [
   { key: 'interaction_type', label: 'Force-field version', type: 'select',
     options: [['DNA2', 'oxDNA2 (recommended)'], ['DNA', 'oxDNA1 (legacy)']],
@@ -48,15 +58,21 @@ const ROW_LABELS = {
   topology: 'Topology',
 }
 
-export function initOxdnaJobWizard({ api = {}, launch = async () => null,
-  updateJob = async () => null, getInitialValues = () => ({}), getInitialTarget = () => 'local' } = {}) {
+export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnProduction = async () => null,
+  updateJob = async () => null, getInitialValues = () => ({}), getInitialTarget = () => 'local',
+  getJobs = () => [], getPartPath = () => null, estimateRunSize = () => null,
+  onParentChange = () => {} } = {}) {
   let modal, targetStep, currentTab = 'target', values = oxdnaWizardDefaults(), busy = false
   let editJob = null, derivedEditor = null, derivedError = null
+  let mode = 'relax', parentJobId = null
   const panels = {}, tabs = {}
   let previousBtn, nextBtn, createBtn, closeBtn, configPre, stageSummary, stageTable,
-    engineDetails, validationNote, wizardShell, readOnlyPanel
+    engineDetails, validationNote, wizardShell, readOnlyPanel, sourceMount
+
+  function tabsForMode() { return mode === 'production' ? PRODUCTION_TABS : ALL_TABS }
 
   function renderSettings() {
+    if (mode === 'production') return renderProductionSettings()
     const grid = el('div', { className: 'wizard-field-grid' })
     panels.settings.replaceChildren(el('details', { attrs: { open: true }, children: [
       el('summary', { text: 'Engine versions & installation' }), engineDetails,
@@ -94,20 +110,62 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
     }
   }
 
+  function renderProductionSettings() {
+    const grid = el('div', { className: 'wizard-field-grid' })
+    panels.settings.replaceChildren(el('h3', { text: 'Production run' }), grid)
+    for (const field of PRODUCTION_FIELDS) {
+      const input = el('input', { attrs: { type: field.type, min: field.min, step: field.step } })
+      input.dataset.oxdnaField = field.key
+      input.value = values[field.key]
+      input.addEventListener('input', () => {
+        values[field.key] = Number(input.value)
+        renderConfig(); paintValidation()
+      })
+      grid.append(el('label', { className: 'wizard-field', children: [
+        el('span', { className: 'wizard-field__label', text: field.label }), input,
+        field.unit ? el('span', { className: 'wizard-field__unit', text: field.unit }) : null,
+        field.help ? el('span', { className: 'wizard-field__help', text: field.help }) : null,
+      ] }))
+    }
+  }
+
   function paintValidation() {
     if (!validationNote) return
-    const result = validateOxdnaWizard(values)
+    const result = mode === 'production' ? validateOxdnaProductionWizard(values) : validateOxdnaWizard(values)
     validationNote.textContent = result.valid ? '' : Object.values(result.errors)[0]
     validationNote.hidden = result.valid
-    if (createBtn) createBtn.disabled = busy || !(targetStep?.isReady?.() ?? true) || !result.valid
+    const ready = mode === 'production' ? true : (targetStep?.isReady?.() ?? true)
+    if (createBtn) createBtn.disabled = busy || !ready || !result.valid
   }
 
   function renderConfig() {
     if (!configPre) return
+    if (mode === 'production') return renderProductionConfig()
     configPre.textContent = oxdnaConfigDocument(values, targetStep?.payloadFields?.() || {})
     const stages = oxdnaStagePlan(values)
     stageSummary.textContent = `${stages.length} stages · ${stages.reduce((n, s) => n + s.steps, 0).toLocaleString()} scheduled steps`
     renderStageTable(stages)
+  }
+
+  /** Read-only summary — production has exactly 2 editable knobs (steps, steps_per_frame) already
+   *  shown on the settings tab; backend/device/salt are inherited from the parent with no override
+   *  field on RunRequest, so the editable per-stage table (which invites editing those) doesn't fit. */
+  function renderProductionConfig() {
+    const parentJob = getJobs().find(j => j.job_id === parentJobId) || {}
+    const [stage] = oxdnaProductionStagePlan(values, parentJob)
+    const { frames = 0, bytes = 0 } = estimateRunSize(stage.steps, stage.print_conf_interval, parentJobId) || {}
+    stageSummary.textContent = `1 stage · ${stage.steps.toLocaleString()} scheduled steps`
+      + (frames ? ` · ~${frames.toLocaleString()} frames${bytes > 0 ? ` · ~${formatBytes(bytes)} trajectory` : ''}` : '')
+    stageTable.replaceChildren()
+    const lines = [
+      `continue_from = ${parentJob.job_id || '(none selected)'}`,
+      `steps = ${stage.steps}`,
+      `steps_per_frame = ${stage.print_conf_interval}`,
+      `backend = ${stage.backend ?? '(inherited)'}`,
+      `device = ${stage.device ?? '(inherited)'}`,
+      `salt_concentration = ${stage.salt_concentration ?? '(inherited)'}`,
+    ]
+    configPre.textContent = `# ${stage.name}: ${stage.purpose}\n${lines.join('\n')}`
   }
 
   function displayValue(value) {
@@ -214,14 +272,92 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
       : '<strong>Engine not detected.</strong> Set <code>$OXDNA_BIN</code> or install oxDNA. Configuration remains available, but Run stays unavailable.'
   }
 
+  function modeButton(id, label, help) {
+    const selected = mode === id
+    return el('button', { className: `wizard-mode${selected ? ' is-selected' : ''}`,
+      attrs: { type: 'button', 'aria-pressed': String(selected) },
+      on: { click: () => setMode(id) },
+      children: [el('div', { className: 'wizard-mode__label', text: label }),
+        el('div', { className: 'wizard-mode__help', text: help })] })
+  }
+
+  function setMode(newMode) {
+    if (mode === newMode) return
+    mode = newMode
+    if (mode === 'production') {
+      values = oxdnaProductionDefaults({ parentJobId })
+      targetStep.setChoice({ target: 'local' })
+      if (parentJobId) onParentChange(parentJobId)
+    } else {
+      values = oxdnaWizardDefaults(getInitialValues())
+      targetStep.setChoice({ target: getInitialTarget() || 'local' })
+    }
+    currentTab = tabsForMode()[0][0]
+    targetStep.render()
+    renderSettings(); renderConfig(); paint()
+  }
+
+  /** Mode toggle + "Continue from" parent picker — always visible above the tab bar,
+   *  mirroring NAMD's renderSource()/modeButton() (md_job_wizard.js). Overridable
+   *  regardless of how open() seeded the mode. */
+  function renderSource() {
+    if (!sourceMount) return
+    if (editJob) { sourceMount.replaceChildren(); return }   // editing an existing job's kind is fixed
+    const modes = el('div', { className: 'wizard-modes', children: [
+      modeButton('relax', 'Relaxation', 'Relax a fresh structure from its designed topology.'),
+      modeButton('production', 'Production', 'Continue sampling from an already-relaxed structure.'),
+    ] })
+    const children = [modes]
+    if (mode === 'production') {
+      const parents = oxdnaProductionParents(getJobs(), getPartPath(), { includeJobId: parentJobId })
+      if (!parents.length) {
+        children.push(el('div', { className: 'wizard-note', children: [
+          el('p', { text: 'No completed relaxation for this design yet. Production starts from equilibrated coordinates, so a relaxation has to finish first.' }),
+          createButton({ label: 'Set up a relaxation instead', variant: 'ghost', onClick: () => setMode('relax') }),
+        ] }))
+      } else {
+        if (!parents.some(j => j.job_id === parentJobId)) {
+          parentJobId = parents[0].job_id
+          onParentChange(parentJobId)
+        }
+        const select = el('select', { attrs: { 'aria-label': 'Continue from' } })
+        for (const job of parents) {
+          select.append(el('option', { text: `${job.design_name || job.job_id} — ${job.job_id}`, attrs: { value: job.job_id } }))
+        }
+        select.value = parentJobId
+        // Re-sync the shared Anchors/Electric-field/Hard-surface/PEG panels to whichever
+        // job is chosen HERE, not whatever's selected in the main list — those are
+        // independent once the wizard is open (fixes stale/false capture-strand state).
+        select.addEventListener('change', () => {
+          parentJobId = select.value
+          onParentChange(parentJobId)
+          renderConfig(); paintValidation()
+        })
+        children.push(el('label', { className: 'wizard-field', children: [
+          el('span', { className: 'wizard-field__label', text: 'Continue from' }), select,
+        ] }))
+      }
+    }
+    sourceMount.replaceChildren(...children)
+  }
+
   function paint() {
-    for (const [id] of TABS) {
-      const selected = id === currentTab
+    const activeTabs = tabsForMode()
+    for (const [id] of ALL_TABS) {
+      const activeEntry = activeTabs.find(([activeId]) => activeId === id)
+      const inMode = !!activeEntry
+      const selected = inMode && id === currentTab
       panels[id].hidden = !selected
+      // .wizard-tab sets its own `display: flex` (author CSS), which beats the native
+      // `[hidden] { display: none }` UA rule — the `hidden` property alone is a no-op
+      // here, so the actual show/hide has to go through an inline style too.
+      tabs[id].hidden = !inMode
+      tabs[id].style.display = inMode ? '' : 'none'
+      if (activeEntry) tabs[id].textContent = activeEntry[1]   // production relabels settings/config
       tabs[id].classList.toggle('is-selected', selected)
       tabs[id].setAttribute('aria-selected', String(selected))
     }
-    const index = TABS.findIndex(([id]) => id === currentTab)
+    const index = activeTabs.findIndex(([id]) => id === currentTab)
     if (derivedEditor) {
       previousBtn.style.display = 'none'
       nextBtn.style.display = 'none'
@@ -230,25 +366,28 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
       return
     }
     previousBtn.style.display = index ? '' : 'none'
-    nextBtn.style.display = index < TABS.length - 1 ? '' : 'none'
-    createBtn.style.display = index === TABS.length - 1 ? '' : 'none'
-    const ready = targetStep?.isReady?.() ?? true
+    nextBtn.style.display = index < activeTabs.length - 1 ? '' : 'none'
+    createBtn.style.display = index === activeTabs.length - 1 ? '' : 'none'
+    const ready = mode === 'production' ? true : (targetStep?.isReady?.() ?? true)
     nextBtn.disabled = currentTab === 'target' && !ready
-    createBtn.disabled = busy || !ready || !validateOxdnaWizard(values).valid
+    const validation = mode === 'production' ? validateOxdnaProductionWizard(values) : validateOxdnaWizard(values)
+    createBtn.disabled = busy || !ready || !validation.valid
+    renderSource()
     if (currentTab === 'settings') renderSettings()
     if (currentTab === 'config') renderConfig()
   }
 
   function selectTab(id) {
-    if (id !== 'target' && !targetStep.isReady()) return
+    if (mode !== 'production' && id !== 'target' && !targetStep.isReady()) return
     currentTab = id; paint()
   }
   function step(delta) {
-    const i = TABS.findIndex(([id]) => id === currentTab)
-    selectTab(TABS[Math.max(0, Math.min(TABS.length - 1, i + delta))][0])
+    const activeTabs = tabsForMode()
+    const i = activeTabs.findIndex(([id]) => id === currentTab)
+    selectTab(activeTabs[Math.max(0, Math.min(activeTabs.length - 1, i + delta))][0])
   }
   async function submit() {
-    if (busy || (!derivedEditor && !targetStep.isReady())) return
+    if (busy || (!derivedEditor && mode !== 'production' && !targetStep.isReady())) return
     busy = true; paint()
     try {
       let payload
@@ -262,12 +401,16 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
           derivedError.hidden = false
           return
         }
+      } else if (mode === 'production') {
+        payload = oxdnaProductionPayload(values)
       } else {
         payload = oxdnaWizardPayload(values, targetStep.payloadFields())
       }
       const saved = editJob
         ? await updateJob(editJob.job_id, payload)
-        : await launch(payload)
+        : mode === 'production'
+          ? await spawnProduction(parentJobId, payload)
+          : await launch(payload)
       if (saved) modal.close()
     }
     finally { busy = false; paint() }
@@ -288,13 +431,14 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
     panels.config = el('section', { className: 'wizard-pane wizard-tabpanel', children: [validationNote, stageSummary,
       el('p', { className: 'oxdna-wizard-note', text: 'Click an editable cell to override that stage. Blue cells change from the previous stage; amber cells are your overrides.' }),
       stageTable, el('details', { children: [el('summary', { text: 'Config document' }), configPre] })] })
-    for (const [id, label] of TABS) tabs[id] = el('button', { className: 'wizard-tab', text: label, attrs: { type: 'button', role: 'tab' }, on: { click: () => selectTab(id) } })
+    for (const [id, label] of ALL_TABS) tabs[id] = el('button', { className: 'wizard-tab', text: label, attrs: { type: 'button', role: 'tab' }, on: { click: () => selectTab(id) } })
     targetStep = initWizardTargetStep({ mount: panels.target, fetchHardware: api.fetchHardware,
       fetchAvailability: api.fetchAvailability, getSlurmPreview: api.getSlurmPreview, getTotalNs: () => 0,
       getJobPreview: api.getRunpodJobPreview, getVolumes: api.getRunpodVolumes, setVolume: api.setRunpodVolume,
       getPlanShape: () => oxdnaRunpodPlanShape(values), fsApi: api.fsApi,
       onChange: () => { renderSettings(); renderConfig(); paint() } })
-    wizardShell = el('div', { className: 'wizard', children: [el('div', { className: 'wizard-tabbar', children: [
+    sourceMount = el('div', { className: 'wizard-source' })
+    wizardShell = el('div', { className: 'wizard', children: [sourceMount, el('div', { className: 'wizard-tabbar', children: [
         el('div', { className: 'wizard-tabs', attrs: { role: 'tablist' }, children: Object.values(tabs) })] }),
       panels.target, panels.settings, panels.config] })
     readOnlyPanel = el('section', { className: 'wizard-pane oxdna-job-settings-view' })
@@ -303,7 +447,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
       body: [wizardShell, readOnlyPanel], actions: [closeBtn, previousBtn, nextBtn, createBtn] })
   }
 
-  function open() {
+  function open(initialMode = 'relax', { parentJobId: seedParentId = null } = {}) {
     if (!modal) build()
     editJob = null
     derivedEditor = null
@@ -312,9 +456,18 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
     readOnlyPanel.hidden = true
     closeBtn.textContent = 'Cancel'
     createBtn.textContent = 'Create job'
-    values = oxdnaWizardDefaults(getInitialValues())
-    targetStep.setChoice({ target: getInitialTarget() || 'local' })
-    currentTab = 'target'; targetStep.render(); renderSettings()
+    mode = initialMode === 'production' ? 'production' : 'relax'
+    parentJobId = seedParentId
+    if (mode === 'production') {
+      values = oxdnaProductionDefaults({ parentJobId })
+      targetStep.setChoice({ target: 'local' })
+      if (parentJobId) onParentChange(parentJobId)
+    } else {
+      values = oxdnaWizardDefaults(getInitialValues())
+      targetStep.setChoice({ target: getInitialTarget() || 'local' })
+    }
+    currentTab = tabsForMode()[0][0]
+    targetStep.render(); renderSource(); renderSettings()
     void renderEngineDetails()
     renderConfig(); paint(); modal.open()
   }
@@ -371,6 +524,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
     readOnlyPanel.hidden = true
     closeBtn.textContent = 'Cancel'
     createBtn.textContent = 'Save changes'
+    mode = 'relax'
     values = oxdnaWizardDefaults({
       ...(job.run_config || {}),
       seed: job.random_seed ?? job.run_config?.seed,
@@ -380,7 +534,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
       partition: job.partition || job.run_config?.partition || null,
     })
     currentTab = 'target'
-    targetStep.render(); renderSettings()
+    targetStep.render(); renderSource(); renderSettings()
     void renderEngineDetails()
     renderConfig(); paint(); modal.open()
   }

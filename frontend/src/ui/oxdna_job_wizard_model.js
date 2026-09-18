@@ -120,3 +120,56 @@ export function oxdnaRunpodPlanShape(values = {}) {
     relax_timestep_fs: 1, production_ns: 0, production_steps: 0, production_timestep_fs: 1,
     production_source: 'none', stages: stages.map(s => ({ steps: s.steps, dcd_freq: s.print_conf_interval })) }
 }
+
+// ── Production ("Full Sim" continuation of a completed relaxation) ─────────────
+// Matches #oxdna-jobs-prod-steps / -steps-per-frame's prior UI defaults — NOT
+// RunRequest's own schema default (2,000,000) — so this isn't a silent UX change.
+const PRODUCTION_DEFAULTS = Object.freeze({ steps: 5_000_000, steps_per_frame: 10_000 })
+
+export function oxdnaProductionDefaults(overrides = {}) { return { ...PRODUCTION_DEFAULTS, ...overrides } }
+
+export function validateOxdnaProductionWizard(values = {}) {
+  const v = oxdnaProductionDefaults(values)
+  const errors = {}
+  if (!v.parentJobId) errors.parentJobId = 'Choose a completed relaxation to continue from.'
+  const range = (key, min, max, message) => {
+    const n = Number(v[key])
+    if (!Number.isFinite(n) || n < min || (max != null && n > max)) errors[key] = message
+  }
+  // Bounds match RunRequest (backend/api/routes_oxdna.py): steps 1e3-2e8, steps_per_frame 1-2e8.
+  range('steps', 1000, 200_000_000, 'Production steps must be between 1,000 and 200,000,000.')
+  range('steps_per_frame', 1, 200_000_000, 'Steps/frame must be between 1 and 200,000,000.')
+  return { valid: Object.keys(errors).length === 0, errors }
+}
+
+/** Single-stage plan mirroring oxdnaStagePlan's shape, for the wizard's read-only summary.
+ *  backend/device/salt are always inherited from the parent — RunRequest has no override field. */
+export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
+  const v = oxdnaProductionDefaults(values)
+  return [{
+    name: '1_production', purpose: 'Sample from the relaxed structure', sim_type: 'MD',
+    backend: parentJob?.backend ?? null, device: parentJob?.device ?? null,
+    salt_concentration: parentJob?.salt_concentration ?? null,
+    steps: Number(v.steps), print_conf_interval: Number(v.steps_per_frame),
+  }]
+}
+
+/** Payload sent to POST /oxdna/jobs/{parentId}/run. Deliberately excludes field/surface/anchors —
+ *  those stay sourced from the shared Anchors/Electric-field/Hard-surface panel state at submit
+ *  time in oxdna_jobs_panel.js, exactly as the (removed) Full Sim button already did. */
+export function oxdnaProductionPayload(values) {
+  const v = oxdnaProductionDefaults(values)
+  return { steps: Number(v.steps), steps_per_frame: Number(v.steps_per_frame) }
+}
+
+/** Jobs eligible as a production "Continue from" parent: completed, and belonging to the current
+ *  design (unless includeJobId names one already chosen — e.g. by the panel's selected-job seed —
+ *  which must survive even if the part-path filter would otherwise drop it). Newest first. */
+export function oxdnaProductionParents(jobs, partPath, { includeJobId = null } = {}) {
+  const norm = p => String(p || '').replace(/\\/g, '/').replace(/\/+$/, '')
+  const want = norm(partPath)
+  return (jobs || [])
+    .filter(j => j?.status === 'completed')
+    .filter(j => !want || j.job_id === includeJobId || norm(j.design_source_path) === want)
+    .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
+}
