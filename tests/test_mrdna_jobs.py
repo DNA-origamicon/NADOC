@@ -273,7 +273,7 @@ def test_reconcile_running_with_cached_display_completes(tmp_path):
 def test_reconcile_running_no_output_and_no_process_stops(tmp_path, monkeypatch):
     import backend.core.mrdna_runner as r
 
-    monkeypatch.setattr(r, "_external_arbd_pid", lambda job, ws: None)
+    monkeypatch.setattr(r, "_external_arbd_pid", lambda job, ws, **kwargs: None)
 
     job = new_mrdna_job("d")
     job.status = MrdnaStatus.running

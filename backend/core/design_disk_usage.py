@@ -43,12 +43,22 @@ def dir_size_bytes(path: Path) -> int:
     return total
 
 
-# A short TTL is plenty: size on disk is informational and barely moves between
-# polls. This keeps the job-list endpoints (polled every few seconds by the MD /
-# oxDNA panels) from re-walking multi-GB folders on a slow external drive each
-# time — the bug that, alongside a heavy concurrent trajectory load, wedged the
-# server during an 18hb archive.
-_SIZE_TTL_S = 60.0
+# Size on disk is informational and barely moves between polls, so a long TTL is
+# plenty and keeps the job-list endpoints (polled every few seconds by the MD /
+# oxDNA panels, across up to six engines) from re-walking multi-GB folders on a
+# slow external drive each time — the bug that, alongside a heavy concurrent
+# trajectory load, wedged the server during an 18hb archive.
+#
+# Was 60s. Measured directly (py-spy, aggregate over a real contended window):
+# these directory walks — not GIL/CPU contention — were over half of ALL samples
+# (dir_size_bytes's rglob+stat, 159 accumulated job directories across engines,
+# some multi-GB NAMD trajectory packages) during a design load, because a poll
+# every 4-5s guarantees some engine's 60s-old cache entry is always expiring and
+# re-triggering a full background walk. 10 minutes cuts that re-walk frequency
+# 10x for a column that's advisory, not live-progress (an ACTIVELY RUNNING job's
+# growth is also visible through its own progress/health-sample fields, not only
+# through this size poll).
+_SIZE_TTL_S = 600.0
 _size_cache: dict[str, tuple[float, int]] = {}
 # Paths whose size is being walked right now, so overlapping polls of the same job
 # list don't stampede a multi-GB directory. Guarded by _warm_lock (background walks

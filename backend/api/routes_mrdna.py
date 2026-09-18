@@ -288,9 +288,16 @@ async def list_mrdna_jobs() -> list[dict]:
 
 def _list_mrdna_jobs() -> tuple[list[dict], list]:
     from backend.core.design_disk_usage import dir_size_bytes_cached_only
+    from backend.core.mrdna_runner import _scan_arbd_proc_cmdlines
 
     ws = _workspace()
-    jobs = [reconcile_mrdna_status(j, ws) for j in MrdnaJob.list_jobs(ws)]
+    # One /proc pass shared by every job's orphan check, instead of each job
+    # rescanning (11 jobs x 70 host processes was 770 reads for one response).
+    proc_scan = _scan_arbd_proc_cmdlines()
+    jobs = [
+        reconcile_mrdna_status(j, ws, proc_scan=proc_scan)
+        for j in MrdnaJob.list_jobs(ws)
+    ]
     current_fp = _current_fingerprint()
     out: list[dict] = []
     to_warm: list = []

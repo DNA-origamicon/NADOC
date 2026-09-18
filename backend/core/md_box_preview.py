@@ -32,6 +32,30 @@ def box_preview_inputs(request) -> dict:
     return {key: getattr(request, key) for key in BOX_PREVIEW_KEYS}
 
 
+def _build_cache_key_json(design) -> str:
+    """Serialize *design* for the box-preview caches, dropping fields the atomistic
+    build never reads (confirmed: no reference to feature_log/loadouts anywhere in
+    atomistic.py, pdb_export.py, md_protocols.py, lattice.py or namd_solvate.py —
+    same fields encode_design_snapshot already excludes, for the same reason).
+
+    Feature-log entries accumulate on EVERY edit, including ones that leave the
+    built PDB byte-identical (re-assigning the same scaffold sequence, a metadata
+    rename, ...). Keying the cache on the full serialized design made every such
+    edit a guaranteed cache miss — measured at 6.5s (build_atomistic_model +
+    export_pdb, 315k atoms) to rebuild an atomistic model this preview panel
+    polls on every design-changing request, whether or not the atoms moved."""
+    stripped = design.model_copy(
+        update={
+            "feature_log": [],
+            "feature_log_cursor": -1,
+            "feature_log_sub_cursor": None,
+            "loadouts": [],
+            "active_loadout_id": None,
+        }
+    )
+    return stripped.model_dump_json()
+
+
 def preview_box(design, request) -> dict:
     if request.box_size_nm and all(v is not None and math.isfinite(v) and v > 0 for v in request.box_size_nm):
         # Explicit cells exist independently of solute geometry; preparation still
@@ -40,7 +64,7 @@ def preview_box(design, request) -> dict:
         return dict(calculated_nm=dims, selected_nm=dims, padding_nm=request.padding_nm,
                     box_mode=request.box_mode, center_nm=[0., 0., 0.], estimated=True,
                     note='Explicit dimensions; solute clearance and exact ion counts are validated during preparation.')
-    result = dict(_calculated_box(design.model_dump_json(), json.dumps(box_preview_inputs(request))))
+    result = dict(_calculated_box(_build_cache_key_json(design), json.dumps(box_preview_inputs(request))))
     result['selected_nm'] = [v if v is not None else result['calculated_nm'][i]
                              for i, v in enumerate(request.box_size_nm or (None,) * 3)]
     return result

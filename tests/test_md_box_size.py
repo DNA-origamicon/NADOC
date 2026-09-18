@@ -222,3 +222,52 @@ def test_concurrent_box_estimates_reuse_atomistic_model(monkeypatch):
         assert results[0]['selected_nm'] != results[1]['selected_nm']
     finally:
         md_box_preview._calculated_box.cache_clear()
+
+
+def test_feature_log_growth_alone_reuses_the_cached_atomistic_model(monkeypatch):
+    """A cache keyed on the design's full serialized JSON busts on every edit,
+    including ones that never move an atom (re-assigning the same sequence,
+    an undo/redo, a metadata rename) — feature_log alone grows on every one.
+    build_atomistic_model + export_pdb measured at 6.5s for a real design (315k
+    atoms); this pins that a feature_log-only change is a cache HIT, not a
+    rebuild, and that a REAL topology change still correctly misses."""
+    from functools import lru_cache
+    from backend.core import md_box_preview
+    from backend.api.routes_md import CreateJobRequest
+    from tests.reciprocal_design import reciprocal_design
+
+    calls = []
+
+    @lru_cache(maxsize=4)
+    def model(serialized):
+        calls.append(serialized)
+        return DNA
+
+    monkeypatch.setattr(md_box_preview, '_design_pdb', model)
+    md_box_preview._calculated_box.cache_clear()
+    design = reciprocal_design(None)
+    request = CreateJobRequest(devices='cpu', box_mode='bbox', padding_nm=1.2)
+
+    try:
+        first = md_box_preview.preview_box(design, request)
+        assert len(calls) == 1
+
+        # Simulate what an edit that never moves an atom looks like from this
+        # cache's perspective: only feature_log grows.
+        from backend.core.models import SnapshotLogEntry
+        grown = design.model_copy(update={
+            'feature_log': [
+                *design.feature_log,
+                SnapshotLogEntry(op_kind='assign-scaffold-sequence', label='x', timestamp='t', params={}),
+            ],
+        })
+        second = md_box_preview.preview_box(grown, request)
+        assert len(calls) == 1, 'feature_log-only growth must not rebuild the atomistic model'
+        assert second['calculated_nm'] == first['calculated_nm']
+
+        # A real topology change must still correctly miss.
+        changed = design.model_copy(update={'helices': []})
+        md_box_preview.preview_box(changed, request)
+        assert len(calls) == 2
+    finally:
+        md_box_preview._calculated_box.cache_clear()

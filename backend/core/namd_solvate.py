@@ -750,10 +750,14 @@ def _recenter_pdb_in_padded_box(
     half = np.array([(xmax - xmin), (ymax - ymin), (zmax - zmin)], dtype=float) / 2.0
     centre = np.array([(xmax + xmin), (ymax + ymin), (zmax + zmin)], dtype=float) / 2.0
     if box_mode == "rotation":
-        r_max = max(
-            float(np.linalg.norm(np.array([x, y, z]) - centre))
-            for x, y, z in zip(xs, ys, zs)
-        )
+        # Vectorised: the per-atom Python loop (one fresh 3-element np.array + one
+        # np.linalg.norm call per atom) measured pegging a CPU core for 100+ seconds
+        # on an atomistic PDB export (tens of thousands of atoms) — a single batched
+        # norm over all points at once is the same per-point formula (3 squares, a
+        # sum of 3, a sqrt — no cross-point reduction ambiguity), so this is
+        # numerically identical, not merely close.
+        points = np.column_stack([xs, ys, zs])
+        r_max = float(np.max(np.linalg.norm(points - centre, axis=1)))
         span = np.array([2.0 * r_max] * 3)
     elif box_mode == "bbox":
         span = 2.0 * half

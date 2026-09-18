@@ -57,6 +57,28 @@ from backend.core.models import (
 from backend.core.lattice import retry_pending_ligations as _retry_pending_ligations
 from backend.core.validator import ValidationReport, validate_design
 
+
+def _snapshot_copy(design: Design) -> Design:
+    """Independent copy of ``design`` for the undo/redo stack and pre/post-mutation
+    diffing — semantically identical to ``design.model_copy(deep=True)`` but ~2-3x
+    faster on a large design.
+
+    ``model_copy(deep=True)`` falls back to Python's generic ``copy.deepcopy``, which
+    recursively visits every nested object one at a time — 326k individual calls,
+    measured as the dominant cost (~0.7s of a ~1s request) of a single strand-end
+    resize on a 71-helix/449-strand/109-entry-history design. Round-tripping through
+    Pydantic's Rust-backed dump/validate does the same structural copy far faster.
+    Every mutation helper below takes this snapshot at least once per edit.
+
+    Re-running ``Design``'s validators (``model_validate`` does, ``model_copy`` does
+    not) is safe here: ``s.design`` is always already-valid by construction — nothing
+    outside these helpers can hold an unvalidated Design — so every validator this
+    round-trip re-runs (feature-log checkpoint stripping, cluster-joint schema
+    migration) is confirmed idempotent on already-valid data and is a no-op.
+    """
+    return Design.model_validate(design.model_dump())
+
+
 MAX_UNDO_STEPS = 50
 
 # Retained for API/test compatibility. Feature history is intentionally no
@@ -193,7 +215,7 @@ def copy_doc_for_persist(doc_id: str) -> tuple[Design | None, int]:
         s = _sessions.get(doc_id)
         if s is None:
             return None, 0
-        snap = s.design.model_copy(deep=True) if s.design is not None else None
+        snap = _snapshot_copy(s.design) if s.design is not None else None
         return snap, s.revision
 
 
@@ -239,7 +261,7 @@ def copy_for_persist() -> tuple[Design | None, int]:
     """``(deep copy of current doc's design or None, revision)`` under the lock."""
     with _lock:
         s = _session()
-        snap = s.design.model_copy(deep=True) if s.design is not None else None
+        snap = _snapshot_copy(s.design) if s.design is not None else None
         return snap, s.revision
 
 
@@ -249,7 +271,7 @@ def copy_for_workspace_save() -> tuple[Design, int, dict[str, set[str]]]:
         s = _session()
         if s.design is None:
             raise HTTPException(404, detail="No active design.")
-        design = s.design.model_copy(deep=True)
+        design = _snapshot_copy(s.design)
         known: dict[str, set[str]] = {}
         # Include history for sessions opened before persistence cursors were
         # tracked separately. Undo/redo may restore an older embedded head.
@@ -298,7 +320,7 @@ def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, 
         _bump_revision(s)
         # Pair the acknowledgement revision with the merged current content,
         # never the pre-I/O snapshot when a concurrent edit was preserved.
-        return s.design.model_copy(deep=True) if include_snapshot else None
+        return _snapshot_copy(s.design) if include_snapshot else None
 
 
 def workspace_heads_for_doc(doc_id: str) -> dict[str, dict[str, list[str]]]:
@@ -369,7 +391,7 @@ def set_design(d: Design) -> None:
         _assert_active_loadout_editable(s.design, d)
         _assert_photoproduct_dependencies(d)
         if s.design is not None:
-            s.history.append(s.design.model_copy(deep=True))
+            s.history.append(_snapshot_copy(s.design))
         s.redo.clear()
         s.design = d
         _bump_revision(s)
@@ -440,7 +462,7 @@ def mutate_and_validate(
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
         _assert_active_loadout_editable(s.design)
-        before = s.design.model_copy(deep=True)
+        before = _snapshot_copy(s.design)
         redo_before = deque(s.redo, maxlen=s.redo.maxlen)
         s.history.append(before)
         s.redo.clear()
@@ -500,7 +522,7 @@ def mutate_with_reconcile(
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
         _assert_active_loadout_editable(s.design)
-        before = s.design.model_copy(deep=True)
+        before = _snapshot_copy(s.design)
         redo_before = deque(s.redo, maxlen=s.redo.maxlen)
         s.history.append(before)
         s.redo.clear()
@@ -536,7 +558,7 @@ def replace_with_reconcile(
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
         _assert_active_loadout_editable(s.design, new_design)
-        before = s.design.model_copy(deep=True)
+        before = _snapshot_copy(s.design)
         redo_before = deque(s.redo, maxlen=s.redo.maxlen)
         s.history.append(before)
         s.redo.clear()
@@ -687,7 +709,7 @@ def mutate_with_feature_log(
                 },
             )
         _assert_active_loadout_editable(s.design)
-        before = s.design.model_copy(deep=True)
+        before = _snapshot_copy(s.design)
         history_before = deque(s.history, maxlen=s.history.maxlen)
         redo_before = deque(s.redo, maxlen=s.redo.maxlen)
         s.history.append(before)
@@ -817,7 +839,7 @@ def mutate_with_minor_log(
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
         _assert_active_loadout_editable(s.design)
-        before = s.design.model_copy(deep=True)
+        before = _snapshot_copy(s.design)
         redo_before = deque(s.redo, maxlen=s.redo.maxlen)
         s.history.append(before)
         s.redo.clear()
@@ -941,7 +963,7 @@ def undo() -> tuple[Design, ValidationReport]:
         _assert_active_loadout_editable(s.design)
         if not s.history:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
-        s.redo.append(s.design.model_copy(deep=True))
+        s.redo.append(_snapshot_copy(s.design))
         s.design = _restore_edit_snapshot(s.history.pop(), s.design)
         report = validate_design(s.design)
         _bump_revision(s)
@@ -958,7 +980,7 @@ def redo() -> tuple[Design, ValidationReport]:
         _assert_active_loadout_editable(s.design)
         if not s.redo:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
-        s.history.append(s.design.model_copy(deep=True))
+        s.history.append(_snapshot_copy(s.design))
         s.design = _restore_edit_snapshot(s.redo.pop(), s.design)
         report = validate_design(s.design)
         _bump_revision(s)
@@ -1010,7 +1032,7 @@ def snapshot() -> None:
         s = _session()
         _assert_active_loadout_editable(s.design)
         if s.design is not None:
-            s.history.append(s.design.model_copy(deep=True))
+            s.history.append(_snapshot_copy(s.design))
         s.redo.clear()
 
 

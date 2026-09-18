@@ -93,7 +93,18 @@ export function activeOperationTiming() { return _active }
 /** Briefly defer background polls while an interactive operation renders.
  * Timing is diagnostic, not a lock: an aborted render or a missing completion
  * callback must never prevent unrelated requests from being sent indefinitely.
- * Expiry releases only the waiter; it does not finish or cancel the operation. */
+ * Expiry releases only the waiter; it does not finish or cancel the operation.
+ *
+ * Deliberately NOT raised for the multi-second design-load case this also now
+ * covers (GET /design + GET /design/geometry): every current caller is a
+ * periodic timer (job lists, peer status, MD queue, feature-log backfill)
+ * running independently of any others, so a longer cap doesn't stagger their
+ * releases — it bunches them, since they all resolve together the instant the
+ * long operation finishes or the cap expires, trading frequent small bursts
+ * for rarer, larger ones. Measured A/B on a live server: raising this to 20s
+ * did not reliably improve — and sometimes worsened — a load's wall-clock time.
+ * The actual dominant cost turned out to be design_disk_usage.py's directory-
+ * walk cache TTL, not this cap; see its own comment. */
 export function whenOperationIdle({ maxWaitMs = 2000 } = {}) {
   if (!_active) return Promise.resolve()
   return new Promise(resolve => {

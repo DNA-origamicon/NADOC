@@ -78,17 +78,25 @@ def is_running(job_id: str) -> bool:
     return handle is not None and handle.thread.is_alive()
 
 
-def _external_arbd_pid(job: MrdnaJob, workspace_dir: Path) -> Optional[int]:
-    """PID of an ARBD process for this job found by scanning /proc for the job dir
-    in an arbd command line — or None.  Matching by the job dir is self-verifying,
-    so the PID is safe to signal (used to stop a detached run after a restart, and
-    to keep reconcile from mislabelling a still-running orphan ``stopped``)."""
-    job_dir = job.job_dir(workspace_dir).resolve()
-    needle = str(job_dir).encode()
+def _scan_arbd_proc_cmdlines() -> list[tuple[Path, bytes]]:
+    """One /proc pass, pre-filtered to ``(proc_dir, cmdline_bytes)`` pairs whose
+    cmdline mentions "arbd" — the only entries any job's orphan check can match.
+    Keeping ``proc_dir`` (not just its pid name) lets the cwd check below reuse the
+    exact directory this cmdline came from, unaffected by whatever root a caller
+    (real ``/proc`` or a test's monkeypatched ``Path.iterdir``) actually scanned.
+
+    A job-list poll checks every one of its jobs against the SAME running-process
+    snapshot (via ``_external_arbd_pid``'s ``proc_scan`` param), so this runs once
+    per poll instead of once per job: 11 mrDNA jobs × 70 host processes was 770
+    ``/proc/<pid>/cmdline`` reads for one ``/api/mrdna/jobs`` response — individually
+    cheap but, under the concurrent polling every job-list route now does, real
+    contributors to a measured 5-17s pile-up (LESSONS: whenOperationIdle pile-up).
+    """
     try:
         proc_dirs = list(Path("/proc").iterdir())
     except OSError:
-        return None
+        return []
+    out: list[tuple[Path, bytes]] = []
     for proc_dir in proc_dirs:
         if not proc_dir.name.isdigit():
             continue
@@ -96,10 +104,31 @@ def _external_arbd_pid(job: MrdnaJob, workspace_dir: Path) -> Optional[int]:
             cmdline = (proc_dir / "cmdline").read_bytes()
         except OSError:
             continue
-        # Most processes are unrelated. Avoid resolving every process's cwd (which
-        # can traverse slow mounted filesystems) for every historical job poll.
-        if b"arbd" not in cmdline.lower():
-            continue
+        if b"arbd" in cmdline.lower():
+            out.append((proc_dir, cmdline))
+    return out
+
+
+def _external_arbd_pid(
+    job: MrdnaJob,
+    workspace_dir: Path,
+    *,
+    proc_scan: "list[tuple[Path, bytes]] | None" = None,
+) -> Optional[int]:
+    """PID of an ARBD process for this job found by scanning /proc for the job dir
+    in an arbd command line — or None.  Matching by the job dir is self-verifying,
+    so the PID is safe to signal (used to stop a detached run after a restart, and
+    to keep reconcile from mislabelling a still-running orphan ``stopped``).
+
+    ``proc_scan`` lets a multi-job caller (a job-list poll) share ONE /proc pass
+    across every job instead of each job re-scanning — see
+    :func:`_scan_arbd_proc_cmdlines`. ``None`` (every single-job caller) scans now,
+    identical to this function's behavior before ``proc_scan`` existed.
+    """
+    job_dir = job.job_dir(workspace_dir).resolve()
+    needle = str(job_dir).encode()
+    candidates = _scan_arbd_proc_cmdlines() if proc_scan is None else proc_scan
+    for proc_dir, cmdline in candidates:
         # mrDNA chdirs into the job directory and launches ARBD with RELATIVE config
         # paths, so the job path is normally absent from cmdline. Match either the
         # absolute command or the process cwd; both are self-verifying.
@@ -108,7 +137,7 @@ def _external_arbd_pid(job: MrdnaJob, workspace_dir: Path) -> Optional[int]:
             cwd_match = (proc_dir / "cwd").resolve() == job_dir
         except OSError:
             pass
-        if (needle in cmdline or cwd_match) and b"arbd" in cmdline.lower():
+        if needle in cmdline or cwd_match:
             try:
                 return int(proc_dir.name)
             except ValueError:
@@ -1298,12 +1327,20 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     return live
 
 
-def reconcile_mrdna_status(job: MrdnaJob, workspace_dir: Path) -> MrdnaJob:
+def reconcile_mrdna_status(
+    job: MrdnaJob,
+    workspace_dir: Path,
+    *,
+    proc_scan: "list[tuple[Path, bytes]] | None" = None,
+) -> MrdnaJob:
     """Recover a detached job's status after the runner thread died (e.g. a
     ``uvicorn --reload`` restart mid-run).  If the cached ``display.json`` exists the
     run finished → ``completed``; if the ARBD child is gone and nothing was cached →
-    ``stopped``.  No-op unless the job is an orphaned ``running`` one."""
-    pid = _external_arbd_pid(job, workspace_dir)
+    ``stopped``.  No-op unless the job is an orphaned ``running`` one.
+
+    ``proc_scan`` — see :func:`_external_arbd_pid`; passed through for a job-list
+    poll sharing one /proc scan across every job instead of each re-scanning."""
+    pid = _external_arbd_pid(job, workspace_dir, proc_scan=proc_scan)
     if is_running(job.job_id) or pid is not None:
         changed = False
         if pid is not None and job.arbd_pid != pid:

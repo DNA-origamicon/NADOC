@@ -8,10 +8,11 @@
  * through client.js (`_oxdnaJSON`, which always stamps `docHeaders()`) fixes it; this
  * test pins that the header is present so a future call can't silently drop it.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
 import * as api from './client.js'
 import { getDocId } from '../shared/doc_id.js'
 import { __resetForTests as resetPositioning } from '../ui/new_positioning.js'
+import { finishOperationAfterRender } from '../perf/operation_timing.js'
 
 const DOC = getDocId()   // jsdom main-app tab mints a sticky per-tab id
 
@@ -25,6 +26,13 @@ describe('MD client functions stamp X-NADOC-Doc', () => {
       return { ok: true, status: 200, json: async () => ({ ok: true }) }
     })
   })
+  // getDesign() is a timed operation (see client.js's isTimedOperation); nothing in
+  // this mocked context ever renders to close it via design_renderer's normal path
+  // (that only happens for a real followup getGeometry() call, which every real
+  // caller makes but this file's "active display projection" test does not). Left
+  // open, later whenOperationIdle() calls in this file (e.g. listMdJobs()) would
+  // wait out its now-20s cap instead of vitest's 5s test timeout.
+  afterEach(() => finishOperationAfterRender())
 
   it('has a doc id in this (non-editor) test context', () => {
     expect(DOC).toBeTruthy()
