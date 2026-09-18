@@ -15,6 +15,25 @@ if [ "$(git -C "$PEG_SOURCE" rev-parse HEAD)" != "$PEG_REV" ]; then
   echo "PEG source revision mismatch; expected $PEG_REV" >&2
   exit 1
 fi
+# Same NADOC physics/thermostat corrections as scripts/build-oxdna.sh's
+# adaptive-memory flavor, so this binary also carries the "NADOC physics
+# corrections v3" signature the runner requires
+# (backend/core/oxdna_runner.py:oxdna_supports_physics_v3). physics-corrections
+# references _d_particle_ids, which only adaptive-neighbor-lists.patch declares
+# (MD_CUDABackend.h), so that patch must land first even though this build
+# does not otherwise use adaptive neighbor lists. None of these four overlap
+# the DNA2PEG patch's files, so order relative to it doesn't matter.
+for patch in oxdna_memory/adaptive-neighbor-lists oxdna_thermostat/rigid-body-bussi \
+             oxdna_thermostat/cuda-bussi-rng oxdna_thermostat/physics-corrections; do
+  PATCH="$PROJECT_ROOT/tools/$patch.patch"
+  if git -C "$PEG_SOURCE" apply --reverse --check "$PATCH" >/dev/null 2>&1; then
+    echo "==> $patch patch already applied"
+  else
+    git -C "$PEG_SOURCE" apply --check "$PATCH"
+    git -C "$PEG_SOURCE" apply "$PATCH"
+    echo "==> applied $patch patch"
+  fi
+done
 python3 "$PROJECT_ROOT/tools/oxdna_peg/patch_engine.py" "$PEG_SOURCE"
 cmake -S "$PEG_SOURCE" -B "$PEG_BUILD" -DCMAKE_BUILD_TYPE=Release \
   -DCUDA=ON -DPython=OFF -DCUDA_COMMON_ARCH=OFF -DUSE_CXX17_FOR_CUDA=ON
