@@ -238,3 +238,73 @@ def apply_child_diff_forward(
     if not overrides:
         return anchor, warnings
     return anchor.copy_with(**overrides), warnings
+
+
+def apply_child_diff_run(anchor: "Design", children) -> "Design":
+    """Compose a contiguous recorded prefix without materializing each child.
+
+    This is *state-patch* evaluation, never command coalescing: even a resize's
+    deletion of a different object survives. Ordered maps preserve remove/re-add
+    order; modifications of absent ids remain ignored, matching forward apply.
+    Only the final surviving POST objects require Pydantic construction. No
+    reconcile, geometry generation, shared cache, or mutation of the anchor.
+
+    The contract is the same recorded-field coverage as apply_child_diff_forward,
+    not a claim that legacy diffs describe all Design fields. Non-diff children
+    must be replayed outside this function. Duplicate ids (noncanonical history)
+    fall back to the reference path, whose list semantics allow duplicates.
+    """
+    children = tuple(children)
+    if len(children) < 2:
+        for child in children:
+            if not is_diff_child(child):
+                raise ValueError("A recorded diff run cannot contain legacy operations")
+            anchor, _ = apply_child_diff_forward(
+                anchor, child.diff_added_b64, child.diff_removed_b64,
+                child.diff_modified_b64,
+            )
+        return anchor
+
+    classes = _model_classes()
+    collections: dict[str, dict] = {}
+
+    def reference():
+        state = anchor
+        for child in children:
+            state, _ = apply_child_diff_forward(
+                state, child.diff_added_b64, child.diff_removed_b64,
+                child.diff_modified_b64,
+            )
+        return state
+
+    for child in children:
+        if not is_diff_child(child):
+            raise ValueError("A recorded diff run cannot contain legacy operations")
+        added = json.loads(_ungzip_b64(child.diff_added_b64)) if child.diff_added_b64 else {}
+        removed = json.loads(_ungzip_b64(child.diff_removed_b64)) if child.diff_removed_b64 else {}
+        modified = json.loads(_ungzip_b64(child.diff_modified_b64)) if child.diff_modified_b64 else {}
+        post = modified.get("post", {})
+        for field in (added.keys() | removed.keys() | post.keys()) & classes.keys():
+            if field not in collections:
+                original = getattr(anchor, field) or []
+                current = {obj.id: obj for obj in original}
+                if len(current) != len(original):
+                    return reference()
+                collections[field] = current
+            current = collections[field]
+            for item in removed.get(field, []):
+                current.pop(item["id"], None)
+            for item in post.get(field, []):
+                if item["id"] in current:
+                    current[item["id"]] = item
+            for item in added.get(field, []):
+                if item["id"] in current:
+                    return reference()
+                current[item["id"]] = item
+
+    overrides = {
+        field: [classes[field].model_validate(obj) if isinstance(obj, dict) else obj
+                for obj in current.values()]
+        for field, current in collections.items()
+    }
+    return anchor.copy_with(**overrides) if overrides else anchor

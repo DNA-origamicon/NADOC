@@ -1,0 +1,69 @@
+{
+  "full_fast_suite": {
+    "passed": 8678,
+    "failed": 30,
+    "errors": 9,
+    "skipped": 41,
+    "seconds": 112.15
+  },
+  "original_code_recheck": {
+    "failed": 29,
+    "errors": 9,
+    "seconds": 7.98,
+    "method": "Original HEAD sources imported for crud, routes_feature_log and design_diff; all other files unchanged",
+    "nodes": [
+      "tests/test_headless_oxdna_build.py::test_field_validation_oracle_passes_with_deflecting_mock",
+      "tests/test_headless_oxdna_build.py::test_build_field_specimen_is_field_ready",
+      "tests/test_headless_oxdna_build.py::test_build_field_specimen_sequences_an_unsequenced_design",
+      "tests/test_headless_oxdna_build.py::test_build_field_specimen_from_build_spec",
+      "tests/test_headless_oxdna_build.py::test_field_ready_oracle_fires_on_unsequenced_specimen",
+      "tests/test_headless_oxdna_build.py::test_field_ready_oracle_fires_on_empty_anchor",
+      "tests/test_headless_oxdna_build.py::test_equilibration_timeline_extracts_finite_tau",
+      "tests/test_headless_oxdna_build.py::test_equilibration_timeline_inconclusive_on_short_run",
+      "tests/test_headless_oxdna_build.py::test_relaxed_measurement_fires_without_production",
+      "tests/test_headless_oxdna_build.py::test_iterate_oracle_fires_on_vacuous_convergence",
+      "tests/test_headless_oxdna_build.py::test_relaxed_measurement_inter_helix_spacing_fires_on_wrong_target",
+      "tests/test_headless_oxdna_build.py::test_steer_field_session_follows_a_waypoint_path",
+      "tests/test_headless_oxdna_build.py::test_steer_field_session_magnitude_per_waypoint",
+      "tests/test_headless_oxdna_build.py::test_steer_field_session_rejects_empty_waypoints",
+      "tests/test_namd_peg_wall.py::test_executed_tcl_matches_physical_oracle[0]",
+      "tests/test_namd_peg_wall.py::test_executed_tcl_matches_physical_oracle[1]",
+      "tests/test_namd_peg_wall.py::test_executed_tcl_matches_physical_oracle[2]",
+      "tests/test_alpine_restart.py::test_legacy_tcl_guard_resumes_without_changing_open_config",
+      "tests/test_seamless_router.py::test_cube_pore_saved_route_closes_and_is_idempotent",
+      "tests/test_photoproduct_registry.py::test_toolchain_does_not_mistake_gnome_orca_for_quantum_orca",
+      "tests/test_aptamer_import.py::test_api_import_merge_undo_and_resize",
+      "tests/test_photoproduct_api.py::test_catalog_and_toolchain_are_read_only_and_fail_closed",
+      "tests/test_photoproduct_review.py::test_review_catalog_revalidates_sources_and_marks_focus_geometry",
+      "tests/test_photoproduct_review.py::test_definition_decision_for_old_embedding_is_marked_stale",
+      "tests/test_photoproduct_review.py::test_visual_decision_is_atomic_gate_neutral_and_revision_stays_unresolved",
+      "tests/test_photoproduct_review.py::test_conformer_approval_requires_partition_and_source_hashes_are_immutable",
+      "tests/test_photoproduct_review.py::test_boundary_review_is_hash_pinned_without_fit_partition",
+      "tests/test_photoproduct_review.py::test_complete_visual_conformer_decisions_materialize_audited_plans",
+      "tests/test_photoproduct_review.py::test_scientific_review_api_serves_geometry_and_records_gate_neutral_decisions",
+      "tests/test_aptamer_connections.py::test_native_tails_are_stable_overhangs_and_can_form_sidebar_duplex",
+      "tests/test_aptamer_connections.py::test_forced_ligation_keeps_sequence_sites_and_history[True]",
+      "tests/test_aptamer_connections.py::test_forced_ligation_keeps_sequence_sites_and_history[False]",
+      "tests/test_aptamer_connections.py::test_cadnano_partner_selects_real_duplex_and_undo_restores_fold",
+      "tests/test_aptamer_connections.py::test_tail_sequence_patch_preserves_native_core_without_scaffold",
+      "tests/test_aptamer_history.py::test_first_import_is_logged_undoable_and_seekable",
+      "tests/test_aptamer_history.py::test_move_rotate_edit_delete_and_revert_preserve_native_sites",
+      "tests/test_aptamer_history.py::test_import_delete_handles_dependent_moves_and_independent_imports",
+      "tests/test_aptamer_history.py::test_resize_log_substeps_restore_fold_and_sequence"
+    ]
+  },
+  "new_test_fixture_correction": "Sub-domain phi must be nonnegative; corrected the newly added test input, not production behavior.",
+  "slow_test_triage": {
+    "per_test_violators": 0,
+    "workers": 4,
+    "tests": 8757,
+    "total_test_seconds": 349.8,
+    "guard_wall_seconds": 119,
+    "conclusion": "Aggregate runtime with four workers; no individual over-budget tests. No test reclassification or budget changes."
+  },
+  "final_focused_suite": {
+    "passed": 226,
+    "skipped": 3,
+    "seconds": 8.87
+  }
+}

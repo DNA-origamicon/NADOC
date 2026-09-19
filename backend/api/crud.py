@@ -7545,7 +7545,7 @@ def _state_at_child_boundary(entry, k: int) -> "Design":
     re-reconciles — diffs already include reconcile + ligation-retry effects
     (captured post-reconcile in ``mutate_with_minor_log``).
     """
-    from backend.core.design_diff import apply_child_diff_forward, is_diff_child
+    from backend.core.feature_evaluation import evaluate_child_prefix, optimization_enabled
 
     if entry.evicted or not entry.pre_state_gz_b64:
         raise HTTPException(
@@ -7558,25 +7558,18 @@ def _state_at_child_boundary(entry, k: int) -> "Design":
     except Exception as e:  # pragma: no cover - defensive
         raise HTTPException(500, detail=f"Failed to decode Fine Routing pre-state: {e}")
 
-    for child in entry.children[:k]:
-        if is_diff_child(child):
-            state, _w = apply_child_diff_forward(
-                state,
-                child.diff_added_b64,
-                child.diff_removed_b64,
-                child.diff_modified_b64,
-            )
-        else:
-            try:
-                state = _replay_minor_op(state, child.op_subtype, child.params)
-            except NotImplementedError:
-                raise HTTPException(
-                    422,
-                    detail="Cannot reconstruct this sub-step: an earlier sub-step predates "
-                    "per-step history and uses an operation that can't be replayed. "
-                    "Revert or delete the whole Fine Routing cluster instead.",
-                )
-    return state
+    try:
+        return evaluate_child_prefix(
+            state, entry.children[:k], _replay_minor_op,
+            optimized=optimization_enabled(),
+        )
+    except NotImplementedError:
+        raise HTTPException(
+            422,
+            detail="Cannot reconstruct this sub-step: an earlier sub-step predates "
+            "per-step history and uses an operation that can't be replayed. "
+            "Revert or delete the whole Fine Routing cluster instead.",
+        )
 
 
 def _n_failures(report) -> int:
@@ -8992,7 +8985,8 @@ def _rebuild_deformed_continuations(design: Design) -> Design:
 
 
 def _seek_snapshot_base(
-    design: Design, position: int, sub_position: int | None = None
+    design: Design, position: int, sub_position: int | None = None,
+    *, optimized: bool = False,
 ) -> Design:
     """Choose the design whose strand/helix/crossover topology represents the
     state at the requested feature-log position.
@@ -9053,11 +9047,6 @@ def _seek_snapshot_base(
             return not e.evicted and bool(e.post_state_gz_b64)
         return False
 
-    pre_indices = [i for i, e in enumerate(log) if _has_pre(e)]
-    post_indices = [i for i, e in enumerate(log) if _has_post(e)]
-    if not pre_indices and not post_indices:
-        return design
-
     # Determine the effective position for payload lookup.
     # -1 / overshoot ⇒ end-of-log.
     if position == -1 or position >= len(log) - 1:
@@ -9067,19 +9056,28 @@ def _seek_snapshot_base(
     else:
         eff_position = position
 
-    # Largest non-evicted POST index <= eff_position.
-    sj: int | None = None
-    for s_idx in reversed(post_indices):
-        if s_idx <= eff_position:
-            sj = s_idx
-            break
+    # Long histories usually need only the last payload. Avoid constructing
+    # two complete index lists and repeated Pydantic isinstance checks.
+    if optimized and len(log) >= 32:
+        sj = next((i for i in range(eff_position, -1, -1)
+                   if log[i].feature_type in ("snapshot", "routing-cluster")
+                   and _has_post(log[i])), None)
+        first_pre = None
+        if sj is None:
+            first_pre = next((i for i, e in enumerate(log)
+                              if e.feature_type in ("snapshot", "routing-cluster")
+                              and _has_pre(e)), None)
+    else:
+        pre_indices = [i for i, e in enumerate(log) if _has_pre(e)]
+        post_indices = [i for i, e in enumerate(log) if _has_post(e)]
+        sj = next((i for i in reversed(post_indices) if i <= eff_position), None)
+        first_pre = pre_indices[0] if pre_indices else None
 
     if sj is None:
-        # eff_position precedes every payload entry — fall back to the first
-        # payload entry's PRE-state (= F0 baseline).
-        if not pre_indices:
+        # Before the first payload, restore its PRE state (the F0 baseline).
+        if first_pre is None:
             return design
-        first = log[pre_indices[0]]
+        first = log[first_pre]
         snap_design = design_state.decode_design_snapshot(
             first.design_snapshot_gz_b64
             if isinstance(first, _SnapshotLogEntry)
@@ -9105,25 +9103,16 @@ def _seek_snapshot_base(
         # 0..M-1 = first sub_position+1 children active
         n_children = len(payload_entry.children)
         if 0 <= sub_position < n_children:
-            from backend.core.design_diff import apply_child_diff_forward, is_diff_child
+            from backend.core.feature_evaluation import evaluate_child_prefix
 
             try:
                 snap_design = design_state.decode_design_snapshot(
                     payload_entry.pre_state_gz_b64
                 )
-                for child in payload_entry.children[: sub_position + 1]:
-                    if is_diff_child(child):
-                        # Diff-based: works for any op type, no replay needed.
-                        snap_design, _w = apply_child_diff_forward(
-                            snap_design,
-                            child.diff_added_b64,
-                            child.diff_removed_b64,
-                            child.diff_modified_b64,
-                        )
-                    else:
-                        snap_design = _replay_minor_op(
-                            snap_design, child.op_subtype, child.params
-                        )
+                snap_design = evaluate_child_prefix(
+                    snap_design, payload_entry.children[:sub_position + 1],
+                    _replay_minor_op, optimized=optimized,
+                )
                 return _topology_substitute(design, snap_design)
             except NotImplementedError:
                 # Legacy child with a non-replayable op AND no diff. Gracefully
@@ -9145,7 +9134,8 @@ def _seek_snapshot_base(
 
 
 def _seek_feature_log(
-    design: Design, position: int, sub_position: int | None = None
+    design: Design, position: int, sub_position: int | None = None,
+    *, optimized: bool | None = None,
 ) -> Design:
     """Replay feature_log[0..position] to compute effective deformations + cluster states.
 
@@ -9163,12 +9153,15 @@ def _seek_feature_log(
     so that seeking past an auto-op or mid-cluster rolls back the topology too
     — not just deformations and cluster states.
     """
+    if optimized is None:
+        from backend.core.feature_evaluation import optimization_enabled
+        optimized = optimization_enabled()
     log = list(design.feature_log)
 
     # Substitute topology to match the requested position. Subsequent delta
     # logic operates on this topology-corrected base, so the existing
     # rebuild-from-log logic Just Works for snapshot-bearing histories.
-    design = _seek_snapshot_base(design, position, sub_position)
+    design = _seek_snapshot_base(design, position, sub_position, optimized=optimized)
     log = list(design.feature_log)
 
     if position == -2:
@@ -9252,23 +9245,31 @@ def _seek_feature_log(
         cursor_val = position
         active = log[: position + 1]
 
-    # Rebuild deformation list from active entries.
-    deform_map = {d.id: d for d in design.deformations}
-    new_deformations = []
-    for entry in active:
-        if entry.feature_type == "deformation":
-            op = entry.op_snapshot or deform_map.get(entry.deformation_id)
-            if op:
-                new_deformations.append(op)
+    optimize_overlays = optimized and len(log) >= 32
+    if optimize_overlays:
+        from backend.core.feature_evaluation import collect_overlays
+        overlays = collect_overlays(design, log, len(active))
+        new_deformations = overlays.deformations
+        cluster_last = overlays.cluster_last
+        clusters_with_ops = overlays.clusters_with_ops
+    else:
+        # Rebuild deformation list from active entries.
+        deform_map = {d.id: d for d in design.deformations}
+        new_deformations = []
+        for entry in active:
+            if entry.feature_type == "deformation":
+                op = entry.op_snapshot or deform_map.get(entry.deformation_id)
+                if op:
+                    new_deformations.append(op)
 
-    # Rebuild cluster states: use the last cluster_op per cluster in the active window.
-    cluster_last: dict[str, ClusterOpLogEntry] = {}
-    for entry in active:
-        if entry.feature_type == "cluster_op":
-            cluster_last[entry.cluster_id] = entry
+        # Rebuild cluster states: use the last cluster_op per cluster in the active window.
+        cluster_last: dict[str, ClusterOpLogEntry] = {}
+        for entry in active:
+            if entry.feature_type == "cluster_op":
+                cluster_last[entry.cluster_id] = entry
 
-    # Collect cluster IDs that have ANY cluster_op anywhere in the full log.
-    clusters_with_ops = {e.cluster_id for e in log if e.feature_type == "cluster_op"}
+        # Collect cluster IDs that have ANY cluster_op anywhere in the full log.
+        clusters_with_ops = {e.cluster_id for e in log if e.feature_type == "cluster_op"}
 
     new_cts = []
     for ct in design.cluster_transforms:
@@ -9293,34 +9294,40 @@ def _seek_feature_log(
 
     new_joints = _rebase_joints_to_cts(design, new_cts)
 
-    # Rebuild overhang rotations: last rotation per overhang_id in active window.
-    # Phase 4 — also track per-sub-domain (theta, phi) state.
-    ovhg_last_rot: dict = {}
-    sd_last_angles: dict[tuple[str, str], tuple[float, float]] = {}
-    ovhgs_with_ops: set = set()
-    sd_pairs_with_ops: set[tuple[str, str]] = set()
-    for entry in active:
-        if entry.feature_type != "overhang_rotation":
-            continue
-        sd_ids = entry.sub_domain_ids
-        thetas = entry.sub_domain_thetas_deg
-        phis = entry.sub_domain_phis_deg
-        for i, oid in enumerate(entry.overhang_ids):
-            sd_id_i = sd_ids[i] if i < len(sd_ids) else None
-            if sd_id_i is None:
-                ovhg_last_rot[oid] = entry.rotations[i]
-            else:
-                sd_last_angles[(oid, sd_id_i)] = (float(thetas[i]), float(phis[i]))
-    for e in log:
-        if e.feature_type != "overhang_rotation":
-            continue
-        sd_ids = e.sub_domain_ids
-        for i, oid in enumerate(e.overhang_ids):
-            sd_id_i = sd_ids[i] if i < len(sd_ids) else None
-            if sd_id_i is None:
-                ovhgs_with_ops.add(oid)
-            else:
-                sd_pairs_with_ops.add((oid, sd_id_i))
+    if optimize_overlays:
+        ovhg_last_rot = overlays.overhang_last
+        sd_last_angles = overlays.subdomain_last
+        ovhgs_with_ops = overlays.overhangs_with_ops
+        sd_pairs_with_ops = overlays.subdomains_with_ops
+    else:
+        # Rebuild overhang rotations: last rotation per overhang_id in active window.
+        # Phase 4 — also track per-sub-domain (theta, phi) state.
+        ovhg_last_rot: dict = {}
+        sd_last_angles: dict[tuple[str, str], tuple[float, float]] = {}
+        ovhgs_with_ops: set = set()
+        sd_pairs_with_ops: set[tuple[str, str]] = set()
+        for entry in active:
+            if entry.feature_type != "overhang_rotation":
+                continue
+            sd_ids = entry.sub_domain_ids
+            thetas = entry.sub_domain_thetas_deg
+            phis = entry.sub_domain_phis_deg
+            for i, oid in enumerate(entry.overhang_ids):
+                sd_id_i = sd_ids[i] if i < len(sd_ids) else None
+                if sd_id_i is None:
+                    ovhg_last_rot[oid] = entry.rotations[i]
+                else:
+                    sd_last_angles[(oid, sd_id_i)] = (float(thetas[i]), float(phis[i]))
+        for e in log:
+            if e.feature_type != "overhang_rotation":
+                continue
+            sd_ids = e.sub_domain_ids
+            for i, oid in enumerate(e.overhang_ids):
+                sd_id_i = sd_ids[i] if i < len(sd_ids) else None
+                if sd_id_i is None:
+                    ovhgs_with_ops.add(oid)
+                else:
+                    sd_pairs_with_ops.add((oid, sd_id_i))
 
     new_overhangs = []
     for ovhg in design.overhangs:

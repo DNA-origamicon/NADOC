@@ -58,6 +58,7 @@ from backend.api.crud import (
     _TimingTrace,
 )
 from backend.core.deformation import deformed_helix_axes
+from backend.core.feature_evaluation import batch_target_groups, optimization_enabled
 
 router = APIRouter()
 
@@ -68,6 +69,14 @@ class SeekFeaturesBody(BaseModel):
     """Mid-cluster sub-position. None → cluster's post-state (all children active).
     -2 → cluster's pre-state (no children active). 0..M-1 → first sub_position+1
     children active. Honored only when ``position`` indexes a RoutingClusterLogEntry."""
+
+
+@router.get("/design/features/evaluation-plan")
+def get_evaluation_plan(position: int = -1, sub_position: int | None = None) -> dict:
+    """Explain target-local overwrite proofs without changing state or decoding history."""
+    from backend.core.feature_evaluation import evaluation_plan
+
+    return evaluation_plan(design_state.get_or_404(), position, sub_position)
 
 
 @router.post("/design/features/seek", status_code=200)
@@ -131,14 +140,17 @@ def geometry_batch(body: GeometryBatchBody) -> dict:
     """
     design = design_state.get_or_404()
     result: dict[str, dict] = {}
-    for position in set(body.positions):
+    groups = batch_target_groups(design, body.positions, optimized=optimization_enabled())
+    for position, aliases in groups.items():
         d = _seek_feature_log(design, position)
-        result[str(position)] = {
+        entry = {
             "nucleotides_compact": _compact_geometry_for_design(
                 d, junction_balance=True
             ),
             "helix_axes": deformed_helix_axes(d),
         }
+        for alias in aliases:
+            result[str(alias)] = entry
     return result
 
 
@@ -156,10 +168,13 @@ def atomistic_batch(body: GeometryBatchBody) -> dict:
 
     design = design_state.get_or_404()
     result: dict[str, list] = {}
-    for position in set(body.positions):
+    groups = batch_target_groups(design, body.positions, optimized=optimization_enabled())
+    for position, aliases in groups.items():
         d = _seek_feature_log(design, position)
         model = build_atomistic_model(d)
-        result[str(position)] = atomistic_positions_flat(model)
+        entry = atomistic_positions_flat(model)
+        for alias in aliases:
+            result[str(alias)] = entry
     return result
 
 
@@ -194,7 +209,8 @@ def surface_batch(body: SurfaceBatchBody) -> dict:
 
     design = design_state.get_or_404()
     result: dict[str, dict] = {}
-    for position in set(body.positions):
+    groups = batch_target_groups(design, body.positions, optimized=optimization_enabled())
+    for position, aliases in groups.items():
         d = _seek_feature_log(design, position)
         model = build_atomistic_model(d)
         mesh = compute_surface(
@@ -214,5 +230,6 @@ def surface_batch(body: SurfaceBatchBody) -> dict:
                 # 4 decimals is more than enough for 8-bit display precision and
                 # keeps the bake payload compact for many-keyframe animations.
                 entry["vertex_colors"] = [round(float(c), 4) for c in vc]
-        result[str(position)] = entry
+        for alias in aliases:
+            result[str(alias)] = entry
     return result
