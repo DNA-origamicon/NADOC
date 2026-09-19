@@ -31,6 +31,7 @@ it('tracks the latest calculation, reports failures inline and keeps automatic s
  const requests=[]
  const api={fetchProtocolBoxPreview:vi.fn(()=>new Promise(resolve=>requests.push(resolve))),updateMetadata:vi.fn(async()=>({}))}
  ui=initBoxSolvent({api,store:{getState:()=>({}),subscribe:()=>()=>{}}})
+ document.getElementById('md-box-solvent-toggle').click()   // expand: the estimate is lazy
  const spinner=document.getElementById('md-box-loading'),warning=document.getElementById('md-box-warning')
  expect(spinner.hidden).toBe(false)
  await vi.waitFor(()=>expect(requests).toHaveLength(1))
@@ -60,4 +61,21 @@ it('tracks the latest calculation, reports failures inline and keeps automatic s
  expect(ui.payload().box_mode).toBe('rotation')
  ui.setJobWarnings([{key:'job',name:'cube',message:'Box X needs 20 nm'}])
  expect(warning.hidden).toBe(false)
+})
+
+it('does not ask the backend for a box estimate while collapsed, only once expanded',async()=>{
+ const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
+ for(const id of ['md-box-solvent-toggle','md-box-solvent-body','md-surface-body'])document.body.append(source.getElementById(id))
+ const api={fetchProtocolBoxPreview:vi.fn(async()=>({box_preview:{selected_nm:[5,5,5],calculated_nm:[5,5,5]}})),updateMetadata:vi.fn(async()=>({}))}
+ const listeners=new Set(),state={currentDesign:{id:'a',metadata:{}},currentGeometry:[1]}
+ const store={getState:()=>state,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn)}}
+ ui=initBoxSolvent({api,store})
+ // Design open: new id, then geometry arrives — both used to trigger the backend build.
+ state.currentDesign={id:'b',metadata:{}};listeners.forEach(fn=>fn())
+ state.currentGeometry=[2];listeners.forEach(fn=>fn())
+ await new Promise(r=>setTimeout(r,400))
+ expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
+ expect(document.getElementById('md-box-loading').hidden).toBe(true)
+ document.getElementById('md-box-solvent-toggle').click()
+ await vi.waitFor(()=>expect(api.fetchProtocolBoxPreview).toHaveBeenCalledTimes(1))
 })

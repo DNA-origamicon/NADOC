@@ -282,6 +282,7 @@ function makeOpenFactory(overrides = {}) {
   const api = {
     getLibraryFileContent: vi.fn(async () => ({ content: '{"x":1}' })),
     importDesign: vi.fn(async () => true),
+    openLibraryPart: vi.fn(async () => ({ identityDisposition: 'confirmed' })),
     importAssembly: vi.fn(async () => true),
     ...overrides.api,
   }
@@ -311,18 +312,17 @@ function makeOpenFactory(overrides = {}) {
 }
 
 describe('initFileOpen — openPartFromServer', () => {
-  it('aborts with an error overlay when the server returns no content', async () => {
-    const { fileOpen, deps } = makeOpenFactory({ api: { getLibraryFileContent: vi.fn(async () => ({ content: null })) } })
-    await fileOpen.openPartFromServer('p/x.nadoc', 'x')
-    expect(deps.flShowError).toHaveBeenCalledWith('Could not load part.')
-    expect(deps.resetForNewDesign).not.toHaveBeenCalled()
+  it('opens server-side without moving the file content through the browser', async () => {
+    const { fileOpen, deps } = makeOpenFactory()
+    await fileOpen.openPartFromServer('p/x.nadoc', 'NiceName')
+    expect(deps.api.openLibraryPart).toHaveBeenCalledWith('p/x.nadoc', 'NiceName')
+    expect(deps.api.getLibraryFileContent).not.toHaveBeenCalled()
     expect(deps.api.importDesign).not.toHaveBeenCalled()
   })
-  it('on a successful import sets identity, reveals the workspace, and frames', async () => {
+  it('on success sets identity, reveals the workspace, and frames', async () => {
     const { fileOpen, deps } = makeOpenFactory()
     await fileOpen.openPartFromServer('p/x.nadoc', 'NiceName')
     expect(deps.resetForNewDesign).toHaveBeenCalled()
-    expect(deps.api.importDesign).toHaveBeenCalledWith('{"x":1,"metadata":{"name":"NiceName"}}')
     expect(deps.setFileName).toHaveBeenCalledWith('NiceName')
     expect(deps.setWorkspacePath).toHaveBeenCalledWith('p/x.nadoc')
     expect(deps.hideWelcome).toHaveBeenCalled()
@@ -330,16 +330,17 @@ describe('initFileOpen — openPartFromServer', () => {
     expect(deps.fitToView).toHaveBeenCalled()
     expect(deps.flShowSuccess).toHaveBeenCalledWith('Part loaded successfully')
     expect(deps.showWelcome).not.toHaveBeenCalled()
+    expect(deps.flAppendLog).toHaveBeenCalledWith('File identity and workspace path confirmed.', 'info')
   })
   it('falls back to the path as the filename when no name is given', async () => {
     const { fileOpen, deps } = makeOpenFactory()
     await fileOpen.openPartFromServer('p/x.nadoc')
     expect(deps.setFileName).toHaveBeenCalledWith('x')
-    expect(deps.api.importDesign).toHaveBeenCalledWith('{"x":1,"metadata":{"name":"x"}}')
+    expect(deps.api.openLibraryPart).toHaveBeenCalledWith('p/x.nadoc', 'x')
   })
-  it('on import failure shows the error and returns to the welcome screen', async () => {
+  it('on failure shows the error and returns to the welcome screen', async () => {
     const { fileOpen, deps } = makeOpenFactory({
-      api: { importDesign: vi.fn(async () => false) },
+      api: { openLibraryPart: vi.fn(async () => null) },
       storeState: { lastError: { message: 'bad json' } },
     })
     await fileOpen.openPartFromServer('p/x.nadoc', 'x')
@@ -347,9 +348,9 @@ describe('initFileOpen — openPartFromServer', () => {
     expect(deps.showWelcome).toHaveBeenCalled()
     expect(deps.fitToView).not.toHaveBeenCalled()
   })
-  it('catches a fetch exception and surfaces the load error', async () => {
+  it('catches a request exception and surfaces the load error', async () => {
     const { fileOpen, deps } = makeOpenFactory({
-      api: { getLibraryFileContent: vi.fn(async () => { throw new Error('network') }) },
+      api: { openLibraryPart: vi.fn(async () => { throw new Error('network') }) },
     })
     await fileOpen.openPartFromServer('p/x.nadoc', 'x')
     expect(deps.flShowError).toHaveBeenCalledWith('Could not load part.')

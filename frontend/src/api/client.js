@@ -428,19 +428,23 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
   // within _BUSY_POPUP_DELAY_MS. Fast calls clear the timer before it fires
   // and the user never sees the popup. Slow calls (linker seek, autostaple,
   // big imports) get a "still working" indicator so they don't look frozen.
+  const t0 = performance.now()
   let _busyShown = false
   let _busyShownAt = 0
+  let _busyToken = null
   const _busyTimer = suppressBusy ? null : setTimeout(() => {
     _busyShown = true
     _busyShownAt = performance.now()
-    showOpProgress(_busyHeaderForPath(method, path), '')
+    _busyToken = showOpProgress(_busyHeaderForPath(method, path), '', {
+      detail: `${method} ${path} (request #${diagnosticId})`,
+      startedAt: t0,
+    })
     _emitRequestDiagnostic({ phase: 'busy-show', id: diagnosticId, method, path })
     // A slow request might mean the backend is wedged, not just busy — probe
     // /health now (short timeout, off the event loop) so a true hang surfaces as
     // "reconnecting…" in seconds instead of waiting out the request ceiling.
     pokeProbe()
   }, _BUSY_POPUP_DELAY_MS)
-  const t0 = performance.now()
   let r, json, tNetwork = 0
   try {
     r = await fetch(`${BASE}${path}`, opts)
@@ -473,7 +477,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
       const visibleFor = performance.now() - _busyShownAt
       const wait = Math.max(0, _BUSY_POPUP_MIN_VISIBLE_MS - visibleFor)
       const hide = () => {
-        hideOpProgress()
+        hideOpProgress(_busyToken)
         _emitRequestDiagnostic({ phase: 'busy-hide', id: diagnosticId, method, path })
       }
       if (wait > 0) setTimeout(hide, wait)
@@ -5046,6 +5050,16 @@ export async function listSimJobs(designSourcePath = null, showAll = false) {
   } finally {
     if (_simJobsInflight.get(path) === request) _simJobsInflight.delete(path)
   }
+}
+
+/** Open a workspace part entirely server-side (identity reconcile + name stamp + import).
+ *  Replaces getLibraryFileContent → importDesign for opening: an 80 MB design used to
+ *  cross the wire twice and be re-encoded in the browser. Resolves to
+ *  `{ identityDisposition }` on success, `null` on failure (see store.lastError). */
+export async function openLibraryPart(path, name) {
+  const json = await _request('POST', '/library/open-part', { path, name })
+  const ok = await _syncFromDesignResponse(json)
+  return ok ? { identityDisposition: json?.identity_disposition ?? null } : null
 }
 
 export async function getLibraryFileContent(path) {

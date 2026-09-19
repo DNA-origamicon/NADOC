@@ -826,6 +826,11 @@ class DesignImportRequest(BaseModel):
     content: str
 
 
+class OpenLibraryPartRequest(BaseModel):
+    path: str  # workspace-relative .nadoc path
+    name: Optional[str] = None  # part name to stamp into metadata (defaults to the file's own)
+
+
 class BundleRequest(BaseModel):
     cells: List[List[int]]  # [[row, col], ...]
     length_bp: int
@@ -1728,27 +1733,15 @@ def load_design(body: FilePathRequest) -> dict:
     return _design_response(design, report, full_feature_log=False)
 
 
-@router.post("/design/import", status_code=200)
-def import_design(body: DesignImportRequest) -> dict:
-    """Load a design from raw .nadoc JSON content sent by the browser.
-
-    Unlike ``/design/load`` (which reads a server-side file path), this endpoint
-    accepts the file content directly, enabling browser-based file-open dialogs.
-    Clears undo history and crossover cache so the loaded design starts fresh.
-
-    Like ``/design/load``, native .nadoc content preserves absolute positions —
-    recentering is only applied to non-native imports.
-    """
+def _install_loaded_design(design: Design) -> dict:
+    """Shared tail of a native .nadoc open: self-correcting migrations, install as the
+    session baseline, validate, and build the slim response."""
     from backend.core.lattice import (
         migrate_split_staple_domains,
         autodetect_all_overhangs,
     )
     from backend.core.validator import validate_design
 
-    try:
-        design = Design.from_json(body.content)
-    except Exception as exc:
-        raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
     design = migrate_split_staple_domains(design)
     # Full detection (Pass 1 autodetect + Pass 2 reconcile), not just reconcile:
     # idempotent for already-tagged overhangs, but also catches overhangs the
@@ -1765,6 +1758,51 @@ def import_design(body: DesignImportRequest) -> dict:
     # New lineage (fresh load/import) — see the matching comment in load_design above:
     # slim response now, GET /design/feature-log/full backfills bodies in the background.
     return _design_response(design, report, full_feature_log=False)
+
+
+@router.post("/library/open-part", status_code=200)
+def open_library_part(body: OpenLibraryPartRequest) -> dict:
+    """Open a workspace ``.nadoc`` entirely server-side.
+
+    The browser used to fetch the whole file, re-encode it with the part name and POST
+    it straight back (~82 MB each way for a large design). The server already has the
+    file, so it reconciles the file's identity, stamps the name and installs it through
+    the same pipeline as ``/design/import``; the response adds ``identity_disposition``.
+    """
+    from backend.api.assembly import _safe_workspace_path
+    from backend.api.routes_assembly_workspace import _reconcile_nadoc_file
+
+    dest = _safe_workspace_path(body.path)
+    if not dest.is_file():
+        raise HTTPException(404, detail=f"File not found in workspace: {body.path!r}")
+    design, disposition = _reconcile_nadoc_file(dest, body.path)
+    if design is None:
+        raise HTTPException(400, detail=f"Failed to load design: {body.path!r}")
+    if body.name:
+        design = design.model_copy(
+            update={"metadata": design.metadata.model_copy(update={"name": body.name})}
+        )
+    resp = _install_loaded_design(design)
+    resp["identity_disposition"] = disposition
+    return resp
+
+
+@router.post("/design/import", status_code=200)
+def import_design(body: DesignImportRequest) -> dict:
+    """Load a design from raw .nadoc JSON content sent by the browser.
+
+    Unlike ``/design/load`` (which reads a server-side file path), this endpoint
+    accepts the file content directly, enabling browser-based file-open dialogs.
+    Clears undo history and crossover cache so the loaded design starts fresh.
+
+    Like ``/design/load``, native .nadoc content preserves absolute positions —
+    recentering is only applied to non-native imports.
+    """
+    try:
+        design = Design.from_json(body.content)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
+    return _install_loaded_design(design)
 
 
 class CadnanoImportRequest(BaseModel):

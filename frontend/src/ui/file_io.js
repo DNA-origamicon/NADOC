@@ -226,43 +226,25 @@ export function initFileOpen({
     return raw.replace(/\.[^.]+$/, '') || raw
   }
 
-  function _contentWithPartName(content, partName) {
-    try {
-      const parsed = JSON.parse(content)
-      parsed.metadata = { ...(parsed.metadata ?? {}), name: partName }
-      return JSON.stringify(parsed)
-    } catch (_) {
-      return content
-    }
-  }
-
   async function openPartFromServer(path, name) {
     showFileLoad('Opening Part')
     flAppendLog(`Path: ${path}`)
     try {
-      flSetProgress(0, 'Fetching file…')
-      const result = await api.getLibraryFileContent(path)
-      if (!result?.content) {
-        flAppendLog('Server returned no content.', 'error')
-        flShowError('Could not load part.')
-        return
-      }
-      const identityMessages = {
-        claimed: 'Legacy file identity registered at this workspace path.',
-        confirmed: 'File identity and workspace path confirmed.',
-        move: 'Moved file recognized; its design identity was retained.',
-        copy: 'Copied file recognized; a new independent design identity was assigned.',
-      }
-      if (identityMessages[result.identity_disposition]) {
-        flAppendLog(identityMessages[result.identity_disposition], 'info')
-      }
-      flAppendLog(`File fetched — ${Math.round(result.content.length / 1024)} KB`)
-      flSetProgress(50, 'Importing design…')
-      flAppendLog('Parsing and validating design…')
+      flSetProgress(10, 'Opening file on the server…')
+      flAppendLog('Server is reading, migrating and validating the design…')
       resetForNewDesign()
       const partName = _partNameFromPath(path, name)
-      const ok = await api.importDesign(_contentWithPartName(result.content, partName))
-      if (ok) {
+      const opened = await api.openLibraryPart(path, partName)
+      if (opened) {
+        const identityMessages = {
+          claimed: 'Legacy file identity registered at this workspace path.',
+          confirmed: 'File identity and workspace path confirmed.',
+          move: 'Moved file recognized; its design identity was retained.',
+          copy: 'Copied file recognized; a new independent design identity was assigned.',
+        }
+        if (identityMessages[opened.identityDisposition]) {
+          flAppendLog(identityMessages[opened.identityDisposition], 'info')
+        }
         flAppendLog('Design imported successfully.', 'success')
         setFileName(partName)
         setWorkspacePath(path)

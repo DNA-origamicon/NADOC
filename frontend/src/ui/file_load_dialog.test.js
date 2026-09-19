@@ -56,7 +56,7 @@ describe('initFileLoadDialog', () => {
     dlg.appendLog('boom', 'error')
     const lines = els['flp-log'].querySelectorAll('div')
     expect(lines.length).toBe(2)
-    expect(lines[0].textContent).toBe('hello')
+    expect(lines[0].textContent).toMatch(/^\[\+\d+\.\ds\] hello$/)
     expect(lines[0].style.color).toBe('rgb(139, 148, 158)') // info
     expect(lines[1].style.color).toBe('rgb(248, 81, 73)')   // error
   })
@@ -103,5 +103,34 @@ describe('initFileLoadDialog', () => {
     els['flp-details-toggle'].click()
     expect(els['flp-log-wrap'].style.display).toBe('none')
     expect(els['flp-details-toggle'].textContent).toBe('▸ Details')
+  })
+
+  it('shows elapsed time, freezes it on success, and copies a report', async () => {
+    vi.useFakeTimers()
+    const els = mountIds({
+      'file-load-progress': 'div', 'flp-fill': 'div', 'flp-status': 'div',
+      'flp-header': 'div', 'flp-log': 'div', 'flp-log-wrap': 'div',
+      'flp-details-toggle': 'button', 'flp-actions': 'div',
+      'flp-elapsed': 'div', 'flp-copy': 'button',
+    })
+    const writeText = vi.fn().mockResolvedValue()
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    const dlg = initFileLoadDialog()
+    dlg.show('Opening Part')
+    dlg.appendLog('fetched design')
+    vi.advanceTimersByTime(2000)
+    expect(els['flp-elapsed'].textContent).toBe('elapsed 2.0s')
+    const done = dlg.showSuccess('Loaded')
+    vi.advanceTimersByTime(1500)
+    await done
+    expect(els['flp-elapsed'].textContent).toBe('elapsed 2.0s')
+    els['flp-copy'].click()
+    await vi.advanceTimersByTimeAsync(0)
+    const text = writeText.mock.calls[0][0]
+    expect(text).toContain('Operation: Opening Part')
+    expect(text).toContain('Elapsed: 2.0s')
+    expect(text).toMatch(/\[\+0\.0s\] fetched design/)
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 })

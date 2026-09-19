@@ -29,7 +29,7 @@ export function initBoxSolvent({api,store,root=document}={}) {
       if(jobWarnings.some(w=>!dismissed.has(w.key))){const button=document.createElement('button');button.type='button';button.textContent='Dismiss previous job warnings';button.onclick=()=>{for(const w of jobWarnings)dismissed.add(w.key);paintFeedback()};warningPanel.append(button)}
     }
   }
-  function openWarnings(event){event.stopPropagation();host.style.display='';root.querySelector('#md-box-solvent-arrow')?.classList.remove('is-collapsed');warningPanel?.scrollIntoView?.({block:'nearest'})}
+  function openWarnings(event){event.stopPropagation();host.style.display='';root.querySelector('#md-box-solvent-arrow')?.classList.remove('is-collapsed');warningPanel?.scrollIntoView?.({block:'nearest'});if(stale)schedule?.()}
   warningIcon?.addEventListener('click',openWarnings)
   let preview=null,version=0,timer=null,saveTimer=null,designId=store?.getState()?.currentDesign?.id,disposed=false
   let pairActive=false,unpairedSizes=null
@@ -109,20 +109,31 @@ export function initBoxSolvent({api,store,root=document}={}) {
     }catch(e){if(current===version){calculationWarning=e.message;status.textContent='Box calculation could not finish. Review the warning above.'}}
     if(current===version && !disposed){loading=false;paint()}
   }
-  function schedule(){clearTimeout(timer);version++;preview=null;loading=true;calculationWarning='';status.textContent='Calculating box dimensions and solvent details…';paintFeedback();emit();timer=setTimeout(calculate,250)}
+  // The estimate only feeds this section's numbers and the optional "View details"
+  // overlay (job preparation recomputes the box on the server). It asks the backend to
+  // build a full atomistic model — ~20 s on a large design — so never do it while the
+  // section is collapsed: it raced the geometry fetch on every design open. A collapsed
+  // section just goes stale and recalculates when expanded.
+  let stale=false
+  const wanted=()=>host.style.display!=='none' || !!view?.checked
+  function schedule(){
+    clearTimeout(timer);version++;preview=null;calculationWarning=''
+    if(!wanted()){stale=true;loading=false;paintFeedback();emit();return}
+    stale=false;loading=true;status.textContent='Calculating box dimensions and solvent details…';paintFeedback();emit();timer=setTimeout(calculate,250)
+  }
   function save(){
     clearTimeout(saveTimer)
     const id=designId,values=read()
     saveTimer=setTimeout(()=>{if(!id || id!==designId || disposed)return;writes=writes.then(async()=>{if(id===designId && !disposed){const saved=await api.updateMetadata?.({namd_box_solvent:values},{skipGeometry:true});if(!saved)throw Error('Metadata update failed')}}).catch(e=>{status.textContent=`Could not save preparation settings: ${e.message}`})},400)
   }
   function change(event){
-    if(event.target===view){emit();return}
+    if(event.target===view){if(view.checked && stale)schedule();else emit();return}
     if(host.contains(event.target)){if(event.target===inputs.salt && inputs.salt.value==='screening'){inputs.na.value=0;inputs.mg.value=12.5}paint();schedule();save()}
     else if(event.target?.closest?.('#md-surface-body')){paint();schedule()}
   }
   root.addEventListener('input',change);root.addEventListener('change',change)
   const header=root.querySelector('#md-box-solvent-toggle')
-  header?.addEventListener('click',()=>{const open=host.style.display==='none';host.style.display=open?'':'none';root.querySelector('#md-box-solvent-arrow')?.classList.toggle('is-collapsed',!open)})
+  header?.addEventListener('click',()=>{const open=host.style.display==='none';host.style.display=open?'':'none';root.querySelector('#md-box-solvent-arrow')?.classList.toggle('is-collapsed',!open);if(open && stale)schedule()})
   function restore(p={}){
     const values={...DEFAULTS,padding:p.padding_nm ?? DEFAULTS.padding,sizing:p.box_size_nm?.every(v=>v!=null)?'explicit':p.box_mode || DEFAULTS.sizing,
       salt:p.salt_mode || DEFAULTS.salt,na:p.ion_conc_mM ?? DEFAULTS.na,mg:p.mg_conc_mM ?? DEFAULTS.mg,temperature:p.graphene_temperature_K ?? DEFAULTS.temperature}
