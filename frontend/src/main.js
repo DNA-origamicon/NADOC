@@ -177,6 +177,9 @@ import { computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel } from './ui/cluster_panel.js'
 import { withClusterDisplay } from './scene/cluster_entries.js'
 import { initPlatesTab }                          from './ui/plates_tab.js'
+import { initHairpinDimerChecker }                from './ui/hairpin_dimer_checker.js'
+import { initHairpinDimerMarkers }                from './scene/hairpin_dimer_markers.js'
+import { openStrandHairpinDimerWindow }           from './ui/hairpin_dimer_window.js'
 import { initJointsPanel }                          from './ui/joints_panel.js'
 import { initJointRenderer }                       from './scene/joint_renderer.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
@@ -3701,6 +3704,18 @@ async function main() {
     }
   })
 
+  // Tools → Sequencing → Hairpin/Dimer Checker toggle ('0'), auto-check after overhang
+  // generation, and the clickable ⚠ over flagged strands in the 3D view.
+  initHairpinDimerChecker({
+    store, showToast, showProgress: _showProgress, hideProgress: _hideProgress, broadcast: nadocBroadcast,
+    checkHairpinDimer: api.checkHairpinDimer, onOverhangSequencesGenerated: api.onOverhangSequencesGenerated,
+  })
+  const hairpinDimerMarkers = initHairpinDimerMarkers({
+    store, camera, canvas, host: canvas.parentElement, getHelixCtrl: () => designRenderer.getHelixCtrl(),
+    onOpen: (sid, title) => openStrandHairpinDimerWindow(
+      store.getState().hairpinDimerReport, store.getState().currentDesign, sid, { title }),
+  })
+
   document.getElementById('menu-seq-update-routing')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     const isSQ = currentDesign?.lattice_type === 'SQUARE'
@@ -6918,6 +6933,7 @@ async function main() {
       designRenderer.getHelixCtrl(),
       (_canvasCursorX != null) ? { camera, canvas, x: _canvasCursorX, y: _canvasCursorY } : null,
     )
+    hairpinDimerMarkers.refresh()   // hairpin/dimer ⚠ follow live bead positions
 
     // ── LOD (Level of Detail) — apply on first tick after design load (_lastDetailLevel = -1)
     if (designRenderer.getHelixCtrl()) {

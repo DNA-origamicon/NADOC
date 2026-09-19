@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   initPlateView: vi.fn(),
-  plateView: { setData: vi.fn(), resetView: vi.fn() },
+  plateView: { setData: vi.fn(), resetView: vi.fn(), setWarnings: vi.fn() },
 }))
 
 vi.mock('./plate_view.js', () => ({ initPlateView: mocks.initPlateView }))
@@ -13,6 +13,7 @@ vi.mock('../scene/helix_renderer.js', () => ({
 }))
 
 import { initPlatesTab } from './plates_tab.js'
+import { makeDesign, makeReport } from '../test-helpers/hairpin_dimer_fixture.js'
 
 describe('initPlatesTab', () => {
   beforeEach(() => {
@@ -26,6 +27,7 @@ describe('initPlatesTab', () => {
     mocks.initPlateView.mockReset().mockReturnValue(mocks.plateView)
     mocks.plateView.setData.mockReset()
     mocks.plateView.resetView.mockReset()
+    mocks.plateView.setWarnings.mockReset()
   })
 
   it('normalizes visible staple records from design state', () => {
@@ -151,5 +153,40 @@ describe('initPlatesTab', () => {
     subscriber(state)
     expect(mocks.plateView.setData).toHaveBeenLastCalledWith(expect.any(Array), tubed)
     expect(api.savePlateLayout).toHaveBeenCalledWith(tubed)
+  })
+
+  it('carries hairpin/dimer warnings on records and updates them without a re-layout', () => {
+    let subscriber
+    let state = {
+      currentDesign: makeDesign(), currentGeometry: [], strandColors: {}, strandGroups: [],
+      hairpinDimerReport: makeReport(),
+    }
+    initPlatesTab({
+      api: { savePlateLayout: vi.fn() },
+      designRenderer: { getHelixCtrl: () => null },
+      selectionManager: {},
+      store: { getState: () => state, subscribe: handler => { subscriber = handler } },
+    })
+    subscriber(state)
+    const records = mocks.plateView.setData.mock.calls.at(-1)[0]
+    const byId = Object.fromEntries(records.map(r => [r.strandId, r]))
+    expect(byId.s_a.warning).toContain('Overhang OH-A (22 nt): hairpin Tm 96.6 °C')
+    expect(byId.s_a.warning).toContain('Strongest (hairpin):')      // monospace canvas tooltip
+    expect(byId.s_a.warningLevel).toBe('critical')
+    expect(byId.s_b.warning).toBeNull()
+
+    // A report-only change (e.g. the check re-ran clean) → setWarnings, not setData.
+    const setDataCalls = mocks.plateView.setData.mock.calls.length
+    state = { ...state, hairpinDimerReport: { ...makeReport(), checks: [] } }
+    subscriber(state)
+    expect(mocks.plateView.setData.mock.calls.length).toBe(setDataCalls)
+    expect(mocks.plateView.setWarnings).toHaveBeenCalledOnce()
+    expect([...mocks.plateView.setWarnings.mock.calls[0][0].keys()]).toEqual([])
+
+    // A badge click opens the structure window for that strand (report still flagged).
+    state = { ...state, hairpinDimerReport: makeReport() }
+    mocks.initPlateView.mock.calls.at(-1)[1].onWarningClick('s_a', 'S1')
+    expect(document.querySelector('.hd-window .modal__title').textContent).toBe('S1 — secondary structure')
+    document.querySelector('.hd-window .modal__close').click()
   })
 })

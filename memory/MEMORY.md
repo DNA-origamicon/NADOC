@@ -83,7 +83,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Display / representation:** **[native_vr](project_native_vr.md)** (ACTIVE)·[ssdna_ball_joints](project_ssdna_ball_joints.md)·[photo_mode](project_photo_mode.md)·[hull_prism](project_hull_prism.md)·**[mixed_representation](project_mixed_representation.md)** (impostors uncovered)·[strand_animations](project_strand_animations.md)·[reference_geometry](project_reference_geometry.md)·**[protein_attachment](project_protein_attachment.md)** (all representations + assembly parity; Voltron cylinder invariant)·[nanoparticles](project_nanoparticles.md)·[headless_build](project_headless_build.md)·[sphere_impostors](project_sphere_impostors.md)
 
-**Sequences:** **[strand_sequence_edit](project_strand_sequence_edit.md)** (hand-edit a strand's bases; targeted vs design-wide re-derive)
+**Sequences:** **[strand_sequence_edit](project_strand_sequence_edit.md)** (hand-edit a strand's bases; targeted vs design-wide re-derive)·[hairpin_dimer_checker](project_hairpin_dimer_checker.md) (primer3 Tm > 30 °C ⚠; overhang ss bases + linkers)
 
 **Crossover geometry:** Catenation retired 2026-08-11 (archived only); ring piercing + heavy-atom clashes are active diagnostics. ·
 **[extra_base_spacing](project_extra_base_spacing.md)** (2.25 nm lattice ~2 Å tighter than equilibrium, even with no inserts) ·

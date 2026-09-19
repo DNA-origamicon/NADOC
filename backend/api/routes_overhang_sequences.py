@@ -160,4 +160,5 @@ def generate_all_overhang_sequences() -> dict:
     )
     result = _design_response(updated, report)
     result["generated_count"] = len(generated)
+    result["generated_overhang_ids"] = list(generated)
     return result

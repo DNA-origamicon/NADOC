@@ -184,6 +184,10 @@ and writes the same records. Recorded so nobody re-proposes the retirement.
 - [[ct_tab]] — the manager CT tab this section re-houses; [[assembly_overhang_bindings]] — the
   assembly twin panel.
 
+## Hairpin/dimer ⚠ (2026-09-18) — see [[hairpin-dimer-checker]]
+`⚠ ` option prefix, `.oconn-hd-warning` line under each flagged side, ⚠ on group headers / rows
+whose overhang or linker strand is flagged; re-renders on `hairpinDimerReport` change.
+
 ## Key facts
 
 - Overhang ids encode polarity as a `_5p`/`_3p` suffix (`ovhg_{helix}_{bp}_{5p|3p}`,

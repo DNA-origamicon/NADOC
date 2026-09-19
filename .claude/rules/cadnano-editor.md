@@ -49,6 +49,7 @@ but it **imports from here** — see *Reverse coupling* below.
 Returned API :4809 — `update(design)` :4909,
 `setTool` :4828, `setSelection` :4867, `setPaintColor` :4842, `setSelectFilter` :4846,
 `setViewTools` :4850, `setNativeOrientation` :4891, `setUnligatedCrossoverIds` :4901,
+`setHairpinDimerMarkers` (⚠ glyphs from `pathview/hairpin_dimer_markers.js`; click → `onHairpinDimerClick`),
 `fitToContent` :4826, `drawToLens` :4816, `getZoom/getPanX/getPanY` :4821-23.
 
 Useful `pathview.js` internal landmarks: coordinate helpers :614 · periodic-boundary helpers :637 ·
@@ -341,7 +342,8 @@ checked *before* the INPUT/TEXTAREA bail (:1375), then `if (ctrl) return` (:1376
 | `1` | Scaffold ends routing | main.js:1436 |
 | `2` | Full autostaple | main.js:1439 |
 | `4` `5` `6` | update routing / assign scaffold seq / assign staple seq | main.js:1440-1442 |
-| `S` | toggle strands spreadsheet | main.js:1445 |
+| `0` | Hairpin/Dimer Checker **toggle** (clicks `#menu-seq-hairpin-dimer`) | main.js keydown, next to `6` |
+| `S` | cycle select filter staple→scaffold→both (**not** the spreadsheet — use `#sheet-toggle`) | main.js keydown |
 | `?` / `F1` | help modal | main.js:1448 |
 | `Escape` | close help modal, else drop back to Select | main.js:1449 |
 | `Space` (hold) | zoom-scope magnifier | zoom_scope.js:131 / :139 |

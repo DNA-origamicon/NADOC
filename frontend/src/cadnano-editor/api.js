@@ -444,12 +444,36 @@ export async function patchOverhang(overhangId, { sequence = undefined, label = 
   )
 }
 
+// Listeners told which overhangs just received a GENERATED sequence — the
+// hairpin/dimer checker re-checks exactly those (mirrors api/overhang_endpoints.js).
+const _generatedListeners = new Set()
+
+/** Subscribe to overhang-sequence generation; returns an unsubscribe function. */
+export function onOverhangSequencesGenerated(fn) {
+  _generatedListeners.add(fn)
+  return () => _generatedListeners.delete(fn)
+}
+
+function _emitGenerated(overhangIds) {
+  if (!overhangIds?.length) return
+  for (const fn of _generatedListeners) {
+    try { fn(overhangIds) } catch (err) { console.error('[overhang generated]', err) }
+  }
+}
+
+/** Read-only hairpin / self-dimer check (backend/core/hairpin_dimer.py). */
+export async function checkHairpinDimer(body = {}) {
+  return _request('POST', '/design/hairpin-dimer-check', body)
+}
+
 /** Generate a rare, structure-safe sequence for a single overhang via
  *  the Johnson et al. 5-mer scoring algorithm. */
 export async function generateOverhangRandomSequence(overhangId) {
-  return mutate(req =>
+  const json = await mutate(req =>
     req('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random`)
   )
+  if (json) _emitGenerated([overhangId])
+  return json
 }
 
 /**
@@ -543,6 +567,7 @@ export async function clearAllLoopSkips() {
 export async function generateAllOverhangSequences() {
   const json = await mutate(req => req('POST', '/design/generate-overhang-sequences'))
   if (!json) return null
+  _emitGenerated(json.generated_overhang_ids ?? [])
   return { ok: !!json.design, count: json.generated_count ?? 0 }
 }
 

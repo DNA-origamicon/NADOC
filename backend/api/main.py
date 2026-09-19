@@ -47,6 +47,7 @@ from backend.api.routes_connection_versions import router as connection_versions
 from backend.api.routes_overhang_connections import router as overhang_connections_router
 from backend.api.routes_overhang_bindings import router as overhang_bindings_router
 from backend.api.routes_overhang_sequences import router as overhang_sequences_router
+from backend.api.routes_hairpin_dimer import router as hairpin_dimer_router
 from backend.api.routes_relaxation import router as relaxation_router
 from backend.api.routes_assembly_overhangs import router as assembly_overhangs_router
 from backend.api.routes_assembly_polymerize import router as assembly_polymerize_router
@@ -381,6 +382,7 @@ app.include_router(connection_versions_router, prefix="/api")
 app.include_router(overhang_connections_router, prefix="/api")
 app.include_router(overhang_bindings_router, prefix="/api")
 app.include_router(overhang_sequences_router, prefix="/api")
+app.include_router(hairpin_dimer_router, prefix="/api")
 app.include_router(relaxation_router, prefix="/api")
 app.include_router(loop_skip_router, prefix="/api")
 app.include_router(camera_poses_router, prefix="/api")

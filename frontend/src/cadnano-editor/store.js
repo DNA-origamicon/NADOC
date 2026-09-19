@@ -58,6 +58,10 @@ const _initialState = {
    */
   unligatedCrossoverIds: new Set(),
 
+  /** Hairpin/self-dimer check report (ui/hairpin_dimer_checker.js), or null.
+   *  Derived data — never persisted; stale checks are filtered on read. */
+  hairpinDimerReport: null,
+
   /** True while an API request is in flight. */
   loading: false,
 

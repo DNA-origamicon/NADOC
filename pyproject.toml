@@ -32,6 +32,7 @@ dependencies = [
     "asyncssh>=2.24.0",
     "psutil>=7.0",
     "boto3>=1.40",
+    "primer3-py>=2.3",
 ]
 
 # OpenMM's official pip package includes CPU/OpenCL/Reference.  The ``cuda12`` extra

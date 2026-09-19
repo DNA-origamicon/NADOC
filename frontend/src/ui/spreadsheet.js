@@ -27,6 +27,8 @@ import { recordNameEdit } from './name_edit_audit.js'
 
 import { initSequenceSearch } from './sequence_search.js'
 import { spreadsheetColumns } from './spreadsheet_schema.js'
+import { createHairpinDimerIndexCache } from './hairpin_dimer_report.js'
+import { prependStrandWarningIcon } from './hairpin_dimer_window.js'
 import {
   DEFAULT_SPREADSHEET_SORT_ORDER,
   initSpreadsheetSort,
@@ -513,6 +515,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     onChange: () => _rebuildTable(store.getState()),
   })
 
+  const hairpinDimerIndex = createHairpinDimerIndexCache()
+
   // ── Shared datalist for group comboboxes ──────────────────────────
   const datalist = document.createElement('datalist')
   datalist.id = 'sheet-groups-datalist'
@@ -743,6 +747,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const pins    = stapleColorPins(state)
     const strands = sortedStrands(design, strandColors, strandGroups, sortOrder, pins)
     const displayIds = buildStrandDisplayIdMap(design.strands)
+    const hdIndex = hairpinDimerIndex.get(state.hairpinDimerReport, design)
     // Map internal ids to the same human label used by the viewport/pathview.
     const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, h.label ?? i]))
 
@@ -781,6 +786,9 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             td.className = 'sheet-col-id'
             td.textContent = displayIds.get(strand.id) ?? '—'
             td.title = strand.id
+            prependStrandWarningIcon(td, hdIndex, strand.id, design, state.hairpinDimerReport, {
+              title: [displayIds.get(strand.id), strand.name].filter(Boolean).join(' '),
+            })
             break
           }
           case 'name': {
@@ -1466,7 +1474,9 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const assemblyStrandsChanged = newState.currentAssembly?.assembly_strands
                                   !== prevState.currentAssembly?.assembly_strands
 
-    if (designChanged || strandsChanged || groupsChanged || colorsChanged
+    const hairpinDimerChanged = newState.hairpinDimerReport !== prevState.hairpinDimerReport
+
+    if (designChanged || strandsChanged || groupsChanged || colorsChanged || hairpinDimerChanged
         || assemblyChanged || assemblyActiveChanged || assemblyStrandsChanged) {
       _rebuildTable(newState)
       return

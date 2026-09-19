@@ -78,6 +78,10 @@ const _initialState = {
   /** Last API error, or null.  Shape: { status: number, message: string } */
   lastError: null,
 
+  /** Hairpin/self-dimer check report (ui/hairpin_dimer_checker.js), or null.
+   *  Derived data — never persisted; stale checks are filtered on read. */
+  hairpinDimerReport: null,
+
   /**
    * Per-strand custom colour overrides.  Plain object: strand_id → hex number.
    * Persists across scene rebuilds.  Set via designRenderer.setStrandColor().
