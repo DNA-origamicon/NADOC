@@ -13,6 +13,8 @@ GET /api/jobs/active   every currently-busy (running/preparing) MD or oxDNA job,
 
 from __future__ import annotations
 
+from backend.api.startup_cache import coalesce_job_reads
+
 import importlib
 import json
 import logging
@@ -214,6 +216,9 @@ def _collect_active() -> list[dict]:
         from backend.core.namd_runner import reconcile_job_status
 
         for j in MdJob.list_jobs(ws):
+            # Activity summaries need no archive/output reconciliation for idle jobs.
+            if j.status.value not in _BUSY:
+                continue
             try:
                 j = reconcile_job_status(j, ws)
             except Exception:  # noqa: BLE001
@@ -310,6 +315,9 @@ def _collect_active() -> list[dict]:
         from backend.core.oxdna_runner import reconcile_oxdna_status
 
         for j in OxdnaJob.list_jobs(ws):
+            # Activity summaries need no archive/output reconciliation for idle jobs.
+            if j.status.value not in _BUSY:
+                continue
             try:
                 j = reconcile_oxdna_status(j, ws)
             except Exception:  # noqa: BLE001
@@ -388,6 +396,9 @@ def _collect_active() -> list[dict]:
                 importlib.import_module(f"backend.core.{mod_runner}"), recon_name
             )
             for j in JobCls.list_jobs(ws):
+                # Activity summaries need no archive/output reconciliation for idle jobs.
+                if j.status.value not in _BUSY:
+                    continue
                 try:
                     j = reconcile(j, ws)
                 except Exception:  # noqa: BLE001
@@ -414,6 +425,7 @@ def _collect_active() -> list[dict]:
 
 
 @router.get("/jobs/active")
+@coalesce_job_reads
 async def list_active_jobs() -> dict:
     """Every currently busy (running/preparing) MD or oxDNA job across the workspace.
 

@@ -191,3 +191,11 @@ describe('welcome workspace server tabs', () => {
     expect(tab.querySelector('.lib-server-status').classList.contains('online')).toBe(true)
   })
 })
+
+it('preserves cached sizes while pending and marks completion explicitly', () => {
+  const entries = [{ type: 'part', path: 'a.nadoc', size_bytes: 10, sim_bytes: 40, disk_bytes: 50 }]
+  const pending = mergeLibraryDiskUsage(entries, { 'a.nadoc': null })
+  expect(pending[0]).toMatchObject({ disk_bytes: 50, disk_usage_pending: true })
+  const ready = mergeLibraryDiskUsage(pending, { 'a.nadoc': 90 })
+  expect(ready[0]).toMatchObject({ disk_bytes: 100, disk_usage_pending: false })
+})

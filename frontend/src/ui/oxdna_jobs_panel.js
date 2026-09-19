@@ -1309,6 +1309,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // would drop to block). `initCollapsed` runs at the end (with
   // the other mount probes) to preserve the original apply-then-onOpen ordering.
   const _base = initJobsPanelBase({
+    deferUntilVisible: true,
     section: 'oxdna-jobs-panel',
     els: { heading, body, arrow },
     pollMs: POLL_MS,
@@ -2976,7 +2977,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // Staleness is historical UI metadata, not part of applying the selected
     // Feature Log state. Coalesce rapid scrubs and let the scene paint first.
     clearTimeout(_designChangeRefreshTimer)
-    _designChangeRefreshTimer = setTimeout(() => { void _fetchJobs() }, 150)
+    _designChangeRefreshTimer = setTimeout(() => { if (_base.isOpen()) void _fetchJobs() }, 150)
   })
 
   // ── Design switched/opened → re-filter the list to the new design ─────────

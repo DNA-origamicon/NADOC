@@ -37,6 +37,8 @@ Display note: relaxed coordinates are Physical-layer only; they never mutate top
 
 from __future__ import annotations
 
+from backend.api.startup_cache import coalesce_job_reads
+
 import logging
 import shutil
 from pathlib import Path
@@ -277,6 +279,7 @@ async def create_blade_job(body: CreateBladeJobRequest) -> dict:
 
 
 @router.get("/blade/jobs")
+@coalesce_job_reads
 async def list_blade_jobs() -> list[dict]:
     # Disk scans and status reconciliation must not occupy the HTTP event loop.
     from fastapi.concurrency import run_in_threadpool

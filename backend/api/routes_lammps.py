@@ -10,6 +10,8 @@ Mounted in ``backend/api/main.py`` via ``app.include_router(..., prefix="/api")`
 
 from __future__ import annotations
 
+from backend.api.startup_cache import coalesce_job_reads
+
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Response
@@ -181,19 +183,29 @@ async def create_lammps_job(body: CreateLammpsJobRequest) -> dict:
 
 
 @router.get("/lammps/jobs")
+@coalesce_job_reads
 async def list_lammps_jobs() -> list[dict]:
     # Disk scans and status reconciliation must not occupy the HTTP event loop.
     from fastapi.concurrency import run_in_threadpool
 
-    return await run_in_threadpool(_list_lammps_jobs)
+    from backend.core.design_disk_usage import schedule_dir_size_warm
+    rows, paths = await run_in_threadpool(_list_lammps_jobs)
+    schedule_dir_size_warm(paths)
+    return rows
 
 
-def _list_lammps_jobs() -> list[dict]:
+def _list_lammps_jobs() -> tuple[list[dict], list]:
+    from backend.core.design_disk_usage import dir_size_bytes_cached_only
     ws = _workspace()
-    return [
-        lammps_runner.reconcile_lammps_status(j, ws).to_dict()
-        for j in LammpsJob.list_jobs(ws)
-    ]
+    rows, paths = [], []
+    for job in LammpsJob.list_jobs(ws):
+        job = lammps_runner.reconcile_lammps_status(job, ws)
+        row = job.to_dict()
+        row["size_bytes"] = dir_size_bytes_cached_only(job.job_dir(ws))
+        if row["size_bytes"] is None:
+            paths.append(job.job_dir(ws))
+        rows.append(row)
+    return rows, paths
 
 
 @router.get("/lammps/jobs/{job_id}")

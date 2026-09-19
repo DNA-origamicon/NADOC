@@ -27,6 +27,8 @@ JSON directly.  mrDNA output is Physical-layer only; it never mutates topology.
 
 from __future__ import annotations
 
+from backend.api.startup_cache import coalesce_job_reads
+
 import logging
 import shutil
 from pathlib import Path
@@ -276,6 +278,7 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
 
 
 @router.get("/mrdna/jobs")
+@coalesce_job_reads
 async def list_mrdna_jobs() -> list[dict]:
     # Disk scans and status reconciliation must not occupy the HTTP event loop.
     from fastapi.concurrency import run_in_threadpool
@@ -656,6 +659,6 @@ async def get_mrdna_analytic_curvature() -> dict:
 
 
 @router.get("/mrdna/available")
-async def get_mrdna_available() -> dict:
+def get_mrdna_available() -> dict:
     """Probe for a usable mrDNA + ARBD install (mirror /oxdna/available)."""
     return mrdna_available()

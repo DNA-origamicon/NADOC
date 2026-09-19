@@ -6,21 +6,44 @@ over the `/ws/engines/install` WebSocket (see `api/ws.py`), not here.
 
 from __future__ import annotations
 
+import asyncio
+import os
+import time
+from weakref import WeakKeyDictionary
+
 from fastapi import APIRouter
+from fastapi.concurrency import run_in_threadpool
 
 from backend.core.engines import engines_status
 
 router = APIRouter(tags=["engines"])
 
 
+_status_by_loop = WeakKeyDictionary()
+
+
 @router.get("/engines/status")
-async def get_engines_status() -> dict:
+async def get_engines_status(refresh: bool = False) -> dict:
     """Per-engine availability, GPU + toolchain info, and per-section readiness.
 
     See `engines.engines_status()` for the response shape.  The frontend calls
     this on the Help-menu panel and to gate the oxDNA / MD sidebar sections.
     """
-    return engines_status()
+    loop = asyncio.get_running_loop()
+    key = (os.environ.get("NADOC_ENGINES_FORCE_MISSING", ""), engines_status)
+    cache = _status_by_loop.setdefault(loop, {})
+    now = time.monotonic()
+    task, expires = cache.get(key, (None, 0))
+    if task is None or (task.done() and (refresh or now >= expires)):
+        task = asyncio.create_task(run_in_threadpool(engines_status))
+        cache.clear()
+        cache[key] = (task, now + 60)
+    try:
+        return await asyncio.shield(task)
+    except Exception:
+        if cache.get(key, (None,))[0] is task:
+            cache.pop(key, None)
+        raise
 
 
 # Filename shapes worth highlighting per engine in the folder navigator.

@@ -47,8 +47,8 @@ export function initMdEngines({ api }) {
   const _gates = {}                // section → gate root element
 
   // ── data ────────────────────────────────────────────────────────────────
-  async function refresh() {
-    _status = await api.enginesStatus().catch(() => null)
+  async function refresh({ force = true } = {}) {
+    _status = await api.enginesStatus({ refresh: force }).catch(() => null)
     if (_statusModal && _statusModal.isOpen()) _renderStatusBody()
     _updateGates()
     return _status

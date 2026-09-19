@@ -1,3 +1,4 @@
+import { openProcessLog } from './ui/process_log.js'
 import { initMdIonPaths } from './scene/md_ion_paths.js'
 /**
  * NADOC frontend entry point.
@@ -6206,6 +6207,7 @@ async function main() {
   })
 
   // ── Help / Hotkeys modal ─────────────────────────────────────────────────────
+  document.getElementById('menu-help-open-log')?.addEventListener('click', openProcessLog)
   const helpModal = document.getElementById('help-modal')
   document.getElementById('menu-help-hotkeys')?.addEventListener('click', () => helpModal.classList.add('visible'))
   document.getElementById('menu-help-strand-anim')?.addEventListener('click',
@@ -6731,7 +6733,17 @@ async function main() {
   // MD Engines: Help-menu install/status panel + sidebar install gates.
   const mdEngines = initMdEngines({ api })
   mdEngines.mountSidebarGates()
-  mdEngines.refresh()
+  // Full GPU/build-tool discovery is only needed when simulation UI is used.
+  let engineStatusRequested = false
+  const ensureEngineStatus = () => {
+    const pane = document.getElementById('tab-content-dynamics')
+    if (!engineStatusRequested && pane && !pane.hidden) {
+      engineStatusRequested = true
+      void mdEngines.refresh({ force: false })
+    }
+  }
+  window.addEventListener('nadoc:left-tab-change', ensureEngineStatus)
+  queueMicrotask(ensureEngineStatus)
   document.getElementById('menu-help-md-engines')?.addEventListener('click', () => mdEngines.showStatusModal())
 
   initCreateSeam({ store, api })

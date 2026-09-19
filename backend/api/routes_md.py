@@ -19,6 +19,8 @@ GET   /md/jobs/{job_id}/display     latest displayable NADOC MD trajectory
 
 from __future__ import annotations
 
+from backend.api.startup_cache import coalesce_job_reads
+
 import asyncio
 import hashlib
 import json
@@ -5001,6 +5003,7 @@ def _compact_list_health_samples(samples: list) -> tuple[list, bool]:
 
 
 @router.get("/md/jobs")
+@coalesce_job_reads
 async def list_md_jobs() -> list[dict]:
     from backend.core.design_disk_usage import schedule_dir_size_warm
 
@@ -8497,7 +8500,7 @@ async def get_md_job_metrics(job_id: str) -> list[dict]:
 
 
 @router.get("/md/namd-available")
-async def namd_available() -> dict:
+def namd_available() -> dict:
     """Check whether NAMD3 and GROMACS are accessible."""
     try:
         namd_path = find_namd()

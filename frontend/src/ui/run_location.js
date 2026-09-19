@@ -137,6 +137,15 @@ export function mountDirectoryButton(container, { api } = {}) {
   }
   try { window.addEventListener(_EVT, sync) } catch { /* no window (tests) */ }
   container.appendChild(btn)
-  void sync()
+  let initiallyChecked = false
+  const checkWhenVisible = () => {
+    const pane = document.getElementById('tab-content-dynamics')
+    if (initiallyChecked || pane?.hidden) return
+    initiallyChecked = true
+    void sync()
+  }
+  window.addEventListener('nadoc:left-tab-change', checkWhenVisible)
+  render()
+  checkWhenVisible()
   return btn
 }

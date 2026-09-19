@@ -254,3 +254,35 @@ describe('initJobsPanelBase — poll loop', () => {
     expect(tick).not.toHaveBeenCalled()
   })
 })
+
+it('defers hidden engine startup and loads it when made visible', async () => {
+  document.body.innerHTML = '<div id="tab-content-dynamics" hidden><section id="lazy-engine" style="display:none"><div id="lazy-body"></div></section></div>'
+  const pane = document.getElementById('tab-content-dynamics')
+  const panel = document.getElementById('lazy-engine')
+  const onOpen = vi.fn()
+  const base = initJobsPanelBase({
+    section: 'lazy-engine', els: { body: document.getElementById('lazy-body') },
+    collapsible: false, deferUntilVisible: true, onOpen,
+  })
+  base.initCollapsed()
+  await Promise.resolve()
+  expect(onOpen).not.toHaveBeenCalled()
+  pane.hidden = false
+  window.dispatchEvent(new Event('nadoc:left-tab-change'))
+  await Promise.resolve()
+  expect(onOpen).not.toHaveBeenCalled()
+  panel.style.display = ''
+  window.dispatchEvent(new Event('nadoc:simulation-engine'))
+  await Promise.resolve()
+  expect(onOpen).toHaveBeenCalledTimes(1)
+  expect(base.isOpen()).toBe(true)
+  panel.style.display = 'none'
+  window.dispatchEvent(new Event('nadoc:simulation-engine'))
+  await Promise.resolve()
+  expect(base.isOpen()).toBe(false)
+  panel.style.display = ''
+  window.dispatchEvent(new Event('nadoc:simulation-engine'))
+  await Promise.resolve()
+  expect(onOpen).toHaveBeenCalledTimes(2)
+  document.body.replaceChildren()
+})

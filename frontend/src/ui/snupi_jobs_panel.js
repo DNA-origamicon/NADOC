@@ -353,6 +353,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
 
   // ── Shared scaffold: collapse + advanced drawer + poll loop ────────────────────
   const _base = initJobsPanelBase({
+    deferUntilVisible: true,
     section: 'snupi-jobs-panel',
     els: { heading, body, arrow, advToggle, advArrow, advBody },
     pollMs: POLL_MS,
@@ -757,7 +758,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     if (e.detail?.from === 'dynamics') _stopDisplays()
   })
   window.addEventListener('nadoc:design-changed', () => { _stopDisplays() })
-  window.addEventListener('nadoc:workspace-path-change', () => { _selectedId = null; _fetchJobs() })
+  window.addEventListener('nadoc:workspace-path-change', () => { _selectedId = null; if (_base.isOpen()) _fetchJobs() })
 
   // ── Open ──────────────────────────────────────────────────────────────────────
   function _onOpen() {

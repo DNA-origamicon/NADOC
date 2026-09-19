@@ -26,6 +26,8 @@ oxDNA output is Physical-layer only; it never mutates Design topology.
 
 from __future__ import annotations
 
+from backend.api.startup_cache import coalesce_job_reads
+
 import logging
 import json
 import struct
@@ -1189,6 +1191,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 
 
 @router.get("/oxdna/jobs")
+@coalesce_job_reads
 async def list_oxdna_jobs() -> list[dict]:
     # Disk scans and status reconciliation must not occupy the HTTP event loop.
     from fastapi.concurrency import run_in_threadpool
@@ -1210,6 +1213,13 @@ def _list_oxdna_jobs() -> tuple[list[dict], list]:
     for j in jobs:
         d = j.to_dict()
         d["out_of_date"] = _job_is_out_of_date(j, current_fp)
+        if d.get("status") == "running":
+            from backend.core.oxdna_runner import job_overall_fraction, load_stage_specs
+            try:
+                d["progress_fraction"] = round(job_overall_fraction(j, ws, load_stage_specs(j.job_dir(ws))), 4)
+            except Exception:
+                pass  # Progress is advisory; never sink the job list.
+
         # Cache-only: never block the poll on a multi-GB job-tree stat-walk. An
         # uncached size comes back None (frontend renders it blank) and is filled
         # in by the background warm scheduled above, appearing on the next poll.
@@ -4477,6 +4487,6 @@ async def get_oxdna_rmsf_surface(
 
 
 @router.get("/oxdna/available")
-async def get_oxdna_available() -> dict:
+def get_oxdna_available() -> dict:
     """Probe for a usable oxDNA binary (mirror /md/namd-available)."""
     return oxdna_available()

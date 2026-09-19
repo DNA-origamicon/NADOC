@@ -38,8 +38,9 @@ export function mergeLibraryDiskUsage(entries, usage) {
   if (!usage || typeof usage !== 'object') return entries
   return entries.map(entry => {
     if (entry.type !== 'part') return entry
+    if (usage[normPath(entry.path)] === null) return { ...entry, disk_usage_pending: true }
     const simBytes = Number(usage[normPath(entry.path)] ?? 0)
-    return { ...entry, sim_bytes: simBytes, disk_bytes: (entry.size_bytes ?? 0) + simBytes }
+    return { ...entry, disk_usage_pending: false, sim_bytes: simBytes, disk_bytes: (entry.size_bytes ?? 0) + simBytes }
   })
 }
 
@@ -370,16 +371,23 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     _allEntries = readLibraryCache()
   }
 
-  async function _refreshDiskUsage(generation) {
+  let _diskUsageTimer = null
+  async function _refreshDiskUsage(generation, attempt = 0) {
     if (typeof api.libraryDiskUsage !== 'function') return
-    const usage = await api.libraryDiskUsage()
+    const usage = await api.libraryDiskUsage().catch(() => null)
     if (generation !== _refreshGeneration || !usage) return
+    if (usage && Object.values(usage).some(value => value === null) && attempt < 6) {
+      _diskUsageTimer = setTimeout(() => {
+        if (generation === _refreshGeneration && !_activePeerId) void _refreshDiskUsage(generation, attempt + 1)
+      }, Math.min(30000, 2000 * 2 ** attempt))
+    }
     _allEntries = mergeLibraryDiskUsage(_allEntries, usage)
     _saveCachedEntries()
     _render()
   }
 
   async function refresh() {
+    clearTimeout(_diskUsageTimer)
     const generation = ++_refreshGeneration
     if (!_allEntries.length) treeEl.innerHTML = '<div class="lib-loading">Loading…</div>'
     try {
@@ -592,6 +600,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     sizeEl.className = 'lib-row-size'
     const diskBytes = _entryDiskBytes(file)
     sizeEl.textContent = diskBytes ? formatBytes(diskBytes) : ''
+    if (file.disk_usage_pending) sizeEl.textContent = 'Calculating…'
     const simBytes = file.sim_bytes ?? 0
     if (simBytes > 0) {
       if (hasLargeSimulationData(simBytes)) sizeEl.classList.add('lib-row-size-sim')

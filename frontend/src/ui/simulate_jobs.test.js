@@ -474,6 +474,7 @@ describe('unified list + master card', () => {
     // while it already has a running node). This is the state when a production run is
     // launched off a completed parent.
     const { sim, api } = make([oxNode({ status: 'completed' })])
+    window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', { detail: { activeTab: 'dynamics' } }))
     await sim.refresh()
     const before = api.listSimJobs.mock.calls.length
     // A production child now exists in the backend; the engine panel fires the wake event.

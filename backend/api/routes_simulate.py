@@ -137,99 +137,34 @@ async def list_simulate_jobs(
     from backend.core import sim_jobs
 
     ws = _WORKSPACE_DIR
-    nodes = await run_in_threadpool(_local_simulate_nodes, ws)
-    # mrDNA / CanDo / NAMD reuse each engine's own list endpoint (identical reconcile +
-    # out_of_date + on-disk-size enrichment) so a run reads the same here as on its tab.
-    # Each is isolated in its own try so one broken engine list can't sink the others.
-    try:
-        from backend.api.routes_mrdna import list_mrdna_jobs
+    import asyncio
+    from backend.api import (
+        routes_oxdna, routes_lammps, routes_mrdna, routes_cando,
+        routes_snupi, routes_blade, routes_md,
+    )
 
-        for d in await list_mrdna_jobs():
-            nodes.append(sim_jobs.normalize_mrdna_job(d))
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        from backend.api.routes_cando import list_cando_jobs
-
-        for d in await list_cando_jobs():
-            nodes.append(sim_jobs.normalize_cando_job(d))
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        from backend.api.routes_snupi import list_snupi_jobs
-
-        for d in await list_snupi_jobs():
-            nodes.append(sim_jobs.normalize_snupi_job(d))
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        from backend.api.routes_blade import list_blade_jobs
-
-        for d in await list_blade_jobs():
-            nodes.append(sim_jobs.normalize_blade_job(d))
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        from backend.api.routes_md import list_md_jobs
-
-        for d in await list_md_jobs():
-            nodes.append(sim_jobs.normalize_md_job(d))
-    except Exception:  # noqa: BLE001
-        pass
-
+    sources = [
+        (routes_oxdna.list_oxdna_jobs, sim_jobs.normalize_oxdna_job),
+        (routes_lammps.list_lammps_jobs, sim_jobs.normalize_lammps_job),
+        (routes_mrdna.list_mrdna_jobs, sim_jobs.normalize_mrdna_job),
+        (routes_cando.list_cando_jobs, sim_jobs.normalize_cando_job),
+        (routes_snupi.list_snupi_jobs, sim_jobs.normalize_snupi_job),
+        (routes_blade.list_blade_jobs, sim_jobs.normalize_blade_job),
+        (routes_md.list_md_jobs, sim_jobs.normalize_md_job),
+    ]
+    # Same in-flight reads as engine panels; no second scan or serial chain.
+    results = await asyncio.gather(*(read() for read, _ in sources), return_exceptions=True)
+    nodes = []
+    for (_, normalize), rows in zip(sources, results):
+        if isinstance(rows, Exception):
+            continue
+        try:
+            nodes.extend(normalize(row) for row in rows)
+        except Exception:
+            continue  # Malformed data from one engine must not hide other engines.
     return await run_in_threadpool(
         _finish_simulate_nodes, nodes, ws, design_source_path, show_all
     )
-
-
-def _local_simulate_nodes(ws):
-    """Read local oxDNA/LAMMPS status without blocking the HTTP event loop."""
-    from backend.api.routes_oxdna import (
-        _current_design_fingerprint,
-        _job_is_out_of_date,
-    )
-    from backend.core import sim_jobs
-    from backend.core.design_disk_usage import dir_size_bytes_cached
-    from backend.core.lammps_job import LammpsJob
-    from backend.core.lammps_runner import reconcile_lammps_status
-    from backend.core.oxdna_job import OxdnaJob
-    from backend.core.oxdna_runner import (
-        job_overall_fraction,
-        load_stage_specs,
-        reconcile_oxdna_status,
-    )
-
-    nodes: list[dict] = []
-    try:
-        current_fp = _current_design_fingerprint()  # computed once for the whole list
-        for j in OxdnaJob.list_jobs(ws):
-            j = reconcile_oxdna_status(j, ws)
-            d = j.to_dict()
-            d["out_of_date"] = _job_is_out_of_date(j, current_fp)
-            d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
-            # A RUNNING job carries its live within-stage fraction so the master
-            # progress bar advances during a single-stage run (e-field / surface /
-            # production child) instead of sitting at 0 % until the stage completes.
-            if d.get("status") == "running":
-                try:
-                    specs = load_stage_specs(j.job_dir(ws))
-                    d["progress_fraction"] = round(
-                        job_overall_fraction(j, ws, specs), 4
-                    )
-                except Exception:  # noqa: BLE001 — progress is advisory, never sink the list
-                    pass
-            nodes.append(sim_jobs.normalize_oxdna_job(d))
-    except Exception:  # noqa: BLE001 — a broken oxDNA list must not sink the LAMMPS one
-        pass
-    try:
-        for j in LammpsJob.list_jobs(ws):
-            j = reconcile_lammps_status(j, ws)
-            d = j.to_dict()
-            d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
-            nodes.append(sim_jobs.normalize_lammps_job(d))
-    except Exception:  # noqa: BLE001
-        pass
-    return nodes
 
 
 def _finish_simulate_nodes(nodes, ws, design_source_path, show_all):

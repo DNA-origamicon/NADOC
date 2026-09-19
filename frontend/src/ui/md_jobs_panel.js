@@ -1815,6 +1815,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // down by the onClose hook. `initCollapsed` runs at the end (with the other mount
   // probes) to preserve the original apply-then-onOpen ordering.
   const _base = initJobsPanelBase({
+    deferUntilVisible: true,
     section: 'md-jobs-panel',
     els: { heading, body, arrow },
     arrowStyle: 'class',

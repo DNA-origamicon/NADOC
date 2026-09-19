@@ -5,7 +5,7 @@ vi.mock('../state/store.js', () => ({
 }))
 
 import {
-  enginesStatus, getMdJob, getMdTrajectory, getSystemResources,
+  enginesStatus, getVRStatus, getMdJob, getMdTrajectory, getSystemResources,
   launchNativeVR, listActiveJobs, listLibraryFiles, listSimJobs,
   refreshNativeVRJobs, refreshNativeVRVisualization, sendVRTrajectoryFeedback,
 } from './client.js'
@@ -215,4 +215,15 @@ describe('job JSON GET coalescing', () => {
       })],
     })
   })
+})
+
+it('coalesces overlapping VR status probes and permits a fresh later probe', async () => {
+  const pending = deferredResponse({ running: false })
+  global.fetch = vi.fn(() => pending.wait)
+  const a = getVRStatus(), b = getVRStatus()
+  await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+  pending.release()
+  await expect(Promise.all([a, b])).resolves.toEqual([{ running: false }, { running: false }])
+  await getVRStatus()
+  expect(global.fetch).toHaveBeenCalledTimes(2)
 })

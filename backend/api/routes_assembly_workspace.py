@@ -444,11 +444,11 @@ def list_library_files() -> list:
 
 
 @router.get("/library/disk-usage", status_code=200)
-def library_disk_usage() -> dict[str, int]:
+def library_disk_usage() -> dict[str, int | None]:
     """Simulation bytes by design path, fetched after the fast file listing."""
-    from backend.core.design_disk_usage import sim_bytes_by_source_path
+    from backend.core.design_disk_usage import cached_sim_bytes_by_source_path
 
-    return sim_bytes_by_source_path(_asm._WORKSPACE_DIR)
+    return cached_sim_bytes_by_source_path(_asm._WORKSPACE_DIR)
 
 
 @router.get("/design/about", status_code=200)

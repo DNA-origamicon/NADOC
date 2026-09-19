@@ -12,10 +12,10 @@ One reason to change: how a design's on-disk footprint is measured and grouped.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import time
 from pathlib import Path
 
@@ -137,25 +137,60 @@ def warm_dir_sizes(paths, ttl: float = _SIZE_TTL_S) -> None:
                 _warming.discard(key)
 
 
-_warm_tasks: set = set()
+# A single disk walker shared by all callers. Queue paths, not one task per poll.
+_size_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nadoc-sizes")
+_queued_paths: dict[str, Path] = {}
+_warm_worker_running = False
+
+
+def _drain_size_queue():
+    global _warm_worker_running
+    while True:
+        with _warm_lock:
+            if not _queued_paths:
+                _warm_worker_running = False
+                return
+            key = next(iter(_queued_paths))
+            path = _queued_paths.pop(key)
+        try:
+            warm_dir_sizes([path])
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Cannot measure job directory %s", path)
 
 
 def schedule_dir_size_warm(paths) -> None:
-    """Fire-and-forget :func:`warm_dir_sizes` for every path not already cached-fresh.
+    """Queue cold paths once; one dedicated worker performs all background walks."""
+    global _warm_worker_running
+    with _warm_lock:
+        for path in paths:
+            key = str(path)
+            hit = _size_cache.get(key)
+            if key not in _warming and (hit is None or time.time() - hit[0] >= _SIZE_TTL_S):
+                _queued_paths[key] = Path(path)
+        if _queued_paths and not _warm_worker_running:
+            _warm_worker_running = True
+            _size_executor.submit(_drain_size_queue)
 
-    For polled job-list routes: call this AFTER building the response (whose
-    ``size_bytes`` came from :func:`dir_size_bytes_cached_only` and may be ``None``
-    for a cold entry) so the walk never holds up that response. Keeps a reference to
-    the created task so the event loop doesn't garbage-collect it mid-walk; a no-op
-    for an empty ``paths``.
-    """
-    if not paths:
-        return
-    from fastapi.concurrency import run_in_threadpool
 
-    task = asyncio.create_task(run_in_threadpool(warm_dir_sizes, paths))
-    _warm_tasks.add(task)
-    task.add_done_callback(_warm_tasks.discard)
+def cached_sim_bytes_by_source_path(workspace_dir: Path) -> dict[str, int | None]:
+    """Library accounting without directory walks. None means size is pending."""
+    totals: dict[str, int | None] = {}
+    pending = []
+    for cls in (MdJob, OxdnaJob):
+        for job in cls.list_jobs(workspace_dir):
+            key = _norm(job.design_source_path)
+            if not key:
+                continue
+            path = job.job_dir(workspace_dir)
+            size = dir_size_bytes_cached_only(path)
+            if size is None:
+                pending.append(path)
+                totals[key] = None
+            elif key not in totals or totals[key] is not None:
+                totals[key] = totals.get(key, 0) + size
+    schedule_dir_size_warm(pending)
+    return totals
 
 
 def _status_str(job) -> str | None:

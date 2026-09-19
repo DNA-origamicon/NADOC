@@ -1,3 +1,4 @@
+import { recordProcess } from './process_log.js'
 /** End-to-end timing for interactive design operations.
  *
  * Traces are intentionally cheap and always available. Slow operations are logged
@@ -30,6 +31,7 @@ export function beginOperationTiming(label, details = {}) {
   }
   // UI operations are serialized in normal use. If one overlaps, retain both in
   // history but make the newest operation the render-completion candidate.
+  recordProcess(`operation:${trace.id}`, { label, kind: 'Design operation', startedAt: trace.startedAt })
   _active = trace
   trace.marks.push({ name: 'operation-start', at: trace.startedAt, elapsedMs: 0 })
   return trace
@@ -52,6 +54,11 @@ export function finishOperationAfterRender(trace = _active) {
     markOperationTiming('final-render', undefined, trace)
     trace.finished = true
     trace.totalMs = _now() - trace.startedAt
+    recordProcess(`operation:${trace.id}`, {
+      durationMs: trace.totalMs,
+      status: trace.marks.some(mark => ['operation-failed', 'operation-rejected'].includes(mark.name)) ? 'Failed' : 'Completed',
+      detail: trace.marks.map((mark, i) => `${mark.name}: +${(mark.elapsedMs - (trace.marks[i - 1]?.elapsedMs ?? 0)).toFixed(1)} ms (${mark.elapsedMs.toFixed(1)} ms total)`).join('\n'),
+    })
     _history.push(trace)
     if (_history.length > MAX_HISTORY) _history.shift()
     if (_active === trace) _active = null

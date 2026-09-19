@@ -1,3 +1,4 @@
+import { recordRequestDiagnostic } from '../perf/process_log.js'
 /**
  * API client — typed fetch wrappers for all CRUD endpoints.
  *
@@ -246,6 +247,7 @@ const _BUSY_POPUP_MIN_VISIBLE_MS = 400
 let _diagnosticRequestSeq = 0
 
 function _emitRequestDiagnostic(detail) {
+  recordRequestDiagnostic(detail)
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent('nadoc:api-request', {
     detail: { ...detail, at: performance.now() },
@@ -488,6 +490,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
   _emitRequestDiagnostic({
     phase: 'complete', id: diagnosticId, method, path,
     durationMs: tTotal, networkMs: tNetwork, status: r?.status ?? null,
+    serverTiming: r.headers?.get?.('Server-Timing') ?? null,
   })
   // Cheap perf trace: log slow calls (and all calls when explicitly enabled),
   // including any Server-Timing breakdown the backend attached. Threshold keeps
@@ -2790,7 +2793,7 @@ export const getRunpodVolumes    = ()            => _oxdnaJSON('GET',  '/runpod/
 export const setRunpodVolume     = (id)          =>
   _oxdnaJSON('POST', '/runpod/volume', { network_volume_id: id })
 /** MD-engine status report (oxDNA/NAMD/GROMACS/… availability + GPU + toolchain). */
-export const enginesStatus       = ()            => _oxdnaJSON('GET',  '/engines/status')
+export const enginesStatus       = ({ refresh = false } = {}) => _oxdnaJSON('GET', `/engines/status${refresh ? '?refresh=true' : ''}`)
 /** List a directory for the "pick a downloaded file" navigator ({cwd, parent, entries}).
  *  path omitted → opens at the user's Downloads folder; kind ('arbd'|'namd') highlights matches. */
 export const browseFiles         = (path, kind)  => {
@@ -4855,8 +4858,13 @@ export async function getSystemResources(devices = '0') {
 /** Host-local native-OpenXR companion used when the browser has no immersive
  * WebXR bridge (notably stock Firefox/Chromium on Linux). These endpoints accept
  * localhost or this host's configured Tailscale origin and never mutate design. */
-export async function getVRStatus() {
-  return _request('GET', '/vr/status', undefined, { suppressBusy: true })
+let _vrStatusInflight = null
+export function getVRStatus() {
+  if (!_vrStatusInflight) {
+    _vrStatusInflight = _request('GET', '/vr/status', undefined, { suppressBusy: true })
+      .finally(() => { _vrStatusInflight = null })
+  }
+  return _vrStatusInflight
 }
 
 export async function getVREvent() {

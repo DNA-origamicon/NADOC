@@ -84,6 +84,7 @@ export function initJobsPanelBase({
   arrowStyle = 'text',
   advArrowStyle = 'text',
   collapsible = true,
+  deferUntilVisible = false,
   hasActive = null,
   tick = null,
   onOpen = null,
@@ -92,7 +93,30 @@ export function initJobsPanelBase({
   const { heading, body, arrow, advToggle, advArrow, advBody } = els
   let _pollTimer = null
 
-  const isOpen = () => !!body && body.style.display !== 'none'
+  function isVisible() {
+    if (!deferUntilVisible) return true
+    const pane = document.getElementById(`tab-content-${tab}`)
+    if (pane?.hidden) return false
+    for (let node = document.getElementById(section) ?? body; node; node = node.parentElement) {
+      if (node.hidden || node.style.display === 'none') return false
+    }
+    return true
+  }
+  const isOpen = () => !!body && body.style.display !== 'none' && isVisible()
+  let mounted = false
+  let wasVisible = false
+  function syncVisibility() {
+    if (!mounted) return
+    const visible = isOpen()
+    if (visible && !wasVisible) onOpen?.()
+    if (!visible) clearPoll()
+    wasVisible = visible
+  }
+  if (deferUntilVisible) {
+    for (const event of ['nadoc:left-tab-change', 'nadoc:simulation-engine']) {
+      window.addEventListener(event, () => queueMicrotask(syncVisibility))
+    }
+  }
 
   function clearPoll() {
     if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
@@ -108,7 +132,7 @@ export function initJobsPanelBase({
   function applyCollapsed(collapsed) {
     if (body) body.style.display = bodyDisplay(collapsed)
     applyArrow(arrow, !collapsed, arrowStyle)
-    if (!collapsed) onOpen?.()
+    if (!collapsed && isVisible()) { wasVisible = true; onOpen?.() }
     else { clearPoll(); onClose?.() }
   }
 
@@ -137,10 +161,13 @@ export function initJobsPanelBase({
    * read lazily by `getWorkspacePath()`) exist → a TDZ. The microtask fires after the
    * synchronous init body completes, so those deps are ready. */
   function initCollapsed(defaultCollapsed = true) {
+    mounted = true
     if (!collapsible) {
       if (body) body.style.display = bodyDisplay(false)
       applyArrow(arrow, true, arrowStyle)
-      if (onOpen) queueMicrotask(onOpen)
+      if (onOpen) queueMicrotask(() => {
+        if (isVisible()) { wasVisible = true; onOpen() }
+      })
       return
     }
     applyCollapsed(getSectionCollapsed(tab, section, defaultCollapsed))

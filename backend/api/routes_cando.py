@@ -31,6 +31,8 @@ Display note: FEM output is Physical-layer only; it never mutates topology.
 
 from __future__ import annotations
 
+from backend.api.startup_cache import coalesce_job_reads
+
 import logging
 import shutil
 from pathlib import Path
@@ -225,6 +227,7 @@ async def create_cando_job(body: CreateCandoJobRequest) -> dict:
 
 
 @router.get("/cando/jobs")
+@coalesce_job_reads
 async def list_cando_jobs() -> list[dict]:
     # Disk scans and status reconciliation must not occupy the HTTP event loop.
     from fastapi.concurrency import run_in_threadpool

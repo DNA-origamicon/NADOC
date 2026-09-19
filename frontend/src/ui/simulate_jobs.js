@@ -1197,7 +1197,7 @@ export function initSimulateJobs({
   // A design switch re-filters the list + drops any selection/overlay (keyed to the old design).
   window.addEventListener('nadoc:workspace-path-change', () => {
     _sel = { engine: null, id: null }
-    _fetch()
+    if (_dynamicsActive) _fetch()
   })
   // A job launched / stopped / resumed from an engine panel (each polls its OWN hidden
   // list) must WAKE the master: its poll re-arms only while it already has an active
@@ -1218,7 +1218,7 @@ export function initSimulateJobs({
       _schedulePoll()
       return
     }
-    _fetch()
+    if (_dynamicsActive) _fetch()
   })
   // Cluster authentication completes before the backend's post-login reconciliation:
   // that background pass may discover that an Alpine run finished while NADOC was
