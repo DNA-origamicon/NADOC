@@ -11,7 +11,7 @@ export function openProcessLog() {
   panel.setAttribute('role', 'dialog')
   panel.setAttribute('aria-labelledby', 'process-log-title')
   panel.innerHTML = `<header><strong id="process-log-title">Process Log</strong><button type="button" data-close aria-label="Close process log">Close</button></header>
-    <p>Live timings for instrumented API requests and design operations in this tab. API duration includes response parsing, not completion of background simulation jobs. Latest ${PROCESS_LOG_LIMIT} records; reload starts a new log. With Autoscroll off, the displayed rows stay fixed; recording continues. Use Refresh to show the latest timings.</p>
+    <p>Live timings for instrumented API requests and design operations in this tab. API duration includes response parsing, not completion of background simulation jobs. Latest ${PROCESS_LOG_LIMIT} records; reload starts a new log. With Autoscroll off, rows stay fixed while statuses and durations update. Use Refresh for new entries and phase details.</p>
     <div class="process-log-controls"><input aria-label="Filter processes" placeholder="Filter processes…"><select aria-label="Sort processes"><option value="recent">Newest first</option><option value="slow">Longest first</option></select><label><input type="checkbox" data-autoscroll> Autoscroll</label><button type="button" data-refresh>Refresh</button><button type="button" data-export>Export JSON</button><button type="button" data-clear>Clear completed</button></div>
     <p data-summary></p><div class="process-log-table"><table><thead><tr><th>Started</th><th>Process / phases</th><th>Status</th><th>Duration</th></tr></thead><tbody></tbody></table></div><footer><button type="button" data-prev>Previous</button><span data-page></span><button type="button" data-next>Next</button></footer>`
   const current = panel
@@ -28,7 +28,7 @@ export function openProcessLog() {
     rows.sort(sort.value === 'slow' ? (a, b) => elapsed(b) - elapsed(a) : (a, b) => b.startedAt - a.startedAt)
     const pages = Math.max(1, Math.ceil(rows.length / 100))
     page = Math.min(page, pages - 1)
-    current.querySelector('[data-summary]').textContent = `${rows.length} matching / ${snapshot.entries.length} recorded · ${snapshot.entries.filter(e => e.status === 'Running').length} running · ${snapshot.discarded} older records discarded`
+    updateSummary(snapshot)
     current.querySelector('[data-page]').textContent = `Page ${page + 1} of ${pages}`
     current.querySelector('[data-prev]').disabled = page === 0
     current.querySelector('[data-next]').disabled = page === pages - 1
@@ -36,6 +36,7 @@ export function openProcessLog() {
     body.replaceChildren()
     for (const entry of rows.slice(page * 100, (page + 1) * 100)) {
       const row = body.insertRow()
+      row.dataset.processKey = entry.key
       row.insertCell().textContent = new Date(entry.startedWall).toLocaleTimeString()
       const name = row.insertCell()
       name.textContent = `${entry.kind}: ${entry.label}`
@@ -56,8 +57,29 @@ export function openProcessLog() {
     scroller.scrollTop = autoscroll.checked ? 0 : scrollTop
     scroller.scrollLeft = scrollLeft
   }
+  function updateSummary(snapshot) {
+    current.querySelector('[data-summary]').textContent = `${snapshot.entries.length} recorded · ${snapshot.entries.filter(e => e.status === 'Running').length} running · ${snapshot.discarded} older records discarded`
+  }
+  function updateVisibleTimings() {
+    const snapshot = processLogSnapshot()
+    updateSummary(snapshot)
+    const entries = new Map(snapshot.entries.map(entry => [entry.key, entry]))
+    // Update only fixed-width cells: no insertion, reordering, or growing phase text.
+    for (const row of current.querySelectorAll('tbody tr[data-process-key]')) {
+      const entry = entries.get(row.dataset.processKey)
+      if (!entry) {
+        row.cells[2].textContent = 'Expired'
+        row.cells[3].textContent = '—'
+        row.title = 'This record is no longer retained. Refresh to see current records.'
+        continue
+      }
+      row.cells[2].textContent = entry.status
+      row.cells[3].textContent = `${duration(elapsed(entry))}${entry.status === 'Running' ? ' elapsed' : ''}`
+    }
+  }
   const timer = setInterval(() => {
     if (autoscroll.checked) { page = 0; refresh() }
+    else updateVisibleTimings()
   }, 500)
   autoscroll.onchange = () => {
     if (autoscroll.checked) { page = 0; refresh() }

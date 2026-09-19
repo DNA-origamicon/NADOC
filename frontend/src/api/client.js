@@ -1,3 +1,4 @@
+import { recordPanelRequest } from '../ui/panel_loading.js'
 import { recordRequestDiagnostic } from '../perf/process_log.js'
 /**
  * API client — typed fetch wrappers for all CRUD endpoints.
@@ -41,7 +42,7 @@ import { showOpProgress, hideOpProgress, setOpProgressLabel } from '../ui/op_pro
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
 import { createAssemblySimulationContext } from './simulation_context.js'
-import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, markOperationTiming, whenOperationIdle } from '../perf/operation_timing.js'
+import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, finishOperationTiming, withOperationTiming, markOperationTiming, whenOperationIdle } from '../perf/operation_timing.js'
 import { buildVRJobSnapshot, VR_JOB_SNAPSHOT_LIMIT } from '../scene/vr_job_snapshot.js'
 
 const BASE = '/api'
@@ -64,13 +65,38 @@ const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null (s
 // reload resets it and the first response re-seeds it.
 let _lastAppliedRevision = -1
 
+// Associate completion with the response, never whichever request started last.
+const _responseTimings = new WeakMap()
+function _setTimedState(updates, json) {
+  return withOperationTiming(_responseTimings.get(json), () => store.setState(updates))
+}
+async function _applyTimedResponse(json, apply) {
+  const trace = json && typeof json === 'object' ? (_responseTimings.get(json) ?? null) : null
+  try {
+    const result = await apply()
+    if (trace && !trace.finished) {
+      markOperationTiming('response-applied', undefined, trace)
+      trace.applicationComplete = true
+      finishOperationAfterRender(trace)
+    }
+    return result
+  } catch (error) {
+    markOperationTiming('application-error', { message: error?.message }, trace)
+    finishOperationTiming(trace, { status: 'Failed', phase: 'application-failed' })
+    throw error
+  }
+}
+
 /** True if this design response is older than the newest already applied (so the
  *  caller should DROP it). Updates the watermark when the response is accepted.
  *  Only consults responses that actually carry a design + numeric revision. */
 function _isStaleDesignResponse(json) {
   const rev = json?.revision
   if (typeof rev !== 'number' || !json?.design) return false
-  if (rev < _lastAppliedRevision) return true
+  if (rev < _lastAppliedRevision) {
+    finishOperationTiming(_responseTimings.get(json), { status: 'Superseded', phase: 'stale-response-skipped' })
+    return true
+  }
   _lastAppliedRevision = rev
   return false
 }
@@ -248,6 +274,7 @@ let _diagnosticRequestSeq = 0
 
 function _emitRequestDiagnostic(detail) {
   recordRequestDiagnostic(detail)
+  recordPanelRequest(detail)
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent('nadoc:api-request', {
     detail: { ...detail, at: performance.now() },
@@ -385,8 +412,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     // welcome→loaded / cross-tab-restore window is spent waiting on. Tracing them
     // lets whenOperationIdle() (job lists, peer status, MD queue) defer background
     // polling for their duration instead of racing them for the same connection
-    // budget. design_renderer's post-rebuild finishOperationAfterRender() closes
-    // the trace whichever of the two calls started it last (see operation_timing.js).
+    // budget. Each response closes its own trace after application and render.
     (method === 'GET' && (path === '/design' || path.startsWith('/design/geometry')))
   )
   // An optimistic UI may start the trace immediately before calling the API so
@@ -394,10 +420,11 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
   // trace instead of replacing it at fetch time.
   const activeTrace = activeOperationTiming()
   const operationTrace = isTimedOperation
-    ? (activeTrace?.details?.optimisticPreview || activeTrace?.details?.requestPath === path)
+    ? (!activeTrace?.managed && (activeTrace?.details?.optimisticPreview || activeTrace?.details?.requestPath === path))
       ? activeTrace
-      : beginOperationTiming(`${method} ${path}`, { body })
+      : beginOperationTiming(`${method} ${path}`, { requestPath: path })
     : null
+  if (operationTrace) operationTrace.managed = true
   // Hard timeout so a wedged-but-listening backend (event loop stuck) can't make a
   // request hang forever — without it the welcome screen waited indefinitely and
   // looked dead. On timeout the catch below flags the connection down. Generous by
@@ -465,7 +492,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
       durationMs: performance.now() - t0, message: err?.message ?? String(err),
     })
     markOperationTiming('operation-failed', { message: err?.message ?? String(err) }, operationTrace)
-    finishOperationAfterRender(operationTrace)
+    finishOperationTiming(operationTrace, { status: 'Failed', phase: 'request-failed' })
     notifyRequestFailure()   // network-level failure → flag the connection as down
     throw err
   } finally {
@@ -507,6 +534,8 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     }
   }
   if (!r.ok) {
+    markOperationTiming('operation-rejected', { status: r.status }, operationTrace)
+    finishOperationTiming(operationTrace, { status: 'Failed', phase: 'request-rejected' })
     if (r.status === 409 && json?.detail?.code === 'protected_simulation_loadout' && protectedRetry) {
       // Protected simulation branches are immutable. Restore the most recently
       // used editable branch and replay the user's original action there.
@@ -520,11 +549,13 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
       }
     }
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
-    markOperationTiming('operation-rejected', { status: r.status }, operationTrace)
-    finishOperationAfterRender(operationTrace)
     return null
   }
   store.setState({ lastError: null })
+  if (operationTrace) {
+    if (json && typeof json === 'object') _responseTimings.set(json, operationTrace)
+    else finishOperationTiming(operationTrace, { status: 'Failed', phase: 'missing-response-payload' })
+  }
   return json
 }
 
@@ -621,7 +652,11 @@ async function _backfillFullFeatureLog() {
   }
 }
 
-export async function _syncFromDesignResponse(json, {
+export function _syncFromDesignResponse(json, options = {}) {
+  return _applyTimedResponse(json, () => _applyDesignResponse(json, options))
+}
+
+async function _applyDesignResponse(json, {
   skipGeometry = false,
   transient = false,
   crossTabMetadataOnly = false,
@@ -698,7 +733,7 @@ export async function _syncFromDesignResponse(json, {
     const minimalUpdates = {}
     if (json.design)     minimalUpdates.currentDesign     = json.design
     if (json.validation) minimalUpdates.validationReport  = json.validation
-    store.setState(minimalUpdates)
+    _setTimedState(minimalUpdates, json)
     if (json.design) _signalDesignChanged({
       geometryUnchanged: true,
       metadataOnly: crossTabMetadataOnly,
@@ -823,11 +858,11 @@ export async function _syncFromDesignResponse(json, {
       }
       updates.straightHelixAxes = Object.keys(straightAxesMap).length ? straightAxesMap : null
     }
-    store.setState(updates)
-    markOperationTiming('store-applied')
+    _setTimedState(updates, json)
+    markOperationTiming('store-applied', undefined, _responseTimings.get(json) ?? null)
   } else {
-    store.setState(updates)
-    markOperationTiming('design-applied')
+    _setTimedState(updates, json)
+    markOperationTiming('design-applied', undefined, _responseTimings.get(json) ?? null)
     if (json.design) {
       const h0 = json.design.helices?.[0]
       console.debug('[NADOC import] design set: first helix axis_start =',
@@ -836,9 +871,10 @@ export async function _syncFromDesignResponse(json, {
     }
     // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
     if (json.design) {
-      markOperationTiming('geometry-fetch-start')
-      await getGeometry()
-      markOperationTiming('geometry-fetched')
+      markOperationTiming('geometry-fetch-start', undefined, _responseTimings.get(json) ?? null)
+      const geometry = await getGeometry()
+      if (!geometry) finishOperationTiming(_responseTimings.get(json), { status: 'Failed', phase: 'geometry-fetch-failed' })
+      markOperationTiming('geometry-fetched', undefined, _responseTimings.get(json) ?? null)
       const axes0 = Object.values(store.getState().currentHelixAxes ?? {})[0]
       console.debug('[NADOC import] geometry applied: first helix_axes start =',
         axes0 ? `(${axes0.start[0]?.toFixed(3)}, ${axes0.start[1]?.toFixed(3)})` : 'none')
@@ -967,11 +1003,22 @@ export function _expandV2Assembly(assembly) {
 /** Sync the store with an assembly mutation response. */
 export function _syncFromAssemblyResponse(json) {
   if (!json) return null
-  if (json.assembly) {
-    store.setState({ currentAssembly: _expandV2Assembly(json.assembly) })
-    persistAssembly()
+  const trace = _responseTimings.get(json)
+  try {
+    if (json.assembly) {
+      _setTimedState({ currentAssembly: _expandV2Assembly(json.assembly) }, json)
+      persistAssembly()
+    }
+    if (trace) {
+      markOperationTiming('assembly-response-applied', undefined, trace)
+      trace.applicationComplete = true
+      finishOperationAfterRender(trace)
+    }
+    return json
+  } catch (error) {
+    finishOperationTiming(trace, { status: 'Failed', phase: 'assembly-application-failed' })
+    throw error
   }
-  return json
 }
 
 // ── Design ────────────────────────────────────────────────────────────────────
@@ -982,6 +1029,10 @@ export async function getDesign({ metadataOnly = false } = {}) {
   // exclude it rather than leave background polling deferred until an unrelated
   // later rebuild happens to finish it.
   const json = await _request('GET', '/design', undefined, { excludeFromTiming: metadataOnly })
+  return _applyTimedResponse(json, () => _applyGetDesignResponse(json, metadataOnly))
+}
+
+async function _applyGetDesignResponse(json, metadataOnly) {
   if (!json) return null
   if (_isStaleDesignResponse(json)) return json
   // A cold load (no prior design in this tab — restart recovery, a freshly opened
@@ -1048,7 +1099,7 @@ export async function getDesign({ metadataOnly = false } = {}) {
       updates.strandColors = merged
     }
   }
-  store.setState(updates)
+  _setTimedState(updates, json)
   _clearStaleSelections()
   persistDesign()
   if (wasColdLoad) _backfillFullFeatureLog()
@@ -1819,6 +1870,10 @@ export async function getGeometry(helixIds = null) {
   // toggle costs one refetch and the legacy request stays byte-identical when off.
   const url  = base + geometryQuerySuffix(base.includes('?'))
   const json = await _request('GET', url)
+  return _applyTimedResponse(json, () => _applyGeometryResponse(json))
+}
+
+async function _applyGeometryResponse(json) {
   if (!json) return null
   // Response format: { nucleotides: [...], helix_axes: [...] }
   // When the design has deformations or cluster_transforms, the backend
@@ -1888,7 +1943,7 @@ export async function getGeometry(helixIds = null) {
     // but include them in the same setState if the backend ever does.
     if (straightGeo !== null)  updates.straightGeometry  = straightGeo
     if (straightAxes !== null) updates.straightHelixAxes = straightAxes
-    store.setState(updates)
+    _setTimedState(updates, json)
   } else {
     const updates = {
       currentGeometry:  nucleotides,
@@ -1896,7 +1951,7 @@ export async function getGeometry(helixIds = null) {
     }
     if (straightGeo !== null)  updates.straightGeometry  = straightGeo
     if (straightAxes !== null) updates.straightHelixAxes = straightAxes
-    store.setState(updates)
+    _setTimedState(updates, json)
   }
   return json
 }
@@ -1915,7 +1970,7 @@ export async function getDeformDebug() {
  */
 export async function getStraightGeometry() {
   const base = '/design/geometry?apply_deformations=false'
-  const json = await _request('GET', base + geometryQuerySuffix(true))
+  const json = await _request('GET', base + geometryQuerySuffix(true), undefined, { excludeFromTiming: true })
   if (!json) return null
   const nucleotides = json.nucleotides ?? json
   const helixAxesMap = {}
@@ -4799,13 +4854,14 @@ export async function libraryDiskUsage() {
 /** Currently-busy (running/preparing) MD + oxDNA jobs across the workspace, for the
  *  welcome-screen activity spinner and the concurrent-job guard. See routes_jobs.py. */
 let _activeJobsCache = null
+let _activeJobsCachedAt = 0
 let _activeJobsInflight = null
 export async function listActiveJobs() {
   // This display-only poll repeatedly contended with the CPU-heavy geometry
   // response during large edits. Hold the last four-second poll result while an
   // interactive operation is in flight; launch guards refresh normally once the
   // operation's final frame has rendered.
-  if (activeOperationTiming() && _activeJobsCache) return _activeJobsCache
+  if (activeOperationTiming() && _activeJobsCache && performance.now() - _activeJobsCachedAt < 4000) return _activeJobsCache
   if (_activeJobsInflight) return _activeJobsInflight
   await whenOperationIdle()
   // Background activity polling must never own the centred operation popup. On a
@@ -4816,7 +4872,7 @@ export async function listActiveJobs() {
   _activeJobsInflight = _request('GET', '/jobs/active', undefined, { suppressBusy: true })
   try {
     const result = await _activeJobsInflight
-    if (result) _activeJobsCache = result
+    if (result) { _activeJobsCache = result; _activeJobsCachedAt = performance.now() }
     return result
   } finally {
     _activeJobsInflight = null
@@ -5038,7 +5094,7 @@ export async function simulateRecommendation(devices = '0') {
  *  normalized into one common node shape (engine/kind/status/parent_job_id/…) so the
  *  Simulate panel renders GPU-oxDNA and CPU-LAMMPS runs in one hierarchical list. */
 const _simJobsInflight = new Map()
-export async function listSimJobs(designSourcePath = null, showAll = false) {
+export async function listSimJobs(designSourcePath = null, showAll = false, { waitForIdle = true } = {}) {
   const q = new URLSearchParams()
   if (designSourcePath) q.set('design_source_path', designSourcePath)
   if (showAll) q.set('show_all', 'true')
@@ -5047,7 +5103,7 @@ export async function listSimJobs(designSourcePath = null, showAll = false) {
   // job). Suppress the generic 5 s "Working…" auto-popup: while a NAMD/oxDNA run
   // saturates the machine this endpoint routinely exceeds the threshold, and a
   // repeating poll would otherwise flash the modal on a loop.
-  await whenOperationIdle()
+  if (waitForIdle) await whenOperationIdle()
   const path = `/simulate/jobs${s ? `?${s}` : ''}`
   const existing = _simJobsInflight.get(path)
   if (existing) return existing

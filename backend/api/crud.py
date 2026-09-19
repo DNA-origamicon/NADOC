@@ -1622,15 +1622,16 @@ def get_geometry(
         design = design_state.get_or_404()
     ids: frozenset[str] | None = frozenset(helix_ids.split(",")) if helix_ids else None
     if apply_deformations:
+        with trace.step("helix_axes"):
+            axes = deformed_helix_axes(design)
         with trace.step("nucleotides"):
             nucleotides = _geometry_for_helices(
                 design,
                 ids,
                 measured_positioning=measured_positioning,
                 junction_balance=True,
+                helix_axes=axes,
             )
-        with trace.step("helix_axes"):
-            axes = deformed_helix_axes(design)
         with trace.step("ovhg_rotations"):
             _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
         out = {

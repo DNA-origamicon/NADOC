@@ -1,3 +1,4 @@
+import { activeOperationTiming, markOperationTiming } from '../perf/operation_timing.js'
 /**
  * Client-side design state store.
  *
@@ -393,6 +394,8 @@ const _SLICES = {
 function createStore(initial) {
   let _state = { ...initial }
   const _listeners = new Set()
+  const _listenerLabels = new WeakMap()
+  let _nextListener = 0
 
   // One listener Set per slice name
   const _sliceListeners = Object.fromEntries(
@@ -408,20 +411,31 @@ function createStore(initial) {
       const prev = _state
       _state = { ..._state, ...partial }
 
-      // Notify global listeners first (preserves existing subscription order)
-      for (const fn of _listeners) fn(_state, prev)
+      const trace = activeOperationTiming()
+      const measure = trace && (Object.hasOwn(partial, 'currentGeometry') || Object.hasOwn(partial, 'straightGeometry'))
+      const notify = (fn, label) => {
+        if (!measure) { fn(_state, prev); return }
+        const started = performance.now()
+        try { fn(_state, prev) } finally {
+          const durationMs = performance.now() - started
+          if (durationMs >= 8) markOperationTiming(`${label} (${durationMs.toFixed(1)} ms)`, { durationMs }, trace)
+        }
+      }
+      // Preserve subscriber ordering; record expensive synchronous scene work.
+      for (const fn of _listeners) notify(fn, _listenerLabels.get(fn))
 
       // Notify slice listeners — only for slices that contain a changed key
       const changedKeys = Object.keys(partial)
       for (const [sliceName, keys] of Object.entries(_SLICES)) {
         if (changedKeys.some(k => keys.has(k))) {
-          for (const fn of _sliceListeners[sliceName]) fn(_state, prev)
+          for (const fn of _sliceListeners[sliceName]) notify(fn, `slice:${sliceName}`)
         }
       }
     },
 
     /** Subscribe to ALL state changes.  Returns an unsubscribe function. */
-    subscribe(fn) {
+    subscribe(fn, timingLabel = null) {
+      _listenerLabels.set(fn, timingLabel ?? `store-subscriber:${++_nextListener}`)
       _listeners.add(fn)
       return () => _listeners.delete(fn)
     },

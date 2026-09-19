@@ -1,3 +1,5 @@
+import { whenOperationIdle } from '../perf/operation_timing.js'
+import { beginPanelLoading } from './panel_loading.js'
 import { sidebarPanelVisible } from './display_tab_policy.js'
 /**
  * simulate_jobs.js — the unified simulation job list + master Job status card
@@ -973,6 +975,7 @@ export function initSimulateJobs({
   // ── selection ────────────────────────────────────────────────────────────
   let selectionExplicit = false
   function _select(jobId, explicit = false) {
+    if (!_listReady) return
     const node = _nodes.find((n) => n.job_id === jobId)
     if (!node) return
     if (_sel.engine === node.engine && _sel.id === jobId) return
@@ -1140,20 +1143,60 @@ export function initSimulateJobs({
   })
 
   // ── fetch + poll ──────────────────────────────────────────────────────────
-  async function _fetch() {
-    const nodes = await api.listSimJobs(_currentPath(), false).catch(() => null)
-    if (!Array.isArray(nodes)) {
-      // Preserve the last known-good rows and selection. Clearing both on a temporary
-      // network/backend stall made a live Alpine job disappear, then stopped this poll
-      // because the newly-empty list contained no active node.
-      _schedulePoll({ retryFailedFetch: true })
-      return
-    }
-    _nodes = nodes
-    if (_sel.id && !_selectedNode()) _sel = { engine: null, id: null }   // selection vanished
-    _renderList()
-    _renderMaster()
-    _schedulePoll()
+  let _fetchPending = null
+  let _fetchEpoch = 0
+  let _loadedPath = undefined
+  let _listReady = false
+  const loadStatus = document.createElement('div')
+  loadStatus.setAttribute('role', 'status')
+  loadStatus.dataset.jobsLoadStatus = 'true'
+  loadStatus.hidden = true
+  listEl.before(loadStatus)
+  function _fetch() {
+    if (_fetchPending) return _fetchPending
+    const endLoading = beginPanelLoading([
+      cardHeader, document.querySelector('.left-tab-btn[data-tab="dynamics"]'),
+    ], 'Loading simulation jobs…')
+    _fetchPending = (async () => {
+      while (true) {
+        if (_loadedPath !== _currentPath()) {
+          _listReady = false
+          listEl.inert = true
+          listEl.setAttribute('aria-busy', 'true')
+          loadStatus.hidden = false
+          loadStatus.textContent = 'Loading jobs…'
+        }
+        // Resolve the path AFTER geometry/operation deferral, not at the initial
+        // tab event when the file being opened may not yet have its workspace path.
+        await whenOperationIdle()
+        const path = _currentPath()
+        const epoch = _fetchEpoch
+        const nodes = await api.listSimJobs(path, false, { waitForIdle: false }).catch(() => null)
+        if (path !== _currentPath() || epoch !== _fetchEpoch) continue
+        if (!Array.isArray(nodes)) {
+          loadStatus.hidden = false
+          loadStatus.textContent = 'Could not load jobs. '
+          const retry = document.createElement('button')
+          retry.type = 'button'; retry.textContent = 'Retry'
+          retry.onclick = () => { void _fetch() }
+          loadStatus.append(retry)
+          _schedulePoll({ retryFailedFetch: true })
+          return
+        }
+        _nodes = nodes
+        _loadedPath = path
+        _listReady = true
+        listEl.inert = false
+        listEl.removeAttribute('aria-busy')
+        loadStatus.hidden = true
+        if (_sel.id && !_selectedNode()) _sel = { engine: null, id: null }
+        _renderList()
+        _renderMaster()
+        _schedulePoll()
+        return
+      }
+    })().finally(() => { _fetchPending = null; endLoading() })
+    return _fetchPending
   }
   function _schedulePoll({ retryFailedFetch = false } = {}) {
     if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
@@ -1175,6 +1218,7 @@ export function initSimulateJobs({
   })
   // A design edit / feature-log seek re-evaluates staleness + list membership.
   window.addEventListener('nadoc:design-changed', () => {
+    _fetchEpoch++
     if (_dynamicsActive) _fetch()
   })
   // A cluster-submit request can upload for minutes before sbatch returns. Wake the
@@ -1196,7 +1240,11 @@ export function initSimulateJobs({
   })
   // A design switch re-filters the list + drops any selection/overlay (keyed to the old design).
   window.addEventListener('nadoc:workspace-path-change', () => {
+    _fetchEpoch++
+    _listReady = false
+    listEl.inert = true
     _sel = { engine: null, id: null }
+    _renderMaster()
     if (_dynamicsActive) _fetch()
   })
   // A job launched / stopped / resumed from an engine panel (each polls its OWN hidden
@@ -1204,6 +1252,7 @@ export function initSimulateJobs({
   // node, so a launch made while the master is idle would otherwise not surface until a
   // manual refresh. _fetch() picks up the new job AND re-arms the poll from there.
   window.addEventListener('nadoc:sim-jobs-changed', (event) => {
+    _fetchEpoch++
     const removeJobId = event.detail?.removeJobId
     if (removeJobId) {
       _nodes = _nodes.filter(n => n.job_id !== removeJobId)

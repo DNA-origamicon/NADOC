@@ -229,6 +229,22 @@ def _straight_helix_axes(design: Design) -> list[dict]:
     return result
 
 
+def _extension_anchor_keys(design: Design, extension_ids=None) -> set:
+    """Only terminal frames used by the requested strand extensions."""
+    strands = {strand.id: strand for strand in design.strands}
+    keys = set()
+    for ext in design.extensions:
+        if extension_ids is not None and ext.id not in extension_ids:
+            continue
+        strand = strands.get(ext.strand_id)
+        if strand is None or not strand.domains:
+            continue
+        domain = strand.domains[0] if ext.end == "five_prime" else strand.domains[-1]
+        bp = domain.start_bp if ext.end == "five_prime" else domain.end_bp
+        keys.add((domain.helix_id, bp, domain.direction))
+    return keys
+
+
 def _strand_extension_geometry(
     design: Design,
     nuc_pos_map: dict,
@@ -404,6 +420,7 @@ def _geometry_for_helices(
     extension_ids: frozenset[str] | None = None,
     measured_positioning: bool = False,
     junction_balance: bool = False,
+    helix_axes: list[dict] | None = None,
 ) -> list[dict]:
     """Compute nucleotide geometry for *design*.
 
@@ -460,6 +477,7 @@ def _geometry_for_helices(
     needs_pos_map = bool(design.extensions) and (full_mode or bool(extension_ids))
     result: list[dict] = []
     nuc_pos_map: dict = {}
+    anchor_keys = _extension_anchor_keys(design, extension_ids) if needs_pos_map else set()
 
     # Pre-compute min/max bp referenced by any strand domain per helix.
     # Needed to render ss-scaffold loops that extend outside the physical helix span.
@@ -509,7 +527,7 @@ def _geometry_for_helices(
             bp = bp_list[i]
             d_enum = _dir_enums[dir_arr[i]]
             key = (helix_id, bp, d_enum)
-            if needs_pos_map:
+            if key in anchor_keys:
                 nuc_pos_map[key] = SimpleNamespace(
                     position=arrs["positions"][i],
                     axis_tangent=arrs["axis_tangents"][i],
@@ -556,7 +574,7 @@ def _geometry_for_helices(
         import numpy as _np
 
         native_ids = {h.id for h in design.helices if effective_helix_for_geometry(h, design).native_residues}
-        for _a in deformed_helix_axes(design):
+        for _a in (helix_axes if helix_axes is not None else deformed_helix_axes(design)):
             if _a["helix_id"] in native_ids:
                 continue
             _s = _np.asarray(_a["start"], dtype=float)
@@ -1056,12 +1074,13 @@ def _positions_for_design(
     # legacy, those three drew legacy beads next to measured ones — which is why the
     # `helix_renderer` sites that look like they bypass measured positioning are
     # actually correct today (TD-27 Stage 3).
+    axes = deformed_helix_axes(design)
     _measured_axes: dict = {}
     if measured_positioning:
         import numpy as _np
 
         native_ids = {h.id for h in design.helices if effective_helix_for_geometry(h, design).native_residues}
-        for _a in deformed_helix_axes(design):
+        for _a in axes:
             if _a["helix_id"] in native_ids:
                 continue
             _s = _np.asarray(_a["start"], dtype=float)
@@ -1160,8 +1179,7 @@ def _positions_for_design(
                 _measured_axes.get(helix.id),
             )
 
-    # Helix axes — same pipeline as the full-geometry path.
-    axes = deformed_helix_axes(design)
+    # Reuse the same axes used for measured placement above.
 
     # Build the (helix_id, bp_index, direction) → backbone_position lookup
     # straight from positions_by_helix so _apply_ovhg_rotations_to_axes can
@@ -1259,6 +1277,7 @@ def _positions_for_design(
         from types import SimpleNamespace
 
         ext_anchor_map: dict = {}
+        anchor_keys = _extension_anchor_keys(design)
         for hid, by_dir in positions.items():
             for dir_name, bucket in by_dir.items():
                 d_enum = (
@@ -1269,7 +1288,10 @@ def _positions_for_design(
                 bn_arr = bucket["bn"]
                 at_arr = bucket["at"]
                 for i in range(len(bp_arr)):
-                    ext_anchor_map[(hid, bp_arr[i], d_enum)] = SimpleNamespace(
+                    key = (hid, bp_arr[i], d_enum)
+                    if key not in anchor_keys:
+                        continue
+                    ext_anchor_map[key] = SimpleNamespace(
                         position=np.array(bb_arr[i], dtype=float),
                         base_normal=np.array(bn_arr[i], dtype=float),
                         axis_tangent=np.array(at_arr[i], dtype=float),

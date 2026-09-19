@@ -119,37 +119,16 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
 
   // ── Map builders ────────────────────────────────────────────────────────────
 
-  function _buildStraightPosMap(straightGeometry) {
-    const m = new Map()
-    if (!straightGeometry) return m
-    for (const nuc of straightGeometry) {
+  function _buildStraightNucleotideMaps(geometry) {
+    _straightPosMap = new Map()
+    _straightBnMap = new Map()
+    _straightBaseMap = new Map()
+    for (const nuc of geometry ?? []) {
       const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
-      const bp  = nuc.backbone_position
-      m.set(key, new THREE.Vector3(bp[0], bp[1], bp[2]))
+      _straightPosMap.set(key, new THREE.Vector3(...nuc.backbone_position))
+      _straightBnMap.set(key, new THREE.Vector3(...nuc.base_normal))
+      if (nuc.base_position) _straightBaseMap.set(key, new THREE.Vector3(...nuc.base_position))
     }
-    return m
-  }
-
-  function _buildStraightBnMap(straightGeometry) {
-    const m = new Map()
-    if (!straightGeometry) return m
-    for (const nuc of straightGeometry) {
-      const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
-      const bn  = nuc.base_normal
-      m.set(key, new THREE.Vector3(bn[0], bn[1], bn[2]))
-    }
-    return m
-  }
-
-  function _buildStraightBaseMap(straightGeometry) {
-    const m = new Map()
-    if (!straightGeometry) return m
-    for (const nuc of straightGeometry) {
-      const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
-      const base = nuc.base_position
-      if (base) m.set(key, new THREE.Vector3(base[0], base[1], base[2]))
-    }
-    return m
   }
 
   function _buildStraightAxesMap(straightHelixAxes) {
@@ -254,18 +233,19 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     store.setState({ deformVisuActive: false })
   }
 
+  let _timingSubscriber = 0
+  const subscribe = fn => store.subscribe(fn, `deform-view:${++_timingSubscriber}`)
+
   // ── Store subscriptions ──────────────────────────────────────────────────────
 
   // Rebuild maps whenever straight geometry changes.
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     const geoChanged  = newState.straightGeometry  !== prevState.straightGeometry
     const axesChanged = newState.straightHelixAxes !== prevState.straightHelixAxes
     if (!geoChanged && !axesChanged) return
 
     if (geoChanged)  {
-      _straightPosMap = _buildStraightPosMap(newState.straightGeometry)
-      _straightBnMap  = _buildStraightBnMap(newState.straightGeometry)
-      _straightBaseMap = _buildStraightBaseMap(newState.straightGeometry)
+      _buildStraightNucleotideMaps(newState.straightGeometry)
     }
     if (axesChanged) _straightAxesMap = _buildStraightAxesMap(newState.straightHelixAxes)
 
@@ -277,7 +257,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
 
   // When currentGeometry changes (undo/redo, topology mutation, new deformation):
   // update straight geometry and restore the correct deform-view state.
-  store.subscribe(async (newState, prevState) => {
+  subscribe(async (newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry) return
 
     const hasDeformations = (newState.currentDesign?.deformations?.length ?? 0) > 0
@@ -289,9 +269,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     if (!hasDeformations && !hasTransforms) {
       // Nothing shifts positions — straight geometry equals current geometry.
       // Build maps directly to avoid a redundant round-trip.
-      _straightPosMap  = _buildStraightPosMap(newState.currentGeometry)
-      _straightBnMap   = _buildStraightBnMap(newState.currentGeometry)
-      _straightBaseMap = _buildStraightBaseMap(newState.currentGeometry)
+      _buildStraightNucleotideMaps(newState.currentGeometry)
       _straightAxesMap = _buildStraightAxesMap(newState.currentHelixAxes)
     } else if (store.getState().cadnanoActive) {
       // Cadnano is active: the fetch is not needed right now (cadnano positions
@@ -343,7 +321,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   })
 
   // Handle deformVisuActive being cleared externally (e.g. when unfold is toggled on).
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     if (newState.deformVisuActive === prevState.deformVisuActive) return
     if (!newState.deformVisuActive && _active) {
       if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
@@ -372,7 +350,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
           || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
     }))
   }
-  store.subscribe(async (newState, prevState) => {
+  subscribe(async (newState, prevState) => {
     if (newState.currentDesign === prevState.currentDesign) return
     if (_active) return  // already on — nothing to do
     if (newState.cadnanoActive || newState.unfoldActive) return
@@ -390,7 +368,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
 
   // When cadnano exits, fetch the straight geometry that was deferred during the session.
   // The fetch completes → straightGeometry subscriber above fires → _applyLerp(_currentT).
-  store.subscribe(async (newState, prevState) => {
+  subscribe(async (newState, prevState) => {
     if (newState.cadnanoActive === prevState.cadnanoActive) return
     if (!newState.cadnanoActive && _straightGeomStale) {
       _straightGeomStale = false
@@ -401,7 +379,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   // When the deform tool exits, design_renderer calls _traverseSetOpacity(1.0) which
   // resets ALL material opacities — including the shaft/straightShaft cross-fade managed
   // by the deform lerp.  Re-apply the lerp to restore the correct shaft visibility.
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     if (newState.deformToolActive === prevState.deformToolActive) return
     if (!newState.deformToolActive) _applyLerp(_currentT)
   })

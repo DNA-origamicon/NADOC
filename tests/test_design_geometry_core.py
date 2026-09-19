@@ -347,3 +347,39 @@ def test_positions_for_design_extension_survives_deformation_strip():
     assert d_ext.keys() == f_ext.keys()
     for dir_name in d_ext:
         assert d_ext[dir_name]["bb"] == f_ext[dir_name]["bb"]
+
+
+def test_measured_geometry_reuses_supplied_axes(monkeypatch):
+    from backend.core import design_geometry as geometry
+
+    design = _single_helix_design()
+    axes = geometry.deformed_helix_axes(design)
+    expected = geometry._geometry_for_helices(design, measured_positioning=True)
+
+    def unexpected(*args, **kwargs):
+        raise AssertionError("supplied axes should not be recomputed")
+
+    monkeypatch.setattr(geometry, "deformed_helix_axes", unexpected)
+    assert geometry._geometry_for_helices(
+        design, measured_positioning=True, helix_axes=axes
+    ) == expected
+
+
+def test_extension_frames_only_include_required_terminals(monkeypatch):
+    from backend.core import design_geometry as geometry
+
+    design = _single_helix_design(length_bp=100, extensions=[
+        StrandExtension(strand_id="s0", end="five_prime", sequence="AC"),
+        StrandExtension(strand_id="s0", end="three_prime", sequence="GT"),
+    ])
+    original = geometry._strand_extension_geometry
+    sizes = []
+
+    def capture(design, positions, *args, **kwargs):
+        sizes.append(len(positions))
+        return original(design, positions, *args, **kwargs)
+
+    monkeypatch.setattr(geometry, "_strand_extension_geometry", capture)
+    geometry._geometry_for_helices(design)
+    geometry._positions_for_design(design)
+    assert sizes == [2, 2]

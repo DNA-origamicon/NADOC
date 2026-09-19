@@ -81,3 +81,23 @@ it('holds rows and scroll position until refresh or autoscroll is enabled', () =
   vi.advanceTimersByTime(1000)
   expect(body.firstChild).toBe(frozenRow)
 })
+
+it('updates status and duration in place with autoscroll off', () => {
+  vi.useFakeTimers()
+  recordRequestDiagnostic({ phase: 'start', id: 777, method: 'GET', path: '/jobs/active' })
+  openProcessLog()
+  const body = document.querySelector('#process-log tbody')
+  const row = body.firstChild
+  const name = row.cells[1].textContent
+  const scroller = document.querySelector('.process-log-table')
+  scroller.scrollTop = 100
+  recordRequestDiagnostic({ phase: 'complete', id: 777, method: 'GET', path: '/jobs/active', status: 200, durationMs: 42 })
+  recordProcess('another', { label: 'new entry', status: 'Completed', durationMs: 10 })
+  vi.advanceTimersByTime(500)
+  expect(body.firstChild).toBe(row)
+  expect(row.cells[1].textContent).toBe(name)
+  expect(row.cells[2].textContent).toBe('Completed')
+  expect(row.cells[3].textContent).toBe('42.0 ms')
+  expect(body.textContent).not.toContain('new entry')
+  expect(scroller.scrollTop).toBe(100)
+})

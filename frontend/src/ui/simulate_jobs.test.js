@@ -422,7 +422,7 @@ function make(nodes, apiOverrides = {}, connectionOverrides = {}) {
     copyJob: vi.fn().mockResolvedValue({ job_id: 'md-copy' }),
     deleteSelected: vi.fn().mockResolvedValue(true), archiveSelected: vi.fn().mockResolvedValue(undefined) }
   const engineSelector = { select: vi.fn(), getSelected: () => 'oxdna' }
-  const sim = initSimulateJobs({ api, getWorkspacePath: () => '/w/D.nadoc',
+  const sim = initSimulateJobs({ api, getWorkspacePath: connectionOverrides.getWorkspacePath ?? (() => '/w/D.nadoc'),
     oxdnaPanel, mrdnaPanel, candoPanel, mdPanel, engineSelector,
     getClusterState: connectionOverrides.getClusterState ?? (() => 'connected'),
     getRunpodConnected: connectionOverrides.getRunpodConnected ?? (() => true) })
@@ -439,6 +439,30 @@ const mdNode = (o = {}) => ({ engine: 'namd', job_id: 'md1', parent_job_id: null
 beforeEach(() => { document.body.innerHTML = ''; vi.clearAllMocks() })
 
 describe('unified list + master card', () => {
+  it('coalesces refreshes and discards results for the previous design', async () => {
+    mount()
+    let path = '/w/old.nadoc'
+    let resolveOld
+    const listSimJobs = vi.fn().mockResolvedValue([])
+      .mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+      .mockResolvedValueOnce([oxNode({ job_id: 'new-job' })])
+    const { sim } = make([], { listSimJobs }, { getWorkspacePath: () => path })
+    const pending = sim.refresh()
+    await Promise.resolve()
+    expect(listSimJobs).toHaveBeenCalledTimes(1)
+    const again = sim.refresh()
+    path = '/w/new.nadoc'
+    expect(document.getElementById('simulate-jobs-list').inert).toBe(true)
+    expect(document.querySelector('[data-panel-loading]')).not.toBeNull()
+    resolveOld([oxNode({ job_id: 'old-job' })])
+    await Promise.all([pending, again])
+    expect(listSimJobs).toHaveBeenCalledTimes(2)
+    expect(listSimJobs.mock.calls[1][0]).toBe(path)
+    expect(document.getElementById('simulate-jobs-list').inert).toBe(false)
+    expect(document.querySelector('[data-panel-loading]')).toBeNull()
+    expect(document.getElementById('simulate-jobs-list').innerHTML).not.toContain('old-job')
+  })
+
   it('does not refresh the job list for design edits while Simulations is closed', async () => {
     mount()
     const { api } = make([oxNode()])

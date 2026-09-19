@@ -4,7 +4,7 @@ const entries = new Map()
 let discarded = 0
 export function recordProcess(key, update) {
   const previous = entries.get(key)
-  entries.set(key, { startedAt: performance.now(), startedWall: Date.now(), status: 'Running', ...previous, ...update })
+  entries.set(key, { key, startedAt: performance.now(), startedWall: Date.now(), status: 'Running', ...previous, ...update })
   while (entries.size > PROCESS_LOG_LIMIT) {
     // Prefer evicting completed work so long-running requests remain visible.
     const candidate = [...entries].find(([, value]) => value.status !== 'Running')

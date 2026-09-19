@@ -2471,7 +2471,7 @@ def _split_segment_by_bps(seg: dict, drop_bps: set) -> list[dict]:
     return out
 
 
-def _segments_for_helix(design: "Design", h: "Helix") -> list[dict]:
+def _segments_for_helix(design: "Design", h: "Helix", candidates=None) -> list[dict]:
     """Return per-domain axis segment descriptors for helix *h*, sorted by bp_lo.
 
     Domain ranges may overlap or only partially coincide (notably an inline
@@ -2482,11 +2482,10 @@ def _segments_for_helix(design: "Design", h: "Helix") -> list[dict]:
     """
     from backend.core.models import StrandType as _StrandType
 
-    cands: list[tuple] = []
-    for strand in design.strands:
-        for di, dom in enumerate(strand.domains):
-            if dom.helix_id == h.id:
-                cands.append((strand, di, dom))
+    cands = candidates
+    if cands is None:
+        cands = [(strand, di, dom) for strand in design.strands
+                 for di, dom in enumerate(strand.domains) if dom.helix_id == h.id]
     if not cands:
         return [
             {
@@ -2708,6 +2707,12 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
         else []
     )
 
+    # One index per calculation, rather than a full domain scan for every helix.
+    domains_by_helix = {}
+    for strand in design.strands:
+        for di, dom in enumerate(strand.domains):
+            domains_by_helix.setdefault(dom.helix_id, []).append((strand, di, dom))
+
     real_helices = [h for h in design.helices if not h.id.startswith("__lnk__")]
 
     if not design.deformations and not design.cluster_transforms:
@@ -2716,7 +2721,7 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
             s = h.axis_start.to_array().tolist()
             e = h.axis_end.to_array().tolist()
             seg_geoms = []
-            for seg in _segments_for_helix(design, h):
+            for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
                 ss, ee = _seg_endpoints_straight(h, seg)
                 seg_geoms.append({**seg, "start": ss, "end": ee})
             out.append(
@@ -2743,7 +2748,7 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
                     for pt in samples
                 ]
             seg_geoms = []
-            for seg in _segments_for_helix(design, h):
+            for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
                 ss, ee = _seg_endpoints_straight(h, seg)
                 ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys)
                 ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys)
@@ -2779,7 +2784,7 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
                     for pt in samples
                 ]
             seg_geoms = []
-            for seg in _segments_for_helix(design, h):
+            for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
                 ss, ee = _seg_endpoints_straight(h, seg)
                 ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys)
                 ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys)
@@ -2834,7 +2839,7 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
         # segment's bp boundaries, then apply each cluster only to the segments
         # that move with it.
         seg_geoms = []
-        for seg in _segments_for_helix(design, h):
+        for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
             ss, ee = _seg_endpoints_curve(sample_local, samples_pre, seg, h)
             ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys)
             ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys)

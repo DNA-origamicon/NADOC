@@ -67,8 +67,14 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   let _straightPosMap  = null   // Map<"hid:bp:dir", THREE.Vector3>
   let _straightAxesMap = null   // Map<helixId, {start: THREE.Vector3, end: THREE.Vector3}>
 
-  function _buildStraightMaps() {
+  let _mappedGeometry, _mappedAxes
+  function _buildStraightMaps(force = true) {
     const { straightGeometry, straightHelixAxes } = store.getState()
+    if (!force && straightGeometry === _mappedGeometry && straightHelixAxes === _mappedAxes) return false
+    _mappedGeometry = straightGeometry
+    _mappedAxes = straightHelixAxes
+    _straightPosMap = null
+    _straightAxesMap = null
     if (straightGeometry) {
       _straightPosMap = new Map()
       for (const nuc of straightGeometry) {
@@ -96,6 +102,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         })
       }
     }
+    return true
   }
 
   const _arcGroup = new THREE.Group()
@@ -1023,9 +1030,12 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     }
   }
 
+  let _timingSubscriber = 0
+  const subscribe = fn => store.subscribe(fn, `unfold-view:${++_timingSubscriber}`)
+
   // Rebuild arcs whenever geometry or design changes.
   // design_renderer subscribes before this, so _helixCtrl is already rebuilt.
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     const geometryChanged = newState.currentGeometry !== prevState.currentGeometry
     const designChanged   = newState.currentDesign   !== prevState.currentDesign
 
@@ -1054,6 +1064,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     // that undo/redo and topology mutations stay in whatever view mode is active.
     // New-design loads are handled externally: main.js sets unfoldActive: false
     // explicitly, which triggers deactivate() via the unfoldActive listener below.
+    _buildStraightMaps()
     const conns   = designRenderer.getCrossHelixConnections()
     const offsets = _buildOffsets(newState.unfoldSpacing)
     _initArcs(conns, _straightPosMap)
@@ -1091,7 +1102,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   // Handle unfoldActive being cleared externally (e.g. main.js on new-design
   // load sets unfoldActive: false without going through deactivate()).
   // Reset internal state so the next activate() starts clean.
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     if (newState.unfoldActive === prevState.unfoldActive) return
     if (!newState.unfoldActive && _active) {
       if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
@@ -1104,10 +1115,10 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   // Rebuild straight maps when straight geometry changes (e.g. after undo while unfold is active).
   // Also refresh the straight-position anchors on existing arc entries so that
   // the unfold animation always uses up-to-date straight positions.
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     if (newState.straightGeometry  === prevState.straightGeometry &&
         newState.straightHelixAxes === prevState.straightHelixAxes) return
-    _buildStraightMaps()
+    if (!_buildStraightMaps(false)) return
     _refreshArcStraightPositions(_straightPosMap)
     // Re-draw arcs at current t using the fresh straight anchors.
     const offsets = _buildOffsets(store.getState().unfoldSpacing)
@@ -1115,12 +1126,12 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     _refreshArcGlow()
   })
 
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     if (newState.staplesHidden !== prevState.staplesHidden) _applyStapleArcVisibility()
   })
 
   // Reference View toggle: hide/show every arc touching reference geometry.
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     if (newState.showReferenceGeometry === prevState.showReferenceGeometry &&
         newState.simulationTabActive === prevState.simulationTabActive) return
     if (!_arcMeta.length) return
@@ -1132,7 +1143,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
   // Periodic-seam ("end-to-end crossover") View toggle: hide/show the long
   // far↔near connectors of is_periodic_seam forced ligations. Default hidden.
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     if (newState.showPeriodicSeamArcs === prevState.showPeriodicSeamArcs) return
     if (!_arcMeta.length) return
     _reapplyArcHidden()
@@ -1142,7 +1153,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   })
 
   // Update arc colors when strand colors change (e.g. via color picker).
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     if (newState.strandColors === prevState.strandColors) return
     if (!_arcMeta.length) return
     const oldC = prevState.strandColors ?? {}
@@ -1161,7 +1172,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   // Update arc colors when strand group membership or group colors change.
   // design_renderer subscribes before this, so _helixCtrl is already rebuilt
   // with the new effective colors by the time this subscriber runs.
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     if (newState.strandGroups === prevState.strandGroups) return
     if (!_arcMeta.length) return
 
@@ -1192,7 +1203,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   })
 
   // Re-skin crossover arcs when the global coloringMode changes.
-  store.subscribe((newState, prevState) => {
+  subscribe((newState, prevState) => {
     if (newState.coloringMode === prevState.coloringMode) return
     if (!_arcMeta.length) return
     _refreshClusterDisplay(newState.currentDesign)
@@ -1203,7 +1214,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   // cluster_transforms. Keyed on the display signature rather than array identity
   // because cluster_transforms is replaced on every gizmo-drag patch (~60/s) while
   // only the pose moves — see cluster_entries.clusterDisplaySignature.
-  store.subscribe((newState) => {
+  subscribe((newState) => {
     if (!_arcMeta.length) return
     const sig = clusterDisplaySignature(newState.currentDesign)
     if (sig === _clusterDisplaySig) return

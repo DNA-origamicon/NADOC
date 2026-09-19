@@ -9,6 +9,8 @@ const SLOW_MS = 250
 const MAX_HISTORY = 50
 let _nextId = 1
 let _active = null
+let _applying = undefined
+const _pending = new Set()
 const _history = []
 const _idleWaiters = new Set()
 
@@ -29,73 +31,97 @@ export function beginOperationTiming(label, details = {}) {
   const trace = {
     id: _nextId++, label, details, startedAt: _now(), marks: [], finished: false,
   }
-  // UI operations are serialized in normal use. If one overlaps, retain both in
-  // history but make the newest operation the render-completion candidate.
+  // Each response owns its trace, including overlapping requests and child geometry.
+  _pending.add(trace)
   recordProcess(`operation:${trace.id}`, { label, kind: 'Design operation', startedAt: trace.startedAt })
   _active = trace
   trace.marks.push({ name: 'operation-start', at: trace.startedAt, elapsedMs: 0 })
   return trace
 }
 
-export function markOperationTiming(name, data = undefined, trace = _active) {
+export function markOperationTiming(name, data = undefined, trace = activeOperationTiming()) {
   if (!trace || trace.finished) return
   const at = _now()
   trace.marks.push({ name, at, elapsedMs: at - trace.startedAt, ...(data === undefined ? {} : { data }) })
+  recordProcess(`operation:${trace.id}`, { detail: traceDetail(trace) })
 }
 
-export function finishOperationAfterRender(trace = _active) {
+function traceDetail(trace) {
+  return trace.marks.map((mark, i) => `${mark.name}: +${(mark.elapsedMs - (trace.marks[i - 1]?.elapsedMs ?? 0)).toFixed(1)} ms (${mark.elapsedMs.toFixed(1)} ms total)`).join('\n')
+}
+
+/** Scope synchronous store subscribers to the response actually being applied. */
+export function withOperationTiming(trace, apply) {
+  const previous = _applying
+  _applying = trace ?? null
+  try { return apply() } finally { _applying = previous }
+}
+
+export function finishOperationTiming(trace, { status = 'Completed', phase = 'operation-finished' } = {}) {
+  if (!trace || trace.finished) return
+  markOperationTiming(phase, undefined, trace)
+  trace.finished = true
+  clearTimeout(trace.renderFallback)
+  trace.totalMs = _now() - trace.startedAt
+  trace.status = status
+  _pending.delete(trace)
+  recordProcess(`operation:${trace.id}`, {
+    durationMs: trace.totalMs, status, detail: traceDetail(trace),
+  })
+  _history.push(trace)
+  if (_history.length > MAX_HISTORY) _history.shift()
+  if (_active === trace) _active = [..._pending].at(-1) ?? null
+  if (!_pending.size) {
+    for (const resolve of _idleWaiters) resolve()
+    _idleWaiters.clear()
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nadoc:operation-timing', {
+      detail: {
+        id: trace.id, label: trace.label, totalMs: trace.totalMs, status,
+        marks: trace.marks.map(({ name, elapsedMs, data }) => ({
+          name, elapsedMs, ...(data === undefined ? {} : { data }),
+        })),
+      },
+    }))
+  }
+  if (trace.totalMs >= SLOW_MS || globalThis.__nadocOperationTraceAll) {
+    const rows = trace.marks.map((mark, i) => ({
+      phase: mark.name,
+      elapsed_ms: Math.round(mark.elapsedMs * 10) / 10,
+      delta_ms: Math.round((mark.elapsedMs - (trace.marks[i - 1]?.elapsedMs ?? 0)) * 10) / 10,
+      details: mark.data ? JSON.stringify(mark.data) : '',
+    }))
+    // The paste-friendly one-line phase dump is intentionally opt-in; normal
+    // sessions get only the collapsed slow-operation summary below.
+    if (globalThis.__nadocOperationTraceAll) {
+      console.log(`[operation phases] ${rows.map(r => `${r.phase} +${r.delta_ms}ms${r.details ? ` ${r.details}` : ''}`).join(' | ')}`)
+    }
+    console.groupCollapsed(`[operation ${Math.round(trace.totalMs)}ms] ${trace.label}`)
+    console.table(rows)
+    console.groupEnd()
+  }
+}
+
+export function finishOperationAfterRender(trace = activeOperationTiming()) {
   if (!trace || trace.finished || trace.renderScheduled) return
+  // The API owns completion until its response (including child geometry) is applied.
+  if (trace.managed && !trace.applicationComplete) return
   trace.renderScheduled = true
+  const failed = trace.marks.some(mark => ['operation-failed', 'operation-rejected'].includes(mark.name))
+  const finish = () => finishOperationTiming(trace, { status: failed ? 'Failed' : 'Completed', phase: 'final-render' })
   const raf = globalThis.requestAnimationFrame ?? ((cb) => setTimeout(() => cb(_now()), 0))
-  // First frame presents the newly rebuilt scene; the second callback confirms
-  // that frame has passed through the browser's render loop.
-  raf(() => raf(() => {
-    if (trace.finished) return
-    markOperationTiming('final-render', undefined, trace)
-    trace.finished = true
-    trace.totalMs = _now() - trace.startedAt
-    recordProcess(`operation:${trace.id}`, {
-      durationMs: trace.totalMs,
-      status: trace.marks.some(mark => ['operation-failed', 'operation-rejected'].includes(mark.name)) ? 'Failed' : 'Completed',
-      detail: trace.marks.map((mark, i) => `${mark.name}: +${(mark.elapsedMs - (trace.marks[i - 1]?.elapsedMs ?? 0)).toFixed(1)} ms (${mark.elapsedMs.toFixed(1)} ms total)`).join('\n'),
-    })
-    _history.push(trace)
-    if (_history.length > MAX_HISTORY) _history.shift()
-    if (_active === trace) _active = null
-    if (!_active) {
-      for (const resolve of _idleWaiters) resolve()
-      _idleWaiters.clear()
-    }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('nadoc:operation-timing', {
-        detail: {
-          id: trace.id, label: trace.label, totalMs: trace.totalMs,
-          marks: trace.marks.map(({ name, elapsedMs, data }) => ({
-            name, elapsedMs, ...(data === undefined ? {} : { data }),
-          })),
-        },
-      }))
-    }
-    if (trace.totalMs >= SLOW_MS || globalThis.__nadocOperationTraceAll) {
-      const rows = trace.marks.map((mark, i) => ({
-        phase: mark.name,
-        elapsed_ms: Math.round(mark.elapsedMs * 10) / 10,
-        delta_ms: Math.round((mark.elapsedMs - (trace.marks[i - 1]?.elapsedMs ?? 0)) * 10) / 10,
-        details: mark.data ? JSON.stringify(mark.data) : '',
-      }))
-      // The paste-friendly one-line phase dump is intentionally opt-in; normal
-      // sessions get only the collapsed slow-operation summary below.
-      if (globalThis.__nadocOperationTraceAll) {
-        console.log(`[operation phases] ${rows.map(r => `${r.phase} +${r.delta_ms}ms${r.details ? ` ${r.details}` : ''}`).join(' | ')}`)
-      }
-      console.groupCollapsed(`[operation ${Math.round(trace.totalMs)}ms] ${trace.label}`)
-      console.table(rows)
-      console.groupEnd()
-    }
-  }))
+  if (trace.managed) {
+    // Background tabs can suspend animation frames indefinitely. Report application
+    // completion honestly; do not claim to have observed a rendered frame.
+    const applied = () => finishOperationTiming(trace, { status: 'Applied', phase: 'response-applied-render-unconfirmed' })
+    if (globalThis.document?.hidden) { applied(); return }
+    trace.renderFallback = setTimeout(applied, 2000)
+  }
+  raf(() => { if (!trace.finished) raf(finish) })
 }
 
-export function activeOperationTiming() { return _active }
+export function activeOperationTiming() { return _applying === undefined ? _active : _applying }
 
 /** Briefly defer background polls while an interactive operation renders.
  * Timing is diagnostic, not a lock: an aborted render or a missing completion
