@@ -98,6 +98,7 @@ export function initProteinSubsystem({
     },
     getMode: () => allRenderers().find(r => r.getMode() !== 'off')?.getMode() ?? 'off',
     centroidOf: (...args) => allRenderers().map(r => r.centroidOf(...args)).find(Boolean) ?? null,
+    extentOf: (...args) => allRenderers().map(r => r.extentOf?.(...args)).find(Boolean) ?? null,
     raycastPick: (...args) => allRenderers().map(r => r.raycastPick(...args)).filter(Boolean)
       .sort((a, b) => a.distance - b.distance)[0] ?? null,
     highlight(selection) {

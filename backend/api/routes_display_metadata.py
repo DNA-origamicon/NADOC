@@ -12,6 +12,8 @@ so each one simply validates that its referenced ids exist, assigns a single
   - **Per-region representation overrides** (``/design/representation-overrides``)
     — pin a render rep onto selected strands/clusters so a focal region can show
     full detail against a coarser background (topic: mixed_representation).
+  - **Viewport annotations** (``/design/annotations``) — callouts + highlights attached
+    to selectable elements, with a global on/off switch (topic: annotations).
   - **Element visibility** (``/design/visibility``) — hidden base keys, explicit
     shown exceptions, and hidden cluster ids used by the unified hide system.
 
@@ -42,6 +44,7 @@ from backend.api import state as design_state
 # extracted routers). bespoke-B=0.
 from backend.api.crud import _design_response
 from backend.core.models import (
+    Annotation,
     Design,
     PlateLayout,
     RepresentationOverride,
@@ -82,6 +85,11 @@ class RepresentationOverridesSaveRequest(BaseModel):
 
 class ViewVolumesSaveRequest(BaseModel):
     volumes: List[ViewVolume]
+
+
+class AnnotationsSaveRequest(BaseModel):
+    annotations: List[Annotation]
+    enabled: bool = True
 
 
 class StapleGroupsSaveRequest(BaseModel):
@@ -215,6 +223,29 @@ def save_view_volumes(body: ViewVolumesSaveRequest) -> dict:
     design, revision = design_state.mutate_display_metadata(_apply)
     return {
         "view_volumes": [volume.model_dump(mode="json") for volume in design.view_volumes],
+        "revision": revision,
+    }
+
+
+@router.put("/design/annotations", status_code=200)
+def save_annotations(body: AnnotationsSaveRequest) -> dict:
+    """Replace the viewport annotations (and their global switch) persisted with the part.
+
+    Display-only: no undo entry, no feature-log entry, no topology validation, and a
+    small response (like view volumes) so a callout drag never round-trips the design.
+    """
+    ids = [a.id for a in body.annotations]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="Annotation ids must be unique.")
+
+    def _apply(design: Design) -> None:
+        design.annotations = [a.model_copy(deep=True) for a in body.annotations]
+        design.annotations_enabled = body.enabled
+
+    design, revision = design_state.mutate_display_metadata(_apply)
+    return {
+        "annotations": [a.model_dump(mode="json") for a in design.annotations],
+        "annotations_enabled": design.annotations_enabled,
         "revision": revision,
     }
 

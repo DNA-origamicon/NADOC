@@ -768,6 +768,22 @@ export function initAtomisticRenderer(scene) {
       return n ? { x: x / n, y: y / n, z: z / n } : null
     },
 
+    /** Bounding sphere `{x,y,z,radius}` of the rendered atoms matching `predicate`, or null. */
+    extentOf(predicate = null) {
+      const c = this.centroidOf(predicate)
+      if (!c) return null
+      let r2 = 0
+      const table = _state.atoms
+      for (const [, group] of Object.entries(_state.elementAtoms)) {
+        for (let i = 0; i < group.length; i++) {
+          const r = group[i]
+          if (predicate && !predicate(table.get(r))) continue
+          r2 = Math.max(r2, (table.x(r) - c.x) ** 2 + (table.y(r) - c.y) ** 2 + (table.z(r) - c.z) ** 2)
+        }
+      }
+      return { ...c, radius: Math.sqrt(r2) }
+    },
+
     /**
      * Snapshot the instances matching `predicate` so a live rigid transform can
      * be previewed without a server round-trip (used by the gizmo during drag).

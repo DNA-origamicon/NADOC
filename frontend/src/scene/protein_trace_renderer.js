@@ -199,6 +199,21 @@ export function initProteinTraceRenderer(scene) {
       }
       return count ? sum.multiplyScalar(1 / count) : null
     },
+    /** Bounding sphere `{x,y,z,radius}` of the traced atoms matching `predicate`, or null. */
+    extentOf(predicate = null) {
+      const c = this.centroidOf(predicate)
+      if (!c) return null
+      const point = new THREE.Vector3()
+      let r2 = 0
+      for (const group of attachmentGroups.values()) {
+        for (const atom of group.userData.atoms) {
+          if (predicate && !predicate(atom)) continue
+          point.set(atom.x, atom.y, atom.z).applyMatrix4(group.matrixWorld)
+          r2 = Math.max(r2, (point.x - c.x) ** 2 + (point.y - c.y) ** 2 + (point.z - c.z) ** 2)
+        }
+      }
+      return { ...c, radius: Math.sqrt(r2) }
+    },
     raycastPick(raycaster) {
       const meshes = []
       root.traverse(obj => { if (obj.isMesh) meshes.push(obj) })

@@ -1256,6 +1256,39 @@ class RepresentationOverride(BaseModel):
     protein_attachment_ids: List[str] = Field(default_factory=list)
 
 
+class Annotation(BaseModel):
+    """Display-only viewport callout attached to selectable elements.
+
+    View metadata: it never affects topology, geometry or physics. ``refs`` are the
+    frontend's stable selection refs (``{"kind": "strand", "id": ...}``,
+    ``{"kind": "domain", "strandId": ..., "domainIndex": ...}``, base/end keys, ...),
+    stored verbatim; a ref whose element no longer exists simply resolves to nothing
+    (annotations are never pruned behind the user's back, so undo can bring it back).
+    ``screen_pos`` is the manual callout's top-left as fractions of the viewport.
+    """
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    text: str = Field("", max_length=2000)
+    icon: Optional[str] = Field(None, max_length=32)
+    callout_type: Literal["elbow", "line", "rounded", "shelf"] = "elbow"
+    color: str = Field("#f0883e", pattern=r"^#[0-9a-fA-F]{6}$")
+    transparency: float = Field(0.0, ge=0.0, le=1.0)
+    size: float = Field(1.0, ge=0.25, le=4.0)
+    manual: bool = False
+    screen_pos: Optional[tuple[float, float]] = None
+    visible: bool = True
+    refs: List[Dict[str, Any]] = Field(default_factory=list, max_length=5000)
+
+    @model_validator(mode="after")
+    def _refs_are_kinded(self) -> "Annotation":
+        for ref in self.refs:
+            if not isinstance(ref.get("kind"), str) or not ref["kind"]:
+                raise ValueError("every annotation ref needs a string 'kind'")
+        if self.screen_pos is not None and not all(0.0 <= v <= 1.0 for v in self.screen_pos):
+            raise ValueError("screen_pos must be fractions within [0, 1]")
+        return self
+
+
 class ViewVolume(BaseModel):
     """Oriented, display-only spatial representation region.
 
@@ -2997,6 +3030,9 @@ class Design(BaseModel):
     # coarser background. Display-only; never affects topology or geometry.
     representation_overrides: List[RepresentationOverride] = Field(default_factory=list)
     view_volumes: List[ViewVolume] = Field(default_factory=list)
+    # Display-only viewport callouts + their global on/off switch (see Annotation).
+    annotations: List[Annotation] = Field(default_factory=list)
+    annotations_enabled: bool = True
     visibility_state: VisibilityState = Field(default_factory=VisibilityState)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
     crossovers: List[Crossover] = Field(default_factory=list)

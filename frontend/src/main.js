@@ -19,6 +19,7 @@ import { initPegCoatingSetup } from './ui/peg_coating_setup.js'
 import { initNamdPegCoating } from './ui/namd_peg_coating.js'
 import { initNamdSetupPresets } from './ui/namd_setup_presets.js'
 import { initPreparationDetails } from './scene/md_preparation_details.js'
+import { initAnnotations } from './scene/annotation_subsystem.js'
 import { initTwoElectrodePreview } from './scene/namd_two_electrode_preview.js'
 import { initNamdPegCoatingPreview } from './scene/namd_peg_coating_preview.js'
 import { initNamdPegReview } from './ui/namd_peg_review.js'
@@ -4284,6 +4285,12 @@ async function main() {
   }
 
   initPropertiesPanel({ clearSelection: () => selectionManager.clearSelection() })
+  initAnnotations({
+    store, api, scene, getCamera: getRenderCamera, addFrameCallback, removeFrameCallback,
+    getEntries: () => designRenderer.getBackboneEntries?.() ?? [],
+    resolveBasePosition: key => selectionManager.getBaseWorldPosition?.(key) ?? null,
+    getProteinRenderer: () => proteinRenderer, getNanoparticleSubsystem: () => nanoparticleSubsystem,
+  })
   initPhotoproductOverlay({
     scene, THREE, store,
     getBasePosition: key => selectionManager.getBaseWorldPosition?.(key) ?? null,

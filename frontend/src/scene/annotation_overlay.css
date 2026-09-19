@@ -1,0 +1,43 @@
+/* Annotation callouts. The layer sits above the canvas and every other canvas
+   overlay; only the manual-drag grip takes pointer events, so callouts never
+   block selection or orbit. */
+.nadoc-anno-layer {
+  position: absolute; inset: 0; overflow: hidden;
+  pointer-events: none; z-index: 50;
+}
+.nadoc-anno-layer[hidden] { display: none; }
+.nadoc-anno-leaders { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.nadoc-anno-leaders polyline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.nadoc-anno-leaders circle { fill: none; stroke-width: 2; }
+
+.nadoc-anno {
+  --anno-color: #f0883e;
+  position: absolute; left: 0; top: 0; will-change: transform;
+  pointer-events: none;
+}
+.nadoc-anno[hidden] { display: none; }
+.nadoc-anno__box {
+  position: relative; display: flex; align-items: flex-start; gap: 7px;
+  box-sizing: border-box; max-width: 280px; padding: 6px 10px;
+  background: rgba(13, 17, 23, 0.92);
+  border: 2px solid var(--anno-color); color: var(--anno-color);
+  font: 600 13px/1.3 system-ui, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.nadoc-anno__icon { flex: none; display: inline-flex; line-height: 0; }
+.nadoc-anno__text:empty { display: none; }
+.nadoc-anno--rounded .nadoc-anno__box { border-radius: 16px; padding-inline: 13px; }
+.nadoc-anno--shelf .nadoc-anno__box {
+  background: transparent; border-width: 0 0 2px; padding: 2px 4px 3px;
+  text-shadow: 0 0 4px #0d1117, 0 0 2px #0d1117;
+}
+
+/* Manual-position grip: a hatched triangle in the bottom-right corner. */
+.nadoc-anno__grip {
+  display: none; position: absolute; right: -2px; bottom: -2px;
+  width: 16px; height: 16px; cursor: move; touch-action: none;
+  pointer-events: auto;
+  background: linear-gradient(135deg, transparent 50%, var(--anno-color) 50%, var(--anno-color) 58%,
+    transparent 58%, transparent 68%, var(--anno-color) 68%, var(--anno-color) 76%, transparent 76%);
+}
+.nadoc-anno--manual .nadoc-anno__grip { display: block; }
+.nadoc-anno--dragging .nadoc-anno__grip { filter: brightness(1.4); }

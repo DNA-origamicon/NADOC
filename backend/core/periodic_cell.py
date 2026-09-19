@@ -221,6 +221,7 @@ def _slice_to_bp_range(design: Design, bp_start: int, bp_end: int) -> Design:
             "feature_log_sub_cursor": None,
             "animations": [],
             "camera_poses": [],
+            "annotations": [],
         }
     )
 

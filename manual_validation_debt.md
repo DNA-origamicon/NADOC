@@ -297,3 +297,12 @@ entry has disabled run controls and is not an independent ensemble replica. Use
 do not acknowledge a real user's incident merely to run an automated test.
 
 - **MV-38 — PENDING — Mobile gold/strep/biotin/DNA playback (2026-09-16).** In an isolated review workspace, apply one streptavidin tetramer, generate biotinylated DNA, create a CUDA oxDNA job and inspect trajectory playback: core, coating and bound pocket must move together while DNA flexes; restore must recover the authored display. API and native CUDA checks pass; live browser gesture/display was not exercised. See `docs/oxdna_mobile_strep.md`. Delete disposable review outputs afterward.
+
+## MV-ANNOTATIONS-1 — PENDING (2026-09-18)
+
+Annotations tab (right sidebar). Automated: vitest for model/targets/layout/controller/overlay/panel plus
+`frontend/e2e/annotations.spec.js` (target capture, text/icon gating, highlight object present, manual
+drag pins across a camera move). NOT hand-checked: (a) highlight glow size/visibility at low zoom on a
+real multi-helix design, (b) how each callout type (elbow / straight / rounded / shelf) looks over dense
+geometry and at Size 2.5×, (c) base / end / domain / cluster / crossover targets on a loaded `.nadoc`, plus placement quality (least design covered, no jitter while orbiting) on a dense multi-helix design and with a real protein / gold particle,
+(d) `just smoke` (not run), (e) a real save/close/reopen of a user `.nadoc` with annotations (automated: autosave → file on disk → import round-trip only). See `memory/project_annotations.md`.

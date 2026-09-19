@@ -1117,6 +1117,15 @@ export async function saveViewVolumes(volumes) {
   return json
 }
 
+/** Persist viewport annotations (+ their global switch) in the .nadoc file. Display-only:
+ *  no undo entry, no geometry refetch, tiny response. */
+export async function saveAnnotations({ annotations, enabled }) {
+  const json = await _request('PUT', '/design/annotations', { annotations, enabled }, { suppressBusy: true })
+  if (!json || !_acceptMetadataRevision(json)) return null
+  _signalDesignChanged({ geometryUnchanged: true, metadataOnly: true })
+  return json
+}
+
 /** Persist display-only nucleotide/cluster visibility in the .nadoc file. */
 export async function saveVisibilityState(visibilityState) {
   const json = await _request('PUT', '/design/visibility', visibilityState)

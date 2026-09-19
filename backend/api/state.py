@@ -942,10 +942,17 @@ def mutate_with_minor_log(
 
 
 def _restore_edit_snapshot(snapshot: Design, current: Design) -> Design:
-    """File location/signoff are persistence metadata, not editable content."""
+    """File location/signoff and viewport annotations are not editable topology content.
+
+    Annotations are display-only view metadata saved through their own route (no undo
+    entry), so undo/redo must neither rewind them to an older list nor resurrect a
+    deleted one — the current annotations always win.
+    """
     if snapshot.id != current.id:
         return snapshot
     return snapshot.model_copy(update={
+        "annotations": current.annotations,
+        "annotations_enabled": current.annotations_enabled,
         "metadata": snapshot.metadata.model_copy(update={
             "identity_last_known_path": current.metadata.identity_last_known_path,
             "identity_confirmed_at": current.metadata.identity_confirmed_at,

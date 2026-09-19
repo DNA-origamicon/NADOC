@@ -90,7 +90,7 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
   const changeListeners = new Set()
   const stack = initSidebarStack({
     side: 'right', document, storage, getAvailableWidth,
-    labels: { assembly: 'Assembly', properties: 'Properties', visualization: 'Visualization', clustering: 'Clustering', overhangs: 'Overhangs' },
+    labels: { assembly: 'Assembly', properties: 'Properties', visualization: 'Visualization', clustering: 'Clustering', overhangs: 'Overhangs', annotations: 'Annotations' },
     panePrefix: 'right-tab-content-', defaultTab: 'properties',
     storageKey: 'nadoc.rightSidebar.v2', legacyKeys: ['nadoc.rightSidebar.v1'],
     onChange(detail) { for (const listener of changeListeners) listener(detail) },
