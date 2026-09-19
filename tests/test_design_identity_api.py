@@ -182,3 +182,128 @@ def test_autosave_after_undo_survives_code_reload(monkeypatch, tmp_path):
     assert session_cache.restore() == 1
     assert save().status_code == 200
     assert Design.from_json((tmp_path / 'reload.nadoc').read_text()).metadata.name == 'Untitled'
+
+
+# ── Startup audit: skip-stamp so unchanged designs are not re-parsed ─────────────
+
+
+def _audit(monkeypatch, tmp_path):
+    """Run the audit and return the paths it parsed (`Design.from_json` callers)."""
+    from backend.api import routes_assembly_workspace as w
+
+    monkeypatch.setattr(assembly, "_WORKSPACE_DIR", tmp_path)
+    parsed: list[str] = []
+    real = Design.from_json.__func__
+
+    def counting(cls, text, *a, **k):
+        parsed.append(text)
+        return real(cls, text, *a, **k)
+
+    monkeypatch.setattr(Design, "from_json", classmethod(counting))
+    w._audit_workspace_design_identities(tmp_path)
+    monkeypatch.setattr(Design, "from_json", classmethod(real))
+    return parsed
+
+
+def _stamp_files(tmp_path):
+    import json
+
+    return json.loads((tmp_path / ".identity_audit.json").read_text())["files"]
+
+
+def test_audit_skips_unchanged_confirmed_designs_on_second_pass(monkeypatch, tmp_path):
+    (tmp_path / "a.nadoc").write_text(Design(id="id-a").to_json())
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "b.nadoc").write_text(Design(id="id-b").to_json())
+
+    first = _audit(monkeypatch, tmp_path)
+    assert len(first) >= 2                      # legacy files are parsed once and claimed
+    stamp = _stamp_files(tmp_path)
+    assert {k: v[2] for k, v in stamp.items()} == {"a.nadoc": "id-a", "sub/b.nadoc": "id-b"}
+    assert all(v[3] for v in stamp.values())    # path-confirmed after the first pass
+
+    assert _audit(monkeypatch, tmp_path) == []  # nothing changed → nothing parsed
+
+
+def test_audit_reparses_only_edited_file(monkeypatch, tmp_path):
+    (tmp_path / "a.nadoc").write_text(Design(id="id-a").to_json())
+    (tmp_path / "b.nadoc").write_text(Design(id="id-b").to_json())
+    _audit(monkeypatch, tmp_path)
+
+    edited = Design.from_json((tmp_path / "b.nadoc").read_text())
+    (tmp_path / "b.nadoc").write_text(edited.to_json() + " ")
+    parsed = _audit(monkeypatch, tmp_path)
+    assert len(parsed) == 1 and '"id-b"' in parsed[0]
+
+
+def test_audit_forks_new_copy_of_an_unchanged_stamped_design(monkeypatch, tmp_path):
+    (tmp_path / "a.nadoc").write_text(Design(id="id-a").to_json())
+    _audit(monkeypatch, tmp_path)
+    original = (tmp_path / "a.nadoc").read_text()
+    (tmp_path / "copy.nadoc").write_text(original)   # external copy, identical id + claim
+
+    _audit(monkeypatch, tmp_path)
+    a = Design.from_json((tmp_path / "a.nadoc").read_text())
+    c = Design.from_json((tmp_path / "copy.nadoc").read_text())
+    assert a.id == "id-a" and c.id != "id-a"
+    assert c.metadata.identity_last_known_path == "copy.nadoc"
+
+
+def test_audit_treats_moved_file_as_changed(monkeypatch, tmp_path):
+    (tmp_path / "a.nadoc").write_text(Design(id="id-a").to_json())
+    _audit(monkeypatch, tmp_path)
+    (tmp_path / "moved").mkdir()
+    (tmp_path / "a.nadoc").rename(tmp_path / "moved" / "a.nadoc")
+
+    _audit(monkeypatch, tmp_path)
+    moved = Design.from_json((tmp_path / "moved" / "a.nadoc").read_text())
+    assert moved.id == "id-a"                              # a move retains identity
+    assert moved.metadata.identity_last_known_path == "moved/a.nadoc"
+
+
+def test_audit_never_descends_into_engine_job_trees(monkeypatch, tmp_path):
+    (tmp_path / "md_jobs" / "job1").mkdir(parents=True)
+    (tmp_path / "md_jobs" / "job1" / "snapshot.nadoc").write_text(Design(id="x").to_json())
+    (tmp_path / ".session" / "d").mkdir(parents=True)
+    (tmp_path / ".session" / "d" / "active.nadoc").write_text(Design(id="y").to_json())
+    (tmp_path / "keep.nadoc").write_text(Design(id="z").to_json())
+
+    _audit(monkeypatch, tmp_path)
+    assert set(_stamp_files(tmp_path)) == {"keep.nadoc"}
+
+
+def test_audit_still_covers_non_job_internal_roots(monkeypatch, tmp_path):
+    """Only ``*_jobs`` trees are pruned; other roots keep their historical coverage."""
+    (tmp_path / "benchmark_runs").mkdir()
+    (tmp_path / "benchmark_runs" / "fixture.nadoc").write_text(Design(id="f").to_json())
+    _audit(monkeypatch, tmp_path)
+    assert set(_stamp_files(tmp_path)) == {"benchmark_runs/fixture.nadoc"}
+
+
+# ── Server-side open (no browser round trip of the file) ─────────────────────────
+
+
+def test_open_part_installs_design_stamps_name_and_reports_identity(monkeypatch, tmp_path):
+    client = _client_at(monkeypatch, tmp_path)
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "arm.nadoc").write_text(Design(id="arm-id").to_json())
+
+    response = client.post("/api/library/open-part", json={"path": "sub/arm.nadoc", "name": "Arm"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["identity_disposition"] == "claimed"       # legacy file claims its path
+    assert body["design"]["id"] == "arm-id"
+    assert body["design"]["metadata"]["name"] == "Arm"
+    assert design_state.get_design().metadata.name == "Arm"
+    # The reconcile claim is persisted, exactly as GET /library/content did.
+    on_disk = Design.from_json((tmp_path / "sub" / "arm.nadoc").read_text())
+    assert on_disk.metadata.identity_last_known_path == "sub/arm.nadoc"
+
+    again = client.post("/api/library/open-part", json={"path": "sub/arm.nadoc"})
+    assert again.json()["identity_disposition"] == "confirmed"
+
+
+def test_open_part_rejects_missing_file_and_traversal(monkeypatch, tmp_path):
+    client = _client_at(monkeypatch, tmp_path)
+    assert client.post("/api/library/open-part", json={"path": "nope.nadoc"}).status_code == 404
+    assert client.post("/api/library/open-part", json={"path": "../outside.nadoc"}).status_code == 400

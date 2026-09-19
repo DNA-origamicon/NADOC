@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -33,11 +34,24 @@ def dir_size_bytes(path: Path) -> int:
     """
     if not path.exists():
         return 0
+    # os.scandir: the entry's file type comes free with the directory read and only
+    # regular files are stat'd once, versus rglob + is_file + stat (two stats and a Path
+    # object per file). Each syscall releases the GIL, so on a busy server the walk's
+    # wall time scales with syscall count; this cut is what keeps a cold first walk of
+    # ~160 job trees from stalling every other request.
     total = 0
-    for f in path.rglob("*"):
+    pending = [str(path)]
+    while pending:
         try:
-            if f.is_file():
-                total += f.stat().st_size
+            with os.scandir(pending.pop()) as it:
+                for entry in it:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            pending.append(entry.path)
+                        elif entry.is_file():
+                            total += entry.stat().st_size
+                    except OSError:
+                        continue
         except OSError:
             continue
     return total

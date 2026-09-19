@@ -91,8 +91,49 @@ def _atomic_write_text(path: Path, content: str) -> None:
     os.replace(temporary, path)
 
 
+_IDENTITY_STAMP_NAME = ".identity_audit.json"
+_IDENTITY_STAMP_VERSION = 1
+
+
+def _audit_candidate_files(workspace_dir: Path) -> list[Path]:
+    """Every ``.nadoc`` the audit has always covered: any file with no ``.``/``__``
+    path part. The only change from ``rglob`` is that top-level ``*_jobs`` engine trees
+    are not descended (they hold most of the workspace's directories and, on a cold
+    cache, dominated the startup stall); job folders store ``design.json`` snapshots,
+    never library ``.nadoc`` files. Other internal roots are still audited.
+    """
+    found: list[Path] = []
+    for root, dirs, files in os.walk(workspace_dir):
+        at_top = Path(root) == workspace_dir
+        dirs[:] = sorted(
+            d
+            for d in dirs
+            if not d.startswith((".", "__")) and not (at_top and d.endswith("_jobs"))
+        )
+        found.extend(Path(root) / f for f in sorted(files) if f.endswith(".nadoc"))
+    return sorted(found)
+
+
+def _load_identity_stamp(workspace_dir: Path) -> dict[str, list]:
+    try:
+        raw = json.loads((workspace_dir / _IDENTITY_STAMP_NAME).read_text("utf-8"))
+        if raw.get("version") == _IDENTITY_STAMP_VERSION:
+            return dict(raw.get("files") or {})
+    except (OSError, ValueError, AttributeError):
+        pass
+    return {}
+
+
 def _audit_workspace_design_identities(workspace_dir: Path | None = None) -> None:
-    """Resolve duplicate legacy UUIDs deterministically before library use."""
+    """Resolve duplicate legacy UUIDs deterministically before library use.
+
+    Parsing every design (two are >80 MB) holds the GIL for seconds and stalled every
+    other request in a freshly started backend. A stamp of ``(mtime_ns, size, id,
+    path-confirmed)`` per file, saved after each pass, lets later passes skip a file
+    that is unchanged, still at the path it last confirmed, and whose id is unique:
+    ``reconcile_open_identity`` is a no-op for exactly that case. New, edited, moved
+    or duplicate-id files take the full path below unchanged.
+    """
     from backend.core.design_identity import (
         fork_identity_for_copy,
         normalize_workspace_path,
@@ -100,18 +141,46 @@ def _audit_workspace_design_identities(workspace_dir: Path | None = None) -> Non
     )
 
     workspace_dir = workspace_dir or _asm._WORKSPACE_DIR
-    records: list[tuple[Path, str, Design]] = []
-    for path in sorted(workspace_dir.rglob("*.nadoc")):
-        rel_parts = path.relative_to(workspace_dir).parts
-        if any(part.startswith(".") or part.startswith("__") for part in rel_parts):
-            continue
+    stamp = _load_identity_stamp(workspace_dir)
+
+    listing: list[tuple[Path, str, tuple[int, int]]] = []
+    for path in _audit_candidate_files(workspace_dir):
         try:
-            design = Design.from_json(path.read_text(encoding="utf-8"))
-        except Exception:
+            st = path.stat()
+        except OSError:
             continue
         rel = str(path.relative_to(workspace_dir)).replace("\\", "/")
-        records.append((path, rel, design))
+        listing.append((path, rel, (st.st_mtime_ns, st.st_size)))
 
+    def _unchanged(rel: str, sig: tuple[int, int]) -> bool:
+        entry = stamp.get(rel)
+        return bool(entry) and entry[0] == sig[0] and entry[1] == sig[1] and bool(entry[3])
+
+    skip = {rel: sig for _, rel, sig in listing if _unchanged(rel, sig)}
+    parsed: dict[str, Design] = {}
+
+    def _parse(path: Path, rel: str) -> None:
+        try:
+            parsed[rel] = Design.from_json(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    for path, rel, _sig in listing:
+        if rel not in skip:
+            _parse(path, rel)
+    # A stamped id shared with another stamped file, or claimed by a freshly parsed
+    # one, is a duplicate group: parse its unchanged members too so the full logic runs.
+    seen_ids = {d.id for d in parsed.values()}
+    stamped_count: dict[str, int] = {}
+    for rel in skip:
+        stamped_count[stamp[rel][2]] = stamped_count.get(stamp[rel][2], 0) + 1
+    for path, rel, _sig in listing:
+        if rel in skip and (stamped_count[stamp[rel][2]] > 1 or stamp[rel][2] in seen_ids):
+            del skip[rel]
+            _parse(path, rel)
+
+    records = [(path, rel, parsed[rel]) for path, rel, _sig in listing if rel in parsed]
+    final: dict[str, Design] = {}
     groups: dict[str, list[tuple[Path, str, Design]]] = {}
     for record in records:
         groups.setdefault(record[2].id, []).append(record)
@@ -133,9 +202,30 @@ def _audit_workspace_design_identities(workspace_dir: Path | None = None) -> Non
                     reassign_job_snapshot_identity(
                         workspace_dir, rel, design.id, resolved.id
                     )
+            final[rel] = resolved
     from backend.core.project_revisions import migrate_job_revision_provenance
 
     migrate_job_revision_provenance(workspace_dir)
+
+    # Record the post-audit state (re-stat: the pass may have rewritten files).
+    files: dict[str, list] = {}
+    for path, rel, sig in listing:
+        if rel in skip:
+            files[rel] = [sig[0], sig[1], stamp[rel][2], True]
+        elif rel in final:
+            try:
+                st = path.stat()
+            except OSError:
+                continue
+            claimed = normalize_workspace_path(final[rel].metadata.identity_last_known_path)
+            files[rel] = [st.st_mtime_ns, st.st_size, final[rel].id, claimed == rel]
+    try:
+        _atomic_write_text(
+            workspace_dir / _IDENTITY_STAMP_NAME,
+            json.dumps({"version": _IDENTITY_STAMP_VERSION, "files": files}),
+        )
+    except OSError:
+        pass
 
 
 def _schedule_workspace_identity_audit() -> None:

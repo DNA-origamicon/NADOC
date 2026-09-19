@@ -266,3 +266,16 @@ class TestAsyncSizeWarm:
         assert (
             dir_size_bytes_cached_only(tmp_path, ttl=0.0) is None
         )  # stale under a zero ttl
+
+
+def test_dir_size_bytes_counts_nested_files_and_ignores_symlinked_dirs(tmp_path):
+    (tmp_path / "a" / "b").mkdir(parents=True)
+    (tmp_path / "top.bin").write_bytes(b"x" * 10)
+    (tmp_path / "a" / "mid.bin").write_bytes(b"x" * 20)
+    (tmp_path / "a" / "b" / "deep.bin").write_bytes(b"x" * 30)
+    outside = tmp_path.parent / (tmp_path.name + "_outside")
+    outside.mkdir()
+    (outside / "big.bin").write_bytes(b"x" * 1000)
+    (tmp_path / "a" / "link_dir").symlink_to(outside, target_is_directory=True)
+    assert dir_size_bytes(tmp_path) == 60          # symlinked dir is not followed
+    assert dir_size_bytes(tmp_path / "top.bin") == 0   # a plain file is not a tree
