@@ -1,5 +1,6 @@
 import { clearProcessLog, processLogSnapshot, PROCESS_LOG_LIMIT } from '../perf/process_log.js'
 import './process_log.css'
+import { mountViewerPerformancePanel } from './viewer_performance_panel.js'
 
 const duration = ms => ms < 1000 ? `${ms.toFixed(1)} ms` : ms < 60000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.floor(ms / 60000)}m ${((ms % 60000) / 1000).toFixed(1)}s`
 let panel
@@ -85,7 +86,8 @@ export function openProcessLog() {
     if (autoscroll.checked) { page = 0; refresh() }
   }
   current.querySelector('[data-refresh]').onclick = refresh
-  function close() { clearInterval(timer); current.remove(); panel = null; returnFocus?.focus() }
+  function close() { clearInterval(timer); unmountPerformance(); current.remove(); panel = null; returnFocus?.focus() }
+  const unmountPerformance = mountViewerPerformancePanel(current, close)
   current.querySelector('[data-close]').onclick = close
   current.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); close() } })
   filter.oninput = sort.onchange = () => { page = 0; render() }

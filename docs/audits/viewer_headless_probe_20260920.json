@@ -1,0 +1,873 @@
+{
+  "scope": "Small 6hb fixture; development builds, SwiftShader, one warmup and five 3-second segments per variant. Non-interleaved runs and differing backend workspaces/background activity. Behavioral evidence only; NOT a performance acceptance verdict.",
+  "baseline": {
+    "source_filename": "6hb_test.nadoc",
+    "source_sha256": "a9f9734eb059524740d75b8447ca14f46a96097255eccc1cbfd9418f20997ab2",
+    "scope": "Headless local probe; 3-second orbit segments, history omitted; not user-GPU acceptance",
+    "records": [
+      {
+        "schema": 1,
+        "instrumentation": "viewer-frame-capture-v1",
+        "run_id": "95138e95-4252-499b-8e53-64614938aadc",
+        "captured_at": "2026-09-20T20:27:04.821Z",
+        "variant": "A",
+        "scenario": "orbit",
+        "duration_requested_ms": 3000,
+        "fixture_sha256": "a514b10257d80fe219a466e2bd278bd3d35230c9efa088b3b510f3e7252a7d2f",
+        "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+        "build": {
+          "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+          "frontend_sha256": "aa1dbe747f58d3963ead10325db653264209aa05fa868877492dcb4c41dd06d0",
+          "dirty": true
+        },
+        "build_mode": "development",
+        "environment": {
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "viewport": [
+            632,
+            634,
+            632,
+            634,
+            1
+          ],
+          "refresh_hz": null
+        },
+        "view": {
+          "camera": {
+            "position": [
+              41.34675073076618,
+              17.229322817025047,
+              44.296800000000005
+            ],
+            "target": [
+              3.897150730766178,
+              2.249482817025043,
+              6.8472
+            ],
+            "up": [
+              -0.19245008972987532,
+              0.9622504486493764,
+              -0.19245008972987532
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "assembly": false,
+          "detail_level": 0,
+          "atomistic": "off",
+          "surface": "off",
+          "coloring": "strand"
+        },
+        "cache": "warm",
+        "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+        "simulation_content_verified": false,
+        "load_ms": null,
+        "selection_latency_ms": null,
+        "elapsed_ms": 3024.2999999998137,
+        "valid": true,
+        "invalid_reason": null,
+        "frame_intervals": {
+          "samples": 21,
+          "p50_ms": 142.19999999925494,
+          "p95_ms": 158.70000000018626,
+          "p99_ms": 165.40000000037253,
+          "worst_ms": 165.40000000037253,
+          "over_33ms": 21,
+          "over_50ms": 21,
+          "mean_fps": 6.944903763476848
+        },
+        "render_counts_last_frame": {
+          "calls": 77,
+          "triangles": 101432,
+          "points": 0,
+          "lines": 43,
+          "geometries": 24,
+          "textures": 12
+        },
+        "sampled_js_heap_peak_bytes": 123000000,
+        "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+        "gpu_memory_bytes": null,
+        "warmup": false
+      },
+      {
+        "schema": 1,
+        "instrumentation": "viewer-frame-capture-v1",
+        "run_id": "4ddec270-4b6c-49a6-a149-14ce025f015d",
+        "captured_at": "2026-09-20T20:27:10.504Z",
+        "variant": "A",
+        "scenario": "orbit",
+        "duration_requested_ms": 3000,
+        "fixture_sha256": "a514b10257d80fe219a466e2bd278bd3d35230c9efa088b3b510f3e7252a7d2f",
+        "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+        "build": {
+          "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+          "frontend_sha256": "aa1dbe747f58d3963ead10325db653264209aa05fa868877492dcb4c41dd06d0",
+          "dirty": true
+        },
+        "build_mode": "development",
+        "environment": {
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "viewport": [
+            632,
+            634,
+            632,
+            634,
+            1
+          ],
+          "refresh_hz": null
+        },
+        "view": {
+          "camera": {
+            "position": [
+              41.34675073076618,
+              17.229322817025047,
+              44.296800000000005
+            ],
+            "target": [
+              3.897150730766178,
+              2.249482817025043,
+              6.8472
+            ],
+            "up": [
+              -0.19245008972987532,
+              0.9622504486493764,
+              -0.19245008972987532
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "assembly": false,
+          "detail_level": 0,
+          "atomistic": "off",
+          "surface": "off",
+          "coloring": "strand"
+        },
+        "cache": "warm",
+        "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+        "simulation_content_verified": false,
+        "load_ms": null,
+        "selection_latency_ms": null,
+        "elapsed_ms": 3120.0999999996275,
+        "valid": true,
+        "invalid_reason": null,
+        "frame_intervals": {
+          "samples": 22,
+          "p50_ms": 139.79999999981374,
+          "p95_ms": 159.20000000018626,
+          "p99_ms": 160.29999999981374,
+          "worst_ms": 160.29999999981374,
+          "over_33ms": 22,
+          "over_50ms": 22,
+          "mean_fps": 7.052186177715934
+        },
+        "render_counts_last_frame": {
+          "calls": 77,
+          "triangles": 101432,
+          "points": 0,
+          "lines": 43,
+          "geometries": 24,
+          "textures": 12
+        },
+        "sampled_js_heap_peak_bytes": 123000000,
+        "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+        "gpu_memory_bytes": null,
+        "warmup": false
+      },
+      {
+        "schema": 1,
+        "instrumentation": "viewer-frame-capture-v1",
+        "run_id": "93a2bd6f-16da-4a8f-b786-118f352a7af5",
+        "captured_at": "2026-09-20T20:27:16.273Z",
+        "variant": "A",
+        "scenario": "orbit",
+        "duration_requested_ms": 3000,
+        "fixture_sha256": "a514b10257d80fe219a466e2bd278bd3d35230c9efa088b3b510f3e7252a7d2f",
+        "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+        "build": {
+          "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+          "frontend_sha256": "aa1dbe747f58d3963ead10325db653264209aa05fa868877492dcb4c41dd06d0",
+          "dirty": true
+        },
+        "build_mode": "development",
+        "environment": {
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "viewport": [
+            632,
+            634,
+            632,
+            634,
+            1
+          ],
+          "refresh_hz": null
+        },
+        "view": {
+          "camera": {
+            "position": [
+              41.34675073076618,
+              17.229322817025047,
+              44.296800000000005
+            ],
+            "target": [
+              3.897150730766178,
+              2.249482817025043,
+              6.8472
+            ],
+            "up": [
+              -0.19245008972987532,
+              0.9622504486493764,
+              -0.19245008972987532
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "assembly": false,
+          "detail_level": 0,
+          "atomistic": "off",
+          "surface": "off",
+          "coloring": "strand"
+        },
+        "cache": "warm",
+        "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+        "simulation_content_verified": false,
+        "load_ms": null,
+        "selection_latency_ms": null,
+        "elapsed_ms": 3070.600000000559,
+        "valid": true,
+        "invalid_reason": null,
+        "frame_intervals": {
+          "samples": 20,
+          "p50_ms": 149.59999999962747,
+          "p95_ms": 179.20000000018626,
+          "p99_ms": 192.29999999981374,
+          "worst_ms": 192.29999999981374,
+          "over_33ms": 20,
+          "over_50ms": 20,
+          "mean_fps": 6.514233600416516
+        },
+        "render_counts_last_frame": {
+          "calls": 77,
+          "triangles": 101432,
+          "points": 0,
+          "lines": 43,
+          "geometries": 24,
+          "textures": 12
+        },
+        "sampled_js_heap_peak_bytes": 123000000,
+        "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+        "gpu_memory_bytes": null,
+        "warmup": false
+      },
+      {
+        "schema": 1,
+        "instrumentation": "viewer-frame-capture-v1",
+        "run_id": "6b0c40d0-0327-4997-8690-d5b1bd7d6de8",
+        "captured_at": "2026-09-20T20:27:22.217Z",
+        "variant": "A",
+        "scenario": "orbit",
+        "duration_requested_ms": 3000,
+        "fixture_sha256": "a514b10257d80fe219a466e2bd278bd3d35230c9efa088b3b510f3e7252a7d2f",
+        "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+        "build": {
+          "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+          "frontend_sha256": "aa1dbe747f58d3963ead10325db653264209aa05fa868877492dcb4c41dd06d0",
+          "dirty": true
+        },
+        "build_mode": "development",
+        "environment": {
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "viewport": [
+            632,
+            634,
+            632,
+            634,
+            1
+          ],
+          "refresh_hz": null
+        },
+        "view": {
+          "camera": {
+            "position": [
+              41.34675073076618,
+              17.229322817025047,
+              44.296800000000005
+            ],
+            "target": [
+              3.897150730766178,
+              2.249482817025043,
+              6.8472
+            ],
+            "up": [
+              -0.19245008972987532,
+              0.9622504486493764,
+              -0.19245008972987532
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "assembly": false,
+          "detail_level": 0,
+          "atomistic": "off",
+          "surface": "off",
+          "coloring": "strand"
+        },
+        "cache": "warm",
+        "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+        "simulation_content_verified": false,
+        "load_ms": null,
+        "selection_latency_ms": null,
+        "elapsed_ms": 3066.7000000001863,
+        "valid": true,
+        "invalid_reason": null,
+        "frame_intervals": {
+          "samples": 20,
+          "p50_ms": 154.8999999994412,
+          "p95_ms": 173.09999999962747,
+          "p99_ms": 173.70000000018626,
+          "worst_ms": 173.70000000018626,
+          "over_33ms": 20,
+          "over_50ms": 20,
+          "mean_fps": 6.522731720043958
+        },
+        "render_counts_last_frame": {
+          "calls": 77,
+          "triangles": 101432,
+          "points": 0,
+          "lines": 43,
+          "geometries": 24,
+          "textures": 12
+        },
+        "sampled_js_heap_peak_bytes": 123000000,
+        "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+        "gpu_memory_bytes": null,
+        "warmup": false
+      },
+      {
+        "schema": 1,
+        "instrumentation": "viewer-frame-capture-v1",
+        "run_id": "c7a78077-5071-4a3e-ac97-2addfea11ed5",
+        "captured_at": "2026-09-20T20:27:28.684Z",
+        "variant": "A",
+        "scenario": "orbit",
+        "duration_requested_ms": 3000,
+        "fixture_sha256": "a514b10257d80fe219a466e2bd278bd3d35230c9efa088b3b510f3e7252a7d2f",
+        "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+        "build": {
+          "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+          "frontend_sha256": "aa1dbe747f58d3963ead10325db653264209aa05fa868877492dcb4c41dd06d0",
+          "dirty": true
+        },
+        "build_mode": "development",
+        "environment": {
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "viewport": [
+            632,
+            634,
+            632,
+            634,
+            1
+          ],
+          "refresh_hz": null
+        },
+        "view": {
+          "camera": {
+            "position": [
+              41.34675073076618,
+              17.229322817025047,
+              44.296800000000005
+            ],
+            "target": [
+              3.897150730766178,
+              2.249482817025043,
+              6.8472
+            ],
+            "up": [
+              -0.19245008972987532,
+              0.9622504486493764,
+              -0.19245008972987532
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "assembly": false,
+          "detail_level": 0,
+          "atomistic": "off",
+          "surface": "off",
+          "coloring": "strand"
+        },
+        "cache": "warm",
+        "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+        "simulation_content_verified": false,
+        "load_ms": null,
+        "selection_latency_ms": null,
+        "elapsed_ms": 3040.100000000559,
+        "valid": true,
+        "invalid_reason": null,
+        "frame_intervals": {
+          "samples": 17,
+          "p50_ms": 175.70000000018626,
+          "p95_ms": 274.5,
+          "p99_ms": 274.5,
+          "worst_ms": 274.5,
+          "over_33ms": 17,
+          "over_50ms": 17,
+          "mean_fps": 5.592841163311648
+        },
+        "render_counts_last_frame": {
+          "calls": 77,
+          "triangles": 101432,
+          "points": 0,
+          "lines": 43,
+          "geometries": 24,
+          "textures": 12
+        },
+        "sampled_js_heap_peak_bytes": 123000000,
+        "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+        "gpu_memory_bytes": null,
+        "warmup": false
+      }
+    ]
+  },
+  "candidate": {
+    "source_filename": "6hb_test.nadoc",
+    "source_sha256": "a9f9734eb059524740d75b8447ca14f46a96097255eccc1cbfd9418f20997ab2",
+    "scope": "Headless local probe; 3-second orbit segments, history omitted; not user-GPU acceptance",
+    "records": [
+      {
+        "schema": 1,
+        "instrumentation": "viewer-frame-capture-v1",
+        "run_id": "84590e9f-9e56-40c5-8a30-59277cf5dff5",
+        "captured_at": "2026-09-20T20:25:54.068Z",
+        "variant": "B",
+        "scenario": "orbit",
+        "duration_requested_ms": 3000,
+        "fixture_sha256": "06a15b79b0d6774e2c976967258bb362c720d432bc1e6c2cb45999f575bebff7",
+        "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+        "build": {
+          "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+          "frontend_sha256": "41eb9b30c7c918f5c5203b53cae8579f31bb14929da7ea9eacd6561137c83a5a",
+          "dirty": true
+        },
+        "build_mode": "development",
+        "environment": {
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "viewport": [
+            632,
+            634,
+            632,
+            634,
+            1
+          ],
+          "refresh_hz": null
+        },
+        "view": {
+          "camera": {
+            "position": [
+              41.34675073076618,
+              17.229322817025047,
+              44.296800000000005
+            ],
+            "target": [
+              3.897150730766178,
+              2.249482817025043,
+              6.8472
+            ],
+            "up": [
+              -0.19245008972987532,
+              0.9622504486493764,
+              -0.19245008972987532
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "assembly": false,
+          "detail_level": 0,
+          "atomistic": "off",
+          "surface": "off",
+          "coloring": "strand"
+        },
+        "cache": "warm",
+        "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+        "simulation_content_verified": false,
+        "load_ms": null,
+        "selection_latency_ms": null,
+        "elapsed_ms": 3105.2000000001863,
+        "valid": true,
+        "invalid_reason": null,
+        "frame_intervals": {
+          "samples": 18,
+          "p50_ms": 160.29999999981374,
+          "p95_ms": 298.8999999994412,
+          "p99_ms": 298.8999999994412,
+          "worst_ms": 298.8999999994412,
+          "over_33ms": 18,
+          "over_50ms": 18,
+          "mean_fps": 5.797474877609211
+        },
+        "render_counts_last_frame": {
+          "calls": 77,
+          "triangles": 101432,
+          "points": 0,
+          "lines": 43,
+          "geometries": 24,
+          "textures": 12
+        },
+        "sampled_js_heap_peak_bytes": 188000000,
+        "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+        "gpu_memory_bytes": null,
+        "warmup": false
+      },
+      {
+        "schema": 1,
+        "instrumentation": "viewer-frame-capture-v1",
+        "run_id": "d109d49b-a865-4ec2-8f6e-666f9311a873",
+        "captured_at": "2026-09-20T20:26:00.385Z",
+        "variant": "B",
+        "scenario": "orbit",
+        "duration_requested_ms": 3000,
+        "fixture_sha256": "06a15b79b0d6774e2c976967258bb362c720d432bc1e6c2cb45999f575bebff7",
+        "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+        "build": {
+          "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+          "frontend_sha256": "41eb9b30c7c918f5c5203b53cae8579f31bb14929da7ea9eacd6561137c83a5a",
+          "dirty": true
+        },
+        "build_mode": "development",
+        "environment": {
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "viewport": [
+            632,
+            634,
+            632,
+            634,
+            1
+          ],
+          "refresh_hz": null
+        },
+        "view": {
+          "camera": {
+            "position": [
+              41.34675073076618,
+              17.229322817025047,
+              44.296800000000005
+            ],
+            "target": [
+              3.897150730766178,
+              2.249482817025043,
+              6.8472
+            ],
+            "up": [
+              -0.19245008972987532,
+              0.9622504486493764,
+              -0.19245008972987532
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "assembly": false,
+          "detail_level": 0,
+          "atomistic": "off",
+          "surface": "off",
+          "coloring": "strand"
+        },
+        "cache": "warm",
+        "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+        "simulation_content_verified": false,
+        "load_ms": null,
+        "selection_latency_ms": null,
+        "elapsed_ms": 3098.4000000003725,
+        "valid": true,
+        "invalid_reason": null,
+        "frame_intervals": {
+          "samples": 19,
+          "p50_ms": 153.29999999981374,
+          "p95_ms": 215.90000000037253,
+          "p99_ms": 215.90000000037253,
+          "worst_ms": 215.90000000037253,
+          "over_33ms": 19,
+          "over_50ms": 19,
+          "mean_fps": 6.132989025177534
+        },
+        "render_counts_last_frame": {
+          "calls": 77,
+          "triangles": 101432,
+          "points": 0,
+          "lines": 43,
+          "geometries": 24,
+          "textures": 12
+        },
+        "sampled_js_heap_peak_bytes": 188000000,
+        "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+        "gpu_memory_bytes": null,
+        "warmup": false
+      },
+      {
+        "schema": 1,
+        "instrumentation": "viewer-frame-capture-v1",
+        "run_id": "f1560420-16d2-47f3-912a-35f8edbe2307",
+        "captured_at": "2026-09-20T20:26:06.584Z",
+        "variant": "B",
+        "scenario": "orbit",
+        "duration_requested_ms": 3000,
+        "fixture_sha256": "06a15b79b0d6774e2c976967258bb362c720d432bc1e6c2cb45999f575bebff7",
+        "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+        "build": {
+          "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+          "frontend_sha256": "41eb9b30c7c918f5c5203b53cae8579f31bb14929da7ea9eacd6561137c83a5a",
+          "dirty": true
+        },
+        "build_mode": "development",
+        "environment": {
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "viewport": [
+            632,
+            634,
+            632,
+            634,
+            1
+          ],
+          "refresh_hz": null
+        },
+        "view": {
+          "camera": {
+            "position": [
+              41.34675073076618,
+              17.229322817025047,
+              44.296800000000005
+            ],
+            "target": [
+              3.897150730766178,
+              2.249482817025043,
+              6.8472
+            ],
+            "up": [
+              -0.19245008972987532,
+              0.9622504486493764,
+              -0.19245008972987532
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "assembly": false,
+          "detail_level": 0,
+          "atomistic": "off",
+          "surface": "off",
+          "coloring": "strand"
+        },
+        "cache": "warm",
+        "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+        "simulation_content_verified": false,
+        "load_ms": null,
+        "selection_latency_ms": null,
+        "elapsed_ms": 3023.4000000003725,
+        "valid": true,
+        "invalid_reason": null,
+        "frame_intervals": {
+          "samples": 20,
+          "p50_ms": 148.8999999994412,
+          "p95_ms": 180.70000000018626,
+          "p99_ms": 187,
+          "worst_ms": 187,
+          "over_33ms": 20,
+          "over_50ms": 20,
+          "mean_fps": 6.618133686300463
+        },
+        "render_counts_last_frame": {
+          "calls": 77,
+          "triangles": 101432,
+          "points": 0,
+          "lines": 43,
+          "geometries": 24,
+          "textures": 12
+        },
+        "sampled_js_heap_peak_bytes": 188000000,
+        "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+        "gpu_memory_bytes": null,
+        "warmup": false
+      },
+      {
+        "schema": 1,
+        "instrumentation": "viewer-frame-capture-v1",
+        "run_id": "62cf8a96-5115-4ae9-93af-48b652f3c25f",
+        "captured_at": "2026-09-20T20:26:12.612Z",
+        "variant": "B",
+        "scenario": "orbit",
+        "duration_requested_ms": 3000,
+        "fixture_sha256": "06a15b79b0d6774e2c976967258bb362c720d432bc1e6c2cb45999f575bebff7",
+        "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+        "build": {
+          "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+          "frontend_sha256": "41eb9b30c7c918f5c5203b53cae8579f31bb14929da7ea9eacd6561137c83a5a",
+          "dirty": true
+        },
+        "build_mode": "development",
+        "environment": {
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "viewport": [
+            632,
+            634,
+            632,
+            634,
+            1
+          ],
+          "refresh_hz": null
+        },
+        "view": {
+          "camera": {
+            "position": [
+              41.34675073076618,
+              17.229322817025047,
+              44.296800000000005
+            ],
+            "target": [
+              3.897150730766178,
+              2.249482817025043,
+              6.8472
+            ],
+            "up": [
+              -0.19245008972987532,
+              0.9622504486493764,
+              -0.19245008972987532
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "assembly": false,
+          "detail_level": 0,
+          "atomistic": "off",
+          "surface": "off",
+          "coloring": "strand"
+        },
+        "cache": "warm",
+        "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+        "simulation_content_verified": false,
+        "load_ms": null,
+        "selection_latency_ms": null,
+        "elapsed_ms": 3064.600000000559,
+        "valid": true,
+        "invalid_reason": null,
+        "frame_intervals": {
+          "samples": 21,
+          "p50_ms": 146.79999999981374,
+          "p95_ms": 160.6000000005588,
+          "p99_ms": 168.59999999962747,
+          "worst_ms": 168.59999999962747,
+          "over_33ms": 21,
+          "over_50ms": 21,
+          "mean_fps": 6.853562220552909
+        },
+        "render_counts_last_frame": {
+          "calls": 77,
+          "triangles": 101432,
+          "points": 0,
+          "lines": 43,
+          "geometries": 24,
+          "textures": 12
+        },
+        "sampled_js_heap_peak_bytes": 188000000,
+        "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+        "gpu_memory_bytes": null,
+        "warmup": false
+      },
+      {
+        "schema": 1,
+        "instrumentation": "viewer-frame-capture-v1",
+        "run_id": "811f0833-7436-4506-9eff-14ed25f05009",
+        "captured_at": "2026-09-20T20:26:18.584Z",
+        "variant": "B",
+        "scenario": "orbit",
+        "duration_requested_ms": 3000,
+        "fixture_sha256": "06a15b79b0d6774e2c976967258bb362c720d432bc1e6c2cb45999f575bebff7",
+        "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+        "build": {
+          "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+          "frontend_sha256": "41eb9b30c7c918f5c5203b53cae8579f31bb14929da7ea9eacd6561137c83a5a",
+          "dirty": true
+        },
+        "build_mode": "development",
+        "environment": {
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "viewport": [
+            632,
+            634,
+            632,
+            634,
+            1
+          ],
+          "refresh_hz": null
+        },
+        "view": {
+          "camera": {
+            "position": [
+              41.34675073076618,
+              17.229322817025047,
+              44.296800000000005
+            ],
+            "target": [
+              3.897150730766178,
+              2.249482817025043,
+              6.8472
+            ],
+            "up": [
+              -0.19245008972987532,
+              0.9622504486493764,
+              -0.19245008972987532
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "assembly": false,
+          "detail_level": 0,
+          "atomistic": "off",
+          "surface": "off",
+          "coloring": "strand"
+        },
+        "cache": "warm",
+        "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+        "simulation_content_verified": false,
+        "load_ms": null,
+        "selection_latency_ms": null,
+        "elapsed_ms": 3118.199999999255,
+        "valid": true,
+        "invalid_reason": null,
+        "frame_intervals": {
+          "samples": 12,
+          "p50_ms": 254.09999999962747,
+          "p95_ms": 347.90000000037253,
+          "p99_ms": 347.90000000037253,
+          "worst_ms": 347.90000000037253,
+          "over_33ms": 12,
+          "over_50ms": 12,
+          "mean_fps": 3.849979145946983
+        },
+        "render_counts_last_frame": {
+          "calls": 77,
+          "triangles": 101432,
+          "points": 0,
+          "lines": 43,
+          "geometries": 24,
+          "textures": 12
+        },
+        "sampled_js_heap_peak_bytes": 188000000,
+        "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+        "gpu_memory_bytes": null,
+        "warmup": false
+      }
+    ]
+  },
+  "comparison_eligible": false,
+  "reasons": [
+    "Runtime document hashes differ despite identical source file hash; canonical prepared-scene identity is not implemented yet.",
+    "Software renderer has high timing variability.",
+    "Runs were not interleaved and backend workspaces/background activity differed."
+  ]
+}

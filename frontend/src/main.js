@@ -1,4 +1,5 @@
 import { openProcessLog } from './ui/process_log.js'
+import { initViewerPerformance } from './perf/viewer_performance.js'
 import { initMdIonPaths } from './scene/md_ion_paths.js'
 /**
  * NADOC frontend entry point.
@@ -350,6 +351,7 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
+  initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel: () => designRenderer.getDetailLevel(), getFileOpen: () => _fileOpen })
   const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer })
   window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug
 

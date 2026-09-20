@@ -1,5 +1,7 @@
 import { resolve } from 'path'
 import { fileURLToPath } from 'url'
+import { frontendBuildInfo } from './build_info.js'
+import { viewerTestPlugin } from './viewer_test_server.js'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
@@ -9,6 +11,8 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const API_PORT = process.env.VITE_API_PORT || '8000'
 
 export default {
+  plugins: [viewerTestPlugin()],
+  define: { __NADOC_BUILD_INFO__: JSON.stringify(frontendBuildInfo(__dirname)) },
   server: {
     port: 5173,
     // Tailscale Serve forwards the original MagicDNS Host header. Keep the

@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "scope": "Static VoltronCoreArmV2 Full orbit on Windows Chrome / RTX 2080 SUPER; current decoder extraction only",
+  "primary": {
+    "A": {
+      "measured_runs": 5,
+      "fps_median": 42.337933688797754,
+      "p50_ms_median": 23.299999952316284,
+      "p95_ms_median": 26,
+      "p99_ms_median": 29.199999928474426,
+      "worst_ms": 64.39999997615814,
+      "total_frames": 4210,
+      "frames_over_33ms": 26,
+      "frames_over_50ms": 2,
+      "sampled_heap_peak_median_bytes": 792317681,
+      "sampled_heap_peak_max_bytes": 1097243378,
+      "file_load_ms_median": 5574.5,
+      "all_valid": true
+    },
+    "B": {
+      "measured_runs": 5,
+      "fps_median": 42.77583165496197,
+      "p50_ms_median": 22.90000009536743,
+      "p95_ms_median": 26.600000023841858,
+      "p99_ms_median": 29.300000071525574,
+      "worst_ms": 75.70000004768372,
+      "total_frames": 4243,
+      "frames_over_33ms": 61,
+      "frames_over_50ms": 3,
+      "sampled_heap_peak_median_bytes": 772388010,
+      "sampled_heap_peak_max_bytes": 1203572908,
+      "file_load_ms_median": 5641.800000071526,
+      "all_valid": true
+    }
+  },
+  "candidate_change_percent": {
+    "fps_median": 1.0342922481360484,
+    "p95_ms_median": 2.3076923993917697,
+    "p99_ms_median": 0.3424662441647186,
+    "file_load_ms_median": 1.207283165692452,
+    "sampled_heap_peak_median_bytes": -2.515363657522618,
+    "sampled_heap_peak_max_bytes": 9.690605760939942
+  },
+  "confirmation_separate": {
+    "A": {
+      "measured_runs": 1,
+      "fps_median": 44.015008068637904,
+      "p50_ms_median": 22.299999952316284,
+      "p95_ms_median": 25.600000023841858,
+      "p99_ms_median": 30.100000023841858,
+      "worst_ms": 42.5,
+      "total_frames": 881,
+      "frames_over_33ms": 5,
+      "frames_over_50ms": 0,
+      "sampled_heap_peak_median_bytes": 691384726,
+      "sampled_heap_peak_max_bytes": 691384726,
+      "file_load_ms_median": 5651.199999928474,
+      "all_valid": true
+    },
+    "B": {
+      "measured_runs": 1,
+      "fps_median": 42.78395601649382,
+      "p50_ms_median": 22.800000071525574,
+      "p95_ms_median": 26.100000023841858,
+      "p99_ms_median": 38.09999990463257,
+      "worst_ms": 51.199999928474426,
+      "total_frames": 856,
+      "frames_over_33ms": 13,
+      "frames_over_50ms": 1,
+      "sampled_heap_peak_median_bytes": 554872191,
+      "sampled_heap_peak_max_bytes": 554872191,
+      "file_load_ms_median": 5558.899999976158,
+      "all_valid": true
+    }
+  },
+  "verdict": "No material typical-performance regression observed; current static checkpoint passes initial gates. Candidate tail spikes remain recorded; no meeting/trajectory/Zoom verdict.",
+  "primary_order": "ABBAABBAAB",
+  "confirmation_order": "BA",
+  "identical_canvas_pngs": 24,
+  "canvas_sha256": "08904acfd9eb78eeb90176d0db405b1363f843456e2fd0b7912485fe565c2355",
+  "editor_restored": true
+}

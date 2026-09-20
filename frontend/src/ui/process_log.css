@@ -19,3 +19,7 @@
 #process-log th:nth-child(3) { width: 90px; }
 #process-log th:last-child { width: 120px; }
 #process-log td:nth-child(2) { overflow-wrap: anywhere; }
+#process-log .viewer-performance-controls { flex-shrink: 0; border-top: 1px solid #697080; padding-top: 8px; margin-top: 8px; }
+#process-log .viewer-performance-controls summary { cursor: pointer; }
+#process-log .viewer-performance-controls textarea { display: block; box-sizing: border-box; width: 100%; background: #171a20; color: #ddd; }
+#process-log .viewer-performance-controls input { width: 60px; }

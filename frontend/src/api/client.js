@@ -1,3 +1,4 @@
+import { expandCompactNucleotides as _expandCompactNucleotides, decodeAssemblyGeometry } from '../viewer/geometry_codec.js'
 import { recordPanelRequest } from '../ui/panel_loading.js'
 import { recordRequestDiagnostic } from '../perf/process_log.js'
 /**
@@ -727,38 +728,7 @@ async function _applyDesignResponse(json, {
   // to parse on big designs. Re-materialise into the flat nuc list the
   // renderer expects so downstream code paths don't change.
   if (!json.nucleotides && json.nucleotides_compact) {
-    const flat = []
-    const compact = json.nucleotides_compact
-    for (const helixId of Object.keys(compact)) {
-      const byDir = compact[helixId]
-      for (const dir of Object.keys(byDir)) {
-        const b = byDir[dir]
-        if (!b || !Array.isArray(b.bp)) continue
-        const M = b.bp.length
-        for (let i = 0; i < M; i++) {
-          flat.push({
-            helix_id:          helixId,
-            bp_index:          b.bp[i],
-            direction:         dir,
-            backbone_position: b.bb[i],
-            base_position:     b.bs[i],
-            base_normal:       b.bn[i],
-            axis_tangent:      b.at[i],
-            strand_id:         b.sid?.[i] ?? null,
-            strand_type:       b.stype?.[i] ?? null,
-            is_five_prime:     !!b.is5?.[i],
-            is_three_prime:    !!b.is3?.[i],
-            domain_index:      b.did?.[i] ?? 0,
-            overhang_id:       b.ohid?.[i] ?? null,
-            extension_id:      b.extid?.[i] ?? null,
-            is_modification:   !!b.ismod?.[i],
-            modification:      b.mod?.[i] ?? null,
-            nucleobase:        b.base?.[i] ?? null,
-          })
-        }
-      }
-    }
-    json.nucleotides = flat
+    json.nucleotides = _expandCompactNucleotides(json.nucleotides_compact)
   }
   if (json.nucleotides) {
     // Geometry is embedded in the response — apply design + geometry in one
@@ -4653,50 +4623,8 @@ export async function getInstanceDesign(id) {
   return _request('GET', `/assembly/instances/${id}/design`)
 }
 
-/**
- * Re-materialise the COMPACT per-helix-per-direction parallel-array form
- * shipped by the backend (`nucleotides_compact`) into the flat per-nuc
- * dict list the renderer pipeline expects. Mirrors the decoder used in
- * _syncFromDesignResponse above; kept module-local so both the main
- * design path and the assembly geometry path share one implementation.
- *
- * @param {object} compact - { helixId: { direction: { bp:[], bb:[], ... } } }
- * @returns {Array} flat list of nucleotide dicts
- */
-export function _expandCompactNucleotides(compact) {
-  const flat = []
-  if (!compact) return flat
-  for (const helixId of Object.keys(compact)) {
-    const byDir = compact[helixId]
-    for (const dir of Object.keys(byDir)) {
-      const b = byDir[dir]
-      if (!b || !Array.isArray(b.bp)) continue
-      const M = b.bp.length
-      for (let i = 0; i < M; i++) {
-        flat.push({
-          helix_id:          helixId,
-          bp_index:          b.bp[i],
-          direction:         dir,
-          backbone_position: b.bb[i],
-          base_position:     b.bs[i],
-          base_normal:       b.bn[i],
-          axis_tangent:      b.at[i],
-          strand_id:         b.sid?.[i] ?? null,
-          strand_type:       b.stype?.[i] ?? null,
-          is_five_prime:     !!b.is5?.[i],
-          is_three_prime:    !!b.is3?.[i],
-          domain_index:      b.did?.[i] ?? 0,
-          overhang_id:       b.ohid?.[i] ?? null,
-          extension_id:      b.extid?.[i] ?? null,
-          is_modification:   !!b.ismod?.[i],
-          modification:      b.mod?.[i] ?? null,
-          nucleobase:        b.base?.[i] ?? null,
-        })
-      }
-    }
-  }
-  return flat
-}
+// Compatibility export; the decoder is shared with prepared viewer packages.
+export { expandCompactNucleotides as _expandCompactNucleotides } from '../viewer/geometry_codec.js'
 
 export async function getInstanceGeometry(id) {
   const json = await _request('GET', `/assembly/instances/${id}/geometry${geometryQuerySuffix(false)}`)
@@ -4757,30 +4685,7 @@ export async function getAssemblyGeometry() {
   if (!json) return json
   if (!json.sources) return json  // pre-Phase-3 shape passthrough (legacy)
 
-  // Decode each source's compact form once; shared across all referencing
-  // instances. The arrays inside are the same JS objects in every entry.
-  const decoded = {}
-  for (const [srcKey, src] of Object.entries(json.sources)) {
-    decoded[srcKey] = {
-      nucleotides: src.nucleotides_compact
-        ? _expandCompactNucleotides(src.nucleotides_compact)
-        : (src.nucleotides ?? []),
-      helix_axes:  src.helix_axes,
-      design:      src.design,
-    }
-  }
-
-  const instances = {}
-  for (const [instId, srcKey] of Object.entries(json.instances || {})) {
-    const src = decoded[srcKey]
-    instances[instId] = src
-      ? { nucleotides: src.nucleotides, helix_axes: src.helix_axes, design: src.design }
-      : { error: `unknown source key ${srcKey}` }
-  }
-  for (const [instId, msg] of Object.entries(json.errors || {})) {
-    instances[instId] = { error: msg }
-  }
-  return { instances }
+  return decodeAssemblyGeometry(json)
 }
 
 export async function saveAssemblyToWorkspace(filename) {

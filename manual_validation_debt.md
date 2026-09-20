@@ -314,3 +314,32 @@ past the coordinate-cache budget; inspect heap/GPU memory and representation swi
 array accounting, eviction, and precision have unit regressions, but no large-trajectory browser
 memory measurement was performed. Preserve exact requested frames and allow one foreground
 page when it alone exceeds the budget. See `docs/maintenance_2026_09.md`.
+
+## MV-VIEWER-PERF — PARTIAL (2026-09-20)
+
+Static Full Voltron production A/B is complete: five measured runs per build on the
+user's RTX 2080 SUPER, plus a separate BA confirmation. Initial gates pass;
+median FPS 42.34/42.78, p95 26.0/26.6 ms, identical restored overview screenshots,
+and restored controls. Tail spikes are retained in the audit. See
+`docs/audits/viewer_ab_production_20260920/README.md`.
+
+For subsequent extraction checkpoints, use Help → Open Log → Performance
+comparison with VoltronCoreArmV2. Capture one warmup and five 20-second orbits per
+variant, then paste Copy latest metrics records. Verify camera/controls restore,
+protein/nanoparticle visibility, and that changing tabs/viewport invalidates a run.
+Use cube_pore for separately labeled Full/atomistic recorded-playback captures;
+do not start simulations. Automated browser capture and teardown checks do not
+replace real-device timing or visual acceptance. See `docs/viewer_performance_manual.md`.
+<!-- Viewer bridge: local API automation reuses the manual frame capture. -->
+
+### MV-VIEWER-BRIDGE — real-device evidence and visual acceptance
+
+Local development bridge and controller can inspect the connected browser, open
+native parts/assemblies using the standard file lifecycle, capture repeated orbits, and retrieve
+canvas PNGs outside timing. Unit and actual-app checks cover command isolation,
+stale-build rejection, pixel availability, and controls restoration. Manual visual
+review of Voltron's protein/nanoparticle and cube_pore's trajectory-specific content
+remains required; screenshots do not prove scientific or assembly-asset parity.
+Static production-build measurements now pass; browser/OS matrix, standalone
+viewer and live meeting measurements remain pending. See
+`docs/viewer_performance_manual.md` for reproducible commands and retained evidence.

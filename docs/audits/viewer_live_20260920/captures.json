@@ -1,0 +1,661 @@
+{
+  "schema": 1,
+  "session": "4970b5ca-88df-466a-a68b-4519b842c1e0",
+  "created_at": "2026-09-20T21:29:01.184Z",
+  "runs": [
+    {
+      "id": "af8e2bb7-f88a-44fc-9f44-7b60c2b990e5",
+      "session": "4970b5ca-88df-466a-a68b-4519b842c1e0",
+      "action": "capture",
+      "options": {
+        "durationMs": 20000,
+        "variant": "B",
+        "scenario": "orbit"
+      },
+      "status": "completed",
+      "requested_at": "2026-09-20T21:29:02.491Z",
+      "verified_build": {
+        "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+        "branch": "feature/standalone-viewer-presentations",
+        "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+        "source_hash_scope": "frontend files at Vite startup/build",
+        "dirty": true
+      },
+      "result": {
+        "metrics": {
+          "schema": 1,
+          "instrumentation": "viewer-frame-capture-v1",
+          "run_id": "afec0e29-6f51-42ba-b1e6-d76c345109d6",
+          "captured_at": "2026-09-20T21:29:02.780Z",
+          "variant": "B",
+          "scenario": "orbit",
+          "duration_requested_ms": 20000,
+          "fixture_sha256": "7afd7103269830f4bf25a5ccd93551b664c6e4e123b3f250e215ce30d7f46561",
+          "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+          "build": {
+            "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+            "branch": "feature/standalone-viewer-presentations",
+            "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+            "source_hash_scope": "frontend files at Vite startup/build",
+            "dirty": true
+          },
+          "build_mode": "development",
+          "environment": {
+            "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 2080 SUPER (0x00001E81) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+            "viewport": [
+              927,
+              833,
+              927,
+              833,
+              1
+            ],
+            "refresh_hz": null
+          },
+          "view": {
+            "camera": {
+              "position": [
+                29.558196138231196,
+                38.83954855657235,
+                -309.8592290071506
+              ],
+              "target": [
+                -0.330902850548803,
+                -4.5,
+                214.0942
+              ],
+              "up": [
+                -0.004687324090718795,
+                0.9966074365294444,
+                0.0821684029726646
+              ],
+              "fov": 55,
+              "orbitMode": "multiscale"
+            },
+            "assembly": false,
+            "detail_level": 0,
+            "atomistic": "off",
+            "surface": "off",
+            "coloring": "strand"
+          },
+          "cache": "warm",
+          "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+          "simulation_content_verified": false,
+          "load_ms": null,
+          "selection_latency_ms": null,
+          "elapsed_ms": 20021.399999976158,
+          "valid": true,
+          "invalid_reason": null,
+          "frame_intervals": {
+            "samples": 791,
+            "p50_ms": 24.800000071525574,
+            "p95_ms": 28.799999952316284,
+            "p99_ms": 32.200000047683716,
+            "worst_ms": 66.69999992847443,
+            "over_33ms": 5,
+            "over_50ms": 1,
+            "mean_fps": 39.511871044300946
+          },
+          "render_counts_last_frame": {
+            "calls": 2677,
+            "triangles": 6069870,
+            "points": 0,
+            "lines": 30503,
+            "geometries": 1711,
+            "textures": 195
+          },
+          "sampled_js_heap_peak_bytes": 950775170,
+          "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+          "gpu_memory_bytes": null
+        },
+        "after": {
+          "build": {
+            "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+            "branch": "feature/standalone-viewer-presentations",
+            "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+            "source_hash_scope": "frontend files at Vite startup/build",
+            "dirty": true
+          },
+          "default_variant": "B",
+          "visible": true,
+          "busy": false,
+          "url": "http://127.0.0.1:5173/?doc=5dc1546173e64baca8032ab52fda1d19",
+          "design": {
+            "id": "72bc167b-d5f4-44b8-8a25-0ea709fccaa3",
+            "name": "VoltronCoreArmV2"
+          },
+          "camera": {
+            "position": [
+              29.558196138231196,
+              38.83954855657235,
+              -309.8592290071506
+            ],
+            "target": [
+              -0.330902850548803,
+              -4.5,
+              214.0942
+            ],
+            "up": [
+              -0.004687324090718795,
+              0.9966074365294444,
+              0.0821684029726646
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "viewport": [
+            927,
+            833,
+            927,
+            833,
+            1
+          ],
+          "settings": {
+            "assembly": false,
+            "detail_level": 0,
+            "atomistic": "off",
+            "surface": "off",
+            "coloring": "strand"
+          },
+          "controls_enabled": true,
+          "process_log_open": false,
+          "render_counts": {
+            "frame": 3893,
+            "calls": 2677,
+            "triangles": 6069870,
+            "points": 0,
+            "lines": 30503
+          },
+          "resources": {
+            "geometries": 1711,
+            "textures": 195
+          },
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
+        }
+      },
+      "finished_at": "2026-09-20T21:29:22.847Z",
+      "warmup": true
+    },
+    {
+      "id": "bcbf4553-45f0-4225-a9d1-df530778091a",
+      "session": "4970b5ca-88df-466a-a68b-4519b842c1e0",
+      "action": "capture",
+      "options": {
+        "durationMs": 20000,
+        "variant": "B",
+        "scenario": "orbit"
+      },
+      "status": "completed",
+      "requested_at": "2026-09-20T21:29:24.660Z",
+      "verified_build": {
+        "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+        "branch": "feature/standalone-viewer-presentations",
+        "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+        "source_hash_scope": "frontend files at Vite startup/build",
+        "dirty": true
+      },
+      "result": {
+        "metrics": {
+          "schema": 1,
+          "instrumentation": "viewer-frame-capture-v1",
+          "run_id": "a1a0e318-bea5-4172-bd4c-40dfd1d1361f",
+          "captured_at": "2026-09-20T21:29:24.934Z",
+          "variant": "B",
+          "scenario": "orbit",
+          "duration_requested_ms": 20000,
+          "fixture_sha256": "7afd7103269830f4bf25a5ccd93551b664c6e4e123b3f250e215ce30d7f46561",
+          "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+          "build": {
+            "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+            "branch": "feature/standalone-viewer-presentations",
+            "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+            "source_hash_scope": "frontend files at Vite startup/build",
+            "dirty": true
+          },
+          "build_mode": "development",
+          "environment": {
+            "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 2080 SUPER (0x00001E81) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+            "viewport": [
+              927,
+              833,
+              927,
+              833,
+              1
+            ],
+            "refresh_hz": null
+          },
+          "view": {
+            "camera": {
+              "position": [
+                29.558196138231196,
+                38.83954855657235,
+                -309.8592290071506
+              ],
+              "target": [
+                -0.330902850548803,
+                -4.5,
+                214.0942
+              ],
+              "up": [
+                -0.004687324090718795,
+                0.9966074365294444,
+                0.0821684029726646
+              ],
+              "fov": 55,
+              "orbitMode": "multiscale"
+            },
+            "assembly": false,
+            "detail_level": 0,
+            "atomistic": "off",
+            "surface": "off",
+            "coloring": "strand"
+          },
+          "cache": "warm",
+          "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+          "simulation_content_verified": false,
+          "load_ms": null,
+          "selection_latency_ms": null,
+          "elapsed_ms": 20006.899999976158,
+          "valid": true,
+          "invalid_reason": null,
+          "frame_intervals": {
+            "samples": 778,
+            "p50_ms": 24.899999976158142,
+            "p95_ms": 29.899999976158142,
+            "p99_ms": 40.10000002384186,
+            "worst_ms": 53.800000071525574,
+            "over_33ms": 18,
+            "over_50ms": 2,
+            "mean_fps": 38.89027743064234
+          },
+          "render_counts_last_frame": {
+            "calls": 2677,
+            "triangles": 6069870,
+            "points": 0,
+            "lines": 30503,
+            "geometries": 1711,
+            "textures": 195
+          },
+          "sampled_js_heap_peak_bytes": 943072137,
+          "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+          "gpu_memory_bytes": null
+        },
+        "after": {
+          "build": {
+            "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+            "branch": "feature/standalone-viewer-presentations",
+            "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+            "source_hash_scope": "frontend files at Vite startup/build",
+            "dirty": true
+          },
+          "default_variant": "B",
+          "visible": true,
+          "busy": false,
+          "url": "http://127.0.0.1:5173/?doc=5dc1546173e64baca8032ab52fda1d19",
+          "design": {
+            "id": "72bc167b-d5f4-44b8-8a25-0ea709fccaa3",
+            "name": "VoltronCoreArmV2"
+          },
+          "camera": {
+            "position": [
+              29.558196138231196,
+              38.83954855657235,
+              -309.8592290071506
+            ],
+            "target": [
+              -0.330902850548803,
+              -4.5,
+              214.0942
+            ],
+            "up": [
+              -0.004687324090718795,
+              0.9966074365294444,
+              0.0821684029726646
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "viewport": [
+            927,
+            833,
+            927,
+            833,
+            1
+          ],
+          "settings": {
+            "assembly": false,
+            "detail_level": 0,
+            "atomistic": "off",
+            "surface": "off",
+            "coloring": "strand"
+          },
+          "controls_enabled": true,
+          "process_log_open": false,
+          "render_counts": {
+            "frame": 4755,
+            "calls": 2677,
+            "triangles": 6069870,
+            "points": 0,
+            "lines": 30503
+          },
+          "resources": {
+            "geometries": 1711,
+            "textures": 195
+          },
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
+        }
+      },
+      "finished_at": "2026-09-20T21:29:44.963Z",
+      "warmup": false
+    },
+    {
+      "id": "e299a18e-5213-45ed-b0b2-b30f28ed2699",
+      "session": "4970b5ca-88df-466a-a68b-4519b842c1e0",
+      "action": "capture",
+      "options": {
+        "durationMs": 20000,
+        "variant": "B",
+        "scenario": "orbit"
+      },
+      "status": "completed",
+      "requested_at": "2026-09-20T21:29:46.825Z",
+      "verified_build": {
+        "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+        "branch": "feature/standalone-viewer-presentations",
+        "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+        "source_hash_scope": "frontend files at Vite startup/build",
+        "dirty": true
+      },
+      "result": {
+        "metrics": {
+          "schema": 1,
+          "instrumentation": "viewer-frame-capture-v1",
+          "run_id": "f13c5d35-969d-4cc0-b4e1-bad63bb20e50",
+          "captured_at": "2026-09-20T21:29:47.120Z",
+          "variant": "B",
+          "scenario": "orbit",
+          "duration_requested_ms": 20000,
+          "fixture_sha256": "7afd7103269830f4bf25a5ccd93551b664c6e4e123b3f250e215ce30d7f46561",
+          "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+          "build": {
+            "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+            "branch": "feature/standalone-viewer-presentations",
+            "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+            "source_hash_scope": "frontend files at Vite startup/build",
+            "dirty": true
+          },
+          "build_mode": "development",
+          "environment": {
+            "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 2080 SUPER (0x00001E81) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+            "viewport": [
+              927,
+              833,
+              927,
+              833,
+              1
+            ],
+            "refresh_hz": null
+          },
+          "view": {
+            "camera": {
+              "position": [
+                29.558196138231196,
+                38.83954855657235,
+                -309.8592290071506
+              ],
+              "target": [
+                -0.330902850548803,
+                -4.5,
+                214.0942
+              ],
+              "up": [
+                -0.004687324090718795,
+                0.9966074365294444,
+                0.0821684029726646
+              ],
+              "fov": 55,
+              "orbitMode": "multiscale"
+            },
+            "assembly": false,
+            "detail_level": 0,
+            "atomistic": "off",
+            "surface": "off",
+            "coloring": "strand"
+          },
+          "cache": "warm",
+          "measurement": "render-loop frame intervals; previous render-pass counts; not GPU duration",
+          "simulation_content_verified": false,
+          "load_ms": null,
+          "selection_latency_ms": null,
+          "elapsed_ms": 18410,
+          "valid": false,
+          "invalid_reason": "Design or assembly changed",
+          "frame_intervals": {
+            "samples": 638,
+            "p50_ms": 25.5,
+            "p95_ms": 33,
+            "p99_ms": 39.700000047683716,
+            "worst_ms": 61.60000002384186,
+            "over_33ms": 29,
+            "over_50ms": 1,
+            "mean_fps": 37.676794519738976
+          },
+          "render_counts_last_frame": {
+            "calls": 2677,
+            "triangles": 6069870,
+            "points": 0,
+            "lines": 30503,
+            "geometries": 1711,
+            "textures": 195
+          },
+          "sampled_js_heap_peak_bytes": 921467216,
+          "heap_method": "performance.memory.usedJSHeapSize (sampled, approximate)",
+          "gpu_memory_bytes": null
+        },
+        "after": {
+          "build": {
+            "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+            "branch": "feature/standalone-viewer-presentations",
+            "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+            "source_hash_scope": "frontend files at Vite startup/build",
+            "dirty": true
+          },
+          "default_variant": "B",
+          "visible": true,
+          "busy": false,
+          "url": "http://127.0.0.1:5173/?doc=5dc1546173e64baca8032ab52fda1d19",
+          "design": {
+            "id": "72bc167b-d5f4-44b8-8a25-0ea709fccaa3",
+            "name": "VoltronCoreArmV2"
+          },
+          "camera": {
+            "position": [
+              29.558196138231196,
+              38.83954855657235,
+              -309.8592290071506
+            ],
+            "target": [
+              -0.330902850548803,
+              -4.5,
+              214.0942
+            ],
+            "up": [
+              -0.004687324090718795,
+              0.9966074365294444,
+              0.0821684029726646
+            ],
+            "fov": 55,
+            "orbitMode": "multiscale"
+          },
+          "viewport": [
+            927,
+            833,
+            927,
+            833,
+            1
+          ],
+          "settings": {
+            "assembly": false,
+            "detail_level": 0,
+            "atomistic": "off",
+            "surface": "off",
+            "coloring": "strand"
+          },
+          "controls_enabled": true,
+          "process_log_open": false,
+          "render_counts": {
+            "frame": 5479,
+            "calls": 2677,
+            "triangles": 6069870,
+            "points": 0,
+            "lines": 30503
+          },
+          "resources": {
+            "geometries": 1711,
+            "textures": 195
+          },
+          "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
+        }
+      },
+      "finished_at": "2026-09-20T21:30:05.710Z",
+      "warmup": false
+    }
+  ],
+  "before": {
+    "build": {
+      "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+      "branch": "feature/standalone-viewer-presentations",
+      "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+      "source_hash_scope": "frontend files at Vite startup/build",
+      "dirty": true
+    },
+    "default_variant": "B",
+    "visible": true,
+    "busy": false,
+    "url": "http://127.0.0.1:5173/?doc=5dc1546173e64baca8032ab52fda1d19",
+    "design": {
+      "id": "72bc167b-d5f4-44b8-8a25-0ea709fccaa3",
+      "name": "VoltronCoreArmV2"
+    },
+    "camera": {
+      "position": [
+        29.558196138231196,
+        38.83954855657235,
+        -309.8592290071506
+      ],
+      "target": [
+        -0.330902850548803,
+        -4.5,
+        214.0942
+      ],
+      "up": [
+        -0.004687324090718795,
+        0.9966074365294444,
+        0.0821684029726646
+      ],
+      "fov": 55,
+      "orbitMode": "multiscale"
+    },
+    "viewport": [
+      927,
+      833,
+      927,
+      833,
+      1
+    ],
+    "settings": {
+      "assembly": false,
+      "detail_level": 0,
+      "atomistic": "off",
+      "surface": "off",
+      "coloring": "strand"
+    },
+    "controls_enabled": true,
+    "process_log_open": false,
+    "render_counts": {
+      "frame": 3050,
+      "calls": 2677,
+      "triangles": 6069870,
+      "points": 0,
+      "lines": 30503
+    },
+    "resources": {
+      "geometries": 1711,
+      "textures": 195
+    },
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
+  },
+  "snapshot_before": {
+    "width": 927,
+    "height": 833,
+    "status": {
+      "build": {
+        "commit": "cce80858ff528a2648cba3f18351685f75dc673c",
+        "branch": "feature/standalone-viewer-presentations",
+        "frontend_sha256": "0fc46aeb32d951710d024635b4a80befe3e7297c04d6014bf4ebe257ad8c2ee2",
+        "source_hash_scope": "frontend files at Vite startup/build",
+        "dirty": true
+      },
+      "default_variant": "B",
+      "visible": true,
+      "busy": false,
+      "url": "http://127.0.0.1:5173/?doc=5dc1546173e64baca8032ab52fda1d19",
+      "design": {
+        "id": "72bc167b-d5f4-44b8-8a25-0ea709fccaa3",
+        "name": "VoltronCoreArmV2"
+      },
+      "camera": {
+        "position": [
+          29.558196138231196,
+          38.83954855657235,
+          -309.8592290071506
+        ],
+        "target": [
+          -0.330902850548803,
+          -4.5,
+          214.0942
+        ],
+        "up": [
+          -0.004687324090718795,
+          0.9966074365294444,
+          0.0821684029726646
+        ],
+        "fov": 55,
+        "orbitMode": "multiscale"
+      },
+      "viewport": [
+        927,
+        833,
+        927,
+        833,
+        1
+      ],
+      "settings": {
+        "assembly": false,
+        "detail_level": 0,
+        "atomistic": "off",
+        "surface": "off",
+        "coloring": "strand"
+      },
+      "controls_enabled": true,
+      "process_log_open": false,
+      "render_counts": {
+        "frame": 3076,
+        "calls": 2677,
+        "triangles": 6069870,
+        "points": 0,
+        "lines": 30503
+      },
+      "resources": {
+        "geometries": 1711,
+        "textures": 195
+      },
+      "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
+    },
+    "scope": "Viewer canvas only; captured outside timing; visual review required",
+    "file": "before.png"
+  },
+  "error": "Design or assembly changed"
+}

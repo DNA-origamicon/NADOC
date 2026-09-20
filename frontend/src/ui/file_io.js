@@ -252,6 +252,7 @@ export function initFileOpen({
         revealWorkspaceForEmptyPart()
         fitToView()
         await flShowSuccess('Part loaded successfully')
+        return true
       } else {
         const err = store.getState().lastError
         flAppendLog(`Import failed: ${err?.message ?? 'unknown error'}`, 'error')
@@ -262,6 +263,7 @@ export function initFileOpen({
       flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
       flShowError('Could not load part.')
     }
+    return false
   }
 
   async function openAssemblyFromServer(path) {
@@ -358,12 +360,14 @@ export function initFileOpen({
         flAppendLog('All parts loaded successfully.', 'success')
         await flShowSuccess('Assembly loaded successfully')
       }
+      return !_hasInstanceErrors
     } catch (e) {
       setAssemblyLoadOnProgress(null)
       setAssemblyLoadSettle(null)
       flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
       flShowError('Could not load assembly.')
     }
+    return false
   }
 
   return { openPartFromServer, openAssemblyFromServer }

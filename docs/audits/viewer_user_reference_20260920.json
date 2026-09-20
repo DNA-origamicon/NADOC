@@ -1,0 +1,33 @@
+{
+  "provenance": "User-pasted manual capture on 2026-09-20. Original A label preserved; not verified as the frozen pre-refactor worktree. Development source hash is computed at Vite startup and can become stale after edits. Treat as a hardware reference, not an A/B verdict.",
+  "record": {
+    "schema": 1,
+    "instrumentation": "viewer-frame-capture-v1",
+    "run_id": "b833a908-b5db-4643-98cc-e536df601010",
+    "captured_at": "2026-09-20T20:26:56.165Z",
+    "variant": "A",
+    "scenario": "orbit",
+    "duration_requested_ms": 20000,
+    "fixture_sha256": "7afd7103269830f4bf25a5ccd93551b664c6e4e123b3f250e215ce30d7f46561",
+    "fixture_hash_kind": "JSON design/assembly document; not simulation content",
+    "build": {"commit":"cce80858ff528a2648cba3f18351685f75dc673c","frontend_sha256":"626fca6a224f9768ad8a370924af1e4aa63f4c3ede69913cb24b41c971d05f27","dirty":true},
+    "build_mode": "development",
+    "environment": {
+      "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 2080 SUPER (0x00001E81) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "viewport": [1567,1193,1567,1193,1], "refresh_hz": null
+    },
+    "view": {
+      "camera": {"position":[29.558196138231196,38.83954855657235,-309.8592290071506],"target":[-0.330902850548803,-4.5,214.0942],"up":[-0.004687324090718795,0.9966074365294444,0.0821684029726646],"fov":55,"orbitMode":"multiscale"},
+      "assembly":false,"detail_level":0,"atomistic":"off","surface":"off","coloring":"strand"
+    },
+    "cache":"warm",
+    "measurement":"render-loop frame intervals; previous render-pass counts; not GPU duration",
+    "simulation_content_verified":false,"load_ms":null,"selection_latency_ms":null,
+    "elapsed_ms":20020.200000047684,"valid":true,"invalid_reason":null,
+    "frame_intervals":{"samples":500,"p50_ms":39.59999990463257,"p95_ms":46.5,"p99_ms":49.700000047683716,"worst_ms":66.60000002384186,"over_33ms":490,"over_50ms":5,"mean_fps":24.98188813110495},
+    "render_counts_last_frame":{"calls":2677,"triangles":6069870,"points":0,"lines":30503,"geometries":1711,"textures":195},
+    "sampled_js_heap_peak_bytes":533742405,
+    "heap_method":"performance.memory.usedJSHeapSize (sampled, approximate)","gpu_memory_bytes":null
+  }
+}
