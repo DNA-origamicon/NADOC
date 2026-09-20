@@ -224,3 +224,6 @@ experiments/exp46_xb_placement/*_xb_traj.json
 
 # Regenerable recorded PEG viewer frames; export with experiments.peg_chudoba.export_viewer
 /frontend/public/peg-trajectories/
+
+# Local retained development evidence; kept outside the user workspace.
+/.development-artifacts

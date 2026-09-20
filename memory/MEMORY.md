@@ -12,6 +12,12 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 
 ## Read first when relevant
 
+- [CPD strand builder](project_cpd_strand_builder.md) — preliminary additive cis-syn support, packaged assets, scope and verification.
+
+- [Long-job completion and wakeups](feedback_long_job_completion.md) — event-driven completion, estimated deadlines, and acknowledged agent delivery.
+
+- [Development artifact cleanup](feedback_development_artifact_cleanup.md) — temporary work is deleted; retained evidence belongs in `.development-artifacts/`, outside the user workspace.
+
 - **[LESSONS](LESSONS.md)** — anti-patterns index; open only the matching entry.
 - **[REFERENCE_DNA_TOPOLOGY](REFERENCE_DNA_TOPOLOGY.md)** — strand/scaffold/polarity rules. Always.
 - **[architecture_decisions](architecture_decisions.md)** — binding laws (DTP-PMD-1/2). Don't drift without sign-off.

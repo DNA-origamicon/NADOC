@@ -1,0 +1,40 @@
+{
+  "schema": "nadoc.cpd-preliminary-review.v1",
+  "decision": "accepted",
+  "product_id": "tt-cpd-cis-syn",
+  "forcefield": "CHARMM36-additive",
+  "version": "cis-syn-joint-v6",
+  "basis": "User accepted bounded local/native stability qualification for preliminary research; full release gates remain pending.",
+  "asset_hashes": {
+    "topology": "335a0ba26dc268805aa3e13f4ce4dea760375a462197adac3af32394e5496e27",
+    "parameters": "524893cd4c553ed6e21c459d6957aa74ff4b77108a2f3651b81110f557fa34f9",
+    "coordinate_template": "cfb5cd66b05f210b8e6f5e95478373ad169d9de3dfbfcff91a2b0c9fe908c0d6",
+    "topology_audit_spec": "2c5c1020da541eff5d552a13427e7fdaf063549add504d969f4beb82d7525913"
+  },
+  "limitations": [
+    "Preliminary additive research use only; no Drude qualification.",
+    "Adjacent internal TT on one strand; no termini, interstrand or other stereoisomers.",
+    "Local placement, complete topology and native startup must pass for each new design.",
+    "No claim of converged lesion-opening populations or quantitative free energies.",
+    "One of three overnight CPD replicas opened a lesion base pair; independent glycosidic energetics remain unresolved.",
+    "At most 2 fs with ordinary masses; no HMR."
+  ],
+  "evidence": [
+    {
+      "path": "final_audit.json",
+      "sha256": "19584bcc2f5c602c5406c7de0da9f3ebdda411832e52951ae494405afd2d6f8f"
+    },
+    {
+      "path": "completion_review.md",
+      "sha256": "ac5f11241c4d584d79e0a9677ccc6a3991ca0f1394bbc53cef9e855d15a8e420"
+    },
+    {
+      "path": "overnight_review_audit.json",
+      "sha256": "d5d5a75a4ebd0b9c577d653382c7c37761bdf3d8fc903f16b4eeed20f3636385"
+    },
+    {
+      "path": "native_check.json",
+      "sha256": "5140efcea5e62a25fc68fc33189ccd0c8d3684b1c01ca3eaad1d628a19616304"
+    }
+  ]
+}

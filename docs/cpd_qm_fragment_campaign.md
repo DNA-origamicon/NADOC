@@ -1,5 +1,9 @@
 # TT-CPD local fragment QM campaign
 
+## September 16 sugar-identity correction
+
+The archived anti primary endpoint fragments inherited inverted sugar centers from their UFF boundary seed. Their optimization-continuity and frequency passes do not establish native deoxyribose identity. Endpoint 1 differs at C3' and endpoint 2 at C1', C3', C4'; both syn primary fragments preserve source sugar handedness. See `.development-artifacts/cpd-primary-fragment-sugar-reaudit-v1/input_invalidation.json` and `experiments/cpd_drude_recovery/README.md`. Anti boundary geometries/Hessians remain archived but are not valid native-sugar transfer references. The earlier checkpoint statements below are retained as history.
+
 ## Decision
 
 The routine TT-CPD parameterization target is no longer a separately optimized,
@@ -916,3 +920,18 @@ It is suitable for fragment-level engine checks only. Scientific NAMD validation
 requires P3 passage, the Drude-aware P4 bonded refit and geometry/Hessian audit, full
 d(TpT) Drude topology assembly, SWM4-NDP solution smoke testing, and duplex-context
 validation.
+
+### Bonded-continuation graph audit supersedes the P2/P3 status (2026-09-16)
+
+The requested Drude bonded continuation found that the P2 OpenMM evaluator and
+its NAMD PSF used syn crosslinks on the anti QM geometry. The registered anti
+graph requires C5–C6/C6–C5, not C5–C5/C6–C6. Prior P2/P3 statistical and engine
+passes are preserved but cannot establish scientific acceptance for that product.
+P1 QM targets remain reusable. A corrected-graph training refit has recovered
+the electrostatic objectives; independent validation remains open.
+
+The bonded response, geometry, and full-nucleotide precursor diagnostics are
+recorded in [`experiments/cpd_drude_recovery/README.md`](../experiments/cpd_drude_recovery/README.md).
+The old P3 score service is stopped; a replacement service collects raw pending
+QM only. No P4 or nucleotide-product release is authorized by the old completion
+triggers or the earlier input-readiness inventory.

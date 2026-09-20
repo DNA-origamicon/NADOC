@@ -1,0 +1,94 @@
+{
+  "schema": "nadoc.cpd-builder-native-check.v1",
+  "passed": true,
+  "minimization_steps": 1000,
+  "dynamics_steps": 1000,
+  "timestep_fs": 2,
+  "sampling_ps": 2,
+  "frames": 10,
+  "max_heavy_bond_angstrom": 1.6798838376998901,
+  "finite_energies": true,
+  "records": [
+    {
+      "frame": 0,
+      "chirality_passed": true,
+      "crosslinks_angstrom": [
+        1.567402503759478,
+        1.554275055196345
+      ]
+    },
+    {
+      "frame": 1,
+      "chirality_passed": true,
+      "crosslinks_angstrom": [
+        1.534742595316974,
+        1.6047882210547595
+      ]
+    },
+    {
+      "frame": 2,
+      "chirality_passed": true,
+      "crosslinks_angstrom": [
+        1.5905417738043577,
+        1.6153301989936764
+      ]
+    },
+    {
+      "frame": 3,
+      "chirality_passed": true,
+      "crosslinks_angstrom": [
+        1.5918340543616802,
+        1.679883776746397
+      ]
+    },
+    {
+      "frame": 4,
+      "chirality_passed": true,
+      "crosslinks_angstrom": [
+        1.597960162474636,
+        1.597813888556904
+      ]
+    },
+    {
+      "frame": 5,
+      "chirality_passed": true,
+      "crosslinks_angstrom": [
+        1.6106037562868862,
+        1.5466860572495096
+      ]
+    },
+    {
+      "frame": 6,
+      "chirality_passed": true,
+      "crosslinks_angstrom": [
+        1.6301392544480002,
+        1.6028379611220367
+      ]
+    },
+    {
+      "frame": 7,
+      "chirality_passed": true,
+      "crosslinks_angstrom": [
+        1.6146652333566112,
+        1.5424961005313453
+      ]
+    },
+    {
+      "frame": 8,
+      "chirality_passed": true,
+      "crosslinks_angstrom": [
+        1.6529378702237831,
+        1.5616047728435862
+      ]
+    },
+    {
+      "frame": 9,
+      "chirality_passed": true,
+      "crosslinks_angstrom": [
+        1.5627441014271004,
+        1.5634533501252772
+      ]
+    }
+  ],
+  "limitations": "Native startup smoke check only; not an additional convergence benchmark."
+}

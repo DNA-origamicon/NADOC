@@ -95,7 +95,7 @@ def preflight_photoproduct(
     if (
         candidate_keys
         and registry_capability
-        and registry_capability["simulation_ready"]
+        and registry_capability.get("simulation_supported", registry_capability["simulation_ready"])
         and atomistic_model is None
     ):
         from backend.core.atomistic import build_atomistic_model
@@ -164,10 +164,19 @@ def preflight_photoproduct(
         _relationship(*ordered_resolved) if len(ordered_resolved) == 2 else None
     )
     placement_report = None
+    preliminary_context_ok = True
+    if (registry_capability or {}).get("qualification", {}).get("available") and not errors:
+        from backend.core.cpd_preliminary import validate_preliminary_endpoints
+        try:
+            validate_preliminary_endpoints(ordered_resolved, atomistic_model)
+        except ValueError as exc:
+            preliminary_context_ok = False
+            warnings.append(_error("preliminary_context_unsupported", str(exc)))
     if (
         not errors
         and registry_capability
-        and registry_capability["simulation_ready"]
+        and registry_capability.get("simulation_supported", registry_capability["simulation_ready"])
+        and preliminary_context_ok
         and atomistic_model is not None
         and len(ordered_resolved) == 2
     ):
@@ -271,7 +280,18 @@ def preflight_photoproduct(
         and registry_capability["simulation_ready"]
         and legacy_capability["available"]
     )
-    if not simulation_ready:
+    simulation_supported = bool(
+        not errors and preliminary_context_ok and registry_capability
+        and registry_capability.get("simulation_supported", simulation_ready)
+        and placement_report and placement_report.get("passed")
+    )
+    if simulation_supported and not simulation_ready:
+        warnings.append(_error(
+            "preliminary_research",
+            "Preliminary cis-syn v6 additive parameters: explicit-solvent NAMD, adjacent internal TT, "
+            "ordinary masses and at most 2 fs. Ensemble populations and Drude are not validated.",
+        ))
+    if not (registry_capability or {}).get("simulation_supported", simulation_ready):
         warnings.append(
             _error(
                 "parameters_unavailable",
@@ -289,6 +309,7 @@ def preflight_photoproduct(
         "schema": "nadoc.photoproduct-preflight.v1",
         "eligible": not errors,
         "simulation_ready": simulation_ready,
+        "simulation_supported": simulation_supported,
         "product": PRODUCT,
         "stereochemistry": stereochemistry,
         "formation": "manual",

@@ -869,3 +869,20 @@ managed health window was 60 frames. A 4 fs run with 2 ps output would mislabel 
 and shorten the health question to 120 ps. DCD/segment timing is now cross-checked;
 restart rollback is respected; health retains 600 ps and reports its actual span.
 Sampling diagnostics use physical-time blocks and report correlation explicitly.
+
+## ISSUE-31 — CPD builder retained a reactant planar improper
+
+[x] Fixed 2026-09-20. The bundled THY topology has a planar C5 improper absent
+from the v6 research fixture. Native startup of a builder-created CPD reproduced
+missing parameters for `CS005 CS001 CS006 CS003`. The CSV6 patch explicitly
+removes both reactant C5 impropers; the static audit verifies this exact delta.
+Native minimization and 2 ps dynamics passed with all lesion stereocenters intact.
+Evidence: `.development-artifacts/cpd-builder-integration-v1/native_check.json`.
+
+## ISSUE-32 — Raw solute coordinates could bypass CPD placement
+
+[x] Fixed 2026-09-20 during strand-builder integration. The solvation builder
+applied `solute_coords` after audited product placement, permitting reactant
+coordinates to overwrite the product. Formed products now reject that raw
+coordinate override and graphene-only topology omission. Atomistic seed models
+still go through placement and topology audits. Regression covers both bypasses.

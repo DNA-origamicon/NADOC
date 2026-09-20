@@ -1,0 +1,143 @@
+{
+  "id": "b6228960-4e60-4716-bdc3-1d3b75e0a68f",
+  "helices": [
+    {
+      "id": "h0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 4.008
+      },
+      "native_residues": [],
+      "native_source": null,
+      "phase_offset": 0.0,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 12,
+      "bp_start": 0,
+      "loop_skips": [],
+      "label": null,
+      "grid_pos": null,
+      "direction": null
+    }
+  ],
+  "strands": [
+    {
+      "id": "scaf",
+      "domains": [
+        {
+          "helix_id": "h0",
+          "start_bp": 0,
+          "end_bp": 11,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": "TTTTTTTTTTTT",
+      "color": null,
+      "name": null,
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "stap",
+      "domains": [
+        {
+          "helix_id": "h0",
+          "start_bp": 11,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": "AAAAAAAAAAAA",
+      "color": null,
+      "name": null,
+      "notes": null,
+      "is_reference": false
+    }
+  ],
+  "lattice_type": "HONEYCOMB",
+  "metadata": {
+    "name": "CPD preliminary duplex",
+    "description": "",
+    "author": "",
+    "created_at": "",
+    "modified_at": "",
+    "tags": [],
+    "identity_last_known_path": null,
+    "identity_confirmed_at": "",
+    "primitive_kind": null,
+    "hardware_defaults": {},
+    "peg_surface": null,
+    "namd_peg_review": null,
+    "namd_box_solvent": null,
+    "namd_peg_coating": null,
+    "namd_peg_visible": true
+  },
+  "deformations": [],
+  "cluster_transforms": [],
+  "nucleotide_transforms": [],
+  "cluster_joints": [],
+  "overhangs": [],
+  "overhang_connections": [],
+  "overhang_bindings": [],
+  "connection_versions": [],
+  "duplexes": [],
+  "flexible_segment_marks": [],
+  "flexible_connections": [],
+  "protein_assets": [],
+  "protein_attachments": [],
+  "nanoparticles": [],
+  "nanoparticle_conjugations": [],
+  "nanoparticle_connection_versions": [],
+  "tm_settings": {
+    "na_mM": 50.0,
+    "conc_nM": 250.0
+  },
+  "extensions": [],
+  "staple_groups": [],
+  "plate_layout": null,
+  "representation_overrides": [],
+  "view_volumes": [],
+  "visibility_state": {
+    "hidden_base_keys": [],
+    "shown_base_keys": [],
+    "hidden_cluster_ids": []
+  },
+  "photoproduct_junctions": [
+    {
+      "id": "84b75528-be9f-4661-83db-06c6ffbd86e6",
+      "base_key_1": "h0:5:FORWARD",
+      "base_key_2": "h0:6:FORWARD",
+      "product": "TT-CPD",
+      "stereochemistry": "cis-syn",
+      "formation": "manual",
+      "patch_order": "base-key-1-first",
+      "orientation_method": "released-template-assignment-v1",
+      "t1_stable_id": null,
+      "t2_stable_id": null,
+      "photoproduct_id": "TT-CPD"
+    }
+  ],
+  "crossovers": [],
+  "forced_ligations": [],
+  "camera_poses": [],
+  "animations": [],
+  "chain_sim_projects": [],
+  "loadouts": [],
+  "atomistic_reference": null,
+  "active_loadout_id": null,
+  "last_editable_loadout_id": null,
+  "feature_log": [],
+  "feature_log_cursor": -1,
+  "feature_log_sub_cursor": null
+}

@@ -6737,6 +6737,11 @@ async function main() {
     showAboutFileModal({ api, path: _workspacePath })
   })
 
+  document.getElementById('menu-help-cpd-progress')?.addEventListener('click', async () => {
+    const { showCpdProgress } = await import('./ui/cpd_progress.js')
+    showCpdProgress()
+  })
+
   document.getElementById('menu-help-tt-cpd-trajectories')?.addEventListener('click', async () => {
     const { showTTCpdTrajectoryHelp } = await import('./ui/tt_cpd_trajectory_help.js')
     showTTCpdTrajectoryHelp({ api })

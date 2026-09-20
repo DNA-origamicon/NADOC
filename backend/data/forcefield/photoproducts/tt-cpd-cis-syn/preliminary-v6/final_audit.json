@@ -1,0 +1,83 @@
+{
+  "status": "all_recorded_local_checks_pass",
+  "simulation_ready": false,
+  "known_local_failures": 0,
+  "bonds": 142,
+  "angles": 270,
+  "models": [
+    {
+      "model": "endpoint-1",
+      "geometry_passed": true,
+      "only_equilibrium_bond_angles_changed": true,
+      "unchanged_forces": [
+        "HarmonicBondForce",
+        "PeriodicTorsionForce",
+        "CustomTorsionForce",
+        "CMAPTorsionForce",
+        "NonbondedForce",
+        "CMMotionRemover"
+      ]
+    },
+    {
+      "model": "endpoint-2",
+      "geometry_passed": true,
+      "only_equilibrium_bond_angles_changed": true,
+      "unchanged_forces": [
+        "HarmonicBondForce",
+        "PeriodicTorsionForce",
+        "CustomTorsionForce",
+        "CMAPTorsionForce",
+        "NonbondedForce",
+        "CMMotionRemover"
+      ]
+    },
+    {
+      "model": "core",
+      "geometry_passed": true,
+      "only_equilibrium_bond_angles_changed": true,
+      "unchanged_forces": [
+        "HarmonicBondForce",
+        "PeriodicTorsionForce",
+        "CustomTorsionForce",
+        "CMAPTorsionForce",
+        "NonbondedForce",
+        "CMMotionRemover"
+      ]
+    }
+  ],
+  "pending": [
+    "Independent glycosidic conformational energetics",
+    "Replicated explicit-solvent nucleotide/duplex validation",
+    "General strand-build integration for typed CPDs"
+  ],
+  "sources": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-syn-joint-v6/assessment.json",
+      "sha256": "dfa03f954251a4c464987d625cc9d6c9c49bb24ef107beafad65f9125cf3aff5"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-syn-joint-v6/comparator_last.prm",
+      "sha256": "941a2bcd2b2ceb04bfacc6d64e392a5efa49c3a8c0275fd39936883de551d7c6"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-syn-joint-v6/minimum_and_engine_checks.json",
+      "sha256": "94e1fc3076c850a06a36a11f3e98a56f9030a60fb1bf59328c9dd5b325989d7c"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-syn-joint-v6/engine_agreement.json",
+      "sha256": "7b0e738aff1bd93fa9e546f34d1761ab1624556432cc3245212d24b5067fb859"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-syn-joint-v6/core-energy/assessment.json",
+      "sha256": "6d6cd7b0c3093b3b08ffad6752b24fb30657056a915c06c42aa8e57ce6243917"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-syn-joint-v6/core_minimum.json",
+      "sha256": "7632f240470c4fbedc1fe751bc7549fbe523a8bb109563423fa71ae9985378bf"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-syn-joint-v6/reference_build_assessment.json",
+      "sha256": "54a32dd33342fad4b19e638abd291aa96b1448a7089f8a771eabd71f1e095b0f"
+    }
+  ]
+}

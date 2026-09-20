@@ -284,6 +284,16 @@ Animation geometry ownership and unified exports remain stages 2–3. Detached
 browser controls were assessed but are not implemented.
 
 
+## MV-CPD-PROGRESS — PENDING (2026-09-19)
+
+Open Help → CPD progress on a narrow screen and with touch input. Check label
+legibility while rotating crowded sugar fragments, scroll the evidence panel,
+and pin/unpin an atom or bond. Desktop Chromium menu navigation, structure
+switching, bond evidence, rotation, and closing are automated; the desktop
+screenshot was inspected. Small-screen and touch usability remain unverified.
+Green must appear only for passing available local checks; missing evidence must
+remain gray, and overall readiness must not imply a production-ready CPD.
+
 ## MV-ALPINE-RESTART — PENDING (2026-09-13)
 
 Verify the NAMD restart warning and preserved-attempt row in the running app after

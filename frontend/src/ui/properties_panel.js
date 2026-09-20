@@ -661,7 +661,7 @@ export function initPropertiesPanel({ clearSelection } = {}) {
     for (const product of products) {
       const option = document.createElement('option')
       option.value = product.stereochemistry
-      option.textContent = `${product.label}${product.simulation_ready ? '' : ' · intent only'}`
+      option.textContent = `${product.label}${product.simulation_ready ? '' : product.simulation_supported ? ' · preliminary research' : ' · intent only'}`
       selector.appendChild(option)
     }
     selectorRow.append(selectorLabel, selector)
@@ -712,7 +712,7 @@ export function initPropertiesPanel({ clearSelection } = {}) {
       const messages = [...(report.errors ?? []), ...(report.warnings ?? [])]
       for (const item of messages) {
         const msg = document.createElement('div')
-        msg.className = item.code === 'parameters_unavailable' ? 'dim' : 'validation-error'
+        msg.className = ['parameters_unavailable', 'preliminary_research', 'preliminary_context_unsupported'].includes(item.code) ? 'dim' : 'validation-error'
         msg.textContent = item.message
         reportHost.appendChild(msg)
       }
@@ -725,6 +725,8 @@ export function initPropertiesPanel({ clearSelection } = {}) {
       action.addEventListener('click', async () => {
         const chemistry = report.simulation_ready
           ? 'A validated product topology is available.'
+          : report.simulation_supported
+            ? 'Preliminary cis-syn v6 additive parameters are available for explicit-solvent NAMD at up to 2 fs with ordinary masses. Quantitative ensemble predictions and Drude are not validated.'
           : 'This saves product intent only; NAMD/export remains blocked because validated CHARMM36 CPD parameters are unavailable.'
         const relationship = rel ? `${rel.strand_relationship}, ${rel.extra_pairing}` : 'resolved pair'
         if (globalThis.confirm?.(`Form a ${stereochemistry} TT-CPD (${relationship})?\n\n${chemistry}`) === false) return

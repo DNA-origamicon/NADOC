@@ -1,0 +1,16 @@
+.cpd-progress-modal { width: min(1180px, 96vw) !important; }
+.cpd-progress { color: #dce6f4; font-size: 13px; }
+.cpd-progress p { margin: 8px 0; line-height: 1.5; }
+.cpd-progress__toolbar, .cpd-progress__legend { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:12px 0; }
+.cpd-progress select, .cpd-progress button { background:#1c2738; color:#e6edf7; border:1px solid #53657e; border-radius:5px; padding:7px 10px; }
+.cpd-progress__layout { display:grid; grid-template-columns:minmax(0, 1.4fr) minmax(280px, 1fr); gap:16px; }
+.cpd-progress svg { width:100%; background:#101722; border:1px solid #354258; border-radius:8px; touch-action:none; align-self:start; }
+.cpd-progress svg [role=button] { cursor:pointer; }
+.cpd-progress svg [role=button]:focus { outline:none; stroke:white; stroke-width:3; }
+.cpd-progress__details { max-height:480px; overflow:auto; background:#151e2b; padding:14px; border-radius:8px; }
+.cpd-progress__details h3 { margin:0 0 8px; }
+.cpd-progress__check { padding:10px; margin:8px 0; border-left:3px solid #e5c34d; background:#202c3d; line-height:1.5; }
+.cpd-progress__check--pass { border-color:#35bd7c; }
+.cpd-progress__check--fail { border-color:#ef5767; }
+.cpd-progress code { display:block; overflow-wrap:anywhere; font-size:11px; }
+@media(max-width:760px) { .cpd-progress__layout { grid-template-columns:1fr; } .cpd-progress__details { max-height:280px; } }

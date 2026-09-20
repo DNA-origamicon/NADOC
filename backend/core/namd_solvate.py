@@ -2892,6 +2892,8 @@ def build_namd_solvated_package(
     )
 
     assert_cpd_simulation_supported(design, path="explicit-solvent NAMD package builder")
+    from backend.core.cpd_forcefield import assert_photoproduct_seed_inputs
+    assert_photoproduct_seed_inputs(design, solute_coords=solute_coords, graphene_only=graphene_only)
     has_photoproducts = bool(design.photoproduct_junctions)
     if has_photoproducts and not require_full_topology:
         from backend.core.cpd_forcefield import CpdCapabilityError  # noqa: PLC0415
@@ -3275,6 +3277,9 @@ def build_namd_solvated_package(
             if ff_path.exists():
                 zf.writestr(prefix + f"forcefield/{ff_file}", ff_path.read_bytes())
         if photoproduct_assets:
+            if any(record["kind"] == "preliminary_review" for record in photoproduct_assets):
+                from backend.core.cpd_preliminary import PACKAGE_NOTICE
+                zf.writestr(prefix + "PRELIMINARY_CPD_README.txt", PACKAGE_NOTICE)
             packaged_manifest = {
                 "schema": "nadoc.packaged-photoproduct-forcefield.v1",
                 "timestep_fs": 2.0,

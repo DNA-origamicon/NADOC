@@ -186,3 +186,8 @@ false native-process adoption and cadence-dependent screening metrics corrected.
 Real Start-API pilot completed at 4 fs; longer runs remain visible under the source
 nadoc. Regression and scientific-analysis tests cover the corrected contracts.
 See docs/namd_electrode_gpu.md and workspace/electrode_gpu_screening_4fs_20260914/.
+
+2026-09-20: [x] ISSUE-31/32: preliminary cis-syn strand-builder integration removes
+reactant planar C5 impropers and rejects bypasses of product coordinate placement.
+Native builder duplex passes 1,000 minimization and 1,000 2-fs dynamics steps.
+See docs/cpd_strand_builder.md. No main.js changes from this task (LOC delta 0).

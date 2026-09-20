@@ -258,7 +258,9 @@ def _asset_audit(entry: dict[str, Any], registry_path: Path) -> dict[str, Any]:
             or template.get("product_id") != entry["id"]
             or template.get("product") != entry["product"]
             or template.get("stereochemistry") != entry["stereochemistry"]
-            or template.get("release_status") != "released"
+            or template.get("release_status") not in (
+                {"released", "preliminary"} if "preliminary_review" in assets else {"released"}
+            )
             or template.get("reflection_allowed") is not False
             or not isinstance(safety, dict)
             or safety.get("schema")
@@ -319,6 +321,8 @@ def _capability(entry: dict[str, Any], gates: list[str], registry_path: Path) ->
     }
     assets_complete = required_assets.issubset(assets["declared"]) and assets["passed"]
     simulation_ready = not pending and assets_complete
+    from backend.core.cpd_preliminary import preliminary_qualification
+    preliminary = preliminary_qualification(entry, assets, registry_path.parent)
     trajectory_declared = "help_trajectory" in assets["declared"]
     trajectory_verified = trajectory_declared and not (
         {"help_trajectory"}
@@ -341,6 +345,8 @@ def _capability(entry: dict[str, Any], gates: list[str], registry_path: Path) ->
         "gate_status": gate_status,
         "next_gate": pending[0] if pending else None,
         "simulation_ready": simulation_ready,
+        "simulation_supported": simulation_ready or preliminary["available"],
+        "qualification": preliminary,
         "help_trajectory": {
             "available": trajectory_available,
             "reason": None
