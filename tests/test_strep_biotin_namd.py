@@ -1,5 +1,3 @@
-import json
-import numpy as np
 import pytest
 from backend.core.models import Design, Nanoparticle
 from backend.core.streptavidin import build_streptavidin_coating

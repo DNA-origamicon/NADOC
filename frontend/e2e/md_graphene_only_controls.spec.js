@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('graphene-only card points to rendered reservoir and ion settings in wizard', async ({ page }) => {
+test('graphene card points to rendered reservoir and ion settings in Box and solvent', async ({ page }) => {
   await page.goto('/')
   await page.waitForSelector('#canvas')
   await page.locator('#menu-file-new').evaluate(el => el.click())
@@ -22,16 +22,18 @@ test('graphene-only card points to rendered reservoir and ion settings in wizard
   await page.locator('#md-nanopore-settings > summary').click()
   await expect(page.locator('#md-surface-pore-diameter')).toBeVisible()
   await expect(page.locator('#md-surface-graphene-only')).toHaveCount(0)
-  await expect(page.locator('#md-surface-enable').locator('..')).toHaveAttribute('title', /New job → Protocol & settings/)
+  await expect(page.locator('#md-surface-enable').locator('..')).toHaveAttribute('title', /Box and solvent/)
   // These belong to the job/solvent package, not the geometric surface descriptor.
   await expect(page.locator('#md-surface-body')).not.toContainText('Ionic conditionsCustom')
 
+  await page.click('#md-box-solvent-toggle')
+  for (const id of ['padding', 'salt', 'na', 'mg', 'temperature']) {
+    await expect(page.locator(`#md-box-${id}`)).toBeVisible()
+  }
   await page.click('#md-jobs-new-btn')
   await page.getByRole('tab', { name: /Protocol & settings/ }).click()
-  await expect(page.locator('.wizard-field__label', { hasText: 'Water padding' })).toBeVisible()
-  await expect(page.locator('.wizard-field__label', { hasText: 'Ionic conditions' })).toBeVisible()
-  await expect(page.locator('.wizard-field__label', { hasText: 'NaCl' })).toBeVisible()
-  await expect(page.locator('.wizard-field__label', { hasText: 'Magnesium' })).toBeVisible()
+  await expect(page.locator('.modal--wizard')).toContainText('Box and solvent:')
+  await expect(page.locator('.modal--wizard')).toContainText('Edit in the sidebar.')
 })
 
 // UI-only: no design saves, job creation, or remote execution.

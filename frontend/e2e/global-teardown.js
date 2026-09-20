@@ -15,7 +15,8 @@
  * different artifact class needs its own failure-safe cleanup registered with
  * the test or added here; cleanup in the successful test body is insufficient.
  */
-import { readdir, rm } from 'node:fs/promises'
+import { readFile, readdir, rm } from 'node:fs/promises'
+import { cleanupProjectArtifacts } from './project_artifact_cleanup.js'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -28,6 +29,14 @@ export default async function globalTeardown() {
   const victims = files.filter(f =>
     (f.startsWith(E2E_PREFIX) || f.startsWith('e2e__')) &&
     (f.endsWith('.nadoc') || f.endsWith('.nass')))
+  // Autosave also persists hidden project history. Resolve IDs before deleting parts,
+  // and remove a store only if every snapshot proves it belongs to a test design.
+  const projectIds = []
+  for (const file of victims.filter(name => name.endsWith('.nadoc'))) {
+    try { projectIds.push(JSON.parse(await readFile(path.join(WORKSPACE, file), 'utf8')).id) } catch {}
+  }
+  const projects = await cleanupProjectArtifacts(WORKSPACE, projectIds)
+  if (projects.length) console.log(`[e2e teardown] removed ${projects.length} test project revision store(s)`)
   await Promise.all(victims.map(f => rm(path.join(WORKSPACE, f)).catch(() => {})))
   const scratch = path.join(WORKSPACE, 'playwright_tests')
   let scratchFiles = []

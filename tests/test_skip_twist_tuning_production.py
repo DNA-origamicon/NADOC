@@ -12,12 +12,11 @@ Two tiers:
     the bundle vs the period-48 seed).  ~hours; the full-scale validation.
 
 Opt-in (real relax + production is expensive):
-    NADOC_RUN_OXDNA_SLOW=1 just test-file tests/test_skip_twist_tuning_production.py
+    just test-scientific tests/test_skip_twist_tuning_production.py
 Needs a real oxDNA binary (``find_oxdna``) + a CUDA GPU.  Skipped otherwise.
 """
 
 import glob
-import os
 from pathlib import Path
 
 import pytest
@@ -35,10 +34,6 @@ pytestmark = pytest.mark.slow
 
 
 def _skip_if_no_engine():
-    if not os.environ.get("NADOC_RUN_OXDNA_SLOW"):
-        pytest.skip(
-            "opt-in: set NADOC_RUN_OXDNA_SLOW=1 (real relax + production is expensive)"
-        )
     if find_oxdna() is None:
         pytest.skip("no real oxDNA binary on PATH/$OXDNA_BIN")
 

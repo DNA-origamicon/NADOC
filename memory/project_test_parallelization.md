@@ -1,4 +1,10 @@
 ---
+
+Current test policy (2026-09-20): normal commands validate software only. Production,
+equilibrium sampling and physical convergence campaigns require explicit
+`just test-scientific TARGET`; see [inventory](../docs/scientific_validation.md).
+Historical full-run commands/results below predate this split; the legacy
+`NADOC_RUN_OXDNA_SLOW` flag no longer enables campaigns.
 name: project_test_parallelization
 description: Backend test suite runs in parallel (pytest-xdist); slow-test registry + global-state isolation gotcha
 metadata: 
@@ -6,6 +12,31 @@ metadata:
   type: project
   originSessionId: 2557a198-2648-4182-8f9b-1f6ff948cb26
 ---
+
+**2026-09-20 portable-fixture follow-up:** the user opened a test
+session and requested full/slow validation, excluding CPD work running on another
+computer. BigO/smallO and cube regressions now build their routed inputs headlessly;
+assembly/history checks passed (54). Scaffold extension preserves existing assigned
+bases while adding unknown bases only at new sites (8 focused checks). Tcl native
+oracles now execute with the installed interpreter; native PEG tests use the built
+Chudoba engine. MD reader, solvent, restart and display fixtures generate isolated
+inputs rather than requiring archived jobs. The current full non-CPD run uses one
+xdist worker to serialize GROMACS, with BLAS/OpenMP threads capped at one. FULL
+completed: 8,946 passed, 17 skipped, 4 failed in 6 h 19 min; no unmarked timing
+violators. The full-scale skip/twist campaign alone took nearly four hours and
+passed. The mock-chain capability and two linker manifests are repaired pending
+focused slow reruns; PEG Live bindings now build. Legacy mrDNA zero-step accuracy
+and two bulk-insertion retention assertions remain active scientific failures. See `docs/portable_test_fixtures.md` and the maintenance report.
+
+**2026-09-19 maintenance triage:** the native hybrid smoke test was renamed from
+`test_prepared_hybrid_job_runs_on_fork` to `..._upstream` without updating `_SLOW_TESTS`.
+The registry now matches; slow-only collection confirms it remains in the oxDNA group.
+The loop-copy connected-component regression uses an 84 bp routed bundle with three
+insertion sites per selected helix instead of 168 bp; its connectivity assertions are intact.
+Final `test-smart`: FAST, 8,713 passed / 52 skipped / one cube-rerouting sequence failure,
+107.74 s pytest / 116 s guard, zero per-test violators. The aggregate backstop still fired;
+no tests were relegated for cumulative suite size. Seven review-packet and four Tcl skips
+are explicit missing dependencies, not validation passes. See `docs/maintenance_2026_09.md`.
 
 Backend tests run in parallel via pytest-xdist. The 2026-09-06 inventory contains
 8,166 cases, including real MD and finite-element solves; full-suite wall time is
@@ -16,11 +47,12 @@ not a measure of the fast development loop.
 of strands, and export its topology / reconstruct nucleotide geometry and FEM mesh.
 They took 9.77 s / 16.87 s (5 s per-test limit), so they now live in `_SLOW_TESTS`,
 area `cando`; `assembly_flatten` source changes select that same slow area. The
-smaller flatten/periodic tests stay fast. **Unresolved fixture drift:** the current
+smaller flatten/periodic tests stay fast. **Historical fixture drift (resolved by the September 19 headless recipes):** the then-current
 workspace polymer yields 5,366 strands and 1,624 seam distances, while these tests
 hardcode 587 and 112 for an older three-repeat artifact. Both failed before their
 classification changed; moving them to slow does not resolve those assertions.
-They need a deterministic saved-fixture replacement in a separate assembly task.
+The September 19 replacement constructs a deterministic three-copy assembly; its
+conservation, seam-family and FEM-connectivity assertions pass.
 The subsequent `just test-smart` run passed 7,721 tests (35 skipped), with zero
 per-test violators (slowest 3.47 s). It still printed the aggregate 99 s / 90 s
 backstop notice; the 7,755-case fast suite has broad cumulative cost, so no

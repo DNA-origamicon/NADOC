@@ -30,6 +30,8 @@ store; this table is the authoritative active queue.
 
 | Priority | Item | Current claim |
 |---|---|---|
+| Resolved · 2026-09-19 | **TD-CUBE-SEQUENCE** | Scaffold extensions preserve assigned bases in sequence order and insert unknown bases only at new sites, including loop/skip offsets. Eight focused checks pass; cube rerouting/idempotence now uses a headless routed fixture rather than a mutable saved design. |
+| P2 · validation | **TD-SEPT-MAINT** | September maintenance fixes and validation gaps are recorded in `docs/maintenance_2026_09.md`: full non-CPD run completed (8,946 pass / 17 skip / 4 fail), pending focused repairs, unresolved mrDNA position and bulk-insertion retention oracles, original historical design inputs, large-trajectory browser memory, and CI build/browser coverage. Tcl oracles now run; CPD validation is on the other computer. |
 | P1 · accepted default, validation open | **TD-OXDNA-PHYSICS** | GPU default explicitly requested on 2026-09-13. Complete convergence, thermal/configurational sampling, and useful-sample performance validation for DNA/proteins and fixed gold/strep/DNA. Resolve protein–DNA contact amplitude with upstream/experimental evidence; retain both native amplitudes meanwhile. |
 | P1 · promote | **TD-STREP-NAMD** | Validate the original streptavidin-on-gold nanoparticle system in NAMD, including gold/coating attachment, biotin–DNA linkage, force-field completeness, stability, and experimentally informed orientation/accessibility. oxDNA smoke tests do not establish NAMD support or validation. |
 | P1 · parked | **TD-30** | Extra-base insert ring piercing. Dedicated topology session only; do not treat the 2026-08-07 suite totals as current without rerunning. |

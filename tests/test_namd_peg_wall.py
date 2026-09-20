@@ -33,6 +33,9 @@ def test_repulsive_wall_force_is_negative_energy_gradient_and_image_invariant(ax
 
 @pytest.mark.parametrize('axis', [0, 1, 2])
 def test_executed_tcl_matches_physical_oracle(axis):
+    import shutil
+    if shutil.which("tclsh") is None:
+        pytest.skip("Tcl execution oracle requires tclsh; Python force oracles run separately")
     wall = RepulsiveSlit(axis=axis)
     xyz = np.array([[1., 1., 1.], [47., 47., 47.], [20., 20., 20.], [49., -47., 97.]])
     # TclForces API stubs exercise actual generated Tcl, including energy bookkeeping.

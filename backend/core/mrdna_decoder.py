@@ -235,6 +235,11 @@ def _dna_particle_frame_rotations(
     fallback for callers without a design.
     """
     names = [atom.name for atom in universe.atoms]
+    # Coarse models have no O orientation particles. Several nucleotide phases
+    # can share one DNA particle, so constructing a Fine seed frame is invalid.
+    # The decoder's existing translation-only coarse path needs no rotations.
+    if "O" not in names:
+        return {}
     sites: dict[tuple, int] = {}
     for record in manifest.records:
         if len(record.particle_bindings) != 1:

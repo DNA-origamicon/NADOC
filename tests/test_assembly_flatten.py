@@ -11,7 +11,7 @@ so the linker bridge silently connected to nothing.
 
 from __future__ import annotations
 
-from pathlib import Path
+from tests.periodic_assembly_fixture import periodic_assembly
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,8 +38,12 @@ from backend.core.models import (
 )
 
 
-def test_flatten_resolves_workspace_relative_file_source():
+def test_flatten_resolves_workspace_relative_file_source(tmp_path, monkeypatch):
     """Current v2 .nass files store file sources relative to workspace/."""
+    from backend.api import assembly
+    from tests.conftest import make_6hb_design
+    monkeypatch.setattr(assembly, "_WORKSPACE_DIR", tmp_path)
+    (tmp_path / "BigO.nadoc").write_text(make_6hb_design().to_json())
     source = PartSourceFile(path="BigO.nadoc")
     asm = Assembly(instances=[PartInstance(id="bigo", name="BigO", source=source)])
     flat = flatten_assembly(asm)
@@ -63,9 +67,7 @@ def test_bigo_periodic_flatten_stitches_repeats_and_keeps_full_ssdna_ends():
     strands retain the source staple's full nucleotide count, with the absent
     neighbour half represented as a true terminal ssDNA extension.
     """
-    root = Path(__file__).resolve().parents[1]
-    assembly = Assembly.from_json((root / "workspace" / "BigO-poly.nass").read_text())
-    part = Design.from_json((root / "workspace" / "BigO.nadoc").read_text())
+    part, assembly = periodic_assembly("BigO")
     flat = flatten_assembly(assembly)
 
     periodic = [fl for fl in part.forced_ligations if fl.is_periodic_seam]
@@ -106,8 +108,22 @@ def test_bigo_periodic_flatten_stitches_repeats_and_keeps_full_ssdna_ends():
     from backend.physics.oxdna_interface import topology_rows
 
     rows, n_strands = topology_rows(flat)
-    assert n_strands == len(flat.strands) == 587
-    assert len(rows) == 43120
+    copies = len(assembly.instances)
+    expected_strands = copies * (len(part.strands) - len(periodic)) + len(periodic) * (copies + 1)
+    assert n_strands == len(flat.strands) == expected_strands
+    from backend.core.sequences import strand_nucleotide_count
+    # Each seam family contributes N-1 internal strands and two full terminal
+    # strands: one additional source-strand equivalent across the whole chain.
+    seam_strands = [s for s in part.strands if any(
+        d.helix_id == fl.three_prime_helix_id and d.end_bp == fl.three_prime_bp
+        and i + 1 < len(s.domains)
+        and s.domains[i+1].helix_id == fl.five_prime_helix_id
+        and s.domains[i+1].start_bp == fl.five_prime_bp
+        for fl in periodic for i, d in enumerate(s.domains))]
+    assert len(seam_strands) == len(periodic)
+    expected_nt = copies * sum(strand_nucleotide_count(s, part) for s in part.strands)
+    expected_nt += sum(strand_nucleotide_count(s, part) for s in seam_strands)
+    assert len(rows) == expected_nt
 
 
 def test_bigo_periodic_flatten_has_one_fem_component_and_registered_seams():
@@ -118,8 +134,7 @@ def test_bigo_periodic_flatten_has_one_fem_component_and_registered_seams():
     from backend.core.deformation import deformed_nucleotide_positions
     from backend.physics.fem_solver import _mesh_component_labels, build_fem_mesh
 
-    root = Path(__file__).resolve().parents[1]
-    assembly = Assembly.from_json((root / "workspace" / "BigO-poly.nass").read_text())
+    _, assembly = periodic_assembly("BigO")
     # Round-trip matches the job-registration boundary and derives ordinary
     # within-part crossover records from the stitched strand graph.
     flat = Design.from_json(flatten_assembly(assembly).to_json())
@@ -156,8 +171,7 @@ def test_smallo_polymer_seams_are_normal_beams_not_rigid_links():
     """Each repeat boundary continues all six duplex axes by one ordinary bp step."""
     from backend.physics.fem_solver import FEM_RISE_PER_BP, build_fem_mesh
 
-    root = Path(__file__).resolve().parents[1]
-    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    _, assembly = periodic_assembly()
     flat = Design.from_json(flatten_assembly(assembly).to_json())
     mesh = build_fem_mesh(flat)
     node_at = {(n.helix_id, n.global_bp): i for i, n in enumerate(mesh.nodes)}
@@ -185,8 +199,7 @@ def test_smallo_polymer_fingerprint_is_stable_across_materialization():
     """Reloading an unchanged assembly must not mark its simulation jobs stale."""
     from backend.core.oxdna_staleness import oxdna_design_fingerprint
 
-    root = Path(__file__).resolve().parents[1]
-    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    _, assembly = periodic_assembly()
     first = Design.from_json(flatten_assembly(assembly).to_json())
     second = Design.from_json(flatten_assembly(assembly).to_json())
 
@@ -209,8 +222,7 @@ def test_smallo_polymer_ends_survive_oxdna_mrdna_and_cando_boundaries():
     from backend.physics.fem_solver import build_fem_mesh, deformed_positions_with_axis
     from backend.physics.oxdna_interface import _strand_nucleotide_order, topology_rows
 
-    root = Path(__file__).resolve().parents[1]
-    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    _, assembly = periodic_assembly()
     flat = Design.from_json(flatten_assembly(assembly).to_json())
     terminal_ids = {
         strand.id for strand in flat.strands if strand.id.startswith("polymer-terminal::")
@@ -253,8 +265,7 @@ def test_smallo_poly_namd_seed_has_no_ring_piercings():
     from backend.core.atomistic import build_atomistic_model
     from backend.core.ring_piercing import piercing_report
 
-    root = Path(__file__).resolve().parents[1]
-    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    _, assembly = periodic_assembly()
     flat = Design.from_json(flatten_assembly(assembly).to_json())
     report = piercing_report(flat, model=build_atomistic_model(flat))
     assert report["n_pierced"] == 0, report["pierced"]
@@ -275,8 +286,7 @@ def test_every_engine_snapshot_loader_reconstructs_polymer_topology(
     """Every worker must retain the derived crossovers CanDo previously lost."""
     import importlib
 
-    root = Path(__file__).resolve().parents[1]
-    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    _, assembly = periodic_assembly()
     flat = flatten_assembly(assembly)
     assert flat.crossovers == []  # derived at the persisted JSON boundary
     (tmp_path / "design.json").write_text(flat.model_dump_json())

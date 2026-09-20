@@ -64,8 +64,9 @@ class OxdnaStageSpec:
     # Molecular dynamics keys (sim_type == MD)
     dt: float = 0.002
     thermostat: str = "bussi"
-    # Explicit local-bath diffusion; required when John/Brownian/Langevin is selected.
+    # John/Brownian require diffusion; Langevin accepts diffusion OR friction.
     diff_coeff: float | None = None
+    gamma_trans: float | None = None
     refresh_vel: bool = True
     bussi_tau: int = 1000
     newtonian_steps: int = 53
@@ -340,7 +341,12 @@ def validate_stage_spec(spec: OxdnaStageSpec) -> None:
             raise ValueError(f"Unsupported thermostat: {spec.thermostat}")
         if spec.thermostat == "bussi" and spec.bussi_tau <= 0:
             raise ValueError("Bussi tau must be positive")
-        if spec.thermostat in {"john", "brownian", "langevin"}:
+        if spec.gamma_trans is not None:
+            if spec.thermostat != "langevin" or spec.diff_coeff is not None:
+                raise ValueError("Langevin requires exactly one of gamma_trans and diff_coeff")
+            if not math.isfinite(spec.gamma_trans) or spec.gamma_trans <= 0:
+                raise ValueError("Langevin friction gamma_trans must be positive")
+        elif spec.thermostat in {"john", "brownian", "langevin"}:
             if spec.diff_coeff is None or not math.isfinite(spec.diff_coeff) or spec.diff_coeff <= 0:
                 raise ValueError("An explicit positive diffusion coefficient is required")
 
@@ -414,7 +420,9 @@ def render_stage_input(
         lines.append(f"thermostat = {spec.thermostat}")
         if spec.thermostat == "bussi":
             lines.append(f"bussi_tau = {spec.bussi_tau}")
-        if spec.thermostat in {"john", "brownian", "langevin"}:
+        if spec.thermostat == "langevin" and spec.gamma_trans is not None:
+            lines.append(f"gamma_trans = {spec.gamma_trans}")
+        elif spec.thermostat in {"john", "brownian", "langevin"}:
             lines.append(f"diff_coeff = {spec.diff_coeff}")
         lines.append(f"newtonian_steps = {spec.newtonian_steps}")
         lines.append(f"refresh_vel = {str(spec.refresh_vel).lower()}")

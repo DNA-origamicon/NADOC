@@ -11,14 +11,11 @@ CanDo-RMSF policy (:func:`shape_metrics.reference_for`).  This module verifies:
 * the HEADLINE N4 property — when the NAMD bundle joins the report, NAMD is the reference for
   shape AND rmsf, overriding the oxDNA / CanDo policy engines (gold override).
 
-FAST tests are pure over Physical-layer dicts.  The SLOW test drives ``md_rmsf`` over a real
-NAMD DCD (fixture-gated like ``test_md_trajectory.py``) → a ready NAMD source.
+FAST tests are pure over Physical-layer dicts.  The SLOW test drives ``md_rmsf`` over a generated
+CHARMM topology and controlled DCD frames → a ready NAMD source.
 """
 
 from __future__ import annotations
-
-import json
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -195,38 +192,16 @@ def test_namd_reference_without_gold_falls_back_to_policy():
 
 
 # ── SLOW: real NAMD DCD → md_rmsf → ready NAMD source ───────────────────────────────
-_WS = Path(__file__).resolve().parent.parent / "workspace"
-_JOB = _WS / "md_jobs" / "5c6a87247a60" / "package" / "2hb_namd_solvated"
-_PSF = _JOB / "2hb.psf"
-_REF = _JOB / "2hb.pdb"
-_DESIGN = _WS / "2hb.nadoc"
-_HAVE_FIXTURE = (
-    _PSF.exists()
-    and _REF.exists()
-    and _DESIGN.exists()
-    and any((_JOB / "output").glob("*.dcd"))
-    if _JOB.exists()
-    else False
-)
+pytest_plugins = ["tests.md_trajectory_fixture"]
 
 
-@pytest.mark.skipif(not _HAVE_FIXTURE, reason="real 2hb NAMD job fixture not present")
-def test_real_namd_trajectory_builds_ready_source():
-    pytest.importorskip("MDAnalysis")
+def test_real_namd_trajectory_builds_ready_source(generated_md):
     from backend.api.skip_twist_tuning import core_reference_geometry
     from backend.core.md_trajectory import md_rmsf
-    from backend.core.models import Design
 
-    raw = _DESIGN.read_text()
-    try:
-        design = Design.model_validate_json(raw)
-    except Exception:
-        obj = json.loads(raw)
-        design = Design.model_validate(obj.get("design", obj))
-
-    dcds = sorted((_JOB / "output").glob("*.dcd"))
-    segments = [(d.stem, "md", d) for d in dcds]
-    r = md_rmsf(_PSF, segments, _REF, design, max_frames=20)
+    design = generated_md.design
+    r = md_rmsf(generated_md.psf, [("generated", "md", generated_md.dcd)],
+                generated_md.ref, design, max_frames=20)
     assert r["ready"] is True and r["n_frames"] > 0
 
     # Regression: md_rmsf recovers each strand's 5'-terminal nucleotide (no P atom —
@@ -257,7 +232,7 @@ def test_real_namd_trajectory_builds_ready_source():
     assert bundle["descriptors"] is not None
     assert bundle["shape_frame"]
     assert bundle["rmsf"] and all(np.isfinite(p["rmsf_nm"]) for p in bundle["rmsf"])
-    # gold override holds on real data too.
+    # gold override holds through the real trajectory reader too.
     report = build_comparison_report([bundle])
     assert report["ready"]
     assert report["references"]["shape"] == "namd"

@@ -10,11 +10,10 @@ every real nucleotide and the designed duplex re-annealed (the extra ssDNA
 inserts must not destabilise the relaxation).
 
 Opt-in (a real relaxation + 5M-step production is ~minutes/GPU):
-    NADOC_RUN_OXDNA_SLOW=1 just test-file tests/test_oxdna_extra_base_production.py
+    just test-scientific tests/test_oxdna_extra_base_production.py
 Needs a real oxDNA binary (``find_oxdna``) and a CUDA GPU.  Skipped otherwise.
 """
 
-import os
 
 import pytest
 
@@ -77,11 +76,11 @@ def _assert_real_geometry_recovered(job, design, workspace, n_extra: int):
     real_keys = {k[:3] for k in order if k[0] != ox._XB_SENTINEL}
     assert sum(1 for k in order if k[0] == ox._XB_SENTINEL) == n_extra
 
-    top = job.job_dir(workspace) / "topology.top"
+    reference = job.job_dir(workspace) / "conf.dat"
     last = job.stage_dir(workspace, job.stages[-1].name) / "last_conf.dat"
     assert last.exists(), "no last_conf.dat from the final stage"
 
-    full = read_configuration_unwrapped(last, design, top)
+    full = read_configuration_unwrapped(last, design, reference)
     assert not any(k[0] == ox._XB_SENTINEL for k in full), (
         "inserts must drop from read-back"
     )
@@ -95,10 +94,6 @@ def _assert_real_geometry_recovered(job, design, workspace, n_extra: int):
 @pytest.mark.parametrize("design_key", ["6hb", "18hb"])
 @pytest.mark.parametrize("mode", ["precise", "bulk"])
 def test_extra_base_design_relaxes_and_runs_production(design_key, mode, tmp_path):
-    if not os.environ.get("NADOC_RUN_OXDNA_SLOW"):
-        pytest.skip(
-            "opt-in: set NADOC_RUN_OXDNA_SLOW=1 (real relax + 5M production is ~minutes)"
-        )
     if find_oxdna() is None:
         pytest.skip("no real oxDNA binary on PATH/$OXDNA_BIN")
 

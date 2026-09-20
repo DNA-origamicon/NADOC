@@ -14,7 +14,7 @@ from backend.core.biotin_atomistic import CATALOG
 from backend.core.biotin_teg_chemistry import chemical_definition
 from backend.core.namd_topology import (
     _write_segment_pdbs, _psfgen_script, _psfgen_pdb_record,
-    _psfgen_atom_name, find_psfgen,
+    _psfgen_atom_name,
 )
 from backend.core.md_charge import parse_psf_atoms
 

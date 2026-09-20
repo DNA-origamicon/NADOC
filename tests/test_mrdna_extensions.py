@@ -439,7 +439,6 @@ def test_real_arbd_runs_with_extensions(tmp_path, routed_6hb):
     from backend.core.mrdna_bridge import (
         ensure_wsl_cuda_libs,
         find_arbd,
-        mrdna_model_from_nadoc,
     )
     from backend.core.mrdna_runner import _SIM_STEM, extract_mrdna_results
 
@@ -448,24 +447,31 @@ def test_real_arbd_runs_with_extensions(tmp_path, routed_6hb):
     ensure_wsl_cuda_libs()
 
     def _run(design, out):
+        from backend.parameterization.mrdna_inject import CrossoverPotentialOverride, mrdna_model_from_nadoc_parameterized
         out.mkdir(parents=True, exist_ok=True)
-        mrdna_model_from_nadoc(design).simulate(
+        model = mrdna_model_from_nadoc_parameterized(design, CrossoverPotentialOverride.from_database("T0"))
+        # Resolve each tail nucleotide explicitly for the attachment-distance
+        # oracle; a 5-nt coarse centroid is not a terminal nucleotide position.
+        model.clear_beads()
+        model.generate_bead_model(1, 1, local_twist=True, escapable_twist=False)
+        model.simulate(
             output_name=_SIM_STEM,
             directory=str(out),
             num_steps=500,
-            timestep=200e-6,
+            timestep=40e-6,
             gpu=0,
             output_period=250,
         )
+        from backend.core.mrdna_manifest import build_mrdna_nucleotide_manifest, bind_manifest_to_mrdna_particles
+        from backend.core.oxdna_staleness import oxdna_design_fingerprint
+        manifest = build_mrdna_nucleotide_manifest(design, design_fingerprint=oxdna_design_fingerprint(design))
+        bind_manifest_to_mrdna_particles(manifest, model).write(out)
         return extract_mrdna_results(design, out)
 
     d = _with_tails(routed_6hb)
     n_ext = sum(len(e.sequence or "") for e in d.extensions)
-    try:
-        res_with = _run(d, tmp_path / "with")
-        res_base = _run(routed_6hb, tmp_path / "base")
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"ARBD simulation unavailable: {exc}")
+    res_with = _run(d, tmp_path / "with")
+    res_base = _run(routed_6hb, tmp_path / "base")
 
     ids = {f"__ext_{e.id}" for e in d.extensions}
     tails = [p for p in res_with["positions"] if p["helix_id"] in ids]

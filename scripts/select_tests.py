@@ -2,6 +2,10 @@
 """Change-based backend test selection (a safe, hand-rolled substitute for the
 broken pytest-testmon on pytest 9.x).
 
+All decisions below select SOFTWARE tests only. tests/conftest.py centrally
+deselects scientific campaigns unless explicitly requested with --scientific;
+scientific campaigns are not deferred debt. See docs/scientific_validation.md.
+
 SLOW-LOCK (the headline rule): heavy (``slow``) tests NEVER run outside a
 test-dedicated session (``just test-session``, TTY-only — see scripts/test_session.sh).
 Outside one, a FULL/AREAS verdict is downgraded to the fast suite and the owed heavy

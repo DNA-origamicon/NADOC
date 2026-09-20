@@ -1,6 +1,4 @@
 import os
-import shutil
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -77,11 +75,9 @@ def test_skip_accepts_stationary_noisy_data_and_records_margins():
     assert all(r['passed'] and len(r['windows'])==2 for r in d['convergence'].values())
 
 
-def test_real_resumed_package_passes_without_rewriting_native_logs(tmp_path):
-    source=Path('workspace/md_jobs/48c1995afbd5/package')
-    if not (source/'peg_relax_p10.resume2.log').exists():
-        pytest.skip('native continuation fixture unavailable')
-    p=tmp_path/'package';shutil.copytree(source,p)
+def test_generated_resumed_package_pairs_logs_and_trajectory(tmp_path):
+    from tests.peg_protocol_fixture import write_evidence
+    p = write_evidence(tmp_path / 'package')
     # Deliberately reverse timestamps; semantics must remain resume1 then resume2.
     os.utime(p/'peg_relax_p10.resume1.log',(2e9,2e9))
     r=assess_segment(p,'peg_relax_p10')

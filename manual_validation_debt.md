@@ -306,3 +306,11 @@ drag pins across a camera move). NOT hand-checked: (a) highlight glow size/visib
 real multi-helix design, (b) how each callout type (elbow / straight / rounded / shelf) looks over dense
 geometry and at Size 2.5×, (c) base / end / domain / cluster / crossover targets on a loaded `.nadoc`, plus placement quality (least design covered, no jitter while orbiting) on a dense multi-helix design and with a real protein / gold particle,
 (d) `just smoke` (not run), (e) a real save/close/reopen of a user `.nadoc` with annotations (automated: autosave → file on disk → import round-trip only). See `memory/project_annotations.md`.
+
+## MV-SEPT-MEMORY — PENDING (2026-09-19)
+
+On an isolated large MD trajectory, force the supported JSON transport fallback and scrub/play
+past the coordinate-cache budget; inspect heap/GPU memory and representation switching. Typed
+array accounting, eviction, and precision have unit regressions, but no large-trajectory browser
+memory measurement was performed. Preserve exact requested frames and allow one foreground
+page when it alone exceeds the budget. See `docs/maintenance_2026_09.md`.

@@ -1,5 +1,13 @@
 import { initTrajectoryStream } from './trajectory_stream.js'
 
+// JSON fallback arrays have no byteLength. Float64 preserves their numeric
+// precision while giving both transports the same explicit storage accounting.
+function normalizeFrames(result) {
+  if (result?.frames) result.frames = result.frames.map(frame =>
+    Array.isArray(frame) ? Float64Array.from(frame) : frame)
+  return result
+}
+
 /** Open a trajectory without making its length the startup cost. Frame-count and
  * stage metadata cover the entire selection; coordinate pages remain exact. */
 export async function loadProgressiveTrajectory({ jobId, spec, downloads, metadata,
@@ -11,6 +19,7 @@ export async function loadProgressiveTrajectory({ jobId, spec, downloads, metada
   ])
   downloads.consumed(jobId, firstSpec)
   if (!first?.ready || !first.frames?.length || !meta?.n_frames) throw new Error('No trajectory frames')
+  normalizeFrames(first)
   const frames = new Array(meta.n_frames)
   first.frames.forEach((frame, i) => { frames[i] = frame })
   const resp = { ...first, ...meta, frames, n_frames: meta.n_frames,
@@ -29,8 +38,12 @@ export async function loadProgressiveTrajectory({ jobId, spec, downloads, metada
       ])
       if (start === 0) seed = null
       downloads.consumed(jobId, range)
-      if (!result?.ready || result.frames.length !== end - start + 1) throw new Error('Incomplete trajectory page')
-      bytesPerFrame = Math.max(bytesPerFrame, (result.frames[0]?.byteLength || 0) + (heavyBytes || 0))
+      if (!result?.ready || result.frames?.length !== end - start + 1) throw new Error('Incomplete trajectory page')
+      normalizeFrames(result)
+      for (const frame of result.frames) {
+        if (!ArrayBuffer.isView(frame)) throw new Error('Invalid trajectory frame')
+        bytesPerFrame = Math.max(bytesPerFrame, frame.byteLength + (heavyBytes || 0))
+      }
       return result
     },
     apply: async (page, start, end) => {

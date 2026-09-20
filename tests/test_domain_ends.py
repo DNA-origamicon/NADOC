@@ -34,12 +34,33 @@ from scripts.blunt_ends_report import (
 
 EXAMPLES = pathlib.Path(__file__).parent.parent / "Examples"
 CADNANO = EXAMPLES / "cadnano"
-WORKSPACE = pathlib.Path(__file__).parent.parent / "workspace"
+def _overhang_end_fixture():
+    """Minimal reproduction of the two separated 10-nt stub domains."""
+    from backend.core.lattice import make_bundle_design
+    from backend.core.models import Domain, Direction, Strand, StrandType
+
+    design = make_bundle_design([(0, 0), (0, 1)], length_bp=47)
+    root, stub = design.helices
+    root = root.model_copy(update={"id": "root", "bp_start": -5})
+    stub = stub.model_copy(update={"id": "h_XY_1_0"})
+    def strand(name, helix, first, last, kind, overhang=None):
+        return Strand(id=name, strand_type=kind, domains=[Domain(
+            helix_id=helix, start_bp=first, end_bp=last,
+            direction=Direction.FORWARD if last > first else Direction.REVERSE,
+            overhang_id=overhang)])
+    return design.copy_with(helices=[root, stub], strands=[
+        strand("scaf-a", "root", 0, 41, StrandType.SCAFFOLD),
+        strand("scaf-b", "root", 41, 10, StrandType.SCAFFOLD),
+        strand("tip", "root", -1, -5, StrandType.STAPLE),
+        strand("stub-a", stub.id, 0, 9, StrandType.STAPLE, "ovhg_h_XY_1_1_0_3p"),
+        strand("stub-b", stub.id, 32, 41, StrandType.STAPLE, "ovhg_h_XY_1_1_41_5p"),
+    ])
 
 
-def _load(path: pathlib.Path):
-    if not path.exists():
-        pytest.skip(f"fixture not present: {path}")
+def _load(path):
+    if callable(path):
+        return path()
+    assert path.is_file(), f"committed fixture missing: {path}"
     from backend.core.lattice import autodetect_all_overhangs
     from backend.api.crud import _recenter_design
 
@@ -64,7 +85,7 @@ DESIGNS = {
     "6hb": CADNANO / "Honeycomb_6hb_test1.json",
     "hinge": CADNANO / "Ultimate Polymer Hinge 191016.json",
     "voltron": EXAMPLES / "Voltron_Core_Arm_V6.sc",
-    "ohtest2": WORKSPACE / "OHtest2.nadoc",
+    "ohtest2": _overhang_end_fixture,
 }
 
 

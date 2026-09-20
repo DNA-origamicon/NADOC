@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from pathlib import Path
 
 import pytest
 
@@ -299,12 +298,17 @@ def test_cube_pore_saved_route_closes_and_is_idempotent():
     from backend.core.scaffold_reset import reset_scaffold_to_structure
     from tests.test_scaffold_idempotence import _topology
 
-    path = Path(__file__).resolve().parents[1] / "workspace/cube_pore.nadoc"
-    if not path.exists():
-        pytest.skip(
-            "local cube_pore design unavailable; synthetic 6x6 covered separately"
-        )
-    saved = Design.model_validate_json(path.read_text())
+    from backend.api import headless_build as hb, state
+
+    # Rebuild the original 6×6 specimen, before later manual workspace edits.
+    # A forced-ligation design intentionally opts out of reset/idempotence.
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle([(r, c) for r in range(6) for c in range(6)], 40,
+                         lattice=LatticeType.SQUARE, name="cube_pore_test")
+        hb.auto_scaffold(seamless=True)
+        hb.full_autostaple()
+        saved = state.get_or_404().model_copy(deep=True)
+    saved = Design.from_json(saved.to_json())
     seed, _ = reset_scaffold_to_structure(saved)
     routed, result = auto_scaffold_seamless(saved)
     _assert_closed_route(seed, routed)

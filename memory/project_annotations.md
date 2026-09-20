@@ -35,6 +35,9 @@ position, target = the canonical selection refs captured with **Use selection**.
   edits (never writes into the wrong design); undo/redo keep the CURRENT annotations (`_restore_edit_snapshot`);
   excluded from atomistic topology hash + part-identity + periodic-cell derivative. Legacy localStorage
   annotations (`nadoc.annotations.v1:<id>`) are adopted once into an annotation-less design, then removed.
+- **Response ordering:** `api/design_revisions.js` retains acknowledged annotation fields
+  separately from full-design revisions. A delayed geometry response can still apply without
+  erasing newer annotations; late acknowledgements for a closed design are ignored.
 - **Global toggle:** `annotations_enabled` (checkbox atop the tab) hides callouts + highlights, keeps entries, saved in the file.
 - **Auto placement:** `annotation_occupancy.js` projects visible backbone beads (stride-capped at 20k) +
   every protein/nanoparticle disc into a 12 px grid (SAT coverage + distance transform, rebuilt only when

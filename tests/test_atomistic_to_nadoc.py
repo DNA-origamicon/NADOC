@@ -1203,17 +1203,8 @@ class TestBuildReferenceMapAndCompute:
         assert result.max_deviation_nm == pytest.approx(0.4, abs=1e-9)
 
 
-# ── extract_from_xtc — env-bound, skip-marked per Pass 11-B prompt ───────────
-
-
-@pytest.mark.skip(
-    reason="extract_from_xtc requires a real binary XTC trajectory; "
-    "covered by tests/test_atomistic_round_trip.py when 10hb fixtures "
-    "are present (env-bound, Pass 11-B prompt §Stop conditions).",
-)
-def test_extract_from_xtc_requires_binary_fixture():
-    """Marker test — body intentionally empty."""
-    pytest.fail("Should be skipped by marker.")
+# Binary XTC extraction is exercised with generated native GROMACS input by
+# test_atomistic_round_trip.py; no permanently skipped placeholder is needed.
 
 
 # ── md_snap_mask — PBC-snap membership (crossover-extra-base wrap fix) ─────────

@@ -37,12 +37,12 @@ describe('exact trajectory pages', () => {
     expect(opened.resp.frames[249]).toBeUndefined()
     for(const i of [0,8,24,40]) await opened.ensure(i)
     expect(heavy).toHaveBeenLastCalledWith(40,55)
-    expect(opened.resp.frames[0]).toEqual([0])
+    expect(opened.resp.frames[0]).toEqual(new Float64Array([0]))
     await opened.ensure(0)
-    expect(opened.resp.frames[0]).toEqual([0])
+    expect(opened.resp.frames[0]).toEqual(new Float64Array([0]))
     await opened.fill()
     expect(opened.status().complete).toBe(true)
-    expect(opened.resp.frames[249]).toEqual([249])
+    expect(opened.resp.frames[249]).toEqual(new Float64Array([249]))
     const calls = get.mock.calls.length
     for (const i of [249,0,100,8,200]) await opened.ensure(i)
     expect(get).toHaveBeenCalledTimes(calls)
@@ -74,5 +74,24 @@ it('stops full preparation at the memory budget without substituting requested f
   await opened.ensure(90)
   expect(opened.resp.frames[90]).toBeDefined()
   expect(opened.status().bytes).toBeLessThanOrEqual(900)
+  expect(evict).toHaveBeenCalled()
+})
+
+it('bounds JSON fallback frames and preserves double precision', async () => {
+  const value = 1.123456789012345
+  const get = async (_id, s) => ({ ready: true, frames: Array.from(
+    { length: s.frameEnd - s.frameStart + 1 }, () => Array(10).fill(value)) })
+  const evict = vi.fn()
+  const opened = await loadProgressiveTrajectory({ jobId: 'json', spec: {},
+    downloads: { get, consumed() {} }, metadata: async () => ({ n_frames: 100 }),
+    heavy: async () => 0, evict, live: () => true, budgetBytes: 2000 })
+  await opened.ensure(0)
+  await opened.fill()
+  expect(opened.status()).toMatchObject({ buffered: 24, bytes: 1920, limited: true, complete: false })
+  expect(opened.resp.frames[0][0]).toBe(value)
+  await opened.ensure(90)
+  expect(opened.status().bytes).toBeLessThanOrEqual(2000)
+  expect(opened.resp.frames[0]).toBeUndefined()
+  expect(opened.resp.frames[90][0]).toBe(value)
   expect(evict).toHaveBeenCalled()
 })

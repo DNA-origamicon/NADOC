@@ -9,6 +9,20 @@ metadata:
 
 # mrDNA relaxation panel (Dynamics tab)
 
+## Native-fixture/decoder maintenance (2026-09-19)
+
+Native extension/extra-base tests now build the required nucleotide manifest with
+the parameterized production bridge and surface ARBD/decoder errors as failures.
+Fine-resolution extension smoke tests retain their root-distance assertions.
+Coarse output without orientation particles uses the existing translation-only
+mapping; it must not construct a unique fine nucleotide orientation for a bead
+that represents several nucleotides. Focused native cases pass.
+
+A newly runnable legacy per-helix zero-step oracle still reports mean position
+error 0.691 nm against its unchanged 0.10 nm limit. `build_md_seed_override` still
+uses that decoder, so it cannot simply be called obsolete. Scientific review is
+pending; no phase constants, geometry or tolerance changes have been made.
+
 ## Visualization card (2026-08-12)
 
 - Job-snapshot Relaxed shape, 5-bp CG beads, trajectory RMSF, and aligned

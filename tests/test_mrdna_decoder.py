@@ -346,3 +346,15 @@ def test_mrdna_orientation_x_maps_to_documented_backbone_y_axis():
     # NADOC radial x axis therefore lands on +y when O points along +x.
     assert frame[:, 0] == pytest.approx([0.0, 1.0, 0.0])
     assert frame[:, 2] == pytest.approx([0.0, 0.0, 1.0])
+
+
+def test_coarse_particles_do_not_require_a_unique_nucleotide_orientation(monkeypatch):
+    from backend.core import mrdna_decoder as decoder
+    def unexpected(*args):
+        raise AssertionError('Coarse particles have no fine orientation frame')
+    monkeypatch.setattr(decoder, '_mrdna_seed_particle_frames', unexpected)
+    universe = SimpleNamespace(atoms=[SimpleNamespace(name='DNA')])
+    manifest = MrdnaNucleotideManifest(design_fingerprint='coarse', records=[])
+    coords = np.zeros((1, 3))
+    assert decoder._dna_particle_frame_rotations(manifest, universe, coords, coords,
+                                                  design=object()) == {}

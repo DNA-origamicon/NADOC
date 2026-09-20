@@ -1,6 +1,5 @@
 """PEG model semantics and actual CPU/CUDA force checks (isolated engine optional)."""
 import subprocess
-from pathlib import Path
 
 import numpy as np
 import pytest

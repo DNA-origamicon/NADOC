@@ -1,11 +1,8 @@
-"""Real-protein performance gate for the Conjugate Manager's initial site map.
+"""Real-protein performance gate over the committed, provenance-pinned 8SCP input."""
 
-Run explicitly after downloading the public RCSB fixture::
-
-    curl -L https://files.rcsb.org/download/8SCP.pdb -o /tmp/8SCP.pdb
-    .venv/bin/pytest -q tests/test_conjugation_8scp_performance.py
-"""
-
+import gzip
+import hashlib
+import json
 from pathlib import Path
 from time import perf_counter
 
@@ -17,11 +14,11 @@ from backend.core.protein import parse_protein_pdb
 
 @pytest.mark.integration
 def test_8scp_initial_surface_mapping_completes_below_two_seconds():
-    fixture = Path("/tmp/8SCP.pdb")
-    if not fixture.is_file():
-        pytest.skip("download https://files.rcsb.org/download/8SCP.pdb to /tmp/8SCP.pdb")
-
-    asset = parse_protein_pdb(fixture.read_text(), name="8SCP")
+    fixtures = Path(__file__).parent / "fixtures"
+    raw = gzip.decompress((fixtures / "8scp.pdb.gz").read_bytes())
+    provenance = json.loads((fixtures / "8scp.provenance.json").read_text())
+    assert hashlib.sha256(raw).hexdigest() == provenance["uncompressed_sha256"]
+    asset = parse_protein_pdb(raw.decode(), name="8SCP")
     started = perf_counter()
     candidates = find_conjugation_candidates(asset)
     elapsed = perf_counter() - started

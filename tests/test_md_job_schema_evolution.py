@@ -12,11 +12,9 @@ kwarg. A real archived job (24hb_2xT, ``bb8654eef459``) still carries
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from backend.core.md_job import MdJob, new_job
 
-_REPO = Path(__file__).resolve().parents[1]
 
 
 def test_load_drops_a_retired_field_instead_of_crashing(tmp_path):
@@ -34,16 +32,16 @@ def test_load_drops_a_retired_field_instead_of_crashing(tmp_path):
     assert not hasattr(loaded, "early_stop_tier")
 
 
-def test_the_real_archived_24hb_2xT_job_still_loads():
-    """Direct regression pin: this exact job.json (still on disk) triggered the bug."""
-    archive = Path("/media/jojo/Archive/NADOC_archive/bb8654eef459/job.json")
-    if not archive.exists():
-        import pytest
-
-        pytest.skip("archived job not present on this machine")
-    data = json.loads(archive.read_text())
-    assert data.get("early_stop_tier") == "B"  # confirms this pins the real scenario
-
-    job = MdJob.load("bb8654eef459", _REPO / "workspace")
+def test_legacy_job_with_retired_tier_loads_without_new_schema_defaults(tmp_path):
+    """Reproduce the archived schema, without relying on a user's job directory."""
+    folder = tmp_path / "md_jobs" / "legacy"
+    folder.mkdir(parents=True)
+    (folder / "job.json").write_text(json.dumps({
+        "job_id": "legacy", "design_name": "24hb_2xT",
+        "protocol": "mgh_slow_release", "status": "stopped", "created_at": 1.0,
+        "package_subdir": "package/24hb_2xT_namd_solvated", "name_stem": "24hb_2xT",
+        "early_stop_tier": "B",
+    }))
+    job = MdJob.load("legacy", tmp_path)
     assert job.design_name == "24hb_2xT"
     assert not hasattr(job, "early_stop_tier")

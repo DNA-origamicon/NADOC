@@ -125,6 +125,7 @@ def test_custom_qd_coating_roundtrip():
 
 def test_publication_count_and_override_persist_through_resize():
     response = client.post('/api/design/nanoparticles/gold-nanospheres', json={'diameter_nm': 10})
+    assert response.status_code == 201, response.text
     pid = state.get_design().nanoparticles[0].id
     url = f'/api/design/nanoparticles/{pid}'
     assert client.patch(url, json={'coating': {'coverage_reference': 'gurtovenko_2019'}}).status_code == 200

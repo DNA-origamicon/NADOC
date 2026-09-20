@@ -16,8 +16,9 @@ Generic production/settings changes and remote launch are rejected while physica
 qualification is incomplete. Native resident execution uses GPU atom migration off
 after observed patch-limit/exclusion failures. Gold–S, polarization and constant
 potential are unsupported. See [selection and capabilities](../docs/namd_gold_model_selection.md)
-and [native results](../workspace/gold_validation_20260914/RESULTS.md), including the
-strict split-run precision residual and unresolved density/statistical validation.
+and the [restart diagnosis](../experiments/gold_interfaces/evidence/gold_restart_diagnosis_20260915/RESULTS.md).
+The earlier workspace native report is unavailable in this checkout; density and
+statistical qualification remain separate from restart precision.
 
 ## Box and solvent sidebar (2026-09-13)
 

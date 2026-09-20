@@ -1,0 +1,5 @@
+{
+  "source": "https://files.rcsb.org/download/8SCP.pdb",
+  "uncompressed_sha256": "3d272d2bffbbef024b69f045b13a22ddfbc5ad9568ab5bbe6baac62559b81908",
+  "purpose": "Immutable real-protein input for conjugation surface-mapping performance; no network or /tmp prerequisite."
+}

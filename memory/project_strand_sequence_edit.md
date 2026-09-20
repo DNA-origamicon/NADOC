@@ -13,6 +13,14 @@ to the strand right-click menu in BOTH editors; for a staple whose scaffold is
 sequenced, show the paired scaffold bases above the input and highlight incorrect
 base pairing — but still allow any bases.
 
+## Sequence preservation during topology edits (2026-09-19)
+
+`make_nick` slices an assigned sequence at the loop/skip-aware length of its first
+fragment. `_ligate` concatenates ordinary assigned strand sequences as well as
+native residues; a missing half is filled with unknown bases, while two unassigned
+ordinary strands remain unassigned. Fourteen focused regressions pass for both
+strand directions, loop/skip offsets, round trips and partial assignments.
+
 ## What shipped
 
 **Backend**

@@ -800,28 +800,14 @@ def _make_simple_design():
 def test_resize_strand_ends_extend_3p_within_helix():
     """Extending a 3' end within existing helix bounds increases end_bp by delta."""
     design, staple = _make_simple_design()
-    # Find a strand that has only one domain so we can predict the result easily
-    single_domain_staple = next(
-        (
-            s
-            for s in design.strands
-            if s.strand_type.value == "staple" and len(s.domains) == 1
-        ),
-        None,
-    )
-    # If no single-domain staple, just use any staple
-    if single_domain_staple is None:
-        single_domain_staple = staple
-
-    helix = next(
-        h for h in design.helices if h.id == single_domain_staple.domains[-1].helix_id
-    )
+    # Trim the forward staple first, leaving a known three-base gap to refill.
+    single_domain_staple = next(s for s in design.staples()
+                               if len(s.domains) == 1 and s.domains[0].end_bp > s.domains[0].start_bp)
+    helix = next(h for h in design.helices if h.id == single_domain_staple.domains[0].helix_id)
+    design = resize_strand_ends(design, [{"strand_id": single_domain_staple.id,
+                                         "helix_id": helix.id, "end": "3p", "delta_bp": -3}])
+    single_domain_staple = next(s for s in design.strands if s.id == single_domain_staple.id)
     term_dom = single_domain_staple.domains[-1]
-
-    # Only extend if there is room
-    helix_end_bp = helix.bp_start + helix.length_bp - 1
-    if term_dom.end_bp + 3 > helix_end_bp:
-        pytest.skip("no room to extend within helix bounds in this design")
 
     original_end_bp = term_dom.end_bp
     result = resize_strand_ends(
@@ -906,8 +892,7 @@ def test_resize_strand_ends_trim_3p():
         ),
         None,
     )
-    if staple is None:
-        pytest.skip("no suitable staple strand found in this design")
+    assert staple is not None, "fixture must contain a trimmable staple"
 
     helix = next(h for h in design.helices if h.id == staple.domains[-1].helix_id)
     original_end_bp = staple.domains[-1].end_bp

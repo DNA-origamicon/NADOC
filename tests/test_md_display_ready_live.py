@@ -1,71 +1,25 @@
-"""Live-job end-to-end check: Display-MD works + is ready in time for 3x6x200.
+"""Headless 18HB/200bp websocket display check with >62 strands.
 
-ENVIRONMENT-DEPENDENT integration test.  Registered *slow* (skipped by
-``just test-fast``) and SKIPS unless the real 3x6x200_test NAMD job is present, and
-under xdist (``just test`` uses ``-n auto`` — 16 workers + the live sim saturate the
-CPU and inflate the wall-clock budgets into false failures).  Run it directly:
-
-    python -m pytest tests/test_md_display_ready_live.py
-
-It drives ``/ws/md-run`` against the actual job (143 MB PSF, live DCD) mapped onto
-the design the job was built from, and checks BOTH things that were broken/slow:
-
-  * CORRECTNESS — the segid-based p_order maps every trajectory DNA P atom, and the
-    streamed frame Kabsch-aligns to the design at a physically sane RMSD (a scrambled
-    mapping — the psfgen chainID-collision bug this replaced — lands at >50 Å).
-  * READINESS   — one-time ``load`` → ``ready`` (what the prewarm hides) and the warm
-    ``get_latest`` frame (what a prewarmed toggle pays) stay within budget.  The
-    ``_try_unwrap`` make-whole skip keeps the load off its former multi-minute path.
+Controlled DCD frames verify mapping and readiness, not physical equilibration.
+The existing load and warm-frame budgets also run under the full parallel suite.
 """
 
 from __future__ import annotations
 
-import json
-import os
 import time
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from backend.api import state as design_state
 from backend.api.main import app
-from backend.core.models import Design
 
 
-_REPO = Path(__file__).resolve().parents[1]
-_JOBS = _REPO / "workspace" / "md_jobs"
+pytest_plugins = ["tests.md_trajectory_fixture"]
 
 _LOAD_BUDGET_S = 30.0  # cold model build + PSF parse ≈ ~9 s (regression ceiling)
 _WARM_FRAME_BUDGET_S = 2.0  # warm get_latest = O(1) dcd read + PBC/Kabsch (~tens of ms)
-_RMSD_SANE_A = 20.0  # correct mapping ≈ 7 Å; a scrambled one is >50 Å
-
-
-def _find_job():
-    if not _JOBS.exists():
-        return None
-    for psf in sorted(_JOBS.glob("*/package/*/*_hmr.psf")):
-        if "3x6x200" not in psf.name:
-            continue
-        run_dir = psf.parent
-        job_root = run_dir.parents[1]
-        design_json = job_root / "design.json"
-        dcds = sorted(run_dir.glob("output/*.dcd"), key=lambda p: p.stat().st_mtime)
-        pdb = run_dir / "3x6x200_test.pdb"
-        if design_json.exists() and pdb.exists() and dcds:
-            return {"design": design_json, "psf": psf, "pdb": pdb, "dcd": dcds[-1]}
-    return None
-
-
-_JOB = _find_job()
-
-pytestmark = [
-    pytest.mark.skipif(_JOB is None, reason="3x6x200_test live NAMD job not present"),
-    pytest.mark.skipif(
-        bool(os.environ.get("PYTEST_XDIST_WORKER")),
-        reason="timing test — run serially, not under xdist parallelism",
-    ),
-]
+_RMSD_SANE_A = 20.0  # controlled fixture ≈ 0.2 Å; a scrambled mapping is >50 Å
 
 
 def _design_p_reference(design):
@@ -81,10 +35,10 @@ def _design_p_reference(design):
     return ref
 
 
-def test_display_md_end_to_end_correct_and_ready(capsys):
+def test_display_md_end_to_end_correct_and_ready(capsys, generated_large_md):
     from fastapi.testclient import TestClient
 
-    design = Design.model_validate(json.loads(_JOB["design"].read_text()))
+    design = generated_large_md.design
     design_state.set_design(design)
     p_ref = _design_p_reference(design)
 
@@ -93,9 +47,9 @@ def test_display_md_end_to_end_correct_and_ready(capsys):
         ws.send_json(
             {
                 "action": "load",
-                "topology_path": str(_JOB["psf"]),
-                "xtc_path": str(_JOB["dcd"]),
-                "coordinate_path": str(_JOB["pdb"]),
+                "topology_path": str(generated_large_md.psf),
+                "xtc_path": str(generated_large_md.dcd),
+                "coordinate_path": str(generated_large_md.ref),
                 "mode": "nadoc",
             }
         )
@@ -108,7 +62,7 @@ def test_display_md_end_to_end_correct_and_ready(capsys):
                 break
             if m["type"] == "error":
                 pytest.fail(f"load errored (mapping regressed?): {m['message']}")
-            assert m["type"] == "log", m
+            assert m["type"] in {"log", "loading"}, m
         t_load = time.perf_counter() - t0
         assert ready is not None and ready["n_frames"] > 0
 
@@ -143,7 +97,7 @@ def test_display_md_end_to_end_correct_and_ready(capsys):
 
     with capsys.disabled():
         print(
-            f"\n[md-e2e] {_JOB['dcd'].name}: mapped {len(positions)} P "
+            f"\n[md-e2e] {generated_large_md.dcd.name}: mapped {len(positions)} P "
             f"({len(got)} rigid) · RMSD-to-design {rmsd_A:.1f} Å · "
             f"load {t_load:.2f}s · warm frame {t_frame * 1000:.0f} ms · "
             f"{ready['n_frames']} frames"

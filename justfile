@@ -47,7 +47,7 @@ test-status:
     @echo "watermark: $(cat .nadoc-test-watermark 2>/dev/null | cut -c1-12 || echo 'none — full suite owed')"
     @echo "slow groups owed (deferred by fast-only sessions): $(cat .nadoc-slow-pending 2>/dev/null | tr '\n' ' ' || echo 'none')"
 
-# FULL suite incl. every heavy sim (minutes). TEST-DEDICATED SESSION ONLY.
+# FULL software suite, including bounded native integration checks. TEST-DEDICATED SESSION ONLY.
 # The pre-push gate — never the per-change loop.
 # --dist loadfile keeps each file's tests on one worker: tests share a module-level
 # TestClient(app) over global per-doc backend state, so a file's tests must stay
@@ -61,6 +61,14 @@ test:
 # Forward pytest args: `just test-slow -k oxdna`.
 test-slow *ARGS:
     scripts/test_guard.sh "test-slow" 1 1 -- bash -c 'uv run pytest tests/ -n auto --dist loadfile -m slow {{ARGS}} && rm -f .nadoc-slow-pending'
+
+# Scientific campaigns are never software validation or deferred debt.
+test-scientific TARGET *ARGS:
+    scripts/test_guard.sh "test-scientific" 1 1 -- uv run pytest --scientific {{TARGET}} {{ARGS}}
+
+# Collection only; no simulations or test fixtures run.
+test-scientific-list:
+    uv run pytest tests/ --scientific --collect-only -q
 
 # The fast suite, nothing else (~20s): skips every `slow`-marked test. Always allowed.
 # If this ever creeps over the 60s budget the guard says so and the slowest unmarked

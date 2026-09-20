@@ -79,11 +79,11 @@ def main():
     unit_ps=np.sqrt(44*.8518**2/24.943387854)
     interval=max(1,args.steps//args.trajectory_frames)
     stage=OxdnaStageSpec('chain','production','MD',args.steps,args.backend,
-        dt=args.dt_fs/1000/unit_ps,thermostat='langevin',interaction='DNA2PEG',
+        dt=args.dt_fs/1000/unit_ps,thermostat='langevin',gamma_trans=unit_ps,interaction='DNA2PEG',
         peg_parameters=PegParameters().engine_parameters(),seed=args.seed)
     inp=render_stage_input(stage,'topology.top','conf.dat')
     lines=[x for x in inp.splitlines() if not x.startswith(('T =','print_conf_interval =','print_energy_every ='))]
-    inp='\n'.join(lines)+f'\nT = {args.temperature}K\npeg_chudoba = true\npeg_chudoba_pure = true\nT_force_value = true\ngamma_trans = {unit_ps}\nprint_conf_interval = {interval}\nprint_energy_every = {interval}\n'
+    inp='\n'.join(lines)+f'\nT = {args.temperature}K\npeg_chudoba = true\npeg_chudoba_pure = true\nT_force_value = true\nprint_conf_interval = {interval}\nprint_energy_every = {interval}\n'
     if args.sampling=='mc':
         inp=inp.replace('sim_type = MD','sim_type = MC')
         inp+='\nensemble = nvt\ndelta_translation = 0.04\ndelta_rotation = 0.1\ncheck_energy_every = 1\n'

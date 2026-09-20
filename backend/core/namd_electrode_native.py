@@ -25,8 +25,12 @@ def install_native(folder):
     """Compile against Tcl stubs if an SDK is installed; never require it for setup."""
     compiler=shutil.which('g++')
     roots=[Path(os.environ.get('NADOC_TCL_SDK','/usr')),Path('workspace/electrode_native_build/sdk/usr').resolve()]
+    tclsh = shutil.which('tclsh')
+    if tclsh:
+        roots.append(Path(tclsh).resolve().parent.parent)
     for root in roots:
-        include=root/'include/tcl8.6'
+        include=next((path for path in (root/'include/tcl8.6', root/'include')
+                      if (path/'tcl.h').is_file()), root/'include/tcl8.6')
         libs=list((root/'lib').glob('**/libtclstub8.6.a')) if include.exists() else []
         if compiler and (include/'tcl.h').exists() and libs:break
     else:return {'enabled':False,'reason':'Tcl 8.6 SDK/compiler unavailable; reference Tcl forces retained'}

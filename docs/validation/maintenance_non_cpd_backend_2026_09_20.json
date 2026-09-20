@@ -1,0 +1,175 @@
+{
+  "scope": "Full backend test-smart selection, excluding CPD/photoproduct work at user request",
+  "decision": "FULL",
+  "counts": {
+    "tests": 8967,
+    "passed": 8946,
+    "failed": 4,
+    "errors": 0,
+    "skipped": 17
+  },
+  "pytest_seconds": 22734.919,
+  "failures": [
+    {
+      "test": "tests.test_mrdna_pipeline.TestSyntheticRoundTrip::test_zero_step_position_accuracy",
+      "seconds": 0.006,
+      "message": "AssertionError: Mean position error 0.691 nm > 0.10 nm\nassert np.float64(0.6911751375159637) < 0.1"
+    },
+    {
+      "test": "tests.test_chain_completion_e2e::test_full_chain_runs_end_to_end_with_a_mock_binary",
+      "seconds": 0.085,
+      "message": "AssertionError: stage 0 spawn failed after 3 attempts: 400: Rebuild oxDNA with scripts/build-oxdna.sh for the current physics corrections.\nassert 'failed' == 'completed'\n  \n  - completed\n  + failed"
+    },
+    {
+      "test": "tests.test_oxdna_extra_base_production::test_extra_base_design_relaxes_and_runs_production[bulk-6hb]",
+      "seconds": 232.848,
+      "message": "AssertionError: designed duplex did not re-anneal with extra bases (6hb/bulk); final retention 0.84\nassert 0.8432539682539683 >= 0.85"
+    },
+    {
+      "test": "tests.test_oxdna_extra_base_production::test_extra_base_design_relaxes_and_runs_production[bulk-18hb]",
+      "seconds": 274.715,
+      "message": "AssertionError: designed duplex did not re-anneal with extra bases (18hb/bulk); final retention 0.85\nassert 0.8492063492063492 >= 0.85"
+    }
+  ],
+  "skips": [
+    {
+      "test": "tests.test_snupi_ssdna::test_snupi_mesh_ssdna_elements_match_the_real_binary[6hbx100_noT-expected0]",
+      "seconds": 0.004,
+      "message": "6hbx100_noT.nadoc not present"
+    },
+    {
+      "test": "tests.test_snupi_ssdna::test_snupi_mesh_ssdna_elements_match_the_real_binary[3x4SQ-expected1]",
+      "seconds": 0.003,
+      "message": "3x4SQ.nadoc not present"
+    },
+    {
+      "test": "tests.test_headless_hinge_build::test_real_bound_end_to_root_design_routes_and_preserves_all_fls",
+      "seconds": 0.006,
+      "message": "workspace/3x6_hinge_bound_end_to_root.nadoc not present in this checkout"
+    },
+    {
+      "test": "tests.test_simple_router::test_full_autostaple_preserves_manual_connections_and_overhangs",
+      "seconds": 0.007,
+      "message": "3x6_hinge_bound_end_to_root.nadoc absent (hand-built fixture; see 3x6_autogen_hinge.nadoc)"
+    },
+    {
+      "test": "tests.test_mrdna_linkers::test_real_arbd_runs_with_linker[ds-attach0]",
+      "seconds": 14.314,
+      "message": "ARBD simulation unavailable: Unsupported mrDNA job: nucleotide_map.json is missing; rerun the job"
+    },
+    {
+      "test": "tests.test_mrdna_linkers::test_real_arbd_runs_with_linker[ss-attach1]",
+      "seconds": 14.051,
+      "message": "ARBD simulation unavailable: Unsupported mrDNA job: nucleotide_map.json is missing; rerun the job"
+    },
+    {
+      "test": "tests.test_peg_live::test_real_peg_worker_bursts_and_stops[CPU]",
+      "seconds": 0.022,
+      "message": "Build PEG Live bindings first"
+    },
+    {
+      "test": "tests.test_peg_live::test_real_peg_worker_bursts_and_stops[CUDA]",
+      "seconds": 0.022,
+      "message": "Build PEG Live bindings first"
+    },
+    {
+      "test": "tests.test_seamed_router::test_seamed_autoscaffold_preserves_hinge_forced_scaffold_anchors",
+      "seconds": 0.011,
+      "message": "workspace/Hinge3.nadoc not available"
+    },
+    {
+      "test": "tests.test_seamed_router::test_seamed_autoscaffold_does_not_place_hinge_xovers_on_manual_anchor_strands",
+      "seconds": 0.01,
+      "message": "workspace/Hinge3.nadoc not available"
+    },
+    {
+      "test": "tests.test_two_base_default::test_production_two_base_default_has_no_insert_defects[True-6hb_2xT]",
+      "seconds": 0.012,
+      "message": "Original geometry fixture missing: /home/joshua/NADOC/workspace/6hb_2xT.nadoc (workspace is not synced)"
+    },
+    {
+      "test": "tests.test_two_base_default::test_production_two_base_default_has_no_insert_defects[True-2x3SQx32_2xT]",
+      "seconds": 0.012,
+      "message": "Original geometry fixture missing: /home/joshua/NADOC/workspace/2x3SQx32_2xT.nadoc (workspace is not synced)"
+    },
+    {
+      "test": "tests.test_two_base_default::test_production_two_base_default_has_no_insert_defects[False-6hb_2xT]",
+      "seconds": 0.011,
+      "message": "Original geometry fixture missing: /home/joshua/NADOC/workspace/6hb_2xT.nadoc (workspace is not synced)"
+    },
+    {
+      "test": "tests.test_two_base_default::test_production_two_base_default_has_no_insert_defects[False-2x3SQx32_2xT]",
+      "seconds": 0.011,
+      "message": "Original geometry fixture missing: /home/joshua/NADOC/workspace/2x3SQx32_2xT.nadoc (workspace is not synced)"
+    },
+    {
+      "test": "tests.test_two_base_default::test_auditor_shows_promoted_production_v7_without_a_pending_proposal[6hb_2xT]",
+      "seconds": 0.012,
+      "message": "Original geometry fixture missing: /home/joshua/NADOC/workspace/6hb_2xT.nadoc (workspace is not synced)"
+    },
+    {
+      "test": "tests.test_two_base_default::test_auditor_shows_promoted_production_v7_without_a_pending_proposal[2x3SQx32_2xT]",
+      "seconds": 0.011,
+      "message": "Original geometry fixture missing: /home/joshua/NADOC/workspace/2x3SQx32_2xT.nadoc (workspace is not synced)"
+    },
+    {
+      "test": "tests.test_holliday_bridge_bow::test_scaffold_holliday_bow_clears_24hb_contacts_and_moves_only_linkers",
+      "seconds": 0.012,
+      "message": "Original geometry fixture missing: /home/joshua/NADOC/workspace/24hb_1xT.nadoc (workspace is not synced)"
+    }
+  ],
+  "slowest": [
+    {
+      "test": "tests.test_skip_twist_tuning_production::test_full_scale_converges_3x6x400",
+      "seconds": 14286.614
+    },
+    {
+      "test": "tests.test_oxdna_extra_base_production::test_extra_base_design_relaxes_and_runs_production[precise-6hb]",
+      "seconds": 1233.87
+    },
+    {
+      "test": "tests.test_oxdna_extra_base_production::test_extra_base_design_relaxes_and_runs_production[precise-18hb]",
+      "seconds": 1188.587
+    },
+    {
+      "test": "tests.test_skip_twist_tuning_production::test_skipped_square_design_relaxes_and_produces_intact",
+      "seconds": 699.376
+    },
+    {
+      "test": "tests.test_skip_twist_tuning_production::test_proxy_loop_mechanics_2x3x40",
+      "seconds": 556.06
+    },
+    {
+      "test": "tests.test_openmm_checker.TestOpenMMFullMD::test_single_helix_21bp_passes_drift_threshold",
+      "seconds": 458.928
+    },
+    {
+      "test": "tests.test_headless_oxdna_build::test_field_specimen_reanneals_and_equilibrates_real_engine",
+      "seconds": 328.796
+    },
+    {
+      "test": "tests.test_cando_linkers::test_voltroncore_ssdna_block_couples_and_solves_bounded",
+      "seconds": 316.063
+    },
+    {
+      "test": "tests.test_oxdna_extra_base_production::test_extra_base_design_relaxes_and_runs_production[bulk-18hb]",
+      "seconds": 274.715
+    },
+    {
+      "test": "tests.test_oxdna_extra_base_production::test_extra_base_design_relaxes_and_runs_production[bulk-6hb]",
+      "seconds": 232.848
+    }
+  ],
+  "post_run_repairs": {
+    "mock_chain": "current physics capability mocked; slow rerun pending",
+    "mrdna_linkers": "required manifest generated and exception-to-skip removed; slow rerun pending",
+    "native_reader_reference": "use conf.dat rather than topology.top; saved bulk retention values unchanged"
+  },
+  "science_findings": {
+    "mrdna_mean_error_nm": 0.6911751375159637,
+    "mrdna_limit_nm": 0.1,
+    "bulk_6hb_retention": 0.8432539682539683,
+    "bulk_18hb_retention": 0.8492063492063492,
+    "retention_limit": 0.85
+  }
+}

@@ -433,7 +433,11 @@ def test_full_chain_runs_end_to_end_with_a_mock_binary(tmp_path, monkeypatch):
     # Mock the oxDNA binary + analysis + health so the REAL orchestration runs fast.
     monkeypatch.setattr(routes_oxdna, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
     monkeypatch.setattr(routes_oxdna, "oxdna_supports_cuda", lambda *a, **k: True)
+    # This fake exercises orchestration, including the current capability gate;
+    # it makes no claim about native physics correctness.
+    monkeypatch.setattr(routes_oxdna, "oxdna_supports_physics_v3", lambda _: True)
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
+    monkeypatch.setattr(r, "oxdna_supports_physics_v3", lambda _: True)
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
     monkeypatch.setattr(
         r,

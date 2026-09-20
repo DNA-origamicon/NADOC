@@ -2013,6 +2013,12 @@ def make_nick(
         sequence=None,
     )
 
+    if strand.sequence is not None:
+        from backend.core.sequences import strand_sequence_length
+        split_at = strand_sequence_length(existing_design, new_strand_left)
+        new_strand_left.sequence = strand.sequence[:split_at]
+        new_strand_right.sequence = strand.sequence[split_at:]
+
     new_strands: List[Strand] = []
     for s in existing_design.strands:
         if s.id == strand.id:
@@ -2085,7 +2091,9 @@ def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: igno
     new_domains = _merge_adjacent_domains(list(s1.domains) + list(s2.domains))
     updates = {"domains": new_domains}
     native_ids = {h.id for h in design.helices if h.native_residues}
-    if any(d.helix_id in native_ids for d in (*s1.domains, *s2.domains)):
+    if s1.sequence is not None or s2.sequence is not None or any(
+        d.helix_id in native_ids for d in (*s1.domains, *s2.domains)
+    ):
         from backend.core.sequences import strand_sequence_length
         updates["sequence"] = "".join(
             (s.sequence or "").ljust(strand_sequence_length(design, s), "N")

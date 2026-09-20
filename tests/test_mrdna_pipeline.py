@@ -88,16 +88,10 @@ def _generate_primitive_fixture(
     design = _load_design(design_path)
     stem = "primitive"
     model = mrdna_model_from_nadoc(design)
-    try:
-        model.simulate(
-            output_name=stem,
-            directory=str(out_dir),
-            coarse_steps=steps,
-            fine_steps=steps,
-            output_period=max(1, steps // 10),
-        )
-    except Exception as exc:  # ARBD missing / GPU unavailable
-        pytest.skip(f"ARBD simulation unavailable: {exc}")
+    model.clear_beads()
+    model.generate_bead_model(1, 1, local_twist=True, escapable_twist=False)
+    model.simulate(output_name=stem, directory=str(out_dir), num_steps=steps,
+                   timestep=40e-6, output_period=max(1, steps // 10))
 
     # Fine stage = the psf whose companion .pdb has the most ATOM records.
     best, best_n = None, -1
@@ -114,7 +108,7 @@ def _generate_primitive_fixture(
             best_n, best = n, psf
     dcds = sorted(glob(str(out_dir / "output" / "*.dcd")))
     if best is None or not dcds:
-        pytest.skip("mrdna produced no fine-stage PSF/DCD")
+        pytest.fail("mrdna produced no fine-stage PSF/DCD")
     dcd = next((d for d in dcds if Path(best).stem in Path(d).stem), dcds[-1])
     return design, best, dcd
 
@@ -508,24 +502,17 @@ class TestSyntheticRoundTrip:
             tmpdir = Path(d)
             stem = "test_design"
 
-            # simulate(output_name, directory) writes:
-            #   stem-0.psf, stem-0.pdb  (coarse)
-            #   stem-1.psf, stem-1.pdb  (intermediate fine)
-            #   stem-2.psf, stem-2.pdb  (fine)
+            # simulate() does not accept run_fine/num_steps_fine; those old
+            # kwargs silently ran the default coarse simulation. Generate the
+            # actual fine initial files directly for this zero-step oracle.
             model = mrdna_model_from_nadoc(design)
-            model.simulate(
-                output_name=stem,
-                directory=str(tmpdir),
-                run_coarse=False,
-                run_fine=True,
-                num_steps_fine=[0],
-            )  # 0 ARBD steps → init PDB only
-
+            model.clear_beads()
+            model.generate_bead_model(1, 1, local_twist=True, escapable_twist=False)
             psf = tmpdir / f"{stem}-2.psf"
             pdb = tmpdir / f"{stem}-2.pdb"
-
-            if not psf.exists() or not pdb.exists():
-                pytest.skip("mrdna did not produce fine-stage PSF/PDB")
+            model.write_psf(str(psf))
+            model.write_pdb(str(pdb))
+            assert psf.is_file() and pdb.is_file()
 
             # Use the initial PDB as the 'DCD' (zero-step round-trip)
             override = nuc_pos_override_from_arbd_strands(
@@ -794,166 +781,9 @@ class TestRoutedPrimitiveIntegration:
             )
 
 
-@skip_no_mrdna
-class TestPhase3bRegression:
-    """
-    Regression test: the Phase 3b CG override must reduce EM convergence
-    steps vs. ideal B-DNA baseline by > 50%.  Requires GROMACS in PATH.
-    This test is slow (~3-5 min); mark it explicitly to run or skip.
-
-    XFAIL (2026-06-28): the EM-reduction PREMISE has gone stale and is no longer
-    measurable. When written, ideal-B-DNA U6hb needed ~500 GROMACS EM steps (hit the
-    nsteps cap) so a CG-prerelaxed override could show a big speedup (→14 steps). On
-    the current GROMACS/forcefield the ideal-B-DNA baseline itself converges in ~15
-    steps, so there is no headroom for a >50% reduction regardless of the CG seed
-    (measured: baseline 15, override 16 → ratio 1.07x). This is independent of the
-    fixture repoint. To revive: recalibrate the EM protocol (e.g. tighter emtol or a
-    starting structure genuinely far from a minimum) so the baseline is slow again.
-    Left here (run=False, no compute burned) as a documented marker, not a silent skip.
-    """
-
-    @pytest.mark.slow
-    @pytest.mark.xfail(
-        reason="EM-reduction premise stale: ideal-B-DNA baseline now "
-        "converges in ~15 GROMACS EM steps; >50% CG speedup "
-        "unmeasurable. Needs EM-protocol recalibration.",
-        run=False,
-    )
-    def test_step_reduction(self, tmp_path_factory):
-        import subprocess, re
-        from backend.core.gromacs_package import _build_gromacs_input_pdb, _find_gmx
-        from backend.core.mrdna_bridge import nuc_pos_override_from_arbd_strands
-
-        # The EM-speedup claim needs a large, genuinely-relaxed structure: a CG run
-        # only pre-positions atoms usefully when the bundle is big enough to flex
-        # away from ideal B-DNA. Regenerate from U6hb (the original regime) with a
-        # real relaxation, not the small primitive (which stays ~ideal → no speedup).
-        out = tmp_path_factory.mktemp("mrdna_p3b")
-        design, _psf, _dcd = _generate_primitive_fixture(
-            out, design_path=EXAMPLES / "U6hb.nadoc", steps=100_000
-        )
-        gmx = _find_gmx()
-        ff = "charmm36-feb2026_cgenff-5.0"
-
-        _EM_MDP = (
-            "integrator = steep\nnsteps = 500\nemtol = 1000.0\n"
-            "emstep = 0.01\nnstxout = 0\nnstlog = 10\nnstenergy = 10\n"
-            "coulombtype = PME\nrcoulomb = 1.0\nvdwtype = cut-off\n"
-            "rvdw = 1.0\npbc = xyz\n"
-        )
-
-        def _run_em(pdb_text: str, label: str, tmpdir: Path) -> int:
-            """Write PDB, run pdb2gmx+grompp+mdrun, return step count."""
-            (tmpdir / "input.pdb").write_text(pdb_text)
-            pdb_lines = [
-                l for l in pdb_text.splitlines() if l.startswith(("ATOM", "HETATM"))
-            ]
-            n_chains = 1 + sum(
-                1 for a, b in zip(pdb_lines, pdb_lines[1:]) if a[21] != b[21]
-            )
-
-            r = subprocess.run(
-                [
-                    gmx,
-                    "pdb2gmx",
-                    "-f",
-                    "input.pdb",
-                    "-o",
-                    "conf.gro",
-                    "-p",
-                    "topol.top",
-                    "-ignh",
-                    "-ff",
-                    ff,
-                    "-water",
-                    "none",
-                    "-nobackup",
-                    "-ter",
-                ],
-                input="4\n6\n" * n_chains,
-                capture_output=True,
-                text=True,
-                cwd=tmpdir,
-            )
-            assert r.returncode == 0, f"pdb2gmx failed for {label}: {r.stderr[-500:]}"
-
-            (tmpdir / "em.mdp").write_text(_EM_MDP)
-            r = subprocess.run(
-                [
-                    gmx,
-                    "grompp",
-                    "-f",
-                    "em.mdp",
-                    "-c",
-                    "conf.gro",
-                    "-p",
-                    "topol.top",
-                    "-o",
-                    "em.tpr",
-                    "-maxwarn",
-                    "20",
-                    "-nobackup",
-                ],
-                capture_output=True,
-                text=True,
-                cwd=tmpdir,
-            )
-            assert r.returncode == 0, f"grompp failed for {label}: {r.stderr[-500:]}"
-
-            ntomp = max(1, int(subprocess.check_output(["nproc", "--all"]).strip()) - 4)
-            subprocess.run(
-                [
-                    gmx,
-                    "mdrun",
-                    "-v",
-                    "-ntmpi",
-                    "1",
-                    "-ntomp",
-                    str(ntomp),
-                    "-nb",
-                    "gpu",
-                    "-deffnm",
-                    "em",
-                ],
-                capture_output=True,
-                text=True,
-                cwd=tmpdir,
-            )
-
-            log = (tmpdir / "em.log").read_text(errors="replace")
-            steps = re.findall(r"^\s*(\d+)\s+[-\d.e+]", log, re.MULTILINE)
-            return int(steps[-1]) if steps else 0
-
-        with tempfile.TemporaryDirectory(prefix="nadoc_p3b_test_baseline_") as d:
-            baseline_steps = _run_em(
-                _build_gromacs_input_pdb(design, ff=ff),
-                "baseline",
-                Path(d),
-            )
-
-        override = nuc_pos_override_from_arbd_strands(
-            design,
-            _psf,
-            _dcd,
-            frame=-1,
-            sigma_nt=1.5,
-        )
-
-        with tempfile.TemporaryDirectory(prefix="nadoc_p3b_test_spline_") as d:
-            spline_steps = _run_em(
-                _build_gromacs_input_pdb(design, ff=ff, nuc_pos_override=override),
-                "phase3b",
-                Path(d),
-            )
-
-        assert baseline_steps > 0, "Baseline EM produced 0 steps — check GROMACS"
-        assert spline_steps > 0, "Phase 3b EM produced 0 steps — check GROMACS"
-
-        ratio = spline_steps / baseline_steps
-        assert ratio < 0.50, (
-            f"Phase 3b EM ratio {ratio:.2f}× — expected < 0.50×. "
-            f"Baseline {baseline_steps} steps, Phase 3b {spline_steps} steps."
-        )
+# Retired the permanently xfailed >50% EM-speedup claim: the ideal baseline
+# already converges in ~15 steps. Native EM and coordinate round trips remain
+# tested; any new speedup benchmark needs a separately justified protocol.
 
 
 # ── Tier 1: the groove rule the fine-stage override applies ───────────────────

@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -31,16 +30,19 @@ def test_solvent_energy_plateau_alone_cannot_skip_polymer_relaxation():
     assert not polymer_plateau(energies, settled[:10], settled[:10])[0]
 
 
-def test_prepared_native_case_hmr_and_force_continuity(tmp_path):
-    # Read-only saved native fixture; this test never launches an engine.
-    import shutil
-    source = Path('workspace/md_jobs/654049290521')
-    if not source.exists():
-        pytest.skip('prepared PEG qualification fixture not present')
-    from backend.core.md_job import MdJob
+def test_prepared_package_hmr_and_force_continuity(tmp_path):
+    from backend.core.md_job import MdJob, MdStatus, new_job
+    from backend.core.models import Design
+    from backend.core.namd_peg_review import KIND
     from experiments.peg_namd.structure import read_pair
-    shutil.copytree(source, tmp_path/'md_jobs/654049290521')
-    job = prepare_relax(tmp_path, '654049290521', duration_ps=100)
+    from tests.peg_protocol_fixture import build_package
+
+    source = new_job('protocol_fixture', KIND, 'system', 'package', run_kind=KIND)
+    source.status = MdStatus.completed
+    build_package(source.package_dir(tmp_path))
+    (source.job_dir(tmp_path) / 'design.json').write_text(Design().model_dump_json())
+    source.save(tmp_path)
+    job = prepare_relax(tmp_path, source.job_id, duration_ps=100)
     package = job.package_dir(tmp_path)
     a = read_pair(package/'system.psf', package/'system.pdb')
     b = read_pair(package/'system_hmr.psf', package/'system.pdb')
@@ -68,13 +70,10 @@ def test_prepared_native_case_hmr_and_force_continuity(tmp_path):
         validate_relax_package(package)
 
 
-def test_native_warmup_completion_does_not_require_final_energy_print(tmp_path):
+def test_warmup_completion_does_not_require_final_energy_print(tmp_path):
     from backend.core.namd_peg_health import assess_segment
-    package = Path('workspace/md_jobs/48c1995afbd5/package')
-    if not (package/'output/peg_warm_p100.dcd').exists():
-        pytest.skip('native warm-up fixture unavailable')
-    import shutil
-    shutil.copytree(package, tmp_path/'package')
+    from tests.peg_protocol_fixture import write_evidence
+    write_evidence(tmp_path / 'package', warmup=True)
     result = assess_segment(tmp_path/'package', 'peg_warm_p100')
     assert result['safe']
     assert result['max_force_energy_error_kcal_mol'] < .001

@@ -136,10 +136,12 @@ On error: `store.setState({ lastError: { status, message } })` and **return `nul
 `_syncFromDesignResponse(json, { skipGeometry, transient })`
 ([:360](../../frontend/src/api/client.js#L360)) is the single write path into the store:
 
-1. **Staleness gate first** — `_isStaleDesignResponse(json)` (:362) drops any response whose
-   `json.revision` is below `_lastAppliedRevision` (:51-57). Out-of-order responses are discarded,
-   not applied. `resetRevisionWatermark()` (:62) exists for backend restarts; if it is not called
-   the client will silently ignore every response from a restarted server.
+1. **Staleness gate first** — `_isStaleDesignResponse(json)` delegates to
+   `api/design_revisions.js`. Full snapshots advance the design watermark; partial annotation,
+   view-volume and camera acknowledgements advance only their field revisions. Newer metadata
+   is merged into a still-needed older full snapshot, so metadata cannot discard unapplied
+   geometry. The latest observed revision remains available for optimistic concurrency.
+   `resetRevisionWatermark()` clears both kinds after a backend restart.
 2. Geometry: `nucleotides` present → one `setState` (:536). Absent → a second round-trip via
    `getGeometry()` (:547). `nucleotides_compact` is re-materialized at :427-460; the
    `partial_geometry`/`changed_helix_ids` merge is at :468-483.

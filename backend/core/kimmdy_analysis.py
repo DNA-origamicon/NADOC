@@ -824,7 +824,8 @@ def analyze_kimmdy_trajectory(
 
 
 def write_kimmdy_outputs(
-    report: dict, series: dict[str, np.ndarray], output_dir: Path
+    report: dict, series: dict[str, np.ndarray], output_dir: Path,
+    *, compress_summary: bool = False,
 ) -> dict[str, str]:
     """Write JSON/TSV summary and a compressed, rank-aligned per-frame series."""
 
@@ -833,7 +834,9 @@ def write_kimmdy_outputs(
     json_path = output_dir / "summary.json"
     tsv_path = output_dir / "pairs.tsv"
     npz_path = output_dir / "timeseries.npz"
-    json_path.write_text(json.dumps(report, indent=2) + "\n")
+    from backend.core.json_artifacts import write_json_artifact
+
+    json_path = write_json_artifact(json_path, report, compressed=compress_summary)
 
     fields = [
         "rank",

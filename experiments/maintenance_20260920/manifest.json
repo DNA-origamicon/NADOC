@@ -1,0 +1,166 @@
+{
+  "purpose": "Retained inputs, seeds, native logs and final configurations for the two failed bulk-extra-base retention checks; no geometry or baseline regeneration. Full trajectories remain disposable pytest output.",
+  "archive_sha256": "a9dd8f7c146422ca5fc93f69b813e9876258f04fe4b81c31bb21237ca446028d",
+  "files": [
+    {
+      "path": "6hb/design.json",
+      "bytes": 45585,
+      "sha256": "23dc5411264db4f7405870abe3a56dc94ac26f3e0a4457aea2e4975b1ae049fd"
+    },
+    {
+      "path": "6hb/job.json",
+      "bytes": 3722,
+      "sha256": "43da5ee2f52ea8df8c6812e847241b12063918f5e4ed2fc80732c8fbadfca4cf"
+    },
+    {
+      "path": "6hb/topology.top",
+      "bytes": 13749,
+      "sha256": "a44b0665b1cba5e782845bc68ae1879e9c9f31a2401c0f687ddfa85a3d76ac87"
+    },
+    {
+      "path": "6hb/conf.dat",
+      "bytes": 160843,
+      "sha256": "627488186be50be5f763dbcb9b619dfc30cc85c992cfa9c26a0df2bcfff84f47"
+    },
+    {
+      "path": "6hb/1_mc_relax/energy.dat",
+      "bytes": 4855,
+      "sha256": "050937de981f887c9df695f579e7c64c271e3cc5313a26b6937f2e1984700a2f"
+    },
+    {
+      "path": "6hb/1_mc_relax/oxdna.log",
+      "bytes": 115102,
+      "sha256": "765c177b45b04e15774126a4a2b46eccdfb618b7d95245a9b4dcfe35eea494dc"
+    },
+    {
+      "path": "6hb/1_mc_relax/input.txt",
+      "bytes": 1030,
+      "sha256": "a19b4bff27a96714b8c8b1b01c9c58d091914872b0028c6cc631b859bd5d9bb0"
+    },
+    {
+      "path": "6hb/1_mc_relax/last_conf.dat",
+      "bytes": 197611,
+      "sha256": "b34727527e1e4c8fd808f26cb62e176e1f7caec5f804f3b2c40609b942cfcb6b"
+    },
+    {
+      "path": "6hb/2_md_relax/energy.dat",
+      "bytes": 4900,
+      "sha256": "77e5440ff888847f71fcbd6947fb6db0fbb0d02f899e336fa7619e23491e8c00"
+    },
+    {
+      "path": "6hb/2_md_relax/oxdna.log",
+      "bytes": 113129,
+      "sha256": "1acd45e6f83d3d4a32bf373e51c5cad76457c67a481e2529e2ba59c92aa7e3a6"
+    },
+    {
+      "path": "6hb/2_md_relax/input.txt",
+      "bytes": 1348,
+      "sha256": "52e5720d5751fcf99f782a04c4b4b8dae9262d8005b26c094a802594ebb7d38b"
+    },
+    {
+      "path": "6hb/2_md_relax/last_conf.dat",
+      "bytes": 309558,
+      "sha256": "b7e777499dc0cc54d54815e748e51bbe374d7dede713ba1e9812d93419549846"
+    },
+    {
+      "path": "6hb/3_equil/energy.dat",
+      "bytes": 4900,
+      "sha256": "8d8674a9f0d806ac81091e8adaf325f3f468fe5a8947da8c618b426e69d36f47"
+    },
+    {
+      "path": "6hb/3_equil/oxdna.log",
+      "bytes": 4548,
+      "sha256": "a125e3cba53e42da9f731724529a4a476c3f2bd0737854133026b6f97aa53372"
+    },
+    {
+      "path": "6hb/3_equil/input.txt",
+      "bytes": 1191,
+      "sha256": "9d66cc6225d04b7fac746e83ce22631dcefe4633a02828cdd620df22659f6545"
+    },
+    {
+      "path": "6hb/3_equil/last_conf.dat",
+      "bytes": 310047,
+      "sha256": "369c246c125b7ddaa677f72fabf64946feefb16961d2dfcc5245bfd04d5576bd"
+    },
+    {
+      "path": "18hb/design.json",
+      "bytes": 120285,
+      "sha256": "4249e9a10c73d5c4c8672d2880f6ab8b60c97f4aa03773cca53b8bf5e90d1ce0"
+    },
+    {
+      "path": "18hb/job.json",
+      "bytes": 3724,
+      "sha256": "fa48f832bb215e547ea64c718821321b4b838efc10389eef17a22a27024c6e60"
+    },
+    {
+      "path": "18hb/topology.top",
+      "bytes": 46695,
+      "sha256": "798603b86be6a1f6517fa9e2f26af8f6b2c3d557b36e5f9ed2b4b3cb1e10c28b"
+    },
+    {
+      "path": "18hb/conf.dat",
+      "bytes": 486950,
+      "sha256": "9150d1f35c86913271ea651be12dd3e0c819bd142b957f98e09c1c1e29ecf2c8"
+    },
+    {
+      "path": "18hb/1_mc_relax/energy.dat",
+      "bytes": 4856,
+      "sha256": "69120d2464beecbf33d441f0fe3a8899d0c637ca89d7ec91a0d0e89f32c6bade"
+    },
+    {
+      "path": "18hb/1_mc_relax/oxdna.log",
+      "bytes": 334835,
+      "sha256": "dfe859f3e7505cb9f61f5f50c7d79bf7ce240d1e771f365956d60cb348989c82"
+    },
+    {
+      "path": "18hb/1_mc_relax/input.txt",
+      "bytes": 1030,
+      "sha256": "9ab002297273c3eb71e36e4ed05179d5f0745e9d15247ea667dbf0e96bad80ff"
+    },
+    {
+      "path": "18hb/1_mc_relax/last_conf.dat",
+      "bytes": 596103,
+      "sha256": "0fd346e03d32701c64f2cb1ab4beb399c2105ca4c17c8594c0c81c847c4d70ec"
+    },
+    {
+      "path": "18hb/2_md_relax/energy.dat",
+      "bytes": 4900,
+      "sha256": "caa372ce2fe2d722ccf2078f2258ac729acd1de2ac25d3b19d2db50d72d94fc7"
+    },
+    {
+      "path": "18hb/2_md_relax/oxdna.log",
+      "bytes": 332644,
+      "sha256": "0cf1e13bff3189240da37021fc1a4c6150cedc719e153268d985e40a0273b180"
+    },
+    {
+      "path": "18hb/2_md_relax/input.txt",
+      "bytes": 1348,
+      "sha256": "021539133c9d2029339f4b1c7c8315f86c93b964e0ef2b303bc52d0d0a391894"
+    },
+    {
+      "path": "18hb/2_md_relax/last_conf.dat",
+      "bytes": 938515,
+      "sha256": "c0744d142e18c54e91028a5fe626b85a03fca865fd120e7d0800b044f4edd8d9"
+    },
+    {
+      "path": "18hb/3_equil/energy.dat",
+      "bytes": 4900,
+      "sha256": "dba4ff01e895acb3fd415c78214187d18dc73b295c07f17823ee9903f0d706ff"
+    },
+    {
+      "path": "18hb/3_equil/oxdna.log",
+      "bytes": 4048,
+      "sha256": "b5340a121e0edc696358561899d1db4e61164913e49cc9bd12d65b7b8d6e3bce"
+    },
+    {
+      "path": "18hb/3_equil/input.txt",
+      "bytes": 1191,
+      "sha256": "3c7f48a2a053b66a9f185c53eaffd94ae3262d18017d3f27b1d59ef22c783b09"
+    },
+    {
+      "path": "18hb/3_equil/last_conf.dat",
+      "bytes": 938774,
+      "sha256": "790928820ca7eb53379d33b76b92af2199faf00cca4d4fa5a938f81fb85b99b0"
+    }
+  ]
+}

@@ -275,7 +275,6 @@ def test_real_arbd_runs_with_extra_bases(tmp_path, routed_6hb):
     from backend.core.mrdna_bridge import (
         ensure_wsl_cuda_libs,
         find_arbd,
-        mrdna_model_from_nadoc,
     )
     from backend.core.mrdna_runner import _SIM_STEM, extract_mrdna_results
 
@@ -284,8 +283,10 @@ def test_real_arbd_runs_with_extra_bases(tmp_path, routed_6hb):
     ensure_wsl_cuda_libs()
 
     def _run(design, out):
+        from backend.parameterization.mrdna_inject import CrossoverPotentialOverride, mrdna_model_from_nadoc_parameterized
         out.mkdir(parents=True, exist_ok=True)
-        mrdna_model_from_nadoc(design).simulate(
+        model = mrdna_model_from_nadoc_parameterized(design, CrossoverPotentialOverride.from_database("T0"))
+        model.simulate(
             output_name=_SIM_STEM,
             directory=str(out),
             num_steps=500,
@@ -293,15 +294,16 @@ def test_real_arbd_runs_with_extra_bases(tmp_path, routed_6hb):
             gpu=0,
             output_period=250,
         )
+        from backend.core.mrdna_manifest import build_mrdna_nucleotide_manifest, bind_manifest_to_mrdna_particles
+        from backend.core.oxdna_staleness import oxdna_design_fingerprint
+        manifest = build_mrdna_nucleotide_manifest(design, design_fingerprint=oxdna_design_fingerprint(design))
+        bind_manifest_to_mrdna_particles(manifest, model).write(out)
         return extract_mrdna_results(design, out)
 
     d = _with_extra(routed_6hb, "TT", all_crossovers=True)
     n_extra = sum(len(e) for _xo, e in ox.crossover_extra_base_junctions(d).values())
-    try:
-        res_with = _run(d, tmp_path / "with")
-        res_base = _run(routed_6hb, tmp_path / "base")
-    except Exception as exc:
-        pytest.skip(f"ARBD simulation unavailable: {exc}")
+    res_with = _run(d, tmp_path / "with")
+    res_base = _run(routed_6hb, tmp_path / "base")
 
     # Deform toggle: one __xb__ display entry per inserted base, keyed (crossover_id, k).
     xb = [p for p in res_with["positions"] if p["helix_id"] == "__xb__"]

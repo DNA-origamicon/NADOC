@@ -1794,7 +1794,7 @@ def mock_oxdna_traj(tmp_path, monkeypatch):
     """The multi-frame mock oxDNA binary (frames = steps//100) bound via $OXDNA_BIN —
     a production run pools frames into a mean structure + confidence."""
     p = tmp_path / "mock_oxdna_traj.py"
-    p.write_text(_MOCK_OXDNA_TRAJ)
+    p.write_text(_MOCK_OXDNA_TRAJ + "\n# NADOC physics corrections v3\n")
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
     return p

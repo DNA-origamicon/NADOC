@@ -54,16 +54,9 @@ const LS_DESIGN_KEY   = () => docKey('nadoc:design')
 const LS_ASSEMBLY_KEY = () => docKey('nadoc:assembly')
 const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null (sessionStorage, tab-isolated)
 
-// ── Stale-response guard (rapid-edit race) ───────────────────────────────────
-// Rapid fine-routing edits fire concurrent mutations. The backend serializes
-// them and stamps each design response with a monotonic `revision`. Network/parse
-// jitter can make an EARLIER response arrive after a later one; without this
-// guard it would clobber the newer state (freshly-added nicks "disappearing" a
-// moment later) and desync the panel's feature-log from the backend (the
-// "index N out of range" revert error). We track the newest revision applied and
-// drop any design response older than it. Monotonic per tab/document; a page
-// reload resets it and the first response re-seeds it.
-let _lastAppliedRevision = -1
+import { createDesignRevisionTracker } from './design_revisions.js'
+
+const _designRevisions = createDesignRevisionTracker()
 
 // Associate completion with the response, never whichever request started last.
 const _responseTimings = new WeakMap()
@@ -91,35 +84,21 @@ async function _applyTimedResponse(json, apply) {
  *  caller should DROP it). Updates the watermark when the response is accepted.
  *  Only consults responses that actually carry a design + numeric revision. */
 function _isStaleDesignResponse(json) {
-  const rev = json?.revision
-  if (typeof rev !== 'number' || !json?.design) return false
-  if (rev < _lastAppliedRevision) {
+  if (!_designRevisions.acceptDesign(json)) {
     finishOperationTiming(_responseTimings.get(json), { status: 'Superseded', phase: 'stale-response-skipped' })
     return true
   }
-  _lastAppliedRevision = rev
   return false
 }
 
-/** Advance the stale-response watermark for a lightweight metadata response. */
-function _acceptMetadataRevision(json) {
-  const rev = json?.revision
-  if (typeof rev !== 'number') return true
-  if (rev < _lastAppliedRevision) return false
-  _lastAppliedRevision = rev
-  return true
-}
-
-/** Reset the stale-response watermark. MUST be called when the backend restarts
- *  (its per-session revision resets low, so post-restart responses would
- *  otherwise be dropped as "stale"). Called from the restart-recovery handler. */
+/** Reset both design and field revisions after a backend restart. */
 export function resetRevisionWatermark() {
-  _lastAppliedRevision = -1
+  _designRevisions.reset()
 }
 
-/** Revision of the newest design response accepted by this tab. */
+/** Latest observed server revision, including metadata, for optimistic concurrency. */
 export function currentRevisionWatermark() {
-  return _lastAppliedRevision >= 0 ? _lastAppliedRevision : null
+  return _designRevisions.current()
 }
 
 // ── Recovery-cache quota management ──────────────────────────────────────────
@@ -1170,16 +1149,20 @@ export async function clearRepresentationOverrides() {
 
 /** Replace display-only spatial view volumes persisted with the part. */
 export async function saveViewVolumes(volumes) {
+  const designId = store.getState().currentDesign?.id
   const json = await _request('PUT', '/design/view-volumes', { volumes }, { suppressBusy: true })
-  if (!json || !_acceptMetadataRevision(json)) return null
+  if (!json || designId !== store.getState().currentDesign?.id ||
+      !_designRevisions.acceptMetadata(json, ['view_volumes'], designId)) return null
   return json
 }
 
 /** Persist viewport annotations (+ their global switch) in the .nadoc file. Display-only:
  *  no undo entry, no geometry refetch, tiny response. */
 export async function saveAnnotations({ annotations, enabled }) {
+  const designId = store.getState().currentDesign?.id
   const json = await _request('PUT', '/design/annotations', { annotations, enabled }, { suppressBusy: true })
-  if (!json || !_acceptMetadataRevision(json)) return null
+  if (!json || designId !== store.getState().currentDesign?.id ||
+      !_designRevisions.acceptMetadata(json, ['annotations', 'annotations_enabled'], designId)) return null
   _signalDesignChanged({ geometryUnchanged: true, metadataOnly: true })
   return json
 }
@@ -4113,8 +4096,10 @@ export async function snapshotDesign() {
 
 // Authoring metadata must not replace the currently displayed simulation projection.
 export function _syncDesignAuthoringResponse(json, field) {
-  if (!json || !_acceptMetadataRevision(json)) return json
+  if (!json) return json
   const current = store.getState().currentDesign
+  if (json.design?.id !== current?.id ||
+      !_designRevisions.acceptMetadata(json, [field], current?.id)) return json
   if (current && json.design) {
     store.setState({ currentDesign: { ...current, [field]: json.design[field] } })
     _signalDesignChanged({ geometryUnchanged: true, metadataOnly: true })

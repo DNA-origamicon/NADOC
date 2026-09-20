@@ -370,9 +370,9 @@ def _assert_active_loadout_editable(
         )
 
 
-def load_design(d: Design) -> None:
-    """Establish a file/new-design baseline without making navigation undoable."""
-    if any(p.biotin_dna for p in d.nanoparticles):
+def load_design(d: Design | None) -> None:
+    """Establish a file/new-design baseline, or clear it, without an undo entry."""
+    if d is not None and any(p.biotin_dna for p in d.nanoparticles):
         from backend.core.biotin_atomistic import prepare_biotin_display
         prepare_biotin_display(d)
     with _lock:

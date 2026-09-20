@@ -85,9 +85,11 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Display / representation:** **[native_vr](project_native_vr.md)** (ACTIVE)·[ssdna_ball_joints](project_ssdna_ball_joints.md)·[photo_mode](project_photo_mode.md)·[hull_prism](project_hull_prism.md)·**[mixed_representation](project_mixed_representation.md)** (impostors uncovered)·[strand_animations](project_strand_animations.md)·[reference_geometry](project_reference_geometry.md)·**[protein_attachment](project_protein_attachment.md)** (all representations + assembly parity; Voltron cylinder invariant)·[nanoparticles](project_nanoparticles.md)·[headless_build](project_headless_build.md)·[sphere_impostors](project_sphere_impostors.md)·**[annotations](project_annotations.md)** (right-sidebar callouts; saved in the .nadoc, global toggle, part mode)
 
+**Additional representation and conjugation topics:** [nucleotide_transform](project_nucleotide_transform.md)·[protein_conjugation_optimization](project_protein_conjugation_optimization.md)·[voltroncorearm_visualization_remediation](project_voltroncorearm_visualization_remediation.md)
+
 **Sequences:** **[strand_sequence_edit](project_strand_sequence_edit.md)** (hand-edit a strand's bases; targeted vs design-wide re-derive)
 
-**Crossover geometry:** Catenation retired 2026-08-11 (archived only); ring piercing + heavy-atom clashes are active diagnostics. ·
+**Crossover geometry:** [Catenation](project_crossover_catenation.md) retired 2026-08-11 (historical only); ring piercing + heavy-atom clashes are active diagnostics. ·
 **[extra_base_spacing](project_extra_base_spacing.md)** (2.25 nm lattice ~2 Å tighter than equilibrium, even with no inserts) ·
 **[measured_atomistic](project_measured_atomistic.md)** (all-atom templates re-extracted from free NAMD) ·
 **[atomistic_source_of_truth](project_atomistic_source_of_truth.md)** (P0 — RE-VERIFIED CG coupling audit; head + `_archive`) ·
@@ -141,6 +143,8 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 **Assembly overhaul:** **[assembly_feature_parity](project_assembly_feature_parity.md)** (binding default: assemblies match parts comprehensively; exceptions need evidence)·**[path_to_thousands](project_path_to_thousands.md)** (renderer DEFAULT)·[assembly_part_context](project_assembly_part_context.md) (anim PLAYBACK unbuilt)·[assembly_groups](project_assembly_groups.md) (`representation` dead)·[gear_relations](project_gear_relations.md)·[belt_paths](project_belt_paths.md)·[route_for_polymerization](project_route_for_polymerization.md)·[polymerize_origami](project_polymerize_origami.md)·[session_recovery](project_session_recovery.md)
 
 ## Supporting and historical topics
+
+[Amber OL15/GBION decision](project_amber_gbion.md)
 
 [AutoNAMD delta](autonamd_nadoc_protocol_delta.md)·[F028 perf research](f028_performance_optimization_research.md)·[MD integration plan](md_integration_plan.md)·[mrDNA/NAMD inventory](mrdna_namd_inventory.md)·[atomistic O3′ log](log_atomistic_o3prime.md)·[main-init detail](main_init_detail.md)·[surface-vectorize handoff](HANDOFF_surface_vectorize.md)·[2026-05-05 session](project_session_2026_05_05.md)
 

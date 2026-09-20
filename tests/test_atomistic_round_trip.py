@@ -15,7 +15,6 @@ Run:
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -30,51 +29,17 @@ from backend.core.atomistic import build_atomistic_model
 from backend.core.atomistic_to_nadoc import (
     build_chain_map,
     build_p_gro_order,
-    centroid_offset,
     compare_to_design,
     extract_from_gro,
     extract_from_pdb,
 )
 
-DESIGN_PATH = REPO / "workspace" / "10hb.nadoc"
-RUN_DIR = REPO / "runs" / "10hb_bundle_params" / "nominal"
-PDB_PATH = RUN_DIR / "input_nadoc.pdb"
-EM_GRO = RUN_DIR / "em.gro"
-
-# These tests round-trip against artifacts produced by a specific GROMACS run
-# (PDB + em.gro under runs/10hb_bundle_params/nominal/). Those artifacts aren't
-# checked into the repo, so skip the whole module when any of them is missing
-# rather than erroring out in every fixture.
-_MISSING = [p for p in (DESIGN_PATH, PDB_PATH, EM_GRO) if not p.exists()]
-if _MISSING:
-    pytest.skip(
-        "Atomistic round-trip fixtures missing: "
-        + ", ".join(str(p.relative_to(REPO)) for p in _MISSING),
-        allow_module_level=True,
-    )
-
-# input_nadoc.pdb and em.gro are a matched pair from one GROMACS run.  If the
-# design has been edited since that run — or the model builder changed and the
-# design was re-saved — the cached artifacts no longer correspond to
-# build_atomistic_model(design), and the round-trip would fail on that drift
-# rather than on a real regression.  Skip with a regenerate hint whenever the
-# design is newer than its reference artifacts.  (The code path itself stays
-# covered: a fresh build_atomistic_model → PDB → extract round-trips to ~0 Å.)
-_design_mtime = DESIGN_PATH.stat().st_mtime
-_STALE = [p for p in (PDB_PATH, EM_GRO) if p.stat().st_mtime < _design_mtime]
-if _STALE:
-    pytest.skip(
-        f"Atomistic round-trip artifacts predate the current design "
-        f"({DESIGN_PATH.name} edited after "
-        + ", ".join(p.name for p in _STALE)
-        + ") — regenerate runs/10hb_bundle_params/nominal/ to re-enable.",
-        allow_module_level=True,
-    )
+pytest_plugins = ["tests.md_trajectory_fixture"]
 
 
 @pytest.fixture(scope="module")
-def design() -> Design:
-    return Design.model_validate(json.loads(DESIGN_PATH.read_text()))
+def design(generated_gromacs) -> Design:
+    return generated_gromacs.design
 
 
 @pytest.fixture(scope="module")
@@ -84,15 +49,15 @@ def chain_map(design):
 
 
 @pytest.fixture(scope="module")
-def p_order(chain_map):
-    pdb_text = PDB_PATH.read_text()
+def p_order(chain_map, generated_gromacs):
+    pdb_text = generated_gromacs.pdb.read_text()
     return build_p_gro_order(pdb_text, chain_map)
 
 
 # ── Test 1: chain map completeness ───────────────────────────────────────────
 
 
-def test_chain_map_size(chain_map, design):
+def test_chain_map_size(chain_map, design, generated_gromacs):
     """Chain map should have one entry per nucleotide (all strands have P atoms)."""
     total_nt = sum(
         abs(d.end_bp - d.start_bp) + 1 for s in design.strands for d in s.domains
@@ -105,21 +70,21 @@ def test_chain_map_size(chain_map, design):
 # ── Test 2: PDB round-trip (near-exact match) ─────────────────────────────────
 
 
-def test_pdb_roundtrip_count(chain_map):
+def test_pdb_roundtrip_count(chain_map, generated_gromacs):
     """extract_from_pdb should recover all P atoms in the input PDB."""
-    pdb_text = PDB_PATH.read_text()
+    pdb_text = generated_gromacs.pdb.read_text()
     beads = extract_from_pdb(pdb_text, chain_map)
     assert len(beads) == len(chain_map), (
         f"PDB extraction: {len(beads)} beads, expected {len(chain_map)}"
     )
 
 
-def test_pdb_roundtrip_rmsd(chain_map, design):
+def test_pdb_roundtrip_rmsd(chain_map, design, generated_gromacs):
     """
     P atoms from input_nadoc.pdb should match AtomisticModel P positions
     to within PDB coordinate precision (0.001 Å = 0.0001 nm, stored as %8.3f).
     """
-    pdb_text = PDB_PATH.read_text()
+    pdb_text = generated_gromacs.pdb.read_text()
     beads = extract_from_pdb(pdb_text, chain_map)
     result = compare_to_design(beads, design, use_geometry_layer=False)
 
@@ -136,7 +101,7 @@ def test_pdb_roundtrip_rmsd(chain_map, design):
 # ── Test 3: GRO p_order matches PDB count minus stripped 5'-terminals ─────────
 
 
-def test_p_gro_order_count(p_order, design):
+def test_p_gro_order_count(p_order, design, generated_gromacs):
     """
     GRO P-atom order should have (total_nt - n_strands) entries:
     pdb2gmx strips the 5'-terminal P from each chain.
@@ -152,11 +117,11 @@ def test_p_gro_order_count(p_order, design):
     )
 
 
-def test_p_gro_order_matches_gro(p_order):
+def test_p_gro_order_matches_gro(p_order, generated_gromacs):
     """p_order length must match actual DNA P atom count in em.gro."""
     import MDAnalysis as mda
 
-    u = mda.Universe(str(EM_GRO))
+    u = mda.Universe(str(generated_gromacs.gro))
     dna_p = u.select_atoms(
         "name P and resname DA DT DC DG DA3 DA5 DT3 DT5 DC3 DC5 DG3 DG5"
     )
@@ -168,29 +133,29 @@ def test_p_gro_order_matches_gro(p_order):
 # ── Test 4: EM frame 0 extraction ────────────────────────────────────────────
 
 
-def test_em_extraction_count(p_order):
+def test_em_extraction_count(p_order, generated_gromacs):
     """extract_from_gro should return one BeadPosition per p_order entry."""
-    beads = extract_from_gro(EM_GRO, p_order, frame=0)
+    beads = extract_from_gro(generated_gromacs.gro, p_order, frame=0)
     assert len(beads) == len(p_order)
 
 
-def test_em_bead_positions_finite(p_order):
+def test_em_bead_positions_finite(p_order, generated_gromacs):
     """All extracted positions should be finite (no NaN/Inf)."""
-    beads = extract_from_gro(EM_GRO, p_order, frame=0)
+    beads = extract_from_gro(generated_gromacs.gro, p_order, frame=0)
     for b in beads:
         assert np.all(np.isfinite(b.pos)), (
             f"Non-finite position for {b.helix_id} bp{b.bp_index}"
         )
 
 
-def test_em_rmsd_vs_ideal(p_order, design):
+def test_em_rmsd_vs_ideal(p_order, design, generated_gromacs):
     """
     EM should keep P atoms close to ideal B-DNA.  After centroid alignment
     (GROMACS translates the structure into the periodic box — ~6 nm offset),
     RMSD vs AtomisticModel should be < 3 Å.  Larger values indicate crossover
     geometry relief, which is the expected first-frame deformation.
     """
-    beads = extract_from_gro(EM_GRO, p_order, frame=0)
+    beads = extract_from_gro(generated_gromacs.gro, p_order, frame=0)
     result = compare_to_design(
         beads, design, use_geometry_layer=False, align_translation=True
     )
@@ -204,7 +169,7 @@ def test_em_rmsd_vs_ideal(p_order, design):
 # ── Test 5: geometry-layer offset is consistent ───────────────────────────────
 
 
-def test_geometry_layer_radial_offset(chain_map, design):
+def test_geometry_layer_radial_offset(chain_map, design, generated_gromacs):
     """
     Quantify the P-atom vs geometry-layer backbone offset.
 
@@ -218,7 +183,7 @@ def test_geometry_layer_radial_offset(chain_map, design):
     Use the AtomisticModel (use_geometry_layer=False) for accurate round-trip
     comparisons; the geometry layer is the abstract CG bead, not the P atom.
     """
-    pdb_text = PDB_PATH.read_text()
+    pdb_text = generated_gromacs.pdb.read_text()
     beads = extract_from_pdb(pdb_text, chain_map)
     result = compare_to_design(beads, design, use_geometry_layer=True)
 
@@ -233,69 +198,12 @@ def test_geometry_layer_radial_offset(chain_map, design):
     )
 
 
-# ── Pretty-print report (run as script) ───────────────────────────────────────
-
-
-def _print_report():
-    design_ = Design.model_validate(json.loads(DESIGN_PATH.read_text()))
-    model = build_atomistic_model(design_)
-    cm = build_chain_map(model)
-    pdb_text = PDB_PATH.read_text()
-    p_ord = build_p_gro_order(pdb_text, cm)
-
-    helix_ids = [h.id for h in design_.helices]
-
-    print(f"Design : {DESIGN_PATH.name}")
-    print(f"Helices: {len(design_.helices)}   Strands: {len(design_.strands)}")
-    total_nt = sum(
-        abs(d.end_bp - d.start_bp) + 1 for s in design_.strands for d in s.domains
-    )
-    print(
-        f"Total nt: {total_nt}   Chain-map P entries: {len(cm)}   GRO P order: {len(p_ord)}\n"
-    )
-
-    # ── PDB round-trip ────────────────────────────────────────────────────────
-    beads_pdb = extract_from_pdb(pdb_text, cm)
-    r_pdb = compare_to_design(beads_pdb, design_, use_geometry_layer=False)
-    print("=" * 60)
-    print("Test 1  PDB round-trip  (vs AtomisticModel P atoms)")
-    print(f"  Matched : {r_pdb.n_matched} / {len(beads_pdb)}")
-    print(f"  RMSD    : {r_pdb.global_rmsd_nm * 10:.5f} Å   (PDB ≤ 0.001 Å precision)")
-    print(f"  Max dev : {r_pdb.max_deviation_nm * 10:.5f} Å")
-
-    # ── EM frame 0 ────────────────────────────────────────────────────────────
-    beads_em = extract_from_gro(EM_GRO, p_ord, frame=0)
-    T = centroid_offset(beads_em, design_)
-    r_em_raw = compare_to_design(beads_em, design_, use_geometry_layer=False)
-    r_em = compare_to_design(
-        beads_em, design_, use_geometry_layer=False, align_translation=True
-    )
-    print("\n" + "=" * 60)
-    print("Test 2  EM frame 0  (em.gro vs AtomisticModel P atoms)")
-    print(f"  Matched       : {r_em.n_matched} / {len(beads_em)}")
-    print(f"  Box→NADOC T   : ({T[0] * 10:.1f}, {T[1] * 10:.1f}, {T[2] * 10:.1f}) Å")
-    print(
-        f"  RMSD (raw)    : {r_em_raw.global_rmsd_nm * 10:.3f} Å  (includes box translation)"
-    )
-    print(f"  RMSD (aligned): {r_em.global_rmsd_nm * 10:.3f} Å  (centroid-aligned)")
-    print(f"  Max dev       : {r_em.max_deviation_nm * 10:.3f} Å")
-    print("  Per helix (aligned):")
-    for hid in helix_ids:
-        rmsd = r_em.per_helix_rmsd_nm.get(hid)
-        tag = f"{rmsd * 10:.3f} Å" if rmsd is not None else "—"
-        print(f"    {hid:30s}  {tag}")
-
-    # ── Geometry layer offset ─────────────────────────────────────────────────
-    r_geo = compare_to_design(beads_pdb, design_, use_geometry_layer=True)
-    print("\n" + "=" * 60)
-    print("Test 3  PDB P atoms vs geometry-layer backbone (HELIX_RADIUS = 1.0 nm)")
-    print(f"  Matched : {r_geo.n_matched}  Missing: {r_geo.n_missing} (skip sites)")
-    print(f"  RMSD    : {r_geo.global_rmsd_nm * 10:.3f} Å")
-    print(f"  Max dev : {r_geo.max_deviation_nm * 10:.3f} Å")
-    print("  Note: P atoms are at 0.886 nm radius + ~37° phase offset from the")
-    print("        geometry-layer bead (1.0 nm radius).  ~5 Å is expected and correct.")
-    print("        Use use_geometry_layer=False for faithful round-trip comparison.")
-
-
-if __name__ == "__main__":
-    _print_report()
+def test_binary_xtc_roundtrip(p_order, generated_gromacs):
+    from backend.core.atomistic_to_nadoc import extract_from_xtc
+    beads = extract_from_xtc(generated_gromacs.gro,
+                             generated_gromacs.folder / "view_whole.xtc", p_order, frame=100)
+    initial = extract_from_gro(generated_gromacs.gro, p_order, frame=0)
+    assert len(beads) == len(initial) == len(p_order)
+    # Writer adds 1 Å uniformly by frame 100; XTC precision is 0.001 nm.
+    np.testing.assert_allclose(np.array([b.pos for b in beads]) -
+                               np.array([b.pos for b in initial]), .1, atol=.0011)

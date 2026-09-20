@@ -512,14 +512,14 @@ def test_unwrap_adjacency_keeps_loop_copies_in_one_component():
     from backend.api.crud import _geometry_for_design
     from tests.conftest import make_18hb_routed_design
 
-    # 168 bp (not the 388 bp default) — the unwrap-adjacency threading this guards
+    # 84 bp (not the 388 bp default) — the unwrap-adjacency threading this guards
     # is length-independent; the loops below still land inside the shorter bundle.
-    design = make_18hb_routed_design(length_bp=168)
+    design = make_18hb_routed_design(length_bp=84)
     # inject loops on several helices so there are 4-tuple copies to thread
     for i, h in enumerate(design.helices):
         if i % 3 == 0:
             h.loop_skips = [
-                LoopSkip(bp_index=bp, delta=+1) for bp in range(30, 120, 30)
+                LoopSkip(bp_index=bp, delta=+1) for bp in range(21, 70, 21)
             ]
     relax = resolved_nuc_map(
         design, _geometry_for_design(design)

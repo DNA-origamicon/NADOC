@@ -6190,12 +6190,12 @@
 <label title="Show the setup preview or the selected job’s surface."><input type="checkbox" id="md-graphene-show" checked> View surface</label>
 
 </div></details></section>
-<section class="namd-surface-option" id="md-screening-option"><label class="namd-surface-option__toggle" title="A charged closed wall. Choose salt and temperature in the job wizard. This model cannot be combined with an open nanopore."><input id="md-screening-enable" type="checkbox"> Add surface charge</label>
+<section class="namd-surface-option" id="md-screening-option"><label class="namd-surface-option__toggle" title="A charged closed wall. Choose salt and temperature in Box and solvent. This model cannot be combined with an open nanopore."><input id="md-screening-enable" type="checkbox"> Add surface charge</label>
 <details class="namd-surface-settings" id="md-screening-settings"><summary>Settings</summary><div>
 <label class="namd-surface-field" title="Total sheet charge divided by projected area. Both faces share the screening cloud. Preparation rounds the total to an integer elementary charge; realized density is saved in the job.">Sheet charge density (C/m²)<input id="md-screening-charge" aria-label="Sheet charge density (C/m²)" type="number" min="-0.5" max="0.5" step="0.0001" value="-0.0413"></label>
 <p id="md-screening-status" role="status" hidden></p>
 </div></details></section>
-<section class="namd-surface-option" id="md-nanopore-option"><label class="namd-surface-option__toggle" title="An open graphene pore. Choose Water padding and Ionic conditions in New job → Protocol & settings. Enabling this turns off the closed-wall charge model."><input id="md-surface-enable" type="checkbox"> Graphene nanopore</label>
+<section class="namd-surface-option" id="md-nanopore-option"><label class="namd-surface-option__toggle" title="An open graphene pore. Choose water margin and ionic conditions in Box and solvent. Enabling this turns off the closed-wall charge model."><input id="md-surface-enable" type="checkbox"> Graphene nanopore</label>
 <details class="namd-surface-settings" id="md-nanopore-settings"><summary>Settings</summary><div>
 <label class="namd-surface-field" title="Restrained graphene. Fixed surface charge is available separately for a closed wall.">Material model<select id="md-surface-material" disabled><option value="graphene">Graphene</option></select></label>
 <label class="namd-surface-field">Pore diameter (nm)<input id="md-surface-pore-diameter" type="number" value="2.1" min="0" max="100" step="0.1"></label>

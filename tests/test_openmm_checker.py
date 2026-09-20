@@ -518,10 +518,9 @@ class TestComputeDriftMetrics:
 class TestImportError:
     """verify_design_with_openmm raises ImportError when openmm is absent."""
 
-    @pytest.mark.skipif(
-        _has_openmm, reason="openmm is installed; cannot test ImportError"
-    )
-    def test_raises_import_error_without_openmm(self):
+    def test_raises_import_error_without_openmm(self, monkeypatch):
+        import sys
+        monkeypatch.setitem(sys.modules, "openmm", None)
         from backend.checkers.openmm_checker import verify_design_with_openmm
 
         design = _make_single_helix_design(21)

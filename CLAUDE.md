@@ -46,6 +46,8 @@ The app is at `http://localhost:5173` when both servers run. See [START.md](STAR
 
 ## Verification law
 
+- Normal test commands validate software only. Physical sampling/convergence and production simulations require a specific user request and `just test-scientific TARGET`; never launch them from change-based selection. See [scientific inventory](docs/scientific_validation.md).
+
 - **Development artifact cleanup:** use temporary directories or isolated `experiments/<topic>/ws/` workspaces for development jobs and review designs. Delete disposable outputs after verification; retain useful evidence outside the main user workspace with its purpose documented. Verify cleanup before finishing. See [artifact cleanup memory](memory/feedback_development_artifact_cleanup.md).
 - Backend behavior change → run `just test-smart`; report its `FAST`/`fast+slow[area]` decision, pass count, and any `DEFERRED` groups verbatim.
 - Frontend behavior change → run `just test-frontend` and exercise the feature in the running app. If that is impossible, lead the final report with `NOT VERIFIED IN APP` and explain why.

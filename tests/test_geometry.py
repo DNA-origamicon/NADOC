@@ -1069,15 +1069,11 @@ def test_the_atomistic_representation_is_periodic_over_the_21bp_repeat_too():
     the pure stamp.  Measured on this fixture, every single deviation was one of those.
     """
     import math
-    from pathlib import Path
 
     from backend.core.atomistic import build_atomistic_model
-    from backend.core.models import Design
 
-    path = Path("workspace/6hbx100_noT.nadoc")
-    if not path.exists():
-        pytest.skip("workspace/6hbx100_noT.nadoc not present")
-    design = Design.model_validate_json(path.read_text())
+    from tests.conftest import make_6hb_design
+    design = make_6hb_design(length_bp=100)
     helix = design.helices[0]
 
     relocated = {

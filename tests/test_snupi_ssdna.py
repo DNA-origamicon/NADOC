@@ -404,10 +404,15 @@ def _element_fingerprint(mesh):
 def test_cando_mesh_is_byte_identical_and_carries_no_ssdna_elements():
     """Decision 5: everything is gated behind material="snupi". If this fails, an SS-1 change
     leaked into the validated CanDo baseline."""
-    ws = Path(__file__).resolve().parents[1] / "workspace" / "6hbx100_noT.nadoc"
-    if not ws.exists():
-        pytest.skip("6hbx100_noT.nadoc not present")
-    design = Design.model_validate_json(ws.read_text())
+    # This is a representation-parity check, not the archived SNUPI census above.
+    # Reuse the classifier's inter-helix bridge construction. Unlike an interior
+    # gap (tested below), this adds an ssDNA element without replacing a CanDo beam.
+    design = _two_helix_design(
+        [[_dom("A", 0, 9, Direction.REVERSE),
+          _dom("A", 10, 15, Direction.REVERSE),
+          _dom("B", 0, 9, Direction.REVERSE)]],
+        scaffold_domains=[_dom("A", 0, 9), _dom("B", 0, 9)],
+    )
     cando = build_fem_mesh(design)
     assert _element_fingerprint(
         build_fem_mesh(design, material="cando")
@@ -416,6 +421,7 @@ def test_cando_mesh_is_byte_identical_and_carries_no_ssdna_elements():
     # ...and the snupi mesh keeps the SAME NODES (ssDNA bridges join existing bp nodes and
     # add none — SS-2 is what introduces ss nodes).
     snupi = build_fem_mesh(design, material="snupi")
+    assert any(e.ss_nt == 6 for e in snupi.elements)
     assert [(n.helix_id, n.global_bp) for n in snupi.nodes] == [
         (n.helix_id, n.global_bp) for n in cando.nodes
     ]

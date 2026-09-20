@@ -15,9 +15,6 @@ one), add it to ``ROUTING_ENTRY_POINTS`` — that is the merge rule.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 from backend.core.lattice import (
@@ -144,19 +141,8 @@ def test_checker_passes_crossover_in_extended_ssdna():
 
 # ── Regression pin: the exact failure mode that shipped on 2026-06-26 ─────────
 
-_BAD_OUTPUT = Path("workspace/Hinge_route_test.nadoc")
-
-
-@pytest.mark.skipif(not _BAD_OUTPUT.exists(), reason="workspace fixture absent")
 def test_gate_would_have_caught_the_hinge_regression():
-    """The seamless-raster-as-seamed output that regressed (no seams + crossovers
-    buried in staples) MUST be rejected by the gate.  This is the test the original
-    feature lacked.  (Skips quietly if the workspace file has been restored to the
-    seamed gold — the synthetic unit tests above pin the same failure modes.)"""
-    design = Design.model_validate(json.loads(_BAD_OUTPUT.read_text()))
-    has_hinge_raster = any(
-        (xo.process_id or "").endswith(":hinge") for xo in design.crossovers
-    )
-    if not has_hinge_raster:
-        pytest.skip("workspace file is not the regressed raster output")
-    assert scaffold_routing_invariants(design, require_seams=True)
+    """A seamless raster mislabeled as seamed must fail the shared entry gate."""
+    design, _ = auto_scaffold_seamless(_bundle())
+    violations = scaffold_routing_invariants(design, require_seams=True)
+    assert any("seam" in v for v in violations), violations

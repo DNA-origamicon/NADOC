@@ -1,4 +1,4 @@
-"""Real-topology solvent extraction — the physics the fast tests cannot check.
+"""Solvent extraction from headlessly solvated topology and controlled DCD motion.
 
 SLOW (area ``md``, registered whole-file in conftest): opens a real solvated
 PSF + DCD, so every test here pays a ~2 s universe build plus a per-frame
@@ -16,35 +16,22 @@ solvated trajectory can answer:
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import json
 import numpy as np
 import pytest
 
 from backend.core import md_solvent as MS
 from backend.core import md_trajectory as MT
 
-REPO = Path(__file__).resolve().parent.parent
-PKG = REPO / "workspace/md_validation/10hb_managed_strict/package/10hb_namd_solvated"
-PSF = PKG / "10hb.psf"
-REF = PKG / "10hb.pdb"
-DCD = PKG / "output/10hb_01_050K_NVT_k5_p10.dcd"
-DESIGN = REPO / "workspace/10hb.nadoc"
-
-pytestmark = pytest.mark.skipif(
-    not (PSF.exists() and REF.exists() and DCD.exists() and DESIGN.exists()),
-    reason="needs the real solvated 10hb validation package (user workspace)",
-)
+pytest_plugins = ["tests.md_trajectory_fixture"]
 
 
 @pytest.fixture(scope="module")
-def solvated():
-    """(ctx, solvent ctx, frame_out, xform, DNA display coords) for frame 0."""
-    from backend.core.models import Design
-
-    design = Design.model_validate_json(DESIGN.read_text())
-    ctx = MT._build_md_nadoc_ctx(PSF, [DCD], REF, design, with_atoms=True)
+def solvated(generated_solvated_md):
+    """Real solvated topology with controlled trajectory motion."""
+    fixture = generated_solvated_md
+    ctx = MT._build_md_nadoc_ctx(fixture.psf, [fixture.dcd], fixture.ref,
+                               fixture.design, with_atoms=True)
+    ctx["fixture_audit"] = fixture.audit
     sctx = MS.build_solvent_ctx(ctx["universe"])
     fo: dict = {}
     atoms = MT._extract_md_atoms_frame(ctx, 0, frame_out=fo)
@@ -177,7 +164,7 @@ def test_ion_counts_match_the_packages_own_charge_audit(solvated):
     """Independent oracle: the audit was written by the solvation builder, and
     the viewer reads the PSF. They must agree species by species."""
     _ctx, sctx, _fo, _xf, _dna = solvated
-    audit = json.loads((PKG / "charge_audit.json").read_text())["ionization"]
+    audit = _ctx["fixture_audit"]["ionization"]
     codes, counts = np.unique(sctx["ion_species"], return_counts=True)
     got = {MS.SPECIES[c]: int(n) for c, n in zip(codes, counts)}
     assert got.get("NA", 0) == audit["n_na"]
@@ -190,7 +177,7 @@ def test_hexahydrate_waters_count_as_water(solvated):
     they ride the water toggle, which is what makes the Mg spheres look
     solvated on screen."""
     _ctx, sctx, _fo, _xf, _dna = solvated
-    audit = json.loads((PKG / "charge_audit.json").read_text())["ionization"]
+    audit = _ctx["fixture_audit"]["ionization"]
     expected = audit["n_waters"] + (
         6 * audit["n_mg"] if audit.get("mg_hexahydrate") else 0
     )

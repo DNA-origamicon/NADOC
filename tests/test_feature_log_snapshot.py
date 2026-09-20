@@ -425,31 +425,21 @@ def test_delete_independent_parallel_extrusion_survives():
 
 
 def test_delete_workspace_independent_strutted_corner_extrude_scrubs_survivors():
-    fixture = REPO_ROOT / "workspace" / "2x2_strutted_corner.nadoc"
-    if not fixture.exists():
-        pytest.skip(f"{fixture} not available")
+    # Author the independent extrusions in a disposable document. The old
+    # workspace capture differed between machines and usually skipped this gate.
+    from backend.api import headless_build as hb
+    from backend.core.models import LatticeType
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle([(0, 0), (0, 1), (1, 0), (1, 1)], 21,
+                         lattice=LatticeType.SQUARE, name="snapshot_scrub")
+        hb.extrude_segment([(0, 4), (0, 5)], 21, offset_nm=14.0)
+        hb.extrude_segment([(4, 0), (4, 1), (5, 0), (5, 1)], 21, offset_nm=14.0)
+        built = design_state.get_or_404().model_copy(deep=True)
     design_state.close_session()
-    design_state.set_design(Design.from_json(fixture.read_text()))
-
+    design_state.set_design(built)
     before = design_state.get_or_404()
-    # This fixture is gitignored + untracked, so its contents vary per machine.
-    # The assertions below are pinned to a SPECIFIC capture (extrude-segment at
-    # feature_log[1] creating h_XY_0_4 / h_XY_0_5). If the local file was
-    # regenerated with a different routing / feature-log, skip rather than fail
-    # on the stale pins — the same scrub-on-delete behaviour is covered
-    # fixture-free by test_delete_independent_parallel_extrusion_survives above.
     removed_hids = {"h_XY_0_4", "h_XY_0_5"}
-    entry1_kind = (
-        getattr(before.feature_log[1], "op_kind", None)
-        if len(before.feature_log) > 1
-        else None
-    )
-    if entry1_kind != "extrude-segment" or not (
-        removed_hids & {h.id for h in before.helices}
-    ):
-        pytest.skip(
-            "2x2_strutted_corner.nadoc does not match this test's pinned structure"
-        )
+    assert before.feature_log[1].op_kind == "extrude-segment"
     removed_strands = {
         s.id
         for s in before.strands
@@ -759,27 +749,25 @@ def test_extrude_segment_logs_snapshot():
 def test_overhang_extrude_logs_snapshot():
     """Overhang extrude appends a snapshot entry."""
     client.post(
-        "/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"}
+        "/api/design/bundle", json={"cells": [[1, 0]], "length_bp": 42, "name": "B"}
     )
     design = design_state.get_or_404()
     helix_id = design.helices[0].id
+    # Same valid outward-facing terminal used by the cluster-inheritance regression.
+    design.helices[0].phase_offset = 0.5236
 
     r = client.post(
         "/api/design/overhang/extrude",
         json={
             "helix_id": helix_id,
-            "bp_index": 21,
+            "bp_index": 0,
             "direction": "FORWARD",
-            "is_five_prime": False,
-            "neighbor_row": 0,
+            "is_five_prime": True,
+            "neighbor_row": 1,
             "neighbor_col": 1,
             "length_bp": 8,
         },
     )
-    # Skip if the geometry constraints don't allow this particular extrude on the
-    # 1-cell test bundle; the point of this test is just the snapshot bookkeeping.
-    if r.status_code in (400, 422):
-        pytest.skip(f"Overhang geometry not valid for this fixture: {r.text}")
     assert r.status_code == 200, r.text
 
     log = design_state.get_or_404().feature_log
@@ -800,25 +788,25 @@ def test_overhangs_batch_delete_ships_partial_geometry():
     """GEO-12: deleting an extruded overhang (which removes its whole helix)
     must still use the partial-geometry path for the common no-linker case."""
     client.post(
-        "/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"}
+        "/api/design/bundle", json={"cells": [[1, 0]], "length_bp": 42, "name": "B"}
     )
     design = design_state.get_or_404()
     helix_id = design.helices[0].id
+    # Same valid outward-facing terminal used by the cluster-inheritance regression.
+    design.helices[0].phase_offset = 0.5236
 
     r = client.post(
         "/api/design/overhang/extrude",
         json={
             "helix_id": helix_id,
-            "bp_index": 21,
+            "bp_index": 0,
             "direction": "FORWARD",
-            "is_five_prime": False,
-            "neighbor_row": 0,
+            "is_five_prime": True,
+            "neighbor_row": 1,
             "neighbor_col": 1,
             "length_bp": 8,
         },
     )
-    if r.status_code in (400, 422):
-        pytest.skip(f"Overhang geometry not valid for this fixture: {r.text}")
     assert r.status_code == 200, r.text
 
     design = design_state.get_or_404()

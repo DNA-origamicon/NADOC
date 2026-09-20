@@ -483,6 +483,24 @@ def _extend_helix_hi(
     )
 
 
+def _extend_scaffold_sequence(design, strand, domain_index, new_domain):
+    """Keep existing base assignments when an end-turn extends one domain."""
+    if strand.sequence is None:
+        return None
+    from backend.core.sequences import strand_sequence_length
+
+    old_domain = strand.domains[domain_index]
+    def size(domains):
+        return strand_sequence_length(design, strand.model_copy(update={"domains": domains}))
+
+    added = size([new_domain]) - size([old_domain])
+    # Domains are stored in 5'→3' order. Insert before this domain for 5' growth,
+    # after it for 3' growth; count actual nucleotides, including loops/skips.
+    boundary = domain_index if new_domain.start_bp != old_domain.start_bp else domain_index + 1
+    offset = size(strand.domains[:boundary])
+    return strand.sequence[:offset] + "N" * added + strand.sequence[offset:]
+
+
 def _extend_scaf_domain_lo(
     design: Design, hid: str, face_bp: int, new_lo: int
 ) -> Design:
@@ -502,7 +520,10 @@ def _extend_scaf_domain_lo(
             )
             new_doms = list(strand.domains)
             new_doms[di] = new_dom
-            new_strand = strand.model_copy(update={"domains": new_doms})
+            new_strand = strand.model_copy(update={
+                "domains": new_doms,
+                "sequence": _extend_scaffold_sequence(design, strand, di, new_dom),
+            })
             new_strands = list(design.strands)
             new_strands[si] = new_strand
             return design.copy_with(strands=new_strands)
@@ -528,7 +549,10 @@ def _extend_scaf_domain_hi(
             )
             new_doms = list(strand.domains)
             new_doms[di] = new_dom
-            new_strand = strand.model_copy(update={"domains": new_doms})
+            new_strand = strand.model_copy(update={
+                "domains": new_doms,
+                "sequence": _extend_scaffold_sequence(design, strand, di, new_dom),
+            })
             new_strands = list(design.strands)
             new_strands[si] = new_strand
             return design.copy_with(strands=new_strands)

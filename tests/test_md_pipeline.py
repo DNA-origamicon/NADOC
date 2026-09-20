@@ -5,55 +5,38 @@ Exercises the same code path that /ws/md-run triggers:
   scan_run_dir → build_chain_map → build_p_gro_order → MDAnalysis Universe
   → _try_unwrap (no-op for GRO) → centroid_offset → _extract_universe(frame=0)
 
-Requires the 10hb_bundle_params/nominal run directory.
+Generates a native minimized package and controlled XTC frames in a temporary directory.
 """
 
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import pytest
 
-# ── constants ─────────────────────────────────────────────────────────────────
-
-_RUN_DIR = Path(__file__).parent.parent / "runs" / "10hb_bundle_params" / "nominal"
-_DESIGN_FILE = Path(__file__).parent.parent / "workspace" / "10hb.nadoc"
-
-pytestmark = pytest.mark.skipif(
-    not _RUN_DIR.exists() or not _DESIGN_FILE.exists(),
-    reason="Nominal run directory or design file not found",
-)
-
-
-# ── fixtures ──────────────────────────────────────────────────────────────────
+pytest_plugins = ["tests.md_trajectory_fixture"]
 
 
 @pytest.fixture(scope="module")
-def design():
-    import json
-    from backend.core.models import Design
-
-    return Design.model_validate(json.loads(_DESIGN_FILE.read_text()))
+def design(generated_gromacs):
+    return generated_gromacs.design
 
 
 @pytest.fixture(scope="module")
-def universe():
+def universe(generated_gromacs):
     import MDAnalysis as mda
-
-    gro = _RUN_DIR / "em.gro"
-    xtc = _RUN_DIR / "view_whole.xtc"
-    return mda.Universe(str(gro), str(xtc))
+    root = generated_gromacs.folder
+    return mda.Universe(str(root / "em.gro"), str(root / "view_whole.xtc"))
 
 
 @pytest.fixture(scope="module")
-def chain_data(design):
+def chain_data(design, generated_gromacs):
     from backend.core.atomistic import build_atomistic_model
     from backend.core.atomistic_to_nadoc import build_chain_map, build_p_gro_order
 
     model = build_atomistic_model(design)
     cm = build_chain_map(model)
-    pdb_txt = (_RUN_DIR / "input_nadoc.pdb").read_text(errors="replace")
+    pdb_txt = generated_gromacs.pdb.read_text(errors="replace")
     p_order = build_p_gro_order(pdb_txt, cm)
     return {"chain_map": cm, "p_order": p_order}
 
@@ -137,7 +120,7 @@ def test_frame0_positions_finite(universe, chain_data, design):
         )
 
 
-def test_ready_payload_fields(universe, chain_data, design):
+def test_ready_payload_fields(universe, chain_data, design, generated_gromacs):
     """Simulate the full _load_sync return dict to confirm all keys are present."""
     from backend.core.atomistic_to_nadoc import _extract_universe, centroid_offset
     from backend.core.md_metrics import derive_total_ns, parse_log_metrics
@@ -147,7 +130,7 @@ def test_ready_payload_fields(universe, chain_data, design):
     beads_0 = _extract_universe(universe, 0, p_order)
     T = centroid_offset(beads_0, design)
 
-    log_path = _RUN_DIR / "prod.log"
+    log_path = generated_gromacs.folder / "prod.log"
     metrics = parse_log_metrics(log_path) if log_path.exists() else None
     total_ns = derive_total_ns(metrics, n_frames) if metrics else None
 

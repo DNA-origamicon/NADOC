@@ -19,6 +19,8 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT))
+from backend.core.json_artifacts import json_artifact_exists, read_json_artifact
+
 RESULTS = HERE / "results"
 JOBS_OUT = RESULTS / "jobs"
 INVENTORY = HERE / "inventory.json"
@@ -46,7 +48,7 @@ def _find(*args: str) -> list[Path]:
 
 def _read_json(path: Path) -> dict[str, Any] | None:
     try:
-        return json.loads(path.read_text())
+        return read_json_artifact(path)
     except (OSError, ValueError):
         return None
 
@@ -305,7 +307,7 @@ def analyse(max_frames: int, force: bool = False) -> None:
     for index, job in enumerate(inv["selected_analysis_jobs"], start=1):
         out = JOBS_OUT / job["job_id"]
         summary = out / "summary.json"
-        if summary.is_file() and not force:
+        if json_artifact_exists(summary) and not force:
             print(f"[{index}/{len(inv['selected_analysis_jobs'])}] {job['job_id']} cached", flush=True)
             continue
         print(f"[{index}/{len(inv['selected_analysis_jobs'])}] {job['job_id']} {job['name_stem']}", flush=True)
@@ -325,7 +327,7 @@ def analyse(max_frames: int, force: bool = False) -> None:
             "name_stem": job["name_stem"], "size_class": job["size_class"],
             "arrangement_label": job["arrangement_label"], "design_source": job["design_source"],
         }
-        write_kimmdy_outputs(report, series, out)
+        write_kimmdy_outputs(report, series, out, compress_summary=True)
 
 
 def quality(force: bool = False) -> None:

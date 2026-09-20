@@ -241,7 +241,6 @@ def test_real_arbd_runs_with_linker(tmp_path, linker_type, attach):
     from backend.core.mrdna_bridge import (
         ensure_wsl_cuda_libs,
         find_arbd,
-        mrdna_model_from_nadoc,
     )
     from backend.core.mrdna_runner import _SIM_STEM, extract_mrdna_results
 
@@ -250,8 +249,21 @@ def test_real_arbd_runs_with_linker(tmp_path, linker_type, attach):
     ensure_wsl_cuda_libs()
 
     def _run(design, out):
+        from backend.core.mrdna_manifest import (
+            bind_manifest_to_mrdna_particles,
+            build_mrdna_nucleotide_manifest,
+        )
+        from backend.core.oxdna_staleness import oxdna_design_fingerprint
+        from backend.parameterization.mrdna_inject import (
+            CrossoverPotentialOverride,
+            mrdna_model_from_nadoc_parameterized,
+        )
+
         out.mkdir(parents=True, exist_ok=True)
-        mrdna_model_from_nadoc(design).simulate(
+        model = mrdna_model_from_nadoc_parameterized(
+            design, CrossoverPotentialOverride.from_database("T0")
+        )
+        model.simulate(
             output_name=_SIM_STEM,
             directory=str(out),
             num_steps=500,
@@ -259,14 +271,15 @@ def test_real_arbd_runs_with_linker(tmp_path, linker_type, attach):
             gpu=0,
             output_period=250,
         )
+        manifest = build_mrdna_nucleotide_manifest(
+            design, design_fingerprint=oxdna_design_fingerprint(design)
+        )
+        bind_manifest_to_mrdna_particles(manifest, model).write(out)
         return extract_mrdna_results(design, out)
 
     d, bridge = _link(linker_type, 6, attach)
-    try:
-        res_link = _run(d, tmp_path / "link")
-        res_bare = _run(_bare_6hb(), tmp_path / "bare")
-    except Exception as exc:
-        pytest.skip(f"ARBD simulation unavailable: {exc}")
+    res_link = _run(d, tmp_path / "link")
+    res_bare = _run(_bare_6hb(), tmp_path / "bare")
 
     # The bridge helix's nucleotides are reconstructed in the simulated display frame…
     assert any(p["helix_id"] == bridge for p in res_link["positions"])

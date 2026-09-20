@@ -3821,7 +3821,6 @@ def _capture_display_strands(job, conf_path, full_map) -> list:
     n_cap = int(built.get("n_beads", 0))
     if n_cap <= 0 or not full_map:
         return []
-    seq = "".join(c for c in (ss.get("sequence") or "").upper() if c in "ACGT")
     L = _capture_strand_length(job) or 8
     from backend.physics.oxdna_interface import OXDNA_LENGTH_UNIT, _parse_box_nm
 

@@ -75,13 +75,13 @@ def main():
         f'{i//args.n+1} 500 {i+1 if (i+1)%args.n else -1} {i-1 if i%args.n else -1}\n' for i in range(count)))
     time_unit=np.sqrt(44*.8518**2/24.943387854)
     stage=OxdnaStageSpec('solution','production','MD',args.steps,'CUDA' if args.sampling in ('md','hmc') else 'CPU',dt=args.dt_fs/1000/time_unit,
-        thermostat='langevin',interaction='DNA2PEG',peg_parameters=PegParameters().engine_parameters(),seed=args.seed)
+        thermostat='langevin',gamma_trans=time_unit,interaction='DNA2PEG',peg_parameters=PegParameters().engine_parameters(),seed=args.seed)
     inp=render_stage_input(stage,'topology.top','conf.dat')
     inp='\n'.join(line for line in inp.splitlines() if not line.startswith('list_type ='))
     inp+=f'\nlist_type = {args.list_type}\n'
     inp='\n'.join(line for line in inp.splitlines() if not line.startswith(('T =','print_conf_interval =','print_energy_every =')))
     interval=max(1,args.steps//args.observable_records)
-    inp+=f'\nT = {args.temperature}K\nT_force_value = true\npeg_chudoba = true\npeg_chudoba_pure = true\ngamma_trans = {time_unit}\n'
+    inp+=f'\nT = {args.temperature}K\nT_force_value = true\npeg_chudoba = true\npeg_chudoba_pure = true\n'
     inp+=f'print_conf_interval = {max(1,args.steps//args.trajectory_frames)}\nprint_energy_every = {max(1,args.steps//100)}\nCUDA_update_stress_tensor_every = {interval}\n'
     inp+='''data_output_1 = {
  name = thermo.dat

@@ -18,10 +18,13 @@ perturbs the grid + the CG bead radius and asserts the distance/volume/count che
 
 Panel: the small 6hb stays in the fast suite (~0.25 s — a per-loop guard); 18hb_routed and
 VoltronCore build ~300k-atom models (~7 s each) so they are marked slow+atomistic and defer
-to a test-dedicated session.  VoltronCore's design.json lives under workspace/ (not synced
-across machines) → its param skips when absent.
+to a test-dedicated session.  VoltronCore uses the original hash-pinned input committed as compressed JSON.
+The frozen baseline values are unchanged.
 """
 
+import gzip
+import hashlib
+import json
 from pathlib import Path
 
 import numpy as np
@@ -41,7 +44,7 @@ from backend.core.surface import (
     CG_BEAD_RADIUS_NM,
 )
 
-_VOLTRONCORE_JSON = Path("workspace/oxdna_jobs/154d3ea291b7/design.json")
+_FIXTURES = Path(__file__).parent / "fixtures"
 
 
 # ── Reusable mesh-comparison oracles (imported by the Task-2 vectorized-build tests) ──
@@ -193,11 +196,10 @@ def coarse_surface(
 
 
 def _voltroncore() -> Design:
-    if not _VOLTRONCORE_JSON.exists():
-        pytest.skip(
-            "VoltronCore design.json not present (workspace/ is not synced across machines)"
-        )
-    return Design.model_validate_json(_VOLTRONCORE_JSON.read_text())
+    raw = gzip.decompress((_FIXTURES / "voltroncore_surface_input.json.gz").read_bytes())
+    provenance = json.loads((_FIXTURES / "voltroncore_surface_input.provenance.json").read_text())
+    assert hashlib.sha256(raw).hexdigest() == provenance["uncompressed_sha256"]
+    return Design.model_validate_json(raw)
 
 
 # Baselines measured on this machine (uv.lock-pinned scipy/skimage; marching cubes is

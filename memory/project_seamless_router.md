@@ -4,6 +4,13 @@ description: backend/core/seamless_router.py — zig-zag end crossovers, closing
 type: project
 originSessionId: 4a5f87b3-ab49-4bcb-84bb-6252b80892b0
 ---
+**2026-09-19 sequence/fixture maintenance:** scaffold extension now inserts unknown
+bases at newly created sites while preserving the original assigned bases and their
+loop/skip-aware sequence offsets. Eight focused extension tests pass. The saved-cube
+rerouting/idempotence regression now creates a 6×6 SQ route and staples headlessly,
+then serializes/reloads it; it no longer depends on manual edits to workspace/cube_pore.
+Routing geometry and phase constants are unchanged.
+
 ## What it does
 `auto_scaffold_seamless(design)` now defaults to a **closed route with one buried nick**:
 the 5′/3′ termini are adjacent bases on the same helix, inside the bundle. This is

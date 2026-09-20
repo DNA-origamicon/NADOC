@@ -37,6 +37,8 @@ from tests.automation_harness import (
 )
 from tests.conftest import make_6hb_design, make_18hb_design
 
+# Mock executables advertise the current physics capability only to exercise
+# orchestration. They do not validate physics; native capability tests remain separate.
 # Reuse the mock-binary source + the M13+WC sequencing helper from the oxDNA runner
 # tests (a local fixture wraps the mock so pytest discovers it without a
 # cross-module fixture import).
@@ -60,7 +62,7 @@ def mock_oxdna(tmp_path, monkeypatch):
     """A fake oxDNA binary (copies the input conf → last_conf, writes energy) bound
     via ``$OXDNA_BIN`` — drives the whole job lifecycle deterministically, no GPU."""
     p = tmp_path / "mock_oxdna.py"
-    p.write_text(_MOCK_OXDNA)
+    p.write_text(_MOCK_OXDNA + "\n# NADOC physics corrections v3\n")
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
     _mark_mock_cuda_capable(p)
@@ -502,7 +504,7 @@ with open(cwd / energy, "w") as f:
 @pytest.fixture
 def mock_oxdna_field(tmp_path, monkeypatch):
     p = tmp_path / "mock_oxdna_field.py"
-    p.write_text(_FIELD_MOCK_OXDNA)
+    p.write_text(_FIELD_MOCK_OXDNA + "\n# NADOC physics corrections v3\n")
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
     _mark_mock_cuda_capable(p)
@@ -987,7 +989,7 @@ def mock_oxdna_traj(tmp_path, monkeypatch):
     """A fake oxDNA binary that also emits a multi-frame trajectory.dat (frames =
     ``max(1, steps//100)``), so the production rmsf/mean-structure route works."""
     p = tmp_path / "mock_oxdna_traj.py"
-    p.write_text(_MOCK_OXDNA_TRAJ)
+    p.write_text(_MOCK_OXDNA_TRAJ + "\n# NADOC physics corrections v3\n")
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
     _mark_mock_cuda_capable(p)
@@ -1058,7 +1060,7 @@ def mock_oxdna_field_traj(tmp_path, monkeypatch):
     """A fake oxDNA binary whose field stage emits a multi-frame trajectory.dat
     with a saturating monotone alignment ramp (AF-19 equilibration timeline)."""
     p = tmp_path / "mock_oxdna_field_traj.py"
-    p.write_text(_FIELD_TRAJ_MOCK_OXDNA)
+    p.write_text(_FIELD_TRAJ_MOCK_OXDNA + "\n# NADOC physics corrections v3\n")
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
     return p
@@ -1143,7 +1145,7 @@ def mock_oxdna_field_sweep(tmp_path, monkeypatch):
     """A fake oxDNA binary whose field stage gives a τ that DECREASES with |E| and a
     melt (base-pair break) above a destructive threshold (AF-20 sweep substrate)."""
     p = tmp_path / "mock_oxdna_field_sweep.py"
-    p.write_text(_FIELD_SWEEP_MOCK_OXDNA)
+    p.write_text(_FIELD_SWEEP_MOCK_OXDNA + "\n# NADOC physics corrections v3\n")
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
     return p
@@ -1226,7 +1228,7 @@ def mock_oxdna_field_campaign(tmp_path, monkeypatch):
     (a bigger structure equilibrates faster) while its melt threshold is design-
     independent — the AF-23 campaign substrate (lets two designs be DISTINGUISHABLE)."""
     p = tmp_path / "mock_oxdna_field_campaign.py"
-    p.write_text(_FIELD_CAMPAIGN_MOCK_OXDNA)
+    p.write_text(_FIELD_CAMPAIGN_MOCK_OXDNA + "\n# NADOC physics corrections v3\n")
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
     return p
@@ -2706,7 +2708,7 @@ def test_steer_field_session_rejects_empty_waypoints(tmp_path, mock_oxdna_field)
 # (~1e6-step) md_relax STANDARD_RELAX_PARAMS now applies (verified on
 # workspace/test343.nadoc: HBList mc 35 → md 39 → equil 42/42).
 #
-# Opt-in (a real relaxation is ~minutes on a GPU): set NADOC_RUN_OXDNA_SLOW=1.
+# Opt-in: just test-scientific tests/test_headless_oxdna_build.py
 # Needs a real oxDNA binary (find_oxdna) + a CUDA GPU.  Skipped in the default suite.
 
 
@@ -2718,7 +2720,6 @@ def test_field_specimen_reanneals_and_equilibrates_real_engine(tmp_path):
     assert the time-resolved oracle: the free body aligns to a stable plateau in
     finite τ WITHOUT melting (τ_align < τ_melt).  This is the first real-engine
     confirmation of the Tier-6 physical claims (everything below was mock-only)."""
-    import os
     from pathlib import Path
 
     from backend.core.models import Design
@@ -2729,10 +2730,6 @@ def test_field_specimen_reanneals_and_equilibrates_real_engine(tmp_path):
         resolve_anchor_particles,
     )
 
-    if not os.environ.get("NADOC_RUN_OXDNA_SLOW"):
-        pytest.skip(
-            "opt-in: set NADOC_RUN_OXDNA_SLOW=1 (a real relaxation is ~minutes)"
-        )
     if find_oxdna() is None:
         pytest.skip("no real oxDNA binary on PATH/$OXDNA_BIN")
 
@@ -2761,10 +2758,10 @@ def test_field_specimen_reanneals_and_equilibrates_real_engine(tmp_path):
     # Re-anneal proof: the relaxed structure is (nearly) fully base-paired — the
     # export drops pairing early in md_relax, the long md_relax pulls it back, and
     # equil (mutual traps OFF) HOLDS it → the annealed duplex self-sustains.
-    top = job.job_dir(tmp_path) / "topology.top"
+    reference = job.job_dir(tmp_path) / "conf.dat"
     last = job.stage_dir(tmp_path, job.stages[-1].name) / "last_conf.dat"
     retention = base_pair_retention(
-        design, read_configuration_unwrapped(last, design, top)
+        design, read_configuration_unwrapped(last, design, reference)
     )[0]
     assert retention >= 0.9, (
         f"specimen did not re-anneal (final retention {retention:.2f}); a too-short "

@@ -36,16 +36,18 @@ os.environ.setdefault("NADOC_RUNPOD_AUTOCONNECT", "0")
 #     defaults to "Bundle", so the overhang-extrude / part-editor / loadout / seek
 #     endpoints each drop a ``Bundle_N.nadoc`` into the real repo ``workspace/``).
 #   • ``/assembly/save`` and ``/design/save-workspace`` (via the ``_asm`` alias).
-# Point that one attribute at a throwaway per-test temp dir so NO test — present or
-# future — writes into the real ``workspace/``.  Tests that need their own workspace
+# Application startup also retains an imported copy for its audit log, session
+# cache, and background MD supervisor. Isolate both before any TestClient lifespan.
+# Tests that need their own workspace
 # (or the real one) just ``monkeypatch.setattr(assembly, "_WORKSPACE_DIR", ...)``
 # again; a function-scoped monkeypatch runs after this autouse fixture and wins.
 @pytest.fixture(autouse=True)
 def _isolate_workspace(tmp_path_factory, monkeypatch):
-    from backend.api import assembly
+    from backend.api import assembly, main
 
     ws = tmp_path_factory.mktemp("workspace")
     monkeypatch.setattr(assembly, "_WORKSPACE_DIR", ws)
+    monkeypatch.setattr(main, "_WORKSPACE_DIR", ws)
     yield
 
 
@@ -505,10 +507,11 @@ _SLOW_MODULES = {
     # sampling and cutoff probes reached 5.58–10.61 s in the merge fast gate.
     "test_chudoba_engine",
     "test_md_trajectory",
-    "test_md_display_ready_live",  # real-job load: parses 143 MB PSF + builds model
+    "test_md_display_ready_live",  # generated 18HB/7200-nt PSF + live display load
     # Setup-dominated: a ~16 s module/class-scoped fixture that EVERY test pays,
     # so per-test marking wouldn't help — the whole file is slow.
     "test_md_pipeline",
+    "test_atomistic_round_trip",  # shared fixture runs native GROMACS EM (~11 s)
     # SNUPI native FEM shape predictor — numeric eigen/Newton/Langevin solves on real
     # designs. Each of these files totals 45–130 s of solve time, and `--dist loadfile`
     # pins a file to ONE worker, so any of them alone would blow the 60 s fast budget.
@@ -678,7 +681,7 @@ _SLOW_TESTS = {
     "test_check_relaxed_constraint_met_on_real_run",
     "test_multiple_field_children_from_one_parent",
     # protein fork run
-    "test_prepared_hybrid_job_runs_on_fork",
+    "test_prepared_hybrid_job_runs_on_upstream",  # real native oxDNA, renamed from fork
     # atomistic trajectory audits (MDAnalysis loads)
     "test_trajectory_audit_route",
     "test_audit_trajectory_frames_clean",
@@ -973,11 +976,34 @@ def _slow_area_for(module: str) -> str:
     return "md"
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--scientific", action="store_true", default=False,
+        help="Run ONLY explicitly requested scientific validation campaigns",
+    )
+
+
 def pytest_collection_modifyitems(config, items):
     """Auto-apply the ``slow`` marker to the heavy real-sim/trajectory tests
     registered above, plus an ``area`` marker so ``just test-smart`` can run
     only the heavy group a change affects. ``-m 'not slow'`` skips them all."""
     import pytest
+
+    from tests.scientific_validation import campaign_reason
+
+    scientific = config.getoption("--scientific")
+    selected, deselected = [], []
+    for item in items:
+        reason = campaign_reason(item.nodeid)
+        if reason:
+            item.add_marker(pytest.mark.scientific(reason=reason))
+        is_scientific = item.get_closest_marker("scientific") is not None
+        if is_scientific:
+            item.add_marker(pytest.mark.slow)
+        (selected if is_scientific == scientific else deselected).append(item)
+    items[:] = selected
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
 
     for item in items:
         module = item.module.__name__.rsplit(".", 1)[-1] if item.module else ""

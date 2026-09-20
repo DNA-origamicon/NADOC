@@ -31,7 +31,9 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
   box uses the same display affine as DNA.
 - Interactive NAMD playback starts with eight exact strided frames, then reads ahead in 16-frame
   pages. The rest of the selected trajectory fills in the background and remains cached for
-  random scrubbing, within a 1.5 GiB coordinate budget. Dense float64 heavy-atom caches omit
+  random scrubbing, within a 1.5 GiB coordinate budget. JSON fallback frames are normalized
+  to float64 typed arrays, preserving precision and making their memory count toward that
+  budget; one foreground page is retained even if that page alone exceeds the budget. Dense float64 heavy-atom caches omit
   empty serial slots; only the displayed frame expands into a reusable sparse scratch array.
   Foreground seeks precede the next background page. The panel reports the loaded count,
   fully buffered state, or memory limitation; stopping releases the retained stream.
@@ -57,6 +59,13 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
   remain readable.
 - Atomistic base colors use strand/helix/bp/direction/copy identity. A strand can revisit
   the same bp index and direction on many helices; strand/bp/direction alone collides.
+
+- `backend/core/md_frame_alignment.py` owns the rigid alignment and sequential inlier guard
+  used by live coarse display and trajectory extraction. Per-reader periodic-image selection
+  and atom mapping remain explicit; no pose/phase constants changed. The extraction matched
+  its pre-refactor implementation exactly across 500 frame comparisons. Portable synthetic
+  tests cover known rotations, nonrigid exclusion, independent reader state, and the inlier
+  guard. Native and large-fixture checks remain separate (see `docs/maintenance_2026_09.md`).
 
 ## Binding invariants
 

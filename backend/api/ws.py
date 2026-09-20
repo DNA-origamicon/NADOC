@@ -1192,10 +1192,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 p_raw = _all_pos[_ctx["dna_p_idx"]] / 10.0  # Å → nm, box coords
                 dims = _dims_inj
             eq_pos = _ctx.get("eq_positions")
-            eq_valid = _ctx.get("eq_valid")
             rigid_mask = _ctx.get("rigid_mask")
             snap_mask = _ctx.get("snap_mask")
-            eq_centered = _ctx.get("eq_centered")
             eq_centroid = _ctx.get("eq_centroid")
             # Atoms snapped to design-eq: rigid dsDNA + crossover extra bases.
             # Fall back to rigid_mask if an older ctx has no snap_mask.
@@ -1254,89 +1252,13 @@ async def md_run_ws(websocket: WebSocket) -> None:
             else:
                 p_nm = p_raw + T
 
-            # Step 3 — Kabsch rotation aligned to design equilibrium.
-            # Only rigid dsDNA atoms (rigid_mask = bp≥0) contribute to the H matrix;
-            # ssDNA rows are zeroed in eq_centered so they don't bias the rotation.
-            #
-            # Sequential consistency check: when playing frame-by-frame (|N - N_prev| ≤ 3),
-            # compare the new rotation to R_prev.  If the rotation change exceeds 60°,
-            # the Kabsch likely flipped into an equivalent mirror solution (gimbal lock
-            # near 90° rotation).  In that case, re-run Kabsch using only inlier atoms
-            # (pre-Kabsch delta < median_delta * 3) to get a more robust estimate.
-            R_align = None
-            R_prev = _ctx.get("R_prev")
-            prev_frame = _ctx.get("prev_frame_idx", -999)
-            _is_sequential = abs(frame_idx - prev_frame) <= 3
-            if (
-                eq_centered is not None
-                and eq_centroid is not None
-                and len(eq_centered) == len(p_nm)
-            ):
-                _rm = (
-                    rigid_mask
-                    if (rigid_mask is not None and rigid_mask.any())
-                    else (
-                        eq_valid if (eq_valid is not None and eq_valid.any()) else None
-                    )
-                )
-                _mob_c = (
-                    p_nm[_rm].mean(axis=0) if _rm is not None else p_nm.mean(axis=0)
-                )
-                _mc = p_nm - _mob_c
-                _H = _mc.T @ eq_centered
-                _U2, _, _Vt2 = _np.linalg.svd(_H)
-                _d2 = _np.linalg.det(_Vt2.T @ _U2.T)
-                R_align = _Vt2.T @ _np.diag([1.0, 1.0, _d2]) @ _U2.T
+            # Shared with trajectory extraction; only this reader's history advances.
+            from backend.core.md_frame_alignment import align_md_frame
 
-                # Sequential consistency: detect sudden rotation jumps.
-                if R_prev is not None and _is_sequential:
-                    _dR = R_align @ R_prev.T
-                    _trace = float(_np.trace(_dR))
-                    # angle = arccos((trace-1)/2); if > 60° → suspicious flip
-                    _cos = max(-1.0, min(1.0, (_trace - 1.0) / 2.0))
-                    _angle_deg = _np.degrees(_np.arccos(_cos))
-                    if _angle_deg > 60.0:
-                        # Re-run Kabsch using inlier atoms only (robust to gimbal lock).
-                        _p_nm_raw = _mc @ R_align.T + eq_centroid
-                        _pre_d = _np.linalg.norm(_p_nm_raw - eq_pos, axis=1)
-                        _med_d = (
-                            _np.median(_pre_d[_rm])
-                            if _rm is not None
-                            else _np.median(_pre_d)
-                        )
-                        _inlier = (
-                            _rm & (_pre_d < _med_d * 3.0)
-                            if _rm is not None
-                            else (_pre_d < _med_d * 3.0)
-                        )
-                        if _inlier.sum() >= 10:
-                            _mob_c2 = p_nm[_inlier].mean(axis=0)
-                            _mc2 = p_nm - _mob_c2
-                            _eq_c2 = eq_pos - eq_centroid
-                            _eq_c2[~_inlier] = 0.0
-                            _H2 = _mc2.T @ _eq_c2
-                            _U3, _, _Vt3 = _np.linalg.svd(_H2)
-                            _d3 = _np.linalg.det(_Vt3.T @ _U3.T)
-                            R_inlier = _Vt3.T @ _np.diag([1.0, 1.0, _d3]) @ _U3.T
-                            # Accept inlier rotation only if it's more consistent with R_prev.
-                            _dR2 = R_inlier @ R_prev.T
-                            _cos2 = max(
-                                -1.0, min(1.0, (float(_np.trace(_dR2)) - 1.0) / 2.0)
-                            )
-                            if _np.arccos(_cos2) < _np.arccos(_cos):
-                                R_align = R_inlier
-                                _mob_c = _mob_c2
-                                _mc = _mc2
-                        if _MD_SEEK_DIAG:
-                            print(
-                                f"[ws seek] frame={frame_idx} rotation jump {_angle_deg:.1f}° "
-                                f"→ inlier Kabsch applied",
-                                flush=True,
-                            )
-
-                p_nm = _mc @ R_align.T + eq_centroid
-                _ctx["R_prev"] = R_align
-                _ctx["prev_frame_idx"] = frame_idx
+            aligned = align_md_frame(p_nm, _ctx, frame_idx)
+            p_nm, R_align = aligned.positions, aligned.rotation
+            _mob_c, _rm = aligned.mobile_centroid, aligned.fit_mask
+            if R_align is not None:
                 if _ctx.get("xf_parts") is not None:
                     _ctx["xf_parts"].update(
                         mob_c=_mob_c, eq_centroid=eq_centroid, R=R_align

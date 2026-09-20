@@ -1,0 +1,8 @@
+{
+  "reference_commit": "9aec578d2cacc6a16d68292a91ed0ca1830167ff",
+  "seed": 19,
+  "frame_comparisons": 500,
+  "max_coordinate_difference_nm": 0.0,
+  "rotation_comparison": "array_equal",
+  "scope": "rigid alignment and sequential guard; not a native simulation or a visual geometry lock"
+}

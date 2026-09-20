@@ -11,7 +11,6 @@ local gate on identical data.
 
 from __future__ import annotations
 
-import csv
 import subprocess
 import sys
 from pathlib import Path
@@ -201,36 +200,39 @@ def test_should_early_stop_parity_with_wc():
 # ── 4. frame-parser parity on real log text ────────────────────────────────────
 
 
-def _find_relax_logs(limit=6):
-    ws = _REPO / "workspace" / "md_jobs"
-    if not ws.is_dir():
-        return []
-    logs = [
-        p
-        for p in ws.glob("*/package/*/*_p*.log")
-        if "production" not in p.name.lower() and "qualification" not in p.name.lower()
-    ]
-    return sorted(logs)[:limit]
+@pytest.fixture
+def relaxation_logs(tmp_path):
+    """Native-format parser inputs with independently chosen plateau/drift cases."""
+    paths = []
+    for name, values in {
+        "short": [-1000.] * 3,
+        "flat": [-1000.] * 40,
+        "noisy": [-1000. + (-1)**i * .1 for i in range(40)],
+        "drift": [-1000. + i * 5 for i in range(40)],
+        "jump": [-1000.] * 20 + [-500.] * 20,
+    }.items():
+        path = tmp_path / f"{name}.log"
+        path.write_text("Info: controlled parser fixture\nETITLE: TS POTENTIAL VOLUME\n" +
+                        "\n".join(f"ENERGY: {i*100} {v} 3000000" for i,v in enumerate(values)) +
+                        "\nEnd of program\n")
+        paths.append(path)
+    return paths
 
 
-def test_frame_parser_matches_namd_metrics_on_real_logs():
-    logs = _find_relax_logs()
-    if not logs:
-        pytest.skip("no real relaxation logs in workspace/md_jobs")
+def test_frame_parser_matches_namd_metrics_on_generated_logs(relaxation_logs):
+    logs = relaxation_logs
     for log in logs:
         text = log.read_text(errors="replace")
         assert ev.parse_namd_log_frames(text) == namd_metrics.parse_namd_log_frames(log)
 
 
-def test_replay_decision_matches_local_gate_on_real_logs():
+def test_replay_decision_matches_local_gate_on_generated_logs(relaxation_logs):
     """No tiers: ``decide`` always requires energy AND WC, so pair the real energy
     frames with a controlled WC series and confirm the combined decision matches
     ``md_cutoff.should_early_stop_stage`` — flat WC reduces to energy alone (proving
     the energy leg is unchanged), a drifting WC always holds regardless of energy
     (proving the WC leg actually gates)."""
-    logs = _find_relax_logs()
-    if not logs:
-        pytest.skip("no real relaxation logs in workspace/md_jobs")
+    logs = relaxation_logs
     for log in logs:
         text = log.read_text(errors="replace")
         frames = ev.parse_namd_log_frames(text)
@@ -247,36 +249,8 @@ def test_replay_decision_matches_local_gate_on_real_logs():
         assert code == 1, log.name  # WC never flat -> always HOLD
 
 
-# ── 5. exp36 bank replay (parsed frames -> identical decisions) ─────────────────
-
-
-def test_bank_frames_decisions_match_source():
-    banks = sorted(
-        (_REPO / "experiments" / "exp36_relax_cutoff_bank").glob("bank*/frames.tsv")
-    )
-    if not banks:
-        pytest.skip("exp36 bank not present")
-    checked = 0
-    for tsv in banks:
-        by_seg: dict[str, list[dict]] = {}
-        with tsv.open() as fh:
-            for row in csv.DictReader(fh, delimiter="\t"):
-                f = {
-                    "POTENTIAL": _f(row.get("POTENTIAL")),
-                    "VOLUME": _f(row.get("VOLUME")),
-                }
-                by_seg.setdefault(row["segment"], []).append(f)
-        for frames in by_seg.values():
-            assert ev.energy_plateaued(frames) == md_cutoff.energy_plateaued(frames)
-            checked += 1
-    assert checked > 0
-
-
-def _f(v):
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
+# The optional exp36 bank replay duplicated the threshold/parity tests above.
+# Historical bank evaluation remains an experiment, not a skipped unit-test marker.
 
 
 # ── 6. CLI exit-code contract ──────────────────────────────────────────────────

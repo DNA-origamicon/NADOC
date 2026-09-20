@@ -41,6 +41,7 @@ dependencies = [
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
+    "scientific: opt-in physical validation; only runs with --scientific",
     "slow: marks tests as slow (run GROMACS EM; deselect with -m 'not slow')",
     "integration: marks tests requiring external files at /tmp",
     # Area sub-markers on slow tests, for change-based selection (just test-smart /

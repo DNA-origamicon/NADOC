@@ -293,6 +293,9 @@ def test_generated_batch_restarts_from_checkpoint_without_nadoc(tmp_path, monkey
 
 
 def test_legacy_tcl_guard_resumes_without_changing_open_config(tmp_path, monkeypatch):
+    import shutil
+    if shutil.which("tclsh") is None:
+        pytest.skip("Tcl execution oracle requires tclsh; Python force oracles run separately")
     import subprocess
     from backend.core import remote_resume_conf
 

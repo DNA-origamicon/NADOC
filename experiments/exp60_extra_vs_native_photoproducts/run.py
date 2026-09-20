@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import math
 import sys
 from collections import defaultdict
@@ -17,6 +16,8 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT))
+from backend.core.json_artifacts import json_artifact_exists, read_json_artifact
+
 EXP59 = ROOT / "experiments" / "exp59_kimmdy_extra_base_matrix"
 INVENTORY = EXP59 / "inventory.json"
 JOBS = HERE / "results" / "jobs"
@@ -51,7 +52,7 @@ CLASSES = (
 
 
 def _read_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text())
+    return read_json_artifact(path)
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -112,7 +113,7 @@ def analyse(max_frames: int = 500, force: bool = False) -> None:
     cases = _resolve_cases()
     for number, case in enumerate(cases, start=1):
         out = JOBS / case["job_id"]
-        if (out / "summary.json").is_file() and not force:
+        if json_artifact_exists(out / "summary.json") and not force:
             print(f"[{number}/{len(cases)}] {case['job_id']} cached", flush=True)
             continue
         print(f"[{number}/{len(cases)}] {case['job_id']} {case['family']} {case['arrangement']}", flush=True)
@@ -134,7 +135,7 @@ def analyse(max_frames: int = 500, force: bool = False) -> None:
             "design_source": case["design_source"],
             "duration_ps": _trajectory_duration_ps(case["dcds"]),
         }
-        write_kimmdy_outputs(report, series, out)
+        write_kimmdy_outputs(report, series, out, compress_summary=True)
 
 
 def _near_insert_keys() -> dict[str, set[tuple[str, int, str]]]:

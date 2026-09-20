@@ -1,0 +1,215 @@
+{
+  "format": "gzip; sha256 covers original JSON bytes",
+  "artifacts": [
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/00e55345847a/summary.json.gz",
+      "sha256": "0bb114af407c209d6cd21ebd50aa6ba971aedc123701b434059eec16c79f9c83",
+      "bytes": 242170,
+      "compressed_bytes": 20564,
+      "pairs": 40
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/029a76c6a59f/summary.json.gz",
+      "sha256": "36379ada04609c193dac6a821d39e46d41ac9c78c89f583bf7798ca61030eaa1",
+      "bytes": 50933,
+      "compressed_bytes": 8553,
+      "pairs": 4
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/0ad7fe0f7d9f/summary.json.gz",
+      "sha256": "2a110d2fec859404f774136701f3347e794f917be21715fd26f7b1d0ef71eb70",
+      "bytes": 242305,
+      "compressed_bytes": 19882,
+      "pairs": 40
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/29c5b267380f/summary.json.gz",
+      "sha256": "c46f3f85bee96258eb5d19f1bd46465383d6ff7957e5ed3be2e0c54cc1824e79",
+      "bytes": 39795,
+      "compressed_bytes": 7499,
+      "pairs": 1
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/37418e309e59/summary.json.gz",
+      "sha256": "541928b1af1de07bacfeaa1862bb23a05c79d66b11425fd8a4776f1438f0f669",
+      "bytes": 301570,
+      "compressed_bytes": 22332,
+      "pairs": 28
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/4c0ba3a85587/summary.json.gz",
+      "sha256": "31a643c7d3a3112295818a2f5387ce0e1e6ed9e26916b32a4e0b094b55945a8e",
+      "bytes": 39981,
+      "compressed_bytes": 7912,
+      "pairs": 1
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/613dc2a5bab1/summary.json.gz",
+      "sha256": "f53105333894d2a65724ec367833920c9caaaf0c52f466a3b80c813c914f8452",
+      "bytes": 50820,
+      "compressed_bytes": 8234,
+      "pairs": 4
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/6950d3b79138/summary.json.gz",
+      "sha256": "b1e803e9b1ba1ac001ca51af9e54955a5ad76febe101313852fbade342fecddf",
+      "bytes": 1791315,
+      "compressed_bytes": 124800,
+      "pairs": 159
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/7d5937e569c6/summary.json.gz",
+      "sha256": "5ab715ea249800b0acd9edbcbedc52a47df7a980c8200f18706379c504e88284",
+      "bytes": 38155,
+      "compressed_bytes": 7002,
+      "pairs": 1
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/7f3c3dadb527/summary.json.gz",
+      "sha256": "4b6047635a02a1f1e11fd108e788946ac7fd03f7a78b3afe9473b0d33e0310d6",
+      "bytes": 43800,
+      "compressed_bytes": 7607,
+      "pairs": 2
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/85d6a243d6b5/summary.json.gz",
+      "sha256": "33717569fe4fa30b4a38e7fd0545d8a626bde0db17f830f45d12401f0b63c80c",
+      "bytes": 43805,
+      "compressed_bytes": 7603,
+      "pairs": 2
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/992ab65c0d1a/summary.json.gz",
+      "sha256": "bd4fbfc31f08cb8170b334cde162be3ec85dc6981c714d9012b72d2a4466eaa4",
+      "bytes": 301529,
+      "compressed_bytes": 22340,
+      "pairs": 28
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/9cd897159f47/summary.json.gz",
+      "sha256": "f9c2ceafac3c1b54a44c9fc2b9dd202db372d8d9da00db2b2e6425b84c6dca3e",
+      "bytes": 43993,
+      "compressed_bytes": 8318,
+      "pairs": 2
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/bfd050d2ce4c/summary.json.gz",
+      "sha256": "db09a311c136aa79f51929f96b176c9c29520e199353bf2c6a324052d95962a2",
+      "bytes": 49690,
+      "compressed_bytes": 9005,
+      "pairs": 4
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/cb616816195f/summary.json.gz",
+      "sha256": "f7e98271dbab67973a3da41168e51d2c03f3a2754700358b8d069eabd652669f",
+      "bytes": 258986,
+      "compressed_bytes": 23430,
+      "pairs": 40
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/da4af0483372/summary.json.gz",
+      "sha256": "b03b78710715c4f2621aa86e2f2b27ebb6be9a342724e359a8188deecb2badd0",
+      "bytes": 50836,
+      "compressed_bytes": 8188,
+      "pairs": 4
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/e4a49b2057a5/summary.json.gz",
+      "sha256": "cdbd945e33acbce93e97251d425a7512f110e3a663c8ee5af93295274db0864e",
+      "bytes": 23673,
+      "compressed_bytes": 4283,
+      "pairs": 1
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/e6d49ff6d011/summary.json.gz",
+      "sha256": "0650f69940efda763616e6de179bd5e9054bc1da021b233224902dffffd5e8ab",
+      "bytes": 43999,
+      "compressed_bytes": 8338,
+      "pairs": 2
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/eb4953783dd3/summary.json.gz",
+      "sha256": "d2b321af8a229545234316528bbbdc0d382239d6ec6ba2625ee006f3aa24d83c",
+      "bytes": 301646,
+      "compressed_bytes": 22360,
+      "pairs": 28
+    },
+    {
+      "path": "experiments/exp59_kimmdy_extra_base_matrix/results/jobs/fc12195d0636/summary.json.gz",
+      "sha256": "078db71743e14088079f9bf99fdc18ffc1251d9dc1903b8e2a6b8ab524ac3808",
+      "bytes": 3589984,
+      "compressed_bytes": 337533,
+      "pairs": 636
+    },
+    {
+      "path": "experiments/exp60_extra_vs_native_photoproducts/results/jobs/37418e309e59/summary.json.gz",
+      "sha256": "90ea4f664b7500a5738d8aaa371bf8d1180c26230c3c222b485a4e3f9ef8a357",
+      "bytes": 366592,
+      "compressed_bytes": 30099,
+      "pairs": 52
+    },
+    {
+      "path": "experiments/exp60_extra_vs_native_photoproducts/results/jobs/3e9e2df26012/summary.json.gz",
+      "sha256": "e3794f9f156a621f8cba6f07fb828e57719633675dcd6981d5ba38a49d595231",
+      "bytes": 1498917,
+      "compressed_bytes": 99426,
+      "pairs": 180
+    },
+    {
+      "path": "experiments/exp60_extra_vs_native_photoproducts/results/jobs/6950d3b79138/summary.json.gz",
+      "sha256": "7f9a8c5b8979cac44cec88ae28cd45f74a084cfc3686d04828463b0f40599dec",
+      "bytes": 2980692,
+      "compressed_bytes": 282270,
+      "pairs": 596
+    },
+    {
+      "path": "experiments/exp60_extra_vs_native_photoproducts/results/jobs/6d7c2e38e455/summary.json.gz",
+      "sha256": "103a82eb61f53421756c62d033cb1ef3d7c59c06b46300bb6b6c5d679c0fca23",
+      "bytes": 200951,
+      "compressed_bytes": 12401,
+      "pairs": 13
+    },
+    {
+      "path": "experiments/exp60_extra_vs_native_photoproducts/results/jobs/6fc87681f9de/summary.json.gz",
+      "sha256": "ad32133a0b539a67d29bbf6155bfd42561f090e2ce319de8b7cc0d7379ece043",
+      "bytes": 1272889,
+      "compressed_bytes": 67737,
+      "pairs": 103
+    },
+    {
+      "path": "experiments/exp60_extra_vs_native_photoproducts/results/jobs/7838a495c0a6/summary.json.gz",
+      "sha256": "bc8fe69e79a86e2d70e6132c68c136d5c414c1cc4fa41a2ba2f58b980398404c",
+      "bytes": 225206,
+      "compressed_bytes": 17038,
+      "pairs": 16
+    },
+    {
+      "path": "experiments/exp60_extra_vs_native_photoproducts/results/jobs/892ad3d12d4f/summary.json.gz",
+      "sha256": "e624b3b798de99e840e07b3f471121e9a55e8283c77539e16716ea64ca6a0ee4",
+      "bytes": 248272,
+      "compressed_bytes": 20861,
+      "pairs": 23
+    },
+    {
+      "path": "experiments/exp60_extra_vs_native_photoproducts/results/jobs/992ab65c0d1a/summary.json.gz",
+      "sha256": "835838ec2adb9db416a1bf4af9e7c9809554205ffa780f461c4303faf2c315b4",
+      "bytes": 348260,
+      "compressed_bytes": 27851,
+      "pairs": 45
+    },
+    {
+      "path": "experiments/exp60_extra_vs_native_photoproducts/results/jobs/eb4953783dd3/summary.json.gz",
+      "sha256": "449ba03d883d1c2c9fd0a5e3855a1fcf007ccba800a3ff7b540510c5e29d7e4f",
+      "bytes": 340321,
+      "compressed_bytes": 27124,
+      "pairs": 42
+    },
+    {
+      "path": "experiments/exp60_extra_vs_native_photoproducts/results/jobs/fc12195d0636/summary.json.gz",
+      "sha256": "16ae6da3f48cda21527e597b1ce7792d32a287e38b31aef8a7bf8551015d6386",
+      "bytes": 5034003,
+      "compressed_bytes": 530172,
+      "pairs": 1158
+    }
+  ]
+}
