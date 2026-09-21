@@ -343,3 +343,49 @@ remains required; screenshots do not prove scientific or assembly-asset parity.
 Static production-build measurements now pass; browser/OS matrix, standalone
 viewer and live meeting measurements remain pending. See
 `docs/viewer_performance_manual.md` for reproducible commands and retained evidence.
+
+### MV-PREPARED-VIEWER — experimental static package (2026-09-20)
+
+Check exported `.nadocview` snapshots in `/viewer.html` on real target GPUs: orbit,
+pan, multiscale wheel, double-click center and reset; repeated load/close memory;
+protein/nanoparticle appearance; saved camera/representation parity. The software
+renderer establishes same-pose Voltron pixel parity, but cannot certify interactive
+performance of its six-million-triangle scene. The small-scene app exercise covers
+pointer gestures and invalid-file preservation. Real-device package A/B, browser/OS
+matrix, scientific selection, shared assembly shaders, atomistic impostors,
+recorded cube_pore playback and meeting traffic remain open. See
+`docs/prepared_viewer.md` and the earlier decoder-only A/B evidence; do not transfer
+that earlier performance verdict to the new standalone viewer.
+
+### MV-PREPARED-LAN — two-device invite test (2026-09-20)
+
+Production browser automation covers invite/name entry, auto-download, orbit,
+performance dialog, and host-disconnect indication. HTTP host tests cover denied
+invites, same-origin joining, four-session limit, package protection, exact static
+file routes, expiry and listener shutdown. A real laptop must still confirm the
+Windows LAN/firewall path, supported WebGL rendering, Full protein/nanoparticle
+appearance and interactive metrics. This prototype is trusted-LAN HTTP; encrypted
+remote transport, session roster/slot management, highlights and follow remain
+open. `main.js` receives no additional lines for this LAN-host step.
+
+
+### MV-SHARE-LINK — Help menu / laptop route (2026-09-20)
+
+The actual Help menu, prepared export, clipboard copy, independent alpha/beta
+links, guest name entry, correct part title, cookie isolation and individual/all
+revocation are covered by the isolated `share_link.spec.js` app check. Native
+Windows host/control access also works after separating Node output from the
+interactive console and using Windows-side control transport for WSL. A real
+laptop still owns the same-LAN/firewall reachability, visual content and GPU
+performance check. Current links are frozen snapshots, not live editing or shared
+highlights. `main.js` delta for this step: +2 lines of import/factory wiring.
+
+### MV-INTERNET-SHARE — browser-only remote guests (2026-09-20)
+
+Local production HTTPS browser check passes password denial/acceptance, cookie
+security, package auto-loading, independent pointer orbit and disconnect. The Help
+menu copy/share/revoke regression passes. Provider approval is complete and a browser loaded Voltron through the public
+relay with normal certificate validation and no prompts. A separate physical
+laptop and four-guest Voltron transfer/GPU measurements remain open. Guests must see no install, account, certificate or file-download
+prompts. Stop and expiry must remove only NADOC's public route while preserving
+the user's private editor route. This step adds zero lines to main.js.

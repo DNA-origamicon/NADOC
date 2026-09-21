@@ -1,0 +1,18 @@
+{
+  "checked_at": "2026-09-21T02:14:17.505Z",
+  "public_relay_ip": "208.111.34.11",
+  "https_status": 200,
+  "certificate_override": false,
+  "title": "VoltronCoreArmV2 (test snapshot)",
+  "status": "Static snapshot \u00b7 Orbit, pan and zoom \u00b7 Double-click to center",
+  "page_errors": [],
+  "browser_prompts": [],
+  "unauthenticated_routes": {
+    "/host/shares": 404,
+    "/api/design": 404,
+    "/meeting/ROOM/scene": 401
+  },
+  "performance_acceptance": false,
+  "functional_check_elapsed_ms": 124999,
+  "timing_note": "Whole automated functional check, including wrong-password retry, software rendering, screenshot, and denied-route checks; not isolated download/load/FPS."
+}

@@ -869,3 +869,16 @@ managed health window was 60 frames. A 4 fs run with 2 ps output would mislabel 
 and shorten the health question to 120 ps. DCD/segment timing is now cross-checked;
 restart rollback is respected; health retains 600 ps and reports its actual span.
 Sampling diagnostics use physical-time blocks and report correlation explicitly.
+
+## ISSUE-31 — LAN viewer crashed before join when secure UUID API was absent
+
+[x] Fixed 2026-09-20. The prepared viewer initialized its optional performance
+automation bridge, which called `crypto.randomUUID()` unconditionally. A real
+HTTP LAN origin lacks that secure-context method, so startup failed before name
+entry. Earlier app checks used localhost, which browsers treat as trustworthy
+and therefore did not cover this condition. The optional bridge now stays inert
+when UUID support is absent; ordinary rendering and manual performance capture
+remain available. A unit regression and production browser test on non-secure
+`http://nadoc-lan.test` verify join, rendering, pointer orbit and completed metrics
+with both `crypto.randomUUID` and `crypto.subtle` actually undefined. The secure
+localhost project passes as well. No `main.js` change for this fix.

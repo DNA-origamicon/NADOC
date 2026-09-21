@@ -1,3 +1,5 @@
+import { initShareLink } from './viewer/share_link.js'
+import { initPreparedExport } from './viewer/export_prepared.js'
 import { openProcessLog } from './ui/process_log.js'
 import { initViewerPerformance } from './perf/viewer_performance.js'
 import { initMdIonPaths } from './scene/md_ion_paths.js'
@@ -318,7 +320,7 @@ async function main() {
     setResizeCallback, clearResizeCallback,
     pushControls, popControls,
     addFrameCallback, removeFrameCallback,
-    setRenderFn, resetRenderFn,
+    setRenderFn, resetRenderFn, isStandardRender,
   } = initScene(canvas)
   initNamdPegCoatingPreview({ scene })
   initTwoElectrodePreview({ scene, camera, controls })
@@ -351,6 +353,8 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
+  const preparedExport = initPreparedExport({ scene, camera, renderer, store, captureCurrentCamera, isStandardRender, getDetailLevel: () => designRenderer.getDetailLevel() })
+  initShareLink({ exportView: preparedExport.exportView })
   initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel: () => designRenderer.getDetailLevel(), getFileOpen: () => _fileOpen })
   const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer })
   window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug

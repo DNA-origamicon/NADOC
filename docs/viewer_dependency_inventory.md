@@ -1,11 +1,12 @@
 # Viewer extraction inventory
 
-Checkpoint: Phase 0 diagnostics plus the first Phase 1 wire-decoder extraction.
-This is an implementation checklist, not a claim that standalone viewing exists.
+Checkpoint: Phase 0 committed as `978e5dda`; shared runtime and experimental static
+prepared packages now extend the decoder extraction. `viewer.html` opens supported
+visible-scene snapshots without an editor backend. Full phase acceptance remains open.
 
 | Component | Current dependency | Standalone boundary / acceptance |
 | --- | --- | --- |
-| Scene/navigation | `scene/scene.js`: canvas, controls, animation loop, resize | Reuse controls; add complete lifecycle disposal before independently mounting/unmounting viewers. |
+| Scene/navigation | `viewer/runtime.js`; `scene/scene.js` compatibility export | Editor and prepared viewer reuse controls, loop and resize; runtime disposal cancels frames/animation, removes input listeners, disconnects resize and releases renderer/controls. |
 | Full part rendering | `scene/design_renderer.js`: injected store; helix renderer and display overlays | Feed prepared geometry through a viewer state adapter; preserve subscriber order and physical overrides. |
 | Geometry decoding | Previously embedded/duplicated in `api/client.js` | Now `viewer/geometry_codec.js`; editor imports it. Same coordinates/metadata and shared assembly arrays, no API/store dependencies. |
 | Full assemblies | `assembly_renderer_shared.js`: injected API, batch/instance requests, store | Supply scene-source adapter; preserve unique-source geometry and instance transforms. Include linkers/connectors and per-instance overrides. |
@@ -53,7 +54,7 @@ fixture still needs to be selected/generated in an isolated workspace.
   optional metadata, legacy input, error propagation and shared array identity.
   Further viewer restructuring is gated by the broader performance/visual evidence.
 
-## Current checkpoint verification
+## Committed diagnostic checkpoint verification
 
 - Full frontend suite after production automation: 471 files, 6,672 tests passed.
 - Latest targeted transport/server/bridge suite: 3 files, 11 tests passed.
@@ -66,4 +67,32 @@ fixture still needs to be selected/generated in an isolated workspace.
 - Test-created prefixed workspace files were checked absent after teardown. Source
   scientific designs/trajectories and unrelated working-tree edits were untouched.
 - `main.js`: +2 lines of import/initialization wiring. `api/client.js`: net −95 lines.
-- No backend behavior changed; no simulations, deployment, commits, or pushes.
+- No backend behavior changed; no simulations, deployment, or pushes. This
+  checkpoint was subsequently committed as `978e5dda`.
+
+## Prepared snapshot checkpoint
+
+The verification results above describe the diagnostic checkpoint.
+The subsequent implementation adds binary typed-array packages and a standalone
+static viewer. Existing visible Full meshes, proteins and nanoparticles can be
+packaged without duplicating scientific geometry computation. The prototype
+preserves shared geometry/materials, instance transforms/colors/alpha and PNG
+textures. Unknown shaders fail explicitly; shared assembly transforms and atomistic
+impostors require adapters before parity can be claimed. Scientific selection,
+recorded frames and rooms remain open. See `prepared_viewer.md` for limitations,
+manual performance controls, and the distinction from completed phase acceptance.
+The prepared snapshot implementation passes 6,685 frontend tests, 23 smoke tests,
+and small/Voltron round-trip application checks. Its real-GPU A/B gate is still
+open; retained evidence is in `audits/prepared_viewer_20260920/README.md`.
+
+## Local sharing control checkpoint
+
+Help → Share link reuses the prepared export factory. A loopback-only editor
+middleware controls a separate temporary native Node host through a file-only
+credential. WSL uses a local Windows subprocess for control transport; guest
+traffic uses the Windows LAN interface. Guests receive independent immutable
+part links with name entry and isolated session cookies; the guest viewer still
+has no editor/Python dependency. Shared highlights, recorded trajectories and
+HTTPS remote transport remain outside this static LAN checkpoint. See
+`audits/share_link_menu_20260920/README.md` for actual clipboard/guest-flow checks,
+Windows launch fixes, and the separate backend-test limitations.

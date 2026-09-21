@@ -1,0 +1,6 @@
+{
+  "scope": "Small native Full scene; actual export/open; editor API blocked in viewer; pointer orbit/reset and invalid-file preservation passed",
+  "package_bytes": 160716,
+  "identical_pngs": true,
+  "png_sha256": "f5bd4f984f3d7bde878f1cf416a020c22836f637551e09d31c41408cda61ff61"
+}

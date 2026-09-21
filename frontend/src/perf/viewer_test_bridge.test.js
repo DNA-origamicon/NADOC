@@ -1,5 +1,16 @@
-import { expect, it, vi } from 'vitest'
+import { expect, it, vi, afterEach } from 'vitest'
 import { connectViewerTestBridge } from './viewer_test_bridge.js'
+afterEach(() => vi.unstubAllGlobals())
+
+it('leaves optional automation inert when LAN HTTP lacks secure-context UUIDs', () => {
+  vi.stubGlobal('crypto', { getRandomValues: vi.fn() })
+  const hot = { send: vi.fn(), on: vi.fn(), off: vi.fn() }, inspect = vi.fn()
+  const dispose = connectViewerTestBridge({ hot, api: {}, inspect })
+  expect(hot.on).not.toHaveBeenCalled()
+  expect(hot.send).not.toHaveBeenCalled()
+  expect(inspect).not.toHaveBeenCalled()
+  expect(() => dispose()).not.toThrow()
+})
 
 function fixture() {
   const handlers = new Map(), callbacks = new Set()

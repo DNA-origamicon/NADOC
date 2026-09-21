@@ -1,0 +1,333 @@
+/**
+ * Three.js scene bootstrap.
+ *
+ * Creates the renderer, camera, lights, and OrbitControls.
+ * Sizes the renderer to the canvas element's parent container, not window.
+ * Returns a context object shared by all other modules.
+ */
+
+import * as THREE from 'three'
+import { OrbitControls }    from 'three/addons/controls/OrbitControls.js'
+import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
+import { makeMultiscaleControls } from '../scene/multiscale_controls.js'
+import { fovPanScale } from '../scene/fov_pan.js'
+import { screenPlaneCameraUp } from '../scene/camera_basis.js'
+
+function _makeOrbitControls(camera, canvas, target) {
+  const c = new OrbitControls(camera, canvas)
+  c.enableDamping = false
+  c.zoomToCursor = true        // zoom toward cursor position, not just target
+  c.screenSpacePanning = true  // pan moves in screen plane (better for arbitrary 3-D views)
+  if (target) c.target.copy(target)
+  return c
+}
+
+function _makeTrackballControls(camera, canvas, target) {
+  const c = new TrackballControls(camera, canvas)
+  c.rotateSpeed = 3.0
+  c.zoomSpeed   = 1.2
+  c.panSpeed    = 0.8
+  c.staticMoving = true
+  if (target) c.target.copy(target)
+  const innerUpdate = c.update.bind(c)
+  c.update = () => {
+    camera.up.copy(screenPlaneCameraUp(camera.position, c.target, camera.up))
+    return innerUpdate()
+  }
+  c.update()
+  return c
+}
+
+export function initScene(canvas) {
+  let disposed = false
+  let finishAnimation = null
+  const pendingFrames = new Set()
+  const container = canvas.parentElement
+
+  function _w() { return container.clientWidth  || window.innerWidth  }
+  function _h() { return container.clientHeight || window.innerHeight }
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, stencil: true })
+  renderer.setSize(_w(), _h())
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setClearColor(0x000000, 0)
+  renderer.xr.enabled = true
+
+  const scene = new THREE.Scene()
+  scene.background = null
+
+  // Camera positioned to see a 42 bp helix (~14 nm long along Z).
+  // near=0.1 nm is well below single-nucleotide scale (~0.34 nm).
+  // far=2000 nm accommodates structures >5000 bp (~1700 nm) with the camera
+  // pulled back to a comfortable viewing distance.
+  const camera = new THREE.PerspectiveCamera(55, _w() / _h(), 0.1, 2000)
+  camera.position.set(6, 3, 7)
+
+  // Mutable reference to whichever controls are currently active.
+  // A Proxy is returned to callers so that switchOrbitMode() can swap the
+  // underlying instance without invalidating any stored references.
+  let _inner = _makeOrbitControls(camera, canvas)
+  _inner.target.set(0, 0, 7)   // midpoint of 42 bp helix on Z axis
+
+  const controls = new Proxy({}, {
+    get(_, prop) {
+      const val = _inner[prop]
+      return typeof val === 'function' ? val.bind(_inner) : val
+    },
+    set(_, prop, value) {
+      _inner[prop] = value
+      return true
+    },
+  })
+
+  // Matches the controls actually created above (OrbitControls). Earlier this
+  // started as 'trackball' which made captureCurrentCamera() lie about the
+  // initial state until the user explicitly switched modes.
+  let _currentOrbitMode = 'orbit'
+
+  // Helix-axis segments for the Multiscale mode's nav-scale field. main.js
+  // installs the real provider (it needs the store); until then the mode simply
+  // falls back to the orbit-target distance.
+  let _navSegments = () => new Float64Array(0)
+  function setNavScaleProvider(fn) { _navSegments = fn }
+
+  function switchOrbitMode(mode) {
+    _currentOrbitMode = mode
+    const savedTarget = _inner.target.clone()
+    _inner.dispose()
+    if (mode === 'trackball') {
+      _inner = _makeTrackballControls(camera, canvas, savedTarget)
+    } else if (mode === 'multiscale') {
+      _inner = makeMultiscaleControls(camera, canvas, savedTarget, () => _navSegments())
+    } else {
+      _inner = _makeOrbitControls(camera, canvas, savedTarget)
+    }
+  }
+
+  // ── Camera capture / animation helpers ─────────────────────────────────────
+
+  /** Returns a plain-object snapshot of the current camera state. */
+  function captureCurrentCamera() {
+    return {
+      position: camera.position.toArray(),
+      target:   controls.target.toArray(),
+      up:       camera.up.toArray(),
+      fov:      camera.fov,
+      orbitMode: _currentOrbitMode,
+    }
+  }
+
+  /**
+   * Smoothly animate the camera to an exact stored position/target/up/fov.
+   * @param {object} opts
+   * @param {number[]} opts.position  — [x, y, z] destination camera position
+   * @param {number[]} opts.target    — [x, y, z] destination controls.target
+   * @param {number[]} opts.up        — [x, y, z] destination camera.up
+   * @param {number}   [opts.fov]     — destination FOV (degrees); skipped if not provided
+   * @param {number}   [opts.duration=350] — animation duration in ms
+   * @returns {Promise<void>}  resolves when the animation is complete
+   */
+  let _animRaf = null
+  function animateCameraTo({ position, target, up, fov, duration = 350 }) {
+    if (_animRaf) { cancelAnimationFrame(_animRaf); _animRaf = null }
+    finishAnimation?.(); finishAnimation = null
+    if (disposed) return Promise.resolve()
+
+    const destPos    = new THREE.Vector3(...position)
+    const destTarget = new THREE.Vector3(...target)
+    const destUp     = new THREE.Vector3(...up)
+    const startPos    = camera.position.clone()
+    const startTarget = controls.target.clone()
+    const startUp     = camera.up.clone()
+    const startFov    = camera.fov
+    const destFov     = (fov != null) ? fov : startFov
+    const startTime   = performance.now()
+
+    return new Promise(resolve => {
+      finishAnimation = resolve
+      function frame(now) {
+        const raw = Math.min((now - startTime) / duration, 1)
+        const t = raw < 0.5 ? 2 * raw * raw : -1 + (4 - 2 * raw) * raw // ease-in-out
+
+        camera.position.lerpVectors(startPos, destPos, t)
+        controls.target.lerpVectors(startTarget, destTarget, t)
+        camera.up.lerpVectors(startUp, destUp, t).normalize()
+        if (destFov !== startFov) {
+          camera.fov = startFov + (destFov - startFov) * t
+          camera.updateProjectionMatrix()
+        }
+        controls.update()
+
+        if (raw < 1) {
+          _animRaf = requestAnimationFrame(frame)
+        } else {
+          _animRaf = null
+          finishAnimation = null
+          resolve()
+        }
+      }
+      _animRaf = requestAnimationFrame(frame)
+    })
+  }
+
+  // Shift+wheel → fast zoom: boost zoomSpeed for the duration of the event.
+  // Capture phase ensures this runs before the controls' own wheel listener.
+  const fastZoom = e => {
+    if (!e.shiftKey) return
+    const isTrackball = _inner instanceof TrackballControls
+    _inner.zoomSpeed = isTrackball ? 4.8 : 4.0
+    const frame = requestAnimationFrame(() => {
+      pendingFrames.delete(frame)
+      _inner.zoomSpeed = isTrackball ? 1.2 : 1.0
+    })
+    pendingFrames.add(frame)
+  }
+  canvas.addEventListener('wheel', fastZoom, { capture: true, passive: true })
+
+  // Shift+drag → fast pan: live-update panSpeed each pointermove while Shift is held.
+  //
+  // The same listener normalises pan against the lens. TrackballControls (and
+  // Multiscale, built on it) pan by |camera − target| with no FOV term, so a
+  // photo-mode FOV change — which dollies to preserve framing — silently
+  // rescales pan: wild at 8°, glacial at 90°. OrbitControls already folds
+  // tan(fov/2) into its own pan maths, so it must NOT get the factor.
+  const fastPan = e => {
+    const isTrackball = _inner instanceof TrackballControls
+    const base = (e.shiftKey && e.buttons !== 0)
+      ? (isTrackball ? 3.2 : 4.0)
+      : (isTrackball ? 0.8 : 1.0)
+    _inner.panSpeed = isTrackball ? base * fovPanScale(camera.fov) : base
+  }
+  canvas.addEventListener('pointermove', fastPan, { capture: true, passive: true })
+
+  // Double-click → re-center orbit on the clicked 3-D point.
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff, 0.45))
+  const sun = new THREE.DirectionalLight(0xffffff, 1.1)
+  sun.position.set(8, 14, 6)
+  scene.add(sun)
+  const fill = new THREE.DirectionalLight(0x4488cc, 0.35)
+  fill.position.set(-6, -4, -8)
+  scene.add(fill)
+
+  // Active render camera — normally the perspective camera, but can be swapped
+  // by cadnano_view to an OrthographicCamera.
+  let _renderCamera = camera
+
+  /** Replace the camera used by the render loop. */
+  function setRenderCamera(cam) { _renderCamera = cam }
+  /** Restore the render loop to the default perspective camera. */
+  function restoreRenderCamera() { _renderCamera = camera }
+  /** Return the camera currently used for rendering (may be ortho in cadnano mode). */
+  function getRenderCamera() { return _renderCamera }
+  /** Return the controls currently handling input (may be ortho controls in cadnano mode). */
+  function getActiveControls() { return _inner }
+
+  // Photo-mode render override — replaces renderer.render() in the animation loop.
+  // The default fn is restored by resetRenderFn().
+  let _defaultRenderFn = () => renderer.render(scene, _renderCamera)
+  let _renderFn = _defaultRenderFn
+
+  function setRenderFn(fn) { _renderFn = fn }
+  function resetRenderFn() { _renderFn = _defaultRenderFn }
+
+  // Optional callback invoked on every resize, registered by external modules
+  // that own the active camera (e.g. cadnano_view updates ortho frustum here).
+  let _onResize = null
+  function setResizeCallback(fn) { _onResize = fn }
+  function clearResizeCallback()  { _onResize = null }
+
+  // Controls stack — allows cadnano_view to push an ortho-controls instance
+  // and pop it back on exit, restoring the perspective controls.
+  let _savedInner = null
+
+  /**
+   * Disable the current controls and replace them with newCtrls.
+   * Call popControls() to restore the previous controls.
+   */
+  function pushControls(newCtrls) {
+    _savedInner = _inner
+    _savedInner.enabled = false
+    _inner = newCtrls
+  }
+
+  /**
+   * Dispose the pushed controls and restore the previously saved controls.
+   */
+  function popControls() {
+    if (!_savedInner) return
+    _inner.dispose()
+    _inner = _savedInner
+    _inner.enabled = true
+    _savedInner = null
+  }
+
+  // Per-frame callbacks registered by external modules (e.g. VR session grab update).
+  const _frameCallbacks = new Set()
+  function addFrameCallback(fn) { _frameCallbacks.add(fn) }
+  function removeFrameCallback(fn) { _frameCallbacks.delete(fn) }
+
+  // Render loop — setAnimationLoop works in both normal and WebXR modes.
+  // _cnFrame is a global frame counter used by the cadnano debug logger.
+  let _cnFrame = 0
+  window._cnFrame = 0
+  renderer.setAnimationLoop(() => {
+    _cnFrame++
+    window._cnFrame = _cnFrame
+    if (!renderer.xr.isPresenting) _inner.update()
+    _frameCallbacks.forEach(fn => fn())
+    _renderFn()
+  })
+
+  // Resize to container
+  const resizeObserver = new ResizeObserver(() => {
+    const w = _w()
+    const h = _h()
+    camera.aspect = w / h
+    camera.updateProjectionMatrix()
+    renderer.setSize(w, h)
+    // TrackballControls (and Multiscale, which builds on it) caches the canvas
+    // rect for its screen→trackball mapping; without this, rotation drifts after
+    // any resize. OrbitControls reads the rect live and has no such method.
+    _inner.handleResize?.()
+    _onResize?.(w, h)
+  })
+  resizeObserver.observe(container)
+
+  // Scene children belong to the host. Dispose their resources before disposing
+  // this runtime; the editor and a prepared viewer have different resource owners.
+  function dispose() {
+    if (disposed) return
+    disposed = true
+    renderer.setAnimationLoop(null)
+    resizeObserver.disconnect()
+    canvas.removeEventListener('wheel', fastZoom, true)
+    canvas.removeEventListener('pointermove', fastPan, true)
+    if (_animRaf) cancelAnimationFrame(_animRaf)
+    _animRaf = null
+    finishAnimation?.(); finishAnimation = null
+    for (const frame of pendingFrames) cancelAnimationFrame(frame)
+    pendingFrames.clear()
+    _frameCallbacks.clear()
+    _inner.dispose()
+    if (_savedInner && _savedInner !== _inner) _savedInner.dispose()
+    _savedInner = null
+    _onResize = null
+    _navSegments = () => new Float64Array(0)
+    renderer.dispose()
+  }
+
+  return {
+    dispose,
+    scene, camera, renderer, controls,
+    switchOrbitMode, setNavScaleProvider, captureCurrentCamera, animateCameraTo,
+    setRenderCamera, restoreRenderCamera, getRenderCamera,
+    getActiveControls,
+    setResizeCallback, clearResizeCallback,
+    pushControls, popControls,
+    addFrameCallback, removeFrameCallback,
+    setRenderFn, resetRenderFn,
+    isStandardRender: () => _renderFn === _defaultRenderFn && _renderCamera === camera,
+  }
+}

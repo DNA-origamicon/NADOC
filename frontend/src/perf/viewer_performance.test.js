@@ -4,7 +4,7 @@ import { getViewerPerformance, initViewerPerformance } from './viewer_performanc
 
 afterEach(() => { getViewerPerformance()?.dispose(); vi.useRealTimers() })
 
-function fixture() {
+function fixture(options = {}) {
   const canvas = document.createElement('canvas')
   const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000)
   camera.position.set(10, 5, 10)
@@ -17,6 +17,7 @@ function fixture() {
       info: { render: { calls: 5, triangles: 100 }, memory: { geometries: 3, textures: 0 } } },
     camera, controls, store: { getState: () => state },
     captureCurrentCamera: () => ({ position: camera.position.toArray(), up: camera.up.toArray(), target: controls.target.toArray() }),
+    ...options,
     addFrameCallback: fn => callbacks.add(fn), removeFrameCallback: fn => callbacks.delete(fn),
   })
   return { api, camera, controls, callbacks, canvas, change: () => { state = { ...state, currentDesign: { id: 'b' } } } }
@@ -68,4 +69,10 @@ it('repeats the benchmark pose but restores the user viewpoint on stop', async (
   expect(camera.position.equals(first)).toBe(true)
   api.stop()
   expect(camera.position.equals(userPosition)).toBe(true)
+})
+
+it('labels a prepared package with both source identity and actual package identity', async () => {
+  const { api } = fixture({ getFixtureIdentity: () => ({ sha256: 'a'.repeat(64), kind: 'JSON design/assembly document; not simulation content', package_sha256: 'b'.repeat(64) }) })
+  await api.start(); api.stop()
+  expect(api.latest).toMatchObject({ fixture_sha256: 'a'.repeat(64), package_sha256: 'b'.repeat(64), viewer_kind: 'prepared-static-snapshot' })
 })

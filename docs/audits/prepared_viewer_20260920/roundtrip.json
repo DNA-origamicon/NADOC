@@ -1,0 +1,50 @@
+{
+  "fixture": "VoltronCoreArmV2",
+  "source_sha256": "f0c03351c3962b6a50ae96e7e8cfb5e6722701572be36d9aca3b85df066148f6",
+  "scope": "Software-rendered static round-trip; test copy has __e2e__ identity/name and omits history. Not performance or trajectory acceptance.",
+  "test_passed": true,
+  "editor_api_requests_in_viewer": 0,
+  "package_bytes": 22629044,
+  "package_sha256": "03487f7820b0c54d9531184e0894faa5c5464eb32108f856b11255f47653e696",
+  "source_document_hash_from_package": "bc64150d6d77b7d5fd30fc74782ddc87e59b2522e49f4a31f172a5114a167f98",
+  "camera": {
+    "position": [
+      432.54389714945125,
+      168.64992000000004,
+      646.969
+    ],
+    "target": [
+      -0.330902850548803,
+      -4.5,
+      214.0942
+    ],
+    "up": [
+      -0.1924500897298753,
+      0.9622504486493764,
+      -0.1924500897298753
+    ],
+    "fov": 55,
+    "orbitMode": "multiscale",
+    "near": 0.1,
+    "far": 2000
+  },
+  "view": {
+    "assembly": false,
+    "detail_level": 0,
+    "atomistic": "off",
+    "surface": "off",
+    "coloring": "strand"
+  },
+  "package_resources": {
+    "geometries": 1711,
+    "materials": 2312,
+    "textures": 195,
+    "images": 195
+  },
+  "canvas_size": [
+    800,
+    600
+  ],
+  "editor_png_sha256": "1722a64833a473e7cd6541b68f54078003f8a2ced0ab0a174db3e33ae3b0e9ae",
+  "viewer_png_sha256": "1722a64833a473e7cd6541b68f54078003f8a2ced0ab0a174db3e33ae3b0e9ae"
+}

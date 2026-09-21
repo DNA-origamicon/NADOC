@@ -43,6 +43,7 @@ export function installTestApi({
   multiView,
 }) {
   window.__nadocTest = {
+    pauseViewerRenderingForTest: () => renderer.setAnimationLoop(null),
     scene,
     dimensions: {
       open: () => dimensionsTool?.open?.(),

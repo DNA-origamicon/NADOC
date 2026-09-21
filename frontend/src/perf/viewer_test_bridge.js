@@ -2,6 +2,9 @@ import { createViewerTestTransport, viewerTestDestination } from './viewer_test_
 
 /** Small browser adapter; timed runs reuse the exact manual capture implementation. */
 export function connectViewerTestBridge({ hot, api, snapshot, inspect, openFile, document: doc = document }) {
+  // This optional automation bridge must not block ordinary LAN/HTTP viewing.
+  // Keep manual performance capture available without weakening bridge IDs.
+  if (typeof globalThis.crypto?.randomUUID !== 'function') return () => {}
   const id = crypto.randomUUID()
   if (!hot || typeof hot.off !== 'function') hot = createViewerTestTransport({ id })
   if (!hot) return () => {}

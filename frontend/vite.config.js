@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { frontendBuildInfo } from './build_info.js'
+import { preparedSharePlugin as internetSharePlugin } from './prepared_share_server.js'
 import { viewerTestPlugin } from './viewer_test_server.js'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
@@ -11,7 +12,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const API_PORT = process.env.VITE_API_PORT || '8000'
 
 export default {
-  plugins: [viewerTestPlugin()],
+  plugins: [viewerTestPlugin(), internetSharePlugin()],
   define: { __NADOC_BUILD_INFO__: JSON.stringify(frontendBuildInfo(__dirname)) },
   server: {
     port: 5173,
@@ -34,6 +35,7 @@ export default {
     rollupOptions: {
       input: {
         main:            resolve(__dirname, 'index.html'),
+        viewer:          resolve(__dirname, 'viewer.html'),
         'cadnano-editor': resolve(__dirname, 'cadnano-editor.html'),
         'strand-anim':    resolve(__dirname, 'strand-anim.html'),
       },

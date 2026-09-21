@@ -186,3 +186,9 @@ false native-process adoption and cadence-dependent screening metrics corrected.
 Real Start-API pilot completed at 4 fs; longer runs remain visible under the source
 nadoc. Regression and scientific-analysis tests cover the corrected contracts.
 See docs/namd_electrode_gpu.md and workspace/electrode_gpu_screening_4fs_20260914/.
+
+2026-09-20: [x] ISSUE-31: guarded the optional test bridge's secure-context UUID
+requirement so it cannot prevent ordinary HTTP LAN viewing. Added unit coverage
+and a real non-secure-origin Playwright project, including completed manual
+performance capture. Both production browser projects pass; 6,692 frontend tests
+pass. Cached host assets require restarting the test host and replacing its link.

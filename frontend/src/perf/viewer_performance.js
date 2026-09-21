@@ -17,7 +17,7 @@ async function digest(value) {
 }
 
 /** Editor adapter. This observes live geometry; it never mutates design or job data. */
-export function initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel = () => null, getFileOpen = () => null }) {
+export function initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel = () => null, getFileOpen = () => null, getFixtureIdentity = null }) {
   installed?.dispose()
   let preparing = false
   let disposed = false
@@ -109,7 +109,8 @@ export function initViewerPerformance({ renderer, camera, controls, store, addFr
       announce()
       try {
         // Hash outside the measured interval; never copy scientific contents into logs.
-        const fixtureHash = await digest(design)
+        const identity = getFixtureIdentity ? await getFixtureIdentity() : null
+        const fixtureHash = identity?.sha256 ?? await digest(design)
         if (disposed) throw new Error('Viewer capture disposed')
         const current = store.getState()
         if (document.hidden || current.currentDesign !== initialState.currentDesign || current.currentAssembly !== initialState.currentAssembly ||
@@ -144,7 +145,8 @@ export function initViewerPerformance({ renderer, camera, controls, store, addFr
           run_id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           captured_at: new Date().toISOString(), variant, scenario,
           duration_requested_ms: durationMs, fixture_sha256: fixtureHash,
-          fixture_hash_kind: 'JSON design/assembly document; not simulation content',
+          fixture_hash_kind: identity?.kind ?? 'JSON design/assembly document; not simulation content',
+          ...(identity?.package_sha256 ? { package_sha256: identity.package_sha256, viewer_kind: 'prepared-static-snapshot' } : {}),
           build: typeof __NADOC_BUILD_INFO__ === 'undefined' ? null : __NADOC_BUILD_INFO__,
           build_mode: import.meta.env.DEV ? 'development' : 'production',
           environment: { browser: navigator.userAgent, gpu, viewport, refresh_hz: null },

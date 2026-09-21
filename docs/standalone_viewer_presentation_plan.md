@@ -1,6 +1,7 @@
 # Standalone viewer and presentations: phased development plan
 
-Status: Phase 0 implementation plus first Phase 1 decoder extraction. Product decisions below were accepted
+Status: Phase 0 committed; Phase 1 shared runtime and an experimental Phase 2 static
+package/viewer are in development. Product decisions below were accepted
 on 2026-09-20. Controlled production A/B for static Voltron on the user's RTX 2080
 SUPER passes the initial gates. Large assemblies, trajectories and presentation
 performance remain outstanding; do not claim their gates have passed.
@@ -10,8 +11,10 @@ user GPU reference was recorded (24.98 FPS; p95 46.5 ms). Subsequent controlled 
 records 42.34/42.78 median FPS and 26.0/26.6 ms p95; all overview screenshots match.
 See [the production comparison](audits/viewer_ab_production_20260920/README.md),
 `viewer_performance_manual.md` and
-`viewer_dependency_inventory.md`. Packages, standalone entry point, recorded-frame
-delivery, and meeting hosting are not implemented at this checkpoint.
+`viewer_dependency_inventory.md`. The subsequent `.nadocview`/`viewer.html` prototype
+is described in [prepared viewer notes](prepared_viewer.md). Its performance and full
+parity gates are separate from that earlier A/B result. Recorded-frame delivery,
+scientific selection, and meeting hosting are not implemented at this checkpoint.
 
 Development branch: `feature/standalone-viewer-presentations`.
 Baseline commit: `cce80858ff528a2648cba3f18351685f75dc673c` (master at branch creation).
@@ -32,6 +35,14 @@ files; automated performance runs use separate worktrees, ports, and scratch dat
   simulation controls, and trusted workspace peer credentials.
 
 ## Accepted scope (2026-09-20)
+
+LAN prototype update: the static package now has a separate temporary HTTP host,
+random invite/name-entry flow, four-browser limit and process expiry. This enables
+a trusted same-network laptop test. Help → Share link now packages the current
+view and manages independent part-specific links; the Windows host/control path
+is running after scoped firewall approval.
+It does not complete Phase 4's HTTPS/remote transport or Phase 3's shared state.
+See `prepared_viewer.md` and `audits/prepared_lan_20260920/README.md`.
 
 1. Prepared viewer packages first; raw legacy designs without Python and browser
    scientific geometry generation are deferred.
@@ -245,3 +256,20 @@ Use additive, versioned packages; never rewrite original design files as a migra
 side effect. Keep the original viewer runnable until final acceptance. Remove any
 temporary dual-path switch only after regression gates and manual review pass.
 No deployment or geometry-engine rewrite occurs as part of this planning task.
+
+## Internet sharing requirement — 2026-09-20
+
+Guests may be on unrelated networks across the country and must use an ordinary
+HTTPS browser link with name/password entry only: no guest installation, account,
+VPN, certificate warning, file handling, or firewall setup. The default transport
+is therefore a meeting-scoped managed HTTPS tunnel from the presenter's PC. LAN
+sharing remains an optional manual path. Third-party relay infrastructure is used;
+no permanent NADOC content server is required. Node/CLI/account setup belongs only
+on the host. Prepared snapshots and independent navigation are the current scope;
+shared highlights, jump/follow and recorded simulation playback retain their phases.
+
+Implementation adds an isolated public listener, a separate local management port,
+generated per-snapshot passwords, secure cookies, bounded join attempts, hidden
+Windows helper, and owned foreground Funnel lifecycle. Provider account approval is complete. The public-relay browser check passed with ordinary TLS validation. The
+real-device acceptance matrix and performance gates remain open. The existing
+private editor route must not be changed or made public.
