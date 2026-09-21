@@ -1,0 +1,50 @@
+/* Layout only: controls use NADOC's shared .btn, .input and .select primitives. */
+.sharing-dialog {
+  width: min(680px, 92vw);
+  max-height: 88vh;
+  overflow: auto;
+  padding: var(--space-5);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface);
+  border: var(--border-thin) solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.sharing-dialog::backdrop { background: var(--color-bg-overlay); }
+.sharing-dialog--broadcast { width: min(560px, 92vw); }
+.sharing-dialog--broadcast > .sharing-actions { margin-top: var(--space-4); }
+.sharing-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-3); }
+.sharing-header h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); }
+.sharing-dialog h3, .sharing-clip legend { margin: 0; font-size: var(--text-base); font-weight: var(--weight-semibold); }
+.sharing-description { color: var(--color-text-muted); line-height: var(--leading-normal); margin: var(--space-2) 0 var(--space-3); }
+.sharing-card { min-width: 0; margin: var(--space-4) 0 0; padding: var(--space-4); background: var(--color-bg-canvas); border: var(--border-thin) solid var(--color-border-default); border-radius: var(--radius-md); }
+.sharing-clip legend { padding: 0 var(--space-2); }
+.sharing-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.sharing-actions .btn { text-decoration: none; }
+.sharing-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
+.sharing-fields label, .sharing-field { display: flex; flex-direction: column; gap: var(--space-2); color: var(--color-text-secondary); }
+.sharing-fields .input, .sharing-fields .select, .sharing-field .select { width: 100%; min-width: 0; }
+.sharing-status { padding: var(--space-3); margin: var(--space-4) 0 0; background: var(--color-bg-raised); border-left: 3px solid var(--color-accent); border-radius: var(--radius-sm); color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.sharing-status:empty { display: none; }
+.sharing-url { display: block; width: 100%; margin: var(--space-3) 0; }
+.sharing-link > strong { display: block; overflow-wrap: anywhere; font-weight: var(--weight-semibold); }
+.sharing-password { margin: 0 0 var(--space-3); color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.sharing-invitation { width: 100%; min-height: 100px; padding: var(--space-3); margin-top: var(--space-3); resize: vertical; }
+.sharing-invitation[hidden] { display: none; }
+.sharing-playback { margin-top: var(--space-4); padding-top: var(--space-3); border-top: var(--border-thin) solid var(--color-border-default); }
+.sharing-seek { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); color: var(--color-text-secondary); }
+.sharing-seek input { flex: 1; min-width: 120px; accent-color: var(--color-accent); cursor: pointer; }
+.sharing-footer { margin-top: var(--space-5); padding-top: var(--space-3); border-top: var(--border-thin) solid var(--color-border-default); }
+.sharing-check { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); cursor: pointer; }
+.sharing-check input { accent-color: var(--color-accent); }
+.sharing-badge { position: fixed; bottom: var(--space-5); left: 50%; transform: translateX(-50%); z-index: 10000; max-width: 80vw; padding: var(--space-3) var(--space-4); color: var(--color-text-primary); background: var(--color-bg-surface); border: var(--border-thin) solid var(--color-accent); border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
+.sharing-badge:not([hidden]) { display: flex; align-items: center; gap: var(--space-3); }
+@media (max-width: 520px) {
+  .sharing-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sharing-dialog { padding: var(--space-3); }
+  .sharing-badge:not([hidden]) { flex-wrap: wrap; }
+}
+
+.sharing-publish { margin-top: var(--space-4); }
+.sharing-clip legend .sharing-check { margin: 0; }
+.sharing-clip [data-clip-settings][hidden] { display: none; }

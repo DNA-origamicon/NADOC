@@ -4,7 +4,6 @@ import { promisify } from 'node:util'
 import { readFile, writeFile, chmod } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 const exec = promisify(execFile)
-const quote = value => `'${String(value).replaceAll("'", "''")}'`
 export async function launchPreparedShare({ root, controlFile, minutes = 120 }) {
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 480) throw new Error('Host lifetime must be 1–480 minutes')
   const repo = resolve(root, '..'), dist = join(root, 'dist')
@@ -16,14 +15,26 @@ export async function launchPreparedShare({ root, controlFile, minutes = 120 }) 
   const wsl = process.platform === 'linux' && /microsoft/i.test(await readFile('/proc/version', 'utf8').catch(() => ''))
   if (wsl || process.platform === 'win32') {
     const windows = async path => wsl ? (await exec('wslpath', ['-w', path])).stdout.trim() : path
-    const [script, windowsDist, windowsControl] = await Promise.all([windows(join(repo, 'scripts/prepared_internet_host.mjs')), windows(dist), windows(controlFile)])
-    const args = [script, '--dist', windowsDist, '--control-file', windowsControl, '--minutes', String(minutes)]
-    const command = `$ErrorActionPreference='Stop'; $node=(Get-Command node.exe).Source; $ts=(Get-Command tailscale.exe).Source; $argv=@(${args.map(quote).join(',')},'--tailscale',$ts); $quoted=($argv | ForEach-Object { '"' + $_.Replace('"','\\"') + '"' }) -join ' '; Start-Process -FilePath $node -ArgumentList $quoted -WindowStyle Hidden -RedirectStandardOutput ${quote(windowsControl + '.stdout.log')} -RedirectStandardError ${quote(windowsControl + '.stderr.log')}`
-    await exec('powershell.exe', ['-NoProfile', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], { timeout: 15000 })
+    try {
+      // PowerShell Start-Process with redirected output can keep its caller alive
+      // until the meeting ends. Only use PowerShell for executable discovery.
+      const command = "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; @{node=(Get-Command node.exe).Source; tailscale=(Get-Command tailscale.exe).Source} | ConvertTo-Json -Compress"
+      const executables = JSON.parse((await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { timeout: 15000, windowsHide: true })).stdout)
+      const node = wsl ? (await exec('wslpath', ['-u', executables.node])).stdout.trim() : executables.node
+      const [bootstrap, script, windowsDist, windowsControl] = await Promise.all([
+        windows(join(repo, 'scripts/prepared_share_spawn.mjs')),
+        windows(join(repo, 'scripts/prepared_internet_host.mjs')), windows(dist), windows(controlFile),
+      ])
+      await exec(node, [bootstrap, windowsControl, script, '--dist', windowsDist, '--control-file', windowsControl,
+        '--minutes', String(minutes), '--tailscale', executables.tailscale], { timeout: 15000, windowsHide: true })
+    } catch (cause) {
+      throw new Error('Could not start internet sharing. Check that Node.js and Tailscale are installed and available on the hosting PC, then try again.', { cause })
+    }
   } else {
     // Verify the host prerequisite before detaching; guests need only a browser.
     await exec('tailscale', ['version'], { timeout: 10000 })
     const child = spawn(process.execPath, [join(repo, 'scripts/prepared_internet_host.mjs'), '--dist', dist, '--control-file', controlFile, '--minutes', String(minutes)], { stdio: 'ignore', detached: true })
+    await new Promise((ok, fail) => { child.once('spawn', ok); child.once('error', fail) })
     child.unref()
   }
 }

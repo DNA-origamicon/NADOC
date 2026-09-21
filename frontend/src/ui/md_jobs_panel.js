@@ -5723,6 +5723,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Shared with trajectory keyframes so playback uses this controller's cache and
     // the same overlays as the Dynamics tab.
     trajectorySolvent: solvent,
+    pauseTrajectory: () => trajPlayer.pause(),
     ionPathsActive: () => ionPaths?.isActive(),
     reapplyIonPaths: () => ionPaths?.reapplyRepresentation(),
     /** Binary solvent frame from the live MD WebSocket → the overlay. Wired in

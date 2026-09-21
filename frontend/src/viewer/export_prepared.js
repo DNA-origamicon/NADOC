@@ -4,15 +4,21 @@ import { navigationDesign } from '../scene/reference_navigation.js'
 import { showToast } from '../ui/toast.js'
 
 /** Thin editor host. Export is explicit and runs outside the render loop. */
-export function initPreparedExport({ scene, camera, renderer, store, captureCurrentCamera, getDetailLevel = () => null, isStandardRender = () => true, document: doc = document }) {
+export function initPreparedExport({ scene, camera, renderer, store, captureCurrentCamera, getPresentationView = () => null, getDetailLevel = () => null, isStandardRender = () => true, document: doc = document }) {
   const button = doc.getElementById('menu-file-export-viewer')
   let busy = false
-  async function exportView() {
+  function captureView(presentation = true) {
+    const alternate = presentation ? getPresentationView() : null
+    if ((!alternate && !isStandardRender()) || (camera.layers && camera.layers.mask !== 1)) throw new Error('Return to the normal 3D view before exporting a prepared snapshot')
+    const state = store.getState()
+    if (state.cadnanoActive || state.unfoldActive) throw new Error('Return to the 3D view before exporting')
+    return { scene: alternate?.scene ?? scene, camera: alternate?.camera ?? camera, pose: alternate?.pose ?? captureCurrentCamera(), view: alternate?.view, pane: alternate?.pane }
+  }
+  async function exportView({ presentation = false } = {}) {
     if (busy) return
     const state = store.getState()
     if (!state.currentDesign && !state.currentAssembly) throw new Error('Open a design before exporting a viewer package')
-    if (!isStandardRender() || (camera.layers && camera.layers.mask !== 1)) throw new Error('Return to the normal 3D view before exporting a prepared snapshot')
-    if (state.cadnanoActive || state.unfoldActive) throw new Error('Return to the 3D view before exporting')
+    const source = captureView(presentation)
     busy = true
     try {
       const title = state.currentAssembly?.name ?? state.currentDesign?.metadata?.name ?? 'Prepared view'
@@ -21,10 +27,10 @@ export function initPreparedExport({ scene, camera, renderer, store, captureCurr
       const digest = await crypto.subtle.digest('SHA-256', bytes)
       const sourceHash = [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, '0')).join('')
       if (store.getState().currentDesign !== state.currentDesign || store.getState().currentAssembly !== state.currentAssembly) throw new Error('The design changed during export; retry when idle')
-      if (!isStandardRender() || store.getState().assemblyActive !== state.assemblyActive) throw new Error('The view changed during export; retry when idle')
-      const pose = { ...captureCurrentCamera(), near: camera.near, far: camera.far }
-      const view = { assembly: !!state.assemblyActive, detail_level: getDetailLevel(), atomistic: state.atomisticMode ?? 'off', surface: state.surfaceMode ?? 'off', coloring: state.coloringMode ?? 'strand' }
-      return { buffer: prepareScene({ scene, camera: pose, renderer, navigation: axisSegments(navigationDesign(state)), title, background, sourceHash, view }), title }
+      if (captureView(presentation).scene !== source.scene || store.getState().assemblyActive !== state.assemblyActive) throw new Error('The view changed during export; retry when idle')
+      const pose = { ...source.pose, near: source.camera.near, far: source.camera.far }
+      const view = { assembly: !!state.assemblyActive, detail_level: getDetailLevel(), atomistic: state.atomisticMode ?? 'off', surface: state.surfaceMode ?? 'off', coloring: state.coloringMode ?? 'strand', ...source.view }
+      return { buffer: prepareScene({ scene: source.scene, camera: pose, renderer, navigation: axisSegments(navigationDesign(state)), title, background, sourceHash, view }), title, requiresSectionViewer: !!renderer.localClippingEnabled }
     } finally { busy = false }
   }
   async function download() {
@@ -41,5 +47,10 @@ export function initPreparedExport({ scene, camera, renderer, store, captureCurr
     finally { button.disabled = false }
   }
   button?.addEventListener('click', download)
-  return { exportView, dispose: () => button?.removeEventListener('click', download) }
+  async function sourceHash() {
+    const state = store.getState(), value = state.assemblyActive ? state.currentAssembly : state.currentDesign
+    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value)))
+    return [...new Uint8Array(hash)].map(v => v.toString(16).padStart(2, '0')).join('')
+  }
+  return { exportView, captureView, sourceHash, dispose: () => button?.removeEventListener('click', download) }
 }

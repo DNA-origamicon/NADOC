@@ -1,13 +1,13 @@
 import { it, expect, vi, afterEach } from 'vitest'
 import { mountMeetingPresentation } from './meeting_presentation.js'
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks() })
-function setup(role = 'guest') {
+function setup(role = 'guest', options = {}) {
   document.body.innerHTML = '<header></header><main><canvas></canvas></main><button id="reset"></button><select id="mode"></select>'
   const events = new EventTarget(); events.close = vi.fn()
   const frames = new Set(), viewer = { current: {}, performanceApi: { busy: false }, runtime: { controls: { enabled: true }, addFrameCallback: fn => frames.add(fn), removeFrameCallback: fn => frames.delete(fn) }, captureCamera: vi.fn(() => ({ position: [2, 3, 4] })), applyCamera: vi.fn() }
   let tick
   const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
-  const dispose = mountMeetingPresentation({ viewer, base: '/meeting/room', role, revision: 'rev', room: 'room', document, fetch: request, eventSource: () => events, setInterval: fn => { tick = fn; return 1 }, clearInterval: vi.fn() })
+  const dispose = mountMeetingPresentation({ viewer, base: '/meeting/room', role, revision: 'rev', room: 'room', document, fetch: request, eventSource: () => events, setInterval: fn => { tick = fn; return 1 }, clearInterval: vi.fn(), ...options })
   const state = (sequence, camera = { position: [10, 0, 30] }, extra = {}) => events.dispatchEvent(new MessageEvent('state', { data: JSON.stringify({ room: 'room', revision: 'rev', sequence, camera, presenting: true, ...extra }) }))
   events.dispatchEvent(new Event('open'))
   return { events, viewer, request, state, tick, dispose, frame: () => [...frames].forEach(fn => fn()) }
@@ -50,5 +50,55 @@ it('explicit browser offline releases the camera and reconnect never re-enables 
   window.dispatchEvent(new Event('online')); v.events.dispatchEvent(new Event('open')); v.state(2)
   expect(document.querySelector('[data-follow]').disabled).toBe(false)
   expect(document.querySelector('[data-follow]').getAttribute('aria-pressed')).toBe('false')
+  v.dispose()
+})
+
+it('updates an announced scene without taking the guest camera or losing the presentation channel', async () => {
+  let finish
+  const loadRevision = vi.fn(({ viewer }) => new Promise(resolve => { finish = () => { viewer.current = {}; resolve(true) } }))
+  const v = setup('guest', { loadRevision })
+  v.state(1, undefined, { revision: 'a'.repeat(64) })
+  expect(document.querySelector('[data-jump]').disabled).toBe(true)
+  finish(); await vi.waitFor(() => expect(document.querySelector('[data-jump]').disabled).toBe(false))
+  v.frame(); expect(v.viewer.applyCamera).not.toHaveBeenCalled()
+  expect(v.events.close).not.toHaveBeenCalled()
+  document.querySelector('[data-follow]').click(); v.frame()
+  expect(v.viewer.applyCamera).toHaveBeenCalled()
+  v.dispose()
+})
+
+it('does not download room revisions over a privately opened guest file', () => {
+  const loadRevision = vi.fn(), v = setup('guest', { loadRevision })
+  v.viewer.current = {}
+  v.state(1, undefined, { revision: 'a'.repeat(64) }); v.tick()
+  expect(loadRevision).not.toHaveBeenCalled(); v.dispose()
+})
+
+it.each(['guest', 'presenter'])('remounts playback for updated %s content while preserving the meeting channel', async role => {
+  const mounts = [], mountTrajectory = vi.fn(() => { const value = { receive: vi.fn(), dispose: vi.fn() }; mounts.push(value); return value })
+  const onSharedView = vi.fn(), loadRevision = vi.fn(async ({ viewer }) => { viewer.current = {}; return true })
+  const v = setup(role, { mountTrajectory, onSharedView, loadRevision })
+  v.state(1, null, { revision: 'a'.repeat(64), serverTime: 1000, trajectory: { id: 'clip' }, presenting: false })
+  await vi.waitFor(() => expect(mounts.length).toBe(2))
+  expect(mounts[0].dispose).toHaveBeenCalledOnce()
+  expect(mounts[1].receive.mock.calls.at(-1)[0].trajectory.id).toBe('clip')
+  expect(onSharedView).toHaveBeenLastCalledWith(v.viewer.current)
+  v.state(2, null, { revision: 'b'.repeat(64), serverTime: 2000, trajectory: null, presenting: false })
+  await vi.waitFor(() => expect(mounts.length).toBe(3))
+  expect(mounts[1].dispose).toHaveBeenCalledOnce()
+  expect(mounts[2].receive.mock.calls.at(-1)[0].trajectory).toBeNull()
+  expect(v.events.close).not.toHaveBeenCalled(); expect(v.viewer.applyCamera).not.toHaveBeenCalled()
+  v.dispose(); expect(mounts[2].dispose).toHaveBeenCalledOnce()
+})
+it('cancels a pending replacement when the host returns to the already displayed revision', async () => {
+  let finish
+  const loadRevision = vi.fn(({ viewer, isCurrent }) => new Promise(resolve => { finish = () => { const valid = isCurrent(); if (valid) viewer.current = {}; resolve(valid) } }))
+  const v = setup('guest', { loadRevision }), original = v.viewer.current
+  v.state(1, null, { revision: 'a'.repeat(64), presenting: false })
+  v.state(2, null, { revision: 'rev', presenting: false })
+  finish(); await new Promise(resolve => setTimeout(resolve, 0))
+  await v.tick()
+  expect(v.viewer.current).toBe(original)
+  expect(loadRevision).toHaveBeenCalledOnce()
   v.dispose()
 })

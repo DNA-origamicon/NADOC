@@ -402,3 +402,55 @@ and add an explicitly labeled Follow capture before declaring performance parity
 Current repeatable captures deliberately exit Follow and pause presenter broadcast;
 they cannot certify Follow FPS. Scientific highlights/assembly identity and
 recorded cube_pore playback remain later milestones. New-phase main.js LOC delta: 0.
+
+### MV-PRESENTER-RETURN — uninterrupted guest attendance (2026-09-20)
+
+Exercise Leave presentation → privately open a different file/version → Return,
+and close/reopen the presenter invitation while a physical laptop remains joined.
+Guests must keep the same URL, name, snapshot and independent camera, with no
+re-sign-in or file transfer. Presenter sign-in/slot survives absence until meeting
+expiry. Automated HTTPS browser coverage checks these actions, private-file
+isolation, guest cookie identity, no guest rejoin/reload requests, and presenter
+re-entry without input. Verify normal expiry/Stop still ends hosting; this is not
+permanent public access. main.js LOC delta: 0.
+
+### MV-EDITOR-BROADCAST — live editor visuals and large-design costs (2026-09-20)
+
+Verify the Help broadcast toggle on VoltronCoreArmV2 and cube_pore using the real
+host GPU and a remote laptop. Compare A=off, B=on camera-only repeatable orbit with
+identical camera/viewport/representation and warm cache; paste the existing
+`[NADOC_VIEWER_PERF v1]` records. Then enable visualizations and capture color,
+section, and active-pane changes, retaining `[NADOC_PRESENTATION_UPDATE v1]`
+bytes/time records. Check pause/file-switch privacy, guest-independent orbit, and
+section-cap appearance. Large prepared-scene replacements may cause transient
+rebuild stalls; no real-GPU parity claim is made yet. Full-layout multi-view,
+semantic highlights, unsupported shader adapters and recorded playback remain
+separate milestones. An older running host requires an explicit meeting restart
+before using the new protocol. main.js LOC delta: 0.
+
+
+### MV-TRAJECTORY-SHARE — Full clips on real guest hardware/WAN (2026-09-21)
+
+Prepare a short cube_pore NAMD Full clip (water off), send the internet invitation to
+an ordinary laptop, and exercise play/pause/seek, independent orbit, late join,
+reconnect and presenter absence. Check exact paused coordinates against the source
+and include graphene/ion overlays in a separate capture. Validate Windows host control
+transport, Chrome/Firefox/Safari, and four total participants. Compare 4/8/15/30
+requested samples/s and retain Copy trajectory metrics plus hardware render-loop
+measurements. Current repeatable orbit pauses sample application, so it cannot
+certify render FPS during playback. Record actual guest throughput and source-frame
+lag; simulated throttling is not a real WAN/Funnel measurement. No 30 FPS acceptance
+claim yet. Clips are bounded (120 samples, 128 MiB host compressed budget, 32 MiB guest
+raw cache); disk-backed long recordings, molecular compression/interpolation, atomic
+pause refinement, and assembly/multi-view temporal adapters remain later work.
+main.js LOC delta for this slice: 0 (one existing init's arguments extended).
+
+
+### MV-UNIFIED-SHARING — same guest invitation across content changes (2026-09-21)
+
+On a real laptop/WAN connection, join once, update the selected presentation from
+static view to a Full clip and back, and verify independent orbit, unchanged URL,
+password and sign-in. Inspect presenter Leave/Return after updates, cancellation,
+and end-of-meeting expiry. The normal MD Play button remains private; prepared clips
+use the shared playback controls. Older hosts need a one-time explicit protocol
+restart after their current meeting. main.js LOC delta: 0.

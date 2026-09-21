@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { applyInstanceAlphaMaterial, instanceAlphaOnBeforeCompile } from '../scene/instance_alpha.js'
 import { encodeContainer, decodeContainer } from './package_container.js'
+import { sectionCapShader } from '../scene/section_cap_material.js'
 
 const MATERIALS = new Set(['MeshBasicMaterial', 'MeshLambertMaterial', 'MeshPhongMaterial', 'MeshStandardMaterial', 'MeshPhysicalMaterial', 'MeshNormalMaterial', 'LineBasicMaterial', 'LineDashedMaterial', 'PointsMaterial', 'SpriteMaterial'])
 const COLOR_KEYS = ['color', 'emissive', 'specular', 'sheenColor', 'attenuationColor', 'specularColor']
@@ -13,6 +14,7 @@ const fail = message => { throw new Error(message) }
  * Unsupported shader pipelines fail rather than silently losing their transforms.
  */
 export function prepareScene({ scene, camera, navigation = new Float64Array(), title = 'Prepared view', background = '#0d1117', renderer, sourceHash = null, view = null }) {
+  if (renderer?.clippingPlanes?.length) fail('Global clipping is not supported by prepared views')
   const geometries = new Map(), materials = new Map(), meta = { textures: {}, images: {} }
   function attribute(a) {
     if (a.isInterleavedBufferAttribute) {
@@ -36,15 +38,18 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
     if (m.colors && Object.entries(m.colors).some(([k, v]) => !COLOR_KEYS.includes(k) || !finiteVector(v, 3))) fail('Invalid material colors')
     if (!MATERIALS.has(m.type)) fail(`Unsupported material ${m.type}; this view cannot yet be packaged`)
     const alpha = m.onBeforeCompile === instanceAlphaOnBeforeCompile
-    if (!alpha && m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
-    if (m.clippingPlanes?.length) fail('Disable section clipping before preparing this view')
+    const sectionCap = m.onBeforeCompile === sectionCapShader
+    if (!alpha && !sectionCap && m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
     const data = m.toJSON(meta)
     delete data.userData
-    materials.set(m.uuid, { ...data, instanceAlpha: alpha, colors: Object.fromEntries(COLOR_KEYS.filter(k => m[k]?.isColor).map(k => [k, m[k].toArray()])) })
+    materials.set(m.uuid, { ...data, instanceAlpha: alpha, sectionCap,
+      sectionPlanes: (m.clippingPlanes ?? []).map(p => [...p.normal.toArray(), p.constant]),
+      clipIntersection: m.clipIntersection, clipShadows: m.clipShadows,
+      colors: Object.fromEntries(COLOR_KEYS.filter(k => m[k]?.isColor).map(k => [k, m[k].toArray()])) })
     return m.uuid
   }
   function node(o, depth = 0) {
-    if (!o.visible) return null // This package freezes the current visible representation.
+    if (!o.visible || o.isTransformControlsRoot) return null // Tools stay local; section caps remain part of the view.
     if (o.isSkinnedMesh || o.isBatchedMesh) fail(`Unsupported scene object ${o.type}`)
     const type = o.isInstancedMesh ? 'InstancedMesh' : o.isLineSegments ? 'LineSegments' : o.isLineLoop ? 'LineLoop' : o.type
     if (depth > 128 || !NODES.has(type)) fail(`Unsupported scene object ${o.type}`)
@@ -69,10 +74,11 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
     return value
   }
   const root = node(scene)
-  const packageData = { format: 'nadoc-prepared-scene', version: 1, threeRevision: THREE.REVISION, units: 'nm',
+  const sectioned = [...materials.values()].some(m => m.sectionCap || m.sectionPlanes.length)
+  const packageData = { format: 'nadoc-prepared-scene', version: sectioned ? 2 : 1, threeRevision: THREE.REVISION, units: 'nm',
     title: String(title).slice(0, 200), sourceHash, view, capabilities: ['static-visible-scene', 'orbit'],
     camera, navigation, background: scene.background?.isColor ? `#${scene.background.getHexString()}` : background,
-    render: { toneMapping: renderer?.toneMapping ?? THREE.NoToneMapping, toneMappingExposure: renderer?.toneMappingExposure ?? 1, outputColorSpace: renderer?.outputColorSpace ?? THREE.SRGBColorSpace, clearColor: renderer?.getClearColor(new THREE.Color()).getHex() ?? 0, clearAlpha: renderer?.getClearAlpha() ?? 0 },
+    render: { localClippingEnabled: !!renderer?.localClippingEnabled, toneMapping: renderer?.toneMapping ?? THREE.NoToneMapping, toneMappingExposure: renderer?.toneMappingExposure ?? 1, outputColorSpace: renderer?.outputColorSpace ?? THREE.SRGBColorSpace, clearColor: renderer?.getClearColor(new THREE.Color()).getHex() ?? 0, clearAlpha: renderer?.getClearAlpha() ?? 0 },
     root, geometries: [...geometries.values()], materials: [...materials.values()], textures: Object.values(meta.textures), images: Object.values(meta.images) }
   validateScene(packageData)
   return encodeContainer(packageData)
@@ -80,7 +86,7 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
 
 /** Validate before creating GPU resources or giving image URLs to Three.js. */
 export function validateScene(data) {
-  if (data?.format !== 'nadoc-prepared-scene' || data.version !== 1 || data.threeRevision !== THREE.REVISION || data.units !== 'nm') fail('Unsupported viewer package version')
+  if (data?.format !== 'nadoc-prepared-scene' || ![1, 2].includes(data.version) || data.threeRevision !== THREE.REVISION || data.units !== 'nm') fail('Unsupported viewer package version')
   if (data.sourceHash !== null && !/^[a-f0-9]{64}$/.test(data.sourceHash)) fail('Invalid source identity')
   if (typeof data.title !== 'string' || data.title.length > 200) fail('Invalid package title')
   const pose = data.camera
@@ -90,6 +96,7 @@ export function validateScene(data) {
   if (!Number.isInteger(data.render?.clearColor) || data.render.clearColor < 0 || data.render.clearColor > 0xffffff || !Number.isFinite(data.render.clearAlpha) || data.render.clearAlpha < 0 || data.render.clearAlpha > 1) fail('Invalid clear color')
   if (typeof data.background !== 'string' || !/^#[0-9a-f]{6}$/i.test(data.background)) fail('Invalid package background')
   if (!data.render || ![THREE.NoToneMapping, THREE.LinearToneMapping, THREE.ReinhardToneMapping, THREE.CineonToneMapping, THREE.ACESFilmicToneMapping, THREE.AgXToneMapping, THREE.NeutralToneMapping].includes(data.render.toneMapping) || !Number.isFinite(data.render.toneMappingExposure) || ![THREE.SRGBColorSpace, THREE.LinearSRGBColorSpace].includes(data.render.outputColorSpace)) fail('Invalid package rendering settings')
+  if (data.render.localClippingEnabled != null && typeof data.render.localClippingEnabled !== 'boolean') fail('Invalid clipping setting')
   const table = (rows, limit) => {
     if (!Array.isArray(rows) || rows.length > limit) fail('Package resource limit exceeded')
     const map = new Map()
@@ -120,6 +127,8 @@ export function validateScene(data) {
   for (const m of materials.values()) {
     if (m.colors && Object.entries(m.colors).some(([k, v]) => !COLOR_KEYS.includes(k) || !finiteVector(v, 3))) fail('Invalid material colors')
     if (!MATERIALS.has(m.type) || m.vertexShader || m.fragmentShader || m.uniforms || m.clippingPlanes) fail('Unsupported package material')
+    if (m.sectionCap != null && typeof m.sectionCap !== 'boolean') fail('Invalid section cap')
+    if (m.sectionPlanes && (!Array.isArray(m.sectionPlanes) || m.sectionPlanes.length > 16 || m.sectionPlanes.some(p => !finiteVector(p, 4) || Math.abs(Math.hypot(...p.slice(0, 3)) - 1) > .001))) fail('Invalid section planes')
     for (const [key, value] of Object.entries(m)) if ((key === 'map' || key.endsWith('Map')) && value != null && !textures.has(value)) fail('Missing material texture')
   }
   for (const t of textures.values()) if (!images.has(t.image)) fail('Missing texture image')
@@ -179,7 +188,13 @@ export async function loadPreparedScene(buffer) {
   const digest = globalThis.crypto?.subtle ? await crypto.subtle.digest('SHA-256', buffer) : null
   const packageHash = digest ? [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, '0')).join('') : null
   const loader = new THREE.ObjectLoader(), geometries = {}, materials = {}
-  const images = await loader.parseImagesAsync(data.images)
+  // ObjectLoader awaits images serially. Rendering a large previous scene can
+  // delay every image callback; decode bounded batches while that scene stays usable.
+  const images = {}
+  for (let i = 0; i < data.images.length; i += 16) {
+    const batch = await Promise.all(data.images.slice(i, i + 16).map(image => loader.parseImagesAsync([image])))
+    for (const decoded of batch) Object.assign(images, decoded)
+  }
   const textures = loader.parseTextures(data.textures, images)
   try {
     const materialLoader = new THREE.MaterialLoader().setTextures(textures)
@@ -190,6 +205,10 @@ export async function loadPreparedScene(buffer) {
         materials[m.uuid][k].fromArray(color)
       }
       if (m.instanceAlpha) applyInstanceAlphaMaterial(materials[m.uuid])
+      if (m.sectionCap) materials[m.uuid].onBeforeCompile = sectionCapShader
+      materials[m.uuid].clippingPlanes = (m.sectionPlanes ?? []).map(p => new THREE.Plane(new THREE.Vector3(...p.slice(0, 3)), p[3]))
+      materials[m.uuid].clipIntersection = !!m.clipIntersection
+      materials[m.uuid].clipShadows = !!m.clipShadows
     }
     const attribute = a => {
       const result = a.instanced ? new THREE.InstancedBufferAttribute(a.array, a.itemSize, a.normalized, a.meshPerAttribute) : new THREE.BufferAttribute(a.array, a.itemSize, a.normalized)
@@ -206,6 +225,10 @@ export async function loadPreparedScene(buffer) {
     // ObjectLoader does not persist this flag in r172.
     const restore = (o, spec) => {
       o.frustumCulled = spec.frustumCulled
+      if ((Array.isArray(o.material) ? o.material : [o.material]).some(m => m?.onBeforeCompile === sectionCapShader)) {
+        o.onAfterRender = renderer => renderer.clearStencil()
+        o.raycast = () => {} // The stencil plane is not a molecular surface to center on.
+      }
       if (o.isInstancedMesh) {
         o.instanceMatrix = attribute(spec.instanceMatrix)
         if (spec.instanceColor) o.instanceColor = attribute(spec.instanceColor)

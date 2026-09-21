@@ -39,6 +39,15 @@ export function cloneMultiScene(scene) {
     if (Array.isArray(obj.material)) obj.material = obj.material.map(material => material.clone())
     else if (obj.material) obj.material = obj.material.clone()
   })
+  // clone() omits shader callbacks; preserve trusted render behavior in each pane.
+  const copyCallbacks = (source, target) => {
+    const src = Array.isArray(source.material) ? source.material : [source.material]
+    const dst = Array.isArray(target.material) ? target.material : [target.material]
+    dst.forEach((m, i) => { if (m && src[i]) { m.onBeforeCompile = src[i].onBeforeCompile; m.customProgramCacheKey = src[i].customProgramCacheKey } })
+    target.onAfterRender = source.onAfterRender
+    source.children.forEach((child, i) => { if (target.children[i]) copyCallbacks(child, target.children[i]) })
+  }
+  copyCallbacks(scene, clone)
   for (const control of interactiveControls) control.removeFromParent()
   return clone
 }
@@ -98,6 +107,7 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
   controls, setRenderFn, resetRenderFn, setRepresentation, setColoringMode }) {
   const host = document?.getElementById('right-multi-view-body')
   if (!host) return null
+  let activePanel = 0
   const viewportGrid = document.createElement('div')
   viewportGrid.className = 'mv-viewport-grid'
   canvas.parentElement?.append(viewportGrid)
@@ -127,6 +137,8 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
     viewportGrid.replaceChildren()
     for (let i = 0; i < count; i++) {
       const panel = document.createElement('div'); panel.className = 'mv-viewport-panel'; panel.dataset.panel = String(i + 1)
+      panel.addEventListener('pointerdown', () => { activePanel = i }, true)
+      panel.addEventListener('wheel', () => { activePanel = i }, { capture: true, passive: true })
       panel.dataset.ready = panels[i].renderScene ? 'true' : 'false'
       const row = document.createElement('div'); row.className = 'mv-panel-head'
       const label = document.createElement('span'); label.className = 'mv-panel-label'; label.textContent = `${i + 1}`
@@ -262,6 +274,7 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
   async function activate(next) {
     const previousCount = count
     count = next
+    activePanel = Math.min(activePanel, count - 1)
     viewportGrid.dataset.count = count > 1 ? String(count) : ''
     for (const button of buttons.children) {
       const active = Number(button.dataset.count) === count
@@ -321,7 +334,15 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
     return panels.slice(0, count).map(panel => ({ representation: panel.representation, coloring: panel.coloring }))
   }
 
-  return { activate, configure, getCount: () => count, panels, dispose: () => {
+  return { activate, configure, getCount: () => count, panels,
+    getBroadcastView() {
+      if (count <= 1) return null
+      const panel = panels[activePanel]
+      if (!panel.renderScene || !panel.controls) throw Object.assign(new Error('Waiting for the active multi-view pane to finish loading'), { code: 'VIEW_NOT_READY' })
+      return { scene: panel.renderScene, camera: panel.camera, pose: { position: panel.camera.position.toArray(),
+        target: panel.controls.target.toArray(), up: panel.camera.up.toArray(), fov: panel.camera.fov, orbitMode: 'orbit' },
+        view: { coloring: panel.coloring, representation: panel.representation }, pane: activePanel + 1 }
+    }, dispose: () => {
     globalThis.window?.removeEventListener('nadoc:comparison-mode', exclusiveMode)
     activate(1); viewportGrid.remove()
   } }

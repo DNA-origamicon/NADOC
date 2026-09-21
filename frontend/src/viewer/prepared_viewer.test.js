@@ -55,3 +55,18 @@ it('applies a shared perspective without changing the snapshot reset pose', asyn
   expect(runtime.camera.position.toArray()).toEqual(loaded.data.camera.position)
   expect(loaded.data.camera.fov).toBe(55); viewer.dispose()
 })
+
+it('preserves the guest camera and checks revision identity before replacing the scene', async () => {
+  const { viewer, runtime } = setup(), first = scene(), next = scene(), wrong = scene()
+  loadPreparedScene.mockResolvedValueOnce(first); await viewer.loadFile(file)
+  const pose = { ...first.data.camera, position: [40, 50, 60], near: .3, far: 3000 }
+  runtime.captureCurrentCamera = () => pose
+  next.packageHash = 'correct'; next.data.render.localClippingEnabled = true
+  loadPreparedScene.mockResolvedValueOnce(next)
+  await viewer.loadFile(file, { preserveCamera: true, expectedHash: 'correct' })
+  expect(runtime.camera.position.toArray()).toEqual(pose.position)
+  expect(runtime.renderer.localClippingEnabled).toBe(true)
+  wrong.packageHash = 'wrong'; loadPreparedScene.mockResolvedValueOnce(wrong)
+  expect(await viewer.loadFile(file, { expectedHash: 'correct' })).toBe(false)
+  expect(viewer.current).toBe(next); expect(wrong.dispose).toHaveBeenCalledOnce(); viewer.dispose()
+})

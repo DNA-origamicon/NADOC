@@ -17,7 +17,12 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
     async function ensureHost() {
       try { return await hostRequest('/host/shares') } catch { /* explicitly started below */ }
       if (!starting) starting = (async () => {
-        await launch({ root: server.config.root, controlFile: credentialPath() })
+        try { await launch({ root: server.config.root, controlFile: credentialPath() }) }
+        catch (error) {
+          // A bootstrap can time out after spawning successfully. Trust only an
+          // authenticated response from the host, never a stale status file.
+          try { return await hostRequest('/host/shares') } catch { throw error }
+        }
         for (let i = 0; i < 100; i++) {
           let state
           try { state = JSON.parse(await readFile(credentialPath() + '.status.json', 'utf8')) } catch { /* starting */ }
@@ -49,7 +54,27 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
           for await (const chunk of req) { size += chunk.length; if (size > 512 * 1024 * 1024) return send(413, { error: 'Package exceeds 512 MiB' }); chunks.push(chunk) }
           return send(201, await hostRequest('/host/shares', { method: 'POST', headers: { 'X-NADOC-Title': req.headers['x-nadoc-title'] ?? 'Shared design' }, body: Buffer.concat(chunks) }))
         }
+        const content = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/content$/)
+        if (req.method === 'POST' && content) {
+          const chunks = []; let size = 0
+          for await (const chunk of req) { size += chunk.length; if (size > 512 * 1024 * 1024) return send(413, { error: 'Package exceeds 512 MiB' }); chunks.push(chunk) }
+          return send(200, await hostRequest(`/host/shares/${content[1]}/content`, { method: 'POST', headers: { 'X-NADOC-Title': req.headers['x-nadoc-title'] ?? 'Shared design' }, body: Buffer.concat(chunks) }))
+        }
+        const timeline = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/trajectory$/)
+        if (['GET', 'POST'].includes(req.method) && timeline) {
+          const chunks = []; let size = 0
+          for await (const chunk of req) { size += chunk.length; if (size > 2048) return send(413, { error: 'Command too large' }); chunks.push(chunk) }
+          return send(200, await hostRequest(`/host/shares/${timeline[1]}/trajectory`, { method: req.method, ...(req.method === 'POST' ? { body: Buffer.concat(chunks) } : {}) }))
+        }
         const remove = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})$/)
+        const broadcast = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|pause|heartbeat)$/)
+        if (req.method === 'POST' && broadcast) {
+          const chunks = []; let size = 0
+          const limit = broadcast[2] === 'scene' ? 512 * 1024 * 1024 : 4096
+          for await (const chunk of req) { size += chunk.length; if (size > limit) return send(413, { error: 'Broadcast update too large' }); chunks.push(chunk) }
+          return send(200, await hostRequest(`/host/shares/${broadcast[1]}/broadcast/${broadcast[2]}`, { method: 'POST',
+            headers: { 'X-NADOC-Broadcast': req.headers['x-nadoc-broadcast'] ?? '' }, body: Buffer.concat(chunks) }))
+        }
         if (req.method === 'DELETE' && remove) return send(200, await hostRequest(`/host/shares/${remove[1]}`, { method: 'DELETE' }))
         if (req.method === 'POST' && path === '/__nadoc_share/stop') return send(200, await hostRequest('/host/stop', { method: 'POST' }))
         return send(404, { error: 'Unknown share action' })

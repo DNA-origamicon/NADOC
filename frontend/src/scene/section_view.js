@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { createSectionViewControls } from '../ui/section_view_controls.js'
 import { sectionStencilGeometry } from './section_geometry.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
+import { sectionCapShader } from './section_cap_material.js'
 
 const materials = object => Array.isArray(object.material) ? object.material : [object.material]
 
@@ -93,12 +94,7 @@ export function initSectionView({ scene, camera, renderer, controls, addFrameCal
     const capMaterial = new THREE.MeshBasicMaterial({ color: 0x94bdd0, side: THREE.DoubleSide,
       stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
       stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp })
-    capMaterial.onBeforeCompile = shader => {
-      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-        float stripe = mod(gl_FragCoord.x + gl_FragCoord.y, 12.0);
-        float ink = 1.0 - smoothstep(0.7, 1.8, min(stripe, 12.0 - stripe));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.18, 0.27, 0.32), ink * 0.8);`)
-    }
+    capMaterial.onBeforeCompile = sectionCapShader
     const cap = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), capMaterial)
     cap.renderOrder = 2
     cap.frustumCulled = false

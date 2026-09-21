@@ -107,3 +107,51 @@ test('presenter camera changes leave guests free until Jump or Follow; input and
     expect(errors).toEqual([])
   } finally { await Promise.all(contexts.map(context => context.close())) }
 })
+
+test('presenter can leave, inspect another file, return and reopen while guests keep their link and sign-in', async ({ browser }) => {
+  const presenterContext = await browser.newContext({ ignoreHTTPSErrors: true }), guestContext = await browser.newContext({ ignoreHTTPSErrors: true })
+  const errors = [], guestJoins = [], guestScenes = []
+  const signIn = async (context, url, name) => {
+    const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message))
+    await page.goto(url); await expect(page.locator('#join-submit')).toBeEnabled()
+    if (await page.locator('#join').isVisible()) {
+      await page.locator('#guest-name').fill(name); await page.locator('#meeting-password').fill(share.password); await page.locator('#join-submit').click()
+    }
+    await expect(page.locator('#join')).not.toBeVisible(); return page
+  }
+  try {
+    let presenter = await signIn(presenterContext, share.presenterUrl, 'Presenter')
+    const guest = await signIn(guestContext, share.url, 'Guest')
+    guest.on('request', request => { if (request.url().endsWith('/join')) guestJoins.push(request.url()); if (request.url().endsWith('/scene')) guestScenes.push(request.url()) })
+    const cookie = (await guestContext.cookies()).find(c => c.name.startsWith('nadoc_view_')).value
+    await presenter.locator('[data-broadcast]').click(); await expect(guest.locator('[data-follow]')).toBeEnabled()
+    await guest.locator('[data-follow]').click()
+    await presenter.getByRole('button', { name: 'Leave presentation', exact: true }).click()
+    await expect(guest.locator('[data-follow]')).toHaveAttribute('aria-pressed', 'false')
+    await expect(guest.locator('#join')).not.toBeVisible()
+    const before = await guest.locator('#canvas').screenshot()
+    const privateScene = new THREE.Scene(); privateScene.add(new THREE.Mesh(new THREE.SphereGeometry(8), new THREE.MeshBasicMaterial({ color: '#ff0000' })))
+    const buffer = Buffer.from(prepareScene({ scene: privateScene, title: 'Private alternate version', camera: { position: [20, 15, 25], target: [0, 0, 0], up: [0, 1, 0], fov: 55, orbitMode: 'orbit' } }))
+    // In-memory upload: no native design, workspace file or download artifact.
+    await presenter.locator('#file').setInputFiles({ name: 'private.nadocview', mimeType: 'application/octet-stream', buffer })
+    await expect(presenter.locator('#title')).toHaveText('Private alternate version')
+    await expect(guest.locator('#title')).toHaveText('Password protected design')
+    expect((await guest.locator('#canvas').screenshot()).equals(before)).toBe(true)
+    await presenter.getByRole('button', { name: 'Return to presentation', exact: true }).click()
+    await expect(presenter.locator('#title')).toHaveText('Password protected design')
+    await presenter.locator('[data-broadcast]').click(); await expect(guest.locator('[data-follow]')).toBeEnabled()
+    await expect(guest.locator('[data-follow]')).toHaveAttribute('aria-pressed', 'false')
+    await presenter.close()
+    presenter = await presenterContext.newPage(); presenter.on('pageerror', error => errors.push(error.message))
+    await presenter.goto(share.presenterUrl)
+    // No fill/click: an existing presenter cookie resumes without another login.
+    await expect(presenter.locator('[data-broadcast]')).toBeEnabled()
+    await expect(presenter.locator('#join')).not.toBeVisible()
+    await presenter.locator('[data-broadcast]').click(); await expect(guest.locator('[data-follow]')).toBeEnabled()
+    expect(guest.url()).toBe(share.url)
+    expect((await guestContext.cookies()).find(c => c.name.startsWith('nadoc_view_')).value).toBe(cookie)
+    expect(guestJoins).toEqual([]); expect(guestScenes).toEqual([]); expect(errors).toEqual([])
+    await guest.reload(); await expect(guest.locator('[data-follow]')).toBeEnabled()
+    await expect(guest.locator('#join')).not.toBeVisible() // guests can also reload without signing in again
+  } finally { await presenterContext.close(); await guestContext.close() }
+})

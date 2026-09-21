@@ -1,0 +1,27 @@
+{
+  "inventory_differences": {
+    "workspace": {
+      "added": [],
+      "removed": []
+    },
+    "workspace/.nadoc-projects": {
+      "added": [],
+      "removed": []
+    },
+    "workspace/.session": {
+      "added": [],
+      "removed": []
+    },
+    "workspace/playwright_tests": {
+      "added": [],
+      "removed": []
+    }
+  },
+  "isolated_credentials_absent": [
+    "/tmp/nadoc-share-internet-0d094af3799e-5174.json",
+    "/tmp/nadoc-viewer-test-0d094af3799e-5174.json"
+  ],
+  "disposable_playwright_output_removed": true,
+  "source_job_read_only": true,
+  "live_servers_or_tunnel_changed": false
+}

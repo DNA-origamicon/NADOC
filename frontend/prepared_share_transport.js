@@ -17,7 +17,7 @@ export async function hostTransport({ root, controlFile, config, path, options }
     try {
       const body = scratch ? join(scratch, 'snapshot.nadocview') : ''
       if (body) await writeFile(body, options.body, { mode: 0o600 })
-      const args = [await windows(resolve(root, '../scripts/prepared_share_request.mjs')), await windows(controlFile), path, options.method ?? 'GET', body ? await windows(body) : '', options.headers?.['X-NADOC-Title'] ?? '']
+      const args = [await windows(resolve(root, '../scripts/prepared_share_request.mjs')), await windows(controlFile), path, options.method ?? 'GET', body ? await windows(body) : '', options.headers?.['X-NADOC-Title'] ?? '', options.headers?.['X-NADOC-Broadcast'] ?? '']
       const result = await exec(await nodePath, args, { timeout: 25000, maxBuffer: 1024 * 1024 })
       ;({ status, value } = JSON.parse(result.stdout))
     } finally { if (scratch) await rm(scratch, { recursive: true, force: true }) }

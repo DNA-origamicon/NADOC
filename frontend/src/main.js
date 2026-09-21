@@ -353,8 +353,8 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
-  const preparedExport = initPreparedExport({ scene, camera, renderer, store, captureCurrentCamera, isStandardRender, getDetailLevel: () => designRenderer.getDetailLevel() })
-  initShareLink({ exportView: preparedExport.exportView })
+  const preparedExport = initPreparedExport({ scene, camera, renderer, store, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView(), getDetailLevel: () => designRenderer.getDetailLevel() })
+  initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store }, trajectory: { prepared: preparedExport, store, getSource: () => ({ controller: mdViz, companion: mdPanel.trajectorySolvent, pause: mdPanel.pauseTrajectory, representation: _currentRepr }) } })
   initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel: () => designRenderer.getDetailLevel(), getFileOpen: () => _fileOpen })
   const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer })
   window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug
@@ -3135,7 +3135,7 @@ async function main() {
 
   /** Clear per-file state (slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
-    dimensionsTool?.clear?.()
+    window.dispatchEvent(new Event('nadoc:document-reset')); dimensionsTool?.clear?.()
     dimensionsTool?.close?.()
     selectionController.reload('design')
     // Leave photo mode before tearing the scene down. Otherwise the photo

@@ -41,14 +41,16 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     }
     runtime.controls.update()
   }
-  async function loadFile(file) {
+  async function loadFile(file, { preserveCamera = false, expectedHash = null, isCurrent = () => true } = {}) {
     const ticket = ++generation
     if (!file || disposed) return
     status.textContent = 'Opening prepared view…'
     try {
       if (file.size > PACKAGE_LIMIT) throw new Error('Viewer packages are limited to 512 MB')
       const next = await loadPreparedScene(await file.arrayBuffer())
-      if (disposed || ticket !== generation) { next.dispose(); return }
+      if (disposed || ticket !== generation || !isCurrent()) { next.dispose(); return }
+      if (expectedHash && next.packageHash !== expectedHash) { next.dispose(); throw new Error('Downloaded visualization does not match the announced revision') }
+      const savedCamera = preserveCamera && current ? { ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far } : null
       performanceApi.stop()
       current?.dispose()
       runtime.scene.clear()
@@ -61,12 +63,13 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
       runtime.renderer.toneMapping = next.data.render.toneMapping
       runtime.renderer.toneMappingExposure = next.data.render.toneMappingExposure
       runtime.renderer.outputColorSpace = next.data.render.outputColorSpace
+      runtime.renderer.localClippingEnabled = !!next.data.render.localClippingEnabled
       runtime.renderer.setClearColor(next.data.render.clearColor, next.data.render.clearAlpha)
       canvas.parentElement.style.backgroundColor = next.data.background
       runtime.setNavScaleProvider(() => next.data.navigation)
-      resetCamera()
+      if (savedCamera) applyCamera(savedCamera); else resetCamera()
       title.textContent = String(next.data.title || file.name)
-      status.textContent = 'Static snapshot · Orbit, pan and zoom · Double-click to center'
+      status.textContent = `${next.data.trajectory ? 'Prepared trajectory' : 'Static snapshot'} · Orbit, pan and zoom · Double-click to center`
       resetButton.disabled = false; modeInput.disabled = false
       return true
     } catch (error) {

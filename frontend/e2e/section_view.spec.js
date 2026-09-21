@@ -9,8 +9,9 @@ test('instanced spheres have hatched solid cuts and restore pixel-for-pixel', as
     '<div id="right-view-actions"><div class="ox-card__body"></div></div><canvas></canvas>' }))
   await page.goto('/section-view-test')
   const result = await page.evaluate(async () => {
-    const THREE = await import('/node_modules/three/build/three.module.js')
+    const THREE = await import('/node_modules/.vite/deps/three.js')
     const { initSectionView } = await import('/src/scene/section_view.js')
+    const { prepareScene, loadPreparedScene } = await import('/src/viewer/prepared_scene.js')
     const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('canvas'), stencil: true })
     renderer.setSize(400, 300)
     renderer.setClearColor(0xffffff)
@@ -24,8 +25,8 @@ test('instanced spheres have hatched solid cuts and restore pixel-for-pixel', as
     scene.add(mesh)
     const view = initSectionView({ scene, camera, renderer, controls: { target: new THREE.Vector3(), enabled: true },
       document, addFrameCallback() {}, removeFrameCallback() {} })
-    function pixels() {
-      renderer.render(scene, camera)
+    function pixels(object = scene) {
+      renderer.render(object, camera)
       const gl = renderer.getContext(), buffer = new Uint8Array(400 * 300 * 4)
       gl.readPixels(0, 0, 400, 300, gl.RGBA, gl.UNSIGNED_BYTE, buffer)
       return buffer
@@ -33,13 +34,18 @@ test('instanced spheres have hatched solid cuts and restore pixel-for-pixel', as
     const baseline = pixels()
     document.getElementById('section-view-btn').click()
     const cut = pixels()
+    const prepared = await loadPreparedScene(prepareScene({ scene, renderer, camera: {
+      position: camera.position.toArray(), target: [0, 0, 0], up: camera.up.toArray(), fov: camera.fov, near: camera.near, far: camera.far, orbitMode: 'orbit',
+    } }))
+    const guestCut = pixels(prepared.scene)
     // Count blue cap pixels and dark hatch pixels inside the left sphere,
     // away from the central transform gizmo.
-    let blue = 0, hatch = 0
+    let blue = 0, hatch = 0, guestDifferences = 0
     for (let y = 120; y < 180; y++) for (let x = 100; x < 140; x++) {
       const i = (y * 400 + x) * 4
       if (cut[i + 2] > cut[i] + 10) blue++
       if (cut[i] < 180 && cut[i + 2] > cut[i]) hatch++
+      if ([0, 1, 2].some(channel => cut[i + channel] !== guestCut[i + channel])) guestDifferences++
     }
     view.anchor.position.z = -3
     view.sync()
@@ -48,12 +54,13 @@ test('instanced spheres have hatched solid cuts and restore pixel-for-pixel', as
     document.getElementById('section-view-btn').click()
     const restored = pixels()
     const same = baseline.every((value, index) => restored[index] === value)
-    view.dispose(); renderer.dispose()
-    return { blue, hatch, beyond: Array.from(beyond.slice(center, center + 3)), same }
+    prepared.dispose(); view.dispose(); renderer.dispose()
+    return { blue, hatch, guestDifferences, beyond: Array.from(beyond.slice(center, center + 3)), same }
   })
   expect(errors).toEqual([])
   expect(result.blue).toBeGreaterThan(1500)
   expect(result.hatch).toBeGreaterThan(100)
+  expect(result.guestDifferences).toBe(0)
   expect(result.beyond).toEqual([255, 255, 255])
   expect(result.same).toBe(true)
 })

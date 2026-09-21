@@ -1,9 +1,36 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import http from 'node:http'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createPreparedHost } from './prepared_view_host.mjs'
+
+test('local editor broadcasts update the existing invitation and guest cookie, with stale writes rejected', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-editor-room-')); t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
+  const host = await createPreparedHost({ dist: root }); t.after(host.stop)
+  await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
+  const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
+  const share = host.createShare(Buffer.from('NADOCVW1before')), endpoint = `${base}/meeting/${share.id}`
+  const auth = { Authorization: `Bearer ${host.controlToken}` }
+  const joinResponse = await fetch(endpoint + '/join', { method: 'POST', headers: { Origin: base }, body: JSON.stringify({ name: 'Guest', token: new URLSearchParams(new URL(share.url).hash.slice(1)).get('invite') }) })
+  const cookie = joinResponse.headers.get('set-cookie').split(';')[0]
+  const route = `${base}/host/shares/${share.id}/broadcast/`
+  assert.equal((await fetch(route + 'start', { method: 'POST', headers: { Cookie: cookie } })).status, 403)
+  const started = await (await fetch(route + 'start', { method: 'POST', headers: auth })).json()
+  const headers = { ...auth, 'X-NADOC-Broadcast': started.lease }
+  const updated = await (await fetch(route + 'scene', { method: 'POST', headers, body: 'NADOCVW1after' })).json()
+  assert.notEqual(updated.revision, share.revision)
+  assert.equal((await fetch(endpoint + `/scene?revision=${share.revision}`, { headers: { Cookie: cookie } })).status, 409)
+  assert.equal(await (await fetch(endpoint + `/scene?revision=${updated.revision}`, { headers: { Cookie: cookie } })).text(), 'NADOCVW1after')
+  const status = await (await fetch(`${base}/host/shares`, { headers: auth })).json()
+  assert.equal(status.shares[0].url, share.url); assert.equal(status.shares[0].presenterUrl, share.presenterUrl)
+  assert.ok(status.capabilities.includes('editor-broadcast-v1'))
+  assert.equal((await fetch(route + 'pause', { method: 'POST', headers })).status, 200)
+  assert.equal((await fetch(route + 'scene', { method: 'POST', headers, body: 'NADOCVW1private' })).status, 409)
+  assert.equal(await (await fetch(endpoint + '/scene', { headers: { Cookie: cookie } })).text(), 'NADOCVW1after')
+})
 
 test('only the presenter can publish; late guests receive the latest snapshot-bound camera', async t => {
   const root = await mkdtemp(join(tmpdir(), 'nadoc-room-test-')); t.after(() => rm(root, { recursive: true, force: true }))
@@ -39,6 +66,42 @@ test('only the presenter can publish; late guests receive the latest snapshot-bo
   assert.equal((await joinOther()).status, 409) // limit is across snapshots
   now += 120001
   assert.equal((await joinOther()).status, 200) // disconnected leases are reclaimed
+  const resume = (cookie, url, role) => fetch(endpoint + '/join', { method: 'POST', headers: { Origin: base, Cookie: cookie }, body: JSON.stringify({ resume: true, role, token: new URLSearchParams(new URL(url).hash.slice(1)).get('invite') }) })
+  assert.equal((await resume(pc, share.presenterUrl, 'presenter')).status, 200) // presenter identity survives absence
+  const fresh = await joinRoom(share.url), freshCookie = fresh.headers.get('set-cookie').split(';')[0]
+  assert.equal((await resume(freshCookie, share.presenterUrl, 'presenter')).status, 401)
+  assert.equal((await resume(pc, share.url, 'guest')).status, 401)
+  assert.equal((await post(pc)).status, 200)
+  await joinRoom(share.url) // four slots occupied, including the retained presenter
+  assert.equal((await fetch(endpoint + '/leave', { method: 'POST', headers: { Origin: base, Cookie: freshCookie } })).status, 403)
+  assert.equal((await fetch(endpoint + '/leave', { method: 'POST', headers: { Origin: base, Cookie: pc } })).status, 200)
+  assert.equal((await joinRoom(share.url)).status, 409) // the host can still return to a full room
+  assert.equal((await post(pc)).status, 403)
+  const away = await (await fetch(endpoint + '/status', { headers: { Cookie: freshCookie } })).json()
+  assert.equal(away.presentation.presenting, false)
+  assert.equal((await fetch(endpoint + '/scene', { headers: { Cookie: freshCookie } })).status, 200)
+  assert.equal((await resume(pc, share.presenterUrl, 'presenter')).status, 200)
+  assert.equal((await post(pc)).status, 200)
+  assert.equal((await resume(freshCookie, share.url, 'guest')).status, 200)
+  assert.equal((await fetch(endpoint + '/scene', { headers: { Cookie: freshCookie } })).status, 200)
+  const arrived = new Promise(ok => host.server.once('request', ok))
+  let finishCamera
+  const delayedCamera = new Promise((ok, fail) => {
+    const request = http.request(endpoint + '/camera', { method: 'POST', headers: { Origin: base, Cookie: pc } }, response => {
+      response.resume(); response.once('end', () => ok(response.statusCode))
+    })
+    request.on('error', fail); request.write('{"revision":')
+    finishCamera = () => request.end(JSON.stringify(share.revision) + ',"camera":' + JSON.stringify(camera) + '}')
+  })
+  await arrived
+  await fetch(endpoint + '/leave', { method: 'POST', headers: { Origin: base, Cookie: pc } })
+  assert.equal((await resume(pc, share.presenterUrl, 'presenter')).status, 200)
+  finishCamera(); assert.equal(await delayedCamera, 403) // even after Return, a request started before Leave cannot restart broadcasting
+  assert.equal((await (await fetch(endpoint + '/status', { headers: { Cookie: freshCookie } })).json()).presentation.presenting, false)
+  await fetch(endpoint + '/leave', { method: 'POST', headers: { Origin: base, Cookie: pc } })
+  assert.equal((await joinRoom(share.presenterUrl, 'presenter')).status, 200) // authenticated return from another browser
+  assert.equal((await resume(pc, share.presenterUrl, 'presenter')).status, 401) // old presenter authority is replaced
+  assert.equal((await fetch(endpoint + '/scene', { headers: { Cookie: freshCookie } })).status, 200)
 })
 
 test('internet guests require the password and HTTPS origin; management is on a separate listener', async t => {

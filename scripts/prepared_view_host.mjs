@@ -6,6 +6,8 @@ import { resolve, join, basename } from 'node:path'
 import { randomBytes, timingSafeEqual, createHash } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { createPresentationState } from './prepared_room_state.mjs'
+import { createEditorBroadcast } from './prepared_editor_broadcast.mjs'
+import { unpackTrajectory, updateTrajectory, initialTrajectory } from './prepared_trajectory.mjs'
 
 const same = (a, b) => typeof a === 'string' && /^[a-f0-9]{64}$/.test(a) && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 const mime = name => name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.html') ? 'text/html' : name.endsWith('.png') ? 'image/png' : name.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream'
@@ -21,15 +23,32 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const invite = randomBytes(32).toString('hex'), expiresAt = now() + lifetimeMs
   const rooms = new Map(), controlToken = randomBytes(32).toString('hex')
   let publicBase = publicOrigin
-  const summary = room => ({ id: room.id, title: room.title, revision: room.revision, expiresAt, ...(room.password ? { password: room.password } : {}),
+  const summary = room => ({ id: room.id, title: room.title, revision: room.revision, expiresAt, ...(room.trajectory ? { trajectory: { id: room.trajectory.id, count: room.trajectory.count, fps: room.trajectory.fps, state: room.presentation.snapshot().trajectory, serverTime: now() } } : {}), ...(room.password ? { password: room.password } : {}),
     url: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.invite}${room.password ? '&password=required' : ''}`,
     presenterUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.presenterToken}&role=presenter${room.password ? '&password=required' : ''}` })
-  function createShare(scene, title = 'Shared design', id = randomBytes(16).toString('hex')) {
+  function prepareContent(scene, replacing = null) {
     if (scene.length > 512 * 1024 * 1024 || scene.subarray(0, 8).toString() !== 'NADOCVW1') throw new Error('Choose a prepared .nadocview package (maximum 512 MiB)')
-    if (rooms.size >= 8 || [...rooms.values()].reduce((sum, room) => sum + room.scene.length, scene.length) > 512 * 1024 * 1024) throw new Error('Share capacity reached. Stop an existing share first (eight snapshots / 512 MiB).')
-    const revision = createHash('sha256').update(scene).digest('hex')
-    const room = { id, revision, title: String(title).slice(0, 200), scene, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), presenterToken: randomBytes(32).toString('hex'), sessions: new Map(), presentation: createPresentationState({ id, revision, now }) }
+    const unpacked = unpackTrajectory(scene), others = [...rooms.values()].filter(room => room.id !== replacing)
+    if (others.reduce((sum, room) => sum + room.scene.length, unpacked.scene.length) > 512 * 1024 * 1024) throw new Error('Shared views exceed the 512 MiB host capacity')
+    if (others.reduce((n, room) => n + (room.trajectory?.bytes ?? 0), unpacked.trajectory?.bytes ?? 0) > 128 * 1024 * 1024) throw new Error('Host trajectory capacity reached (128 MiB). Stop an existing clip first.')
+    return { ...unpacked, revision: createHash('sha256').update(unpacked.scene).digest('hex') }
+  }
+  function replaceShare(id, bytes, title) {
+    const room = rooms.get(id)
+    if (!room) throw new Error('This share has ended.')
+    if (room.editorBroadcast.active) throw new Error('Turn off Broadcast to presentation before replacing the shared view.')
+    const content = prepareContent(bytes, id)
+    Object.assign(room, content, { title: String(title).slice(0, 200) })
+    room.presentation.replaceContent(room.revision, initialTrajectory(room.trajectory, now))
+    return summary(room)
+  }
+  function createShare(bytes, title = 'Shared design', id = randomBytes(16).toString('hex')) {
+    if (rooms.size >= 8) throw new Error('Share capacity reached. Stop an existing share first (eight snapshots).')
+    const { scene, trajectory, revision } = prepareContent(bytes)
+    const room = { id, revision, title: String(title).slice(0, 200), scene, trajectory, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), presenterToken: randomBytes(32).toString('hex'), sessions: new Map(), presentation: createPresentationState({ id, revision, now }) }
+    if (trajectory) room.presentation.setTrajectory(initialTrajectory(trajectory, now))
     rooms.set(id, room)
+    room.editorBroadcast = createEditorBroadcast({ room, rooms, maxGuests, now })
     return summary(room)
   }
   if (initial) createShare(initial, basename(packagePath), 'default')
@@ -44,7 +63,37 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { expiresAt, shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { capabilities: ['editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1'], expiresAt, shares: [...rooms.values()].map(summary) })
+      const content = route.match(/^\/host\/shares\/([a-f0-9]{32})\/content$/)
+      if (req.method === 'POST' && content) {
+        if (!rooms.has(content[1])) return send(410, { error: 'This share has ended.' })
+        try {
+          const chunks = []; let size = 0
+          for await (const chunk of req) { size += chunk.length; if (size > 512 * 1024 * 1024) return send(413, { error: 'Package too large' }); chunks.push(chunk) }
+          return send(200, replaceShare(content[1], Buffer.concat(chunks), decodeURIComponent(req.headers['x-nadoc-title'] ?? 'Shared design')))
+        } catch (error) { return send(409, { error: error.message }) }
+      }
+      const timeline = route.match(/^\/host\/shares\/([a-f0-9]{32})\/trajectory$/)
+      if (['GET', 'POST'].includes(req.method) && timeline) {
+        const room = rooms.get(timeline[1]); if (!room) return send(410, { error: 'This share has ended.' })
+        if (req.method === 'GET') return send(200, room.presentation.snapshot())
+        try {
+          const chunks = []; let size = 0
+          for await (const chunk of req) { size += chunk.length; if (size > 2048) return send(413, { error: 'Command too large' }); chunks.push(chunk) }
+          return send(200, updateTrajectory(room, JSON.parse(Buffer.concat(chunks)), now))
+        } catch (error) { return send(400, { error: error.message }) }
+      }
+      const broadcast = route.match(/^\/host\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|pause|heartbeat)$/)
+      if (req.method === 'POST' && broadcast) {
+        const room = rooms.get(broadcast[1]); if (!room) return send(410, { error: 'This share has ended.' })
+        try {
+          const action = broadcast[2], limit = action === 'scene' ? 512 * 1024 * 1024 : 4096
+          const chunks = []; let size = 0
+          for await (const chunk of req) { size += chunk.length; if (size > limit) return send(413, { error: 'Broadcast update too large' }); chunks.push(chunk) }
+          const body = Buffer.concat(chunks)
+          return send(200, action === 'start' ? room.editorBroadcast.start(body.length ? JSON.parse(body) : {}) : room.editorBroadcast.apply(action, req.headers['x-nadoc-broadcast'], body))
+        } catch (error) { return send(409, { error: error.message }) }
+      }
       if (req.method === 'DELETE' && /^\/host\/shares\/[a-f0-9]{32}$/.test(route)) {
         const id = route.split('/').pop(); rooms.get(id)?.presentation.close(); rooms.delete(id); return send(200, { ok: true })
       }
@@ -59,7 +108,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       return send(404, { error: 'Unknown host action' })
     }
     if (publicOrigin && management) return send(404, { error: 'Not found' })
-    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|pause)$/)
+    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|pause|leave|trajectory|frame)$/)
     const room = rooms.get(match ? match[1] : 'default')
     if (match) route = `/meeting/${match[2]}`
     if (route?.startsWith('/meeting/') && !room) return send(410, { error: 'This share has ended.' })
@@ -76,38 +125,65 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         for await (const chunk of req) { bytes += chunk.length; if (bytes > 2048) { send(413, { error: 'Request too large' }); return } body += chunk.toString() }
         const value = JSON.parse(body)
         const role = value.role === 'presenter' ? 'presenter' : 'guest'
+        if (role === 'presenter' && room.editorBroadcast.active) return send(409, { error: 'The NADOC editor is presenting. Turn off Broadcast to presentation before using this presenter page.' })
         if (!same(value.token, role === 'presenter' ? room.presenterToken : room.invite)) return send(403, { error: 'Invalid or expired invite.' })
+        const previous = req.headers.cookie?.match(cookiePattern)?.[1]
+        // Keep presenter credentials and their occupied slot until the meeting
+        // ends. Leaving the viewer does not revoke the meeting or its guests.
+        for (const r of rooms.values()) for (const [key, s] of r.sessions) if (s.role !== 'presenter' && now() - s.seenAt > 120000) r.sessions.delete(key)
+        if (value.resume === true) {
+          const existing = sessions.get(previous)
+          if (!existing || existing.role !== role) return send(401, { error: 'Please sign in to this view.' })
+          existing.away = false; existing.seenAt = now(); existing.generation++
+          return send(200, { name: existing.name, role, revision: room.revision, expiresAt })
+        }
         // Generated passwords contain 96 bits of entropy; compare fixed-size hashes.
         if (room.password && (typeof value.password !== 'string' || !timingSafeEqual(createHash('sha256').update(value.password).digest(), createHash('sha256').update(room.password).digest()))) return send(403, { error: 'Incorrect meeting password.' })
         const name = typeof value.name === 'string' ? value.name.trim() : ''
         if (!name || name.length > 40 || /[\x00-\x1f\x7f]/.test(name)) return send(400, { error: 'Enter a display name of 1–40 characters.' })
-        const previous = req.headers.cookie?.match(cookiePattern)?.[1]
-        // Four participants across the host, including the presenter. Closed tabs
-        // release their leases after two minutes without an authenticated heartbeat.
-        for (const r of rooms.values()) for (const [key, session] of r.sessions) if (now() - session.seenAt > 120000) r.sessions.delete(key)
+        // A separately authenticated presenter can reclaim an absent presenter's
+        // place, without changing the invitation or any guest's session.
+        if (role === 'presenter') for (const [key, s] of sessions) {
+          if (key !== previous && s.role === 'presenter' && (s.away || now() - s.seenAt > 120000)) sessions.delete(key)
+        }
         if (role === 'presenter' && [...sessions].some(([key, session]) => session.role === 'presenter' && key !== previous)) return send(409, { error: 'A presenter is already connected to this view.' })
-        if (!sessions.has(previous) && [...rooms.values()].reduce((n, r) => n + r.sessions.size, 0) >= maxGuests) return send(409, { error: 'This presentation is full (four participants including the presenter).' })
+        if (!sessions.has(previous) && [...rooms.values()].reduce((n, r) => n + r.sessions.size + Number(r.editorBroadcast.active && ![...r.sessions.values()].some(s => s.role === 'presenter')), 0) >= maxGuests) return send(409, { error: 'This presentation is full (four participants including the presenter).' })
         const id = sessions.has(previous) ? previous : randomBytes(32).toString('hex')
-        sessions.set(id, { name, role, seenAt: now() })
+        sessions.set(id, { name, role, seenAt: now(), away: false, generation: 0 })
         return send(200, { name, role, revision: room.revision, expiresAt }, 'application/json', { 'Set-Cookie': `${cookieName}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(1, Math.floor((expiresAt - now()) / 1000))}${publicOrigin ? '; Secure' : ''}` })
       } catch { return send(400, { error: 'Invalid join request.' }) }
     }
     const sessionId = req.headers.cookie?.match(cookiePattern)?.[1], session = sessions?.get(sessionId)
     if (session) session.seenAt = now()
-    if (req.method === 'POST' && (route === '/meeting/camera' || route === '/meeting/pause')) {
+    if (req.method === 'POST' && ['/meeting/camera', '/meeting/pause', '/meeting/leave', '/meeting/trajectory'].includes(route)) {
+      if (room.editorBroadcast.active) return send(403, { error: 'The editor is presenting this view.' })
       if (req.headers.origin !== (publicOrigin || `http://${req.headers.host}`) || session?.role !== 'presenter') return send(403, { error: 'Presenter access required' })
+      if (route === '/meeting/leave') { session.away = true; session.generation++; room.presentation.leavePresenter(); return send(200, { ok: true }) }
       if (route === '/meeting/pause') { room.presentation.pause(); return send(200, { ok: true }) }
+      const generation = session.generation
       try {
         const chunks = []; let size = 0
         for await (const chunk of req) { size += chunk.length; if (size > 2048) return send(413, { error: 'Camera message too large' }); chunks.push(chunk) }
-        return send(200, room.presentation.publish(JSON.parse(Buffer.concat(chunks))))
+        if (session.away || session.generation !== generation || sessions.get(sessionId) !== session) return send(403, { error: 'Return to the presentation before sharing a perspective.' })
+        return send(200, route === '/meeting/trajectory' ? updateTrajectory(room, JSON.parse(Buffer.concat(chunks)), now) : room.presentation.publish(JSON.parse(Buffer.concat(chunks))))
       } catch (error) { return send(error.message.startsWith('Too many') ? 429 : 400, { error: error.message }) }
     }
     if (req.method !== 'GET') return send(405, { error: 'Read-only viewer' }, 'application/json', { Allow: 'GET, POST' })
+    if (route === '/meeting/frame') {
+      if (!session) return send(401, { error: 'Join with the invite link first.' })
+      const query = new URL(req.url, 'http://localhost').searchParams, index = Number(query.get('index'))
+      if (!room.trajectory || query.get('clip') !== room.trajectory.id || !query.has('index') || !Number.isSafeInteger(index) || index < 0 || index >= room.trajectory.frames.length) return send(404, { error: 'Unknown trajectory frame' })
+      if ((session.frameRequests ?? 0) >= 2) return send(429, { error: 'Wait for the pending frame' })
+      session.frameRequests = (session.frameRequests ?? 0) + 1
+      res.once('close', () => { session.frameRequests-- })
+      const frame = room.trajectory.frames[index]
+      return send(200, frame, 'application/octet-stream', { 'Content-Length': frame.length })
+    }
     if (route === '/meeting/scene' || route === '/meeting/status' || route === '/meeting/events') {
       if (!session) return send(401, { error: 'Join with the invite link first.' })
       if (route === '/meeting/status') return send(200, { name: session.name, role: session.role, revision: room.revision, expiresAt, presentation: room.presentation.snapshot() })
       if (route === '/meeting/events') {
+        if (session.away) return send(409, { error: 'Return to the presentation to reconnect.' })
         res.writeHead(200, { ...headers, 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' })
         room.presentation.subscribe(res, { presenter: session.role === 'presenter' })
         const heartbeat = setInterval(() => {
@@ -117,7 +193,9 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         res.on('close', () => { clearInterval(heartbeat) })
         return
       }
-      return send(200, room.scene, 'application/octet-stream', { 'Content-Length': room.scene.length })
+      const expected = new URL(req.url, 'http://localhost').searchParams.get('revision')
+      if (expected && expected !== room.revision) return send(409, { error: 'A newer visualization is available.' })
+      return send(200, room.scene, 'application/octet-stream', { 'Content-Length': room.scene.length, 'X-NADOC-Revision': room.revision })
     }
     const key = route === '/' ? '/viewer.html' : route
     if (!assets.has(key)) return send(404, { error: 'Not found' })
@@ -127,7 +205,8 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const controlServer = publicOrigin ? http.createServer(handler(true)) : null
   server.requestTimeout = 15000; server.headersTimeout = 10000
   if (controlServer) { controlServer.requestTimeout = 15000; controlServer.headersTimeout = 10000 }
-  const stop = () => { closed = true; for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); listener?.closeAllConnections() } }
+  const leases = setInterval(() => { for (const room of rooms.values()) room.editorBroadcast.expire() }, 1000); leases.unref()
+  const stop = () => { closed = true; clearInterval(leases); for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); listener?.closeAllConnections() } }
   return { server, controlServer, invite, expiresAt, stop, controlToken, createShare, setPublicBase: value => { if (publicOrigin && value !== publicOrigin) throw new Error('Public origin is fixed'); publicBase = value } }
 }
 

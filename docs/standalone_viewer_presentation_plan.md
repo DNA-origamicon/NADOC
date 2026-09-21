@@ -1,11 +1,21 @@
 # Standalone viewer and presentations: phased development plan
 
-Status (2026-09-20): checkpoint `302d50f6` is committed and pushed. Prepared
-static snapshots, standalone viewing, and temporary password-protected public HTTPS
-sharing are implemented. The transport milestone was brought forward from Phase 4.
-Camera-only presenter Jump/Follow is now implemented and locally browser-tested.
-The user approved the browser-only remote guest experience. Scientific-selection,
-representation/assembly parity and recorded-playback milestones remain open.
+Status (2026-09-21): prepared snapshots, standalone viewing, temporary
+password-protected public HTTPS sharing, presenter Leave/Return, editor broadcasting,
+and short recorded Full trajectory clips are implemented. Static views and clips
+now use one publish action and one reusable guest invitation. Explicit content
+updates preserve the URL, password, guest sign-ins and original meeting expiry.
+The transport milestone was brought forward from Phase 4. Presenter Jump/Follow
+is implemented and the user confirmed perspective sharing.
+The standard editor now has a temporary Help → Broadcast to presentation control:
+separate perspective/visualization choices, throttled scene revisions on the same
+link, and the active multi-view pane (user decision). Real-GPU update costs remain
+an acceptance gate; this does not certify a continuous live-scene transport.
+The user approved the browser-only remote guest experience. Scientific selection,
+representation/assembly parity, compact trajectory delivery, atomistic refinement
+on pause and hardware/WAN playback acceptance remain open. See the
+[current validation checkpoint](audits/unified_sharing_20260921.md) for completed
+checks, the seven unrelated missing-fixture backend failures and deferred FULL suite.
 
 The earlier controlled RTX 2080 SUPER A/B (42.34/42.78 median FPS; 26.0/26.6 ms p95)
 covered decoder extraction only. It does not certify the prepared viewer, room
@@ -78,11 +88,26 @@ owned tunnel; a downloaded snapshot cannot be retracted.
 |1/2A: Shared runtime and frozen packages | Prototype delivered; public Voltron loading and same-pose image parity verified. Full parity and hardware A/B remain gates. |
 |4A: Temporary internet delivery | Implemented and externally exercised; HTTPS, password, hidden host, expiry, revoke, isolated management. |
 |3A: Presenter perspectives | Implemented: separate presenter authority, snapshot-bound camera state, opt-in Jump/Follow, late join and reconnect. Browser/host evidence is in the [perspectives audit](audits/presenter_perspectives_20260920/README.md); real-GPU/WAN acceptance remains open. |
+|3A.0: Presenter attendance | Implemented: Leave/Return and private file inspection preserve guest links and sessions until host stop/expiry; [browser and lifecycle evidence](audits/presenter_return_20260920/README.md). |
+|3A.1: Editor broadcasting | Temporary Help toggle with independent camera/visualization choices; same-link revision delivery, coloring and trusted section caps, active multi-view pane, stop on document switch, expiring editor authority. Settled visualization updates currently replace prepared snapshots; incremental updates and large-design A/B remain required. |
 |2B/3B: Scientific selection and highlights | Stable base/domain/cluster/object and assembly-instance references; presenter selection highlights distinct from guest selection. Connect editor selection only when snapshot identity matches. |
 |2C: Full/assembly parity | Shared-transform shader adapters, physical overlays, complete Full proteins/nanoparticles, unsupported-asset feedback and representation readiness. |
-|3C: Recorded simulations | Prepared cube_pore frames, topology/content hashes, bounded buffering and coordinated playback; Full first, atomistic second. |
+|3C: Recorded simulations | Unified guest invitation for static views and recorded playback; one publish action with same-link content replacement. First bounded Full clip implementation: 2–120 samples from the loaded NAMD part trajectory, exact rendered-coordinate patches, authenticated per-frame delivery, shared clock, one download per guest, temporal decimation and pause/seek. No water. Hardware/WAN acceptance, long clips, multi-view/assembly adapters, compact molecular encoding and atomistic refinement remain open. |
 |4B: Acceptance | Four participants including presenter; Windows/macOS/Linux browser matrix, WAN transfer/reconnect and real-GPU A/B under presentation traffic. |
 |5: Browser geometry generation | Deferred unless raw-design opening without preparation is requested. |
+
+Editor-broadcast protocol and validation: [implementation record](audits/editor_broadcast_20260920.md).
+
+Recorded-trajectory feasibility, measured cube_pore payloads and extraction costs,
+and proposed 8/15/30-step playback acceptance:
+[2026-09-21 assessment](audits/trajectory_sharing_assessment_20260921.md).
+The first implementation uses prepared absolute frame patches and a shared playback
+clock rather than replacing the scene for each sample. No WAN trajectory refresh
+rate is certified yet. See [implementation and validation](audits/trajectory_sharing_20260921.md).
+The [same-invitation follow-up](audits/unified_sharing_20260921.md) verifies static
+→ recorded trajectory → static in an already joined browser. Older running hosts
+need one explicit restart after their meeting; that restart ends old invitations.
+Create one new invitation afterward, then reuse it for subsequent content updates.
 
 A milestone may ship independently, but no earlier open parity/performance gate is
 implicitly passed by later connectivity work. Validate one coherent slice, retain
@@ -154,13 +179,15 @@ performance checks pass. Raw legacy designs require preparation. Optional omitte
 ## Phase 3 — presentation rooms on isolated local infrastructure
 
 - Create/end rooms; separate presenter authority from guest identity and permissions.
-- Join by link/name; snapshot revision is fixed during a session initially.
+- Join by link/name. Snapshot revisions remain fixed until explicit publication;
+  **Update shared view** or editor broadcasting can replace the scene without replacing the link,
+  password, cookies, or room expiry. Guest cameras stay independent through updates.
 - Start with server-sent state events over HTTPS and coalesced presenter POSTs.
   This fits four participants without adding a server WebSocket dependency. Keep
   the state contract transport-independent for future WSS if measurements justify it.
   Validate roles/messages server-side; rate-limit and coalesce transient updates.
 - 3A uses a separate presenter invitation, available only in the local host UI.
-  Presenter mode opens the same immutable snapshot as guests. Guest invitations
+  Presenter mode opens the same current shared snapshot as guests. Guest invitations
   cannot acquire presenter authority or post camera changes. Guests begin free;
   Jump is one-shot, Follow is opt-in, and direct camera input exits Follow.
 - 3B adds semantic highlights after stable selection references exist. A spatial
@@ -168,7 +195,22 @@ performance checks pass. Raw legacy designs require preparation. Optional omitte
 - Implement agreed highlight/jump/follow behavior without camera feedback loops.
 - Handle late join, reconnection, event ordering, host disconnect/rejoin, and expiry.
   Network loss must not prevent local orbiting of an already loaded scene.
+- Presenter attendance is independent of room lifetime. Leave/Return and private
+  file checks preserve the existing guest URL, sign-ins and frozen snapshot.
+  Same-browser re-entry reuses the presenter credential, whose occupied slot is
+  retained until meeting end. Only explicit stop, host shutdown or expiry ends
+  availability; changing editor documents does not republish or revoke the room.
 - Bind callouts to both snapshot revision and assembly instance identity.
+- Standard editor presentation is the intended primary workflow. The temporary
+  Help toggle defaults off, allows camera and/or visualization publication, sends
+  at most four coalesced camera updates per second, and sends settled visualization
+  snapshots no more often than every three seconds. Full multi-view layout sharing
+  is deferred; broadcast the last pane clicked/navigated. Unsupported shaders stop
+  the broadcast visibly. Switching documents stops it before exporting another file.
+- Benchmark both camera-only broadcasting and settled visualization replacement
+  on VoltronCoreArmV2 and cube_pore. Keep the existing repeatable-orbit A/B metrics,
+  and capture `[NADOC_PRESENTATION_UPDATE v1]` byte count and preparation/upload time.
+  No renderer/FPS parity claim follows from functional broadcast tests alone.
 
 Exit: multiple independent browsers exercise the room; guests cannot edit designs
 or send presenter actions. Measure rendering during highlight/camera traffic.
@@ -238,7 +280,7 @@ Record:
 - For rooms: event delivery/apply timing with clock methodology recorded. Use RTT
   or synchronized clocks; do not subtract unsynchronized device timestamps.
 
-Manual experience to implement:
+Manual capture workflow (orbit capture implemented; other scenarios remain gates):
 
 1. Open isolated A or B build and load the same benchmark fixture.
 2. Choose **Performance comparison**, confirm visible run settings, and start the
@@ -254,7 +296,9 @@ by JSON containing run ID, A/B variant, commit/build/instrumentation IDs, fixtur
 hash/revision, browser/OS, available GPU metadata, viewport/DPR, quality/representation,
 cache/network mode, scenario/duration, measured metrics, availability flags, and
 errors. Exclude file paths, sequences, invite tokens, and participant names.
-This is a proposed log contract, not an existing command or fabricated sample result.
+The orbit/frame-capture record is implemented. Unavailable measures remain null;
+selection latency, full readiness timing and the remaining acceptance scenarios are
+not implied by an orbit capture. See the retained A/B records above.
 
 Proposed initial regression gates, calibrated after Phase 0 noise measurements:
 

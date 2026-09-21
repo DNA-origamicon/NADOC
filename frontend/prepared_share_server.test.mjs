@@ -6,6 +6,28 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createPreparedHost } from '../scripts/prepared_view_host.mjs'
 import { preparedSharePlugin } from './prepared_share_server.js'
+
+test('a failed bootstrap is recovered only when the authenticated host responds', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-share-start-')); t.after(() => rm(root, { recursive: true, force: true }))
+  const controlFile = join(root, 'host.json')
+  let handler, ready = true, launches = 0, requests = 0
+  const editor = http.createServer((req, res) => handler(req, res, () => res.end())); t.after(() => { editor.close(); editor.closeAllConnections() })
+  await new Promise(ok => editor.listen(0, '127.0.0.1', ok))
+  preparedSharePlugin({ controlFile, launch: async () => {
+    launches++
+    await writeFile(controlFile, JSON.stringify({ url: 'http://127.0.0.1:5184', token: 'a'.repeat(64) }))
+    await writeFile(controlFile + '.status.json', JSON.stringify({ state: 'ready' }))
+    throw new Error('Bootstrap timed out')
+  }, transport: async () => { requests++; if (!ready) throw new Error('Host unavailable'); return { shares: [] } } }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
+  const start = () => fetch(`http://127.0.0.1:${editor.address().port}/__nadoc_share/start`, { method: 'POST', headers: { 'X-NADOC-Share': '1' } })
+  assert.equal((await start()).status, 200)
+  assert.equal(launches, 1); assert.equal(requests, 1)
+  assert.equal((await start()).status, 200); assert.equal(launches, 1)
+  ready = false
+  const failed = await start(); assert.equal(failed.status, 503)
+  assert.deepEqual(await failed.json(), { error: 'Bootstrap timed out' })
+  assert.equal(launches, 2)
+})
 test('editor middleware keeps host credentials local and publishes only from the local same-origin editor', async t => {
   const root = await mkdtemp(join(tmpdir(), 'nadoc-share-server-')); t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')

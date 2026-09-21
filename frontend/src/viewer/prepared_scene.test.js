@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import * as THREE from 'three'
+import { sectionCapShader } from '../scene/section_cap_material.js'
 import { prepareScene, loadPreparedScene, validateScene } from './prepared_scene.js'
-import { decodeContainer } from './package_container.js'
+import { decodeContainer, encodeContainer } from './package_container.js'
 import { installInstanceAlpha, instanceAlphaOnBeforeCompile } from '../scene/instance_alpha.js'
 const camera = { position: [10, 4, 20], target: [0, 0, 0], up: [0, 1, 0], fov: 55, orbitMode: 'multiscale' }
 function fixture() {
@@ -13,6 +14,22 @@ function fixture() {
   return { scene, mesh }
 }
 describe('prepared scene', () => {
+  it('decodes embedded textures concurrently with a bounded batch size', async () => {
+    const { scene } = fixture(), data = decodeContainer(prepareScene({ scene, camera }))
+    data.images = Array.from({ length: 33 }, (_, i) => ({ uuid: `image-${i}`, url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB9sAAAAASUVORK5CYII=' }))
+    let active = 0, peak = 0, completed = 0
+    const parse = vi.spyOn(THREE.ObjectLoader.prototype, 'parseImagesAsync').mockImplementation(async rows => {
+      active++; peak = Math.max(peak, active)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      active--; completed += rows.length
+      return {}
+    })
+    try {
+      const result = await loadPreparedScene(encodeContainer(data))
+      expect(completed).toBe(33); expect(peak).toBeGreaterThan(1); expect(peak).toBeLessThanOrEqual(16)
+      result.dispose()
+    } finally { parse.mockRestore() }
+  })
   it('round-trips Full geometry, instance transforms/colors, lights and shared resources', async () => {
     const { scene, mesh } = fixture()
     mesh.material.color.setRGB(.1234567, .3456789, .5678912)
@@ -68,4 +85,23 @@ it('preserves strided attribute values and normalization', async () => {
   const result = await loadPreparedScene(prepareScene({ scene, camera }))
   expect([...result.scene.children[0].geometry.attributes.position.array]).toEqual([1,2,3,4,5,6,7,8,9])
   result.dispose()
+})
+
+it('round-trips trusted section caps and clipping while excluding editing gizmos', async () => {
+  const scene = new THREE.Scene(), material = new THREE.MeshBasicMaterial({ color: 'red' })
+  material.onBeforeCompile = sectionCapShader
+  material.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 0, 1), -2)]
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(), material))
+  const gizmo = new THREE.Group(); gizmo.isTransformControlsRoot = true; scene.add(gizmo)
+  const data = prepareScene({ scene, camera, renderer: { localClippingEnabled: true, getClearColor: c => c, getClearAlpha: () => 0 } })
+  const loaded = await loadPreparedScene(data)
+  expect(loaded.data.version).toBe(2)
+  expect(loaded.scene.children).toHaveLength(1)
+  const cap = loaded.scene.children[0]
+  expect(cap.material.onBeforeCompile).toBe(sectionCapShader)
+  expect(cap.material.clippingPlanes[0].constant).toBe(-2)
+  const clearStencil = vi.fn(); cap.onAfterRender({ clearStencil }); expect(clearStencil).toHaveBeenCalledOnce()
+  expect(new THREE.Raycaster(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1)).intersectObject(cap)).toEqual([])
+  const invalid = decodeContainer(data); invalid.materials[0].sectionPlanes = [[0, 0, 0, 1]]
+  expect(() => validateScene(invalid)).toThrow('section planes'); loaded.dispose()
 })
