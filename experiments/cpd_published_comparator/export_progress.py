@@ -1,11 +1,13 @@
 """Regenerate Help > CPD progress from retained evidence; never changes release gates."""
 
-import argparse, json, hashlib
+import argparse, json, hashlib, sys
 from pathlib import Path
 from datetime import datetime, timezone
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO))
+from backend.core.cpd_preview import attach_isomer_previews  # noqa: E402
 ART = REPO / ".development-artifacts"
 ARCHIVE = Path("/media/jojo/Archive/NADOC_archive/photoproduct_evidence")
 sources = {}
@@ -750,5 +752,5 @@ payload = {
     "sources": sources,
 }
 path = REPO / "frontend/public/cpd-progress.json"
-path.write_text(json.dumps(payload, indent=2) + "\n")
+path.write_text(json.dumps(attach_isomer_previews(payload), indent=2) + "\n")
 print(path, len(models), "structures")

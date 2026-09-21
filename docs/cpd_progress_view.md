@@ -1,10 +1,39 @@
 # CPD progress view
 
-Open **Help → CPD progress…** to inspect the current CPD evidence snapshot.
-The selector opens the corrected cis-syn core and includes two corrected sugar
-fragments, three original comparison structures, and two deferred cis-anti starting
-structures. These are model compounds and
-starting structures, not a validated full DNA strand.
+Open **Help → CPD progress…** to compare all **eight ordered DNA TT-CPD isomers**
+and inspect the current CPD evidence snapshot. The gallery shows every isomer
+at the same scale and in the same ordered cyclobutane frame. Select a card for
+the larger, rotatable view; camera orientation is retained when switching isomers.
+
+Both endpoints include deoxyribose and phosphate. Blue identifies endpoint 1;
+purple identifies endpoint 2. Dashed arrows mark the local 5′ exit at P and 3′
+exit at O3′. Outlined O5′ atoms identify the same backbone-bead landmark used by
+NADOC's Full representation. The two pale crosslinks follow each registered
+graph: C5–C5/C6–C6 for syn, C5–C6/C6–C5 for anti. Endpoint numbers are retained
+chemical identities, not an assumption that the two residues share a strand.
+
+**Show sugar–phosphate context** toggles the attachment geometry. Each **sugar
+rotation** slider explores the corresponding N1–C1′ torsion while keeping the
+CPD core, attachment bond length, and internal sugar geometry fixed. C1′ and
+O5′ separations and the angle between local P→O3′ vectors update alongside the
+view. These describe one conformer; they do not establish strand compatibility.
+**Reset view** restores the camera and both initial sugar orientations.
+
+The cis-syn-I preview uses the current preliminary coordinate template. The
+other seven use existing ETKDG/UFF starting cores checked against all four
+registered stereocenters. Their D-sugar/phosphate attachments are transferred by
+proper rotations from the preliminary template; a coarse heavy-atom clearance
+search adjusts only the two glycosidic torsions. These are explicitly labeled
+**In development · estimate**. They are not force-field minima, fitted duplexes,
+or guarantees of clash-free placement in a design. No authoring or simulation
+qualification is enabled by these previews. Original source hashes accompany
+the portable starting cores in `backend/data/cpd_preview_cores.json`.
+
+The **Evidence studies · model fragments** selector group retains the corrected
+cis-syn core, two corrected sugar fragments, three original comparison structures,
+and two deferred cis-anti starting structures. These remain independently
+inspectable studies; their check colors are separate from the endpoint colors
+used in the isomer gallery.
 
 Drag to rotate, scroll to zoom, and hover over an atom or bond for its recorded
 checks. Tab also selects elements; click or Enter pins the details for inspection.
@@ -28,6 +57,17 @@ Passing fitted geometry is training evidence, not independent validation.
 ## Updating the evidence
 
 The UI reads `frontend/public/cpd-progress.json`. It does not monitor running jobs.
+Refresh just the isomer illustrations using tracked repository data, with no
+archive access, RDKit installation, GUI, or simulation required:
+
+```sh
+OPENBLAS_NUM_THREADS=1 .venv/bin/python scripts/export_cpd_isomer_previews.py
+```
+
+This preserves the original evidence date, studies, and checks. It can update an
+alternate snapshot with `--snapshot PATH`. The full evidence exporter also
+regenerates the isomer catalog, so routine evidence refreshes retain it.
+
 After new assessments are saved, regenerate the snapshot from the repository root:
 
 ```sh
@@ -67,9 +107,13 @@ Add newly assessed model compounds and their checks to the exporter as work expa
 ## Verification
 
 `frontend/src/ui/cpd_progress.test.js` covers status semantics, projection,
-snapshot validation, details, and asynchronous modal lifecycle.
+snapshot validation, all eight structures, torsion invariants, details, and
+asynchronous modal lifecycle. `tests/test_cpd_preview.py` checks all stereocenters,
+correct crosslinks, bond lengths, preserved core/sugar geometry and handedness,
+the O5′ landmark, portable regeneration, and unchanged evidence/release gates.
 `frontend/e2e/cpd_progress.spec.js` exercises the real menu, evidence, structure
-switching, failed glycosidic-bond details, rotation, and closing in Chromium.
+switching, all eight context views, sugar rotation/reset, context visibility,
+failed glycosidic-bond details, rotation, and closing in headless Chromium.
 
 ## Drift localization evidence
 
