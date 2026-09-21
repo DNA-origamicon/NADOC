@@ -108,8 +108,6 @@ def fine_surface(
     probe_radius=0.28,
     radius_inflate=1.30,
     smooth=15,
-    *,
-    measured_positioning=True,
 ):
     """The FINE (all-atom) design surface, built the way ``get_surface`` detail='fine' builds
     it (fast_bridges + flexible override + adaptive grid + Taubin smooth), so these tests guard
@@ -118,7 +116,6 @@ def fine_surface(
         design,
         nuc_frame_override=_flexible_display_override(design),
         fast_bridges=True,
-        measured_positioning=measured_positioning,
     )
     gs = adaptive_grid_spacing(model.atoms, grid_spacing)
     mesh = compute_surface(
@@ -213,12 +210,12 @@ _slow = [pytest.mark.slow, pytest.mark.atomistic]
 _PANEL = [
     pytest.param(
         make_6hb_design,
-        dict(verts=32777, faces=66466, vol=225.3, area=728.6, cf_mean=0.28),
+        dict(verts=30555, faces=61462, vol=219.8306, area=696.4542, cf_mean=0.28),
         id="6hb",
     ),
     pytest.param(
         make_18hb_routed_design,
-        dict(verts=871679, faces=1769846, vol=6399.5, area=19718.8, cf_mean=0.28),
+        dict(verts=810683, faces=1633914, vol=6311.4529, area=18971.4365, cf_mean=0.28),
         marks=_slow,
         id="18hb_routed",
     ),
@@ -251,7 +248,7 @@ def test_fine_surface_invariants(builder, base):
     """Vertex/face counts + enclosed volume + surface area stay within a small band of the
     pinned baseline — an envelope change (grid, radius, frame math) moves them well beyond it."""
     design = builder()
-    m = fine_surface(design, measured_positioning=False)
+    m = fine_surface(design)
     assert abs(len(m.vertices) / base["verts"] - 1.0) < _COUNT_BAND, (
         f"vertex count {len(m.vertices)} vs baseline {base['verts']}"
     )

@@ -390,3 +390,20 @@ describe('setExtraBaseInstanceFromSim', () => {
     for (const c of s.pos.toArray()) expect(Number.isFinite(c)).toBe(true)
   })
 })
+
+it('retains independent CPD projection sites and standard slab dimensions on arc refresh', () => {
+  const beads = mockMesh(1), slabs = mockMesh(1)
+  const geometry = { backbone_position: [1, 2, 3], base_position: [4, 5, 6], frame_rotation: [0, 0, 0, 1] }
+  const pose = new THREE.Matrix4().makeRotationZ(Math.PI / 2).setPosition(2, 3, 4)
+  updateExtraBaseInstances(beads, slabs, 0, 1,
+    new THREE.Vector3(), new THREE.Vector3(1, 1, 0), new THREE.Vector3(2, 0, 0),
+    new THREE.Vector3(0, 0, 1), false, false, new Map([[0, pose]]), 'T', new Map([[0, geometry]]))
+  expect(decompose(beads, 0).pos.distanceTo(new THREE.Vector3(...geometry.backbone_position).applyMatrix4(pose))).toBeLessThan(1e-12)
+  expect(decompose(slabs, 0).pos.distanceTo(new THREE.Vector3(...geometry.base_position).applyMatrix4(pose))).toBeLessThan(1e-12)
+  expect(decompose(slabs, 0).scl.toArray()).toEqual([SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK])
+  const expectedAxes = [new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0)]
+  expectedAxes.forEach((axis, i) => {
+    const actual = new THREE.Vector3().setFromMatrixColumn(slabs._mats[0], i).normalize()
+    expect(actual.distanceTo(axis.transformDirection(pose))).toBeLessThan(1e-12)
+  })
+})

@@ -226,7 +226,8 @@ def test_delete_transform_records_pose_reset_in_feature_log():
     assert redone.json()["design"]["feature_log"][-1]["op_kind"] == "nucleotide-transform-delete"
 
 
-def test_put_route_embeds_the_requested_display_projection():
+@pytest.mark.parametrize("comparison", ["true", "false", None])
+def test_put_route_embeds_the_requested_display_projection(comparison):
     """Apply must not replace measured display geometry with legacy geometry."""
     design_state.set_design(make_minimal_design())
     client = TestClient(app)
@@ -237,7 +238,7 @@ def test_put_route_embeds_the_requested_display_projection():
     }
     measured = client.put(
         "/api/design/nucleotide-transform", json=body,
-        headers={"X-NADOC-Measured-Positioning": "true"},
+        headers={"X-NADOC-Measured-Positioning": comparison} if comparison else {},
     )
     assert measured.status_code == 200
 

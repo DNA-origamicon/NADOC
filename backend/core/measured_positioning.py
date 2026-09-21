@@ -89,6 +89,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from backend.core.nucleotide_landmarks import (
+    FULL_REP_BACKBONE_ATOM,
+    PYRIMIDINE_RING,
+    PURINE_RING,
+)
+
 
 @dataclass(frozen=True)
 class Site:
@@ -153,8 +159,6 @@ def _from_atomistic_template(backbone_atom: str = "C3'") -> "MeasuredPositioning
     """
     from backend.core import measured_atomistic as _ma
 
-    PURINE_RING = ("N9", "C8", "N7", "C5", "C6", "N1", "C2", "N3", "C4")
-    PYRIMIDINE_RING = ("N1", "C2", "N3", "C4", "C5", "C6")
     try:
         tmpl = _ma.measured_templates()
     except _ma.MeasuredTemplateUnavailable:
@@ -238,7 +242,7 @@ _FULL_REP_FALLBACK = MeasuredPositioning(
     base_rev=_FALLBACK.base_rev,
     slab_extent_nm=0.7074,
 )
-FULL_REP = _from_atomistic_template("O5'") or _FULL_REP_FALLBACK
+FULL_REP = _from_atomistic_template(FULL_REP_BACKBONE_ATOM) or _FULL_REP_FALLBACK
 
 
 # ── The atomistic re-placement lives in measured_atomistic.py ─────────────────

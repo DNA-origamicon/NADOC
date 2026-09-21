@@ -325,13 +325,8 @@ def test_build_reproduces_the_template_cross_strand_geometry_exactly():
     )
 
 
-def test_measured_build_widens_the_base_pair_versus_legacy():
-    """The visible consequence: the legacy build's base pairs are too narrow.
-
-    ``atomistic.py`` applies its P-P correction to the template frame ORIGIN, and the
-    two strands' frames are z-mirrored, so the correction rotates the phosphates toward
-    each other and pulls C1'-C1' in to 0.967 nm.  Measured placement restores it.
-    """
+def test_both_comparison_states_preserve_native_base_pair_width():
+    """The retired comparison flag cannot restore the collapsed legacy duplex."""
 
     def median_c1(model):
         nucs = _by_nucleotide(model)
@@ -345,22 +340,18 @@ def test_measured_build_widens_the_base_pair_versus_legacy():
         ]
         return float(np.median(vals))
 
-    legacy, measured = median_c1(_build(False)), median_c1(_build(True))
-    assert legacy == pytest.approx(0.967, abs=0.005), "legacy collapse value moved"
-    assert measured > legacy + 0.03
-    assert 0.99 < measured < 1.10
+    baseline, candidate = median_c1(_build(False)), median_c1(_build(True))
+    assert baseline == candidate
+    assert 0.99 < baseline < 1.10
 
 
-def test_measured_build_keeps_atom_and_bond_counts():
-    """Same atoms, same bonds — only positions move.
-
-    The measured templates carry the same atom names as the 1ZEW ones precisely so the
-    bond tables, element table and renderer are untouched by this.
-    """
-    legacy, measured = _build(False), _build(True)
-    assert len(measured.atoms) == len(legacy.atoms)
-    assert measured.bonds == legacy.bonds
-    assert [a.name for a in measured.atoms] == [a.name for a in legacy.atoms]
+def test_both_comparison_states_keep_identical_atoms_and_bonds():
+    """Both comparison slots preserve the accepted atoms, positions, and bonds."""
+    baseline, candidate = _build(False), _build(True)
+    assert candidate.bonds == baseline.bonds
+    assert [(a.name, a.x, a.y, a.z) for a in candidate.atoms] == [
+        (a.name, a.x, a.y, a.z) for a in baseline.atoms
+    ]
 
 
 def test_measured_placement_is_the_default():

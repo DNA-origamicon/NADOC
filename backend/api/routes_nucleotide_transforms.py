@@ -106,11 +106,42 @@ def _apply_transform_body(
     return transform
 
 
+def _cpd_unit_bodies(design, bodies):
+    """Expand a CPD endpoint delta to its partner; reject nonrigid pair edits."""
+    by_key = {
+        f"__xb__:{b.crossover_id}:{b.extra_base_k}": b
+        for b in bodies if b.kind == "extra_base"
+    }
+    expanded = list(bodies)
+    for lesion in design.photoproduct_junctions:
+        if not lesion.design_coordinates:
+            continue
+        pair = [lesion.base_key_1, lesion.base_key_2]
+        selected = [by_key[k] for k in pair if k in by_key]
+        if not selected:
+            continue
+        delta = selected[0]
+        pose = lambda b: (b.pivot, b.translation, b.rotation)
+        if any(not b.compose or pose(b) != pose(delta) for b in selected):
+            raise HTTPException(422, detail="Move/rotate a converted CPD as one rigid unit.")
+        for key in pair:
+            if key not in by_key:
+                from backend.core.base_keys import parse_base_key
+                target = parse_base_key(key)
+                partner = delta.model_copy(update={"crossover_id": target.crossover_id, "extra_base_k": target.k})
+                by_key[key] = partner
+                expanded.append(partner)
+    return expanded
+
+
 @router.put("/design/nucleotide-transform", status_code=200)
 def put_nucleotide_transform(body: NucleotideTransformBody) -> dict:
     """Create or replace the pose for one residue and push one undo step."""
-    transform = NucleotideTransform(**body.model_dump(exclude={"compose"}))
     design = design_state.get_or_404()
+    expanded = _cpd_unit_bodies(design, [body])
+    if len(expanded) > 1:
+        return put_nucleotide_transforms(NucleotideTransformBatchBody(transforms=expanded))
+    transform = NucleotideTransform(**body.model_dump(exclude={"compose"}))
     if not _target_exists(design, transform):
         raise HTTPException(404, detail="The nucleotide transform target does not exist in this design.")
 
@@ -146,6 +177,8 @@ def put_nucleotide_transform(body: NucleotideTransformBody) -> dict:
 @router.put("/design/nucleotide-transforms", status_code=200)
 def put_nucleotide_transforms(body: NucleotideTransformBatchBody) -> dict:
     """Persist one exact residue scope as one feature-log and undo transaction."""
+    design = design_state.get_or_404()
+    body = body.model_copy(update={"transforms": _cpd_unit_bodies(design, body.transforms)})
     requested = [
         NucleotideTransform(**item.model_dump(exclude={"compose"}))
         for item in body.transforms
@@ -201,6 +234,10 @@ def delete_nucleotide_transform(transform_id: str) -> dict:
     """Remove one saved residue pose and push one undo step."""
     design = design_state.get_or_404()
     existing = next((t for t in design.nucleotide_transforms if t.id == transform_id), None)
+    if existing and existing.kind == "extra_base":
+        key = f"__xb__:{existing.crossover_id}:{existing.extra_base_k}"
+        if any(key in lesion.design_coordinates for lesion in design.photoproduct_junctions):
+            raise HTTPException(422, detail="Remove the CPD before resetting an individual endpoint pose.")
     transforms = [t for t in design.nucleotide_transforms if t.id != transform_id]
     if len(transforms) == len(design.nucleotide_transforms):
         raise HTTPException(404, detail=f"Nucleotide transform {transform_id!r} not found.")

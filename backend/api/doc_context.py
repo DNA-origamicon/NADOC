@@ -45,7 +45,8 @@ _skip_geometry: contextvars.ContextVar[bool] = contextvars.ContextVar(
 
 # Display geometry is a projection of the persisted Design, not part of it.  The
 # browser therefore states which projection it is currently displaying on every
-# API request.  None preserves the legacy behavior for non-frontend callers.
+# API request. None selects the accepted baseline for non-frontend callers;
+# the old false=legacy viewer mapping has been retired.
 _measured_positioning: contextvars.ContextVar[bool | None] = contextvars.ContextVar(
     "nadoc_measured_positioning",
     default=None,

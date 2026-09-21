@@ -94,6 +94,7 @@ class _TimingTrace:
 
 from backend.api import state as design_state
 from backend.api.doc_context import requested_measured_positioning, should_skip_geometry
+from backend.core.display_placement import measured_display_placement
 from backend.core.geometry import (
     nucleotide_positions,
 )
@@ -298,6 +299,8 @@ def _design_response(
 ) -> dict:
     design = _ensure_default_cluster(design)
     design_dict = design.to_dict()
+    from backend.core.cpd_representation import inject_cpd_representation
+    inject_cpd_representation(design_dict)
     # Loadout branch payloads are full compressed design snapshots. They must
     # persist in server-side state and .nadoc saves, but shipping every branch
     # snapshot on every UI response bloats ordinary edits. The frontend only
@@ -475,13 +478,8 @@ def _design_response_with_geometry(
             preserve_feature_log_id=preserve_feature_log_id,
             full_feature_log=full_feature_log,
         )
-    # The Design stores canonical topology/poses, while measured vs legacy
-    # positioning is a browser-owned display projection. Mutation responses must
-    # use the same projection as GET /geometry or replacing currentGeometry causes
-    # a transient, design-wide bead/slab shift until reload.
-    measured_positioning = requested_measured_positioning()
-    if measured_positioning is None:
-        measured_positioning = False
+    # Mutation and GET feeds resolve the same baseline/candidate display policy.
+    measured_positioning = measured_display_placement(requested_measured_positioning())
     if changed_helix_ids is not None:
         # Partial path — compute only the real helices that actually changed.
         real_ids = frozenset(
@@ -1570,15 +1568,9 @@ def get_geometry(
         "covers all helices regardless of this filter.",
     ),
     measured_positioning: bool = Query(
-        False,
-        description="Display-only.  Re-place backbone beads and base beads onto the "
-        "MD-measured radii and P-P azimuthal separation instead of the "
-        "legacy HELIX_RADIUS / +-150 deg groove.  The app always states "
-        "this explicitly; it stays opt-out here because the other CG "
-        "position paths (oxDNA seeding, linker relax, extension tails) do "
-        "not yet share the measured placement, unlike the ATOMISTIC layer, "
-        "which is measured natively.  Topology and the geometric layer are "
-        "untouched; see core/measured_positioning.py.",
+        True,
+        description="Placement comparison selector. Both baseline (false) and "
+        "candidate (true) currently use the accepted measured geometry.",
     ),
 ):
     """Return geometry for the active design.
@@ -1596,6 +1588,7 @@ def get_geometry(
     so the frontend can log where each call's time was spent (nucleotide
     compute vs. axes compute vs. JSON serialisation downstream).
     """
+    measured_positioning = measured_display_placement(measured_positioning)
     trace = _TimingTrace()
     with trace.step("get_design"):
         design = design_state.get_or_404()

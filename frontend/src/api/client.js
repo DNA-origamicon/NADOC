@@ -5255,3 +5255,23 @@ async function _namdSetupPresetRequest(method, path, body) {
   if (!result) throw new Error(lastErrorMessage() || 'Could not update setup presets.')
   return result
 }
+
+
+export async function getCpdDesignTemplate(stereochemistry) {
+  return _request('GET', `/design/photoproducts/template/${encodeURIComponent(stereochemistry)}`, undefined, { suppressBusy: true })
+}
+
+export async function convertExtraBasesToCpd(baseKeys, stereochemistry) {
+  const json = await _request('POST', '/design/photoproducts/convert', {
+    base_keys: baseKeys, stereochemistry, expected_revision: currentRevisionWatermark(),
+  })
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
+
+export async function relaxCpd(photoproductId) {
+  const json = await _request('POST', `/design/photoproducts/${encodeURIComponent(photoproductId)}/relax`, {
+    expected_revision: currentRevisionWatermark(),
+  })
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}

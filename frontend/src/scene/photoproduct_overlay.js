@@ -26,6 +26,8 @@ export function initPhotoproductOverlay({ scene, THREE, store, getBasePosition }
     clear()
     for (const lesion of store.getState().currentDesign?.photoproduct_junctions ?? []) {
       if (!lesion.base_key_1 || !lesion.base_key_2) continue
+      // Converted products already have slab crosslinks / real atomistic bonds.
+      if (Object.keys(lesion.design_coordinates ?? {}).length) continue
       const pair = new THREE.Group()
       pair.name = `formedPhotoproduct:${lesion.id}`
       pair.userData = { kind: 'photoproduct', id: lesion.id }

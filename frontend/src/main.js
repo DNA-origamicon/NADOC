@@ -6795,12 +6795,8 @@ async function main() {
     if (_overlayMode && event.detail?.representation !== 'ballstick') _setOverlayMode(false)
   })
 
-  // ── Help > New Positioning ──────────────────────────────────────────────────
-  // Display-only. OFF keeps every current position; ON re-places the full
-  // representation onto the geometry measured from free NAMD trajectories
-  // (backend/core/measured_positioning.py carries the numbers + provenance).
-  // The placement is computed server-side, so flipping this costs one geometry
-  // refetch; the slab centre/extent that rides with it lives in the renderer.
+  // Placement comparison: baseline OFF / candidate ON, both reset to the
+  // accepted native placement. Keep both render feeds on the same selection.
   _setMenuToggle('menu-help-new-positioning', isNewPositioningOn())
   document.getElementById('menu-help-new-positioning')?.addEventListener('click', async () => {
     const next = !isNewPositioningOn()
@@ -6810,8 +6806,7 @@ async function main() {
     // store change (design_renderer.js:762) — no explicit rebuild needed.
     await api.getGeometry()
     // The atomistic reps are a SEPARATE fetch with its own cache, so they need an
-    // explicit invalidate + refetch or the two representations would disagree —
-    // CG on measured placement, ball-and-stick still on the 1ZEW templates.
+    // explicit invalidate + refetch so future candidates update both representations.
     _atomSurface?.invalidateAtomCache()
     await _atomSurface?.refetchAtomistic()
   })

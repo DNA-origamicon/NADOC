@@ -1020,6 +1020,9 @@ class PhotoproductJunction(BaseModel):
     formation: Literal["manual", "legacy-scadnano"] = "manual"
     patch_order: Literal["base-key-1-first", "base-key-2-first"] = "base-key-1-first"
     orientation_method: str = "canonical-key-order"
+    # Exact test-template coordinates before per-residue rigid poses (nm).
+    design_coordinates: dict[str, dict[str, List[float]]] = Field(default_factory=dict)
+    bond_relaxation: dict[str, Any] = Field(default_factory=dict)
     t1_stable_id: Optional[str] = None
     t2_stable_id: Optional[str] = None
     photoproduct_id: str = "TT-CPD"
@@ -1061,6 +1064,14 @@ class PhotoproductJunction(BaseModel):
             raise ValueError("photoproduct requires canonical base keys or both legacy stable IDs")
         if self.formation == "manual" and self.photoproduct_id != self.product:
             raise ValueError("photoproduct_id and product must agree")
+        if self.design_coordinates:
+            if set(self.design_coordinates) != {self.base_key_1, self.base_key_2}:
+                raise ValueError("CPD design coordinates must cover exactly its two endpoints")
+            for atoms in self.design_coordinates.values():
+                if not {"C5", "C6"}.issubset(atoms):
+                    raise ValueError("CPD design coordinates require both ring atoms")
+                if any(len(xyz) != 3 or not all(math.isfinite(v) for v in xyz) for xyz in atoms.values()):
+                    raise ValueError("CPD design coordinates must be finite xyz triples")
         return self
 
     @property
@@ -1822,6 +1833,7 @@ SnapshotOpKind = Literal[
     "create-near-ends",
     "create-far-ends",
     "photoproduct-create",
+    "photoproduct-relax",
     "photoproduct-delete",
     "overhang-bulk",
     "apply-loop-skips",

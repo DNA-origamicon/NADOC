@@ -1,0 +1,58 @@
+[
+  {
+    "file": "workspace/2hb_1xT_CPD.nadoc",
+    "measured_positioning": true,
+    "key": "__xb__:4a12dd44-bce2-46be-8296-093ce52d2ec9:0",
+    "bead_distances_nm": {
+      "P": 0.1607501118037418,
+      "O5'": 6.2400113717567446e-06,
+      "C5'": 0.14758813881094363,
+      "C4'": 0.24667456649028807,
+      "C1'": 0.4317679384879464,
+      "O3'": 0.37953142265315815
+    },
+    "slab_ring_centroid_error_nm": 3.0777782417227755e-06
+  },
+  {
+    "file": "workspace/2hb_1xT_CPD.nadoc",
+    "measured_positioning": true,
+    "key": "__xb__:54c5689d-127b-4693-bc11-f51121719fad:0",
+    "bead_distances_nm": {
+      "P": 0.15437678792028234,
+      "O5'": 4.7204470332201316e-06,
+      "C5'": 0.13958361266012,
+      "C4'": 0.2459557516221656,
+      "C1'": 0.47572978877891975,
+      "O3'": 0.41064544950086546
+    },
+    "slab_ring_centroid_error_nm": 7.717976806999309e-07
+  },
+  {
+    "file": "workspace/2hb_1xT_CPD_relaxed_v2.nadoc",
+    "measured_positioning": true,
+    "key": "__xb__:4a12dd44-bce2-46be-8296-093ce52d2ec9:0",
+    "bead_distances_nm": {
+      "P": 0.1607501118037418,
+      "O5'": 6.2400113717567446e-06,
+      "C5'": 0.14758813881094363,
+      "C4'": 0.24667456649028807,
+      "C1'": 0.4317679384879464,
+      "O3'": 0.37953142265315815
+    },
+    "slab_ring_centroid_error_nm": 3.0777782417227755e-06
+  },
+  {
+    "file": "workspace/2hb_1xT_CPD_relaxed_v2.nadoc",
+    "measured_positioning": true,
+    "key": "__xb__:54c5689d-127b-4693-bc11-f51121719fad:0",
+    "bead_distances_nm": {
+      "P": 0.15437678792028234,
+      "O5'": 4.7204470332201316e-06,
+      "C5'": 0.13958361266012,
+      "C4'": 0.2459557516221656,
+      "C1'": 0.47572978877891975,
+      "O3'": 0.41064544950086546
+    },
+    "slab_ring_centroid_error_nm": 7.717976806999309e-07
+  }
+]

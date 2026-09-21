@@ -616,6 +616,16 @@ export function initPropertiesPanel({ clearSelection } = {}) {
       const title = document.createElement('strong')
       title.textContent = `Formed product · ${lesion.stereochemistry ?? 'cis-syn'} TT-CPD`
       card.appendChild(title)
+      if (lesion.bond_relaxation?.bond_count) {
+        const report = lesion.bond_relaxation
+        const note = document.createElement('div')
+        note.className = 'dim'
+        note.textContent = `Local bond relaxation: RMS bond-length error ${(report.rms_error_before_nm * 10).toFixed(2)} → ${(report.rms_error_after_nm * 10).toFixed(2)} Å.${report.remaining_strain ? ' Some attachment bonds remain strained.' : ''}`
+        if (report.clashes_after) {
+          note.textContent += ` Close atom contacts: ${report.clashes_before.count} → ${report.clashes_after.count}; severe clashes: ${report.clashes_before.severe_count} → ${report.clashes_after.severe_count}.`
+        }
+        card.appendChild(note)
+      }
       for (const key of [lesion.base_key_1, lesion.base_key_2].filter(Boolean)) {
         const row = document.createElement('div')
         row.className = 'mono dim'
@@ -627,6 +637,28 @@ export function initPropertiesPanel({ clearSelection } = {}) {
         unresolved.className = 'dim'
         unresolved.textContent = 'Legacy scadnano identity is unresolved; simulation is blocked.'
         card.appendChild(unresolved)
+      }
+      if (Object.keys(lesion.design_coordinates ?? {}).length) {
+        const relax = document.createElement('button')
+        relax.className = 'primary-btn cpd-relax-btn'
+        relax.textContent = 'Relax CPD bonds and clashes'
+        relax.addEventListener('click', async () => {
+          relax.disabled = true
+          relax.textContent = 'Relaxing CPD…'
+          try {
+            const result = await api.relaxCpd(lesion.id)
+            if (!result) throw new Error(store.getState().lastError?.message ?? 'CPD relaxation failed.')
+          } catch (error) {
+            const message = document.createElement('div')
+            message.className = 'validation-error'
+            message.textContent = error.message
+            card.appendChild(message)
+          } finally {
+            relax.disabled = false
+            relax.textContent = 'Relax CPD bonds and clashes'
+          }
+        })
+        card.appendChild(relax)
       }
       const remove = document.createElement('button')
       remove.className = 'danger-btn cpd-remove-btn'

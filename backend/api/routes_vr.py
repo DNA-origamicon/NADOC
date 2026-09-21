@@ -10,6 +10,8 @@ data.
 
 from __future__ import annotations
 
+from backend.core.display_placement import measured_display_placement
+
 import copy
 import gzip
 import hashlib
@@ -121,7 +123,7 @@ class VRLaunchRequest(BaseModel):
     browser_requested_at_ms: Optional[float] = Field(default=None, gt=0, lt=1e15)
     job_snapshot_ms: Optional[float] = Field(default=None, ge=0, lt=1e6)
     camera: Optional[VRCamera] = None
-    measured_positioning: bool = False
+    measured_positioning: bool = True
     assembly_active: bool = False
     representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
@@ -2850,7 +2852,7 @@ def _snapshot(
     design = design_state.get_or_404()
     nucleotides = _geometry_for_design(
         design,
-        measured_positioning=body.measured_positioning,
+        measured_positioning=measured_display_placement(body.measured_positioning),
         junction_balance=True,
     )
     axes = deformed_helix_axes(design)
@@ -2862,7 +2864,7 @@ def _snapshot(
     atomistic_model = build_atomistic_model(
         design,
         fast_bridges=True,
-        measured_positioning=body.measured_positioning,
+        measured_positioning=measured_display_placement(body.measured_positioning),
     )
     from backend.api.crud import unligated_crossover_ids
 

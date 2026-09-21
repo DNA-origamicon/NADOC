@@ -13,7 +13,7 @@ beforeEach(() => {
 })
 
 describe('the flag', () => {
-  it('is off after an explicit opt-out', () => {
+  it('selects baseline after an explicit choice', () => {
     expect(isNewPositioningOn()).toBe(false)
   })
 
@@ -35,13 +35,13 @@ describe('the flag', () => {
 
   it('persists across a reload', () => {
     setNewPositioning(true)
-    expect(localStorage.getItem('nadoc.newPositioning.v2')).toBe('true')
+    expect(localStorage.getItem('nadoc.newPositioning.v3')).toBe('true')
     setNewPositioning(false)
-    expect(localStorage.getItem('nadoc.newPositioning.v2')).toBe('false')
+    expect(localStorage.getItem('nadoc.newPositioning.v3')).toBe('false')
   })
 
-  it('is ON when nothing was ever chosen — measured placement is native', () => {
-    localStorage.removeItem('nadoc.newPositioning.v2')
+  it('starts on the candidate slot when nothing was chosen', () => {
+    localStorage.removeItem('nadoc.newPositioning.v3')
     __resetForTests(undefined)
     expect(isNewPositioningOn()).toBe(true)
   })
@@ -58,9 +58,6 @@ describe('the flag', () => {
 
 describe('geometryQuerySuffix', () => {
   it('states the mode explicitly when off, never relying on a default', () => {
-    // The two endpoints this feeds do NOT default alike — atomistic is measured
-    // natively, CG geometry is still opt-in — so an empty suffix would mean two
-    // different things depending on which URL it was appended to.
     expect(geometryQuerySuffix(false)).toBe('?measured_positioning=false')
     expect(geometryQuerySuffix(true)).toBe('&measured_positioning=false')
   })
@@ -70,4 +67,13 @@ describe('geometryQuerySuffix', () => {
     expect(geometryQuerySuffix(false)).toBe('?measured_positioning=true')
     expect(geometryQuerySuffix(true)).toBe('&measured_positioning=true')
   })
+})
+
+it('clears the retired comparison preference instead of restoring legacy mode', () => {
+  localStorage.setItem('nadoc.newPositioning.v1', 'false')
+  localStorage.setItem('nadoc.newPositioning.v2', 'false')
+  __resetForTests()
+  expect(isNewPositioningOn()).toBe(true)
+  expect(localStorage.getItem('nadoc.newPositioning.v1')).toBeNull()
+  expect(localStorage.getItem('nadoc.newPositioning.v2')).toBeNull()
 })

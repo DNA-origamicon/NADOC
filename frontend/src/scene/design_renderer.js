@@ -12,6 +12,7 @@
  */
 
 import * as THREE from 'three'
+import { createCpdSlabBonds } from './cpd_slab_bonds.js'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 import { resolveRepOverrides } from './representation_overrides.js'
 import { buildCrossoverConnections, updateExtraBaseInstances, setExtraBaseInstanceFromSim, simBeadIndex, partitionExtraBaseUpdates, setExtraBaseConnectors, setExtraBaseSlabConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors } from './crossover_connections.js'
@@ -52,6 +53,7 @@ export function initDesignRenderer(scene, storeRef) {
   // Extra-base beads+slabs (from buildCrossoverConnections) are children of root,
   // so _helixCtrl.root.visible covers them automatically.
   // Arc LINE geometry lives in unfold_view._arcGroup (separate module — see main.js SCENE GEOMETRY RULE).
+  let _cpdSlabBonds     = null
   let _xoverArcData     = null   // arc metadata for extra-base crossovers
   let _xoverBeadsMesh   = null   // InstancedMesh for extra-base beads
   let _xoverSlabsMesh   = null   // InstancedMesh for extra-base slabs
@@ -355,6 +357,7 @@ export function initDesignRenderer(scene, storeRef) {
     if (_xoverSlabsMesh) _xoverSlabsMesh.visible = show
     if (_xoverConnMesh)  _xoverConnMesh.visible  = show
     if (_xoverSlabConnMesh) _xoverSlabConnMesh.visible = show
+    _cpdSlabBonds?.sync(_detailLevel === 0)
   }
 
   /**
@@ -403,6 +406,7 @@ export function initDesignRenderer(scene, storeRef) {
         }
       }
     }
+    _cpdSlabBonds?.sync(_detailLevel === 0)
   }
 
   /** Apply alpha visibility for extra bases in hidden crossovers. */
@@ -482,6 +486,7 @@ export function initDesignRenderer(scene, storeRef) {
       }
       _xoverSlabConnMesh.instanceMatrix.needsUpdate = true
     }
+    _cpdSlabBonds?.sync(_detailLevel === 0)
   }
 
   /**
@@ -582,6 +587,7 @@ export function initDesignRenderer(scene, storeRef) {
     _fluoroGlowLayer.clear()    // caller must re-apply fluorescence glow after rebuild
 
     // Clear stale xover refs — the old meshes were children of oldRoot, already disposed above.
+    _cpdSlabBonds    = null
     _xoverArcData    = null
     _xoverBeadsMesh  = null
     _xoverSlabsMesh  = null
@@ -628,6 +634,12 @@ export function initDesignRenderer(scene, storeRef) {
       // Extra-base beads+slabs are children of root — no separate scene.add() needed.
       // root.visible covers them automatically; no extra VISIBILITY RULE required.
       _helixCtrl.root.add(xoverResult.group)
+      _cpdSlabBonds = createCpdSlabBonds(design, _xoverSlabsMesh, target => {
+        const arc = _xoverArcDataMap.get(target?.crossover_id)
+        if (!arc || target.k < 0 || target.k >= arc.beadCount) return null
+        return arc.beadStartIdx + simBeadIndex(target.k, arc.beadCount, arc.simReversed)
+      })
+      if (_cpdSlabBonds) xoverResult.group.add(_cpdSlabBonds.mesh)
       // Re-skin extra-base meshes if a non-strand coloring mode is active —
       // build emitted strand colors, applyColoring covers helix meshes, this
       // covers the xover extras.
@@ -1073,11 +1085,16 @@ export function initDesignRenderer(scene, storeRef) {
 
     if (!geoChanged && !designChanged && !loopChanged) return
 
+    // Extra-base poses and CPD topology live in design metadata, not in the
+    // real-helix geometry payload. They must refresh even on geometry_unchanged.
+    const residuePosesChanged = designChanged && ['nucleotide_transforms', 'photoproduct_junctions'].some(key =>
+      JSON.stringify(newState.currentDesign?.[key] ?? []) !== JSON.stringify(prevState.currentDesign?.[key] ?? []))
+
     // Skip rebuild when only visual-only design fields changed (cluster_transforms,
     // configurations, camera_poses, animations) — topology arrays are unchanged.
     // This prevents a spurious full-scene rebuild after patchCluster, which would
     // reset visual cluster positions and trigger an unnecessary geometry refetch.
-    if (designChanged && !geoChanged && !loopChanged) {
+    if (designChanged && !geoChanged && !loopChanged && !residuePosesChanged) {
       const p = prevState.currentDesign, n = newState.currentDesign
       if (p && n &&
           p.helices.length      === n.helices.length      &&
@@ -1091,7 +1108,7 @@ export function initDesignRenderer(scene, storeRef) {
     }
 
     // Fix B part 2: try in-place patch before committing to full rebuild.
-    if (geoChanged && newState.lastPartialChangedHelixIds?.length) {
+    if (geoChanged && !residuePosesChanged && newState.lastPartialChangedHelixIds?.length) {
       const _changedSet = new Set(
         newState.lastPartialChangedHelixIds.filter(id => !id.startsWith('__')))
       const _coverageChanged = _scaffoldCoverageChanged(
@@ -1750,8 +1767,9 @@ export function initDesignRenderer(scene, storeRef) {
         const points = [info.arcData.pointA.clone()]
         const m = new THREE.Matrix4()
         for (let i = 0; i < info.beadMatrices.length; i++) {
-          m.copy(info.beadMatrices[i])
-          if (i === info.entry.i) m.premultiply(matrix)
+          // Other members may already have received the same group preview.
+          // Read live matrices so redrawing this arc preserves all moved beads.
+          _xoverBeadsMesh.getMatrixAt(info.arcData.beadStartIdx + i, m)
           points.push(new THREE.Vector3().setFromMatrixPosition(m))
         }
         points.push(info.arcData.pointB.clone())
@@ -1770,6 +1788,7 @@ export function initDesignRenderer(scene, storeRef) {
       }
       _xoverBeadsMesh.instanceMatrix.needsUpdate = true
       _xoverSlabsMesh.instanceMatrix.needsUpdate = true
+      _cpdSlabBonds?.sync(_detailLevel === 0)
       return true
     },
 
@@ -1990,14 +2009,14 @@ export function initDesignRenderer(scene, storeRef) {
           _xoverBeadsMesh, _xoverSlabsMesh,
           ad.beadStartIdx, ad.beadCount,
           posA, _clusterXoverCtrl, posB, ad.avgAx,
-          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
+          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence, ad.productGeometry,
         )
         const placements = buildCrossoverExtraPlacements({
           xoId: ad.xoId, count: ad.beadCount, pointA: posA,
           control: _clusterXoverCtrl, pointB: posB, helixAxis: ad.avgAx,
           sequence: ad.sequence, simReversed: ad.simReversed,
           localFrameReversed: ad.localFrameReversed,
-          savedTransforms: ad.savedTransforms,
+          savedTransforms: ad.savedTransforms, productGeometry: ad.productGeometry,
         })
         for (const g of _xoverGlowLive) {
           if (g.arcData === ad) g.pos.copy(placements[g.localIdx].center)
@@ -2052,14 +2071,14 @@ export function initDesignRenderer(scene, storeRef) {
         _xoverBeadsMesh, _xoverSlabsMesh,
         ad.beadStartIdx, ad.beadCount,
         liveA, _clusterXoverCtrl, liveB, ad.avgAx,
-        ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
+        ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence, ad.productGeometry,
       )
       // Keep selection glow positions on the exact same placement records as the meshes.
       const placements = buildCrossoverExtraPlacements({
         xoId: ad.xoId, count: ad.beadCount, pointA: liveA, control: _clusterXoverCtrl,
         pointB: liveB, helixAxis: ad.avgAx, simReversed: ad.simReversed,
         localFrameReversed: ad.localFrameReversed,
-        sequence: ad.sequence, savedTransforms: ad.savedTransforms,
+        sequence: ad.sequence, savedTransforms: ad.savedTransforms, productGeometry: ad.productGeometry,
       })
       for (const g of _xoverGlowLive) {
         if (g.arcData === ad) g.pos.copy(placements[g.localIdx].center)
