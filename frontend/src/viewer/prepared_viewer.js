@@ -25,6 +25,22 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     runtime.camera.near = pose.near ?? 0.1; runtime.camera.far = pose.far ?? 2000
     runtime.camera.updateProjectionMatrix(); runtime.controls.update()
   }
+  const remotePosition = new THREE.Vector3(), remoteTarget = new THREE.Vector3(), remoteUp = new THREE.Vector3()
+  function applyCamera(pose, blend = 1) {
+    if (!current || performanceApi.busy) return
+    // A one-shot jump also clears residual damping from the guest's last gesture.
+    if (blend === 1 || modeInput.value !== pose.orbitMode) { runtime.switchOrbitMode(pose.orbitMode); modeInput.value = pose.orbitMode }
+    runtime.camera.position.lerp(remotePosition.fromArray(pose.position), blend)
+    runtime.controls.target.lerp(remoteTarget.fromArray(pose.target), blend)
+    runtime.camera.up.lerp(remoteUp.fromArray(pose.up), blend)
+    if (runtime.camera.up.lengthSq() < 1e-10) runtime.camera.up.copy(remoteUp)
+    runtime.camera.up.normalize()
+    const fov = runtime.camera.fov + (pose.fov - runtime.camera.fov) * blend
+    if (runtime.camera.fov !== fov || runtime.camera.near !== pose.near || runtime.camera.far !== pose.far) {
+      runtime.camera.fov = fov; runtime.camera.near = pose.near; runtime.camera.far = pose.far; runtime.camera.updateProjectionMatrix()
+    }
+    runtime.controls.update()
+  }
   async function loadFile(file) {
     const ticket = ++generation
     if (!file || disposed) return
@@ -76,7 +92,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
   modeInput.addEventListener('change', changeMode)
   canvas.addEventListener('dragover', drag); canvas.addEventListener('drop', drop)
   canvas.addEventListener('dblclick', center)
-  return { loadFile, runtime, performanceApi, get current() { return current }, dispose() {
+  return { loadFile, runtime, performanceApi, applyCamera, captureCamera: () => ({ ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far }), get current() { return current }, dispose() {
     if (disposed) return
     disposed = true; generation++
     performanceApi.dispose()

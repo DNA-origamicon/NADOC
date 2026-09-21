@@ -34,6 +34,10 @@ test('Help creates and copies part-specific links that open independently and re
     await section.getByRole('button', { name: 'Copy link', exact: true }).click()
     const url = await page.evaluate(() => navigator.clipboard.readText())
     expect(url).toBe(await section.locator('input').inputValue())
+    const presenter = section.getByRole('link', { name: 'Open presenter', exact: true })
+    await expect(presenter).toBeVisible()
+    expect(await presenter.getAttribute('href')).toContain('&role=presenter')
+    expect(await presenter.getAttribute('href')).not.toBe(url)
     return url
   }
   const first = await sharePart('alpha')

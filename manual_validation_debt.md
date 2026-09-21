@@ -386,6 +386,19 @@ Local production HTTPS browser check passes password denial/acceptance, cookie
 security, package auto-loading, independent pointer orbit and disconnect. The Help
 menu copy/share/revoke regression passes. Provider approval is complete and a browser loaded Voltron through the public
 relay with normal certificate validation and no prompts. A separate physical
-laptop and four-guest Voltron transfer/GPU measurements remain open. Guests must see no install, account, certificate or file-download
+laptop and four-participant Voltron transfer/GPU measurements remain open. Guests must see no install, account, certificate or file-download
 prompts. Stop and expiry must remove only NADOC's public route while preserving
 the user's private editor route. This step adds zero lines to main.js.
+
+### MV-PRESENTER-PERSPECTIVES — real-device camera sharing (2026-09-20)
+
+The camera-only phase uses a separate presenter invitation with opt-in Jump/Follow.
+Browser tests cover independent guests, direct-input escape, late join, four
+participants, presenter disconnect and guest offline/reconnect. Review Voltron on
+two physical machines over the public route: motion smoothness, sudden changes of
+viewpoint, all three navigation modes, Pause, network interruption, and immediate
+return to guest navigation. Measure independent orbit with incoming camera traffic
+and add an explicitly labeled Follow capture before declaring performance parity.
+Current repeatable captures deliberately exit Follow and pause presenter broadcast;
+they cannot certify Follow FPS. Scientific highlights/assembly identity and
+recorded cube_pore playback remain later milestones. New-phase main.js LOC delta: 0.

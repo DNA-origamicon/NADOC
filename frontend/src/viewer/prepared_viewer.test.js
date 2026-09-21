@@ -43,3 +43,15 @@ it('drops a stale async load without replacing the newest scene or leaking it', 
   expect(older.dispose).toHaveBeenCalledTimes(1)
   viewer.dispose()
 })
+it('applies a shared perspective without changing the snapshot reset pose', async () => {
+  const { viewer, runtime } = setup(), loaded = scene(); loadPreparedScene.mockResolvedValueOnce(loaded)
+  await viewer.loadFile(file)
+  const camera = { position: [30, 40, 50], target: [1, 0, 0], up: [0, 0, 1], fov: 70, near: .2, far: 4000, orbitMode: 'trackball' }
+  viewer.applyCamera(camera)
+  expect(runtime.camera.position.toArray()).toEqual(camera.position)
+  expect(runtime.controls.target.toArray()).toEqual(camera.target)
+  expect(runtime.camera.fov).toBe(70); expect(runtime.switchOrbitMode).toHaveBeenLastCalledWith('trackball')
+  document.querySelector('button').click()
+  expect(runtime.camera.position.toArray()).toEqual(loaded.data.camera.position)
+  expect(loaded.data.camera.fov).toBe(55); viewer.dispose()
+})

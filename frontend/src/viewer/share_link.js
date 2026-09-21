@@ -4,7 +4,7 @@ export function initShareLink({ exportView, document: doc = document, fetch: req
   const dialog = doc.createElement('dialog')
   dialog.id = 'share-link-dialog'
   dialog.style.cssText = 'width:min(680px,90vw);max-height:85vh;overflow:auto;background:#161b22;color:#e6edf3;border:1px solid #484f58;border-radius:10px;padding:22px'
-  dialog.innerHTML = `<h2 style="margin-top:0">Share a prepared view</h2><p>Create an internet link to a snapshot of the current 3D view. Guests need only a browser, the invitation, and its password. Later edits do not change an existing link.</p><p>Keep this PC awake while sharing. Four viewers per link. Static navigation; shared highlights and trajectories are coming later.</p><button data-create>Create link for current view</button> <button data-stop-host>Stop hosting all links</button> <button data-close>Close</button><p data-status role="status"></p><div data-links></div>`
+  dialog.innerHTML = `<h2 style="margin-top:0">Share a prepared view</h2><p>Create an internet link to a snapshot of the current 3D view. Guests need only a browser, the invitation, and its password. Later edits do not change an existing link.</p><p>Keep this PC awake while sharing. Up to four participants, including the presenter. Open presenter to share your perspective; guests choose Jump or Follow. Shared highlights and trajectories are coming later.</p><button data-create>Create link for current view</button> <button data-stop-host>Stop hosting all links</button> <button data-close>Close</button><p data-status role="status"></p><div data-links></div>`
   doc.body.append(dialog)
   const el = selector => dialog.querySelector(selector), status = el('[data-status]'), list = el('[data-links]')
   let busy = false, disposed = false, revision = 0
@@ -25,6 +25,9 @@ export function initShareLink({ exportView, document: doc = document, fetch: req
     const stop = doc.createElement('button'); stop.textContent = 'Stop sharing'
     stop.onclick = async () => { stop.disabled = true; try { await api(`shares/${share.id}`, { method: 'DELETE' }); section.remove(); status.textContent = 'Link stopped. Already downloaded views can remain on guest devices.' } catch (error) { status.textContent = error.message; stop.disabled = false } }
     section.append(title, expiry, url, copy, open, stop)
+    if (share.presenterUrl) {
+      const presenter = doc.createElement('a'); presenter.textContent = 'Open presenter'; presenter.href = share.presenterUrl; presenter.target = '_blank'; presenter.rel = 'noopener noreferrer'; presenter.style.cssText = 'margin:0 12px;color:#58a6ff'; section.append(presenter)
+    }
     if (share.password) {
       const password = doc.createElement('p'); password.textContent = `Meeting password: ${share.password}`; password.dataset.password = share.password
       const invitation = doc.createElement('textarea'); invitation.readOnly = true; invitation.hidden = true; invitation.setAttribute('aria-label', 'Invitation to copy')

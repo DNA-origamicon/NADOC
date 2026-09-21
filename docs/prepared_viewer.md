@@ -62,7 +62,8 @@ The complete phase gates remain open: stable scientific selection references;
 base/domain/cluster inspection; shared assembly shader transforms; all supported
 representations and physical overlays; recorded cube_pore trajectories/graphene/ions;
 package readiness/error UX; long-session and large-design hardware performance;
-join/highlight/jump/follow rooms; meeting-scoped hosting; browser/OS matrix.
+scientific highlight rooms and the browser/OS matrix. Temporary internet hosting
+and camera-only Jump/Follow are implemented; their hardware/WAN acceptance remains open.
 
 An assembly is not intentionally excluded as a product tier. The current package
 prototype rejects unsupported shared assembly shaders because dropping their
@@ -119,9 +120,43 @@ temporary files are removed in `finally`; credential files are pre-created mode0
 Each snapshot gets an independent invite, 96-bit random password, and HttpOnly,
 Secure, SameSite=Strict session cookie. Joining checks the configured HTTPS origin;
 passwords travel in the request body rather than the URL. Join attempts are bounded
-at 60 per minute across the host. Four browser sessions per snapshot, eight
+at 60 per minute across the host. Four participants across the host, including the presenter, eight
 snapshots / 512 MiB aggregate, and the two-hour default lifetime remain enforced.
 Later editor changes do not alter a published snapshot.
+
+### Present a perspective
+
+Use **Open presenter** in the host's Share link dialog, enter a name and the same
+meeting password, then select **Share my perspective**. This opens the frozen
+snapshot rather than sharing an editable document. **Copy invitation** always
+copies the guest link; presenter authority uses a separate secret available only
+through host management. One presenter is allowed per snapshot.
+
+Guests start with independent navigation. **Jump to presenter** moves once;
+**Follow presenter** tracks subsequent camera changes. Dragging, scrolling,
+resetting or changing navigation mode exits Follow before handling the input.
+Pausing, presenter disconnect or guest network loss also exits Follow.
+Reconnection restores the latest state without taking over the guest's camera.
+Closing a browser releases its participant slot after two minutes without a
+heartbeat. Revoking a snapshot ends its event streams immediately.
+
+Camera messages carry the exact package SHA-256 and a monotonically increasing
+sequence. The host validates role, origin, bounds and rate; guests receive bounded
+server-sent events. The presenter coalesces motion into at most ten POST requests
+per second with only one camera request in flight. Following interpolates locally;
+it does not regenerate or transfer geometry. Opening another package disables the
+old presentation channel. This phase does not supply scientific selection or
+base/domain/cluster highlighting.
+
+Starting a performance capture pauses presenter broadcast and exits Follow so the
+repeatable orbit owns the camera. These captures can assess independent navigation
+with incoming room events, but do not measure Follow motion; that measurement is a
+separate acceptance item. Keep canvas dimensions equal when comparing—the room
+toolbar changes available height.
+
+An already running helper retains its original server code and built assets.
+New presenter controls become available in the next hosting session after the
+updated frontend is built. Stop/start invalidates existing invitations.
 
 **Stop sharing** revokes one snapshot; **Stop hosting all links**, expiry, or tunnel
 loss ends the complete session. The helper closes both listeners and its owned
@@ -159,8 +194,8 @@ Use the host PC's actual LAN address for `--bind`. The command prints an invite
 link containing a random secret in its fragment. Guests open the link, enter a
 1–40 character display name, and the design downloads automatically. No NADOC,
 Python, Node, extension, or file picker is needed on their laptop. Only the host
-runs Node. This older LAN-only CLI is optional; the Help menu uses internet sharing. This is a static viewing test: guests orbit independently; names do
-not yet provide a participant roster or shared presenter state.
+runs Node. This older LAN-only CLI is optional; the Help menu uses internet sharing.
+The CLI prints a guest invitation; use the Help-menu flow for presenter access.
 
 The process allows four browser sessions (including any presenter browser),
 expires after two hours by default (maximum eight), and stops immediately with
@@ -168,7 +203,7 @@ Ctrl-C. A restart creates a new invite and forgets prior sessions. Cookie-based
 session credentials protect the package; the host exposes no editor routes,
 workspace listing, arbitrary files, or write operations. Reloading and rejoining
 in the same browser reuses its slot. Slots otherwise remain occupied until the
-host ends; participant management is deferred.
+browser closes for two minutes without a heartbeat; explicit participant management is deferred.
 
 This initial transport is **HTTP on a trusted local network**, not internet
 hosting or encrypted access. Anyone on that network who has the invite can join;

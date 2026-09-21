@@ -1,20 +1,16 @@
 # Standalone viewer and presentations: phased development plan
 
-Status: Phase 0 committed; Phase 1 shared runtime and an experimental Phase 2 static
-package/viewer are in development. Product decisions below were accepted
-on 2026-09-20. Controlled production A/B for static Voltron on the user's RTX 2080
-SUPER passes the initial gates. Large assemblies, trajectories and presentation
-performance remain outstanding; do not claim their gates have passed.
+Status (2026-09-20): checkpoint `302d50f6` is committed and pushed. Prepared
+static snapshots, standalone viewing, and temporary password-protected public HTTPS
+sharing are implemented. The transport milestone was brought forward from Phase 4.
+Camera-only presenter Jump/Follow is now implemented and locally browser-tested.
+The user approved the browser-only remote guest experience. Scientific-selection,
+representation/assembly parity and recorded-playback milestones remain open.
 
-First checkpoint: Process Log capture and baseline worktree are available. One
-user GPU reference was recorded (24.98 FPS; p95 46.5 ms). Subsequent controlled A/B
-records 42.34/42.78 median FPS and 26.0/26.6 ms p95; all overview screenshots match.
-See [the production comparison](audits/viewer_ab_production_20260920/README.md),
-`viewer_performance_manual.md` and
-`viewer_dependency_inventory.md`. The subsequent `.nadocview`/`viewer.html` prototype
-is described in [prepared viewer notes](prepared_viewer.md). Its performance and full
-parity gates are separate from that earlier A/B result. Recorded-frame delivery,
-scientific selection, and meeting hosting are not implemented at this checkpoint.
+The earlier controlled RTX 2080 SUPER A/B (42.34/42.78 median FPS; 26.0/26.6 ms p95)
+covered decoder extraction only. It does not certify the prepared viewer, room
+traffic, large assemblies or trajectories. See [production comparison](audits/viewer_ab_production_20260920/README.md),
+[prepared viewer](prepared_viewer.md), and [public HTTPS validation](audits/internet_viewer_20260920/README.md).
 
 Development branch: `feature/standalone-viewer-presentations`.
 Baseline commit: `cce80858ff528a2648cba3f18351685f75dc673c` (master at branch creation).
@@ -36,13 +32,12 @@ files; automated performance runs use separate worktrees, ports, and scratch dat
 
 ## Accepted scope (2026-09-20)
 
-LAN prototype update: the static package now has a separate temporary HTTP host,
-random invite/name-entry flow, four-browser limit and process expiry. This enables
-a trusted same-network laptop test. Help → Share link now packages the current
-view and manages independent part-specific links; the Windows host/control path
-is running after scoped firewall approval.
-It does not complete Phase 4's HTTPS/remote transport or Phase 3's shared state.
-See `prepared_viewer.md` and `audits/prepared_lan_20260920/README.md`.
+Current framework: a background helper on the personal/office PC owns an
+expiring prepared-viewer listener and a Tailscale Funnel HTTPS route. Guests on
+unrelated networks enter a display name and meeting password in an ordinary
+browser, without installing software, signing into a provider, or changing network
+settings. Setup/account approval belongs only on the host. LAN HTTP remains an
+optional manual path, not the default guest experience.
 
 1. Prepared viewer packages first; raw legacy designs without Python and browser
    scientific geometry generation are deferred.
@@ -54,7 +49,7 @@ See `prepared_viewer.md` and `audits/prepared_lan_20260920/README.md`.
    recorded frames with bounded buffering and shared presenter playback state;
    guests keep independent orbiting. Other recommended capabilities stay on the
    roadmap, subject to parity inventory. Guest devices do not run simulations.
-4. Invite link plus display name; host-controlled meeting lifetime. Stop hosting
+4. HTTPS invite link plus generated password and display name; host-controlled meeting lifetime. Stop hosting
    invalidates credentials and stops serving packages/frames. Already-downloaded
    data may remain on a guest device; expiry cannot revoke that copy.
 5. Host only from a personal or office PC. No permanent cloud application or data
@@ -67,10 +62,31 @@ viewing and `workspace/cube_pore.nadoc` for graphene/ion-transport trajectories.
 See `viewer_dependency_inventory.md` for hashes and available completed jobs.
 A large assembly fixture and recorded-playback captures remain outstanding. Bundled
 examples validate software but cannot substitute for those performance results.
-Remote access needs a meeting-scoped HTTPS/WSS route, such as a tunnel to a
-restricted presentation listener. Choose transport/provider and confirm office
-network constraints before remote rollout. Never forward the full editor API.
-A transport relay is distinct from persistent cloud application/data hosting.
+Public transport is implemented with Tailscale Funnel on HTTPS port 443, proxying only
+the guest loopback listener on port 5183. Local host management uses a separate listener on port 5184
+and file-only credentials. Existing private editor routes are preserved; no router
+forwarding or incoming Node firewall exception is required. The managed relay is
+third-party infrastructure, not persistent NADOC cloud application/data hosting.
+Guests never need Tailscale. Host shutdown/expiry revokes sessions and stops its
+owned tunnel; a downloaded snapshot cannot be retracted.
+
+## Execution order after the HTTPS checkpoint
+
+| Milestone | Status / exit evidence |
+| --- | --- |
+|0: Baseline and diagnostics | Done for static Voltron decoder extraction; assembly/trajectory fixtures still needed. |
+|1/2A: Shared runtime and frozen packages | Prototype delivered; public Voltron loading and same-pose image parity verified. Full parity and hardware A/B remain gates. |
+|4A: Temporary internet delivery | Implemented and externally exercised; HTTPS, password, hidden host, expiry, revoke, isolated management. |
+|3A: Presenter perspectives | Implemented: separate presenter authority, snapshot-bound camera state, opt-in Jump/Follow, late join and reconnect. Browser/host evidence is in the [perspectives audit](audits/presenter_perspectives_20260920/README.md); real-GPU/WAN acceptance remains open. |
+|2B/3B: Scientific selection and highlights | Stable base/domain/cluster/object and assembly-instance references; presenter selection highlights distinct from guest selection. Connect editor selection only when snapshot identity matches. |
+|2C: Full/assembly parity | Shared-transform shader adapters, physical overlays, complete Full proteins/nanoparticles, unsupported-asset feedback and representation readiness. |
+|3C: Recorded simulations | Prepared cube_pore frames, topology/content hashes, bounded buffering and coordinated playback; Full first, atomistic second. |
+|4B: Acceptance | Four participants including presenter; Windows/macOS/Linux browser matrix, WAN transfer/reconnect and real-GPU A/B under presentation traffic. |
+|5: Browser geometry generation | Deferred unless raw-design opening without preparation is requested. |
+
+A milestone may ship independently, but no earlier open parity/performance gate is
+implicitly passed by later connectivity work. Validate one coherent slice, retain
+reviewable evidence, and checkpoint it separately.
 
 ## Architecture boundaries
 
@@ -139,8 +155,16 @@ performance checks pass. Raw legacy designs require preparation. Optional omitte
 
 - Create/end rooms; separate presenter authority from guest identity and permissions.
 - Join by link/name; snapshot revision is fixed during a session initially.
-- Relay object references, camera poses, and room state through WebSockets.
+- Start with server-sent state events over HTTPS and coalesced presenter POSTs.
+  This fits four participants without adding a server WebSocket dependency. Keep
+  the state contract transport-independent for future WSS if measurements justify it.
   Validate roles/messages server-side; rate-limit and coalesce transient updates.
+- 3A uses a separate presenter invitation, available only in the local host UI.
+  Presenter mode opens the same immutable snapshot as guests. Guest invitations
+  cannot acquire presenter authority or post camera changes. Guests begin free;
+  Jump is one-shot, Follow is opt-in, and direct camera input exits Follow.
+- 3B adds semantic highlights after stable selection references exist. A spatial
+  camera target is not a base/domain/cluster identity and must not be labeled as one.
 - Implement agreed highlight/jump/follow behavior without camera feedback loops.
 - Handle late join, reconnection, event ordering, host disconnect/rejoin, and expiry.
   Network loss must not prevent local orbiting of an already loaded scene.
@@ -255,21 +279,4 @@ Keep benchmarks isolated from the user's running NADOC server and workspace data
 Use additive, versioned packages; never rewrite original design files as a migration
 side effect. Keep the original viewer runnable until final acceptance. Remove any
 temporary dual-path switch only after regression gates and manual review pass.
-No deployment or geometry-engine rewrite occurs as part of this planning task.
-
-## Internet sharing requirement — 2026-09-20
-
-Guests may be on unrelated networks across the country and must use an ordinary
-HTTPS browser link with name/password entry only: no guest installation, account,
-VPN, certificate warning, file handling, or firewall setup. The default transport
-is therefore a meeting-scoped managed HTTPS tunnel from the presenter's PC. LAN
-sharing remains an optional manual path. Third-party relay infrastructure is used;
-no permanent NADOC content server is required. Node/CLI/account setup belongs only
-on the host. Prepared snapshots and independent navigation are the current scope;
-shared highlights, jump/follow and recorded simulation playback retain their phases.
-
-Implementation adds an isolated public listener, a separate local management port,
-generated per-snapshot passwords, secure cookies, bounded join attempts, hidden
-Windows helper, and owned foreground Funnel lifecycle. Provider account approval is complete. The public-relay browser check passed with ordinary TLS validation. The
-real-device acceptance matrix and performance gates remain open. The existing
-private editor route must not be changed or made public.
+Geometry generation remains in Python; the prepared renderer and transport do not rewrite scientific geometry.

@@ -2,7 +2,8 @@
 
 Checkpoint: Phase 0 committed as `978e5dda`; shared runtime and experimental static
 prepared packages now extend the decoder extraction. `viewer.html` opens supported
-visible-scene snapshots without an editor backend. Full phase acceptance remains open.
+visible-scene snapshots without an editor backend. Temporary public HTTPS sharing
+and camera-only presenter rooms extend that snapshot path. Full phase acceptance remains open.
 
 | Component | Current dependency | Standalone boundary / acceptance |
 | --- | --- | --- |
@@ -96,3 +97,19 @@ has no editor/Python dependency. Shared highlights, recorded trajectories and
 HTTPS remote transport remain outside this static LAN checkpoint. See
 `audits/share_link_menu_20260920/README.md` for actual clipboard/guest-flow checks,
 Windows launch fixes, and the separate backend-test limitations.
+
+## Internet and presenter checkpoints
+
+The LAN checkpoint above is historical. The Help menu now starts temporary public
+HTTPS sharing through Tailscale Funnel, with a generated password, isolated guest
+and management listeners, and hidden native Windows hosting. See
+`audits/internet_viewer_20260920/README.md`; committed and pushed as `302d50f6`.
+
+Camera-only rooms add `meeting_presentation.js` on the guest/presenter side and
+`prepared_room_state.mjs` on the host. A package-byte SHA-256 binds camera state to
+the immutable exported view. Separate presenter credentials authorize coalesced
+POST updates; ordered server-sent events synchronize willing guests. No scientific
+geometry, editor-store subscriptions, assembly transforms or main.js wiring change.
+The package still lacks stable scientific selection references; camera targets
+cannot substitute for base/domain/cluster identity. That contract is the next
+dependency before presenter selection highlights or recorded-data playback.

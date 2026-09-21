@@ -5,6 +5,42 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createPreparedHost } from './prepared_view_host.mjs'
 
+test('only the presenter can publish; late guests receive the latest snapshot-bound camera', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-room-test-')); t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
+  let now = Date.now()
+  const host = await createPreparedHost({ dist: root, now: () => now }); t.after(host.stop)
+  await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
+  const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
+  const share = host.createShare(Buffer.from('NADOCVW1room')), endpoint = base + `/meeting/${share.id}`
+  const joinRoom = (url, role = 'guest') => fetch(endpoint + '/join', { method: 'POST', headers: { Origin: base }, body: JSON.stringify({ token: new URLSearchParams(new URL(url).hash.slice(1)).get('invite'), role, name: role }) })
+  assert.equal((await joinRoom(share.url, 'presenter')).status, 403)
+  const presenter = await joinRoom(share.presenterUrl, 'presenter'), guest = await joinRoom(share.url)
+  const pc = presenter.headers.get('set-cookie').split(';')[0], gc = guest.headers.get('set-cookie').split(';')[0]
+  assert.equal((await presenter.json()).role, 'presenter')
+  assert.equal((await joinRoom(share.presenterUrl, 'presenter')).status, 409)
+  const camera = { position: [10, 0, 30], target: [0, 0, 0], up: [0, 1, 0], fov: 55, near: .1, far: 2000, orbitMode: 'orbit' }
+  const post = (cookie, revision = share.revision) => fetch(endpoint + '/camera', { method: 'POST', headers: { Origin: base, Cookie: cookie }, body: JSON.stringify({ revision, camera }) })
+  assert.equal((await post(gc)).status, 403)
+  assert.equal((await post(pc, 'other')).status, 400)
+  assert.equal((await post(pc)).status, 200)
+  assert.equal((await fetch(endpoint + '/events')).status, 401)
+  const stream = await fetch(endpoint + '/events', { headers: { Cookie: gc } }), reader = stream.body.getReader()
+  const first = new TextDecoder().decode((await reader.read()).value)
+  assert.match(first, /"sequence":1/); assert.match(first, /"position":\[10,0,30\]/)
+  assert.ok(!first.includes(new URL(share.presenterUrl).hash)); assert.ok(!first.includes('presenterToken'))
+  await fetch(endpoint + '/pause', { method: 'POST', headers: { Origin: base, Cookie: pc } })
+  assert.match(new TextDecoder().decode((await reader.read()).value), /"presenting":false/)
+  await reader.cancel()
+  await joinRoom(share.url); await joinRoom(share.url)
+  assert.equal((await joinRoom(share.url)).status, 409)
+  const second = host.createShare(Buffer.from('NADOCVW1second'))
+  const joinOther = () => fetch(base + `/meeting/${second.id}/join`, { method: 'POST', headers: { Origin: base }, body: JSON.stringify({ token: new URLSearchParams(new URL(second.url).hash.slice(1)).get('invite'), name: 'Other room' }) })
+  assert.equal((await joinOther()).status, 409) // limit is across snapshots
+  now += 120001
+  assert.equal((await joinOther()).status, 200) // disconnected leases are reclaimed
+})
+
 test('internet guests require the password and HTTPS origin; management is on a separate listener', async t => {
   const root = await mkdtemp(join(tmpdir(), 'nadoc-host-test-')); t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')

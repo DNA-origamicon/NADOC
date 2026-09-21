@@ -1,4 +1,5 @@
 /** Invite-only loading for the temporary static host; no editor API dependency. */
+import { mountMeetingPresentation } from './meeting_presentation.js'
 export function mountMeetingJoin({ viewer, document: doc = document, location: loc = location, fetch: request = fetch, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   const params = new URLSearchParams(loc.hash.slice(1)), token = params.get('invite')
   const room = params.get('room')
@@ -12,7 +13,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   if (passwordRow) passwordRow.hidden = !needsPassword
   if (passwordField) { passwordField.required = needsPassword; passwordField.value = '' }
   const abort = new AbortController()
-  let disposed = false, timer = null, busy = false
+  let disposed = false, timer = null, busy = false, disconnectPresentation = () => {}
   doc.querySelector('.open').hidden = true
   dialog.showModal()
   const preventClose = event => event.preventDefault()
@@ -23,7 +24,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
     busy = true; button.disabled = true; error.textContent = ''
     try {
       const joined = await request(`${base}/join`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, name: doc.getElementById('guest-name').value.trim(), ...(needsPassword ? { password: passwordField?.value.trim() ?? '' } : {}) }), signal: abort.signal })
+        body: JSON.stringify({ token, name: doc.getElementById('guest-name').value.trim(), ...(params.get('role') === 'presenter' ? { role: 'presenter' } : {}), ...(needsPassword ? { password: passwordField?.value.trim() ?? '' } : {}) }), signal: abort.signal })
       const details = await joined.json()
       if (!joined.ok) throw new Error(details.error || 'Could not join this session')
       button.textContent = 'Loading design…'
@@ -37,22 +38,30 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
       const loaded = await viewer.loadFile(new File([blob], 'Shared design.nadocview'))
       if (!loaded) throw new Error(status.textContent || 'Could not open the shared design')
       if (disposed) return
+      if (details.revision && viewer.current?.packageHash && viewer.current.packageHash !== details.revision) throw new Error('Downloaded design does not match this invitation')
       identity.textContent = `${details.name} · Private test`
       if (passwordField) passwordField.value = ''
       dialog.close()
+      if (details.role && details.revision) disconnectPresentation = mountMeetingPresentation({ viewer, base, role: details.role, revision: details.revision, room: room || 'default', document: doc, fetch: request })
       timer = repeat(async () => {
         try {
           const response = await request(`${base}/status`, { signal: abort.signal })
+          if (response.status === 401 || response.status === 410) {
+            if (!disposed) { identity.textContent = `${details.name} · Session ended`; cancel(timer); timer = null; disconnectPresentation() }
+            return
+          }
           if (!response.ok) throw new Error('ended')
+          if (!disposed) identity.textContent = `${details.name} · Private test`
         } catch {
-          if (!disposed) { identity.textContent = `${details.name} · Host disconnected or session ended`; cancel(timer); timer = null }
+          // A transient outage must not disable EventSource's reconnect or local navigation.
+          if (!disposed) identity.textContent = `${details.name} · Host disconnected; reconnecting…`
         }
       }, 10000)
     } catch (reason) { if (!disposed) error.textContent = reason.message }
     finally { busy = false; if (!disposed) { button.disabled = false; button.textContent = 'Join view' } }
   }
   form.addEventListener('submit', submit)
-  return () => { disposed = true; abort.abort(); if (timer) cancel(timer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
+  return () => { disposed = true; abort.abort(); disconnectPresentation(); if (timer) cancel(timer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
 }
 
 /** A second invite can change only the fragment in an already-open viewer tab. */

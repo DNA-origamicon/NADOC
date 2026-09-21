@@ -27,6 +27,19 @@ it('keeps the prompt open and permits retry after a denied join', async () => {
   expect(v.viewer.loadFile).not.toHaveBeenCalled(); expect(v.dialog.close).not.toHaveBeenCalled()
   expect(document.querySelector('button').disabled).toBe(false); v.dispose()
 })
+it('keeps monitoring across transient outages and stops only on confirmed revocation', async () => {
+  const v = setup([{ ok: true, json: async () => ({ name: 'Alice' }) }, { ok: true, headers: new Headers({ 'Content-Length': '8' }), blob: async () => new Blob(['NADOCVW1']) }])
+  v.submit(); await vi.waitFor(() => expect(v.repeat).toHaveBeenCalledOnce())
+  const poll = v.repeat.mock.calls[0][0]
+  v.fetch.mockRejectedValueOnce(new Error('Network down')); await poll()
+  expect(document.querySelector('#guest').textContent).toContain('reconnecting')
+  expect(v.cancel).not.toHaveBeenCalled()
+  v.fetch.mockResolvedValueOnce({ ok: true }); await poll()
+  expect(document.querySelector('#guest').textContent).toBe('Alice · Private test')
+  v.fetch.mockResolvedValueOnce({ ok: false, status: 410 }); await poll()
+  expect(v.cancel).toHaveBeenCalledWith(1); expect(document.querySelector('#guest').textContent).toContain('Session ended')
+  v.dispose()
+})
 it('does not dismiss the join prompt when package decoding fails', async () => {
   const v = setup([{ ok: true, json: async () => ({ name: 'Alice' }) }, { ok: true, headers: new Headers({ 'Content-Length': '8' }), blob: async () => new Blob(['NADOCVW1']) }])
   v.viewer.loadFile.mockResolvedValue(false); v.submit()

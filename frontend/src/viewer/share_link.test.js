@@ -27,7 +27,7 @@ it('does not start hosting when the current view cannot be exported', async () =
   ui.dispose()
 })
 it('copies a complete internet invitation with a separate password', async () => {
-  const share = { id: 'a'.repeat(32), title: 'Voltron', url: 'https://meeting.example/viewer.html#invite=token&password=required', password: 'a-secure-generated-password', expiresAt: Date.now() + 60000 }
+  const share = { id: 'a'.repeat(32), title: 'Voltron', url: 'https://meeting.example/viewer.html#invite=token&password=required', presenterUrl: 'https://meeting.example/viewer.html#invite=presenter-secret&role=presenter', password: 'a-secure-generated-password', expiresAt: Date.now() + 60000 }
   const clipboard = { writeText: vi.fn().mockResolvedValue() }, fetch = vi.fn(async () => ({ ok: true, json: async () => ({ shares: [share] }) }))
   const ui = initShareLink({ exportView: vi.fn(), fetch, clipboard }); document.querySelector('dialog').showModal = vi.fn(); ui.show()
   await vi.waitFor(() => expect(document.querySelector('[data-password]')?.textContent).toContain(share.password))
@@ -35,5 +35,7 @@ it('copies a complete internet invitation with a separate password', async () =>
   await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenCalledOnce())
   expect(clipboard.writeText.mock.calls[0][0]).toContain(share.url)
   expect(clipboard.writeText.mock.calls[0][0]).toContain(`Meeting password: ${share.password}`)
+  expect(clipboard.writeText.mock.calls[0][0]).not.toContain('presenter-secret')
+  expect([...document.querySelectorAll('a')].find(link => link.textContent === 'Open presenter').href).toBe(share.presenterUrl)
   expect(share.url).not.toContain(share.password); ui.dispose()
 })

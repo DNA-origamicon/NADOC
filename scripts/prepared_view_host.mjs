@@ -5,6 +5,7 @@ import { readFile, readdir, writeFile, unlink } from 'node:fs/promises'
 import { resolve, join, basename } from 'node:path'
 import { randomBytes, timingSafeEqual, createHash } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
+import { createPresentationState } from './prepared_room_state.mjs'
 
 const same = (a, b) => typeof a === 'string' && /^[a-f0-9]{64}$/.test(a) && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 const mime = name => name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.html') ? 'text/html' : name.endsWith('.png') ? 'image/png' : name.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream'
@@ -20,11 +21,14 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const invite = randomBytes(32).toString('hex'), expiresAt = now() + lifetimeMs
   const rooms = new Map(), controlToken = randomBytes(32).toString('hex')
   let publicBase = publicOrigin
-  const summary = room => ({ id: room.id, title: room.title, expiresAt, ...(room.password ? { password: room.password } : {}), url: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.invite}${room.password ? '&password=required' : ''}` })
+  const summary = room => ({ id: room.id, title: room.title, revision: room.revision, expiresAt, ...(room.password ? { password: room.password } : {}),
+    url: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.invite}${room.password ? '&password=required' : ''}`,
+    presenterUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.presenterToken}&role=presenter${room.password ? '&password=required' : ''}` })
   function createShare(scene, title = 'Shared design', id = randomBytes(16).toString('hex')) {
     if (scene.length > 512 * 1024 * 1024 || scene.subarray(0, 8).toString() !== 'NADOCVW1') throw new Error('Choose a prepared .nadocview package (maximum 512 MiB)')
     if (rooms.size >= 8 || [...rooms.values()].reduce((sum, room) => sum + room.scene.length, scene.length) > 512 * 1024 * 1024) throw new Error('Share capacity reached. Stop an existing share first (eight snapshots / 512 MiB).')
-    const room = { id, title: String(title).slice(0, 200), scene, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), sessions: new Map() }
+    const revision = createHash('sha256').update(scene).digest('hex')
+    const room = { id, revision, title: String(title).slice(0, 200), scene, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), presenterToken: randomBytes(32).toString('hex'), sessions: new Map(), presentation: createPresentationState({ id, revision, now }) }
     rooms.set(id, room)
     return summary(room)
   }
@@ -42,7 +46,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
       if (req.method === 'GET' && route === '/host/shares') return send(200, { expiresAt, shares: [...rooms.values()].map(summary) })
       if (req.method === 'DELETE' && /^\/host\/shares\/[a-f0-9]{32}$/.test(route)) {
-        rooms.delete(route.split('/').pop()); return send(200, { ok: true })
+        const id = route.split('/').pop(); rooms.get(id)?.presentation.close(); rooms.delete(id); return send(200, { ok: true })
       }
       if (req.method === 'POST' && route === '/host/stop') { send(200, { ok: true }); setTimeout(stop, 100); return }
       if (req.method === 'POST' && route === '/host/shares') {
@@ -55,7 +59,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       return send(404, { error: 'Unknown host action' })
     }
     if (publicOrigin && management) return send(404, { error: 'Not found' })
-    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status)$/)
+    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|pause)$/)
     const room = rooms.get(match ? match[1] : 'default')
     if (match) route = `/meeting/${match[2]}`
     if (route?.startsWith('/meeting/') && !room) return send(410, { error: 'This share has ended.' })
@@ -71,23 +75,48 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         let body = '', bytes = 0
         for await (const chunk of req) { bytes += chunk.length; if (bytes > 2048) { send(413, { error: 'Request too large' }); return } body += chunk.toString() }
         const value = JSON.parse(body)
-        if (!same(value.token, room.invite)) return send(403, { error: 'Invalid or expired invite.' })
+        const role = value.role === 'presenter' ? 'presenter' : 'guest'
+        if (!same(value.token, role === 'presenter' ? room.presenterToken : room.invite)) return send(403, { error: 'Invalid or expired invite.' })
         // Generated passwords contain 96 bits of entropy; compare fixed-size hashes.
         if (room.password && (typeof value.password !== 'string' || !timingSafeEqual(createHash('sha256').update(value.password).digest(), createHash('sha256').update(room.password).digest()))) return send(403, { error: 'Incorrect meeting password.' })
         const name = typeof value.name === 'string' ? value.name.trim() : ''
         if (!name || name.length > 40 || /[\x00-\x1f\x7f]/.test(name)) return send(400, { error: 'Enter a display name of 1–40 characters.' })
         const previous = req.headers.cookie?.match(cookiePattern)?.[1]
-        if (!sessions.has(previous) && sessions.size >= maxGuests) return send(409, { error: 'This test session is full (four browsers).' })
+        // Four participants across the host, including the presenter. Closed tabs
+        // release their leases after two minutes without an authenticated heartbeat.
+        for (const r of rooms.values()) for (const [key, session] of r.sessions) if (now() - session.seenAt > 120000) r.sessions.delete(key)
+        if (role === 'presenter' && [...sessions].some(([key, session]) => session.role === 'presenter' && key !== previous)) return send(409, { error: 'A presenter is already connected to this view.' })
+        if (!sessions.has(previous) && [...rooms.values()].reduce((n, r) => n + r.sessions.size, 0) >= maxGuests) return send(409, { error: 'This presentation is full (four participants including the presenter).' })
         const id = sessions.has(previous) ? previous : randomBytes(32).toString('hex')
-        sessions.set(id, name)
-        return send(200, { name, expiresAt }, 'application/json', { 'Set-Cookie': `${cookieName}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(1, Math.floor((expiresAt - now()) / 1000))}${publicOrigin ? '; Secure' : ''}` })
+        sessions.set(id, { name, role, seenAt: now() })
+        return send(200, { name, role, revision: room.revision, expiresAt }, 'application/json', { 'Set-Cookie': `${cookieName}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(1, Math.floor((expiresAt - now()) / 1000))}${publicOrigin ? '; Secure' : ''}` })
       } catch { return send(400, { error: 'Invalid join request.' }) }
     }
+    const sessionId = req.headers.cookie?.match(cookiePattern)?.[1], session = sessions?.get(sessionId)
+    if (session) session.seenAt = now()
+    if (req.method === 'POST' && (route === '/meeting/camera' || route === '/meeting/pause')) {
+      if (req.headers.origin !== (publicOrigin || `http://${req.headers.host}`) || session?.role !== 'presenter') return send(403, { error: 'Presenter access required' })
+      if (route === '/meeting/pause') { room.presentation.pause(); return send(200, { ok: true }) }
+      try {
+        const chunks = []; let size = 0
+        for await (const chunk of req) { size += chunk.length; if (size > 2048) return send(413, { error: 'Camera message too large' }); chunks.push(chunk) }
+        return send(200, room.presentation.publish(JSON.parse(Buffer.concat(chunks))))
+      } catch (error) { return send(error.message.startsWith('Too many') ? 429 : 400, { error: error.message }) }
+    }
     if (req.method !== 'GET') return send(405, { error: 'Read-only viewer' }, 'application/json', { Allow: 'GET, POST' })
-    if (route === '/meeting/scene' || route === '/meeting/status') {
-      const id = req.headers.cookie?.match(cookiePattern)?.[1]
-      if (!sessions.has(id)) return send(401, { error: 'Join with the invite link first.' })
-      if (route === '/meeting/status') return send(200, { name: sessions.get(id), expiresAt })
+    if (route === '/meeting/scene' || route === '/meeting/status' || route === '/meeting/events') {
+      if (!session) return send(401, { error: 'Join with the invite link first.' })
+      if (route === '/meeting/status') return send(200, { name: session.name, role: session.role, revision: room.revision, expiresAt, presentation: room.presentation.snapshot() })
+      if (route === '/meeting/events') {
+        res.writeHead(200, { ...headers, 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' })
+        room.presentation.subscribe(res, { presenter: session.role === 'presenter' })
+        const heartbeat = setInterval(() => {
+          if (sessions.get(sessionId) !== session) { res.end(); return }
+          session.seenAt = now(); if (!res.write(': heartbeat\n\n')) res.destroy()
+        }, 10000)
+        res.on('close', () => { clearInterval(heartbeat) })
+        return
+      }
       return send(200, room.scene, 'application/octet-stream', { 'Content-Length': room.scene.length })
     }
     const key = route === '/' ? '/viewer.html' : route
@@ -98,7 +127,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const controlServer = publicOrigin ? http.createServer(handler(true)) : null
   server.requestTimeout = 15000; server.headersTimeout = 10000
   if (controlServer) { controlServer.requestTimeout = 15000; controlServer.headersTimeout = 10000 }
-  const stop = () => { closed = true; rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); listener?.closeAllConnections() } }
+  const stop = () => { closed = true; for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); listener?.closeAllConnections() } }
   return { server, controlServer, invite, expiresAt, stop, controlToken, createShare, setPublicBase: value => { if (publicOrigin && value !== publicOrigin) throw new Error('Public origin is fixed'); publicBase = value } }
 }
 
