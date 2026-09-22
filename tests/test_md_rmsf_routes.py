@@ -25,8 +25,9 @@ def test_rmsf_atomistic_reorders_shared_inputs_for_analysis(monkeypatch):
 
     response = client.post("/api/md/jobs/J/rmsf-atomistic")
     assert response.status_code == 200
-    assert seen["fn"] == "md_rmsf_atomistic"
-    assert seen["args"] == (
+    assert seen["fn"] == "md_flex_analysis"
+    assert seen["args"][0] == "md_rmsf_atomistic"
+    assert seen["args"][1] == (
         "job.psf",
         [("prod", "production", "prod.dcd")],
         "job.pdb",
@@ -54,8 +55,9 @@ def test_rmsf_surface_reorders_inputs_and_appends_surface_params(monkeypatch):
         },
     )
     assert response.status_code == 200
-    assert seen["fn"] == "md_rmsf_surface"
-    assert seen["args"] == (
+    assert seen["fn"] == "md_flex_analysis"
+    assert seen["args"][0] == "md_rmsf_surface"
+    assert seen["args"][1] == (
         "job.psf",
         [("prod", "production", "prod.dcd")],
         "job.pdb",
@@ -119,3 +121,32 @@ def test_photoproduct_progress_route_reports_inactive_without_worker():
     response = client.get("/api/md/jobs/no-such-worker/photoproduct-progress")
     assert response.status_code == 200
     assert response.json() == {"active": False}
+
+
+def test_flex_progress_is_scoped_to_job_and_representation(monkeypatch, tmp_path):
+    path = tmp_path / 'progress.json'
+    path.write_text('{"phase":"atomistic_average","done":30,"total":150}')
+    monkeypatch.setitem(routes_md._FLEX_PROGRESS_PATHS, ('J', 'rmsf-atomistic'), path)
+    assert client.get('/api/md/jobs/J/flex-progress?kind=rmsf-atomistic').json() == {
+        'active': True, 'phase': 'atomistic_average', 'done': 30, 'total': 150,
+    }
+    assert client.get('/api/md/jobs/J/flex-progress').json() == {'active': False}
+    assert client.get('/api/md/jobs/other/flex-progress?kind=rmsf-atomistic').json() == {'active': False}
+
+
+def test_flex_progress_files_are_removed_on_failure(monkeypatch):
+    import asyncio
+    from pathlib import Path
+    import pytest
+    paths = []
+
+    async def fail(_request, _job, _kind, _fn, args, **_kwargs):
+        paths.append(Path(args[-1]))
+        assert paths[-1].exists()
+        raise RuntimeError('worker failed')
+
+    monkeypatch.setattr(routes_md, '_run_md_analysis', fail)
+    with pytest.raises(RuntimeError, match='worker failed'):
+        asyncio.run(routes_md._run_md_flex(None, 'J', 'rmsf', 'md_rmsf', ()))
+    assert not paths[0].exists()
+    assert ('J', 'rmsf') not in routes_md._FLEX_PROGRESS_PATHS

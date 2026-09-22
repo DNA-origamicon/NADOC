@@ -1405,6 +1405,7 @@ async function main() {
   // reused for NAMD jobs without touching the validated oxDNA controller.
   const mdViz = initOxdnaDisplay({
     designRenderer, api: mdVizApiAdapter(api), proteinRenderer,
+    onRmsfProgress: detail => window.dispatchEvent(new CustomEvent('nadoc:md-flex-progress', { detail })),
     setDesignVisible: _setSimulationVisualizationVisible,
     restoreDesignVisible: _restoreNativeAfterSimulation,
     onOccupancyClear:     () => occupancyOverlay.clear(),

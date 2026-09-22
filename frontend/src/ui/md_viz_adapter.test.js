@@ -63,9 +63,9 @@ describe('mdVizApiAdapter', () => {
     const api = { getMdRmsfAtomistic: vi.fn(), getMdRmsfSurface: vi.fn() }
     const a = mdVizApiAdapter(api)
     a.getOxdnaRmsfAtomistic('J1', { align: true })
-    expect(api.getMdRmsfAtomistic).toHaveBeenCalledWith('J1')
+    expect(api.getMdRmsfAtomistic).toHaveBeenCalledWith('J1', undefined)
     a.getOxdnaRmsfSurface('J1', { probe_radius: 0.3 }, { align: true })
-    expect(api.getMdRmsfSurface).toHaveBeenCalledWith('J1', { probe_radius: 0.3 })
+    expect(api.getMdRmsfSurface).toHaveBeenCalledWith('J1', { probe_radius: 0.3 }, undefined)
   })
 
   // ── Contract test: the REAL controller, not a hand-written stand-in ──────────

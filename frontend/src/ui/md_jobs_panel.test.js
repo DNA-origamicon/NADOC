@@ -1700,6 +1700,38 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     return panel
   }
 
+  it('keeps the flex bar active through atom mapping and reuses it on representation changes', async () => {
+    for (const [id, tag] of Object.entries({ 'md-jobs-flex-toggle': 'input', 'md-jobs-flex-bar': 'div', 'md-jobs-flex-status': 'div' })) {
+      const el = document.createElement(tag)
+      el.id = id
+      document.body.append(el)
+    }
+    let finish
+    viz.displayRmsf = vi.fn(() => new Promise(resolve => { finish = resolve }))
+    await openWithJob()
+    const toggle = $('md-jobs-flex-toggle')
+    toggle.checked = true
+    toggle.dispatchEvent(new Event('change'))
+    expect(viz.displayRmsf).toHaveBeenCalledWith('J9', { awaitHeavy: true })
+    const emit = detail => window.dispatchEvent(new CustomEvent('nadoc:md-flex-progress', {
+      detail: { jobId: 'J9', ...detail },
+    }))
+    emit({ phase: 'atomistic_average', done: 30, total: 150 })
+    const bar = $('md-jobs-flex-bar')
+    expect(bar.querySelector('[role="progressbar"]').getAttribute('aria-valuenow')).toBe('20')
+    expect(bar.textContent).toContain('30/150')
+    expect(bar.textContent).not.toContain('ready')
+    finish({ ok: true, min: 0, max: 1, n: 10, nFrames: 150 })
+    await flushMicro()
+    expect(bar.textContent).toContain('ready')
+    emit({ phase: 'atomistic_setup', done: 0, total: 1 })
+    expect(bar.textContent).toContain('Mapping simulation atoms')
+    toggle.checked = false
+    toggle.dispatchEvent(new Event('change'))
+    emit({ phase: 'display', done: 1, total: 1, complete: true })
+    expect(bar.style.display).toBe('none')
+  })
+
   it('shows the automatically selected surface job and hides it on deselection', async () => {
     const surfaceToggle = document.createElement('input')
     surfaceToggle.id = 'md-surface-enable'

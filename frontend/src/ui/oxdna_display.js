@@ -460,7 +460,7 @@ export function prebuildMemoryPlan({
 export function initOxdnaDisplay({
   designRenderer, api, proteinRenderer = null, nanoparticleRenderer = null, preparationOnly = false, sharedFrameQueue = null,
   getAtomisticRenderer = null, getSurfaceRenderer = null,
-  getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
+  getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null, onRmsfProgress = null,
   applyOxdnaFrame = null,
   setDesignVisible = null,
   restoreDesignVisible = null,
@@ -784,9 +784,9 @@ export function initOxdnaDisplay({
     const ar = getAtomisticRenderer?.()
     // arr may be a plain Array (legacy flat route) OR a Float32Array (fast stamp
     // expansion) — accept both array-likes, reject only null/empty.
-    if (!ar || ar.getMode?.() === 'off' || !arr || !arr.length) return
-    if (!(await _ensureJobAtomistic(ar, epoch))) return   // FETCH topology (no paint)
-    if (live && !live()) return
+    if (!ar || ar.getMode?.() === 'off' || !arr || !arr.length) return false
+    if (!(await _ensureJobAtomistic(ar, epoch))) return false   // FETCH topology (no paint)
+    if (live && !live()) return false
     // Render native + relax in ONE synchronous tick — the native rebuild is overwritten
     // before the browser paints, so the atoms appear directly at their simulated positions.
     _applyJobTopology(ar)
@@ -798,6 +798,7 @@ export function initOxdnaDisplay({
     _heavyActive = true
     onHeavyApplied()   // atoms are live → the caller can now hide the CG model (no flash)
     _warmBonds()       // VDW skipped the bonds → fetch them off the critical path
+    return true
   }
 
   /** VDW painted without bonds. Pull them in the background so a later flip to
@@ -1198,20 +1199,42 @@ export function initOxdnaDisplay({
           if (live() && mesh) _pushSurface(mesh)
         }
       } else if (_mode === 'rmsf') {
+        const onProgress = state => { if (live()) onRmsfProgress?.({ ...state, jobId: _jobId }) }
+        const signal = _loadAbort?.signal
         if (kind === 'atomistic') {
           const r = await _memoHeavy(kind,
-            () => api.getOxdnaRmsfAtomistic(_jobId, { align: _align }))
+            () => api.getOxdnaRmsfAtomistic(_jobId, { align: _align, signal, onProgress }))
           if (live() && strict && !r?.ready) throw new Error(r?.reason || 'Could not load average atom positions')
           if (live() && r?.ready) {
+            // NAMD already built this exact model while averaging its atoms.
+            // Reuse it rather than requesting another complete topology build.
+            if (r.model?.atoms?.length && (_pendingTopoJob !== _jobId || _pendingTopoModel !== r.model)) {
+              _pendingTopoModel = r.model
+              _pendingTopoJob = _jobId
+              _atomTopoBonds = true
+              _atomSerials = Number(r.model.n_serials) || 0
+              _atomTopoJob = null
+            }
+            onProgress({ phase: 'display', done: 0, total: 1 })
+            await new Promise(resolve => setTimeout(resolve, 0))
             const { lo, hi } = _activeBounds()
             const m = rmsfColorMap(_rmsfResp, lo, hi, _rmsfCmap)   // same ramp/scale as the beads
-            await _pushAtomistic(r.atomistic, epoch, live, m?.colorByKey || null)
+            if (!live()) return
+            const applied = await _pushAtomistic(r.atomistic, epoch, live, m?.colorByKey || null)
+            if (live() && !applied) throw new Error('Could not draw average atom positions')
+            onProgress({ phase: 'display', done: 1, total: 1, complete: true })
+          } else if (live()) {
+            onProgress({ failed: true, message: r?.reason || 'Could not load average atom positions' })
           }
         } else {
           const r = await _memoHeavy(kind,
-            () => api.getOxdnaRmsfSurface(_jobId, {}, { align: _align }))
+            () => api.getOxdnaRmsfSurface(_jobId, {}, { align: _align, signal, onProgress }))
           if (live() && strict && !r?.ready) throw new Error(r?.reason || 'Could not load average surface')
-          if (live() && r?.ready) _pushSurface(r.surface, true)   // colour by per-vertex RMSF
+          if (live() && r?.ready) {
+            onProgress({ phase: 'display', done: 0, total: 1 })
+            _pushSurface(r.surface, true)   // colour by per-vertex RMSF
+            onProgress({ phase: 'display', done: 1, total: 1, complete: true })
+          } else if (live()) onProgress({ failed: true, message: r?.reason || 'Could not load average surface' })
         }
       } else if (_mode === 'trajectory') {
         const idx = _frameIdx
@@ -1248,6 +1271,7 @@ export function initOxdnaDisplay({
         }
       }
     } catch (error) {
+      if (live() && _mode === 'rmsf') onRmsfProgress?.({ jobId: _jobId, failed: true, message: error.message })
       if (strict) throw error // callers with explicit loading UI must report failure
       /* transient fetch failure → leave heavy rep as-is */
     } finally { if (busy && live()) _setHeavyBusy(false, kind) }
@@ -1522,14 +1546,15 @@ export function initOxdnaDisplay({
     // Re-use the cached flex map for this job (instant re-toggle) unless a refetch
     // is forced (e.g. refresh after more production frames accumulated).
     let resp
-    let signal = null
+    const signal = _beginLoad()
     if (response) {
       resp = response
     } else if (!refetch && _rmsfCache && _rmsfCache.jobId === jobId && _rmsfCache.align === align) {
       resp = _rmsfCache.resp
     } else {
-      signal = _beginLoad()
-      resp = await api.getOxdnaRmsf(jobId, { align, signal })
+      resp = await api.getOxdnaRmsf(jobId, { align, signal,
+        onProgress: state => { if (epoch === _epoch) onRmsfProgress?.({ ...state, jobId }) },
+      })
       if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     }
     const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)

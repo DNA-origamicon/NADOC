@@ -577,6 +577,42 @@ async def get_md_job_trajectory_meta(
     return {"ready": result["n_frames"] > 0, **result}
 
 
+_FLEX_PROGRESS_PATHS: dict[tuple[str, str], Path] = {}
+
+
+async def _run_md_flex(request, job_id, kind, analysis, args, *, timeout_s=600.0):
+    fd, name = tempfile.mkstemp(prefix='nadoc_md_flex_', suffix='.json')
+    os.close(fd)
+    path = Path(name)
+    key = (job_id, kind)
+    _FLEX_PROGRESS_PATHS[key] = path
+    try:
+        return await _run_md_analysis(
+            request, job_id, kind, 'md_flex_analysis',
+            (analysis, args, str(path)), timeout_s=timeout_s,
+        )
+    finally:
+        if _FLEX_PROGRESS_PATHS.get(key) == path:
+            _FLEX_PROGRESS_PATHS.pop(key, None)
+        path.unlink(missing_ok=True)
+        path.with_suffix('.tmp').unlink(missing_ok=True)
+
+
+@router.get('/md/jobs/{job_id}/flex-progress')
+async def get_md_flex_progress(job_id: str, kind: str = 'rmsf') -> dict:
+    path = _FLEX_PROGRESS_PATHS.get((job_id, kind))
+    if path is None:
+        return {'active': False}
+    try:
+        state = json.loads(path.read_text())
+        updated = state.pop('updated_at', None)
+        if updated is not None:
+            state['elapsed_seconds'] = state.get('elapsed_seconds', 0) + max(0, time.time() - updated)
+        return {'active': True, **state}
+    except (OSError, ValueError):
+        return {'active': True, 'phase': 'starting', 'done': 0, 'total': 1}
+
+
 @router.get("/md/jobs/{job_id}/rmsf")
 async def get_md_job_rmsf(job_id: str, request: Request) -> dict:
     """Per-nucleotide flexibility map (RMSF) over the NAMD run — the MD analogue of
@@ -595,7 +631,7 @@ async def get_md_job_rmsf(job_id: str, request: Request) -> dict:
             "positions": [],
         }
     psf, ref, segments, design = inputs
-    result = await _run_md_analysis(
+    result = await _run_md_flex(
         request, job_id, "rmsf", "md_rmsf", (psf, segments, ref, design)
     )
     if result.get("ready"):
@@ -1106,7 +1142,7 @@ async def md_rmsf_atomistic_route(job_id: str, request: Request) -> dict:
     if inputs is None:
         return {"ready": False, "atomistic": []}
     psf, ref, segments, design = inputs
-    return await _run_md_analysis(
+    return await _run_md_flex(
         request,
         job_id,
         "rmsf-atomistic",
@@ -1125,7 +1161,7 @@ async def md_rmsf_surface_route(
     if inputs is None:
         return {"ready": False, "surface": None}
     psf, ref, segments, design = inputs
-    return await _run_md_analysis(
+    return await _run_md_flex(
         request,
         job_id,
         "rmsf-surface",

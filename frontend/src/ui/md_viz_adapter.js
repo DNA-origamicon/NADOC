@@ -26,6 +26,7 @@
  * Display-state only — never writes topology.
  */
 import { initMdTrajectoryPrefetch } from '../scene/md_trajectory_prefetch.js'
+import { withFlexProgress } from './md_flex_progress.js'
 
 export function mdVizApiAdapter(api) {
   const prefetch = initMdTrajectoryPrefetch(api)
@@ -64,9 +65,12 @@ export function mdVizApiAdapter(api) {
     // has neither, but the method must still exist so its metadata-only bead trajectory
     // can proceed to the solvent/ion/box renderer.
     getOxdnaDisplay: (id) => api.getMdDisplayMeta(id),
-    getOxdnaRmsf:       (id, { signal } = {}) => api.getMdRmsf(id, signal),
-    getOxdnaRmsfAtomistic: (id) => api.getMdRmsfAtomistic(id),
-    getOxdnaRmsfSurface: (id, params = {}) => api.getMdRmsfSurface(id, params),
+    getOxdnaRmsf: (id, { signal, onProgress } = {}) =>
+      withFlexProgress(api, id, 'rmsf', () => api.getMdRmsf(id, signal), onProgress),
+    getOxdnaRmsfAtomistic: (id, { signal, onProgress } = {}) =>
+      withFlexProgress(api, id, 'rmsf-atomistic', () => api.getMdRmsfAtomistic(id, signal), onProgress),
+    getOxdnaRmsfSurface: (id, params = {}, { signal, onProgress } = {}) =>
+      withFlexProgress(api, id, 'rmsf-surface', () => api.getMdRmsfSurface(id, params, signal), onProgress),
     // Heavy trajectory frames. The controller calls these POSITIONALLY as
     // `(id, frameIndices, align, scope, stride)` / `(id, frameIndices, params, align,
     // scope)`. `align`/`scope` are oxDNA-only and dropped (md_trajectory.py always

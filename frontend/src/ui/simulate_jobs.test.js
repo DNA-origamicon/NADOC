@@ -439,6 +439,20 @@ const mdNode = (o = {}) => ({ engine: 'namd', job_id: 'md1', parent_job_id: null
 beforeEach(() => { document.body.innerHTML = ''; vi.clearAllMocks() })
 
 describe('unified list + master card', () => {
+  it('refreshes a loaded job list without pulsing the loading spinner', async () => {
+    mount()
+    const { sim, api } = make([mdNode({ status: 'running' })])
+    await sim.refresh()
+    let resolveRefresh
+    api.listSimJobs.mockImplementationOnce(() => new Promise(resolve => { resolveRefresh = resolve }))
+    const pending = sim.refresh()
+    await Promise.resolve()
+    expect(document.querySelector('[data-panel-loading]')).toBeNull()
+    resolveRefresh([mdNode({ status: 'completed' })])
+    await pending
+    expect(document.querySelector('[data-panel-loading]')).toBeNull()
+  })
+
   it('coalesces refreshes and discards results for the previous design', async () => {
     mount()
     let path = '/w/old.nadoc'

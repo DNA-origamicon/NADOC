@@ -97,7 +97,7 @@ def test_atomistic_flex_mean_positions_every_synthetic_residue_by_serial(monkeyp
             {"serial": 4, "x": 14.0, "y": 24.0, "z": 34.0},
         ],
     ]
-    monkeypatch.setattr(md_trajectory, "_build_md_nadoc_ctx", lambda *a, **k: ctx)
+    monkeypatch.setattr(md_trajectory, "_build_playback_ctx", lambda *a, **k: ctx)
     monkeypatch.setattr(
         md_trajectory, "_extract_md_atoms_frame", lambda _ctx, idx, **kw: np.array([[a[k] for k in ("x", "y", "z")] for a in frames[idx]])
     )
@@ -108,3 +108,23 @@ def test_atomistic_flex_mean_positions_every_synthetic_residue_by_serial(monkeyp
     flat = result["atomistic"]
     assert flat[3:6] == [2.0, 3.0, 4.0]  # crossover insert, serial 1
     assert flat[12:15] == [12.0, 22.0, 32.0]  # extension atom, serial 4
+
+
+def test_flex_worker_returns_existing_topology_and_measured_progress(monkeypatch, tmp_path):
+    import json
+    path = tmp_path / 'progress.json'
+    seen = []
+    expected = {'ready': True, 'atomistic': [1, 2, 3], 'model': {'atoms': [{'serial': 0}]}}
+
+    def average(*args, include_model=False, progress=None):
+        assert include_model is True
+        for phase, done, total in [('atomistic_setup', 0, 1), ('atomistic_average', 30, 150)]:
+            progress(phase, done, total)
+            seen.append(json.loads(path.read_text()))
+        return expected
+
+    monkeypatch.setattr(md_trajectory, 'md_rmsf_atomistic', average)
+    assert md_trajectory.md_flex_analysis('md_rmsf_atomistic', (), str(path)) is expected
+    assert (seen[-1]['done'], seen[-1]['total']) == (30, 150)
+    assert json.loads(path.read_text())['phase'] == 'transfer'
+    assert not path.with_suffix('.tmp').exists()

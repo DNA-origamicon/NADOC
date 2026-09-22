@@ -17,6 +17,7 @@ import { initMdIonPathsControls } from './md_ion_paths_controls.js'
  */
 
 import { initOccupancyControls } from './occupancy_controls.js'
+import { flexProgressView } from './md_flex_progress.js'
 import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
@@ -2888,14 +2889,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   function _setFlexStatus(text, color = _C.dim) {
     if (flexStatus) { flexStatus.textContent = text; flexStatus.style.color = color }
   }
-  function _setFlexBar(state) {
+  function _setFlexBar(state, progress = {}) {
     if (!flexBar) return
     if (state === 'computing') {
+      const { percent, text } = flexProgressView(progress)
       flexBar.style.display = ''
       flexBar.innerHTML =
-        `<div style="position:relative;height:6px;border-radius:4px;overflow:hidden;background:#222">` +
-        `<div style="position:absolute;top:0;height:100%;width:35%;background:${_C.accent};` +
-        `animation:gromacs-indeterminate 1.1s linear infinite"></div></div>`
+        `<div role="progressbar" aria-label="Flexibility map stage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" style="height:6px;border-radius:4px;overflow:hidden;background:#222">` +
+        `<div style="height:100%;width:${percent}%;background:${_C.accent}"></div></div><div data-flex-progress-label style="font-size:11px;margin-top:4px"></div>`
+      flexBar.querySelector('[data-flex-progress-label]').textContent = text
     } else if (state === 'done') {
       flexBar.style.display = ''
       flexBar.innerHTML = `<span style="color:${_C.ok};font-size:11px">✓ Flexibility map ready</span>`
@@ -2904,6 +2906,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       flexBar.innerHTML = ''
     }
   }
+  window.addEventListener('nadoc:md-flex-progress', ({ detail }) => {
+    if (!flexToggle?.checked || detail?.jobId !== _selectedId) return
+    if (detail.failed) {
+      _setFlexBar('off')
+      _setFlexStatus(detail.message || 'Could not load flexibility representation', _C.warn)
+    } else if (detail.complete) _setFlexBar('done')
+    else _setFlexBar('computing', detail)
+  })
   function _setFlexLegend(min, max) {
     if (!flexLegend) return
     if (min == null || max == null) { flexLegend.style.display = 'none'; flexLegend.innerHTML = ''; return }
@@ -2960,8 +2970,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     await _occupancy?.refresh()
   })
 
+  let _flexLoading = false
+  let _flexLoadEpoch = 0
   function _setFlexOff() {
+    _flexLoadEpoch++
     if (getMdViz?.()?.mode?.() === 'rmsf') getMdViz().stopAndRestore()
+    else if (_flexLoading) getMdViz?.()?.cancelPendingLoad?.()
+    _flexLoading = false
     if (flexToggle) flexToggle.checked = false
     getFlexScale?.()?.hide?.()
     _setFlexBar('off')
@@ -2973,10 +2988,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const v = getMdViz?.()
     if (!_selectedId || !v) return
     const jobId = _selectedId
+    const epoch = ++_flexLoadEpoch
+    _flexLoading = true
     _setFlexStatus('Computing average structure + RMSF…', _C.accent)
     _setFlexBar('computing')
-    const r = await v.displayRmsf(jobId)
-    if (jobId !== _selectedId) return
+    let r
+    try {
+      r = await v.displayRmsf(jobId, { awaitHeavy: true })
+    } catch (error) {
+      r = { ok: false, reason: error.message }
+    } finally {
+      if (epoch === _flexLoadEpoch) _flexLoading = false
+    }
+    if (epoch !== _flexLoadEpoch || jobId !== _selectedId || !flexToggle?.checked) return
     if (r.ok) {
       _setFlexBar('done')
       _setFlexLegend(r.min, r.max)

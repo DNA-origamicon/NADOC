@@ -35,7 +35,7 @@ export function beginPanelLoading(targets, label = 'Loading…') {
   }
 }
 
-export function recordPanelRequest({ id, phase, path }) {
+export function recordPanelRequest({ id, phase, path, method }) {
   if (typeof document === 'undefined') return
   if (phase !== 'start') {
     if (['complete', 'error', 'aborted'].includes(phase)) {
@@ -46,6 +46,9 @@ export function recordPanelRequest({ id, phase, path }) {
   }
   const engine = /^\/(md|oxdna|mrdna|cando|snupi|blade|lammps)\/(jobs|queue|available|namd-available|run-dir-status)(?:[/?]|$)/.exec(path)?.[1]
   if (!engine && !/^\/(simulate\/jobs|engines\/status)(?:[/?]|$)/.test(path)) return
+  // Routine data reads must not pulse the card/tab spinners on every poll.
+  // Panels own their initial-loading feedback; mutations still show activity here.
+  if (method === 'GET') return
   const tab = engine === 'md' ? 'namd' : engine === 'lammps' ? 'oxdna' : engine
   const targets = [document.querySelector('.left-tab-btn[data-tab="dynamics"]')]
   if (tab) targets.push(document.querySelector(`.engine-selector-btn[data-engine="${tab}"]`))

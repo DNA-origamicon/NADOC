@@ -3,6 +3,15 @@ import { describe, it, expect } from 'vitest'
 import { beginPanelLoading, recordPanelRequest } from './panel_loading.js'
 
 describe('panel loading feedback', () => {
+  it('keeps simulation data polls quiet', () => {
+    document.body.innerHTML = '<button class="left-tab-btn" data-tab="dynamics"></button><button class="engine-selector-btn" data-engine="namd"></button><button id="simulate-jobs-toggle"></button>'
+    for (const path of ['/md/jobs', '/md/jobs/job1', '/md/queue', '/simulate/jobs', '/engines/status']) {
+      recordPanelRequest({ id: path, phase: 'start', method: 'GET', path })
+      expect(document.querySelector('[data-panel-loading]')).toBeNull()
+      recordPanelRequest({ id: path, phase: 'complete' })
+    }
+  })
+
   it('keeps the spinner until all overlapping work finishes', () => {
     const target = document.createElement('button')
     const first = beginPanelLoading([target, target])

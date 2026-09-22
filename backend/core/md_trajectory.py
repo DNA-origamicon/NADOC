@@ -1607,6 +1607,46 @@ def md_frames_surface(
     return out
 
 
+def md_flex_analysis(analysis, args, progress_path):
+    """Killable flex worker with atomic, measured per-stage progress snapshots."""
+    import json
+    import time
+    from threadpoolctl import threadpool_limits
+
+    path = Path(progress_path)
+    started = time.monotonic()
+    phase_started = started
+    last_phase = None
+
+    def report(phase, done, total):
+        nonlocal last_phase, phase_started
+        now = time.monotonic()
+        if phase != last_phase:
+            last_phase, phase_started = phase, now
+        state = dict(phase=phase, done=done, total=total, updated_at=time.time(),
+                     elapsed_seconds=now - started,
+                     phase_elapsed_seconds=now - phase_started)
+        temporary = path.with_suffix('.tmp')
+        temporary.write_text(json.dumps(state))
+        temporary.replace(path)
+
+    # These fits are tiny (three columns). BLAS thread-team startup costs more
+    # than the arithmetic and competes with the simulation/browser.
+    with threadpool_limits(limits=1, user_api='blas'):
+        if analysis == 'md_rmsf':
+            result = md_rmsf(*args, progress=report)
+        elif analysis == 'md_rmsf_atomistic':
+            # Return the topology already built for averaging. The viewer otherwise
+            # repeats the full model/PSF setup in a second atomistic-model request.
+            result = md_rmsf_atomistic(*args, include_model=True, progress=report)
+        elif analysis == 'md_rmsf_surface':
+            result = md_rmsf_surface(*args, progress=report)
+        else:
+            raise ValueError(f'Unknown flex analysis: {analysis}')
+    report('transfer', 0, 1)
+    return result
+
+
 def md_rmsf_atomistic(
     topology_path, segments, coordinate_path, design, max_frames: int = 150,
     *, include_model=False, progress=None,
@@ -1614,7 +1654,7 @@ def md_rmsf_atomistic(
     """Average the simulation's own DNA atoms using bounded DNA-only DCD reads."""
     report = progress or (lambda *args: None)
     report('atomistic_setup', 0, 1)
-    ctx = _build_md_nadoc_ctx(
+    ctx = _build_playback_ctx(
         topology_path, [s[2] for s in segments], coordinate_path, design, with_atoms=True
     )
     report('atomistic_setup', 1, 1)
@@ -1640,6 +1680,7 @@ def md_rmsf_atomistic(
         flat = np.zeros((int(serials.max()) + 1, 3), dtype=np.float32)
         flat[serials] = sums
         result = {'ready': True, 'atomistic': flat.ravel().tolist(), 'n_frames': used}
+        report('atomistic_average', len(idxs), len(idxs))
         if include_model:
             report('atomistic_topology', 0, 1)
             atoms = [{**m, 'x': float(p[0]), 'y': float(p[1]), 'z': float(p[2]),
@@ -1648,16 +1689,17 @@ def md_rmsf_atomistic(
                       'scalar_key': m.get('scalar_key') or
                           f"{m.get('helix_id', '')}:{m.get('bp_index', 0)}:{m.get('direction', '')}:{m.get('copy_k', 0)}"}
                      for m, p in zip(meta, sums)]
-            bonds = heavy_bond_pairs(ctx['universe'], ctx['heavy_idx'], nested=True)
+            bonds = (ctx['heavy_bonds'].tolist() if 'heavy_bonds' in ctx else
+                     heavy_bond_pairs(ctx['universe'], ctx['heavy_idx'], nested=True))
             result['model'] = {'atoms': atoms, 'bonds': bonds or [],
                                'bonds_available': bool(bonds), 'n_serials': len(flat)}
             report('atomistic_topology', 1, 1)
-        report('atomistic_average', 1, 1)
         return result
     finally:
         if ctx.get('dcd_prefix') is not None:
             ctx['dcd_prefix'].close()
-        ctx['universe'].trajectory.close()
+        if ctx.get('universe') is not None:
+            ctx['universe'].trajectory.close()
 
 
 def md_rmsf_surface(
@@ -1678,18 +1720,20 @@ def md_rmsf_surface(
 
     report = progress or (lambda *args: None)
     average = average or md_rmsf_atomistic(
-        topology_path, segments, coordinate_path, design, max_frames=max_frames
+        topology_path, segments, coordinate_path, design, max_frames=max_frames,
+        include_model=True, progress=report,
     )
     if not average.get("ready"):
         return {"ready": False, "surface": None, "n_frames": 0}
     rmsf = rmsf or md_rmsf(
-        topology_path, segments, coordinate_path, design, max_frames=max_frames
+        topology_path, segments, coordinate_path, design, max_frames=max_frames,
+        progress=report,
     )
     if not rmsf.get("ready"):
         return {"ready": False, "surface": None, "n_frames": 0}
 
     flat = average["atomistic"]
-    model = model or md_atomistic_model(topology_path, segments, coordinate_path, design)
+    model = model or average.get('model') or md_atomistic_model(topology_path, segments, coordinate_path, design)
     atoms = []
     for atom in model.get("atoms", []):
         serial = int(atom["serial"])

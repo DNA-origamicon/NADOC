@@ -1154,9 +1154,9 @@ export function initSimulateJobs({
   listEl.before(loadStatus)
   function _fetch() {
     if (_fetchPending) return _fetchPending
-    const endLoading = beginPanelLoading([
+    const endLoading = beginPanelLoading(_loadedPath !== _currentPath() ? [
       cardHeader, document.querySelector('.left-tab-btn[data-tab="dynamics"]'),
-    ], 'Loading simulation jobs…')
+    ] : [], 'Loading simulation jobs…')
     _fetchPending = (async () => {
       while (true) {
         if (_loadedPath !== _currentPath()) {
