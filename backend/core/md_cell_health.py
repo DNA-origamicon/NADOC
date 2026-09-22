@@ -46,8 +46,8 @@ DEFAULT_FLAT_TOL_FRAC = 0.01
 # Sits between the measured legitimate trim (0.926) and the volume at which the carved
 # run first crashed (0.67).
 COLLAPSE_VOLUME_FRAC = 0.85
-# Solute-to-own-periodic-image clearance.  Below 2x the nonbonded cutoff the solute
-# interacts with its own image directly; NAMD's default cutoff here is 12 A.
+# Recommended solute-to-image buffer: twice a 12 A cutoff leaves deformation
+# headroom. Direct short-range image contacts begin below ONE cutoff, not two.
 MIN_IMAGE_CLEARANCE_ANG = 24.0
 # Slack when judging "is the padding honoured" — extents are measured, not exact.
 _PAD_SLACK_ANG = 0.1

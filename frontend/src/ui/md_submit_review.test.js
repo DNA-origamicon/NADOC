@@ -185,6 +185,7 @@ describe('remoteJobBadge', () => {
 describe('submit guard (double-submit prevention)', () => {
   const rec = {
     prepared: true, cluster_name: 'alpine', design_name: 'd', status: 'queued',
+    image_clearance: { status: 'pass', requires_override: false, detail: 'Sufficient starting clearance.' },
     already_submitted: false, n_atoms: 1000, total_ns: 1,
     available_partitions: [{ name: 'ah200', kind: 'gpu', gpu_model: 'H200' }],
     available_qos: [{ name: 'gpu-normal', max_walltime_h: 24 }],
@@ -250,4 +251,44 @@ describe('submit guard (double-submit prevention)', () => {
       expect.objectContaining({ ok: false, message: 'module not found' }))
     expect(card.isSubmitting()).toBe(false)                  // retry is allowed now
   })
+  it('blocks an unsafe gap until explicitly checked and sends the separate override', async () => {
+    const { card, api, release } = mount({
+      getMdRemoteRecommendation: async () => ({ ...rec, image_clearance: {
+        status: 'insufficient', requires_override: true, axis_gaps_nm: [1, 2, 3],
+        recommended_gap_nm: 2.4, detail: 'Increase solvent padding.',
+      } }),
+    })
+    await card.open('j1')
+    const go = document.querySelector('#mr-go')
+    expect(go.disabled).toBe(true)
+    go.click()
+    expect(api.submitMdJobRemote).not.toHaveBeenCalled()
+    document.querySelector('#mr-allow-small-image-gap').click()
+    expect(go.disabled).toBe(false)
+    go.click()
+    await Promise.resolve()
+    expect(api.submitMdJobRemote).toHaveBeenCalledWith('j1', expect.objectContaining({ allow_small_image_gap: true }))
+    release()
+  })
+
+  it('resets acknowledgment when reopening and treats missing diagnostics as unknown', async () => {
+    const { card } = mount({ getMdRemoteRecommendation: async () => ({ ...rec, image_clearance: null }) })
+    await card.open('j1')
+    document.querySelector('#mr-allow-small-image-gap').click()
+    await card.open('j1')
+    expect(document.querySelector('#mr-go').disabled).toBe(true)
+    expect(document.querySelector('#mr-allow-small-image-gap').checked).toBe(false)
+    card.dispose()
+  })
+
+  it('submits an ensemble after disposing the card without losing the partition or override', async () => {
+    const api = { getMdRemoteRecommendation: vi.fn(async () => ({ ...rec, image_clearance: null })),
+      submitMdEnsemble: vi.fn(async () => ({ submitted: [{ job_id: 'child' }], errors: [] })) }
+    const card = initMdSubmitReview({ api, toast: () => {} })
+    await card.open('child', { mode: 'ensemble', parentId: 'parent', count: 1, partition: 'acpu' })
+    document.querySelector('#mr-allow-small-image-gap').click()
+    document.querySelector('#mr-go').click()
+    await vi.waitFor(() => expect(api.submitMdEnsemble).toHaveBeenCalledWith('parent', expect.objectContaining({ partition: 'acpu', allow_small_image_gap: true })))
+  })
+
 })

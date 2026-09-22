@@ -45,6 +45,12 @@ from backend.api.assembly import _WORKSPACE_DIR
 from backend.core import job_archive
 from backend.core import md_chain_executor as _chain
 from backend.core import md_plan
+from backend.core.md_image_clearance import (
+    job_image_clearance,
+    ensemble_image_clearance,
+    require_image_clearance,
+    record_clearance_review,
+)
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
 from backend.core.md_pipeline import (
     MdPipeline,
@@ -6738,6 +6744,8 @@ async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> 
 class EnsembleSubmitRequest(BaseModel):
     """Submit every prepared replica of a parent to the cluster in one action."""
 
+    allow_small_image_gap: bool = False
+
     cluster_name: str = Field("alpine")
     resources: Optional[dict] = Field(
         None,
@@ -6793,9 +6801,18 @@ async def submit_md_ensemble(parent_id: str, body: EnsembleSubmitRequest) -> dic
             )
         resources = sizing["resources"]
 
+    reviews = {
+        child.job_id: await run_in_threadpool(
+            require_image_clearance, child, _workspace(), allow=body.allow_small_image_gap
+        )
+        for child in replicas
+    }
     submitted, errors = [], []
     for child in replicas:
         try:
+            record_clearance_review(
+                child, _workspace(), reviews[child.job_id], allow=body.allow_small_image_gap
+            )
             job = await md_executor.submit_job(
                 child,
                 _workspace(),
@@ -7053,6 +7070,8 @@ def _runpod_client_keys() -> Optional[list[str]]:
 class SubmitRemoteRequest(BaseModel):
     """Submit a prepared job to a compute cluster (Alpine/SLURM)."""
 
+    allow_small_image_gap: bool = False
+
     cluster_name: str = Field("alpine", description="Cluster profile name")
     resources: Optional[dict] = Field(
         None,
@@ -7180,6 +7199,8 @@ def md_job_remote_recommendation(
     partition: Optional[str] = None,
     gres_type: Optional[str] = None,
     current: bool = False,
+    resume: bool = False,
+    ensemble: bool = False,
 ) -> dict:
     """Preview the auto-recommended SLURM resources for a prepared job — read-only,
     no cluster connection needed. Drives the Phase-4 submit-review card so the user
@@ -7254,6 +7275,8 @@ def md_job_remote_recommendation(
         "slurm_job_id": job.slurm_job_id,
         "available_partitions": available,
         "available_qos": available_qos,
+        "image_clearance": (ensemble_image_clearance(job, _workspace()) if ensemble
+                            else job_image_clearance(job, _workspace(), resume=resume)),
         **sizing,
     }
 
@@ -7318,6 +7341,10 @@ async def submit_md_job_remote(job_id: str, body: SubmitRemoteRequest) -> dict:
         raise HTTPException(404, msg)
 
     resources = _remote_resources(job, profile, body)
+    review = await run_in_threadpool(
+        require_image_clearance, job, _workspace(), allow=body.allow_small_image_gap
+    )
+    record_clearance_review(job, _workspace(), review, allow=body.allow_small_image_gap)
     try:
         job = await md_executor.submit_job(
             job,
@@ -7343,6 +7370,7 @@ async def submit_md_job_remote(job_id: str, body: SubmitRemoteRequest) -> dict:
 
 
 class ResumeRemoteRequest(BaseModel):
+    allow_small_image_gap: bool = False
     cluster_name: str = "alpine"
     # Reviewed/edited SLURM resources for the resumed run (e.g. a longer walltime
     # after a promising short run).  Omitted → keep the job's existing resources.
@@ -7378,6 +7406,11 @@ async def resume_md_job_remote(job_id: str, body: ResumeRemoteRequest) -> dict:
     if profile is None:
         raise HTTPException(404, f"Unknown cluster profile {body.cluster_name!r}.")
 
+    review = await run_in_threadpool(
+        require_image_clearance, job, _workspace(),
+        allow=body.allow_small_image_gap, resume=True,
+    )
+    record_clearance_review(job, _workspace(), review, allow=body.allow_small_image_gap)
     try:
         job = await md_executor.resume_job(
             job,

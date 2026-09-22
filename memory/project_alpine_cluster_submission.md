@@ -37,6 +37,13 @@ lives in `alpine_transfer.json` and overrides stale job records. Explicit Discon
 stops transfers; worker/workstation/transport loss requires reconnecting, with partial
 file validation/resume preserved. See the restart-recovery document above.
 
+**2026-09-21 fixed-pose image clearance:** The submission review and submit/resume/ensemble
+routes now require a separate acknowledgment for low or unverified solute-to-image
+envelope gaps. Production uses its actual equilibrated coordinates/cell. The recommendation
+is max(2.4 nm, twice the configured cutoff); the existing rotational override does not
+bypass this check. Remote-resume poses remain unverified until their actual remote
+checkpoint can be inspected. See [submission clearance](../docs/namd_submission_clearance.md).
+
 Related: [[md-job-system]] (the local job system this extends), [[md-prep-relaxation-exp29]]
 (prep ladder that produces the package we ship), [[namd-solvate]], [[btube-benchmark]].
 

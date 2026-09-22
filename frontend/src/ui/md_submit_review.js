@@ -1,3 +1,5 @@
+import { mountImageClearanceReview } from './md_image_clearance_review.js'
+
 /**
  * ui/md_submit_review.js — Phase 4 of the Alpine remote-execution backend.
  *
@@ -224,7 +226,7 @@ export function initMdSubmitReview({
     const resume = mode === 'resume'
     const ensemble = mode === 'ensemble'
     const effPartition = partition ?? (ensemble ? (_ctx.partition || 'acpu') : null)
-    const rec = await api.getMdRemoteRecommendation(jobId, { clusterName, partition: effPartition, current: resume && !partition }).catch(() => null)
+    const rec = await api.getMdRemoteRecommendation(jobId, { clusterName, partition: effPartition, current: resume && !partition, resume, ensemble }).catch(() => null)
     if (!_ctx) return   // disposed while awaiting
     if (!rec) {
       _notify(api.lastErrorMessage?.() ?? 'Could not load cluster recommendation', 'error')
@@ -253,7 +255,7 @@ export function initMdSubmitReview({
   }
 
   function _render(rec) {
-    const { jobId, clusterName, mode, parentId, count } = _ctx
+    const { jobId, clusterName, mode, parentId, count, partition } = _ctx
     const resume = mode === 'resume'
     const ensemble = mode === 'ensemble'
     const s = formatResourceSummary(rec)
@@ -291,6 +293,7 @@ export function initMdSubmitReview({
       <div style="color:${_C.dim};margin-bottom:8px">${s.safety}</div>
       ${s.notes.length ? `<div style="color:${_C.muted};margin-bottom:8px;line-height:1.4">${s.notes.map(n => `• ${n}`).join('<br>')}</div>` : ''}
 
+      <div id="mr-image-clearance"></div>
       <button id="mr-edit-toggle" style="background:none;border:none;color:#58a6ff;cursor:pointer;padding:0;margin-bottom:6px;font-size:var(--text-xs)">${_ctx.editOpen ? '▾' : '▸'} Edit resources</button>
       <div id="mr-edit" style="display:${_ctx.editOpen ? '' : 'none'};background:${_C.panel};border:1px solid ${_C.border};border-radius:4px;padding:8px;margin-bottom:8px">
         <div style="color:${_C.dim};margin-bottom:6px">Change the partition to re-size on it; blank a field = keep auto value.</div>
@@ -312,6 +315,7 @@ export function initMdSubmitReview({
     _overlay.appendChild(box)
     document.body.appendChild(_overlay)
 
+    const clearance = mountImageClearanceReview(box.querySelector('#mr-image-clearance'), rec.image_clearance, box.querySelector('#mr-go'))
     const errEl = box.querySelector('#mr-err')
     const editBody = box.querySelector('#mr-edit')
     const editToggle = box.querySelector('#mr-edit-toggle')
@@ -337,7 +341,7 @@ export function initMdSubmitReview({
       // Re-entry guard. `disabled` alone is not enough: the card can be reopened, and
       // a slow submit (an 800 MB package upload takes minutes) is exactly when an
       // impatient second click happens.
-      if (_submitting) return
+      if (_submitting || !clearance.canSubmit()) return
       errEl.textContent = ''
       const overrides = {
         partition: box.querySelector('#mr-partition').value.trim(),
@@ -348,6 +352,7 @@ export function initMdSubmitReview({
         qos:       box.querySelector('#mr-qos').value.trim(),
       }
       const payload = reviewSubmitPayload({ clusterName, baseResources: r, overrides })
+      if (clearance.overridden()) payload.allow_small_image_gap = true
       const goBtn = box.querySelector('#mr-go')
       _submitting = true
       goBtn.disabled = true
@@ -361,7 +366,7 @@ export function initMdSubmitReview({
       onSubmitStart({ jobId, parentId, ensemble, resume, label: what })
       try {
         if (ensemble) {
-          const result = await api.submitMdEnsemble(parentId, { ...payload, partition: _ctx.partition || 'acpu' })
+          const result = await api.submitMdEnsemble(parentId, { ...payload, partition: partition || 'acpu' })
           if (!result) throw new Error(api.lastErrorMessage?.() ?? 'Ensemble submit failed')
           const nSub = result.submitted?.length ?? 0
           const nErr = result.errors?.length ?? 0

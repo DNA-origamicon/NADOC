@@ -3563,10 +3563,12 @@ export const resumeMdChain       = (id, body = {}) => _oxdnaJSON('POST', `/md/ch
 // ── Remote (Alpine/SLURM) execution — Phase 4 submit-review flow ───────────────
 /** Preview the auto-recommended SLURM resources for a prepared job (read-only, no
  *  cluster connection needed). Returns {prepared:false,…} while still preparing. */
-export const getMdRemoteRecommendation = (id, { clusterName = 'alpine', safetyFactor = 1.5, partition = null, current = false } = {}) => {
+export const getMdRemoteRecommendation = (id, { clusterName = 'alpine', safetyFactor = 1.5, partition = null, current = false, resume = false, ensemble = false } = {}) => {
   let url = `/md/jobs/${id}/remote-recommendation?cluster_name=${encodeURIComponent(clusterName)}&safety_factor=${safetyFactor}`
   if (partition) url += `&partition=${encodeURIComponent(partition)}`
   if (current) url += '&current=true'
+  if (resume) url += '&resume=true'
+  if (ensemble) url += '&ensemble=true'
   return _oxdnaJSON('GET', url)
 }
 /** Stage + submit a prepared job to the cluster. `resources` omitted → auto-recommend. */

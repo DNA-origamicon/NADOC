@@ -192,3 +192,7 @@ requirement so it cannot prevent ordinary HTTP LAN viewing. Added unit coverage
 and a real non-secure-origin Playwright project, including completed manual
 performance capture. Both production browser projects pass; 6,692 frontend tests
 pass. Cached host assets require restarting the test host and replacing its link.
+
+## 2026-09-21 — ISSUE-32, ensemble submission context lifetime
+
+Fixed as part of the Alpine periodic-image clearance gate. Root cause: closing the review cleared its shared context before the asynchronous ensemble submit branch read the partition. Capture the reviewed partition before teardown. The regression exercises the ensemble API call after disposal, including the new explicit clearance override. No alternate hypothesis pursued; `main.js` LOC delta 0.

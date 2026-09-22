@@ -882,3 +882,11 @@ remain available. A unit regression and production browser test on non-secure
 `http://nadoc-lan.test` verify join, rendering, pointer orbit and completed metrics
 with both `crypto.randomUUID` and `crypto.subtle` actually undefined. The secure
 localhost project passes as well. No `main.js` change for this fix.
+
+### ISSUE-32 — Alpine ensemble review discarded its partition before submitting [x]
+
+- **Found:** 2026-09-21 while adding the periodic-image submission block.
+- **Trigger:** Open ensemble submission review and click Submit.
+- **Cause:** `dispose()` cleared `_ctx`, then the ensemble branch read `_ctx.partition`.
+- **Fix:** Capture the partition with the other submission values before disposing the overlay.
+- **Verification:** `md_submit_review.test.js` exercises ensemble submission with the independent image-gap override and checks the parent, partition, and payload.
