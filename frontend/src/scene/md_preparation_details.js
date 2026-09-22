@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { initPeriodicImages } from './md_periodic_images.js'
 
 function label(text, {callout=false}={}) {
   const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d')
@@ -25,6 +26,7 @@ function label(text, {callout=false}={}) {
 
 /** Display-only cell and solvent compartments; never drives molecular geometry. */
 export function initPreparationDetails({scene,camera,controls,getEntries=()=>[]}={}) {
+  const periodicImages=initPeriodicImages({scene,getEntries})
   const group=new THREE.Group();group.name='NAMD box and solvent details';group.visible=false;group.userData.setupOnly=true;scene.add(group)
   let lastSize=null, refreshLeader=()=>{}
   const onCameraChange=()=>refreshLeader()
@@ -139,5 +141,5 @@ export function initPreparationDetails({scene,camera,controls,getEntries=()=>[]}
     refreshLeader()
   }
   window.addEventListener('nadoc:box-solvent-details',update)
-  return {dispose(){controls?.removeEventListener?.('change',onCameraChange);window.removeEventListener('nadoc:box-solvent-details',update);clear();scene.remove(group)}}
+  return {dispose(){periodicImages.dispose();controls?.removeEventListener?.('change',onCameraChange);window.removeEventListener('nadoc:box-solvent-details',update);clear();scene.remove(group)}}
 }

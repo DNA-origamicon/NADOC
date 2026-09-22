@@ -512,8 +512,8 @@ def _dna_atom_positions_nm(
 # built in.  An unrestrained solute rotates: the 2hb built as 20.2 x 42.6 x 88.1 A reached
 # 59.7 x 70.3 x 107.0 A over 200 ns and overran its "bbox"-sized cell on every axis,
 # spending most of the run within 3-9 A of its own periodic image.  "bbox" (the historical
-# rule) remains available and is the automatic fallback when "rotation" would not fit the
-# hardware.  See experiments/exp47_protocol_delta/RESULTS.md.
+# rule) remains an explicit user choice. Hardware limits never change the requested
+# padding or sizing mode. See experiments/exp47_protocol_delta/RESULTS.md.
 logger = logging.getLogger(__name__)
 
 DEFAULT_BOX_MODE = "rotation"
@@ -532,8 +532,7 @@ def estimate_box_atoms(box_nm, n_dna_atoms: int, n_phosphates: int = 0) -> int:
 
     ``n_phosphates`` adds the ion census.  It is a small correction (an Mg(H₂O)₆
     cluster is 19 atoms but vacates 6 waters, so each is only ~+1 atom net), but this
-    is the function that picks rotation-vs-bbox, so it should not silently model a
-    cell as pure water.  Zero keeps the historical water-only estimate.
+    is a resource estimate, so it should not silently model a cell as pure water.  Zero keeps the historical water-only estimate.
     """
     v_box = float(box_nm[0]) * float(box_nm[1]) * float(box_nm[2]) * 1000.0  # nm³→Å³
     v_dna = n_dna_atoms * _DNA_ANG3_PER_ATOM
@@ -553,151 +552,11 @@ def estimate_box_atoms(box_nm, n_dna_atoms: int, n_phosphates: int = 0) -> int:
     return int(round(total))
 
 
-def _box_mode_atom_cap(devices: "str | None") -> "int | None":
-    """Atom ceiling the box sizer must respect — the same VRAM/host-RAM cap the
-    water-shell auto-sizer uses, so the two agree about what "fits"."""
-    try:
-        from backend.core.md_vram import (
-            detect_host_ram_mb,
-            detect_vram_mb,  # noqa: PLC0415
-            max_atoms_for_host_ram,
-            max_atoms_for_vram,
-        )
-
-        host = detect_host_ram_mb()
-        host_cap = max_atoms_for_host_ram(host) if host else None
-        if (devices or "").strip().lower() in ("cpu", "none"):
-            return host_cap
-        vram = detect_vram_mb(devices or "0")
-        vram_cap = max_atoms_for_vram(vram) if vram else None
-        caps = [c for c in (vram_cap, host_cap) if c]
-        return min(caps) if caps else None
-    except Exception:  # noqa: BLE001 — sizing must never break a build
-        return None
-
-
-#: The tutorial's solvation padding: ``solvate -minmax`` at the DNA bbox ± 20 Å.
+#: Reference solvation padding; user-selected values are preserved verbatim.
 TUTORIAL_PADDING_NM = 2.0
-#: What to fall back to when the tutorial's padding will not fit the hardware.  NADOC's
-#: historical default — 40 % tighter than the reference, but proven on this box.
-FALLBACK_PADDING_NM = 1.2
-
-
-def resolve_padding_nm(
-    pdb_text: str,
-    requested_nm: float,
-    *,
-    max_atoms: "int | None",
-    fallback_nm: float = FALLBACK_PADDING_NM,
-) -> tuple[float, "str | None"]:
-    """Trim the requested padding when the resulting cell would not fit (pure).
-
-    The protocol asks for bbox ± 20 Å and that is the default, but honouring it is not
-    free: the extra water can push a large design past the hardware's atom cap, which
-    triggers an automatic water-shell carve — and a carved cell runs NVT throughout,
-    which silently deletes BOTH the Note-4 settle stage and the box-trace criterion, on
-    exactly the designs where they matter most.  A slightly tight box that keeps the
-    barostat beats a faithful one that cannot use it.
-
-    Returns ``(padding_nm, note)``; ``note`` is set only when the request was trimmed.
-    """
-    if not max_atoms or requested_nm <= fallback_nm:
-        return requested_nm, None
-    n_dna = 0
-    n_p = 0
-    for ln in pdb_text.splitlines():
-        if not ln.startswith(("ATOM", "HETATM")):
-            continue
-        n_dna += 1
-        if ln[12:16].strip() == "P":
-            n_p += 1
-    try:
-        _, box = _recenter_pdb_in_padded_box(pdb_text, requested_nm, DEFAULT_BOX_MODE)
-        atoms = estimate_box_atoms(box, n_dna, n_p)
-    except Exception:  # noqa: BLE001 — sizing must never break a build
-        return requested_nm, None
-    if atoms <= max_atoms:
-        return requested_nm, None
-    return fallback_nm, (
-        f"trimmed padding {requested_nm:g} -> {fallback_nm:g} nm: the requested cell "
-        f"would be ~{atoms:,} atoms against a {max_atoms:,} cap, which forces a "
-        f"water-shell carve — and a carved cell runs NVT throughout, losing the "
-        f"fixed-DNA settle stage and the box-trace criterion."
-    )
-
-
-#: Unrestrained nanoseconds below which rotation sizing buys nothing.
-#:
-#: Rotation sizing exists because a FREE solute reorients into its own periodic image —
-#: measured on VoltronCore, which overran a bbox cell over 200 ns (exp47).  A relaxation
-#: ladder is not that: it is ~19 ns of which only the k=0 stage is unrestrained, and
-#: rotational diffusion over a few ns is negligible.  For a 2hb rod (L ≈ 11.4 nm) the
-#: Stokes-Einstein-Debye estimate is D_rot ≈ 4.5e5 s⁻¹, so ⟨θ²⟩ = 2·D_rot·t gives
-#: θ_rms ≈ 4° over 4.8 ns against ≈ 24° over 200 ns.  Four degrees cannot walk a solute
-#: into its image; twenty-four can.
-#:
-#: The cost of getting this wrong is not small.  A 2hb's bbox cell is 4.4 × 6.7 × 11.4 nm
-#: (336 nm³); the rotation cell is a 11.9 nm cube (1,698 nm³) — 5x the water, and gmx
-#: FILLS it, so 32.6k atoms becomes 166k and every stage runs ~4x slower.  Paying that
-#: through a ladder that never turns is pure waste.
+#: Run-length threshold used only by the existing production rotation guard.
+#: It does not select or modify the solvent box.
 ROTATION_FREE_NS_THRESHOLD = 20.0
-
-
-def resolve_box_mode(
-    pdb_text: str,
-    padding_nm: float,
-    *,
-    max_atoms: "int | None",
-    free_ns: "float | None" = None,
-    preferred: str = DEFAULT_BOX_MODE,
-) -> tuple[str, "str | None"]:
-    """Pick a cell-sizing rule that is both correct and affordable (pure).
-
-    Two independent reasons to decline rotation sizing:
-
-    * **It is not needed.** ``free_ns`` is how long this package will run UNRESTRAINED.
-      Below :data:`ROTATION_FREE_NS_THRESHOLD` the solute cannot turn far enough for the
-      minimum-image problem to arise, so a bbox cell is both correct and far cheaper.
-      Pass ``None`` to size for an arbitrarily long free run (the safe default).
-    * **It does not fit.** A too-big cell is not a safer choice than a too-small one: it
-      forces a water-shell carve, which forces NVT, which rules out the free NPT stage
-      rotation sizing existed to protect.
-
-    Returns ``(mode, note)``; ``note`` is set whenever rotation was declined, so the
-    caller can record WHY a package is bbox-sized — which the production path then reads
-    back to decide whether a long free run is safe in it.
-    """
-    if preferred != "rotation":
-        return preferred, None
-    if free_ns is not None and free_ns <= ROTATION_FREE_NS_THRESHOLD:
-        return "bbox", (
-            f"bbox sizing: this package runs {free_ns:g} ns unrestrained, under the "
-            f"{ROTATION_FREE_NS_THRESHOLD:g} ns at which a solute can rotate into its own "
-            f"periodic image. A rotation-sized cell would cost several times the water "
-            f"for no benefit. A LONG free run (production) in this cell is NOT "
-            f"trustworthy — re-solvate for one."
-        )
-    if not max_atoms:
-        return preferred, None
-    n_dna = 0
-    n_p = 0
-    for ln in pdb_text.splitlines():
-        if not ln.startswith(("ATOM", "HETATM")):
-            continue
-        n_dna += 1
-        if ln[12:16].strip() == "P":
-            n_p += 1
-    _, rot_box = _recenter_pdb_in_padded_box(pdb_text, padding_nm, "rotation")
-    rot_atoms = estimate_box_atoms(rot_box, n_dna, n_p)
-    if rot_atoms <= max_atoms:
-        return "rotation", None
-    _, bb_box = _recenter_pdb_in_padded_box(pdb_text, padding_nm, "bbox")
-    return "bbox", (
-        f"rotation-sized cell would be ~{rot_atoms:,} atoms (cap {max_atoms:,}); "
-        f"fell back to bbox sizing (~{estimate_box_atoms(bb_box, n_dna, n_p):,} atoms). "
-        f"A free (unrestrained) stage in this box is NOT trustworthy — the solute can "
-        f"rotate into its own periodic image. Use a cluster target for a free run."
-    )
 
 
 def _recenter_pdb_in_padded_box(
@@ -2837,17 +2696,14 @@ def build_namd_solvated_package(
     mg_conc_mM: float = 0.0,
     mg_hexahydrate: bool = False,
     require_full_topology: bool = False,
-    #: Unrestrained nanoseconds this package will run — drives the cell-sizing rule.
-    #: See :data:`ROTATION_FREE_NS_THRESHOLD`.  None = size for an arbitrarily long
-    #: free run.
+    #: Intended unrestrained duration, recorded for provenance; never changes sizing.
     free_ns: "float | None" = None,
     seed: int = 42,
     atomistic_model: "AtomisticModel | None" = None,
     solute_coords: "np.ndarray | None" = None,
     graphene_nanopore: "dict | None" = None,
     graphene_only: bool = False,
-    # Compute target, used ONLY to size the box against the right memory ceiling
-    # (see _box_mode_atom_cap).  "cpu"/"none" sizes to host RAM instead of VRAM.
+    # Retained for caller compatibility; compute hardware never changes the cell.
     devices: str = "0",
     progress: Optional[ProgressCb] = None,
 ) -> bytes:
@@ -2969,26 +2825,8 @@ def build_namd_solvated_package(
         #    _gmx_solvate returns the DNA re-centred into the SAME [0,L] frame as the
         #    water; use THAT text below so DNA + water co-register and every atom
         #    lands inside the periodic cell (else NAMD's GPU kernel crashes).
-        # Cell-sizing rule: prefer rotation (orientation-proof), but fall back to the
-        # historical bbox rule when that would not fit the hardware — a cell too big to
-        # run is not safer than one too small.  The downgrade is recorded, not silent.
-        fixed_box = box_size_nm is not None and all(v is not None for v in box_size_nm)
-        padding_note = box_mode_note = None
-        if not fixed_box:
-            _atom_cap = _box_mode_atom_cap(devices)
-            # Prefer the tutorial's bbox ± 20 Å when it fits the selected hardware.
-            padding_nm, padding_note = resolve_padding_nm(
-                dna_pdb, padding_nm, max_atoms=_atom_cap
-            )
-            if padding_note:
-                logger.info("box sizing: %s", padding_note)
-            box_mode, box_mode_note = resolve_box_mode(
-                dna_pdb, padding_nm, max_atoms=_atom_cap, free_ns=free_ns,
-                preferred=box_mode,
-            )
-            if box_mode_note:
-                logger.warning("box sizing: %s", box_mode_note)
-                _emit(progress, "assemble", 0.4, f"Box sizing: {box_mode_note}")
+        # Honor the requested padding/mode even when the cell exceeds local hardware.
+        # Explicit axes are validated by _gmx_solvate; never silently shrink the box.
         cell_options = {}
         if box_size_nm is not None:
             cell_options["box_size_nm"] = box_size_nm
@@ -3243,17 +3081,12 @@ def build_namd_solvated_package(
             "box_nm": list(box_nm),
             "ion_volume_nm3": ion_volume_nm3,
         },
-        # Which sizing rules produced this cell.  Both were previously logger-only, so a
-        # finished job had no record of whether its box came from rotation or bbox, or
-        # whether the tutorial's padding had been refused for it.
+        # Record the requested sizing policy, without automatic padding/mode overrides.
         "box_sizing": {
             "padding_nm": padding_nm,
             "box_mode": box_mode,
             "requested_box_size_nm": box_size_nm,
-            "padding_note": padding_note,
-            "box_mode_note": box_mode_note,
-            # What the cell was sized FOR.  A package sized for a short ladder cannot
-            # safely host a long production run; append_md_production reads this back.
+            # Duration is provenance only; it never overrides the requested box.
             "sized_for_free_ns": free_ns,
         },
     }

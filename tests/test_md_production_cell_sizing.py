@@ -3,8 +3,8 @@
 Fast, pure tests — no NAMD, no GROMACS.  They pin the three links in the chain that
 let a 1 us production run start in a cell sized for a 4.8 ns restrained ladder:
 
-  1. ``production_ns_intent`` reaching the box sizer, so a package CAN be built
-     rotation-sized (nothing after prep re-solvates, so this is the only chance);
+  1. explicit rotation sizing remains available (automatic duration/hardware
+     downgrades are retired; preservation is covered in test_md_box_no_trimming);
   2. the production child manifest inheriting the parent's ``solvation`` block, so
      the rotation verdict survives the one hop from parent to child; and
   3. ``_assert_cell_fits_a_free_run`` refusing a long free run in a cell that fails
@@ -23,44 +23,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api.routes_md import _assert_cell_fits_a_free_run
-from backend.core.md_protocols import _LADDER_FREE_NS
-from backend.core.namd_solvate import ROTATION_FREE_NS_THRESHOLD, resolve_box_mode
-
-# One DNA atom is enough: resolve_box_mode's short-circuit for a declared-short free
-# run never reaches the atom-count estimate.
-_PDB = "ATOM      1  P   ADE A   1       0.000   0.000   0.000  1.00  0.00      D000\n"
-
-
-class TestIntentDrivesCellSizing:
-    def test_no_intent_keeps_the_cheap_ladder_cell(self) -> None:
-        mode, note = resolve_box_mode(
-            _PDB, 2.0, max_atoms=None, free_ns=_LADDER_FREE_NS
-        )
-        assert mode == "bbox"
-        # The note is the record of WHY, which the package manifest carries forward.
-        assert "not trustworthy" in note.lower()
-
-    def test_a_long_intent_asks_for_a_rotation_sized_cell(self) -> None:
-        mode, note = resolve_box_mode(_PDB, 2.0, max_atoms=None, free_ns=1000.0)
-        assert mode == "rotation"
-        assert note is None
-
-    @pytest.mark.parametrize(
-        "free_ns,expected",
-        [
-            (ROTATION_FREE_NS_THRESHOLD - 0.1, "bbox"),
-            (ROTATION_FREE_NS_THRESHOLD, "bbox"),  # at the threshold: still cheap
-            (ROTATION_FREE_NS_THRESHOLD + 0.1, "rotation"),
-        ],
-    )
-    def test_the_flip_is_at_the_documented_threshold(self, free_ns, expected) -> None:
-        mode, _ = resolve_box_mode(_PDB, 2.0, max_atoms=None, free_ns=free_ns)
-        assert mode == expected
-
-    def test_none_means_size_for_an_arbitrarily_long_run(self) -> None:
-        # The safe default: a caller that says nothing gets the conservative cell.
-        mode, _ = resolve_box_mode(_PDB, 2.0, max_atoms=None, free_ns=None)
-        assert mode == "rotation"
+from backend.core.namd_solvate import ROTATION_FREE_NS_THRESHOLD
 
 
 class _FakeJob:

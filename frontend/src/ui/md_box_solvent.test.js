@@ -1,6 +1,6 @@
 import {it,expect,vi,afterEach} from 'vitest'
 import {readFileSync} from 'node:fs'
-import {initBoxSolvent,solventNumbers} from './md_box_solvent.js'
+import {initBoxSolvent,solventNumbers,faceClearances} from './md_box_solvent.js'
 let ui
 afterEach(()=>{ui?.dispose();document.body.replaceChildren()})
 it('estimates bulk salt counts from liquid volume, not a slab vacuum cell',()=>{
@@ -18,6 +18,16 @@ it('persists explicit preparation, renders live details and restores without sal
  change('md-box-sizing','explicit');change('md-box-x','10');change('md-box-y','15');change('md-box-z','20');change('md-box-salt','custom');change('md-box-na','175');change('md-box-mg','0')
  document.getElementById('md-box-view-details').click()
  await vi.waitFor(()=>expect(events.at(-1)).toMatchObject({enabled:true,dimensions:[10,15,20],na:175,mg:0}),{timeout:2000})
+ document.getElementById('md-box-view-details').click()
+ document.getElementById('md-box-view-periodic').click()
+ expect(events.at(-1)).toMatchObject({enabled:false,periodicImages:true})
+ window.dispatchEvent(new CustomEvent('nadoc:representation-change',{detail:{representation:'beads'}}))
+ expect(document.getElementById('md-box-view-periodic').checked).toBe(false)
+ expect(document.getElementById('md-box-view-periodic').disabled).toBe(true)
+ expect(events.at(-1).periodicImages).toBe(false)
+ window.dispatchEvent(new CustomEvent('nadoc:representation-change',{detail:{representation:'full'}}))
+ expect(document.getElementById('md-box-view-periodic').disabled).toBe(false)
+ expect(document.getElementById('md-box-view-periodic').checked).toBe(false)
  expect(ui.payload()).toMatchObject({box_size_nm:[10,15,20],salt_mode:'custom',ion_conc_mM:175,mg_conc_mM:0})
  await vi.waitFor(()=>expect(api.updateMetadata).toHaveBeenCalled(),{timeout:2000})
  ui.restore({box_size_nm:[8,9,10],salt_mode:'custom',ion_conc_mM:100,mg_conc_mM:2})
@@ -78,4 +88,25 @@ it('does not ask the backend for a box estimate while collapsed, only once expan
  expect(document.getElementById('md-box-loading').hidden).toBe(true)
  document.getElementById('md-box-solvent-toggle').click()
  await vi.waitFor(()=>expect(api.fetchProtocolBoxPreview).toHaveBeenCalledTimes(1))
+})
+
+
+it('measures all six face clearances, including asymmetric and negative gaps',()=>{
+ expect(faceClearances([10,12,14],[0,0,0],{min:[-3,-4,-5],max:[3,4,5]})).toEqual([[2,2],[2,2],[2,2]])
+ expect(faceClearances([10,12,14],[1,0,0],{min:[-3,-4,-5],max:[7,4,5]})).toEqual([[1,-1],[2,2],[2,2]])
+ expect(faceClearances([10,12,14],[0,0,0],null)).toBeNull()
+})
+
+it('recommends 2 nm per face for free DNA and displays measured clearance',async()=>{
+ const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
+ for(const id of ['md-box-solvent-toggle','md-box-solvent-body','md-surface-body'])document.body.append(source.getElementById(id))
+ const api={fetchProtocolBoxPreview:vi.fn(async()=>({box_preview:{selected_nm:[10,12,14],center_nm:[0,0,0],solute_bounds_nm:{min:[-3,-4,-5],max:[3,4,5]}}}))}
+ ui=initBoxSolvent({api,store:{getState:()=>({}),subscribe:()=>()=>{}}})
+ expect(ui.payload()).toMatchObject({box_mode:'bbox',padding_nm:2})
+ document.getElementById('md-box-solvent-toggle').click()
+ await vi.waitFor(()=>expect(document.getElementById('md-box-clearance').textContent).toContain('X− 2.00 / X+ 2.00'))
+ ui.restore({box_mode:'rotation',padding_nm:3})
+ const sizing=document.getElementById('md-box-sizing');sizing.value='auto';sizing.dispatchEvent(new Event('change',{bubbles:true}))
+ expect(ui.payload()).toMatchObject({box_mode:'bbox',padding_nm:2})
+ expect(document.getElementById('md-box-clearance').textContent).toContain('unavailable')
 })

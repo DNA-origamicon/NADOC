@@ -14,6 +14,35 @@ build_namd_solvated_package(design, *, padding_nm=1.2, ion_conc_mM=150.0) -> byt
 get_solvation_stats(design, *, padding_nm=1.2, ion_conc_mM=150.0) -> dict
 ```
 
+## Explicit box sizing (2026-09-22)
+
+Preview and preparation preserve requested padding, sizing mode, and explicit axes.
+The local-memory padding trim and rotation→bbox fallback have been removed, as has
+the short-free-run bbox substitution. Their sizing warnings are no longer generated.
+Hardware and submission checks may reject a run; they must not change its solvent
+geometry. Existing package files retain their historical dimensions and metadata.
+Regression: `tests/test_md_box_no_trimming.py` checks preview and the native-solvation
+boundary under tiny mocked hardware budgets, short/long runs, and partial axis overrides.
+
+## Recommended UI fit (2026-09-22)
+
+Box and solvent Recommended selects bbox + 2 nm per face; choosing it resets the
+padding input to 2. Padding is editable. Rotation sizing remains an explicit
+Allow any orientation option. The UI reports all six geometric face clearances
+from the actual preview bounds, separately from requested envelope padding.
+Reference: Yoo & Aksimentiev 2013 PNAS, 4 nm between periodic images
+(https://pmc.ncbi.nlm.nih.gov/articles/PMC3864285/). Existing submission guards remain.
+
+## Periodic image display (2026-09-22)
+
+View periodic images in Box and solvent independently toggles six non-pickable,
+shared-buffer backbone point ghosts at ± one cell length along X/Y/Z. Setup preview
+only; no solvent or corner/edge neighbors. Clears on invalidation/document changes.
+The toggle sits below View details and is Full-only; leaving Full unchecks it,
+returning does not auto-check it. Ghost positions/colors follow the displayed
+backbone each rendered frame; lattice translations remain the preparation cell.
+The module is `frontend/src/scene/md_periodic_images.js`.
+
 ## Pipeline
 
 1. `export_pdb(design)` → DNA heavy-atom PDB (Angstroms, CHARMM36 naming)

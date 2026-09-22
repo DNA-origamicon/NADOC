@@ -1,9 +1,13 @@
 # Box and solvent
 
 In Simulations → NAMD, expand **Box and solvent** above the surface card. Choose
-rotation-safe fit, bounding-box fit, or explicit X/Y/Z dimensions in nm. Explicit
-dimensions work on a blank part without first estimating DNA geometry. Fit modes
-recalculate when geometry, water margin or surface settings change.
+Recommended (current bounding box + 2 nm per face), custom bounding-box padding,
+Allow any orientation (rotation envelope), or explicit X/Y/Z dimensions in nm.
+Selecting Recommended resets padding to 2 nm. Explicit dimensions work on a blank
+part without first estimating DNA geometry. Fit modes recalculate when geometry,
+requested padding or surface settings change. Actual six-face water clearances are
+shown separately from requested envelope padding. Preparation does not automatically
+trim padding or switch sizing modes to fit hardware; see [box sizing](namd_box_sizing.md).
 
 Select **Custom** ionic conditions to enter NaCl and MgCl₂ concentrations in mM.
 Origami screening uses 0 mM NaCl and 12.5 mM MgCl₂. Surface-control temperature is
@@ -22,6 +26,13 @@ Production retains the prepared source job's box, solvent and protocol behavior.
   identify the slab-corrected periodic direction with vacuum padding. They do
   not represent open/nonperiodic boundaries.
 
+**View periodic images**, on its own row below View details, shows six faint,
+non-interactive backbone copies at ± one box length on each axis. It works
+independently of View details and follows displayed positions/colors in Full
+representation. Switching to another representation unchecks and disables it;
+returning to Full leaves it unchecked. These are setup-box neighbors, not a live
+trajectory-cell contact analysis. See [periodic-image preview](namd_box_sizing.md#display-controls).
+
 The two-electrode card owns its gap and lateral dimensions; Box and solvent shows
 its derived simulation cell with 3× normal padding. Salt counts exclude this
 vacuum. Two-electrode jobs now select the experimental Electrode relaxation protocol;
@@ -36,7 +47,7 @@ Plain blank electrolyte native preparation is not qualified by these UI checks.
 
 Current choices are saved as `metadata.namd_box_solvent` in the document. Named
 presets include this card but remain global files under `workspace/namd_setup_presets`,
-independent of any `.nadoc` document. The visibility overlay starts off when a new
+independent of any `.nadoc` document. Both display toggles start off when a new
 document is opened.
 
 ## Validation (2026-09-13)

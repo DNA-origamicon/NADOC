@@ -5154,12 +5154,9 @@ def _inherited_box_check(job: MdJob, *, max_depth: int = 8) -> Optional[dict]:
 def _assert_cell_fits_a_free_run(job: MdJob, length_ns: float, *, allow: bool) -> None:
     """Refuse a long UNRESTRAINED run in a cell the solute can rotate out of.
 
-    A relaxation package is deliberately bbox-sized (see
-    ``namd_solvate.ROTATION_FREE_NS_THRESHOLD``): its ladder is restrained throughout
-    bar one 4.8 ns stage, and a rotation-sized cell would cost several times the water
-    for a reorientation that never happens.  Production is the opposite case — tens to
-    hundreds of nanoseconds with nothing holding the solute — and that is exactly the
-    run that walks a rod-shaped origami into its own periodic image.
+    Explicit bbox sizing (including packages made by older automatic fallbacks)
+    may not accommodate rotational diffusion during a long free run. Preparation
+    now preserves the user's sizing policy; this guard only evaluates the result.
 
     The package already records the verdict: ``box_check.fits_rotated`` is measured on
     every build.  This just refuses to ignore it.

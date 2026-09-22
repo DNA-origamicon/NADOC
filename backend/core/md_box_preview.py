@@ -82,8 +82,7 @@ def _calculated_box(serialized: str, settings: str) -> dict:
     if spacing is not None:
         design = scale_helix_spacing(design, spacing)
     from backend.core.namd_solvate import (
-        _graphene_pdb_atoms, _recenter_pdb_in_padded_box, _box_mode_atom_cap,
-        resolve_padding_nm, resolve_box_mode,
+        _graphene_pdb_atoms, _recenter_pdb_in_padded_box,
     )
     control = request.graphene_only or (request.graphene_nanopore and not design.strands)
     if control:
@@ -103,9 +102,7 @@ def _calculated_box(serialized: str, settings: str) -> dict:
         }
         lines = _graphene_pdb_atoms(pdb, spec)
         pdb = pdb.rstrip().removesuffix('END').rstrip() + '\n' + '\n'.join(lines) + '\nEND\n'
-    cap = _box_mode_atom_cap(request.devices)
-    padding, padding_note = resolve_padding_nm(pdb, request.padding_nm, max_atoms=cap)
-    mode, mode_note = resolve_box_mode(pdb, padding, max_atoms=cap, free_ns=None, preferred=request.box_mode)
+    padding, mode = request.padding_nm, request.box_mode
     pad_xyz = None
     if control:
         axis = int(max(range(3), key=lambda i: abs(spec['dir'][i])))
@@ -121,5 +118,5 @@ def _calculated_box(serialized: str, settings: str) -> dict:
         'calculated_nm': [math.ceil(v * 1000 - 1e-9) / 1000 for v in calculated],
         'padding_nm': padding, 'box_mode': 'bbox' if control else mode, 'estimated': True,
         'note': 'Sized from fast geometry without crossover optimization. Submitted dimensions stay fixed; preparation checks the final solute clearance.',
-        'sizing_notes': [n for n in (padding_note, mode_note) if n],
+        'sizing_notes': [],
     }

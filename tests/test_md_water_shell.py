@@ -147,54 +147,10 @@ def test_solvation_always_fills_box_without_shell_flag(monkeypatch, tmp_path):
 
 
 def _rod_pdb(n: int = 120, rise_ang: float = 3.4, width_ang: float = 44.0) -> str:
-    """A high-aspect-ratio solute — the shape rotation sizing punishes hardest."""
+    """A high-aspect-ratio solute for comparing explicitly selected sizing modes."""
     return "".join(
         _pdb_atom(i, j * rise_ang, (j % 2) * width_ang, 0.0) + "\n"
         for i, j in enumerate(range(n), start=1)
-    )
-
-
-def test_a_short_free_run_gets_a_bbox_cell():
-    """Rotation sizing protects a LONG unrestrained run from the minimum-image problem.
-    A relaxation ladder is restrained throughout bar one 4.8 ns stage, over which a rod
-    reorients by ~4 degrees — it cannot reach its own image, and a rotation-sized cell
-    costs several times the water for nothing (measured: 2hb 32.6k -> 166k atoms)."""
-    from backend.core.namd_solvate import ROTATION_FREE_NS_THRESHOLD, resolve_box_mode
-
-    mode, note = resolve_box_mode(_rod_pdb(), 1.2, max_atoms=10**9, free_ns=4.8)
-    assert mode == "bbox"
-    assert "unrestrained" in note and "not" in note.lower()
-    # ...and the boundary is inclusive.
-    assert (
-        resolve_box_mode(
-            _rod_pdb(), 1.2, max_atoms=10**9, free_ns=ROTATION_FREE_NS_THRESHOLD
-        )[0]
-        == "bbox"
-    )
-
-
-def test_a_long_free_run_still_gets_a_rotation_cell():
-    from backend.core.namd_solvate import ROTATION_FREE_NS_THRESHOLD, resolve_box_mode
-
-    assert (
-        resolve_box_mode(
-            _rod_pdb(), 1.2, max_atoms=10**9, free_ns=ROTATION_FREE_NS_THRESHOLD + 0.1
-        )[0]
-        == "rotation"
-    )
-    assert (
-        resolve_box_mode(_rod_pdb(), 1.2, max_atoms=10**9, free_ns=200.0)[0]
-        == "rotation"
-    )
-
-
-def test_unknown_free_time_sizes_for_rotation():
-    """None means "no idea how long this runs free" — size for the worst case."""
-    from backend.core.namd_solvate import resolve_box_mode
-
-    assert (
-        resolve_box_mode(_rod_pdb(), 1.2, max_atoms=10**9, free_ns=None)[0]
-        == "rotation"
     )
 
 
@@ -211,9 +167,8 @@ def test_bbox_is_dramatically_cheaper_for_a_rod():
     assert estimate_box_atoms(rot, 120, 120) > 10 * estimate_box_atoms(bb, 120, 120)
 
 
-def test_the_relax_ladder_declares_its_free_time_to_the_sizer():
-    """Regression guard for the wiring: if prepare stops passing free_ns, every relax
-    package silently goes back to paying for a rotation cell."""
+def test_the_relax_ladder_records_its_free_duration():
+    """The short free rung remains recorded independently of cell sizing."""
     from backend.core.md_protocols import _LADDER_FREE_NS
     from backend.core.namd_solvate import ROTATION_FREE_NS_THRESHOLD
 

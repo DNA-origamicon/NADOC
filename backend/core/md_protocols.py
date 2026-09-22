@@ -529,8 +529,7 @@ def protocol_fidelity(
                 "item": "solvent padding",
                 "ours": f"{padding_nm:g} nm",
                 "theirs": "2.0 nm (bbox ± 20 Å)",
-                "why": "trimmed to keep the cell inside the hardware's atom budget; see "
-                "box_sizing.padding_note in the charge audit",
+                "why": "the selected solvent padding is below the reference 2.0 nm",
             }
         )
     if ion.get("counterion") == "na":

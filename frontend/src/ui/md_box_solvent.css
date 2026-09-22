@@ -11,3 +11,5 @@
 .md-box-warnings { color:#e3b341; border-left:2px solid #e3b341; padding-left:8px; margin:8px 0; overflow-wrap:anywhere; }
 .md-box-warnings p { margin:5px 0; }
 #md-box-sizing-help { line-height:1.4; }
+
+#md-box-solvent-body .box-solvent-toggle { display:block; margin:5px 0; }

@@ -454,3 +454,13 @@ password and sign-in. Inspect presenter Leave/Return after updates, cancellation
 and end-of-meeting expiry. The normal MD Play button remains private; prepared clips
 use the shared playback controls. Older hosts need a one-time explicit protocol
 restart after their current meeting. main.js LOC delta: 0.
+
+
+### MV-PERIODIC-IMAGES — sparse periodic-neighbor appearance (2026-09-22)
+
+Inspect View periodic images in Box and solvent on a long origami and a dense plate.
+Orbit and zoom out to compare six face neighbors with the central structure; assess
+point opacity/size and recognizability when the 12,000-point cap subsamples a large
+structure. Browser checks cover real geometry, independent toggles, shared buffers,
+and cleanup; visual legibility across designs still needs a human check.
+main.js LOC delta: 0.

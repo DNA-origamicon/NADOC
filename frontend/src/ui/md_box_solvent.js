@@ -10,11 +10,30 @@ export function solventNumbers(dimensions, na, mg) {
   return {volume_nm3:volume,na:count(na),mg:count(mg),cl:count(na)+2*count(mg)}
 }
 
+/** Signed geometric clearance to each face, in the same frame as the solute. */
+export function faceClearances(dimensions, center, bounds) {
+  if(!bounds || !dimensions || !center)return null
+  if(![...dimensions,...center,...bounds.min,...bounds.max].every(Number.isFinite))return null
+  return dimensions.map((length,i)=>[
+    bounds.min[i]-(center[i]-length/2),
+    center[i]+length/2-bounds.max[i],
+  ])
+}
+
 export function initBoxSolvent({api,store,root=document}={}) {
   const host=root.querySelector('#md-box-solvent-body')
   if(!host)return null
   const inputs=Object.fromEntries(Object.keys(DEFAULTS).map(k=>[k,host.querySelector(`#md-box-${k}`)]))
   const view=host.querySelector('#md-box-view-details'),status=host.querySelector('[role=status]'),boundary=host.querySelector('output')
+  const periodic=host.querySelector('#md-box-view-periodic')
+  let fullRepresentation=!root.querySelector('#menu-view-detail-full') || root.querySelector('#menu-view-detail-full').classList.contains('is-checked')
+  function representationChanged(event){
+    fullRepresentation=event.detail?.representation==='full'
+    if(periodic){periodic.disabled=!fullRepresentation;if(!fullRepresentation)periodic.checked=false}
+    emit()
+  }
+  if(periodic)periodic.disabled=!fullRepresentation
+  window.addEventListener('nadoc:representation-change',representationChanged)
   const spinner=root.querySelector('#md-box-loading'),warningIcon=root.querySelector('#md-box-warning'),warningPanel=host.querySelector('#md-box-warnings')
   let loading=false,calculationWarning='',jobWarnings=[]
   const dismissed=new Set()
@@ -38,7 +57,7 @@ export function initBoxSolvent({api,store,root=document}={}) {
   const isCharged=()=>!!root.querySelector('#md-screening-enable')?.checked
   const read=()=>Object.fromEntries(Object.entries(inputs).map(([k,el])=>[k,el.value]))
   function settings(){
-    const raw=read(),p={padding_nm:Number(raw.padding),box_mode:raw.sizing==='rotation' || (raw.sizing==='auto' && !surfaceContext().graphene_nanopore)?'rotation':'bbox',salt_mode:raw.salt,box_size_nm:null,
+    const raw=read(),p={padding_nm:Number(raw.padding),box_mode:raw.sizing==='rotation'?'rotation':'bbox',salt_mode:raw.salt,box_size_nm:null,
       ion_conc_mM:raw.salt==='screening'?0:Number(raw.na),mg_conc_mM:raw.salt==='screening'?12.5:Number(raw.mg)}
     for(const input of Object.values(inputs))if(!input.disabled && (!input.checkValidity() || !input.value.trim()))throw Error('Correct the Box and solvent settings.')
     if(isCharged() || isPair())p.graphene_temperature_K=Number(raw.temperature)
@@ -68,7 +87,7 @@ export function initBoxSolvent({api,store,root=document}={}) {
       if(preview){
         const dims=preview.selected_nm || preview.calculated_nm
         const solvent=preview.solvent_nm || dims
-        detail={enabled:view.checked,dimensions: dims,solvent,center:preview.center_nm || [0,0,0],solute:preview.solute_bounds_nm || null,
+        detail={enabled:view.checked,periodicImages:fullRepresentation && !!periodic?.checked,dimensions: dims,solvent,center:preview.center_nm || [0,0,0],solute:preview.solute_bounds_nm || null,
           padding:preview.padding_nm ?? p.padding_nm,boundary:preview.boundary || 'periodic',normal_axis:preview.normal_axis,
           na:p.ion_conc_mM,mg:p.mg_conc_mM,numbers:solventNumbers(solvent,p.ion_conc_mM,p.mg_conc_mM),
           temperature:isCharged() || isPair()?Number(inputs.temperature.value):300,
@@ -90,6 +109,11 @@ export function initBoxSolvent({api,store,root=document}={}) {
     inputs.temperature.title=inputs.temperature.disabled?'Ordinary DNA relaxation targets 300 K; stage temperatures remain controlled by the protocol.':'Target temperature for the surface control.'
     boundary.textContent=pair?'Slab: lateral periodic · normal vacuum padding (3×)':'Periodic on all six faces'
     if(preview && (pair || !explicit))for(const [i,k] of ['x','y','z'].entries())inputs[k].value=(preview.selected_nm || preview.calculated_nm)[i].toFixed(3)
+    const clearance=host.querySelector('#md-box-clearance')
+    if(clearance){
+      const gaps=preview && faceClearances(preview.solvent_nm || preview.selected_nm || preview.calculated_nm,preview.center_nm,preview.solute_bounds_nm)
+      clearance.textContent=gaps?`Water clearance to faces (nm): ${gaps.map((pair,i)=>`${'XYZ'[i]}− ${pair[0].toFixed(2)} / ${'XYZ'[i]}+ ${pair[1].toFixed(2)}`).join(' · ')}`:'Water clearance to faces: unavailable until the structure and box are calculated.'
+    }
     paintFeedback();emit()
   }
   async function calculate(){
@@ -115,9 +139,9 @@ export function initBoxSolvent({api,store,root=document}={}) {
   // section is collapsed: it raced the geometry fetch on every design open. A collapsed
   // section just goes stale and recalculates when expanded.
   let stale=false
-  const wanted=()=>host.style.display!=='none' || !!view?.checked
+  const wanted=()=>host.style.display!=='none' || !!view?.checked || !!periodic?.checked
   function schedule(){
-    clearTimeout(timer);version++;preview=null;calculationWarning=''
+    clearTimeout(timer);version++;preview=null;calculationWarning='';paint()
     if(!wanted()){stale=true;loading=false;paintFeedback();emit();return}
     stale=false;loading=true;status.textContent='Calculating box dimensions and solvent details…';paintFeedback();emit();timer=setTimeout(calculate,250)
   }
@@ -127,7 +151,8 @@ export function initBoxSolvent({api,store,root=document}={}) {
     saveTimer=setTimeout(()=>{if(!id || id!==designId || disposed)return;writes=writes.then(async()=>{if(id===designId && !disposed){const saved=await api.updateMetadata?.({namd_box_solvent:values},{skipGeometry:true});if(!saved)throw Error('Metadata update failed')}}).catch(e=>{status.textContent=`Could not save preparation settings: ${e.message}`})},400)
   }
   function change(event){
-    if(event.target===view){if(view.checked && stale)schedule();else emit();return}
+    if(event.target===view || event.target===periodic){if((view.checked || periodic?.checked) && stale)schedule();else emit();return}
+    if(event.target===inputs.sizing && inputs.sizing.value==='auto')inputs.padding.value=2
     if(host.contains(event.target)){if(event.target===inputs.salt && inputs.salt.value==='screening'){inputs.na.value=0;inputs.mg.value=12.5}paint();schedule();save()}
     else if(event.target?.closest?.('#md-surface-body')){paint();schedule()}
   }
@@ -145,7 +170,7 @@ export function initBoxSolvent({api,store,root=document}={}) {
     jobWarnings=[];dismissed.clear()
     const saved=store?.getState()?.currentDesign?.metadata?.namd_box_solvent || DEFAULTS
     for(const k of Object.keys(DEFAULTS))inputs[k].value=saved[k] ?? DEFAULTS[k]
-    view.checked=false;paint();schedule()
+    view.checked=false;if(periodic)periodic.checked=false;paint();schedule()
   }
   const unsub=store?.subscribe(()=>{const state=store.getState(),id=state?.currentDesign?.id;if(id!==designId){designId=id;geometry=state.currentGeometry;clearTimeout(saveTimer);restoreDocument()}else if(state.currentGeometry!==geometry){geometry=state.currentGeometry;schedule()}})
   restoreDocument()
@@ -153,5 +178,5 @@ export function initBoxSolvent({api,store,root=document}={}) {
     setJobWarnings(warnings){jobWarnings=warnings || [];paintFeedback()},
     restore,refresh:schedule,summary:()=>isPair()?'Box and solvent: dimensions linked to Two-electrode settings.':`Box and solvent: ${inputs.sizing.value==='explicit'?['x','y','z'].map(k=>inputs[k].value).join(' × ')+' nm':`automatic ${settings().box_mode==='rotation'?'rotation-safe':'bounding-box'} fit; final dimensions set during preparation`}; NaCl ${settings().ion_conc_mM} mM; MgCl₂ ${settings().mg_conc_mM} mM. Edit in the sidebar.`,
     acceptPreview(value){if(value && inputs.sizing.value!=='explicit' && !isPair()){preview={...preview,...value,center_nm:preview?.center_nm || value.center_nm,solute_bounds_nm:preview?.solute_bounds_nm || value.solute_bounds_nm};paint()}},
-    dispose(){disposed=true;loading=false;paintFeedback();warningIcon?.removeEventListener('click',openWarnings);version++;clearTimeout(timer);clearTimeout(saveTimer);unsub?.();root.removeEventListener('input',change);root.removeEventListener('change',change);window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{enabled:false}}))}}
+    dispose(){window.removeEventListener('nadoc:representation-change',representationChanged);disposed=true;loading=false;paintFeedback();warningIcon?.removeEventListener('click',openWarnings);version++;clearTimeout(timer);clearTimeout(saveTimer);unsub?.();root.removeEventListener('input',change);root.removeEventListener('change',change);window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{enabled:false}}))}}
 }

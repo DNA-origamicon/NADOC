@@ -139,9 +139,7 @@ PRESETS: dict[str, RelaxPreset] = {
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "box_mode": "rotation",
-            # The tutorial's own recipe is the DNA bbox ± 20 Å.  NADOC shipped 1.2 nm,
-            # 40 % tighter.  namd_solvate.resolve_padding_nm trims this back down when
-            # the resulting complete cell would not fit the selected hardware.
+            # Reference padding; preview and preparation honor this without trimming.
             "padding_nm": 2.0,
             "early_stop_relax": True,
         },
