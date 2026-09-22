@@ -107,6 +107,9 @@ or fewer. Simulation engines and VR require their respective dependencies.
   - Rare 5-mer selection
   - GC-content filtering
   - Hairpin/self-dimer filtering
+  - Thermodynamic screening of whole staples and final connected linkers
+  - Atomic staple/linker updates; failed searches preserve existing sequences
+  - Locked sub-domain preservation during generation
   - Corpus-diversity filtering
 - **Ordering and Plates**
   - 96-well plate layout

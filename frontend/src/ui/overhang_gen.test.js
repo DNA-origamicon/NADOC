@@ -4,7 +4,7 @@ import { runOverhangGen, reverseComplement } from './overhang_gen.js'
 function makeDeps(seqMap, showChoice) {
   const api = {
     // A "new random" sequence for the target (deterministic for the test).
-    generateOverhangRandomSequence: vi.fn(async (id) => { seqMap[id] = 'GGGGCCCC' }),
+    generateOverhangRandomSequence: vi.fn(async (id) => { seqMap[id] = 'GGGGCCCC'; return {} }),
     patchOverhang: vi.fn(async (id, { sequence }) => { seqMap[id] = sequence }),
   }
   return { api, getSeq: (id) => seqMap[id] ?? null, showChoice }
@@ -66,6 +66,15 @@ describe('runOverhangGen', () => {
     await runOverhangGen('a', 'b', d)
     expect(d.api.generateOverhangRandomSequence).not.toHaveBeenCalled()
     expect(d.api.patchOverhang).not.toHaveBeenCalled()
+  })
+
+  it('failed generation in "pair" leaves the partner unchanged', async () => {
+    const seqs = { a: 'TTTT', b: 'AAAC' }
+    const d = makeDeps(seqs, vi.fn(async () => 'pair'))
+    d.api.generateOverhangRandomSequence.mockResolvedValue(null)
+    await runOverhangGen('a', 'b', d)
+    expect(d.api.patchOverhang).not.toHaveBeenCalled()
+    expect(seqs).toEqual({ a: 'TTTT', b: 'AAAC' })
   })
 
   it('uses the injected (register-aware) rcOfPartner for every RC write', async () => {

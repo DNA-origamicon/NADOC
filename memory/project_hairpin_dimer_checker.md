@@ -88,8 +88,29 @@ isolated backend (`NADOC_WORKSPACE` scratch) with a VoltronCore copy: 70 checks,
 the selection unchanged; regenerating a flagged overhang = one targeted re-check. ΔG differs from IDT's UNAFold (−12.8 vs primer3
 −10.7 kcal/mol at 25 °C, 50 mM Na⁺) — different loop/terminal parameters; structures agree.
 
+## Generation screening — shipped 2026-09-22
+
+- Generation now screens full overhangs, whole affected staples, and final connected linker
+  sequences through `overhang_sequence_screen.OverhangSequenceScreen` before committing.
+  Single Gen, bulk Gen and sub-domain Gen share the screen. Overhang/linker cutoff is 30 °C
+  under `ORIGAMI_BUFFER`; staple hairpin and self-dimer limits are each max(30 °C, fixed-body
+  baseline with the variable overhang masked). The baseline allows immutable scaffold-body
+  structures without grandfathering the old overhang. It bounds maximum Tm per structure type;
+  it does not prove that every individual structure is unchanged. Locked sub-domains survive.
+  Accepted staple/linker sequences are committed together, including actual bridge bases.
+  Johnson candidates are tried first; random exploration remains subject to the same screen
+  and GC/heuristic filters. Exhaustion is a 422 with no mutation, never an unchecked fallback.
+  All-or-nothing bulk generation screens against previously accepted candidates in the batch.
+  Limits: unchanged linker arms/bridge can make one-arm regeneration impossible, undefined
+  bases remain partial, and long-strand windowing is inherited from the checker.
+
+Validation: 33 tests in `test_hairpin_dimer.py`, 69 focused backend tests, and
+6,590 frontend tests passed. The real Gen button cleared an 85.8 °C linker warning
+on an isolated VoltronCoreArmV2 copy and the saved source remained unchanged.
+The wider FAST run still has 30 failures and 9 errors outside the generation tests;
+the FULL suite is deferred. Details: [generation screening](../docs/overhang_generation_screening.md).
+
 ## Open
 
-- Generator (`overhang_generator._filter_structure`) still uses string heuristics, so generated
-  overhangs can be flagged immediately. Filtering candidates by thal Tm is the obvious follow-up.
-- No UI to change threshold/conditions (both are API-body overrides; UI always uses the origami buffer).
+- No UI to change threshold/conditions. The checker supports API-body overrides;
+  generation uses its fixed defaults (30 °C, origami buffer).

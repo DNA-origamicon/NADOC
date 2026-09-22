@@ -7180,9 +7180,8 @@ def generate_sub_domain_random(
     generation in tests / for record-and-replay.
     """
     import random as _random
-    from backend.core.overhang_generator import (
-        generate_overhang_sequence_with_overrides,
-    )
+    from backend.api.routes_overhang_sequences import _generated_sequence
+    from backend.core.overhang_sequence_screen import OverhangSequenceScreen
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -7230,21 +7229,11 @@ def generate_sub_domain_random(
     if body.seed is not None:
         _random.seed(int(body.seed))
 
-    scaffold = design.scaffold()
-    scaffold_seq = scaffold.sequence if scaffold and scaffold.sequence else ""
-    staple_seqs = [
-        s.sequence
-        for s in design.strands
-        if s.strand_type != StrandType.SCAFFOLD and s.sequence
-    ]
-
-    # 4. Call the override-aware generator. It returns the FULL overhang
-    #    sequence with the locked overrides verbatim and the target slot
-    #    filled with a freshly generated piece.
-    full_seq = generate_overhang_sequence_with_overrides(
-        scaffold_seq,
-        staple_seqs,
-        temp_sub_doms,
+    # Screen the complete oligos with the neighbours locked, not just the
+    # variable fragment; no candidate is committed until every screen passes.
+    full_seq, _ = _generated_sequence(
+        design, spec.model_copy(update={"sub_domains": temp_sub_doms}),
+        sum(s.length_bp for s in temp_sub_doms),
     )
 
     # 5. Slice out the target sub-domain's segment.
@@ -7279,8 +7268,8 @@ def generate_sub_domain_random(
         )
         # Re-splice into the assembled strand sequence so downstream consumers
         # (atomistic, CSV export, etc.) see the new bases.
-        updated_ = _resplice_overhang_in_strand(updated_, overhang_id, cur.strand_id)
-        return updated_
+        new_spec = next(o for o in updated_.overhangs if o.id == overhang_id)
+        return OverhangSequenceScreen(updated_, new_spec).apply(full_seq)
 
     updated, report, _entry = design_state.mutate_with_feature_log(
         op_kind="overhang-bulk",

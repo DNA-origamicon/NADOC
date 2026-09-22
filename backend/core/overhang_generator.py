@@ -9,8 +9,13 @@ from __future__ import annotations
 
 import itertools
 import random
+from typing import Callable
 
 import numpy as np
+
+
+class SequenceGenerationError(ValueError):
+    """No candidate satisfying the requested structure constraints was found."""
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +307,7 @@ def generate_overhang_sequences(
     gc_min: float = 35.0,
     gc_max: float = 75.0,
     staple_weight: int = 5,
+    candidate_filter: Callable[[str], bool] | None = None,
 ) -> list[str]:
     """Generate *count* unique overhang sequences of *length* bases.
 
@@ -309,8 +315,9 @@ def generate_overhang_sequences(
     sequences that are rare in the scaffold + staple corpus, pass GC
     content constraints, and avoid hairpins / self-dimers.
 
-    Falls back to random sequences if the algorithm cannot find enough
-    candidates within the maximum iteration budget.
+    ``candidate_filter`` screens each complete candidate in its design context.
+    When supplied it is a hard constraint: exhaustion raises instead of returning
+    an unchecked random fallback.
 
     Parameters
     ----------
@@ -368,7 +375,9 @@ def generate_overhang_sequences(
         random.shuffle(candidates)
 
         for seq in candidates:
-            if seq not in results:
+            if seq not in results and (
+                candidate_filter is None or candidate_filter(seq)
+            ):
                 results.append(seq)
                 # Add to extra corpus for diversity on subsequent iterations
                 rc = reverse_complement(seq)
@@ -377,7 +386,25 @@ def generate_overhang_sequences(
                 if len(results) >= count:
                     break
 
-    # Fill any remaining slots with random fallbacks
+    if len(results) < count and candidate_filter is not None:
+        # Rare k-mer seeds can concentrate the search on a narrow sequence
+        # family. Explore alternatives, but never relax structural constraints.
+        for _ in range(2000):
+            fb = _random_fallback(length)
+            if (
+                fb not in results
+                and gc_min <= gc_content(fb) <= gc_max
+                and _filter_structure([fb])
+                and candidate_filter(fb)
+            ):
+                results.append(fb)
+                if len(results) >= count:
+                    return results[:count]
+        raise SequenceGenerationError(
+            "No sequence passed the structure screen within the search budget."
+        )
+
+    # Legacy standalone callers retain their random fallback.
     while len(results) < count:
         fb = _random_fallback(length)
         if fb not in results:
@@ -398,6 +425,7 @@ def generate_overhang_sequence_with_overrides(
     gc_min: float = 35.0,
     gc_max: float = 75.0,
     staple_weight: int = 5,
+    candidate_filter: Callable[[str], bool] | None = None,
 ) -> str:
     """Generate one overhang sequence honouring locked sub-domain overrides.
 
@@ -416,6 +444,20 @@ def generate_overhang_sequence_with_overrides(
     """
     if not sub_domains:
         return ""
+
+    if candidate_filter is not None:
+        # Screen the assembled sequence, including locked bases and junctions,
+        # rather than approving independently generated variable fragments.
+        attempts = 1 if all(sd.sequence_override for sd in sub_domains) else 500
+        for _ in range(attempts):
+            candidate = generate_overhang_sequence_with_overrides(
+                scaffold_seq, staple_seqs, sub_domains, gc_min, gc_max, staple_weight
+            )
+            if candidate_filter(candidate):
+                return candidate
+        raise SequenceGenerationError(
+            "No sequence passed the structure screen with the current locked sub-domains."
+        )
 
     # Sort defensively — callers should pass them ordered already.
     ordered = sorted(sub_domains, key=lambda sd: getattr(sd, "start_bp_offset", 0))

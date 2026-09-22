@@ -417,3 +417,175 @@ def test_generate_all_reports_generated_overhang_ids():
         "ovhg_h_a_0_5p",
         "ovhg_h_b_0_3p",
     ]
+
+
+# ── Generation screens the final oligos, before committing any sequence ───────
+
+
+def test_generation_screen_rejects_structure_formed_only_in_final_linker():
+    from backend.core.overhang_sequence_screen import OverhangSequenceScreen
+
+    d = _seed(seq_a=BENIGN, seq_b=_rc(BENIGN), linker_type="ss", bridge="TTTT")
+    screen = OverhangSequenceScreen(d, d.overhangs[0])
+    assert hairpin(BENIGN, COND) is None
+    assert dimer(BENIGN, BENIGN, COND) is None
+    assert not screen(BENIGN)
+    assert "__lnk__" in screen.last_failure
+    assert screen(_rc(BENIGN))
+    updated = screen.apply(_rc(BENIGN))
+    linker = next(s for s in updated.strands if s.strand_type == StrandType.LINKER)
+    assert linker.sequence == linker_strand_sequence(updated, linker)
+    assert updated.find_strand("s_a").sequence == _rc(BENIGN)
+    assert d.overhangs[0].sequence == BENIGN  # probing/accepting is pure
+    assert updated.find_strand("s_b") is d.find_strand("s_b")
+
+
+def test_generation_screen_includes_whole_staple_body_and_preserves_it():
+    from backend.core.overhang_sequence_screen import OverhangSequenceScreen
+
+    d = _seed(seq_a=BENIGN)
+    staple = d.find_strand("s_a")
+    body = Domain(helix_id="body", start_bp=0, end_bp=25, direction=Direction.FORWARD)
+    fixed = _rc(BENIGN) + "TTTT"
+    staple = staple.model_copy(
+        update={
+            "domains": [body, *staple.domains],
+            "sequence": fixed + BENIGN,
+        }
+    )
+    d = d.model_copy(
+        update={"strands": [staple if s.id == staple.id else s for s in d.strands]}
+    )
+    screen = OverhangSequenceScreen(d, d.overhangs[0])
+    assert not screen(BENIGN)
+    assert "s_a" in screen.last_failure
+    assert screen(_rc(BENIGN))
+    assert screen.apply(_rc(BENIGN)).find_strand("s_a").sequence == fixed + _rc(BENIGN)
+
+
+def test_gen_endpoint_retries_and_commits_matching_staple_and_linker(monkeypatch):
+    import backend.core.overhang_generator as generator
+
+    d = _seed(seq_a=BENIGN, seq_b=_rc(BENIGN), linker_type="ss", bridge="TTTT")
+    # Both pass isolated-overhang heuristics; only the second passes in context.
+    monkeypatch.setattr(generator, "_extend_seeds", lambda *args: [BENIGN, _rc(BENIGN)])
+    monkeypatch.setattr(
+        generator.random, "shuffle", lambda seqs: seqs.sort(key=lambda s: s != BENIGN)
+    )
+    design_state.set_design(d)
+    r = client.post(f"/api/design/overhang/{d.overhangs[0].id}/generate-random")
+    assert r.status_code == 200, r.text
+    updated = design_state.get_or_404()
+    assert updated.overhangs[0].sequence == _rc(BENIGN)
+    assert updated.find_strand("s_a").sequence == _rc(BENIGN)
+    checks = check_design(updated, overhang_ids=[d.overhangs[0].id])["checks"]
+    assert checks and not any(c["flagged"] for c in checks)
+    linker = next(s for s in updated.strands if s.strand_type == StrandType.LINKER)
+    assert linker.sequence == linker_strand_sequence(updated, linker)
+
+
+def test_gen_exhaustion_returns_422_without_mutation_or_random_fallback(monkeypatch):
+    import backend.core.overhang_generator as generator
+
+    d = _seed(seq_a=BENIGN, seq_b=_rc(BENIGN), linker_type="ss", bridge="TTTT")
+    monkeypatch.setattr(generator, "_extend_seeds", lambda *args: [BENIGN])
+    monkeypatch.setattr(generator, "_random_fallback", lambda *_: BENIGN)
+    design_state.set_design(d)
+    before = design_state.get_or_404()
+    r = client.post(f"/api/design/overhang/{d.overhangs[0].id}/generate-random")
+    assert r.status_code == 422, r.text
+    assert "whole staple and connected linkers" in r.json()["detail"]
+    assert design_state.get_or_404() is before
+
+
+def test_locked_sequence_is_screened_and_not_silently_overwritten():
+    from backend.core.overhang_generator import (
+        generate_overhang_sequence_with_overrides,
+        SequenceGenerationError,
+    )
+    from backend.core.overhang_sequence_screen import OverhangSequenceScreen
+
+    d = _seed(seq_a=STRONG)
+    spec = d.overhangs[0]
+    locked = spec.sub_domains[0].model_copy(update={"sequence_override": STRONG})
+    spec = spec.model_copy(update={"sub_domains": [locked]})
+    screen = OverhangSequenceScreen(d, spec)
+    with pytest.raises(SequenceGenerationError):
+        generate_overhang_sequence_with_overrides(
+            "", [], [locked], candidate_filter=screen
+        )
+    assert screen.attempts == 1
+
+
+@pytest.mark.parametrize("linker_type", ["ss", "ds"])
+def test_generation_commits_actual_linker_bridge_and_both_binding_polarities(
+    linker_type,
+):
+    from backend.core.overhang_sequence_screen import OverhangSequenceScreen
+
+    d = _seed(seq_a=STRONG, linker_type=linker_type, bridge="ACACAC")
+    for spec in d.overhangs:
+        screen = OverhangSequenceScreen(d, spec)
+        d = screen.apply(BENIGN)
+        for strand in screen.strands:
+            if strand.strand_type == StrandType.LINKER:
+                updated = d.find_strand(strand.id)
+                assert updated.sequence == linker_strand_sequence(d, updated)
+
+
+def test_generation_allows_fixed_staple_baseline_but_checks_each_structure_type():
+    from backend.core.overhang_sequence_screen import OverhangSequenceScreen
+
+    d = _seed(seq_a=BENIGN)
+    staple = d.find_strand("s_a")
+    fixed = STRONG + "NNNN"
+    body = Domain(
+        helix_id="body", start_bp=0, end_bp=len(fixed) - 1, direction=Direction.FORWARD
+    )
+    staple = staple.model_copy(
+        update={"domains": [body, *staple.domains], "sequence": fixed + BENIGN}
+    )
+    d = d.model_copy(
+        update={"strands": [staple if s.id == staple.id else s for s in d.strands]}
+    )
+    screen = OverhangSequenceScreen(d, d.overhangs[0])
+    assert screen.limits["s_a"][0] == hairpin(STRONG, COND)["tm"]
+    assert screen.limits["s_a"][1] == max(30, dimer(STRONG, STRONG, COND)["tm"])
+    assert screen(BENIGN)
+    assert not screen(
+        STRONG
+    )  # the overhang itself must pass, regardless of body baseline
+
+
+def test_screened_fallback_can_find_safe_candidate_without_relaxing_constraints(
+    monkeypatch,
+):
+    import backend.core.overhang_generator as generator
+
+    monkeypatch.setattr(generator, "_extend_seeds", lambda *args: [])
+    candidates = iter([STRONG, BENIGN])
+    monkeypatch.setattr(generator, "_random_fallback", lambda *_: next(candidates))
+    result = generator.generate_overhang_sequences(
+        "", [], 22, candidate_filter=lambda s: s == BENIGN
+    )
+    assert result == [BENIGN]
+
+
+def test_bulk_generation_failure_is_atomic_with_locked_unsafe_overhang():
+    d = _seed(seq_a=BENIGN, seq_b=STRONG)
+    locked = (
+        d.overhangs[1].sub_domains[0].model_copy(update={"sequence_override": STRONG})
+    )
+    d = d.model_copy(
+        update={
+            "overhangs": [
+                d.overhangs[0],
+                d.overhangs[1].model_copy(update={"sub_domains": [locked]}),
+            ]
+        }
+    )
+    design_state.set_design(d)
+    before = design_state.get_or_404()
+    r = client.post("/api/design/generate-overhang-sequences")
+    assert r.status_code == 422, r.text
+    assert design_state.get_or_404() is before
