@@ -78,7 +78,8 @@ export function normalizeVRToolConfig(input) {
     if (lengthBp === undefined || ![-1, 1].includes(input.direction_sign) ||
         !STRAND_FILTERS.has(input.strand_filter) ||
         typeof input.ligate_adjacent !== 'boolean' ||
-        input.footprint_state !== 'unresolved') return null
+        input.footprint_state !== 'unresolved' ||
+        (input.extrude_from !== undefined && !['XY', 'XZ', 'YZ'].includes(input.extrude_from))) return null
     return {
       mode: input.mode, ...target,
       length_bp: lengthBp,
@@ -86,6 +87,7 @@ export function normalizeVRToolConfig(input) {
       strand_filter: input.strand_filter,
       ligate_adjacent: input.ligate_adjacent,
       footprint_state: input.footprint_state,
+      ...(input.extrude_from === undefined ? {} : { extrude_from: input.extrude_from }),
     }
   }
   const planeA = _boundedInteger(

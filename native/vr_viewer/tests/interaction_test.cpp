@@ -1,4 +1,7 @@
 #include "interaction.hpp"
+#include "extrude_plane.hpp"
+#include "stroke_font.hpp"
+#include <sstream>
 #include "jobs.hpp"
 #include "picking.hpp"
 #include "visualization.hpp"
@@ -1318,6 +1321,20 @@ void menuComfortTelemetryMeasuresDepthMotionAndControllerResiduals() {
 }  // namespace
 
 int main() {
+    require(nadoc_vr::glyph('Z') != nadoc_vr::glyph(' '));
+    require(nadoc_vr::glyph('Z') != nadoc_vr::glyph('X'));
+    require(nadoc_vr::glyph('Z') != nadoc_vr::glyph('Y'));
+    nadoc_vr::ExtrudePlane source;
+    std::istringstream record("XZ SQUARE geometry");
+    source.read(record);
+    require(source.plane == "XZ" && source.lattice == "SQUARE");
+    source.cycle(); require(source.plane == "YZ" && source.reason == "user");
+    source.cycle(); require(source.plane == "XY");
+    bool rejected = false;
+    try { std::istringstream invalid("freeform SQUARE geometry"); source.read(invalid); }
+    catch (const std::runtime_error&) { rejected = true; }
+    require(rejected);
+
     oneHandGrabFollowsRigidControllerDelta();
     twoHandGrabScalesAroundMidpointWithoutJumping();
     oneTwoOneTransitionsStayContinuous();

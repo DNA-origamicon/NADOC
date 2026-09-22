@@ -49,6 +49,7 @@ def action(name, description, properties=None):
 
 TOOLS = [
     tool("observe", "Inspect live session, frame, controls, owner identity, browser acknowledgement and Extrude draft. Works after viewer restarts. Offline is an explicit error.", read=True),
+    action("scene_visibility", "Diagnostic rendering only: show or hide design while preserving geometry, scale and input behavior.", {"visibility": {"enum": ["normal", "hidden"]}}),
     action("pose", "Set one test hand pose in OpenXR LOCAL meters, quaternion XYZW. Does not move the physical head. Held buttons expire after two seconds without a control command; neutral poses remain available.",
            {"hand": HAND, "position": VECTOR,
             "orientation": {**VECTOR, "minItems": 4, "maxItems": 4}}),
@@ -190,7 +191,9 @@ class Bridge:
         if not session or any(c not in "0123456789-" for c in session):
             raise ValueError("invalid session token")
         command = operation
-        if operation == "pose":
+        if operation == "scene_visibility":
+            command += " " + args["visibility"]
+        elif operation == "pose":
             if not 0.99 <= math.sqrt(sum(v*v for v in args["orientation"])) <= 1.01:
                 raise ValueError("orientation must be normalized XYZW")
             command += " " + " ".join(map(str, [args["hand"], *args["position"], *args["orientation"]]))

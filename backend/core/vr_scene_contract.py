@@ -80,9 +80,9 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     if (
         len(header) != 4
         or header[0] != "NADOCVR"
-        or header[1] not in {"6", "7", "8", "9", "10", "11", "12"}
+        or header[1] not in {"6", "7", "8", "9", "10", "11", "12", "13"}
     ):
-        raise ValueError("stable comparison requires NADOCVR v6 through v12")
+        raise ValueError("stable comparison requires NADOCVR v6 through v13")
     version = int(header[1])
     result: dict[str, dict[str, ScenePrimitive]] = {}
     handle_tokens: dict[str, set[str]] = {}
@@ -91,6 +91,13 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     for line_number, line in enumerate(lines[1:], start=2):
         fields = line.split()
         if not fields or fields[0].startswith("#"):
+            continue
+        if fields[0] == "F" and version >= 13:
+            if (len(fields) != 4 or active is not None
+                    or fields[1] not in {"XY", "XZ", "YZ"}
+                    or fields[2] not in {"SQUARE", "HONEYCOMB"}
+                    or fields[3] not in {"geometry", "mixed", "unknown", "empty"}):
+                raise ValueError("invalid extrusion source-plane metadata")
             continue
         if fields[0] in {"R", "E"}:
             if len(fields) != 2:

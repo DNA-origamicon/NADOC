@@ -1475,7 +1475,10 @@ def _serialize_scene(
         )
 
     lines = _SceneLineEmitter(line_writer)
-    lines.append(f"NADOCVR 12 {representation} {coloring}")
+    from backend.core.extrude_plane import extrude_plane_record
+
+    lines.append(f"NADOCVR 13 {representation} {coloring}")
+    lines.append(extrude_plane_record(design))
     lines.append("# stable identities, owner aliases, and endpoint-aware tool scopes")
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
@@ -2697,7 +2700,7 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     expanded_lines = expanded_text.splitlines()
     natural_header = natural_lines[0].split()
     expanded_header = expanded_lines[0].split()
-    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "12"]:
+    if natural_header != expanded_header or (natural_header[0] != "NADOCVR" or natural_header[1] not in {"12", "13"}):
         raise HTTPException(500, detail="Expanded VR scene headers do not match.")
 
     def blocks(lines: list[str]) -> dict[str, list[str]]:
@@ -2718,9 +2721,14 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     if set(natural_blocks) != set(expanded_blocks):
         raise HTTPException(500, detail="Expanded VR representations do not match.")
     output = [
-        f"NADOCVR 12 {natural_header[2]} {natural_header[3]}",
+        " ".join(natural_header),
         "# natural and expanded poses share identities and endpoint-aware tool scopes",
     ]
+    if natural_header[1] == "13":
+        defaults = [line for line in natural_lines if line.startswith("F ")]
+        if len(defaults) != 1 or defaults != [line for line in expanded_lines if line.startswith("F ")]:
+            raise HTTPException(500, detail="Expanded extrusion defaults differ.")
+        output.extend(defaults)
     for representation, natural_records in natural_blocks.items():
         expanded_records = expanded_blocks[representation]
         primitive_types = {"P", "C", "H", "B"}
@@ -2886,7 +2894,7 @@ def _snapshot(
     expanded_writer = None
     if line_writer is not None:
         def expanded_writer(line: str) -> None:
-            if line.startswith("NADOCVR ") or line.startswith("#"):
+            if line.startswith(("NADOCVR ", "#", "F ")):
                 return
             line_writer(f"E {line[2:]}") if line.startswith("R ") else line_writer(line)
 
@@ -3335,6 +3343,7 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
             or raw.get("strand_filter") not in {"both", "scaffold", "staples"}
             or not isinstance(raw.get("ligate_adjacent"), bool)
             or raw.get("footprint_state") != "unresolved"
+            or raw.get("extrude_from", "XY") not in {"XY", "XZ", "YZ"}
         ):
             raise ValueError("invalid extrusion configuration")
         return {
@@ -3344,6 +3353,7 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
             "strand_filter": raw["strand_filter"],
             "ligate_adjacent": raw["ligate_adjacent"],
             "footprint_state": "unresolved",
+            **({"extrude_from": raw["extrude_from"]} if "extrude_from" in raw else {}),
         }
 
     plane_a_bp = bounded_int(

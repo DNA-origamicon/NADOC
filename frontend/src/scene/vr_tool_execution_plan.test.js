@@ -37,6 +37,12 @@ const endContext = overrides => ({
 })
 
 describe('native VR parameterized tool execution plans', () => {
+  it('refuses a draft plane that conflicts with an existing end', () => {
+    const result = buildVRParameterizedToolPlan(endDraft({ extrude_from: 'XZ' }), {
+      toolTarget: target(endRef, { toolContext: endContext() }), design, geometry,
+    })
+    expect(result.reason).toBe('source_plane_mismatch')
+  })
   it('maps an exact free End to the desktop continuation operation without executing it', () => {
     const result = buildVRParameterizedToolPlan(endDraft(), {
       toolTarget: target(endRef, { toolContext: endContext() }), design, geometry,

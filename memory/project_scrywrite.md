@@ -7,6 +7,48 @@ review_after: 2026-09-21
 
 # ScryWrite VR troubleshooting
 
+Extrude source-plane increment (2026-09-22): `EXTRUDE FROM` cycles XY/XZ/YZ in native
+settings, carried as `extrude_from` in drafts/observation. Scene v13 adds the
+`F <plane> <lattice> <reason>` default record; older scenes use XY/unknown.
+Desktop's existing dropdown now resolves loaded geometry too. Source IDs take
+precedence over rest-axis alignment; mixed/oblique inputs remain explicit fallbacks.
+Future blunt-end/freeform options are deferred; user-approved freeform semantics are
+canonical-plane topology plus persisted placement. Frame ownership and commits remain
+outstanding. See the audit below and `.development-artifacts/vr-extrude-from/validation.md`.
+
+VR Extrude persistence/coordinates audit (2026-09-22):
+[findings and implementation contract](../docs/vr_extrude_lattice_mapping_audit.md).
+Painted cells are native drafts; existing-end plans preflight but have no attached
+Extrude commit executor. Arbitrary orientation needs explicit lattice-frame ownership,
+frame-aware cell consumers and a browser-authoritative transaction. Mixed-plane same-cell
+segments reproduce duplicate cadnano export coordinates; do not assume UI paint proves authoring.
+
+User preference and reusable skill: [make debugging observable](feedback_debug_visibility.md).
+Proactively improve viewing conditions while preserving the behavior under test.
+
+## Start here: live visual inspector status (audited 2026-09-22)
+
+[Inspector capability index and entry points](../docs/scrywrite_inspector.md).
+Implemented: unified native VR inspector at `http://127.0.0.1:8766` (when running),
+`tools/scrywrite_inspector/` and `frontend/scrywrite/inspector/`. It combines stereo
+pixel identity picking, frame-bound hit geometry/rays, production input ownership,
+normal/hidden scene rendering and the existing Extrude human-profile workflow.
+`tools/vr_motion/session.py` shares the transport/session/capture/release safeguards.
+Use steady_fast first; final validation all four in the same viewer session.
+Hide the chiral fixture after tests requiring its scene/object identity complete;
+restore it only for scene-dependent checks and hide again afterward. Rendering-only
+hiding preserves sizing/normalization; scene picking remains active outside UI.
+Session launch/socket/PIDs: `.development-artifacts/vr-human-motion-live/launch.json`.
+Remaining: synchronized scrubbable native/browser timeline, general actionability
+locators and per-control occlusion assertions. The desktop Three.js inspector remains
+`frontend/src/scene/scene_inspector.js`; it serves a different renderer.
+
+
+Human-motion testing (2026-09-22): [dataset location and modeller](project_vr_human_motion.md),
+with [CLI/runbook](../docs/vr_human_motion.md). Seeded synthetic traces and imported
+Vive recordings feed existing Witness/live interfaces; human-profile calibration and
+physical validation of the new modeller remain open.
+
 For Vive recovery or a requested dummy left-eye window, first read
 [VR recovery guardrails](feedback_vr_restore_proven_path.md). The existing physical
 mirror and view-relative framing were user-confirmed working on 2026-09-08; do not
@@ -57,7 +99,10 @@ Physical-HMD mirror contract and dummy validation:
 - Native CTest and a Playwright fixture both execute the same scenario.
 - No OpenXR runtime, headset, live server, or user design is touched.
 
-## Next after POC
+## Historical next-after-POC plan (superseded by later implementation)
+
+The private socket, captures and live Vive inspection now exist; see the inspector
+index and September 16 section. The combined native/browser transaction gate remains open.
 
 Extract a narrow production/test input and frame-source interface from `main.cpp`,
 then connect the fixture over a private live socket. The first live end-to-end gate is
@@ -300,3 +345,12 @@ environment issue without a source change.
   `/tmp/nadoc-scrywrite-physical-20260916/` (ephemeral).
 - New real-GL regression covers primitive shaders, front/rear occlusion, impostor
   discard, identity persistence, owner mapping, glow exclusion and overlay masking.
+
+Visible-motion follow-up (2026-09-22): state success did not establish visible paint
+or traces. Native contact layers now have dedicated stencil IDs and overlap-safe
+strokes; new `visual_checks.py` verifies both-eye RGB/route/paint/persistence and
+mirror-buffer parity, `desktop_check.py` verifies real X11 client pixels. Inspector
+adds stage previews, magnification, and Paint and retain. All four profiles have
+completed visibility confirmations; variable wheel detents still fail and long
+combined runs have intermittent transport/timing failures. Evidence:
+`.development-artifacts/scrywrite-inspector/visibility-05/validation.md`.

@@ -12,6 +12,10 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 
 ## Read first when relevant
 
+- [Debug visibility](feedback_debug_visibility.md) — autonomously improve viewing conditions, preserve the behavior under test, verify user-visible output; reusable Codex skill.
+
+- [VR human motion](project_vr_human_motion.md) — archived BEHAVIOR Vive recordings, movement modeller, live/Witness adapters; steady_fast first, all four presets for final validation.
+
 - [CPD strand builder](project_cpd_strand_builder.md) — preliminary additive cis-syn support, packaged assets, scope and verification.
 
 - [Long-job completion and wakeups](feedback_long_job_completion.md) — event-driven completion, estimated deadlines, and acknowledged agent delivery.
@@ -138,7 +142,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Automation / jobs infra:** [staleness_diagnostics](project_staleness_diagnostics.md)·[job_activity_spinner](project_job_activity_spinner.md)·[job_disk_usage](project_job_disk_usage.md)·[job_archive](project_job_archive.md)·[runpod_submission](project_runpod_submission.md)·[af25/26 log sync](project_af25_af26_job_log_sync.md)
 
-**Dev infra:** **[scrywrite](project_scrywrite.md)** (VR troubleshooting driver)·[dev_server_shutdown_hang](project_dev_server_shutdown_hang.md)·[nadoc_overview](project_nadoc_overview.md)·**[context_economy_split](project_context_economy_split.md)** (head/archive rule)·[steamvr_drm_lease_fix](project_steamvr_drm_lease_fix.md) (Vive HDMI-0 DRM lease, automatic in routes_vr.py)
+**Dev infra:** **[scrywrite](project_scrywrite.md)** (VR inspector/API status, existing desktop inspector, captures and remaining GUI; see [inspector index](../docs/scrywrite_inspector.md))·[dev_server_shutdown_hang](project_dev_server_shutdown_hang.md)·[nadoc_overview](project_nadoc_overview.md)·**[context_economy_split](project_context_economy_split.md)** (head/archive rule)·[steamvr_drm_lease_fix](project_steamvr_drm_lease_fix.md) (Vive HDMI-0 DRM lease, automatic in routes_vr.py)
 
 **Imports / validation:** [sq_importer_fix](project_sq_importer_fix.md)·[crossover_distance_script](project_crossover_distance_script.md)·[clash_detector](project_clash_detector.md)·[corner_primitive](project_corner_primitive.md)
 

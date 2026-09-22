@@ -58,6 +58,46 @@ struct LiveViewerTest {
         }
     }
     static void checks(Viewer& v) {
+        nadoc_vr::ControllerPaths paths;
+        const auto fixture = v.liveDirectory_ / "controller-path-test.txt";
+        { std::ofstream out(fixture); out << "0 0 0 0\n0 .1 0 0\n"; }
+        paths.load(fixture.string());
+        requireLive(paths.generation() == 1,"path generation missing");
+        { std::ofstream out(fixture); out << "0 0 0 0\n0 .2 0 0\n"; }
+        paths.load(fixture.string());
+        requireLive(paths.generation() == 2,"path reload not observable");
+        { std::ofstream out(fixture); out << "0 0 0 0\n0 90 0 0\n"; }
+        bool invalidPath = false;
+        try { paths.load(fixture.string()); } catch (...) { invalidPath = true; }
+        requireLive(invalidPath && paths.generation() == 2,"invalid route replaced valid path");
+        std::filesystem::remove(fixture);
+        std::array<nadoc_vr::HandPose,2> hands{};
+        hands[0].valid = true; hands[0].position = {0,0,0}; paths.sample(hands);
+        hands[0].position = {.01F,.01F,0}; paths.sample(hands);
+        size_t actualLines = 0, intendedLines = 0;
+        auto countPaths = [&](const auto&,const auto&,const glm::vec3& color) {
+            if (color.y == 1.F) ++actualLines; else ++intendedLines;
+        };
+        paths.draw(countPaths);
+        requireLive(actualLines == 1 && intendedLines > 1,"planned dashes/actual trace missing");
+        hands[0].valid = false; paths.sample(hands); actualLines = intendedLines = 0;
+        paths.draw(countPaths); requireLive(actualLines == 1,"release erased completed trace");
+        hands[0].valid = true; hands[0].position = {1,0,0}; paths.sample(hands);
+        actualLines = intendedLines = 0; paths.draw(countPaths);
+        requireLive(actualLines == 0,"trace bridged tracking loss");
+
+        hands[0].position={0,0,.18F}; hands[0].orientation=glm::quat(1,0,0,0);
+        paths.sample(hands,glm::vec3(0),glm::vec3(0,0,1));
+        hands[0].position={.02F,0,.18F};paths.sample(hands,glm::vec3(0),glm::vec3(0,0,1));
+        size_t contacts=0;
+        paths.drawContact([&](auto a,auto b,auto,bool actual) {
+            if(actual) {++contacts;requireLive(std::abs(a.z)<1e-6F&&std::abs(b.z)<1e-6F,"contact trail stayed at controller body");}
+        });
+        requireLive(contacts==1,"missing contact trace");
+        hands[0].valid=false;paths.sample(hands,glm::vec3(0),glm::vec3(0,0,1));contacts=0;
+        paths.drawContact([&](auto,auto,auto,bool actual){contacts+=actual;});
+        requireLive(contacts==1,"release erased panel contact trace");
+
         const auto initial = v.liveCommand("observe");
         requireLive(initial.find("\"runtime_connected\":false") != std::string::npos, "must label headless evidence");
         requireLive(v.liveCommand("old 1 button 1 trigger 1").find("stale_session") != std::string::npos, "old session accepted");
@@ -107,6 +147,10 @@ struct LiveViewerTest {
         setAt(v.menuPlacement_.worldPoint({wheelX,wheelY,0.4F}), {1,0,0,0});
         command(v, "aim 1 EXTRUDE LENGTH WHEEL"); frame(v);
         requireLive(v.thumbwheelHovered_, "wheel locator misses production hit test");
+        const auto targets = v.liveTargets();
+        const auto wheelTarget = std::find_if(targets.begin(),targets.end(),[](const auto& target) { return target.hit == -2; });
+        requireLive(wheelTarget != targets.end() && glm::length(wheelTarget->hitHalfRight) > 0 &&
+                    glm::length(wheelTarget->hitHalfUp) > 0,"wheel hit rectangle telemetry missing");
         const auto wheelOrientation = v.liveInput_.hands[1].orientation;
         const int beforeLength = v.toolConfig_.lengthBp();
         const auto beforeCells = v.extrudeLatticeDraft_.cells();
@@ -135,6 +179,13 @@ struct LiveViewerTest {
         v.sessionState_ = XR_SESSION_STATE_VISIBLE;
         requireLive(command(v, "button 1 trigger 1").find("not_focused") != std::string::npos, "unfocused command accepted");
         requireLive(command(v, "release").find("\"error\"") == std::string::npos, "unfocused release refused");
+        v.liveMode_ = "inspect";
+        const float scaleBefore = v.normalizationScale_;
+        command(v, "scene_visibility hidden");
+        requireLive(v.liveSceneHidden_ && v.normalizationScale_ == scaleBefore,"visibility changed model scale");
+        requireLive(v.liveState().find("\"scene_visibility\":\"hidden\"") != std::string::npos,"visibility not disclosed");
+        command(v, "scene_visibility normal");
+        requireLive(!v.liveSceneHidden_,"scene visibility did not restore");
     }
 };
 }
@@ -211,6 +262,25 @@ int objectIdGlChecks() {
         requireLive(scene.objectTable(unique).find("cylinder")!=std::string::npos,"atomistic line IDs missing");
         scene.setStyle(Representation::full,Coloring::base);
         requireLive(render()[64*128+64]==front,"object ID changed after style switch");
+        glClearStencil(0); glClear(GL_STENCIL_BUFFER_BIT);
+        glEnable(GL_STENCIL_TEST); glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+        std::vector<Vertex> guides{
+            {{-.8F,-.5F,0},{1,0,0},1}, {{-.2F,-.5F,0},{1,0,0},1},
+            {{.2F,.5F,0},{0,1,0},1}, {{.8F,.5F,0},{0,1,0},1}};
+        const std::array<size_t,2> ends{2,4};
+        scene.renderGuides(glm::mat4(1),guides,&ends);
+        std::vector<uint8_t> classes(128*128);
+        glReadPixels(0,0,128,128,GL_STENCIL_INDEX,GL_UNSIGNED_BYTE,classes.data());
+        requireLive(std::count(classes.begin(),classes.end(),4)>10,"left controller identity missing");
+        requireLive(std::count(classes.begin(),classes.end(),5)>10,"right controller identity missing");
+        const auto coverage=nadoc_vr::assessSpectatorCoverage(classes);
+        requireLive(coverage.overlayPixels>20 && coverage.unknownPixels==0,"controller tags broke mirror coverage");
+        glEnable(GL_SCISSOR_TEST); glScissor(0,0,128,64);
+        glClearStencil(3); glClear(GL_STENCIL_BUFFER_BIT); glDisable(GL_SCISSOR_TEST);
+        glReadPixels(0,0,128,128,GL_STENCIL_INDEX,GL_UNSIGNED_BYTE,classes.data());
+        requireLive(std::count(classes.begin(),classes.end(),4)==0,"covered controller counted visible");
+        requireLive(std::count(classes.begin(),classes.end(),5)>10,"uncovered controller erased");
+        glDisable(GL_STENCIL_TEST);
     }
     glDeleteTextures(1,&color); glDeleteTextures(1,&ids);
     glDeleteRenderbuffers(1,&depth); glDeleteFramebuffers(1,&fbo);

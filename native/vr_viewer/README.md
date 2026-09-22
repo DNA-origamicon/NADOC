@@ -1,5 +1,7 @@
 # NADOC native VR viewer
 
+Debugging / live visual inspector: [existing tools, entry points and remaining GUI](../../docs/scrywrite_inspector.md).
+
 This small OpenXR/OpenGL companion is the Linux fallback for browsers that do
 not expose immersive WebXR. NADOC launches it through the local backend with a
 read-only snapshot of the active design. It renders through the active OpenXR
@@ -354,7 +356,10 @@ primitives: 0.10 nm backbone beads, 0.18 nm 5′ cubes, oriented
 same-helix strand connectors.
 Production snapshots are streamed into private gzip files; the viewer reads them
 incrementally while retaining transparent support for plain legacy fixtures.
-Scene format v12 pairs natural and Expanded Quick View poses by the URL-safe
+Scene format v13 adds `F <XY|XZ|YZ> <HONEYCOMB|SQUARE> <geometry|mixed|unknown|empty>`
+before representation blocks. It initializes the `EXTRUDE FROM` draft control and
+lattice type independently of tablet pose. Versions 4–12 remain readable and use
+XY with unknown provenance. The v12 contract retained by v13 pairs poses by the URL-safe
 semantic identities introduced in v6, retains v8's bounded canonical-owner aliases,
 retains v9's explicit owner-keyed Cluster gizmo centers and v10 endpoint transform
 ownership, and adds a compact owner dictionary plus exact Base/End/Domain/Strand

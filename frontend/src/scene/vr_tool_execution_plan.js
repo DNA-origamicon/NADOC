@@ -72,6 +72,9 @@ function _extrusionPlan(config, toolTarget) {
   if (config.length_bp === 0) {
     return { accepted: false, reason: 'length_required', plan: null }
   }
+  if (config.extrude_from && config.extrude_from !== context.plane) {
+    return { accepted: false, reason: 'source_plane_mismatch', plan: null }
+  }
   if (context.connections?.length) {
     return { accepted: false, reason: 'occupied_target', plan: null }
   }

@@ -68,7 +68,7 @@ counts** (102 = 92+2+8, then GENERATED 1 / VALIDATED 9, then "90 pending rows" �
 and 9 already-VALIDATED rows plus 1 FAILING row were still sitting in the PENDING index, so the queue
 over-reported the work left. Counts below are derived from the actual index, not hand-maintained.
 
-- **PENDING (genuinely open): 84.** The index now holds 85 rows: 84 pending + MV-5 (generated, see below).
+- **PENDING (genuinely open): 85.** The index now holds 86 rows: 85 pending + MV-5 (generated, see below). Includes MV-38, added 2026-09-22.
   *(Was 84/85 — `MV-PHOTO-1`/`MV-PHOTO-2` struck 2026-07-30, see "Retired" below.)*
 - **GENERATED (block written, not yet run): 1** — MV-5.
 - **VALIDATED: 12** — **MV-ALPINE-GPU (2026-08-07, user-confirmed in app — all pass)** — the whole
@@ -159,6 +159,28 @@ inspection proved playback cannot consume `configuration_id`; it is no longer va
 MV-RSZ, the 3D overhang-resize-through-boundary fix, was pushed PENDING this session.)
 
 ## PENDING queue — index (ordered; first row = next loop processes this)
+
+- **MV-38 — Human-motion live VR/Witness (2026-09-22), PENDING.**
+  Source-plane field follow-up: verify XY/XZ/YZ legibility and selection through the
+  physical headset. Native stereo/mirror/actual desktop checks passed; the original
+  menu size missed one `variable_deliberate` reach (other three presets hit).
+  Evidence: `.development-artifacts/vr-extrude-from/validation.md`. This validates
+  a draft field, not DNA creation; blunt-end/freeform and VR commits remain deferred.
+  On an isolated scene, inspect a seeded reach and compare physical mirror/Witness motion; verify
+  intentional overshoot, target misses, release on interruption, and pacing logs.
+  Calibrate a BEHAVIOR segment's source-to-OpenXR origin/axes and controller aim
+  correction before replay. Headset pose must stay physical. Automated tests cover
+  native IPC, script parsing and controller pixel identities. Live run-03 verifies
+  both-eye controller visibility, offscreen rejection and menu hit/miss outcomes;
+  user confirmed the desktop demonstration. Four-preset Extrude paint/erase passed;
+  variable profiles overshoot wheel detents (vr-extrude-probe/validated-matrix).
+  Unified inspector adds captured stereo picking, bounds/rays, input ownership,
+  scene hiding and profile-run controls. Human validation still needs desktop
+  readability, through-headset agreement and comfortable use of these overlays.
+  Hide the chiral fixture after scene-dependent tests. Human fidelity and wheel
+  usability remain unvalidated. Runbook:
+  `docs/vr_human_motion.md`; fixture: generated seed-42 trace under
+  `.development-artifacts/vr-human-motion/`.
 
 **83 pending rows** + MV-5 (generated). Reconciled 2026-08-08: MV-8 was promoted to ISSUE-23;
 MV-22 through MV-27 were obsolete intermediate Simulate-panel slices and were consolidated into

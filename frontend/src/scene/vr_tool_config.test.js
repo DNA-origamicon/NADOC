@@ -24,6 +24,8 @@ describe('native VR tool configuration drafts', () => {
       ligate_adjacent: true,
       footprint_state: 'unresolved',
     })
+    expect(normalizeVRToolConfig({ ...draft, extrude_from: 'XZ' }).extrude_from).toBe('XZ')
+    expect(normalizeVRToolConfig({ ...draft, extrude_from: 'freeform' })).toBeNull()
     expect(draft).not.toBeNull()
     expect(vrToolConfigMissing(draft)).toEqual(['footprint'])
   })

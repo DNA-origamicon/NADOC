@@ -886,3 +886,33 @@ applied `solute_coords` after audited product placement, permitting reactant
 coordinates to overwrite the product. Formed products now reject that raw
 coordinate override and graphene-only topology omission. Atomistic seed models
 still go through placement and topology audits. Regression covers both bypasses.
+
+## 2026-09-22 VR inspector validation: unrelated backend gate failures
+
+`just test-smart` selected FAST (full suite deferred without a test session):
+8,685 passed, 30 failed, 9 errors, 118 skipped. Recheck after the current workspace
+changes settle; no baseline checkout was used, so these are not asserted to be
+pre-existing. Failures are outside the inspector files: absent workspace
+`smallO-poly.nass`, oxDNA physics-build rejection, aptamer fixture initialization,
+animation seek geometry and photoproduct round-trip metadata. Full output retained
+at `.development-artifacts/scrywrite-inspector/validation/test-smart.log`.
+
+Timing triage: real upstream oxDNA hybrid execution (8.10s) moved to the existing
+slow/oxdna registry; default-preset unit test no longer probes host NAMD. The
+Chudoba compiler fixture took 0.33s alone versus 8.16s contended and stays fast.
+Ten further offenders in the 68s fast rerun all passed in isolation (0.01–1.78s
+calls; 9s guarded run); they stay fast per ISSUE-20. Budgets unchanged.
+
+## 2026-09-22 — Live VR matrix transport interruptions (open)
+
+Combined, capture-heavy Extrude runs intermittently abort with either a motion
+lateness error (250 ms versus the unchanged 150 ms budget) or a three-second
+Unix-socket timeout. Native viewing resumes focused; input cleanup releases held
+buttons. Root cause is not established; do not label this a profile failure or
+silently retry input mutations. Retained examples:
+`.development-artifacts/scrywrite-inspector/visibility-03/profiles-1790105505697705522/report.json`
+and `visibility-05/profiles-1790106183551253079/report.json` under the same root.
+New single-profile reruns (`extrude_probe --preset`) avoid repeating already checked
+profiles; failures now retain operation/frame/sequence context in report.json.
+The timing/transport budgets remain unchanged. This infrastructure issue is separate
+from the reproducible variable-profile wheel-detent overshoot and visible-path fixes.

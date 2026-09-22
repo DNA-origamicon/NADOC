@@ -41,7 +41,9 @@ def test_presets_are_listed_cheapest_first():
     assert set(PRESETS) == set(PRESET_ORDER)
 
 
-def test_standard_is_the_default():
+def test_standard_is_the_default(monkeypatch):
+    # Default selection does not depend on probing the host's NAMD installation.
+    monkeypatch.setattr("backend.core.namd_runner.find_namd", lambda **_: "/test/namd")
     assert DEFAULT_PRESET == STANDARD
     assert get_preset(None).id == STANDARD
     assert get_preset("").id == STANDARD

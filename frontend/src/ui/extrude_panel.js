@@ -16,6 +16,7 @@
  *    deformed frame). The CALLER drives `slicePlane.showAtEnd/showDeformed`; this
  *    module just shows the panel and locks the dropdown to the context plane.
  */
+import { resolveExtrudeSourcePlane } from './extrude_source_plane.js'
 import { resolveDefaultPlane, dropdownStateForMode } from './extrude_panel_logic.js'
 
 const NEW_BUNDLE_INDICATOR =
@@ -56,7 +57,11 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing, rightSide
     expandedSpacing?.forceOff?.()
     rightSidebar?.open?.('properties')
 
-    const defaultPlane = resolveDefaultPlane(store.getState().currentPlane)
+    const source = resolveExtrudeSourcePlane(store.getState().currentDesign, resolveDefaultPlane(store.getState().currentPlane))
+    const defaultPlane = source.plane
+    if (_select) _select.title = ['mixed', 'unknown'].includes(source.reason)
+      ? 'Mixed or unrecognized source planes: choose XY, XZ, or YZ explicitly.'
+      : 'Canonical lattice source plane; independent of viewing orientation.'
     const { value, disabled } = dropdownStateForMode(mode, ctx.plane, defaultPlane)
     if (_select) { _select.value = value; _select.disabled = disabled }
     if (_panel) _panel.style.display = 'block'

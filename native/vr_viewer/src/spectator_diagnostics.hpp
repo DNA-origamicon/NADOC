@@ -29,6 +29,10 @@ enum class SpectatorRenderClass : uint8_t {
     design = 1U,
     reference_grid = 2U,
     overlay = 3U,
+    controller_left = 4U,
+    controller_right = 5U,
+    contact_intended = 6U,
+    contact_actual = 7U,
 };
 
 struct SpectatorCoverageAssessment {
@@ -81,6 +85,10 @@ inline SpectatorCoverageAssessment assessSpectatorCoverage(
             case SpectatorRenderClass::background: break;
             case SpectatorRenderClass::design: ++result.designPixels; break;
             case SpectatorRenderClass::reference_grid: ++result.gridPixels; break;
+            case SpectatorRenderClass::contact_intended:
+            case SpectatorRenderClass::contact_actual:
+            case SpectatorRenderClass::controller_left:
+            case SpectatorRenderClass::controller_right:
             case SpectatorRenderClass::overlay: ++result.overlayPixels; break;
             default: ++result.unknownPixels; break;
         }

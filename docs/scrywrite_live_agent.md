@@ -1,5 +1,15 @@
 # ScryWrite live agent interface
 
+Looking for the **live visual inspector**? See the [inspector capability index](scrywrite_inspector.md).
+This API is its inspection/control foundation. Start the separate graphical client
+with `python3 -m tools.scrywrite_inspector`; see the index for launch arguments.
+`inspect` mode alone does not open a panel. `scrywrite_scene_visibility` accepts
+`normal` or `hidden` in inspect/control modes, changing rendering only.
+
+For recorded Vive motion and seeded controller variability, see the
+[human movement modeller](vr_human_motion.md). Its live adapter uses this existing
+bridge and retains session/sequence, input-release and browser-authority contracts.
+
 Implemented 2026-09-16. This interface adds an opt-in Linux Unix socket to the
 production C++ viewer and a dependency-free Python MCP stdio bridge. It preserves
 physical HMD views, the existing mirror, and browser authority over design edits.

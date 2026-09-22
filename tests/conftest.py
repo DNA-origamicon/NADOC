@@ -562,6 +562,8 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Executes the real upstream oxDNA engine (8.10 s), not the mock runner.
+    "test_prepared_hybrid_job_runs_on_upstream",
     # CPD conversion performs a real 24-start nonlinear atomistic relaxation
     # plus quasi-Newton/constraint polishing (6.5–9.3 s per integration test).
     "test_conversion_preserves_complete_template_and_round_trips",
