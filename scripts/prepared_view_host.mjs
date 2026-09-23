@@ -63,7 +63,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { capabilities: ['editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1'], expiresAt, shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { capabilities: ['editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'guest-visualizations-v1'], expiresAt, shares: [...rooms.values()].map(summary) })
       const content = route.match(/^\/host\/shares\/([a-f0-9]{32})\/content$/)
       if (req.method === 'POST' && content) {
         if (!rooms.has(content[1])) return send(410, { error: 'This share has ended.' })
@@ -83,7 +83,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           return send(200, updateTrajectory(room, JSON.parse(Buffer.concat(chunks)), now))
         } catch (error) { return send(400, { error: error.message }) }
       }
-      const broadcast = route.match(/^\/host\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat)$/)
+      const broadcast = route.match(/^\/host\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat|progress)$/)
       if (req.method === 'POST' && broadcast) {
         const room = rooms.get(broadcast[1]); if (!room) return send(410, { error: 'This share has ended.' })
         try {
@@ -217,7 +217,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   server.requestTimeout = 15000; server.headersTimeout = 10000
   if (controlServer) { controlServer.requestTimeout = 15000; controlServer.headersTimeout = 10000 }
   const leases = setInterval(() => { for (const room of rooms.values()) room.editorBroadcast.expire() }, 1000); leases.unref()
-  const stop = () => { closed = true; clearInterval(leases); for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); listener?.closeAllConnections() } }
+  const stop = () => { closed = true; clearInterval(leases); for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); if (listener) setTimeout(() => listener.closeAllConnections(), 250).unref() } }
   return { server, controlServer, invite, expiresAt, stop, controlToken, createShare, setPublicBase: value => { if (publicOrigin && value !== publicOrigin) throw new Error('Public origin is fixed'); publicBase = value } }
 }
 

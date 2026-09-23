@@ -15,7 +15,7 @@ export async function hostTransport({ root, controlFile, config, path, options }
     // widening the guest firewall rule to admit the VM's control connection.
     nodePath ??= exec('powershell.exe', ['-NoProfile', '-Command', '(Get-Command node.exe).Source']).then(async result => (await exec('wslpath', ['-u', result.stdout.trim()])).stdout.trim())
     const windows = async file => (await exec('wslpath', ['-w', file])).stdout.trim()
-    if (/\/broadcast\/(frame|camera|heartbeat|hold|pause)$/.test(path)) {
+    if (/\/broadcast\/(frame|camera|heartbeat|hold|pause|progress)$/.test(path)) {
       let bridge = bridges.get(controlFile)
       if (!bridge || bridge.closed) {
         bridge = createShareBridge(await nodePath, [await windows(resolve(root, '../scripts/prepared_share_bridge.mjs')), await windows(controlFile)])

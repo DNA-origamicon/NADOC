@@ -1,4 +1,6 @@
 import * as THREE from 'three'
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
+import { encodeWideLineMaterial, validateWideLineMaterial, loadWideLineMaterial, restoreWideLine } from './prepared_wide_lines.js'
 import { applyInstanceAlphaMaterial, instanceAlphaOnBeforeCompile } from '../scene/instance_alpha.js'
 import { encodeContainer, decodeContainer } from './package_container.js'
 import { sectionCapShader } from '../scene/section_cap_material.js'
@@ -27,20 +29,20 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
   }
   function geometry(g) {
     if (geometries.has(g.uuid)) return g.uuid
-    if (g.isInstancedBufferGeometry) fail('Custom instanced geometry is not supported by this package version')
+    if (g.isInstancedBufferGeometry && !g.isLineSegmentsGeometry) fail('Custom instanced geometry is not supported by this package version')
     if (Object.keys(g.morphAttributes).length) fail('Animated morph geometry is not supported by this package version')
-    geometries.set(g.uuid, { uuid: g.uuid, attributes: Object.fromEntries(Object.entries(g.attributes).map(([k, a]) => [k, attribute(a)])),
+    geometries.set(g.uuid, { uuid: g.uuid, ...(g.isLineSegmentsGeometry ? { wideLine: true, instanceCount: g.instanceCount } : {}), attributes: Object.fromEntries(Object.entries(g.attributes).map(([k, a]) => [k, attribute(a)])),
       index: g.index ? attribute(g.index) : null, groups: g.groups, drawRange: { start: g.drawRange.start, count: Number.isFinite(g.drawRange.count) ? g.drawRange.count : null } })
     return g.uuid
   }
   function material(m) {
     if (materials.has(m.uuid)) return m.uuid
     if (m.colors && Object.entries(m.colors).some(([k, v]) => !COLOR_KEYS.includes(k) || !finiteVector(v, 3))) fail('Invalid material colors')
-    if (!MATERIALS.has(m.type)) fail(`Unsupported material ${m.type}; this view cannot yet be packaged`)
+    if (!MATERIALS.has(m.type) && !m.isLineMaterial) fail(`Unsupported material ${m.type}; this view cannot yet be packaged`)
     const alpha = m.onBeforeCompile === instanceAlphaOnBeforeCompile
     const sectionCap = m.onBeforeCompile === sectionCapShader
     if (!alpha && !sectionCap && m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
-    const data = m.toJSON(meta)
+    const data = m.isLineMaterial ? encodeWideLineMaterial(m) : m.toJSON(meta)
     delete data.userData
     materials.set(m.uuid, { ...data, instanceAlpha: alpha, sectionCap,
       sectionPlanes: (m.clippingPlanes ?? []).map(p => [...p.normal.toArray(), p.constant]),
@@ -51,7 +53,7 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
   function node(o, depth = 0) {
     if (!o.visible || o.isTransformControlsRoot) return null // Tools stay local; section caps remain part of the view.
     if (o.isSkinnedMesh || o.isBatchedMesh) fail(`Unsupported scene object ${o.type}`)
-    const type = o.isInstancedMesh ? 'InstancedMesh' : o.isLineSegments ? 'LineSegments' : o.isLineLoop ? 'LineLoop' : o.type
+    const type = o.isLineSegments2 ? 'Mesh' : o.isInstancedMesh ? 'InstancedMesh' : o.isLineSegments ? 'LineSegments' : o.isLineLoop ? 'LineLoop' : o.type
     if (depth > 128 || !NODES.has(type)) fail(`Unsupported scene object ${o.type}`)
     if (o.isScene && (o.environment || o.fog || (o.background && !o.background.isColor))) fail('Environment/fog backgrounds are not yet supported')
     if (o.isLight && o.castShadow) fail('Shadow maps are not yet supported')
@@ -59,6 +61,7 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
     if (o.matrixAutoUpdate) o.updateMatrix()
     const value = { type, uuid: o.uuid, name: o.name, matrix: o.matrix.toArray(), matrixAutoUpdate: false, layers: o.layers.mask,
       renderOrder: o.renderOrder, frustumCulled: o.frustumCulled, children: o.children.map(child => node(child, depth + 1)).filter(Boolean) }
+    if (o.isLineSegments2) value.wideLine = true
     if (o.isSprite) value.center = o.center.toArray()
     if (o.geometry) value.geometry = geometry(o.geometry)
     if (o.material) value.material = Array.isArray(o.material) ? o.material.map(material) : material(o.material)
@@ -75,7 +78,7 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
   }
   const root = node(scene)
   const sectioned = [...materials.values()].some(m => m.sectionCap || m.sectionPlanes.length)
-  const packageData = { format: 'nadoc-prepared-scene', version: sectioned ? 2 : 1, threeRevision: THREE.REVISION, units: 'nm',
+  const packageData = { format: 'nadoc-prepared-scene', version: [...materials.values()].some(m => m.wideLine) ? 3 : sectioned ? 2 : 1, threeRevision: THREE.REVISION, units: 'nm',
     title: String(title).slice(0, 200), sourceHash, view, capabilities: ['static-visible-scene', 'orbit'],
     camera, navigation, background: scene.background?.isColor ? `#${scene.background.getHexString()}` : background,
     render: { localClippingEnabled: !!renderer?.localClippingEnabled, toneMapping: renderer?.toneMapping ?? THREE.NoToneMapping, toneMappingExposure: renderer?.toneMappingExposure ?? 1, outputColorSpace: renderer?.outputColorSpace ?? THREE.SRGBColorSpace, clearColor: renderer?.getClearColor(new THREE.Color()).getHex() ?? 0, clearAlpha: renderer?.getClearAlpha() ?? 0 },
@@ -86,7 +89,7 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
 
 /** Validate before creating GPU resources or giving image URLs to Three.js. */
 export function validateScene(data) {
-  if (data?.format !== 'nadoc-prepared-scene' || ![1, 2].includes(data.version) || data.threeRevision !== THREE.REVISION || data.units !== 'nm') fail('Unsupported viewer package version')
+  if (data?.format !== 'nadoc-prepared-scene' || ![1, 2, 3].includes(data.version) || data.threeRevision !== THREE.REVISION || data.units !== 'nm') fail('Unsupported viewer package version')
   if (data.sourceHash !== null && !/^[a-f0-9]{64}$/.test(data.sourceHash)) fail('Invalid source identity')
   if (typeof data.title !== 'string' || data.title.length > 200) fail('Invalid package title')
   const pose = data.camera
@@ -117,6 +120,10 @@ export function validateScene(data) {
   for (const g of geometries.values()) {
     if (!g.attributes || !g.attributes.position || Object.keys(g.attributes).length > 32) fail('Invalid geometry attributes')
     for (const [name, a] of Object.entries(g.attributes)) { if (!/^[A-Za-z0-9_]+$/.test(name)) fail('Invalid attribute name'); attr(a) }
+    if (g.wideLine) {
+      const start = g.attributes.instanceStart, end = g.attributes.instanceEnd
+      if (!start?.instanced || !end?.instanced || start.itemSize !== 3 || end.itemSize !== 3 || start.array.length !== end.array.length || !Number.isInteger(g.instanceCount) || g.instanceCount < 0 || g.instanceCount > start.array.length / 3) fail('Invalid wide-line geometry')
+    }
     if (g.attributes.position.itemSize !== 3) fail('Invalid vertex positions')
     const vertices = g.attributes.position.array.length / 3
     if (g.index) { attr(g.index); if (!(g.index.array instanceof Uint16Array || g.index.array instanceof Uint32Array) || g.index.itemSize !== 1 || g.index.array.some(i => i >= vertices)) fail('Invalid geometry indices') }
@@ -125,6 +132,7 @@ export function validateScene(data) {
     if (!Array.isArray(g.groups) || g.groups.length > 100_000 || g.groups.some(x => !Number.isInteger(x.start) || x.start < 0 || !Number.isInteger(x.count) || x.count < 0 || x.start + x.count > count || !Number.isInteger(x.materialIndex) || x.materialIndex < 0)) fail('Invalid geometry groups')
   }
   for (const m of materials.values()) {
+    validateWideLineMaterial(m)
     if (m.colors && Object.entries(m.colors).some(([k, v]) => !COLOR_KEYS.includes(k) || !finiteVector(v, 3))) fail('Invalid material colors')
     if (!MATERIALS.has(m.type) || m.vertexShader || m.fragmentShader || m.uniforms || m.clippingPlanes) fail('Unsupported package material')
     if (m.sectionCap != null && typeof m.sectionCap !== 'boolean') fail('Invalid section cap')
@@ -145,7 +153,7 @@ export function validateScene(data) {
     if (!w || !h || w > 4096 || h > 4096 || w * h > 4_194_304) fail('Texture dimensions exceed package limits')
   }
   let nodes = 0, instances = 0
-  const nodeKeys = new Set(['type', 'uuid', 'name', 'matrix', 'matrixAutoUpdate', 'layers', 'renderOrder', 'frustumCulled', 'children', 'geometry', 'material', 'count', 'instanceMatrix', 'instanceColor', 'color', 'intensity', 'groundColor', 'distance', 'decay', 'center'])
+  const nodeKeys = new Set(['type', 'uuid', 'name', 'matrix', 'matrixAutoUpdate', 'layers', 'renderOrder', 'frustumCulled', 'children', 'geometry', 'material', 'count', 'instanceMatrix', 'instanceColor', 'color', 'intensity', 'groundColor', 'distance', 'decay', 'center', 'wideLine'])
   function node(o, depth) {
     if (++nodes > 200_000 || depth > 128 || !NODES.has(o?.type) || !finiteVector(o.matrix, 16)) fail('Invalid scene node')
     if (Object.keys(o).some(k => !nodeKeys.has(k)) || !Number.isFinite(o.renderOrder) || !Number.isInteger(o.layers)) fail('Unsupported scene properties')
@@ -154,6 +162,7 @@ export function validateScene(data) {
     if (o.material && (Array.isArray(o.material) ? o.material : [o.material]).some(m => !materials.has(m))) fail('Missing scene material')
     if (['Mesh', 'InstancedMesh', 'Line', 'LineSegments', 'LineLoop', 'Points'].includes(o.type) && (!o.geometry || !o.material)) fail('Incomplete render object')
     if (o.type === 'Sprite' && (!o.material || !finiteVector(o.center, 2))) fail('Invalid sprite')
+    if (o.wideLine && (o.type !== 'Mesh' || !geometries.get(o.geometry)?.wideLine || !materials.get(o.material)?.wideLine)) fail('Invalid wide-line object')
     if (o.type === 'InstancedMesh') {
       attr(o.instanceMatrix)
       if (!(o.instanceMatrix.array instanceof Float32Array) || o.instanceMatrix.itemSize !== 16 || !Number.isInteger(o.count) || o.count < 0 || o.count > o.instanceMatrix.array.length / 16) fail('Invalid instance matrix')
@@ -199,7 +208,7 @@ export async function loadPreparedScene(buffer) {
   try {
     const materialLoader = new THREE.MaterialLoader().setTextures(textures)
     for (const m of data.materials) {
-      materials[m.uuid] = materialLoader.parse(m)
+      materials[m.uuid] = m.wideLine ? loadWideLineMaterial(m) : materialLoader.parse(m)
       for (const [k, color] of Object.entries(m.colors ?? {})) {
         if (!materials[m.uuid][k]?.isColor) fail('Material color is not supported for this type')
         materials[m.uuid][k].fromArray(color)
@@ -215,15 +224,17 @@ export async function loadPreparedScene(buffer) {
       return result
     }
     for (const spec of data.geometries) {
-      const geometry = new THREE.BufferGeometry(); geometries[spec.uuid] = geometry
+      const geometry = spec.wideLine ? new LineSegmentsGeometry() : new THREE.BufferGeometry();
+      if (spec.wideLine) geometry.instanceCount = spec.instanceCount; geometries[spec.uuid] = geometry
       for (const [name, a] of Object.entries(spec.attributes)) geometry.setAttribute(name, attribute(a))
       if (spec.index) geometry.setIndex(attribute(spec.index))
       for (const group of spec.groups) geometry.addGroup(group.start, group.count, group.materialIndex)
       geometry.setDrawRange(spec.drawRange.start, spec.drawRange.count ?? Infinity)
     }
-    const scene = loader.parseObject(data.root, geometries, materials, textures, {})
+    let scene = loader.parseObject(data.root, geometries, materials, textures, {})
     // ObjectLoader does not persist this flag in r172.
     const restore = (o, spec) => {
+      if (spec.wideLine) o = restoreWideLine(o)
       o.frustumCulled = spec.frustumCulled
       if ((Array.isArray(o.material) ? o.material : [o.material]).some(m => m?.onBeforeCompile === sectionCapShader)) {
         o.onAfterRender = renderer => renderer.clearStencil()
@@ -233,10 +244,11 @@ export async function loadPreparedScene(buffer) {
         o.instanceMatrix = attribute(spec.instanceMatrix)
         if (spec.instanceColor) o.instanceColor = attribute(spec.instanceColor)
       }
-      o.children.forEach((child, i) => restore(child, spec.children[i]))
+      o.children = o.children.map((child, i) => { const next = restore(child, spec.children[i]); next.parent = o; return next })
+      return o
     }
     loader.bindLightTargets(scene)
-    restore(scene, data.root)
+    scene = restore(scene, data.root)
     scene.traverse(o => { o.matrixAutoUpdate = false })
     scene.updateMatrixWorld(true)
     return { scene, data, packageHash, dispose: () => disposePreparedScene(scene) }

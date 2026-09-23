@@ -131,3 +131,10 @@ accessible glasses toggle, and End action. `share_link.js` coordinates camera au
 between embedded `editor_broadcast.js` (native camera only) and `job_sharing.js` (live
 job visualization plus optional camera). No presenter-tab link is exposed in the
 editor. The main initialization file needs no additional wiring for these controls.
+
+`visualization_progress.js` reads existing visualization-card progress, relayed by
+the job lease; `meeting_status.js` owns the guest loading and terminal screens.
+Room closure publishes a final ended event before closing SSE connections.
+`prepared_wide_lines.js` restores nanopore thick lines through bundled Three.js
+LineMaterial/LineSegments2 constructors with validated data-only settings. It adds
+no third-party dependency or arbitrary shader execution.

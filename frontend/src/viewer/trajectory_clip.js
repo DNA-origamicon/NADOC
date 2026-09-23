@@ -12,7 +12,7 @@ export function sceneChannels(data) {
     shapes.push([kind, name, array.constructor.name, array.length])
   }
   function visit(node, path) {
-    shapes.push([node.type, node.name, node.count, node.layers, node.renderOrder, node.children.length,
+    shapes.push([node.type, node.wideLine, node.name, node.count, node.layers, node.renderOrder, node.children.length,
       (Array.isArray(node.material) ? node.material : node.material ? [node.material] : []).map(id => clean(materials.get(id)))])
     add(path, 'matrix', '', node.matrix)
     for (const name of ['instanceMatrix', 'instanceColor']) if (node[name]) add(path, name, '', node[name].array)
@@ -21,7 +21,7 @@ export function sceneChannels(data) {
       else {
         seen.set(node.geometry, seen.size)
         const g = geometry.get(node.geometry)
-        shapes.push([g.groups, g.drawRange, g.index ? Array.from(g.index.array) : null])
+        shapes.push([g.wideLine, g.instanceCount, g.groups, g.drawRange, g.index ? Array.from(g.index.array) : null])
         for (const name of Object.keys(g.attributes).sort()) {
           const a = g.attributes[name]
           shapes.push([a.itemSize, a.normalized, a.instanced, a.meshPerAttribute])

@@ -12,6 +12,12 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- Guest visualization feedback (2026-09-23): shared nanopore paths use a validated
+  thick-line export adapter; vector arrows retain their instance transforms/colors.
+  Existing visualization progress is relayed as Loading visualization plus a bar.
+  Host End clears the guest scene and displays Presentation ended. Updated hosts
+  advertise `guest-visualizations-v1`; older active hosts need a later restart.
+
 - Integrated presentation controls (2026-09-23): `viewer/presentation_controls.js`
   mounts a persistent Presenting indicator at the top center of `#canvas-area`.
   Glasses toggle camera sharing (initially off) through the native editor or current

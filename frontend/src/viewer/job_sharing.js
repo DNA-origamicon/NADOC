@@ -2,6 +2,7 @@ import './sharing_controls.css'
 import { decodeContainer } from './package_container.js'
 import { gzipFrame } from './trajectory_clip.js'
 import { createLiveFrameCapture, liveSceneSignature } from './live_frame_capture.js'
+import { visualizationProgress } from './visualization_progress.js'
 import { broadcastDocument } from './broadcast_fingerprint.js'
 
 const sameJob = (a, b) => !!a?.id && a.id === b?.id && a.engine === b?.engine
@@ -13,6 +14,7 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
   document: doc = document, fetch: request = fetch, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   let shared = null, lease = '', room = null, revision = '', capture = null, busy = false, disposed = false
   let lastFrame = null, sentCamera = '', held = false, heartbeat = 0, epoch = 0, identity = null, switching = false, flight = null
+  let pendingJob = null, progressFlight = null, sentProgress = 'null'
   const status = doc.createElement('p'); status.className = 'sharing-job-status'; status.setAttribute('role', 'status')
   const buttons = new Map()
   for (const engine of ['oxdna', 'namd']) {
@@ -67,6 +69,7 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
     const source = prepared.captureView(false)
     if (capture && liveSceneSignature(source) === capture.signature && await publishFrame(source, job, ticket)) return true
     const result = await prepared.exportView({ presentation: false })
+    if (result?.requiresWideLineViewer && !getRoom()?.capabilities?.includes('guest-visualizations-v1')) throw new Error('Restart presentation hosting after the current meeting to enable nanopore ion paths.')
     if (!result) throw new Error('Another view export is in progress. Please retry.')
     if (!current(job, ticket)) return false
     const next = createLiveFrameCapture(decodeContainer(result.buffer), prepared.captureView(false))
@@ -112,21 +115,22 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
         identity = broadcastDocument(store.getState())
         ready(job)
         await beforeStart()
+        pendingJob = job
         if (!current(job, ticket)) return
         if (!lease) {
           room = target.id
           const started = await api('start', JSON.stringify({ jobStream: true }), '')
-          lease = started.lease
+          lease = started.lease; revision = started.revision
         }
         if (await publish(job, ticket)) {
-          shared = job; held = false
+          shared = job; held = false; sentProgress = ''
           message(`Sharing ${engine === 'namd' ? 'NAMD' : 'oxDNA'} job ${job.id}. Visualization changes and playback are live.`)
         }
       }
     } catch (error) { message(error.message) }
     finally {
       if (!shared && lease) { await api('pause').catch(() => {}); lease = '' }
-      busy = false; switching = false; paint()
+      pendingJob = null; busy = false; switching = false; paint()
       await onSharedChange(shared)
     }
   }
@@ -143,6 +147,7 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
         message(`Job ${job.id} remains shared, paused on its last frame. Your selected job is private.`)
         return
       }
+      if (visualizationProgress(doc, job.engine)) return
       ready(job)
       const source = prepared.captureView(false)
       if (!capture || liveSceneSignature(source) !== capture.signature) {
@@ -158,7 +163,15 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
     } catch (error) { message(`${error.message} Guests keep the last shared frame.`) }
     finally { busy = false; paint() }
   }
+  async function reportProgress() {
+    const job = pendingJob ?? shared
+    if (!lease || !getRoom()?.capabilities?.includes('guest-visualizations-v1')) return
+    const value = sameJob(job, selection()) && identity === broadcastDocument(store.getState()) ? visualizationProgress(doc, job.engine) : null
+    const encoded = JSON.stringify(value)
+    if (encoded !== sentProgress) { await api('progress', encoded); sentProgress = encoded }
+  }
   function tick() {
+    if (!disposed && !progressFlight) progressFlight = reportProgress().catch(() => {}).finally(() => { progressFlight = null })
     if (!flight) flight = runTick().finally(() => { flight = null })
     return flight
   }

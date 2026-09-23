@@ -3,8 +3,8 @@ export function createPresentationState({ id, revision, now = Date.now }) {
   let sequence = 0, camera = null, presenting = false, windowStart = now(), updates = 0, closed = false
   const listeners = new Set()
   const presenters = new Set()
-  let trajectory = null, liveFrame = null
-  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, trajectory, liveFrame, serverTime: now() })
+  let trajectory = null, liveFrame = null, loading = null
+  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, trajectory, liveFrame, loading, ended: closed, serverTime: now() })
   const send = response => { if (!response.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`)) response.destroy() }
   const broadcast = () => { for (const response of listeners) send(response) }
   const pause = () => { if (presenting && !closed) { presenting = false; sequence++; broadcast() } }
@@ -24,6 +24,10 @@ export function createPresentationState({ id, revision, now = Date.now }) {
     return snapshot()
   }
   return { snapshot, publish, pause,
+    setLoading(value) {
+      if (value !== null && (!value || typeof value !== 'object' || (value.fraction !== null && (!Number.isFinite(value.fraction) || value.fraction < 0 || value.fraction > 1)))) throw new Error('Invalid visualization progress')
+      loading = value === null ? null : { fraction: value.fraction }; sequence++; broadcast(); return snapshot()
+    },
     setTrajectory(value) { trajectory = value; sequence++; broadcast(); return snapshot() },
     setLiveFrame(value) { liveFrame = value; sequence++; broadcast(); return snapshot() },
     replaceContent(next, clip) { revision = next; trajectory = clip; liveFrame = null; camera = null; presenting = false; sequence++; broadcast(); return snapshot() },
@@ -35,6 +39,6 @@ export function createPresentationState({ id, revision, now = Date.now }) {
       listeners.add(response); if (presenter) presenters.add(response)
       response.on('close', () => { listeners.delete(response); if (presenters.delete(response) && presenters.size === 0) pause() }); send(response)
     },
-    close() { closed = true; for (const response of listeners) response.end(); listeners.clear(); presenters.clear() },
+    close() { if (closed) return; closed = true; presenting = false; loading = null; sequence++; broadcast(); for (const response of listeners) response.end(); listeners.clear(); presenters.clear() },
   }
 }

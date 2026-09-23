@@ -102,3 +102,10 @@ it('cancels a pending replacement when the host returns to the already displayed
   expect(loadRevision).toHaveBeenCalledOnce()
   v.dispose()
 })
+
+it('relays loading and recognizes a terminal state without calling it a transient disconnection', () => {
+  const onLoading = vi.fn(), onEnded = vi.fn(); const v = setup('guest', { onLoading, onEnded })
+  v.state(1, null, { loading: { fraction: .6 } }); expect(onLoading).toHaveBeenLastCalledWith({ fraction: .6 }, false)
+  v.events.dispatchEvent(new Event('error')); expect(onEnded).not.toHaveBeenCalled()
+  v.state(2, null, { ended: true }); expect(onEnded).toHaveBeenCalledOnce(); v.dispose()
+})

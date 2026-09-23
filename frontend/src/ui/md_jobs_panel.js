@@ -2164,6 +2164,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       return
     }
     liveFrameProgress.style.display = ''
+    liveFrameProgress.dataset.loading = String(progress.state !== 'failed')
     const pct = Math.max(0, Math.min(100, Number(progress.percent) || 0))
     if (liveFrameProgressFill) {
       liveFrameProgressFill.style.width = `${pct}%`
@@ -3062,6 +3063,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
     const { percent, count, message, tone } = photoproductProgressView(progress)
     photoproductProgress.style.display = ''
+    photoproductProgress.dataset.loading = String(tone !== 'error' && tone !== 'complete')
     photoproductProgress.setAttribute('aria-valuenow', String(percent))
     photoproductProgress.setAttribute('aria-valuetext', `${message}${count}`)
     if (photoproductProgressFill) {

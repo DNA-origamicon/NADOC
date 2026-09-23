@@ -30,7 +30,9 @@ export function initPreparedExport({ scene, camera, renderer, store, captureCurr
       if (captureView(presentation).scene !== source.scene || store.getState().assemblyActive !== state.assemblyActive) throw new Error('The view changed during export; retry when idle')
       const pose = { ...source.pose, near: source.camera.near, far: source.camera.far }
       const view = { assembly: !!state.assemblyActive, detail_level: getDetailLevel(), atomistic: state.atomisticMode ?? 'off', surface: state.surfaceMode ?? 'off', coloring: state.coloringMode ?? 'strand', ...source.view }
-      return { buffer: prepareScene({ scene: source.scene, camera: pose, renderer, navigation: axisSegments(navigationDesign(state)), title, background, sourceHash, view }), title, requiresSectionViewer: !!renderer.localClippingEnabled }
+      let requiresWideLineViewer = false
+      source.scene.traverseVisible(object => { if (object.isLineSegments2) requiresWideLineViewer = true })
+      return { requiresWideLineViewer, buffer: prepareScene({ scene: source.scene, camera: pose, renderer, navigation: axisSegments(navigationDesign(state)), title, background, sourceHash, view }), title, requiresSectionViewer: !!renderer.localClippingEnabled }
     } finally { busy = false }
   }
   async function download() {

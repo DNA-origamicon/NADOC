@@ -54,7 +54,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
       performanceApi.stop()
       current?.dispose()
       runtime.scene.clear()
-      current = next
+      current = next; runtime.controls.enabled = true; fileInput.disabled = false
       const view = next.data.view ?? {}
       state = { currentDesign: { id: next.packageHash, metadata: { name: next.data.title } }, currentGeometry: next.data.root,
         currentAssembly: view.assembly ? { id: next.packageHash } : null, assemblyActive: !!view.assembly,
@@ -95,7 +95,13 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
   modeInput.addEventListener('change', changeMode)
   canvas.addEventListener('dragover', drag); canvas.addEventListener('drop', drop)
   canvas.addEventListener('dblclick', center)
-  return { loadFile, runtime, performanceApi, applyCamera, captureCamera: () => ({ ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far }), get current() { return current }, dispose() {
+  function clear() {
+    generation++; performanceApi.stop(); current?.dispose(); current = null; runtime.scene.clear()
+    state = { currentDesign: null, currentGeometry: null, assemblyActive: false }
+    runtime.setNavScaleProvider(() => new Float64Array()); runtime.controls.enabled = false
+    resetButton.disabled = true; modeInput.disabled = true; fileInput.disabled = true
+  }
+  return { clear, loadFile, runtime, performanceApi, applyCamera, captureCamera: () => ({ ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far }), get current() { return current }, dispose() {
     if (disposed) return
     disposed = true; generation++
     performanceApi.dispose()

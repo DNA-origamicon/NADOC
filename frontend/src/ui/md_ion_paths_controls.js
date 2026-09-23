@@ -12,7 +12,7 @@ export function initMdIonPathsControls({ api, getOverlay, getJobId, getDisplay, 
   let percentage = 0, summary = '', mode = 'paths'
   function progress(value, label, reset = false) {
     percentage = reset ? value : Math.max(percentage, value)
-    if (bar) { bar.hidden = false; bar.value = percentage; bar.setAttribute('aria-valuetext', `${Math.floor(percentage)}% · ${label}`) }
+    if (bar) { bar.hidden = false; bar.value = percentage; bar.dataset.loading = String(loading && percentage < 100); bar.setAttribute('aria-valuetext', `${Math.floor(percentage)}% · ${label}`) }
     if (status) status.textContent = `${Math.floor(percentage)}% · ${label}`
   }
   function stopPolling() { clearTimeout(pollTimer); pollTimer = null }
@@ -147,7 +147,7 @@ export function initMdIonPathsControls({ api, getOverlay, getJobId, getDisplay, 
       if (token !== generation) return
       if (status) status.textContent = `${Math.floor(percentage)}% · ${err.message || 'Could not load ion data'}`
     } finally {
-      if (token === generation) { loading = false; stopPolling() }
+      if (token === generation) { loading = false; if (bar) bar.dataset.loading = 'false'; stopPolling() }
     }
   }
   async function applyLatestRepresentation(token) {
@@ -168,7 +168,7 @@ export function initMdIonPathsControls({ api, getOverlay, getJobId, getDisplay, 
       if (token === generation) progress(100, summary)
     } catch (err) {
       if (token === generation && status) status.textContent = err.message || 'Could not update representation'
-    } finally { if (token === generation) loading = false }
+    } finally { if (token === generation) { loading = false; if (bar) bar.dataset.loading = 'false' } }
   }
   function selectMode(nextMode, toggle) {
     if (!toggle.checked) return

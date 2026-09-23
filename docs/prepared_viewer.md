@@ -382,6 +382,18 @@ and leave guests on their previous view. Full solvent/atomistic performance and
 public-network throughput require separate measurement. No assembly-specific
 sharing exclusion is introduced; export support follows the visible scene.
 
+Nanopore ion paths preserve thick lines, species colors, and visibility; vector
+fields preserve arrow positions and colors. The guest constructs the known Three.js
+line shader locally from validated settings, rather than accepting shader code.
+While a shared visualization loads, guests see **Loading visualization** with the
+presenter's existing progress bar. The previous complete view stays visible until
+the new visualization is ready. Loading for privately selected jobs is not broadcast.
+Ending the presentation clears the guest scene and shows **Presentation ended**.
+A temporary connection interruption retains the last view instead.
+
+These guest updates require host capability `guest-visualizations-v1`. Restart an
+older host after its current meeting to serve the updated guest viewer.
+
 The protocol requires host capability `job-stream-v1`. A host started before this
 update must be stopped and restarted after its current meeting; that one-time
 restart ends its old invitations. Active meetings are never restarted automatically.

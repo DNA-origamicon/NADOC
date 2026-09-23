@@ -7,7 +7,7 @@ for await (const line of createInterface({ input: process.stdin, crlfDelay: Infi
   let id
   try {
     const value = JSON.parse(line); id = value.id
-    if (!/^\/host\/shares\/[a-f0-9]{32}\/broadcast\/(frame|camera|heartbeat|hold|pause)$/.test(value.path) ||
+    if (!/^\/host\/shares\/[a-f0-9]{32}\/broadcast\/(frame|camera|heartbeat|hold|pause|progress)$/.test(value.path) ||
       typeof value.body !== 'string' || value.body.length > 23 * 1024 * 1024) throw new Error('Invalid streaming action')
     const response = await fetch(config.url + value.path, { method: 'POST', headers: { Authorization: `Bearer ${config.token}`, 'X-NADOC-Broadcast': value.lease },
       body: value.body ? Buffer.from(value.body, 'base64') : undefined, signal: AbortSignal.timeout(15000) })

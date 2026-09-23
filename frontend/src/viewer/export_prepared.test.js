@@ -1,11 +1,12 @@
 import { it, expect, vi, afterEach } from 'vitest'
+import { Scene } from 'three'
 vi.mock('./prepared_scene.js', () => ({ prepareScene: vi.fn(() => new ArrayBuffer(16)) }))
 import { prepareScene } from './prepared_scene.js'
 import { initPreparedExport } from './export_prepared.js'
 afterEach(() => vi.clearAllMocks())
 it('exports display geometry and navigation without writes or editor history', async () => {
   const state = { currentDesign: { metadata: { name: 'Part' }, helices: [], feature_history: ['private'] } }
-  const store = { getState: () => state }, scene = {}, camera = { near: .1, far: 2000 }
+  const store = { getState: () => state }, scene = new Scene(), camera = { near: .1, far: 2000 }
   const api = initPreparedExport({ scene, camera, store, renderer: {}, captureCurrentCamera: () => ({ fov: 55 }), document: { getElementById: () => null } })
   const result = await api.exportView()
   expect(result.title).toBe('Part')

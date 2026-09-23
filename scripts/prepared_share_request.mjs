@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises'
 const [controlFile, path, method = 'GET', bodyFile = '', title = '', lease = ''] = process.argv.slice(2)
 try {
-  if (!/^\/host\/(shares(?:\/[a-f0-9]{32}(?:\/broadcast\/(?:start|camera|scene|frame|hold|pause|heartbeat)|\/(?:trajectory|content))?)?|stop)$/.test(path) || !['GET', 'POST', 'DELETE'].includes(method)) throw new Error('Invalid host action')
+  if (!/^\/host\/(shares(?:\/[a-f0-9]{32}(?:\/broadcast\/(?:start|camera|scene|frame|hold|pause|heartbeat|progress)|\/(?:trajectory|content))?)?|stop)$/.test(path) || !['GET', 'POST', 'DELETE'].includes(method)) throw new Error('Invalid host action')
   const config = JSON.parse(await readFile(controlFile, 'utf8'))
   if (!/^http:\/\/(?:\d{1,3}\.){3}\d{1,3}:\d+$/.test(config.url) || !/^[a-f0-9]{64}$/.test(config.token)) throw new Error('Invalid local host configuration')
   const response = await fetch(config.url + path, { method, headers: { Authorization: `Bearer ${config.token}`, ...(title ? { 'X-NADOC-Title': title } : {}), ...(lease ? { 'X-NADOC-Broadcast': lease } : {}) }, body: bodyFile ? await readFile(bodyFile) : undefined, signal: AbortSignal.timeout(15000) })

@@ -3,7 +3,7 @@ import { mountMeetingTrajectory } from './meeting_trajectory.js'
 import { loadMeetingRevision } from './meeting_scene_updates.js'
 import { mountMeetingLiveFrame } from './meeting_live_frame.js'
 export function mountMeetingPresentation({ viewer, base, role, revision, room, document: doc = document, fetch: request = fetch,
-  eventSource = url => new EventSource(url), loadRevision = loadMeetingRevision, mountTrajectory = mountMeetingTrajectory, onSharedView = () => {}, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
+  eventSource = url => new EventSource(url), loadRevision = loadMeetingRevision, mountTrajectory = mountMeetingTrajectory, onSharedView = () => {}, onEnded = () => {}, onLoading = () => {}, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   const createTrajectory = () => mountTrajectory({ viewer, base, role, document: doc, fetch: request })
   let trajectory = createTrajectory()
   const createLive = () => mountMeetingLiveFrame({ viewer, base, revision, document: doc, fetch: request })
@@ -32,6 +32,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     if (el('follow')) el('follow').textContent = value ? 'Stop following' : 'Follow presenter'
   }
   function update() {
+    onLoading(latest?.loading ?? null, updating)
     status.textContent = !compatible() ? 'Different snapshot opened. Reopen the invitation to present.' : !connected ? 'Presentation connection lost; you can still explore.' : role === 'presenter' ? (broadcasting ? 'Your perspective is shared. Guests choose whether to follow.' : 'Your perspective is not being shared.') : following ? 'Following presenter. Drag or scroll to explore independently.' : latest?.presenting ? 'Explore independently, jump once, or follow the presenter.' : 'Presenter is not sharing a perspective.'
     if (updating) status.textContent = 'Receiving updated visualizations; your camera stays independent.'
     if (el('jump')) el('jump').disabled = updating || latest?.revision !== revision || !connected || !latest?.camera || !compatible() || viewer.performanceApi.busy
@@ -83,6 +84,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     let value; try { value = JSON.parse(event.data) } catch { return }
     if (value.room !== room || !Number.isSafeInteger(value.sequence) || value.sequence <= sequence) return
     if (value.revision !== revision && !/^[a-f0-9]{64}$/.test(value.revision)) return
+    if (value.ended) { onEnded(); return }
     sequence = value.sequence; latest = value; latestAt = performance.now(); pendingRevision = value.revision
     trajectory.receive(value)
     live.receive(value)

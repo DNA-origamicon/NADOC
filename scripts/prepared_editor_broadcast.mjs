@@ -13,7 +13,7 @@ function sourceHash(scene) {
 /** Local management authority; guests never receive this short-lived lease. */
 export function createEditorBroadcast({ room, rooms, maxGuests, now }) {
   let lease = null, seenAt = 0, jobStream = false
-  function pause() { lease = null; room.presentation.pause() }
+  function pause() { lease = null; room.presentation.setLoading(null); room.presentation.pause() }
   function expire() { if (lease && now() - seenAt > 15000) pause() }
   function start(options = {}) {
     expire()
@@ -33,6 +33,7 @@ export function createEditorBroadcast({ room, rooms, maxGuests, now }) {
     if (!lease || token !== lease) throw new Error('Editor broadcast has stopped. Start broadcasting again.')
     seenAt = now()
     if (action === 'pause') { pause(); return { ok: true } }
+    if (action === 'progress') return room.presentation.setLoading(JSON.parse(body))
     if (action === 'heartbeat') return { revision: room.revision }
     if (action === 'hold') { room.presentation.pause(); return { revision: room.revision } }
     if (action === 'camera') return room.presentation.publish(JSON.parse(body))

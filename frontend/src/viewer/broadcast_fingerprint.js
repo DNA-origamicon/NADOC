@@ -7,11 +7,12 @@ export function broadcastFingerprint({ scene, view, pane }, { coordinates = true
       coordinates && o.matrixAutoUpdate === false ? o.matrix?.toArray() : null, o.renderOrder, o.count,
       coordinates ? o.instanceMatrix?.version : o.instanceMatrix?.array.length, coordinates ? o.instanceColor?.version : o.instanceColor?.array.length, o.geometry?.uuid,
       o.geometry && Object.entries(o.geometry.attributes).map(([k, a]) => [k, coordinates ? a.version ?? a.data?.version : [a.count, a.itemSize, a.normalized]]),
-      o.geometry?.index?.version, o.geometry?.drawRange, o.color?.getHex(), o.intensity])
+      o.geometry?.instanceCount, o.geometry?.index?.version, o.geometry?.drawRange, o.color?.getHex(), o.intensity])
     for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
       rows.push(m.uuid)
       if (materials.has(m)) continue
       materials.add(m)
+      if (m.isLineMaterial) rows.push([m.linewidth, m.worldUnits, m.dashed, m.dashScale, m.dashSize, m.gapSize, m.dashOffset, m.color.toArray(), m.opacity])
       rows.push(Object.entries(m).flatMap(([k, v]) => {
         // needsUpdate bumps the GPU upload counter even when the material is unchanged.
         if (!coordinates && k === 'version') return []

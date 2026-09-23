@@ -23,7 +23,7 @@ function setup() {
   const showNative = vi.fn(async () => { mesh.position.set(0, 0, 0) })
   const ui = initJobSharing({ prepared, store: { getState: () => ({ currentDesign: { id: 'design' } }) }, getSelection: () => selected,
     showNative, getRoom: () => room, fetch: request, setInterval: () => null, clearInterval: () => {} })
-  return { ui, request, mesh, prepared, showNative, select: job => { selected = job }, host: () => { room = { id: 'room', capabilities: ['job-stream-v1'] }; ui.refresh() }, fail: () => { fail = true } }
+  return { ui, request, mesh, prepared, showNative, select: job => { selected = job }, host: () => { room = { id: 'room', capabilities: ['job-stream-v1', 'guest-visualizations-v1'] }; ui.refresh() }, fail: () => { fail = true } }
 }
 it('shows job controls only with an invitation and preserves publication across private selection and list rerender', async () => {
   const v = setup(), button = document.querySelector('[data-share-job="oxdna"]')
@@ -101,4 +101,16 @@ it('toggles camera sharing without stopping frames and keeps private selections 
   v.request.mockClear(); v.select({ engine: 'namd', id: 'b' }); await v.ui.setPerspective(true)
   expect(v.request.mock.calls.some(([path]) => /\/(camera|scene|frame)$/.test(path))).toBe(false)
   v.ui.dispose()
+})
+
+it('relays visualization progress while holding the previous scene and does not leak private work', async () => {
+  const v = setup(); v.host(); await v.ui.toggle('oxdna')
+  const body = document.createElement('div'); body.id = 'oxdna-jobs-viz-body'; body.innerHTML = '<progress max="100" value="35"></progress>'; document.body.append(body)
+  v.request.mockClear(); v.mesh.material.color.set('red'); await v.ui.tick()
+  await vi.waitFor(() => expect(v.request.mock.calls.some(([p, o]) => p.endsWith('/progress') && o.body === '{"fraction":0.35}')).toBe(true))
+  expect(v.request.mock.calls.some(([p]) => p.endsWith('/scene'))).toBe(false)
+  v.select({ engine: 'namd', id: 'b' }); await v.ui.tick()
+  await vi.waitFor(() => expect(v.request.mock.calls.some(([p, o]) => p.endsWith('/progress') && o.body === 'null')).toBe(true))
+  v.select({ engine: 'oxdna', id: 'a' }); body.querySelector('progress').value = 100; await v.ui.tick()
+  expect(v.request.mock.calls.some(([p]) => p.endsWith('/scene'))).toBe(true); v.ui.dispose()
 })

@@ -115,6 +115,7 @@ export function initShareLink({ exportView, broadcast, trajectory, document: doc
       const host = await api('start', { method: 'POST' })
       capabilities = host.capabilities ?? []
       if (target && !host.capabilities?.includes('share-content-v1')) throw new Error('This running host predates same-link updates. After this meeting, stop hosting and create a new link once to enable them.')
+      if (result.requiresWideLineViewer && !host.capabilities?.includes('guest-visualizations-v1')) throw new Error('Restart presentation hosting after the current meeting to enable nanopore ion paths.')
       if (result.requiresSectionViewer && !host.capabilities?.includes('editor-broadcast-v1')) throw new Error('This running host predates sectioned views. After your current meeting, stop hosting and create a new link to share this sectioned view.')
       if (asClip && !host.capabilities?.includes('trajectory-clip-v1')) throw new Error('This host predates trajectory sharing. Stop hosting all links after your meeting, then create the trajectory link again.')
       status.textContent = 'Publishing prepared view…'

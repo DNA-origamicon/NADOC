@@ -67,7 +67,7 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
           return send(200, await hostRequest(`/host/shares/${timeline[1]}/trajectory`, { method: req.method, ...(req.method === 'POST' ? { body: Buffer.concat(chunks) } : {}) }))
         }
         const remove = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})$/)
-        const broadcast = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat)$/)
+        const broadcast = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat|progress)$/)
         if (req.method === 'POST' && broadcast) {
           const chunks = []; let size = 0
           const limit = broadcast[2] === 'scene' ? 512 * 1024 * 1024 : broadcast[2] === 'frame' ? 16 * 1024 * 1024 + 64 : 4096
