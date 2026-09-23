@@ -188,7 +188,7 @@ def trial(probe, path_file, preset, origin_pose, *, preview=None, review_only=Fa
     return result
 
 
-def framed_origin(probe, eye):
+def framed_origin(probe, eye, activate=None):
     """Use production placement feedback to face the tablet toward the real eye.
 
     Correct the wrist pose rather than changing the HMD, default tablet tilt or
@@ -198,8 +198,11 @@ def framed_origin(probe, eye):
     origin={'position':add(eye['position'],rotate(q,[0,-.18,-.55])), 'orientation_xyzw':q}
     def open_at_origin():
         put(probe,origin['position'],origin['orientation_xyzw'])
-        probe.send('activate',tool='move_rotate');probe.frame()
-        probe.send('activate',tool='extrude');probe.frame()
+        if activate is not None:
+            activate()
+        else:
+            probe.send('activate',tool='move_rotate');probe.frame()
+            probe.send('activate',tool='extrude');probe.frame()
     open_at_origin()
     panel=probe.state['extrude']['panel_orientation_xyzw']
     origin['orientation_xyzw']=multiply(multiply(q,[-panel[0],-panel[1],-panel[2],panel[3]]),q)

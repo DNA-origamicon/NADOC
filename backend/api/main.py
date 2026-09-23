@@ -92,6 +92,8 @@ from backend.api.routes_oxdna_metrics import router as oxdna_metrics_router
 from backend.api.routes_shape_metrics import router as shape_metrics_router
 from backend.api.routes_system import router as system_router
 from backend.api.routes_vr import router as vr_router
+from backend.api.routes_vr_scene import router as vr_scene_router
+from backend.api.routes_frame_extrusion import router as frame_extrusion_router
 from backend.api.routes_simulate import router as simulate_router
 from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
@@ -399,6 +401,8 @@ app.include_router(feature_log_router, prefix="/api")
 app.include_router(deformation_router, prefix="/api")
 app.include_router(display_geometry_router, prefix="/api")
 app.include_router(vr_router, prefix="/api")
+app.include_router(vr_scene_router, prefix="/api")
+app.include_router(frame_extrusion_router, prefix="/api")
 app.include_router(display_metadata_router, prefix="/api")
 app.include_router(flexible_segments_router, prefix="/api")
 app.include_router(duplex_router, prefix="/api")

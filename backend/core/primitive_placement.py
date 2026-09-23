@@ -259,8 +259,14 @@ def place_primitive_into(
 
     # ── translate + remap the primitive content ──────────────────────────────────
     translated = translate_design(primitive, grid_delta, world_delta, plane)
+    used_f = {f.id for f in host.lattice_frames}
+    fmap = {}
+    for frame in primitive.lattice_frames:
+        fmap[frame.id] = _fresh_id(frame.id, used_f)
+        used_f.add(fmap[frame.id])
     placed_helices = [
-        h.model_copy(update={"id": hmap[orig.id]})
+        h.model_copy(update={"id": hmap[orig.id],
+            "lattice_frame_id": fmap.get(orig.lattice_frame_id)})
         for orig, h in zip(primitive.helices, translated.helices)
     ]
     placed_strands = []
@@ -282,6 +288,7 @@ def place_primitive_into(
         for fl in primitive.forced_ligations
     ]
     placed_clusters = []
+    cmap = {}
     for c in primitive.cluster_transforms:
         new_helix_ids = [hmap[hid] for hid in c.helix_ids]
         new_domain_ids = []
@@ -293,6 +300,7 @@ def place_primitive_into(
             )
         nid = _fresh_id(c.id, used_c)
         used_c.add(nid)
+        cmap[c.id] = nid
         placed_clusters.append(
             c.model_copy(
                 update={
@@ -308,6 +316,9 @@ def place_primitive_into(
     result.strands = list(result.strands) + placed_strands
     result.forced_ligations = list(result.forced_ligations) + placed_fls
     result.cluster_transforms = list(result.cluster_transforms) + placed_clusters
+    result.lattice_frames = [*result.lattice_frames, *(f.model_copy(update={
+        'id': fmap[f.id], 'placement_cluster_id': cmap[f.placement_cluster_id]})
+        for f in primitive.lattice_frames)]
     if not host.helices:
         result.lattice_type = lattice
     return result

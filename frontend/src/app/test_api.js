@@ -577,6 +577,7 @@ export function installTestApi({
     },
     /** Screen {x,y} + identity of each visible blunt-end ring (gesture e2e for
      *  blunt-end / primitive-on-face flows). */
+    getVRToolEndTable: () => bluntEnds.getVRToolEndTable?.() ?? [],
     getDomainEndScreenPositions: () =>
       bluntEnds.getEndScreenInfo?.(camera, canvas.getBoundingClientRect()) ?? [],
     /** Slice-plane mode snapshot (visible / placement / continuation). */
@@ -587,6 +588,21 @@ export function installTestApi({
       continuation: slicePlane.isContinuation(),
       deformed: slicePlane.isDeformed(),
     }),
+    /** Read-only rendered cell locations; tests still click through the real raycast. */
+    getSliceCellScreenPositions() {
+      const rect = canvas.getBoundingClientRect(), cells = new Map()
+      if (!slicePlane.isVisible()) return []
+      scene.traverseVisible(object => {
+        const { row, col, state } = object.userData ?? {}
+        if (!object.isMesh || !Number.isInteger(row) || !Number.isInteger(col) || !state) return
+        const p = object.getWorldPosition(new THREE.Vector3()).project(camera)
+        if (Math.abs(p.x) > 1 || Math.abs(p.y) > 1 || Math.abs(p.z) > 1) return
+        cells.set(`${row},${col}`, { row, col, state,
+          x: rect.left + (p.x + 1) * rect.width / 2,
+          y: rect.top + (1 - p.y) * rect.height / 2 })
+      })
+      return [...cells.values()]
+    },
     /** Deterministic counterpart of Blunt end → Extrude for large-scene e2e tests.
      *  (Software-WebGL ring raycasts are too slow/flaky to be the recommendation oracle.) */
     openExtrudeAtEnd({ helixId, diskBp, openSide = 1, plane = 'XY' }) {

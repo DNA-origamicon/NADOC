@@ -22,6 +22,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_validator
+from backend.core.lattice_frame_model import LatticeFrame, validate_frame_references
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
@@ -166,6 +167,8 @@ class Helix(BaseModel):
     label: Optional[str] = None
     """Display label shown in the pathview gutter (e.g. scadnano helix index).  None = use
     positional index."""
+    lattice_frame_id: Optional[str] = None
+    """Explicit local-cell frame; None preserves legacy implicit-frame semantics."""
     grid_pos: Optional[Tuple[int, int]] = None
     """(row, col) in the originating lattice grid, when known.  Set by scadnano/caDNAno
     importers so that the crossover lookup table can be used without parsing the helix ID."""
@@ -1809,6 +1812,7 @@ class OverhangRotationLogEntry(BaseModel):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
+    "extrude-frame",
     "aptamer-import",
     "bundle-create",
     "cluster-paste",
@@ -2973,6 +2977,7 @@ class Design(BaseModel):
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    lattice_frames: List[LatticeFrame] = Field(default_factory=list)
     helices: List[Helix] = Field(default_factory=list)
     strands: List[Strand] = Field(default_factory=list)
     lattice_type: LatticeType = LatticeType.HONEYCOMB
@@ -3030,6 +3035,11 @@ class Design(BaseModel):
     active); ``-2`` = pre-cluster (no children); ``0..M-1`` = first
     sub_cursor+1 children active. Lets the slider thumb land on the
     specific sub-notch the user scrubbed to."""
+
+    @model_validator(mode="after")
+    def _validate_lattice_frames(self) -> "Design":
+        validate_frame_references(self)
+        return self
 
     @field_validator("feature_log", mode="before")
     @classmethod

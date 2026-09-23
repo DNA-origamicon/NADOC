@@ -887,6 +887,7 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
     # immediately discarded (notably ~142 ms for VoltronCoreArm).
     if disposition == "confirmed" or acknowledged is None:
         return {
+            **(acknowledged if isinstance(acknowledged, dict) else {}),
             "path": body.path,
             "identity_disposition": disposition,
             "previous_path": previous,

@@ -178,3 +178,93 @@ report.json where available; never raise the motion-lateness budget to hide a
 loaded-runtime failure. Consolidated evidence must identify each source attempt.
 
 Latest visible-motion evidence: `.development-artifacts/scrywrite-inspector/visibility-05/validation.md` and `visible-matrix.html`.
+
+## Fast numerical visual checks (2026-09-22)
+
+Use MCP `scrywrite_measure`, authenticated inspector `POST /api/measure`, or:
+
+```sh
+python -m tools.scrywrite_inspector.visual_metrics \
+  --socket /private/session/viewer.sock --roi 0 0 1 1 --expect expectations.json
+```
+
+MCP arguments: `session`, `expected_sequence`, optional `roi`. ROI is normalized
+**top-left x, y, width, height**, contained in the image. It rounds outward to pixel
+boundaries; results give the actual integer ROI. The command advances the session
+sequence and waits for a newly submitted frame. Concurrent captures/measurements
+fail busy. The four-second deadline is a timeout, not a mandatory wait.
+
+The native module reads only final stencil bytes: no RGB, depth, object-ID
+readback, PNG encoding, or files. Seven masks per eye report pixel counts, bounds,
+pixel-center centroids, fill ratios, and moment-equivalent ellipse axes. Coordinates
+are full-eye pixels with top-left origin; bounds are x/y/width/height. Absent masks
+have zero pixels and null geometry. IDs: design 1, reference grid 2, overlay 3,
+left controller 4, right controller 5, intended contacts 6, actual contacts 7.
+
+Example expectations:
+
+```json
+[
+  {"eye":0,"class_id":3,"ranges":{"pixels":[1000,null],"width":[100,null]}},
+  {"eye":1,"class_id":3,"ranges":{"pixels":[1000,null],"width":[100,null]}}
+]
+```
+
+Eyes: left=0/right=1. Metrics: `pixels,x,y,width,height,cx,cy,fill_ratio,major,minor`.
+Range endpoints are inclusive; null means unbounded on that side. Empty rules,
+unknown metrics, invalid ranges and nonfinite numbers are rejected. Missing shape
+measurements fail their ranges. Explicit pixels=[0,0] tests absence. HTTP accepts
+`roi` and `expectations`, returning the measurement and optional evaluation. CLI
+exits nonzero on failed measurements/expectations. MCP returns compact structured
+text with no image attachment; internal bridge state retains ownership checks.
+
+**Limits:** these are render-class masks, not per-control identities or connected
+components. UI controls share class 3. An ROI isolates a region but cannot distinguish
+overlapping controls. Moment axes describe mask spread, not exact circle fits,
+especially for outlines, disconnected shapes or clipping. Counts can include dark
+panel backgrounds. They do not prove legibility, contrast, correct color, desktop
+visibility, compositor delivery or physical headset comfort. IDs can be correct
+when RGB shading is wrong. Continue full captures and actual desktop image checks
+at milestones and on discrepancies; markers alone cannot replace these.
+
+Physical-runtime benchmark: five samples each, median full measure 23.25 ms,
+60%×60% ROI 22.34 ms, small corner 22.31 ms; three full capture-and-copy samples
+median 251.10 ms (~10.8× faster). Capture includes additional data and disk I/O:
+this compares workflows, not equivalent payloads. Bridge polling is 20 ms.
+Both-eye interface checks passed; empty-corner presence checks failed as intended.
+Against separate captured frames, count differences were <0.08% and centroid
+distances <0.2 pixels. Physical tracking jitter remains.
+
+Evidence and benchmark script: `.development-artifacts/scrywrite-fast-metrics/`
+resolves to `/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/scrywrite-fast-metrics/`.
+See `report.json`, `benchmark.py`, `capture-2/left.png`, `desktop-review.png`.
+Rerunning the benchmark requires fresh capture output directories.
+
+Established approaches: [OpenCV shape statistics and moments](https://docs.opencv.org/4.13.0/d3/dc0/group__imgproc__shape.html),
+[RenderDoc pixel inspection](https://github.com/baldurk/renderdoc/blob/v1.x/docs/how/how_inspect_pixel.rst),
+[AprilTag fiducials](https://github.com/AprilRobotics/apriltag).
+Integer masks avoid display-color ambiguity and require no extra dependency.
+Next: stable semantic UI IDs in the actual draw pass, followed by component/contour
+measurements and expected projected bounds. Optional marker flashes could verify
+coordinate registration, but cannot prove that the actual control rendered.
+Human-review holds remain separate from machine measurement timing.
+
+### Read-only placement mapping evidence
+
+Native observe/capture state includes `presentation` with
+`model_to_tracking_rows` (row-major4x4), `source_center_nm`,
+`normalization_model_per_nm`, and `normalized_offset_model`. Source coordinates
+first become `(source-center)*normalization+offset`, then the4x4 matrix maps
+them to OpenXR_LOCAL metres. The matrix is observational data from the current
+scene manipulator; it does not change authored geometry or head tracking. Float
+values retain round-trip precision.
+
+`tools/vr_workflows/placement_oracle.py` independently forward-projects the saved
+freeform cluster through these two mappings and compares it to the recorded
+**actual applied** capture pose. It checks all rotation axes, not just the extrusion
+axis, and rejects nonuniform/sheared/reflected presentation, nonzero authored pivot
+or parented placement. Tolerances are0.1mm tracking position and0.05degrees rotation;
+they measure mapping error, not distance from the user's intended pose. The
+combined workflow writes `freeform/placement-mapping.json`; failure output is
+retained separately. This is coordinate consistency, not a physical headset
+visibility or human motor-performance claim.

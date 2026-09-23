@@ -33,6 +33,7 @@ export function createVRToolPreflightCoordinator({
   }
   let requestGeneration = 0
   let feedbackSequence = 0
+  let validated = null
 
   const publish = async (feedback, generation, { retryStale = false } = {}) => {
     if (!feedback) return Promise.resolve(null)
@@ -65,11 +66,12 @@ export function createVRToolPreflightCoordinator({
     async request(toolConfigSequence, draft, environment = {}, {
       waitingReason = null,
     } = {}) {
+      const generation = ++requestGeneration
+      validated = null
       const config = normalizeVRToolConfig(draft)
       if (!Number.isSafeInteger(toolConfigSequence) || toolConfigSequence < 1 || !config) {
         return { sent: false, reason: 'invalid_request' }
       }
-      const generation = ++requestGeneration
       if (waitingReason) {
         publish(_feedback(
           config, toolConfigSequence, 'waiting', waitingReason,
@@ -83,15 +85,27 @@ export function createVRToolPreflightCoordinator({
       const delivered = await publish(
         result.feedback, generation, { retryStale: true },
       )
+      if (generation !== requestGeneration) return { sent: false, reason: 'superseded' }
       if (delivered === null) return { sent: false, reason: 'delivery_failed' }
       if (delivered?.published === false) {
         return { sent: false, reason: 'stale_delivery' }
+      }
+      if (result.feedback.status === 'ok' && result.plan) {
+        validated = { sequence: toolConfigSequence, plan: structuredClone(result.plan) }
       }
       return { sent: true, reason: 'published', result }
     },
 
     cancel() {
       requestGeneration += 1
+      validated = null
+    },
+
+    takeValidatedPlan(sequence) {
+      if (!validated || validated.sequence !== sequence) return null
+      const plan = validated.plan
+      validated = null
+      return plan
     },
 
     feedbackSequence() {

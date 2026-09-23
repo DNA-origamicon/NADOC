@@ -66,6 +66,7 @@ def make_handler(service, port, token):
                 data=json.loads(self.rfile.read(size))
                 route=urlsplit(self.path).path
                 if route=='/api/capture':result=service.capture()
+                elif route=='/api/measure':result=service.measure(data.get('roi'),data.get('expectations'))
                 elif route=='/api/visibility':result=service.visibility(data['visibility'])
                 elif route=='/api/pick':result=service.pick(data['capture'],data['eye'],data['x'],data['y'])
                 elif route=='/api/run':result=service.start(data.get('final',False),data.get('review',False))

@@ -1,3 +1,4 @@
+import { canonicalVREndSource } from './vr_continuation_source.js'
 import { parseBaseKey } from './base_ref.js'
 import { expandedHelixOffsetFrame } from './expanded_helix_offsets.js'
 
@@ -146,6 +147,10 @@ export function resolveVREndToolContext(
   }
   const expand = point => point.map((value, axis) => value + expandedOffset[axis])
   const continuationBp = face.bp + Math.max(0, face.openSide)
+  const source = helix.lattice_frame_id ? canonicalVREndSource(helix, continuationBp, design) : null
+  if (helix.lattice_frame_id && !source) {
+    return { accepted:false, reason:'invalid_continuation_face', context:null }
+  }
   const continuationPosition = face.openSide < 0 ? face.endPos3d : face.ringPos3d
   return {
     accepted: true,
@@ -157,8 +162,9 @@ export function resolveVREndToolContext(
       diskBp: face.diskBp,
       continuationBp,
       openSide: face.openSide,
-      plane: face.plane,
-      offsetNm: face.offsetNm,
+      plane: source?.plane ?? face.plane,
+      offsetNm: source?.offsetNm ?? face.offsetNm,
+      ...(source ? { sourceFrameId:source.sourceFrameId } : {}),
       facePosition: [...face.ringPos3d],
       faceNormal: [...face.faceNormal3d],
       continuationPosition: [...continuationPosition],
@@ -174,7 +180,7 @@ export function resolveVREndToolContext(
       connections: _endConnections(parsed, design),
       footprint: _singleEndFootprint(helix, design),
       deformed: !!design?.deformations?.length ||
-        _effectiveTransform(face.helixId, design),
+        (!source && _effectiveTransform(face.helixId, design)),
     },
   }
 }

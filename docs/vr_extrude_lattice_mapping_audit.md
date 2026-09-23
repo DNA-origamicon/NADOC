@@ -2,6 +2,16 @@
 
 ## Conclusion
 
+**Frame candidate increment (2026-09-22):** explicit lattice-frame records and
+helix references now persist, with an isolated independent-bundle candidate builder
+using existing rigid clusters. Membership lookup keys frame + cell. Cadnano export
+packs explicit frames into separate bands and discloses pose loss; same-frame
+segment consolidation and editor/neighbor/continuation consumers remain unfinished.
+This is not yet a VR commit path. Current details and evidence are in
+[the active authoring campaign](vr_authoring_workflows.md#lattice-frame-candidate-increment-2026-09-22).
+The table below records the original audit baseline, not completion of the refactor.
+
+
 **First increment implemented (2026-09-22):** native VR now has an `EXTRUDE FROM`
 control cycling XY/XZ/YZ. The scene carries a canonical source-plane default and lattice
 type. Desktop's existing dropdown now resolves the loaded part. Known native helix

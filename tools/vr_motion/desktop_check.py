@@ -29,10 +29,7 @@ def pixel_agreement(expected, actual):
             'required_fraction':.95,'pixel_tolerance':32,'registration_tolerance_px':1}
 
 
-def run(socket, output):
-    import numpy as np
-    from PIL import Image, ImageGrab
-    live=LiveSession(Bridge(socket),physical=True)
+def viewer_window(live):
     pid=int(live.session.split('-')[0])
     tree=subprocess.check_output(['xwininfo','-root','-tree'],text=True,timeout=3)
     window=None
@@ -42,6 +39,44 @@ def run(socket, output):
         prop=subprocess.check_output(['xprop','-id',identifier,'_NET_WM_PID'],text=True,timeout=3)
         if prop.strip().endswith('= '+str(pid)):window=identifier;break
     if not window:raise RuntimeError('current viewer client window not found on this X display')
+    return window
+
+
+def reveal_viewer(live):
+    """Raise only the verified owned viewer's frame, without restarting anything."""
+    import ctypes as c
+    import ctypes.util
+    import time
+    window = int(viewer_window(live),16)
+    x = c.CDLL(ctypes.util.find_library('X11'))
+    x.XOpenDisplay.argtypes=[c.c_char_p];x.XOpenDisplay.restype=c.c_void_p
+    x.XQueryTree.argtypes=[c.c_void_p,c.c_ulong,c.POINTER(c.c_ulong),c.POINTER(c.c_ulong),c.POINTER(c.POINTER(c.c_ulong)),c.POINTER(c.c_uint)]
+    x.XRaiseWindow.argtypes=[c.c_void_p,c.c_ulong]
+    x.XSync.argtypes=[c.c_void_p,c.c_int];x.XCloseDisplay.argtypes=[c.c_void_p]
+    x.XFree.argtypes=[c.c_void_p]
+    display=x.XOpenDisplay(os.environ.get('DISPLAY',':1').encode())
+    if not display:raise RuntimeError('cannot open viewer X display')
+    try:
+        for _ in range(16):
+            root=c.c_ulong();parent=c.c_ulong();children=c.POINTER(c.c_ulong)();count=c.c_uint()
+            if not x.XQueryTree(display,window,c.byref(root),c.byref(parent),c.byref(children),c.byref(count)):
+                raise RuntimeError('viewer disappeared before reveal')
+            if children:x.XFree(children)
+            if parent.value in (0,root.value):break
+            window=parent.value
+        else:raise RuntimeError('unexpected viewer window ancestry')
+        x.XRaiseWindow(display,window);x.XSync(display,0)
+    finally:x.XCloseDisplay(display)
+    time.sleep(.3)  # Desktop composition, outside all measured motion.
+
+
+def run(socket, output, *, live=None, reveal=False):
+    import numpy as np
+    from PIL import Image, ImageGrab
+    if live is None:
+        live=LiveSession(Bridge(socket),physical=True)
+    if reveal:reveal_viewer(live)
+    window=viewer_window(live)
     info=subprocess.check_output(['xwininfo','-id',window],text=True,timeout=3)
     def field(name):
         return int(re.search(re.escape(name)+r':\s*(-?\d+)',info).group(1))
@@ -57,6 +92,7 @@ def run(socket, output):
         # Never retain other applications exposed by an obscured/failed window.
         if result['passed']:crop.save(output/'desktop-client.png')
     result.update(session=live.session,frame=evidence['state']['frame'],window=window,rectangle=[x,y,w,h],
+        revealed_owned_viewer=reveal,
         scope='Actual X11 desktop pixels versus submitted-eye mirror; not physical headset scanout')
     (output/'desktop-check.json').write_text(json.dumps(result,indent=2)+'\n')
     return result

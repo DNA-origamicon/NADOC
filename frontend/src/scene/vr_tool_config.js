@@ -1,3 +1,6 @@
+import { normalizeFreeformPlacement } from './vr_freeform_placement.js'
+import { normalizePaintedFootprint } from './vr_extrude_draft.js'
+
 /** Pure validation/state for target-bound native-VR tool configuration drafts.
  *
  * These are transport bounds, not design-operation limits. Canonical desktop
@@ -74,6 +77,11 @@ export function normalizeVRToolConfig(input) {
   const target = _target(input)
   if (!target) return null
   if (input.mode === 'extrude') {
+    const placement = normalizeFreeformPlacement(input.freeform_placement)
+    if (placement === null || (placement !== undefined && target.target_kind !== 'none')) return null
+    const footprint = input.painted_footprint === undefined ? undefined
+      : normalizePaintedFootprint(input.painted_footprint)
+    if (footprint === null) return null
     const lengthBp = _boundedInteger(input.length_bp, 0, VR_TOOL_CONFIG_LIMITS.maxLengthBp)
     if (lengthBp === undefined || ![-1, 1].includes(input.direction_sign) ||
         !STRAND_FILTERS.has(input.strand_filter) ||
@@ -87,6 +95,8 @@ export function normalizeVRToolConfig(input) {
       strand_filter: input.strand_filter,
       ligate_adjacent: input.ligate_adjacent,
       footprint_state: input.footprint_state,
+      ...(placement === undefined ? {} : { freeform_placement:placement }),
+      ...(footprint === undefined ? {} : { painted_footprint: footprint }),
       ...(input.extrude_from === undefined ? {} : { extrude_from: input.extrude_from }),
     }
   }
@@ -164,7 +174,7 @@ export function reduceVRToolConfig(
   }
   const draft = normalizeVRToolConfig(event.draft)
   if (!draft) return { state, accepted: false, reason: 'invalid_draft' }
-  if (targetSnapshotPresent && !toolTarget) {
+  if (targetSnapshotPresent && !toolTarget && draft.target_kind !== 'none') {
     return { state, accepted: false, reason: 'stale_target' }
   }
   if (draft.target_kind !== 'none' && (

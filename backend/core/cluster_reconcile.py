@@ -242,6 +242,10 @@ def _compute_helix_membership(
             new_helix_targets[new_hid] = helix_membership_before[origin]
         else:
             new_helix_targets[new_hid] = set()  # orphan
+        helix = next(h for h in design_after.helices if h.id == new_hid)
+        if helix.lattice_frame_id is not None:
+            frame = next(f for f in design_after.lattice_frames if f.id == helix.lattice_frame_id)
+            new_helix_targets[new_hid] = set(new_helix_targets[new_hid]) | {frame.placement_cluster_id}
 
     result: dict[str, list[str]] = {}
     for cluster in design_before.cluster_transforms:
@@ -281,7 +285,7 @@ def _infer_origin_via_lattice_neighbors(
     for h in design_after.helices:
         if h.id == new_hid or h.id not in candidate_helix_ids:
             continue
-        if h.grid_pos is None:
+        if h.grid_pos is None or h.lattice_frame_id != new_helix.lattice_frame_id:
             continue
         dist = abs(h.grid_pos[0] - new_row) + abs(h.grid_pos[1] - new_col)
         if dist > 2:

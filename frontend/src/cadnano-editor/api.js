@@ -167,13 +167,13 @@ export async function savePlateLayout(layout) {
  * bp extent + 3D Z-span), so a strand later penned onto it lands beside it in 3D.
  * The user pens scaffold/staple strands onto the bare track themselves.
  */
-export async function addHelixAtCell(row, col, length_bp = 42) {
-  return mutate(req => req('POST', '/design/helix-at-cell', { row, col, length_bp, populate_strands: false }))
+export async function addHelixAtCell(row, col, length_bp = 42, lattice_frame_id = null) {
+  return mutate(req => req('POST', '/design/helix-at-cell', { row, col, length_bp, populate_strands: false, lattice_frame_id }))
 }
 
 /** Delete a helix by ID. */
 export async function deleteHelix(helixId) {
-  return mutate(req => req('DELETE', `/design/helix/${helixId}`))
+  return mutate(req => req('DELETE', `/design/helices/${helixId}`))
 }
 
 /**

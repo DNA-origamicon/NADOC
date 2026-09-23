@@ -23,7 +23,7 @@ SPEC.loader.exec_module(mcp)
 def test_discovery_and_offline_error(tmp_path):
     bridge = mcp.Bridge(tmp_path / "offline.sock")
     tools = mcp.dispatch(bridge, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
-    assert len(tools["result"]["tools"]) == 11
+    assert len(tools["result"]["tools"]) == 12
     reply = mcp.dispatch(bridge, {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scrywrite_observe"}})
     assert reply["result"]["isError"] is True
     assert mcp.dispatch(bridge, {"jsonrpc": "2.0", "method": "notifications/initialized"}) is None

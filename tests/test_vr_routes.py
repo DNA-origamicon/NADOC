@@ -426,6 +426,7 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "trajectory_action": "none",
         "trajectory_frame_idx": 0,
         "tool_sequence": 4,
+        "tool_action_config_sequence": 0,
         "tool_mode": "twist",
         "tool_action": "preview",
         "tool_target_identity": "nuc:s1:0:h1:3:FORWARD:0",
@@ -542,7 +543,8 @@ def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
         "display_period_ms": None,
     }
 
-    event_path.write_text("x" * 4097)
+    from backend.core.vr_extrude_draft import MAX_VR_EVENT_BYTES
+    event_path.write_text("x" * (MAX_VR_EVENT_BYTES + 1))
     assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
 
 

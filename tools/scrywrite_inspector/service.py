@@ -71,6 +71,16 @@ class Inspector:
             return entry
         return self.mutate(perform)
 
+    def measure(self, roi=None, expectations=None):
+        from .visual_metrics import evaluate
+        def perform(live):
+            measurement = live.send('measure', roi=roi if roi is not None else [0,0,1,1])['measurement']
+            result = {'session': live.session, 'measurement': measurement}
+            if expectations is not None:
+                result['evaluation'] = evaluate(measurement, expectations)
+            return result
+        return self.mutate(perform)
+
     def visibility(self, value):
         if value not in ('normal','hidden'):
             raise ValueError('invalid scene visibility')

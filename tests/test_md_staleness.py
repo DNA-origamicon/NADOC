@@ -89,7 +89,10 @@ def test_md_out_of_date_flag_and_roll_clears_it(monkeypatch, tmp_path):
 def test_md_roll_migrates_old_snapshot_before_protecting_it(monkeypatch, tmp_path):
     """Old NAMD snapshots with no cluster must still become a visible protected loadout."""
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
-    prepared = make_6hb_design().copy_with(cluster_transforms=[])
+    prepared = make_6hb_design()
+    # This fixture represents an old file predating both clusters and frames.
+    prepared = prepared.copy_with(cluster_transforms=[], lattice_frames=[],
+        helices=[h.model_copy(update={'lattice_frame_id':None}) for h in prepared.helices])
     job = _make_md_job(
         tmp_path, prepared, fingerprint=design_build_fingerprint(prepared)
     )

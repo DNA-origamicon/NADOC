@@ -543,7 +543,9 @@ class LatticePaintStroke {
  * caller's value. Constants are intentionally centralized for headset tuning. */
 class ThumbwheelControl {
   public:
-    static constexpr float kNotchTravel = 0.014F;
+    // 30mm per detent at the default 0.75 menu scale. Shorter travel
+    // let the variable-motion stress profile generate unintended lattice periods.
+    static constexpr float kNotchTravel = 0.040F;
     static constexpr float kDampingPerSecond = 2.6F;
     static constexpr float kStopVelocity = 0.012F;
     static constexpr float kFlickVelocityThreshold = 0.20F;
@@ -868,19 +870,25 @@ inline std::optional<std::string> selectionVolumeOwnerToken(
     const std::string& identity, const std::string& selectionLevel) {
     const std::string targetKind = selectionLevel == "default"
         ? "strand" : selectionLevel == "xover" ? "crossover" : selectionLevel;
+    if (targetKind == "end" && identity.starts_with("segment:")) return std::nullopt;
     const auto owner = std::find_if(
         aliases.begin(), aliases.end(), [&](const OwnerAliasEntry& candidate) {
             return candidate.identity == identity;
         });
     if (owner == aliases.end()) return std::nullopt;
+    std::optional<std::string> exactEnd;
     for (const std::string& token : owner->tokens) {
         const auto typed = std::find_if(
             tokenKinds.begin(), tokenKinds.end(), [&](const auto& candidate) {
                 return candidate.first == token && candidate.second == targetKind;
             });
-        if (typed != tokenKinds.end()) return token;
+        if (typed == tokenKinds.end()) continue;
+        if (targetKind != "end") return token;
+        // A spanning segment cannot identify which endpoint was touched.
+        if (exactEnd && *exactEnd != token) return std::nullopt;
+        exactEnd = token;
     }
-    return std::nullopt;
+    return exactEnd;
 }
 
 struct BoundsSummary {
@@ -1321,6 +1329,7 @@ class ToolShell {
         ToolMode mode, const std::string& selectionKind) {
         if (mode == ToolMode::inspect) return ToolCapability::view_only;
         if (selectionKind.empty() || selectionKind == "none") {
+            if (mode == ToolMode::extrude) return ToolCapability::configuration_required;
             return ToolCapability::unsupported;
         }
         struct CapabilityEntry {
@@ -1354,7 +1363,7 @@ class ToolShell {
         status_ = targetStatus(mode, selectionKind);
     }
 
-    void apply(ToolAction action, const std::string& selectionKind) {
+    void apply(ToolAction action, const std::string& selectionKind, bool paintedReady = false) {
         const bool hasSelection = !selectionKind.empty() && selectionKind != "none";
         const ToolCapability capability = selectionCapability(mode_, selectionKind);
         const bool directPreview = capability == ToolCapability::direct_preview;
@@ -1375,7 +1384,10 @@ class ToolShell {
                 status_ = "PREVIEW ONLY";
             }
         } else if (action == ToolAction::confirm) {
-            if (capability == ToolCapability::configuration_required) {
+            if (mode_ == ToolMode::extrude && (!hasSelection || selectionKind == "end")) {
+                if (!executionPending_ && paintedReady) executionPending_ = true;
+                status_ = executionPending_ ? "COMMITTING" : "VALIDATE DRAFT";
+            } else if (capability == ToolCapability::configuration_required) {
                 status_ = "CONFIG REQUIRED";
             } else if (previewRequested_ && directPreview && !executionPending_) {
                 executionPending_ = true;
@@ -1469,7 +1481,7 @@ class ToolShell {
     [[nodiscard]] static std::string targetStatus(
         ToolMode mode, const std::string& selectionKind) {
         if (mode == ToolMode::inspect) return "VIEW ONLY";
-        if (selectionKind.empty() || selectionKind == "none") return "SELECT TARGET";
+        if ((selectionKind.empty() || selectionKind == "none") && mode != ToolMode::extrude) return "SELECT TARGET";
         const ToolCapability capability = selectionCapability(mode, selectionKind);
         if (capability == ToolCapability::direct_preview) return "READY";
         if (capability == ToolCapability::configuration_required) {
@@ -1675,7 +1687,7 @@ inline std::optional<ToolExecutionFeedback> parseToolExecutionFeedback(
         magic != "NADOCVR_TOOL_EXECUTION" || version != 1 ||
         result.sequence <= previousSequence || result.toolSequence == 0 ||
         result.toolSequence > maximumToolSequence || result.identity.empty() ||
-        result.identity == "-" || result.identity.size() > 2048 ||
+        result.identity.size() > 2048 ||
         fields >> trailing) {
         return std::nullopt;
     }
@@ -1686,8 +1698,8 @@ inline std::optional<ToolExecutionFeedback> parseToolExecutionFeedback(
     static constexpr std::array<const char*, 4> statuses = {
         "pending", "succeeded", "failed", "refused",
     };
-    static constexpr std::array<const char*, 10> selectionKinds = {
-        "cluster", "strand", "domain", "base", "end", "bond",
+    static constexpr std::array<const char*, 11> selectionKinds = {
+        "none", "cluster", "strand", "domain", "base", "end", "bond",
         "crossover", "overhang", "extension", "protein",
     };
     if (std::find(modes.begin(), modes.end(), result.mode) == modes.end() ||
@@ -1698,11 +1710,14 @@ inline std::optional<ToolExecutionFeedback> parseToolExecutionFeedback(
         result.reason.empty() || result.reason.size() > 64) {
         return std::nullopt;
     }
+    const bool targetless = result.mode == "extrude" && result.selectionKind == "none" && result.identity == "-";
+    if (!targetless && (result.selectionKind == "none" || result.identity == "-")) return std::nullopt;
     if ((result.status == "succeeded") != (result.featureLogEntryId != "-") ||
         result.featureLogEntryId.size() > 128) {
         return std::nullopt;
     }
     if (result.featureLogEntryId == "-") result.featureLogEntryId.clear();
+    if (targetless) result.identity.clear();
     return result;
 }
 
@@ -1964,6 +1979,22 @@ class SceneManipulator {
                                + headOrientation * glm::vec3(0.0F, 0.0F, -kViewDistanceMeters);
         transform_ = glm::translate(glm::mat4(1.0F), target - kDefaultModelCenter);
         scale_ = 1.0F;
+        mode_ = ManipulationMode::none;
+    }
+
+    // Presentation-only fit; canonical normalization and coordinates stay fixed.
+    void fitInView(const glm::vec3& headPosition, const glm::quat& headOrientation,
+                   const std::optional<BoundsSummary>& bounds) {
+        if (!bounds || !std::isfinite(bounds->radius) || bounds->radius <= 0.0F) {
+            recenter(headPosition, headOrientation);
+            return;
+        }
+        scale_ = std::clamp(0.25F / bounds->radius, kMinScale, kMaxScale);
+        const auto orientation = glm::normalize(headOrientation);
+        const auto target = headPosition + orientation * glm::vec3(0, 0, -kViewDistanceMeters);
+        transform_ = glm::translate(glm::mat4(1), target) * glm::toMat4(orientation)
+                   * glm::scale(glm::mat4(1), glm::vec3(scale_))
+                   * glm::translate(glm::mat4(1), -bounds->center);
         mode_ = ManipulationMode::none;
     }
 

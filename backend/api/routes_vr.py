@@ -270,7 +270,7 @@ class VRToolExecutionFeedbackRequest(BaseModel):
     tool_sequence: int = Field(ge=1, le=2**53 - 1)
     tool_mode: Literal["move_rotate", "extrude"]
     tool_action: Literal["confirm", "undo"]
-    target_identity: str = Field(min_length=1, max_length=2048)
+    target_identity: Optional[str] = Field(default=None, min_length=1, max_length=2048)
     target_kind: SelectionKind
     status: Literal["pending", "succeeded", "failed", "refused"]
     reason: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")
@@ -2858,6 +2858,15 @@ def _snapshot(
     from backend.core.design_geometry import _geometry_for_design
 
     design = design_state.get_or_404()
+    from backend.core.vr_empty_scene import empty_authoring_scene
+
+    empty_scene = empty_authoring_scene(design, body.representation, body.coloring)
+    if empty_scene is not None:
+        if line_writer is None:
+            return empty_scene
+        for line in empty_scene.splitlines():
+            line_writer(line)
+        return None
     nucleotides = _geometry_for_design(
         design,
         measured_positioning=measured_display_placement(body.measured_positioning),
@@ -3005,7 +3014,8 @@ def _read_state() -> dict | None:
             raise ValueError("PID no longer belongs to NADOC VR")
         return state
     except (FileNotFoundError, KeyError, ValueError, OSError, json.JSONDecodeError):
-        _STATE_PATH.unlink(missing_ok=True)
+        # A status reader may race a writer in another API process. Never remove
+        # a pathname that could already refer to a newer session.
         return None
 
 
@@ -3154,8 +3164,14 @@ def _start_steamvr() -> dict[str, bool]:
 
 
 def _write_state(state: dict) -> None:
-    _STATE_PATH.write_text(json.dumps(state))
-    _STATE_PATH.chmod(0o600)
+    fd, name = tempfile.mkstemp(prefix=_STATE_PATH.name + ".", dir=_STATE_PATH.parent)
+    pending = Path(name)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(state, stream)
+        os.replace(pending, _STATE_PATH)
+    finally:
+        pending.unlink(missing_ok=True)
 
 
 def _cleanup_after_process(
@@ -3173,6 +3189,8 @@ def _cleanup_after_process(
     coordinate_path: Path,
 ) -> None:
     process.wait()
+    from backend.api.routes_vr_scene import cleanup_scene_refresh
+    cleanup_scene_refresh(event_path)
     scene_path.unlink(missing_ok=True)
     event_path.unlink(missing_ok=True)
     feedback_path.unlink(missing_ok=True)
@@ -3336,6 +3354,16 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
         return result
 
     if mode == "extrude":
+        from backend.core.vr_extrude_draft import validate_painted_footprint
+
+        footprint = ({"painted_footprint": validate_painted_footprint(raw["painted_footprint"])}
+                     if "painted_footprint" in raw else {})
+        from backend.core.vr_freeform_placement import validate_freeform_placement
+        placement = {}
+        if "freeform_placement" in raw:
+            if target_kind != "none":
+                raise ValueError("freeform placement cannot target an end")
+            placement = {"freeform_placement":validate_freeform_placement(raw["freeform_placement"])}
         length_bp = bounded_int(raw.get("length_bp"), 0, 1_000_000)
         direction_sign = bounded_int(raw.get("direction_sign"), -1, 1)
         if (
@@ -3353,6 +3381,8 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
             "strand_filter": raw["strand_filter"],
             "ligate_adjacent": raw["ligate_adjacent"],
             "footprint_state": "unresolved",
+            **footprint,
+            **placement,
             **({"extrude_from": raw["extrude_from"]} if "extrude_from" in raw else {}),
         }
 
@@ -3419,7 +3449,8 @@ def _event_payload(state: dict | None) -> dict:
         }
     path = Path(state["event_path"])
     try:
-        if path.stat().st_size > 4096:
+        from backend.core.vr_extrude_draft import MAX_VR_EVENT_BYTES, action_config_sequence
+        if path.stat().st_size > MAX_VR_EVENT_BYTES:
             raise ValueError("event record is too large")
         event = json.loads(path.read_text())
         sequence = int(event.get("sequence", 0))
@@ -3449,6 +3480,7 @@ def _event_payload(state: dict | None) -> dict:
         ):
             raise ValueError("invalid tool configuration sequence")
         tool_config_sequence = raw_tool_config_sequence
+        tool_action_config_sequence = action_config_sequence(event, tool_config_sequence)
         tool_config = _parse_tool_config(
             event.get("tool_config"), tool_config_sequence
         )
@@ -3627,6 +3659,7 @@ def _event_payload(state: dict | None) -> dict:
             "trajectory_action": trajectory_action,
             "trajectory_frame_idx": trajectory_frame_idx,
             "tool_sequence": tool_sequence,
+            "tool_action_config_sequence": tool_action_config_sequence,
             "tool_mode": tool_mode,
             "tool_action": tool_action,
             "tool_target_identity": tool_target_identity,
@@ -4098,19 +4131,21 @@ def _write_tool_execution_feedback(
     if not state or not state.get("tool_execution_feedback_path"):
         raise HTTPException(409, detail="Native VR is not running.")
     entry_id = body.feature_log_entry_id or "-"
+    identity = body.target_identity or "-"
+    targetless = body.tool_mode == "extrude" and body.target_kind == "none" and body.target_identity is None
     if (
-        body.target_kind == "none"
+        (not targetless and (body.target_kind == "none" or body.target_identity is None))
         or (body.status == "succeeded") != (body.feature_log_entry_id is not None)
         or any(
             any(character.isspace() for character in value)
-            for value in (body.target_identity, entry_id)
+            for value in (identity, entry_id)
         )
     ):
         raise HTTPException(422, detail="Invalid VR tool execution feedback.")
     record = (
         f"NADOCVR_TOOL_EXECUTION 1 {body.execution_sequence} "
         f"{body.tool_sequence} {body.tool_mode} {body.tool_action} "
-        f"{body.target_kind} {body.target_identity} {body.status} "
+        f"{body.target_kind} {identity} {body.status} "
         f"{body.reason} {entry_id}\n"
     )
     if len(record.encode()) > 4096:
@@ -4968,7 +5003,10 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                 pass
             raise HTTPException(503, detail=detail)
 
+        from backend.api.doc_context import get_current_doc
         state = {
+            "doc_id": get_current_doc(),
+            "launch_request": body.model_dump(mode="json"),
             "pid": process.pid,
             "scene_path": str(scene_path),
             "event_path": str(event_path),

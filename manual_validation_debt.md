@@ -161,6 +161,11 @@ MV-RSZ, the 3D overhang-resize-through-boundary fix, was pushed PENDING this ses
 ## PENDING queue — index (ordered; first row = next loop processes this)
 
 - **MV-38 — Human-motion live VR/Witness (2026-09-22), PENDING.**
+  Tools/settings-menu follow-up: larger 60mm adjustment rows at default scale need physical-headset
+  legibility/comfort review; verify edge picking and adjacent-row separation.
+  Native bounds regression and submitted-eye evidence do not establish through-lens comfort.
+  Wheel follow-up:30mm travel per detent at default scale (was10.5mm); check
+  precision versus arm travel and flick/controlled-release comfort.
   Source-plane field follow-up: verify XY/XZ/YZ legibility and selection through the
   physical headset. Native stereo/mirror/actual desktop checks passed; the original
   menu size missed one `variable_deliberate` reach (other three presets hit).

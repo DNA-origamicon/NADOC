@@ -11,6 +11,7 @@
 
 import { parseMdAtomFrames, parseMdAtomModel } from '../scene/md_atom_frames_bin.js'
 import { store } from '../state/store.js'
+import { createFrameExtrusionAPI } from './frame_extrusion.js'
 import { geometryQuerySuffix, isNewPositioningOn } from '../ui/new_positioning.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 import { recordNameEdit } from '../ui/name_edit_audit.js'
@@ -1235,6 +1236,10 @@ export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = '
   return _syncFromDesignResponse(json)
 }
 
+export const { validateFrameExtrusion, addFrameExtrusion, refreshNativeVRScene } = createFrameExtrusionAPI({
+  request: _request, sync: _syncFromDesignResponse,
+})
+
 /**
  * Append a bundle segment to the active design (slice-plane extrude).
  * lengthBp may be negative to extrude in the -axis direction.
@@ -1272,9 +1277,12 @@ export async function addCircleSegment({ cells, cellLengths, plane = 'XY', offse
  * Extrude a continuation segment: cells whose helix ends at offsetNm extend existing strands;
  * fresh cells get new scaffold + staple strands.
  */
-export async function addBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both', ligateAdjacent = true }) {
+export async function addBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both', ligateAdjacent = true, sourceFrameId = null, expectedDesignId = null, expectedRevision = null }) {
   const json = await _request('POST', '/design/bundle-continuation', {
     cells,
+    ...(sourceFrameId === null ? {} : { source_frame_id:sourceFrameId }),
+    ...(expectedDesignId === null ? {} : { expected_design_id:expectedDesignId }),
+    ...(expectedRevision === null ? {} : { expected_revision:expectedRevision }),
     length_bp: lengthBp,
     plane,
     offset_nm: offsetNm,
@@ -1285,9 +1293,12 @@ export async function addBundleContinuation({ cells, lengthBp, plane = 'XY', off
 }
 
 /** Dry-run the exact continuation builder; never updates the design/store. */
-export async function validateBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both', ligateAdjacent = true }) {
+export async function validateBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both', ligateAdjacent = true, sourceFrameId = null, expectedDesignId = null, expectedRevision = null }) {
   return _request('POST', '/design/bundle-continuation/validate', {
     cells,
+    ...(sourceFrameId === null ? {} : { source_frame_id:sourceFrameId }),
+    ...(expectedDesignId === null ? {} : { expected_design_id:expectedDesignId }),
+    ...(expectedRevision === null ? {} : { expected_revision:expectedRevision }),
     length_bp: lengthBp,
     plane,
     offset_nm: offsetNm,
@@ -4673,7 +4684,11 @@ export async function saveDesignToWorkspace(path) {
   // design ref changes → autosave → fresh timestamp/ref → autosave, and every
   // turn also invalidates/reloads the atomistic model. The already-open frontend
   // design is canonical for a "confirmed" save, so keep its object identity.
-  if (json.identity_disposition === 'confirmed') return json
+  if (json.identity_disposition === 'confirmed') {
+    if (json.design_id === store.getState().currentDesign?.id &&
+        json.previous_revision === currentRevisionWatermark()) _acceptMetadataRevision(json)
+    return json
+  }
   // Initial path claims and Save As can change identity/path metadata (and Save
   // As can mint a new UUID), so those responses still must enter the store.
   return _syncFromDesignResponse(json, { skipGeometry: true })
@@ -4684,7 +4699,11 @@ export async function saveDesignToWorkspace(path) {
 export async function saveDesignAs(path, overwrite = true) {
   const json = await _request('POST', '/design/save-workspace', { path, overwrite })
   if (!json) return null
-  if (json.identity_disposition === 'confirmed') return json
+  if (json.identity_disposition === 'confirmed') {
+    if (json.design_id === store.getState().currentDesign?.id &&
+        json.previous_revision === currentRevisionWatermark()) _acceptMetadataRevision(json)
+    return json
+  }
   return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 

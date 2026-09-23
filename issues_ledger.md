@@ -916,3 +916,150 @@ New single-profile reruns (`extrude_probe --preset`) avoid repeating already che
 profiles; failures now retain operation/frame/sequence context in report.json.
 The timing/transport budgets remain unchanged. This infrastructure issue is separate
 from the reproducible variable-profile wheel-detent overshoot and visible-path fixes.
+
+## ISSUE-33 — null native tool draft stops VR event polling
+
+- [x] Guard target resolution when native tool_config draft is null.
+- Reproduced in physical fit/undo run: browser pageError at main.js target_identity access after configuration sequence9; polling stopped before valid painted preflight.
+- Root cause: optional chaining returns undefined, and undefined !== 'none' incorrectly treated a missing draft as a target snapshot. Guard existence before comparing; same fix for plane-pick branch.
+- Regression: vr_painted_commit.spec.js dispatches null draft before valid paint and commit/undo. Validation recorded in VR fit artifacts.
+
+## ISSUE-34 — VR status reader races launch publication
+
+- [x] Publish complete private session JSON with atomic rename; readers never unlink.
+- Physical test launch failed chmod because another status reader removed its partially written state. Native process existed but status reportednone.
+- Focused tests observe old record until replace and simulate an invalid old read racing a new record. Owned orphan terminated; diagnostic restored.
+- Physical launch/commit/Undo passes after fix (fit-undo-atomic).
+
+## ISSUE-35 — autosave invalidates native topology refresh
+
+- [x] Retry snapshot publication for a newer revision of the same design, at most three attempts; never replay extrusion.
+- Reproduced with real six-helix42-bp VR paint: commit201, save-workspace advances revision, scene-refresh409 during serialization. Native remains empty.
+- Regression covers same-design revision advance, unchanged revision, and switched document refusal. Physical confirmation recorded in sixhb artifacts.
+
+## ISSUE-36 — confirmed autosave leaves VR preflight revision stale
+
+- [x] Lightweight confirmed-save acknowledgement includes design_id, previous_revision and revision captured under the state lock.
+- Browser advances watermark only for its current design and exact previous watermark, without replacing Design or restarting autosave.
+- Reproduced live: all painted cells acquired, repeated frame preflight409 with expected_revision4 after a confirmed autosave. Frontend-only fix was insufficient because the response omitted revision; failure retained.
+- Unit regressions cover concurrent edits, document switch and stale acknowledgements. Physical existing-frame commit/Undo/edit/save/reload passes with complete fix; scene serialization remains slow.
+- Evidence: `.development-artifacts/vr-workflows/existing-frame-complete/`, save-ack test logs.
+
+## ISSUE-37 — native End selection returns default selection mode in live workflow
+
+- [ ] Diagnose native selection-level publication/browser feedback ordering.
+- New physical end probe reaches a visible terminal using captured depth and the
+  production selection sphere (12cm in front of controller). Submitted-eye image
+  confirms overlap. Browser feedback reports selection_level default and two
+  strand owners; native selection_kind stays none after5s. No geometry committed.
+- END was requested through the options menu. Root cause not established;
+  reordered Paint exit before END still fails. Stop repeating unchanged probe;
+  inspect native level state/event publication and browser event ordering next.
+- Evidence: `.development-artifacts/vr-workflows/end-observed/` (trace, pick/
+  selection-volume stereo) and `end-level/`. All temporary workspaces cleaned;
+  idle diagnostic viewer restored and observed focused in end-restored.json.
+
+### ISSUE-37 follow-up — menu acquisition and event ordering separated
+
+- Live hover assertions show END was not hit: aiming with the hand holding the
+  wrist menu changed the target. Two-hand setup (left menu/right input) fixes
+  acquisition; end-two-hand trace now reports selection_level end.
+- Fixed two code ordering hazards separately: browser processes mode before
+  selection from one poll; native ignores level feedback predating a newer local
+  choice. Frontend event-order regression and native sequence guard tests pass.
+- End commit still unverified: acquired selection contains two terminal owners
+  plus an axis alias mapping to the distant end. Record below, not a mode failure.
+
+## ISSUE-38 — end volume acquisition includes coarse spanning axis owners
+
+- [ ] End-mode sphere on a visible terminal returns multiple end owners, including
+  a remote endpoint from a spanning axis alias; browser correctly refuses a single
+  tool target. Two terminal nucleotides at the local face are also within25mm sphere.
+- `selectionVolumeOwnerToken` picks the first matching typed alias; current
+  `resolveSelectionVolumeHits` also forwards unresolved coarse identities.
+- Need explicit exact-end acquisition behavior/diagnostic scale and a regression
+  excluding distant endpoints. Do not weaken target identity or silently widen
+  extrusion scope. Evidence: end-two-hand trace and selection-volume eye images.
+
+### ISSUE-38 checkpoint — live exact-end continuation succeeds
+
+End-mode owner lookup now rejects primitives with multiple end aliases instead
+of choosing the first; unresolved End primitives are excluded from selection.
+Native regression covers ambiguous axis, interior and exact terminal cases.
+The physical probe targets a visible terminal backbone bead (ideal pixel/depth
+acquisition), verifies the selected owner and commits42→63bp on exactly one helix.
+Native Undo restores42/42; cadnano edit/save/reload preserves210nucleotide positions.
+`end-roundtrip-framed` passes. Broader coarse primitives with only one remote end
+alias, arbitrary multi-end usability, noisy acquisition and through-lens visibility
+still need coverage; do not generalize this diagnostic to all end picking.
+
+### ISSUE-38 spanning single-end alias follow-up
+
+End filtering now also excludes `segment:` identities even if their alias list
+contains only one end. Regression covers this formerly ambiguous coarse case.
+Physical end-segment-filter passes exact Confirm/Undo/cadnano edit/save/reload.
+Dense multiple exact terminals still remain a user acquisition/usability concern;
+no arbitrary owner selection or extrusion-scope widening was added.
+
+### ISSUE-38 combined-workflow scale evidence
+
+The12helix combined workflow could not acquire the visible terminal at its initial
+recentered scale (`combined-authoring`). A recorded4×normal two-hand zoom allowed
+exact end acquisition and continuation (`combined-zoom`, `combined-transition`).
+No selection tolerance or owner-scope changes. This diagnoses an acquisition-scale
+usability boundary; noisy acquisition remains unresolved, not closed by ideal zoomed input.
+
+## ISSUE-39 — Tools menu Extrude does not open paint tablet
+
+Reproduced through profiled visible Tools→Inspect→Extrude clicks in physical viewer
+(menu-activation-real). Tool settings open but extrude.open staysfalse.
+Radial/semantic activation initializes the lattice; the tools-menu branch omitted
+that block. Existing framing helper also hid the discrepancy by activating tools
+internally; it now accepts an explicit visible-UI callback. Extract existing lattice
+initialization to one shared helper and invoke it from both paths. First fix alone
+exposed a second gate: ToolShell classified targetless Extrude as unsupported,
+so the menu never entered configuration. Targetless Extrude now explicitly requires
+configuration; other tools retain their selection requirements. Native regression
+added; menu-capability-fixed physical VR-first roundtrip passes. Native36tests
+and26focused tooling tests pass. Shared initialization opens the tablet through
+visible menu controls, including framing callbacks, without semantic activation.
+No geometry or input-tolerance change.
+
+## ISSUE-40 — VR labels silently drop minus signs
+
+Observed in settings-targets-steady/wheel-before-drag/left.png: intended -1 BP
+renders as 1 BP, DIRECTION - loses its sign, and SIZE - is indistinguishable by
+sign. Root cause: stroke_font.hpp supports '+' but omits '-' and defaults unknown
+characters to blank glyphs. The numeric target/hover checks still pass, so they
+cannot establish label clarity. Add the horizontal minus glyph and regression
+that it differs from both blank and plus. No action IDs or numeric behavior change.
+Validation and submitted-eye review: settings-sign-* artifacts; status recorded
+in settings-targets-validation.md. This mechanical correction is within the user's
+explicit VR UI clarity goal.
+
+## ISSUE-41 — Native authored-pixel presence check accepts an unhelpful review view
+
+Resolved for opt-in authored-geometry review checks2026-09-23; physical headset
+comfort and authoring-trace delivery remain separate open validation work.
+Originally observed in combined-profile-approach/freeform/framed/left.png.
+Desktop reload image usefully shows both bundles. Native1852x2056submitted eye
+has only82x64authored-pixel bounds (1383nonzero IDs); the >=100pixel assertion
+passes despite poor review visibility. Native view is largely end-on. Do not infer
+missing/malformed geometry: independent19helix/2frame/1554position save-reload
+oracles pass. Whether additional scale/bounds behavior contributes remains unproven.
+
+Next: improve observation via ordinary view rotation/zoom, retaining original
+capture as the failed observation condition; verify useful nonempty projected
+bounds and distinguish both frame groups. Strengthen the visibility oracle with
+negative tiny/offscreen cases. Check delivered desktop mirror separately; native
+submitted eyes are not through-lens evidence. Do not enlarge hitboxes or alter
+canonical geometry to fix an observation condition. See cell-approach-validation.md.
+
+Resolution: `tools/vr_workflows/review_view.py` applies ordinary grip rotation and
+bounded scale gestures after authoring, retaining the original view. Both-eye
+coverage, per-cluster visible primitive counts and RGB checks reject tiny, blank,
+edge-clipped, missing-group and black-image cases. Enable `NADOC_VR_REVIEW_VIEW=1`
+and `NADOC_VR_DESKTOP_REVIEW=1`. Combined and variable_deliberate VR-first pilots
+pass independent geometry/round-trip and actual X11 mirror checks. Configuration
+and scene revision remain unchanged by observation. Existing legacy presence-only
+checks remain when flags are absent. Evidence: `.development-artifacts/vr-workflows/review-view-validation.md`.

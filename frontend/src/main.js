@@ -27,6 +27,7 @@ import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
 import { buildVRVisualizationSnapshot } from './scene/vr_visualization_snapshot.js'
 import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
+import { createVRPaintedCommit } from './scene/vr_painted_commit.js'
 import { createVRToolTransactionCoordinator } from './scene/vr_tool_transaction.js'
 import {
   initialVRToolConfigState, reduceVRToolConfig, vrPlaneFeedbackPayload,
@@ -6261,9 +6262,9 @@ async function main() {
     undoDesign: api.undo,
   })
   const _sendVRToolExecution = async (event, status, reason, transaction = null) => {
-    const targetIdentity = transaction?.targetIdentity ?? event.targetIdentity
+    const targetIdentity = transaction ? transaction.targetIdentity : event.targetIdentity
     const targetKind = transaction?.targetKind ?? event.targetKind
-    if (!targetIdentity || !targetKind || targetKind === 'none') return Promise.resolve(null)
+    if ((!targetIdentity || targetKind === 'none') && !(event.mode === 'extrude' && targetKind === 'none' && !targetIdentity)) return Promise.resolve(null)
     const payload = {
       execution_sequence: ++_vrToolExecutionSequence,
       tool_sequence: event.sequence,
@@ -6299,6 +6300,7 @@ async function main() {
   const _vrToolPreflight = createVRToolPreflightCoordinator({
     sendFeedback: api.sendVRToolPreflightFeedback,
   })
+  const _vrPaintedCommit = createVRPaintedCommit({ resolveTarget: target => selectionManager.resolveVRToolTargetSnapshot?.(target), preflight: _vrToolPreflight, transaction: _vrToolTransaction, api, getState: store.getState, sendFeedback: _sendVRToolExecution, onOutcome: outcome => showToast(`VR Extrude: ${outcome.reason.replaceAll('_', ' ')}.`) })
   const _requestVRToolPreflight = (
     sequence, draft, { waitingReason = null } = {},
   ) => {
@@ -6518,7 +6520,7 @@ async function main() {
         }).catch(() => {})
       } else if (event?.type === 'tool_config') {
         const draft = event.draft
-        const targetSnapshotPresent = draft?.target_kind !== 'none' ||
+        const targetSnapshotPresent = !!draft?.target_kind && draft.target_kind !== 'none' ||
           !!draft?.target_identity || !!draft?.target_owner_tokens?.length
         const toolTarget = targetSnapshotPresent
           ? selectionManager.resolveVRToolTargetSnapshot?.({
@@ -6539,7 +6541,7 @@ async function main() {
         _requestVRToolPreflight(event.sequence, draft)
       } else if (event?.type === 'plane_pick') {
         const draft = _vrToolConfigState.draft
-        const targetSnapshotPresent = draft?.target_kind !== 'none' ||
+        const targetSnapshotPresent = !!draft?.target_kind && draft.target_kind !== 'none' ||
           !!draft?.target_identity || !!draft?.target_owner_tokens?.length
         const toolTarget = targetSnapshotPresent
           ? selectionManager.resolveVRToolTargetSnapshot?.({
@@ -6556,6 +6558,7 @@ async function main() {
         })
         if (feedback) api.sendVRPlaneFeedback(feedback).catch(() => {})
       } else if (event?.type === 'tool') {
+        if (_vrPaintedCommit.handle(event)) return
         const targetSnapshotPresent = event.targetKind !== 'none' ||
           !!event.targetIdentity || !!event.targetOwnerTokens?.length
         const toolTarget = targetSnapshotPresent
@@ -6683,6 +6686,7 @@ async function main() {
         _nucleotideTransformTool.cancelVRPreview()
         _vrToolPreflight.cancel()
         _vrToolTransaction.clear()
+        _vrPaintedCommit.reset()
         _vrToolConfigState = initialVRToolConfigState
       } else {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''

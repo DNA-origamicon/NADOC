@@ -99,6 +99,7 @@ struct LiveViewerTest {
         requireLive(contacts==1,"release erased panel contact trace");
 
         const auto initial = v.liveCommand("observe");
+        requireLive(initial.find("\"presentation\":{\"model_to_tracking_rows\":") != std::string::npos, "missing read-only presentation mapping");
         requireLive(initial.find("\"runtime_connected\":false") != std::string::npos, "must label headless evidence");
         requireLive(v.liveCommand("old 1 button 1 trigger 1").find("stale_session") != std::string::npos, "old session accepted");
         v.liveMode_ = "inspect";
@@ -155,7 +156,7 @@ struct LiveViewerTest {
         const int beforeLength = v.toolConfig_.lengthBp();
         const auto beforeCells = v.extrudeLatticeDraft_.cells();
         command(v, "button 1 trigger 1"); frame(v);
-        setAt(v.menuPlacement_.worldPoint({wheelX,wheelY + 0.045F,0.4F}), wheelOrientation);
+        setAt(v.menuPlacement_.worldPoint({wheelX,wheelY + 0.125F,0.4F}), wheelOrientation);
         frame(v);
         requireLive(v.toolConfig_.lengthBp() == beforeLength + 21, "wheel did not produce three honeycomb detents");
         requireLive(v.extrudeLatticeDraft_.cells() == beforeCells, "wheel trigger painted lattice");

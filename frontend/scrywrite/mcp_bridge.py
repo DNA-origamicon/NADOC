@@ -67,6 +67,10 @@ TOOLS = [
            {"tool": {"enum": ["extrude", "move_rotate", "twist", "bend"]}}),
     action("release", "Neutralize all scripted hands and held buttons; available even when unfocused."),
     action("capture", "Capture the next submitted stereo app frame: PNGs, window depth, render classes, per-pixel uint32 object IDs and objects.json mapping primitive identities/owner tokens, plus semantic/transaction metadata. IDs are stable within the viewer session; zero denotes background/UI; glow creates no IDs. Returns left-eye image. No compositor acknowledgement; requires rendering."),
+    tool("measure", "Measure final visible render-class pixels in the next submitted stereo frame, without PNG/depth readback. ROI is normalized top-left x,y,width,height. Returns counts, bounds, centroids and moment-equivalent axes; classes group controls, not individual UI identities.",
+         {**SESSION, "roi": {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1},
+                            "minItems": 4, "maxItems": 4}},
+         list(SESSION), read=True),
     tool("wait", "Wait for an observed frame/state predicate in this session. Does not renew held inputs. Runtime frames are not deterministic virtual steps.",
          {"session": SESSION["session"], "field": {"enum": ["frame", "hover", "menu", "status", "tool", "execution_feedback_sequence", "extrude.hover", "extrude.cells", "extrude.open"]},
           "value": {}, "comparison": {"enum": ["equals", "at_least"]},
@@ -74,6 +78,7 @@ TOOLS = [
          ["session", "field", "value"], read=True),
 ]
 BY_NAME = {item["name"]: item for item in TOOLS}
+BY_NAME["scrywrite_measure"]["annotations"]["idempotentHint"] = False
 
 
 def validate(value, spec):
@@ -191,7 +196,12 @@ class Bridge:
         if not session or any(c not in "0123456789-" for c in session):
             raise ValueError("invalid session token")
         command = operation
-        if operation == "scene_visibility":
+        if operation == "measure":
+            roi = args.get("roi", [0, 0, 1, 1])
+            if roi[2] <= 0 or roi[3] <= 0 or roi[0]+roi[2] > 1 or roi[1]+roi[3] > 1:
+                raise ValueError("invalid ROI extent")
+            command += " " + " ".join(map(str, roi))
+        elif operation == "scene_visibility":
             command += " " + args["visibility"]
         elif operation == "pose":
             if not 0.99 <= math.sqrt(sum(v*v for v in args["orientation"])) <= 1.01:
@@ -211,9 +221,10 @@ class Bridge:
         result = self.request(f"{session} {sequence} {command}")
         if "error" in result:
             return result
-        if operation == "capture":
+        if operation in ("capture", "measure"):
+            field = "capture" if operation == "capture" else "measurement"
             def captured(state):
-                capture = state.get("capture") or {}
+                capture = state.get(field) or {}
                 if capture.get("command_sequence") != sequence:
                     raise ValueError("capture superseded by another command")
                 return capture.get("status") in ("complete", "failed")
@@ -221,8 +232,8 @@ class Bridge:
         return result
 
 
-def tool_result(result, *, capture=False):
-    failed = "error" in result or (capture and (result.get("capture") or {}).get("status") == "failed")
+def tool_result(result, *, capture=False, measure=False):
+    failed = "error" in result or (capture and (result.get("capture") or {}).get("status") == "failed") or (measure and (result.get("measurement") or {}).get("status") == "failed")
     return {"content": [{"type": "text", "text": json.dumps(result)}],
             "structuredContent": result, "isError": failed}
 
@@ -251,7 +262,9 @@ def dispatch(bridge, message):
             try:
                 name = params.get("name")
                 state = bridge.call(name, params.get("arguments", {}))
-                result = tool_result(state, capture=name == "scrywrite_capture")
+                if name == "scrywrite_measure" and "error" not in state:
+                    state = {key: state[key] for key in ("session", "command_sequence", "measurement")}
+                result = tool_result(state, capture=name == "scrywrite_capture", measure=name == "scrywrite_measure")
                 if name == "scrywrite_capture" and (state.get("capture") or {}).get("status") == "complete":
                     directory = Path(state["capture"]["directory"])
                     if directory.parent != Path(bridge.socket_path).parent:

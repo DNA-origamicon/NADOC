@@ -354,7 +354,7 @@ export async function loadAssemblyWithParts(page, { doc, n = 2, name = 'asm' }) 
   // (load topology → derive B-DNA geometry), which is the app's real assembly
   // case and renders reliably. `__e2e__` prefix → global-teardown removes it.
   const partRel = `__e2e__${name}_part.nadoc`
-  await page.request.post(`${API}/design/save`, { data: { path: `workspace/${partRel}` }, headers: H })
+  await page.request.post(`${API}/design/save`, { data: { path: `${process.env.NADOC_WORKSPACE || 'workspace'}/${partRel}` }, headers: H })
   await page.request.post(`${API}/assembly`, { data: { name: `__e2e__${name}` }, headers: H })
   const ids = []
   for (let i = 0; i < n; i++) {
@@ -543,7 +543,7 @@ export async function loadAssemblyWithClusterJoint(page, { doc, name = 'pjoint' 
     data: { axis_origin: [0, 0, 33], axis_direction: [0, 1, 0], name: 'pj-joint' }, headers: H,
   })
   const partRel = `__e2e__${name}_part.nadoc`
-  await page.request.post(`${API}/design/save`, { data: { path: `workspace/${partRel}` }, headers: H })
+  await page.request.post(`${API}/design/save`, { data: { path: `${process.env.NADOC_WORKSPACE || 'workspace'}/${partRel}` }, headers: H })
   await page.request.post(`${API}/assembly`, { data: { name: `__e2e__${name}` }, headers: H })
   const addBody = await (await page.request.post(`${API}/assembly/instances`, {
     data: { source: { type: 'file', path: partRel }, name: 'Joint Part' }, headers: H,

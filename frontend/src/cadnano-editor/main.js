@@ -1925,7 +1925,7 @@ let _syncingFromBroadcast = false
 let _spreadsheet = null
 const sliceContainerEl = document.getElementById('sliceview-container')
 const sliceview = initSliceview(sliceSvg, sliceContainerEl, {
-  onAddHelix:    ({ row, col }) => addHelixAtCell(row, col),
+  onAddHelix:    ({ row, col, latticeFrameId }) => addHelixAtCell(row, col, 42, latticeFrameId),
   onRemoveHelix: (helixId)     => deleteHelix(helixId),
 })
 

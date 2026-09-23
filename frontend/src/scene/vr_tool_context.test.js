@@ -226,3 +226,19 @@ describe('VR End tool context', () => {
     }).footprint_resolved).toBe(false)
   })
 })
+
+it('keeps the displayed end locator while resolving a rotated frame canonically', () => {
+  const d = design({ transformed:true })
+  d.helices[0].lattice_frame_id = 'frame'
+  d.cluster_transforms[0].id = 'placement'
+  d.lattice_frames = [{ id:'frame', plane:'XY', placement_cluster_id:'placement' }]
+  const result = resolveVREndToolContext({ kind:'end',key:'h1:9:FORWARD' }, {
+    design:d, geometry:[nucleotide()], domainEnds:[face({ offsetNm:999, plane:'YZ' })],
+  })
+  expect(result.context).toMatchObject({ sourceFrameId:'frame', plane:'XY', offsetNm:5,
+    facePosition:[1,2,3], continuationPosition:[1,2,3], deformed:false })
+  d.deformations = [{ id:'bend' }]
+  expect(resolveVREndToolContext({ kind:'end',key:'h1:9:FORWARD' }, {
+    design:d, geometry:[nucleotide()], domainEnds:[face()],
+  }).context.deformed).toBe(true)
+})

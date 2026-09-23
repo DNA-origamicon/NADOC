@@ -193,3 +193,18 @@ if(BUILD_TESTING)
   add_test(NAME nadoc-vr-scrywrite-live-unit COMMAND nadoc-vr-scrywrite-live-test
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_chiral_perspective.nadocvr)
 endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-visual-metrics-test tests/visual_metrics_test.cpp)
+  target_link_libraries(nadoc-vr-visual-metrics-test PRIVATE OpenGL::GL)
+  target_compile_options(nadoc-vr-visual-metrics-test PRIVATE -UNDEBUG -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-visual-metrics COMMAND nadoc-vr-visual-metrics-test)
+endif()
+
+if(BUILD_TESTING)
+  add_test(NAME nadoc-vr-empty-authoring COMMAND nadoc-vr-viewer --validate
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/empty_authoring.nadocvr)
+  add_test(NAME nadoc-vr-empty-unmarked COMMAND nadoc-vr-viewer --validate
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/empty_unmarked.nadocvr)
+  set_tests_properties(nadoc-vr-empty-unmarked PROPERTIES WILL_FAIL TRUE)
+endif()

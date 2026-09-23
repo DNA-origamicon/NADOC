@@ -4,6 +4,7 @@
  * operation, preflight, transient-preview cleanup, and undo authority that a later
  * adapter must use after the physical headset gates pass.
  */
+import { buildPaintedExtrusionPlan } from './vr_painted_extrusion_plan.js'
 import { parseBaseKey } from './base_ref.js'
 import { clusterIdForNucleotide } from './cluster_entries.js'
 import { normalizeVRToolConfig } from './vr_tool_config.js'
@@ -64,7 +65,9 @@ function _validFootprint(footprint) {
     footprint.cells[0].every(Number.isSafeInteger)
 }
 
-function _extrusionPlan(config, toolTarget) {
+function _extrusionPlan(config, toolTarget, { design, revision }) {
+  const guard = design?.id && Number.isSafeInteger(revision) && revision >= 0
+    ? { expectedDesignId:design.id, expectedRevision:revision } : {}
   const context = toolTarget?.toolContext
   if (config.target_kind !== 'end' || context?.kind !== 'continuation_end') {
     return { accepted: false, reason: 'exact_end_context_required', plan: null }
@@ -94,9 +97,12 @@ function _extrusionPlan(config, toolTarget) {
     plan: {
       kind: 'extrude_continuation',
       targetIdentity: config.target_identity,
+      targetOwnerTokens: [...config.target_owner_tokens],
       preflight: {
         apiMethod: 'validateBundleContinuation',
         arguments: {
+          ...guard,
+          ...(context.sourceFrameId ? { sourceFrameId:context.sourceFrameId } : {}),
           cells: context.footprint.cells.map(cell => [...cell]),
           lengthBp: context.openSide * config.direction_sign * config.length_bp,
           plane: context.plane,
@@ -108,6 +114,8 @@ function _extrusionPlan(config, toolTarget) {
       commit: {
         apiMethod: 'addBundleContinuation',
         arguments: {
+          ...guard,
+          ...(context.sourceFrameId ? { sourceFrameId:context.sourceFrameId } : {}),
           cells: context.footprint.cells.map(cell => [...cell]),
           lengthBp: context.openSide * config.direction_sign * config.length_bp,
           plane: context.plane,
@@ -184,14 +192,18 @@ export function buildVRParameterizedToolPlan(draft, {
   toolTarget = null,
   design = null,
   geometry = [],
+  revision = null,
 } = {}) {
   const config = normalizeVRToolConfig(draft)
   if (!config) return { accepted: false, reason: 'invalid_draft', plan: null }
+  if (config.mode === 'extrude' && config.target_kind === 'none' && !toolTarget) {
+    return buildPaintedExtrusionPlan(config, design, revision)
+  }
   if (!_targetMatches(config, toolTarget)) {
     return { accepted: false, reason: 'stale_target', plan: null }
   }
   return config.mode === 'extrude'
-    ? _extrusionPlan(config, toolTarget)
+    ? _extrusionPlan(config, toolTarget, { design, revision })
     : _deformationPlan(config, toolTarget, { design, geometry })
 }
 
@@ -218,7 +230,7 @@ export async function evaluateVRToolPreflight(sequence, draft, {
   const config = normalizeVRToolConfig(draft)
   if (!Number.isSafeInteger(sequence) || sequence < 1 || !config) return null
   const described = buildVRParameterizedToolPlan(config, {
-    toolTarget, design, geometry,
+    toolTarget, design, geometry, revision: api?.currentRevisionWatermark?.() ?? null,
   })
   if (!described.accepted) {
     return {
@@ -231,7 +243,9 @@ export async function evaluateVRToolPreflight(sequence, draft, {
   }
   let result = null
   try {
-    result = described.plan.kind === 'extrude_continuation'
+    result = described.plan.kind === 'extrude_frame'
+      ? await api?.validateFrameExtrusion?.(described.plan.preflight.arguments)
+      : described.plan.kind === 'extrude_continuation'
       ? await api?.validateBundleContinuation?.(
           described.plan.preflight.arguments,
         )

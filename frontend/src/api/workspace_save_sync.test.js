@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { saveDesignAs, saveDesignToWorkspace } from './client.js'
+import { saveDesignAs, saveDesignToWorkspace, currentRevisionWatermark, resetRevisionWatermark } from './client.js'
 import { store } from '../state/store.js'
 
-function response({ disposition, design }) {
+function response({ disposition, design, revision = 7, previous_revision = null }) {
   return {
     ok: true,
     status: 200,
     headers: { get: () => null },
     json: async () => ({
-      design,
+      ...(disposition === 'confirmed' ? { design_id:design.id, revision, previous_revision } : { design, revision }),
       validation: { results: [] },
       identity_disposition: disposition,
       path: '2hb_1xT.nadoc',
@@ -20,6 +20,7 @@ function response({ disposition, design }) {
 describe('workspace save response synchronization', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())
+    resetRevisionWatermark()
   })
 
   it('does not replace currentDesign after a confirmed same-path autosave', async () => {
@@ -36,6 +37,7 @@ describe('workspace save response synchronization', () => {
 
     const result = await saveDesignToWorkspace('2hb_1xT.nadoc')
 
+    expect(currentRevisionWatermark()).toBe(7)
     expect(result.identity_disposition).toBe('confirmed')
     expect(store.getState().currentDesign).toBe(current)
     expect(store.getState().validationReport).toEqual({ marker: 'before' })
@@ -50,8 +52,29 @@ describe('workspace save response synchronization', () => {
     }))
 
     await saveDesignAs('2hb_1xT.nadoc', true)
+    expect(currentRevisionWatermark()).toBe(7)
 
     expect(store.getState().currentDesign).toBe(current)
+  })
+
+  it('does not regress the watermark or advance it for another design', async () => {
+    const current = { id:'same', helices:[], strands:[] }
+    store.setState({ currentDesign:current })
+    for (const [design, revision] of [[current,9],[current,3],[{ ...current,id:'other' },20]]) {
+      fetch.mockResolvedValueOnce(response({ disposition:'confirmed', design, revision }))
+      await saveDesignToWorkspace('2hb_1xT.nadoc')
+      expect(currentRevisionWatermark()).toBe(9)
+      expect(store.getState().currentDesign).toBe(current)
+    }
+  })
+
+  it('does not mark intervening unseen edits as applied', async () => {
+    const current = { id:'same', helices:[], strands:[] }
+    store.setState({ currentDesign:current })
+    fetch.mockResolvedValueOnce(response({ disposition:'confirmed', design:current,
+      previous_revision:6, revision:7 }))
+    await saveDesignToWorkspace('2hb_1xT.nadoc')
+    expect(currentRevisionWatermark()).toBeNull()
   })
 
   it('still synchronizes an initial path claim or Save As identity change', async () => {

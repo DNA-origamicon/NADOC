@@ -91,6 +91,9 @@ def _prefix_helix(helix: Helix, prefix: str, mat4: np.ndarray) -> Helix:
     return helix.model_copy(
         update={
             "id": f"{prefix}{helix.id}",
+            # Simulation projection bakes instance axes and has no placement
+            # clusters. Authoring frames remain on the unchanged source parts.
+            "lattice_frame_id": None,
             "axis_start": _transform_vec3(mat4, helix.axis_start),
             "axis_end": _transform_vec3(mat4, helix.axis_end),
         }

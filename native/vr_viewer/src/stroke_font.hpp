@@ -40,6 +40,7 @@ inline std::array<uint8_t, 7> glyph(char value) {
         case '8': return {14, 17, 17, 14, 17, 17, 14};
         case '9': return {14, 17, 17, 15, 1, 1, 14};
         case '+': return {0, 4, 4, 31, 4, 4, 0};
+        case '-': return {0, 0, 0, 31, 0, 0, 0};
         default: return {};
     }
 }
