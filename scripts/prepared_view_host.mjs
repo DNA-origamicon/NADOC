@@ -38,7 +38,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (!room) throw new Error('This share has ended.')
     if (room.editorBroadcast.active) throw new Error('Turn off Broadcast to presentation before replacing the shared view.')
     const content = prepareContent(bytes, id)
-    Object.assign(room, content, { title: String(title).slice(0, 200) })
+    Object.assign(room, content, { title: String(title).slice(0, 200), liveFrame: null, liveLayout: null })
     room.presentation.replaceContent(room.revision, initialTrajectory(room.trajectory, now))
     return summary(room)
   }
@@ -63,7 +63,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { capabilities: ['editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1'], expiresAt, shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { capabilities: ['editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1'], expiresAt, shares: [...rooms.values()].map(summary) })
       const content = route.match(/^\/host\/shares\/([a-f0-9]{32})\/content$/)
       if (req.method === 'POST' && content) {
         if (!rooms.has(content[1])) return send(410, { error: 'This share has ended.' })
@@ -83,11 +83,11 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           return send(200, updateTrajectory(room, JSON.parse(Buffer.concat(chunks)), now))
         } catch (error) { return send(400, { error: error.message }) }
       }
-      const broadcast = route.match(/^\/host\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|pause|heartbeat)$/)
+      const broadcast = route.match(/^\/host\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat)$/)
       if (req.method === 'POST' && broadcast) {
         const room = rooms.get(broadcast[1]); if (!room) return send(410, { error: 'This share has ended.' })
         try {
-          const action = broadcast[2], limit = action === 'scene' ? 512 * 1024 * 1024 : 4096
+          const action = broadcast[2], limit = action === 'scene' ? 512 * 1024 * 1024 : action === 'frame' ? 16 * 1024 * 1024 + 64 : 4096
           const chunks = []; let size = 0
           for await (const chunk of req) { size += chunk.length; if (size > limit) return send(413, { error: 'Broadcast update too large' }); chunks.push(chunk) }
           const body = Buffer.concat(chunks)
@@ -108,7 +108,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       return send(404, { error: 'Unknown host action' })
     }
     if (publicOrigin && management) return send(404, { error: 'Not found' })
-    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|pause|leave|trajectory|frame)$/)
+    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|pause|leave|trajectory|frame|live-frame)$/)
     const room = rooms.get(match ? match[1] : 'default')
     if (match) route = `/meeting/${match[2]}`
     if (route?.startsWith('/meeting/') && !room) return send(410, { error: 'This share has ended.' })
@@ -169,6 +169,17 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       } catch (error) { return send(error.message.startsWith('Too many') ? 429 : 400, { error: error.message }) }
     }
     if (req.method !== 'GET') return send(405, { error: 'Read-only viewer' }, 'application/json', { Allow: 'GET, POST' })
+    if (route === '/meeting/live-frame') {
+      if (!session) return send(401, { error: 'Join with the invite link first.' })
+      const query = new URL(req.url, 'http://localhost').searchParams, frame = room.liveFrame
+      if (!frame || query.get('revision') !== frame.revision) return send(409, { error: 'A newer visualization is available.' })
+      // Capture the latest frame atomically. A slow guest must not chase an already
+      // obsolete sequence forever when its round-trip exceeds the playback interval.
+      if ((session.frameRequests ?? 0) >= 2) return send(429, { error: 'Wait for the pending frame' })
+      session.frameRequests = (session.frameRequests ?? 0) + 1
+      res.once('close', () => { session.frameRequests-- })
+      return send(200, frame.buffer, 'application/octet-stream', { 'Content-Length': frame.bytes, 'X-NADOC-Sequence': frame.sequence, 'X-NADOC-SHA256': frame.sha256 })
+    }
     if (route === '/meeting/frame') {
       if (!session) return send(401, { error: 'Join with the invite link first.' })
       const query = new URL(req.url, 'http://localhost').searchParams, index = Number(query.get('index'))

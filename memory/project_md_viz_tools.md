@@ -12,6 +12,23 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- Integrated presentation controls (2026-09-23): `viewer/presentation_controls.js`
+  mounts a persistent Presenting indicator at the top center of `#canvas-area`.
+  Glasses toggle camera sharing (initially off) through the native editor or current
+  shared job; private job browsing pauses guests. End invokes the same host-stop
+  action as the sharing dialog. The editor no longer offers Open presenter or the
+  legacy Broadcast dialog entry. Camera authority transfers across native/job mode
+  without a new guest invitation. Standard visualization tools remain available.
+- Job sharing (2026-09-23): oxDNA/NAMD Visualizations headers expose green Share / red
+  Stop sharing while a presentation invitation exists. Shared job identity is independent
+  of private selection; switching selection pauses guests on the last published frame.
+  Explicitly sharing another job moves the row dot and reuses the invitation. Stop selects
+  native positions + Full in the editor and publishes the native model without ending the
+  guest session. `viewer/job_sharing.js` owns the workflow; render patches are streamed at
+  up to eight samples/s without preparing a full clip. See
+  [viewer documentation](../docs/prepared_viewer.md#job-sharing-through-one-invitation-2026-09-23)
+  for protocol limits and upgrade behavior.
+
 - Job-list disk reads, status reconciliation and MD manifest/fingerprint decoration run in
   worker threads, preserving per-document context so polling cannot occupy the HTTP event
   loop while a part loads. mrDNA process discovery checks the command before resolving cwd.

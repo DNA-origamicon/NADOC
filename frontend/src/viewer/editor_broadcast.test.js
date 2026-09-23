@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { initEditorBroadcast } from './editor_broadcast.js'
 import { broadcastFingerprint, broadcastDocument } from './broadcast_fingerprint.js'
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks() })
-function setup() {
+function setup(options = {}) {
   document.body.innerHTML = '<button id="menu-help-broadcast"></button><canvas></canvas>'
   const state = { currentDesign: { id: 'part' } }, listeners = new Set()
   const scene = new THREE.Scene(), mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial()); scene.add(mesh)
@@ -11,7 +11,7 @@ function setup() {
   const prepared = { captureView: () => ({ scene, camera, pose }), sourceHash: vi.fn(async () => 'c'.repeat(64)), exportView: vi.fn(async () => ({ buffer: new ArrayBuffer(24) })) }
   let time = 0
   const fetch = vi.fn(async path => ({ ok: true, json: async () => path.endsWith('/status') ? { capabilities: ['editor-broadcast-v1'], shares: [{ id: 'a'.repeat(32), title: 'Part' }] } : { lease: 'secret', revision: 'b'.repeat(64) } }))
-  const ui = initEditorBroadcast({ prepared, store: { getState: () => state, subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn) } }, fetch, now: () => time, setInterval: () => 1, clearInterval: vi.fn(), log: vi.fn() })
+  const ui = initEditorBroadcast({ prepared, store: { getState: () => state, subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn) } }, fetch, now: () => time, setInterval: () => 1, clearInterval: vi.fn(), log: vi.fn(), ...options })
   document.querySelector('dialog').showModal = vi.fn(); document.querySelector('dialog').close = vi.fn()
   return { ui, state, scene, mesh, pose, prepared, fetch, advance: ms => { time += ms }, notify: () => listeners.forEach(fn => fn()) }
 }
@@ -51,4 +51,19 @@ it('supports camera-only mode with a source-identity check and refuses an empty 
   expect(v.prepared.exportView).not.toHaveBeenCalled()
   expect(JSON.parse(v.fetch.mock.calls.find(([path]) => path.endsWith('/start'))[1].body)).toEqual({ cameraOnly: true, sourceHash: 'c'.repeat(64) })
   v.state.currentDesign = { id: 'private' }; v.notify(); expect(v.ui.active).toBe(false); v.ui.dispose()
+})
+
+it('shares the standard editor camera directly without a presenter dialog or exported scene', async () => {
+  const v = setup({ embedded: true })
+  const capture = v.prepared.captureView
+  // The main renderer is hidden in multi-view; only the active pane is valid.
+  v.prepared.captureView = (presentation = true) => { if (!presentation) throw new Error('Main renderer hidden'); return capture() }
+  await v.ui.present({ id: 'a'.repeat(32), title: 'Part' })
+  expect(v.ui.active).toBe(true)
+  expect(document.querySelector('dialog').showModal).not.toHaveBeenCalled()
+  expect(document.getElementById('editor-broadcast-status').hidden).toBe(true)
+  expect(v.prepared.exportView).not.toHaveBeenCalled()
+  expect(v.fetch.mock.calls.some(([path]) => path.endsWith('/camera'))).toBe(true)
+  await v.ui.stop(); expect(v.ui.active).toBe(false)
+  v.ui.dispose()
 })

@@ -3,37 +3,34 @@
 The first local package prototype captures the currently visible 3D scene into a
 `.nadocview` file and opens it in `viewer.html`, without an editor backend. It uses
 the same scene runtime and Orbit/Trackball/Multiscale controls as NADOC. This is an
-experimental viewer with temporary internet presentations and short prepared Full
-trajectory clips. Full representation/assembly parity and hardware/WAN performance
+experimental viewer with temporary internet presentations and live job visualization
+streaming; the older prepared Full trajectory format is also retained. Full representation/assembly parity and hardware/WAN performance
 acceptance remain open; see the [development plan](standalone_viewer_presentation_plan.md).
 
 ## Share one invitation throughout a meeting
 
 1. Open the view you want to publish and choose **Help → Share link**.
-2. For a new meeting, select **New invitation** and press **Create link for current
-   view**. Send guests **Copy invitation**, which includes the HTTPS link and password.
-3. To replace the shared content, select that existing **Presentation** and press
-   **Update shared view**. Guests keep the same link, password, sign-in and camera.
-4. Enable **Include recorded trajectory** to publish a prepared Full clip, or leave
-   it off to publish a static view. Use **Play shared clip**, **Pause shared clip**
-   and the shared-frame slider for the recording; normal editor MD playback stays private.
-5. For editor camera/coloring/section changes, use **Help → Broadcast to presentation**.
-   Stop broadcasting before replacing content. To broadcast visualizations after a
-   clip, update the same presentation with a static view first.
+2. Press **Create link for current view** and send **Copy invitation**, which includes
+   the link and password. Guests enter their name and password once.
+3. Select an oxDNA or NAMD job and click the green **Share** button beside its
+   **Visualizations** title. A red dot identifies the published job. Its visualization
+   changes and playback stream automatically; guests can orbit independently or follow
+   the shared perspective.
+4. Selecting another job is private: guests remain paused on the last shared frame.
+   Click **Share** on the new job to switch the presentation using the same invitation.
+5. Select the published job and click the red **Stop sharing** button to return guests
+   to the native NADOC model. The invitation remains open.
 
-The host can inspect other files while guests keep the last shared content.
-**Open presenter** grants host controls; guests receive the ordinary invitation.
-Content updates do not extend the original meeting expiry. **Stop sharing** revokes
-one invitation; **Stop hosting all links**, host shutdown or expiry ends the session.
-
-**One-time upgrade:** an already running helper keeps its loaded code. If NADOC
-reports that it predates same-link updates, finish the meeting, stop hosting, and
-create one new invitation. That restart ends the old links and sign-ins. Subsequent
-content updates preserve the new invitation. Updating source files or rebuilding
-alone does not upgrade the running helper.
-
-The [latest validation record](audits/unified_sharing_20260921.md) covers the real
-cube_pore static → trajectory → static browser flow, tests and remaining limits.
+A persistent **Presenting** indicator sits at the top center of the standard 3D
+viewer while an invitation is active. Its glasses icon toggles **Share perspective**
+(off initially), allowing guests to jump to or follow the editor camera. All editor
+visualization tools remain available; job sharing publishes the chosen visualization.
+The **End** button stops hosting all links. No separate presenter tab is required
+or offered. For static content, **Update shared view** replaces the snapshot through
+the same invitation.
+The older recorded-clip preparation controls are no longer part of the main sharing
+setup. **End invitation** revokes the invitation; **Stop hosting all links**, host
+shutdown or expiry ends the session. Content updates do not extend meeting expiry.
 
 ## Try it locally
 
@@ -206,13 +203,13 @@ at 60 per minute across the host. Four participants across the host, including t
 snapshots / 512 MiB aggregate, and the two-hour default lifetime remain enforced.
 Later editor changes do not alter a published snapshot.
 
-### Present a perspective
+### Present a perspective from the editor
 
-Use **Open presenter** in the host's Share link dialog, enter a name and the same
-meeting password, then select **Share my perspective**. This opens the frozen
-snapshot rather than sharing an editable document. **Copy invitation** always
-copies the guest link; presenter authority uses a separate secret available only
-through host management. One presenter is allowed per snapshot.
+Use the glasses icon in the **Presenting** indicator above NADOC's standard 3D
+canvas. No presenter tab, presenter sign-in, or additional link is needed. The
+editor shares its camera through local host authority; **Copy invitation** supplies
+the guest link. In native multi-view, the active pane supplies the camera and
+explicit snapshot updates. The toggle controls camera sharing independently of live job frames.
 
 Guests start with independent navigation. **Jump to presenter** moves once;
 **Follow presenter** tracks subsequent camera changes. Dragging, scrolling,
@@ -222,6 +219,9 @@ Reconnection restores the latest state without taking over the guest's camera.
 Closing a guest browser releases its participant slot after two minutes without a
 heartbeat. Once joined, the presenter's sign-in and occupied slot remain reserved
 until the meeting ends. Revoking a snapshot ends its event streams immediately.
+
+The following describes the retained **legacy presenter-tab protocol**, not a
+control exposed by the current editor:
 
 **Leave presentation** pauses perspective sharing while keeping the room, guest
 link and guest sign-ins intact. The presenter may work on another native file in
@@ -341,7 +341,58 @@ The [Help-menu validation record](audits/share_link_menu_20260920/README.md)
 covers the actual copy/share/open flow and native Windows control transport.
 
 
-## First recorded trajectory sharing slice (2026-09-21)
+## Job sharing through one invitation (2026-09-23)
+
+Create the presentation with **Help → Share link**. Guests use the same invitation,
+display name and meeting password throughout; they need no account or installation.
+The editor reuses the existing invitation instead of offering a second link.
+
+While an invitation is active, the oxDNA and NAMD **Visualizations** card titles
+show a green **Share** button for the selected job. Click it to publish that job's
+visible visualization. The button becomes red **Stop sharing**, and the job row
+gets a red dot with the tooltip **currently sharing this job for presentation**.
+Visualization changes, playback and seeks are sent automatically. Guests can orbit
+independently. Enable the glasses button in the **Presenting** indicator to let them
+jump to or follow the main editor camera. The toggle persists across shared-job
+changes and return to native coordinates; private job selection pauses camera sharing.
+
+Selecting another job is private: guests retain the previously shared job, paused
+on its last published frame, and its red dot remains. Click the new job's **Share**
+button to replace the publication and move the dot. A failed replacement retains
+the old publication. To stop job sharing, select the shared job and click **Stop
+sharing**. This selects native positions and Full representation in the editor
+and publishes the native NADOC model to guests; it does not end their invitation.
+**End invitation** or **Stop hosting all links** explicitly ends guest access.
+
+The live path targets at most eight render-state samples per second, independently
+of each browser's render loop. It sends the prepared scene initially, then absolute
+gzip-compressed render-buffer patches. Compatible job/view changes reuse that scene;
+layout/material changes publish a replacement. The host retains only the latest
+patch, and guests fetch it automatically with one request in flight. Slow guests
+receive the latest available frame instead of downloading a backlog. This removes
+the short-clip preparation step and full-trajectory upfront download; it does not
+promise eight delivered samples/s on every connection. Repeated scenes are not
+triggered by GPU material upload counters.
+
+This preserves exported render coordinates without interpolation or precision
+reduction. It is not yet a compact molecular-coordinate codec. Existing prepared
+scene/shader support, the 8-million-value layout guard, 16 MiB frame guard and
+512 MiB aggregate scene budget still apply. Unsupported exports report an error
+and leave guests on their previous view. Full solvent/atomistic performance and
+public-network throughput require separate measurement. No assembly-specific
+sharing exclusion is introduced; export support follows the visible scene.
+
+The protocol requires host capability `job-stream-v1`. A host started before this
+update must be stopped and restarted after its current meeting; that one-time
+restart ends its old invitations. Active meetings are never restarted automatically.
+The WSL frame/camera path uses a persistent Windows Node pipe, avoiding a subprocess
+and temporary upload file per frame. Host credentials remain outside the browser.
+
+## Historical recorded-clip implementation (2026-09-21)
+
+The following describes the retained prepared-clip format and older controls.
+The normal editor now uses the job-sharing controls above; it no longer exposes
+**Include recorded trajectory** or first/last-frame fields in Share link.
 
 Load a NAMD trajectory in the main 3D **Full** part view, turn water off, and pause.
 Open **Help → Share link**, enable **Include recorded trajectory**, and choose
@@ -400,16 +451,11 @@ still be measured. Real-GPU/WAN acceptance remains open; see
 [validation record](audits/trajectory_sharing_20260921.md).
 
 
-## One invitation across view and trajectory changes
+## Invitation continuity
 
-The separate trajectory-link button has been removed. Select an existing
-**Presentation** in Help → Share link and use **Update shared view**. Enable
-**Include recorded trajectory** to publish a prepared clip; leave it off to publish
-the visible static view. The guest URL, password, sign-in and meeting expiry stay
-the same. Guests receive the new scene and retain their own camera; playback
-controls appear or disappear with the recording. Preparation or validation failure
-keeps the previous shared content. Select **New invitation** only for an intentionally
-separate presentation. Turn off editor broadcasting before replacing its content.
-
-The presenter entry remains a host action with separate authority; send guests the
-ordinary invitation. See [same-link validation](audits/unified_sharing_20260921.md).
+Publishing a job, changing its visualization, switching the shared job, and
+returning guests to the native model preserve the invitation URL, password,
+session cookie and expiry. Presenter authority stays in the editor; send guests the ordinary invitation.
+The older presenter URL is retained for protocol compatibility but is no longer
+exposed by the editor. Earlier prepared-clip continuity tests
+are recorded in [same-link validation](audits/unified_sharing_20260921.md).

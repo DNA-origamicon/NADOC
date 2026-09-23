@@ -67,10 +67,10 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
           return send(200, await hostRequest(`/host/shares/${timeline[1]}/trajectory`, { method: req.method, ...(req.method === 'POST' ? { body: Buffer.concat(chunks) } : {}) }))
         }
         const remove = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})$/)
-        const broadcast = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|pause|heartbeat)$/)
+        const broadcast = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat)$/)
         if (req.method === 'POST' && broadcast) {
           const chunks = []; let size = 0
-          const limit = broadcast[2] === 'scene' ? 512 * 1024 * 1024 : 4096
+          const limit = broadcast[2] === 'scene' ? 512 * 1024 * 1024 : broadcast[2] === 'frame' ? 16 * 1024 * 1024 + 64 : 4096
           for await (const chunk of req) { size += chunk.length; if (size > limit) return send(413, { error: 'Broadcast update too large' }); chunks.push(chunk) }
           return send(200, await hostRequest(`/host/shares/${broadcast[1]}/broadcast/${broadcast[2]}`, { method: 'POST',
             headers: { 'X-NADOC-Broadcast': req.headers['x-nadoc-broadcast'] ?? '' }, body: Buffer.concat(chunks) }))

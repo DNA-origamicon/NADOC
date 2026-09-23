@@ -354,7 +354,7 @@ async function main() {
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
   const preparedExport = initPreparedExport({ scene, camera, renderer, store, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView(), getDetailLevel: () => designRenderer.getDetailLevel() })
-  initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store }, trajectory: { prepared: preparedExport, store, getSource: () => ({ controller: mdViz, companion: mdPanel.trajectorySolvent, pause: mdPanel.pauseTrajectory, representation: _currentRepr }) } })
+  const sharing = initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store } })
   initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel: () => designRenderer.getDetailLevel(), getFileOpen: () => _fileOpen })
   const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer })
   window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug
@@ -6115,6 +6115,7 @@ async function main() {
   const _syncAssemblyReprMenu = _reprSwitcher.syncAssemblyReprMenu
 
   const _setComparisonRepresentation = _setRepresentation
+  sharing.bindJobs({ getSelection: () => simulateJobs.getSelected(), getSource: engine => ({ controller: engine === 'namd' ? mdViz : oxdnaDisplay }), showNative: () => _setRepresentation('full') })
 
   // oxDNA input geometry follows the same reference-visibility contract as the
   // native renderer. Rebuild the lightweight instanced preview when entering or

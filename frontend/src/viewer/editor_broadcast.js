@@ -3,8 +3,8 @@ import { broadcastDocument, broadcastFingerprint } from './broadcast_fingerprint
 
 /** Temporary editor presenter controls. No scene export runs inside the render loop. */
 export function initEditorBroadcast({ prepared, store, document: doc = document, fetch: request = fetch,
-  setInterval: repeat = setInterval, clearInterval: cancel = clearInterval, now = () => performance.now(), log = console.info }) {
-  const trigger = doc.getElementById('menu-help-broadcast')
+  setInterval: repeat = setInterval, clearInterval: cancel = clearInterval, now = () => performance.now(), log = console.info, embedded = false, onStop = () => {} }) {
+  const trigger = embedded ? null : doc.getElementById('menu-help-broadcast')
   const dialog = doc.createElement('dialog'); dialog.id = 'editor-broadcast-dialog'
   dialog.className = 'sharing-dialog sharing-dialog--broadcast'
   dialog.setAttribute('aria-labelledby', 'broadcast-title')
@@ -31,8 +31,8 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
   function stop(reason = 'Broadcast paused. Guests keep the last shared view.') {
     generation++; active = false; starting = false
     const previous = lease; lease = ''
-    if (previous) void send('pause', undefined, previous).catch(() => {})
-    badge.hidden = false; message(reason); paint()
+    badge.hidden = embedded; message(reason); paint(); onStop(reason)
+    return previous ? send('pause', undefined, previous).catch(() => {}) : Promise.resolve()
   }
   function sameDocument() { return broadcastDocument(store.getState()) === identity }
   async function publishVisual(ticket, signature) {
@@ -92,7 +92,7 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
       if (ticket !== generation || disposed || !sameDocument()) { await send('pause', undefined, result.lease, startRoom); return }
       lease = result.lease; revision = result.revision; active = true; starting = false
       sentCamera = ''; sentVisual = ''; candidate = ''; checkedAt = -Infinity; exportedAt = -Infinity; heartbeatAt = now()
-      badge.hidden = false; dialog.close(); paint()
+      badge.hidden = embedded; dialog.close(); paint()
       if (visualsOn) {
         inFlight = true
         try { await publishVisual(ticket, broadcastFingerprint(prepared.captureView())) } finally { inFlight = false }
@@ -123,7 +123,12 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
   host?.addEventListener('nadoc:workspace-path-change', changed); host?.addEventListener('nadoc:document-reset', changed)
   host?.addEventListener('offline', offline); host?.addEventListener('pagehide', offline)
   const timer = repeat(tick, 250); paint()
-  return { show, start, stop, tick, get active() { return active }, dispose() {
+  return { show, start, stop, tick, async present(share) {
+    const option = doc.createElement('option'); option.value = share.id; option.textContent = share.title
+    el('room').replaceChildren(option); el('camera').checked = true; el('visuals').checked = false
+    await start()
+    if (!active) throw new Error(el('status').textContent || 'Could not share perspective')
+  }, get active() { return active }, dispose() {
     if (disposed) return
     stop(); disposed = true; cancel(timer); unsubscribe?.(); trigger?.removeEventListener('click', show)
     doc.removeEventListener('pointerdown', pointerDown, true); doc.removeEventListener('pointerup', pointerUp, true); doc.removeEventListener('wheel', wheel, true)

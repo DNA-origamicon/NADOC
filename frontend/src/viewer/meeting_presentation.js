@@ -1,10 +1,13 @@
 /** Camera-only presentation controls. Scientific selection is a separate contract. */
 import { mountMeetingTrajectory } from './meeting_trajectory.js'
 import { loadMeetingRevision } from './meeting_scene_updates.js'
+import { mountMeetingLiveFrame } from './meeting_live_frame.js'
 export function mountMeetingPresentation({ viewer, base, role, revision, room, document: doc = document, fetch: request = fetch,
   eventSource = url => new EventSource(url), loadRevision = loadMeetingRevision, mountTrajectory = mountMeetingTrajectory, onSharedView = () => {}, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   const createTrajectory = () => mountTrajectory({ viewer, base, role, document: doc, fetch: request })
   let trajectory = createTrajectory()
+  const createLive = () => mountMeetingLiveFrame({ viewer, base, revision, document: doc, fetch: request })
+  let live = createLive()
   const bar = doc.createElement('div'); bar.dataset.presentation = ''; bar.style.cssText = 'display:flex;align-items:center;gap:12px;padding:8px 18px;flex-wrap:wrap'
   bar.innerHTML = role === 'presenter'
     ? '<button data-broadcast aria-pressed="false">Share my perspective</button><span data-connection role="status"></span>'
@@ -68,6 +71,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
         if (loaded) {
           revision = next; frozen = viewer.current; onSharedView(frozen)
           trajectory.dispose(); trajectory = createTrajectory()
+          live.dispose(); live = createLive(); if (latest?.revision === revision) live.receive(latest)
           if (latest?.revision === revision) trajectory.receive({ ...latest, serverTime: latest.serverTime + performance.now() - latestAt })
         }
         if (next === pendingRevision && !loaded) break
@@ -81,6 +85,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     if (value.revision !== revision && !/^[a-f0-9]{64}$/.test(value.revision)) return
     sequence = value.sequence; latest = value; latestAt = performance.now(); pendingRevision = value.revision
     trajectory.receive(value)
+    live.receive(value)
     if (value.revision !== revision) { broadcasting = false; publicationEpoch++; sent = ''; pendingRevision = value.revision; void refreshScene() }
     if (role === 'presenter' && !value.presenting) sent = ''
     if (!value.presenting) follow(false)
@@ -119,7 +124,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   update()
   return () => {
     if (disposed) return
-    disposed = true; trajectory.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
+    disposed = true; trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
     if (timer !== null) cancel(timer)
     viewer.runtime.removeFrameCallback(frame)
     host?.removeEventListener('offline', offline); host?.removeEventListener('online', online)

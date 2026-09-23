@@ -3,8 +3,8 @@ export function createPresentationState({ id, revision, now = Date.now }) {
   let sequence = 0, camera = null, presenting = false, windowStart = now(), updates = 0, closed = false
   const listeners = new Set()
   const presenters = new Set()
-  let trajectory = null
-  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, trajectory, serverTime: now() })
+  let trajectory = null, liveFrame = null
+  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, trajectory, liveFrame, serverTime: now() })
   const send = response => { if (!response.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`)) response.destroy() }
   const broadcast = () => { for (const response of listeners) send(response) }
   const pause = () => { if (presenting && !closed) { presenting = false; sequence++; broadcast() } }
@@ -25,7 +25,8 @@ export function createPresentationState({ id, revision, now = Date.now }) {
   }
   return { snapshot, publish, pause,
     setTrajectory(value) { trajectory = value; sequence++; broadcast(); return snapshot() },
-    replaceContent(next, clip) { revision = next; trajectory = clip; camera = null; presenting = false; sequence++; broadcast(); return snapshot() },
+    setLiveFrame(value) { liveFrame = value; sequence++; broadcast(); return snapshot() },
+    replaceContent(next, clip) { revision = next; trajectory = clip; liveFrame = null; camera = null; presenting = false; sequence++; broadcast(); return snapshot() },
     replaceRevision(next) { revision = next; sequence++; broadcast() },
     leavePresenter() { pause(); for (const response of presenters) response.end() },
     subscribe(response, { presenter = false } = {}) {

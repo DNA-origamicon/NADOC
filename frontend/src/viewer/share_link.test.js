@@ -36,10 +36,11 @@ it('copies a complete internet invitation with a separate password', async () =>
   expect(clipboard.writeText.mock.calls[0][0]).toContain(share.url)
   expect(clipboard.writeText.mock.calls[0][0]).toContain(`Meeting password: ${share.password}`)
   expect(clipboard.writeText.mock.calls[0][0]).not.toContain('presenter-secret')
-  expect([...document.querySelectorAll('a')].find(link => link.textContent === 'Open presenter').href).toBe(share.presenterUrl)
+  expect([...document.querySelectorAll('a')].some(link => link.href === share.presenterUrl)).toBe(false)
+  expect(document.getElementById('presentation-controls').hidden).toBe(false)
   expect(share.url).not.toContain(share.password); ui.dispose()
 })
-it('updates an existing invitation through the same publish button and keeps new invitations explicit', async () => {
+it('updates an existing invitation without offering a second link', async () => {
   const share = { id: 'a'.repeat(32), title: 'Part', url: 'https://example.invalid/one-link', expiresAt: Date.now() + 60000 }
   const request = vi.fn(async path => ({ ok: true, json: async () => path.endsWith('/content') ? share : { shares: [share], capabilities: ['share-content-v1'] } }))
   const ui = initShareLink({ exportView: async () => ({ title: 'Part', buffer: new ArrayBuffer(16) }), fetch: request })
@@ -51,7 +52,22 @@ it('updates an existing invitation through the same publish button and keeps new
   expect(request.mock.calls.some(([p]) => p.endsWith('/create'))).toBe(false)
   expect(document.querySelectorAll('[data-links] section')).toHaveLength(1)
   expect(document.querySelector('section input').value).toBe(share.url)
-  const target = document.querySelector('[data-target]'); target.value = ''; target.dispatchEvent(new Event('change'))
-  expect(document.querySelector('[data-create]').textContent).toBe('Create link for current view')
+  expect([...document.querySelector('[data-target]').options].map(option => option.value)).toEqual([share.id])
+  ui.dispose()
+})
+
+it('ends hosting from the persistent canvas controls and keeps them on a failed request', async () => {
+  document.body.innerHTML = '<div id="canvas-area"></div>'
+  let fails = true
+  const fetch = vi.fn(async path => ({ ok: !path.endsWith('/stop') || !fails, json: async () => path.endsWith('/stop') ? { error: 'Host unavailable' } : { shares: [{ id: 'room', title: 'Part', expiresAt: Date.now() + 60000 }] } }))
+  const ui = initShareLink({ exportView: vi.fn(), fetch }); document.querySelector('dialog').showModal = vi.fn(); ui.show()
+  const bar = document.querySelector('#canvas-area #presentation-controls')
+  await vi.waitFor(() => expect(bar.hidden).toBe(false))
+  bar.querySelector('[data-end-presentation]').click()
+  await vi.waitFor(() => expect(bar.textContent).toContain('Host unavailable'))
+  expect(bar.hidden).toBe(false)
+  fails = false; bar.querySelector('[data-end-presentation]').click()
+  await vi.waitFor(() => expect(bar.hidden).toBe(true))
+  expect(fetch.mock.calls.at(-1)).toEqual(['/__nadoc_share/stop', { method: 'POST', headers: { 'X-NADOC-Share': '1' } }])
   ui.dispose()
 })

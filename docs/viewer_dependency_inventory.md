@@ -111,5 +111,23 @@ the immutable exported view. Separate presenter credentials authorize coalesced
 POST updates; ordered server-sent events synchronize willing guests. No scientific
 geometry, editor-store subscriptions, assembly transforms or main.js wiring change.
 The package still lacks stable scientific selection references; camera targets
-cannot substitute for base/domain/cluster identity. That contract is the next
-dependency before presenter selection highlights or recorded-data playback.
+cannot substitute for base/domain/cluster identity. That contract remains necessary for presenter selection highlights. Recorded-data
+playback now uses exported render-buffer patches without claiming scientific selection identity.
+
+
+## Job publication and streaming (2026-09-23)
+
+`job_sharing.js` owns explicit oxDNA/NAMD job publication independently of editor
+selection. `live_frame_capture.js` reads the existing scene buffers;
+`prepared_live_frame.mjs` validates and retains one absolute compressed patch;
+`meeting_live_frame.js` automatically fetches/applies it while preserving the
+guest camera. Geometry/material layout changes reuse same-link scene replacement.
+The WSL streaming controls use `prepared_share_bridge.mjs` over a persistent local
+pipe. No public editor APIs or host credentials are exposed to guests.
+See [current sharing workflow](prepared_viewer.md#job-sharing-through-one-invitation-2026-09-23).
+
+`presentation_controls.js` owns the persistent editor-canvas Presenting indicator,
+accessible glasses toggle, and End action. `share_link.js` coordinates camera authority
+between embedded `editor_broadcast.js` (native camera only) and `job_sharing.js` (live
+job visualization plus optional camera). No presenter-tab link is exposed in the
+editor. The main initialization file needs no additional wiring for these controls.
