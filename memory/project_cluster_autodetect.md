@@ -4,6 +4,17 @@ description: How _autodetect_clusters works, algorithm rules for each cluster ty
 type: project
 originSessionId: 97d1bf68-963a-4055-a1d4-0a23b4019608
 ---
+## Interchange integrity update (2026-09-22)
+
+caDNAno/scadnano imports now perform strict source and topology checks before
+replacing the active document, including after autodetection. Failed imports leave
+current state/history intact. scadnano loopout bases are retained in junction
+`extra_bases`; asymmetric loop/skip declarations and circular staples are rejected.
+Both exporters expose the design-specific `interchange_compatibility` report,
+including cluster memberships/transforms. The 3D and Origami Editor menus require
+review before lossy metadata export; molecular blockers cannot be overridden.
+See `docs/audits/topology_conversion_20260922/conversion_resolution.md`.
+
 ## Overview (2026-04-25, kinematics-cleanup)
 
 `_autodetect_clusters(design)` is called on every cadnano/scadnano import. It produces two named sets of clusters stored together in `design.cluster_transforms`:

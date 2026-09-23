@@ -493,28 +493,9 @@ def _make_circular_cadnano():
     return import_cadnano(data)
 
 
-def test_circular_strand_warning_issued():
-    """A circular strand produces a non-empty warnings list."""
-    _, warnings = _make_circular_cadnano()
-    assert warnings, "Expected at least one warning for circular strand"
-    assert any("circular" in w.lower() for w in warnings)
-
-
-def test_circular_strand_not_imported():
-    """A circular strand is not imported as a NADOC strand."""
-    from backend.core.models import StrandType
-
-    design, warnings = _make_circular_cadnano()
-    # Only the linear scaffold should be imported; circular staple is dropped.
-    assert len(design.strands) == 1
-    assert design.strands[0].strand_type == StrandType.SCAFFOLD
-
-
-def test_circular_strand_count_in_warning():
-    """Warning message includes the correct count of skipped strands."""
-    _, warnings = _make_circular_cadnano()
-    assert warnings
-    assert "1" in warnings[0]
+def test_circular_staple_rejects_whole_import():
+    with pytest.raises(ValueError, match="1 circular non-scaffold"):
+        _make_circular_cadnano()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -555,12 +536,12 @@ def _make_stap_only_cadnano():
     stap0 = [empty] * N
     for bp in range(N):
         nh = 0 if bp < N - 1 else -1
-        scaf0[bp] = [-1, -1, nh, bp + 1 if bp < N - 1 else -1]
+        scaf0[bp] = [0 if bp else -1, bp - 1, nh, bp + 1 if bp < N - 1 else -1]
     # staple: vstrand 0 bp 15 → vstrand 2 bp 15 (cross-helix)
     for bp in range(16):
-        stap0[bp] = [-1, -1, 0, bp + 1]
+        stap0[bp] = [0 if bp else -1, bp - 1, 0, bp + 1]
     stap0[0] = [-1, -1, 0, 1]  # 5' end
-    stap0[15] = [-1, -1, 2, 15]  # crosses to vstrand 2
+    stap0[15] = [0, 14, 2, 15]  # crosses to vstrand 2
 
     # vstrand 2: FORWARD at row=0, col=2.  NO scaffold, only staple.
     scaf2 = [empty] * N

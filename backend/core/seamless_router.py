@@ -50,6 +50,8 @@ from backend.core.seamed_router import (
 )
 
 
+from backend.core.scaffold_safety import safe_scaffold_route
+
 def _closeable_path(ids: list[str], adj: dict[str, set[str]]) -> list[str] | None:
     """A Hamiltonian path whose two endpoints are scaffold-adjacent (a Hamiltonian
     cycle minus one edge), or None.  Routing a uniform bundle along such a path lets a
@@ -134,6 +136,8 @@ class SeamlessResult:
     warnings: list[str] = field(default_factory=list)
     end_xovers: int = 0  # zig-zag crossovers placed within sections
     bridge_xovers: int = 0  # HJ bridge crossovers placed between sections
+    valid: bool = True
+    errors: list[str] = field(default_factory=list)
 
 
 def _warn_open_scaffolds(design: Design, result: SeamlessResult) -> None:
@@ -162,6 +166,7 @@ def _warn_open_scaffolds(design: Design, result: SeamlessResult) -> None:
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 
+@safe_scaffold_route(SeamlessResult)
 def auto_scaffold_seamless(
     design: Design, *, close_cycle: bool = True, reset: bool = True
 ) -> tuple[Design, SeamlessResult]:

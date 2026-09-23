@@ -1610,8 +1610,12 @@ export async function exportIdtOrderXlsx(strandNames = {}) {
   return true
 }
 
-export async function exportCadnano() {
-  const r = await fetch(`${BASE}/design/export/cadnano`, { headers: docHeaders() })
+export async function getExportCompatibility(target) {
+  return _request('GET', `/design/export/compatibility/${encodeURIComponent(target)}`)
+}
+
+export async function exportCadnano(compatibilityToken = '') {
+  const r = await fetch(`${BASE}/design/export/cadnano?compatibility_token=${encodeURIComponent(compatibilityToken)}`, { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
@@ -1628,8 +1632,8 @@ export async function exportCadnano() {
   return true
 }
 
-export async function exportScadnano() {
-  const r = await fetch(`${BASE}/design/export/scadnano`, { headers: docHeaders() })
+export async function exportScadnano(compatibilityToken = '') {
+  const r = await fetch(`${BASE}/design/export/scadnano?compatibility_token=${encodeURIComponent(compatibilityToken)}`, { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })

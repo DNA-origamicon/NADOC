@@ -16,6 +16,7 @@
  */
 import { showToast, showPersistentToast, dismissToast } from './toast.js'
 import { getStapleColorOrder } from './spreadsheet.js'
+import { createInterchangeExport } from './interchange_warning.js'
 import { buildIdtStrandNames } from './idt_order.js'
 
 /** Last backend error message, or 'unknown'. Pure (reads a plain state object). */
@@ -76,6 +77,9 @@ export function showPdbPositionModal(visualizationName, trajectory = null, color
 }
 
 export function initExportMenu({ store, api, getPdbVisualization = () => null }) {
+  const exportInterchange = createInterchangeExport({ api,
+    onError: error => showToast('Export failed: ' + (error?.message || exportErrorMessage(store.getState())), { severity: 'error' }),
+  })
   let pdbExportBusy = false
   // Shared guard: every export needs a design loaded. Returns true if OK.
   const haveDesign = () => {
@@ -115,14 +119,12 @@ export function initExportMenu({ store, api, getPdbVisualization = () => null })
   // ── Export caDNAno (.json) ─────────────────────────────────────────────────────
   document.getElementById('menu-file-export-cadnano')?.addEventListener('click', async () => {
     if (!haveDesign()) return
-    const ok = await api.exportCadnano()
-    if (!ok) showToast('Export failed: ' + exportErrorMessage(store.getState()), { severity: 'error' })
+    await exportInterchange('cadnano')
   })
 
   document.getElementById('menu-file-export-scadnano')?.addEventListener('click', async () => {
     if (!haveDesign()) return
-    const ok = await api.exportScadnano()
-    if (!ok) showToast('scadnano export failed: ' + exportErrorMessage(store.getState()), { severity: 'error' })
+    await exportInterchange('scadnano')
   })
 
   // ── Export PDB ─────────────────────────────────────────────────────────────────

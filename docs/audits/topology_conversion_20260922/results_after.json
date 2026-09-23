@@ -1,0 +1,3432 @@
+{
+  "scope": "synthetic in-memory probes; no native simulation or UI",
+  "cases": [
+    {
+      "case": "route/HONEYCOMB/seamed/clean",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1428,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamed/linker",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamed/oh_binder",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamed/staple",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamed/reference",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1428,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamed/opposite",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1434,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/matched/clean",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1428,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/matched/linker",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/matched/oh_binder",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/matched/staple",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/matched/reference",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1428,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/matched/opposite",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1434,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/bounded/clean",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1386,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/bounded/linker",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/bounded/oh_binder",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/bounded/staple",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/bounded/reference",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1386,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/bounded/opposite",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1392,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamless/clean",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 3,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1366,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "[Seamless] No closed route with one buried nick was achieved: 1 scaffold strand(s) still have separated termini. The design may not admit a seamless cycle, or the search could not find or realize one. Adjust the cross-section or route manually."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamless/linker",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 3,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1372,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "[Seamless] No closed route with one buried nick was achieved: 1 scaffold strand(s) still have separated termini. The design may not admit a seamless cycle, or the search could not find or realize one. Adjust the cross-section or route manually."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamless/oh_binder",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 3,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1372,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "[Seamless] No closed route with one buried nick was achieved: 1 scaffold strand(s) still have separated termini. The design may not admit a seamless cycle, or the search could not find or realize one. Adjust the cross-section or route manually."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamless/staple",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 3,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1372,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "[Seamless] No closed route with one buried nick was achieved: 1 scaffold strand(s) still have separated termini. The design may not admit a seamless cycle, or the search could not find or realize one. Adjust the cross-section or route manually."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamless/reference",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 3,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1366,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "[Seamless] No closed route with one buried nick was achieved: 1 scaffold strand(s) still have separated termini. The design may not admit a seamless cycle, or the search could not find or realize one. Adjust the cross-section or route manually."
+        ]
+      }
+    },
+    {
+      "case": "route/HONEYCOMB/seamless/opposite",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 3,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1372,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "[Seamless] No closed route with one buried nick was achieved: 1 scaffold strand(s) still have separated termini. The design may not admit a seamless cycle, or the search could not find or realize one. Adjust the cross-section or route manually."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/seamed/clean",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1440,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/seamed/linker",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/seamed/oh_binder",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/seamed/staple",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/seamed/reference",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1440,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/seamed/opposite",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1446,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/matched/clean",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1440,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/matched/linker",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/matched/oh_binder",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/matched/staple",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/matched/reference",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1440,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/matched/opposite",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1446,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/bounded/clean",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1376,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/bounded/linker",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/bounded/oh_binder",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/bounded/staple",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/bounded/reference",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1376,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/bounded/opposite",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1382,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/seamless/clean",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 4,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1388,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/seamless/linker",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/seamless/oh_binder",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/seamless/staple",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_obstacle' (-4\u2192-9, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "route/SQUARE/seamless/reference",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1344,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 4,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1388,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "route/SQUARE/seamless/opposite",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1350,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 4,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 1394,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": []
+      }
+    },
+    {
+      "case": "validator/duplicate_strand_occupancy",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Duplicate nucleotide occupancy at (h_XY_0_0, bp 0, FORWARD): 'scaf_XY_0_0' domain 0 and 'duplicate' domain 0."
+        ],
+        "strands": 9,
+        "crossovers": 0,
+        "active_scaffolds": 5,
+        "forced_ligations": 0,
+        "domain_nt": 756,
+        "collision_slots": 84,
+        "collision_examples": [
+          [
+            [
+              "h_XY_0_0",
+              0,
+              "FORWARD"
+            ],
+            [
+              [
+                0,
+                0,
+                "scaffold"
+              ],
+              [
+                8,
+                0,
+                "scaffold"
+              ]
+            ]
+          ],
+          [
+            [
+              "h_XY_0_0",
+              1,
+              "FORWARD"
+            ],
+            [
+              [
+                0,
+                0,
+                "scaffold"
+              ],
+              [
+                8,
+                0,
+                "scaffold"
+              ]
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "case": "validator/scaffold_self_overlap",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Duplicate nucleotide occupancy at (h_XY_0_0, bp 0, FORWARD): 'scaf_XY_0_0' domain 0 and 'scaf_XY_0_0' domain 1.",
+          "Strand 'scaf_XY_0_0' backbone transition ('h_XY_0_0', 83, 'FORWARD') \u2192 ('h_XY_0_0', 0, 'FORWARD') has no junction record."
+        ],
+        "strands": 8,
+        "crossovers": 0,
+        "active_scaffolds": 4,
+        "forced_ligations": 0,
+        "domain_nt": 756,
+        "collision_slots": 84,
+        "collision_examples": [
+          [
+            [
+              "h_XY_0_0",
+              0,
+              "FORWARD"
+            ],
+            [
+              [
+                0,
+                0,
+                "scaffold"
+              ],
+              [
+                0,
+                1,
+                "scaffold"
+              ]
+            ]
+          ],
+          [
+            [
+              "h_XY_0_0",
+              1,
+              "FORWARD"
+            ],
+            [
+              [
+                0,
+                0,
+                "scaffold"
+              ],
+              [
+                0,
+                1,
+                "scaffold"
+              ]
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "case": "validator/reversed_bounds",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Strand 'scaf_XY_0_0': domain 'h_XY_0_0' 83\u21920 contradicts FORWARD traversal."
+        ],
+        "strands": 8,
+        "crossovers": 0,
+        "active_scaffolds": 4,
+        "forced_ligations": 0,
+        "domain_nt": 588,
+        "collision_slots": 0,
+        "collision_examples": []
+      }
+    },
+    {
+      "case": "validator/missing_crossover_helix",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Crossover 'db0f20ea-2c74-4938-a634-e45ca1f081cb' has no active nucleotide at ('missing-a', 10, 'FORWARD').",
+          "Crossover 'db0f20ea-2c74-4938-a634-e45ca1f081cb' has no active nucleotide at ('missing-b', 10, 'REVERSE').",
+          "Crossover 'db0f20ea-2c74-4938-a634-e45ca1f081cb' does not match a backbone transition or pending termini."
+        ],
+        "strands": 8,
+        "crossovers": 1,
+        "active_scaffolds": 4,
+        "forced_ligations": 0,
+        "domain_nt": 672,
+        "collision_slots": 0,
+        "collision_examples": []
+      }
+    },
+    {
+      "case": "validator/orphan_forced_ligation",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Forced ligation '21c13e5f-cac6-41be-8bd7-fc1f24769a76' has no active nucleotide at ('missing-a', 10, 'FORWARD').",
+          "Forced ligation '21c13e5f-cac6-41be-8bd7-fc1f24769a76' has no active nucleotide at ('missing-b', 10, 'REVERSE').",
+          "Forced ligation '21c13e5f-cac6-41be-8bd7-fc1f24769a76' does not match a backbone transition or pending termini."
+        ],
+        "strands": 8,
+        "crossovers": 0,
+        "active_scaffolds": 4,
+        "forced_ligations": 1,
+        "domain_nt": 672,
+        "collision_slots": 0,
+        "collision_examples": []
+      }
+    },
+    {
+      "case": "validator/missing_junction_records",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Strand 'scaf_XY_1_0_h_XY_1_0_45_r' backbone transition ('h_XY_1_0', -5, 'REVERSE') \u2192 ('h_XY_1_1', -5, 'FORWARD') has no junction record.",
+          "Strand 'scaf_XY_1_0_h_XY_1_0_45_r' backbone transition ('h_XY_1_1', 39, 'FORWARD') \u2192 ('h_XY_0_1', 39, 'REVERSE') has no junction record.",
+          "Strand 'scaf_XY_1_0_h_XY_1_0_45_r' backbone transition ('h_XY_0_1', -9, 'REVERSE') \u2192 ('h_XY_0_0', -9, 'FORWARD') has no junction record.",
+          "Strand 'scaf_XY_1_0_h_XY_1_0_45_r' backbone transition ('h_XY_0_0', 95, 'FORWARD') \u2192 ('h_XY_0_1', 95, 'REVERSE') has no junction record.",
+          "Strand 'scaf_XY_1_0_h_XY_1_0_45_r' backbone transition ('h_XY_0_1', 40, 'REVERSE') \u2192 ('h_XY_1_1', 40, 'FORWARD') has no junction record."
+        ],
+        "strands": 5,
+        "crossovers": 0,
+        "active_scaffolds": 1,
+        "forced_ligations": 0,
+        "domain_nt": 756,
+        "collision_slots": 0,
+        "collision_examples": []
+      }
+    },
+    {
+      "case": "validator/duplicate_crossover_record",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Duplicate junction record 'duplicate-record'."
+        ],
+        "strands": 5,
+        "crossovers": 7,
+        "active_scaffolds": 1,
+        "forced_ligations": 0,
+        "domain_nt": 756,
+        "collision_slots": 0,
+        "collision_examples": []
+      }
+    },
+    {
+      "case": "validator/insertion_correct_sequence",
+      "result": {
+        "validator_passed": true,
+        "errors": [],
+        "strands": 8,
+        "crossovers": 0,
+        "active_scaffolds": 4,
+        "forced_ligations": 0,
+        "domain_nt": 672,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "expected_sequence_length": 85,
+        "actual_sequence_length": 85
+      }
+    },
+    {
+      "case": "validator/insertion_short_sequence",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Strand 'scaf_XY_0_0' sequence length 84 != expected 85."
+        ],
+        "strands": 8,
+        "crossovers": 0,
+        "active_scaffolds": 4,
+        "forced_ligations": 0,
+        "domain_nt": 672,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "expected_sequence_length": 85,
+        "actual_sequence_length": 84
+      }
+    },
+    {
+      "case": "crossover/absent_nucleotides",
+      "result": {
+        "bp": 200,
+        "helper_error": "Crossover endpoints must both have active strand coverage"
+      }
+    },
+    {
+      "case": "crossover/rejection_preserves_nicks",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 672,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 672,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "crossover_created": false,
+        "warnings": [
+          "skip h_XY_0_0\u2194h_XY_0_1 bp=20: Crossover indices must match (20 \u2260 21)"
+        ]
+      }
+    },
+    {
+      "case": "scadnano/clean",
+      "result": {
+        "validator_passed": true,
+        "errors": [],
+        "strands": 1,
+        "crossovers": 1,
+        "active_scaffolds": 1,
+        "forced_ligations": 0,
+        "domain_nt": 16,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [],
+        "sequences": [
+          null
+        ],
+        "extra_bases": [
+          null
+        ],
+        "loop_skips": [
+          [],
+          []
+        ],
+        "lattice": "SQUARE"
+      }
+    },
+    {
+      "case": "scadnano/loopout",
+      "result": {
+        "validator_passed": true,
+        "errors": [],
+        "strands": 1,
+        "crossovers": 1,
+        "active_scaffolds": 1,
+        "forced_ligations": 0,
+        "domain_nt": 16,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [],
+        "sequences": [
+          "AAAAAAAACCCCCCCC"
+        ],
+        "extra_bases": [
+          null
+        ],
+        "loop_skips": [
+          [],
+          []
+        ],
+        "lattice": "SQUARE"
+      }
+    },
+    {
+      "case": "scadnano/conflicting_insertions",
+      "result": {
+        "validator_passed": true,
+        "errors": [],
+        "strands": 2,
+        "crossovers": 1,
+        "active_scaffolds": 1,
+        "forced_ligations": 0,
+        "domain_nt": 24,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [],
+        "sequences": [
+          null,
+          null
+        ],
+        "extra_bases": [
+          null
+        ],
+        "loop_skips": [
+          [
+            {
+              "bp_index": 3,
+              "delta": 2
+            }
+          ],
+          []
+        ],
+        "lattice": "SQUARE"
+      }
+    },
+    {
+      "case": "scadnano/duplicate_helix_index",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Duplicate helix IDs detected."
+        ],
+        "strands": 1,
+        "crossovers": 0,
+        "active_scaffolds": 1,
+        "forced_ligations": 0,
+        "domain_nt": 8,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [],
+        "sequences": [
+          null
+        ],
+        "extra_bases": [],
+        "loop_skips": [
+          [],
+          []
+        ],
+        "lattice": "SQUARE"
+      }
+    },
+    {
+      "case": "scadnano/unknown_grid",
+      "result": {
+        "validator_passed": true,
+        "errors": [],
+        "strands": 1,
+        "crossovers": 0,
+        "active_scaffolds": 1,
+        "forced_ligations": 1,
+        "domain_nt": 16,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [],
+        "sequences": [
+          null
+        ],
+        "extra_bases": [
+          null
+        ],
+        "loop_skips": [
+          [],
+          []
+        ],
+        "lattice": "HONEYCOMB"
+      }
+    },
+    {
+      "case": "scadnano/empty_domain",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Strand 'sc_strand_0': domain 'h_sc_0' 0\u2192-1 contradicts FORWARD traversal."
+        ],
+        "strands": 1,
+        "crossovers": 0,
+        "active_scaffolds": 1,
+        "forced_ligations": 1,
+        "domain_nt": 8,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [],
+        "sequences": [
+          null
+        ],
+        "extra_bases": [
+          null
+        ],
+        "loop_skips": [
+          [],
+          []
+        ],
+        "lattice": "SQUARE"
+      }
+    },
+    {
+      "case": "scadnano/circular_scaffold",
+      "result": {
+        "validator_passed": true,
+        "errors": [],
+        "strands": 1,
+        "crossovers": 1,
+        "active_scaffolds": 1,
+        "forced_ligations": 0,
+        "domain_nt": 16,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [
+          "Strand 0: circular scaffold imported as linear (nick placed before first domain)."
+        ],
+        "sequences": [
+          null
+        ],
+        "extra_bases": [
+          null
+        ],
+        "loop_skips": [
+          [],
+          []
+        ],
+        "lattice": "SQUARE"
+      }
+    },
+    {
+      "case": "scadnano/circular_staple",
+      "result": {
+        "validator_passed": true,
+        "errors": [],
+        "strands": 1,
+        "crossovers": 1,
+        "active_scaffolds": 1,
+        "forced_ligations": 0,
+        "domain_nt": 16,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [
+          "Strand 1: circular non-scaffold strand skipped."
+        ],
+        "sequences": [
+          null
+        ],
+        "extra_bases": [
+          null
+        ],
+        "loop_skips": [
+          [],
+          []
+        ],
+        "lattice": "SQUARE"
+      }
+    },
+    {
+      "case": "export/extra_bases/cadnano",
+      "result": {
+        "input_extra_nt": 2,
+        "restored_extra_nt": 0,
+        "compatibility": [],
+        "import_warnings": []
+      }
+    },
+    {
+      "case": "export/extra_bases/scadnano",
+      "result": {
+        "input_extra_nt": 2,
+        "restored_extra_nt": 0,
+        "compatibility": null,
+        "import_warnings": []
+      }
+    },
+    {
+      "case": "cadnano/clean",
+      "result": {
+        "validator_passed": true,
+        "errors": [],
+        "strands": 8,
+        "crossovers": 0,
+        "active_scaffolds": 4,
+        "forced_ligations": 0,
+        "domain_nt": 672,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [],
+        "first_scaffold_domains": [
+          {
+            "helix_id": "h_XY_1_0",
+            "start_bp": 0,
+            "end_bp": 83,
+            "direction": "FORWARD",
+            "overhang_id": null,
+            "binds_overhang_id": null
+          },
+          {
+            "helix_id": "h_XY_1_1",
+            "start_bp": 83,
+            "end_bp": 0,
+            "direction": "REVERSE",
+            "overhang_id": null,
+            "binds_overhang_id": null
+          }
+        ]
+      }
+    },
+    {
+      "case": "cadnano/nonreciprocal",
+      "result": {
+        "validator_passed": false,
+        "errors": [
+          "Duplicate nucleotide occupancy at (h_XY_1_0, bp 2, FORWARD): 'scaf_0_0' domain 0 and 'scaf_0_2' domain 0."
+        ],
+        "strands": 9,
+        "crossovers": 0,
+        "active_scaffolds": 5,
+        "forced_ligations": 0,
+        "domain_nt": 754,
+        "collision_slots": 82,
+        "collision_examples": [
+          [
+            [
+              "h_XY_1_0",
+              2,
+              "FORWARD"
+            ],
+            [
+              [
+                0,
+                0,
+                "scaffold"
+              ],
+              [
+                1,
+                0,
+                "scaffold"
+              ]
+            ]
+          ],
+          [
+            [
+              "h_XY_1_0",
+              3,
+              "FORWARD"
+            ],
+            [
+              [
+                0,
+                0,
+                "scaffold"
+              ],
+              [
+                1,
+                0,
+                "scaffold"
+              ]
+            ]
+          ]
+        ],
+        "warnings": [],
+        "first_scaffold_domains": [
+          {
+            "helix_id": "h_XY_1_0",
+            "start_bp": 0,
+            "end_bp": 83,
+            "direction": "FORWARD",
+            "overhang_id": null,
+            "binds_overhang_id": null
+          },
+          {
+            "helix_id": "h_XY_1_0",
+            "start_bp": 2,
+            "end_bp": 83,
+            "direction": "FORWARD",
+            "overhang_id": null,
+            "binds_overhang_id": null
+          }
+        ]
+      }
+    },
+    {
+      "case": "cadnano/same_helix_jump",
+      "result": {
+        "validator_passed": true,
+        "errors": [],
+        "strands": 8,
+        "crossovers": 0,
+        "active_scaffolds": 4,
+        "forced_ligations": 0,
+        "domain_nt": 672,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [],
+        "first_scaffold_domains": [
+          {
+            "helix_id": "h_XY_1_0",
+            "start_bp": 0,
+            "end_bp": 83,
+            "direction": "FORWARD",
+            "overhang_id": null,
+            "binds_overhang_id": null
+          },
+          {
+            "helix_id": "h_XY_1_1",
+            "start_bp": 83,
+            "end_bp": 0,
+            "direction": "REVERSE",
+            "overhang_id": null,
+            "binds_overhang_id": null
+          }
+        ]
+      }
+    },
+    {
+      "case": "cadnano/circular_scaffold",
+      "result": {
+        "validator_passed": true,
+        "errors": [],
+        "strands": 7,
+        "crossovers": 0,
+        "active_scaffolds": 3,
+        "forced_ligations": 0,
+        "domain_nt": 588,
+        "collision_slots": 0,
+        "collision_examples": [],
+        "warnings": [
+          "1 circular strand not imported (NADOC requires linear strands with a 5\u2032 end)."
+        ],
+        "first_scaffold_domains": [
+          {
+            "helix_id": "h_XY_1_1",
+            "start_bp": 83,
+            "end_bp": 0,
+            "direction": "REVERSE",
+            "overhang_id": null,
+            "binds_overhang_id": null
+          },
+          {
+            "helix_id": "h_XY_0_1",
+            "start_bp": 0,
+            "end_bp": 83,
+            "direction": "FORWARD",
+            "overhang_id": null,
+            "binds_overhang_id": null
+          }
+        ]
+      }
+    },
+    {
+      "case": "cadnano/bad_target",
+      "exception": "KeyError",
+      "message": "999"
+    },
+    {
+      "case": "extension/HONEYCOMB/seamed/low/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          -4,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (-4\u2192-4, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/seamed/low/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          -4,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (-4\u2192-4, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/seamed/high/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          172,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (172\u2192172, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/seamed/high/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          172,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (172\u2192172, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/matched/low/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          -4,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (-4\u2192-4, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/matched/low/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          -4,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (-4\u2192-4, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/matched/high/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          172,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (172\u2192172, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/matched/high/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          172,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (172\u2192172, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/bounded/low/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          -4,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (-4\u2192-4, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/bounded/low/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          -4,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (-4\u2192-4, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/bounded/high/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          171,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (171\u2192171, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/bounded/high/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          171,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (171\u2192171, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/seamless/low/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_1",
+          -3,
+          "FORWARD"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_1' would overlap 'audit_discovered_obstacle' (-3\u2192-3, FORWARD)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/seamless/low/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_1",
+          -3,
+          "FORWARD"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_1' would overlap 'audit_discovered_obstacle' (-3\u2192-3, FORWARD)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/seamless/high/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          170,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (170\u2192170, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/HONEYCOMB/seamless/high/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          170,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (170\u2192170, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/seamed/low/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          -5,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (-5\u2192-5, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/seamed/low/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          -5,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (-5\u2192-5, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/seamed/high/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          181,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (181\u2192181, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/seamed/high/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          181,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (181\u2192181, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/matched/low/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          -5,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (-5\u2192-5, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/matched/low/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          -5,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (-5\u2192-5, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/matched/high/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          181,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (181\u2192181, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/matched/high/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          181,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (181\u2192181, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/bounded/low/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          -5,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (-5\u2192-5, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/bounded/low/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          -5,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (-5\u2192-5, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/bounded/high/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          171,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (171\u2192171, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/bounded/high/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          171,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (171\u2192171, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/seamless/low/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          -3,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (-3\u2192-3, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/seamless/low/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_1_0",
+          -3,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_1_0' would overlap 'audit_discovered_obstacle' (-3\u2192-3, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/seamless/high/linker",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          171,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (171\u2192171, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "extension/SQUARE/seamless/high/oh_binder",
+      "result": {
+        "obstacle_slot": [
+          "h_XY_0_1",
+          171,
+          "REVERSE"
+        ],
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 1345,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [
+          "Routing rejected; original design retained: Scaffold extension on 'h_XY_0_1' would overlap 'audit_discovered_obstacle' (171\u2192171, REVERSE)."
+        ]
+      }
+    },
+    {
+      "case": "reset/mixed_supported_unpaired_helix",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 1,
+          "active_scaffolds": 3,
+          "forced_ligations": 0,
+          "domain_nt": 532,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 6,
+          "crossovers": 1,
+          "active_scaffolds": 3,
+          "forced_ligations": 0,
+          "domain_nt": 532,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [],
+        "assigned_scaffold_bases_before": 0,
+        "assigned_scaffold_bases_after": 0
+      }
+    },
+    {
+      "case": "reset/scaffold_gap",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 5,
+          "forced_ligations": 0,
+          "domain_nt": 663,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 5,
+          "forced_ligations": 0,
+          "domain_nt": 663,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [],
+        "assigned_scaffold_bases_before": 0,
+        "assigned_scaffold_bases_after": 0
+      }
+    },
+    {
+      "case": "reset/assigned_sequences",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 672,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 672,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "warnings": [],
+        "assigned_scaffold_bases_before": 336,
+        "assigned_scaffold_bases_after": 336
+      }
+    },
+    {
+      "case": "polymer_roundtrip/cadnano",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 4,
+          "domain_nt": 840,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": false,
+          "errors": [
+            "Duplicate nucleotide occupancy at (h_XY_0_0, bp 20, REVERSE): 'scaf_3_65' domain 0 and 'stap_3_105' domain 0.",
+            "Duplicate nucleotide occupancy at (h_XY_0_0, bp 66, REVERSE): 'stap_3_105' domain 0 and 'scaf_3_65' domain 6.",
+            "Duplicate nucleotide occupancy at (h_XY_0_1, bp 20, FORWARD): 'scaf_3_65' domain 1 and 'stap_2_20' domain 0.",
+            "Duplicate nucleotide occupancy at (h_XY_0_1, bp 61, FORWARD): 'stap_2_20' domain 0 and 'scaf_3_65' domain 5.",
+            "Duplicate nucleotide occupancy at (h_XY_1_1, bp 20, REVERSE): 'scaf_3_65' domain 2 and 'stap_1_105' domain 0."
+          ],
+          "strands": 9,
+          "crossovers": 2,
+          "active_scaffolds": 1,
+          "forced_ligations": 4,
+          "domain_nt": 1100,
+          "collision_slots": 344,
+          "collision_examples": [
+            [
+              [
+                "h_XY_0_0",
+                65,
+                "REVERSE"
+              ],
+              [
+                [
+                  0,
+                  0,
+                  "scaffold"
+                ],
+                [
+                  8,
+                  0,
+                  "staple"
+                ]
+              ]
+            ],
+            [
+              [
+                "h_XY_0_0",
+                64,
+                "REVERSE"
+              ],
+              [
+                [
+                  0,
+                  0,
+                  "scaffold"
+                ],
+                [
+                  8,
+                  0,
+                  "staple"
+                ]
+              ]
+            ]
+          ]
+        },
+        "route_warnings": [],
+        "import_warnings": [],
+        "periodic_records_before": 4,
+        "periodic_records_after": 0
+      }
+    },
+    {
+      "case": "polymer_roundtrip/scadnano",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 4,
+          "domain_nt": 840,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": false,
+          "errors": [
+            "Strand 'sc_strand_5' backbone transition ('h_sc_2', 99, 'FORWARD') \u2192 ('h_sc_2', -5, 'FORWARD') has no junction record.",
+            "Strand 'sc_strand_6' backbone transition ('h_sc_3', -5, 'REVERSE') \u2192 ('h_sc_3', 99, 'REVERSE') has no junction record.",
+            "Strand 'sc_strand_7' backbone transition ('h_sc_1', 95, 'FORWARD') \u2192 ('h_sc_1', -9, 'FORWARD') has no junction record.",
+            "Strand 'sc_strand_8' backbone transition ('h_sc_0', -9, 'REVERSE') \u2192 ('h_sc_0', 95, 'REVERSE') has no junction record."
+          ],
+          "strands": 9,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 840,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "route_warnings": [],
+        "import_warnings": [],
+        "periodic_records_before": 4,
+        "periodic_records_after": 0
+      }
+    },
+    {
+      "case": "ordinary_roundtrip/cadnano",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 756,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 2,
+          "active_scaffolds": 1,
+          "forced_ligations": 4,
+          "domain_nt": 756,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "import_warnings": []
+      }
+    },
+    {
+      "case": "ordinary_roundtrip/scadnano",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 756,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 5,
+          "crossovers": 6,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 756,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "import_warnings": []
+      }
+    },
+    {
+      "case": "staple_control/autobreak/linker/reference=False",
+      "result": {
+        "protected_unchanged": true,
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 13,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 690,
+          "collision_slots": 0,
+          "collision_examples": []
+        }
+      }
+    },
+    {
+      "case": "staple_control/autobreak/oh_binder/reference=False",
+      "result": {
+        "protected_unchanged": true,
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 13,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 690,
+          "collision_slots": 0,
+          "collision_examples": []
+        }
+      }
+    },
+    {
+      "case": "staple_control/autobreak/staple/reference=True",
+      "result": {
+        "protected_unchanged": true,
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 13,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 672,
+          "collision_slots": 0,
+          "collision_examples": []
+        }
+      }
+    },
+    {
+      "case": "staple_control/merge/linker/reference=False",
+      "result": {
+        "protected_unchanged": true,
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 690,
+          "collision_slots": 0,
+          "collision_examples": []
+        }
+      }
+    },
+    {
+      "case": "staple_control/merge/oh_binder/reference=False",
+      "result": {
+        "protected_unchanged": true,
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 690,
+          "collision_slots": 0,
+          "collision_examples": []
+        }
+      }
+    },
+    {
+      "case": "staple_control/merge/staple/reference=True",
+      "result": {
+        "protected_unchanged": true,
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 9,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 672,
+          "collision_slots": 0,
+          "collision_examples": []
+        }
+      }
+    },
+    {
+      "case": "auto_crossover/clean",
+      "result": {
+        "after": {
+          "validator_passed": false,
+          "errors": [
+            "Strand nicked at crossover location(s) \u2014 non-physical: strand 'stpl_XY_0_0_h_XY_0_0_70_r' terminus on crossover at (h_XY_0_0, bp 69, REVERSE); strand 'stpl_XY_0_0_h_XY_0_0_70_r' terminus on crossover at (h_XY_0_1, bp 69, FORWARD); strand 'stpl_XY_0_0_h_XY_0_0_49_r' terminus on crossover at (h_XY_0_0, bp 48, REVERSE); strand 'stpl_XY_0_0_h_XY_0_0_49_r' terminus on crossover at (h_XY_0_1, bp 48, FORWARD); strand 'stpl_XY_0_0_h_XY_0_0_28_r' terminus on crossover at (h_XY_0_0, bp 27, REVERSE); strand 'stpl_XY_0_0_h_XY_0_0_28_r' terminus on crossover at (h_XY_0_1, bp 27, FORWARD)"
+          ],
+          "strands": 9,
+          "crossovers": 24,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 672,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "passes": [
+          {
+            "sites_considered": 48,
+            "placed": 24
+          },
+          {
+            "sites_considered": 48,
+            "placed": 0
+          }
+        ]
+      }
+    },
+    {
+      "case": "auto_crossover/reference_staples",
+      "result": {
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 8,
+          "crossovers": 0,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 336,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "passes": [
+          {
+            "sites_considered": 0,
+            "placed": 0
+          }
+        ],
+        "reference_strands_unchanged": true
+      }
+    },
+    {
+      "case": "auto_crossover/deleted_sites",
+      "result": {
+        "after": {
+          "validator_passed": false,
+          "errors": [
+            "Strand nicked at crossover location(s) \u2014 non-physical: strand 'stpl_XY_0_0_h_XY_0_0_70_r' terminus on crossover at (h_XY_0_0, bp 69, REVERSE); strand 'stpl_XY_0_0_h_XY_0_0_70_r' terminus on crossover at (h_XY_0_1, bp 69, FORWARD); strand 'stpl_XY_0_0_h_XY_0_0_49_r' terminus on crossover at (h_XY_0_0, bp 48, REVERSE); strand 'stpl_XY_0_0_h_XY_0_0_49_r' terminus on crossover at (h_XY_0_1, bp 48, FORWARD); strand 'stpl_XY_0_0_h_XY_0_0_28_r' terminus on crossover at (h_XY_0_0, bp 27, REVERSE); strand 'stpl_XY_0_0_h_XY_0_0_28_r' terminus on crossover at (h_XY_0_1, bp 27, FORWARD)"
+          ],
+          "strands": 9,
+          "crossovers": 24,
+          "active_scaffolds": 4,
+          "forced_ligations": 0,
+          "domain_nt": 576,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "passes": [
+          {
+            "sites_considered": 48,
+            "placed": 24
+          },
+          {
+            "sites_considered": 48,
+            "placed": 0
+          }
+        ],
+        "crossovers_on_deleted_sites": 24
+      }
+    },
+    {
+      "case": "fixture/teeth.nadoc/seamed",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 64,
+          "crossovers": 0,
+          "active_scaffolds": 32,
+          "forced_ligations": 0,
+          "domain_nt": 6048,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 33,
+          "crossovers": 62,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 6528,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "lost_original_slots": 0,
+        "warnings": []
+      }
+    },
+    {
+      "case": "fixture/teeth.nadoc/seamless",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 64,
+          "crossovers": 0,
+          "active_scaffolds": 32,
+          "forced_ligations": 0,
+          "domain_nt": 6048,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": false,
+          "errors": [
+            "Strand 'scaffold_section_route' backbone transition ('h_XY_3_2', 168, 'REVERSE') \u2192 ('h_XY_2_0', 168, 'FORWARD') has no junction record.",
+            "Strand 'scaffold_section_route' backbone transition ('h_XY_3_2', 84, 'REVERSE') \u2192 ('h_XY_2_0', 84, 'FORWARD') has no junction record.",
+            "Strand 'scaffold_section_route' backbone transition ('h_XY_3_2', 0, 'REVERSE') \u2192 ('h_XY_2_0', 0, 'FORWARD') has no junction record."
+          ],
+          "strands": 33,
+          "crossovers": 35,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 6494,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "lost_original_slots": 0,
+        "warnings": []
+      }
+    },
+    {
+      "case": "fixture/10-6-10hb_seamed.nadoc/seamed",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 28,
+          "crossovers": 12,
+          "active_scaffolds": 14,
+          "forced_ligations": 0,
+          "domain_nt": 2688,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": false,
+          "errors": [
+            "Crossover '14776d06-3bb1-41c9-a867-1551c6fac9d2' does not match a backbone transition or pending termini.",
+            "Crossover '305681ac-0557-4a78-8e61-a416460b2a8f' does not match a backbone transition or pending termini.",
+            "Crossover '97e6b837-7aa7-4b66-bab1-197ff0396941' does not match a backbone transition or pending termini.",
+            "Crossover '2f92a85e-0af7-4117-bfa2-fe4f9d218840' does not match a backbone transition or pending termini.",
+            "Crossover '270f537d-d9f9-4491-bef2-3a34e0d98ee6' does not match a backbone transition or pending termini."
+          ],
+          "strands": 15,
+          "crossovers": 38,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 2898,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "lost_original_slots": 0,
+        "warnings": []
+      }
+    },
+    {
+      "case": "fixture/10-6-10hb_seamed.nadoc/seamless",
+      "result": {
+        "before": {
+          "validator_passed": true,
+          "errors": [],
+          "strands": 28,
+          "crossovers": 12,
+          "active_scaffolds": 14,
+          "forced_ligations": 0,
+          "domain_nt": 2688,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "after": {
+          "validator_passed": false,
+          "errors": [
+            "Crossover '66e5c9fb-5e17-480c-b46a-1961e6b2c1ca' does not match a backbone transition or pending termini.",
+            "Crossover 'b151cc6f-aad3-4943-9ab9-0ae904a520db' does not match a backbone transition or pending termini.",
+            "Crossover 'd10ed6d2-f380-47a6-a95f-d6bea99f3a82' does not match a backbone transition or pending termini.",
+            "Crossover 'bf1b4d1b-0438-4dd8-ae76-37f8beecc53d' does not match a backbone transition or pending termini.",
+            "Crossover '14776d06-3bb1-41c9-a867-1551c6fac9d2' does not match a backbone transition or pending termini."
+          ],
+          "strands": 15,
+          "crossovers": 28,
+          "active_scaffolds": 1,
+          "forced_ligations": 0,
+          "domain_nt": 2800,
+          "collision_slots": 0,
+          "collision_examples": []
+        },
+        "lost_original_slots": 0,
+        "warnings": []
+      }
+    }
+  ]
+}

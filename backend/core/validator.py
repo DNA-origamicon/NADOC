@@ -143,43 +143,21 @@ def validate_design(design: Design) -> ValidationReport:
             )
         )
 
-    # ── Sequence length consistency ───────────────────────────────────────
-    # Build skip-position sets per helix so deleted bases can be subtracted
-    # from the bp-count expected length (scadnano deletions reduce nucleotide
-    # count below the raw bp span).
-    helix_skips: Dict[str, Set[int]] = {
-        h.id: {ls.bp_index for ls in h.loop_skips if ls.delta == -1}
-        for h in design.helices
-    }
+    # Shared sequence accounting includes insertions and the binder/overhang contract.
+    from backend.core.sequences import strand_sequence_length
+    from backend.core.topology_integrity import domain_order_errors, occupancy_errors, junction_errors
+
+    for message in domain_order_errors(design) + occupancy_errors(design) + junction_errors(design):
+        report.results.append(ValidationResult(False, message))
     for strand in design.strands:
-        if strand.sequence is None:
+        if strand.sequence is None or strand.is_reference or strand.strand_type == StrandType.LINKER:
             continue
-        if strand.strand_type == StrandType.LINKER or strand.is_reference:
-            continue  # linker sequences auto-generated; reference geometry is excluded
-        expected_len = sum(
-            abs(d.end_bp - d.start_bp)
-            + 1
-            - sum(
-                1
-                for bp in helix_skips.get(d.helix_id, set())
-                if min(d.start_bp, d.end_bp) <= bp <= max(d.start_bp, d.end_bp)
-            )
-            for d in strand.domains
-        )
+        expected_len = strand_sequence_length(design, strand)
         if len(strand.sequence) != expected_len:
-            report.results.append(
-                ValidationResult(
-                    False,
-                    f"Strand {strand.id!r} sequence length {len(strand.sequence)} "
-                    f"!= expected {expected_len}.",
-                )
-            )
+            report.results.append(ValidationResult(False,
+                f"Strand {strand.id!r} sequence length {len(strand.sequence)} != expected {expected_len}."))
         else:
-            report.results.append(
-                ValidationResult(
-                    True, f"Strand {strand.id!r} sequence length is consistent."
-                )
-            )
+            report.results.append(ValidationResult(True, f"Strand {strand.id!r} sequence length is consistent."))
 
     # ── Loop / circular strand detection ─────────────────────────────────────
     loop_ids: List[str] = [

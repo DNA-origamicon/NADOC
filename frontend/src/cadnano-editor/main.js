@@ -6,6 +6,8 @@
  * backend via BroadcastChannel + direct API polls.
  */
 
+import { createInterchangeExport } from '../ui/interchange_warning.js'
+import { getExportCompatibility } from './api.js'
 import { editorStore }   from './store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 import * as connectionMonitor from '../shared/connection_monitor.js'
@@ -945,15 +947,16 @@ document.getElementById('menu-file-export-native')?.addEventListener('click', as
   if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
   if (!await exportDesign()) showToast('Part export failed.', { severity: 'error' })
 })
+const exportInterchange = createInterchangeExport({ api: { getExportCompatibility, exportCadnano, exportScadnano },
+  onError: error => showToast(error?.message || 'Export failed. The design may have changed; review compatibility again.', { severity: 'error' }),
+})
 document.getElementById('menu-file-export-cadnano')?.addEventListener('click', async () => {
   if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
-  const ok = await exportCadnano()
-  if (!ok) showToast('Export failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
+  await exportInterchange('cadnano')
 })
 document.getElementById('menu-file-export-scadnano')?.addEventListener('click', async () => {
   if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
-  const ok = await exportScadnano()
-  if (!ok) showToast('scadnano export failed.', { severity: 'error' })
+  await exportInterchange('scadnano')
 })
 document.getElementById('menu-file-export-pdb')?.addEventListener('click', () => {
   if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }

@@ -1,0 +1,240 @@
+{
+  "per_test_budget_sec": 5.0,
+  "total_test_seconds": 650.0,
+  "n_tests": 8868,
+  "sim_running": false,
+  "sim_reason": "",
+  "slowest_files_15": [
+    {
+      "file": "tests/test_headless_oxdna_build.py",
+      "seconds": 52.8,
+      "n_tests": 45,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_oxdna_relaxation.py",
+      "seconds": 43.8,
+      "n_tests": 246,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_atomistic.py",
+      "seconds": 18.0,
+      "n_tests": 52,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_headless_spec_build.py",
+      "seconds": 15.5,
+      "n_tests": 82,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_namd_anchors.py",
+      "seconds": 15.4,
+      "n_tests": 39,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_helical_site.py",
+      "seconds": 14.0,
+      "n_tests": 29,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_cadnano_roundtrip.py",
+      "seconds": 13.6,
+      "n_tests": 30,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_streptavidin.py",
+      "seconds": 12.6,
+      "n_tests": 10,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_atomistic_validation.py",
+      "seconds": 11.2,
+      "n_tests": 16,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_automation_harness.py",
+      "seconds": 10.1,
+      "n_tests": 136,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_molecular_placement_audit.py",
+      "seconds": 8.9,
+      "n_tests": 7,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_simple_router.py",
+      "seconds": 8.7,
+      "n_tests": 26,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_md_box_size.py",
+      "seconds": 8.5,
+      "n_tests": 22,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_snupi_ssdna.py",
+      "seconds": 8.2,
+      "n_tests": 53,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_overhang_geometry.py",
+      "seconds": 7.7,
+      "n_tests": 36,
+      "n_slow_marked": 0
+    }
+  ],
+  "violators": [
+    {
+      "nodeid": "tests/test_streptavidin.py::test_packing_is_deterministic_and_clash_checked[adsorption]",
+      "seconds": 5.78
+    },
+    {
+      "nodeid": "tests/test_assembly_models.py::test_undo_cap_enforced_for_large_assembly",
+      "seconds": 5.33
+    },
+    {
+      "nodeid": "tests/test_oxdna_relaxation.py::test_runner_end_to_end",
+      "seconds": 5.19
+    }
+  ],
+  "slowest_25": [
+    {
+      "nodeid": "tests/test_streptavidin.py::test_packing_is_deterministic_and_clash_checked[adsorption]",
+      "seconds": 5.78,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_assembly_models.py::test_undo_cap_enforced_for_large_assembly",
+      "seconds": 5.33,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_oxdna_relaxation.py::test_runner_end_to_end",
+      "seconds": 5.19,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_streptavidin.py::test_packing_is_deterministic_and_clash_checked[biotin_tether]",
+      "seconds": 4.04,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_headless_oxdna_build.py::test_run_relaxation_completes_and_recovers_geometry",
+      "seconds": 3.99,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_md_presets.py::test_standard_is_the_default",
+      "seconds": 3.75,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_namd_anchors.py::test_prepare_excludes_both_extra_bases_topology_exactly",
+      "seconds": 3.39,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_extra_base_metrics_audit.py::test_read_only_route_serves_the_registered_evidence",
+      "seconds": 3.21,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_helical_site.py::test_the_mrdna_seed_is_the_geometric_layers_site[fixture2]",
+      "seconds": 3.18,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_headless_oxdna_build.py::test_display_route_surfaces_extension_tails",
+      "seconds": 3.04,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_helical_site.py::test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope",
+      "seconds": 3.03,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cadnano_roundtrip.py::test_roundtrip_conserves_cadnano_native[Ultimate Polymer Hinge 191016]",
+      "seconds": 2.98,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_headless_oxdna_build.py::test_run_field_spawns_child_field_job",
+      "seconds": 2.91,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_headless_oxdna_build.py::test_build_field_specimen_is_field_ready",
+      "seconds": 2.86,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_overhang_geometry.py::test_voltron_protein_overhang_cylinder_matches_bead_orientation",
+      "seconds": 2.8,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_simple_router.py::test_full_autostaple_splits_oversize_seam_bridge",
+      "seconds": 2.75,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_oxdna_relaxation.py::test_oxdna_native_seed_map_handles_loop_inserts",
+      "seconds": 2.63,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_mrdna_extensions.py::test_tails_are_flexible_ssdna_in_the_built_model",
+      "seconds": 2.63,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_headless_oxdna_build.py::test_display_route_surfaces_extra_bases",
+      "seconds": 2.59,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_headless_oxdna_build.py::test_create_then_start_two_step",
+      "seconds": 2.58,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_headless_oxdna_build.py::test_field_validation_oracle_passes_with_deflecting_mock",
+      "seconds": 2.49,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_namd_vacuum.py::test_the_retired_preset_is_not_offered",
+      "seconds": 2.49,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_junction_balance.py::test_the_atomistic_dx_junction_linkers_are_balanced[fixture0]",
+      "seconds": 2.44,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cg_to_atomistic.py::test_pair_frame_backmap_ignores_box_rigid_motion_and_is_topology_safe",
+      "seconds": 2.4,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_headless_oxdna_build.py::test_append_production_after_completion",
+      "seconds": 2.36,
+      "slow_marked": false
+    }
+  ]
+}

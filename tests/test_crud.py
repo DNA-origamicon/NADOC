@@ -62,7 +62,8 @@ def test_export_cadnano_uses_design_name_for_download_filename():
     design.metadata.name = "Left Arm / Rev A"
     design_state.set_design(design)
 
-    r = client.get("/api/design/export/cadnano")
+    report = client.get("/api/design/export/compatibility/cadnano").json()
+    r = client.get("/api/design/export/cadnano", params={"compatibility_token": report["token"]})
 
     assert r.status_code == 200
     assert (

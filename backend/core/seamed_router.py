@@ -46,6 +46,8 @@ _SQ_SCAF_BOW_RIGHT: frozenset[int] = frozenset(
 # ── Low-level helpers ─────────────────────────────────────────────────────────
 
 
+from backend.core.scaffold_safety import safe_scaffold_route, require_clear_extension
+
 def _active_scaffolds(design: Design) -> list[Strand]:
     """Non-reference scaffold strands. Reference geometry is excluded from routing."""
     return [s for s in design.scaffolds() if not s.is_reference]
@@ -414,12 +416,13 @@ def _place_xover(
     warnings: list[str],
 ) -> tuple[Design, Crossover | None]:
     """Nick + validate + record + ligate one scaffold crossover."""
+    original = design
     design = _nick_if_needed(design, ha.helix_id, nick_a, ha.strand)
     design = _nick_if_needed(design, hb.helix_id, nick_b, hb.strand)
     err = validate_crossover(design, ha, hb)
     if err:
         warnings.append(f"skip {ha.helix_id}↔{hb.helix_id} bp={ha.index}: {err}")
-        return design, None
+        return original, None
     xo = Crossover(half_a=ha, half_b=hb, process_id=process_id)
     design = design.copy_with(crossovers=list(design.crossovers) + [xo])
     design = _ligate_xover(design, xo)
@@ -518,6 +521,7 @@ def _extend_scaf_domain_lo(
                 if dom.direction == Direction.FORWARD
                 else dom.model_copy(update={"end_bp": new_lo})
             )
+            require_clear_extension(design, strand, di, new_dom)
             new_doms = list(strand.domains)
             new_doms[di] = new_dom
             new_strand = strand.model_copy(update={
@@ -547,6 +551,7 @@ def _extend_scaf_domain_hi(
                 if dom.direction == Direction.FORWARD
                 else dom.model_copy(update={"start_bp": new_hi})
             )
+            require_clear_extension(design, strand, di, new_dom)
             new_doms = list(strand.domains)
             new_doms[di] = new_dom
             new_strand = strand.model_copy(update={
@@ -568,6 +573,8 @@ class SeamedResult:
     seam_xovers: int = 0
     near_end_xovers: int = 0
     far_end_xovers: int = 0
+    valid: bool = True
+    errors: list[str] = field(default_factory=list)
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -1357,6 +1364,7 @@ def seamed_routability_errors(design: Design) -> list[str]:
     return errors
 
 
+@safe_scaffold_route(SeamedResult)
 def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
     """Seamed scaffold pipeline (Seam → Near Ends → Far Ends).
 
@@ -1428,6 +1436,7 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
     return classic_design, classic_result
 
 
+@safe_scaffold_route(SeamedResult)
 def auto_scaffold_seamed_bounded(design: Design) -> tuple[Design, SeamedResult]:
     """Classic seamed route with bounded end-turns (no matched-ends attempt).
 
@@ -1441,6 +1450,7 @@ def auto_scaffold_seamed_bounded(design: Design) -> tuple[Design, SeamedResult]:
     )
 
 
+@safe_scaffold_route(SeamedResult)
 def auto_scaffold_matched(design: Design) -> tuple[Design, SeamedResult]:
     """Matched-ends scaffold pipeline for blunt-end end-to-end polymerization.
 

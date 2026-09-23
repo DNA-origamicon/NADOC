@@ -191,6 +191,12 @@ def test_regression_extended_designs_export(stem: str):
     if not path.exists():
         pytest.skip(f"{path} not present")
     d = _load_nadoc(path)
+    if stem == "NS_trans_fix":
+        # This fixture has terminal extension bases. The old exporter silently
+        # dropped them; unsupported molecular content now blocks the conversion.
+        with pytest.raises(ValueError, match="Terminal extension bases"):
+            export_cadnano(d)
+        return
     data = export_cadnano(d)  # previously IndexError
     _assert_wellformed(data)
     d2, warnings = import_cadnano(data)

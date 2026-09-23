@@ -178,10 +178,29 @@ def reset_scaffold_to_structure(design: Design) -> tuple[Design, list[str]]:
         )
         return design, warnings
 
+    # A reset only owns an existing automatic route. Never reinterpret a fresh
+    # hand-authored scaffold from its staple envelope.
+    if not any(is_route_crossover(xo.process_id) for xo in design.crossovers):
+        return design, warnings
+
     intervals = structural_intervals(design)
     extents = structural_extents(design)
     if not extents:
         return design, warnings  # no staples anywhere → nothing to anchor to
+
+    # Preserve connected paths that cannot be reconstructed solely from the
+    # structural intervals. In particular, a mixed stapled/unstapled strand must
+    # not lose its unsupported domains when the other domains are reseeded.
+    active = [s for s in design.strands if s.is_scaffold and not s.is_reference]
+    if any(any(dm.helix_id not in intervals for dm in s.domains) for s in active):
+        warnings.append("Prior scaffold route was NOT reset: an unstapled scaffold domain must be preserved.")
+        return design, warnings
+    active_slots = {(dm.helix_id, dm.direction) for s in active for dm in s.domains}
+    if any(xo.process_id == "manual" and
+           any((half.helix_id, half.strand) in active_slots for half in (xo.half_a, xo.half_b))
+           for xo in design.crossovers):
+        warnings.append("Prior scaffold route was NOT reset: manual scaffold crossovers must be preserved.")
+        return design, warnings
 
     # 1. Helices: re-cut to the staple span (skip any helix with no staples).
     new_helices, retracted = [], 0
@@ -256,25 +275,22 @@ def reset_scaffold_to_structure(design: Design) -> tuple[Design, list[str]]:
             reach = [(lo, hi) for lo, hi in scaf_cov[h.id] if lo <= ihi and hi >= ilo]
             if not reach:
                 continue  # no scaffold in this section — nothing to seed
-            lo = max(ilo, min(r[0] for r in reach))
-            hi = min(ihi, max(r[1] for r in reach))
-            # Convention (lattice.make_bundle_design): start_bp = 5' end, end_bp = 3'.
-            start, end = (lo, hi) if direction == Direction.FORWARD else (hi, lo)
-            new_strands.append(
-                Strand(
-                    id=f"scaf_seed_{h.id}_{i}",
-                    domains=[
-                        Domain(
-                            helix_id=h.id,
-                            start_bp=start,
-                            end_bp=end,
-                            direction=direction,
-                        )
-                    ],
+            # Merge only touching intervals. Taking the outer envelope would
+            # silently fill deliberate holes between independent scaffold pieces.
+            merged = []
+            for lo, hi in sorted((max(ilo, lo), min(ihi, hi)) for lo, hi in reach):
+                if merged and lo <= merged[-1][1] + 1:
+                    merged[-1] = (merged[-1][0], max(hi, merged[-1][1]))
+                else:
+                    merged.append((lo, hi))
+            for j, (lo, hi) in enumerate(merged):
+                start, end = (lo, hi) if direction == Direction.FORWARD else (hi, lo)
+                new_strands.append(Strand(
+                    id=f"scaf_seed_{h.id}_{i}" + (f"_{j}" if j else ""),
+                    domains=[Domain(helix_id=h.id, start_bp=start, end_bp=end, direction=direction)],
                     strand_type=StrandType.SCAFFOLD,
-                )
-            )
-            seeds += 1
+                ))
+                seeds += 1
 
     # 3. Drop the prior route's own crossovers (manual ones are kept).
     kept = [xo for xo in design.crossovers if not is_route_crossover(xo.process_id)]
@@ -287,6 +303,6 @@ def reset_scaffold_to_structure(design: Design) -> tuple[Design, list[str]]:
             f"scaffold domain(s), dropped {dropped} auto-scaffold crossover(s)."
         )
 
-    return design.copy_with(
-        helices=new_helices, strands=new_strands, crossovers=kept
-    ), warnings
+    from backend.core.scaffold_safety import preserve_scaffold_sequences
+    out = design.copy_with(helices=new_helices, strands=new_strands, crossovers=kept)
+    return preserve_scaffold_sequences(design, out), warnings

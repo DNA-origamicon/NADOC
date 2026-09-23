@@ -91,6 +91,7 @@ function makeDeps(initialState = {}) {
     exportSequenceCsv: vi.fn().mockResolvedValue(true),
     exportSequenceXlsx: vi.fn().mockResolvedValue(true),
     exportIdtOrderXlsx: vi.fn().mockResolvedValue(true),
+    getExportCompatibility: vi.fn().mockResolvedValue({ issues: [], blocked: false, token: 'review' }),
     exportCadnano: vi.fn().mockResolvedValue(true),
     exportScadnano: vi.fn().mockResolvedValue(true),
     exportSurfaceStl: vi.fn().mockResolvedValue(true),

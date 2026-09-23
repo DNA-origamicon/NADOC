@@ -46,7 +46,7 @@ def build_strand_ranges(
     """
     sr: dict[tuple[str, str], list[tuple[int, int]]] = {}
     for strand in design.strands:
-        if strand.strand_type == StrandType.LINKER:
+        if strand.is_reference or strand.strand_type == StrandType.LINKER:
             continue
         for dom in strand.domains:
             lo = min(dom.start_bp, dom.end_bp)
@@ -398,6 +398,8 @@ def validate_crossover(
     # 5. Both halves must connect strands of the same type (both scaffold or both staple).
     def _strand_type_at(helix_id: str, bp: int, direction) -> str | None:
         for s in design.strands:
+            if s.is_reference:
+                continue
             for dom in s.domains:
                 if dom.helix_id != helix_id or dom.direction != direction:
                     continue
@@ -409,7 +411,9 @@ def validate_crossover(
 
     type_a = _strand_type_at(half_a.helix_id, half_a.index, half_a.strand)
     type_b = _strand_type_at(half_b.helix_id, half_b.index, half_b.strand)
-    if type_a and type_b and type_a != type_b:
+    if type_a is None or type_b is None:
+        return "Crossover endpoints must both have active strand coverage"
+    if type_a != type_b:
         return f"Crossover would connect {type_a} to {type_b} — both halves must be the same strand type"
 
     occupied: set[tuple[str, int, object]] = set()

@@ -1,0 +1,29 @@
+{
+  "head": "6d0691fd55874cd259170adfc2359dd75304c56d",
+  "date": "2026-09-22",
+  "sha256": {
+    "backend/core/models.py": "e198d5cb1cf5768063a88ab98178c3293ba90f984f2ac499bcbed4b4db009530",
+    "backend/core/validator.py": "8ce42a31d0048891219ac051c88ffae6b4bbb40c517160d37c1d947879702ead",
+    "backend/core/lattice.py": "021abd395ab2de45dd0e30d881e17e758f234195473898032eacb561f76b818c",
+    "backend/core/seamed_router.py": "7696f4b1354b6abff00abe74f21684ca8273197771a41089663bc64960ab520e",
+    "backend/core/seamless_router.py": "1ae3171031bf0161c45123644333feb57cf624d51b094c836c2f1e73e80d1234",
+    "backend/core/scaffold_reset.py": "9bd8dae692c11123393d46bc9e29799df53dd44ef912486123836874eac513f0",
+    "backend/core/section_router.py": "d43624356bc07dc9a9b4b498f9879e84576cbb2293e9116d83409754bf4cc951",
+    "backend/core/polymer_router.py": "e136133640f83d9f0cda6c1222375c4c0e50f335ffc1ba01b5e86d8bcfa71065",
+    "backend/core/crossover_positions.py": "1dd0d81772af32b6d2fddf8285c3d4a21530ba9c4f3ebf5c755d7eb8fb671930",
+    "backend/core/sequences.py": "725dbe86573de8da0a519f95504db68ecb60501b01db466f2c7fbf7887207fae",
+    "backend/core/cadnano.py": "c903c1d6d7311d9cb73f4e50a91db7e9478b050b1f6b188f3ec4d61b5ca4a5fc",
+    "backend/core/scadnano.py": "15ff70d61d59ad44de069fcda8b938e0321ae423a5eb5918a596e8b6536dd5b2",
+    "backend/core/mrdna_runner.py": "f42ec21087cef445438eb4b9a39cddb1c67792d5bac325e629f3fd8605bb702a",
+    "backend/core/mrdna_bridge.py": "0968635394ad1c523de1941b54fcbdae3763c2a12f6cc52be386a63e76d5b53a",
+    "backend/core/mrdna_decoder.py": "4ec6f0b067fdb3720b96807377f4b8cfda170b9d5fcc86c3a065c2ac0c8683bf",
+    "backend/api/crud.py": "e1610f34a19fb3836b6b3296508351c903233b47ea538064f59ab588631ffeae",
+    "backend/api/routes_design_interchange.py": "c94598d934bc4fded9af48d2668da1f8797d031c559fd4e63009f841a7a83541",
+    "backend/api/state.py": "d91b84b72f2c349503e21dfe4f1e6825d1fb5aa94b922b836437b26389e3d3de",
+    "tests/fixtures/teeth.nadoc": "1e899ed502019cfbbe266f1ed0425d4ab563ce870f26194415bc794f2a2cfb16",
+    "tests/fixtures/10-6-10hb_seamed.nadoc": "80f940f53fdae43a816ebc18ddedae251025eb6f78de7ecc3145cd92b6ea4149",
+    "docs/maintenance_2026_09.md": "9387322c0e7b4d057d42c7df300c53cbc7d5f19ed467a8cbf4634a62af7ce1bc",
+    "docs/audits/topology_conversion_20260922/probe.py": "6cca34cbc31b7da4c8d26f29b53c1ac353b7297223cc81c2c3ee271e0cfe1ef1",
+    "docs/audits/topology_conversion_20260922/results.json": "23a397a301461ee0e58b71aa522aeb0a254b66b20f88d7ddcf6baa31fb52d78e"
+  }
+}

@@ -591,8 +591,12 @@ export async function exportDesign() {
 }
 
 /** Download the current design as a caDNAno JSON file. */
-export async function exportCadnano() {
-  const r = await fetch('/api/design/export/cadnano', { headers: docHeaders() })
+export async function getExportCompatibility(target) {
+  return _request('GET', `/design/export/compatibility/${encodeURIComponent(target)}`)
+}
+
+export async function exportCadnano(compatibilityToken = '') {
+  const r = await fetch(`/api/design/export/cadnano?compatibility_token=${encodeURIComponent(compatibilityToken)}`, { headers: docHeaders() })
   if (!r.ok) return false
   const cd   = r.headers.get('Content-Disposition') ?? ''
   const m    = cd.match(/filename="([^"]+)"/)
@@ -605,8 +609,8 @@ export async function exportCadnano() {
 }
 
 /** Download the current design as a scadnano .sc file. */
-export async function exportScadnano() {
-  const r = await fetch('/api/design/export/scadnano', { headers: docHeaders() })
+export async function exportScadnano(compatibilityToken = '') {
+  const r = await fetch(`/api/design/export/scadnano?compatibility_token=${encodeURIComponent(compatibilityToken)}`, { headers: docHeaders() })
   if (!r.ok) return false
   const cd = r.headers.get('Content-Disposition') ?? ''
   const m = cd.match(/filename="([^"]+)"/)

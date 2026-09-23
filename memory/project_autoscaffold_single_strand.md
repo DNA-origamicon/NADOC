@@ -7,6 +7,21 @@ metadata:
   originSessionId: e8eafa48-297e-4c65-8397-7de37a254477
 ---
 
+## Routing integrity update — 2026-09-22
+
+R1–R9 regressions are covered by `tests/test_routing_integrity.py`. Public seamed,
+bounded, matched, and seamless routes are transactional: an occupied extension or
+invalid direction rejects the candidate without changing the design or feature history.
+Reset now acts only when an automatic-route marker exists, preserves disjoint scaffold
+coverage, and declines to rebuild mixed stapled/unstapled paths or explicitly manual
+scaffold crossovers. Forced ligations still bypass reset; routing additionally protects
+their directed backbone edges and original records, including extra bases and periodic
+seam metadata. Assigned scaffold sequence follows nucleotide identity through reset and
+routing (including insertions/deletions); newly added material receives `N`.
+The older “staples are the design” statement below is limited by these protections.
+See `docs/audits/topology_conversion_20260922/routing_resolution.md` for verification
+and the remaining conversion findings, which were not changed in this work.
+
 ## ✅ ISSUE-9 FIXED 2026-07-13 — autoscaffold is now idempotent (`backend/core/scaffold_reset.py`)
 
 **Re-routing an already-routed design no longer re-extends anything.** `reset_scaffold_to_structure()` runs at the

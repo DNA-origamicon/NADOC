@@ -140,7 +140,7 @@ def test_none_grid_raises():
 # Circular scaffold strands are imported as linear (nick before first domain).
 
 
-def test_circular_non_scaffold_skipped():
+def test_circular_non_scaffold_rejected():
     data = {
         "version": "0.19.0",
         "grid": "square",
@@ -152,9 +152,8 @@ def test_circular_non_scaffold_skipped():
             }
         ],
     }
-    design, warns = import_scadnano(data)
-    assert len(design.strands) == 0
-    assert any("circular" in w for w in warns)
+    with pytest.raises(ValueError, match="circular non-scaffold"):
+        import_scadnano(data)
 
 
 def test_circular_scaffold_imported_as_linear():

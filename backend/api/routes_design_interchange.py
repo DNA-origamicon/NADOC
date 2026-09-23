@@ -11,7 +11,6 @@ from pydantic import BaseModel
 
 from backend.api import state as design_state
 from backend.api.crud import (
-    _design_for_export,
     _design_response,
     _export_filename_stem,
 )
@@ -392,8 +391,14 @@ def _import_protein_free(asset, *, operation_id: str, expected_revision: int | N
     return updated, report, protein_asset_meta(asset)
 
 
+@router.get("/design/export/compatibility/{target}")
+def export_compatibility(target: Literal["cadnano", "scadnano"]) -> dict:
+    from backend.core.interchange_compatibility import compatibility_report
+    return compatibility_report(design_state.get_or_404(), target)
+
+
 @router.get("/design/export/cadnano")
-def export_cadnano_design() -> Response:
+def export_cadnano_design(compatibility_token: str | None = None) -> Response:
     """Export the active design as a caDNAno v2 JSON file download.
 
     Returns a JSON file with Content-Disposition: attachment so the browser
@@ -403,7 +408,9 @@ def export_cadnano_design() -> Response:
     import json as _json
     from backend.core.cadnano import export_cadnano, check_cadnano_compatibility
 
-    design = _design_for_export()
+    from backend.api.interchange_review import require_review
+    design = design_state.get_or_404()
+    require_review(design, "cadnano", compatibility_token)
     warnings = check_cadnano_compatibility(design)
     errors = [w for w in warnings if w.startswith("ERROR")]
     if errors:
@@ -422,12 +429,14 @@ def export_cadnano_design() -> Response:
 
 
 @router.get("/design/export/scadnano")
-def export_scadnano_design() -> Response:
+def export_scadnano_design(compatibility_token: str | None = None) -> Response:
     """Export the active design as a scadnano .sc JSON file."""
     import json as _json
     from backend.core.scadnano import export_scadnano
 
-    design = _design_for_export()
+    from backend.api.interchange_review import require_review
+    design = design_state.get_or_404()
+    require_review(design, "scadnano", compatibility_token)
     try:
         data = export_scadnano(design)
     except Exception as exc:

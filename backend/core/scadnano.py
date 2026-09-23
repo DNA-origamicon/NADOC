@@ -38,7 +38,7 @@ Each subdomain is one of:
 Mapping to NADOC
 ════════════════
     Helix domain → Domain (start_bp inclusive, end_bp inclusive)
-    Loopout      → skipped (CrossoverBases no longer supported)
+    Loopout      → junction extra_bases (unknown sequence represented as N)
     Extension    → StrandExtension (five_prime or three_prime)
     photoproduct_junctions → PhotoproductJunction list on Design
 
@@ -169,6 +169,8 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
         If the design uses an unsupported grid type ("none") or is otherwise
         malformed in a way that prevents import.
     """
+    from backend.core.conversion_integrity import validate_scadnano_source
+    validate_scadnano_source(data)
     warnings: List[str] = []
 
     # ── Grid / lattice ────────────────────────────────────────────────────────
@@ -276,6 +278,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
     # ── Process strands ───────────────────────────────────────────────────────
     strands: List[Strand] = []
     extensions: List[StrandExtension] = []
+    loopouts = []
 
     for si, sc in enumerate(data.get("strands", [])):
         is_scaffold = sc.get("is_scaffold", False)
@@ -403,7 +406,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
                     helix_parts.append(sc_seq[offset : offset + n])
                     offset += n
                 elif t == "loopout":
-                    # Skip loopout bases — CrossoverBases are no longer supported.
+                    # Junction bases are assigned separately below, never counted twice.
                     n = d["loopout"]
                     offset += n
                 elif t == "ext":
@@ -420,6 +423,21 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
                 ext5_obj.sequence = next(ext_iter, ext5_obj.sequence)
             if ext3_obj:
                 ext3_obj.sequence = next(ext_iter, ext3_obj.sequence)
+
+        # Record loopout sequence separately from Strand.sequence, matching the
+        # NADOC junction-extra-bases contract. Source checks require two flanks.
+        offset, domain_index = 0, -1
+        for kind, part in parsed:
+            if kind == "helix":
+                domain_index += 1
+                offset += part["end"] - part["start"] + sum(n for _, n in part.get("insertions", [])) - len(part.get("deletions", []))
+            elif kind == "ext":
+                offset += part["extension_num_bases"]
+            else:
+                n = part["loopout"]
+                sequence = sc_seq[offset:offset+n] if sc_seq is not None else "N" * n
+                loopouts.append((strand, domain_index, sequence))
+                offset += n
 
         # ── Collect results ───────────────────────────────────────────────────
         strands.append(strand)
@@ -449,6 +467,24 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
         strands, helices, lattice
     )
 
+    from backend.core.conversion_integrity import add_same_helix_junctions
+    forced_ligations = add_same_helix_junctions(strands, forced_ligations)
+
+    from backend.core.models import ForcedLigation
+    from backend.core.topology_integrity import forced_edge, half_slot, slot
+    for strand, di, sequence in loopouts:
+        a, b = strand.domains[di:di+2]
+        edge = (slot(a.helix_id, a.end_bp, a.direction), slot(b.helix_id, b.start_bp, b.direction))
+        junction = next((x for x in crossovers if (half_slot(x.half_a), half_slot(x.half_b)) == edge), None)
+        if junction is None:
+            junction = next((f for f in forced_ligations if forced_edge(f) == edge), None)
+        if junction is None:
+            junction = ForcedLigation(three_prime_helix_id=a.helix_id, three_prime_bp=a.end_bp,
+                three_prime_direction=a.direction, five_prime_helix_id=b.helix_id,
+                five_prime_bp=b.start_bp, five_prime_direction=b.direction)
+            forced_ligations.append(junction)
+        junction.extra_bases = sequence
+
     # ── Assemble Design ───────────────────────────────────────────────────────
     design = Design(
         helices=helices,
@@ -461,11 +497,16 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
         metadata=DesignMetadata(name=data.get("name", "scadnano import")),
     )
 
+    from backend.core.conversion_integrity import require_import_integrity
+    require_import_integrity(design)
     return design, warnings
 
 
 def export_scadnano(design: Design) -> dict:
     """Convert a NADOC design to scadnano's JSON interchange representation."""
+    from backend.core.interchange_compatibility import require_exportable
+    require_exportable(design, "scadnano")
+    design = design.model_copy(update={"strands": design.active_strands()})
     if design.lattice_type not in (LatticeType.SQUARE, LatticeType.HONEYCOMB):
         raise ValueError("scadnano export requires a square or honeycomb lattice")
 
@@ -533,8 +574,9 @@ def export_scadnano(design: Design) -> dict:
         }
         if strand.color and strand.strand_type != StrandType.SCAFFOLD:
             payload["color"] = strand.color
-        sequence = (ext5.sequence if ext5 else "") + (strand.sequence or "") + (ext3.sequence if ext3 else "")
-        if sequence:
+        from backend.core.sequences import strand_sequence_length
+        sequence = (ext5.sequence or "" if ext5 else "") + (strand.sequence or "N" * strand_sequence_length(design, strand)) + (ext3.sequence or "" if ext3 else "")
+        if strand.sequence is not None or (ext5 and ext5.sequence) or (ext3 and ext3.sequence):
             payload["sequence"] = sequence
         strands.append(payload)
 

@@ -309,6 +309,7 @@ def _path_to_domains_and_xovers(
     path: List[Tuple[int, int]],
     helix_by_num: Dict[int, Helix],
     strand_id: str,
+    strand_key: str = "scaf",
 ) -> Tuple[List[Domain], List[Tuple[int, int, int]]]:
     """Convert a 5′→3′ path to Domain list and raw crossover info.
 
@@ -330,13 +331,14 @@ def _path_to_domains_and_xovers(
     for i in range(1, len(path)):
         cur_num, cur_bp = path[i]
 
-        if cur_num == prev_num:
+        step = 1 if (prev_num % 2 == 0) == (strand_key == "scaf") else -1
+        if cur_num == prev_num and cur_bp == prev_bp + step:
             # Still on same helix — extend current segment.
             prev_num, prev_bp = cur_num, cur_bp
             continue
 
         # Cross-helix jump: close the current domain.
-        direction = Direction.FORWARD if prev_bp >= seg_start_bp else Direction.REVERSE
+        direction = Direction.FORWARD if (seg_start_num % 2 == 0) == (strand_key == "scaf") else Direction.REVERSE
         domains.append(
             Domain(
                 helix_id=helix_by_num[seg_start_num].id,
@@ -353,7 +355,7 @@ def _path_to_domains_and_xovers(
         prev_num, prev_bp = cur_num, cur_bp
 
     # Close final domain.
-    direction = Direction.FORWARD if path[-1][1] >= seg_start_bp else Direction.REVERSE
+    direction = Direction.FORWARD if (seg_start_num % 2 == 0) == (strand_key == "scaf") else Direction.REVERSE
     domains.append(
         Domain(
             helix_id=helix_by_num[seg_start_num].id,
@@ -383,6 +385,8 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
         Fully populated topological Design.  Geometry (nucleotide positions)
         is computed on demand from the Helix axes as usual.
     """
+    from backend.core.conversion_integrity import validate_cadnano_source
+    validate_cadnano_source(data)
     vstrands: List[dict] = data.get("vstrands", [])
     if not vstrands:
         raise ValueError("caDNAno file contains no vstrands.")
@@ -521,7 +525,7 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
         path = _trace(by_num, start_num, start_bp, "stap")
         stap_visited.update(path)
         strand_id = f"stap_{start_num}_{start_bp}"
-        domains, raw = _path_to_domains_and_xovers(path, helix_by_num, strand_id)
+        domains, raw = _path_to_domains_and_xovers(path, helix_by_num, strand_id, strand_key="stap")
         color = stap_color_map.get((start_num, start_bp))
         strand = Strand(
             id=strand_id,
@@ -537,17 +541,27 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
     warnings: List[str] = []
     n_circ_scaf = _count_circular_strands(all_vstrands_by_num, "scaf", scaf_visited)
     n_circ_stap = _count_circular_strands(all_vstrands_by_num, "stap", stap_visited)
-    n_circ = n_circ_scaf + n_circ_stap
-    if n_circ:
-        warnings.append(
-            f"{n_circ} circular strand{'s' if n_circ > 1 else ''} not imported "
-            f"(NADOC requires linear strands with a 5\u2032 end)."
-        )
+    if n_circ_stap:
+        raise ValueError(f"{n_circ_stap} circular non-scaffold strands are unsupported; import would delete molecules.")
+    if n_circ_scaf:
+        for num, vs in sorted(by_num.items()):
+            for bp, entry in enumerate(vs["scaf"]):
+                if entry == [-1, -1, -1, -1] or (num, bp) in scaf_visited:
+                    continue
+                path = _trace(by_num, num, bp, "scaf")
+                scaf_visited.update(path)
+                sid = f"scaf_{num}_{bp}"
+                domains, _ = _path_to_domains_and_xovers(path, helix_by_num, sid)
+                strands.append(Strand(id=sid, domains=domains, strand_type=StrandType.SCAFFOLD))
+        warnings.append(f"{n_circ_scaf} circular scaffold(s) imported as linear at a deterministic sequence origin; all bases retained.")
 
     # ── Classify cross-helix transitions: real DX crossovers vs forced ligations ──
     crossovers, forced_ligations = extract_crossovers_from_strands(
         strands, helices, lattice
     )
+
+    from backend.core.conversion_integrity import add_same_helix_junctions
+    forced_ligations = add_same_helix_junctions(strands, forced_ligations)
 
     # ── Assemble Design ───────────────────────────────────────────────────────
     name = data.get("name", "Imported Design")
@@ -555,14 +569,17 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
     if name.endswith(".json"):
         name = name[: -len(".json")]
 
-    return Design(
+    design = Design(
         helices=helices,
         strands=strands,
         lattice_type=lattice,
         crossovers=crossovers,
         forced_ligations=forced_ligations,
         metadata=DesignMetadata(name=name),
-    ), warnings
+    )
+    from backend.core.conversion_integrity import require_import_integrity
+    require_import_integrity(design)
+    return design, warnings
 
 
 # ── Public export entry point ─────────────────────────────────────────────────
@@ -573,32 +590,9 @@ def check_cadnano_compatibility(design: Design) -> List[str]:
     compatibility with caDNAno v2 export.  An empty list means clean export.
     Strings prefixed with 'ERROR' indicate export will fail outright.
     """
-    msgs: List[str] = []
-    if design.lattice_type not in (LatticeType.HONEYCOMB, LatticeType.SQUARE):
-        msgs.append("ERROR: caDNAno v2 export only supports HC and SQ lattices.")
-    n_scaf = sum(1 for s in design.strands if s.is_scaffold)
-    if n_scaf == 0:
-        msgs.append(
-            "WARNING: No scaffold strand — only staple strands will be exported."
-        )
-    elif n_scaf > 1:
-        msgs.append(
-            f"WARNING: Design has {n_scaf} scaffold strands. "
-            "caDNAno treats the scaffold as a single continuous loop."
-        )
-    if any(h.loop_skips for h in design.helices):
-        msgs.append("INFO: Loop/skip insertions present and will be exported.")
-    if any(s.sequence for s in design.strands):
-        msgs.append(
-            "INFO: Strand sequences are not stored in caDNAno v2 JSON. "
-            "Export sequences separately via 'Export Sequences (CSV)'."
-        )
-    if design.overhangs:
-        msgs.append(
-            "INFO: Overhangs will be exported as regular staple strands "
-            "(caDNAno has no overhang concept)."
-        )
-    return msgs
+    from backend.core.interchange_compatibility import compatibility_report
+    return [("ERROR: " if i["severity"] == "error" else "WARNING: ") + i["label"] + ": " + i["effect"]
+            for i in compatibility_report(design, "cadnano")["issues"]]
 
 
 def _assign_grid_coords(
@@ -672,6 +666,13 @@ def _assign_grid_coords(
             rows[h.id] = int(row)
             cols[h.id] = int(col)
             export_dirs[h.id] = _direction_for_cell(int(row), int(col))
+        # Normalizing imported lattice cells can flip the common parity origin.
+        # A uniform cell translation restores numbering without reversing DNA.
+        desired = {h.id: helix_scaffold_dir[h.id] or h.direction for h in helices}
+        if desired and all(desired[h.id] is not None and desired[h.id] != export_dirs[h.id] for h in helices):
+            for h in helices:
+                cols[h.id] += 1
+                export_dirs[h.id] = desired[h.id]
         _center_rows_cols()
         return rows, cols, export_dirs
 
@@ -865,6 +866,9 @@ def export_cadnano(design: Design) -> dict:
     # layout shifts every bp by one uniform non-negative offset — uniform across all
     # helices to keep crossover / loop-skip columns aligned — and sizes the array to
     # the true span rounded up to the lattice period so the caDNAno app renders it.
+    from backend.core.interchange_compatibility import require_exportable
+    require_exportable(design, "cadnano")
+    design = design.model_copy(update={"strands": design.active_strands()})
     layout = _export_layout(design)
     rows, cols = layout["rows"], layout["cols"]
     sorted_helices = layout["sorted_helices"]

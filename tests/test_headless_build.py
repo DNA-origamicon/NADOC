@@ -709,8 +709,8 @@ def test_apply_end_to_root_cadnano_clean_after_apply():
         relocated root↔tip bond is a ForcedLigation (NOT an invalid crossover), and
         there are no improper (mismatched-bp) crossovers anywhere
         (via assert_direct_binding_applied + the explicit checks below);
-      • the caDNAno EXPORT: exports cleanly, drops exactly the orphan vstrand, and
-        has no staple/scaffold pointer to a non-existent helix num.
+      • caDNAno export rejects the noncanonical relocated strand direction
+        instead of silently reinterpreting the backbone.
     """
     from backend.core.cadnano import export_cadnano
 
@@ -755,15 +755,13 @@ def test_apply_end_to_root_cadnano_clean_after_apply():
             int(xo.half_a.index) == int(xo.half_b.index) for xo in d.crossovers
         ), "no improper (mismatched-bp) crossover may remain"
 
-        # The editor's serialized form exports cleanly + drops the orphan vstrand.
-        cad = export_cadnano(d)
-        assert len(cad["vstrands"]) == len(d.helices) == pre_helices - 1
-        nums = {vs["num"] for vs in cad["vstrands"]}
-        for vs in cad["vstrands"]:
-            for arr in (vs["scaf"], vs["stap"]):
-                for ph, _pi, nh, _ni in arr:
-                    assert ph == -1 or ph in nums, f"dangling 5' pointer → num {ph}"
-                    assert nh == -1 or nh in nums, f"dangling 3' pointer → num {nh}"
+        assert len(d.helices) == pre_helices - 1
+        # The native editor still preserves this connection. caDNAno's fixed
+        # parity cannot encode its relocated strand direction faithfully.
+        before = d.model_dump()
+        with pytest.raises(ValueError, match="Noncanonical strand directions"):
+            export_cadnano(d)
+        assert d.model_dump() == before
 
 
 def test_autonomous_build_end_to_root_binding_is_valid_and_roundtrip_stable():

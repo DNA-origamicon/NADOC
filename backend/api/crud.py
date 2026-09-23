@@ -1841,8 +1841,13 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     design = _recenter_design(design)
     design = autodetect_all_overhangs(design)
     design = _autodetect_clusters(design)
-    design_state.load_design(design)
+    from backend.core.conversion_integrity import require_import_integrity
+    try:
+        require_import_integrity(design)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
     report = validate_design(design)
+    design_state.load_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
     resp = _design_response(design, report, full_feature_log=True)
     if import_warnings:
@@ -2076,8 +2081,13 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     _cx = round(_post_recenter[0][1] - _pre_recenter[0][1], 4) if _pre_recenter else 0.0
     _cy = round(_post_recenter[0][2] - _pre_recenter[0][2], 4) if _pre_recenter else 0.0
     design = _autodetect_clusters(design)
-    design_state.load_design(design)
+    from backend.core.conversion_integrity import require_import_integrity
+    try:
+        require_import_integrity(design)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
     report = validate_design(design)
+    design_state.load_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
     resp = _design_response(design, report, full_feature_log=True)
     if import_warnings:
