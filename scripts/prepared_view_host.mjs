@@ -6,6 +6,7 @@ import { resolve, join, basename } from 'node:path'
 import { randomBytes, timingSafeEqual, createHash } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { createPresentationState } from './prepared_room_state.mjs'
+import { createRoomPresence } from './prepared_presence.mjs'
 import { createEditorBroadcast } from './prepared_editor_broadcast.mjs'
 import { unpackTrajectory, updateTrajectory, initialTrajectory } from './prepared_trajectory.mjs'
 
@@ -23,7 +24,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const invite = randomBytes(32).toString('hex'), expiresAt = now() + lifetimeMs
   const rooms = new Map(), controlToken = randomBytes(32).toString('hex')
   let publicBase = publicOrigin
-  const summary = room => ({ id: room.id, title: room.title, revision: room.revision, expiresAt, ...(room.trajectory ? { trajectory: { id: room.trajectory.id, count: room.trajectory.count, fps: room.trajectory.fps, state: room.presentation.snapshot().trajectory, serverTime: now() } } : {}), ...(room.password ? { password: room.password } : {}),
+  const summary = room => ({ id: room.id, title: room.title, revision: room.revision, participants: room.presentation.snapshot().participants, serverTime: now(), expiresAt, ...(room.trajectory ? { trajectory: { id: room.trajectory.id, count: room.trajectory.count, fps: room.trajectory.fps, state: room.presentation.snapshot().trajectory, serverTime: now() } } : {}), ...(room.password ? { password: room.password } : {}),
     url: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.invite}${room.password ? '&password=required' : ''}`,
     presenterUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.presenterToken}&role=presenter${room.password ? '&password=required' : ''}` })
   function prepareContent(scene, replacing = null) {
@@ -48,6 +49,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     const room = { id, revision, title: String(title).slice(0, 200), scene, trajectory, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), presenterToken: randomBytes(32).toString('hex'), sessions: new Map(), presentation: createPresentationState({ id, revision, now }) }
     if (trajectory) room.presentation.setTrajectory(initialTrajectory(trajectory, now))
     rooms.set(id, room)
+    room.presence = createRoomPresence({ ...room, now })
     room.editorBroadcast = createEditorBroadcast({ room, rooms, maxGuests, now })
     return summary(room)
   }
@@ -108,7 +110,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       return send(404, { error: 'Unknown host action' })
     }
     if (publicOrigin && management) return send(404, { error: 'Not found' })
-    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|pause|leave|trajectory|frame|live-frame)$/)
+    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|share-view|health|pause|leave|trajectory|frame|live-frame)$/)
     const room = rooms.get(match ? match[1] : 'default')
     if (match) route = `/meeting/${match[2]}`
     if (route?.startsWith('/meeting/') && !room) return send(410, { error: 'This share has ended.' })
@@ -135,7 +137,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           const existing = sessions.get(previous)
           if (!existing || existing.role !== role) return send(401, { error: 'Please sign in to this view.' })
           existing.away = false; existing.seenAt = now(); existing.generation++
-          return send(200, { name: existing.name, role, revision: room.revision, expiresAt })
+          return send(200, { name: existing.name, participantId: room.presence.identify(existing), role, revision: room.revision, expiresAt })
         }
         // Generated passwords contain 96 bits of entropy; compare fixed-size hashes.
         if (room.password && (typeof value.password !== 'string' || !timingSafeEqual(createHash('sha256').update(value.password).digest(), createHash('sha256').update(room.password).digest()))) return send(403, { error: 'Incorrect meeting password.' })
@@ -149,12 +151,23 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         if (role === 'presenter' && [...sessions].some(([key, session]) => session.role === 'presenter' && key !== previous)) return send(409, { error: 'A presenter is already connected to this view.' })
         if (!sessions.has(previous) && [...rooms.values()].reduce((n, r) => n + r.sessions.size + Number(r.editorBroadcast.active && ![...r.sessions.values()].some(s => s.role === 'presenter')), 0) >= maxGuests) return send(409, { error: 'This presentation is full (four participants including the presenter).' })
         const id = sessions.has(previous) ? previous : randomBytes(32).toString('hex')
-        sessions.set(id, { name, role, seenAt: now(), away: false, generation: 0 })
-        return send(200, { name, role, revision: room.revision, expiresAt }, 'application/json', { 'Set-Cookie': `${cookieName}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(1, Math.floor((expiresAt - now()) / 1000))}${publicOrigin ? '; Secure' : ''}` })
+        const previousSession = sessions.get(id)
+        const joined = { participantId: previousSession?.participantId, color: previousSession?.color, name, role, seenAt: now(), away: false, generation: 0 }
+        sessions.set(id, joined)
+        return send(200, { name, participantId: room.presence.identify(joined), role, revision: room.revision, expiresAt }, 'application/json', { 'Set-Cookie': `${cookieName}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(1, Math.floor((expiresAt - now()) / 1000))}${publicOrigin ? '; Secure' : ''}` })
       } catch { return send(400, { error: 'Invalid join request.' }) }
     }
     const sessionId = req.headers.cookie?.match(cookiePattern)?.[1], session = sessions?.get(sessionId)
     if (session) session.seenAt = now()
+    if (req.method === 'POST' && ['/meeting/share-view', '/meeting/health'].includes(route)) {
+      if (req.headers.origin !== (publicOrigin || `http://${req.headers.host}`) || session?.role !== 'guest') return send(403, { error: 'Guest access required' })
+      try {
+        const chunks = []; let size = 0
+        for await (const chunk of req) { size += chunk.length; if (size > 2048) return send(413, { error: 'Camera message too large' }); chunks.push(chunk) }
+        if (sessions.get(sessionId) !== session) return send(403, { error: 'Sign in again before sharing' })
+        return send(200, room.presence[route === '/meeting/health' ? 'health' : 'share'](session, JSON.parse(Buffer.concat(chunks))))
+      } catch (error) { return send(409, { error: error.message }) }
+    }
     if (req.method === 'POST' && ['/meeting/camera', '/meeting/pause', '/meeting/leave', '/meeting/trajectory'].includes(route)) {
       if (room.editorBroadcast.active) return send(403, { error: 'The editor is presenting this view.' })
       if (req.headers.origin !== (publicOrigin || `http://${req.headers.host}`) || session?.role !== 'presenter') return send(403, { error: 'Presenter access required' })
@@ -197,6 +210,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         if (session.away) return send(409, { error: 'Return to the presentation to reconnect.' })
         res.writeHead(200, { ...headers, 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' })
         room.presentation.subscribe(res, { presenter: session.role === 'presenter' })
+        room.presence.connect(session, res)
         const heartbeat = setInterval(() => {
           if (sessions.get(sessionId) !== session) { res.end(); return }
           session.seenAt = now(); if (!res.write(': heartbeat\n\n')) res.destroy()
@@ -216,7 +230,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const controlServer = publicOrigin ? http.createServer(handler(true)) : null
   server.requestTimeout = 15000; server.headersTimeout = 10000
   if (controlServer) { controlServer.requestTimeout = 15000; controlServer.headersTimeout = 10000 }
-  const leases = setInterval(() => { for (const room of rooms.values()) room.editorBroadcast.expire() }, 1000); leases.unref()
+  const leases = setInterval(() => { for (const room of rooms.values()) { room.editorBroadcast.expire(); room.presence.expireHealth() } }, 1000); leases.unref()
   const stop = () => { closed = true; clearInterval(leases); for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); if (listener) setTimeout(() => listener.closeAllConnections(), 250).unref() } }
   return { server, controlServer, invite, expiresAt, stop, controlToken, createShare, setPublicBase: value => { if (publicOrigin && value !== publicOrigin) throw new Error('Public origin is fixed'); publicBase = value } }
 }

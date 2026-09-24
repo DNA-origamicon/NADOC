@@ -138,3 +138,16 @@ Room closure publishes a final ended event before closing SSE connections.
 `prepared_wide_lines.js` restores nanopore thick lines through bundled Three.js
 LineMaterial/LineSegments2 constructors with validated data-only settings. It adds
 no third-party dependency or arbitrary shader execution.
+
+`prepared_presence.mjs` tracks per-session SSE connections and assigns public IDs
+and random colors. Room snapshots carry only connected guest display records.
+`meeting_presence.js` renders safe text chips or compact initials; guest updates
+arrive over existing SSE and the editor uses its existing five-second host poll.
+No new network connection, dependency, or main.js wiring is required.
+
+Guest one-shot poses use `prepared_camera.mjs` validation and the existing roster
+channel. `guest_shared_views.js` owns explicit uploads; `meeting_presence.js` owns
+the persistent glasses action and timed glow; `meeting_ping.js` synthesizes a short
+local Web Audio chime. `shared_view_motion.js` interpolates camera orientation,
+distance and target, with input/context cancellation. The editor receives controls
+and canvas through thin prepared-export wiring, including active multi-view panes.

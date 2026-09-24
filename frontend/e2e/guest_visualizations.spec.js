@@ -33,8 +33,14 @@ function ionPacket() {
   result.writeUInt32LE(0x4e495054, 0); result.writeUInt32LE(1, 4); result.writeUInt32LE(metadata.length, 8); metadata.copy(result, 12)
   coords.forEach((value, i) => result.writeFloatLE(value, start + i * 4)); return result
 }
-test('guest sees measured loading, nanopore paths and vector fields, then a terminal presentation-ended screen', async ({ page, context }) => {
+test('guest sees presence, measured loading, nanopore paths and vector fields, then a terminal presentation-ended screen', async ({ page, context, browser }) => {
   test.setTimeout(180000)
+  const observeAudio = () => {
+    window.__guestPings = 0
+    const Audio = window.AudioContext ?? window.webkitAudioContext
+    if (Audio) { const original = Audio.prototype.createOscillator; Audio.prototype.createOscillator = function (...args) { window.__guestPings++; return original.apply(this, args) } }
+  }
+  await context.addInitScript(observeAudio)
   const errors = trackConsoleErrors(page), job = { job_id: '__e2e__guest_ions', engine: 'namd', status: 'completed', kind: 'relax', created_at: 1, prep_params: { graphene_nanopore: true }, segments: [] }
   let release; const ready = new Promise(resolve => { release = resolve })
   await page.route('**/api/simulate/jobs**', route => route.fulfill({ json: [job] }))
@@ -62,6 +68,88 @@ test('guest sees measured loading, nanopore paths and vector fields, then a term
   const guestErrors = trackConsoleErrors(guest)
   await guest.locator('#guest-name').fill('Ion viewer'); await guest.locator('#join-submit').click()
   await expect(guest.locator('#status')).toContainText('Static snapshot', { timeout: 30000 })
+  await expect(guest.locator('#metrics')).toHaveCount(0)
+  await expect(guest.locator('[data-jump]')).toHaveCount(0)
+  await guest.keyboard.press('Control+p'); await expect(guest.locator('#performance')).toBeVisible()
+  await guest.keyboard.press('Escape'); await expect(guest.locator('#performance')).not.toBeVisible()
+  const otherContext = await browser.newContext()
+  await otherContext.addInitScript(observeAudio)
+  try {
+    const other = await otherContext.newPage()
+    await other.goto(url); await expect(other.locator('#join-submit')).toBeEnabled()
+    await other.locator('#guest-name').fill('Grace Hopper'); await other.locator('#join-submit').click()
+    await expect(guest.locator('.meeting-presence-chip')).toHaveText(['Grace Hopper', 'Presenter', 'Me'])
+    const chipBounds = await guest.locator('.meeting-presence-chip').first().boundingBox(), viewBounds = await guest.locator('main').boundingBox()
+    expect(chipBounds.y).toBeGreaterThanOrEqual(viewBounds.y)
+    expect(chipBounds.x).toBeLessThan(viewBounds.x + viewBounds.width / 2)
+    await expect(other.locator('.meeting-presence-chip')).toHaveText(['Ion viewer', 'Presenter', 'Me'])
+    await expect(page.locator('#presentation-controls .meeting-presence-chip')).toHaveCount(2)
+    const color = await guest.locator('.meeting-presence-chip').first().evaluate(chip => chip.style.backgroundColor)
+    await expect(page.locator('#presentation-controls .meeting-presence-chip[title="Grace Hopper · Present"]')).toHaveCSS('background-color', color)
+    await guest.screenshot({ path: path.join(evidence, 'presence.png') })
+    await other.reload(); await expect(other.locator('.meeting-presence-chip')).toHaveText(['Ion viewer', 'Presenter', 'Me'])
+    await expect(guest.locator('.meeting-presence-chip').first()).toHaveCSS('background-color', color)
+    const box = await other.locator('canvas').boundingBox()
+    await other.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await other.mouse.down()
+    await other.mouse.move(box.x + box.width / 2 + 140, box.y + box.height / 2 + 50, { steps: 8 }); await other.mouse.up()
+    const publication = other.waitForRequest(request => request.url().endsWith('/share-view'))
+    await other.locator('[data-share-view]').click()
+    const firstPose = (await publication).postDataJSON().camera
+    await expect(guest.locator('.meeting-presence-glow')).toHaveCount(1)
+    await expect.poll(() => guest.evaluate(() => window.__guestPings)).toBe(1)
+    await expect.poll(() => page.evaluate(() => window.__guestPings)).toBe(1)
+    const hostGlasses = page.getByRole('button', { name: "View Grace Hopper's shared perspective", exact: true })
+    const samples = await hostGlasses.evaluate(button => new Promise(resolve => {
+      const camera = window.__NADOC_DBG__.camera, frames = [camera.position.toArray()], start = performance.now()
+      button.click()
+      const record = time => { frames.push(camera.position.toArray()); if (time - start < 1200) requestAnimationFrame(record); else resolve(frames) }
+      requestAnimationFrame(record)
+    }))
+    const distance = (a, b) => Math.hypot(...a.map((value, i) => value - b[i]))
+    expect(samples.some(pose => distance(pose, samples[0]) > .01 && distance(pose, firstPose.position) > .01)).toBe(true)
+    await expect.poll(async () => distance(await page.evaluate(() => window.__NADOC_DBG__.camera.position.toArray()), firstPose.position)).toBeLessThan(.001)
+    await guest.getByRole('button', { name: "View Grace Hopper's shared perspective", exact: true }).click()
+    await guest.waitForTimeout(1100)
+    const received = guest.waitForRequest(request => request.url().endsWith('/share-view'))
+    await guest.locator('[data-share-view]').click()
+    expect(distance((await received).postDataJSON().camera.position, firstPose.position)).toBeLessThan(.001)
+    await expect(guest.locator('.meeting-presence-glow')).toHaveCount(0, { timeout: 17000 })
+    await expect(guest.locator('.meeting-view-glasses')).toHaveCount(1)
+    await other.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await other.mouse.wheel(0, -150)
+    const replacement = other.waitForRequest(request => request.url().endsWith('/share-view'))
+    await other.locator('[data-share-view]').click()
+    const secondPose = (await replacement).postDataJSON().camera
+    expect(distance(secondPose.position, firstPose.position)).toBeGreaterThan(.01)
+    await expect(guest.locator('.meeting-presence-glow')).toHaveCount(1)
+    // First remote ping + own share confirmation + replacement ping.
+    await expect.poll(() => guest.evaluate(() => window.__guestPings)).toBe(3)
+    await expect.poll(() => page.evaluate(() => window.__guestPings)).toBe(3)
+    await hostGlasses.click()
+    await expect.poll(async () => distance(await page.evaluate(() => window.__NADOC_DBG__.camera.position.toArray()), secondPose.position)).toBeLessThan(.001)
+    await guest.screenshot({ path: path.join(evidence, 'shared-view.png') })
+    await page.locator('.presentation-perspective').click()
+    await expect(guest.locator('[data-follow]')).toBeEnabled()
+    await guest.locator('[data-follow]').click()
+    await guest.waitForTimeout(1200)
+    const followed = guest.waitForRequest(request => request.url().endsWith('/share-view'))
+    await guest.locator('[data-share-view]').click()
+    expect(distance((await followed).postDataJSON().camera.position, secondPose.position)).toBeLessThan(.01)
+    await guest.locator('[data-follow]').click(); await page.locator('.presentation-perspective').click()
+    // Exercise the authenticated status channel; deterministic sampling is unit-tested.
+    await other.waitForTimeout(2100)
+    await other.route('**/health', route => route.continue({ postData: JSON.stringify({ networkSlow: true, renderSlow: true }) }))
+    await expect.poll(() => other.evaluate(async () => {
+      const base = `/meeting/${new URLSearchParams(location.hash.slice(1)).get('room')}`
+      return (await fetch(`${base}/health`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ networkSlow: true, renderSlow: true }) })).status
+    }), { intervals: [2200], timeout: 10000 }).toBe(200)
+    await expect(guest.locator('.meeting-presence-person').filter({ hasText: 'Grace Hopper' }).locator('[data-health]')).toHaveCount(2)
+    await expect(page.locator('#presentation-controls .meeting-presence-person').filter({ has: page.locator('[title="Grace Hopper · Present"]') }).locator('[data-health]')).toHaveCount(2)
+
+
+  } finally { await otherContext.close() }
+  await expect(guest.locator('.meeting-presence-chip')).toHaveCount(3)
+  await expect(guest.locator('.meeting-presence-chip').first()).toHaveAttribute('title', 'Grace Hopper · Left · Saved view available')
+  await expect(page.locator('#presentation-controls .meeting-presence-chip')).toHaveCount(2)
   await page.locator('[data-share-job="namd"]').click(); await expect(page.locator('[data-share-job="namd"]')).toHaveText('Stop sharing')
   await expect(page.locator('#md-ion-paths-toggle')).toBeEnabled()
   await page.locator('#md-ion-paths-toggle').check()

@@ -39,13 +39,19 @@ export function initShareLink({ exportView, broadcast, trajectory, document: doc
     nativeFlight = presenter.present(share)
     try { await nativeFlight } finally { nativeFlight = null }
   }
-  const controls = initPresentationControls({ document: doc, onPerspective: sharePerspective, onEnd: stopHosting })
+  const controls = initPresentationControls({ document: doc, onPerspective: sharePerspective, onEnd: stopHosting, onGuestView: view => {
+    try {
+      broadcast?.prepared.viewSharedCamera(view.camera, { presentation: !jobs?.active, canMove: () => !!currentRoom() && (!jobs?.active || jobs.canViewShared) })
+    } catch (error) { controls.error(error.message) }
+  } })
   function syncControls() {
     controls.setActive(shares.length > 0)
+    controls.setParticipants(currentRoom()?.participants ?? [], { serverTime: currentRoom()?.serverTime })
     if (!shares.length) void stopNative()
     jobs?.refresh()
   }
   async function stopHosting() {
+    broadcast?.prepared.cancelSharedCamera?.()
     await api('stop', { method: 'POST' })
     shares = []; selectedId = null; renderShares()
     status.textContent = 'Hosting stopped. All links have ended.'
@@ -58,6 +64,7 @@ export function initShareLink({ exportView, broadcast, trajectory, document: doc
   }
   function chooseTarget() {
     selectedId = el('[data-target]').value
+    controls.setParticipants(currentRoom()?.participants ?? [], { serverTime: currentRoom()?.serverTime })
     el('[data-create]').textContent = selectedId ? 'Update shared view' : 'Create link for current view'
   }
   function renderShares() {
@@ -151,5 +158,5 @@ export function initShareLink({ exportView, broadcast, trajectory, document: doc
       } catch { /* The next authenticated write reports an interruption. */ }
     }, 5000)
     return jobs
-  }, dispose() { clearInterval(statusTimer); disposed = true; preservingPerspective = true; jobs?.dispose(); clipUi?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; trigger?.removeEventListener('click', show); dialog.remove() } }
+  }, dispose() { clearInterval(statusTimer); disposed = true; preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); clipUi?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; trigger?.removeEventListener('click', show); dialog.remove() } }
 }

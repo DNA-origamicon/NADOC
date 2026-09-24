@@ -353,7 +353,7 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
-  const preparedExport = initPreparedExport({ scene, camera, renderer, store, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView(), getDetailLevel: () => designRenderer.getDetailLevel() })
+  const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView(), getDetailLevel: () => designRenderer.getDetailLevel() })
   const sharing = initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store } })
   initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel: () => designRenderer.getDetailLevel(), getFileOpen: () => _fileOpen })
   const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer })

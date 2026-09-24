@@ -12,6 +12,18 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- Guest presence (2026-09-23): compact guest initials in the Presenting toolbar;
+  all participant chips (Me/Presenter included) stacked longest-name-first in the
+  guest canvas upper left. Random host-assigned
+  colors persist on reconnect; live SSE connections determine membership.
+  Guest Share view publishes one camera pose: ping, 15-second chip glow, persistent
+  glasses action, and smooth 0.9-second transition for guests/editor. Re-sharing
+  replaces the pose; saved views survive guest disconnect until presentation end.
+  Private job selection blocks presenter camera application. No live guest authority.
+  Guest Follow uses the saved-view easing; Jump and Performance buttons are removed
+  (metrics remain on Ctrl+P). Two local health flags drive red wifi/circuit warnings
+  on guest/editor rosters; no hardware identifiers are collected.
+
 - Guest visualization feedback (2026-09-23): shared nanopore paths use a validated
   thick-line export adapter; vector arrows retain their instance transforms/colors.
   Existing visualization progress is relayed as Loading visualization plus a bar.

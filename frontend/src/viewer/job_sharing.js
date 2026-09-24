@@ -182,7 +182,7 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
     await flight
     if (!value && lease) await api('hold')
     if (value) await tick()
-  }, get active() { return !!shared }, get shared() { return shared && { ...shared } }, refresh: paint,
+  }, get canViewShared() { return !shared || current(shared, epoch) }, get active() { return !!shared }, get shared() { return shared && { ...shared } }, refresh: paint,
     dispose() {
       disposed = true; epoch++; cancel(timer)
       if (lease) void api('pause').catch(() => {})

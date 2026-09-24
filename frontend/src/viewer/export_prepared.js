@@ -1,18 +1,26 @@
+import { createSharedViewMotion } from './shared_view_motion.js'
 import { prepareScene } from './prepared_scene.js'
 import { axisSegments } from '../scene/multiscale_nav.js'
 import { navigationDesign } from '../scene/reference_navigation.js'
 import { showToast } from '../ui/toast.js'
 
 /** Thin editor host. Export is explicit and runs outside the render loop. */
-export function initPreparedExport({ scene, camera, renderer, store, captureCurrentCamera, getPresentationView = () => null, getDetailLevel = () => null, isStandardRender = () => true, document: doc = document }) {
+export function initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, getPresentationView = () => null, getDetailLevel = () => null, isStandardRender = () => true, document: doc = document }) {
   const button = doc.getElementById('menu-file-export-viewer')
-  let busy = false
+  let busy = false, motionOptions = {}
+  const motion = createSharedViewMotion({ getView: () => {
+    if (motionOptions.canMove?.() === false) throw new Error('Select the currently shared job before viewing a guest perspective')
+    const source = captureView(motionOptions.presentation)
+    if (!source.controls) throw new Error('Return to the 3D viewer to open this perspective')
+    const state = store.getState()
+    return { ...source, canvas, context: `${state.currentDesign?.id}:${state.currentAssembly?.id}:${state.assemblyActive}:${source.pane}` }
+  } })
   function captureView(presentation = true) {
     const alternate = presentation ? getPresentationView() : null
     if ((!alternate && !isStandardRender()) || (camera.layers && camera.layers.mask !== 1)) throw new Error('Return to the normal 3D view before exporting a prepared snapshot')
     const state = store.getState()
     if (state.cadnanoActive || state.unfoldActive) throw new Error('Return to the 3D view before exporting')
-    return { scene: alternate?.scene ?? scene, camera: alternate?.camera ?? camera, pose: alternate?.pose ?? captureCurrentCamera(), view: alternate?.view, pane: alternate?.pane }
+    return { controls: alternate?.controls ?? controls, scene: alternate?.scene ?? scene, camera: alternate?.camera ?? camera, pose: alternate?.pose ?? captureCurrentCamera(), view: alternate?.view, pane: alternate?.pane }
   }
   async function exportView({ presentation = false } = {}) {
     if (busy) return
@@ -54,5 +62,8 @@ export function initPreparedExport({ scene, camera, renderer, store, captureCurr
     const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value)))
     return [...new Uint8Array(hash)].map(v => v.toString(16).padStart(2, '0')).join('')
   }
-  return { exportView, captureView, sourceHash, dispose: () => button?.removeEventListener('click', download) }
+  return { exportView, captureView, sourceHash,
+    viewSharedCamera(pose, options = {}) { motionOptions = options; motion.move(pose) },
+    cancelSharedCamera: motion.cancel,
+    dispose() { motion.dispose(); button?.removeEventListener('click', download) } }
 }

@@ -1,34 +1,35 @@
 import { it, expect, vi, afterEach } from 'vitest'
 import { mountMeetingPresentation } from './meeting_presentation.js'
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks() })
+const cameraDefaults = { target: [0, 0, 0], up: [0, 1, 0], fov: 55, near: .1, far: 2000, orbitMode: 'orbit' }
 function setup(role = 'guest', options = {}) {
   document.body.innerHTML = '<header></header><main><canvas></canvas></main><button id="reset"></button><select id="mode"></select>'
   const events = new EventTarget(); events.close = vi.fn()
-  const frames = new Set(), viewer = { current: {}, performanceApi: { busy: false }, runtime: { controls: { enabled: true }, addFrameCallback: fn => frames.add(fn), removeFrameCallback: fn => frames.delete(fn) }, captureCamera: vi.fn(() => ({ position: [2, 3, 4] })), applyCamera: vi.fn() }
+  const frames = new Set(), viewer = { current: {}, performanceApi: { busy: false }, runtime: { controls: { enabled: true }, addFrameCallback: fn => frames.add(fn), removeFrameCallback: fn => frames.delete(fn) }, captureCamera: vi.fn(() => ({ ...cameraDefaults, position: [2, 3, 4] })), applyCamera: vi.fn() }
   let tick
   const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
   const dispose = mountMeetingPresentation({ viewer, base: '/meeting/room', role, revision: 'rev', room: 'room', document, fetch: request, eventSource: () => events, setInterval: fn => { tick = fn; return 1 }, clearInterval: vi.fn(), ...options })
-  const state = (sequence, camera = { position: [10, 0, 30] }, extra = {}) => events.dispatchEvent(new MessageEvent('state', { data: JSON.stringify({ room: 'room', revision: 'rev', sequence, camera, presenting: true, ...extra }) }))
+  const state = (sequence, camera = { position: [10, 0, 30] }, extra = {}) => events.dispatchEvent(new MessageEvent('state', { data: JSON.stringify({ room: 'room', revision: 'rev', sequence, camera: camera && { ...cameraDefaults, ...camera }, presenting: true, ...extra }) }))
   events.dispatchEvent(new Event('open'))
   return { events, viewer, request, state, tick, dispose, frame: () => [...frames].forEach(fn => fn()) }
 }
-it('leaves camera independent until Jump or Follow; direct input exits Follow', () => {
+it('leaves camera independent until Follow; direct input exits Follow', () => {
   const v = setup(); v.state(1); v.frame(); expect(v.viewer.applyCamera).not.toHaveBeenCalled()
-  document.querySelector('[data-jump]').click(); expect(v.viewer.applyCamera).toHaveBeenCalledTimes(1)
-  v.state(2); v.frame(); expect(v.viewer.applyCamera).toHaveBeenCalledTimes(1)
-  document.querySelector('[data-follow]').click(); v.frame(); expect(v.viewer.applyCamera).toHaveBeenCalledTimes(3)
+  expect(document.querySelector('[data-jump]')).toBeNull()
+  v.state(2); v.frame(); expect(v.viewer.applyCamera).not.toHaveBeenCalled()
+  document.querySelector('[data-follow]').click(); v.frame(); expect(v.viewer.applyCamera).toHaveBeenCalledTimes(1)
   document.querySelector('canvas').dispatchEvent(new Event('pointerdown'))
   expect(document.querySelector('[data-follow]').getAttribute('aria-pressed')).toBe('false')
   expect(v.viewer.runtime.controls.enabled).toBe(true)
-  v.frame(); expect(v.viewer.applyCamera).toHaveBeenCalledTimes(3); v.dispose()
+  v.frame(); expect(v.viewer.applyCamera).toHaveBeenCalledTimes(1); v.dispose()
 })
 it('ignores stale/cross-snapshot events and releases controls on loss or disposal', () => {
   const v = setup(); v.state(3); document.querySelector('[data-follow]').click()
   v.state(2, { position: [90, 0, 0] }); v.state(4, null, { revision: 'other' }); v.frame()
-  expect(v.viewer.applyCamera.mock.calls.at(-1)[0].position).toEqual([10, 0, 30])
+  expect(v.viewer.applyCamera.mock.calls.at(-1)[0].position[0]).toBeLessThan(10)
   v.events.dispatchEvent(new Event('error')); expect(v.viewer.runtime.controls.enabled).toBe(true)
   v.events.dispatchEvent(new Event('open')); v.state(5); v.frame()
-  expect(v.viewer.applyCamera).toHaveBeenCalledTimes(2) // never auto-follow on reconnect
+  expect(v.viewer.applyCamera).toHaveBeenCalledTimes(1) // never auto-follow on reconnect
   v.dispose(); expect(v.events.close).toHaveBeenCalledOnce(); expect(document.querySelector('[data-presentation]')).toBeNull()
 })
 it('coalesces presenter changes with at most one request in flight and pauses explicitly', async () => {
@@ -58,8 +59,8 @@ it('updates an announced scene without taking the guest camera or losing the pre
   const loadRevision = vi.fn(({ viewer }) => new Promise(resolve => { finish = () => { viewer.current = {}; resolve(true) } }))
   const v = setup('guest', { loadRevision })
   v.state(1, undefined, { revision: 'a'.repeat(64) })
-  expect(document.querySelector('[data-jump]').disabled).toBe(true)
-  finish(); await vi.waitFor(() => expect(document.querySelector('[data-jump]').disabled).toBe(false))
+  expect(document.querySelector('[data-follow]').disabled).toBe(true)
+  finish(); await vi.waitFor(() => expect(document.querySelector('[data-follow]').disabled).toBe(false))
   v.frame(); expect(v.viewer.applyCamera).not.toHaveBeenCalled()
   expect(v.events.close).not.toHaveBeenCalled()
   document.querySelector('[data-follow]').click(); v.frame()

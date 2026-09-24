@@ -1,6 +1,9 @@
+import { mountViewerHealth } from './viewer_health.js'
+import { createMeetingPing } from './meeting_ping.js'
 /** Invite-only loading for the temporary static host; no editor API dependency. */
 import { mountMeetingPresentation } from './meeting_presentation.js'
 import { mountMeetingStatus } from './meeting_status.js'
+import { mountMeetingPresence } from './meeting_presence.js'
 import { mountPresenterAttendance } from './meeting_attendance.js'
 export function mountMeetingJoin({ viewer, document: doc = document, location: loc = location, fetch: request = fetch, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   const params = new URLSearchParams(loc.hash.slice(1)), token = params.get('invite')
@@ -18,10 +21,14 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   const sharedViews = new WeakSet()
   let disposed = false, ended = false, timer = null, busy = false, disconnectPresentation = () => {}
   const display = mountMeetingStatus({ viewer, document: doc })
+  const ping = createMeetingPing({ document: doc })
+  let presence = null, moveView = () => {}
+  const health = mountViewerHealth({ viewer, base, document: doc, fetch: request, onChange: value => presence?.setHealth(value) })
+  const measuredRequest = health.fetch
   function finish() {
     if (ended || disposed) return
     ended = true; abort.abort(); if (timer) cancel(timer); timer = null
-    disconnectPresentation(); display.end(); identity.textContent = 'Presentation ended · Session ended'
+    disconnectPresentation(); health.dispose(); presence?.dispose(); ping.dispose(); display.end(); identity.textContent = 'Presentation ended · Session ended'
     if (dialog.open) dialog.close()
   }
   doc.querySelector('.open').hidden = true
@@ -35,7 +42,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   }
   async function loadSharedView(details) {
     if (sharedViews.has(viewer.current) && (!viewer.current?.packageHash || viewer.current.packageHash === details.revision)) return
-    const response = await request(`${base}/scene`, { signal: abort.signal })
+    const response = await measuredRequest(`${base}/scene`, { signal: abort.signal })
     if (!response.ok) throw new Error('The host is unavailable or the session has ended.')
     const size = Number(response.headers.get('Content-Length'))
     if (!Number.isFinite(size) || size <= 0 || size > 512 * 1024 * 1024) throw new Error('Invalid package size')
@@ -65,8 +72,10 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
       identity.textContent = `${details.name} · Private test`
       if (passwordField) passwordField.value = ''
       dialog.close()
+      presence?.dispose()
+      presence = mountMeetingPresence({ parent: doc.querySelector('main') ?? doc.body, selfId: details.participantId, onView: view => moveView(view), ping, document: doc })
       if (details.role && details.revision) {
-        const mount = ({ onSharedView } = {}) => mountMeetingPresentation({ onEnded: finish, onLoading: display.progress, onSharedView, viewer, base, role: details.role, revision: details.revision, room: room || 'default', document: doc, fetch: request })
+        const mount = ({ onSharedView } = {}) => mountMeetingPresentation({ onEnded: finish, onLoading: display.progress, onPresence: (participants, context) => { presence.update(participants, context); if (details.role === 'guest') health.start() }, onViewShared: ping.play, onViewReady: move => { moveView = move }, onSharedView, viewer, base, role: details.role, revision: details.revision, room: room || 'default', document: doc, fetch: measuredRequest })
         disconnectPresentation = details.role === 'presenter' ? mountPresenterAttendance({ viewer, base, document: doc, fetch: request, mount, resume: async () => {
           const resumed = await join({ ...credential, resume: true })
           if (!resumed.response.ok) throw new Error(resumed.details.error || 'Could not return to the presentation')
@@ -76,7 +85,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
       }
       timer = repeat(async () => {
         try {
-          const response = await request(`${base}/status`, { signal: abort.signal })
+          const response = await measuredRequest(`${base}/status`, { signal: abort.signal })
           if (response.status === 401 || response.status === 410) {
             finish()
             return
@@ -94,7 +103,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   const submit = event => { event.preventDefault(); void enter() }
   form.addEventListener('submit', submit)
   void enter(true)
-  return () => { disposed = true; abort.abort(); disconnectPresentation(); display.dispose(); if (timer) cancel(timer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
+  return () => { disposed = true; abort.abort(); disconnectPresentation(); health.dispose(); presence?.dispose(); ping.dispose(); display.dispose(); if (timer) cancel(timer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
 }
 
 /** A second invite can change only the fragment in an already-open viewer tab. */

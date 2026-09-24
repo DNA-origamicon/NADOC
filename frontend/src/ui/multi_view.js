@@ -339,7 +339,7 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
       if (count <= 1) return null
       const panel = panels[activePanel]
       if (!panel.renderScene || !panel.controls) throw Object.assign(new Error('Waiting for the active multi-view pane to finish loading'), { code: 'VIEW_NOT_READY' })
-      return { scene: panel.renderScene, camera: panel.camera, pose: { position: panel.camera.position.toArray(),
+      return { controls: panel.controls, scene: panel.renderScene, camera: panel.camera, pose: { position: panel.camera.position.toArray(),
         target: panel.controls.target.toArray(), up: panel.camera.up.toArray(), fov: panel.camera.fov, orbitMode: 'orbit' },
         view: { coloring: panel.coloring, representation: panel.representation }, pane: activePanel + 1 }
     }, dispose: () => {

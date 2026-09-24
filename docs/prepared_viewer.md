@@ -394,6 +394,26 @@ A temporary connection interruption retains the last view instead.
 These guest updates require host capability `guest-visualizations-v1`. Restart an
 older host after its current meeting to serve the updated guest viewer.
 
+Connected guests now appear as colored initials in the presenter's Presenting bar.
+Guest viewers show all participants, including Me and Presenter, in rounded chips
+at the upper left of the 3D area, stacked longest displayed name first. The host assigns random colors, consistent across viewers and retained
+on reconnect. Closing the last viewer connection removes that guest. The roster
+contains separate display IDs, never authentication cookies. Restart an older host
+to load the presence implementation and new guest assets.
+
+Guests can click **Share view** to publish their current camera once. Other guests
+and the editor see a glasses button beside that guest's chip and hear a short ping
+once audio is unlocked by a tab interaction. The chip glows for 15 seconds; clicking
+the glasses animates to the pose over about 0.9 seconds without enabling live follow.
+Manual navigation cancels the animation. Re-sharing replaces the saved pose, pings
+again, and restarts the glow. The latest pose and glasses remain for the presentation,
+including after the guest leaves (marked Left). Camera poses remain in model-world
+coordinates when the host changes visualization; no trajectory data is retransmitted.
+Presenter notifications use the existing five-second host poll. A presenter browsing
+a private job must select the currently shared job before applying a guest view.
+The guest endpoint checks session, origin, revision at publication, pose bounds,
+request size, and a one-second repeat limit; it grants no live presenter authority.
+
 The protocol requires host capability `job-stream-v1`. A host started before this
 update must be stopped and restarted after its current meeting; that one-time
 restart ends its old invitations. Active meetings are never restarted automatically.
@@ -471,3 +491,16 @@ session cookie and expiry. Presenter authority stays in the editor; send guests 
 The older presenter URL is retained for protocol compatibility but is no longer
 exposed by the editor. Earlier prepared-clip continuity tests
 are recorded in [same-link validation](audits/unified_sharing_20260921.md).
+
+Guest controls offer Follow presenter (the same eased 0.9-second transition as a
+saved perspective) without a separate Jump button. Performance metrics remain
+available through Ctrl+P (Cmd+P on macOS); there is no Performance toolbar button.
+
+Red wifi and circuit icons indicate sustained slow transfers and slow foreground
+rendering, respectively. Sampling uses the existing downloads and render loop; it
+does not inspect hardware identity, capacity, or other applications. Only two
+boolean warning flags go to the host every ten seconds. Guests see their own local
+status immediately; the roster exposes warnings to other guests and the presenter.
+Hidden tabs, loading, and performance captures do not count as slow rendering.
+Warnings recover with healthy samples; server reports expire after 30 seconds.
+These are viewer-experience indicators, not a diagnosis of the user's internet or GPU.

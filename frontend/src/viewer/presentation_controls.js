@@ -1,7 +1,8 @@
 import './sharing_controls.css'
+import { mountMeetingPresence } from './meeting_presence.js'
 
 /** Persistent controls anchored to the editor's actual 3D canvas area. */
-export function initPresentationControls({ document: doc = document, onPerspective, onEnd }) {
+export function initPresentationControls({ document: doc = document, onPerspective, onEnd, onGuestView }) {
   const bar = doc.createElement('div'); bar.id = 'presentation-controls'; bar.hidden = true
   bar.className = 'presentation-controls'; bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Presentation')
   bar.innerHTML = `<span class="presentation-label"><span class="presentation-dot" aria-hidden="true"></span>Presenting</span>
@@ -11,6 +12,7 @@ export function initPresentationControls({ document: doc = document, onPerspecti
     <span class="presentation-error" role="status" aria-live="polite"></span>`
   ;(doc.getElementById('canvas-area') ?? doc.getElementById('viewport-container') ?? doc.body).append(bar)
   const glasses = bar.querySelector('.presentation-perspective'), end = bar.querySelector('[data-end-presentation]'), error = bar.querySelector('.presentation-error')
+  const presence = mountMeetingPresence({ parent: bar, compact: true, onView: onGuestView, document: doc })
   let enabled = false, busy = false, disposed = false, generation = 0
   function paint() {
     glasses.setAttribute('aria-pressed', String(enabled))
@@ -34,7 +36,8 @@ export function initPresentationControls({ document: doc = document, onPerspecti
     get perspective() { return enabled },
     setPerspective(value) { enabled = value; paint() },
     error(message) { error.textContent = message },
+    setParticipants: presence.update,
     setActive(active) { bar.hidden = !active; if (!active) { generation++; enabled = false; error.textContent = '' } paint() },
-    dispose() { disposed = true; generation++; bar.remove() },
+    dispose() { disposed = true; generation++; presence.dispose(); bar.remove() },
   }
 }

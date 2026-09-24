@@ -1,9 +1,11 @@
+import { createPresenterFollow } from './presenter_follow.js'
+import { mountGuestSharedViews } from './guest_shared_views.js'
 /** Camera-only presentation controls. Scientific selection is a separate contract. */
 import { mountMeetingTrajectory } from './meeting_trajectory.js'
 import { loadMeetingRevision } from './meeting_scene_updates.js'
 import { mountMeetingLiveFrame } from './meeting_live_frame.js'
 export function mountMeetingPresentation({ viewer, base, role, revision, room, document: doc = document, fetch: request = fetch,
-  eventSource = url => new EventSource(url), loadRevision = loadMeetingRevision, mountTrajectory = mountMeetingTrajectory, onSharedView = () => {}, onEnded = () => {}, onLoading = () => {}, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
+  eventSource = url => new EventSource(url), loadRevision = loadMeetingRevision, mountTrajectory = mountMeetingTrajectory, onSharedView = () => {}, onEnded = () => {}, onLoading = () => {}, onPresence = () => {}, onViewReady = () => {}, onViewShared = () => {}, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   const createTrajectory = () => mountTrajectory({ viewer, base, role, document: doc, fetch: request })
   let trajectory = createTrajectory()
   const createLive = () => mountMeetingLiveFrame({ viewer, base, revision, document: doc, fetch: request })
@@ -11,31 +13,36 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   const bar = doc.createElement('div'); bar.dataset.presentation = ''; bar.style.cssText = 'display:flex;align-items:center;gap:12px;padding:8px 18px;flex-wrap:wrap'
   bar.innerHTML = role === 'presenter'
     ? '<button data-broadcast aria-pressed="false">Share my perspective</button><span data-connection role="status"></span>'
-    : '<button data-jump disabled>Jump to presenter</button><button data-follow aria-pressed="false" disabled>Follow presenter</button><span data-connection role="status"></span>'
+    : '<button data-follow aria-pressed="false" disabled>Follow presenter</button><span data-connection role="status"></span>'
   doc.body.insertBefore(bar, doc.querySelector('main'))
   const el = key => bar.querySelector(`[data-${key}]`), status = el('connection'), canvas = doc.querySelector('canvas')
   let frozen = viewer.current, updating = false, pendingRevision = null, retryAfter = 0
   const abort = new AbortController(), host = doc.defaultView
   let source
-  let disposed = false, connected = false, following = false, savedEnabled = true, broadcasting = false, inFlight = false, latest = null, latestAt = 0, sequence = -1, sent = '', previousFrame = performance.now()
+  let disposed = false, connected = false, following = false, savedEnabled = true, broadcasting = false, inFlight = false, latest = null, latestAt = 0, sequence = -1, sent = ''
   let writes = Promise.resolve(), publicationEpoch = 0
   const compatible = () => viewer.current === frozen
+  const followMotion = createPresenterFollow({ viewer })
   function follow(value) {
     if (value && !following) {
       savedEnabled = viewer.runtime.controls.enabled
-      if (latest?.camera) viewer.applyCamera(latest.camera, 1)
+      followMotion.start()
       viewer.runtime.controls.enabled = false
     }
-    if (!value && following) viewer.runtime.controls.enabled = savedEnabled
+    if (!value && following) { followMotion.stop(); viewer.runtime.controls.enabled = savedEnabled }
     following = value
     el('follow')?.setAttribute('aria-pressed', String(value))
     if (el('follow')) el('follow').textContent = value ? 'Stop following' : 'Follow presenter'
   }
+  const guestViews = role === 'guest' ? mountGuestSharedViews({ parent: bar, viewer, base, document: doc, fetch: request,
+    onPublished: onViewShared, getRevision: () => revision, ready: () => connected && compatible() && !updating && !viewer.performanceApi.busy,
+    beforeMove: () => follow(false) }) : null
+  onViewReady(view => guestViews?.move(view))
   function update() {
+    guestViews?.update()
     onLoading(latest?.loading ?? null, updating)
-    status.textContent = !compatible() ? 'Different snapshot opened. Reopen the invitation to present.' : !connected ? 'Presentation connection lost; you can still explore.' : role === 'presenter' ? (broadcasting ? 'Your perspective is shared. Guests choose whether to follow.' : 'Your perspective is not being shared.') : following ? 'Following presenter. Drag or scroll to explore independently.' : latest?.presenting ? 'Explore independently, jump once, or follow the presenter.' : 'Presenter is not sharing a perspective.'
+    status.textContent = !compatible() ? 'Different snapshot opened. Reopen the invitation to present.' : !connected ? 'Presentation connection lost; you can still explore.' : role === 'presenter' ? (broadcasting ? 'Your perspective is shared. Guests choose whether to follow.' : 'Your perspective is not being shared.') : following ? 'Following presenter. Drag or scroll to explore independently.' : latest?.presenting ? 'Explore independently or follow the presenter.' : 'Presenter is not sharing a perspective.'
     if (updating) status.textContent = 'Receiving updated visualizations; your camera stays independent.'
-    if (el('jump')) el('jump').disabled = updating || latest?.revision !== revision || !connected || !latest?.camera || !compatible() || viewer.performanceApi.busy
     if (el('follow')) el('follow').disabled = updating || latest?.revision !== revision || !connected || !latest?.camera || !latest?.presenting || !compatible() || viewer.performanceApi.busy
     if (el('broadcast')) { el('broadcast').disabled = !connected || !compatible() || viewer.performanceApi.busy; el('broadcast').textContent = broadcasting ? 'Pause perspective sharing' : 'Share my perspective'; el('broadcast').setAttribute('aria-pressed', String(broadcasting)) }
   }
@@ -85,6 +92,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     if (value.room !== room || !Number.isSafeInteger(value.sequence) || value.sequence <= sequence) return
     if (value.revision !== revision && !/^[a-f0-9]{64}$/.test(value.revision)) return
     if (value.ended) { onEnded(); return }
+    onPresence(value.participants ?? [], { serverTime: value.serverTime })
     sequence = value.sequence; latest = value; latestAt = performance.now(); pendingRevision = value.revision
     trajectory.receive(value)
     live.receive(value)
@@ -108,15 +116,13 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   for (const type of ['pointerdown', 'wheel', 'dblclick']) canvas.addEventListener(type, ownCamera, { capture: true, passive: true })
   doc.getElementById('reset')?.addEventListener('click', ownCamera, true)
   doc.getElementById('mode')?.addEventListener('change', ownCamera, true)
-  if (el('jump')) el('jump').onclick = () => { follow(false); if (latest?.camera) viewer.applyCamera(latest.camera, 1); update() }
-  if (el('follow')) el('follow').onclick = () => { follow(!following); previousFrame = performance.now(); update() }
+  if (el('follow')) el('follow').onclick = () => { guestViews?.cancel(); follow(!following); update() }
   if (el('broadcast')) el('broadcast').onclick = () => { if (broadcasting) pause(); else { broadcasting = true; publicationEpoch++; sent = ''; update(); void publish() } }
   function frame() {
     if (updating) return
     if (!compatible()) { follow(false); broadcasting = false; source.close(); update(); return }
     if (following && latest?.revision === revision && !viewer.performanceApi.busy && latest?.camera) {
-      const time = performance.now(), blend = 1 - Math.exp(-Math.min(100, time - previousFrame) / 70); previousFrame = time
-      viewer.applyCamera(latest.camera, blend); viewer.runtime.controls.enabled = false
+      followMotion.frame(latest.camera); viewer.runtime.controls.enabled = false
     }
   }
   // Benchmark orbit owns its camera; do not combine it with follow interpolation.
@@ -126,7 +132,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   update()
   return () => {
     if (disposed) return
-    disposed = true; trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
+    disposed = true; guestViews?.dispose(); onViewReady(() => {}); trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
     if (timer !== null) cancel(timer)
     viewer.runtime.removeFrameCallback(frame)
     host?.removeEventListener('offline', offline); host?.removeEventListener('online', online)
