@@ -197,3 +197,54 @@ test('part-specific links isolate snapshots and cookies and revoke independently
   assert.equal((await fetch(base + `/meeting/${a.id}/scene`, { headers: { Cookie: ac } })).status, 410)
   assert.equal(await (await fetch(base + `/meeting/${b.id}/scene`, { headers: { Cookie: bc } })).text(), 'NADOCVW1Part B')
 })
+
+test('reauthentication rotates cookies, revokes old streams, and bounds streams per session', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-session-audit-')); t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
+  const host = await createPreparedHost({ dist: root }); t.after(host.stop)
+  await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
+  const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
+  const share = host.createShare(Buffer.from('NADOCVW1session')), endpoint = `${base}/meeting/${share.id}`
+  const joinRoom = (url, role = 'guest', cookie = '') => fetch(endpoint + '/join', { method: 'POST', headers: { Origin: base, Cookie: cookie },
+    body: JSON.stringify({ role, name: role, token: new URLSearchParams(new URL(url).hash.slice(1)).get('invite') }) })
+  const cookie = response => response.headers.get('set-cookie').split(';')[0]
+  const guest = cookie(await joinRoom(share.url))
+  const streams = []
+  for (let i = 0; i < 2; i++) {
+    const response = await fetch(endpoint + '/events', { headers: { Cookie: guest } })
+    assert.equal(response.status, 200)
+    const reader = response.body.getReader(); await reader.read(); streams.push(reader)
+  }
+  assert.equal((await fetch(endpoint + '/events', { headers: { Cookie: guest } })).status, 429)
+  // One guest cannot consume every room slot.
+  const other = cookie(await joinRoom(share.url))
+  const response = await fetch(endpoint + '/events', { headers: { Cookie: other } })
+  assert.equal(response.status, 200); await response.body.cancel()
+  const presenter = cookie(await joinRoom(share.presenterUrl, 'presenter', guest))
+  assert.notEqual(presenter, guest)
+  assert.equal((await fetch(endpoint + '/scene', { headers: { Cookie: guest } })).status, 401)
+  for (const reader of streams) { while (!(await reader.read()).done) { /* drain queued presence */ } }
+  assert.equal((await (await fetch(endpoint + '/status', { headers: { Cookie: presenter } })).json()).role, 'presenter')
+  const rejoined = cookie(await joinRoom(share.presenterUrl, 'presenter', presenter))
+  assert.notEqual(rejoined, presenter)
+  assert.equal((await fetch(endpoint + '/status', { headers: { Cookie: presenter } })).status, 401)
+  assert.equal((await fetch(endpoint + '/status', { headers: { Cookie: rejoined } })).status, 200)
+})
+
+test('host expiry closes an already authenticated event stream without another request', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-expiry-audit-')); t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
+  let clock = 1000
+  const host = await createPreparedHost({ dist: root, lifetimeMs: 1000, now: () => clock }); t.after(host.stop)
+  await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
+  const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
+  const share = host.createShare(Buffer.from('NADOCVW1expiry')), endpoint = `${base}/meeting/${share.id}`
+  const joined = await fetch(endpoint + '/join', { method: 'POST', headers: { Origin: base }, body: JSON.stringify({ name: 'Guest', token: new URLSearchParams(new URL(share.url).hash.slice(1)).get('invite') }) })
+  const cookie = joined.headers.get('set-cookie').split(';')[0]
+  const response = await fetch(endpoint + '/events', { headers: { Cookie: cookie }, signal: AbortSignal.timeout(5000) })
+  const reader = response.body.getReader(); await reader.read()
+  clock = 2001
+  let remaining = ''
+  for (;;) { const chunk = await reader.read(); if (chunk.done) break; remaining += new TextDecoder().decode(chunk.value) }
+  assert.match(remaining, /"ended":true/)
+})

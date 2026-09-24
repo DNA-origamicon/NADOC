@@ -1,3 +1,4 @@
+import { requireSharingCapabilities } from './sharing_capabilities.js'
 import './sharing_controls.css'
 import { broadcastDocument, broadcastFingerprint } from './broadcast_fingerprint.js'
 
@@ -19,6 +20,7 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
   const el = key => dialog.querySelector(`[data-${key}]`), host = doc.defaultView
   let active = false, starting = false, startPending = false, disposed = false, inFlight = false, generation = 0, room = null, lease = '', revision = '', identity = null
   let cameraOn = true, visualsOn = true, sentCamera = '', sentVisual = '', candidate = '', candidateSince = 0, checkedAt = -Infinity, exportedAt = -Infinity, heartbeatAt = 0
+  let capabilities = []
   let title = '', dragging = false, gestureAt = -Infinity
   function message(value) { el('status').textContent = value; label.textContent = value }
   function paint() { trigger?.setAttribute('aria-pressed', String(active)); if (trigger) trigger.textContent = active ? '✓ Broadcast to presentation' : 'Broadcast to presentation…'; stopButton.textContent = active || starting ? 'Stop broadcast' : 'Dismiss' }
@@ -37,6 +39,7 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
   function sameDocument() { return broadcastDocument(store.getState()) === identity }
   async function publishVisual(ticket, signature) {
     const started = now(), result = await prepared.exportView({ presentation: true })
+    requireSharingCapabilities(result, capabilities)
     if (!result) throw new Error('Another export is busy; stop and retry broadcasting.')
     if (!active || ticket !== generation || !sameDocument()) return
     message(`Updating shared visualizations · ${title}`)
@@ -106,9 +109,10 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
     dialog.showModal(); el('start').disabled = true; message('Looking for active share links…')
     try {
       const value = await api('status'); if (disposed) return
+      capabilities = value.capabilities ?? []
       el('room').replaceChildren(...(value.shares ?? []).map(share => { const option = doc.createElement('option'); option.value = share.id; option.textContent = share.title; return option }))
-      if (!value.capabilities?.includes('editor-broadcast-v1')) throw new Error(value.running ? 'This host was started before editor broadcasting was installed. After your current meeting, stop hosting and create a new share link to use this feature.' : 'Create a link with Help → Share link first.')
-      if (!value.shares.length) throw new Error('Create a link with Help → Share link first.')
+      if (!value.capabilities?.includes('editor-broadcast-v1')) throw new Error(value.running ? 'This host was started before editor broadcasting was installed. After your current meeting, stop hosting and create a new share link to use this feature.' : 'Create a link with File → Sharing first.')
+      if (!value.shares.length) throw new Error('Create a link with File → Sharing first.')
       el('start').disabled = false; message('Broadcasting is off. Guests will keep the same link and sign-in.')
     } catch (error) { message(error.message) }
   }

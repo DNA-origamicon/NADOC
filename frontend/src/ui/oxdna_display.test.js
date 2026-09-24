@@ -1793,3 +1793,28 @@ it('applies NAMD measured ring centers and planes without oxDNA offsets', () => 
   expect(framesToUpdates([['h', 7, 'REVERSE']],
     [1,2,3,1,0,0,NaN,NaN,NaN,null,null,null])[0].base_position).toBeUndefined()
 })
+
+it('awaits exact atomic export frames even in coarse playback mode and rejects missing coordinates', async () => {
+  const atom = { getMode: () => 'vdw', update: vi.fn(), applyPositionLerp: vi.fn() }
+  let repr = 'full'
+  const api = {
+    getOxdnaTrajectory: vi.fn(async () => ({ ready: true, n_frames: 4,
+      keys: [['h', 0, 'FORWARD']], frames: [0, 1, 2, 3].map(x => [x, 0, 0, 1, 0, 0]) })),
+    getOxdnaAtomisticModel: vi.fn(async () => ({ n_serials: 1, atoms: [{ serial: 0, element: 'P', strand_id: 's', x: 0, y: 0, z: 0 }], bonds: [] })),
+    getOxdnaFramesAtomistic: vi.fn(),
+  }
+  const ctrl = initOxdnaDisplay({ designRenderer: { applyFemPositions: vi.fn(), clearScalarColors: vi.fn() }, api,
+    getCurrentRepr: () => repr, getAtomisticRenderer: () => atom })
+  await ctrl.loadTrajectory('job', true, 'job'); repr = 'vdw'; ctrl.setPlaying(true)
+  let resolveFrame
+  api.getOxdnaFramesAtomistic.mockImplementationOnce(() => new Promise(resolve => { resolveFrame = resolve }))
+  const pending = ctrl.showFrameForExport(2)
+  await vi.waitFor(() => expect(resolveFrame).toBeTypeOf('function'))
+  expect(atom.applyPositionLerp).not.toHaveBeenCalled()
+  expect(api.getOxdnaFramesAtomistic.mock.calls.at(-1)[1]).toEqual([2])
+  resolveFrame({ '2': [20, 30, 40] }); await pending
+  expect(atom.applyPositionLerp).toHaveBeenLastCalledWith([20, 30, 40], [20, 30, 40], 0, null, [], null)
+  api.getOxdnaFramesAtomistic.mockResolvedValueOnce({})
+  await expect(ctrl.showFrameForExport(3)).rejects.toThrow('exact atomic trajectory frame')
+  ctrl.stopAndRestore()
+})

@@ -1,3 +1,5 @@
+import { restoreNativePresentation } from './native_presentation.js'
+import { initSurfaceStrandsOverlay } from '../scene/surface_strands_overlay.js'
 import { it, expect, vi, afterEach } from 'vitest'
 import * as THREE from 'three'
 import { Blob } from 'node:buffer'
@@ -11,7 +13,7 @@ import { loadPreparedScene } from './prepared_scene.js'
 
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks(); vi.unstubAllGlobals() })
 const camera = { position: [0, 0, 10], target: [0, 0, 0], up: [0, 1, 0], fov: 55, near: .1, far: 1000, orbitMode: 'orbit' }
-function setup() {
+function setup(controller) {
   vi.stubGlobal('Blob', Blob)
   document.body.innerHTML = '<button id="menu-help-broadcast"></button>' + ['oxdna', 'md'].map(p => `<div><div id="${p}-jobs-viz-toggle"></div><input type="radio" id="${p}-jobs-viz-off"></div>`).join('') + '<div data-job-id="a"></div><div data-job-id="b"></div>'
   let selected = { engine: 'oxdna', id: 'a' }, room = null, fail = false
@@ -22,8 +24,8 @@ function setup() {
   const request = vi.fn(async (path, options) => ({ ok: !fail, json: async () => fail ? { error: 'Transfer failed' } : { lease: 'token', revision: 'a'.repeat(64) } }))
   const showNative = vi.fn(async () => { mesh.position.set(0, 0, 0) })
   const ui = initJobSharing({ prepared, store: { getState: () => ({ currentDesign: { id: 'design' } }) }, getSelection: () => selected,
-    showNative, getRoom: () => room, fetch: request, setInterval: () => null, clearInterval: () => {} })
-  return { ui, request, mesh, prepared, showNative, select: job => { selected = job }, host: () => { room = { id: 'room', capabilities: ['job-stream-v1', 'guest-visualizations-v1'] }; ui.refresh() }, fail: () => { fail = true } }
+    getSource: () => ({ controller }), showNative, getRoom: () => room, fetch: request, setInterval: () => null, clearInterval: () => {} })
+  return { ui, request, mesh, prepared, showNative, select: job => { selected = job }, host: capabilities => { room = { id: 'room', capabilities: capabilities ?? ['live-unlimited-frames-v1', 'job-stream-v1', 'guest-visualizations-v1', ...(controller ? ['live-timeline-v1'] : [])] }; ui.refresh() }, fail: () => { fail = true } }
 }
 it('shows job controls only with an invitation and preserves publication across private selection and list rerender', async () => {
   const v = setup(), button = document.querySelector('[data-share-job="oxdna"]')
@@ -113,4 +115,89 @@ it('relays visualization progress while holding the previous scene and does not 
   await vi.waitFor(() => expect(v.request.mock.calls.some(([p, o]) => p.endsWith('/progress') && o.body === 'null')).toBe(true))
   v.select({ engine: 'oxdna', id: 'a' }); body.querySelector('progress').value = 100; await v.ui.tick()
   expect(v.request.mock.calls.some(([p]) => p.endsWith('/scene'))).toBe(true); v.ui.dispose()
+})
+
+
+it.each(['oxdna', 'namd'])('stopping %s sharing removes PEG results AND resumed setup previews before publishing native', async engine => {
+  const v = setup(), scene = v.prepared.captureView().scene
+  v.select({ engine, id: 'a' })
+  const overlay = initSurfaceStrandsOverlay({ scene, camera: new THREE.PerspectiveCamera(), canvas: document.createElement('canvas') })
+  overlay.update({ material: 'PEG', shape: 'square', sizeNm: 10, densityPerUm2: 10000, segments: 2, beadDiameterNm: .5 }, true)
+  overlay.setResults([[[1, 2, 3], [1, 3, 3]]])
+  document.getElementById(`${engine === 'namd' ? 'md' : 'oxdna'}-jobs-viz-off`).onclick = () => overlay.setResults(null)
+  let finishRepresentation
+  const stopLive = vi.fn()
+  v.showNative.mockImplementation(() => restoreNativePresentation({
+    stopLive,
+    setRepresentation: async repr => {
+      expect(repr).toBe('full')
+      await new Promise(resolve => { finishRepresentation = resolve })
+      v.mesh.position.set(0, 0, 0)
+    },
+    clearSimulationVisuals: () => overlay.clear(),
+  }))
+  v.mesh.position.x = 5; v.host(); await v.ui.toggle(engine)
+  let guest = await loadPreparedScene(v.request.mock.calls.find(([p]) => p.endsWith('/scene'))[1].body)
+  expect(guest.scene.getObjectByName('peg-surface-beads')).toBeTruthy(); guest.dispose()
+  v.request.mockClear()
+  const stopping = v.ui.toggle(engine)
+  await vi.waitFor(() => expect(finishRepresentation).toBeTypeOf('function'))
+  expect(stopLive).toHaveBeenCalledOnce()
+  // Off by itself leaves the seed preview visible: the original regression.
+  expect(scene.getObjectByName('peg-surface-beads').children.length).toBeGreaterThan(0)
+  expect(v.request.mock.calls.some(([p]) => p.endsWith('/scene'))).toBe(false)
+  finishRepresentation(); await stopping
+  guest = await loadPreparedScene(v.request.mock.calls.find(([p]) => p.endsWith('/scene'))[1].body)
+  expect(guest.scene.getObjectByName('peg-surface-beads')).toBeUndefined()
+  expect(guest.scene.getObjectByProperty('uuid', v.mesh.uuid).matrix.elements[12]).toBe(0)
+  expect(v.ui.shared).toBeNull()
+  v.request.mockClear(); v.select({ engine, id: null }); await v.ui.tick()
+  expect(v.request.mock.calls.some(([p]) => /\/(scene|frame)$/.test(p))).toBe(false)
+  guest.dispose(); overlay.dispose(); v.ui.dispose()
+})
+
+it('streams playback through background loading and sends pause/seek metadata with each packet', async () => {
+  let info = { frame: 1, total: 100, playing: true }
+  const v = setup({ activeJobId: () => 'a', trajectoryInfo: () => info })
+  v.host(); await v.ui.setPerspective(false); await v.ui.toggle('oxdna')
+  const body = document.createElement('div'); body.id = 'oxdna-jobs-viz-body'
+  body.innerHTML = '<progress max="100" value="35"></progress>'; document.body.append(body)
+  for (const frame of [2, 3, 80]) {
+    info = { frame, total: 100, playing: frame !== 80 }; v.mesh.position.x = frame
+    await v.ui.tick()
+    const packet = v.request.mock.calls.filter(([p]) => p.endsWith('/frame')).at(-1)[1].body
+    const size = new DataView(packet.buffer).getUint32(64)
+    expect(JSON.parse(new TextDecoder().decode(packet.subarray(68, 68 + size)))).toEqual(info)
+    expect(gunzipSync(packet.subarray(68 + size)).length).toBeGreaterThan(0)
+  }
+  info.playing = true; await v.ui.tick()
+  expect(v.request.mock.calls.filter(([p]) => p.endsWith('/frame'))).toHaveLength(5)
+  expect(v.prepared.exportView).toHaveBeenCalledTimes(1)
+  expect(v.request.mock.calls.some(([p]) => p.endsWith('/camera'))).toBe(false)
+  v.ui.dispose()
+})
+
+it('renews the lease while a large frame upload is still pending', async () => {
+  const v = setup(); v.host(); await v.ui.toggle('oxdna')
+  let finish
+  const original = v.request.getMockImplementation()
+  v.request.mockImplementation((path, options) => path.endsWith('/frame') ? new Promise(resolve => { finish = () => resolve({ ok: true, json: async () => ({}) }) }) : original(path, options))
+  v.mesh.position.x = 42
+  const upload = v.ui.tick()
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  const before = v.request.mock.calls.filter(([p]) => p.endsWith('/heartbeat')).length
+  const later = Date.now() + 6000; vi.spyOn(Date, 'now').mockReturnValue(later)
+  void v.ui.tick()
+  await vi.waitFor(() => expect(v.request.mock.calls.filter(([p]) => p.endsWith('/heartbeat')).length).toBeGreaterThan(before))
+  finish(); await upload; v.ui.dispose()
+})
+
+it('refuses a stale sharing host before acquiring a lease or exporting a trajectory', async () => {
+  const v = setup(); v.host(['job-stream-v1', 'live-timeline-v1'])
+  await v.ui.toggle('oxdna')
+  expect(v.prepared.exportView).not.toHaveBeenCalled()
+  expect(v.request).not.toHaveBeenCalled()
+  expect(v.ui.active).toBe(false)
+  expect(document.querySelector('.sharing-job-status').textContent).toContain('sharing host is out of date')
+  v.ui.dispose()
 })

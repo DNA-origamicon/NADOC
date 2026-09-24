@@ -28,7 +28,7 @@ try {
     $quotedArgs = ($hostArgs | ForEach-Object { '"' + ([string]$_).Replace('"', '\"') + '"' }) -join ' '
     $child = Start-Process -FilePath $node -ArgumentList $quotedArgs -PassThru `
         -RedirectStandardOutput ($logBase + '.stdout.log') -RedirectStandardError ($logBase + '.stderr.log')
-    Write-Host "NADOC sharing host running on $BindAddress`:$Port for up to $Minutes minutes. Use Help > Share link."
+    Write-Host "NADOC sharing host running on $BindAddress`:$Port for up to $Minutes minutes. Use File > Sharing."
     while (!$child.WaitForExit(1000)) { }
     if ($child.ExitCode -ne 0) { Get-Content ($logBase + '.stderr.log') -ErrorAction SilentlyContinue }
 

@@ -21,7 +21,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "jsdom": "^29.0.1",
-    "vite": "^6.2.0",
-    "vitest": "^4.1.1"
+    "vite": "^6.4.3",
+    "vitest": "^4.1.11"
   }
 }

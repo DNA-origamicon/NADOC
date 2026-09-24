@@ -31,6 +31,16 @@ test('stream packets use the same guest session, reject obsolete frames, survive
   const endpoint = `${url}/meeting/${share.id}/live-frame?revision=${revision}&sequence=${sent.value.sequence}`
   assert.equal((await fetch(endpoint)).status, 401)
   assert.deepEqual(Buffer.from(await (await fetch(endpoint, { headers: { Cookie: cookie } })).arrayBuffer()), frame)
+  const metadata = Buffer.from(JSON.stringify({ frame: 37, total: 250, playing: true }))
+  const length = Buffer.alloc(4); length.writeUInt32BE(metadata.length)
+  const timed = Buffer.concat([Buffer.from(revision), length, metadata, frame])
+  assert.equal((await host('frame', timed, lease)).status, 200)
+  const newer = await fetch(endpoint, { headers: { Cookie: cookie } })
+  assert.deepEqual(JSON.parse(newer.headers.get('X-NADOC-Timeline')), { frame: 37, total: 250, playing: true })
+  assert.deepEqual(Buffer.from(await newer.arrayBuffer()), frame)
+  const badMetadata = Buffer.from(JSON.stringify({ frame: 251, total: 250, playing: true }))
+  length.writeUInt32BE(badMetadata.length)
+  assert.equal((await host('frame', Buffer.concat([Buffer.from(revision), length, badMetadata, frame]), lease)).status, 409)
   await host('hold', undefined, lease)
   assert.equal((await fetch(endpoint, { headers: { Cookie: cookie } })).status, 200)
   const reset = await host('scene', scene, lease); assert.equal(reset.status, 200)
@@ -52,4 +62,33 @@ test('stream packets use the same guest session, reject obsolete frames, survive
   await fetch(`${url}/host/stop`, { method: 'POST', headers: { Authorization: `Bearer ${app.controlToken}` } })
   const states = (await stream).split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)))
   assert.equal(states.at(-1).ended, true); assert.equal(states.at(-1).presenting, false)
+})
+
+test('large live atomistic patches retain bounded compression without the recorded clip raw limit', async () => {
+  const { acceptLiveFrame } = await import('./prepared_live_frame.mjs')
+  const { LIVE_FRAME_LIMITS } = await import('../frontend/src/viewer/live_frame_capture.js')
+  const n = 1_500_000, base = { signature: 'same', values: new Float64Array(n) }, next = { signature: 'same', values: new Float64Array(n).fill(1) }
+  assert.throws(() => encodeFrame(base, next), /16 MiB/)
+  const raw = encodeFrame(base, next, LIVE_FRAME_LIMITS), bytes = gzipSync(new Uint8Array(raw))
+  assert.ok(raw.byteLength > 16 * 1024 * 1024)
+  assert.ok(bytes.length < 16 * 1024 * 1024)
+  let published
+  const room = { revision: 'a'.repeat(64), liveLayout: n, presentation: { setLiveFrame: value => { published = value } } }
+  acceptLiveFrame(room, Buffer.concat([Buffer.from(room.revision), bytes]))
+  assert.equal(published.sequence, 1)
+  assert.equal(published.bytes, bytes.length)
+})
+
+test('live packets can exceed the old compressed-size limit', async () => {
+  const { acceptLiveFrame } = await import('./prepared_live_frame.mjs')
+  const { LIVE_FRAME_LIMITS } = await import('../frontend/src/viewer/live_frame_capture.js')
+  assert.equal(LIVE_FRAME_LIMITS.maxBytes, Infinity)
+  assert.equal(LIVE_FRAME_LIMITS.maxValues, Infinity)
+  const n = 2_500_000, base = { signature: 'same', values: new Float64Array(n) }
+  const next = { signature: 'same', values: Float64Array.from({ length: n }, () => Math.random()) }
+  const raw = encodeFrame(base, next, LIVE_FRAME_LIMITS), bytes = gzipSync(new Uint8Array(raw))
+  assert.ok(bytes.length > 16 * 1024 * 1024)
+  const room = { revision: 'a'.repeat(64), liveLayout: n, presentation: { setLiveFrame() {} } }
+  const published = acceptLiveFrame(room, Buffer.concat([Buffer.from(room.revision), bytes]))
+  assert.equal(published.bytes, bytes.length)
 })

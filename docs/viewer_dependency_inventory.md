@@ -88,7 +88,7 @@ open; retained evidence is in `audits/prepared_viewer_20260920/README.md`.
 
 ## Local sharing control checkpoint
 
-Help → Share link reuses the prepared export factory. A loopback-only editor
+File → Sharing reuses the prepared export factory. A loopback-only editor
 middleware controls a separate temporary native Node host through a file-only
 credential. WSL uses a local Windows subprocess for control transport; guest
 traffic uses the Windows LAN interface. Guests receive independent immutable

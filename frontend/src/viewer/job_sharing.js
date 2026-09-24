@@ -1,7 +1,9 @@
+import { liveTimeline } from './live_timeline.js'
+import { requireSharingCapabilities } from './sharing_capabilities.js'
 import './sharing_controls.css'
 import { decodeContainer } from './package_container.js'
 import { gzipFrame } from './trajectory_clip.js'
-import { createLiveFrameCapture, liveSceneSignature } from './live_frame_capture.js'
+import { createLiveFrameCapture, liveSceneSignature, LIVE_FRAME_LIMITS } from './live_frame_capture.js'
 import { visualizationProgress } from './visualization_progress.js'
 import { broadcastDocument } from './broadcast_fingerprint.js'
 
@@ -14,7 +16,7 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
   document: doc = document, fetch: request = fetch, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   let shared = null, lease = '', room = null, revision = '', capture = null, busy = false, disposed = false
   let lastFrame = null, sentCamera = '', held = false, heartbeat = 0, epoch = 0, identity = null, switching = false, flight = null
-  let pendingJob = null, progressFlight = null, sentProgress = 'null'
+  let pendingJob = null, progressFlight = null, sentProgress = 'null', sentTimeline = ''
   const status = doc.createElement('p'); status.className = 'sharing-job-status'; status.setAttribute('role', 'status')
   const buttons = new Map()
   for (const engine of ['oxdna', 'namd']) {
@@ -60,6 +62,7 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
   }
   const current = (job, ticket) => !disposed && ticket === epoch && sameJob(job, selection()) && identity === broadcastDocument(store.getState())
   function ready(job) {
+    if (!getRoom()?.capabilities?.includes('live-unlimited-frames-v1')) throw new Error('The sharing host is out of date. Stop hosting and create a new invitation to share trajectories.')
     const source = getSource?.(job.engine), off = doc.getElementById(`${prefix(job.engine)}-jobs-viz-off`)
     if (!off?.checked && source?.controller?.activeJobId() && source.controller.activeJobId() !== job.id) throw new Error('Waiting for the selected job visualization to finish loading.')
     return source
@@ -69,25 +72,34 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
     const source = prepared.captureView(false)
     if (capture && liveSceneSignature(source) === capture.signature && await publishFrame(source, job, ticket)) return true
     const result = await prepared.exportView({ presentation: false })
-    if (result?.requiresWideLineViewer && !getRoom()?.capabilities?.includes('guest-visualizations-v1')) throw new Error('Restart presentation hosting after the current meeting to enable nanopore ion paths.')
+    requireSharingCapabilities(result, getRoom()?.capabilities)
     if (!result) throw new Error('Another view export is in progress. Please retry.')
     if (!current(job, ticket)) return false
-    const next = createLiveFrameCapture(decodeContainer(result.buffer), prepared.captureView(false))
+    const next = createLiveFrameCapture(decodeContainer(result.buffer), prepared.captureView(false), getRoom()?.capabilities?.includes('live-unlimited-frames-v1') ? LIVE_FRAME_LIMITS : getRoom()?.capabilities?.includes('live-large-frames-v1') ? { maxBytes: 128 * 1024 * 1024, maxValues: 16_000_000 } : {})
     const updated = await api('scene', result.buffer)
     if (disposed || ticket !== epoch) return false
     revision = updated.revision; capture = next; lastFrame = null; sentCamera = ''
+    // Attach a timeline immediately, including when topology changes every tick.
+    if (current(job, ticket)) await publishFrame(prepared.captureView(false), job, ticket)
     return true
   }
   async function publishFrame(source, job, ticket) {
     const frame = capture.frame(source)
     if (!frame) return false
     const bytes = new Uint8Array(frame)
-    if (!equal(lastFrame, bytes)) {
-      const compressed = await gzipFrame(frame)
+    const info = getSource?.(job.engine)?.controller?.trajectoryInfo?.()
+    const timeline = liveTimeline(info ? { frame: info.frame, total: info.total, playing: !!info.playing } : null)
+    const encodedTimeline = JSON.stringify(timeline)
+    if (!equal(lastFrame, bytes) || sentTimeline !== encodedTimeline) {
+      const compressed = await gzipFrame(frame, false, getRoom()?.capabilities?.includes('live-unlimited-frames-v1') ? LIVE_FRAME_LIMITS : {})
       if (!current(job, ticket)) return false
-      const packet = new Uint8Array(64 + compressed.byteLength)
-      packet.set(new TextEncoder().encode(revision)); packet.set(new Uint8Array(compressed), 64)
-      await api('frame', packet); lastFrame = bytes
+      const metadata = getRoom()?.capabilities?.includes('live-timeline-v1') ? new TextEncoder().encode(encodedTimeline) : null
+      const offset = metadata ? 68 + metadata.length : 64
+      const packet = new Uint8Array(offset + compressed.byteLength)
+      packet.set(new TextEncoder().encode(revision))
+      if (metadata) { new DataView(packet.buffer).setUint32(64, metadata.length); packet.set(metadata, 68) }
+      packet.set(new Uint8Array(compressed), offset)
+      await api('frame', packet); lastFrame = bytes; sentTimeline = encodedTimeline
     }
     // A successful upload is the publication boundary, even if the presenter
     // selected another job while the server was accepting this packet.
@@ -122,6 +134,7 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
           const started = await api('start', JSON.stringify({ jobStream: true }), '')
           lease = started.lease; revision = started.revision
         }
+        lastFrame = null // Switching jobs must cross an acknowledged publication boundary.
         if (await publish(job, ticket)) {
           shared = job; held = false; sentProgress = ''
           message(`Sharing ${engine === 'namd' ? 'NAMD' : 'oxDNA'} job ${job.id}. Visualization changes and playback are live.`)
@@ -141,13 +154,14 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
     if (getRoom()?.id !== room) { epoch++; shared = null; lease = ''; capture = null; paint(); return }
     busy = true; const ticket = epoch, job = shared
     try {
-      if (Date.now() - heartbeat > 4000) { await api('heartbeat'); heartbeat = Date.now() }
       if (!current(job, ticket)) {
         if (!held) { await api('hold'); held = true; sentCamera = '' }
         message(`Job ${job.id} remains shared, paused on its last frame. Your selected job is private.`)
         return
       }
-      if (visualizationProgress(doc, job.engine)) return
+      // Trajectory prefetch/prebuild can remain busy throughout playback.
+      // Once frames exist, keep sharing the displayed render buffers.
+      if (visualizationProgress(doc, job.engine) && !getSource?.(job.engine)?.controller?.trajectoryInfo?.()) return
       ready(job)
       const source = prepared.captureView(false)
       if (!capture || liveSceneSignature(source) !== capture.signature) {
@@ -165,7 +179,10 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
   }
   async function reportProgress() {
     const job = pendingJob ?? shared
-    if (!lease || !getRoom()?.capabilities?.includes('guest-visualizations-v1')) return
+    if (!lease) return
+    // Keep the lease alive independently of a large frame upload.
+    if (Date.now() - heartbeat > 4000) { await api('heartbeat'); heartbeat = Date.now() }
+    if (!getRoom()?.capabilities?.includes('guest-visualizations-v1')) return
     const value = sameJob(job, selection()) && identity === broadcastDocument(store.getState()) ? visualizationProgress(doc, job.engine) : null
     const encoded = JSON.stringify(value)
     if (encoded !== sentProgress) { await api('progress', encoded); sentProgress = encoded }
@@ -173,7 +190,7 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
   function tick() {
     if (!disposed && !progressFlight) progressFlight = reportProgress().catch(() => {}).finally(() => { progressFlight = null })
     if (!flight) flight = runTick().finally(() => { flight = null })
-    return flight
+    return Promise.all([flight, progressFlight])
   }
   const timer = repeat(tick, 125)
   paint()

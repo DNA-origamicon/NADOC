@@ -2,7 +2,7 @@ import { it, expect, vi, afterEach } from 'vitest'
 import { initShareLink } from './share_link.js'
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks() })
 it('publishes the current snapshot, copies its exact URL, and revokes that share', async () => {
-  document.body.innerHTML = '<button id="menu-help-share-link"></button>'
+  document.body.innerHTML = '<button id="menu-file-sharing"></button>'
   const share = { id: 'a'.repeat(32), title: '<b>Part A</b>', url: 'http://192.168.0.15:5182/viewer.html#room=a&invite=b', expiresAt: Date.now() + 60000 }
   const fetch = vi.fn(async path => ({ ok: true, json: async () => path.endsWith('/create') ? share : { shares: [] } }))
   const buffer = new ArrayBuffer(16), exportView = vi.fn().mockResolvedValue({ title: share.title, buffer }), clipboard = { writeText: vi.fn().mockResolvedValue() }
@@ -69,5 +69,51 @@ it('ends hosting from the persistent canvas controls and keeps them on a failed 
   fails = false; bar.querySelector('[data-end-presentation]').click()
   await vi.waitFor(() => expect(bar.hidden).toBe(true))
   expect(fetch.mock.calls.at(-1)).toEqual(['/__nadoc_share/stop', { method: 'POST', headers: { 'X-NADOC-Share': '1' } }])
+  ui.dispose()
+})
+
+it('mirrors native view tools on the same invitation while camera sharing is off', async () => {
+  vi.useFakeTimers()
+  const share = { id: 'a'.repeat(32), title: 'Part', url: 'https://example.test/part', expiresAt: Date.now() + 60000 }
+  const caps = ['share-content-v1', 'editor-broadcast-v1']
+  let hosted = false
+  const request = vi.fn(async path => ({ ok: true, json: async () => {
+    if (path.endsWith('/create')) { hosted = true; return share }
+    if (path.endsWith('/content')) return share
+    return { capabilities: caps, shares: hosted ? [share] : [] }
+  } }))
+  const view = { viewTools: { sequences: false } }
+  const prepared = { captureView: () => ({ scene: { uuid: 'native' }, view }), exportView: vi.fn(async () => ({ title: 'Part', buffer: new ArrayBuffer(16) })) }
+  const store = { getState: () => ({ currentDesign: { id: 'part' } }), subscribe: () => () => {} }
+  const ui = initShareLink({ exportView: prepared.exportView, broadcast: { prepared, store }, fetch: request })
+  try {
+    document.getElementById('share-link-dialog').showModal = vi.fn(); ui.show()
+    await vi.advanceTimersByTimeAsync(0)
+    document.querySelector('[data-create]').click(); await vi.advanceTimersByTimeAsync(0)
+    expect(document.querySelector('.sharing-url').value).toBe(share.url)
+    view.viewTools.sequences = true
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(request.mock.calls.filter(([p]) => p.endsWith('/content'))).toHaveLength(1)
+    expect(request.mock.calls.some(([p]) => p.endsWith('/camera') || p.endsWith('/broadcast/start'))).toBe(false)
+    expect(document.querySelector('.presentation-perspective').getAttribute('aria-pressed')).toBe('false')
+    view.viewTools.sequences = false
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(request.mock.calls.filter(([p]) => p.endsWith('/content'))).toHaveLength(2)
+    expect(document.querySelector('.sharing-url').value).toBe(share.url)
+  } finally { ui.dispose(); vi.useRealTimers() }
+})
+
+it('creates a fresh invitation when upgrading the host invalidates the selected old link', async () => {
+  const old = { id: 'a'.repeat(32), title: 'Part', url: 'https://example.invalid/old', expiresAt: Date.now() + 60000 }
+  const fresh = { ...old, id: 'b'.repeat(32), url: 'https://example.invalid/new' }
+  const request = vi.fn(async path => ({ ok: true, json: async () => path.endsWith('/create') ? fresh : { shares: path.endsWith('/start') ? [] : [old], capabilities: ['share-content-v1'], updateRequired: path.endsWith('/status') } }))
+  const ui = initShareLink({ exportView: async () => ({ title: 'Part', buffer: new ArrayBuffer(16) }), fetch: request })
+  document.querySelector('dialog').showModal = vi.fn(); ui.show()
+  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toContain('update required'))
+  document.querySelector('[data-create]').click()
+  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toContain('Invitation ready'))
+  expect(request.mock.calls.some(([path]) => path.endsWith('/content'))).toBe(false)
+  expect(document.querySelectorAll('[data-links] section')).toHaveLength(1)
+  expect(document.querySelector('.sharing-url').value).toBe(fresh.url)
   ui.dispose()
 })

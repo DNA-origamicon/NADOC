@@ -129,6 +129,15 @@ const _FRAG_DECL   = `#include <common>\n${IMPOSTOR_FRAG_UNIFORMS}`
 const _FRAG_SPHERE = IMPOSTOR_FRAG_SPHERE_BODY
 const _FRAG_NORMAL = IMPOSTOR_FRAG_NORMAL
 
+// Only export our known shader composition; metadata alone cannot authorize a shader.
+const trustedImpostors = new WeakMap()
+
+export function preparedImpostorSpec(material) {
+  const spec = trustedImpostors.get(material)
+  return spec && material.onBeforeCompile === spec.compile
+    ? { radius: spec.radius, instanceAlpha: !!material.userData.instanceAlphaPatch } : null
+}
+
 /**
  * Build an impostor-patched MeshPhongMaterial for a bead/atom InstancedMesh.
  * @param {object}  opts
@@ -157,6 +166,7 @@ export function makeImpostorPhongMaterial({ radius, color = 0xffffff }) {
   // materials sharing a program never get their u_impostorRadius bound — the
   // exact bug the shared-instancing path hit, see assembly_renderer.js:3038).
   mat.customProgramCacheKey = () => 'impostorPhong_' + mat.uuid
+  trustedImpostors.set(mat, { radius, compile: mat.onBeforeCompile })
   mat.userData.isImpostor = true
   mat.userData.impostorRadius = radius
   return mat

@@ -1,3 +1,4 @@
+export const LIVE_FRAME_LIMITS = { maxBytes: Infinity, maxValues: Infinity }
 import { sceneChannels, encodeFrame } from './trajectory_clip.js'
 import { broadcastFingerprint } from './broadcast_fingerprint.js'
 
@@ -7,8 +8,8 @@ export function liveSceneSignature(source) {
 }
 
 /** Read the existing render buffers without exporting textures/geometry each frame. */
-export function createLiveFrameCapture(data, source) {
-  const base = sceneChannels(data), signature = liveSceneSignature(source)
+export function createLiveFrameCapture(data, source, limits = {}) {
+  const base = sceneChannels(data, limits), signature = liveSceneSignature(source)
   const objects = new Map()
   source.scene.traverse(o => objects.set(o.uuid, o))
   const channels = base.channels.map(c => {
@@ -33,6 +34,6 @@ export function createLiveFrameCapture(data, source) {
         } else values.set(a.array, c.offset)
       }
     }
-    return encodeFrame(base, { values, signature: base.signature })
+    return encodeFrame(base, { values, signature: base.signature }, limits)
   } }
 }

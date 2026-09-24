@@ -3,11 +3,11 @@ import { mountTrajectoryShare, appendTrajectoryControls } from './trajectory_sha
 import { prepareTrajectory } from './prepare_trajectory.js'
 vi.mock('./prepare_trajectory.js', () => ({ prepareTrajectory: vi.fn() }))
 
-it('cancels preparation and rejects non-Full representation before capture', async () => {
+it('cancels preparation and rejects unsupported representation before capture', async () => {
   document.body.innerHTML = '<dialog><div data-links></div></dialog>'
-  const source = { representation: 'atomistic' }
+  const source = { representation: 'surface' }
   const ui = mountTrajectoryShare({ dialog: document.querySelector('dialog'), getSource: () => source })
-  await expect(ui.prepare()).rejects.toThrow('Full representation')
+  await expect(ui.prepare()).rejects.toThrow('Choose Full')
   expect(prepareTrajectory).not.toHaveBeenCalled()
   source.representation = 'full'
   prepareTrajectory.mockImplementation(({ signal }) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('Cancelled')))))

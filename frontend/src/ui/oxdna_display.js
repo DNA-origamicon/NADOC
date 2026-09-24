@@ -1162,13 +1162,14 @@ export function initOxdnaDisplay({
   /** Reconstruct + apply the heavy rep for the CURRENT mode/frame (no-op in CG).
    *  Token-guarded: only the newest call applies, so rapid scrubbing / rep flips
    *  never paint a stale frame. */
-  async function _applyHeavy({ strict = false } = {}) {
+  async function _applyHeavy({ strict = false, exact = false } = {}) {
     if (!_active || !_jobId) return
     const kind = _repKind()
     if (kind === 'cg') return
     // Keep the capability guard explicit: an engine/mode added without its matching
     // heavy endpoint must never silently leave the design's equilibrium atoms on screen.
     if (!_canDeliverHeavy(kind)) {
+      if (exact) throw new Error('Exact atomistic trajectory frames are unavailable for this visualization')
       onHeavyStatus?.({ building: false, kind, mode: _mode, unsupported: true })
       return
     }
@@ -1190,6 +1191,15 @@ export function initOxdnaDisplay({
     }
     if (busy) _setHeavyBusy(true, kind)
     try {
+      if (exact && _mode === 'trajectory' && kind === 'atomistic') {
+        const frame = sourceFrame(_frameIdx)
+        const result = await _queueFrameFetch(() => live()
+          ? api.getOxdnaFramesAtomistic(_jobId, [frame], _align, _trajScope, _trajStride) : null)
+        if (!live() || !await _pushAtomistic(result?.[String(frame)], epoch, live)) {
+          throw new Error('Could not apply the exact atomic trajectory frame')
+        }
+        return true
+      }
       if (_mode === 'relaxed') {
         if (kind === 'atomistic') {
           const flat = await _memoHeavy(kind, () => _relaxedAtomisticFlat(epoch, live))
@@ -1926,7 +1936,7 @@ export function initOxdnaDisplay({
   }
 
   /** Deform the model to composite-trajectory frame i (clamped). No-op off mode. */
-  function showFrame(i) {
+  function showFrame(i, { heavy = true } = {}) {
     if (_mode !== 'trajectory' || !_traj || !designRenderer) return
     const n = _traj.frames.length
     const idx = Math.max(0, Math.min(n - 1, i | 0))
@@ -1939,7 +1949,7 @@ export function initOxdnaDisplay({
     _stream?.prefetch(idx)
     nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, _traj.frames[idx])
     _applyFem(framesToUpdates(_traj.keys, _traj.frames[idx]))
-    _applyHeavy()   // atomistic/surface follow the scrub (coarse=snap, fine=exact)
+    if (heavy) _applyHeavy()   // atomistic/surface follow the scrub (coarse=snap, fine=exact)
   }
 
   async function ensureTrajectoryFrame(index) {
@@ -2079,6 +2089,13 @@ export function initOxdnaDisplay({
     },
     retainTrajectoryDownloads: requests => trajectoryDownloads.retain(requests),
     showFrame: i => showFrame(i - (_traj?.frame_start ?? 0)),
+    async showFrameForExport(i) {
+      if (_mode !== 'trajectory' || !_traj) throw new Error('Load a trajectory before preparing a clip')
+      const index = i - (_traj.frame_start ?? 0)
+      if (!_traj.frames[index]) throw new Error('Requested trajectory frame is not loaded')
+      showFrame(index, { heavy: false })
+      if (_repKind() !== 'cg') await _applyHeavy({ strict: true, exact: true })
+    },
     refresh,
     stopAndRestore,
     setGranularity,
@@ -2100,7 +2117,7 @@ export function initOxdnaDisplay({
       // atomSerials/nNucleotides let a caller price an all-atom prebuild: the exact
       // serial span once the topology has been fetched, the nucleotide count (which the
       // trajectory payload always carries) as the estimate before that.
-      ? { frame: sourceFrame(_frameIdx) + 1, total: _traj.total_n_frames ?? _traj.frames.length,
+      ? { playing: _playing, frame: sourceFrame(_frameIdx) + 1, total: _traj.total_n_frames ?? _traj.frames.length,
           atomSerials: _atomSerials, nNucleotides: _traj.n_nucleotides || 0 }
       : null,
     coloringInfo: () => {

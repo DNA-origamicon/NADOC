@@ -16,6 +16,13 @@ import { annotationIconMarkup } from './annotation_icons.js'
 import { anchorFromPoints, matchTargetEntries, unresolvedBaseKeys } from './annotation_targets.js'
 import { layoutCallouts, leaderPoints } from './annotation_layout.js'
 
+const sharedOverlays = new WeakMap()
+
+/** Visible callouts only; hidden annotation text and editor selection refs stay local. */
+export function captureSceneAnnotations(scene) {
+  return sharedOverlays.get(scene)?.() ?? []
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const BASE_FONT_PX = 13
 const BASE_ICON_PX = 18
@@ -48,6 +55,7 @@ export function initAnnotationOverlay({
   getEntries = () => [], getDesign = () => null, resolveBasePosition = () => null,
   resolveExternal = () => null, getOccluders = () => [],
   addFrameCallback = null, removeFrameCallback = null, getViewport = null,
+  readOnly = false, resolveSharedPoints = null,
 }) {
   const root = document.createElement('div')
   root.className = 'nadoc-anno-layer'
@@ -61,7 +69,7 @@ export function initAnnotationOverlay({
   group.name = 'Annotation highlights'
   group.userData.setupOnly = true
   scene.add(group)
-  const texture = glowTexture(document)
+  const texture = readOnly ? null : glowTexture(document)
 
   const records = new Map()
   const v = new THREE.Vector3()
@@ -83,7 +91,8 @@ export function initAnnotationOverlay({
     const grip = document.createElement('div')
     grip.className = 'nadoc-anno__grip'
     grip.title = 'Drag to place this callout'
-    box.append(icon, text, grip)
+    box.append(icon, text)
+    if (!readOnly) box.append(grip)
     el.append(box)
     root.append(el)
 
@@ -100,7 +109,7 @@ export function initAnnotationOverlay({
       src: null, srcLen: -1, design: null, matched: [], extra: [], externalRefs: [], halos: [], points: null, pointCount: 0,
       shown: false, styleSig: '', tx: NaN, ty: NaN, hasAnchor: false,
     }
-    wireDrag(rec)
+    if (!readOnly) wireDrag(rec)
     records.set(entry.id, rec)
     return rec
   }
@@ -322,10 +331,10 @@ export function initAnnotationOverlay({
       const rec = records.get(entry.id)
       if (!rec || !annotationIsRenderable(entry)) continue
       const stale = rec.dirty || !sameTargetDesign(rec.design, design) || (rec.src !== src && (src.length || rec.srcLen))
-      if (stale) rebuildTarget(rec, entry, src, design)
-      const spheres = writeHighlight(rec)
+      if (stale && !resolveSharedPoints) rebuildTarget(rec, entry, src, design)
+      const spheres = resolveSharedPoints ? [] : writeHighlight(rec)
       let anchor = null
-      const points = rec.matched.map(e => e.pos).concat(rec.extra, spheres)
+      const points = resolveSharedPoints ? resolveSharedPoints(entry) : rec.matched.map(e => e.pos).concat(rec.extra, spheres)
       const world = anchorFromPoints(points)
       if (world) {
         v.set(world.x, world.y, world.z).project(camera)
@@ -368,10 +377,22 @@ export function initAnnotationOverlay({
       }
     } else for (const rec of records.values()) rec.dirty = true
   })
+  function captureShared() {
+    update()
+    if (!enabled || !controller.isEnabled()) return []
+    return controller.list().filter(annotationIsRenderable).map(entry => {
+      const rec = records.get(entry.id)
+      return { id: entry.id, text: entry.text, icon: entry.icon, calloutType: entry.calloutType,
+        color: entry.color, size: entry.size, transparency: entry.transparency,
+        manual: entry.manual, screenPos: entry.screenPos,
+        targets: [rec?.points, ...(rec?.halos ?? [])].filter(o => o?.visible).map(o => o.uuid) }
+    })
+  }
+  if (!readOnly) sharedOverlays.set(scene, captureShared)
   addFrameCallback?.(update)
 
   return {
-    update,
+    update, captureShared,
     setEnabled(next) {
       enabled = !!next
       const on = enabled && controller.isEnabled()
@@ -382,6 +403,7 @@ export function initAnnotationOverlay({
     /** Test/debug view of what is currently drawn. */
     getRecord: id => records.get(id) ?? null,
     dispose() {
+      if (sharedOverlays.get(scene) === captureShared) sharedOverlays.delete(scene)
       unsubscribe()
       removeFrameCallback?.(update)
       for (const rec of [...records.values()]) destroyRecord(rec)

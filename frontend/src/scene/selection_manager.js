@@ -5090,6 +5090,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Copy of the base-level pool — app-wide base keys (see scene/base_ref.js). */
     getSelectedBaseKeys() { return [..._baseKeys] },
 
+    /** Display-only selections that have no canonical molecular ref (loop/skip markers). */
+    getPresentationSelectionExtras() {
+      return _multiLoopSkipEntries.map(e => ({ id: `${e.type}:${e.helixId}:${e.bpIndex ?? e.frac}`, type: e.type, position: e.getPosition() }))
+    },
+
     /** Resolve any canonical base key (ordinary/loop/extension/linker/xover) to
      * its current coarse world position. Used by persistent design annotations
      * such as the formed-product glyph; never exposes mesh instance identity. */

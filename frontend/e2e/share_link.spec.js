@@ -18,15 +18,16 @@ test.beforeAll(async () => {
   await writeFile(controlFile, JSON.stringify({ url, token: host.controlToken }), { mode: 0o600, flag: 'wx' }); ownsControl = true
 })
 test.afterAll(async () => { host?.stop(); if (ownsControl) await unlink(controlFile).catch(() => {}) })
-test('Help updates one invitation across parts and retains guest sessions', async ({ page, context }) => {
+test('File Sharing updates one invitation across parts and retains guest sessions', async ({ page, context }) => {
   test.setTimeout(180000)
   const errors = trackConsoleErrors(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:5174' })
   async function sharePart(name) {
     await loadScaffoldedPart(page, { doc: `__e2e__share_${name}`, name: `share_${name}` })
-    // Hover the actual Help menu, then use the visible entry.
-    await page.locator('.menu-item').filter({ has: page.locator('#menu-help-share-link') }).hover()
-    await page.locator('#menu-help-share-link').click()
+    // Hover the actual File menu, then use the visible entry.
+    await expect(page.locator('#menu-workspace-hub + #menu-file-sharing')).toHaveText('Sharing…')
+    await page.locator('.menu-item').filter({ has: page.locator('#menu-file-sharing') }).hover()
+    await page.locator('#menu-file-sharing').click()
     await expect(page.locator('#share-link-dialog')).toBeVisible()
     await expect(page.locator('#share-link-dialog [data-target]')).toBeEnabled()
     await page.locator('#share-link-dialog [data-create]').click()
@@ -73,7 +74,7 @@ test('Help updates one invitation across parts and retains guest sessions', asyn
   await glasses.click(); await expect(glasses).toHaveAttribute('aria-pressed', 'true')
   await expect(guest.locator('[data-follow]')).toBeEnabled({ timeout: 15000 })
   async function updateView() {
-    await page.locator('#menu-help-share-link').evaluate(button => button.click())
+    await page.locator('#menu-file-sharing').evaluate(button => button.click())
     await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled()
     await page.locator('#share-link-dialog [data-create]').click()
     await expect(page.locator('#share-link-dialog [data-status]')).toContainText('Shared view updated', { timeout: 30000 })
@@ -98,8 +99,8 @@ test('Help updates one invitation across parts and retains guest sessions', asyn
   await page.evaluate(() => window.__nadocTest.store.setState({ coloringMode: 'strand' }))
   await page.waitForTimeout(3500); expect(updates.length).toBe(paused)
   await Promise.all(downloads); expect(updateErrors).toEqual([])
-  await page.locator('.menu-item').filter({ has: page.locator('#menu-help-share-link') }).hover()
-  await page.locator('#menu-help-share-link').click()
+  await page.locator('.menu-item').filter({ has: page.locator('#menu-file-sharing') }).hover()
+  await page.locator('#menu-file-sharing').click()
   const betaRow = page.locator('#share-link-dialog section').filter({ hasText: '__e2e__share_beta' })
   await betaRow.getByRole('button', { name: 'End invitation', exact: true }).click()
   await expect(betaRow).toHaveCount(0)

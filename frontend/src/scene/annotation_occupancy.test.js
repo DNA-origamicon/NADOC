@@ -40,3 +40,8 @@ describe('occupancy grid', () => {
     expect(coverage(occ, { x: 0, y: 0, w: 50, h: 50 })).toBe(0)
   })
 })
+
+it('bounds rasterization to the viewport for enormous near-camera obstacles', () => {
+  const occ = buildOccupancy([], [{ x: 300, y: 200, r: 1e12 }], vp)
+  expect(coverage(occ, { x: 0, y: 0, w: 600, h: 400 })).toBe(1)
+})

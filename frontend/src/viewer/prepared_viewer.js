@@ -1,3 +1,7 @@
+import { initViewCube } from '../scene/view_cube.js'
+import { mountSharedSelection } from './shared_selection.js'
+import { mountSharedAnnotations } from './shared_annotations.js'
+import { mountSharedViewTools } from './shared_view_tools_ui.js'
 import * as THREE from 'three'
 import { initScene } from './runtime.js'
 import { loadPreparedScene } from './prepared_scene.js'
@@ -7,7 +11,10 @@ import { PACKAGE_LIMIT } from './package_container.js'
 /** Standalone host: no editor store, API client, filesystem API, or backend calls. */
 export function mountPreparedViewer({ canvas, status, title, fileInput, resetButton, modeInput }) {
   const runtime = initScene(canvas)
+  const viewTools = mountSharedViewTools(canvas.parentElement)
+  const sharedSelection = mountSharedSelection({ container: canvas.parentElement, runtime })
   runtime.scene.clear()
+  let annotations = null
   let current = null, disposed = false, generation = 0
   let state = { currentDesign: null, currentGeometry: null, assemblyActive: false }
   const performanceApi = initViewerPerformance({ ...runtime, store: { getState: () => state },
@@ -15,8 +22,19 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     getFixtureIdentity: () => ({ sha256: current?.data.sourceHash ?? current?.packageHash,
       kind: current?.data.sourceHash ? 'JSON design/assembly document; not simulation content' : 'Prepared scene package bytes',
       package_sha256: current?.packageHash }) })
+  const viewCube = initViewCube(canvas.parentElement, runtime.camera, runtime.controls,
+    () => current ? new THREE.Box3().setFromObject(current.scene) : null, {
+      beforeNavigate: () => {
+        if (!current || performanceApi.busy) return false
+        canvas.dispatchEvent(new Event('nadoc:view-navigation'))
+        runtime.switchOrbitMode(modeInput.value)
+        return true
+      },
+    })
+  viewCube.hide()
   function resetCamera() {
     if (!current || performanceApi.busy) return
+    viewCube.cancel()
     const pose = current.data.camera
     runtime.switchOrbitMode(pose.orbitMode)
     modeInput.value = pose.orbitMode
@@ -28,6 +46,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
   const remotePosition = new THREE.Vector3(), remoteTarget = new THREE.Vector3(), remoteUp = new THREE.Vector3()
   function applyCamera(pose, blend = 1, { resetControls = blend === 1 } = {}) {
     if (!current || performanceApi.busy) return
+    viewCube.cancel()
     // A one-shot jump also clears residual damping from the guest's last gesture.
     if (resetControls || modeInput.value !== pose.orbitMode) { runtime.switchOrbitMode(pose.orbitMode); modeInput.value = pose.orbitMode }
     runtime.camera.position.lerp(remotePosition.fromArray(pose.position), blend)
@@ -52,14 +71,19 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
       if (expectedHash && next.packageHash !== expectedHash) { next.dispose(); throw new Error('Downloaded visualization does not match the announced revision') }
       const savedCamera = preserveCamera && current ? { ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far } : null
       performanceApi.stop()
+      annotations?.dispose(); annotations = null
       current?.dispose()
       runtime.scene.clear()
       current = next; runtime.controls.enabled = true; fileInput.disabled = false
       const view = next.data.view ?? {}
+      viewTools.update(view.viewTools, view.visualization)
+      viewCube.cancel(); viewCube.show()
+      sharedSelection.update(next)
       state = { currentDesign: { id: next.packageHash, metadata: { name: next.data.title } }, currentGeometry: next.data.root,
         currentAssembly: view.assembly ? { id: next.packageHash } : null, assemblyActive: !!view.assembly,
         atomisticMode: view.atomistic ?? 'off', surfaceMode: view.surface ?? 'off', coloringMode: view.coloring ?? 'strand' }
       runtime.scene.add(next.scene)
+      annotations = mountSharedAnnotations({ current: next, container: canvas.parentElement, runtime })
       runtime.renderer.toneMapping = next.data.render.toneMapping
       runtime.renderer.toneMappingExposure = next.data.render.toneMappingExposure
       runtime.renderer.outputColorSpace = next.data.render.outputColorSpace
@@ -96,6 +120,10 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
   canvas.addEventListener('dragover', drag); canvas.addEventListener('drop', drop)
   canvas.addEventListener('dblclick', center)
   function clear() {
+    annotations?.dispose(); annotations = null
+    viewCube.hide()
+    viewTools.update(null)
+    sharedSelection.update(null)
     generation++; performanceApi.stop(); current?.dispose(); current = null; runtime.scene.clear()
     state = { currentDesign: null, currentGeometry: null, assemblyActive: false }
     runtime.setNavScaleProvider(() => new Float64Array()); runtime.controls.enabled = false
@@ -104,6 +132,10 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
   return { clear, loadFile, runtime, performanceApi, applyCamera, captureCamera: () => ({ ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far }), get current() { return current }, dispose() {
     if (disposed) return
     disposed = true; generation++
+    annotations?.dispose(); annotations = null
+    viewCube.dispose()
+    viewTools.dispose()
+    sharedSelection.dispose()
     performanceApi.dispose()
     current?.dispose(); current = null
     fileInput.removeEventListener('change', choose); resetButton.removeEventListener('click', resetCamera)

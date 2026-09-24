@@ -1,33 +1,68 @@
+import { join } from 'node:path'
+import { preparedHostBuildId } from '../scripts/prepared_host_build.mjs'
 import { readFile } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import { shareControlFile } from '../scripts/prepared_share_control.mjs'
 import { hostTransport } from './prepared_share_transport.js'
 import { launchPreparedShare } from '../scripts/launch_prepared_share.mjs'
 
-export function preparedSharePlugin({ controlFile, launch = launchPreparedShare, transport = hostTransport } = {}) {
+export function preparedSharePlugin({ controlFile, launch = launchPreparedShare, transport = hostTransport, getBuildId = preparedHostBuildId } = {}) {
   function configure(server) {
-    let starting = null
-    const credentialPath = () => controlFile ?? shareControlFile(server.config.root, server.httpServer?.address()?.port ?? 5173)
+    const outdated = async state => {
+      const expected = await getBuildId(join(server.config.root, 'dist')).catch(() => null)
+      return !state.capabilities?.includes('live-unlimited-frames-v1') || (!!expected && state.buildId !== expected)
+    }
+    let starting = null, lifecycle = Promise.resolve(), resolvedCredentialPath = null
+    const credentialPath = () => resolvedCredentialPath ?? controlFile ?? shareControlFile(server.config.root, server.httpServer?.address()?.port ?? 5173)
     async function hostRequest(path, options = {}) {
       let config
       try { config = JSON.parse(await readFile(credentialPath(), 'utf8')) } catch { throw new Error('Sharing host is not running. Choose Create link to start it.') }
       if (!/^http:\/\/(?:\d{1,3}\.){3}\d{1,3}:\d+$/.test(config.url) || !/^[a-f0-9]{64}$/.test(config.token)) throw new Error('Invalid local share-host configuration')
       return transport({ root: server.config.root, controlFile: credentialPath(), config, path, options })
     }
-    async function ensureHost() {
-      try { return await hostRequest('/host/shares') } catch { /* explicitly started below */ }
+    // End the detached process, not just its rooms: it caches both modules and assets.
+    async function stopHost() {
+      await hostRequest('/host/stop', { method: 'POST' })
+      for (let i = 0; i < 100; i++) {
+        await delay(100)
+        try { await hostRequest('/host/shares') }
+        catch { await delay(250); return }
+      }
+      throw new Error('The previous sharing host is still stopping. Please retry.')
+    }
+    async function closePreviousHost() {
+      try { await hostRequest('/host/shares') } catch { return }
+      await stopHost()
+    }
+    const opened = () => {
+      resolvedCredentialPath = credentialPath()
+      lifecycle = closePreviousHost()
+      // Report failure to the next request without an unhandled background rejection.
+      void lifecycle.catch(() => {})
+    }
+    if (server.httpServer?.listening) opened()
+    else server.httpServer?.once('listening', opened)
+    server.httpServer?.once('close', () => { void lifecycle.catch(() => {}).then(closePreviousHost).catch(() => {}) })
+    function ensureHost() {
       if (!starting) starting = (async () => {
+        let existing
+        try { existing = await hostRequest('/host/shares') } catch { /* start below */ }
+        if (existing && !await outdated(existing)) return existing
+        if (existing) await stopHost()
+        const ready = async () => {
+          const state = await hostRequest('/host/shares')
+          if (await outdated(state)) throw new Error('The sharing host did not load the current build. Restart hosting.')
+          return state
+        }
         try { await launch({ root: server.config.root, controlFile: credentialPath() }) }
         catch (error) {
-          // A bootstrap can time out after spawning successfully. Trust only an
-          // authenticated response from the host, never a stale status file.
-          try { return await hostRequest('/host/shares') } catch { throw error }
+          try { return await ready() } catch { throw error }
         }
         for (let i = 0; i < 100; i++) {
           let state
           try { state = JSON.parse(await readFile(credentialPath() + '.status.json', 'utf8')) } catch { /* starting */ }
           if (state?.state === 'error') throw new Error(state.error)
-          try { return await hostRequest('/host/shares') } catch { await delay(500) }
+          try { return await ready() } catch { await delay(500) }
         }
         throw new Error('Internet sharing did not become ready. Check Tailscale on the hosting PC; guests do not need it.')
       })().finally(() => { starting = null })
@@ -44,8 +79,9 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
           (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) ||
           (req.method !== 'GET' && req.headers['x-nadoc-share'] !== '1')) return send(403, { error: 'Share links must be created from NADOC on the hosting PC.' })
       try {
+        await lifecycle
         if (req.method === 'GET' && path === '/__nadoc_share/status') {
-          try { return send(200, { running: true, ...await hostRequest('/host/shares') }) }
+          try { const state = await hostRequest('/host/shares'); return send(200, { running: true, ...state, updateRequired: await outdated(state) }) }
           catch { return send(200, { running: false, shares: [] }) }
         }
         if (req.method === 'POST' && path === '/__nadoc_share/start') return send(200, await ensureHost())
@@ -70,7 +106,7 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
         const broadcast = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat|progress)$/)
         if (req.method === 'POST' && broadcast) {
           const chunks = []; let size = 0
-          const limit = broadcast[2] === 'scene' ? 512 * 1024 * 1024 : broadcast[2] === 'frame' ? 16 * 1024 * 1024 + 64 : 4096
+          const limit = broadcast[2] === 'scene' ? 512 * 1024 * 1024 : broadcast[2] === 'frame' ? Infinity : 4096
           for await (const chunk of req) { size += chunk.length; if (size > limit) return send(413, { error: 'Broadcast update too large' }); chunks.push(chunk) }
           return send(200, await hostRequest(`/host/shares/${broadcast[1]}/broadcast/${broadcast[2]}`, { method: 'POST',
             headers: { 'X-NADOC-Broadcast': req.headers['x-nadoc-broadcast'] ?? '' }, body: Buffer.concat(chunks) }))

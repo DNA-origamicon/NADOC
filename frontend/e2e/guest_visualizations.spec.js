@@ -57,7 +57,7 @@ test('guest sees presence, measured loading, nanopore paths and vector fields, t
   await page.locator('.left-tab-btn[data-tab="dynamics"]').click()
   await page.locator('.engine-selector-btn[data-engine="namd"]').click()
   await page.locator('#simulate-jobs-list [data-job-id="__e2e__guest_ions"]').click()
-  await page.locator('#menu-help-share-link').evaluate(button => button.click())
+  await page.locator('#menu-file-sharing').evaluate(button => button.click())
   await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled(); await page.locator('#share-link-dialog [data-create]').click()
   await expect(page.locator('#share-link-dialog [data-status]')).toContainText('Invitation ready', { timeout: 30000 })
   const url = await page.locator('.sharing-url').inputValue(); await page.locator('#share-link-dialog [data-close]').click()

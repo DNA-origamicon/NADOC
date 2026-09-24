@@ -78,7 +78,7 @@ test('one invitation streams real NAMD frames and returns to the native model', 
     window.__nadocTest.pauseViewerRenderingForTest()
   })
   console.log('NAMD sharing: trajectory loaded')
-  await page.locator('#menu-help-share-link').evaluate(el => el.click())
+  await page.locator('#menu-file-sharing').evaluate(el => el.click())
   await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled()
   await page.locator('#share-link-dialog [data-create]').click()
   await expect(page.locator('#share-link-dialog [data-status]')).toContainText('Invitation ready', { timeout: 90000 })

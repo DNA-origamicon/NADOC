@@ -7,9 +7,12 @@ experimental viewer with temporary internet presentations and live job visualiza
 streaming; the older prepared Full trajectory format is also retained. Full representation/assembly parity and hardware/WAN performance
 acceptance remain open; see the [development plan](standalone_viewer_presentation_plan.md).
 
+For the reviewed security boundaries, network requirements, and remaining limitations,
+see the [sharing audit](audits/sharing_security_hygiene_20260923.md).
+
 ## Share one invitation throughout a meeting
 
-1. Open the view you want to publish and choose **Help → Share link**.
+1. Open the view you want to publish and choose **File → Sharing**.
 2. Press **Create link for current view** and send **Copy invitation**, which includes
    the link and password. Guests enter their name and password once.
 3. Select an oxDNA or NAMD job and click the green **Share** button beside its
@@ -58,7 +61,7 @@ only on the local machine. For meeting links, use the separate Help-menu flow be
 
 ## Present from the standard editor
 
-Create a link with **Help → Share link**, then choose **Help → Broadcast to
+Create a link with **File → Sharing**, then choose **Help → Broadcast to
 presentation…**. Select the meeting and independently enable **Share my
 perspective** and **Share current visualizations**. Broadcasting starts off.
 The visible broadcast badge and the Help toggle both stop it immediately locally;
@@ -163,7 +166,7 @@ The package viewer's real-GPU performance gate remains open.
 
 ## Share the current part over the internet
 
-On the hosting PC, use **Help → Share link… → Create link for current view**.
+On the hosting PC, use **File → Sharing… → Create link for current view**.
 The default host now prepares an HTTPS invitation for guests on any network.
 **Copy invitation** includes the link, a generated meeting password, and simple
 browser instructions. Guests enter their display name and password; they need no
@@ -237,7 +240,7 @@ existing sign-in, even after the usual two-minute guest inactivity interval.
 Guest reloads also reuse an existing valid sign-in. A different browser still
 requires the presenter invitation and password; it can reclaim the presenter's
 place after explicit Leave or two minutes disconnected, without affecting guests. The existing snapshot remains listed
-under **Help → Share link**, regardless of which file is open in the editor.
+under **File → Sharing**, regardless of which file is open in the editor.
 Leaving the presentation does not stop the background host. The host PC must stay
 awake, and the existing meeting expiry still applies; **Stop sharing**, **Stop
 hosting all links**, host shutdown and expiry end availability. This does not make
@@ -343,7 +346,7 @@ covers the actual copy/share/open flow and native Windows control transport.
 
 ## Job sharing through one invitation (2026-09-23)
 
-Create the presentation with **Help → Share link**. Guests use the same invitation,
+Create the presentation with **File → Sharing**. Guests use the same invitation,
 display name and meeting password throughout; they need no account or installation.
 The editor reuses the existing invitation instead of offering a second link.
 
@@ -420,14 +423,13 @@ restart ends its old invitations. Active meetings are never restarted automatica
 The WSL frame/camera path uses a persistent Windows Node pipe, avoiding a subprocess
 and temporary upload file per frame. Host credentials remain outside the browser.
 
-## Historical recorded-clip implementation (2026-09-21)
+## Recorded NAMD clips (including atomistic views)
 
-The following describes the retained prepared-clip format and older controls.
-The normal editor now uses the job-sharing controls above; it no longer exposes
-**Include recorded trajectory** or first/last-frame fields in Share link.
+Live job sharing remains available above. **File → Sharing → Include recorded
+trajectory** also prepares a bounded clip for independent guest playback.
 
-Load a NAMD trajectory in the main 3D **Full** part view, turn water off, and pause.
-Open **Help → Share link**, enable **Include recorded trajectory**, and choose
+Load a NAMD trajectory in the main 3D **Full**, **VDW**, **ball-and-stick**, or **stick** part view, turn water off, and pause.
+Open **File → Sharing**, enable **Include recorded trajectory**, and choose
 first/last frame, interval, and samples per second. Use **Create link for current
 view** for a new presentation or **Update shared view** for the selected existing
 presentation. Preparation visits those frames through the normal
@@ -444,7 +446,7 @@ use **Stop hosting all links**, then create a new invitation with **Include reco
 ends old links; no active meeting is restarted automatically by the upgrade.
 
 Each frame is an independently applicable, compressed patch against one prepared
-scene. Coordinates match the exported Full display; patches update existing GPU
+scene. Coordinates match the exported display; patches update existing GPU
 attributes instead of reconstructing the whole scene. The receiver downloads one
 frame at a time, predicts ahead using measured transfer time, and skips old samples.
 Pause/seek cancels obsolete requests and requests the exact selected sample. A small
@@ -457,8 +459,12 @@ Initial limits: 2–120 samples, 1–30 requested samples/s (UI presets 4/8/15/3
 frame, and 32 MiB decompressed receiver cache. The initial scene is additional memory
 and transfer. Clips remain in host memory until revoked/expired; disk-backed long
 recordings are a later step. Source display structure/settings must remain stable
-during preparation. Main-view NAMD Full parts are supported; assembly playback and
-multi-view need temporal display adapters. Atomistic/surface and water are rejected.
+during preparation. Main-view NAMD Full and atomistic parts are supported; assembly playback and
+multi-view need temporal display adapters. Surface and water remain unsupported.
+Atomic preparation awaits each exact measured frame, regardless of coarse playback
+settings, and restores the inspected atomic pose afterward. Representation changes
+cancel capture. The existing size limits determine which structures fit; atoms are
+not dropped to make a clip fit.
 Visible graphene/ions use the existing companion-frame readiness path; end-to-end
 validation of those overlays remains open.
 
@@ -504,3 +510,40 @@ status immediately; the roster exposes warnings to other guests and the presente
 Hidden tabs, loading, and performance captures do not count as slow rendering.
 Warnings recover with healthy samples; server reports expire after 30 seconds.
 These are viewer-experience indicators, not a diagnosis of the user's internet or GPU.
+
+Live trajectory sharing continues while frames prefetch or atomistic representations
+prepare in the background. Guests receive the newest available absolute render frame,
+independently of camera following. A read-only bottom-center scrubber mirrors the
+presenter's current frame, total frames, and playback state. Its counter travels with
+the render packet and advances only after that packet is applied; slow connections
+skip intermediate frames instead of accumulating a playback queue. Recorded clips
+also show their received source frame at the bottom center.
+
+The timeline requires the `live-timeline-v1` host capability. Existing hosts still
+accept the original coordinate packets; restart hosting after the meeting and reload
+the editor/guest viewer to enable the timeline. Live delivery remains bounded by the
+125 ms publication interval, encoding time, and connection throughput.
+
+NADOC server restarts revoke existing invitations. Guests who enable Follow keep
+that choice through visualization changes; the active Follow button is green.
+Live atomistic frames use a separate bounded decoding budget (`live-large-frames-v1`)
+so ball-and-stick render patches larger than a recorded clip's 16 MiB raw limit can
+stream. Network packets remain capped at 16 MiB compressed, and slower guests skip
+to the newest available frame. Restart presentation hosting and reload guest pages
+after installing this update to use the updated host capability and viewer bundle.
+
+
+Live trajectory frame uploads now have no application-level compressed-size,
+decoded-size, or channel-count cap (`live-unlimited-frames-v1`). Guests display
+“Buffering…” beside the scrubber until the newest announced frame is fully received,
+verified, decoded, and applied. The displayed frame counter stays on the last applied
+frame while waiting. The indicator also stays visible during retries and recorded
+clip buffering. Large live transfers do not have a fixed whole-transfer deadline;
+publisher heartbeats continue during uploads. Restart hosting and reload guests to
+load this protocol update.
+
+The sharing host now reports its loaded build identity. NADOC replaces a detached
+host that predates the current sharing runtime or viewer build before starting a new
+invitation. Editor-server restart stops the detached host itself, so cached guest code
+cannot survive the restart. Replacing a host closes its old invitations; publish a
+new invitation and have guests reopen it.

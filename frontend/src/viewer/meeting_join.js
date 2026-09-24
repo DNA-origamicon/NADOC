@@ -19,7 +19,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   if (passwordField) { passwordField.required = needsPassword; passwordField.value = '' }
   const abort = new AbortController()
   const sharedViews = new WeakSet()
-  let disposed = false, ended = false, timer = null, busy = false, disconnectPresentation = () => {}
+  let disposed = false, ended = false, timer = null, polling = false, busy = false, disconnectPresentation = () => {}
   const display = mountMeetingStatus({ viewer, document: doc })
   const ping = createMeetingPing({ document: doc })
   let presence = null, moveView = () => {}
@@ -84,9 +84,11 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
         } }) : mount()
       }
       timer = repeat(async () => {
+        if (disposed || ended || polling) return
+        polling = true
         try {
           const response = await measuredRequest(`${base}/status`, { signal: abort.signal })
-          if (response.status === 401 || response.status === 410) {
+          if ([401, 403, 404, 410].includes(response.status)) {
             finish()
             return
           }
@@ -95,7 +97,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
         } catch {
           // A transient outage must not disable EventSource's reconnect or local navigation.
           if (!disposed && !ended) identity.textContent = `${details.name} · Host disconnected; reconnecting…`
-        }
+        } finally { polling = false }
       }, 10000)
     } catch (reason) { if (!disposed) error.textContent = reason.message }
     finally { busy = false; if (!disposed) { button.disabled = false; button.textContent = 'Join view' } }

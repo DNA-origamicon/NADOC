@@ -29,7 +29,7 @@ it('keeps the prompt open and permits retry after a denied join', async () => {
   expect(v.viewer.loadFile).not.toHaveBeenCalled(); expect(v.dialog.close).not.toHaveBeenCalled()
   expect(document.querySelector('button').disabled).toBe(false); v.dispose()
 })
-it('keeps monitoring across transient outages and stops only on confirmed revocation', async () => {
+it.each([401, 403, 404, 410])('keeps monitoring outages and ends revoked/restarted sessions on HTTP %s', async terminalStatus => {
   const v = await setup([{ ok: true, json: async () => ({ name: 'Alice' }) }, { ok: true, headers: new Headers({ 'Content-Length': '8' }), blob: async () => new Blob(['NADOCVW1']) }])
   v.submit(); await vi.waitFor(() => expect(v.repeat).toHaveBeenCalledOnce())
   const poll = v.repeat.mock.calls[0][0]
@@ -38,7 +38,7 @@ it('keeps monitoring across transient outages and stops only on confirmed revoca
   expect(v.cancel).not.toHaveBeenCalled()
   v.fetch.mockResolvedValueOnce({ ok: true }); await poll()
   expect(document.querySelector('#guest').textContent).toBe('Alice · Private test')
-  v.fetch.mockResolvedValueOnce({ ok: false, status: 410 }); await poll()
+  v.fetch.mockResolvedValueOnce({ ok: false, status: terminalStatus }); await poll()
   expect(v.cancel).toHaveBeenCalledWith(1); expect(document.querySelector('#guest').textContent).toContain('Session ended')
   v.dispose()
 })
@@ -93,4 +93,19 @@ it('automatically resumes an authenticated invitation without name/password entr
   expect(JSON.parse(v.fetch.mock.calls[0][1].body)).toEqual({ token: 'secret', role: 'presenter', resume: true })
   expect(document.querySelector('#guest').textContent).toContain('Returning presenter')
   expect(v.dialog.close).toHaveBeenCalled(); dispose()
+})
+
+it('coalesces slow status polls instead of accumulating requests', async () => {
+  const v = await setup([{ ok: true, json: async () => ({ name: 'Alice' }) }, { ok: true, headers: new Headers({ 'Content-Length': '8' }), blob: async () => new Blob(['NADOCVW1']) }])
+  v.submit(); await vi.waitFor(() => expect(v.repeat).toHaveBeenCalledOnce())
+  const poll = v.repeat.mock.calls[0][0]
+  v.fetch.mockClear()
+  let finish
+  v.fetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  const pending = poll(); await poll(); await poll()
+  expect(v.fetch).toHaveBeenCalledOnce()
+  finish({ ok: true }); await pending
+  v.fetch.mockResolvedValueOnce({ ok: true }); await poll()
+  expect(v.fetch).toHaveBeenCalledTimes(2)
+  v.dispose(); await poll(); expect(v.fetch).toHaveBeenCalledTimes(2)
 })

@@ -3,7 +3,7 @@ import { clipFrameAt } from './trajectory_clip.js'
 
 export function mountTrajectoryShare({ dialog, prepared, store, getSource, document: doc = document }) {
   const field = doc.createElement('fieldset'); field.dataset.clipOptions = ''; field.className = 'sharing-card sharing-clip'
-  field.innerHTML = `<legend><label class="sharing-check"><input type="checkbox" data-include-clip>Include recorded trajectory</label></legend><div data-clip-settings hidden><p class="sharing-description">Load and pause a NAMD trajectory in Full view with water off. Start with 8 samples; guests can buffer before playback. Preparation restores your inspected frame. Maximum 120 samples.</p>
+  field.innerHTML = `<legend><label class="sharing-check"><input type="checkbox" data-include-clip>Include recorded trajectory</label></legend><div data-clip-settings hidden><p class="sharing-description">Load and pause a NAMD trajectory in Full, VDW, ball-and-stick or stick view with water off. Atomic clips depend on structure size: 16 MiB per frame, 128 MiB per clip, maximum 120 samples. Start with 8 samples; guests can buffer before playback. Preparation restores your inspected frame.</p>
     <div class="sharing-fields"><label>First frame<input class="input" data-from type="number" min="1" value="1"></label><label>Last frame<input class="input" data-to type="number" min="2" value="8"></label><label>Interval<input class="input" data-step type="number" min="1" value="1"></label><label>Samples/s<select class="select" data-fps><option>4</option><option selected>8</option><option>15</option><option>30</option></select></label></div>
     <div class="sharing-actions"><button class="btn" data-cancel-clip disabled>Cancel preparation</button></div></div>`
   dialog.insertBefore(field, dialog.querySelector('[data-publish-actions]') ?? dialog.querySelector('[data-status]') ?? dialog.querySelector('[data-links]'))
@@ -17,7 +17,7 @@ export function mountTrajectoryShare({ dialog, prepared, store, getSource, docum
     try {
       if (doc.getElementById('menu-help-broadcast')?.getAttribute('aria-pressed') === 'true') throw new Error('Stop visualization broadcasting before preparing a trajectory clip')
       const source = getSource()
-      if (source.representation !== 'full') throw new Error('Choose the Full representation before preparing a trajectory clip')
+      if (!['full', 'vdw', 'ballstick', 'stick'].includes(source.representation)) throw new Error('Choose Full, VDW, ball-and-stick or stick before preparing a trajectory clip')
       return await prepareTrajectory({ prepared, store, source, from: Number(el('from').value) - 1, to: Number(el('to').value) - 1,
         step: Number(el('step').value), fps: Number(el('fps').value), signal: abort.signal, onProgress })
     } finally { abort = null; el('cancel-clip').disabled = true }

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /** Meeting-scoped static test host. Deliberately independent of the editor API. */
+import { preparedHostBuildId } from './prepared_host_build.mjs'
 import http from 'node:http'
 import { readFile, readdir, writeFile, unlink } from 'node:fs/promises'
 import { resolve, join, basename } from 'node:path'
@@ -16,6 +17,7 @@ const mime = name => name.endsWith('.js') ? 'text/javascript' : name.endsWith('.
 export async function createPreparedHost({ dist, packagePath, publicOrigin = '', lifetimeMs = 2 * 60 * 60 * 1000, maxGuests = 4, now = Date.now }) {
   if (publicOrigin && (!publicOrigin.startsWith('https://') || new URL(publicOrigin).origin !== publicOrigin)) throw new Error('Public sharing requires an exact HTTPS origin')
   if (!Number.isFinite(lifetimeMs) || lifetimeMs < 1000 || lifetimeMs > 8 * 60 * 60 * 1000) throw new Error('Lifetime must be between one second and eight hours')
+  const buildId = await preparedHostBuildId(dist)
   const initial = packagePath ? await readFile(packagePath) : null
   const assets = new Map([['/viewer.html', await readFile(join(dist, 'viewer.html'))]])
   for (const name of await readdir(join(dist, 'assets'))) {
@@ -54,6 +56,11 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     return summary(room)
   }
   if (initial) createShare(initial, basename(packagePath), 'default')
+  function revokeSession(room, id) {
+    const session = room.sessions.get(id)
+    room.sessions.delete(id)
+    for (const stream of session?.streams ?? []) stream.end()
+  }
   let closed = false
   let joinWindow = now(), joinAttempts = 0
   const handler = management => async (req, res) => {
@@ -65,7 +72,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { capabilities: ['editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'guest-visualizations-v1'], expiresAt, shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1'], expiresAt, shares: [...rooms.values()].map(summary) })
       const content = route.match(/^\/host\/shares\/([a-f0-9]{32})\/content$/)
       if (req.method === 'POST' && content) {
         if (!rooms.has(content[1])) return send(410, { error: 'This share has ended.' })
@@ -89,7 +96,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       if (req.method === 'POST' && broadcast) {
         const room = rooms.get(broadcast[1]); if (!room) return send(410, { error: 'This share has ended.' })
         try {
-          const action = broadcast[2], limit = action === 'scene' ? 512 * 1024 * 1024 : action === 'frame' ? 16 * 1024 * 1024 + 64 : 4096
+          const action = broadcast[2], limit = action === 'scene' ? 512 * 1024 * 1024 : action === 'frame' ? Infinity : 4096
           const chunks = []; let size = 0
           for await (const chunk of req) { size += chunk.length; if (size > limit) return send(413, { error: 'Broadcast update too large' }); chunks.push(chunk) }
           const body = Buffer.concat(chunks)
@@ -132,7 +139,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         const previous = req.headers.cookie?.match(cookiePattern)?.[1]
         // Keep presenter credentials and their occupied slot until the meeting
         // ends. Leaving the viewer does not revoke the meeting or its guests.
-        for (const r of rooms.values()) for (const [key, s] of r.sessions) if (s.role !== 'presenter' && now() - s.seenAt > 120000) r.sessions.delete(key)
+        for (const r of rooms.values()) for (const [key, s] of r.sessions) if (s.role !== 'presenter' && now() - s.seenAt > 120000) revokeSession(r, key)
         if (value.resume === true) {
           const existing = sessions.get(previous)
           if (!existing || existing.role !== role) return send(401, { error: 'Please sign in to this view.' })
@@ -146,13 +153,17 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         // A separately authenticated presenter can reclaim an absent presenter's
         // place, without changing the invitation or any guest's session.
         if (role === 'presenter') for (const [key, s] of sessions) {
-          if (key !== previous && s.role === 'presenter' && (s.away || now() - s.seenAt > 120000)) sessions.delete(key)
+          if (key !== previous && s.role === 'presenter' && (s.away || now() - s.seenAt > 120000)) revokeSession(room, key)
         }
         if (role === 'presenter' && [...sessions].some(([key, session]) => session.role === 'presenter' && key !== previous)) return send(409, { error: 'A presenter is already connected to this view.' })
         if (!sessions.has(previous) && [...rooms.values()].reduce((n, r) => n + r.sessions.size + Number(r.editorBroadcast.active && ![...r.sessions.values()].some(s => s.role === 'presenter')), 0) >= maxGuests) return send(409, { error: 'This presentation is full (four participants including the presenter).' })
-        const id = sessions.has(previous) ? previous : randomBytes(32).toString('hex')
-        const previousSession = sessions.get(id)
-        const joined = { participantId: previousSession?.participantId, color: previousSession?.color, name, role, seenAt: now(), away: false, generation: 0 }
+        // Reauthentication (especially a role change) must invalidate the old cookie
+        // and its event streams. Preserve display identity only within the same role.
+        const previousSession = sessions.get(previous)
+        const identity = previousSession?.role === role ? previousSession : null
+        const id = randomBytes(32).toString('hex')
+        revokeSession(room, previous)
+        const joined = { participantId: identity?.participantId, color: identity?.color, name, role, seenAt: now(), away: false, generation: 0, streams: new Set() }
         sessions.set(id, joined)
         return send(200, { name, participantId: room.presence.identify(joined), role, revision: room.revision, expiresAt }, 'application/json', { 'Set-Cookie': `${cookieName}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(1, Math.floor((expiresAt - now()) / 1000))}${publicOrigin ? '; Secure' : ''}` })
       } catch { return send(400, { error: 'Invalid join request.' }) }
@@ -191,7 +202,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       if ((session.frameRequests ?? 0) >= 2) return send(429, { error: 'Wait for the pending frame' })
       session.frameRequests = (session.frameRequests ?? 0) + 1
       res.once('close', () => { session.frameRequests-- })
-      return send(200, frame.buffer, 'application/octet-stream', { 'Content-Length': frame.bytes, 'X-NADOC-Sequence': frame.sequence, 'X-NADOC-SHA256': frame.sha256 })
+      return send(200, frame.buffer, 'application/octet-stream', { 'Content-Length': frame.bytes, 'X-NADOC-Sequence': frame.sequence, 'X-NADOC-Timeline': JSON.stringify(frame.timeline ?? null), 'X-NADOC-SHA256': frame.sha256 })
     }
     if (route === '/meeting/frame') {
       if (!session) return send(401, { error: 'Join with the invite link first.' })
@@ -208,8 +219,12 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       if (route === '/meeting/status') return send(200, { name: session.name, role: session.role, revision: room.revision, expiresAt, presentation: room.presentation.snapshot() })
       if (route === '/meeting/events') {
         if (session.away) return send(409, { error: 'Return to the presentation to reconnect.' })
+        session.streams ??= new Set()
+        if (session.streams.size >= 2) return send(429, { error: 'Close another viewer tab before connecting again.' }, 'application/json', { 'Retry-After': '10' })
         res.writeHead(200, { ...headers, 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' })
-        room.presentation.subscribe(res, { presenter: session.role === 'presenter' })
+        if (!room.presentation.subscribe(res, { presenter: session.role === 'presenter' })) return
+        session.streams.add(res)
+        res.once('close', () => session.streams.delete(res))
         room.presence.connect(session, res)
         const heartbeat = setInterval(() => {
           if (sessions.get(sessionId) !== session) { res.end(); return }
@@ -220,6 +235,9 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       }
       const expected = new URL(req.url, 'http://localhost').searchParams.get('revision')
       if (expected && expected !== room.revision) return send(409, { error: 'A newer visualization is available.' })
+      if ((session.sceneRequests ?? 0) >= 2) return send(429, { error: 'Wait for the pending visualization download' }, 'application/json', { 'Retry-After': '2' })
+      session.sceneRequests = (session.sceneRequests ?? 0) + 1
+      res.once('close', () => { session.sceneRequests-- })
       return send(200, room.scene, 'application/octet-stream', { 'Content-Length': room.scene.length, 'X-NADOC-Revision': room.revision })
     }
     const key = route === '/' ? '/viewer.html' : route
@@ -230,7 +248,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const controlServer = publicOrigin ? http.createServer(handler(true)) : null
   server.requestTimeout = 15000; server.headersTimeout = 10000
   if (controlServer) { controlServer.requestTimeout = 15000; controlServer.headersTimeout = 10000 }
-  const leases = setInterval(() => { for (const room of rooms.values()) { room.editorBroadcast.expire(); room.presence.expireHealth() } }, 1000); leases.unref()
+  const leases = setInterval(() => { if (now() >= expiresAt) { stop(); return }; for (const room of rooms.values()) { room.editorBroadcast.expire(); room.presence.expireHealth() } }, 1000); leases.unref()
   const stop = () => { closed = true; clearInterval(leases); for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); if (listener) setTimeout(() => listener.closeAllConnections(), 250).unref() } }
   return { server, controlServer, invite, expiresAt, stop, controlToken, createShare, setPublicBase: value => { if (publicOrigin && value !== publicOrigin) throw new Error('Public origin is fixed'); publicBase = value } }
 }
@@ -248,7 +266,7 @@ async function main() {
     await writeFile(controlFile, JSON.stringify({ url: `http://${host}:${port}`, token: app.controlToken, expiresAt: app.expiresAt }), { mode: 0o600 })
     app.server.once('close', () => { unlink(controlFile).catch(() => {}) })
   }
-  console.log(`Prepared host${flags['--package'] ? ': ' + basename(flags['--package']) : ''}\n${flags['--package'] ? `Invite: http://${host}:${port}/viewer.html#invite=${app.invite}` : 'Use NADOC Help → Share link to publish the current part.'}\nExpires: ${new Date(app.expiresAt).toISOString()}\nCtrl-C stops this host immediately. Anyone with this link on your trusted network can join (four browsers maximum).`)
+  console.log(`Prepared host${flags['--package'] ? ': ' + basename(flags['--package']) : ''}\n${flags['--package'] ? `Invite: http://${host}:${port}/viewer.html#invite=${app.invite}` : 'Use NADOC File → Sharing to publish the current part.'}\nExpires: ${new Date(app.expiresAt).toISOString()}\nCtrl-C stops this host immediately. Anyone with this link on your trusted network can join (four browsers maximum).`)
   app.server.once('close', () => clearTimeout(timer))
   const timer = setTimeout(() => { console.log('Test session expired.'); app.stop() }, app.expiresAt - Date.now())
   const stop = () => { clearTimeout(timer); app.stop() }

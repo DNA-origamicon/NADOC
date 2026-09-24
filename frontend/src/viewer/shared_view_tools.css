@@ -1,0 +1,7 @@
+.shared-view-tools{position:absolute;bottom:12px;left:12px;max-width:min(340px,calc(100% - 136px));padding:10px 12px;border:1px solid #30363d;border-radius:6px;background:rgba(13,17,23,.9);color:#c9d1d9;font:12px/1.5 system-ui,sans-serif;pointer-events:none;overflow-wrap:anywhere;max-height:calc(100% - 24px);overflow:auto}
+.shared-view-tools[hidden]{display:none}
+.shared-view-tools-active{color:#b1bac4}
+.shared-length-legend{margin-top:6px;max-width:220px}
+.shared-length-gradient{height:10px;margin-top:4px;background:linear-gradient(to right,hsl(240,90%,50%),hsl(180,90%,50%),hsl(120,90%,50%),hsl(60,90%,50%),hsl(0,90%,50%));border:1px solid #484f58}
+.shared-length-ticks{display:flex;justify-content:space-between}
+.shared-clash-legend{color:#ff7777;margin-top:4px}

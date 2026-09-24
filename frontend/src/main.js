@@ -1,3 +1,6 @@
+import { captureSharedVisualization } from './viewer/shared_visualization.js'
+import { restoreNativePresentation } from './viewer/native_presentation.js'
+import { initPresentationSelection } from './scene/presentation_selection.js'
 import { initShareLink } from './viewer/share_link.js'
 import { initPreparedExport } from './viewer/export_prepared.js'
 import { openProcessLog } from './ui/process_log.js'
@@ -353,8 +356,11 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
-  const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView(), getDetailLevel: () => designRenderer.getDetailLevel() })
-  const sharing = initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store } })
+  const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView(), getDetailLevel: () => designRenderer.getDetailLevel(), getVisualization: () => captureSharedVisualization(document, simulateJobs?.getSelectedDetails?.()) })
+  const sharing = initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store }, trajectory: {
+    prepared: preparedExport, store, getSource: () => ({ controller: mdViz, companion: mdPanel?.trajectorySolvent,
+      representation: _currentRepr, pause: () => mdPanel?.pauseTrajectory?.() }),
+  } })
   initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel: () => designRenderer.getDetailLevel(), getFileOpen: () => _fileOpen })
   const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer })
   window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug
@@ -5483,6 +5489,14 @@ async function main() {
   // Free/part-joint drag state moved into scene/assembly_pointer.js (sub-part a).
   let _assemblySelectedPartJoint = null
   let _selectedAssemblyCluster   = null  // { instanceId, clusterId } | null
+  initPresentationSelection({
+    scene, store, container: document.getElementById('canvas-area'), getCamera: getRenderCamera,
+    addFrameCallback, removeFrameCallback, getEntries: () => designRenderer.getBackboneEntries?.() ?? [],
+    resolveBasePosition: key => selectionManager.getBaseWorldPosition?.(key) ?? null,
+    getProteinRenderer: () => proteinRenderer, getNanoparticleSubsystem: () => nanoparticleSubsystem,
+    assemblyRenderer, getAssemblyCluster: () => _selectedAssemblyCluster,
+    getExtras: () => selectionManager.getPresentationSelectionExtras(),
+  })
 
   // ── Assembly-mode lasso (Ctrl-drag → multi-select PartInstances) ────────────
   // Mirrors design-mode lasso (selection_manager.js: _createLassoOverlay /
@@ -6115,7 +6129,11 @@ async function main() {
   const _syncAssemblyReprMenu = _reprSwitcher.syncAssemblyReprMenu
 
   const _setComparisonRepresentation = _setRepresentation
-  sharing.bindJobs({ getSelection: () => simulateJobs.getSelected(), getSource: engine => ({ controller: engine === 'namd' ? mdViz : oxdnaDisplay }), showNative: () => _setRepresentation('full') })
+  sharing.bindJobs({ getSelection: () => simulateJobs.getSelected(), getSource: engine => ({ controller: engine === 'namd' ? mdViz : oxdnaDisplay }), showNative: () => restoreNativePresentation({
+    stopLive: () => oxdnaLive.stop(),
+    setRepresentation: _setRepresentation,
+    clearSimulationVisuals: () => { occupancyOverlay.clear(); _resetSimulationSceneVisuals() },
+  }) })
 
   // oxDNA input geometry follows the same reference-visibility contract as the
   // native renderer. Rebuild the lightweight instanced preview when entering or

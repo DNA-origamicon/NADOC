@@ -1,3 +1,4 @@
+import { mountLiveTimeline } from './live_timeline.js'
 import { createClipApplier, gzipFrame, clipFrameAt, validateClip, FRAME_LIMIT } from './trajectory_clip.js'
 
 /** Independent bounded receiver: one download in flight, absolute frames, shared clock. */
@@ -10,6 +11,7 @@ export function mountMeetingTrajectory({ viewer, base, role, document: doc = doc
   bar.dataset.trajectory = ''; bar.style.cssText = 'display:flex;gap:12px;padding:8px 18px;align-items:center;flex-wrap:wrap'
   bar.innerHTML = `<strong>Recorded trajectory</strong>${role === 'presenter' ? '<button data-play>Play</button><input data-seek type="range" min="0" value="0" aria-label="Shared trajectory frame"><select data-speed aria-label="Trajectory frames per second"><option>4</option><option>8</option><option>15</option><option>30</option></select>' : ''}<button data-preload>Buffer clip</button><span data-progress role="status"></span><button data-metrics>Copy trajectory metrics</button>`
   doc.body.insertBefore(bar, doc.querySelector('main'))
+  const timeline = role === 'guest' ? mountLiveTimeline(doc) : null
   const el = key => bar.querySelector(`[data-${key}]`), status = el('progress')
   let state = null, anchor = 0, serverAt = 0, disposed = false, flight = null, epoch = 0, bytes = 0, shown = -1, fetchMs = 150, lastTick = now(), lastReport = now(), preload = false, retryAt = 0, syncAt = now() + 5000, syncing = false, networkDelay = 0, sequence = -1
   const startedAt = now(), clockAbort = new AbortController()
@@ -84,11 +86,13 @@ export function mountMeetingTrajectory({ viewer, base, role, document: doc = doc
       try { const started = now(); apply.apply(cache.get(available)); metrics.max_apply_ms = Math.max(metrics.max_apply_ms, now() - started); if (shown >= 0) metrics.skipped_frames += Math.max(0, available - shown - 1); shown = available; metrics.applied_frames++ }
       catch (error) { status.textContent = error.message; resetRequest(); disposed = true; return }
     }
+    if (shown >= 0) timeline?.update({ frame: clip.sourceFrames[shown] + 1, total: clip.sourceFrames.at(-1) + 1, playing: state.playing })
     const waiting = shown !== index
+    timeline?.setBuffering(waiting, { total: clip.sourceFrames.at(-1) + 1 })
     if (waiting && time - lastTick > 0) metrics.waiting_ms += Math.min(250, time - lastTick)
     lastTick = time
     const lag = shown < 0 ? null : Math.max(0, index - shown) / state.fps
-    status.textContent = `${state.playing ? 'Playing' : 'Paused'} · source frame ${shown < 0 ? 'loading' : clip.sourceFrames[shown] + 1} / ${clip.sourceFrames.at(-1) + 1} · ${cache.size}/${clip.frames.length} buffered${lag > 1 ? ' · catching up' : ''} · exact Full samples`
+    status.textContent = `${state.playing ? 'Playing' : 'Paused'} · source frame ${shown < 0 ? 'loading' : clip.sourceFrames[shown] + 1} / ${clip.sourceFrames.at(-1) + 1} · ${cache.size}/${clip.frames.length} buffered${lag > 1 ? ' · catching up' : ''} · recorded samples`
     if (el('seek')) el('seek').value = String(index)
     el('preload').textContent = preload ? 'Buffering…' : cache.size === clip.frames.length ? 'Clip buffered' : 'Buffer clip'
     if (flight || time < retryAt) return
@@ -113,5 +117,5 @@ export function mountMeetingTrajectory({ viewer, base, role, document: doc = doc
   const visibility = () => { if (doc.hidden) resetRequest(); else { syncAt = now(); tick() } }
   doc.addEventListener('visibilitychange', visibility)
   const timer = repeat(tick, 33)
-  return { receive, dispose() { disposed = true; clockAbort.abort(); resetRequest(); cancel(timer); doc.removeEventListener('visibilitychange', visibility); cache.clear(); bar.remove(); report() } }
+  return { receive, dispose() { disposed = true; clockAbort.abort(); resetRequest(); cancel(timer); doc.removeEventListener('visibilitychange', visibility); cache.clear(); bar.remove(); timeline?.dispose(); report() } }
 }

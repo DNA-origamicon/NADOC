@@ -34,7 +34,7 @@ export async function hostTransport({ root, controlFile, config, path, options }
       ;({ status, value } = JSON.parse(result.stdout))
     } finally { if (scratch) await rm(scratch, { recursive: true, force: true }) }
   } else {
-    const response = await fetch(config.url + path, { ...options, headers: { ...options.headers, Authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(15000) })
+    const response = await fetch(config.url + path, { ...options, headers: { ...options.headers, Authorization: `Bearer ${config.token}` }, signal: path.endsWith('/broadcast/frame') ? options.signal : AbortSignal.timeout(15000) })
     status = response.status; value = await response.json()
   }
   if (status < 200 || status >= 300) throw new Error(value.error ?? 'Sharing host request failed')

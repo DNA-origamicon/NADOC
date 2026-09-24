@@ -158,7 +158,9 @@ const ICON_CW  = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" st
  * @param {*}                    controls   — OrbitControls / TrackballControls proxy
  * @param {() => THREE.Box3}     getBox     — returns the navigable design bounds (may be null)
  */
-export function initViewCube(container, camera, controls, getBox) {
+export function initViewCube(container, camera, controls, getBox, { beforeNavigate = () => true } = {}) {
+  const document = container.ownerDocument
+  let disposed = false, syncRaf = null
   // Inject CSS
   const styleEl = document.createElement('style')
   styleEl.textContent = STYLE
@@ -222,6 +224,7 @@ export function initViewCube(container, camera, controls, getBox) {
   const _tmpSize = new THREE.Vector3()
 
   function _snapToNormal(normal, up) {
+    if (disposed || beforeNavigate() === false) return
     if (_animRaf) { cancelAnimationFrame(_animRaf); _animRaf = null }
 
     // Compute bounding box of the current design (fallback: origin)
@@ -264,6 +267,7 @@ export function initViewCube(container, camera, controls, getBox) {
   // so there's no degenerate case.
   const _qRoll = new THREE.Quaternion()
   function _startRoll(angle) {
+    if (disposed || beforeNavigate() === false) return
     if (_animRaf) { cancelAnimationFrame(_animRaf); _animRaf = null }
     const fwd       = controls.target.clone().sub(camera.position).normalize()
     const startUp   = camera.up.clone()
@@ -303,13 +307,15 @@ export function initViewCube(container, camera, controls, getBox) {
   // pure DOM it can't reach the offscreen export render.
   ;(function _loop() {
     if (wrap.style.display !== 'none') _syncCube()
-    requestAnimationFrame(_loop)
+    syncRaf = requestAnimationFrame(_loop)
   })()
 
   // ── Public API ──────────────────────────────────────────────────────────────
   return {
     show()               { wrap.style.display = ''; roll.style.display = '' },
-    hide()               { wrap.style.display = 'none'; roll.style.display = 'none' },
+    hide()               { wrap.style.display = 'none'; roll.style.display = 'none'; if (_animRaf) cancelAnimationFrame(_animRaf); _animRaf = null },
+    cancel()             { if (_animRaf) cancelAnimationFrame(_animRaf); _animRaf = null },
+    dispose()            { disposed = true; cancelAnimationFrame(syncRaf); if (_animRaf) cancelAnimationFrame(_animRaf); wrap.remove(); roll.remove(); styleEl.remove() },
     snapToNormal(n, up)  { _snapToNormal(n, up) },
   }
 }

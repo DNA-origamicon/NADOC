@@ -32,6 +32,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     if (!value && following) { followMotion.stop(); viewer.runtime.controls.enabled = savedEnabled }
     following = value
     el('follow')?.setAttribute('aria-pressed', String(value))
+    if (el('follow')) { el('follow').style.background = value ? '#238636' : ''; el('follow').style.borderColor = value ? '#2ea043' : ''; el('follow').style.color = value ? '#fff' : '' }
     if (el('follow')) el('follow').textContent = value ? 'Stop following' : 'Follow presenter'
   }
   const guestViews = role === 'guest' ? mountGuestSharedViews({ parent: bar, viewer, base, document: doc, fetch: request,
@@ -43,7 +44,14 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     onLoading(latest?.loading ?? null, updating)
     status.textContent = !compatible() ? 'Different snapshot opened. Reopen the invitation to present.' : !connected ? 'Presentation connection lost; you can still explore.' : role === 'presenter' ? (broadcasting ? 'Your perspective is shared. Guests choose whether to follow.' : 'Your perspective is not being shared.') : following ? 'Following presenter. Drag or scroll to explore independently.' : latest?.presenting ? 'Explore independently or follow the presenter.' : 'Presenter is not sharing a perspective.'
     if (updating) status.textContent = 'Receiving updated visualizations; your camera stays independent.'
-    if (el('follow')) el('follow').disabled = updating || latest?.revision !== revision || !connected || !latest?.camera || !latest?.presenting || !compatible() || viewer.performanceApi.busy
+    const canFollow = !updating && latest?.revision === revision && connected && latest?.camera && latest?.presenting && compatible() && !viewer.performanceApi.busy
+    if (el('follow')) {
+      el('follow').disabled = !following && !canFollow
+      if (following) {
+        viewer.runtime.controls.enabled = canFollow ? false : savedEnabled
+        if (!canFollow) status.textContent = 'Following presenter · Waiting for the shared view…'
+      }
+    }
     if (el('broadcast')) { el('broadcast').disabled = !connected || !compatible() || viewer.performanceApi.busy; el('broadcast').textContent = broadcasting ? 'Pause perspective sharing' : 'Share my perspective'; el('broadcast').setAttribute('aria-pressed', String(broadcasting)) }
   }
   function post(action, body) {
@@ -73,8 +81,10 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     try {
       while (pendingRevision && pendingRevision !== revision && !disposed) {
         const next = pendingRevision
+        // Finish an in-flight snapshot even if playback has announced a newer one.
+        // Otherwise sustained layout changes can starve a slower guest indefinitely.
         const loaded = await loadRevision({ viewer, base, revision: next, fetch: request, signal: abort.signal,
-          isCurrent: () => !disposed && next === pendingRevision && viewer.current === frozen })
+          isCurrent: () => !disposed && pendingRevision !== revision && viewer.current === frozen })
         if (disposed) return
         if (loaded) {
           revision = next; frozen = viewer.current; onSharedView(frozen)
@@ -98,7 +108,8 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     live.receive(value)
     if (value.revision !== revision) { broadcasting = false; publicationEpoch++; sent = ''; pendingRevision = value.revision; void refreshScene() }
     if (role === 'presenter' && !value.presenting) sent = ''
-    if (!value.presenting) follow(false)
+    // Keep the guest’s follow preference through scene/lease handoffs.
+    // Only explicit guest navigation or loss of the connection cancels it.
     update()
   }
   function connect() {
@@ -112,8 +123,8 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   const offline = () => { disconnect(); lost() }
   const online = () => { if (!disposed && compatible()) { disconnect(); connect() } }
   connect(); host?.addEventListener('offline', offline); host?.addEventListener('online', online)
-  const ownCamera = () => { follow(false); update() }
-  for (const type of ['pointerdown', 'wheel', 'dblclick']) canvas.addEventListener(type, ownCamera, { capture: true, passive: true })
+  const ownCamera = () => { guestViews?.cancel(); follow(false); update() }
+  for (const type of ['pointerdown', 'wheel', 'dblclick', 'nadoc:view-navigation']) canvas.addEventListener(type, ownCamera, { capture: true, passive: true })
   doc.getElementById('reset')?.addEventListener('click', ownCamera, true)
   doc.getElementById('mode')?.addEventListener('change', ownCamera, true)
   if (el('follow')) el('follow').onclick = () => { guestViews?.cancel(); follow(!following); update() }
@@ -121,7 +132,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   function frame() {
     if (updating) return
     if (!compatible()) { follow(false); broadcasting = false; source.close(); update(); return }
-    if (following && latest?.revision === revision && !viewer.performanceApi.busy && latest?.camera) {
+    if (following && connected && latest?.presenting && latest?.revision === revision && !viewer.performanceApi.busy && latest?.camera) {
       followMotion.frame(latest.camera); viewer.runtime.controls.enabled = false
     }
   }
@@ -136,7 +147,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     if (timer !== null) cancel(timer)
     viewer.runtime.removeFrameCallback(frame)
     host?.removeEventListener('offline', offline); host?.removeEventListener('online', online)
-    for (const type of ['pointerdown', 'wheel', 'dblclick']) canvas.removeEventListener(type, ownCamera, true)
+    for (const type of ['pointerdown', 'wheel', 'dblclick', 'nadoc:view-navigation']) canvas.removeEventListener(type, ownCamera, true)
     doc.getElementById('reset')?.removeEventListener('click', ownCamera, true); doc.getElementById('mode')?.removeEventListener('change', ownCamera, true)
     bar.remove()
   }

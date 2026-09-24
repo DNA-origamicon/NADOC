@@ -70,3 +70,16 @@ it('preserves the guest camera and checks revision identity before replacing the
   expect(await viewer.loadFile(file, { expectedHash: 'correct' })).toBe(false)
   expect(viewer.current).toBe(next); expect(wrong.dispose).toHaveBeenCalledOnce(); viewer.dispose()
 })
+
+it('updates and removes host view-tool legends with scene replacement and meeting cleanup', async () => {
+  const { viewer } = setup(), first = scene(), next = scene()
+  first.data.view = { viewTools: { lengthHeatmap: true, clashes: true, clashCount: 3 } }
+  loadPreparedScene.mockResolvedValueOnce(first); await viewer.loadFile(file)
+  expect(document.querySelector('.shared-length-legend')).not.toBeNull()
+  expect(document.querySelector('.shared-clash-legend').textContent).toBe('3 clashes')
+  loadPreparedScene.mockResolvedValueOnce(next); await viewer.loadFile(file)
+  expect(document.querySelector('.shared-view-tools').hidden).toBe(true)
+  loadPreparedScene.mockResolvedValueOnce(first); await viewer.loadFile(file)
+  viewer.clear(); expect(document.querySelector('.shared-view-tools').hidden).toBe(true)
+  viewer.dispose(); expect(document.querySelector('.shared-view-tools')).toBeNull()
+})

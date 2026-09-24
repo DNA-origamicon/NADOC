@@ -3,7 +3,7 @@ export const CLIP_LIMIT = 128 * 1024 * 1024
 export const FRAME_LIMIT = 16 * 1024 * 1024
 export const FRAME_COUNT_LIMIT = 120
 
-export function sceneChannels(data) {
+export function sceneChannels(data, { maxValues = 8_000_000 } = {}) {
   const channels = [], shapes = [], seen = new Map(), geometry = new Map(data.geometries.map(g => [g.uuid, g]))
   const materials = new Map(data.materials.map(m => [m.uuid, m]))
   const clean = value => JSON.stringify(value, (k, v) => k === 'uuid' ? undefined : v)
@@ -34,18 +34,18 @@ export function sceneChannels(data) {
   visit(data.root, [])
   let length = 0
   for (const channel of channels) { channel.offset = length; length += channel.array.length }
-  if (length > 8_000_000) throw new Error('This scene is too large for the initial trajectory clip format')
+  if (length > maxValues) throw new Error('This scene is too large for the initial trajectory clip format')
   const values = new Float64Array(length)
   for (const channel of channels) values.set(channel.array, channel.offset)
   return { channels, values, signature: JSON.stringify([shapes, data.images, data.textures, data.render, data.view]) }
 }
 
-export function encodeFrame(base, next) {
-  if (base.signature !== next.signature || base.values.length !== next.values.length) throw new Error('The scene structure changed during preparation. Use a stable Full view without changing tools or representations.')
+export function encodeFrame(base, next, { maxBytes = FRAME_LIMIT } = {}) {
+  if (base.signature !== next.signature || base.values.length !== next.values.length) throw new Error('The scene structure changed during preparation. Keep a stable view without changing tools or representations.')
   const indices = []
   for (let i = 0; i < base.values.length; i++) if (base.values[i] !== next.values[i]) indices.push(i)
   const offset = Math.ceil((8 + indices.length * 4) / 8) * 8
-  if (offset + indices.length * 8 > FRAME_LIMIT) throw new Error('A trajectory frame exceeds the 16 MiB limit. Use a smaller view or clip.')
+  if (offset + indices.length * 8 > maxBytes) throw new Error(`A trajectory frame exceeds the ${maxBytes / 1048576} MiB limit. Use a smaller view or clip.`)
   const buffer = new ArrayBuffer(offset + indices.length * 8)
   new DataView(buffer).setUint32(0, indices.length, true)
   new Uint32Array(buffer, 8, indices.length).set(indices)
@@ -53,8 +53,8 @@ export function encodeFrame(base, next) {
   return buffer
 }
 
-export function decodeFrame(buffer, total) {
-  if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 8 || buffer.byteLength > FRAME_LIMIT) throw new Error('Invalid trajectory frame size')
+export function decodeFrame(buffer, total, { maxBytes = FRAME_LIMIT } = {}) {
+  if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 8 || buffer.byteLength > maxBytes) throw new Error('Invalid trajectory frame size')
   const count = new DataView(buffer).getUint32(0, true), offset = Math.ceil((8 + count * 4) / 8) * 8
   if (offset + count * 8 !== buffer.byteLength) throw new Error('Incomplete trajectory frame')
   const indices = new Uint32Array(buffer, 8, count), values = new Float64Array(buffer, offset, count)
@@ -62,7 +62,7 @@ export function decodeFrame(buffer, total) {
   return { indices, values }
 }
 
-export async function gzipFrame(buffer, decompress = false) {
+export async function gzipFrame(buffer, decompress = false, { maxBytes = FRAME_LIMIT } = {}) {
   const Stream = decompress ? globalThis.DecompressionStream : globalThis.CompressionStream
   if (!Stream) throw new Error('This browser needs gzip stream support for trajectory sharing')
   const reader = new Blob([buffer]).stream().pipeThrough(new Stream('gzip')).getReader()
@@ -71,7 +71,7 @@ export async function gzipFrame(buffer, decompress = false) {
     while (true) {
       const { done, value } = await reader.read(); if (done) break
       size += value.byteLength
-      if (size > FRAME_LIMIT) throw new Error('Trajectory frame exceeds the decompression limit')
+      if (size > maxBytes) throw new Error('Trajectory frame exceeds the decompression limit')
       chunks.push(value)
     }
   } finally { await reader.cancel().catch(() => {}) }
@@ -90,8 +90,8 @@ export function validateClip(clip) {
 }
 
 /** Apply exact exported coordinates in place; no editor or scientific model dependency. */
-export function createClipApplier(current) {
-  const layout = sceneChannels(current.data), touched = new Set()
+export function createClipApplier(current, limits = {}) {
+  const layout = sceneChannels(current.data, limits), touched = new Set()
   const channels = layout.channels.map(c => {
     const object = c.path.reduce((o, i) => o.children[i], current.scene)
     const attribute = c.kind === 'attribute' ? object.geometry.attributes[c.name] : c.kind === 'matrix' ? null : object[c.kind]
@@ -107,7 +107,7 @@ export function createClipApplier(current) {
     }
   }
   return { apply(buffer) {
-    const patch = decodeFrame(buffer, layout.values.length)
+    const patch = decodeFrame(buffer, layout.values.length, limits)
     if (previous) write(previous, true)
     write(patch, false); previous = patch
     for (const c of touched) {

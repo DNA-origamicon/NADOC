@@ -26,3 +26,17 @@ it('rejects render overrides instead of silently omitting photo or alternate-cam
   await expect(api.exportView()).rejects.toThrow('normal 3D view')
   expect(prepareScene).not.toHaveBeenCalled()
 })
+
+it('captures simulation identity with each published snapshot and advertises label support', async () => {
+  let visualization = { engine: 'namd', jobId: 'job', jobName: 'Run A', runDate: null, mode: 'Trajectory' }
+  const state = { currentDesign: {} }
+  const api = initPreparedExport({ scene: new Scene(), camera: {}, renderer: {},
+    store: { getState: () => state }, captureCurrentCamera: () => ({}),
+    getVisualization: () => visualization, document: { getElementById: () => null } })
+  expect((await api.exportView()).requiresVisualizationLabelViewer).toBe(true)
+  expect(prepareScene.mock.calls.at(-1)[0].view.visualization.jobName).toBe('Run A')
+  visualization = null
+  expect((await api.exportView()).requiresVisualizationLabelViewer).toBe(false)
+  expect(prepareScene.mock.calls.at(-1)[0].view.visualization).toBeNull()
+  api.dispose()
+})

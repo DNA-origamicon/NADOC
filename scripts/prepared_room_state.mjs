@@ -6,8 +6,9 @@ export function createPresentationState({ id, revision, now = Date.now }) {
   const presenters = new Set()
   let trajectory = null, liveFrame = null, loading = null, participants = []
   const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, trajectory, liveFrame, loading, participants, ended: closed, serverTime: now() })
-  const send = response => { if (!response.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`)) response.destroy() }
-  const broadcast = () => { for (const response of listeners) send(response) }
+  const encode = () => `event: state\ndata: ${JSON.stringify(snapshot())}\n\n`
+  const send = (response, message) => { if (!response.write(message)) response.destroy() }
+  const broadcast = () => { if (!listeners.size) return; const message = encode(); for (const response of listeners) send(response, message) }
   const pause = () => { if (presenting && !closed) { presenting = false; sequence++; broadcast() } }
   function publish(value) {
     if (closed) throw new Error('This presentation has ended')
@@ -32,10 +33,11 @@ export function createPresentationState({ id, revision, now = Date.now }) {
     replaceRevision(next) { revision = next; sequence++; broadcast() },
     leavePresenter() { pause(); for (const response of presenters) response.end() },
     subscribe(response, { presenter = false } = {}) {
-      if (closed) { response.end(); return }
-      if (listeners.size >= 8) { response.destroy(); return }
+      if (closed) { response.end(); return false }
+      if (listeners.size >= 8) { response.destroy(); return false }
       listeners.add(response); if (presenter) presenters.add(response)
-      response.on('close', () => { listeners.delete(response); if (presenters.delete(response) && presenters.size === 0) pause() }); send(response)
+      response.on('close', () => { listeners.delete(response); if (presenters.delete(response) && presenters.size === 0) pause() }); send(response, encode())
+      return listeners.has(response)
     },
     close() { if (closed) return; closed = true; presenting = false; loading = null; sequence++; broadcast(); for (const response of listeners) response.end(); listeners.clear(); presenters.clear() },
   }

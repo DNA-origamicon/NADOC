@@ -22,7 +22,13 @@ export function buildOccupancy(points, discs, viewport, cell = CELL) {
   for (const d of discs ?? []) {
     const r = Math.ceil(d.r / cell)
     const cx = Math.floor(d.x / cell), cy = Math.floor(d.y / cell)
-    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r) mark(cx + dx, cy + dy)
+    // A large/near-camera obstacle may project far beyond the viewport. Bound
+    // work to visible cells rather than iterating the entire off-screen disc.
+    for (let y = Math.max(0, cy - r); y <= Math.min(rows - 1, cy + r); y++) {
+      for (let x = Math.max(0, cx - r); x <= Math.min(cols - 1, cx + r); x++) {
+        if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r) mark(x, y)
+      }
+    }
   }
 
   // Summed-area table (one extra row/column of zeros).

@@ -13,12 +13,12 @@ function setup(role = 'guest', options = {}) {
   events.dispatchEvent(new Event('open'))
   return { events, viewer, request, state, tick, dispose, frame: () => [...frames].forEach(fn => fn()) }
 }
-it('leaves camera independent until Follow; direct input exits Follow', () => {
+it.each(['pointerdown', 'nadoc:view-navigation'])('leaves camera independent until Follow; %s exits Follow', event => {
   const v = setup(); v.state(1); v.frame(); expect(v.viewer.applyCamera).not.toHaveBeenCalled()
   expect(document.querySelector('[data-jump]')).toBeNull()
   v.state(2); v.frame(); expect(v.viewer.applyCamera).not.toHaveBeenCalled()
   document.querySelector('[data-follow]').click(); v.frame(); expect(v.viewer.applyCamera).toHaveBeenCalledTimes(1)
-  document.querySelector('canvas').dispatchEvent(new Event('pointerdown'))
+  document.querySelector('canvas').dispatchEvent(new Event(event))
   expect(document.querySelector('[data-follow]').getAttribute('aria-pressed')).toBe('false')
   expect(v.viewer.runtime.controls.enabled).toBe(true)
   v.frame(); expect(v.viewer.applyCamera).toHaveBeenCalledTimes(1); v.dispose()
@@ -109,4 +109,43 @@ it('relays loading and recognizes a terminal state without calling it a transien
   v.state(1, null, { loading: { fraction: .6 } }); expect(onLoading).toHaveBeenLastCalledWith({ fraction: .6 }, false)
   v.events.dispatchEvent(new Event('error')); expect(onEnded).not.toHaveBeenCalled()
   v.state(2, null, { ended: true }); expect(onEnded).toHaveBeenCalledOnce(); v.dispose()
+})
+
+it('displays completed snapshots while newer playback snapshots arrive', async () => {
+  const pending = [], applied = []
+  const loadRevision = vi.fn(({ viewer, revision, isCurrent }) => new Promise(resolve => pending.push(() => {
+    const valid = isCurrent()
+    if (valid) { viewer.current = {}; applied.push(revision) }
+    resolve(valid)
+  })))
+  const v = setup('guest', { loadRevision })
+  v.state(1, null, { revision: 'a'.repeat(64) })
+  v.state(2, null, { revision: 'b'.repeat(64) })
+  pending.shift()()
+  await vi.waitFor(() => expect(loadRevision).toHaveBeenCalledTimes(2))
+  expect(applied).toEqual(['a'.repeat(64)])
+  pending.shift()()
+  await vi.waitFor(() => expect(applied).toEqual(['a'.repeat(64), 'b'.repeat(64)]))
+  v.dispose()
+})
+
+it('keeps Follow green across presenter handoffs and visualization changes', async () => {
+  const loadRevision = vi.fn(async ({ viewer }) => { viewer.current = {}; return true })
+  const v = setup('guest', { loadRevision })
+  v.state(1); const button = document.querySelector('[data-follow]'); button.click()
+  expect(button.style.background).toBe('rgb(35, 134, 54)')
+  v.state(2, null, { presenting: false }) // native publisher releases its lease
+  expect(button.getAttribute('aria-pressed')).toBe('true')
+  expect(button.disabled).toBe(false) // opting out remains possible during the handoff
+  v.state(3, null, { revision: 'a'.repeat(64), presenting: false })
+  await vi.waitFor(() => expect(loadRevision).toHaveBeenCalledOnce())
+  v.state(4, { position: [50, 0, 30] }, { revision: 'a'.repeat(64) })
+  v.frame()
+  expect(button.getAttribute('aria-pressed')).toBe('true')
+  expect(v.viewer.applyCamera).toHaveBeenCalled()
+  expect(v.viewer.runtime.controls.enabled).toBe(false)
+  document.querySelector('canvas').dispatchEvent(new Event('pointerdown'))
+  expect(button.style.background).toBe('')
+  expect(button.getAttribute('aria-pressed')).toBe('false')
+  v.dispose()
 })
