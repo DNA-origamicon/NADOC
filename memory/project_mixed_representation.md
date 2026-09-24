@@ -29,6 +29,15 @@ in `docs/audits/view_volume_display_20260924.md`.
 
 ## Sharing display state (2026-09-24)
 
+Native sharing also watches design/geometry identities. After an edit, it waits
+for a stable document and scene structure across polling ticks, then replaces the
+existing invitation's scene. GPU upload-counter churn does not block publication;
+superseding edits invalidate in-flight exports. Guests retain their camera.
+Active multi-overlay layers refresh from updated design geometry, serialize their
+rebuilds, and preserve the presenter camera. Small-design browser coverage includes
+overhang extrusion, free-end resize, and bundle extrusion, including active overlay.
+See `docs/audits/shared_design_edits_20260924.md`.
+
 Shared snapshots include visible volume outlines and representation geometry, with
 per-instance alpha preserved. After explicit publication, native sharing watches
 scene display changes, so representation switches and volume edits update the same

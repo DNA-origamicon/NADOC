@@ -62,6 +62,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   const sharedScene = new THREE.Scene()
   let count = 0
   let generation = 0
+  let rebuildFlight = Promise.resolve(), refreshTimer = null, sourceDirty = false
   let separation = 0
   let longestDimension = 1
   let savedCamera = null
@@ -164,13 +165,13 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     positionLayers()
   }
 
-  async function rebuild() {
-    const mine = ++generation
+  async function build(mine, refit) {
     sharedScene.children = []
     for (const layer of layers) { disposeMultiScene(layer.renderScene); layer.renderScene = null }
     for (const row of viewportControls.children) row.dataset.ready = 'false'
     for (let i = 0; i < count; i++) {
       const available = await setRepresentation(layers[i].representation)
+      if (mine !== generation || count === 0) return
       if (available === false) {
         layers[i].renderScene = new THREE.Scene()
         const row = viewportControls.children[i]
@@ -187,8 +188,31 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
       if (loading) loading.textContent = 'Loading…'
       viewportControls.children[i].dataset.ready = 'true'
     }
-    fitInitial()
+    if (refit) fitInitial()
+    else { longestDimension = designLongestDimension(store.getState()); positionLayers() }
   }
+
+  function rebuild({ refit = true } = {}) {
+    const mine = ++generation
+    sourceDirty = true
+    rebuildFlight = rebuildFlight.catch(() => {}).then(async () => {
+      if (mine !== generation || !count) return
+      await build(mine, refit)
+      if (mine === generation) sourceDirty = false
+    })
+    return rebuildFlight
+  }
+  const unsubscribe = store.subscribe?.((next, previous) => {
+    if (!count || !['currentDesign', 'currentGeometry', 'currentHelixAxes', 'currentAssembly'].some(key => next[key] !== previous[key])) return
+    sourceDirty = true; generation++
+    clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null
+      void rebuild({ refit: false }).catch(error => {
+        for (const loading of viewportControls.querySelectorAll('.mo-loading')) loading.textContent = error.message
+      })
+    }, 250)
+  })
 
   function renderOverlay() {
     const width = canvas.clientWidth || canvas.parentElement?.clientWidth || 1
@@ -219,6 +243,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     }
     renderControls()
     if (!count) {
+      clearTimeout(refreshTimer); refreshTimer = null; sourceDirty = false
       generation++; resetRenderFn(); sharedScene.children = []
       for (const layer of layers) { disposeMultiScene(layer.renderScene); layer.renderScene = null }
       if (savedCamera) {
@@ -267,7 +292,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   return { activate, configure,
     getBroadcastView() {
       if (!count) return null
-      if (layers.slice(0, count).some(layer => !layer.renderScene)) throw Object.assign(new Error('Waiting for multi-overlay layers to finish loading'), { code: 'VIEW_NOT_READY' })
+      if (sourceDirty || layers.slice(0, count).some(layer => !layer.renderScene)) throw Object.assign(new Error('Waiting for multi-overlay layers to finish loading'), { code: 'VIEW_NOT_READY' })
       // Borrow the frozen scenes without reparenting or cloning their GPU resources.
       sharedScene.children = layers.slice(0, count).map(layer => layer.renderScene)
       return { scene: sharedScene, camera, controls,
@@ -326,6 +351,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
       }
     }),
     dispose: () => {
+    unsubscribe?.(); clearTimeout(refreshTimer)
     globalThis.window?.removeEventListener('nadoc:comparison-mode', exclusiveMode)
     activate(0); viewportControls.remove()
   } }

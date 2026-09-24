@@ -38,7 +38,7 @@ function _makeTrackballControls(camera, canvas, target) {
   return c
 }
 
-export function initScene(canvas) {
+export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false } = {}) {
   let disposed = false
   let finishAnimation = null
   const pendingFrames = new Set()
@@ -49,7 +49,7 @@ export function initScene(canvas) {
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, stencil: true })
   renderer.setSize(_w(), _h())
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelRatioCap))
   renderer.setClearColor(0x000000, 0)
   renderer.xr.enabled = true
 
@@ -273,6 +273,7 @@ export function initScene(canvas) {
   let _cnFrame = 0
   window._cnFrame = 0
   renderer.setAnimationLoop(() => {
+    if (pauseWhenHidden && canvas.ownerDocument.hidden) return
     _cnFrame++
     window._cnFrame = _cnFrame
     if (!renderer.xr.isPresenting) _inner.update()

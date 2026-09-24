@@ -1,0 +1,19 @@
+/* Dynamic viewport handles mobile browser chrome and the sign-in keyboard. */
+body { height: 100dvh; }
+.mobile-viewer { overflow: hidden; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.mobile-viewer header { gap: 6px; padding: 4px 8px; min-height: 52px; }
+.mobile-viewer header h1 { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mobile-viewer button, .mobile-viewer select, .mobile-viewer .open { min-height: 44px; min-width: 44px; touch-action: manipulation; }
+.mobile-viewer header > * { flex-shrink: 0; }
+.mobile-viewer header h1 { flex-shrink: 1; }
+.mobile-viewer #mode { display: none; }
+.mobile-viewer dialog { max-height: calc(100dvh - 24px); overflow: auto; padding: 16px; }
+.mobile-viewer #join input { font-size: 16px; min-height: 44px; }
+.mobile-viewer [data-presentation], .mobile-viewer [data-trajectory] { padding: 4px 8px !important; gap: 6px !important; flex-wrap: nowrap !important; overflow-x: auto; flex-shrink: 0; }
+.mobile-viewer [data-presentation] > *, .mobile-viewer [data-trajectory] > * { flex-shrink: 0; }
+.mobile-viewer:not(.mobile-details) #status, .mobile-viewer:not(.mobile-details) #guest, .mobile-viewer:not(.mobile-details) [data-connection] { display: none; }
+.mobile-viewer.mobile-details #status { max-height: 70px; overflow: auto; padding: 4px 8px; }
+.mobile-viewer.mobile-details #guest { max-height: 35px; overflow: auto; }
+.mobile-landscape, .mobile-recovery { position: absolute; z-index: 100; left: 8px; right: 8px; top: 8px; padding: 16px; background: #161b22f5; border: 1px solid #586575; border-radius: 8px; }
+.mobile-landscape[hidden], .mobile-recovery[hidden] { display: none; }
+.mobile-recovery { z-index: 101; }

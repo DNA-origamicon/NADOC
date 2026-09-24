@@ -478,3 +478,9 @@ For independent volume displays, also compare overlapping local color schemes,
 rotated box/hex hull openings, and interaction speed with several volumes on a
 large design. Small-design and enclosed-volume pixel checks pass; see
 `docs/audits/view_volume_display_20260924.md`.
+During a remote session, create an overhang, resize an end, and extrude a bundle
+on a representative large design; check update latency and guest camera continuity
+in native and multi-overlay views. Small-design automated edit coverage passes;
+full-snapshot throughput needs real-device validation.
+
+- 2026-09-24 mobile shared viewer: Chromium phone emulation verifies sign-in, landscape layout and actual touch rotate/pinch/pan; physical iPhone Safari/Android Chrome rotation, resume, GPU memory and thermal behavior remain pending. See `docs/audits/mobile_viewer_implementation_20260924.md` for the phone acceptance sequence.

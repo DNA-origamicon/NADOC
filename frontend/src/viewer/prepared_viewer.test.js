@@ -7,12 +7,12 @@ import { initScene } from './runtime.js'
 import { loadPreparedScene } from './prepared_scene.js'
 import { mountPreparedViewer } from './prepared_viewer.js'
 afterEach(() => { vi.clearAllMocks(); document.body.innerHTML = '' })
-function setup() {
+function setup(mobile = false) {
   document.body.innerHTML = '<main><canvas></canvas></main><h1></h1><p></p><input type="file"><button></button><select></select>'
   const runtime = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(), controls: { target: new THREE.Vector3(), update: vi.fn() },
     resetRenderFn: vi.fn(), setRenderFn: vi.fn(), renderer: { setClearColor: vi.fn() }, switchOrbitMode: vi.fn(), setNavScaleProvider: vi.fn(), dispose: vi.fn() }
   initScene.mockReturnValue(runtime)
-  const viewer = mountPreparedViewer({ canvas: document.querySelector('canvas'), status: document.querySelector('p'), title: document.querySelector('h1'), fileInput: document.querySelector('input'), resetButton: document.querySelector('button'), modeInput: document.querySelector('select') })
+  const viewer = mountPreparedViewer({ mobile, canvas: document.querySelector('canvas'), status: document.querySelector('p'), title: document.querySelector('h1'), fileInput: document.querySelector('input'), resetButton: document.querySelector('button'), modeInput: document.querySelector('select') })
   return { viewer, runtime }
 }
 const file = { name: 'part.nadocview', size: 10, arrayBuffer: async () => new ArrayBuffer(10) }
@@ -94,5 +94,16 @@ it('installs the overlay renderer and restores normal rendering on replacement a
   expect(runtime.resetRenderFn).toHaveBeenCalledTimes(2)
   viewer.clear()
   expect(runtime.resetRenderFn).toHaveBeenCalledTimes(3)
+  viewer.dispose()
+})
+
+it('keeps Orbit on mobile when a desktop presenter uses Multiscale or Trackball', async () => {
+  const { viewer, runtime } = setup(true), next = scene()
+  next.data.camera.orbitMode = 'multiscale'
+  loadPreparedScene.mockResolvedValueOnce(next); await viewer.loadFile(file)
+  expect(initScene).toHaveBeenLastCalledWith(document.querySelector('canvas'), { pixelRatioCap: 1, pauseWhenHidden: true })
+  expect(runtime.switchOrbitMode).toHaveBeenLastCalledWith('orbit')
+  viewer.applyCamera({ ...next.data.camera, orbitMode: 'trackball' })
+  expect(runtime.switchOrbitMode).toHaveBeenLastCalledWith('orbit')
   viewer.dispose()
 })

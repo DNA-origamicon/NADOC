@@ -84,7 +84,8 @@ it('mirrors native view tools on the same invitation while camera sharing is off
   } }))
   const view = { viewTools: { sequences: false } }
   const prepared = { captureView: () => ({ scene: { uuid: 'native' }, view }), exportView: vi.fn(async () => ({ title: 'Part', buffer: new ArrayBuffer(16) })) }
-  const store = { getState: () => ({ currentDesign: { id: 'part' } }), subscribe: () => () => {} }
+  const state = { currentDesign: { id: 'part' } }
+  const store = { getState: () => state, subscribe: () => () => {} }
   const ui = initShareLink({ exportView: prepared.exportView, broadcast: { prepared, store }, fetch: request })
   try {
     document.getElementById('share-link-dialog').showModal = vi.fn(); ui.show()

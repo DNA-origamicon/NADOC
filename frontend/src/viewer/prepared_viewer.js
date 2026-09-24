@@ -1,3 +1,4 @@
+import { isTouchViewer } from './mobile_viewer.js'
 import { renderSharedOverlay } from './shared_overlay.js'
 import { initViewCube } from '../scene/view_cube.js'
 import { mountSharedSelection } from './shared_selection.js'
@@ -10,8 +11,9 @@ import { initViewerPerformance } from '../perf/viewer_performance.js'
 import { PACKAGE_LIMIT } from './package_container.js'
 
 /** Standalone host: no editor store, API client, filesystem API, or backend calls. */
-export function mountPreparedViewer({ canvas, status, title, fileInput, resetButton, modeInput }) {
-  const runtime = initScene(canvas)
+export function mountPreparedViewer({ canvas, status, title, fileInput, resetButton, modeInput, mobile = isTouchViewer() }) {
+  const runtime = initScene(canvas, { pixelRatioCap: mobile ? 1 : 2, pauseWhenHidden: mobile })
+  const navigationMode = mode => mobile ? 'orbit' : mode
   const viewTools = mountSharedViewTools(canvas.parentElement)
   const sharedSelection = mountSharedSelection({ container: canvas.parentElement, runtime })
   runtime.scene.clear()
@@ -28,7 +30,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
       beforeNavigate: () => {
         if (!current || performanceApi.busy) return false
         canvas.dispatchEvent(new Event('nadoc:view-navigation'))
-        runtime.switchOrbitMode(modeInput.value)
+        runtime.switchOrbitMode(navigationMode(modeInput.value))
         return true
       },
     })
@@ -37,8 +39,8 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     if (!current || performanceApi.busy) return
     viewCube.cancel()
     const pose = current.data.camera
-    runtime.switchOrbitMode(pose.orbitMode)
-    modeInput.value = pose.orbitMode
+    runtime.switchOrbitMode(navigationMode(pose.orbitMode))
+    modeInput.value = navigationMode(pose.orbitMode)
     runtime.camera.position.fromArray(pose.position); runtime.controls.target.fromArray(pose.target)
     runtime.camera.up.fromArray(pose.up); runtime.camera.fov = pose.fov
     runtime.camera.near = pose.near ?? 0.1; runtime.camera.far = pose.far ?? 2000
@@ -49,7 +51,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     if (!current || performanceApi.busy) return
     viewCube.cancel()
     // A one-shot jump also clears residual damping from the guest's last gesture.
-    if (resetControls || modeInput.value !== pose.orbitMode) { runtime.switchOrbitMode(pose.orbitMode); modeInput.value = pose.orbitMode }
+    if (resetControls || modeInput.value !== navigationMode(pose.orbitMode)) { runtime.switchOrbitMode(navigationMode(pose.orbitMode)); modeInput.value = navigationMode(pose.orbitMode) }
     runtime.camera.position.lerp(remotePosition.fromArray(pose.position), blend)
     runtime.controls.target.lerp(remoteTarget.fromArray(pose.target), blend)
     runtime.camera.up.lerp(remoteUp.fromArray(pose.up), blend)
@@ -96,7 +98,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
       runtime.setNavScaleProvider(() => next.data.navigation)
       if (savedCamera) applyCamera(savedCamera); else resetCamera()
       title.textContent = String(next.data.title || file.name)
-      status.textContent = `${next.data.trajectory ? 'Prepared trajectory' : 'Static snapshot'} · Orbit, pan and zoom · Double-click to center`
+      status.textContent = mobile ? 'One finger rotates · Pinch to zoom · Two fingers pan · Reset view restores the starting camera' : `${next.data.trajectory ? 'Prepared trajectory' : 'Static snapshot'} · Orbit, pan and zoom · Double-click to center`
       resetButton.disabled = false; modeInput.disabled = false
       return true
     } catch (error) {
@@ -105,7 +107,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     }
   }
   const choose = () => { loadFile(fileInput.files[0]); fileInput.value = '' }
-  const changeMode = () => { if (!performanceApi.busy) runtime.switchOrbitMode(modeInput.value) }
+  const changeMode = () => { if (!performanceApi.busy) runtime.switchOrbitMode(navigationMode(modeInput.value)) }
   const drag = event => event.preventDefault()
   const drop = event => { event.preventDefault(); loadFile(event.dataTransfer.files[0]) }
   const ray = new THREE.Raycaster(), pointer = new THREE.Vector2()
@@ -116,6 +118,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     ray.setFromCamera(pointer, runtime.camera)
     const hit = ray.intersectObject(current.scene, true)[0]
     if (hit) { runtime.controls.target.copy(hit.point); runtime.controls.update() }
+    return !!hit
   }
   fileInput.addEventListener('change', choose)
   resetButton.addEventListener('click', resetCamera)
@@ -133,7 +136,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     runtime.setNavScaleProvider(() => new Float64Array()); runtime.controls.enabled = false
     resetButton.disabled = true; modeInput.disabled = true; fileInput.disabled = true
   }
-  return { clear, loadFile, runtime, performanceApi, applyCamera, captureCamera: () => ({ ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far }), get current() { return current }, dispose() {
+  return { mobile, centerAt: center, clear, loadFile, runtime, performanceApi, applyCamera, captureCamera: () => ({ ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far }), get current() { return current }, dispose() {
     if (disposed) return
     disposed = true; generation++
     annotations?.dispose(); annotations = null

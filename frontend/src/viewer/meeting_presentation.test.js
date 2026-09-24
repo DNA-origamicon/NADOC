@@ -149,3 +149,12 @@ it('keeps Follow green across presenter handoffs and visualization changes', asy
   expect(button.getAttribute('aria-pressed')).toBe('false')
   v.dispose()
 })
+
+it('reconnects after a suspended tab returns and removes the lifecycle listener on disposal', () => {
+  const v = setup(), hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+  document.dispatchEvent(new Event('visibilitychange')); expect(v.events.close).not.toHaveBeenCalled()
+  hidden.mockReturnValue(false)
+  document.dispatchEvent(new Event('visibilitychange')); expect(v.events.close).toHaveBeenCalledOnce()
+  v.dispose()
+  document.dispatchEvent(new Event('visibilitychange')); expect(v.events.close).toHaveBeenCalledTimes(2)
+})

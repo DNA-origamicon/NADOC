@@ -27,3 +27,15 @@ it('stops rendering, controls, resize observer and pending camera animation on d
   expect(stopControls).toHaveBeenCalledTimes(1)
   expect(disconnect).toHaveBeenCalledTimes(1)
 })
+
+it('caps mobile resolution and skips rendering while the document is hidden', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  document.body.innerHTML = '<div><canvas></canvas></div>'
+  const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+  const runtime = initScene(document.querySelector('canvas'), { pixelRatioCap: 1, pauseWhenHidden: true })
+  const frame = runtime.renderer.setAnimationLoop.mock.calls[0][0]
+  expect(runtime.renderer.setPixelRatio.mock.calls[0][0]).toBeLessThanOrEqual(1)
+  frame(); expect(runtime.renderer.render).not.toHaveBeenCalled()
+  hidden.mockReturnValue(false); frame(); expect(runtime.renderer.render).toHaveBeenCalledOnce()
+  runtime.dispose(); hidden.mockRestore()
+})

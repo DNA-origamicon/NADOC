@@ -80,3 +80,70 @@ it('shares changing hull windows even when their editing outlines are hidden', a
   await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(2)
   v.ui.dispose()
 })
+
+it('coalesces design and geometry updates and publishes the final revision without a toggle', async () => {
+  const v = setup(); v.ui.remember()
+  v.state.currentDesign = { id: 'part', overhangs: [{ id: 'new' }] }
+  await v.ui.tick(); expect(v.publish).not.toHaveBeenCalled()
+  v.state.currentGeometry = [{ helix_id: 'new' }]
+  await v.ui.tick(); expect(v.publish).not.toHaveBeenCalled()
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledOnce()
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledOnce()
+  v.ui.dispose()
+})
+
+it('discards an export superseded by another design edit and retries the latest scene', async () => {
+  const v = setup(); v.ui.remember()
+  v.state.currentDesign = { id: 'part', name: 'resized' }
+  await v.ui.tick()
+  let finish
+  v.prepared.exportView.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  const flight = v.ui.tick()
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  v.state.currentDesign = { id: 'part', name: 'extruded' }
+  finish({ buffer: new ArrayBuffer(1) }); await flight
+  expect(v.publish).not.toHaveBeenCalled()
+  await v.ui.tick(); await v.ui.tick()
+  expect(v.publish).toHaveBeenCalledOnce()
+  v.ui.dispose()
+})
+
+it('does not send a partially changed display after asynchronous preparation', async () => {
+  const v = setup(); v.ui.remember(); v.view.representation = 'stick'
+  v.prepared.exportView.mockImplementationOnce(async () => {
+    v.sourceScene.add(new THREE.Group())
+    return { buffer: new ArrayBuffer(1) }
+  })
+  await v.ui.tick(); expect(v.publish).not.toHaveBeenCalled()
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledOnce()
+  v.ui.dispose()
+})
+
+it('does not starve design updates when render frames refresh GPU upload counters', async () => {
+  const v = setup(), mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial())
+  v.sourceScene.add(mesh); v.ui.remember()
+  v.state.currentDesign = { id: 'part', overhangs: ['new'] }
+  await v.ui.tick()
+  mesh.material.needsUpdate = true; mesh.geometry.attributes.position.needsUpdate = true
+  await v.ui.tick()
+  expect(v.publish).toHaveBeenCalledOnce()
+  v.ui.dispose()
+})
+
+it('does not republish idle GPU uploads, but still shares actual buffer edits', async () => {
+  const v = setup(), mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 2)
+  mesh.setColorAt(0, new THREE.Color('red')); v.sourceScene.add(mesh); v.ui.remember()
+  for (let frame = 0; frame < 4; frame++) {
+    mesh.material.needsUpdate = true
+    for (const attribute of [mesh.instanceMatrix, mesh.instanceColor, mesh.geometry.attributes.position, mesh.geometry.index]) attribute.needsUpdate = true
+    await v.ui.tick()
+  }
+  expect(v.prepared.exportView).not.toHaveBeenCalled()
+  mesh.setMatrixAt(0, new THREE.Matrix4().makeTranslation(4, 0, 0)); mesh.instanceMatrix.needsUpdate = true
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(1)
+  mesh.geometry.attributes.position.setX(0, 6); mesh.geometry.attributes.position.needsUpdate = true
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(2)
+  mesh.setColorAt(0, new THREE.Color('blue')); mesh.instanceColor.needsUpdate = true
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(3)
+  v.ui.dispose()
+})

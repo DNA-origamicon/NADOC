@@ -84,4 +84,28 @@ describe('multi-overlay', () => {
     renderFn()
     expect(renderer.render).toHaveBeenCalledTimes(4)
   })
+
+  it('refreshes edited design layers without resetting the presenter camera', async () => {
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(55, 1, .1, 100)
+    const controls = { target: new THREE.Vector3(), update: vi.fn() }
+    let subscriber, state = { currentDesign: { id: 'part' }, currentGeometry: [] }
+    const api = initMultiOverlay({ document, scene, camera, canvas: document.getElementById('canvas'),
+      renderer: {}, controls, setRenderFn: vi.fn(), resetRenderFn: vi.fn(),
+      store: { getState: () => state, subscribe: fn => { subscriber = fn; return vi.fn() } },
+      setRepresentation: vi.fn(), setColoringMode: vi.fn(),
+    })
+    scene.add(new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial()))
+    await api.activate(2)
+    const first = api.getBroadcastView().view.overlay
+    camera.position.set(33, 44, 55); controls.target.set(1, 2, 3)
+    scene.add(new THREE.Mesh(new THREE.SphereGeometry(), new THREE.MeshBasicMaterial()))
+    const previous = state; state = { ...state, currentDesign: { id: 'part', overhangs: ['new'] } }
+    subscriber(state, previous)
+    expect(() => api.getBroadcastView()).toThrow('Waiting')
+    await vi.waitFor(() => expect(api.getBroadcastView().view.overlay).not.toEqual(first))
+    expect(api.layers.slice(0, 2).every(layer => layer.renderScene.children.filter(o => o.isMesh).length === 2)).toBe(true)
+    expect(camera.position.toArray()).toEqual([33, 44, 55])
+    expect(controls.target.toArray()).toEqual([1, 2, 3])
+    api.dispose()
+  })
 })

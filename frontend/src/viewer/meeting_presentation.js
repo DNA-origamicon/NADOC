@@ -122,6 +122,8 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   // Browsers can keep a quiet HTTP stream open after the network goes offline.
   const offline = () => { disconnect(); lost() }
   const online = () => { if (!disposed && compatible()) { disconnect(); connect() } }
+  const visibility = () => { if (!doc.hidden) online() }
+  doc.addEventListener('visibilitychange', visibility)
   connect(); host?.addEventListener('offline', offline); host?.addEventListener('online', online)
   const ownCamera = () => { guestViews?.cancel(); follow(false); update() }
   for (const type of ['pointerdown', 'wheel', 'dblclick', 'nadoc:view-navigation']) canvas.addEventListener(type, ownCamera, { capture: true, passive: true })
@@ -146,6 +148,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     disposed = true; guestViews?.dispose(); onViewReady(() => {}); trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
     if (timer !== null) cancel(timer)
     viewer.runtime.removeFrameCallback(frame)
+    doc.removeEventListener('visibilitychange', visibility)
     host?.removeEventListener('offline', offline); host?.removeEventListener('online', online)
     for (const type of ['pointerdown', 'wheel', 'dblclick', 'nadoc:view-navigation']) canvas.removeEventListener(type, ownCamera, true)
     doc.getElementById('reset')?.removeEventListener('click', ownCamera, true); doc.getElementById('mode')?.removeEventListener('change', ownCamera, true)

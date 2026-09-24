@@ -38,8 +38,8 @@ export function initPreparedExport({ scene, camera, renderer, controls, canvas, 
       const bytes = new TextEncoder().encode(JSON.stringify(state.assemblyActive ? state.currentAssembly : state.currentDesign))
       const digest = await crypto.subtle.digest('SHA-256', bytes)
       const sourceHash = [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, '0')).join('')
-      if (store.getState().currentDesign !== state.currentDesign || store.getState().currentAssembly !== state.currentAssembly) throw new Error('The design changed during export; retry when idle')
-      if (captureView(presentation).scene !== source.scene || store.getState().assemblyActive !== state.assemblyActive) throw new Error('The view changed during export; retry when idle')
+      if (store.getState().currentDesign !== state.currentDesign || store.getState().currentAssembly !== state.currentAssembly) throw Object.assign(new Error('The design changed during export; retry when idle'), { code: 'VIEW_NOT_READY' })
+      if (captureView(presentation).scene !== source.scene || store.getState().assemblyActive !== state.assemblyActive) throw Object.assign(new Error('The view changed during export; retry when idle'), { code: 'VIEW_NOT_READY' })
       const pose = { ...source.pose, near: source.camera.near, far: source.camera.far }
       const view = { assembly: !!state.assemblyActive, detail_level: getDetailLevel(), atomistic: state.atomisticMode ?? 'off', surface: state.surfaceMode ?? 'off', coloring: state.coloringMode ?? 'strand', ...source.view }
       let requiresHullCutoutViewer = false, requiresWideLineViewer = false, requiresImpostorViewer = false
