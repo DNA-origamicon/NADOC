@@ -356,7 +356,7 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
-  const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView(), getDetailLevel: () => designRenderer.getDetailLevel(), getVisualization: () => captureSharedVisualization(document, simulateJobs?.getSelectedDetails?.()) })
+  const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView() ?? _multiOverlay?.getBroadcastView(), getRepresentation: () => _currentRepr, getDetailLevel: () => designRenderer.getDetailLevel(), getVisualization: () => captureSharedVisualization(document, simulateJobs?.getSelectedDetails?.()) })
   const sharing = initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store }, trajectory: {
     prepared: preparedExport, store, getSource: () => ({ controller: mdViz, companion: mdPanel?.trajectorySolvent,
       representation: _currentRepr, pause: () => mdPanel?.pauseTrajectory?.() }),
@@ -6159,7 +6159,7 @@ async function main() {
   const _multiOverlay = initMultiOverlay({
     document, scene, camera, renderer, canvas, controls, store,
     setRenderFn, resetRenderFn,
-    setRepresentation: _setComparisonRepresentation,
+    getRepresentation: () => _currentRepr, setRepresentation: _setComparisonRepresentation,
     setColoringMode: _setColoringMode,
   })
 

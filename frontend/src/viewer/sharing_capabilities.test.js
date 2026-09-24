@@ -1,6 +1,8 @@
 import { it, expect } from 'vitest'
 import { requireSharingCapabilities } from './sharing_capabilities.js'
 it.each([
+  ['requiresHullCutoutViewer', 'hull-cutouts-v1'],
+  ['requiresOverlayViewer', 'multi-overlay-v1'],
   ['requiresVisualizationLabelViewer', 'visualization-labels-v1'],
   ['requiresSelectionViewer', 'selection-ping-v1'],
   ['requiresAnnotationsViewer', 'annotations-v1'],

@@ -1,3 +1,5 @@
+import { hullCutoutShader, applyHullCutouts, validateHullCutouts } from '../scene/hull_volume_cutouts.js'
+import { validateSharedOverlay } from './shared_overlay.js'
 import { validateSharedVisualization } from './shared_visualization.js'
 import { validateSharedSelection } from './shared_selection.js'
 import { validateSharedAnnotations } from './shared_annotations.js'
@@ -46,11 +48,12 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
     if (!MATERIALS.has(m.type) && !m.isLineMaterial) fail(`Unsupported material ${m.type}; this view cannot yet be packaged`)
     const impostor = preparedImpostorSpec(m)
     const alpha = m.onBeforeCompile === instanceAlphaOnBeforeCompile
+    const hullCutouts = m.onBeforeCompile === hullCutoutShader ? m.userData.hullCutouts : null
     const sectionCap = m.onBeforeCompile === sectionCapShader
-    if (!impostor && !alpha && !sectionCap && m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
+    if (!hullCutouts && !impostor && !alpha && !sectionCap && m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
     const data = m.isLineMaterial ? encodeWideLineMaterial(m) : m.toJSON(meta)
     delete data.userData
-    materials.set(m.uuid, { ...data, instanceAlpha: alpha, sectionCap, ...(impostor ? { impostor } : {}),
+    materials.set(m.uuid, { ...data, instanceAlpha: alpha, sectionCap, ...(hullCutouts ? { hullCutouts } : {}), ...(impostor ? { impostor } : {}),
       sectionPlanes: (m.clippingPlanes ?? []).map(p => [...p.normal.toArray(), p.constant]),
       clipIntersection: m.clipIntersection, clipShadows: m.clipShadows,
       colors: Object.fromEntries(COLOR_KEYS.filter(k => m[k]?.isColor).map(k => [k, m[k].toArray()])) })
@@ -84,7 +87,7 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
   }
   const root = node(scene)
   const sectioned = [...materials.values()].some(m => m.sectionCap || m.sectionPlanes.length)
-  const packageData = { format: 'nadoc-prepared-scene', version: [...materials.values()].some(m => m.impostor) ? 4 : [...materials.values()].some(m => m.wideLine) ? 3 : sectioned ? 2 : 1, threeRevision: THREE.REVISION, units: 'nm',
+  const packageData = { format: 'nadoc-prepared-scene', version: [...materials.values()].some(m => m.hullCutouts?.length) ? 6 : view?.overlay ? 5 : [...materials.values()].some(m => m.impostor) ? 4 : [...materials.values()].some(m => m.wideLine) ? 3 : sectioned ? 2 : 1, threeRevision: THREE.REVISION, units: 'nm',
     title: String(title).slice(0, 200), sourceHash, view, capabilities: ['static-visible-scene', 'orbit'],
     camera, navigation, background: scene.background?.isColor ? `#${scene.background.getHexString()}` : background,
     render: { localClippingEnabled: !!renderer?.localClippingEnabled, toneMapping: renderer?.toneMapping ?? THREE.NoToneMapping, toneMappingExposure: renderer?.toneMappingExposure ?? 1, outputColorSpace: renderer?.outputColorSpace ?? THREE.SRGBColorSpace, clearColor: renderer?.getClearColor(new THREE.Color()).getHex() ?? 0, clearAlpha: renderer?.getClearAlpha() ?? 0 },
@@ -95,7 +98,8 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
 
 /** Validate before creating GPU resources or giving image URLs to Three.js. */
 export function validateScene(data) {
-  if (data?.format !== 'nadoc-prepared-scene' || ![1, 2, 3, 4].includes(data.version) || data.threeRevision !== THREE.REVISION || data.units !== 'nm') fail('Unsupported viewer package version')
+  if (data?.format !== 'nadoc-prepared-scene' || ![1, 2, 3, 4, 5, 6].includes(data.version) || data.threeRevision !== THREE.REVISION || data.units !== 'nm') fail('Unsupported viewer package version')
+  validateSharedOverlay(data)
   validateViewTools(data.view?.viewTools)
   validateSharedVisualization(data.view?.visualization)
   if (data.sourceHash !== null && !/^[a-f0-9]{64}$/.test(data.sourceHash)) fail('Invalid source identity')
@@ -143,6 +147,7 @@ export function validateScene(data) {
     validateWideLineMaterial(m)
     if (m.colors && Object.entries(m.colors).some(([k, v]) => !COLOR_KEYS.includes(k) || !finiteVector(v, 3))) fail('Invalid material colors')
     if (!MATERIALS.has(m.type) || m.vertexShader || m.fragmentShader || m.uniforms || m.clippingPlanes) fail('Unsupported package material')
+    if (m.hullCutouts != null) { validateHullCutouts(m.hullCutouts); if (m.hullCutouts.length && data.version < 6) fail('Unsupported hull cutout version'); if (m.impostor || m.instanceAlpha || m.sectionCap || !['MeshPhongMaterial', 'MeshBasicMaterial', 'LineBasicMaterial'].includes(m.type)) fail('Unsupported hull cutout material') }
     if (m.impostor != null && (data.version < 4 || m.type !== 'MeshPhongMaterial' || !Number.isFinite(m.impostor.radius) || m.impostor.radius <= 0 || typeof m.impostor.instanceAlpha !== 'boolean' || m.instanceAlpha || m.sectionCap || m.wideLine)) fail('Invalid sphere impostor')
     if (m.sectionCap != null && typeof m.sectionCap !== 'boolean') fail('Invalid section cap')
     if (m.sectionPlanes && (!Array.isArray(m.sectionPlanes) || m.sectionPlanes.length > 16 || m.sectionPlanes.some(p => !finiteVector(p, 4) || Math.abs(Math.hypot(...p.slice(0, 3)) - 1) > .001))) fail('Invalid section planes')
@@ -231,6 +236,7 @@ export async function loadPreparedScene(buffer) {
         materials[m.uuid] = material
         if (m.impostor.instanceAlpha) enableImpostorInstanceAlpha(material)
       }
+      if (m.hullCutouts) applyHullCutouts(materials[m.uuid], m.hullCutouts)
       if (m.instanceAlpha) applyInstanceAlphaMaterial(materials[m.uuid])
       if (m.sectionCap) materials[m.uuid].onBeforeCompile = sectionCapShader
       materials[m.uuid].clippingPlanes = (m.sectionPlanes ?? []).map(p => new THREE.Plane(new THREE.Vector3(...p.slice(0, 3)), p[3]))
@@ -254,6 +260,7 @@ export async function loadPreparedScene(buffer) {
     const restore = (o, spec) => {
       if (spec.wideLine) o = restoreWideLine(o)
       o.frustumCulled = spec.frustumCulled
+
       if ((Array.isArray(o.material) ? o.material : [o.material]).some(m => m?.onBeforeCompile === sectionCapShader)) {
         o.onAfterRender = renderer => renderer.clearStencil()
         o.raycast = () => {} // The stencil plane is not a molecular surface to center on.

@@ -55,11 +55,8 @@ import {
 import { resolveAtomColor } from './atomistic_renderer/color_resolver.js'
 import { makeAtomTable } from './atom_table.js'
 
-let _colorMode    = 'cpk'    // 'cpk' | 'strand' | 'base'
-let _vdwScale     = 1.0      // multiplier on VdW / ball radii
-let _strandColors = new Map()  // strand_id → hex number (used when _colorMode==='strand')
-let _baseColors   = new Map()  // strand/helix/bp/direction/copy identity → hex (used when _colorMode==='base')
-let _scalarColors = null       // "helix:bp:dir" → hex; oxDNA flexibility-map overlay (null = off)
+const sharedColors = { mode: 'cpk', strands: new Map(), bases: new Map(), scalar: null }
+let _vdwScale = 1.0
 
 // Spurious-bond guard for position overlays (applyPositionLerp) — now a BACKSTOP,
 // not the primary fix. The oxDNA→atomistic reconstruction stamps each nucleotide by
@@ -74,13 +71,14 @@ const _HIDDEN_BOND = new THREE.Matrix4().makeScale(0, 0, 0)
 
 // ── Renderer factory ──────────────────────────────────────────────────────────
 
-export function initAtomisticRenderer(scene) {
+export function initAtomisticRenderer(scene, { independentColors = false } = {}) {
+  const colors = independentColors ? { mode: 'cpk', strands: new Map(), bases: new Map(), scalar: null } : sharedColors
   // Colour preferences are shared by renderer instances; skip a repeated paint
   // only when this instance has actually painted those same preferences.
   let _lastColorPaint = null
-  const _colorsCurrent = () => _lastColorPaint && _lastColorPaint.mode === _colorMode
-    && _lastColorPaint.strands === _strandColors && _lastColorPaint.bases === _baseColors
-    && _lastColorPaint.scalar === _scalarColors
+  const _colorsCurrent = () => _lastColorPaint && _lastColorPaint.mode === colors.mode
+    && _lastColorPaint.strands === colors.strands && _lastColorPaint.bases === colors.bases
+    && _lastColorPaint.scalar === colors.scalar
 
 
   // Factory-scoped mutable state bundled into one object per Pass 13-F's
@@ -444,11 +442,11 @@ export function initAtomisticRenderer(scene) {
   // Build a per-call snapshot of module-mutable colour state for color_resolver.
   // The resolver is pure — it only reads `colorMode`, `strandColors`, `baseColors`
   // through this ctx, never closes over the module-level let-bindings directly.
-  // Extracting `_colorMode` / `_strandColors` / `_baseColors` themselves is
+  // Extracting `colors.mode` / `colors.strands` / `colors.bases` themselves is
   // Pass 14+ scope per Pass 12-B's surface map.
   function _colorCtx() {
-    return { colorMode: _colorMode, strandColors: _strandColors, baseColors: _baseColors,
-             scalarColors: _scalarColors, clusterColors: _state.clusterColors }
+    return { colorMode: colors.mode, strandColors: colors.strands, baseColors: colors.bases,
+             scalarColors: colors.scalar, clusterColors: _state.clusterColors }
   }
 
   function _applyColors(selection) {
@@ -499,7 +497,7 @@ export function initAtomisticRenderer(scene) {
         }
       }
     }
-    _lastColorPaint = { mode: _colorMode, strands: _strandColors, bases: _baseColors, scalar: _scalarColors }
+    _lastColorPaint = { mode: colors.mode, strands: colors.strands, bases: colors.bases, scalar: colors.scalar }
   }
 
   /** Per-cluster opacity of one atom row, keyed per nucleotide. Atoms carry no
@@ -921,12 +919,12 @@ export function initAtomisticRenderer(scene) {
      */
     setColorMode(mode, strandColors = new Map(), baseColors = null) {
       const strands = strandColors instanceof Map ? strandColors : new Map()
-      const bases = baseColors instanceof Map ? baseColors : _baseColors
+      const bases = baseColors instanceof Map ? baseColors : colors.bases
       const same = (a, b) => a.size === b.size && [...a].every(([key, color]) => b.get(key) === color)
-      if (_colorsCurrent() && _colorMode === mode && same(strands, _strandColors) && same(bases, _baseColors)) return
-      _colorMode = mode
-      _strandColors = new Map(strands)
-      _baseColors = new Map(bases)
+      if (_colorsCurrent() && colors.mode === mode && same(strands, colors.strands) && same(bases, colors.bases)) return
+      colors.mode = mode
+      colors.strands = new Map(strands)
+      colors.bases = new Map(bases)
       _applyColors(_state.lastSel)
     },
 
@@ -980,16 +978,16 @@ export function initAtomisticRenderer(scene) {
       // Representation rebuilds already paint the held scalar map. Both the
       // shared controls and simulation owner reapply it; identical values must
       // not repaint every atom and bond twice (~125 ms on P1 Alpine).
-      if (_colorsCurrent() && (next === _scalarColors || (next && _scalarColors && next.size === _scalarColors.size
-          && [...next].every(([key, color]) => _scalarColors.get(key) === color)))) return
-      _scalarColors = next
+      if (_colorsCurrent() && (next === colors.scalar || (next && colors.scalar && next.size === colors.scalar.size
+          && [...next].every(([key, color]) => colors.scalar.get(key) === color)))) return
+      colors.scalar = next
       _applyColors(_state.lastSel)
     },
 
     /** Drop the scalar overlay → atoms return to CPK/strand/base colouring. */
     clearScalarColors() {
-      if (!_scalarColors && _colorsCurrent()) return
-      _scalarColors = null
+      if (!colors.scalar && _colorsCurrent()) return
+      colors.scalar = null
       _applyColors(_state.lastSel)
     },
 

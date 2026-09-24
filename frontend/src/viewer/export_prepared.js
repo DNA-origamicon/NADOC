@@ -9,7 +9,7 @@ import { navigationDesign } from '../scene/reference_navigation.js'
 import { showToast } from '../ui/toast.js'
 
 /** Thin editor host. Export is explicit and runs outside the render loop. */
-export function initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, getPresentationView = () => null, getDetailLevel = () => null, getVisualization = () => null, isStandardRender = () => true, document: doc = document }) {
+export function initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, getPresentationView = () => null, getDetailLevel = () => null, getRepresentation = () => null, getVisualization = () => null, isStandardRender = () => true, document: doc = document }) {
   const button = doc.getElementById('menu-file-export-viewer')
   let busy = false, motionOptions = {}
   const motion = createSharedViewMotion({ getView: () => {
@@ -24,7 +24,7 @@ export function initPreparedExport({ scene, camera, renderer, controls, canvas, 
     if ((!alternate && !isStandardRender()) || (camera.layers && camera.layers.mask !== 1)) throw new Error('Return to the normal 3D view before exporting a prepared snapshot')
     const state = store.getState()
     if (state.cadnanoActive || state.unfoldActive) throw new Error('Return to the 3D view before exporting')
-    return { controls: alternate?.controls ?? controls, scene: alternate?.scene ?? scene, camera: alternate?.camera ?? camera, pose: alternate?.pose ?? captureCurrentCamera(), view: { ...alternate?.view, viewTools: captureViewTools(doc), visualization: alternate ? null : getVisualization(), annotations: captureSceneAnnotations(alternate?.scene ?? scene), selection: capturePresentationSelection(alternate?.scene ?? scene) }, pane: alternate?.pane }
+    return { controls: alternate?.controls ?? controls, scene: alternate?.scene ?? scene, camera: alternate?.camera ?? camera, pose: alternate?.pose ?? captureCurrentCamera(), view: { representation: getRepresentation(), ...alternate?.view, viewTools: captureViewTools(doc), visualization: alternate ? null : getVisualization(), annotations: captureSceneAnnotations(alternate?.scene ?? scene), selection: capturePresentationSelection(alternate?.scene ?? scene) }, pane: alternate?.pane }
   }
   async function exportView({ presentation = false } = {}) {
     if (busy) return
@@ -42,12 +42,13 @@ export function initPreparedExport({ scene, camera, renderer, controls, canvas, 
       if (captureView(presentation).scene !== source.scene || store.getState().assemblyActive !== state.assemblyActive) throw new Error('The view changed during export; retry when idle')
       const pose = { ...source.pose, near: source.camera.near, far: source.camera.far }
       const view = { assembly: !!state.assemblyActive, detail_level: getDetailLevel(), atomistic: state.atomisticMode ?? 'off', surface: state.surfaceMode ?? 'off', coloring: state.coloringMode ?? 'strand', ...source.view }
-      let requiresWideLineViewer = false, requiresImpostorViewer = false
+      let requiresHullCutoutViewer = false, requiresWideLineViewer = false, requiresImpostorViewer = false
       source.scene.traverseVisible(object => {
+        if ((Array.isArray(object.material) ? object.material : [object.material]).some(m => m?.userData?.hullCutouts?.length)) requiresHullCutoutViewer = true
         if (object.isLineSegments2) requiresWideLineViewer = true
         if ((Array.isArray(object.material) ? object.material : [object.material]).some(preparedImpostorSpec)) requiresImpostorViewer = true
       })
-      return { requiresVisualizationLabelViewer: !!view.visualization, requiresSelectionViewer: !!view.selection, requiresAnnotationsViewer: !!view.annotations?.length, requiresWideLineViewer, requiresImpostorViewer, requiresViewToolsViewer: Object.values(view.viewTools ?? {}).some(value => value === true), buffer: prepareScene({ scene: source.scene, camera: pose, renderer, navigation: axisSegments(navigationDesign(state)), title, background, sourceHash, view }), title, requiresSectionViewer: !!renderer.localClippingEnabled }
+      return { requiresHullCutoutViewer, requiresOverlayViewer: !!view.overlay, requiresVisualizationLabelViewer: !!view.visualization, requiresSelectionViewer: !!view.selection, requiresAnnotationsViewer: !!view.annotations?.length, requiresWideLineViewer, requiresImpostorViewer, requiresViewToolsViewer: Object.values(view.viewTools ?? {}).some(value => value === true), buffer: prepareScene({ scene: source.scene, camera: pose, renderer, navigation: axisSegments(navigationDesign(state)), title, background, sourceHash, view }), title, requiresSectionViewer: !!renderer.localClippingEnabled }
     } finally { busy = false }
   }
   async function download() {

@@ -9,7 +9,7 @@ export function broadcastFingerprint({ scene, view, pane }, { coordinates = true
       o.geometry && Object.entries(o.geometry.attributes).map(([k, a]) => [k, coordinates ? a.version ?? a.data?.version : [a.count, a.itemSize, a.normalized]]),
       o.geometry?.instanceCount, o.geometry?.index?.version, o.geometry?.drawRange, o.color?.getHex(), o.intensity])
     for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
-      rows.push(m.uuid)
+      rows.push(m.uuid, m.userData?.hullCutouts)
       if (materials.has(m)) continue
       materials.add(m)
       if (m.isLineMaterial) rows.push([m.linewidth, m.worldUnits, m.dashed, m.dashScale, m.dashSize, m.gapSize, m.dashOffset, m.color.toArray(), m.opacity])

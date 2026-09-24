@@ -40,3 +40,17 @@ it('captures simulation identity with each published snapshot and advertises lab
   expect(prepareScene.mock.calls.at(-1)[0].view.visualization).toBeNull()
   api.dispose()
 })
+
+it('exports all overlay layers through the presentation path with a compatibility flag', async () => {
+  const scene = new Scene(), overlay = new Scene(), first = new Scene(), second = new Scene()
+  overlay.add(first, second)
+  const state = { currentDesign: {} }
+  const api = initPreparedExport({ scene, camera: {}, renderer: {}, store: { getState: () => state },
+    captureCurrentCamera: () => ({ fov: 55 }), isStandardRender: () => false,
+    getPresentationView: () => ({ scene: overlay, view: { overlay: [first.uuid, second.uuid] } }),
+    document: { getElementById: () => null } })
+  expect((await api.exportView({ presentation: true })).requiresOverlayViewer).toBe(true)
+  expect(prepareScene.mock.calls.at(-1)[0].scene).toBe(overlay)
+  expect(prepareScene.mock.calls.at(-1)[0].view.overlay).toEqual([first.uuid, second.uuid])
+  api.dispose()
+})

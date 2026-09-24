@@ -1,12 +1,14 @@
+import * as THREE from 'three'
 import { it, expect, vi } from 'vitest'
 import { initNativeViewToolSharing } from './native_view_tool_sharing.js'
 function setup() {
   let context = 'native', room = 'room', busy = false
   const state = { currentDesign: { id: 'part' } }, view = { viewTools: { sequences: false } }
-  const prepared = { captureView: () => ({ scene: { uuid: 'scene' }, view }), exportView: vi.fn(async () => ({ buffer: new ArrayBuffer(1) })) }
+  const sourceScene = new THREE.Scene(), pose = { position: [0, 0, 10] }
+  const prepared = { captureView: () => ({ scene: sourceScene, view, pose }), exportView: vi.fn(async () => ({ buffer: new ArrayBuffer(1) })) }
   const publish = vi.fn(async () => true)
   const ui = initNativeViewToolSharing({ prepared, store: { getState: () => state }, getContext: () => context, getRoom: () => ({ id: room }), isBusy: () => busy, publish, onError: vi.fn(), setInterval: () => 1, clearInterval: () => {} })
-  return { ui, prepared, publish, view, state, context: v => { context = v }, room: v => { room = v }, busy: v => { busy = v } }
+  return { ui, sourceScene, pose, prepared, publish, view, state, context: v => { context = v }, room: v => { room = v }, busy: v => { busy = v } }
 }
 it('mirrors toggles after explicit publication, without requiring camera sharing', async () => {
   const v = setup(); await v.ui.tick(); expect(v.publish).not.toHaveBeenCalled()
@@ -52,5 +54,29 @@ it('mirrors selection, deselection and repeated ping events without sharing the 
   await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(3)
   v.view.selection = null
   await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(4)
+  v.ui.dispose()
+})
+
+it('mirrors representations and volume transforms while ignoring camera movement', async () => {
+  const v = setup(), volume = new THREE.Group()
+  v.sourceScene.add(volume); v.ui.remember()
+  v.pose.position[0] = 25
+  await v.ui.tick(); expect(v.publish).not.toHaveBeenCalled()
+  v.view.representation = 'mrdna-coarse'
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(1)
+  volume.position.x = 3
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(2)
+  volume.visible = false
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(3)
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(3)
+  v.ui.dispose()
+})
+it('shares changing hull windows even when their editing outlines are hidden', async () => {
+  const v = setup(), hull = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshPhongMaterial())
+  v.sourceScene.add(hull); v.ui.remember()
+  hull.material.userData.hullCutouts = [{ inverse: new THREE.Matrix4().toArray(), half: [1,1,1], hex: false }]
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(1)
+  hull.material.userData.hullCutouts[0].half[0] = 2
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(2)
   v.ui.dispose()
 })

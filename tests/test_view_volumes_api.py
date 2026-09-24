@@ -12,7 +12,7 @@ def setup_function():
 
 def test_view_volume_round_trip_and_old_default():
     design = _demo_design()
-    design.view_volumes = [ViewVolume(name="Focus", shape="hexagonal", min_corner=(0, 1, 2), max_corner=(3, 4, 5), rotation=(0, 0, 0.70710678, 0.70710678), representation="surface", opacity=.35, outline_visible=False, enabled=False)]
+    design.view_volumes = [ViewVolume(name="Focus", shape="hexagonal", min_corner=(0, 1, 2), max_corner=(3, 4, 5), rotation=(0, 0, 0.70710678, 0.70710678), representation="surface", coloring="cluster", opacity=.35, outline_visible=False, enabled=False)]
     restored = Design.from_json(design.to_json())
     assert restored.view_volumes == design.view_volumes
     assert Design.from_json(_demo_design().to_json()).view_volumes == []
@@ -21,7 +21,7 @@ def test_view_volume_round_trip_and_old_default():
 def test_put_view_volumes_persists_and_validates():
     client = TestClient(app)
     revision_before = design_state.revision()
-    body = {"volumes": [{"name": "Atomistic window", "min_corner": [-2, -2, -2], "max_corner": [2, 2, 2], "representation": "stick", "opacity": .7}]}
+    body = {"volumes": [{"name": "Atomistic window", "min_corner": [-2, -2, -2], "max_corner": [2, 2, 2], "representation": "stick", "coloring": "base", "opacity": .7}]}
     response = client.put("/api/design/view-volumes", json=body)
     assert response.status_code == 200
     saved = response.json()["view_volumes"][0]
@@ -30,6 +30,9 @@ def test_put_view_volumes_persists_and_validates():
     assert response.json()["revision"] > revision_before
     assert saved["name"] == "Atomistic window"
     assert saved["opacity"] == .7
+    assert saved["coloring"] == "base"
+    assert ViewVolume(min_corner=(0, 0, 0), max_corner=(1, 1, 1)).coloring == "strand"
+    assert client.put("/api/design/view-volumes", json={"volumes": [{**body["volumes"][0], "coloring": "bad"}]}).status_code == 422
     lightweight = client.get("/api/design/view-volumes")
     assert lightweight.status_code == 200
     assert lightweight.json()["view_volumes"] == response.json()["view_volumes"]

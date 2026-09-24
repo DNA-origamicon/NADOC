@@ -1,5 +1,7 @@
 /** Every publication path must enforce the same prepared-view compatibility rules. */
 const FEATURES = [
+  ['requiresHullCutoutViewer', 'hull-cutouts-v1', 'hull volume cutouts'],
+  ['requiresOverlayViewer', 'multi-overlay-v1', 'multi-overlay views'],
   ['requiresVisualizationLabelViewer', 'visualization-labels-v1', 'simulation view labels'],
   ['requiresSelectionViewer', 'selection-ping-v1', 'selections and pings'],
   ['requiresAnnotationsViewer', 'annotations-v1', 'annotations'],

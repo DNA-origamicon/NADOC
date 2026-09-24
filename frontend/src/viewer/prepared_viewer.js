@@ -1,3 +1,4 @@
+import { renderSharedOverlay } from './shared_overlay.js'
 import { initViewCube } from '../scene/view_cube.js'
 import { mountSharedSelection } from './shared_selection.js'
 import { mountSharedAnnotations } from './shared_annotations.js'
@@ -83,6 +84,8 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
         currentAssembly: view.assembly ? { id: next.packageHash } : null, assemblyActive: !!view.assembly,
         atomisticMode: view.atomistic ?? 'off', surfaceMode: view.surface ?? 'off', coloringMode: view.coloring ?? 'strand' }
       runtime.scene.add(next.scene)
+      runtime.resetRenderFn()
+      if (view.overlay) runtime.setRenderFn(() => renderSharedOverlay(runtime.renderer, next.scene.children, runtime.camera))
       annotations = mountSharedAnnotations({ current: next, container: canvas.parentElement, runtime })
       runtime.renderer.toneMapping = next.data.render.toneMapping
       runtime.renderer.toneMappingExposure = next.data.render.toneMappingExposure
@@ -124,6 +127,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     viewCube.hide()
     viewTools.update(null)
     sharedSelection.update(null)
+    runtime.resetRenderFn()
     generation++; performanceApi.stop(); current?.dispose(); current = null; runtime.scene.clear()
     state = { currentDesign: null, currentGeometry: null, assemblyActive: false }
     runtime.setNavScaleProvider(() => new Float64Array()); runtime.controls.enabled = false

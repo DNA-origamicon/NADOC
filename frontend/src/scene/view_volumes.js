@@ -1,3 +1,5 @@
+import { COLORING_LABELS, supportedColoringSet, coloringFallbackMode } from './coloring_modes.js'
+import { withSkippedColumnPoints } from './view_volume_points.js'
 import * as THREE from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { getSectionCollapsed, setSectionCollapsed } from '../ui/section_collapse_state.js'
@@ -6,6 +8,14 @@ export const VIEW_VOLUME_REPRESENTATIONS = [
   ['Full', 'full'], ['Beads', 'beads'], ['Cylinders', 'cylinders'],
   ['Surface', 'surface'], ['VDW', 'vdw'], ['Ball & Stick', 'ballstick'], ['Stick', 'stick'],
 ]
+
+/** Coarse global representations may not allocate backbone instances. */
+export function volumeBackboneEntries(live = [], geometry = []) {
+  const entries = live.filter(entry => entry?.nuc && entry?.pos)
+  if (entries.length) return entries
+  return geometry.filter(n => Array.isArray(n.backbone_position) && n.backbone_position.length === 3 && n.backbone_position.every(Number.isFinite))
+    .map(nuc => ({ nuc, pos: new THREE.Vector3(...nuc.backbone_position) }))
+}
 
 export function normalizeBounds(a, b) {
   return {
@@ -170,15 +180,15 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   window.addEventListener('nadoc:view-volume-stage', onStage)
 
   const volumes = () => draftVolumes ?? store.getState().currentDesign?.view_volumes ?? []
-  const entries = () => designRenderer.getBackboneEntries().filter(entry => entry?.nuc && entry?.pos)
+  const entries = () => volumeBackboneEntries(designRenderer.getBackboneEntries(), store.getState().currentGeometry ?? [])
   function points() {
-    return entries().map(entry => ({ key: `${entry.nuc.helix_id}:${entry.nuc.bp_index}`, position: entry.pos.toArray() }))
+    return withSkippedColumnPoints(entries().map(entry => ({ key: `${entry.nuc.helix_id}:${entry.nuc.bp_index}`, position: entry.pos.toArray() })), store.getState().currentDesign?.helices)
   }
   function computeLayers(sourceVolumes = volumes()) {
     const started = performance.now(), sourcePoints = points()
     const layers = resolveViewVolumeLayers(activeViewVolumes(sourceVolumes), sourcePoints).map(layer => ({
       id: layer.volume.id, name: layer.volume.name, representation: layer.volume.representation,
-      opacity: layer.volume.opacity, keys: [...layer.keys], segments: segmentsForKeys(layer.keys),
+      opacity: layer.volume.opacity, coloring: layer.volume.coloring ?? 'strand', volume: layer.volume, keys: [...layer.keys], segments: segmentsForKeys(layer.keys),
     }))
     timing.last.membershipMs = performance.now() - started
     timing.last.pointCount = sourcePoints.length; timing.last.layerCount = layers.length
@@ -322,11 +332,16 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
       for (const [label, value] of VIEW_VOLUME_REPRESENTATIONS) rep.add(new Option(label, value))
       rep.value = volume.representation
       const opacity = document.createElement('input'); opacity.className = 'view-volume-opacity'; opacity.type = 'range'; opacity.min = '0'; opacity.max = '1'; opacity.step = '0.05'; opacity.value = String(volume.opacity); opacity.title = `Opacity ${Math.round(volume.opacity * 100)}%`
-      controlsRow.append(rep, opacity); row.append(top, controlsRow); list.append(row)
+      const coloring = document.createElement('select'); coloring.className = 'view-volume-coloring'; coloring.title = 'Volume coloring scheme'
+      for (const mode of supportedColoringSet(volume.representation)) coloring.add(new Option(COLORING_LABELS[mode], mode))
+      coloring.value = coloringFallbackMode(volume.representation, volume.coloring ?? 'strand') ?? volume.coloring ?? 'strand'
+      coloring.style.cssText = rep.style.cssText
+      controlsRow.append(rep, opacity); row.append(top, controlsRow, coloring); list.append(row)
       row.addEventListener('click', () => { selectedId = selectedId === volume.id ? null : volume.id; render() })
-      for (const control of [name, rep, opacity, enabled, outline, remove]) control.addEventListener('click', event => event.stopPropagation())
+      for (const control of [name, rep, coloring, opacity, enabled, outline, remove]) control.addEventListener('click', event => event.stopPropagation())
       name.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, name: e.target.value.trim() || 'View Volume' } : v)))
-      rep.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, representation: e.target.value } : v)))
+      rep.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, representation: e.target.value, coloring: coloringFallbackMode(e.target.value, v.coloring ?? 'strand') ?? v.coloring ?? 'strand' } : v)))
+      coloring.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, coloring: e.target.value } : v)))
       opacity.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, opacity: Number(e.target.value) } : v)))
       enabled.addEventListener('click', () => save(volumes().map(v => v.id === volume.id ? { ...v, enabled: v.enabled === false } : v)))
       outline.addEventListener('click', () => save(volumes().map(v => v.id === volume.id ? { ...v, outline_visible: v.outline_visible === false } : v)))
@@ -356,7 +371,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     selectedId = id
     // Start as Full: creating a box must stay instantaneous even for an 80 MB
     // design. The user explicitly opts into surface/atomistic computation.
-    save([...volumes(), { id, name: `${shape === 'hexagonal' ? 'Hex Volume' : 'Volume'} ${volumes().length + 1}`, shape, ...bounds, rotation: [0, 0, 0, 1], representation: 'full', opacity: 1, outline_visible: true, enabled: true }])
+    save([...volumes(), { id, name: `${shape === 'hexagonal' ? 'Hex Volume' : 'Volume'} ${volumes().length + 1}`, shape, ...bounds, rotation: [0, 0, 0, 1], representation: 'full', coloring: coloringFallbackMode('full', store.getState().coloringMode) ?? store.getState().coloringMode ?? 'strand', opacity: 1, outline_visible: true, enabled: true }])
   }
   section.querySelector('#view-volume-enable-all').addEventListener('click', () => {
     const enable = volumes().some(volume => volume.enabled === false)

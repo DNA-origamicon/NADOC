@@ -1,3 +1,5 @@
+import { overlayRenderOrder } from '../viewer/shared_overlay.js'
+export { overlayRenderOrder } from '../viewer/shared_overlay.js'
 import * as THREE from 'three'
 import { COLORING_LABELS, supportedColoringSet } from '../scene/coloring_modes.js'
 import { MULTI_VIEW_REPRESENTATIONS, cloneMultiScene, disposeMultiScene,
@@ -36,21 +38,6 @@ export function designGeometryBounds(state) {
   return box
 }
 
-/** Painter's order for separately rendered transparent scenes: farthest first. */
-export function overlayRenderOrder(layers, count, camera) {
-  camera.updateMatrixWorld?.(true)
-  const world = new THREE.Vector3()
-  return layers.slice(0, count).map((layer, index) => {
-    const scene = layer.renderScene
-    scene?.updateMatrixWorld?.(true)
-    if (scene) scene.getWorldPosition(world)
-    else world.set(0, 0, 0)
-    const cameraZ = world.clone().applyMatrix4(camera.matrixWorldInverse).z
-    return { index, cameraZ }
-  }).sort((a, b) => a.cameraZ - b.cameraZ || a.index - b.index)
-    .map(entry => entry.index)
-}
-
 function setSceneOpacity(scene, opacity) {
   scene?.traverse?.(obj => {
     const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
@@ -69,16 +56,17 @@ function setSceneOpacity(scene, opacity) {
 }
 
 export function initMultiOverlay({ document, scene, camera, renderer, canvas, controls,
-  store, setRenderFn, resetRenderFn, setRepresentation, setColoringMode }) {
+  store, setRenderFn, resetRenderFn, setRepresentation, setColoringMode, getRepresentation = () => 'full' }) {
   const host = document?.getElementById('right-multi-overlay-body')
   if (!host) return null
+  const sharedScene = new THREE.Scene()
   let count = 0
   let generation = 0
   let separation = 0
   let longestDimension = 1
   let savedCamera = null
   const layers = Array.from({ length: 4 }, (_, i) => ({
-    representation: ['hull-prism', 'cylinders', 'mrdna-fine', 'full'][i],
+    representation: 'cylinders',
     coloring: 'strand',
     opacity: i === 0 ? 1 : 0.65,
     renderScene: null,
@@ -178,6 +166,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
 
   async function rebuild() {
     const mine = ++generation
+    sharedScene.children = []
     for (const layer of layers) { disposeMultiScene(layer.renderScene); layer.renderScene = null }
     for (const row of viewportControls.children) row.dataset.ready = 'false'
     for (let i = 0; i < count; i++) {
@@ -218,7 +207,11 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     renderer.autoClear = oldAutoClear
   }
 
-  async function activate(next) {
+  async function activate(next, configured = false) {
+    if (!count && next && !configured) {
+      layers[0].representation = getRepresentation()
+      for (let i = 1; i < layers.length; i++) layers[i].representation = 'cylinders'
+    }
     count = next
     for (const button of buttons.children) {
       const active = Number(button.dataset.count) === count
@@ -226,7 +219,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     }
     renderControls()
     if (!count) {
-      generation++; resetRenderFn()
+      generation++; resetRenderFn(); sharedScene.children = []
       for (const layer of layers) { disposeMultiScene(layer.renderScene); layer.renderScene = null }
       if (savedCamera) {
         camera.position.fromArray(savedCamera.position); camera.up.fromArray(savedCamera.up)
@@ -264,14 +257,23 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     separation = Math.min(1, Math.max(0, Number(nextSeparation) || 0))
     separationInput.value = String(separation)
     separationRow.querySelector('output').textContent = `${Math.round(separation * 100)}%`
-    await activate(Math.min(4, Math.max(0, Number(nextCount) || 0)))
+    await activate(Math.min(4, Math.max(0, Number(nextCount) || 0)), representations.length > 0)
     positionLayers()
     return layers.slice(0, count).map(layer => ({
       representation: layer.representation, coloring: layer.coloring, opacity: layer.opacity,
     }))
   }
 
-  return { activate, configure, getCount: () => count, layers,
+  return { activate, configure,
+    getBroadcastView() {
+      if (!count) return null
+      if (layers.slice(0, count).some(layer => !layer.renderScene)) throw Object.assign(new Error('Waiting for multi-overlay layers to finish loading'), { code: 'VIEW_NOT_READY' })
+      // Borrow the frozen scenes without reparenting or cloning their GPU resources.
+      sharedScene.children = layers.slice(0, count).map(layer => layer.renderScene)
+      return { scene: sharedScene, camera, controls,
+        view: { overlay: sharedScene.children.map(layer => layer.uuid) } }
+    },
+    getCount: () => count, layers,
     renderOrder: () => overlayRenderOrder(layers, count, camera),
     diagnostics: () => layers.slice(0, count).map(layer => {
       const beads = []

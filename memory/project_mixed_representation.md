@@ -7,6 +7,36 @@ beads, binding cylinders — are CLOSED, and the suspected photo-export bug was 
 photo-mode/override interaction, per-region extra bases, a test gap, and in-app verification —
 real, but none of them silently wrong geometry.
 
+## Independent volume display (2026-09-24)
+
+Each volume persists its own `coloring` scheme (legacy records default to strand).
+The card offers schemes supported by the selected representation. Dedicated CG,
+atomistic and surface layers preserve independent coloring/opacity even when
+volumes overlap; global coloring changes do not override them. Native CG yields
+inside their column footprint. Membership falls back to current display geometry
+when coarse global LOD has no backbone instances.
+Skipped columns have no nucleotide positions, but domain cylinders still span
+them. Volume membership supplies display-only samples interpolated from the
+surrounding live column centers, preventing one-bp cylinder remnants inside heavy
+volumes (reproduced on `3x6SQ_norm_skips`, h_XY_0_1:38, h_XY_2_1:29, h_XY_2_0:27).
+
+Hull Prism opens the enabled volume's projected box/hexagonal outline along the
+camera ray, so even an entirely enclosed volume remains visible. The mask follows
+rotation, works in shared snapshots (package v6 / `hull-cutouts-v1`), and disappears
+when the volume is disabled. Multi-overlay starts with the current representation;
+additional default layers use cylinders. Validation and limitations are recorded
+in `docs/audits/view_volume_display_20260924.md`.
+
+## Sharing display state (2026-09-24)
+
+Shared snapshots include visible volume outlines and representation geometry, with
+per-instance alpha preserved. After explicit publication, native sharing watches
+scene display changes, so representation switches and volume edits update the same
+link without requiring camera sharing. Multi-overlay uses separate guest render
+passes for each frozen layer, retaining opacity, separation, lighting, and
+camera-dependent draw order. Guests orbit the result; volume editing remains in
+the editor. See `docs/audits/representation_sharing_20260924.md` for validation.
+
 ## Spatial View Volumes (Path B, shipped 2026-09-01)
 
 The Visualization sidebar now owns a `View Volumes` card. Each persisted

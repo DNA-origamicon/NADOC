@@ -464,3 +464,17 @@ point opacity/size and recognizability when the 12,000-point cap subsamples a la
 structure. Browser checks cover real geometry, independent toggles, shared buffers,
 and cleanup; visual legibility across designs still needs a human check.
 main.js LOC delta: 0.
+
+### MV-REPRESENTATION-SHARING — translucent overlay appearance (2026-09-24)
+
+**Status:** PENDING — automated guest rendering and scene round trips pass; real-device visual comparison remains.
+**Charter:** Share a representative large design in Hull Prism, Cylinders, mrDNA
+Coarse/Fine and oxDNA. Compare host/guest geometry and colors, then combine three
+layers with different opacity and separation. Orbit both sides and check bead/rod
+occlusion, lighting and layer ordering. Move/resize a view volume and confirm its
+local representation and visible outline update for guests. Guests should retain
+independent camera control. See `docs/audits/representation_sharing_20260924.md`.
+For independent volume displays, also compare overlapping local color schemes,
+rotated box/hex hull openings, and interaction speed with several volumes on a
+large design. Small-design and enclosed-volume pixel checks pass; see
+`docs/audits/view_volume_display_20260924.md`.

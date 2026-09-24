@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeViewVolumes, createLatestFrameScheduler, normalizeBounds, pointInVolume, resolveViewVolumeLayers, segmentsForKeys } from './view_volumes.js'
+import { volumeBackboneEntries, activeViewVolumes, createLatestFrameScheduler, normalizeBounds, pointInVolume, resolveViewVolumeLayers, segmentsForKeys } from './view_volumes.js'
 
 describe('view volume spatial resolution', () => {
   const a = { id: 'a', min_corner: [0, 0, 0], max_corner: [5, 5, 5], representation: 'surface', opacity: .4 }
@@ -58,4 +58,11 @@ describe('view volume spatial resolution', () => {
     await [...frames.values()][0]()
     expect(seen).toEqual([['latest', 2]])
   })
+})
+
+it('uses current display coordinates for volume membership when coarse LOD has no beads', () => {
+  const geometry = [{ backbone_position: [1,2,3], helix_id: 'h', bp_index: 4 }, { backbone_position: null }]
+  expect(volumeBackboneEntries([], geometry).map(e => e.pos.toArray())).toEqual([[1,2,3]])
+  const live = [{ nuc: geometry[0], pos: { x: 9 } }]
+  expect(volumeBackboneEntries(live, geometry)).toEqual(live)
 })

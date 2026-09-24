@@ -10,7 +10,7 @@ afterEach(() => { vi.clearAllMocks(); document.body.innerHTML = '' })
 function setup() {
   document.body.innerHTML = '<main><canvas></canvas></main><h1></h1><p></p><input type="file"><button></button><select></select>'
   const runtime = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(), controls: { target: new THREE.Vector3(), update: vi.fn() },
-    renderer: { setClearColor: vi.fn() }, switchOrbitMode: vi.fn(), setNavScaleProvider: vi.fn(), dispose: vi.fn() }
+    resetRenderFn: vi.fn(), setRenderFn: vi.fn(), renderer: { setClearColor: vi.fn() }, switchOrbitMode: vi.fn(), setNavScaleProvider: vi.fn(), dispose: vi.fn() }
   initScene.mockReturnValue(runtime)
   const viewer = mountPreparedViewer({ canvas: document.querySelector('canvas'), status: document.querySelector('p'), title: document.querySelector('h1'), fileInput: document.querySelector('input'), resetButton: document.querySelector('button'), modeInput: document.querySelector('select') })
   return { viewer, runtime }
@@ -82,4 +82,17 @@ it('updates and removes host view-tool legends with scene replacement and meetin
   loadPreparedScene.mockResolvedValueOnce(first); await viewer.loadFile(file)
   viewer.clear(); expect(document.querySelector('.shared-view-tools').hidden).toBe(true)
   viewer.dispose(); expect(document.querySelector('.shared-view-tools')).toBeNull()
+})
+
+it('installs the overlay renderer and restores normal rendering on replacement and clear', async () => {
+  const { viewer, runtime } = setup(), overlay = scene(), native = scene()
+  overlay.data.view = { overlay: ['one', 'two'] }
+  loadPreparedScene.mockResolvedValueOnce(overlay).mockResolvedValueOnce(native)
+  await viewer.loadFile(file)
+  expect(runtime.setRenderFn).toHaveBeenCalledOnce()
+  await viewer.loadFile(file)
+  expect(runtime.resetRenderFn).toHaveBeenCalledTimes(2)
+  viewer.clear()
+  expect(runtime.resetRenderFn).toHaveBeenCalledTimes(3)
+  viewer.dispose()
 })

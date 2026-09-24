@@ -1,3 +1,4 @@
+import { initHullVolumeCutouts } from './hull_volume_cutouts.js'
 /**
  * Joint Renderer — surface approximation, joint axis visualisation, and
  * face-click interaction for ClusterJoint definition.
@@ -3567,7 +3568,10 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     return group
   }
 
-  function _rebuildHullRepr(design, helixAxes) {
+  const hullCutouts = initHullVolumeCutouts({ getRoots: () => _hullReprMeshes.values(), store })
+  function _rebuildHullRepr(...args) { _buildHullRepr(...args); hullCutouts.refresh() }
+
+  function _buildHullRepr(design, helixAxes) {
     for (const grp of _hullReprMeshes.values()) {
       grp.traverse(o => { o.material?.map?.dispose(); o.geometry?.dispose(); o.material?.dispose() })
       grp.parent?.remove(grp)
@@ -3938,6 +3942,7 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
   }
 
   function dispose() {
+    hullCutouts.dispose()
     exitDefineMode()
     _previewMesh.traverse(o => {
       o.geometry?.dispose()

@@ -1308,6 +1308,7 @@ class ViewVolume(BaseModel):
         "full", "beads", "cylinders", "surface", "vdw", "ballstick", "stick"
     ] = "full"
     opacity: float = Field(default=1.0, ge=0.0, le=1.0)
+    coloring: Literal["strand", "base", "cluster", "overhang-only", "cpk"] = "strand"
     outline_visible: bool = True
     enabled: bool = True
 

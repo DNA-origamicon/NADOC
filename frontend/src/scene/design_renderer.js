@@ -1187,11 +1187,9 @@ export function initDesignRenderer(scene, storeRef) {
       if (!_helixCtrl?.applyRepOverrides) return
       const { columnRep } = resolveRepOverrides(storeRef.getState().currentDesign)
       // A spatial volume overrides the global/coarse representation in its
-      // footprint. Independent heavy layers are retained in the event payload;
-      // the CG visibility channel only needs to know whether to show full/beads,
-      // cylinders, or yield the column to a heavy overlay.
+      // footprint. Native CG yields to independently colored volume renderers.
       for (const layer of layers) {
-        const rep = layer.representation === 'beads' ? 'full' : layer.representation
+        const rep = 'surface' // Independent volume layers supply all local representations.
         for (const key of layer.keys ?? []) columnRep.set(key, rep)
       }
       _helixCtrl.setDetailLevel(_detailLevel)

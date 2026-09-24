@@ -55,12 +55,12 @@ describe('multi-overlay', () => {
       controls: { target: new THREE.Vector3(), update: vi.fn() },
       store: { getState: () => ({ currentGeometry: [] }) },
       setRenderFn: fn => { renderFn = fn }, resetRenderFn: vi.fn(),
-      setRepresentation: vi.fn(), setColoringMode: vi.fn(),
+      setRepresentation: vi.fn(), setColoringMode: vi.fn(), getRepresentation: () => 'oxdna',
     })
     expect(document.querySelectorAll('.mo-count-btn')).toHaveLength(4)
     await api.activate(4)
     expect(api.layers.map(layer => layer.representation)).toEqual([
-      'hull-prism', 'cylinders', 'mrdna-fine', 'full',
+      'oxdna', 'cylinders', 'cylinders', 'cylinders',
     ])
     await vi.waitFor(() => expect(document.querySelectorAll('.mo-layer-row[data-ready="true"]')).toHaveLength(4))
     expect(document.querySelectorAll('.mo-representation')).toHaveLength(4)
@@ -76,6 +76,11 @@ describe('multi-overlay', () => {
     const separation = document.querySelector('.mo-separation-row input')
     separation.value = '1'; separation.dispatchEvent(new Event('input', { bubbles: true }))
     expect(api.layers.map(layer => layer.renderScene.position.x)).toEqual([-6, -2, 2, 6])
+    const shared = api.getBroadcastView()
+    expect(shared.scene.children).toEqual(api.layers.map(layer => layer.renderScene))
+    expect(shared.view.overlay).toEqual(shared.scene.children.map(layer => layer.uuid))
+    expect(api.getBroadcastView().scene).toBe(shared.scene)
+    expect(shared.scene.children.every(layer => layer.parent === null)).toBe(true)
     renderFn()
     expect(renderer.render).toHaveBeenCalledTimes(4)
   })
