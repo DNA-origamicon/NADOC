@@ -14,7 +14,7 @@ import { unpackTrajectory, updateTrajectory, initialTrajectory } from './prepare
 const same = (a, b) => typeof a === 'string' && /^[a-f0-9]{64}$/.test(a) && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 const mime = name => name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.html') ? 'text/html' : name.endsWith('.png') ? 'image/png' : name.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream'
 
-export async function createPreparedHost({ dist, packagePath, publicOrigin = '', lifetimeMs = 2 * 60 * 60 * 1000, maxGuests = 4, now = Date.now }) {
+export async function createPreparedHost({ dist, packagePath, publicOrigin = '', lifetimeMs = 2 * 60 * 60 * 1000, maxGuests = 4, now = Date.now, getPublicAccess = null }) {
   if (publicOrigin && (!publicOrigin.startsWith('https://') || new URL(publicOrigin).origin !== publicOrigin)) throw new Error('Public sharing requires an exact HTTPS origin')
   if (!Number.isFinite(lifetimeMs) || lifetimeMs < 1000 || lifetimeMs > 8 * 60 * 60 * 1000) throw new Error('Lifetime must be between one second and eight hours')
   const buildId = await preparedHostBuildId(dist)
@@ -24,7 +24,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (/^[\w.-]+\.(js|css|png|svg|woff2?)$/.test(name)) assets.set(`/assets/${name}`, await readFile(join(dist, 'assets', name)))
   }
   const invite = randomBytes(32).toString('hex'), expiresAt = now() + lifetimeMs
-  const rooms = new Map(), controlToken = randomBytes(32).toString('hex')
+  const rooms = new Map(), controlToken = randomBytes(32).toString('hex'), probeId = randomBytes(16).toString('hex')
   let publicBase = publicOrigin
   const summary = room => ({ id: room.id, title: room.title, revision: room.revision, participants: room.presentation.snapshot().participants, serverTime: now(), expiresAt, ...(room.trajectory ? { trajectory: { id: room.trajectory.id, count: room.trajectory.count, fps: room.trajectory.fps, state: room.presentation.snapshot().trajectory, serverTime: now() } } : {}), ...(room.password ? { password: room.password } : {}),
     url: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.invite}${room.password ? '&password=required' : ''}`,
@@ -46,6 +46,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     return summary(room)
   }
   function createShare(bytes, title = 'Shared design', id = randomBytes(16).toString('hex')) {
+    if (getPublicAccess && getPublicAccess()?.state !== 'ready') throw new Error(getPublicAccess()?.message || 'Public access checks are still running. Wait before creating an invitation.')
     if (rooms.size >= 8) throw new Error('Share capacity reached. Stop an existing share first (eight snapshots).')
     const { scene, trajectory, revision } = prepareContent(bytes)
     const room = { id, revision, title: String(title).slice(0, 200), scene, trajectory, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), presenterToken: randomBytes(32).toString('hex'), sessions: new Map(), presentation: createPresentationState({ id, revision, now }) }
@@ -72,7 +73,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1'], expiresAt, shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
       const content = route.match(/^\/host\/shares\/([a-f0-9]{32})\/content$/)
       if (req.method === 'POST' && content) {
         if (!rooms.has(content[1])) return send(410, { error: 'This share has ended.' })
@@ -116,6 +117,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       }
       return send(404, { error: 'Unknown host action' })
     }
+    if (req.method === 'GET' && route === '/__nadoc_public_health') return send(200, { service: 'nadoc-prepared-viewer', probeId })
     if (publicOrigin && management) return send(404, { error: 'Not found' })
     const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|share-view|health|pause|leave|trajectory|frame|live-frame)$/)
     const room = rooms.get(match ? match[1] : 'default')
@@ -250,7 +252,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   if (controlServer) { controlServer.requestTimeout = 15000; controlServer.headersTimeout = 10000 }
   const leases = setInterval(() => { if (now() >= expiresAt) { stop(); return }; for (const room of rooms.values()) { room.editorBroadcast.expire(); room.presence.expireHealth() } }, 1000); leases.unref()
   const stop = () => { closed = true; clearInterval(leases); for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); if (listener) setTimeout(() => listener.closeAllConnections(), 250).unref() } }
-  return { server, controlServer, invite, expiresAt, stop, controlToken, createShare, setPublicBase: value => { if (publicOrigin && value !== publicOrigin) throw new Error('Public origin is fixed'); publicBase = value } }
+  return { probeId, server, controlServer, invite, expiresAt, stop, controlToken, createShare, setPublicBase: value => { if (publicOrigin && value !== publicOrigin) throw new Error('Public origin is fixed'); publicBase = value } }
 }
 
 async function main() {

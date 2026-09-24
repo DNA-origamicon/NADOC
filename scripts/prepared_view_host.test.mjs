@@ -248,3 +248,20 @@ test('host expiry closes an already authenticated event stream without another r
   for (;;) { const chunk = await reader.read(); if (chunk.done) break; remaining += new TextDecoder().decode(chunk.value) }
   assert.match(remaining, /"ended":true/)
 })
+
+test('public hosting refuses invitations until verified and exposes only a probe identity', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-public-ready-')); t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
+  let access = { state: 'dns_pending', message: 'Public DNS is not ready' }
+  const host = await createPreparedHost({ dist: root, publicOrigin: 'https://host.example.ts.net', getPublicAccess: () => access }); t.after(host.stop)
+  await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
+  const base = `http://127.0.0.1:${host.server.address().port}`
+  assert.throws(() => host.createShare(Buffer.from('NADOCVW1test')), /Public DNS/)
+  const probe = await (await fetch(base + '/__nadoc_public_health')).json()
+  assert.deepEqual(probe, { service: 'nadoc-prepared-viewer', probeId: host.probeId })
+  assert.equal((await fetch(base + '/host/shares')).status, 404)
+  access = { state: 'ready', message: 'Verified' }
+  const share = host.createShare(Buffer.from('NADOCVW1test'))
+  assert.ok(share.password); assert.ok(!share.url.includes(share.password))
+  assert.equal((await fetch(base + `/meeting/${share.id}/scene`)).status, 401)
+})

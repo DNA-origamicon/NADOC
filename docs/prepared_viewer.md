@@ -174,7 +174,8 @@ NADOC, Tailscale, VPN, extension, account, certificate exception, or file picker
 **Copy link** remains available for sending the password separately. The invitation
 is a bearer credential; the display name is not verified identity.
 
-Build the frontend before hosting (`cd frontend && npm run build`). The hosting PC
+Use [the new-host setup and public verification routine](sharing_host_setup.md).
+Missing guest-viewer assets are built automatically on first hosting. The hosting PC
 needs Node and a signed-in Tailscale CLI, with HTTPS and Funnel enabled by its owner.
 First-time provider approval happens only on the hosting PC. NADOC surfaces the
 provider's approval URL if this prerequisite is missing. The Windows/WSL launcher
@@ -189,13 +190,14 @@ encoded PowerShell command even when the helper had started successfully. NADOC
 checks the authenticated local host before treating a bootstrap failure as fatal.
 See the [startup correction validation](audits/share_launch_20260920.md).
 
-The helper creates a foreground Tailscale Funnel on HTTPS port 443, proxying only
-the prepared guest listener on local loopback port 5183. It refuses an occupied
-provider port and preserves unrelated Serve/Funnel configurations (including the
+The helper creates a foreground Tailscale Funnel on the first free supported HTTPS
+port (443, 8443, then 10000), proxying only the prepared guest listener on loopback
+port 5183. It refuses to overwrite an occupied provider port and preserves unrelated Serve/Funnel configurations (including the
 existing private editor route). Host management lives on a separate loopback port
 5184, requires a file-only bearer credential, and is never routed through Funnel.
 Public `/host/*` and editor API requests return 404. The editor's control middleware
-still accepts only local, same-origin requests with the explicit custom header.
+accepts same-origin requests from localhost or the exact configured private Tailscale
+editor URL, through loopback and with the explicit custom header.
 WSL controls the Windows helper through a local Windows subprocess. Private upload
 temporary files are removed in `finally`; credential files are pre-created mode0600.
 

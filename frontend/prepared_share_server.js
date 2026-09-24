@@ -6,8 +6,14 @@ import { shareControlFile } from '../scripts/prepared_share_control.mjs'
 import { hostTransport } from './prepared_share_transport.js'
 import { launchPreparedShare } from '../scripts/launch_prepared_share.mjs'
 
-export function preparedSharePlugin({ controlFile, launch = launchPreparedShare, transport = hostTransport, getBuildId = preparedHostBuildId } = {}) {
+export function preparedSharePlugin({ controlFile, launch = launchPreparedShare, transport = hostTransport, getBuildId = preparedHostBuildId, publicUrl = process.env.NADOC_PUBLIC_URL } = {}) {
   function configure(server) {
+    let editorOrigin = null
+    try {
+      const url = new URL(publicUrl)
+      if (url.protocol === 'https:' && /^[a-z0-9-]+\.[a-z0-9.-]+\.ts\.net$/i.test(url.hostname) &&
+          !url.username && !url.password && url.pathname === '/' && !url.search && !url.hash) editorOrigin = url.origin
+    } catch { /* Only explicitly configured Tailscale origins are trusted. */ }
     const outdated = async state => {
       const expected = await getBuildId(join(server.config.root, 'dist')).catch(() => null)
       return !state.capabilities?.includes('live-unlimited-frames-v1') || (!!expected && state.buildId !== expected)
@@ -72,11 +78,15 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
       const path = req.url?.split('?')[0]
       if (!path?.startsWith('/__nadoc_share/')) return next()
       const send = (code, value) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)) }
-      // Only a local, same-origin editor can publish. Never offer this on a guest server.
+      // The configured private editor can arrive through Tailscale's loopback proxy.
+      // Never trust arbitrary tailnet hosts or expose publishing on the guest server.
+      const localHost = /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(req.headers.host ?? '')
+      const trustedHost = editorOrigin && req.headers.host === new URL(editorOrigin).host
+      const expectedOrigin = trustedHost ? editorOrigin : `http://${req.headers.host}`
       if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) ||
-          !/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(req.headers.host ?? '') ||
+          (!localHost && !trustedHost) ||
           req.headers['sec-fetch-site'] === 'cross-site' ||
-          (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) ||
+          (req.headers.origin && req.headers.origin !== expectedOrigin) ||
           (req.method !== 'GET' && req.headers['x-nadoc-share'] !== '1')) return send(403, { error: 'Share links must be created from NADOC on the hosting PC.' })
       try {
         await lifecycle

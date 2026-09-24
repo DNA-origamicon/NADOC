@@ -57,6 +57,17 @@ to generic `ubuntu`, restore `Session=ubuntu-xorg` and `SessionType=x11` through
 AccountsService, sign out and back in, then start NADOC. Headless ScryWrite
 validation remains available in either session.
 
+For a new hosting computer, follow [internet-sharing prerequisites](docs/sharing_host_setup.md).
+**Create link** runs hosting setup and public DNS/HTTPS checks automatically in the
+background. No separate setup button or Node command is required;
+`node scripts/setup_sharing.mjs --check --browser` is an optional diagnostic.
+
+**File → Sharing…** creates a temporary guest-viewer invitation from localhost or
+this host's configured private Tailscale editor URL. Guests use a browser and the
+invitation password; they do not need Tailscale. On a fresh checkout, the first
+hosting request builds the guest viewer automatically. Hosting selects a free
+supported HTTPS port (443, 8443, then 10000), preserving existing private services.
+
 Both computers must be paired once from **Help → Tailscale Workspace Setup**.
 Saved Tailscale HTTP/IP peers are upgraded automatically to HTTPS MagicDNS when
 the updated remote server is detected. If an unusually configured legacy peer

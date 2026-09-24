@@ -5,9 +5,16 @@ import { readFile, writeFile, chmod } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 const exec = promisify(execFile)
 export async function launchPreparedShare({ root, controlFile, minutes = 120 }) {
+  if (Number(process.versions.node.split('.')[0]) < 20) throw new Error('Hosting requires Node.js 20 or newer. Install Node.js LTS on this computer.')
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 480) throw new Error('Host lifetime must be 1–480 minutes')
   const repo = resolve(root, '..'), dist = join(root, 'dist')
-  await readFile(join(dist, 'viewer.html'))
+  try { await readFile(join(dist, 'viewer.html')) }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    await exec(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'), 'build'], {
+      cwd: root, timeout: 120000, maxBuffer: 8 * 1024 * 1024,
+    })
+  }
   // Pre-create privately: Windows UNC file creation otherwise inherits mode 0644.
   for (const file of [controlFile, controlFile + '.status.json']) {
     await writeFile(file, '', { mode: 0o600 }); await chmod(file, 0o600)
@@ -32,7 +39,8 @@ export async function launchPreparedShare({ root, controlFile, minutes = 120 }) 
     }
   } else {
     // Verify the host prerequisite before detaching; guests need only a browser.
-    await exec('tailscale', ['version'], { timeout: 10000 })
+    try { await exec('tailscale', ['version'], { timeout: 10000 }) }
+    catch { throw new Error('Install Tailscale on the hosting computer (https://tailscale.com/download), start its service, and sign in with tailscale up. Guests do not need Tailscale.') }
     const child = spawn(process.execPath, [join(repo, 'scripts/prepared_internet_host.mjs'), '--dist', dist, '--control-file', controlFile, '--minutes', String(minutes)], { stdio: 'ignore', detached: true })
     await new Promise((ok, fail) => { child.once('spawn', ok); child.once('error', fail) })
     child.unref()

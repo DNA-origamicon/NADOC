@@ -1,3 +1,4 @@
+import { waitForPublicHosting } from './hosting_setup.js'
 import { requireSharingCapabilities } from './sharing_capabilities.js'
 import { initNativeViewToolSharing } from './native_view_tool_sharing.js'
 import './sharing_controls.css'
@@ -26,6 +27,7 @@ export function initShareLink({ exportView, broadcast, trajectory, document: doc
     <footer class="sharing-footer"><p class="sharing-description">Keep this PC awake while sharing. Leaving the presentation keeps guests signed in until you stop hosting or the session expires.</p><button class="btn btn--danger" data-stop-host>Stop hosting all links</button></footer>`
   doc.body.append(dialog)
   const el = selector => dialog.querySelector(selector), status = el('[data-status]'), list = el('[data-links]')
+  const hostingAbort = new AbortController()
   const clipUi = trajectory ? mountTrajectoryShare({ dialog, ...trajectory, document: doc }) : null
   let polling = false, busy = false, disposed = false, revision = 0, selectedId = null, shares = [], capabilities = [], jobs = null, statusTimer = null, jobOptions = null, hadSharedJob = false
   const currentRoom = () => shares.find(s => s.id === selectedId) ?? shares[0]
@@ -128,8 +130,8 @@ export function initShareLink({ exportView, broadcast, trajectory, document: doc
   async function refresh() {
     const ticket = ++revision
     el('[data-create]').disabled = true; el('[data-target]').disabled = true
-    try { const value = await api('status'); if (value.running === false) throw new Error('Host is offline'); if (!disposed && ticket === revision) { shares = value.shares; capabilities = value.capabilities ?? []; renderShares(); status.textContent = value.updateRequired ? 'Sharing host update required. Stop hosting, then create a new link to load the current viewer.' : value.shares.length ? 'Update this presentation without changing the guest invitation.' : 'Host ready. Create a link for the current view.' } }
-    catch { if (!disposed && ticket === revision) { shares = []; selectedId = null; renderShares(); status.textContent = 'Create a link to start a two-hour internet sharing session. First use may require Tailscale account approval on this hosting PC only.' } }
+    try { const value = await api('status'); if (value.running === false) throw new Error('Host is offline'); if (!disposed && ticket === revision) { shares = value.shares; capabilities = value.capabilities ?? []; renderShares(); status.textContent = value.publicAccess && value.publicAccess.state !== 'ready' ? value.publicAccess.message : value.updateRequired ? 'Sharing host update required. Stop hosting, then create a new link to load the current viewer.' : value.shares.length ? 'Update this presentation without changing the guest invitation.' : 'Host ready. Create a link for the current view.' } }
+    catch (error) { if (!disposed && ticket === revision) { shares = []; selectedId = null; renderShares(); status.textContent = error.message === 'Host is offline' ? 'Create a link to start a two-hour internet sharing session. First use may require Tailscale account approval on this hosting PC only.' : error.message } }
     finally { if (!disposed && ticket === revision && !busy) { el('[data-create]').disabled = false; el('[data-target]').disabled = false } }
   }
   async function create() {
@@ -146,8 +148,7 @@ export function initShareLink({ exportView, broadcast, trajectory, document: doc
       status.textContent = 'Preparing current view…'
       const result = asClip ? await clipUi.prepare((done, total, bytes) => { status.textContent = `Preparing trajectory ${done}/${total} · ${(bytes / 1048576).toFixed(1)} MiB` }) : await exportView({ presentation: true })
       if (!result) throw new Error('Another export is busy; please retry.')
-      status.textContent = 'Connecting internet sharing…'
-      const host = await api('start', { method: 'POST' })
+      const host = await waitForPublicHosting({ api, signal: hostingAbort.signal, onProgress: message => { if (!disposed) status.textContent = message } })
       capabilities = host.capabilities ?? []
       // A host upgrade revokes old invitations; publish a fresh one in this operation.
       if (target && Array.isArray(host.shares) && !host.shares.some(share => share.id === target)) {
@@ -160,7 +161,7 @@ export function initShareLink({ exportView, broadcast, trajectory, document: doc
       const share = await api(target ? `shares/${target}/content` : 'create', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-NADOC-Title': encodeURIComponent(result.title) }, body: result.buffer })
       if (!disposed) { shares = [share, ...shares.filter(value => value.id !== share.id)]; selectedId = share.id; renderShares(); if (nativeContext) nativeTools.remember({ ...nativeContext, room: share.id }); if (controls.perspective) await sharePerspective(true); status.textContent = target ? 'Shared view updated. Guests keep the same link and sign-in.' : 'Invitation ready. Send it to your guests.' }
     } catch (error) { if (!disposed) status.textContent = error.message }
-    finally { busy = false; dialog.setAttribute('aria-busy', 'false'); clipUi?.setBusy(false); el('[data-target]').disabled = false; el('[data-create]').disabled = false; el('[data-stop-host]').disabled = false }
+    finally { busy = false; if (!disposed) { dialog.setAttribute('aria-busy', 'false'); clipUi?.setBusy(false); el('[data-target]').disabled = false; el('[data-create]').disabled = false; el('[data-stop-host]').disabled = false } }
   }
   const show = () => { dialog.showModal(); if (!busy) refresh() }
   trigger?.addEventListener('click', show)
@@ -195,5 +196,5 @@ export function initShareLink({ exportView, broadcast, trajectory, document: doc
       finally { polling = false }
     }, 5000)
     return jobs
-  }, dispose() { nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); clipUi?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; trigger?.removeEventListener('click', show); dialog.remove() } }
+  }, dispose() { nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); clipUi?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; trigger?.removeEventListener('click', show); dialog.remove() } }
 }

@@ -118,3 +118,20 @@ it('creates a fresh invitation when upgrading the host invalidates the selected 
   expect(document.querySelector('.sharing-url').value).toBe(fresh.url)
   ui.dispose()
 })
+
+it('shows the actual host access error instead of the offline invitation hint', async () => {
+  const message = 'Share links must be created from NADOC on the hosting PC.'
+  const ui = initShareLink({ exportView: vi.fn(), fetch: async () => ({ ok: false, json: async () => ({ error: message }) }) })
+  document.querySelector('dialog').showModal = vi.fn(); ui.show()
+  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toBe(message))
+  ui.dispose()
+})
+
+it('does not publish or claim invitation readiness while public DNS is pending', async () => {
+  const request = vi.fn(async () => ({ ok: true, json: async () => ({ publicAccess: { state: 'dns_pending', message: 'Waiting for public DNS', checks: [] }, shares: [] }) }))
+  const ui = initShareLink({ exportView: async () => ({ title: 'Part', buffer: new ArrayBuffer(16) }), fetch: request })
+  document.querySelector('[data-create]').click()
+  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toBe('Waiting for public DNS'))
+  expect(request.mock.calls.some(([path]) => path.endsWith('/create'))).toBe(false)
+  ui.dispose()
+})

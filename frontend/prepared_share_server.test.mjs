@@ -111,3 +111,22 @@ test('a stale detached build is stopped and replaced before starting another inv
   assert.equal(stops, 1); assert.equal(launches, 1)
   assert.equal((await (await fetch(base + '/status')).json()).updateRequired, false)
 })
+
+test('only the configured private editor origin can publish through loopback', async t => {
+  let handler
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-share-origin-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const server = http.createServer((req, res) => handler(req, res, () => res.end()))
+  t.after(() => { server.close(); server.closeAllConnections() })
+  await new Promise(ok => server.listen(0, '127.0.0.1', ok))
+  preparedSharePlugin({ publicUrl: 'https://this.example.ts.net:5173', controlFile: join(root, 'missing') })
+    .configureServer({ config: { root }, httpServer: server, middlewares: { use: fn => { handler = fn } } })
+  const get = headers => new Promise((ok, fail) => {
+    const req = http.request({ host: '127.0.0.1', port: server.address().port, path: '/__nadoc_share/status', headers }, res => { res.resume(); ok(res.statusCode) })
+    req.on('error', fail); req.end()
+  })
+  assert.equal(await get({ Host: 'this.example.ts.net:5173', Origin: 'https://this.example.ts.net:5173' }), 200)
+  assert.equal(await get({ Host: 'other.example.ts.net:5173', Origin: 'https://other.example.ts.net:5173' }), 403)
+  assert.equal(await get({ Host: 'this.example.ts.net:5173', Origin: 'https://evil.example' }), 403)
+  assert.equal(await get({ Host: 'this.example.ts.net:5173', 'Sec-Fetch-Site': 'cross-site' }), 403)
+})
