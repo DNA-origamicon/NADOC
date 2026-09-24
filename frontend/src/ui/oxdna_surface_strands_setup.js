@@ -58,6 +58,8 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
   const seedIn = $('seed'), seedNewBtn = $('seedNew'), fieldChk = $('field'), statusEl = $('status')
   const highlightChk = $('highlight'), showshapeChk = $('showshape')
   const colorIn = $('color'), colorHexIn = $('colorHex')
+  // PEG displays chains/nm²; stored specs and the placement API remain per µm².
+  const densityScale = material === 'PEG' ? 1_000_000 : 1
 
   let _enabled = false
   let _surfaceOn = false   // hard-surface prerequisite
@@ -73,7 +75,7 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
       attachEnd: endSel?.value || "5'",
       shape: shapeSel?.value || 'circle',
       sizeNm: sizeIn?.value,
-      densityPerUm2: densIn?.value,
+      densityPerUm2: Number(densIn?.value) * densityScale,
       offsetXNm: offxIn?.value,
       offsetYNm: offyIn?.value,
       seed: seedIn?.value,
@@ -220,7 +222,7 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
       if (endSel && spec.attachEnd) endSel.value = spec.attachEnd
       if (shapeSel && spec.shape) shapeSel.value = spec.shape
       if (sizeIn && spec.sizeNm != null) sizeIn.value = String(spec.sizeNm)
-      if (densIn && spec.densityPerUm2 != null) densIn.value = String(spec.densityPerUm2)
+      if (densIn && spec.densityPerUm2 != null) densIn.value = String(spec.densityPerUm2 / densityScale)
       if (offxIn && spec.offsetXNm != null) offxIn.value = String(spec.offsetXNm)
       if (offyIn && spec.offsetYNm != null) offyIn.value = String(spec.offsetYNm)
       if (seedIn && spec.seed != null) seedIn.value = String(spec.seed)

@@ -460,6 +460,15 @@ describe('formatEta', () => {
 })
 
 describe('resume button label (incomplete-job detection)', () => {
+  it.each(['failed', 'stopped'])('does not resume a %s job whose stages never started', status => {
+    const job = { status, current_stage_idx: 0,
+      stages: [{ status: 'pending', started_at: null, completed_steps: 0, resumed: false }] }
+    expect(isResumable(job)).toBe(false)
+    expect(startButtonLabel(job)).toContain('Start')
+    expect(isResumable({ ...job, stages: [{ status: 'pending', started_at: 123 }] })).toBe(true)
+    expect(isResumable({ ...job, stages: [{ status: 'pending', completed_steps: 100 }] })).toBe(true)
+  })
+
   it('queued job reads Start; stopped/failed read Resume', () => {
     expect(isResumable({ status: 'queued' })).toBe(false)
     expect(isResumable({ status: 'stopped' })).toBe(true)
@@ -1241,17 +1250,19 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect(run.dataset.runAction).toBe('resume')
   })
 
-  it('a prepared job is selected first, then started from the Run control', async () => {
-    const job = { job_id: 'jReady', design_source_path: 'A.nadoc', status: 'queued',
-      created_at: 1, current_stage_idx: 0, backend: 'CPU', stages: relaxStages() }
+  it.each(['queued', 'failed', 'stopped'])('a never-run %s job starts from the Run control', async status => {
+    const job = { job_id: 'jReady', design_source_path: 'A.nadoc', status,
+      created_at: 1, current_stage_idx: 0, backend: 'CPU',
+      stages: relaxStages().map(stage => ({ ...stage, status: 'pending', started_at: null })) }
     api.listOxdnaJobs.mockResolvedValue([job])
     api.startOxdnaJob.mockClear()
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
     const run = $('oxdna-jobs-run-btn')
-    expect(run.textContent).toContain('Run')
+    expect(run.textContent).toBe('▶ Run')
+    expect(run.dataset.runAction).toBe('run')
     expect(run.disabled).toBe(false)
-    expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeTruthy()
+    if (status === 'queued') expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeTruthy()
     run.click()
     await flush()
     expect(api.startOxdnaJob).toHaveBeenCalledWith('jReady')

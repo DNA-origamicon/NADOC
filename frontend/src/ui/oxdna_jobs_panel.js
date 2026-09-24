@@ -353,11 +353,19 @@ export function resumeNote(job) {
   return cur?.resumed ? 'Resuming from checkpoint' : ''
 }
 
-/** Pure: is this an incomplete job that can be resumed (killed/failed mid-run)?
- *  A `stopped` job was interrupted (backend reconcile sets `current_stage_idx` to
- *  the unfinished stage); a `failed` job can be re-run from where it failed. */
+/** Resume only after execution began; preparation can fail with every stage pending. */
 export function isResumable(job) {
-  return ['stopped', 'failed'].includes(job?.status)
+  if (!['stopped', 'failed'].includes(job?.status)) return false
+  // Older job summaries may omit stages; retain their status-based behavior.
+  if (!Array.isArray(job.stages)) return true
+  return job.current_stage_idx > 0 || job.stages.some(stage =>
+    stage.started_at != null || stage.completed_steps > 0 || stage.resumed
+    || ['running', 'done', 'failed'].includes(stage.status))
+}
+
+function canStartJob(job) {
+  return job?.status === 'queued'
+    || (['stopped', 'failed'].includes(job?.status) && !isResumable(job))
 }
 
 /** The interrupted stage owns its resume control: relaxation stages resume from
@@ -1486,7 +1494,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   function _startSelected() {
     return runExclusive(runBtn, async () => {
       const job = _selectedJob()
-      if (!job || job.status !== 'queued') return
+      if (!canStartJob(job)) return
       if (!(await confirmNoConcurrentJob({
         excludeJobId: _selectedId,
         usesGpu: (job.backend || 'CUDA') === 'CUDA',
@@ -2057,7 +2065,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         runBtn.dataset.spinning = '0'          // drop any spinner state, then set the label
         runBtn.textContent = rc.label
       }
-      const canStart = job?.status === 'queued'
+      const canStart = canStartJob(job)
       runBtn.disabled = !_available || _launching ||
         (rc.action === RUN_ACTION.RUN && (!canStart || prodRunning))
       runBtn.dataset.runAction = rc.action

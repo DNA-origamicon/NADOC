@@ -54,6 +54,18 @@ describe('initOxdnaSurfaceStrandsSetup', () => {
   beforeEach(() => { vi.useFakeTimers(); mount() })
   afterEach(() => { vi.useRealTimers(); clearDom() })
 
+  it('displays stored PEG density in chains/nm² and converts edits for the job payload', () => {
+    const card = initOxdnaSurfaceStrandsSetup({ material: 'PEG' })
+    card.setSurfaceEnabled(true)
+    card.applyConfig({ ...SPEC, material: 'PEG', shape: 'square', sizeNm: 12, densityPerUm2: 200000 })
+    const density = document.getElementById('oxdna-surfstrand-density')
+    expect(density.value).toBe('0.2')
+    expect(card.getStrandsSpec()).toMatchObject({ densityPerUm2: 200000, count: 29 })
+    density.value = '0.1'
+    density.dispatchEvent(new Event('input'))
+    expect(card.getStrandsSpec()).toMatchObject({ densityPerUm2: 100000, count: 14 })
+  })
+
   it('is gated on the hard surface: no surface → cannot be enabled', () => {
     const card = initOxdnaSurfaceStrandsSetup({})
     const chk = document.getElementById('oxdna-surfstrand-enable')
