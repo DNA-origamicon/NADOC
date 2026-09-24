@@ -47,6 +47,7 @@ from backend.api.routes_connection_versions import router as connection_versions
 from backend.api.routes_overhang_connections import router as overhang_connections_router
 from backend.api.routes_overhang_bindings import router as overhang_bindings_router
 from backend.api.routes_overhang_sequences import router as overhang_sequences_router
+from backend.api.routes_hairpin_dimer import router as hairpin_dimer_router
 from backend.api.routes_relaxation import router as relaxation_router
 from backend.api.routes_assembly_overhangs import router as assembly_overhangs_router
 from backend.api.routes_assembly_polymerize import router as assembly_polymerize_router
@@ -91,6 +92,8 @@ from backend.api.routes_oxdna_metrics import router as oxdna_metrics_router
 from backend.api.routes_shape_metrics import router as shape_metrics_router
 from backend.api.routes_system import router as system_router
 from backend.api.routes_vr import router as vr_router
+from backend.api.routes_vr_scene import router as vr_scene_router
+from backend.api.routes_frame_extrusion import router as frame_extrusion_router
 from backend.api.routes_simulate import router as simulate_router
 from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
@@ -381,6 +384,7 @@ app.include_router(connection_versions_router, prefix="/api")
 app.include_router(overhang_connections_router, prefix="/api")
 app.include_router(overhang_bindings_router, prefix="/api")
 app.include_router(overhang_sequences_router, prefix="/api")
+app.include_router(hairpin_dimer_router, prefix="/api")
 app.include_router(relaxation_router, prefix="/api")
 app.include_router(loop_skip_router, prefix="/api")
 app.include_router(camera_poses_router, prefix="/api")
@@ -397,6 +401,8 @@ app.include_router(feature_log_router, prefix="/api")
 app.include_router(deformation_router, prefix="/api")
 app.include_router(display_geometry_router, prefix="/api")
 app.include_router(vr_router, prefix="/api")
+app.include_router(vr_scene_router, prefix="/api")
+app.include_router(frame_extrusion_router, prefix="/api")
 app.include_router(display_metadata_router, prefix="/api")
 app.include_router(flexible_segments_router, prefix="/api")
 app.include_router(duplex_router, prefix="/api")

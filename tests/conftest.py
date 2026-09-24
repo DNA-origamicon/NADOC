@@ -565,6 +565,23 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Executes the real upstream oxDNA engine (8.10 s), not the mock runner.
+    "test_prepared_hybrid_job_runs_on_upstream",
+    # CPD conversion performs a real 24-start nonlinear atomistic relaxation
+    # plus quasi-Newton/constraint polishing (6.5–9.3 s per integration test).
+    "test_conversion_preserves_complete_template_and_round_trips",
+    "test_rejects_reuse_and_non_thymine",
+    "test_api_conversion_and_unit_transform_are_atomic_and_undoable",
+    "test_single_endpoint_api_move_expands_to_unit_and_rejects_separation",
+    "test_conversion_relaxes_attachment_bonds_without_moving_neighbors",
+    # Copies and assesses a real saved NAMD DCD/PSF package (5.36 s).
+    "test_native_warmup_completion_does_not_require_final_energy_print",
+    # Copies a 35 MB native package and assesses its resumed trajectory twice
+    # (14.53 s); synthetic safety checks in the same module stay fast.
+    "test_real_resumed_package_passes_without_rewriting_native_logs",
+    # Parses real workspace logs through both implementations, including two
+    # 11.8 MB NAMD logs (8.01 s). Keep synthetic parser/decision pins fast.
+    "test_frame_parser_matches_namd_metrics_on_real_logs",
     # Real Chudoba CPU/CUDA runs, including MC/pivot/HMC sampling (5.24 s
     # for MC). Keep the pure continuity/derivative checks in the fast suite.
     "test_zero_tail_engine_pair",
@@ -944,7 +961,7 @@ def _slow_area_for(module: str) -> str:
     # so its heavy tests belong to the same "cando" heavy group.
     if "cando" in module or "fem" in module or "snupi" in module:
         return "cando"
-    if "namd" in module:
+    if "namd" in module or module == "test_remote_cutoff_eval":
         return "namd"
     if "mrdna" in module:
         return "mrdna"
@@ -956,6 +973,7 @@ def _slow_area_for(module: str) -> str:
     # reconstruction stack as the atomistic tests, so its slow tests belong there.
     if (
         "atomistic" in module
+        or module == "test_cpd_design"
         or "pdb_export" in module
         or "ring_piercing" in module
         or "two_base_default" in module

@@ -1,4 +1,15 @@
+#include "painted_commit_gate.hpp"
+#include "selection_level_guard.hpp"
+#include "freeform_placement.hpp"
+#include "freeform_draft.hpp"
+#include "live_presentation.hpp"
+#include "lattice_view.hpp"
 #include "interaction.hpp"
+#include "menu_items.hpp"
+#include "menu_layout.hpp"
+#include "extrude_plane.hpp"
+#include "stroke_font.hpp"
+#include <sstream>
 #include "jobs.hpp"
 #include "picking.hpp"
 #include "visualization.hpp"
@@ -35,6 +46,53 @@ glm::vec3 transformedOrigin(const glm::mat4& matrix) {
 
 glm::vec3 transformedPoint(const glm::mat4& matrix, const glm::vec3& point) {
     return glm::vec3(matrix * glm::vec4(point, 1));
+}
+
+void toolMenuTargetsAreVisibleSeparatedAndWithinPanel() {
+    using namespace nadoc_vr;
+    const MenuPanelBounds body{{-0.32F, -0.465F}, {0.32F, 0.225F}};
+    const MenuPanelBounds status{{-0.305F, -0.355F}, {0.305F, -0.240F}};
+    for (size_t i = 0; i < kToolMenuItems.size(); ++i) {
+        const auto& item = kToolMenuItems[i];
+        const auto bounds = item.bounds();
+        require(menuLayoutContains(body, bounds));
+        require(!menuLayoutIntersects(status, bounds));
+        require(item.contains({item.x, item.y}));
+        // Points near the visible edge hit; just outside the border must miss.
+        require(item.contains({item.x, bounds.maximum.y - 0.0001F}));
+        require(!item.contains({item.x, bounds.maximum.y + 0.0001F}));
+        require(!item.contains({bounds.maximum.x + 0.0001F, item.y}));
+        require(2.0F * item.halfHeight * 0.75F >= 0.052F);
+        for (size_t j = 0; j < i; ++j) {
+            require(!menuLayoutIntersects(bounds, kToolMenuItems[j].bounds()));
+        }
+    }
+    // The gap is not a hidden target shared by adjacent rows.
+    require(!kToolMenuItems[0].contains({-0.16F, 0.135F}));
+    require(!kToolMenuItems[1].contains({-0.16F, 0.135F}));
+}
+
+void settingsTargetsLeaveValueLabelsReadable() {
+    using namespace nadoc_vr;
+    const std::array<MenuPanelBounds, 3> values{{
+        strokeTextLayoutBounds("LENGTH 42 BP", -0.305F, 0.200F, 0.0038F),
+        strokeTextLayoutBounds("DIRECTION +", -0.305F, 0.090F, 0.0038F),
+        strokeTextLayoutBounds("STRANDS BOTH", -0.305F, -0.020F, 0.0038F),
+    }};
+    for (size_t i = 0; i < kToolConfigMenuItems.size(); ++i) {
+        const auto& item = kToolConfigMenuItems[i];
+        for (const auto& label : values) {
+            require(!menuLayoutIntersects(item.bounds(), label));
+        }
+        for (size_t j = 0; j < i; ++j) {
+            require(!menuLayoutIntersects(item.bounds(), kToolConfigMenuItems[j].bounds()));
+        }
+        if (i < 4) {
+            require(item.halfHeight == 0.040F);
+            require(item.contains({item.x, item.y + 0.039F}));
+            require(!item.contains({item.x, item.y + 0.041F}));
+        }
+    }
 }
 
 void oneHandGrabFollowsRigidControllerDelta() {
@@ -83,6 +141,17 @@ void oneTwoOneTransitionsStayContinuous() {
         transformedOrigin(manipulator.transform()), atTwoHandStart, 1e-5F)));
 }
 
+void centerPaintChangesViewOnly() {
+    const std::vector<nadoc_vr::LatticeCell> cells{{0,0},{0,1},{1,0}};
+    const auto origin=nadoc_vr::centeredPaintOrigin(cells);
+    require(origin.row==1 && origin.column==1);
+    require(cells[0].row==0 && cells[2].column==0);
+    require(nadoc_vr::centeredPaintOrigin({}, {-4,7}).row==-4);
+    require(nadoc_vr::centeredPaintOrigin({{-6,-4},{-2,0}}).row==-4);
+    require(nadoc_vr::centerPaintHit({0.0375F,-0.263F,0}));
+    require(!nadoc_vr::centerPaintHit({0.2F,-0.263F,0}));
+}
+
 void recenterRestoresUnitScaleInFrontOfHead() {
     SceneManipulator manipulator;
     const glm::quat turn = glm::angleAxis(glm::radians(90.0F), glm::vec3(0, 1, 0));
@@ -92,6 +161,20 @@ void recenterRestoresUnitScaleInFrontOfHead() {
     const glm::vec3 expected = glm::vec3(1, 2, 3)
                              + turn * glm::vec3(0, 0, -SceneManipulator::kViewDistanceMeters);
     require(glm::all(glm::epsilonEqual(actual, expected, 1e-5F)));
+    require(std::abs(manipulator.scale() - 1.0F) < 1e-5F);
+}
+
+void fitCentersOffOriginAuthoredBoundsWithoutChangingInput() {
+    SceneManipulator manipulator;
+    const glm::vec3 head(2, 3, 4);
+    const auto turn = glm::angleAxis(glm::radians(90.0F), glm::vec3(0, 1, 0));
+    const nadoc_vr::BoundsSummary bounds{{8, -5, 2}, 0.05F};
+    manipulator.fitInView(head, turn, bounds);
+    const auto target = head + turn * glm::vec3(0, 0, -SceneManipulator::kViewDistanceMeters);
+    require(glm::distance(transformedPoint(manipulator.transform(), bounds.center), target) < 1e-5F);
+    require(std::abs(manipulator.scale() * bounds.radius - 0.25F) < 1e-5F);
+    require(glm::distance(transformedPoint(manipulator.transform(), bounds.center + glm::vec3(bounds.radius, 0, 0)), target) < 0.251F);
+    manipulator.fitInView(head, turn, std::nullopt);
     require(std::abs(manipulator.scale() - 1.0F) < 1e-5F);
 }
 
@@ -287,8 +370,15 @@ void partiallyVisibleLatticeCirclesRemainVisibleAndPaintable() {
 
 void thumbwheelDragAndMomentumProduceSignedNotches() {
     nadoc_vr::ThumbwheelControl wheel;
+    // +/-12mm physical perturbation at default panel scale must not add a
+    // whole lattice period, especially at length zero where negatives clamp.
     wheel.begin(0.0F);
-    require(wheel.drag(0.030F, 1.0F / 90.0F) == 2);
+    require(wheel.drag(0.016F, 0.05F) == 0);
+    require(wheel.drag(-0.016F, 0.05F) == 0);
+    require(wheel.drag(0.0F, 0.05F) == 0);
+    wheel.reset();
+    wheel.begin(0.0F);
+    require(wheel.drag(0.090F, 1.0F / 90.0F) == 2);
     require(wheel.velocity() > 0.0F);
     wheel.release();
     const float releaseVelocity = wheel.velocity();
@@ -300,7 +390,7 @@ void thumbwheelDragAndMomentumProduceSignedNotches() {
     require(std::abs(wheel.velocity()) < releaseVelocity);
 
     wheel.reset();
-    wheel.begin(0.040F);
+    wheel.begin(0.080F);
     require(wheel.drag(0.005F, 1.0F / 90.0F) < 0);
     require(wheel.velocity() < 0.0F);
 
@@ -538,7 +628,55 @@ void selectionVolumeOverlapMatchesRenderedPrimitiveVolumes() {
         {0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}, 0.10F));
 }
 
+void freeformPlacementUndoesPresentationWithoutScalingTopology() {
+    for (const std::string plane : {"XY","XZ","YZ"}) {
+        nadoc_vr::FreeformDraft draft;
+        HandPose hand{true,false,{2,3,4},{1,0,0,0}};
+        require(!draft.capture(hand,plane,glm::mat4(1),{},1,{}));
+        draft.arm(); require(draft.armed() && !draft.placed());
+        require(draft.capture(hand,plane,glm::mat4(1),{},1,{}));
+        require(!draft.armed() && draft.placed());
+        std::ostringstream json; draft.appendJson(json);
+        require(json.str().find("freeform_placement")!=std::string::npos);
+        std::vector<glm::vec3> tips;
+        draft.preview({{0,0}},false,plane,21,glm::mat4(1),{},1,{},
+            [&](glm::vec3 a,glm::vec3 b,glm::vec3){ if (tips.empty()) {tips.push_back(a);tips.push_back(b);} });
+        require(glm::length(tips[0]-hand.position)<1e-5F);
+        require(glm::length(tips[1]-(hand.position+glm::vec3(0,0,-21*0.334F)))<1e-5F);
+        draft.clear(); require(!draft.placed() && !draft.armed());
+    }
+    const glm::vec3 center(12,-7,3), offset(0,0,-1.3F), source(8,15,-4);
+    const glm::quat sourceRotation = glm::angleAxis(0.73F,glm::normalize(glm::vec3(1,2,3)));
+    const glm::quat viewRotation = glm::angleAxis(-0.52F,glm::normalize(glm::vec3(2,-1,1)));
+    for (float zoom : {0.2F, 1.F, 5.F}) {
+        const glm::mat4 model = glm::translate(glm::mat4(1),glm::vec3(1,-2,0.4F))*
+            glm::mat4_cast(viewRotation)*glm::scale(glm::mat4(1),glm::vec3(zoom));
+        const glm::vec3 world = glm::vec3(model*glm::vec4((source-center)*0.03F+offset,1));
+        const auto result = nadoc_vr::trackingToSourcePlacement(world,viewRotation*sourceRotation,
+            model,center,0.03F,offset);
+        require(result.has_value());
+        require(glm::length(result->translationNanometers-source)<0.0001F);
+        require(std::abs(glm::dot(result->rotation,sourceRotation))>0.99999F);
+    }
+    auto invalid = glm::scale(glm::mat4(1),glm::vec3(1,2,1));
+    require(!nadoc_vr::trackingToSourcePlacement(source,sourceRotation,invalid,center,1,offset));
+    invalid = glm::scale(glm::mat4(1),glm::vec3(-1,1,1));
+    require(!nadoc_vr::trackingToSourcePlacement(source,sourceRotation,invalid,center,1,offset));
+    require(!nadoc_vr::trackingToSourcePlacement(source,sourceRotation,glm::mat4(1),center,0,offset));
+}
+
 void selectionVolumeUsesDesktopFilterOwner() {
+    const std::vector<nadoc_vr::OwnerAliasEntry> endAliases = {
+        {"axis", {"end:near", "end:far"}}, {"terminal", {"end:far"}},
+        {"interior", {"base:middle"}}, {"segment:one-end", {"end:far"}},
+    };
+    const std::vector<std::pair<std::string, std::string>> endKinds = {
+        {"end:near", "end"}, {"end:far", "end"}, {"base:middle", "base"},
+    };
+    require(!nadoc_vr::selectionVolumeOwnerToken(endAliases, endKinds, "segment:one-end", "end"));
+    require(!nadoc_vr::selectionVolumeOwnerToken(endAliases, endKinds, "axis", "end"));
+    require(!nadoc_vr::selectionVolumeOwnerToken(endAliases, endKinds, "interior", "end"));
+    require(nadoc_vr::selectionVolumeOwnerToken(endAliases, endKinds, "terminal", "end") == "end:far");
     const std::vector<nadoc_vr::OwnerAliasEntry> aliases = {
         {"primitive:a", {
             "base:a", "domain:a", "strand:a", "xover:a", "cluster:a"}},
@@ -1068,6 +1206,57 @@ void toolShellNeverClaimsACommitAndRequiresPreview() {
 }
 
 void toolExecutionFeedbackIsStrictSequencedAndTransactionBound() {
+    nadoc_vr::SelectionLevelGuard levels;
+    require(levels.accepts(0));
+    levels.requested(1);
+    require(!levels.accepts(1));
+    require(levels.accepts(2));
+    levels.requested(2);
+    require(!levels.accepts(2));
+    require(levels.accepts(3));
+    nadoc_vr::ToolConfigurationDraft draft;
+    require(draft.bind(nadoc_vr::ToolMode::extrude, "", "none", {}));
+    require(draft.adjustPrimary(1));
+    nadoc_vr::ToolPreflightFeedback ready;
+    ready.toolConfigSequence = 7; ready.mode = "extrude";
+    ready.selectionKind = "none"; ready.status = "ok";
+    require(nadoc_vr::paintedCommitReady(draft, 2, 7, &ready, true));
+    require(!nadoc_vr::paintedCommitReady(draft, 2, 8, &ready, true));
+    require(!nadoc_vr::paintedCommitReady(draft, 0, 7, &ready, true));
+    require(!nadoc_vr::paintedCommitReady(draft, 2, 7, &ready, false));
+    ready.status = "block";
+    require(!nadoc_vr::paintedCommitReady(draft, 2, 7, &ready, true));
+    require(draft.bind(nadoc_vr::ToolMode::extrude, "nuc:end", "end", {"owner:end"}));
+    require(draft.adjustPrimary(1));
+    ready.selectionKind = "end"; ready.identity = "nuc:end"; ready.status = "ok";
+    require(nadoc_vr::extrusionCommitReady(draft, 0, 7, &ready, true));
+    require(!nadoc_vr::extrusionCommitReady(draft, 0, 8, &ready, true));
+    nadoc_vr::ToolShell endShell;
+    endShell.activate(nadoc_vr::ToolMode::extrude, "end");
+    endShell.apply(nadoc_vr::ToolAction::confirm, "end", false);
+    require(!endShell.executionPending());
+    endShell.apply(nadoc_vr::ToolAction::confirm, "end", true);
+    require(endShell.executionPending());
+    ready.identity = "nuc:other";
+    require(!nadoc_vr::extrusionCommitReady(draft, 0, 7, &ready, true));
+    nadoc_vr::ToolShell paintedShell;
+    paintedShell.activate(nadoc_vr::ToolMode::extrude, "none");
+    require(nadoc_vr::ToolShell::selectionCapability(nadoc_vr::ToolMode::extrude, "none") ==
+        nadoc_vr::ToolCapability::configuration_required);
+    require(nadoc_vr::ToolShell::selectionCapability(nadoc_vr::ToolMode::extrude, "") ==
+        nadoc_vr::ToolCapability::configuration_required);
+    require(paintedShell.status() == "CONFIG REQUIRED");
+    require(nadoc_vr::ToolShell::selectionCapability(nadoc_vr::ToolMode::bend, "none") ==
+        nadoc_vr::ToolCapability::unsupported);
+    paintedShell.apply(nadoc_vr::ToolAction::confirm, "none", false);
+    require(!paintedShell.executionPending());
+    paintedShell.apply(nadoc_vr::ToolAction::confirm, "none", true);
+    require(paintedShell.executionPending() && paintedShell.status() == "COMMITTING");
+    const auto painted = nadoc_vr::parseToolExecutionFeedback(
+        "NADOCVR_TOOL_EXECUTION 1 4 9 extrude confirm none - succeeded committed feature:9\n", 3, 9);
+    require(painted && painted->identity.empty() && painted->selectionKind == "none");
+    require(!nadoc_vr::parseToolExecutionFeedback(
+        "NADOCVR_TOOL_EXECUTION 1 4 9 move_rotate confirm none - succeeded committed feature:9\n", 3, 9));
     const auto committed = nadoc_vr::parseToolExecutionFeedback(
         "NADOCVR_TOOL_EXECUTION 1 4 9 move_rotate confirm domain nuc:s1 "
         "succeeded committed feature:9\n",
@@ -1318,10 +1507,39 @@ void menuComfortTelemetryMeasuresDepthMotionAndControllerResiduals() {
 }  // namespace
 
 int main() {
+    {
+        glm::mat4 model(1);
+        model[0][1]=2; model[3][0]=3;
+        const auto json=nadoc_vr::livePresentationJson(model,{10,20,30},.5F,{0,0,-1});
+        require(json.find("\"model_to_tracking_rows\":[[1,0,0,3],[2,1,0,0],[0,0,1,0],[0,0,0,1]]")!=std::string::npos);
+        require(json.find("\"source_center_nm\":[10,20,30]")!=std::string::npos);
+        require(json.find("\"normalization_model_per_nm\":0.5")!=std::string::npos);
+        require(json.find("\"normalized_offset_model\":[0,0,-1]")!=std::string::npos);
+    }
+    require(nadoc_vr::glyph('-') != nadoc_vr::glyph(' '));
+    require(nadoc_vr::glyph('-') != nadoc_vr::glyph('+'));
+    require(nadoc_vr::glyph('Z') != nadoc_vr::glyph(' '));
+    require(nadoc_vr::glyph('Z') != nadoc_vr::glyph('X'));
+    require(nadoc_vr::glyph('Z') != nadoc_vr::glyph('Y'));
+    nadoc_vr::ExtrudePlane source;
+    std::istringstream record("XZ SQUARE geometry");
+    source.read(record);
+    require(source.plane == "XZ" && source.lattice == "SQUARE");
+    source.cycle(); require(source.plane == "YZ" && source.reason == "user");
+    source.cycle(); require(source.plane == "XY");
+    bool rejected = false;
+    try { std::istringstream invalid("freeform SQUARE geometry"); source.read(invalid); }
+    catch (const std::runtime_error&) { rejected = true; }
+    require(rejected);
+
+    toolMenuTargetsAreVisibleSeparatedAndWithinPanel();
+    settingsTargetsLeaveValueLabelsReadable();
     oneHandGrabFollowsRigidControllerDelta();
     twoHandGrabScalesAroundMidpointWithoutJumping();
     oneTwoOneTransitionsStayContinuous();
+    centerPaintChangesViewOnly();
     recenterRestoresUnitScaleInFrontOfHead();
+    fitCentersOffOriginAuthoredBoundsWithoutChangingInput();
     initialPlacementCarriesTheFixturePresentationWithTheHead();
     namedPlacementPresetsAndOverridesAreDeterministic();
     closeInspectionAllowsTheModelToPassThroughTheHead();
@@ -1343,6 +1561,7 @@ int main() {
     selectionVolumeScrollResizesPreciselyAndStaysBounded();
     selectionVolumeOverlapMatchesRenderedPrimitiveVolumes();
     selectionVolumeUsesDesktopFilterOwner();
+    freeformPlacementUndoesPresentationWithoutScalingTopology();
     pendingToolDragAccumulatesInModelSpaceAndCancelsExactly();
     pendingToolDragRotatesRigidlyWithTheController();
     endpointWeightsMoveOnlyTheOwnedBoundaryEndpoint();

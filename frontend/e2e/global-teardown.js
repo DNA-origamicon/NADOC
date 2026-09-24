@@ -21,7 +21,9 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { bridgeCredentialsPath } from '../viewer_test_server.js'
 
-const WORKSPACE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'workspace')
+const WORKSPACE = process.env.NADOC_WORKSPACE
+  ? path.resolve(process.env.NADOC_WORKSPACE)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'workspace')
 const E2E_PREFIX = '__e2e__'
 
 export default async function globalTeardown() {

@@ -26,8 +26,11 @@ def cpd_capability() -> dict[str, Any]:
 
     products = photoproduct_capabilities()["products"]
     released = [item["id"] for item in products if item["simulation_ready"]]
+    preliminary = [item["id"] for item in products if item.get("qualification", {}).get("available")]
     return {
         "available": bool(released),
+        "preliminary_available": bool(preliminary),
+        "preliminary_product_ids": preliminary,
         "released_product_ids": released,
         "availability_authority": "per-product registry gates and asset hashes",
         "legacy_manifest_available_ignored": bool(manifest.get("available")),
@@ -41,6 +44,18 @@ def cpd_capability() -> dict[str, Any]:
 
 def design_has_photoproducts(design: object) -> bool:
     return bool(getattr(design, "photoproduct_junctions", None))
+
+
+def assert_photoproduct_seed_inputs(design, *, solute_coords, graphene_only) -> None:
+    """Do not overwrite audited product placement or omit its topology."""
+    if not design_has_photoproducts(design):
+        return
+    if solute_coords is not None or graphene_only:
+        raise CpdCapabilityError(
+            "Formed photoproducts require audited product placement. A raw solute-coordinate "
+            "override or graphene-only build would bypass it. Supply an atomistic_model "
+            "through the full topology builder instead."
+        )
 
 
 def reject_photoproduct_design(design: object, *, path: str, supported_path: str) -> None:
@@ -77,7 +92,13 @@ def assert_cpd_simulation_supported(design: object, *, path: str) -> None:
                 f"unregistered chemistry {lesion.product}/{lesion.stereochemistry}"
             )
             continue
-        if not capability["simulation_ready"]:
+        if capability.get("qualification", {}).get("available"):
+            from backend.core.cpd_preliminary import validate_preliminary_design
+            try:
+                validate_preliminary_design(design)
+            except ValueError as exc:
+                registry_blockers.append(str(exc))
+        elif not capability["simulation_ready"]:
             # Do not hide the missing parameter/template/audit tail behind an
             # abbreviated message.  A formed-product rejection must say exactly
             # which gates and assets are still absent.
@@ -126,7 +147,17 @@ def photoproduct_package_assets(design: object) -> list[dict[str, Any]]:
             if item["product"] == lesion.product
             and item["stereochemistry"] == lesion.stereochemistry
         )
-        for kind, record in entry["assets"].items():
+        entry_assets = dict(entry["assets"])
+        review_record = entry_assets.get("preliminary_review")
+        if review_record:
+            review_path = REGISTRY_PATH.parent / review_record["path"]
+            review = json.loads(review_path.read_text())
+            for number, evidence in enumerate(review["evidence"]):
+                entry_assets[f"preliminary_evidence_{number}"] = {
+                    "path": str(Path(review_record["path"]).parent / evidence["path"]),
+                    "sha256": evidence["sha256"],
+                }
+        for kind, record in entry_assets.items():
             if kind in excluded:
                 continue
             relative = str(record["path"])

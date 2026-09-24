@@ -275,6 +275,7 @@ describe('initVRSession', () => {
           tool_sequence: 1,
           tool_mode: 'twist',
           tool_action: 'preview',
+          tool_action_config_sequence: 1,
           tool_target_identity: 'nuc:s1',
           tool_target_kind: 'domain',
           tool_target_owner_tokens: ['domain-token'],
@@ -345,19 +346,19 @@ describe('initVRSession', () => {
     await vi.advanceTimersByTimeAsync(25)
     expect(onNativeEvent.mock.calls).toEqual([
       [{ sequence: 2, type: 'hover', identity: 'nuc:s1' }],
+      [{ sequence: 1, type: 'selection_level', level: 'domain' }],
       [{
         sequence: 1,
         type: 'select',
         identity: 'nuc:s1',
         identities: ['nuc:s1', 'nuc:s2'],
       }],
-      [{ sequence: 1, type: 'selection_level', level: 'domain' }],
       [{
         sequence: 1, type: 'style', representation: 'ballstick', coloring: 'cpk',
       }],
       [{ sequence: 1, type: 'trajectory', action: 'seek', frameIdx: 42 }],
       [{
-        sequence: 1, type: 'tool', mode: 'twist', action: 'preview',
+        sequence: 1, type: 'tool', mode: 'twist', action: 'preview', configSequence: 1,
         targetIdentity: 'nuc:s1', targetKind: 'domain',
         targetOwnerTokens: ['domain-token'],
       }],

@@ -54,6 +54,11 @@ import {
   overhangHasDuplex, overhangDuplexSegments, capSequenceToLength, overhangRcOfPartner,
 } from '../scene/design_queries.js'
 import { selectedOverhangIds, selectedStrandIds } from '../scene/selection_model.js'
+import {
+  HAIRPIN_DIMER_COLORS, createHairpinDimerIndexCache, formatHairpinDimerCompact,
+  formatHairpinDimerTooltip, hairpinDimerIconEl, hairpinDimerLevel, overhangNameResolver,
+} from './hairpin_dimer_report.js'
+import { openHairpinDimerWindow } from './hairpin_dimer_window.js'
 
 const _STORAGE = 'nadoc.overhangConnections.connectionType'
 
@@ -233,7 +238,7 @@ export function initOverhangConnectionsPanel({
   // React to design changes (load / edit / overhang add-remove): repopulate the
   // dropdowns (dropping any now-stale selection) and re-render the icon.
   _store.subscribe((s, p) => {
-    if (s.currentDesign !== p.currentDesign) _refresh()
+    if (s.currentDesign !== p.currentDesign || s.hairpinDimerReport !== p.hairpinDimerReport) _refresh()
     else if (s.currentGeometry !== p.currentGeometry) _updateGlow()   // beads moved/rebuilt
   })
 
@@ -298,6 +303,7 @@ function _connections() { return _design()?.overhang_connections ?? [] }
 function _bindings()    { return _design()?.overhang_bindings ?? [] }
 
 function _populate(select, ovhgs, selectedId) {
+  const hd = _hdIndex()
   select.innerHTML = ''
   const blank = document.createElement('option')
   blank.value = ''
@@ -307,7 +313,13 @@ function _populate(select, ovhgs, selectedId) {
     const opt = document.createElement('option')
     opt.value = o.id
     const tag = endOf(o.id)
-    opt.textContent = tag ? `${_displayName(o)}  (${tag === '5p' ? "5'" : "3'"})` : _displayName(o)
+    const warn = hd.byOverhang.get(o.id)
+    opt.textContent = (warn ? '⚠ ' : '')
+      + (tag ? `${_displayName(o)}  (${tag === '5p' ? "5'" : "3'"})` : _displayName(o))
+    if (warn) {
+      opt.title = _hdTitle(warn)
+      if (_hdLevel(warn) === 'critical') opt.style.color = HAIRPIN_DIMER_COLORS.critical
+    }
     select.appendChild(opt)
   }
   select.value = selectedId ?? ''
@@ -545,6 +557,7 @@ function _updateControls() {
   _refreshSeqPreviews()
   _renderDriverToggle()
   _refreshPairWarning()
+  _refreshStructureWarnings()
   const hasBoth   = _selA != null && _selB != null
   const forbidden = hasBoth && ctIsForbidden(_typeId, endOf(_selA), endOf(_selB))
   const existing  = hasBoth && _pairHasConnection()
@@ -820,6 +833,86 @@ function _refreshPairWarning() {
   if (show) {
     _pairWarnEl.textContent =
       '⚠ Overhang A and B sequences share no complementary region.'
+  }
+}
+
+// ── Hairpin / self-dimer ⚠ (hairpin_dimer_checker.js owns the report) ────────
+
+const _hdCache = createHairpinDimerIndexCache()
+let _hdWarnA = null, _hdWarnB = null
+
+function _hdIndex() {
+  return _hdCache.get(_store?.getState()?.hairpinDimerReport, _design())
+}
+
+function _hdThreshold() {
+  return _store?.getState()?.hairpinDimerReport?.threshold_c
+}
+
+function _hdSevere() {
+  return _store?.getState()?.hairpinDimerReport?.severe_threshold_c
+}
+
+function _hdLevel(checks) {
+  return hairpinDimerLevel(checks, _hdSevere())
+}
+
+function _hdTitle(checks) {
+  return formatHairpinDimerTooltip(checks, {
+    nameOf: overhangNameResolver(_design()), threshold: _hdThreshold(), severe: _hdSevere(),
+  })
+}
+
+/** A clickable ⚠ (amber, or red when critical) that opens the structure window for *checks*. */
+function _hdIcon(checks, title) {
+  return hairpinDimerIconEl(_hdTitle(checks), document, () => _hdOpen(checks, title), _hdLevel(checks))
+}
+
+function _hdOpen(checks, title) {
+  const report = _store?.getState()?.hairpinDimerReport
+  openHairpinDimerWindow({
+    checks, title, nameOf: overhangNameResolver(_design()),
+    conditions: report?.conditions, threshold: report?.threshold_c, severe: report?.severe_threshold_c,
+  })
+}
+
+/** Flagged checks touching the pair: both overhangs + the pair's linker strands. */
+function _hdPairChecks(a, b) {
+  const idx = _hdIndex()
+  const out = new Set([...(idx.byOverhang.get(a) ?? []), ...(idx.byOverhang.get(b) ?? [])])
+  const key = _pairKey(a, b)
+  for (const c of _connections()) {
+    if (_pairKey(c.overhang_a_id, c.overhang_b_id) !== key) continue
+    for (const x of idx.byConnection.get(c.id) ?? []) out.add(x)
+  }
+  return [...out]
+}
+
+/** A ⚠ line under each selected overhang whose hairpin / self-dimer Tm is flagged. */
+function _refreshStructureWarnings() {
+  const idx = _hdIndex()
+  for (const side of ['A', 'B']) {
+    const id = side === 'A' ? _selA : _selB
+    let el = side === 'A' ? _hdWarnA : _hdWarnB
+    if (!el) {
+      const anchor = side === 'A' ? (_seqPrevA ?? _seqRowA) : (_seqPrevB ?? _seqRowB)
+      if (!anchor) continue
+      el = document.createElement('div')
+      el.className = 'oconn-hd-warning'
+      el.setAttribute('role', 'button')
+      el.style.cssText = 'width:100%;color:#d29922;font-size:11px;line-height:1.3;cursor:pointer'
+      el.addEventListener('click', () => { if (el._checks?.length) _hdOpen(el._checks, el._label) })
+      anchor.insertAdjacentElement('afterend', el)
+      if (side === 'A') _hdWarnA = el
+      else _hdWarnB = el
+    }
+    const checks = (id && idx.byOverhang.get(id)) || []
+    el._checks = checks
+    el._label = id ? _displayName(_overhangs().find(o => o.id === id)) : ''
+    el.hidden = checks.length === 0
+    el.style.color = HAIRPIN_DIMER_COLORS[_hdLevel(checks) ?? 'warning']
+    el.textContent = checks.length ? `⚠ ${formatHairpinDimerCompact(checks, { threshold: _hdThreshold() })}` : ''
+    el.title = checks.length ? `${_hdTitle(checks)}\n\nClick to show the structure.` : ''
   }
 }
 
@@ -1178,6 +1271,8 @@ function _renderList() {
     header.innerHTML =
       `<span class="oconn-chevron">${collapsed ? '▸' : '▾'}</span>` +
       `<span>${_esc(a)} ↔ ${_esc(b)} · ${n} version${n !== 1 ? 's' : ''}</span>`
+    const hd = _hdPairChecks(grp.a, grp.b)
+    if (hd.length) header.insertBefore(_hdIcon(hd, `${a} ↔ ${b}`), header.lastElementChild)
     header.addEventListener('click', () => {
       if (collapsed) _collapsedGroups.delete(key)
       else _collapsedGroups.add(key)
@@ -1276,6 +1371,8 @@ function _makeRow(kind, e, nameById) {
   main.innerHTML =
     `<span class="oconn-row-name">${_esc(e.name ?? e.id.slice(0, 6))}</span> ` +
     `<span class="oconn-row-summary">${_esc(type)}${_esc(len)} · ${_esc(a)} ↔ ${_esc(b)}</span>`
+  const hd = _hdPairChecks(e.overhang_a_id, e.overhang_b_id)
+  if (hd.length) main.prepend(_hdIcon(hd, e.name ?? `${a} ↔ ${b}`))
   row.appendChild(main)
   const del = document.createElement('button')
   del.className = 'oconn-row-del'

@@ -1,5 +1,9 @@
 # ScryWrite adversarial audit
 
+Current capability inventory: [inspector status, audited 2026-09-22](scrywrite_inspector.md).
+This audit preserves historical findings; its dated remaining-work lists may be
+superseded by the September 16 live API/capture implementation.
+
 Status: second remediation tranche implemented 2026-08-21; remaining claims are
 explicitly bounded below.
 

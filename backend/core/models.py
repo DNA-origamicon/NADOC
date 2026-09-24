@@ -22,6 +22,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_validator
+from backend.core.lattice_frame_model import LatticeFrame, validate_frame_references
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
@@ -166,6 +167,8 @@ class Helix(BaseModel):
     label: Optional[str] = None
     """Display label shown in the pathview gutter (e.g. scadnano helix index).  None = use
     positional index."""
+    lattice_frame_id: Optional[str] = None
+    """Explicit local-cell frame; None preserves legacy implicit-frame semantics."""
     grid_pos: Optional[Tuple[int, int]] = None
     """(row, col) in the originating lattice grid, when known.  Set by scadnano/caDNAno
     importers so that the crossover lookup table can be used without parsing the helix ID."""
@@ -1020,6 +1023,9 @@ class PhotoproductJunction(BaseModel):
     formation: Literal["manual", "legacy-scadnano"] = "manual"
     patch_order: Literal["base-key-1-first", "base-key-2-first"] = "base-key-1-first"
     orientation_method: str = "canonical-key-order"
+    # Exact test-template coordinates before per-residue rigid poses (nm).
+    design_coordinates: dict[str, dict[str, List[float]]] = Field(default_factory=dict)
+    bond_relaxation: dict[str, Any] = Field(default_factory=dict)
     t1_stable_id: Optional[str] = None
     t2_stable_id: Optional[str] = None
     photoproduct_id: str = "TT-CPD"
@@ -1061,6 +1067,14 @@ class PhotoproductJunction(BaseModel):
             raise ValueError("photoproduct requires canonical base keys or both legacy stable IDs")
         if self.formation == "manual" and self.photoproduct_id != self.product:
             raise ValueError("photoproduct_id and product must agree")
+        if self.design_coordinates:
+            if set(self.design_coordinates) != {self.base_key_1, self.base_key_2}:
+                raise ValueError("CPD design coordinates must cover exactly its two endpoints")
+            for atoms in self.design_coordinates.values():
+                if not {"C5", "C6"}.issubset(atoms):
+                    raise ValueError("CPD design coordinates require both ring atoms")
+                if any(len(xyz) != 3 or not all(math.isfinite(v) for v in xyz) for xyz in atoms.values()):
+                    raise ValueError("CPD design coordinates must be finite xyz triples")
         return self
 
     @property
@@ -1832,6 +1846,7 @@ class OverhangRotationLogEntry(BaseModel):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
+    "extrude-frame",
     "aptamer-import",
     "bundle-create",
     "cluster-paste",
@@ -1856,6 +1871,7 @@ SnapshotOpKind = Literal[
     "create-near-ends",
     "create-far-ends",
     "photoproduct-create",
+    "photoproduct-relax",
     "photoproduct-delete",
     "overhang-bulk",
     "apply-loop-skips",
@@ -2995,6 +3011,7 @@ class Design(BaseModel):
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    lattice_frames: List[LatticeFrame] = Field(default_factory=list)
     helices: List[Helix] = Field(default_factory=list)
     strands: List[Strand] = Field(default_factory=list)
     lattice_type: LatticeType = LatticeType.HONEYCOMB
@@ -3060,6 +3077,11 @@ class Design(BaseModel):
     def _biotin_terminal_extensions(self):
         from backend.core.biotin_extensions import ensure_biotin_extensions
         return ensure_biotin_extensions(self)
+
+    @model_validator(mode="after")
+    def _validate_lattice_frames(self) -> "Design":
+        validate_frame_references(self)
+        return self
 
     @field_validator("feature_log", mode="before")
     @classmethod

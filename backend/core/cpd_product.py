@@ -128,6 +128,17 @@ def _template_coordinates(
         "optimized_model_audit_sha256",
         "frequency_audit_sha256",
     }
+    if template.get("release_status") == "preliminary":
+        # A deposited duplex is a structural reference, not a gas-phase QM minimum.
+        # Preserve that distinction in the provenance instead of inventing QM hashes.
+        if (provenance or {}).get("kind") not in {
+            "deposited-structure-with-fixed-heavy-atom-hydrogen-minimization",
+            "native-namd-relaxed-deposited-structure",
+        }:
+            raise ProductPlacementError("unsupported preliminary template provenance")
+        required_hashes = {
+            "coordinates_sha256", "topology_sha256", "starting_structure_audit_sha256"
+        }
     if not isinstance(provenance, dict) or any(
         not isinstance(provenance.get(name), str)
         or len(provenance[name]) != 64
@@ -633,6 +644,12 @@ def select_product_template_assignment(
     for ordered_tuple in permutations(endpoints):
         ordered = list(ordered_tuple)
         keys = [endpoint.key for endpoint in ordered]
+        if template.get("release_status") == "preliminary":
+            from backend.core.cpd_preliminary import preliminary_order_valid
+            if not preliminary_order_valid(ordered, atomistic_model):
+                candidates.append({"endpoint_keys": keys, "status": "rejected",
+                                   "reason": "Preliminary template requires adjacent 5′→3′ order."})
+                continue
         try:
             placed, report = place_product_template(
                 atomistic_model=atomistic_model,
@@ -640,6 +657,7 @@ def select_product_template_assignment(
                 template=template,
                 chemical_definition=chemical_definition,
                 expected_parameter_sha256=expected_parameter_sha256,
+                allowed_template_statuses=frozenset({"released", "preliminary"}),
             )
         except ProductPlacementError as exc:
             candidates.append(
@@ -738,6 +756,7 @@ def build_cpd_product_coordinates(design, atomistic_model):
             template=template,
             chemical_definition=definition,
             expected_parameter_sha256=entry["assets"]["parameters"]["sha256"],
+            allowed_template_statuses=frozenset({"released", "preliminary"}),
         )
         reports.append(report)
     return result, reports

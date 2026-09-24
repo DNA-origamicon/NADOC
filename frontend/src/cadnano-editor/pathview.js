@@ -85,6 +85,11 @@ import {
   stapleColorOf,
 } from './pathview/palette.js'
 import {
+  drawHairpinDimerMarkers,
+  hitHairpinDimerMarker,
+  placeHairpinDimerMarkers,
+} from './pathview/hairpin_dimer_markers.js'
+import {
   domainLineKey as _domainLineKey,
   domainEndKey as _domainEndKey,
   xoverKey as _xoverKey,
@@ -278,6 +283,7 @@ export function initPathview(canvasEl, containerEl, {
   onCrossoverContextMenu,
   onOverhangContextMenu,
   onStrandContextMenu,
+  onHairpinDimerClick,
 }) {
   // `ctx` is mutable so `drawToCanvas()` can swap it to an offscreen target
   // (the zoom_scope lens) for a native re-render at lens transform, then
@@ -370,6 +376,10 @@ export function initPathview(canvasEl, containerEl, {
   // sync via setUnligatedCrossoverIds; auto-clears when topology changes
   // (backend recomputes per-response).
   let _unligatedCrossoverIds = new Set()
+  // Hairpin/self-dimer ⚠ markers (setHairpinDimerMarkers) and their placed
+  // world positions from the last draw (hit-tested on pointerdown).
+  let _hdMarkers = []
+  let _hdPlaced = []
   let _rowMap  = new Map()   // helix.id → { fwdY, revY, scaffoldFwd, cell, idx }
   let _rowBands = []         // sorted [{lo, hi, hid, info}] for pointer row lookup
   let _helixById = new Map() // helix.id → helix; rebuilt in _rebuildLayout. O(1) lookups
@@ -4137,6 +4147,8 @@ export function initPathview(canvasEl, containerEl, {
     _drawForcedLigationArc()
     _drawSliceBar()
     _drawLasso()
+    _hdPlaced = placeHairpinDimerMarkers(_hdMarkers, _rowMap)
+    drawHairpinDimerMarkers(ctx, _hdPlaced, _zoom)
     _drawSpriteDebug()     // magenta hit-radius circles when D key is held
     // ── Frozen screen-space overlays (drawn on top of scrolling content) ───────
     ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -4204,6 +4216,13 @@ export function initPathview(canvasEl, containerEl, {
     }
 
     if (e.button !== 0) return
+
+    // ── Hairpin/dimer ⚠ → structure window (report only; main.js opens it) ────────
+    if (_hdPlaced.length) {
+      const { wx, wy } = _c2w(e.offsetX, e.offsetY)
+      const hd = hitHairpinDimerMarker(_hdPlaced, wx, wy, _zoom)
+      if (hd) { e.preventDefault(); onHairpinDimerClick?.(hd.strandId, hd.label); return }
+    }
 
     // ── Periodic-boundary slider drag (priority over the adjacent slice bar) ─────
     const pbHit = _isNearPbSlider(e.offsetX)
@@ -4662,6 +4681,13 @@ export function initPathview(canvasEl, containerEl, {
   })
 
   canvasEl.addEventListener('pointermove', (e) => {
+    // Hairpin/dimer ⚠ hover → native tooltip with the finding.
+    if (_hdPlaced.length || canvasEl.title) {
+      const { wx, wy } = _c2w(e.offsetX, e.offsetY)
+      const hd = hitHairpinDimerMarker(_hdPlaced, wx, wy, _zoom)
+      const tip = hd ? `${hd.tooltip}\n\nClick to show the structure.` : ''
+      if (canvasEl.title !== tip) canvasEl.title = tip
+    }
     // ── Forced ligation — update arc endpoint + check 5' hover target ────────
     // Click-then-click: arc follows cursor between first click (3') and second click (5').
     if (_forcedLigActive) {
@@ -5254,6 +5280,12 @@ export function initPathview(canvasEl, containerEl, {
       if (_nativeOrientation === native) return
       _nativeOrientation = native
       _rebuildLayout()
+      _draw()
+    },
+
+    /** Replace the hairpin/self-dimer ⚠ markers (hairpinDimerMarkers()) + redraw. */
+    setHairpinDimerMarkers(markers) {
+      _hdMarkers = markers ?? []
       _draw()
     },
 

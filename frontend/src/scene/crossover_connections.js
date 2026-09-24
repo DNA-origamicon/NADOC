@@ -295,6 +295,14 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
         .multiply(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion(...tr.rotation)))
         .multiply(new THREE.Matrix4().makeTranslation(...tr.pivot.map(v => -v)))]))
 
+    const productGeometry = new Map()
+    for (const lesion of design.photoproduct_junctions ?? []) {
+      for (let k = 0; k < n; k++) {
+        const geometry = lesion.representation_geometry?.[`__xb__:${xo.id}:${k}`]
+        if (geometry) productGeometry.set(k, geometry)
+      }
+    }
+
     // Compute control point and bow direction (away from Holliday junction)
     crossoverControlPoint(posA, posB, nucA, nucB, ctrl, bowDir)
 
@@ -314,7 +322,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     const placements = buildCrossoverExtraPlacements({
       xoId: xo.id, count: n, pointA: posA, control: ctrl, pointB: posB,
       helixAxis: avgAx, sequence: xo.extra_bases, simReversed, localFrameReversed,
-      savedTransforms,
+      savedTransforms, productGeometry,
     })
     const posedPoints = placements.map(p => p.center.clone())
 
@@ -357,7 +365,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
       pointA: posA.clone(),
       pointB: posB.clone(),
       sequence: xo.extra_bases,
-      savedTransforms,
+      savedTransforms, productGeometry,
       avgAx: avgAx.clone(),
       // Simulated inserts arrive numbered 5′→3′ from the strand's exit half; beads are
       // laid out A→B.  True when those two disagree — see extraBaseOrderReversed.
@@ -414,11 +422,11 @@ export function updateExtraBaseInstances(
   beadsMesh, slabsMesh, beadStartIdx, beadCount,
   posA, ctrl, posB, avgAx,
   simReversed = false, localFrameReversed = false,
-  savedTransforms = new Map(), sequence = '',
+  savedTransforms = new Map(), sequence = '', productGeometry = new Map(),
 ) {
   const placements = buildCrossoverExtraPlacements({
     xoId: null, count: beadCount, pointA: posA, control: ctrl, pointB: posB,
-    helixAxis: avgAx, sequence, simReversed, localFrameReversed, savedTransforms,
+    helixAxis: avgAx, sequence, simReversed, localFrameReversed, savedTransforms, productGeometry,
   })
   for (const placement of placements) {
     const idx = beadStartIdx + placement.geometricIndex

@@ -670,7 +670,12 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
 
     /** Preview a world delta on one residue. Passing identity restores source data. */
     applyResidueMatrix(target, matrix) {
-      const wanted = new Set(this.residueInfo(target)?.rows ?? [])
+      return this.applyResiduesMatrix([target], matrix)
+    },
+
+    /** Transform a covalently linked group in one pass, including shared bonds. */
+    applyResiduesMatrix(targets, matrix) {
+      const wanted = new Set(targets.flatMap(target => this.residueInfo(target)?.rows ?? []))
       if (!wanted.size) return false
       const transformed = new Map()
       const v = new THREE.Vector3()

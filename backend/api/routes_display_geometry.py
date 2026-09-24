@@ -28,6 +28,8 @@ from __future__ import annotations
 
 from typing import List
 
+from backend.core.display_placement import measured_display_placement
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -82,11 +84,9 @@ def get_atomistic(
     The −32° helical phase offset (aligning the all-atom backbone groove with the
     NADOC CG model) is baked into build_atomistic_model via _ATOMISTIC_PHASE_OFFSET_RAD.
 
-    ``measured_positioning`` defaults TRUE and is NADOC's native geometry: nucleotide
-    templates re-extracted from free NAMD, both strands measured separately in one
-    shared base-pair frame (``core/measured_atomistic.py``).  Pass false to get the
-    1ZEW-derived templates back for comparison — that is what Help ▸ New Positioning
-    switches off.  Topology and the geometric layer are untouched either way.
+    ``measured_positioning`` is the baseline/candidate comparison selector.
+    Both states now use the accepted measured placement. The legacy geometry
+    previously selected by false has been retired.
 
     ``seed_lattice_nm`` switches this to **MD SEED** mode — the t=0, pre-minimisation
     coordinates the simulation would actually start from, for EVERY atom:
@@ -107,6 +107,7 @@ def get_atomistic(
     coordinates that no lattice scale applies to, so a seed built around them
     would silently mix two frames.
     """
+    measured_positioning = measured_display_placement(measured_positioning)
     from backend.core.atomistic import (
         build_atomistic_model,
         atomistic_to_json,
@@ -176,6 +177,7 @@ def get_molecular_placement_audit(measured_positioning: bool = True) -> dict:
     simulation. The response includes the ordinary Full render feed so both audit panel
     representations share the exact same design snapshot.
     """
+    measured_positioning = measured_display_placement(measured_positioning)
     if design_state.get_pdb_atomistic() is not None:
         raise HTTPException(
             status_code=409,

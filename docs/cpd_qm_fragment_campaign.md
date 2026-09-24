@@ -1,5 +1,9 @@
 # TT-CPD local fragment QM campaign
 
+## September 16 sugar-identity correction
+
+The archived anti primary endpoint fragments inherited inverted sugar centers from their UFF boundary seed. Their optimization-continuity and frequency passes do not establish native deoxyribose identity. Endpoint 1 differs at C3' and endpoint 2 at C1', C3', C4'; both syn primary fragments preserve source sugar handedness. See `.development-artifacts/cpd-primary-fragment-sugar-reaudit-v1/input_invalidation.json` and `experiments/cpd_drude_recovery/README.md`. Anti boundary geometries/Hessians remain archived but are not valid native-sugar transfer references. The earlier checkpoint statements below are retained as history.
+
 ## Decision
 
 The routine TT-CPD parameterization target is no longer a separately optimized,
@@ -642,18 +646,20 @@ finite zero-step energy. The full 2018 nucleic-acid topology also exposed an uns
 Drude model compound, but the complete DNA structure-builder path still needs either a
 validated preprocessing correction or a CHARMM-GUI/CHARMM-generated PSF.
 
-The first P1 response pilot is Alpine job **32603453**. It requests a
+The first P1 response pilot was Alpine job **32603453**. It requested a
 B3LYP/aug-cc-pVDZ molecular polarizability tensor and dipole at the audited
 MP2/6-31G(d) N-methyl CPD geometry using 32 CPUs and 70 GB on `acpu`. Submission and
-resource checks passed; the job entered `PENDING (Priority)`. Its completion audit
-requires normal Psi4 termination, nine finite tensor components, tensor symmetry within
-1e-6 atomic units, and three finite dipole components. The enabled
-`nadoc-cpd-drude-response-watch.timer` polls every five minutes, collects terminal output,
-and writes an immutable completion trigger. A pass authorizes preparation of the
-fit/held-out +0.5 e perturbed-ESP campaign only and has no registry effect.
+resource checks passed. Its completion audit
+required normal Psi4 termination, nine finite tensor components, tensor symmetry within
+1e-6 atomic units, and three finite dipole components. A five-minute watcher collected
+terminal output and wrote an immutable completion trigger. Under the policy in force at
+submission, a pass would have authorized preparation of the fit/held-out +0.5 e
+perturbed-ESP campaign only and had no registry effect; the later literature reassessment
+below superseded that automatic continuation.
 
-The next campaign has four reassessment triggers: finish and audit fit/held-out perturbed
-ESP and polarizability QM targets; require a fitted Drude electrostatic model to predict
+The then-proposed next campaign had four reassessment triggers: finish and audit
+fit/held-out perturbed ESP and polarizability QM targets; require a fitted Drude
+electrostatic model to predict
 the held-out perturbations; require unchanged three-orientation water cross-validation
 plus a new frozen fourth orientation; then require a full Drude d(TpT), SWM4-NDP solution,
 and duplex-context validation at no more than 1 fs. Additive-to-Drude parameter transfer
@@ -729,8 +735,203 @@ showed that the solver remained at the default 1e-6 convergence and 100 iteratio
 maximum tensor asymmetry was consequently unchanged at 8.86e-6 atomic units.
 
 The recovery input had applied `SOLVER_CONVERGENCE` to Psi4's `CPHF` module. A direct
-Psi4 1.11 option probe confirmed that this DFT response path instead reads the `SCF`
-module's solver options. Job **32603908** (`cpd-drude-pol3`) was therefore submitted with
-the same scientific target and `SCF` solver convergence set to 1e-10. The prior outputs
-and failed triggers remain immutable. The watcher now follows the v3 archive and will not
-launch dependent jobs.
+Psi4 1.11 option probe initially suggested trying the `SCF` module's solver options. Job
+**32603908** (`cpd-drude-pol3`) used that scope with the same scientific target, but Psi4
+again reported the default 1e-6 convergence and returned the same 8.86e-6 atomic-unit
+asymmetry. Source inspection then established that `run_scf_property` reads the global
+`SOLVER_CONVERGENCE` and `SOLVER_MAXITER` options.
+
+Final recovery job **32607643** (`cpd-drude-pol4`) set those global options to 1e-10 and
+200 without changing the geometry, method, basis, resources, or acceptance criteria. It
+completed normally on Alpine in 7 minutes 38 seconds. Psi4 reported the requested solver
+settings and normal termination; the audit recovered all tensor and dipole components,
+measured maximum tensor asymmetry of **1.2010e-9 atomic units**, and passed the unchanged
+1e-6 limit. The symmetrized tensor is positive definite, with eigenvalues 141.214204,
+182.676046, and 210.980607 atomic units. Its largest component difference from any of the
+three preserved calculations is 1.265e-5 atomic units, confirming that the recovery
+removed numerical asymmetry without materially changing the response target. Remote and
+collected hashes match.
+
+The P1 response-target stage is therefore complete. The immutable closeout is
+`alpine-qm-cpd-drude-response-v4/stage_assessment.json`; it preserves all four job IDs,
+inputs, outputs, audits, completion triggers, and hashes. This result has no registry
+effect and is not simulation-ready. The completion watcher is disabled. Consistent with
+the literature reassessment, no perturbed-ESP expansion is launched automatically and
+the anti Drude research path does not block the canonical cis-syn-I release path. The
+accepted response target remains available if that separate research path is explicitly
+resumed under a new versioned campaign decision.
+
+### Anti-Drude P1 expansion (2026-09-15)
+
+The user explicitly resumed the ordered anti Drude research track after the response
+pilot closed. Campaign `alpine-qm-cpd-drude-perturbed-esp-v1` preregisters the remaining
+P1 targets without changing any prior additive or release gate. It uses the same audited
+MP2/6-31G(d) N-methyl cis-anti-I geometry and calculates B3LYP/aug-cc-pVDZ ESP maps and
+dipoles for one unperturbed density and 96 independent +0.5 e perturbations.
+
+The perturbations use reproducible exposed scaled-Bondi surfaces as a deterministic
+Connolly-surface approximation. Seventy-two positions are frozen for fitting and 24 are
+untouched holdouts. Both partitions span the conventional 2.2 and 4.0 scaled perturbing-
+charge layers; every calculation is sampled on the same 1,136-point readout grid spanning
+the 3.0, 5.0, and 6.0 layers. Maximin selection leaves the holdouts in the largest gaps
+not occupied by the fit set. The 96-by-60 heavy-atom electric-field signature has full
+rank before execution. The exact positions, atom map, grids, thresholds, and hashes are
+frozen in `bundle/shared/design.json` and `campaign_manifest.json`.
+
+The first submission was preserved and cancelled after both pilot tasks entered an
+uninterruptible read while loading the shared Psi4 environment on node
+`c3cpu-c13-u9-1`; neither reached input execution or produced a QM output. The recovery
+excludes that node without changing any scientific input or threshold.
+
+Recovery pilot array **32608030** then ran the unperturbed case normally, but its
+perturbed case reached external-field integral setup and exited with signal 11. The input
+used Psi4's legacy `q, array` point-charge representation. Diagnostic job **32608094**
+replaced only that representation with the current documented N-by-4 array, completed in
+6 minutes 32 seconds, and produced all 1,136 finite ESP values. Its response relative to
+the unperturbed map has RMS 0.001442 atomic units; the dipole changed from
+(-0.893044, -0.716273, -0.541146) to (-1.449088, -0.768390, -0.195208) atomic units.
+Both cases pass the frozen audit.
+
+Execution-recovery campaign `alpine-qm-cpd-drude-perturbed-esp-v2` applies the validated
+N-by-4 representation to all perturbations without changing a position, QM target,
+partition, or threshold. Main array **32608183** contains cases 2--96, is limited to 24
+concurrent 16-CPU/40-GB tasks, and excludes the node from the preserved filesystem-stall
+attempt. Final audit job **32608184** has an `afterany:32608183` dependency so failed or
+incomplete cases produce a recorded campaign failure rather than disappearing. The final
+audit requires all 97 case audits, all 96 responses above the frozen numerical floor, the
+72/24 partition, matching geometry and atom-map provenance, and full-rank field coverage.
+
+The enabled `nadoc-cpd-drude-perturbed-esp-v2-watch.timer` writes independent pilot,
+main, and completion triggers. A passed final trigger closes P1 and permits preparation
+of a versioned P2 electrostatic fit that is scored against the untouched perturbations.
+It has no simulation or registry effect; water-orientation, Drude-consistent nonbonded
+and bonded, SWM4-NDP, d(TpT), duplex, and reproducibility gates remain downstream.
+
+P2 was prepared while the array ran, without reading any held-out target values. The
+immutable first-family policy is
+`anti-cpd-drude-electrostatic-fit-v1/policy.json` (SHA-256
+`a67f17ec66389aaa016989a150746c7a929e5d456d9c521d7589d1550e3a2505`). It fits
+neutral permanent atomic and asymmetric carbonyl lone-pair charges, then fits a bounded
+response family around the official MTHY Drude parameters. The first family varies the
+four ordered crosslink C5/C6 polarizabilities and Thole factors plus bounded endpoint and
+carbonyl polarizability scales. Carbonyl lone-pair geometry and the published first-family
+anisotropy ratios remain fixed. Exactly two charge/response block-refinement cycles must
+finish before the parameter file is hashed and the 24 holdouts become readable.
+
+The fitting evaluator uses OpenMM's `DrudeForce` equations with CHARMM 1-2/1-3
+exclusions and screened pairs, full Coulomb response otherwise, and tightly minimized
+Drude coordinates at the fixed QM geometry. An implementation preflight using untouched
+MTHY priors and fit case 1 gave response-ESP relative RMS **0.0766** and induced-dipole
+relative error **0.0721**; the largest zero-field or perturbed Drude displacement was
+below **0.140 Å**. This favorable diagnostic permits the registered fit but is not a fit
+or holdout result. The enabled `nadoc-anti-drude-p2.timer` checks the independent P1 audit
+and trigger every five minutes. Only a double pass starts the one-core, low-priority fit;
+a failure leaves every P2 target unread. Even a statistical holdout pass still requires
+the frozen OpenMM/NAMD response spot check before P2 closes.
+
+### Anti-Drude P1/P2 closeout (2026-09-16)
+
+Alpine array **32608183** completed all 95 remaining perturbed-ESP cases and final audit
+job **32608184** passed. The collected P1 archive contains all 97 case audits, 72 frozen
+fit cases, and 24 untouched holdouts. All 96 response maps are finite and the 96-by-60
+field-signature matrix retains rank 60. Archive and campaign hashes were independently
+verified, the completion trigger is
+`alpine-qm-cpd-drude-perturbed-esp-v2/completion_trigger.json`, and its watcher is
+disabled.
+
+The original P2 family (`anti-cpd-drude-electrostatic-fit-v1`) passed its permanent
+charge, training response, dipole-response, and displacement limits but failed the
+scaled molecular-polarizability tensor gate. The registered carbonyl-anisotropy expansion
+(`...-fit-v2`) improved the response fit but again failed only that tensor gate; neither
+attempt read a holdout. A training-only scale diagnostic then established that the model
+family had a feasible solution and that the joint optimizer had missed the tradeoff.
+Both failures and the diagnostic are preserved in their stage assessments.
+
+Recovery `anti-cpd-drude-electrostatic-fit-v3` preregistered one bounded uniform atomic-
+polarizability scale while freezing the v2 atomic ratios, Thole factors, anisotropy,
+partitions, and every acceptance threshold. Two scale/charge cycles selected a scale of
+**0.9394538624**. The hashed pre-holdout fit passed with training response relative RMS
+**0.16492**, training dipole-response RMS **0.14880**, tensor Frobenius error **0.06249**,
+and maximum Drude displacement **0.15267 Å**. Only then was the holdout opened. All
+holdout gates passed: response RMS **0.16328**, fit ratio **0.9900**, dipole-response RMS
+**0.14449**, maximum tensor-eigenvalue error **0.08834**, static ESP RMS
+**0.0002798 au**, and maximum displacement **0.14429 Å**.
+
+The final engine check used eight preregistered cases spanning both perturbation layers
+and both data partitions. A CPU-only NAMD Git-2025-12-04 build loaded 20 Drudes, eight
+lone pairs, four anisotropy records, and NBTHOLE. Fixed nuclei and virtual sites were
+retained while zero-temperature damped Drude dynamics converged the induced particles;
+this avoids NAMD's ill-conditioned conjugate-gradient path for hard-fixed Drude parents.
+Against the frozen OpenMM implementation, worst-case relative errors were **0.000347**
+for induced dipole, **0.000674** for per-Drude response magnitudes, and **0.000353** for
+the response ESP, all far below the unchanged **0.02** limit.
+
+P2 is therefore complete. Its immutable closeout and trigger are
+`anti-cpd-drude-electrostatic-fit-v3/stage_assessment.json` and
+`completion_trigger.json`. This passes the electrostatic-model stage only; the model is
+not production or simulation ready. The next anti-Drude stage is a separately frozen P3
+water-orientation validation, followed by bonded fitting, nucleotide assembly, duplex,
+and reproducibility gates before any registry change.
+
+### Anti-Drude P3 water validation (2026-09-16)
+
+P3 freezes the P2 electrostatics and uses SWM4-NDP water. Its only adjustable terms are
+six ordered CPD-target/ODW NBFIX pairs (endpoint 1/2 by H3, O2, and O4), each with a
+bounded well depth and pair Rmin. The three existing QM orientations are canonical,
+alternate-plane, and azimuth +120 degrees. A fourth azimuth +240-degree set was generated
+before fitting and submitted as Alpine array **32610248**; its 54 QM targets remain sealed
+until a three-orientation model is frozen.
+
+The first preregistered fit family is preserved under `anti-cpd-drude-water-fit-v1`. It
+passed the canonical and +120-degree folds but narrowly failed the alternate-plane fold:
+energy RMSE **0.20929 kcal/mol** against a **0.20** limit and distance RMSE **0.10501 Å**
+against a **0.10 Å** limit. Maximum Drude displacement remained safe at **0.16615 Å**.
+No fourth-orientation energy was read.
+
+Recovery `anti-cpd-drude-water-fit-v2` changed only the fit objective's minimum-distance
+scale from 0.05 to 0.03 Å; model terms, parameter bounds, data partitions, and acceptance
+limits are unchanged. All leave-one-orientation-out folds now pass. Canonical,
+alternate-plane, and +120-degree held-out energy/distance RMSE values are respectively
+**0.14132/0.05787**, **0.19016/0.09161**, and **0.16362/0.06254** in kcal/mol and Å.
+The all-orientation parameters were then frozen before holdout under SHA-256
+`ab523c2208f67c953f5c0e976e938896e1047a081882d35a672291172ad4c8a2`.
+
+Transient user service `nadoc-anti-drude-p3-v2.service` watches the Alpine array, imports
+and audits every output, and scores the frozen +240-degree set. It writes
+`anti-cpd-drude-water-fit-v2/completion_trigger.json` only after the independent score.
+A pass authorizes P4 bonded fitting; a failure stops automatic continuation for model
+reassessment. P3 remains incomplete and no production or simulation readiness follows
+while array 32610248 is pending.
+
+The P4 input inventory was audited while that array waits. All five existing cis-anti-I
+force/Hessian datasets are available with the original disjoint split of three training
+and two validation structures, so a favorable P3 result requires no additional QM before
+bonded fitting. P4 must rebuild the fixed nonbonded baseline from the frozen P2 Drude
+electrostatics and P3 NBFIX terms and then refit the coupled bond, angle, and proper basis.
+Only the audited QM targets, graph basis, and partition may be reused. The earlier
+additive bonded coefficients are not transferable: their independent refinement ended at
+`blocked_numerical_validation`. The hash-linked decision is recorded in
+`anti-cpd-drude-water-fit-v2/p4_readiness_assessment.json`.
+
+At this checkpoint the anti-Drude branch has completed P1 perturbed-response QM and P2
+electrostatic fitting, holdout validation, and OpenMM/NAMD response agreement. P3 has a
+frozen three-orientation water candidate but still awaits its sealed fourth orientation.
+It is suitable for fragment-level engine checks only. Scientific NAMD validation still
+requires P3 passage, the Drude-aware P4 bonded refit and geometry/Hessian audit, full
+d(TpT) Drude topology assembly, SWM4-NDP solution smoke testing, and duplex-context
+validation.
+
+### Bonded-continuation graph audit supersedes the P2/P3 status (2026-09-16)
+
+The requested Drude bonded continuation found that the P2 OpenMM evaluator and
+its NAMD PSF used syn crosslinks on the anti QM geometry. The registered anti
+graph requires C5–C6/C6–C5, not C5–C5/C6–C6. Prior P2/P3 statistical and engine
+passes are preserved but cannot establish scientific acceptance for that product.
+P1 QM targets remain reusable. A corrected-graph training refit has recovered
+the electrostatic objectives; independent validation remains open.
+
+The bonded response, geometry, and full-nucleotide precursor diagnostics are
+recorded in [`experiments/cpd_drude_recovery/README.md`](../experiments/cpd_drude_recovery/README.md).
+The old P3 score service is stopped; a replacement service collects raw pending
+QM only. No P4 or nucleotide-product release is authorized by the old completion
+triggers or the earlier input-readiness inventory.

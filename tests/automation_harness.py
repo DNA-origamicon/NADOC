@@ -2701,8 +2701,15 @@ def _min_cell(helices):
 def _placement_subdesign(design: Design, helix_ids) -> Design:
     """Carve out the helices in ``helix_ids`` + the strands/FLs/clusters wholly on them."""
     hids = set(helix_ids)
+    frame_ids = {h.lattice_frame_id for h in design.helices if h.id in hids}
+    cluster_ids = {c.id for c in design.cluster_transforms
+                   if c.helix_ids and all(h in hids for h in c.helix_ids)}
+    assert all(f.placement_cluster_id in cluster_ids for f in design.lattice_frames
+               if f.id in frame_ids), 'placed lattice frame lost its placement cluster'
     return Design(
         lattice_type=design.lattice_type,
+        lattice_frames=[f for f in design.lattice_frames if f.id in {
+            h.lattice_frame_id for h in design.helices if h.id in hids}],
         helices=[h for h in design.helices if h.id in hids],
         strands=[
             s

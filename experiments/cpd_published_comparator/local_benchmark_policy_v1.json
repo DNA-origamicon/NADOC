@@ -1,0 +1,30 @@
+{
+  "schema": "cpd-local-benchmarks.v1",
+  "scope": "cis-syn additive published-model reconstruction hypotheses, not anti/Drude or solution validation",
+  "purpose": "Finite independent local benchmarks under the user's revised stopping criterion",
+  "no_parameter_refitting_in_this_round": true,
+  "historical_results_and_thresholds_unchanged": true,
+  "geometry_reference": "Archived cis-syn neutral N-methyl CPD MP2 geometry; independent of the 2017 published parameter fit",
+  "cap_transfer": "Explicit hypothesis: CGenFF 5.0 1MTH N-methyl cap C1=-0.27 and H11/H12/H13=+0.09, types CG331/HGA3; published lesion charges unchanged",
+  "geometry": {
+    "max_bond_error_angstrom": 0.03,
+    "max_angle_error_degree": 3.0,
+    "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/",
+    "report_all_atoms_and_heavy_atoms_separately": true,
+    "failing_outliers_must_be_named": true
+  },
+  "implementation_and_minimum": {
+    "correct_syn_graph_and_neutral_cap_charge_required": true,
+    "all_four_lesion_centers_preserved": true,
+    "stationary_max_force_kcal_mol_angstrom": 0.001,
+    "internal_negative_eigenvalue_tolerance_kcal_mol_angstrom2": -0.001,
+    "numerical_thresholds_are_project_choices_not_literature_accuracy_claims": true
+  },
+  "diagnostics": [
+    "Heavy-atom aligned RMSD and ring torsions",
+    "Matched-coordinate native/OpenMM energy and force decomposition before an engine-agreement verdict",
+    "Independent QM deformation energies where available, explicitly separate from minimum geometry",
+    "Sensitivity to the first/last published duplicate interpretations and cap assumption"
+  ],
+  "stopping_rule": "Run both frozen hypotheses once. Report passed, failed and untested items. Do not change targets, optimize parameters on these benchmarks, or infer DNA/anti readiness. Local acceptance requires the listed mandatory checks plus assessment of independent conformational energetics; missing evidence remains untested."
+}

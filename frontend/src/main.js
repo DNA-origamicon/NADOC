@@ -35,6 +35,7 @@ import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
 import { buildVRVisualizationSnapshot } from './scene/vr_visualization_snapshot.js'
 import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
+import { createVRPaintedCommit } from './scene/vr_painted_commit.js'
 import { createVRToolTransactionCoordinator } from './scene/vr_tool_transaction.js'
 import {
   initialVRToolConfigState, reduceVRToolConfig, vrPlaneFeedbackPayload,
@@ -185,6 +186,9 @@ import { computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel } from './ui/cluster_panel.js'
 import { withClusterDisplay } from './scene/cluster_entries.js'
 import { initPlatesTab }                          from './ui/plates_tab.js'
+import { initHairpinDimerChecker }                from './ui/hairpin_dimer_checker.js'
+import { initHairpinDimerMarkers }                from './scene/hairpin_dimer_markers.js'
+import { openStrandHairpinDimerWindow }           from './ui/hairpin_dimer_window.js'
 import { initJointsPanel }                          from './ui/joints_panel.js'
 import { initJointRenderer }                       from './scene/joint_renderer.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
@@ -3718,6 +3722,18 @@ async function main() {
     }
   })
 
+  // Tools → Sequencing → Hairpin/Dimer Checker toggle ('0'), auto-check after overhang
+  // generation, and the clickable ⚠ over flagged strands in the 3D view.
+  initHairpinDimerChecker({
+    store, showToast, showProgress: _showProgress, hideProgress: _hideProgress, broadcast: nadocBroadcast,
+    checkHairpinDimer: api.checkHairpinDimer, onOverhangSequencesGenerated: api.onOverhangSequencesGenerated,
+  })
+  const hairpinDimerMarkers = initHairpinDimerMarkers({
+    store, camera, canvas, host: canvas.parentElement, getHelixCtrl: () => designRenderer.getHelixCtrl(),
+    onOpen: (sid, title) => openStrandHairpinDimerWindow(
+      store.getState().hairpinDimerReport, store.getState().currentDesign, sid, { title }),
+  })
+
   document.getElementById('menu-seq-update-routing')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     const isSQ = currentDesign?.lattice_type === 'SQUARE'
@@ -6268,6 +6284,13 @@ async function main() {
     showToast('SteamVR is ready. In NADOC VR, open the controller menu and select Desktop for the live interactive desktop.')
   })
 
+  const _scrywriteBrowserTrace = []
+  const _recordScrywriteBrowser = (kind, value) => {
+    if (!import.meta.env.DEV || !new URLSearchParams(window.location.search).has('scrywrite')) return
+    _scrywriteBrowserTrace.push({ kind, at: performance.now(), ...structuredClone(value) })
+    if (_scrywriteBrowserTrace.length > 128) _scrywriteBrowserTrace.shift()
+  }
+  let _handleNativeVREvent = null
   let _vrToolShellState = initialVRToolShellState
   let _vrToolConfigState = initialVRToolConfigState
   let _vrToolExecutionSequence = 0
@@ -6276,9 +6299,9 @@ async function main() {
     undoDesign: api.undo,
   })
   const _sendVRToolExecution = async (event, status, reason, transaction = null) => {
-    const targetIdentity = transaction?.targetIdentity ?? event.targetIdentity
+    const targetIdentity = transaction ? transaction.targetIdentity : event.targetIdentity
     const targetKind = transaction?.targetKind ?? event.targetKind
-    if (!targetIdentity || !targetKind || targetKind === 'none') return Promise.resolve(null)
+    if ((!targetIdentity || targetKind === 'none') && !(event.mode === 'extrude' && targetKind === 'none' && !targetIdentity)) return Promise.resolve(null)
     const payload = {
       execution_sequence: ++_vrToolExecutionSequence,
       tool_sequence: event.sequence,
@@ -6291,6 +6314,7 @@ async function main() {
       feature_log_entry_id: status === 'succeeded'
         ? transaction?.featureLogEntryId ?? null : null,
     }
+    _recordScrywriteBrowser('execution_verdict', payload)
     let result
     try {
       result = await api.sendVRToolExecutionFeedback(payload)
@@ -6313,6 +6337,7 @@ async function main() {
   const _vrToolPreflight = createVRToolPreflightCoordinator({
     sendFeedback: api.sendVRToolPreflightFeedback,
   })
+  const _vrPaintedCommit = createVRPaintedCommit({ resolveTarget: target => selectionManager.resolveVRToolTargetSnapshot?.(target), preflight: _vrToolPreflight, transaction: _vrToolTransaction, api, getState: store.getState, sendFeedback: _sendVRToolExecution, onOutcome: outcome => showToast(`VR Extrude: ${outcome.reason.replaceAll('_', ' ')}.`) })
   const _requestVRToolPreflight = (
     sequence, draft, { waitingReason = null } = {},
   ) => {
@@ -6442,6 +6467,10 @@ async function main() {
       status: api.getVRStatus,
       event: api.getVREvent,
       launch: () => api.launchNativeVR({
+        // Explicit development opt-in; normal documents never expose agent control.
+        scrywrite_live: ['inspect', 'transactions'].includes(
+          new URLSearchParams(window.location.search).get('scrywrite'))
+          ? new URLSearchParams(window.location.search).get('scrywrite') : 'off',
         ..._vrCompanionState(),
         camera: captureCurrentCamera(),
         measured_positioning: isNewPositioningOn(),
@@ -6488,7 +6517,8 @@ async function main() {
         throw error
       }
     },
-    onNativeEvent: event => {
+    onNativeEvent: (_handleNativeVREvent = event => {
+      _recordScrywriteBrowser('native_event', event)
       const button = document.getElementById('menu-help-view-vr')
       if (event?.type === 'style') {
         // Native menu choices are requests, not local renderer mutations. Route
@@ -6527,7 +6557,7 @@ async function main() {
         }).catch(() => {})
       } else if (event?.type === 'tool_config') {
         const draft = event.draft
-        const targetSnapshotPresent = draft?.target_kind !== 'none' ||
+        const targetSnapshotPresent = !!draft?.target_kind && draft.target_kind !== 'none' ||
           !!draft?.target_identity || !!draft?.target_owner_tokens?.length
         const toolTarget = targetSnapshotPresent
           ? selectionManager.resolveVRToolTargetSnapshot?.({
@@ -6548,7 +6578,7 @@ async function main() {
         _requestVRToolPreflight(event.sequence, draft)
       } else if (event?.type === 'plane_pick') {
         const draft = _vrToolConfigState.draft
-        const targetSnapshotPresent = draft?.target_kind !== 'none' ||
+        const targetSnapshotPresent = !!draft?.target_kind && draft.target_kind !== 'none' ||
           !!draft?.target_identity || !!draft?.target_owner_tokens?.length
         const toolTarget = targetSnapshotPresent
           ? selectionManager.resolveVRToolTargetSnapshot?.({
@@ -6565,6 +6595,7 @@ async function main() {
         })
         if (feedback) api.sendVRPlaneFeedback(feedback).catch(() => {})
       } else if (event?.type === 'tool') {
+        if (_vrPaintedCommit.handle(event)) return
         const targetSnapshotPresent = event.targetKind !== 'none' ||
           !!event.targetIdentity || !!event.targetOwnerTokens?.length
         const toolTarget = targetSnapshotPresent
@@ -6692,12 +6723,13 @@ async function main() {
         _nucleotideTransformTool.cancelVRPreview()
         _vrToolPreflight.cancel()
         _vrToolTransaction.clear()
+        _vrPaintedCommit.reset()
         _vrToolConfigState = initialVRToolConfigState
       } else {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
         selectionManager.previewVRIdentity?.(event?.identity ?? null)
       }
-    },
+    }),
   })
   const _publishVRRepresentation = () => { void vrSession.publishNativeState?.() }
   // Ordinary representation changes publish immediately. A held live-MD switch
@@ -6744,6 +6776,11 @@ async function main() {
   document.getElementById('menu-help-about-file')?.addEventListener('click', async () => {
     const { showAboutFileModal } = await import('./ui/about_file_modal.js')
     showAboutFileModal({ api, path: _workspacePath })
+  })
+
+  document.getElementById('menu-help-cpd-progress')?.addEventListener('click', async () => {
+    const { showCpdProgress } = await import('./ui/cpd_progress.js')
+    showCpdProgress()
   })
 
   document.getElementById('menu-help-tt-cpd-trajectories')?.addEventListener('click', async () => {
@@ -6809,12 +6846,8 @@ async function main() {
     if (_overlayMode && event.detail?.representation !== 'ballstick') _setOverlayMode(false)
   })
 
-  // ── Help > New Positioning ──────────────────────────────────────────────────
-  // Display-only. OFF keeps every current position; ON re-places the full
-  // representation onto the geometry measured from free NAMD trajectories
-  // (backend/core/measured_positioning.py carries the numbers + provenance).
-  // The placement is computed server-side, so flipping this costs one geometry
-  // refetch; the slab centre/extent that rides with it lives in the renderer.
+  // Placement comparison: baseline OFF / candidate ON, both reset to the
+  // accepted native placement. Keep both render feeds on the same selection.
   _setMenuToggle('menu-help-new-positioning', isNewPositioningOn())
   document.getElementById('menu-help-new-positioning')?.addEventListener('click', async () => {
     const next = !isNewPositioningOn()
@@ -6824,8 +6857,7 @@ async function main() {
     // store change (design_renderer.js:762) — no explicit rebuild needed.
     await api.getGeometry()
     // The atomistic reps are a SEPARATE fetch with its own cache, so they need an
-    // explicit invalidate + refetch or the two representations would disagree —
-    // CG on measured placement, ball-and-stick still on the 1ZEW templates.
+    // explicit invalidate + refetch so future candidates update both representations.
     _atomSurface?.invalidateAtomCache()
     await _atomSurface?.refetchAtomistic()
   })
@@ -6952,6 +6984,7 @@ async function main() {
       designRenderer.getHelixCtrl(),
       (_canvasCursorX != null) ? { camera, canvas, x: _canvasCursorX, y: _canvasCursorY } : null,
     )
+    hairpinDimerMarkers.refresh()   // hairpin/dimer ⚠ follow live bead positions
 
     // ── LOD (Level of Detail) — apply on first tick after design load (_lastDetailLevel = -1)
     if (designRenderer.getHelixCtrl()) {
@@ -6970,6 +7003,20 @@ async function main() {
   // Dev-only Playwright facade; implementation lives outside the composition root.
   if (import.meta.env.DEV) {
     installTestApi({
+      scrywrite: new URLSearchParams(window.location.search).has('scrywrite') ? {
+        dispatch: event => _handleNativeVREvent(event),
+        select: ref => selectionController.replace([ref]),
+        snapshot: () => structuredClone({
+          shell: _vrToolShellState,
+          transaction: _vrToolTransaction.snapshot(),
+          trace: _scrywriteBrowserTrace,
+          selection: store.getState().selection,
+          clusterTransforms: store.getState().currentDesign?.cluster_transforms ?? [],
+          featureLog: store.getState().currentDesign?.feature_log ?? [],
+          pendingClusterTransforms: store.getState().currentDesign?.cluster_transforms?.map(
+            cluster => ({ id: cluster.id, pending: clusterGizmo.getPendingTransform(cluster.id) })),
+        }),
+      } : null,
       scene,
       store,
       visibilityController,

@@ -251,6 +251,16 @@ export function initVRSession({
       if (Number.isSafeInteger(sequence) && sequence > lastNativeEventSequence) {
         lastNativeEventSequence = sequence
         onNativeEvent({ sequence, type: 'hover', identity: event?.hover_identity ?? null })
+        const levelSequence = Number(event?.level_sequence ?? 0)
+        if (Number.isSafeInteger(levelSequence) &&
+            levelSequence > lastNativeLevelSequence) {
+          lastNativeLevelSequence = levelSequence
+          onNativeEvent({
+            sequence: levelSequence,
+            type: 'selection_level',
+            level: event?.selection_level ?? 'default',
+          })
+        }
         const selectSequence = Number(event?.select_sequence ?? 0)
         if (Number.isSafeInteger(selectSequence) &&
             selectSequence > lastNativeSelectSequence) {
@@ -262,16 +272,6 @@ export function initVRSession({
             identities: Array.isArray(event?.select_identities)
               ? event.select_identities.filter(identity => typeof identity === 'string').slice(0, 16)
               : (typeof event?.select_identity === 'string' ? [event.select_identity] : []),
-          })
-        }
-        const levelSequence = Number(event?.level_sequence ?? 0)
-        if (Number.isSafeInteger(levelSequence) &&
-            levelSequence > lastNativeLevelSequence) {
-          lastNativeLevelSequence = levelSequence
-          onNativeEvent({
-            sequence: levelSequence,
-            type: 'selection_level',
-            level: event?.selection_level ?? 'default',
           })
         }
         const styleSequence = Number(event?.style_sequence ?? 0)
@@ -306,6 +306,8 @@ export function initVRSession({
           onNativeEvent({
             sequence: toolSequence,
             type: 'tool',
+            configSequence: Number.isSafeInteger(event?.tool_action_config_sequence)
+              ? event.tool_action_config_sequence : 0,
             mode: event?.tool_mode ?? 'inspect',
             action: event?.tool_action ?? 'activate',
             targetIdentity: typeof event?.tool_target_identity === 'string'

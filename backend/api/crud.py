@@ -49,7 +49,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Body
 from fastapi.responses import Response, ORJSONResponse
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 
 # ── Per-request timing trace (Server-Timing header) ──────────────────────────
@@ -94,6 +94,7 @@ class _TimingTrace:
 
 from backend.api import state as design_state
 from backend.api.doc_context import requested_measured_positioning, should_skip_geometry
+from backend.core.display_placement import measured_display_placement
 from backend.core.geometry import (
     nucleotide_positions,
 )
@@ -244,17 +245,8 @@ def _ensure_default_cluster(design: Design, *, persist: bool = True) -> Design:
             design_state.set_design_silent(design)
     if design.cluster_transforms or not design.helices:
         return design
-    from backend.core.models import ClusterRigidTransform
-
-    # Reference geometry is excluded from clusters — keep it a fixed backdrop.
-    ref_ids = design.reference_helix_ids()
-    default_ct = ClusterRigidTransform(
-        name="Cluster 1",
-        is_default=True,
-        auto_created=True,
-        helix_ids=[h.id for h in design.helices if h.id not in ref_ids],
-    )
-    updated = design.copy_with(cluster_transforms=[default_ct])
+    from backend.core.cluster_autodetect import with_default_cluster
+    updated = with_default_cluster(design)
     if persist:
         design_state.set_design_silent(updated)
     return updated
@@ -298,6 +290,8 @@ def _design_response(
 ) -> dict:
     design = _ensure_default_cluster(design)
     design_dict = design.to_dict()
+    from backend.core.cpd_representation import inject_cpd_representation
+    inject_cpd_representation(design_dict)
     # Loadout branch payloads are full compressed design snapshots. They must
     # persist in server-side state and .nadoc saves, but shipping every branch
     # snapshot on every UI response bloats ordinary edits. The frontend only
@@ -475,13 +469,8 @@ def _design_response_with_geometry(
             preserve_feature_log_id=preserve_feature_log_id,
             full_feature_log=full_feature_log,
         )
-    # The Design stores canonical topology/poses, while measured vs legacy
-    # positioning is a browser-owned display projection. Mutation responses must
-    # use the same projection as GET /geometry or replacing currentGeometry causes
-    # a transient, design-wide bead/slab shift until reload.
-    measured_positioning = requested_measured_positioning()
-    if measured_positioning is None:
-        measured_positioning = False
+    # Mutation and GET feeds resolve the same baseline/candidate display policy.
+    measured_positioning = measured_display_placement(requested_measured_positioning())
     if changed_helix_ids is not None:
         # Partial path — compute only the real helices that actually changed.
         real_ids = frozenset(
@@ -636,6 +625,7 @@ class HelixRequest(BaseModel):
 
 
 class HelixAtCellRequest(BaseModel):
+    lattice_frame_id: Optional[str] = None
     row: int
     col: int
     length_bp: int = 42
@@ -862,6 +852,9 @@ class CircleSegmentRequest(BaseModel):
 
 
 class BundleContinuationRequest(BaseModel):
+    expected_design_id: Optional[str] = None
+    expected_revision: Optional[int] = Field(default=None, ge=0, strict=True)
+    source_frame_id: Optional[str] = None
     cells: List[List[int]]  # [[row, col], ...] — may mix continuation and fresh cells
     length_bp: int
     plane: str = "XY"
@@ -1123,9 +1116,9 @@ def _origins_by_grid_pos(
     design_after: Design,
     fallback_origin: Optional[str] = None,
 ) -> dict[str, str]:
-    """Compute new_helix_origins by matching grid_pos.
+    """Compute new_helix_origins by matching frame identity and grid_pos.
 
-    A new helix at the same (row, col) cell as a pre-existing helix is treated
+    A new helix at the same frame/(row, col) cell as a pre-existing helix is treated
     as a continuation of that helix → inherits its cluster.  ``fallback_origin``
     (if provided) is used for new helices whose grid_pos has no existing match
     — typical for deformed-continuation calls with a ref_helix_id.
@@ -1133,8 +1126,9 @@ def _origins_by_grid_pos(
     before_helix_ids = {h.id for h in design_before.helices}
     grid_to_existing: dict[tuple, str] = {}
     for h in design_before.helices:
-        if h.grid_pos is not None and h.grid_pos not in grid_to_existing:
-            grid_to_existing[h.grid_pos] = h.id
+        key = (h.lattice_frame_id, h.grid_pos)
+        if h.grid_pos is not None and key not in grid_to_existing:
+            grid_to_existing[key] = h.id
 
     origins: dict[str, str] = {}
     for h in design_after.helices:
@@ -1142,7 +1136,7 @@ def _origins_by_grid_pos(
             continue
         parent: Optional[str] = None
         if h.grid_pos is not None:
-            parent = grid_to_existing.get(h.grid_pos)
+            parent = grid_to_existing.get((h.lattice_frame_id, h.grid_pos))
         if parent is None:
             parent = fallback_origin
         if parent is not None:
@@ -1272,7 +1266,7 @@ def _build_extrude_continuation(d: Design, body: "BundleContinuationRequest"):
 
     cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
     conflicts = bundle_continuation_conflicts(
-        d, cells, body.length_bp, body.plane, body.offset_nm
+        d, cells, body.length_bp, body.plane, body.offset_nm, body.source_frame_id
     )
     if conflicts:
         cells_text = ", ".join(
@@ -1287,6 +1281,7 @@ def _build_extrude_continuation(d: Design, body: "BundleContinuationRequest"):
         body.offset_nm,
         body.strand_filter,
         extend_inplace=body.extend_inplace,
+        source_frame_id=body.source_frame_id,
     )
     if body.ligate_adjacent:
         existing_ids = {s.id for s in d.strands}
@@ -1319,10 +1314,22 @@ def _continuation_validation_summary(before: Design, after: Design) -> dict:
     }
 
 
+def _guard_continuation_document(design, body, *, revision=None):
+    if (body.expected_design_id is None) != (body.expected_revision is None):
+        raise HTTPException(422, detail="Design and revision guards must be supplied together")
+    if body.expected_design_id is not None and design.id != body.expected_design_id:
+        raise HTTPException(409, detail="Active design changed")
+    if revision is not None and body.expected_revision is not None and revision != body.expected_revision:
+        raise HTTPException(409, detail="Design revision changed")
+
+
 @router.post("/design/bundle-continuation/validate", status_code=200)
 def validate_bundle_continuation(body: BundleContinuationRequest) -> dict:
     """Dry-run the exact continuation builder without state/history mutation."""
-    design = design_state.get_or_404()
+    design, revision = design_state.copy_for_persist()
+    if design is None:
+        raise HTTPException(404, detail="No active design")
+    _guard_continuation_document(design, body, revision=revision)
     try:
         updated, _ = _build_extrude_continuation(design, body)
     except ValueError as exc:
@@ -1347,6 +1354,7 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
     holder: dict = {}
 
     def _fn(d: Design) -> Design:
+        _guard_continuation_document(d, body)
         holder["before_occ"] = _strand_occupancy(d)
         try:
             updated, mreport = _build_extrude_continuation(d, body)
@@ -1362,6 +1370,7 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
             label=f"Extrude continuation: {len(body.cells)} cells × {body.length_bp} bp",
             params=body.model_dump(mode="json"),
             fn=_fn,
+            expected_revision=body.expected_revision,
         )
     with trace.step("geometry_response"):
         changed = _extrude_partial_helix_ids(holder["before_occ"], updated)
@@ -1373,6 +1382,7 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
             partial_axes=changed is not None,
             preserve_feature_log_id=_entry.id,
         )
+    payload["vr_transaction"] = {"feature_log_entry_id": _entry.id, "target_count": len(body.cells)}
     return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
@@ -1534,7 +1544,8 @@ def _build_bundle(cells, body: "BundleRequest") -> Design:
         new_ids = {s.id for s in new_design.strands}
         if new_ids:
             new_design = ligate_new_strands(new_design, new_ids)
-    return new_design
+    from backend.core.lattice_frames import register_created_bundle_frames
+    return register_created_bundle_frames(new_design, body.plane, cells)
 
 
 @router.post("/design", status_code=201)
@@ -1591,15 +1602,9 @@ def get_geometry(
         "covers all helices regardless of this filter.",
     ),
     measured_positioning: bool = Query(
-        False,
-        description="Display-only.  Re-place backbone beads and base beads onto the "
-        "MD-measured radii and P-P azimuthal separation instead of the "
-        "legacy HELIX_RADIUS / +-150 deg groove.  The app always states "
-        "this explicitly; it stays opt-out here because the other CG "
-        "position paths (oxDNA seeding, linker relax, extension tails) do "
-        "not yet share the measured placement, unlike the ATOMISTIC layer, "
-        "which is measured natively.  Topology and the geometric layer are "
-        "untouched; see core/measured_positioning.py.",
+        True,
+        description="Placement comparison selector. Both baseline (false) and "
+        "candidate (true) currently use the accepted measured geometry.",
     ),
 ):
     """Return geometry for the active design.
@@ -1617,6 +1622,7 @@ def get_geometry(
     so the frontend can log where each call's time was spent (nucleotide
     compute vs. axes compute vs. JSON serialisation downstream).
     """
+    measured_positioning = measured_display_placement(measured_positioning)
     trace = _TimingTrace()
     with trace.step("get_design"):
         design = design_state.get_or_404()
@@ -2198,6 +2204,10 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
     co-extensive with its neighbours in both the path view and the 3D view, so a
     strand later penned onto it lands beside the neighbour it sits next to.
     """
+    if body.lattice_frame_id is not None:
+        from backend.api.routes_frame_cells import add_frame_cell
+        return add_frame_cell(body)
+
     from backend.core.constants import BDNA_RISE_PER_BP as _RISE
     from backend.core.lattice import (
         _LINKER_HELIX_PREFIX,
@@ -2221,7 +2231,7 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
     candidates = [
         h
         for h in design.helices
-        if h.grid_pos is not None and not h.id.startswith(_LINKER_HELIX_PREFIX)
+        if h.grid_pos is not None and h.lattice_frame_id is None and not h.id.startswith(_LINKER_HELIX_PREFIX)
     ]
     ref = (
         min(
@@ -7257,9 +7267,8 @@ def generate_sub_domain_random(
     generation in tests / for record-and-replay.
     """
     import random as _random
-    from backend.core.overhang_generator import (
-        generate_overhang_sequence_with_overrides,
-    )
+    from backend.api.routes_overhang_sequences import _generated_sequence
+    from backend.core.overhang_sequence_screen import OverhangSequenceScreen
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -7307,21 +7316,11 @@ def generate_sub_domain_random(
     if body.seed is not None:
         _random.seed(int(body.seed))
 
-    scaffold = design.scaffold()
-    scaffold_seq = scaffold.sequence if scaffold and scaffold.sequence else ""
-    staple_seqs = [
-        s.sequence
-        for s in design.strands
-        if s.strand_type != StrandType.SCAFFOLD and s.sequence
-    ]
-
-    # 4. Call the override-aware generator. It returns the FULL overhang
-    #    sequence with the locked overrides verbatim and the target slot
-    #    filled with a freshly generated piece.
-    full_seq = generate_overhang_sequence_with_overrides(
-        scaffold_seq,
-        staple_seqs,
-        temp_sub_doms,
+    # Screen the complete oligos with the neighbours locked, not just the
+    # variable fragment; no candidate is committed until every screen passes.
+    full_seq, _ = _generated_sequence(
+        design, spec.model_copy(update={"sub_domains": temp_sub_doms}),
+        sum(s.length_bp for s in temp_sub_doms),
     )
 
     # 5. Slice out the target sub-domain's segment.
@@ -7356,8 +7355,8 @@ def generate_sub_domain_random(
         )
         # Re-splice into the assembled strand sequence so downstream consumers
         # (atomistic, CSV export, etc.) see the new bases.
-        updated_ = _resplice_overhang_in_strand(updated_, overhang_id, cur.strand_id)
-        return updated_
+        new_spec = next(o for o in updated_.overhangs if o.id == overhang_id)
+        return OverhangSequenceScreen(updated_, new_spec).apply(full_seq)
 
     updated, report, _entry = design_state.mutate_with_feature_log(
         op_kind="overhang-bulk",

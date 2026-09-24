@@ -1,0 +1,1120 @@
+{
+  "verified_blocks": 68,
+  "verified_frames": 17000,
+  "additional_ns": 34.0,
+  "elapsed_hours": 7.886582284471394,
+  "stop_reason": "wall_budget_admission_limit",
+  "all_recorded_gates_pass": true,
+  "minimum_image_bound_A": 43.5975640799792,
+  "temperature_range_K": [
+    299.0512258,
+    299.39333799999997
+  ],
+  "density_range_g_ml": [
+    1.0243391414285814,
+    1.0248778603758018
+  ],
+  "replicas": [
+    {
+      "system": "cpd",
+      "replica": 1,
+      "additional_ns": 6.0,
+      "blocks": 12,
+      "common_window_ns": 5.5,
+      "common_mean_rmsd_A": 1.6379451273606016,
+      "late_mean_rmsd_A": 1.5933851925940583,
+      "late_lesion_local_rmsd_A": 0.3204765564716147,
+      "late_pair6_contact_fraction": 0.9273333333333333,
+      "minimum_image_bound_A": 45.29679726812519,
+      "final_pair6_contact_fraction": 0.902,
+      "common_blocks": [
+        {
+          "block": 1,
+          "rmsd_A": 1.6247409957591334,
+          "lesion_rmsd_A": 0.3097634671335828,
+          "pair6": 0.954
+        },
+        {
+          "block": 2,
+          "rmsd_A": 1.5570525276438625,
+          "lesion_rmsd_A": 0.3076330339547311,
+          "pair6": 0.936
+        },
+        {
+          "block": 3,
+          "rmsd_A": 1.8082994144718199,
+          "lesion_rmsd_A": 0.3209534091754047,
+          "pair6": 0.794
+        },
+        {
+          "block": 4,
+          "rmsd_A": 1.5517632266183778,
+          "lesion_rmsd_A": 0.2971633515179521,
+          "pair6": 0.92
+        },
+        {
+          "block": 5,
+          "rmsd_A": 1.7295744417781862,
+          "lesion_rmsd_A": 0.30777741811025594,
+          "pair6": 0.896
+        },
+        {
+          "block": 6,
+          "rmsd_A": 1.650940031322816,
+          "lesion_rmsd_A": 0.3102360281717503,
+          "pair6": 0.974
+        },
+        {
+          "block": 7,
+          "rmsd_A": 1.7225426592643593,
+          "lesion_rmsd_A": 0.28174015591103957,
+          "pair6": 0.978
+        },
+        {
+          "block": 8,
+          "rmsd_A": 1.5923275263258867,
+          "lesion_rmsd_A": 0.2979356369371927,
+          "pair6": 0.972
+        },
+        {
+          "block": 9,
+          "rmsd_A": 1.6506422312169216,
+          "lesion_rmsd_A": 0.30067981908933405,
+          "pair6": 0.976
+        },
+        {
+          "block": 10,
+          "rmsd_A": 1.4764601876706414,
+          "lesion_rmsd_A": 0.3191280127524259,
+          "pair6": 0.876
+        },
+        {
+          "block": 11,
+          "rmsd_A": 1.6530531588946116,
+          "lesion_rmsd_A": 0.34162183757308423,
+          "pair6": 0.93
+        }
+      ]
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "additional_ns": 5.5,
+      "blocks": 11,
+      "common_window_ns": 5.5,
+      "common_mean_rmsd_A": 1.8976370812414407,
+      "late_mean_rmsd_A": 1.6997198315169675,
+      "late_lesion_local_rmsd_A": 0.3158101775529063,
+      "late_pair6_contact_fraction": 0.8966666666666666,
+      "minimum_image_bound_A": 44.76290753752824,
+      "final_pair6_contact_fraction": 0.948,
+      "common_blocks": [
+        {
+          "block": 1,
+          "rmsd_A": 2.179899453163579,
+          "lesion_rmsd_A": 0.3178862790495145,
+          "pair6": 0.878
+        },
+        {
+          "block": 2,
+          "rmsd_A": 2.2605631393552135,
+          "lesion_rmsd_A": 0.3174734967669256,
+          "pair6": 0.93
+        },
+        {
+          "block": 3,
+          "rmsd_A": 2.0979516675834464,
+          "lesion_rmsd_A": 0.31358894041503665,
+          "pair6": 0.934
+        },
+        {
+          "block": 4,
+          "rmsd_A": 1.9329069590439834,
+          "lesion_rmsd_A": 0.3093221914422834,
+          "pair6": 0.938
+        },
+        {
+          "block": 5,
+          "rmsd_A": 2.089882555414056,
+          "lesion_rmsd_A": 0.3051792756489631,
+          "pair6": 0.936
+        },
+        {
+          "block": 6,
+          "rmsd_A": 1.8941167800494423,
+          "lesion_rmsd_A": 0.3067342308470188,
+          "pair6": 0.946
+        },
+        {
+          "block": 7,
+          "rmsd_A": 1.7436190122208057,
+          "lesion_rmsd_A": 0.30817177732339146,
+          "pair6": 0.936
+        },
+        {
+          "block": 8,
+          "rmsd_A": 1.5759088322744164,
+          "lesion_rmsd_A": 0.3156901123994399,
+          "pair6": 0.842
+        },
+        {
+          "block": 9,
+          "rmsd_A": 1.6860338160738293,
+          "lesion_rmsd_A": 0.30438881975227833,
+          "pair6": 0.822
+        },
+        {
+          "block": 10,
+          "rmsd_A": 1.7499741414209102,
+          "lesion_rmsd_A": 0.3208681208546068,
+          "pair6": 0.92
+        },
+        {
+          "block": 11,
+          "rmsd_A": 1.6631515370561631,
+          "lesion_rmsd_A": 0.32217359205183377,
+          "pair6": 0.948
+        }
+      ]
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "additional_ns": 5.5,
+      "blocks": 11,
+      "common_window_ns": 5.5,
+      "common_mean_rmsd_A": 2.077109940124427,
+      "late_mean_rmsd_A": 2.9685267150668326,
+      "late_lesion_local_rmsd_A": 0.5945103665303558,
+      "late_pair6_contact_fraction": 0.19066666666666668,
+      "minimum_image_bound_A": 43.5975640799792,
+      "final_pair6_contact_fraction": 0.004,
+      "common_blocks": [
+        {
+          "block": 1,
+          "rmsd_A": 1.628583193047271,
+          "lesion_rmsd_A": 0.3007611207425224,
+          "pair6": 0.948
+        },
+        {
+          "block": 2,
+          "rmsd_A": 1.664305258626301,
+          "lesion_rmsd_A": 0.3150563745376734,
+          "pair6": 0.886
+        },
+        {
+          "block": 3,
+          "rmsd_A": 1.5370706178172397,
+          "lesion_rmsd_A": 0.30625825207364643,
+          "pair6": 0.848
+        },
+        {
+          "block": 4,
+          "rmsd_A": 1.52598961034527,
+          "lesion_rmsd_A": 0.32362583157112196,
+          "pair6": 0.944
+        },
+        {
+          "block": 5,
+          "rmsd_A": 1.5765939951113819,
+          "lesion_rmsd_A": 0.2909562635304431,
+          "pair6": 0.958
+        },
+        {
+          "block": 6,
+          "rmsd_A": 1.9016657468632279,
+          "lesion_rmsd_A": 0.2929955780235948,
+          "pair6": 0.958
+        },
+        {
+          "block": 7,
+          "rmsd_A": 1.9037961956366467,
+          "lesion_rmsd_A": 0.3024765149542846,
+          "pair6": 0.936
+        },
+        {
+          "block": 8,
+          "rmsd_A": 2.204624578720856,
+          "lesion_rmsd_A": 0.2945891912124486,
+          "pair6": 0.984
+        },
+        {
+          "block": 9,
+          "rmsd_A": 3.3188373793671175,
+          "lesion_rmsd_A": 0.4498870924684322,
+          "pair6": 0.558
+        },
+        {
+          "block": 10,
+          "rmsd_A": 2.9818923428790307,
+          "lesion_rmsd_A": 0.6540015881642923,
+          "pair6": 0.01
+        },
+        {
+          "block": 11,
+          "rmsd_A": 2.60485042295435,
+          "lesion_rmsd_A": 0.6796424189583429,
+          "pair6": 0.004
+        }
+      ]
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "additional_ns": 6.0,
+      "blocks": 12,
+      "common_window_ns": 5.5,
+      "common_mean_rmsd_A": 1.8427437040606784,
+      "late_mean_rmsd_A": 1.7721820470716836,
+      "late_lesion_local_rmsd_A": 1.09462799191446,
+      "late_pair6_contact_fraction": 0.8373333333333334,
+      "minimum_image_bound_A": 43.96545493016894,
+      "final_pair6_contact_fraction": 0.82,
+      "common_blocks": [
+        {
+          "block": 1,
+          "rmsd_A": 2.1197452066987794,
+          "lesion_rmsd_A": 0.976338281483991,
+          "pair6": 0.978
+        },
+        {
+          "block": 2,
+          "rmsd_A": 2.2838865242668587,
+          "lesion_rmsd_A": 0.9385755456598143,
+          "pair6": 0.962
+        },
+        {
+          "block": 3,
+          "rmsd_A": 1.9537648344899645,
+          "lesion_rmsd_A": 0.9654290013387288,
+          "pair6": 0.828
+        },
+        {
+          "block": 4,
+          "rmsd_A": 1.7405494424563448,
+          "lesion_rmsd_A": 0.9791444883817542,
+          "pair6": 0.936
+        },
+        {
+          "block": 5,
+          "rmsd_A": 1.7396180249327553,
+          "lesion_rmsd_A": 1.0000585431885438,
+          "pair6": 0.94
+        },
+        {
+          "block": 6,
+          "rmsd_A": 1.7706588611711158,
+          "lesion_rmsd_A": 0.9881787061958528,
+          "pair6": 0.954
+        },
+        {
+          "block": 7,
+          "rmsd_A": 1.6141884632054004,
+          "lesion_rmsd_A": 1.0483372594650109,
+          "pair6": 0.79
+        },
+        {
+          "block": 8,
+          "rmsd_A": 1.731223246231196,
+          "lesion_rmsd_A": 1.0472160821054954,
+          "pair6": 0.84
+        },
+        {
+          "block": 9,
+          "rmsd_A": 1.8457834226800547,
+          "lesion_rmsd_A": 1.1054803650299903,
+          "pair6": 0.8
+        },
+        {
+          "block": 10,
+          "rmsd_A": 1.742573100669165,
+          "lesion_rmsd_A": 1.1120757902528071,
+          "pair6": 0.838
+        },
+        {
+          "block": 11,
+          "rmsd_A": 1.7281896178658318,
+          "lesion_rmsd_A": 1.0663278204605826,
+          "pair6": 0.874
+        }
+      ]
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "additional_ns": 5.5,
+      "blocks": 11,
+      "common_window_ns": 5.5,
+      "common_mean_rmsd_A": 1.9221083437936457,
+      "late_mean_rmsd_A": 1.929390744373124,
+      "late_lesion_local_rmsd_A": 0.9896972444628357,
+      "late_pair6_contact_fraction": 0.9613333333333333,
+      "minimum_image_bound_A": 44.259955023621835,
+      "final_pair6_contact_fraction": 0.972,
+      "common_blocks": [
+        {
+          "block": 1,
+          "rmsd_A": 2.2576195665340837,
+          "lesion_rmsd_A": 0.9266726428777156,
+          "pair6": 0.864
+        },
+        {
+          "block": 2,
+          "rmsd_A": 1.8900835999320866,
+          "lesion_rmsd_A": 0.9255713245047292,
+          "pair6": 0.926
+        },
+        {
+          "block": 3,
+          "rmsd_A": 1.850831555766494,
+          "lesion_rmsd_A": 0.9284539026860763,
+          "pair6": 0.954
+        },
+        {
+          "block": 4,
+          "rmsd_A": 2.1455380430443403,
+          "lesion_rmsd_A": 0.9287991426436658,
+          "pair6": 0.974
+        },
+        {
+          "block": 5,
+          "rmsd_A": 1.859490158006225,
+          "lesion_rmsd_A": 0.972376392753822,
+          "pair6": 0.924
+        },
+        {
+          "block": 6,
+          "rmsd_A": 1.8236006460722423,
+          "lesion_rmsd_A": 1.0176564027459718,
+          "pair6": 0.948
+        },
+        {
+          "block": 7,
+          "rmsd_A": 1.604331453904513,
+          "lesion_rmsd_A": 1.0022009568119665,
+          "pair6": 0.946
+        },
+        {
+          "block": 8,
+          "rmsd_A": 1.923524525350747,
+          "lesion_rmsd_A": 1.0093925710217877,
+          "pair6": 0.964
+        },
+        {
+          "block": 9,
+          "rmsd_A": 1.9104277427999168,
+          "lesion_rmsd_A": 1.0373419032120916,
+          "pair6": 0.944
+        },
+        {
+          "block": 10,
+          "rmsd_A": 1.9518347288623619,
+          "lesion_rmsd_A": 0.9715374954866279,
+          "pair6": 0.968
+        },
+        {
+          "block": 11,
+          "rmsd_A": 1.9259097614570937,
+          "lesion_rmsd_A": 0.9602123346897871,
+          "pair6": 0.972
+        }
+      ]
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "additional_ns": 5.5,
+      "blocks": 11,
+      "common_window_ns": 5.5,
+      "common_mean_rmsd_A": 1.9253904623731861,
+      "late_mean_rmsd_A": 1.8198736674097071,
+      "late_lesion_local_rmsd_A": 0.9331568305995424,
+      "late_pair6_contact_fraction": 0.8913333333333333,
+      "minimum_image_bound_A": 44.18994737664267,
+      "final_pair6_contact_fraction": 0.846,
+      "common_blocks": [
+        {
+          "block": 1,
+          "rmsd_A": 1.83239843342688,
+          "lesion_rmsd_A": 0.9795966334730157,
+          "pair6": 0.936
+        },
+        {
+          "block": 2,
+          "rmsd_A": 1.8642394789712713,
+          "lesion_rmsd_A": 1.1467781199381673,
+          "pair6": 0.9
+        },
+        {
+          "block": 3,
+          "rmsd_A": 2.296572901605037,
+          "lesion_rmsd_A": 1.1113782378967287,
+          "pair6": 0.848
+        },
+        {
+          "block": 4,
+          "rmsd_A": 1.951503570645321,
+          "lesion_rmsd_A": 0.9932534540063066,
+          "pair6": 0.926
+        },
+        {
+          "block": 5,
+          "rmsd_A": 1.9093371373614527,
+          "lesion_rmsd_A": 0.9359296251195544,
+          "pair6": 0.972
+        },
+        {
+          "block": 6,
+          "rmsd_A": 2.1259559730034248,
+          "lesion_rmsd_A": 0.9504782064360245,
+          "pair6": 0.968
+        },
+        {
+          "block": 7,
+          "rmsd_A": 1.8479818089589966,
+          "lesion_rmsd_A": 0.9560013645526384,
+          "pair6": 0.892
+        },
+        {
+          "block": 8,
+          "rmsd_A": 1.8916847799035437,
+          "lesion_rmsd_A": 1.0207736874394495,
+          "pair6": 0.874
+        },
+        {
+          "block": 9,
+          "rmsd_A": 1.8329670165071297,
+          "lesion_rmsd_A": 0.9570347573692805,
+          "pair6": 0.914
+        },
+        {
+          "block": 10,
+          "rmsd_A": 1.940474275426723,
+          "lesion_rmsd_A": 0.9148649580783863,
+          "pair6": 0.914
+        },
+        {
+          "block": 11,
+          "rmsd_A": 1.6861797102952685,
+          "lesion_rmsd_A": 0.9275707763509601,
+          "pair6": 0.846
+        }
+      ]
+    }
+  ],
+  "execution_audit": [
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 1,
+      "frames": 250,
+      "end_step": 360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 1,
+      "frames": 250,
+      "end_step": 360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 1,
+      "frames": 250,
+      "end_step": 360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 1,
+      "frames": 250,
+      "end_step": 360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 1,
+      "frames": 250,
+      "end_step": 360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 1,
+      "frames": 250,
+      "end_step": 360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 2,
+      "frames": 250,
+      "end_step": 610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 2,
+      "frames": 250,
+      "end_step": 610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 2,
+      "frames": 250,
+      "end_step": 610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 2,
+      "frames": 250,
+      "end_step": 610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 2,
+      "frames": 250,
+      "end_step": 610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 2,
+      "frames": 250,
+      "end_step": 610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 3,
+      "frames": 250,
+      "end_step": 860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 3,
+      "frames": 250,
+      "end_step": 860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 3,
+      "frames": 250,
+      "end_step": 860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 3,
+      "frames": 250,
+      "end_step": 860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 3,
+      "frames": 250,
+      "end_step": 860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 3,
+      "frames": 250,
+      "end_step": 860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 4,
+      "frames": 250,
+      "end_step": 1110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 4,
+      "frames": 250,
+      "end_step": 1110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 4,
+      "frames": 250,
+      "end_step": 1110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 4,
+      "frames": 250,
+      "end_step": 1110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 4,
+      "frames": 250,
+      "end_step": 1110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 4,
+      "frames": 250,
+      "end_step": 1110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 5,
+      "frames": 250,
+      "end_step": 1360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 5,
+      "frames": 250,
+      "end_step": 1360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 5,
+      "frames": 250,
+      "end_step": 1360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 5,
+      "frames": 250,
+      "end_step": 1360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 5,
+      "frames": 250,
+      "end_step": 1360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 5,
+      "frames": 250,
+      "end_step": 1360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 6,
+      "frames": 250,
+      "end_step": 1610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 6,
+      "frames": 250,
+      "end_step": 1610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 6,
+      "frames": 250,
+      "end_step": 1610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 6,
+      "frames": 250,
+      "end_step": 1610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 6,
+      "frames": 250,
+      "end_step": 1610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 6,
+      "frames": 250,
+      "end_step": 1610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 7,
+      "frames": 250,
+      "end_step": 1860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 7,
+      "frames": 250,
+      "end_step": 1860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 7,
+      "frames": 250,
+      "end_step": 1860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 7,
+      "frames": 250,
+      "end_step": 1860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 7,
+      "frames": 250,
+      "end_step": 1860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 7,
+      "frames": 250,
+      "end_step": 1860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 8,
+      "frames": 250,
+      "end_step": 2110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 8,
+      "frames": 250,
+      "end_step": 2110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 8,
+      "frames": 250,
+      "end_step": 2110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 8,
+      "frames": 250,
+      "end_step": 2110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 8,
+      "frames": 250,
+      "end_step": 2110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 8,
+      "frames": 250,
+      "end_step": 2110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 9,
+      "frames": 250,
+      "end_step": 2360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 9,
+      "frames": 250,
+      "end_step": 2360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 9,
+      "frames": 250,
+      "end_step": 2360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 9,
+      "frames": 250,
+      "end_step": 2360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 9,
+      "frames": 250,
+      "end_step": 2360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 9,
+      "frames": 250,
+      "end_step": 2360000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 10,
+      "frames": 250,
+      "end_step": 2610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 10,
+      "frames": 250,
+      "end_step": 2610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 10,
+      "frames": 250,
+      "end_step": 2610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 10,
+      "frames": 250,
+      "end_step": 2610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 10,
+      "frames": 250,
+      "end_step": 2610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 10,
+      "frames": 250,
+      "end_step": 2610000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 11,
+      "frames": 250,
+      "end_step": 2860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 11,
+      "frames": 250,
+      "end_step": 2860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 2,
+      "block": 11,
+      "frames": 250,
+      "end_step": 2860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 2,
+      "block": 11,
+      "frames": 250,
+      "end_step": 2860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 3,
+      "block": 11,
+      "frames": 250,
+      "end_step": 2860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 3,
+      "block": 11,
+      "frames": 250,
+      "end_step": 2860000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "cpd",
+      "replica": 1,
+      "block": 12,
+      "frames": 250,
+      "end_step": 3110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    },
+    {
+      "system": "control",
+      "replica": 1,
+      "block": 12,
+      "frames": 250,
+      "end_step": 3110000.0,
+      "source_hashes_verified": true,
+      "restart_hashes_verified": true
+    }
+  ],
+  "simulation_ready": false
+}

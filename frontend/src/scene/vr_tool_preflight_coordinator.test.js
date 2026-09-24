@@ -105,3 +105,40 @@ describe('native VR preflight coordinator', () => {
     })
   })
 })
+
+it('retains a copied validated plan for one matching Confirm only', async () => {
+  const response = result(5)
+  const coordinator = createVRToolPreflightCoordinator({
+    evaluate: async () => response, sendFeedback: async () => ({ published: true }),
+  })
+  await coordinator.request(5, draft())
+  response.plan.kind = 'changed'
+  expect(coordinator.takeValidatedPlan(6)).toBeNull()
+  expect(coordinator.takeValidatedPlan(5)).toEqual({ kind: 'extrude_continuation' })
+  expect(coordinator.takeValidatedPlan(5)).toBeNull()
+})
+
+it('invalidates the plan immediately on a new draft, even malformed, and on cancel', async () => {
+  const coordinator = createVRToolPreflightCoordinator({
+    evaluate: async s => result(s), sendFeedback: async () => ({ published: true }),
+  })
+  await coordinator.request(5, draft())
+  await coordinator.request(6, draft({ length_bp: -1 }))
+  expect(coordinator.takeValidatedPlan(5)).toBeNull()
+  await coordinator.request(7, draft())
+  coordinator.cancel()
+  expect(coordinator.takeValidatedPlan(7)).toBeNull()
+})
+
+it('does not resurrect a plan when feedback delivery finishes after cancellation', async () => {
+  const delivery = deferred()
+  const coordinator = createVRToolPreflightCoordinator({
+    evaluate: async s => result(s), sendFeedback: () => delivery.promise,
+  })
+  const pending = coordinator.request(5, draft())
+  await Promise.resolve()
+  coordinator.cancel()
+  delivery.resolve({ published: true })
+  expect((await pending).reason).toBe('superseded')
+  expect(coordinator.takeValidatedPlan(5)).toBeNull()
+})

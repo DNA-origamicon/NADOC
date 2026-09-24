@@ -105,6 +105,8 @@ struct WitnessMenuEntry {
     std::string label;
     int hit = -1;
     glm::vec3 worldPosition{};
+    glm::vec3 hitHalfRight{};
+    glm::vec3 hitHalfUp{};
 };
 
 struct WitnessGuideLine {

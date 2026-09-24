@@ -140,6 +140,7 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
       'menu-seq-update-routing': 'button',
       'menu-seq-assign-scaffold': 'button',
       'menu-seq-assign-staples': 'button',
+      'menu-seq-hairpin-dimer': 'button',
       'mode-indicator': 'div',
     })
   })
@@ -241,6 +242,18 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     btn2.disabled = true
     await press('6')
     expect(click2).not.toHaveBeenCalled()
+  })
+
+  it("'0' opens the Hairpin/Dimer Checker (never while typing)", async () => {
+    const d = makeDeps()
+    initKeyboardShortcuts(d)
+    const click = vi.fn()
+    document.getElementById('menu-seq-hairpin-dimer').click = click
+    await press('0')
+    expect(click).toHaveBeenCalledTimes(1)
+    await press('0', { tag: 'INPUT' })
+    await press('0', { ctrl: true })
+    expect(click).toHaveBeenCalledTimes(1)
   })
 
   it('backtick toggles the debug overlay and reflects menu + store state', async () => {

@@ -101,7 +101,8 @@ export async function runOverhangGen(thisId, otherId, {
 
   if (pick === 'pair') {
     showToast(JOHNSON)
-    await api.generateOverhangRandomSequence(thisId)
+    const generated = await api.generateOverhangRandomSequence(thisId)
+    if (!generated) return  // failed structure screen: preserve both existing sequences
     if (_real(getSeq(thisId))) await setRc(otherId, thisId)   // partner ← RC of the freshly-generated this
   } else if (pick === 'override') {
     showToast(JOHNSON)

@@ -70,12 +70,14 @@ def _snapshot_copy(design: Design) -> Design:
     Pydantic's Rust-backed dump/validate does the same structural copy far faster.
     Every mutation helper below takes this snapshot at least once per edit.
 
-    Re-running ``Design``'s validators (``model_validate`` does, ``model_copy`` does
-    not) is safe here: ``s.design`` is always already-valid by construction — nothing
-    outside these helpers can hold an unvalidated Design — so every validator this
-    round-trip re-runs (feature-log checkpoint stripping, cluster-joint schema
-    migration) is confirmed idempotent on already-valid data and is a no-op.
+    Frame authoring can temporarily hold references to clusters being replaced;
+    use a deep copy in that case so snapshotting does not rerun import validation.
+    Designs without lattice frames retain the optimized dump/validate path.
     """
+    # Frame authoring may hold intermediate references while clusters are replaced.
+    # Snapshot those values without rerunning document-load validators.
+    if design.lattice_frames:
+        return design.model_copy(deep=True)
     return Design.model_validate(design.model_dump())
 
 
@@ -287,7 +289,7 @@ def copy_for_workspace_save() -> tuple[Design, int, dict[str, set[str]]]:
         return design, s.revision, known
 
 
-def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, include_snapshot: bool = True) -> Design | None:
+def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, include_snapshot: bool = True) -> Design | dict | None:
     """Advance save cursors without overwriting edits made during disk I/O."""
     with _lock:
         s = _session()
@@ -317,10 +319,13 @@ def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, 
                     "identity_confirmed_at": saved.metadata.identity_confirmed_at,
                 })
             s.design = s.design.model_copy(update=updates)
+        previous_revision = s.revision
         _bump_revision(s)
         # Pair the acknowledgement revision with the merged current content,
         # never the pre-I/O snapshot when a concurrent edit was preserved.
-        return _snapshot_copy(s.design) if include_snapshot else None
+        return _snapshot_copy(s.design) if include_snapshot else {
+            'design_id': s.design.id, 'previous_revision': previous_revision, 'revision': s.revision,
+        }
 
 
 def workspace_heads_for_doc(doc_id: str) -> dict[str, dict[str, list[str]]]:

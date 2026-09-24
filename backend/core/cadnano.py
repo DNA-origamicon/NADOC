@@ -591,8 +591,12 @@ def check_cadnano_compatibility(design: Design) -> List[str]:
     Strings prefixed with 'ERROR' indicate export will fail outright.
     """
     from backend.core.interchange_compatibility import compatibility_report
-    return [("ERROR: " if i["severity"] == "error" else "WARNING: ") + i["label"] + ": " + i["effect"]
+    msgs = [("ERROR: " if i["severity"] == "error" else "WARNING: ") + i["label"] + ": " + i["effect"]
             for i in compatibility_report(design, "cadnano")["issues"]]
+    if design.lattice_frames:
+        msgs.append("INFO: Independent lattice frames are laid out separately in caDNAno. "
+                    "Rigid 3D placements remain in the NADOC document, not caDNAno v2 JSON.")
+    return msgs
 
 
 def _assign_grid_coords(
@@ -661,8 +665,11 @@ def _assign_grid_coords(
     # Y-flip and can move a honeycomb row by one, flipping parity and therefore
     # the caDNAno neighbor/crossover lattice.
     if all(h.grid_pos is not None for h in helices):
+        from backend.core.lattice_frame_layout import packed_frame_cells
+        frame_cells = (packed_frame_cells(helices)
+                       if any(h.lattice_frame_id is not None for h in helices) else {})
         for h in helices:
-            row, col = h.grid_pos  # type: ignore[misc]
+            row, col = frame_cells.get(h.id, h.grid_pos)  # type: ignore[misc]
             rows[h.id] = int(row)
             cols[h.id] = int(col)
             export_dirs[h.id] = _direction_for_cell(int(row), int(col))

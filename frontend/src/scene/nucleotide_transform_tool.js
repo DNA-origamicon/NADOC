@@ -7,6 +7,7 @@ import { baseKey, parseBaseKey } from './base_ref.js'
 import { putNucleotideTransform, putNucleotideTransforms } from '../api/client.js'
 import { showToast } from '../ui/toast.js'
 import { canonicalSelection } from './selection_model.js'
+import { expandCpdTargets } from './cpd_selection.js'
 import { selectionRefsEqual } from './selection_ref.js'
 
 export function transformBodyForTarget(target, pivot, translation, quaternion) {
@@ -72,7 +73,7 @@ export function transformTargetsForSelection(state, exactRef = null) {
       if (key) keys.push(key)
     }
   }
-  return [...new Set(keys)].map(parseBaseKey).filter(Boolean)
+  return expandCpdTargets(state.currentDesign, keys, refs).map(parseBaseKey).filter(Boolean)
 }
 
 export function initNucleotideTransformTool({ store, scene, camera, canvas, controls, designRenderer, atomisticRenderer, getAtomisticRenderers, moveRotatePanel, refreshCurrentSelection }) {
@@ -139,7 +140,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     tc.addEventListener('dragging-changed', e => { dragging = e.value; controls.enabled = !e.value })
     tc.addEventListener('change', () => {
       if (!dragging) return
-      for (const x of targetInfos) applyPreview(x, liveMatrix())
+      applyPreviews(targetInfos, liveMatrix())
     })
     document.getElementById('mode-indicator').textContent =
       'NUCLEOTIDE MOVE/ROTATE — Tab: move/rotate · M: apply · Esc: cancel'
@@ -192,13 +193,13 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
       console.error('Nucleotide transform commit failed:', error)
     }
     // Persistence failed, so roll the optimistic matrices back to their source pose.
-    for (const x of committed) applyPreview(x, identity())
+    applyPreviews(committed, identity())
     showToast('Could not save the selected elements move.', { severity: 'error' })
     return { accepted: false, reason: 'request_failed', result: null }
   }
 
   async function confirm() {
-    return _persistCurrent()
+    return _persistCurrent({ atomic: true })
   }
 
   async function confirmVRPreview() {
@@ -223,7 +224,20 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
   }
 
   function restorePreview() {
-    for (const x of targetInfos) applyPreview(x, identity())
+    applyPreviews(targetInfos, identity())
+  }
+
+  function applyPreviews(infos, matrix) {
+    const groups = new Map()
+    for (const x of infos) {
+      if (x.kind !== 'atomistic' || !x.renderer.applyResiduesMatrix) {
+        applyPreview(x, matrix)
+        continue
+      }
+      if (!groups.has(x.renderer)) groups.set(x.renderer, [])
+      groups.get(x.renderer).push(x.target)
+    }
+    for (const [renderer, members] of groups) renderer.applyResiduesMatrix(members, matrix)
   }
 
   function applyPreview(x, matrix) {
@@ -277,7 +291,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     // only renderer matrices would make Confirm save an identity transform.
     dummy.position.copy(pivot).applyMatrix4(matrix)
     dummy.quaternion.setFromRotationMatrix(matrix).normalize()
-    for (const targetInfo of targetInfos) applyPreview(targetInfo, matrix)
+    applyPreviews(targetInfos, matrix)
     return true
   }
 

@@ -748,3 +748,14 @@ def repair_empty_auto_clusters(design: Design) -> Design:
             })
         repaired.append(cluster.model_copy(update=updates))
     return design.copy_with(cluster_transforms=repaired)
+
+
+def with_default_cluster(design: Design) -> Design:
+    """Pure default-placement bootstrap shared by authoring and response adapters."""
+    if design.cluster_transforms or not design.helices:
+        return design
+    from backend.core.models import ClusterRigidTransform
+    reference_ids = design.reference_helix_ids()
+    return design.copy_with(cluster_transforms=[ClusterRigidTransform(
+        name='Cluster 1', is_default=True, auto_created=True,
+        helix_ids=[h.id for h in design.helices if h.id not in reference_ids])])

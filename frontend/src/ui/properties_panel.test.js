@@ -287,6 +287,30 @@ describe('properties panel — protein branch', () => {
     globalThis.confirm.mockRestore()
   })
 
+  it('labels preliminary support without claiming a validated release', async () => {
+    api.getPhotoproductCatalog.mockResolvedValue({ products: [
+      { stereochemistry: 'cis-syn', label: 'cis-syn TT-CPD', simulation_ready: false, simulation_supported: true },
+    ] })
+    api.preflightPhotoproduct.mockResolvedValue({
+      eligible: true, simulation_ready: false, simulation_supported: true,
+      errors: [], warnings: [{ code: 'preliminary_research', message: 'Preliminary research only.' }],
+    })
+    api.createPhotoproduct.mockResolvedValue({ design: {} })
+    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
+    store.setState({ currentDesign: DESIGN, currentGeometry: [] })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [
+      { kind: 'base', key: 'h1:34:REVERSE' },
+      { kind: 'base', key: 'h1:35:REVERSE' },
+    ] } })
+    await vi.waitFor(() => expect(content.querySelector('.cpd-form-btn')).toBeTruthy())
+    expect(content.textContent).toContain('preliminary research')
+    content.querySelector('.cpd-form-btn').click()
+    expect(confirm.mock.calls[0][0]).toContain('Preliminary cis-syn v6 additive parameters')
+    expect(confirm.mock.calls[0][0]).not.toContain('A validated product topology')
+    confirm.mockRestore()
+  })
+
   it('re-preflights and records the selected TT-CPD stereoisomer', async () => {
     api.getPhotoproductCatalog.mockResolvedValue({ products: [
       { stereochemistry: 'cis-syn', label: 'cis-syn TT-CPD', simulation_ready: false },

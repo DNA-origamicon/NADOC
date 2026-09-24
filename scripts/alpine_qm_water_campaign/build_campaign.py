@@ -129,7 +129,12 @@ def build(
         or len(canonical.get("sites") or []) != 6
     ):
         raise ValueError("canonical cis-syn water-probe plan is not reviewed/complete")
-    if probe_variant not in {"canonical", "alternate-plane", "azimuth-120"}:
+    if probe_variant not in {
+        "canonical",
+        "alternate-plane",
+        "azimuth-120",
+        "azimuth-240",
+    }:
         raise ValueError("unsupported water-probe campaign variant")
     selected_products = _selected_products(product_ids)
     site_template = copy.deepcopy(canonical["sites"])
@@ -138,6 +143,10 @@ def build(
     elif probe_variant == "azimuth-120":
         site_template = _azimuth_rotated_sites(
             site_template, azimuth_degrees=120.0
+        )
+    elif probe_variant == "azimuth-240":
+        site_template = _azimuth_rotated_sites(
+            site_template, azimuth_degrees=240.0
         )
 
     # cis-syn-II is the exact ordered-endpoint exchange partner of cis-syn-I in this
@@ -187,12 +196,17 @@ def build(
                 else (
                     "1.3.0-azimuth-120-validation"
                     if probe_variant == "azimuth-120"
-                    else "1.1.0-transfer"
+                    else (
+                        "1.4.0-azimuth-240-validation"
+                        if probe_variant == "azimuth-240"
+                        else "1.1.0-transfer"
+                    )
                 )
             ),
             "status": (
                 "quantitatively_screened"
-                if probe_variant in {"alternate-plane", "azimuth-120"}
+                if probe_variant
+                in {"alternate-plane", "azimuth-120", "azimuth-240"}
                 else canonical["status"]
             ),
             "product_id": product_id,
@@ -323,7 +337,7 @@ def main() -> int:
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument(
         "--probe-variant",
-        choices=("canonical", "alternate-plane", "azimuth-120"),
+        choices=("canonical", "alternate-plane", "azimuth-120", "azimuth-240"),
         default="canonical",
     )
     parser.add_argument(

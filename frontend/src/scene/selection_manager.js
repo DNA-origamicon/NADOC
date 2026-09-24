@@ -29,6 +29,8 @@
 import * as THREE from 'three'
 import { store, pushGroupUndo } from '../state/store.js'
 import * as api from '../api/client.js'
+import { canConvertExtraThymines } from './cpd_selection.js'
+import { showCpdConversion } from '../ui/cpd_conversion.js'
 import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
 import { deferrableContextMenu } from './right_click_menu.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
@@ -4661,6 +4663,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (_baseKeys.length > 0) {
       _dismissMenu()
       const menu = _menuBase(e.clientX, e.clientY)
+      if (canConvertExtraThymines(store.getState().currentDesign, _baseKeys)) {
+        const keys = [..._baseKeys]
+        menu.appendChild(_menuItem('Convert to CPD…', () => {
+          _dismissMenu()
+          void showCpdConversion({ api, baseKeys: keys })
+        }))
+      }
       menu.appendChild(_menuItem('Hide selected', () => _onHideSelection?.({ baseKeys: [..._baseKeys] })))
       document.body.appendChild(menu)
       _menuEl = menu

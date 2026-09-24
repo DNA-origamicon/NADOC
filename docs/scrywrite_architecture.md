@@ -1,8 +1,15 @@
 # ScryWrite: deterministic VR troubleshooting for NADOC
 
-Status: headless proof, live VR Witness Mode, and fail-closed headset-free evidence
-export implemented; physical headset visual check pending. Adversarial findings and
-remaining claims are tracked in `docs/scrywrite_adversarial_audit.md`.
+Current status (2026-09-22): headless/Witness execution, live native inspection and
+control, submitted stereo/object-ID capture, physical Vive validation, menu layout
+oracles, motion-profile reports and the unified graphical VR inspector are implemented.
+A synchronized scrubbable native/browser timeline remains open. Start with the
+[inspector capability index](scrywrite_inspector.md) and [live-agent runbook](scrywrite_live_agent.md).
+
+The POC decisions and staged plans below preserve historical context; references to
+future live sockets/captures are superseded by the September 16 implementation.
+The [adversarial audit](scrywrite_adversarial_audit.md) also contains dated findings;
+its older backlog is not the current capability inventory.
 
 ## Decision
 

@@ -16,14 +16,28 @@
 #include <zlib.h>
 
 #include "interaction.hpp"
+#include "painted_commit_gate.hpp"
+#include "selection_level_guard.hpp"
+#include "freeform_draft.hpp"
+#include "scene_refresh.hpp"
+#include "lattice_view.hpp"
+#include "extrude_plane.hpp"
+#include "stroke_font.hpp"
+#include "controller_diagnostics.hpp"
+#include "controller_paths.hpp"
 #include "jobs.hpp"
 #include "menu_layout.hpp"
+#include "menu_items.hpp"
 #include "picking.hpp"
 #include "reference_grid.hpp"
 #include "scrywrite_witness.hpp"
+#include "scrywrite_live.hpp"
 #include "scrywrite_witness_surface.hpp"
 #include "scrywrite_visual.hpp"
 #include "spectator_mirror.hpp"
+#include "live_mirror_capture.hpp"
+#include "live_visual_measure.hpp"
+#include "live_presentation.hpp"
 #include "trajectory.hpp"
 #include "visualization.hpp"
 
@@ -101,6 +115,7 @@ struct Vertex {
     glm::vec3 position{};
     glm::vec3 color{};
     float size = 1.0F;
+    uint32_t objectId = 0;
 };
 
 struct Cylinder {
@@ -108,6 +123,7 @@ struct Cylinder {
     glm::vec3 end{};
     float radius = 0.01F;
     glm::vec3 color{};
+    uint32_t objectId = 0;
 };
 
 struct Box {
@@ -116,6 +132,7 @@ struct Box {
     glm::vec3 axisY{};
     glm::vec3 axisZ{};
     glm::vec3 color{};
+    uint32_t objectId = 0;
 };
 
 struct CylinderMeshVertex {
@@ -197,9 +214,11 @@ struct RepresentationData {
 };
 
 struct SceneData {
+    nadoc_vr::ExtrudePlane extrudePlane;
     std::array<RepresentationData, 4> representations;
     std::array<RepresentationData, 4> expandedRepresentations;
     bool hasExpanded = false;
+    bool emptyAuthoring = false;
     Representation initialRepresentation = Representation::full;
     Coloring initialColoring = Coloring::strand;
     glm::vec3 normalizationCenter{};
@@ -423,7 +442,9 @@ constexpr const char* kLitFragmentSource = R"GLSL(
     uniform int uShadowsEnabled;
     uniform float uAlpha;
     uniform float uEmissive;
-    out vec4 outColor;
+    layout(location = 0) out vec4 outColor;
+    layout(location = 1) out uint outObjectId;
+    flat in uint vObjectId;
 
     float shadowVisibility(vec3 normal) {
         if (uShadowsEnabled == 0) return 1.0;
@@ -452,6 +473,7 @@ constexpr const char* kLitFragmentSource = R"GLSL(
         float diffuse = max(dot(normal, uLightDirection), 0.0);
         float lighting = 0.20 + 0.90 * diffuse * shadowVisibility(normal);
         lighting = mix(lighting, 1.0, uEmissive);
+        outObjectId = vObjectId;
         outColor = vec4(vColor * lighting, uAlpha);
     }
 )GLSL";
@@ -465,6 +487,8 @@ GLuint makeSphereProgram() {
         layout(location = 3) in vec3 aColor;
         uniform mat4 uViewProjection;
         uniform mat4 uModel;
+        layout(location = 7) in uint aObjectId;
+        flat out uint vObjectId;
         out vec3 vColor;
         out vec2 vCorner;
         flat out vec3 vWorldCenter;
@@ -488,6 +512,7 @@ GLuint makeSphereProgram() {
                 vec2(length(projectionRowX), length(projectionRowY));
             vCorner = aUnitPosition.xy;
             vColor = aColor;
+            vObjectId = aObjectId;
         }
     )GLSL";
 
@@ -505,7 +530,9 @@ GLuint makeSphereProgram() {
         uniform int uShadowsEnabled;
         uniform float uAlpha;
         uniform float uEmissive;
-        out vec4 outColor;
+        layout(location = 0) out vec4 outColor;
+        layout(location = 1) out uint outObjectId;
+        flat in uint vObjectId;
 
         float shadowVisibility(vec3 worldPosition, vec3 normal) {
             if (uShadowsEnabled == 0) return 1.0;
@@ -553,6 +580,7 @@ GLuint makeSphereProgram() {
             float lighting = 0.20 + 0.90 * diffuse *
                 shadowVisibility(worldPosition, normal);
             lighting = mix(lighting, 1.0, uEmissive);
+            outObjectId = vObjectId;
             outColor = vec4(vColor * lighting, uAlpha);
         }
     )GLSL";
@@ -587,6 +615,8 @@ GLuint makeCylinderProgram() {
         layout(location = 4) in vec3 aColor;
         uniform mat4 uViewProjection;
         uniform mat4 uModel;
+        layout(location = 7) in uint aObjectId;
+        flat out uint vObjectId;
         out vec3 vColor;
         out vec3 vNormal;
         out vec3 vWorldPosition;
@@ -610,6 +640,7 @@ GLuint makeCylinderProgram() {
             vNormal = normalize(mat3(uModel) * localNormal);
             vWorldPosition = worldPosition.xyz;
             vColor = aColor;
+            vObjectId = aObjectId;
         }
     )GLSL";
 
@@ -640,18 +671,24 @@ GLuint makeAtomisticBondProgram() {
         layout(location = 4) in vec3 aColor;
         uniform mat4 uViewProjection;
         uniform mat4 uModel;
+        layout(location = 7) in uint aObjectId;
+        flat out uint vObjectId;
         out vec3 vColor;
         void main() {
             vec3 position = gl_VertexID == 0 ? aStart : aEnd;
             gl_Position = uViewProjection * uModel * vec4(position, 1.0);
             vColor = aColor;
+            vObjectId = aObjectId;
         }
     )GLSL";
     static constexpr const char* fragmentSource = R"GLSL(
         #version 330 core
         in vec3 vColor;
-        out vec4 outColor;
+        layout(location = 0) out vec4 outColor;
+        layout(location = 1) out uint outObjectId;
+        flat in uint vObjectId;
         void main() {
+            outObjectId = vObjectId;
             outColor = vec4(vColor, 1.0);
         }
     )GLSL";
@@ -686,6 +723,8 @@ GLuint makeBoxProgram() {
         layout(location = 6) in vec3 aColor;
         uniform mat4 uViewProjection;
         uniform mat4 uModel;
+        layout(location = 7) in uint aObjectId;
+        flat out uint vObjectId;
         out vec3 vColor;
         out vec3 vNormal;
         out vec3 vWorldPosition;
@@ -703,6 +742,7 @@ GLuint makeBoxProgram() {
             vNormal = normalize(mat3(uModel) * localNormal);
             vWorldPosition = worldPosition.xyz;
             vColor = aColor;
+            vObjectId = aObjectId;
         }
     )GLSL";
 
@@ -775,7 +815,7 @@ class GzipInputStream : public std::istream {
     GzipStreamBuffer buffer_;
 };
 
-SceneData loadScene(const std::string& path) {
+SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, float>> fixedNormalization = std::nullopt) {
     const auto started = std::chrono::steady_clock::now();
     std::cout << "VR_METRIC event=process_progress phase=scene_load_start rss_mib="
               << currentResidentMiB() << std::endl;
@@ -789,7 +829,7 @@ SceneData loadScene(const std::string& path) {
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" || (version < 4 || version > 12)) {
+    if (magic != "NADOCVR" || (version < 4 || version > 14)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -846,7 +886,16 @@ SceneData loadScene(const std::string& path) {
             input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             continue;
         }
-        if (type == 'R') {
+        if (type == 'F' && version >= 13) {
+            if (active) throw std::runtime_error("Extrude metadata must precede geometry");
+            scene.extrudePlane.read(input);
+        } else if (type == 'Q' && version >= 14) {
+            std::string purpose;
+            input >> purpose;
+            if (active || scene.emptyAuthoring || purpose != "empty_authoring")
+                throw std::runtime_error("Invalid empty authoring declaration");
+            scene.emptyAuthoring = true;
+        } else if (type == 'R') {
             std::string name;
             input >> name;
             activeIndex = static_cast<size_t>(representationFromName(name));
@@ -1064,13 +1113,23 @@ SceneData loadScene(const std::string& path) {
     if (input.compressionError()) {
         throw std::runtime_error("Corrupt compressed NADOC VR scene snapshot");
     }
-    if (std::all_of(scene.representations.begin(), scene.representations.end(),
-                    [](const RepresentationData& rep) {
-                        return rep.points.empty() && rep.cylinders.empty()
-                            && rep.halfCylinders.empty() && rep.boxes.empty();
-                    })) {
-        throw std::runtime_error("The scene snapshot contains no visible geometry");
+    const auto noPrimitives = [](const RepresentationData& rep) {
+        return rep.points.empty() && rep.cylinders.empty()
+            && rep.halfCylinders.empty() && rep.boxes.empty();
+    };
+    const bool empty = std::all_of(scene.representations.begin(), scene.representations.end(), noPrimitives);
+    if (scene.emptyAuthoring) {
+        if (!empty || scene.hasExpanded) throw std::runtime_error("Empty authoring scene contains geometry");
+        scene.normalizationCenter = fixedNormalization ? fixedNormalization->first : glm::vec3(0.0F);
+        scene.normalizationScale = fixedNormalization ? fixedNormalization->second : kViewSizeMeters / 100.0F; // 100 nm initial working extent.
+        std::cout << "VR_METRIC event=process_progress phase=scene_load_end"
+                  << " records=" << recordsRead << " empty_authoring=true"
+                  << " elapsed_ms=" << std::chrono::duration<double, std::milli>(
+                      std::chrono::steady_clock::now() - started).count()
+                  << " rss_mib=" << currentResidentMiB() << std::endl;
+        return scene; // No synthetic axes/part primitives in an empty document.
     }
+    if (empty) throw std::runtime_error("The scene snapshot contains no visible geometry");
     if (scene.hasExpanded) {
         for (size_t index = 0; index < scene.representations.size(); ++index) {
             if (identities[0][index] != identities[1][index]) {
@@ -1133,10 +1192,10 @@ SceneData loadScene(const std::string& path) {
             }
         }
     }
-    const glm::vec3 center = (lo + hi) * 0.5F;
+    const glm::vec3 center = fixedNormalization ? fixedNormalization->first : (lo + hi) * 0.5F;
     const glm::vec3 extent = hi - lo;
     const float maxExtent = std::max({extent.x, extent.y, extent.z, 1.0e-6F});
-    const float scale = kViewSizeMeters / maxExtent;
+    const float scale = fixedNormalization ? fixedNormalization->second : kViewSizeMeters / maxExtent;
     scene.normalizationCenter = center;
     scene.normalizationScale = scale;
     auto normalize = [&](RepresentationData& rep, bool appendViewerAxes) {
@@ -1240,49 +1299,15 @@ nadoc_vr::HandPose handPoseFromXr(const XrPosef& pose) {
     return result;
 }
 
-std::array<uint8_t, 7> glyph(char value) {
-    switch (value) {
-        case 'A': return {14, 17, 17, 31, 17, 17, 17};
-        case 'B': return {30, 17, 17, 30, 17, 17, 30};
-        case 'C': return {14, 17, 16, 16, 16, 17, 14};
-        case 'D': return {30, 17, 17, 17, 17, 17, 30};
-        case 'E': return {31, 16, 16, 30, 16, 16, 31};
-        case 'F': return {31, 16, 16, 30, 16, 16, 16};
-        case 'G': return {14, 17, 16, 23, 17, 17, 14};
-        case 'H': return {17, 17, 17, 31, 17, 17, 17};
-        case 'I': return {31, 4, 4, 4, 4, 4, 31};
-        case 'K': return {17, 18, 20, 24, 20, 18, 17};
-        case 'L': return {16, 16, 16, 16, 16, 16, 31};
-        case 'M': return {17, 27, 21, 21, 17, 17, 17};
-        case 'N': return {17, 25, 21, 19, 17, 17, 17};
-        case 'O': return {14, 17, 17, 17, 17, 17, 14};
-        case 'P': return {30, 17, 17, 30, 16, 16, 16};
-        case 'R': return {30, 17, 17, 30, 20, 18, 17};
-        case 'S': return {15, 16, 16, 14, 1, 1, 30};
-        case 'T': return {31, 4, 4, 4, 4, 4, 4};
-        case 'U': return {17, 17, 17, 17, 17, 17, 14};
-        case 'V': return {17, 17, 17, 17, 17, 10, 4};
-        case 'W': return {17, 17, 17, 21, 21, 21, 10};
-        case 'X': return {17, 17, 10, 4, 10, 17, 17};
-        case 'Y': return {17, 17, 10, 4, 4, 4, 4};
-        case '0': return {14, 17, 19, 21, 25, 17, 14};
-        case '1': return {4, 12, 4, 4, 4, 4, 14};
-        case '2': return {14, 17, 1, 2, 4, 8, 31};
-        case '3': return {30, 1, 1, 14, 1, 1, 30};
-        case '4': return {2, 6, 10, 18, 31, 2, 2};
-        case '5': return {31, 16, 16, 30, 1, 1, 30};
-        case '6': return {14, 16, 16, 30, 17, 17, 14};
-        case '7': return {31, 1, 2, 4, 8, 8, 8};
-        case '8': return {14, 17, 17, 14, 17, 17, 14};
-        case '9': return {14, 17, 17, 15, 1, 1, 14};
-        case '+': return {0, 4, 4, 31, 4, 4, 0};
-        default: return {};
-    }
-}
 
 class GlScene {
   public:
-    explicit GlScene(SceneData scene) : scene_(std::move(scene)) {
+    explicit GlScene(SceneData scene, bool objectIds = false, const std::vector<std::string>& priorIdentities = {})
+        : scene_(std::move(scene)), objectIdsEnabled_(objectIds) {
+        if (!priorIdentities.empty()) {
+            objectIdentities_ = priorIdentities;
+            for (size_t i = 1; i < objectIdentities_.size(); ++i) objectIds_.emplace(objectIdentities_[i], static_cast<uint32_t>(i));
+        }
         atomisticSharedGeometry_ = atomisticCylindersEquivalent(scene_);
         program_ = makeProgram();
         viewProjection_ = glGetUniformLocation(program_, "uViewProjection");
@@ -1292,9 +1317,25 @@ class GlScene {
         uploadCylinders();
         uploadHalfCylinders();
         uploadBoxes();
+        auto bindIds = [](GLuint vao, GLuint buffer, GLsizei stride, size_t offset) {
+            glBindVertexArray(vao);
+            glBindBuffer(GL_ARRAY_BUFFER, buffer);
+            glEnableVertexAttribArray(7);
+            glVertexAttribIPointer(7, 1, GL_UNSIGNED_INT, stride,
+                                   reinterpret_cast<void*>(offset));
+            glVertexAttribDivisor(7, 1);
+        };
+        bindIds(sphereVao_, sphereInstanceVbo_, sizeof(Vertex), offsetof(Vertex, objectId));
+        bindIds(cylinderVao_, cylinderInstanceVbo_, sizeof(Cylinder), offsetof(Cylinder, objectId));
+        bindIds(atomisticBondVao_, cylinderInstanceVbo_, sizeof(Cylinder), offsetof(Cylinder, objectId));
+        bindIds(halfCylinderVao_, halfCylinderInstanceVbo_, sizeof(Cylinder), offsetof(Cylinder, objectId));
+        bindIds(boxVao_, boxInstanceVbo_, sizeof(Box), offsetof(Box, objectId));
+        glBindVertexArray(0);
         initializeShadowMap();
         setStyle(scene_.initialRepresentation, scene_.initialColoring);
     }
+
+    const std::vector<std::string>& objectIdentities() const { return objectIdentities_; }
 
     void setVisualization(const nadoc_vr::VisualizationSnapshot& snapshot) {
         bool samePositions = visualizationPositions_.size() == snapshot.points.size();
@@ -1773,7 +1814,7 @@ class GlScene {
                 position,
                 visualizationColor(source, point.identity)
                     .value_or(point.colors.get(coloring)),
-                point.size});
+                point.size, objectId(point.identity)});
             sphereCoordinateIndices.push_back(coordinateIndexFor(point.identity, false));
             if (const auto color = glowColor(point.identity)) {
                 glowPoints.push_back(Vertex{position, *color, point.size * 1.55F});
@@ -1815,7 +1856,7 @@ class GlScene {
             cylinders.push_back(Cylinder{
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
-                    .value_or(cylinder.colors.get(coloring))});
+                    .value_or(cylinder.colors.get(coloring)), objectId(cylinder.identity)});
             cylinderCoordinateIndices.push_back({
                 coordinateIndexFor(cylinder.identity, false),
                 coordinateIndexFor(cylinder.identity, true),
@@ -1860,7 +1901,7 @@ class GlScene {
             halfCylinders.push_back(Cylinder{
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
-                    .value_or(cylinder.colors.get(coloring))});
+                    .value_or(cylinder.colors.get(coloring)), objectId(cylinder.identity)});
             if (const auto color = glowColor(cylinder.identity)) {
                 glowHalfCylinders.push_back(Cylinder{
                     start, end, cylinder.radius * 1.55F, *color});
@@ -1903,7 +1944,7 @@ class GlScene {
             boxes.push_back(Box{
                 center, axisX, axisY, axisZ,
                 visualizationColor(source, box.identity)
-                    .value_or(box.colors.get(coloring))});
+                    .value_or(box.colors.get(coloring)), objectId(box.identity)});
             if (const auto color = glowColor(box.identity)) {
                 glowBoxes.push_back(Box{
                     center, axisX * 1.18F, axisY * 1.18F, axisZ * 1.18F, *color});
@@ -2145,6 +2186,7 @@ class GlScene {
                     token = strandToken;
                 }
             }
+            if (selectionLevel == "end" && !token) continue;
             const std::string& key = token ? *token : hit.identity;
             if (!seen.insert(key).second ||
                 identityBytes + hit.identity.size() > 2048U) {
@@ -2243,7 +2285,7 @@ class GlScene {
      * primitive, so tool affordances remain stable across representation changes. */
     [[nodiscard]] std::optional<nadoc_vr::BoundsSummary> ownerBounds(
         const std::vector<std::string>& ownerTokens,
-        const glm::mat4& modelTransform) const {
+        const glm::mat4& modelTransform, bool allAuthored = false) const {
         const RepresentationData& source = currentSource();
         std::unordered_set<std::string> identities;
         for (const std::string& token : ownerTokens) {
@@ -2254,6 +2296,9 @@ class GlScene {
                 }
             }
             if (!identities.empty()) break;
+        }
+        if (allAuthored) {
+            for (const auto& entry : source.ownerAliases) identities.insert(entry.identity);
         }
         if (identities.empty()) return std::nullopt;
 
@@ -2447,8 +2492,42 @@ class GlScene {
         if (shadowFramebuffer_) glDeleteFramebuffers(1, &shadowFramebuffer_);
     }
 
+    std::string objectTable(const std::vector<uint32_t>& visibleIds) const {
+        std::ostringstream out;
+        out << '[';
+        bool first = true;
+        for (uint32_t id : visibleIds) {
+            if (id == 0) continue;
+            if (id >= objectIdentities_.size()) throw std::runtime_error("Unknown rendered object ID");
+            const auto& identity = objectIdentities_[id];
+            if (!first) out << ',';
+            first = false;
+            out << "{\"id\":" << id << ",\"identity\":\""
+                << nadoc_vr::scrywrite::visualJson(identity) << "\",\"owner_tokens\":[";
+            std::vector<std::string> owners;
+            const auto aliases = sourceIndex_.aliases.find(identity);
+            if (aliases != sourceIndex_.aliases.end()) owners = aliases->second->tokens;
+            const auto ownership = sourceIndex_.ownership.find(identity);
+            if (ownership != sourceIndex_.ownership.end()) {
+                for (const auto& owner : ownership->second->owners) {
+                    if ((owner.startWeight > 0 || owner.endWeight > 0) &&
+                        std::find(owners.begin(), owners.end(), owner.token) == owners.end()) {
+                        owners.push_back(owner.token);
+                    }
+                }
+            }
+            for (size_t i = 0; i < owners.size(); ++i) {
+                if (i) out << ',';
+                out << '"' << nadoc_vr::scrywrite::visualJson(owners[i]) << '"';
+            }
+            out << "]}";
+        }
+        out << ']';
+        return out.str();
+    }
+
     void render(const glm::mat4& viewProjection, const glm::mat4& modelTransform,
-                const std::vector<Vertex>& guides) const {
+                const std::vector<Vertex>& guides, bool captureIds = false) const {
         glUseProgram(program_);
         const glm::mat4 modelViewProjection = viewProjection * modelTransform;
         glUniformMatrix4fv(viewProjection_, 1, GL_FALSE, &modelViewProjection[0][0]);
@@ -2456,6 +2535,10 @@ class GlScene {
         glLineWidth(1.5F);
         glDrawArrays(GL_LINES, 0, lineCount_);
 
+        if (captureIds) {
+            const GLenum buffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+            glDrawBuffers(2, buffers);
+        }
         if (sphereCount_ > 0) {
             glUseProgram(sphereProgram_);
             glUniformMatrix4fv(sphereViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
@@ -2529,6 +2612,9 @@ class GlScene {
             glDrawElementsInstanced(
                 GL_TRIANGLES, boxIndexCount_, GL_UNSIGNED_SHORT, nullptr, boxCount_);
         }
+
+        // Glow and UI do not own design pixels. Keep their color rendering unchanged.
+        if (captureIds) glDrawBuffer(GL_COLOR_ATTACHMENT0);
 
         if (sphereGlowCount_ > 0 || cylinderGlowCount_ > 0 ||
             halfCylinderGlowCount_ > 0 || boxGlowCount_ > 0) {
@@ -2607,7 +2693,8 @@ class GlScene {
     }
 
     void renderGuides(
-        const glm::mat4& viewProjection, const std::vector<Vertex>& guides) const {
+        const glm::mat4& viewProjection, const std::vector<Vertex>& guides,
+        const std::array<size_t, 2>* handEnds = nullptr, float lineWidth = 3.0F) const {
         if (!guides.empty()) {
             glDisable(GL_DEPTH_TEST);
             glUseProgram(program_);
@@ -2617,8 +2704,12 @@ class GlScene {
                          static_cast<GLsizeiptr>(guides.size() * sizeof(Vertex)),
                          guides.data(), GL_DYNAMIC_DRAW);
             glBindVertexArray(guideVao_);
-            glLineWidth(3.0F);
-            glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(guides.size()));
+            glLineWidth(lineWidth);
+            if (handEnds) {
+                nadoc_vr::drawClassifiedControllerGuides(guides.size(), *handEnds);
+            } else {
+                glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(guides.size()));
+            }
             glEnable(GL_DEPTH_TEST);
         }
         glBindVertexArray(0);
@@ -3606,6 +3697,23 @@ class GlScene {
 
     GLuint program_ = 0;
     SceneData scene_;
+    bool objectIdsEnabled_ = false;
+    std::unordered_map<std::string, uint32_t> objectIds_;
+    std::vector<std::string> objectIdentities_{""};
+
+    uint32_t objectId(const std::string& identity) {
+        if (!objectIdsEnabled_ || identity.empty() || identity.starts_with("viewer:")) return 0;
+        const auto found = objectIds_.find(identity);
+        if (found != objectIds_.end()) return found->second;
+        if (objectIdentities_.size() >= std::numeric_limits<uint32_t>::max()) {
+            throw std::runtime_error("Object ID capacity exceeded");
+        }
+        const auto id = static_cast<uint32_t>(objectIdentities_.size());
+        objectIds_.emplace(identity, id);
+        objectIdentities_.push_back(identity);
+        return id;
+    }
+
     RepresentationData interpolatedSource_;
     const RepresentationData* displayedSource_ = nullptr;
     SourceIndex sourceIndex_;
@@ -4444,7 +4552,12 @@ class GpuFrameTimer {
 };
 
 class Viewer {
+#ifdef NADOC_SCRYWRITE_TESTING
+    friend struct LiveViewerTest;
+#endif
   public:
+    void loadControllerPath(const std::string& path) { controllerPaths_.load(path); }
+
     explicit Viewer(SceneData scene, std::string eventPath = {},
                     std::string feedbackPath = {},
                     std::string toolFeedbackPath = {},
@@ -4469,7 +4582,8 @@ class Viewer {
                     std::string mirrorDiagnosticsPath = {},
                     std::string witnessCaptureDirectory = {},
                     std::string witnessVisualExpectationDirectory = {},
-                    bool exitOnWitnessComplete = false)
+                    bool exitOnWitnessComplete = false,
+                    std::string liveSocketPath = {}, std::string liveMode = "inspect")
         : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)),
           feedbackPath_(std::move(feedbackPath)),
           toolFeedbackPath_(std::move(toolFeedbackPath)),
@@ -4533,6 +4647,16 @@ class Viewer {
                     "Could not open mirror diagnostics " + mirrorDiagnosticsPath_);
             }
         }
+        if (!liveSocketPath.empty()) {
+            if (!witnessPath.empty()) throw std::runtime_error("live and Witness modes are exclusive");
+            if (!eventPath_.empty() && liveMode == "control")
+                throw std::runtime_error("live browser events require explicit transactions mode");
+            liveMode_ = std::move(liveMode);
+            liveDirectory_ = std::filesystem::path(liveSocketPath).parent_path();
+            liveSession_ = std::to_string(::getpid()) + "-" + std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count());
+            liveSocket_.open(liveSocketPath);
+        }
         if (!witnessPath.empty()) {
             std::ifstream input(witnessPath);
             if (!input) {
@@ -4542,6 +4666,7 @@ class Viewer {
             witness_.emplace(nadoc_vr::scrywrite::WitnessReplay::load(input));
             std::cout << "ScryWrite Witness Mode: " << witnessPath << '\n';
         }
+        extrudePlane_ = sceneData_.extrudePlane;
         normalizationCenter_ = sceneData_.normalizationCenter;
         normalizationScale_ = sceneData_.normalizationScale;
         const RepresentationData& initial = sceneData_.representations[
@@ -4586,6 +4711,7 @@ class Viewer {
             if (swapchain.depth) glDeleteRenderbuffers(1, &swapchain.depth);
             if (swapchain.handle != XR_NULL_HANDLE) xrDestroySwapchain(swapchain.handle);
         }
+        if (liveObjectIdTexture_) glDeleteTextures(1, &liveObjectIdTexture_);
         if (framebuffer_) glDeleteFramebuffers(1, &framebuffer_);
         if (mirrorDiagnosticsTexture_) glDeleteTextures(1, &mirrorDiagnosticsTexture_);
         if (mirrorDiagnosticsDepthStencil_) {
@@ -4914,7 +5040,7 @@ class Viewer {
             }
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
-        glScene_ = std::make_unique<GlScene>(std::move(sceneData_));
+        glScene_ = std::make_unique<GlScene>(std::move(sceneData_), liveSocket_.enabled());
         glScene_->setVisualization(visualizationSnapshot_);
         glScene_->setSelectionHighlights(
             {}, {}, committedSelectionOwnerTokens_, committedSelectionIdentities_);
@@ -4961,7 +5087,7 @@ class Viewer {
     }
 
     void pulse(size_t hand, float amplitude = 0.35F) {
-        if (witness_) return;
+        if (witness_ || liveSocket_.enabled()) return;
         XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO};
         info.action = hapticAction_;
         info.subactionPath = handPaths_[hand];
@@ -4995,7 +5121,7 @@ class Viewer {
         float x, float y, float scale, const glm::vec3& color,
         float z = 0.002F) {
         for (size_t character = 0; character < text.size(); ++character) {
-            const auto rows = glyph(static_cast<char>(
+            const auto rows = nadoc_vr::glyph(static_cast<char>(
                 std::toupper(static_cast<unsigned char>(text[character]))));
             for (size_t row = 0; row < rows.size(); ++row) {
                 for (int column = 0; column < 5; ++column) {
@@ -5046,12 +5172,7 @@ class Viewer {
         options, tools, tool_config, jobs, job_detail, trajectory, desktop
     };
 
-    struct MenuItem {
-        const char* label;
-        float x;
-        float y;
-        float halfWidth;
-    };
+    using MenuItem = nadoc_vr::MenuItem;
     static constexpr std::array<const char*, 7> kSelectionLevels = {
         "default", "cluster", "strand", "domain", "end", "xover", "base",
     };
@@ -5076,27 +5197,8 @@ class Viewer {
         {"TRAJECTORY", -0.16F, -0.415F, 0.145F},
         {"DESKTOP", 0.16F, -0.415F, 0.145F},
     }};
-    static constexpr std::array<MenuItem, 10> kToolMenuItems = {{
-        {"INSPECT", -0.16F, 0.190F, 0.145F},
-        {"MOVE ROTATE", -0.16F, 0.135F, 0.145F},
-        {"EXTRUDE", -0.16F, 0.080F, 0.145F},
-        {"TWIST", -0.16F, 0.025F, 0.145F},
-        {"BEND", -0.16F, -0.030F, 0.145F},
-        {"PREVIEW", 0.16F, 0.190F, 0.145F},
-        {"CONFIRM", 0.16F, 0.135F, 0.145F},
-        {"CANCEL", 0.16F, 0.080F, 0.145F},
-        {"UNDO", 0.16F, 0.025F, 0.145F},
-        {"BACK", 0.0F, -0.260F, 0.305F},
-    }};
-    static constexpr std::array<MenuItem, 7> kToolConfigMenuItems = {{
-        {"-", -0.16F, 0.135F, 0.145F},
-        {"+", 0.16F, 0.135F, 0.145F},
-        {"SECONDARY -", -0.16F, 0.025F, 0.145F},
-        {"SECONDARY +", 0.16F, 0.025F, 0.145F},
-        {"OPTION", -0.16F, -0.085F, 0.145F},
-        {"FLAG", 0.16F, -0.085F, 0.145F},
-        {"BACK TO TOOLS", 0.0F, -0.260F, 0.305F},
-    }};
+    static constexpr auto kToolMenuItems = nadoc_vr::kToolMenuItems;
+    static constexpr auto kToolConfigMenuItems = nadoc_vr::kToolConfigMenuItems;
     static constexpr std::array<MenuItem, 8> kJobsMenuItems = {{
         {"JOB", 0.0F, 0.205F, 0.305F},
         {"JOB", 0.0F, 0.145F, 0.305F},
@@ -5193,9 +5295,16 @@ class Viewer {
         auto append = [&](const auto& items, int hitBase = 0) {
             for (size_t index = 0; index < items.size(); ++index) {
                 const MenuItem item = items[index];
+                if (std::string(item.label) == "EXTRUDE FROM" &&
+                    toolConfig_.mode() != nadoc_vr::ToolMode::extrude) continue;
+                if (std::string(item.label) == "FREEFORM" && !freeformAvailable()) continue;
                 entries.push_back({
                     item.label, hitBase + static_cast<int>(index),
                     menuPlacement_.worldPoint({item.x, item.y, 0.0F}),
+                    menuPlacement_.worldPoint({item.x + item.halfWidth, item.y, 0.0F})
+                        - menuPlacement_.worldPoint({item.x, item.y, 0.0F}),
+                    menuPlacement_.worldPoint({item.x, item.y + item.halfHeight, 0.0F})
+                        - menuPlacement_.worldPoint({item.x, item.y, 0.0F}),
                 });
             }
         };
@@ -5288,22 +5397,18 @@ class Viewer {
             const float left = item.x - item.halfWidth;
             const float right = item.x + item.halfWidth;
             const std::string label = overrideLabel ? overrideLabel : item.label;
-            const nadoc_vr::MenuPanelBounds visualBounds{
-                {left, item.y - 0.023F}, {right, item.y + 0.023F},
-            };
-            const nadoc_vr::MenuPanelBounds hitBounds{
-                {left, item.y - 0.025F}, {right, item.y + 0.025F},
-            };
+            const auto visualBounds = item.bounds();
+            const auto hitBounds = visualBounds;
             const std::string owner = "control:" + label;
             menuLayoutAudit_.addControl(owner, visualBounds, hitBounds);
-            line(menuWorld(left, item.y + 0.023F),
-                 menuWorld(right, item.y + 0.023F), color * 0.7F);
-            line(menuWorld(right, item.y + 0.023F),
-                 menuWorld(right, item.y - 0.023F), color * 0.7F);
-            line(menuWorld(right, item.y - 0.023F),
-                 menuWorld(left, item.y - 0.023F), color * 0.7F);
-            line(menuWorld(left, item.y - 0.023F),
-                 menuWorld(left, item.y + 0.023F), color * 0.7F);
+            line(menuWorld(left, item.y + item.halfHeight),
+                 menuWorld(right, item.y + item.halfHeight), color * 0.7F);
+            line(menuWorld(right, item.y + item.halfHeight),
+                 menuWorld(right, item.y - item.halfHeight), color * 0.7F);
+            line(menuWorld(right, item.y - item.halfHeight),
+                 menuWorld(left, item.y - item.halfHeight), color * 0.7F);
+            line(menuWorld(left, item.y - item.halfHeight),
+                 menuWorld(left, item.y + item.halfHeight), color * 0.7F);
             const auto textPlacement = menuLayoutAudit_.fitAndAddText(
                 owner + ".label", label, left + 0.012F, item.y + 0.012F,
                 0.0036F, visualBounds);
@@ -5339,7 +5444,7 @@ class Viewer {
         const std::string title = menuPage_ == MenuPage::options
             ? "VR MENU"
             : menuPage_ == MenuPage::tools
-                ? "VR TOOLS READ ONLY"
+                ? "VR TOOLS"
                 : menuPage_ == MenuPage::tool_config
                     ? "VR TOOL SETTINGS DRAFT"
                     : menuPage_ == MenuPage::jobs
@@ -5578,9 +5683,10 @@ class Viewer {
             std::ostringstream secondary;
             std::string option;
             std::string flag;
-            std::array<std::string, 7> configLabels = {
+            std::array<std::string, 9> configLabels = {
                 "-", "+", "SECONDARY -", "SECONDARY +",
                 "OPTION", "FLAG", "BACK TO TOOLS",
+                extrudePlane_.label(), freeformDraft_.placed() ? "USE DEFAULT PLANE" : "PLACE FREEFORM",
             };
             std::array<bool, 6> enabled{true, true, true, true, true, true};
             primary << std::fixed << std::setprecision(1);
@@ -5593,6 +5699,10 @@ class Viewer {
                     toolConfig_.strandFilter()));
                 flag = std::string("LIGATE ") +
                     (toolConfig_.ligateAdjacent() ? "YES" : "NO");
+                configLabels[0] = "-1 BP";
+                configLabels[1] = "+1 BP";
+                configLabels[4] = "STRANDS";
+                configLabels[5] = "LIGATE";
                 configLabels[2] = "DIRECTION -";
                 configLabels[3] = "DIRECTION +";
             } else if (toolConfig_.mode() == nadoc_vr::ToolMode::twist) {
@@ -5724,6 +5834,8 @@ class Viewer {
                         ? glm::vec3(0.48F, 0.32F, 0.30F)
                         : glm::vec3(1.0F, 0.78F, 0.22F);
                 }
+                if (index == 7 && toolConfig_.mode() != nadoc_vr::ToolMode::extrude) continue;
+                if (index == 8 && !freeformAvailable()) continue;
                 itemBox(kToolConfigMenuItems[index], color,
                         configLabels[index].c_str());
             }
@@ -5734,11 +5846,11 @@ class Viewer {
             appendMenuText("TOOL", -0.305F, 0.255F, 0.0042F, {0.42F, 0.72F, 0.95F});
             appendMenuText("TRANSACTION", 0.015F, 0.255F, 0.0042F,
                            {0.42F, 0.72F, 0.95F});
-            appendMenuText("SELECTION " + selectionLevel_, -0.305F, -0.115F,
+            appendMenuText("SELECTION " + selectionLevel_, -0.305F, -0.250F,
                            0.0038F, {0.65F, 0.70F, 0.78F});
-            appendMenuText("STATUS " + toolShell_.status(), -0.305F, -0.165F,
+            appendMenuText("STATUS " + (paintedExtrusionReady() ? std::string("READY TO EXTRUDE") : toolShell_.status()), -0.305F, -0.290F,
                            0.0038F, {0.95F, 0.72F, 0.28F});
-            appendMenuText("AMBER NEEDS SETTINGS", -0.305F, -0.205F,
+            appendMenuText("AMBER NEEDS SETTINGS", -0.305F, -0.330F,
                            0.0032F, {0.72F, 0.56F, 0.30F});
             for (size_t index = 0; index < kToolMenuItems.size(); ++index) {
                 const bool selected = index < 5 &&
@@ -5761,6 +5873,7 @@ class Viewer {
                         ? glm::vec3(0.85F, 0.34F, 0.30F)
                         : glm::vec3(1.0F, 0.78F, 0.22F);
                 }
+                if (index == 6 && toolShell_.mode() == nadoc_vr::ToolMode::extrude) color = paintedExtrusionReady() ? glm::vec3(0.30F, 1.0F, 0.48F) : glm::vec3(0.30F, 0.32F, 0.36F);
                 itemBox(kToolMenuItems[index], color);
             }
             return;
@@ -5896,7 +6009,9 @@ class Viewer {
         line({bounds.minimum.x, -0.222F, 0}, {bounds.maximum.x, -0.222F, 0},
              border * 0.65F);
         appendPlacedTextCentered(
-            latticePlacement_, bounds, "EXTRUDE CELLS - HOLD TRIGGER + PAINT",
+            latticePlacement_, bounds, extrudePlane_.label() +
+                (extrudePlane_.reason == "mixed" || extrudePlane_.reason == "unknown"
+                    ? " - CHOOSE PLANE" : " - PAINT CELLS"),
             0.280F, 0.0031F, {0.65F, 0.88F, 1.0F});
         appendPlacedTextCentered(
             latticePlacement_, bounds,
@@ -5907,8 +6022,7 @@ class Viewer {
             0.247F, 0.0027F, {0.55F, 0.68F, 0.82F});
         const nadoc_vr::MenuPanelBounds legendBounds{
             {-0.278F, -0.298F}, {-0.080F, -0.228F}};
-        const nadoc_vr::MenuPanelBounds countBounds{
-            {-0.070F, -0.298F}, {0.145F, -0.228F}};
+        const auto& countBounds = nadoc_vr::kCenterPaintBounds;
         appendPlacedTextCentered(
             latticePlacement_, legendBounds, "FWD BLUE", -0.244F, 0.0026F,
             {41.0F / 255.0F, 182.0F / 255.0F, 246.0F / 255.0F});
@@ -5919,6 +6033,12 @@ class Viewer {
             latticePlacement_, countBounds,
             std::to_string(extrudeLatticeDraft_.cells().size()) + " SELECTED",
             -0.254F, 0.0026F, {0.95F, 0.78F, 0.34F});
+        appendPlacedTextCentered(latticePlacement_, countBounds, "CENTER PAINT",
+            -0.282F, 0.0025F, {0.65F, 0.88F, 1.0F});
+        line({countBounds.minimum.x,countBounds.minimum.y,0}, {countBounds.maximum.x,countBounds.minimum.y,0}, border);
+        line({countBounds.minimum.x,countBounds.maximum.y,0}, {countBounds.maximum.x,countBounds.maximum.y,0}, border);
+        line({countBounds.minimum.x,countBounds.minimum.y,0}, {countBounds.minimum.x,countBounds.maximum.y,0}, border);
+        line({countBounds.maximum.x,countBounds.minimum.y,0}, {countBounds.maximum.x,countBounds.maximum.y,0}, border);
         const glm::vec3 exitColor = latticeExitHovered_
             ? glm::vec3(1.0F, 0.78F, 0.22F)
             : glm::vec3(0.95F, 0.38F, 0.30F);
@@ -5988,7 +6108,7 @@ class Viewer {
                              {clipped->second.x, clipped->second.y, 0.006F}, color);
                     }
                 }
-                if (std::abs(previewDepth) > 1.0e-6F) {
+                if (!freeformDraft_.placed() && std::abs(previewDepth) > 1.0e-6F) {
                     for (int segment = 0; segment < segments; ++segment) {
                         const float first = glm::two_pi<float>() * segment / segments;
                         const float second = glm::two_pi<float>() *
@@ -6035,7 +6155,7 @@ class Viewer {
         auto text = [&](const std::string& value, float x, float y,
                         float scale, const glm::vec3& color) {
             for (size_t character = 0; character < value.size(); ++character) {
-                const auto rows = glyph(static_cast<char>(std::toupper(
+                const auto rows = nadoc_vr::glyph(static_cast<char>(std::toupper(
                     static_cast<unsigned char>(value[character]))));
                 for (size_t row = 0; row < rows.size(); ++row) {
                     for (int column = 0; column < 5; ++column) {
@@ -6231,7 +6351,8 @@ class Viewer {
             : menuPage_ == MenuPage::tools
                 ? kToolMenuItems.size()
                 : menuPage_ == MenuPage::tool_config
-                    ? kToolConfigMenuItems.size()
+                    ? kToolConfigMenuItems.size() -
+                        (toolConfig_.mode() == nadoc_vr::ToolMode::extrude ? 0U : 2U)
                     : menuPage_ == MenuPage::jobs
                         ? kJobsMenuItems.size()
                     : menuPage_ == MenuPage::job_detail
@@ -6239,17 +6360,16 @@ class Viewer {
                             : menuPage_ == MenuPage::trajectory
                                 ? kTrajectoryMenuItems.size() : 1U;
         for (size_t index = 0; index < itemCount; ++index) {
+            if (menuPage_ == MenuPage::tool_config && index == 8 && !freeformAvailable()) continue;
             const MenuItem item = menuPage_ == MenuPage::desktop
                 ? desktopBackItem() : items[index];
-            if (std::abs(local.x - item.x) <= item.halfWidth &&
-                std::abs(local.y - item.y) <= 0.025F) {
+            if (item.contains(local)) {
                 return static_cast<int>(index);
             }
         }
         for (size_t index = 0; index < kMenuControlItems.size(); ++index) {
             const MenuItem item = menuControlItem(index);
-            if (std::abs(local.x - item.x) <= item.halfWidth &&
-                std::abs(local.y - item.y) <= 0.025F) {
+            if (item.contains(local)) {
                 return kMenuControlHitBase + static_cast<int>(index);
             }
         }
@@ -6295,6 +6415,14 @@ class Viewer {
             targeted[1] = true;
             return targeted;
         }
+        if (panelHit && nadoc_vr::centerPaintHit(*panelHit)) {
+            latticeHover_.reset(); latticeExitHovered_ = false; latticePaintStroke_.reset();
+            if (triggerClicked_[1]) {
+                latticeOrigin_ = nadoc_vr::centeredPaintOrigin(extrudeLatticeDraft_.cells(), latticeOrigin_);
+                pulse(1U, 0.40F);
+            }
+            return targeted;
+        }
         const bool previousExitHover = latticeExitHovered_;
         latticeExitHovered_ = panelHit && latticeExitContains(*panelHit);
         if (latticeExitHovered_ && !previousExitHover) pulse(1U, 0.12F);
@@ -6308,9 +6436,26 @@ class Viewer {
         if (latticeHover_ != previous && latticeHover_) pulse(1U, 0.10F);
         if (latticePaintStroke_.update(
                 extrudeLatticeDraft_, latticeHover_, triggerPressed_[1])) {
+            publishToolConfiguration();
             pulse(1U, latticePaintStroke_.selecting() ? 0.34F : 0.20F);
         }
         return targeted;
+    }
+
+    void openExtrudeLattice() {
+        extrudeLatticeDraft_.clear();
+        latticePaintStroke_.reset();
+        thumbwheelControl_.reset();
+        thumbwheelHovered_ = false;
+        latticeOrigin_ = {};
+        latticeSquare_ = extrudePlane_.lattice == "SQUARE";
+        latticePlacement_.openDocked(
+            menuPlacement_.worldPoint({0.72F, 0.0F, 0.0F}),
+            menuPlacement_.orientation());
+        latticeOpen_ = true;
+        latticeHover_.reset();
+        latticeExitHovered_ = false;
+        publishToolConfiguration(); // Publish cleared cells and the new lattice together.
     }
 
     void activateRadialTool(size_t item) {
@@ -6351,18 +6496,7 @@ class Viewer {
         }
 
         if (mode == nadoc_vr::ToolMode::extrude) {
-            extrudeLatticeDraft_.clear();
-            latticePaintStroke_.reset();
-            thumbwheelControl_.reset();
-            thumbwheelHovered_ = false;
-            latticeOrigin_ = {};
-            latticeSquare_ = false;
-            latticePlacement_.openDocked(
-                menuPlacement_.worldPoint({0.72F, 0.0F, 0.0F}),
-                menuPlacement_.orientation());
-            latticeOpen_ = true;
-            latticeHover_.reset();
-            latticeExitHovered_ = false;
+            openExtrudeLattice();
         } else {
             latticeOpen_ = false;
             latticeHover_.reset();
@@ -6476,7 +6610,7 @@ class Viewer {
             if (hit >= 0 && menuHover_ < 0) menuHover_ = hit;
             if (menuPage_ == MenuPage::desktop && desktopPointer && hit < 0) {
                 desktopSurface_.setPointer(*desktopPointer);
-                if (triggerClicked_[hand] && !witness_) desktopSurface_.click();
+                if (triggerClicked_[hand] && !witness_ && !liveSocket_.enabled()) desktopSurface_.click();
                 continue;
             }
             if (hit < 0 || !triggerClicked_[hand]) continue;
@@ -6577,6 +6711,18 @@ class Viewer {
                 else if (hit == 3) changed = toolConfig_.adjustSecondary(1);
                 else if (hit == 4) changed = toolConfig_.cycleOption();
                 else if (hit == 5) changed = toolConfig_.toggleFlag();
+                else if (hit == 7) {
+                    if (toolConfig_.mode() == nadoc_vr::ToolMode::extrude) {
+                        freeformDraft_.clear();
+                        extrudePlane_.cycle();
+                        changed = true;
+                    }
+                }
+                else if (hit == 8 && freeformAvailable()) {
+                    if (freeformDraft_.placed()) freeformDraft_.clear();
+                    else { freeformDraft_.arm(); menuOpen_=false; latticeOpen_=false; }
+                    changed=true;
+                }
                 else {
                     menuPage_ = MenuPage::tools;
                     menuHover_ = -1;
@@ -6615,6 +6761,7 @@ class Viewer {
                         }
                         menuPage_ = MenuPage::tool_config;
                         menuHover_ = -1;
+                        if (mode == nadoc_vr::ToolMode::extrude) openExtrudeLattice();
                     } else if (toolConfig_.clear()) {
                         clearPlanePick();
                         clearPlaneGuides();
@@ -6622,12 +6769,14 @@ class Viewer {
                     }
                 } else if (hit < 9) {
                     const auto action = static_cast<nadoc_vr::ToolAction>(hit - 4);
-                    toolShell_.apply(action, selectedSelectionKind_);
+                    toolShell_.apply(action, selectedSelectionKind_, paintedExtrusionReady());
+                    if (action == nadoc_vr::ToolAction::confirm && toolShell_.mode() == nadoc_vr::ToolMode::extrude && !toolShell_.executionPending()) continue;
                     if (action == nadoc_vr::ToolAction::preview &&
                         toolShell_.previewRequested()) {
                         pendingToolTransform_.activate();
                         publishToolTransform();
                     } else if (action == nadoc_vr::ToolAction::cancel) {
+                        freeformDraft_.clear();
                         pendingToolTransform_.cancel();
                         publishToolTransform();
                     }
@@ -6668,6 +6817,7 @@ class Viewer {
 
     void updateControllerGuides() {
         controllerGuides_.clear();
+        controllerHandEnds_ = {};
         auto line = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& color) {
             controllerGuides_.push_back(Vertex{a, color, 1.0F});
             controllerGuides_.push_back(Vertex{b, color, 1.0F});
@@ -6690,7 +6840,10 @@ class Viewer {
             }
         };
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
-            if (!hands_[hand].valid) continue;
+            if (!hands_[hand].valid) {
+                controllerHandEnds_[hand] = controllerGuides_.size();
+                continue;
+            }
             glm::vec3 color = hand == 0U
                 ? glm::vec3(0.20F, 0.75F, 1.0F)
                 : glm::vec3(1.0F, 0.55F, 0.18F);
@@ -6732,11 +6885,23 @@ class Viewer {
             circle(sphereCenter, radius, 0, 1, sphereColor);
             circle(sphereCenter, radius, 0, 2, sphereColor);
             circle(sphereCenter, radius, 1, 2, sphereColor);
+            controllerHandEnds_[hand] = controllerGuides_.size();
         }
         if (hands_[0].valid && hands_[1].valid &&
             manipulator_.mode() == nadoc_vr::ManipulationMode::two_hand) {
             line(hands_[0].position, hands_[1].position, {0.95F, 0.35F, 1.0F});
         }
+        controllerPaths_.sample(hands_, latticeOpen_ ? std::optional<glm::vec3>(latticePlacement_.position()) : std::nullopt, latticePlacement_.orientation()*glm::vec3(0,0,1));
+        controllerContactGuides_ = {};
+        controllerPaths_.drawContact([&](const auto& a,const auto& b,const auto& color,bool actual) {
+            auto& guides=controllerContactGuides_[actual ? 1 : 0];
+            guides.push_back(Vertex{a,color,1.0F}); guides.push_back(Vertex{b,color,1.0F});
+        });
+        controllerPathGuides_.clear();
+        controllerPaths_.draw([&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& color) {
+            controllerPathGuides_.push_back(Vertex{a, color, 1.0F});
+            controllerPathGuides_.push_back(Vertex{b, color, 1.0F});
+        });
         const bool deformationTool = toolConfig_.active() &&
             (toolConfig_.mode() == nadoc_vr::ToolMode::twist ||
              toolConfig_.mode() == nadoc_vr::ToolMode::bend);
@@ -6902,6 +7067,9 @@ class Viewer {
                 }
             }
         }
+        freeformDraft_.preview(extrudeLatticeDraft_.cells(), latticeSquare_, extrudePlane_.plane,
+            toolConfig_.lengthBp()*toolConfig_.directionSign(), manipulator_.transform(),
+            normalizationCenter_, normalizationScale_, {0,0,-kViewDistanceMeters}, line);
         appendRadialToolGuides();
         appendLatticeGuides();
         const size_t menuGuideBegin = controllerGuides_.size();
@@ -7056,6 +7224,7 @@ class Viewer {
 
     void publishSelectionLevel(const std::string& level) {
         selectionLevel_ = level;
+        selectionLevelGuard_.requested(selectSequence_);
         ++levelSequence_;
         publishEventState();
     }
@@ -7101,6 +7270,7 @@ class Viewer {
 
     void publishToolIntent(nadoc_vr::ToolAction action) {
         lastToolAction_ = action;
+        lastToolConfigSequence_ = toolConfigSequence_;
         // Bind the intent to the acknowledged target visible at controller-click
         // time. Browser polling is asynchronous; looking up its later selection
         // could otherwise redirect Preview or Confirm to a different object.
@@ -7119,7 +7289,9 @@ class Viewer {
         publishEventState();
     }
 
+    bool freeformAvailable() const { return toolConfig_.mode()==nadoc_vr::ToolMode::extrude && toolConfig_.targetSelectionKind()=="none" && extrudePlane_.reason!="empty"; }
     void publishToolConfiguration() {
+        if (!toolConfig_.active() || !freeformAvailable()) freeformDraft_.clear();
         ++toolConfigSequence_;
         toolPreflightFeedback_.reset();
         preflightFeedbackSequence_ = 0;
@@ -7158,6 +7330,7 @@ class Viewer {
                << ",\"tool_mode\":\"" << nadoc_vr::toolModeName(toolShell_.mode())
                << "\",\"tool_action\":\""
                << nadoc_vr::toolActionName(lastToolAction_) << "\"";
+        output << ",\"tool_action_config_sequence\":" << lastToolConfigSequence_;
         output << ",\"tool_target_identity\":";
         identity(lastToolTargetIdentity_);
         output << ",\"tool_target_kind\":\"" << lastToolTargetKind_
@@ -7185,12 +7358,25 @@ class Viewer {
             output << ']';
             if (toolConfig_.mode() == nadoc_vr::ToolMode::extrude) {
                 output << ",\"length_bp\":" << toolConfig_.lengthBp()
+                       << ",\"extrude_from\":\"" << extrudePlane_.plane << "\""
+                       << ",\"extrude_from_reason\":\"" << extrudePlane_.reason << "\""
+            << ",\"freeform_armed\":" << (freeformDraft_.armed() ? "true" : "false")
+            << ",\"freeform_placed\":" << (freeformDraft_.placed() ? "true" : "false")
                        << ",\"direction_sign\":" << toolConfig_.directionSign()
                        << ",\"strand_filter\":\""
                        << nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter())
                        << "\",\"ligate_adjacent\":"
                        << (toolConfig_.ligateAdjacent() ? "true" : "false")
                        << ",\"footprint_state\":\"unresolved\"";
+                freeformDraft_.appendJson(output);
+                output << ",\"painted_footprint\":{\"lattice_type\":\""
+                       << (latticeSquare_ ? "SQUARE" : "HONEYCOMB") << "\",\"cells\":[";
+                for (size_t i = 0; i < extrudeLatticeDraft_.cells().size(); ++i) {
+                    if (i) output << ',';
+                    const auto& cell = extrudeLatticeDraft_.cells()[i];
+                    output << '[' << cell.row << ',' << cell.column << ']';
+                }
+                output << "]}";
             } else {
                 auto optionalInteger = [&](const std::optional<int32_t>& value) {
                     if (value) output << *value;
@@ -7272,7 +7458,7 @@ class Viewer {
         const std::string previousIdentity = selectedIdentity_;
         const std::vector<std::string> previousOwnerTokens = selectedOwnerTokens_;
         const std::string previousSelectionKind = selectedSelectionKind_;
-        selectionLevel_ = feedback->level;
+        if (selectionLevelGuard_.accepts(feedback->sequence)) selectionLevel_ = feedback->level;
         selectedIdentity_ = feedback->accepted && feedback->selected
             ? feedback->identity : "";
         selectedOwnerTokens_ = feedback->accepted && feedback->selected
@@ -7330,12 +7516,14 @@ class Viewer {
         toolExecutionFeedbackSequence_ = feedback->sequence;
         if (feedback->status == "succeeded") {
             if (feedback->action == "confirm") {
-                if (!glScene_->acceptToolCommit()) return;
+                if (feedback->mode == "move_rotate" && !glScene_->acceptToolCommit()) return;
                 committedFeatureLogEntryId_ = feedback->featureLogEntryId;
-                pendingToolTransform_.activate();
-                publishToolTransform();
+                if (feedback->mode == "move_rotate") {
+                    pendingToolTransform_.activate();
+                    publishToolTransform();
+                }
             } else {
-                if (!glScene_->acceptToolUndo()) return;
+                if (feedback->mode == "move_rotate" && !glScene_->acceptToolUndo()) return;
                 committedFeatureLogEntryId_.clear();
             }
         } else if (feedback->action == "undo" &&
@@ -7372,6 +7560,8 @@ class Viewer {
         return &*toolPreflightFeedback_;
     }
 
+    [[nodiscard]] bool paintedExtrusionReady() const { return nadoc_vr::extrusionCommitReady(toolConfig_, extrudeLatticeDraft_.cells().size(), toolConfigSequence_, currentToolPreflightFeedback(), !eventPath_.empty()) && !toolShell_.executionPending() && !freeformDraft_.armed(); }
+
     void pollToolContextFeedback() {
         if (toolFeedbackPath_.empty() || (++toolFeedbackPollFrame_ % 3U) != 0U ||
             !toolConfig_.active() || toolConfigSequence_ == 0) {
@@ -7403,6 +7593,7 @@ class Viewer {
                     latticeSquare_ = square;
                     latticeOrigin_ = feedback->footprintCell;
                     extrudeLatticeDraft_.clear();
+                    publishToolConfiguration();
                     latticeHover_.reset();
                     latticePaintStroke_.reset();
                     thumbwheelControl_.reset();
@@ -7536,7 +7727,373 @@ class Viewer {
         pulse(1U, accepted ? 0.60F : 0.20F);
     }
 
+    struct LiveEyeCapture {
+        int width = 0, height = 0;
+        std::vector<uint8_t> rgb, classes;
+        std::vector<float> depth;
+        std::vector<uint32_t> objectIds;
+        XrView view{XR_TYPE_VIEW};
+    };
+
+    void failLiveCapture(const char* reason) {
+        liveCaptureResult_ = "{\"status\":\"failed\",\"command_sequence\":" +
+            std::to_string(liveCapturePending_.value_or(0)) + ",\"error\":\"" + reason + "\"}";
+        liveCapturePending_.reset(); liveEyes_ = {};
+    }
+
+    void captureLiveEye(uint32_t index, const XrView& view, int width, int height) {
+        if (!liveCapturePending_ || index >= liveEyes_.size()) return;
+        auto& eye = liveEyes_[index];
+        if (width <= 0 || height <= 0 || width > 4096 || height > 4096) {
+            failLiveCapture("capture_dimensions"); return;
+        }
+        eye.width = width; eye.height = height; eye.view = view;
+        const auto pixels = static_cast<size_t>(width) * height;
+        eye.rgb.resize(pixels * 3); eye.classes.resize(pixels); eye.depth.resize(pixels);
+        eye.objectIds.resize(pixels);
+        GLint alignment = 4;
+        glGetIntegerv(GL_PACK_ALIGNMENT, &alignment);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, eye.rgb.data());
+        glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, eye.depth.data());
+        glReadPixels(0, 0, width, height, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, eye.classes.data());
+        glReadBuffer(GL_COLOR_ATTACHMENT1);
+        glReadPixels(0, 0, width, height, GL_RED_INTEGER, GL_UNSIGNED_INT, eye.objectIds.data());
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        // The final stencil describes panel/grid/controller occlusion, including
+        // depth-free UI. IDs under those overlays must not be reported as visible.
+        for (size_t pixel = 0; pixel < pixels; ++pixel) {
+            if (eye.classes[pixel] != static_cast<uint8_t>(nadoc_vr::SpectatorRenderClass::design)) {
+                eye.objectIds[pixel] = 0;
+            }
+        }
+        glPixelStorei(GL_PACK_ALIGNMENT, alignment);
+        if (glGetError() != GL_NO_ERROR) {
+            failLiveCapture("framebuffer_readback_failed");
+        }
+    }
+
+    void finishLiveCapture(bool submitted) {
+        if (!liveCapturePending_ || !submitted || liveEyes_[0].rgb.empty() || liveEyes_[1].rgb.empty()) return;
+        const auto sequence = *liveCapturePending_;
+        const auto directory = liveDirectory_ / ("capture-" + liveSession_ + "-" + std::to_string(sequence));
+        try {
+            std::filesystem::create_directory(directory);
+            std::filesystem::permissions(directory, std::filesystem::perms::owner_all);
+            auto binary = [&](const std::string& name, const void* bytes, size_t size) {
+                std::ofstream out(directory / name, std::ios::binary);
+                out.write(static_cast<const char*>(bytes), static_cast<std::streamsize>(size));
+                if (!out) throw std::runtime_error("capture write failed");
+            };
+            std::unordered_set<uint32_t> visible;
+            for (const auto& eye : liveEyes_) {
+                visible.insert(eye.objectIds.begin(), eye.objectIds.end());
+            }
+            std::vector<uint32_t> visibleIds(visible.begin(), visible.end());
+            std::sort(visibleIds.begin(), visibleIds.end());
+            const auto objects = glScene_->objectTable(visibleIds);
+            binary("objects.json", objects.data(), objects.size());
+            std::ostringstream metadata;
+            metadata << "{\"mirror\":" << liveMirrorCapture_.save(directory) << ",\"source\":\"application_swapchain\",\"xr_end_frame_succeeded\":true,"
+                "\"compositor_acknowledged\":false,\"object_ids_available\":true,"
+                "\"object_id_format\":\"uint32-native-endian-bottom-up\","
+                "\"object_id_scope\":\"viewer-session\",\"object_table\":\"objects.json\","
+                "\"object_id_zero\":\"background-or-nondesign-overlay\","
+                "\"object_id_visibility\":\"opaque-design-with-final-stencil-overlay-mask\","
+                "\"depth_format\":\"float32-native-endian-window-depth-bottom-up\","
+                "\"depth_near_m\":" << kNearMeters << ",\"depth_far_m\":" << kFarMeters
+                << ",\"controller_classes\":{\"left\":4,\"right\":5},\"contact_classes\":{\"intended\":6,\"actual\":7}"
+                << ",\"class_format\":\"uint8-bottom-up\",\"capture_command_sequence\":" << sequence
+                << ",\"state\":" << liveState() << ",\"eyes\":[";
+            for (size_t i = 0; i < liveEyes_.size(); ++i) {
+                const auto& eye = liveEyes_[i];
+                const std::string name = i == 0 ? "left" : "right";
+                nadoc_vr::scrywrite::writeActorEyeCapture(directory, name, eye.rgb, eye.width, eye.height);
+                binary(name + ".depth.f32", eye.depth.data(), eye.depth.size() * sizeof(float));
+                binary(name + ".classes.u8", eye.classes.data(), eye.classes.size());
+                binary(name + ".ids.u32", eye.objectIds.data(), eye.objectIds.size() * sizeof(uint32_t));
+                if (i) metadata << ',';
+                const auto& p = eye.view.pose;
+                const auto& f = eye.view.fov;
+                metadata << "{\"eye\":\"" << name << "\",\"width\":" << eye.width
+                    << ",\"height\":" << eye.height << ",\"position\":[" << p.position.x << ',' << p.position.y << ',' << p.position.z
+                    << "],\"orientation_xyzw\":[" << p.orientation.x << ',' << p.orientation.y << ',' << p.orientation.z << ',' << p.orientation.w
+                    << "],\"fov_left_right_up_down\":[" << f.angleLeft << ',' << f.angleRight << ',' << f.angleUp << ',' << f.angleDown << "]}";
+            }
+            metadata << "]}";
+            const auto data = metadata.str(); binary("evidence.json", data.data(), data.size());
+            liveCaptureResult_ = "{\"status\":\"complete\",\"command_sequence\":" + std::to_string(sequence)
+                + ",\"frame\":" + std::to_string(liveFrame_) + ",\"directory\":\""
+                + nadoc_vr::scrywrite::visualJson(directory.string()) + "\"}";
+        } catch (...) {
+            failLiveCapture("capture_write_failed");
+        }
+        liveCapturePending_.reset(); liveEyes_ = {};
+    }
+
+    bool liveControlsEnabled() const {
+        return liveSocket_.enabled() && liveMode_ != "inspect";
+    }
+
+    void neutralLiveInput(bool forgetPoses = true) {
+        if (forgetPoses) liveInput_ = {};
+        else {
+            liveInput_.menuPressed.fill(false);
+            liveInput_.triggerPressed.fill(false);
+            liveInput_.gripPressed.fill(false);
+        }
+        liveTrackpadPressed_.fill(false);
+        trackpadPressed_.fill(false);
+        radialToolMenu_.close();
+        latticePaintStroke_.reset();
+        thumbwheelControl_.reset();
+    }
+
+    std::vector<nadoc_vr::scrywrite::WitnessMenuEntry> liveTargets() const {
+        auto entries = witnessMenuEntries();
+        if (thumbwheelAvailable()) entries.push_back({"EXTRUDE LENGTH WHEEL", -2,
+            menuPlacement_.worldPoint({
+                (kThumbwheelBounds.minimum.x + kThumbwheelBounds.maximum.x) * 0.5F,
+                (kThumbwheelBounds.minimum.y + kThumbwheelBounds.maximum.y) * 0.5F, 0.0F}),
+            menuPlacement_.worldPoint({(kThumbwheelBounds.maximum.x-kThumbwheelBounds.minimum.x)*0.5F,0,0}) - menuPlacement_.worldPoint({0,0,0}),
+            menuPlacement_.worldPoint({0,(kThumbwheelBounds.maximum.y-kThumbwheelBounds.minimum.y)*0.5F,0}) - menuPlacement_.worldPoint({0,0,0})});
+        if (latticeOpen_) entries.push_back({"LATTICE EXIT", -3,
+            latticePlacement_.worldPoint({
+                (kLatticeExitBounds.minimum.x + kLatticeExitBounds.maximum.x) * 0.5F,
+                (kLatticeExitBounds.minimum.y + kLatticeExitBounds.maximum.y) * 0.5F, 0.0F}),
+            latticePlacement_.orientation()*glm::vec3((kLatticeExitBounds.maximum.x-kLatticeExitBounds.minimum.x)*0.5F*latticePlacement_.scale(),0,0),
+            latticePlacement_.orientation()*glm::vec3(0,(kLatticeExitBounds.maximum.y-kLatticeExitBounds.minimum.y)*0.5F*latticePlacement_.scale(),0)});
+        if (latticeOpen_) entries.push_back({"CENTER PAINT", -4,
+            latticePlacement_.worldPoint({0.0375F,-0.263F,0.0F}),
+            latticePlacement_.orientation()*glm::vec3(0.1075F*latticePlacement_.scale(),0,0),
+            latticePlacement_.orientation()*glm::vec3(0,0.035F*latticePlacement_.scale(),0)});
+        return entries;
+    }
+
+    std::string liveState() const {
+        auto quote = [](const std::string& value) {
+            return "\"" + nadoc_vr::scrywrite::visualJson(value) + "\"";
+        };
+        auto point = [](const glm::vec3& p) {
+            std::ostringstream out;
+            out << '[' << p.x << ',' << p.y << ',' << p.z << ']';
+            return out.str();
+        };
+        std::ostringstream out;
+        out << "{\"protocol\":1,\"session\":" << quote(liveSession_)
+            << ",\"mode\":" << quote(liveMode_)
+            << ",\"frame\":" << liveFrame_
+            << ",\"scene_visibility\":" << quote(liveSceneHidden_ ? "hidden" : "normal")
+            << ",\"controller_path_generation\":" << controllerPaths_.generation()
+            << ",\"command_sequence\":" << liveCommandSequence_
+            << ",\"predicted_display_time\":" << currentPredictedDisplayTime_
+            << ",\"view_state_flags\":" << currentViewStateFlags_
+            << ",\"xr_session_state\":" << static_cast<int>(sessionState_)
+            << ",\"focused\":" << (sessionState_ == XR_SESSION_STATE_FOCUSED ? "true" : "false")
+            << ",\"space\":\"OpenXR_LOCAL\",\"units\":\"meters\""
+            << ",\"menu\":" << quote(menuPageName())
+            << ",\"hover\":" << quote(witnessHoverName())
+            << ",\"tool\":" << quote(nadoc_vr::toolModeName(toolShell_.mode()))
+            << ",\"status\":" << quote(toolShell_.status())
+            << ",\"selection_identity\":" << quote(selectedIdentity_)
+            << ",\"selection_kind\":" << quote(selectedSelectionKind_)
+            << ",\"owner_tokens\":[";
+        for (size_t i = 0; i < selectedOwnerTokens_.size(); ++i) {
+            if (i) out << ',';
+            out << quote(selectedOwnerTokens_[i]);
+        }
+        out << "],\"tool_sequence\":" << toolSequence_
+            << ",\"painted_commit_ready\":" << (paintedExtrusionReady() ? "true" : "false")
+            << ",\"config_sequence\":" << toolConfigSequence_
+            << ",\"execution_feedback_sequence\":" << toolExecutionFeedbackSequence_
+            << ",\"committed_feature_id\":" << quote(committedFeatureLogEntryId_)
+            << ",\"browser_events_connected\":" << (!eventPath_.empty() ? "true" : "false")
+            << ",\"scene_revision\":" << sceneRefresh_.revision()
+            << ",\"visualization_sequence\":" << visualizationSequence_
+            << ",\"coordinate_sequence\":" << coordinateSequence_
+            << ",\"representation\":" << quote(glScene_ ? representationName(glScene_->representation()) : "none")
+            << ",\"layout\":" << quote(menuLayoutAudited_ ? menuLayoutAudit_.status() : "pending")
+            << ",\"layout_detail\":" << quote(menuLayoutAudited_ ? menuLayoutAudit_.summary() : "")
+            << ",\"menu_position\":" << point(menuPlacement_.position())
+            << ",\"menu_docked\":" << (menuPlacement_.worldDocked() ? "true" : "false")
+            << ",\"runtime_connected\":" << (instance_ != XR_NULL_HANDLE ? "true" : "false")
+            << ",\"head_position\":" << point(witnessObserverPosition_)
+            << ",\"presentation\":" << nadoc_vr::livePresentationJson(manipulator_.transform(), normalizationCenter_, normalizationScale_, {0,0,-kViewDistanceMeters})
+            << ",\"thumbwheel_position\":" << point(menuPlacement_.worldPoint({
+                (kThumbwheelBounds.minimum.x + kThumbwheelBounds.maximum.x) * 0.5F,
+                (kThumbwheelBounds.minimum.y + kThumbwheelBounds.maximum.y) * 0.5F, 0.0F}))
+            << ",\"controls\":[";
+        const auto entries = liveTargets();
+        for (size_t i = 0; i < entries.size(); ++i) {
+            if (i) out << ',';
+            out << "{\"label\":" << quote(entries[i].label)
+                << ",\"hit\":" << entries[i].hit
+                << ",\"position\":" << point(entries[i].worldPosition)
+                << ",\"hit_half_right\":" << point(entries[i].hitHalfRight)
+                << ",\"hit_half_up\":" << point(entries[i].hitHalfUp) << '}';
+        }
+        out << "],\"hands\":[";
+        for (size_t i = 0; i < hands_.size(); ++i) {
+            if (i) out << ',';
+            const auto& h = hands_[i];
+            out << "{\"valid\":" << (h.valid ? "true" : "false")
+                << ",\"input_owner\":" << quote(liveInputOwner_[i])
+                << ",\"position\":" << point(h.position)
+                << ",\"orientation_xyzw\":[" << h.orientation.x << ',' << h.orientation.y << ',' << h.orientation.z << ',' << h.orientation.w
+                << "],\"trigger\":" << (triggerPressed_[i] ? "true" : "false")
+                << ",\"grip\":" << (gripPressed_[i] ? "true" : "false") << '}';
+        }
+        out << "],\"extrude\":{\"open\":" << (latticeOpen_ ? "true" : "false")
+            << ",\"footprint_state\":\"unresolved\",\"commit_supported\":false"
+            << ",\"view_origin\":[" << latticeOrigin_.row << ',' << latticeOrigin_.column << ']'
+            << ",\"length_bp\":" << toolConfig_.lengthBp()
+            << ",\"extrude_from\":\"" << extrudePlane_.plane << "\""
+            << ",\"extrude_from_reason\":\"" << extrudePlane_.reason << "\""
+            << ",\"freeform_armed\":" << (freeformDraft_.armed() ? "true" : "false")
+            << ",\"freeform_placed\":" << (freeformDraft_.placed() ? "true" : "false")
+            << ",\"direction_sign\":" << toolConfig_.directionSign()
+            << ",\"wheel_hovered\":" << (thumbwheelHovered_ ? "true" : "false")
+            << ",\"wheel_dragging\":" << (thumbwheelControl_.dragging() ? "true" : "false")
+            << ",\"square\":" << (latticeSquare_ ? "true" : "false")
+            << ",\"wheel_notch_travel_m\":" << nadoc_vr::ThumbwheelControl::kNotchTravel * menuPlacement_.scale()
+            << ",\"base_pairs_per_detent\":" << nadoc_vr::latticeBasePairPeriod(latticeSquare_)
+            << ",\"lattice_hit_radius_m\":" << latticeCellRadius() * 1.08F * latticePlacement_.scale()
+            << ",\"menu_scale\":" << menuPlacement_.scale()
+            << ",\"panel_orientation_xyzw\":[" << latticePlacement_.orientation().x << ',' << latticePlacement_.orientation().y << ',' << latticePlacement_.orientation().z << ',' << latticePlacement_.orientation().w << ']'
+            << ",\"panel_position\":" << point(latticePlacement_.position())
+            << ",\"hover\":";
+        if (latticeHover_) out << '[' << latticeHover_->row << ',' << latticeHover_->column << ']';
+        else out << "null";
+        out << ",\"cells\":[";
+        for (size_t i = 0; i < extrudeLatticeDraft_.cells().size(); ++i) {
+            if (i) out << ',';
+            const auto& cell = extrudeLatticeDraft_.cells()[i];
+            out << '[' << cell.row << ',' << cell.column << ']';
+        }
+        out << "],\"visible_cells\":[";
+        if (latticeOpen_) {
+            const auto cells = visibleLatticeCells();
+            for (size_t i = 0; i < std::min(cells.size(), size_t{512}); ++i) {
+                if (i) out << ',';
+                const auto p = latticeCellPosition(cells[i]);
+                out << "{\"row\":" << cells[i].row << ",\"column\":" << cells[i].column
+                    << ",\"position\":" << point(latticePlacement_.worldPoint({p.x, p.y, 0.0F})) << '}';
+            }
+        }
+        out << "]},\"capture\":" << liveCaptureResult_ << ",\"measurement\":" << liveMeasure_.result() << '}';
+        return out.str();
+    }
+
+    std::string liveCommand(const std::string& text) {
+        if (text == "observe") return liveState();
+        std::istringstream in(text);
+        std::string session, operation, extra;
+        uint64_t sequence = 0;
+        if (!(in >> session >> sequence >> operation) || session != liveSession_ ||
+            sequence != liveCommandSequence_ + 1) return "{\"error\":\"stale_session_or_sequence\"}";
+        auto end = [&]() { if (in >> extra) throw std::runtime_error("trailing arguments"); };
+        auto hand = [&]() { int h = -1; if (!(in >> h) || h < 0 || h > 1) throw std::runtime_error("invalid hand"); return size_t(h); };
+        auto number = [&]() { float v = 0; if (!(in >> v) || !std::isfinite(v) || std::abs(v) > 100.0F) throw std::runtime_error("invalid finite number"); return v; };
+        if (operation == "scene_visibility") {
+            std::string visibility; in >> visibility; end();
+            if (visibility != "normal" && visibility != "hidden") throw std::runtime_error("invalid scene visibility");
+            liveSceneHidden_ = visibility == "hidden";
+        } else if (operation == "measure") {
+            std::array<double,4> roi{};
+            for(auto& v:roi) if(!(in >> v)) throw std::runtime_error("missing ROI");
+            end();
+            if(liveCapturePending_ || liveMeasure_.pending()) return "{\"error\":\"capture_busy\"}";
+            liveMeasure_.begin(sequence, roi);
+        } else if (operation == "capture") {
+            end();
+            if (liveCapturePending_ || liveMeasure_.pending()) return "{\"error\":\"capture_busy\"}";
+            liveCapturePending_ = sequence;
+            liveEyes_ = {}; liveMirrorCapture_ = {};
+            liveCaptureDeadline_ = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+            liveCaptureResult_ = "{\"status\":\"pending\",\"command_sequence\":" + std::to_string(sequence) + "}";
+        } else {
+            if (!liveControlsEnabled()) return "{\"error\":\"read_only\"}";
+            if (operation != "release" && sessionState_ != XR_SESSION_STATE_FOCUSED)
+                return "{\"error\":\"session_not_focused\"}";
+            if (operation == "release") { end(); neutralLiveInput(); }
+            else if (operation == "pose") {
+                const auto h = hand();
+                const float x = number(), y = number(), z = number();
+                const float qx = number(), qy = number(), qz = number(), qw = number();
+                end();
+                const glm::quat q(qw, qx, qy, qz);
+                if (glm::length(q) < 0.99F || glm::length(q) > 1.01F) throw std::runtime_error("quaternion must be normalized");
+                liveInput_.hands[h].position = {x,y,z};
+                liveInput_.hands[h].orientation = glm::normalize(q);
+                liveInput_.hands[h].valid = true;
+            } else if (operation == "button") {
+                const auto h = hand(); std::string button; int pressed = -1;
+                if (!(in >> button >> pressed) || (pressed != 0 && pressed != 1)) throw std::runtime_error("invalid button");
+                end();
+                if (button == "trigger") liveInput_.triggerPressed[h] = pressed;
+                else if (button == "grip") liveInput_.gripPressed[h] = pressed;
+                else if (button == "menu") liveInput_.menuPressed[h] = pressed;
+                else if (button == "trackpad") liveTrackpadPressed_[h] = pressed;
+                else throw std::runtime_error("unknown button");
+            } else if (operation == "aim" || operation == "aim_lattice" || operation == "aim_border") {
+                const auto h = hand(); glm::vec3 target{};
+                if (!liveInput_.hands[h].valid) throw std::runtime_error("set hand pose first");
+                if (operation == "aim") {
+                    std::string label; std::getline(in >> std::ws, label);
+                    const auto entry = nadoc_vr::scrywrite::findWitnessMenuEntry(
+                        liveTargets(), nadoc_vr::scrywrite::WitnessReplay::canonical(label));
+                    if (!entry) throw std::runtime_error("control not present");
+                    target = entry->worldPosition;
+                } else if (operation == "aim_lattice") {
+                    int row = 0, column = 0;
+                    if (!(in >> row >> column) || !latticeOpen_) throw std::runtime_error("lattice unavailable");
+                    end();
+                    const auto cells = visibleLatticeCells();
+                    const nadoc_vr::LatticeCell cell{row,column};
+                    if (std::find(cells.begin(), cells.end(), cell) == cells.end()) throw std::runtime_error("cell not visible");
+                    const auto p = glm::clamp(latticeCellPosition(cell),
+                        kLatticeGridBounds.minimum, kLatticeGridBounds.maximum);
+                    target = latticePlacement_.worldPoint({p.x,p.y,0.0F});
+                } else {
+                    std::string panel, edge;
+                    if (!(in >> panel >> edge)) throw std::runtime_error("missing border");
+                    end();
+                    const bool lattice = panel == "lattice";
+                    if ((!lattice && panel != "menu") || (lattice ? !latticeOpen_ : !menuOpen_)) throw std::runtime_error("panel unavailable");
+                    const auto bounds = lattice ? kLatticePanelBounds : menuPanelBounds();
+                    glm::vec3 local((bounds.minimum.x + bounds.maximum.x) * 0.5F, (bounds.minimum.y + bounds.maximum.y) * 0.5F, 0.0F);
+                    if (edge == "left") local.x = bounds.minimum.x;
+                    else if (edge == "right") local.x = bounds.maximum.x;
+                    else if (edge == "top") local.y = bounds.maximum.y;
+                    else if (edge == "bottom") local.y = bounds.minimum.y;
+                    else throw std::runtime_error("invalid edge");
+                    target = (lattice ? latticePlacement_ : menuPlacement_).worldPoint(local);
+                }
+                const auto q = nadoc_vr::scrywrite::witnessAimOrientation(liveInput_.hands[h].position, target);
+                if (!q) throw std::runtime_error("coincident target");
+                liveInput_.hands[h].orientation = *q;
+            } else if (operation == "activate") {
+                // Semantic entry point; subsequent interactions still use production hit tests.
+                std::string tool; in >> tool; end();
+                if (toolShell_.executionPending()) return "{\"error\":\"transaction_pending\"}";
+                const std::array<std::string, 4> names{"extrude", "twist", "bend", "move_rotate"};
+                const auto it = std::find(names.begin(), names.end(), tool);
+                if (it == names.end() || !liveInput_.hands[1].valid) throw std::runtime_error("invalid tool or right pose");
+                radialToolMenu_.open(liveInput_.hands[1], liveInput_.hands[1].position);
+                activateRadialTool(static_cast<size_t>(it - names.begin()));
+                radialToolMenu_.close();
+            } else throw std::runtime_error("unknown operation");
+            liveInputDeadline_ = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        }
+        liveCommandSequence_ = sequence;
+        return liveState();
+    }
+
     void syncActions(XrTime displayTime) {
+        if (liveControlsEnabled() && (sessionState_ != XR_SESSION_STATE_FOCUSED ||
+            std::chrono::steady_clock::now() > liveInputDeadline_))
+            neutralLiveInput(sessionState_ != XR_SESSION_STATE_FOCUSED);
         triggerClicked_.fill(false);
         gripClicked_.fill(false);
         if (sessionState_ != XR_SESSION_STATE_FOCUSED) {
@@ -7606,6 +8163,7 @@ class Viewer {
             if (witness_) {
                 triggerValues_[hand] = witness_->input().triggerPressed[hand] ? 1.0F : 0.0F;
             }
+            if (liveControlsEnabled()) triggerValues_[hand] = liveInput_.triggerPressed[hand] ? 1.0F : 0.0F;
             triggerPartial_[hand] = triggerValues_[hand] >= 0.15F;
             const bool wasPressed = triggerPressed_[hand];
             const float threshold = wasPressed ? 0.60F : 0.88F;
@@ -7627,6 +8185,7 @@ class Viewer {
                 }
             }
             if (witness_) hands_[hand] = witness_->input().hands[hand];
+            if (liveControlsEnabled()) hands_[hand] = liveInput_.hands[hand];
 
             getInfo.action = menuAction_;
             XrActionStateBoolean menu{XR_TYPE_ACTION_STATE_BOOLEAN};
@@ -7644,6 +8203,12 @@ class Viewer {
                 menuClicked = pressed && !witnessMenuPressed_[hand];
                 witnessMenuPressed_[hand] = pressed;
             }
+            if (liveControlsEnabled()) {
+                if (physicalMenuClicked) neutralLiveInput();
+                const bool pressed = liveInput_.menuPressed[hand];
+                menuClicked = pressed && !liveMenuPressed_[hand];
+                liveMenuPressed_[hand] = pressed;
+            }
             if (menuClicked) toggleMenu(hand);
 
             getInfo.action = gripAction_;
@@ -7653,6 +8218,7 @@ class Viewer {
             const bool wasGripPressed = gripPressed_[hand];
             gripPressed_[hand] = grip.isActive && grip.currentState;
             if (witness_) gripPressed_[hand] = witness_->input().gripPressed[hand];
+            if (liveControlsEnabled()) gripPressed_[hand] = liveInput_.gripPressed[hand];
             gripClicked_[hand] = !wasGripPressed && gripPressed_[hand];
             hands_[hand].pressed = gripPressed_[hand];
 
@@ -7660,7 +8226,8 @@ class Viewer {
             XrActionStateBoolean trackpad{XR_TYPE_ACTION_STATE_BOOLEAN};
             checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &trackpad),
                     "xrGetActionStateBoolean(trackpad click)");
-            const bool trackpadPressed = !witness_ && trackpad.isActive && trackpad.currentState;
+            const bool trackpadPressed = liveControlsEnabled() ? liveTrackpadPressed_[hand]
+                : !witness_ && trackpad.isActive && trackpad.currentState;
             const bool wasTrackpadPressed = trackpadPressed_[hand];
             const bool trackpadClicked = trackpadPressed && !wasTrackpadPressed;
             const bool trackpadReleased = !trackpadPressed && wasTrackpadPressed;
@@ -7676,7 +8243,7 @@ class Viewer {
             checkXr(instance_, xrGetActionStateVector2f(
                 session_, &getInfo, &trackpadAxis),
                 "xrGetActionStateVector2f(trackpad axis)");
-            const bool touching = !witness_ && trackpadTouch.isActive && trackpadTouch.currentState &&
+            const bool touching = !witness_ && !liveSocket_.enabled() && trackpadTouch.isActive && trackpadTouch.currentState &&
                                   trackpadAxis.isActive;
             const bool desktopActive = menuOpen_ && menuPage_ == MenuPage::desktop;
             if (touching && desktopActive) {
@@ -7835,10 +8402,14 @@ class Viewer {
                 if (hands_[hand].valid && hands_[hand].pressed) pulse(hand);
             }
         }
-        std::array<bool, 2> menuControlTargeted = processThumbwheelInput();
+        const auto wheelTargeted = processThumbwheelInput();
+        std::array<bool, 2> menuControlTargeted = wheelTargeted;
         if (menuOpen_) menuControlTargeted = processMenuInput(menuControlTargeted);
         const auto latticeTargeted = processLatticeInput(menuControlTargeted);
         for (size_t hand = 0; hand < menuControlTargeted.size(); ++hand) {
+            liveInputOwner_[hand] = (hand == 1U && radialToolMenu_.open()) ? "radial"
+                : wheelTargeted[hand] ? "wheel" : menuControlTargeted[hand] ? "menu"
+                : latticeTargeted[hand] ? "lattice" : hands_[hand].valid ? "scene" : "none";
             menuControlTargeted[hand] = menuControlTargeted[hand] ||
                                         latticeTargeted[hand];
         }
@@ -7847,6 +8418,13 @@ class Viewer {
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             if (menuControlTargeted[hand] || !triggerClicked_[hand] ||
                 !hands_[hand].valid) {
+                continue;
+            }
+            if (freeformDraft_.armed()) {
+                if (freeformDraft_.capture(hands_[hand],extrudePlane_.plane,manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})) {
+                    latticeOpen_=true; requestedMenuPage_=MenuPage::tool_config; menuOpenRequested_=true;
+                    publishToolConfiguration();
+                }
                 continue;
             }
             if (snapSelectionHits_[hand].empty()) {
@@ -7870,6 +8448,14 @@ class Viewer {
         pollPlanePickFeedback();
         pollToolPreflightFeedback();
         pollToolExecutionFeedback();
+        sceneRefresh_.poll(eventPath_, [&](const std::string& path) {
+            auto candidate = std::make_unique<GlScene>(loadScene(path, std::make_pair(normalizationCenter_, normalizationScale_)), liveSocket_.enabled(), glScene_->objectIdentities());
+            candidate->setStyle(glScene_->representation(), glScene_->coloring());
+            candidate->setVisualization(visualizationSnapshot_);
+            candidate->setSelectionHighlights({}, {}, committedSelectionOwnerTokens_, committedSelectionIdentities_);
+            if (glScene_->expanded()) (void)candidate->toggleExpanded();
+            glScene_.swap(candidate);
+        });
         updateControllerGuides();
     }
 
@@ -7911,9 +8497,9 @@ class Viewer {
         }
         headPosition /= static_cast<float>(viewCount);
         const XrQuaternionf& orientation = views_[0].pose.orientation;
-        manipulator_.recenter(
-            headPosition,
-            {orientation.w, orientation.x, orientation.y, orientation.z});
+        manipulator_.fitInView(
+            headPosition, {orientation.w, orientation.x, orientation.y, orientation.z},
+            glScene_->ownerBounds({}, glm::mat4(1.0F), true));
         pulse(recenterHand_, 0.55F);
         recenterRequested_ = false;
         updateControllerGuides();
@@ -8078,6 +8664,7 @@ class Viewer {
     }
 
     [[nodiscard]] bool spectatorClassificationEnabled() const {
+        if (liveSocket_.enabled()) return true;
         return mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off;
     }
 
@@ -8132,6 +8719,26 @@ class Viewer {
         glFramebufferRenderbuffer(
             GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
             swapchain.depth);
+        const bool captureIds = liveCapturePending_.has_value();
+        if (captureIds) {
+            if (!liveObjectIdTexture_) glGenTextures(1, &liveObjectIdTexture_);
+            glBindTexture(GL_TEXTURE_2D, liveObjectIdTexture_);
+            if (liveObjectIdWidth_ != swapchain.width || liveObjectIdHeight_ != swapchain.height) {
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_R32UI, swapchain.width, swapchain.height,
+                             0, GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                liveObjectIdWidth_ = swapchain.width;
+                liveObjectIdHeight_ = swapchain.height;
+            }
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1,
+                                   GL_TEXTURE_2D, liveObjectIdTexture_, 0);
+            const GLenum buffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+            glDrawBuffers(2, buffers);
+            const GLuint zero[] = {0, 0, 0, 0};
+            glClearBufferuiv(GL_COLOR, 1, zero);
+            glDrawBuffer(GL_COLOR_ATTACHMENT0);
+        }
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
             throw std::runtime_error("OpenXR framebuffer is incomplete");
         }
@@ -8148,13 +8755,13 @@ class Viewer {
         const glm::mat4 projection = projectionFromFov(view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
-        glScene_->render(
+        if (!liveSceneHidden_) glScene_->render(
             viewProjection, manipulator_.transform(),
             spectatorClassificationEnabled()
-                ? std::vector<Vertex>{} : controllerGuides_);
+                ? std::vector<Vertex>{} : controllerGuides_, captureIds);
         if (spectatorClassificationEnabled()) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
-            glScene_->renderGuides(viewProjection, controllerGuides_);
+            glScene_->renderGuides(viewProjection, controllerGuides_, &controllerHandEnds_);
         }
         if (referenceGrid_) {
             setSpectatorRenderClass(
@@ -8169,6 +8776,18 @@ class Viewer {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             witnessSurface_.renderPanel(
                 viewProjection, witnessObserverPosition_, witnessObserverOrientation_);
+        }
+        setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
+        glScene_->renderGuides(viewProjection, controllerPathGuides_);
+        for(size_t pass=0;pass<3;++pass) {
+            const size_t trace=pass==1 ? 1 : 0;
+            setSpectatorRenderClass(trace ? nadoc_vr::SpectatorRenderClass::contact_actual : nadoc_vr::SpectatorRenderClass::contact_intended);
+            glScene_->renderGuides(viewProjection, controllerContactGuides_[trace], nullptr, pass==0 ? 17.0F : pass==1 ? 9.0F : 3.0F);
+        }
+        captureLiveEye(index, view, swapchain.width, swapchain.height);
+        liveMeasure_.readEye(index, swapchain.width, swapchain.height);
+        if (captureIds) {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, 0, 0);
         }
         presentSpectatorMirror(index, view, swapchain.width, swapchain.height);
         finishSpectatorClassification();
@@ -8510,6 +9129,7 @@ class Viewer {
         sampleSpectatorPixels(
             view, true, viewport, framebuffer_,
             {0, 0, sourceWidth, sourceHeight});
+        if (liveCapturePending_) liveMirrorCapture_.read(destinationWidth,destinationHeight,viewIndex,viewport);
         finishSpectatorPresentation(viewport);
     }
 
@@ -8539,10 +9159,10 @@ class Viewer {
             view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
-        glScene_->render(
+        if (!liveSceneHidden_) glScene_->render(
             viewProjection, manipulator_.transform(), {});
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
-        glScene_->renderGuides(viewProjection, controllerGuides_);
+        glScene_->renderGuides(viewProjection, controllerGuides_, &controllerHandEnds_);
         if (referenceGrid_) {
             setSpectatorRenderClass(
                 nadoc_vr::SpectatorRenderClass::reference_grid);
@@ -8556,6 +9176,13 @@ class Viewer {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             witnessSurface_.renderPanel(
                 viewProjection, witnessObserverPosition_, witnessObserverOrientation_);
+        }
+        setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
+        glScene_->renderGuides(viewProjection, controllerPathGuides_);
+        for(size_t pass=0;pass<3;++pass) {
+            const size_t trace=pass==1 ? 1 : 0;
+            setSpectatorRenderClass(trace ? nadoc_vr::SpectatorRenderClass::contact_actual : nadoc_vr::SpectatorRenderClass::contact_intended);
+            glScene_->renderGuides(viewProjection, controllerContactGuides_[trace], nullptr, pass==0 ? 17.0F : pass==1 ? 9.0F : 3.0F);
         }
         sampleSpectatorPixels(view, false, viewport, 0, viewport);
         finishSpectatorClassification();
@@ -8578,7 +9205,7 @@ class Viewer {
             controllerGuides_.begin(),
             controllerGuides_.begin() + static_cast<std::ptrdiff_t>(
                 std::min(witnessActorGuideCount_, controllerGuides_.size())));
-        glScene_->render(
+        if (!liveSceneHidden_) glScene_->render(
             viewProjection, manipulator_.transform(),
             actorGuides);
         if (referenceGrid_) {
@@ -8641,6 +9268,7 @@ class Viewer {
         XrFrameWaitInfo waitInfo{XR_TYPE_FRAME_WAIT_INFO};
         XrFrameState frameState{XR_TYPE_FRAME_STATE};
         checkXr(instance_, xrWaitFrame(session_, &waitInfo, &frameState), "xrWaitFrame");
+        ++liveFrame_;
         currentPredictedDisplayTime_ = frameState.predictedDisplayTime;
         const auto frameStarted = std::chrono::steady_clock::now();
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
@@ -8754,6 +9382,8 @@ class Viewer {
         const auto sceneFinished = std::chrono::steady_clock::now();
         checkXr(instance_, xrEndFrame(session_, &endInfo), "xrEndFrame");
         const auto endFinished = std::chrono::steady_clock::now();
+        finishLiveCapture(layerCount > 0);
+        liveMeasure_.finish(layerCount > 0, liveFrame_);
         for (const auto& report : gpuFrameTimer_.takeReports()) {
             std::cout << "VR_METRIC event=process_progress phase=menu_gpu_timing"
                       << " menu_open=" << (report.menuOpen ? "true" : "false")
@@ -9044,6 +9674,20 @@ class Viewer {
         }
     }
 
+    void pollLive() {
+        liveMeasure_.expire();
+        if (liveCapturePending_ && std::chrono::steady_clock::now() > liveCaptureDeadline_) {
+            failLiveCapture("no_submitted_frame");
+        }
+        liveSocket_.poll([this](const std::string& command) {
+            try { return liveCommand(command); }
+            catch (const std::exception& error) {
+                return std::string("{\"error\":\"invalid_command\",\"detail\":\"") +
+                    nadoc_vr::scrywrite::visualJson(error.what()) + "\"}";
+            }
+        });
+    }
+
     void eventLoop() {
         std::cout << "NADOC VR viewer ready. Grip: move; both grips: resize; "
                      "grip a menu border or Desktop surface: move panel; "
@@ -9069,6 +9713,7 @@ class Viewer {
         while (!exitLoop_) {
             glfwPollEvents();
             pollXrEvents();
+            pollLive();
             if (glfwWindowShouldClose(window_) ||
                 glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS || gStopRequested) {
                 if (sessionRunning_) {
@@ -9089,7 +9734,21 @@ class Viewer {
         }
     }
 
+    nadoc_vr::scrywrite::LiveSocket liveSocket_;
+    nadoc_vr::scrywrite::WitnessInput liveInput_;
+    std::array<bool, 2> liveMenuPressed_{}, liveTrackpadPressed_{};
+    std::string liveSession_, liveMode_ = "inspect";
+    std::array<LiveEyeCapture, 2> liveEyes_{};
+    GLuint liveObjectIdTexture_ = 0;
+    int liveObjectIdWidth_ = 0, liveObjectIdHeight_ = 0;
+    std::optional<uint64_t> liveCapturePending_;
+    std::string liveCaptureResult_ = "null";
+    nadoc_metrics::LiveMeasure liveMeasure_;
+    std::filesystem::path liveDirectory_;
+    uint64_t liveFrame_ = 0, liveCommandSequence_ = 0;
+    std::chrono::steady_clock::time_point liveInputDeadline_{}, liveCaptureDeadline_{};
     SceneData sceneData_;
+    nadoc_vr::SceneRefreshInbox sceneRefresh_;
     std::string eventPath_;
     std::string feedbackPath_;
     std::string toolFeedbackPath_;
@@ -9146,6 +9805,8 @@ class Viewer {
     std::string lastSelectIdentity_;
     std::vector<std::string> lastSelectIdentities_;
     uint64_t levelSequence_ = 0;
+    nadoc_vr::SelectionLevelGuard selectionLevelGuard_;
+    nadoc_vr::FreeformDraft freeformDraft_;
     std::string selectionLevel_ = "default";
     uint64_t styleSequence_ = 0;
     std::string requestedRepresentation_ = "full";
@@ -9154,6 +9815,7 @@ class Viewer {
     std::string trajectoryAction_ = "none";
     uint32_t trajectoryRequestedFrameIndex_ = 0;
     uint64_t toolSequence_ = 0;
+    uint64_t lastToolConfigSequence_ = 0;
     nadoc_vr::ToolAction lastToolAction_ = nadoc_vr::ToolAction::activate;
     std::string lastToolTargetIdentity_;
     std::vector<std::string> lastToolTargetOwnerTokens_;
@@ -9262,6 +9924,13 @@ class Viewer {
     std::vector<std::string> committedSelectionOwnerTokens_;
     nadoc_vr::SceneManipulator manipulator_;
     std::vector<Vertex> controllerGuides_;
+    std::array<size_t, 2> controllerHandEnds_{};
+    std::array<std::string,2> liveInputOwner_{"none","none"};
+    bool liveSceneHidden_ = false;
+    nadoc_vr::LiveMirrorCapture liveMirrorCapture_;
+    nadoc_vr::ControllerPaths controllerPaths_;
+    std::vector<Vertex> controllerPathGuides_;
+    std::array<std::vector<Vertex>,2> controllerContactGuides_;
     std::vector<Vertex> menuGuides_;
     std::vector<Vertex> menuLocalGuides_;
     size_t witnessActorGuideCount_ = 0;
@@ -9285,6 +9954,7 @@ class Viewer {
     std::optional<nadoc_vr::LatticeCell> latticeHover_;
     bool latticeExitHovered_ = false;
     nadoc_vr::LatticeCell latticeOrigin_{};
+    nadoc_vr::ExtrudePlane extrudePlane_;
     bool latticeSquare_ = false;
     nadoc_vr::ThumbwheelControl thumbwheelControl_;
     bool thumbwheelHovered_ = false;
@@ -9386,10 +10056,13 @@ int main(int argc, char** argv) {
                      "[--scene-yaw <degrees>] [--scene-pitch <degrees>] "
                      "[--scene-roll <degrees>] "
                      "[--mirror-diagnostics <trace.jsonl>] "
+                     "[--controller-path <planned-path.txt>] "
                      "[--scrywrite-witness <script.scry>] "
                      "[--witness-captures <directory>] "
                      "[--witness-visual-expect <directory>] "
-                     "[--witness-exit <on|off>]\n";
+                     "[--witness-exit <on|off>] "
+                     "[--scrywrite-live <private-socket-path>] "
+                     "[--scrywrite-live-mode <inspect|control|transactions>]\n";
         return 2;
     }
     std::string eventPath;
@@ -9402,8 +10075,10 @@ int main(int argc, char** argv) {
     std::string visualizationPath;
     std::string trajectoryPath;
     std::string coordinatePath;
+    std::string liveSocketPath, liveMode = "inspect";
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
+    std::string controllerPath;
     std::string witnessCaptureDirectory;
     std::string witnessVisualExpectationDirectory;
     bool exitOnWitnessComplete = false;
@@ -9435,6 +10110,8 @@ int main(int argc, char** argv) {
         else if (option == "--visualization") visualizationPath = argv[index + 1];
         else if (option == "--trajectory") trajectoryPath = argv[index + 1];
         else if (option == "--coordinates") coordinatePath = argv[index + 1];
+        else if (option == "--scrywrite-live") liveSocketPath = argv[index + 1];
+        else if (option == "--scrywrite-live-mode") liveMode = argv[index + 1];
         else if (option == "--scrywrite-witness") witnessPath = argv[index + 1];
         else if (option == "--witness-captures") {
             witnessCaptureDirectory = argv[index + 1];
@@ -9450,6 +10127,7 @@ int main(int argc, char** argv) {
             }
             exitOnWitnessComplete = mode == "on";
         }
+        else if (option == "--controller-path") { controllerPath = argv[index + 1]; }
         else if (option == "--mirror-diagnostics") {
             mirrorDiagnosticsPath = argv[index + 1];
         }
@@ -9554,6 +10232,14 @@ int main(int argc, char** argv) {
         std::cerr << "NADOC VR error: invalid selected owner kind\n";
         return 2;
     }
+    if (liveMode != "inspect" && liveMode != "control" && liveMode != "transactions") {
+        std::cerr << "NADOC VR error: live mode must be inspect, control, or transactions\n";
+        return 2;
+    }
+    if (liveSocketPath.empty() && liveMode != "inspect") {
+        std::cerr << "NADOC VR error: live mode requires --scrywrite-live\n";
+        return 2;
+    }
     if (!witnessPath.empty() && !eventPath.empty()) {
         std::cerr << "NADOC VR error: ScryWrite Witness Mode refuses an event output "
                      "to prevent scripted design mutation\n";
@@ -9586,7 +10272,8 @@ int main(int argc, char** argv) {
             witnessPath, mirrorEye, referenceGrid, placeSceneInView,
             sceneViewPlacement,
             mirrorDiagnosticsPath, witnessCaptureDirectory,
-            witnessVisualExpectationDirectory, exitOnWitnessComplete);
+            witnessVisualExpectationDirectory, exitOnWitnessComplete, liveSocketPath, liveMode);
+        viewer.loadControllerPath(controllerPath);
         const int result = viewer.run();
         const double milliseconds = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - processStarted).count();

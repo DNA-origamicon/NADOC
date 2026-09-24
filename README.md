@@ -324,6 +324,15 @@ score percentile.  Mutual diversity is enforced by adding each generated sequenc
 to the corpus before generating the next.  Available per-overhang via the spreadsheet
 Gen button or in batch via Tools → Sequencing → Generate Overhangs.
 
+Generation also screens the complete staple and connected linker sequences with
+primer3 before accepting a candidate. Overhangs and linkers must pass the 30 °C
+hairpin/self-dimer cutoff; whole staples must not exceed either that cutoff or
+their fixed-body baseline. Accepted staple and linker sequences update together.
+If no candidate passes, generation leaves the design unchanged and explains the
+failure. Locked sub-domains are preserved. See
+[final-oligo screening](docs/overhang_generation_screening.md) for conditions,
+limits, and validation.
+
 ### Overhang binders & strand animation
 A dedicated **OH-binder** strand type designates oligos that hybridize to an
 overhang (the complement of a sticky end, a linker's binding domain, etc.).

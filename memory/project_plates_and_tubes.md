@@ -96,6 +96,12 @@ segregates modified/long staples into an IDT-ready tube list.
 - E2E verification (temp, deleted): cadnano + 3D editors against `Examples/NS_trans_fix.nadoc`
   (205 staples, 334 extensions) — auto-fill, tube segregation, persistence.
 
+## Hairpin/dimer ⚠ (2026-09-18)
+Records carry optional `warning` text + `warningLevel` → ⚠ badge on the well (amber; red when
+`critical`, Tm > 50 °C), appended to the hover tooltip, ⚠ in the tube row; clicking either opens the
+structure window (`onWarningClick`). `setWarnings(Map)` updates without re-layout. Both editors.
+See [[hairpin-dimer-checker]].
+
 ## Not built (future)
 - IDT plate-spec file export (Well Position/Name/Sequence). 384-well plates. 3D-scene click
   highlight uses `isolatedStrandId` (ghosts others) — could be a gentler glow. Block-move

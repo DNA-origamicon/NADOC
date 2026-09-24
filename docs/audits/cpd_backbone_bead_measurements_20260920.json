@@ -1,0 +1,226 @@
+[
+  {
+    "file": "workspace/2hb_1xT_CPD.nadoc",
+    "key": "__xb__:4a12dd44-bce2-46be-8296-093ce52d2ec9:0",
+    "rendered_bead_nm": [
+      1.4268157482147217,
+      2.5742058753967285,
+      4.472721099853516
+    ],
+    "distances": {
+      "P": {
+        "actual_distance_nm": 0.4777431789010513,
+        "standard_distance_nm": 0.37830812892375343
+      },
+      "C1'": {
+        "actual_distance_nm": 0.41201571860027747,
+        "standard_distance_nm": 0.4882269020924896
+      },
+      "C4'": {
+        "actual_distance_nm": 0.39930559418147643,
+        "standard_distance_nm": 0.5000394876427215
+      },
+      "O3'": {
+        "actual_distance_nm": 0.51110051267081,
+        "standard_distance_nm": 0.4045070945368847
+      }
+    },
+    "fits": {
+      "sugar_ring": {
+        "expected_bead_nm": [
+          1.37979986777827,
+          2.61800512374767,
+          4.380961774889718
+        ],
+        "bead_displacement_nm": 0.1120207163302129,
+        "fit_rms_nm": 0.00791353548821964
+      },
+      "sugar_phosphate": {
+        "expected_bead_nm": [
+          1.7763175045350552,
+          2.5659488949615756,
+          4.436711835679894
+        ],
+        "bead_displacement_nm": 0.3514488903144097,
+        "fit_rms_nm": 0.11146011418112925
+      },
+      "whole_residue": {
+        "expected_bead_nm": [
+          1.4090726617364098,
+          2.579132568876092,
+          4.494765681181384
+        ],
+        "bead_displacement_nm": 0.028723735696066312,
+        "fit_rms_nm": 0.14998251825684808
+      }
+    }
+  },
+  {
+    "file": "workspace/2hb_1xT_CPD.nadoc",
+    "key": "__xb__:54c5689d-127b-4693-bc11-f51121719fad:0",
+    "rendered_bead_nm": [
+      1.5968198776245117,
+      2.4628524780273438,
+      4.366231918334961
+    ],
+    "distances": {
+      "P": {
+        "actual_distance_nm": 0.5075946386514034,
+        "standard_distance_nm": 0.3209784747427687
+      },
+      "C1'": {
+        "actual_distance_nm": 0.3832035882559243,
+        "standard_distance_nm": 0.48823650426686893
+      },
+      "C4'": {
+        "actual_distance_nm": 0.37273395014864824,
+        "standard_distance_nm": 0.5000436428575301
+      },
+      "O3'": {
+        "actual_distance_nm": 0.4200245521071135,
+        "standard_distance_nm": 0.42133606853208416
+      }
+    },
+    "fits": {
+      "sugar_ring": {
+        "expected_bead_nm": [
+          1.5199680772196773,
+          2.5123685499757973,
+          4.530191539724491
+        ],
+        "bead_displacement_nm": 0.18772532608272927,
+        "fit_rms_nm": 0.010922265418685708
+      },
+      "sugar_phosphate": {
+        "expected_bead_nm": [
+          1.9163664159229223,
+          2.507229394472323,
+          4.267462017769805
+        ],
+        "bead_displacement_nm": 0.3373941228138288,
+        "fit_rms_nm": 0.1069168029054408
+      },
+      "whole_residue": {
+        "expected_bead_nm": [
+          1.599445076570746,
+          2.4623074810037746,
+          4.371443762391865
+        ],
+        "bead_displacement_nm": 0.005861058755591762,
+        "fit_rms_nm": 0.17258916970920518
+      }
+    }
+  },
+  {
+    "file": "workspace/2hb_1xT_CPD_relaxed_v2.nadoc",
+    "key": "__xb__:4a12dd44-bce2-46be-8296-093ce52d2ec9:0",
+    "rendered_bead_nm": [
+      1.4268157482147217,
+      2.5742058753967285,
+      4.472721099853516
+    ],
+    "distances": {
+      "P": {
+        "actual_distance_nm": 0.4777431789010513,
+        "standard_distance_nm": 0.37830812892375343
+      },
+      "C1'": {
+        "actual_distance_nm": 0.41201571860027747,
+        "standard_distance_nm": 0.4882269020924896
+      },
+      "C4'": {
+        "actual_distance_nm": 0.39930559418147643,
+        "standard_distance_nm": 0.5000394876427215
+      },
+      "O3'": {
+        "actual_distance_nm": 0.51110051267081,
+        "standard_distance_nm": 0.4045070945368847
+      }
+    },
+    "fits": {
+      "sugar_ring": {
+        "expected_bead_nm": [
+          1.37979986777827,
+          2.61800512374767,
+          4.380961774889718
+        ],
+        "bead_displacement_nm": 0.1120207163302129,
+        "fit_rms_nm": 0.00791353548821964
+      },
+      "sugar_phosphate": {
+        "expected_bead_nm": [
+          1.7763175045350552,
+          2.5659488949615756,
+          4.436711835679894
+        ],
+        "bead_displacement_nm": 0.3514488903144097,
+        "fit_rms_nm": 0.11146011418112925
+      },
+      "whole_residue": {
+        "expected_bead_nm": [
+          1.4090726617364098,
+          2.579132568876092,
+          4.494765681181384
+        ],
+        "bead_displacement_nm": 0.028723735696066312,
+        "fit_rms_nm": 0.14998251825684808
+      }
+    }
+  },
+  {
+    "file": "workspace/2hb_1xT_CPD_relaxed_v2.nadoc",
+    "key": "__xb__:54c5689d-127b-4693-bc11-f51121719fad:0",
+    "rendered_bead_nm": [
+      1.5968198776245117,
+      2.4628524780273438,
+      4.366231918334961
+    ],
+    "distances": {
+      "P": {
+        "actual_distance_nm": 0.5075946386514034,
+        "standard_distance_nm": 0.3209784747427687
+      },
+      "C1'": {
+        "actual_distance_nm": 0.3832035882559243,
+        "standard_distance_nm": 0.48823650426686893
+      },
+      "C4'": {
+        "actual_distance_nm": 0.37273395014864824,
+        "standard_distance_nm": 0.5000436428575301
+      },
+      "O3'": {
+        "actual_distance_nm": 0.4200245521071135,
+        "standard_distance_nm": 0.42133606853208416
+      }
+    },
+    "fits": {
+      "sugar_ring": {
+        "expected_bead_nm": [
+          1.5199680772196773,
+          2.5123685499757973,
+          4.530191539724491
+        ],
+        "bead_displacement_nm": 0.18772532608272927,
+        "fit_rms_nm": 0.010922265418685708
+      },
+      "sugar_phosphate": {
+        "expected_bead_nm": [
+          1.9163664159229223,
+          2.507229394472323,
+          4.267462017769805
+        ],
+        "bead_displacement_nm": 0.3373941228138288,
+        "fit_rms_nm": 0.1069168029054408
+      },
+      "whole_residue": {
+        "expected_bead_nm": [
+          1.599445076570746,
+          2.4623074810037746,
+          4.371443762391865
+        ],
+        "bead_displacement_nm": 0.005861058755591762,
+        "fit_rms_nm": 0.17258916970920518
+      }
+    }
+  }
+]

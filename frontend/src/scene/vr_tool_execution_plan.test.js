@@ -37,6 +37,12 @@ const endContext = overrides => ({
 })
 
 describe('native VR parameterized tool execution plans', () => {
+  it('refuses a draft plane that conflicts with an existing end', () => {
+    const result = buildVRParameterizedToolPlan(endDraft({ extrude_from: 'XZ' }), {
+      toolTarget: target(endRef, { toolContext: endContext() }), design, geometry,
+    })
+    expect(result.reason).toBe('source_plane_mismatch')
+  })
   it('maps an exact free End to the desktop continuation operation without executing it', () => {
     const result = buildVRParameterizedToolPlan(endDraft(), {
       toolTarget: target(endRef, { toolContext: endContext() }), design, geometry,
@@ -45,7 +51,7 @@ describe('native VR parameterized tool execution plans', () => {
       accepted: true,
       reason: 'ready_read_only',
       plan: {
-        kind: 'extrude_continuation', targetIdentity: 'nuc:end',
+        kind: 'extrude_continuation', targetIdentity: 'nuc:end', targetOwnerTokens:['owner:end'],
         preflight: {
           apiMethod: 'validateBundleContinuation',
           arguments: {
@@ -178,4 +184,15 @@ describe('native VR parameterized tool execution plans', () => {
     expect(failed.feedback.status).toBe('error')
     expect(failed.feedback.reason).toBe('request_failed')
   })
+})
+
+
+it('carries the canonical frame into both end preflight and commit', () => {
+  const result = buildVRParameterizedToolPlan(endDraft(), {
+    toolTarget:target(endRef,{ toolContext:endContext({ sourceFrameId:'frame' }) }), design:{...design,id:'doc'}, geometry,revision:7,
+  })
+  expect(result.plan.preflight.arguments.sourceFrameId).toBe('frame')
+  expect(result.plan.commit.arguments.sourceFrameId).toBe('frame')
+  expect(result.plan.preflight.arguments).toMatchObject({expectedDesignId:'doc',expectedRevision:7})
+  expect(result.plan.commit.arguments).toMatchObject({expectedDesignId:'doc',expectedRevision:7})
 })

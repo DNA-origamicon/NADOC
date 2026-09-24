@@ -1,3 +1,5 @@
+import { createLatticeFramePicker, helicesInFrame, framePlane } from './lattice_frame_picker.js'
+
 /**
  * Sliceview — SVG lattice grid for helix activation/deactivation.
  *
@@ -99,6 +101,12 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
   let _design   = null
   let _panZoom  = null
   let _fitDone  = false
+  const framePicker = createLatticeFramePicker(containerEl, () => {
+    _fitDone = false
+    _render()
+    const plane = framePlane(_design, framePicker.frameId())
+    _buildLegend(LEGEND_AXES[_nativeOrientation ? plane : 'XY-3D'] ?? LEGEND_AXES.XY)
+  })
 
   // Orientation mode.
   // true  → cadnano native: row 0 at top, Y-down, cadnano2 phase convention.
@@ -335,7 +343,7 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
     const map = new Map()
     if (!_design?.helices) return map
     const isHC = _design.lattice_type === 'HONEYCOMB'
-    for (const h of _design.helices) {
+    for (const h of helicesInFrame(_design, framePicker.frameId())) {
       const cell = h.grid_pos
         ? { row: h.grid_pos[0], col: h.grid_pos[1] }
         : isHC ? hcNmToCell(h.axis_start.x, h.axis_start.y)
@@ -440,6 +448,9 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
 
       const g = document.createElementNS(NS, 'g')
       g.setAttribute('class', `sv-cell ${entry ? 'occupied' : 'empty'}`)
+      g.dataset.row = String(cell.row)
+      g.dataset.col = String(cell.col)
+      if (entry) g.dataset.helixId = entry.helix.id
       g.setAttribute('transform', `translate(${px.toFixed(1)},${py.toFixed(1)})`)
 
       // Tooltip
@@ -497,7 +508,7 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
       g.addEventListener('click', (e) => {
         if (e._svgPanZoomDragged) return
         e.stopPropagation()
-        entry ? onRemoveHelix(entry.helix.id) : onAddHelix({ row: cell.row, col: cell.col })
+        entry ? onRemoveHelix(entry.helix.id) : onAddHelix({ row: cell.row, col: cell.col, latticeFrameId: framePicker.frameId() })
       })
 
       viewport.appendChild(g)
@@ -560,19 +571,19 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
     }
     _panZoom.zoomBy(targetReal / currentReal)
 
-    // After zoom, recompute and pan so the bbox centre lands on the viewport
-    // centre. pixel = (svg − viewBox.x) * realZoom + pan.
-    const newSizes = _panZoom.getSizes()
-    const realZ    = newSizes.realZoom
-    const vbx      = newSizes.viewBox?.x ?? 0
-    const vby      = newSizes.viewBox?.y ?? 0
-    const cx = bx + bw / 2
-    const cy = by + bh / 2
-    const panX = Vw / 2 - (cx - vbx) * realZ
-    const panY = Vh / 2 - (cy - vby) * realZ
-    if (isFinite(panX) && isFinite(panY)) {
-      _panZoom.pan({ x: panX, y: panY })
-    }
+    // svg-pan-zoom applies its CTM on the next frame and may remove viewBox.
+    // Measure displayed cells after that update instead of mixing the library's
+    // cached viewBox origin with SVG coordinates (which clipped edge helices).
+    requestAnimationFrame(() => {
+      const boxes = [...svgEl.querySelectorAll('.sv-cell.occupied')]
+        .map(cell => cell.getBoundingClientRect())
+      if (!boxes.length) return
+      const viewport = svgEl.getBoundingClientRect()
+      const cx = (Math.min(...boxes.map(b => b.left)) + Math.max(...boxes.map(b => b.right))) / 2
+      const cy = (Math.min(...boxes.map(b => b.top)) + Math.max(...boxes.map(b => b.bottom))) / 2
+      _panZoom.panBy({ x: viewport.left + viewport.width/2 - cx,
+        y: viewport.top + viewport.height/2 - cy })
+    })
   }
 
   // Initial render (empty grid)
@@ -586,9 +597,10 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
      */
     update(design) {
       _design = design
+      if (framePicker.update(design)) _fitDone = false
       _render()
       // Update legend axes from design plane (inferred from helix ID format h_PLANE_row_col).
-      const plane = design?.helices?.[0]?.id?.split('_')[1]
+      const plane = framePlane(design, framePicker.frameId())
       const key   = _nativeOrientation ? (plane ?? 'XY') : 'XY-3D'
       _buildLegend(LEGEND_AXES[key] ?? LEGEND_AXES.XY)
     },
@@ -623,7 +635,7 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
       _fitDone = false   // re-fit after flip so content stays centered
       _render()
       // Rebuild legend: pick the 3D variant when not native, otherwise use design plane.
-      const plane = _design?.helices?.[0]?.id?.split('_')[1]
+      const plane = framePlane(_design, framePicker.frameId())
       const key   = native ? (plane ?? 'XY') : 'XY-3D'
       _buildLegend(LEGEND_AXES[key] ?? LEGEND_AXES.XY)
     },

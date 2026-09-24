@@ -671,6 +671,8 @@ def photoproduct_patch_plan(
                     "resid": resid,
                 }
             )
+        from backend.core.cpd_preliminary import validate_internal_patch
+        validate_internal_patch(entry, derived, model)
         patch = {
             "lesion_id": lesion.id,
             "product_id": entry["id"],

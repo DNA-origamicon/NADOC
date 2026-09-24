@@ -30,5 +30,11 @@ Merged to `master` on 2026-04-15 (commit 80a64f8).
 - Sequence column strips terminal overhang bases from display (dsDNA portion only)
 - Toast on Gen cites algorithm DOI
 
+**Hairpin/dimer auto-check (2026-09-18):** every generate path (single, sub-domain, bulk) emits
+`onOverhangSequencesGenerated(ids)`; the checker re-checks just those overhangs with primer3 Tm
+(> 30 °C → ⚠ + toast). Bulk generate now returns `generated_overhang_ids`. The generator's own
+`_filter_structure` is still the string heuristic, so fresh sequences can be flagged. See
+[[hairpin-dimer-checker]].
+
 **Why:** User wanted rare overhang sequences that avoid off-target binding and secondary structure.
 **How to apply:** When touching overhang sequence generation, see `backend/core/overhang_generator.py`.

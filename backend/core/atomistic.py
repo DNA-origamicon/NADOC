@@ -461,6 +461,9 @@ def apply_nucleotide_transforms(atoms: list[Atom], design: Design) -> set[str]:
     to neighbouring residues: these poses are authored NAMD starting conditions,
     not topology edits or a geometry relaxation pass.
     """
+    if any(p.design_coordinates for p in design.photoproduct_junctions):
+        from backend.core.cpd_design import apply_design_coordinates
+        apply_design_coordinates(atoms, design)
     transforms = design.nucleotide_transforms
     if not transforms or not atoms:
         return set()
@@ -815,7 +818,7 @@ def _native_local_defs(residue: str, dir_str: str):
 
     The measured placement is NATIVE: this is what NADOC draws and what it exports to
     every simulation, and the 1ZEW-derived ``_SUGAR``/``BASE_TEMPLATES`` below survive
-    only as the comparison the Help ▸ New Positioning toggle switches back to.
+    for calibrated extra-base/tail placement and local reference frames.
 
     Returned in the LEGACY frame's local coordinates on purpose.  The legacy frame is a
     fixed rigid transform of the measured base-pair frame (proved exactly — it is even
@@ -824,15 +827,12 @@ def _native_local_defs(residue: str, dir_str: str):
     measured-native by swapping these numbers in, with no frame changes at all.
     Round-trip against the direct base-pair-frame stamp: 5.7e-16 nm.
 
-    Returns ``None`` if the measured data file is unavailable, so every caller degrades
-    to the legacy templates rather than failing.
+    The native template is required; missing data must not silently resurrect the
+    retired legacy duplex geometry. Extra/tail templates are separate calibrations.
     """
     from backend.core import measured_atomistic as _ma
 
-    try:
-        sugar, base = _ma.legacy_local_templates()[(dir_str, residue)]
-    except (_ma.MeasuredTemplateUnavailable, KeyError):
-        return None
+    sugar, base = _ma.legacy_local_templates()[(dir_str, residue)]
     return list(sugar) + list(base)
 
 
@@ -1251,13 +1251,7 @@ def _rigid_frame_calibration() -> dict:
         # reading a different template here would bake the difference into the
         # calibration and the placer would stop reproducing the design build.
         defs = _native_local_defs(residue, direction.name)
-        if defs is not None:
-            return {n: _np.array([x, y, z]) for n, _e, x, y, z in defs}
-        d = {n: _np.array([x, y, z]) for n, _e, x, y, z in _SUGAR}
-        base = BASE_TEMPLATES if direction == Direction.FORWARD else BASE_TEMPLATES_REV
-        for n, _e, x, y, z in base[residue][0]:
-            d[n] = _np.array([x, y, z])
-        return d
+        return {n: _np.array([x, y, z]) for n, _e, x, y, z in defs}
 
     def _kabsch(P: _np.ndarray, W: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
         Pc, Wc = P.mean(0), W.mean(0)
@@ -1930,11 +1924,9 @@ def build_atomistic_model(
       close the O3′→P chain.  Nothing here decides where an extra base belongs —
       the CG view does, and this follows it.
 
-    ``measured_positioning`` (DEFAULT, i.e. native) uses the MD-measured templates in
-    ``measured_atomistic.py`` — see that module for what was measured and how.  This is
-    what NADOC draws AND what it hands to every simulation and export; passing False
-    reverts to the 1ZEW-derived templates, which is what the Help ▸ New Positioning
-    toggle switches back to for comparison.
+    Measured placement is the sole duplex template. The ``measured_positioning``
+    argument is accepted for compatibility, but both values use today's native
+    geometry; the legacy viewer comparison has been retired.
 
     Measured placement covers the duplex stamping path, the surface point cloud, the
     fast client-side stamp descriptor and the oxDNA rigid-frame calibration.
@@ -1960,15 +1952,6 @@ def build_atomistic_model(
     authoritative result of a simulation or reconstruction.
 
     """
-    measured_tmpl = None
-    if measured_positioning:
-        from backend.core import measured_atomistic as _ma
-
-        try:
-            measured_tmpl = _ma.measured_templates()
-        except _ma.MeasuredTemplateUnavailable:
-            measured_tmpl = None  # fall back to legacy rather than fail the view
-
     # frame_sink requires the full per-nucleotide loop (the cached-reference fast
     # path never computes per-nucleotide frames), so requesting one forces it.
     #
@@ -1984,6 +1967,8 @@ def build_atomistic_model(
             )
             if apply_design_geometry:
                 apply_nucleotide_transforms(model.atoms, design)
+                from backend.core.cpd_design import add_design_bonds
+                add_design_bonds(model, design)
             if design.nanoparticle_conjugations:
                 from backend.core.nanoparticle_atomistic import append_nanoparticle_linkers
 
@@ -2001,7 +1986,6 @@ def build_atomistic_model(
     helix_map = {h.id: effective_helix_for_geometry(h, design) for h in design.helices}
 
     seq_map = _build_sequence_map(design)
-    sugar_template = _SUGAR
 
     # Pre-compute the 3′-terminal keys (domain.end_bp) that immediately precede
     # extra-base crossover junctions.  These keys must be skipped in the direct
@@ -2303,14 +2287,8 @@ def build_atomistic_model(
                     # frame, a prepared display frame, a deformed axis.  Those branches
                     # never compute an axis point, so a frame-based swap would have
                     # silently left them on 1ZEW geometry while everything else moved.
-                    _sugar_defs, _base_defs = sugar_template, None
-                    if measured_tmpl is not None:
-                        _mt = _native_local_defs(residue, dir_str)
-                        if _mt is not None:
-                            _sugar_defs, _base_defs = (
-                                _mt[: len(_SUGAR)],
-                                _mt[len(_SUGAR) :],
-                            )
+                    _mt = _native_local_defs(residue, dir_str)
+                    _sugar_defs, _base_defs = _mt[: len(_SUGAR)], _mt[len(_SUGAR) :]
 
                     # Record the per-nucleotide rigid frame (UNDEFORMED — the
                     # deformation/cluster post-pass below runs after this loop) so a
@@ -2358,11 +2336,8 @@ def build_atomistic_model(
                         if direction == Direction.FORWARD
                         else BASE_TEMPLATES_REV
                     )
-                    base_atoms_def, base_bond_defs = tmpl_dict[residue]
-                    if _base_defs is not None:
-                        # Bond table is unchanged — the measured template carries the
-                        # same atom names, which is why it drops straight in here.
-                        base_atoms_def = _base_defs
+                    _, base_bond_defs = tmpl_dict[residue]
+                    base_atoms_def = _base_defs
                     base_name_to_serial: dict[str, int] = {**sugar_name_to_serial}
                     for atom_name, element, n, y, z_local in base_atoms_def:
                         local = _np.array([n, y, z_local])
@@ -2590,7 +2565,7 @@ def build_atomistic_model(
     # Do not touch the display geometry serializer on designs with no inserts. Besides
     # avoiding needless work, this preserves the rigid oxDNA-frame calibration's hard
     # dependency firewall: that constant is derived only from raw helical sites.
-    if measured_positioning and endpoint_keys:
+    if endpoint_keys:
         from backend.core.design_geometry import _geometry_for_design
 
         placement_design = design.model_copy(
@@ -2722,6 +2697,9 @@ def build_atomistic_model(
         apply_nucleotide_transforms(atoms, design)
 
     model = AtomisticModel(atoms=atoms, bonds=bonds)
+    if apply_design_geometry:
+        from backend.core.cpd_design import add_design_bonds
+        add_design_bonds(model, design)
     if include_proteins:
         model = _append_protein_atoms(model, design)
     if design.nanoparticle_conjugations:
@@ -2768,13 +2746,7 @@ def _template_local_map(residue: str, dir_str: str) -> dict:
     base template.  Mirrors the calibration's _local helper (one source of truth for
     what 'the fixed template' is)."""
     defs = _native_local_defs(residue, dir_str)
-    if defs is not None:
-        return {name: (n, y, z) for name, _e, n, y, z in defs}
-    d = {name: (n, y, z) for name, _e, n, y, z in _SUGAR}
-    base = BASE_TEMPLATES if dir_str == "FORWARD" else BASE_TEMPLATES_REV
-    for name, _e, n, y, z in base[residue][0]:
-        d[name] = (n, y, z)
-    return d
+    return {name: (n, y, z) for name, _e, n, y, z in defs}
 
 
 @_functools.lru_cache(maxsize=8)
@@ -2786,13 +2758,8 @@ def _surface_stamp_templates() -> dict:
     template."""
     out: dict = {}
     for residue in BASE_TEMPLATES:
-        for dir_str, base_tmpl in (
-            ("FORWARD", BASE_TEMPLATES),
-            ("REVERSE", BASE_TEMPLATES_REV),
-        ):
+        for dir_str in ("FORWARD", "REVERSE"):
             defs = _native_local_defs(residue, dir_str)
-            if defs is None:
-                defs = list(_SUGAR) + list(base_tmpl[residue][0])
             local = _np.array([[n, y, z] for _name, _e, n, y, z in defs], dtype=float)
             radii = _np.array(
                 [VDW_RADIUS.get(e, VDW_RADIUS["C"]) for _name, e, *_ in defs],

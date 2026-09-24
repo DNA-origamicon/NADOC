@@ -4,6 +4,29 @@
 
 import { _request, _syncFromDesignResponse } from './client.js'
 
+// Listeners told which overhangs just received a GENERATED sequence (single,
+// sub-domain or bulk generate) — the hairpin/dimer checker re-checks exactly those.
+const _generatedListeners = new Set()
+
+/** Subscribe to overhang-sequence generation; returns an unsubscribe function. */
+export function onOverhangSequencesGenerated(fn) {
+  _generatedListeners.add(fn)
+  return () => _generatedListeners.delete(fn)
+}
+
+function _emitGenerated(overhangIds) {
+  if (!overhangIds?.length) return
+  for (const fn of _generatedListeners) {
+    try { fn(overhangIds) } catch (err) { console.error('[overhang generated]', err) }
+  }
+}
+
+/** Read-only hairpin / self-dimer check (backend/core/hairpin_dimer.py).
+ *  body: { overhang_ids?, strand_ids?, threshold_c? } — empty = whole design. */
+export async function checkHairpinDimer(body = {}, { quiet = false } = {}) {
+  return _request('POST', '/design/hairpin-dimer-check', body, { suppressBusy: quiet })
+}
+
 export async function extrudeOverhang({ helixId, bpIndex, direction, isFivePrime, neighborRow, neighborCol, lengthBp }) {
   const json = await _request('POST', '/design/overhang/extrude', {
     helix_id:      helixId,
@@ -49,7 +72,9 @@ export async function generateOverhangRandomSequence(overhangId, { deferReassign
   // is already in the store.  The generic sync fallback would otherwise issue
   // a full GET /design/geometry; on deformed designs that also recomputes the
   // embedded straight geometry, making a sequence-only edit take several seconds.
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  const ok = await _syncFromDesignResponse(json, { skipGeometry: true })
+  if (json) _emitGenerated([overhangId])
+  return ok
 }
 
 /**
@@ -163,7 +188,9 @@ export async function generateRandomSequence(length) {
 export async function generateAllOverhangSequences() {
   const json = await _request('POST', '/design/generate-overhang-sequences')
   if (!json) return null
-  return { ok: _syncFromDesignResponse(json), count: json.generated_count ?? 0 }
+  const ok = await _syncFromDesignResponse(json)
+  _emitGenerated(json.generated_overhang_ids ?? [])
+  return { ok, count: json.generated_count ?? 0 }
 }
 
 // ── Phase 3: sub-domain CRUD wrappers ──────────────────────────────────────────
@@ -216,7 +243,9 @@ export async function generateSubDomainRandom(overhangId, subDomainId, { seed } 
     `/design/overhang/${encodeURIComponent(overhangId)}/sub-domains/${encodeURIComponent(subDomainId)}/generate-random`,
     body,
   )
-  return _syncFromDesignResponse(json)
+  const ok = await _syncFromDesignResponse(json)
+  if (json) _emitGenerated([overhangId])
+  return ok
 }
 
 export async function patchTmSettings({ na_mM, conc_nM } = {}) {

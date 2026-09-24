@@ -449,6 +449,7 @@ export function initKeyboardShortcuts(deps) {
     ['4', 'menu-seq-update-routing',       'Add Loops/Skips'],
     ['5', 'menu-seq-assign-scaffold',      'Scaffold sequence'],
     ['6', 'menu-seq-assign-staples',       'Staple sequence'],
+    ['0', 'menu-seq-hairpin-dimer',        'Hairpin/dimer checker'],
   ]) {
     registerShortcut({
       key, ctrl: false, shift: false, alt: false,

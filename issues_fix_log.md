@@ -196,3 +196,44 @@ pass. Cached host assets require restarting the test host and replacing its link
 ## 2026-09-21 — ISSUE-32, ensemble submission context lifetime
 
 Fixed as part of the Alpine periodic-image clearance gate. Root cause: closing the review cleared its shared context before the asynchronous ensemble submit branch read the partition. Capture the reviewed partition before teardown. The regression exercises the ensemble API call after disposal, including the new explicit clearance override. No alternate hypothesis pursued; `main.js` LOC delta 0.
+
+<!-- ISSUE-31/32 below were independently assigned on the CPD branch; historical IDs retained. -->
+
+2026-09-20: [x] ISSUE-31/32: preliminary cis-syn strand-builder integration removes
+reactant planar C5 impropers and rejects bypasses of product coordinate placement.
+Native builder duplex passes 1,000 minimization and 1,000 2-fs dynamics steps.
+See docs/cpd_strand_builder.md. No main.js changes from this task (LOC delta 0).
+
+2026-09-22: ISSUE-33 null tool draft guard implemented. Physical run exposed stopped polling, not an Undo mutation failure. Main.js LOC delta0 for this fix; regression sends null then valid draft through actual application handler. See .development-artifacts/vr-workflows/fit-undo-physical (failure preserved); validation follows in fit artifacts.
+
+2026-09-22: [x] ISSUE-34: atomic private VR session publication and non-destructive status reads. Root cause: reader treated partial JSON as stale and unlinked a pathname concurrently being written. Deterministic publication/racing-reader regressions pass; physical commit/Undo passes after correction. ISSUE-33 also exercised by subsequent physical polling. Evidence fit-undo-atomic; previous failed attempts preserved.
+
+2026-09-22: ISSUE-35: bounded read-only scene refresh retry after autosave revision advance. Mutation remains exactly once, stale snapshot remains rejected. First physical6HB failure preserved under sixhb-physical. Frontend main.js LOC delta0.
+
+2026-09-22: [x] ISSUE-36: save acknowledgement carries atomic revision metadata, accepted only against the browser's matching preceding revision. Maintains lightweight response and no autosave-loop design replacement. Physical desktop6HB→VR6cells in same rotated frame→Undo→cadnano edit/save/reload passed; commit20.1s and Undo12.4s scene refresh remain performance debt. Main.js LOC delta0.
+
+2026-09-22: [x] ISSUE-39: visible Tools→Extrude now supports empty-part configuration
+and opens the paint tablet through shared initialization with radial activation.
+Physical steady_fast VR-first menu/paint/wheel/Confirm/Undo/cadnano/save-reload passes.
+Native36tests and26focused tooling tests pass. Existing framing helper now accepts
+a visible-UI callback; regression rejects hidden semantic activation in that path.
+Evidence: .development-artifacts/vr-workflows/menu-activation-validation.md.
+
+2026-09-22: [x] ISSUE-40: settings pixel review found blank minus glyph despite valid
+layout/interaction checks. Added horizontal stroke and nonblank/distinct-from-plus
+regression. Root cause: font's fallback erased an unsupported character; geometry
+checks do not observe label meaning. No failed alternative fix; discovered during
+larger target work. Native36tests pass; settings-sign-steady full VR-first roundtrip passes56.3s;
+submitted-eye image confirms minus signs on length/direction/size controls. Frontend main.js LOC delta0.
+
+2026-09-23: ISSUE-41 opened by actual image review after a green combined workflow:
+native whole-design review occupies82x64pixels and is largely end-on, while the
+presence-only threshold passes. No framing fix yet; recorded as unresolved rather
+than declaring visible debugging complete. Desktop geometry/edit/save-reload remains
+validated. Native camera/bounds root cause needs measurement; no geometry change.
+
+2026-09-23: [x] ISSUE-41 opt-in review now uses ordinary rotation/scale, both-eye
+coverage/cluster/RGB checks and actual desktop pixel comparison. Original weak
+view retained. A subsequent0%desktop match failure is retained separately; headed
+demo explicitly reveals only its PID-verified native viewer, keeping thresholds.
+Physical through-lens comfort and authoring-trace delivery remain open.

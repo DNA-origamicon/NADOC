@@ -134,6 +134,8 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     # "cando" heavy group, so its source must select that group too.
     ("snupi", ("cando",)),
     ("namd", ("namd",)),
+    # Remote parser parity replays large native NAMD logs in the namd group.
+    ("remote_cutoff_eval", ("namd",)),
     ("mrdna", ("mrdna",)),
     ("arbd", ("mrdna",)),
     # protein hybrids run in the oxDNA fork -> protein source touches oxdna slow
@@ -143,6 +145,8 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("openmm", ("md",)),
     # atomistic_validation.py is a leaf (the atomistic BASE is a full-trigger above)
     ("atomistic_validation", ("atomistic",)),
+    # CPD conversion exercises the atomistic multi-start attachment relaxation.
+    ("cpd_design", ("atomistic",)),
     # pdb_export.py builds on the atomistic model — its heavy export test lives in the
     # atomistic heavy group, so a change here must re-run that group.
     ("pdb_export", ("atomistic",)),

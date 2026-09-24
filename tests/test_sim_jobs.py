@@ -8,11 +8,32 @@ route test drives the HTTP layer with monkeypatched engine job lists.
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+import pytest
 
 from backend.api.main import app
 from backend.core import sim_jobs
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolate_other_engine_jobs(monkeypatch):
+    """Route tests must not scan the developer's real simulation workspace."""
+    from backend.api import (
+        routes_blade, routes_cando, routes_md, routes_mrdna, routes_snupi,
+    )
+
+    async def no_jobs():
+        return []
+
+    for module, name in (
+        (routes_blade, "list_blade_jobs"),
+        (routes_cando, "list_cando_jobs"),
+        (routes_md, "list_md_jobs"),
+        (routes_mrdna, "list_mrdna_jobs"),
+        (routes_snupi, "list_snupi_jobs"),
+    ):
+        monkeypatch.setattr(module, name, no_jobs)
 
 
 # ── pure normalization ────────────────────────────────────────────────────────

@@ -26,3 +26,14 @@ describe('formed photoproduct overlay', () => {
     expect(scene.getObjectByName('formedPhotoproductOverlay')).toBeUndefined()
   })
 })
+
+it('leaves converted CPDs to slab/atomic bonds instead of adding backbone rails', () => {
+  const scene = new THREE.Scene()
+  const store = createMockStore({ currentDesign: { photoproduct_junctions: [{
+    id: 'converted', base_key_1: '__xb__:a:0', base_key_2: '__xb__:b:0',
+    design_coordinates: { '__xb__:a:0': { C5: [0, 0, 0] } },
+  }] } })
+  const overlay = initPhotoproductOverlay({ scene, THREE, store, getBasePosition: () => new THREE.Vector3() })
+  expect(overlay.root.children).toHaveLength(0)
+  overlay.dispose()
+})

@@ -28,6 +28,7 @@ import {
   deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases, patchForcedLigationExtraBases,
   upsertStrandExtensionsBatch, deleteStrandExtensionsBatch, savePlateLayout, convertStrandToBinder, generateBinderForOverhang, convertBinderToScaffold,
   resizeStrandEnds, shiftDomains, insertLoopSkip, clearAllLoopSkips, generateAllOverhangSequences,
+  checkHairpinDimer, onOverhangSequencesGenerated,
   // menu bar operations
   createDesign, importDesign,
   exportDesign, exportCadnano, exportScadnano, exportSequenceCsv,
@@ -47,6 +48,9 @@ import { initLigationDebug } from './ligation_debug.js'
 import { initStrandsSpreadsheet } from './strands_spreadsheet.js'
 import { initFeatureLogPanel } from '../ui/feature_log_panel.js'
 import { initPlateView } from '../ui/plate_view.js'
+import { initHairpinDimerChecker } from '../ui/hairpin_dimer_checker.js'
+import { createHairpinDimerIndexCache, hairpinDimerMarkers, hairpinDimerStrandWarnings } from '../ui/hairpin_dimer_report.js'
+import { openStrandHairpinDimerWindow } from '../ui/hairpin_dimer_window.js'
 import { initStrandSequenceDialog } from '../ui/strand_sequence_dialog.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
 import { createContextMenu } from '../ui/primitives/context_menu.js'
@@ -1146,6 +1150,12 @@ document.getElementById('menu-seq-generate-overhangs')?.addEventListener('click'
   }
 })
 
+// Tools → Sequencing → Hairpin/Dimer Checker toggle ('0') + auto-check after overhang generation.
+initHairpinDimerChecker({
+  store: editorStore, designKey: 'design', showToast, showProgress: _showProgress, hideProgress: _hideProgress,
+  broadcast: nadocBroadcast, checkHairpinDimer, onOverhangSequencesGenerated,
+})
+
 // ── Menu bar — Help ───────────────────────────────────────────────────────────
 const _helpModal = document.getElementById('help-modal')
 document.getElementById('menu-help-hotkeys')?.addEventListener('click', () => _helpModal?.classList.add('visible'))
@@ -1417,6 +1427,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '4') { const b = document.getElementById('menu-seq-update-routing'); if (b && !b.disabled) b.click() }
   if (e.key === '5') document.getElementById('menu-seq-assign-scaffold')?.click()
   if (e.key === '6') document.getElementById('menu-seq-assign-staples')?.click()
+  if (e.key === '0') document.getElementById('menu-seq-hairpin-dimer')?.click()
 
   // Help modal
   if (e.key === '?' || e.key === 'F1') _helpModal?.classList.add('visible')
@@ -1917,11 +1928,13 @@ let _syncingFromBroadcast = false
 let _spreadsheet = null
 const sliceContainerEl = document.getElementById('sliceview-container')
 const sliceview = initSliceview(sliceSvg, sliceContainerEl, {
-  onAddHelix:    ({ row, col }) => addHelixAtCell(row, col),
+  onAddHelix:    ({ row, col, latticeFrameId }) => addHelixAtCell(row, col, 42, latticeFrameId),
   onRemoveHelix: (helixId)     => deleteHelix(helixId),
 })
 
 const pathview = initPathview(pathCanvas, pathContainer, {
+  onHairpinDimerClick: (sid, title) => openStrandHairpinDimerWindow(
+    editorStore.getState().hairpinDimerReport, editorStore.getState().design, sid, { title }),
   onPaintScaffold: async (helixId, loBp, hiBp) => {
     // Auto-extend the helix if the paint range goes outside its current bounds.
     const design = editorStore.getState().design
@@ -2204,6 +2217,13 @@ _spreadsheet = initStrandsSpreadsheet({
     }
   },
   onEditSequence: (strandId) => _strandSequenceDialog.open(strandId),
+  getHairpinDimerReport: () => editorStore.getState().hairpinDimerReport,
+})
+editorStore.subscribe((s, p) => {
+  if (s.hairpinDimerReport !== p.hairpinDimerReport && s.design === p.design) _spreadsheet?.update(s.design)
+  if (s.hairpinDimerReport !== p.hairpinDimerReport || s.design !== p.design) {
+    pathview.setHairpinDimerMarkers(hairpinDimerMarkers(s.hairpinDimerReport, s.design))
+  }
 })
 
 // ── Store subscriptions ──────────────────────────────────────────────────────
@@ -2419,6 +2439,11 @@ initLigationDebug()
   let _platesView = null
   let _platesSig = null
   const _plateLayoutSig = layout => JSON.stringify(layout ?? null)
+  const _plateHdIndex = createHairpinDimerIndexCache()
+  const _plateWarnings = ({ design, hairpinDimerReport: r }) => hairpinDimerStrandWarnings(
+    _plateHdIndex.get(r, design), design,
+    { threshold: r?.threshold_c, severe: r?.severe_threshold_c, withStructure: true })
+  let _plateWarnSig = null
   let _renderedPlateLayoutSig = _plateLayoutSig(null)
   const _sig = (d) => d ? JSON.stringify([
     d.id,
@@ -2441,6 +2466,8 @@ initLigationDebug()
     for (const e of design.extensions ?? []) {
       if (e.modification && !modOf.has(e.strand_id)) modOf.set(e.strand_id, e.modification)
     }
+    const warnings = _plateWarnings(editorStore.getState())
+    _plateWarnSig = JSON.stringify([...warnings])
     const records = []
     let idx = 0
     for (const s of design.strands ?? []) {
@@ -2465,6 +2492,8 @@ initLigationDebug()
         modName: mod ? (EXT_MOD_NAMES[mod] || mod) : null,
         sequence: s.sequence || '',
         name: `S${idx}`,
+        warning: warnings.get(s.id)?.text ?? null,
+        warningLevel: warnings.get(s.id)?.level ?? null,
       })
     }
     _platesView.setData(records, design.plate_layout ?? null)
@@ -2495,6 +2524,8 @@ initLigationDebug()
           pathview.setSelection(ids)
           _spreadsheet?.setSelectedStrands(ids)
         },
+        onWarningClick: (sid, name) => openStrandHairpinDimerWindow(
+          editorStore.getState().hairpinDimerReport, editorStore.getState().design, sid, { title: name }),
       })
     }
     function _setActiveTab(tabId) {
@@ -2510,11 +2541,16 @@ initLigationDebug()
     // Refresh for topology changes and EXTERNAL layout changes (undo/redo or
     // the other editor), but not for our own save response.
     editorStore.subscribe((state, prev) => {
-      if (state.design === prev.design) return
+      if (state.design === prev.design && state.hairpinDimerReport === prev.hairpinDimerReport) return
       if (!platesPanelEl?.classList.contains('is-active')) return
       const sig = _sig(state.design)
       const layoutSig = _plateLayoutSig(state.design?.plate_layout)
-      if (sig === _platesSig && layoutSig === _renderedPlateLayoutSig) return
+      if (sig === _platesSig && layoutSig === _renderedPlateLayoutSig) {
+        const warnings = _plateWarnings(state)   // only the hairpin/dimer ⚠ set may differ
+        const warnSig = JSON.stringify([...warnings])
+        if (warnSig !== _plateWarnSig) { _plateWarnSig = warnSig; _platesView?.setWarnings(warnings) }
+        return
+      }
       _refreshPlates()
     })
   }

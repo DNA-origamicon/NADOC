@@ -58,6 +58,16 @@ describe('initExtrudePanel — new-bundle', () => {
     expect(deps.slicePlane.show).toHaveBeenCalledWith('XZ', 0, false, false, expect.objectContaining({ newBundle: true }))
   })
 
+  it('defaults a loaded imported part to its aligned plane instead of stale UI state', () => {
+    const deps = makeDeps({ currentPlane: 'XY', currentDesign: { lattice_type: 'SQUARE', helices: [
+      { id: 'imported', axis_start: {x: 0, y: 0, z: 0}, axis_end: {x: 0, y: 7, z: 0} },
+    ] } })
+    const panel = initExtrudePanel(deps)
+    panel.activate('newBundle')
+    expect(document.getElementById('extrude-from').value).toBe('XZ')
+    expect(deps.slicePlane.show).toHaveBeenCalledWith('XZ', 0, false, false, { latticeType: 'SQUARE', newBundle: true })
+  })
+
   it('changing the dropdown re-shows on the new origin plane and updates the store', () => {
     const deps = makeDeps()
     const panel = initExtrudePanel(deps)

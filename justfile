@@ -104,9 +104,14 @@ test-frontend:
 # Build and run the headless native + Playwright ScryWrite proof of concept.
 test-scrywrite:
     env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake -S native/vr_viewer -B native/vr_viewer/build -G Ninja -DCMAKE_BUILD_TYPE=Release
-    env PATH=/usr/bin:/bin cmake --build native/vr_viewer/build --target nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export nadoc-vr-interaction-test nadoc-vr-menu-layout-test nadoc-vr-scrywrite-test nadoc-vr-scrywrite-witness-test nadoc-vr-scrywrite-visual-test nadoc-vr-scrywrite-evidence-test nadoc-vr-spectator-mirror-test nadoc-vr-spectator-diagnostics-test nadoc-vr-reference-grid-test
+    env PATH=/usr/bin:/bin cmake --build native/vr_viewer/build --target nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export nadoc-vr-interaction-test nadoc-vr-menu-layout-test nadoc-vr-scrywrite-test nadoc-vr-scrywrite-live-test nadoc-vr-scrywrite-witness-test nadoc-vr-scrywrite-visual-test nadoc-vr-scrywrite-evidence-test nadoc-vr-spectator-mirror-test nadoc-vr-spectator-diagnostics-test nadoc-vr-reference-grid-test
     env PATH=/usr/bin:/bin ctest --test-dir native/vr_viewer/build --output-on-failure -R '^(nadoc-vr-interaction|nadoc-vr-menu-layout|nadoc-vr-scrywrite|nadoc-vr-spectator-mirror|nadoc-vr-spectator-diagnostics|nadoc-vr-reference-grid)'
+    SCRYWRITE_LIVE_TEST_BIN="$PWD/native/vr_viewer/build/nadoc-vr-scrywrite-live-test" uv run pytest tests/test_scrywrite_live.py -q
     cd frontend && npm run test:scrywrite
+
+# Isolated real browser/backend transaction test (no headset or cloud lifecycle).
+test-scrywrite-browser:
+    cd frontend && npx playwright test --config playwright.scrywrite-browser.config.js
 
 # Launch the safe live VR observer replay. Override SCENE/SCRIPT as needed.
 scrywrite-witness SCENE="native/vr_viewer/examples/triangle.nadocvr" SCRIPT="native/vr_viewer/examples/scrywrite_witness_menu.scry" EYE="left" GRID="room":

@@ -4076,6 +4076,7 @@
               <button class="dropdown-item" id="menu-seq-assign-staples">Assign Staple Sequences <span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[6]</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
               <button class="dropdown-item" id="menu-seq-generate-overhangs">Generate Overhangs</button>
+              <button class="dropdown-item dropdown-item--toggleable" id="menu-seq-hairpin-dimer" title="Show hairpin / self-dimer warnings (Tm &gt; 30 °C; 10 mM Mg²⁺, 0 mM Na⁺, 200 nM) for overhangs and linker strands">Hairpin/Dimer Checker <span style="color:#484f58;font-size:var(--text-xs)">[0]</span><span class="menu-toggle-pill"></span></button>
             </div>
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
@@ -4224,7 +4225,7 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-extra-base-metrics-audit" title="Review measured extra-base states, stable windows, populations, transitions, and cross-metric validation.">Extra-Base Metrics Audit<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-hull-audit" title="Compare the current Hull Prism with the topology-preserving dsDNA occupancy candidate.">Hull Audit<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-overlay-mode" title="Show the full representation together with the atomistic ball-and-stick representation.">Overlay Mode<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-new-positioning" title="Show the full and atomistic representations at their MD-measured positions instead of the legacy build geometry. Display only.">New Positioning<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-new-positioning" title="Compare candidate placement (ON) with the baseline (OFF). Both currently use the accepted measured placement.">New Positioning<span class="menu-toggle-pill"></span></button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-debug-lod-hud">Show LOD HUD</button>
           <button class="dropdown-item" id="menu-debug-hull-cluster">Show Hull Cluster Debug</button>
@@ -4244,6 +4245,7 @@
           <button class="dropdown-item" id="menu-help-open-log">Open Log</button>
           <button class="dropdown-item" id="menu-help-about-file">About this file…</button>
           <button class="dropdown-item" id="menu-help-md-engines">MD Engines (install / status)…</button>
+          <button class="dropdown-item" id="menu-help-cpd-progress">CPD progress…</button>
           <button class="dropdown-item" id="menu-help-tt-cpd-trajectories">TT-CPD Model Trajectories…</button>
           <button class="dropdown-item" id="menu-help-tt-cpd-scientific-review">TT-CPD Scientific Review…</button>
           <button class="dropdown-item" id="menu-help-tailscale-setup">Tailscale Workspace Setup…</button>
@@ -4307,6 +4309,7 @@
             <div class="hk-row"><span class="hk-desc">Add Loops/Skips</span><span class="hk-key">4</span></div>
             <div class="hk-row"><span class="hk-desc">Scaffold Sequence</span><span class="hk-key">5</span></div>
             <div class="hk-row"><span class="hk-desc">Staple Sequences</span><span class="hk-key">6</span></div>
+            <div class="hk-row"><span class="hk-desc">Hairpin/Dimer Checker</span><span class="hk-key">0</span></div>
           </div>
           <div class="hk-section">
             <div class="hk-section-title">View</div>

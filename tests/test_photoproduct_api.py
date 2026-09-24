@@ -40,8 +40,9 @@ def test_preflight_is_read_only_and_reports_relationship_and_capability():
         body["reactant_geometry"]["interpretation"]
         == "placement input only; not a stability filter"
     )
-    assert body["placement_report"]["status"] == "blocked_parameters_unavailable"
-    assert body["placement_report"]["coordinates_modified"] is False
+    assert body["simulation_supported"] is True
+    assert body["placement_report"]["passed"] is True
+    assert body["chemistry_capability"]["qualification"]["status"] == "preliminary-research"
     assert design_state.revision() == revision
     assert design_state.undo_depth() == 0
 

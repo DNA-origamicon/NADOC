@@ -1905,6 +1905,8 @@ def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) 
     axes = deformed_helix_axes(display_design)
     _apply_ovhg_rotations_to_axes(display_design, axes, nucleotides)
     design_dict = display_design.to_dict()
+    from backend.core.cpd_representation import inject_cpd_representation
+    inject_cpd_representation(design_dict)
     crud_api._inject_joint_world_axes(
         design_dict
     )  # world cluster-joint axes (see get_instance_geometry)

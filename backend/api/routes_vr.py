@@ -10,6 +10,8 @@ data.
 
 from __future__ import annotations
 
+from backend.core.display_placement import measured_display_placement
+
 import copy
 import gzip
 import hashlib
@@ -121,11 +123,13 @@ class VRLaunchRequest(BaseModel):
     browser_requested_at_ms: Optional[float] = Field(default=None, gt=0, lt=1e15)
     job_snapshot_ms: Optional[float] = Field(default=None, ge=0, lt=1e6)
     camera: Optional[VRCamera] = None
-    measured_positioning: bool = False
+    measured_positioning: bool = True
     assembly_active: bool = False
     representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     show_periodic_seam_arcs: bool = False
+    # Developer-only opt-in. Paths are server-generated, never client supplied.
+    scrywrite_live: Literal["off", "inspect", "transactions"] = "off"
     mirror_eye: Literal["off", "left", "right"] = "left"
     reference_grid: Literal["off", "room"] = "off"
     selection_level: Literal[
@@ -266,7 +270,7 @@ class VRToolExecutionFeedbackRequest(BaseModel):
     tool_sequence: int = Field(ge=1, le=2**53 - 1)
     tool_mode: Literal["move_rotate", "extrude"]
     tool_action: Literal["confirm", "undo"]
-    target_identity: str = Field(min_length=1, max_length=2048)
+    target_identity: Optional[str] = Field(default=None, min_length=1, max_length=2048)
     target_kind: SelectionKind
     status: Literal["pending", "succeeded", "failed", "refused"]
     reason: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")
@@ -1471,7 +1475,10 @@ def _serialize_scene(
         )
 
     lines = _SceneLineEmitter(line_writer)
-    lines.append(f"NADOCVR 12 {representation} {coloring}")
+    from backend.core.extrude_plane import extrude_plane_record
+
+    lines.append(f"NADOCVR 13 {representation} {coloring}")
+    lines.append(extrude_plane_record(design))
     lines.append("# stable identities, owner aliases, and endpoint-aware tool scopes")
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
@@ -2693,7 +2700,7 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     expanded_lines = expanded_text.splitlines()
     natural_header = natural_lines[0].split()
     expanded_header = expanded_lines[0].split()
-    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "12"]:
+    if natural_header != expanded_header or (natural_header[0] != "NADOCVR" or natural_header[1] not in {"12", "13"}):
         raise HTTPException(500, detail="Expanded VR scene headers do not match.")
 
     def blocks(lines: list[str]) -> dict[str, list[str]]:
@@ -2714,9 +2721,14 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     if set(natural_blocks) != set(expanded_blocks):
         raise HTTPException(500, detail="Expanded VR representations do not match.")
     output = [
-        f"NADOCVR 12 {natural_header[2]} {natural_header[3]}",
+        " ".join(natural_header),
         "# natural and expanded poses share identities and endpoint-aware tool scopes",
     ]
+    if natural_header[1] == "13":
+        defaults = [line for line in natural_lines if line.startswith("F ")]
+        if len(defaults) != 1 or defaults != [line for line in expanded_lines if line.startswith("F ")]:
+            raise HTTPException(500, detail="Expanded extrusion defaults differ.")
+        output.extend(defaults)
     for representation, natural_records in natural_blocks.items():
         expanded_records = expanded_blocks[representation]
         primitive_types = {"P", "C", "H", "B"}
@@ -2846,9 +2858,18 @@ def _snapshot(
     from backend.core.design_geometry import _geometry_for_design
 
     design = design_state.get_or_404()
+    from backend.core.vr_empty_scene import empty_authoring_scene
+
+    empty_scene = empty_authoring_scene(design, body.representation, body.coloring)
+    if empty_scene is not None:
+        if line_writer is None:
+            return empty_scene
+        for line in empty_scene.splitlines():
+            line_writer(line)
+        return None
     nucleotides = _geometry_for_design(
         design,
-        measured_positioning=body.measured_positioning,
+        measured_positioning=measured_display_placement(body.measured_positioning),
         junction_balance=True,
     )
     axes = deformed_helix_axes(design)
@@ -2860,7 +2881,7 @@ def _snapshot(
     atomistic_model = build_atomistic_model(
         design,
         fast_bridges=True,
-        measured_positioning=body.measured_positioning,
+        measured_positioning=measured_display_placement(body.measured_positioning),
     )
     from backend.api.crud import unligated_crossover_ids
 
@@ -2882,7 +2903,7 @@ def _snapshot(
     expanded_writer = None
     if line_writer is not None:
         def expanded_writer(line: str) -> None:
-            if line.startswith("NADOCVR ") or line.startswith("#"):
+            if line.startswith(("NADOCVR ", "#", "F ")):
                 return
             line_writer(f"E {line[2:]}") if line.startswith("R ") else line_writer(line)
 
@@ -2993,7 +3014,8 @@ def _read_state() -> dict | None:
             raise ValueError("PID no longer belongs to NADOC VR")
         return state
     except (FileNotFoundError, KeyError, ValueError, OSError, json.JSONDecodeError):
-        _STATE_PATH.unlink(missing_ok=True)
+        # A status reader may race a writer in another API process. Never remove
+        # a pathname that could already refer to a newer session.
         return None
 
 
@@ -3142,8 +3164,14 @@ def _start_steamvr() -> dict[str, bool]:
 
 
 def _write_state(state: dict) -> None:
-    _STATE_PATH.write_text(json.dumps(state))
-    _STATE_PATH.chmod(0o600)
+    fd, name = tempfile.mkstemp(prefix=_STATE_PATH.name + ".", dir=_STATE_PATH.parent)
+    pending = Path(name)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(state, stream)
+        os.replace(pending, _STATE_PATH)
+    finally:
+        pending.unlink(missing_ok=True)
 
 
 def _cleanup_after_process(
@@ -3161,6 +3189,8 @@ def _cleanup_after_process(
     coordinate_path: Path,
 ) -> None:
     process.wait()
+    from backend.api.routes_vr_scene import cleanup_scene_refresh
+    cleanup_scene_refresh(event_path)
     scene_path.unlink(missing_ok=True)
     event_path.unlink(missing_ok=True)
     feedback_path.unlink(missing_ok=True)
@@ -3196,6 +3226,8 @@ def _status_payload() -> dict:
         "available": True,
         "pid": int(state["pid"]),
         "started_at": state.get("started_at"),
+        "scrywrite_live": state.get("scrywrite_live", "off"),
+        "scrywrite_socket": state.get("scrywrite_socket"),
         "mirror_eye": state.get("mirror_eye", "off"),
         "reference_grid": state.get("reference_grid", "off"),
         "timing": _runtime_timing(state, _event_payload(state)),
@@ -3322,6 +3354,16 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
         return result
 
     if mode == "extrude":
+        from backend.core.vr_extrude_draft import validate_painted_footprint
+
+        footprint = ({"painted_footprint": validate_painted_footprint(raw["painted_footprint"])}
+                     if "painted_footprint" in raw else {})
+        from backend.core.vr_freeform_placement import validate_freeform_placement
+        placement = {}
+        if "freeform_placement" in raw:
+            if target_kind != "none":
+                raise ValueError("freeform placement cannot target an end")
+            placement = {"freeform_placement":validate_freeform_placement(raw["freeform_placement"])}
         length_bp = bounded_int(raw.get("length_bp"), 0, 1_000_000)
         direction_sign = bounded_int(raw.get("direction_sign"), -1, 1)
         if (
@@ -3329,6 +3371,7 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
             or raw.get("strand_filter") not in {"both", "scaffold", "staples"}
             or not isinstance(raw.get("ligate_adjacent"), bool)
             or raw.get("footprint_state") != "unresolved"
+            or raw.get("extrude_from", "XY") not in {"XY", "XZ", "YZ"}
         ):
             raise ValueError("invalid extrusion configuration")
         return {
@@ -3338,6 +3381,9 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
             "strand_filter": raw["strand_filter"],
             "ligate_adjacent": raw["ligate_adjacent"],
             "footprint_state": "unresolved",
+            **footprint,
+            **placement,
+            **({"extrude_from": raw["extrude_from"]} if "extrude_from" in raw else {}),
         }
 
     plane_a_bp = bounded_int(
@@ -3403,7 +3449,8 @@ def _event_payload(state: dict | None) -> dict:
         }
     path = Path(state["event_path"])
     try:
-        if path.stat().st_size > 4096:
+        from backend.core.vr_extrude_draft import MAX_VR_EVENT_BYTES, action_config_sequence
+        if path.stat().st_size > MAX_VR_EVENT_BYTES:
             raise ValueError("event record is too large")
         event = json.loads(path.read_text())
         sequence = int(event.get("sequence", 0))
@@ -3433,6 +3480,7 @@ def _event_payload(state: dict | None) -> dict:
         ):
             raise ValueError("invalid tool configuration sequence")
         tool_config_sequence = raw_tool_config_sequence
+        tool_action_config_sequence = action_config_sequence(event, tool_config_sequence)
         tool_config = _parse_tool_config(
             event.get("tool_config"), tool_config_sequence
         )
@@ -3611,6 +3659,7 @@ def _event_payload(state: dict | None) -> dict:
             "trajectory_action": trajectory_action,
             "trajectory_frame_idx": trajectory_frame_idx,
             "tool_sequence": tool_sequence,
+            "tool_action_config_sequence": tool_action_config_sequence,
             "tool_mode": tool_mode,
             "tool_action": tool_action,
             "tool_target_identity": tool_target_identity,
@@ -4082,19 +4131,21 @@ def _write_tool_execution_feedback(
     if not state or not state.get("tool_execution_feedback_path"):
         raise HTTPException(409, detail="Native VR is not running.")
     entry_id = body.feature_log_entry_id or "-"
+    identity = body.target_identity or "-"
+    targetless = body.tool_mode == "extrude" and body.target_kind == "none" and body.target_identity is None
     if (
-        body.target_kind == "none"
+        (not targetless and (body.target_kind == "none" or body.target_identity is None))
         or (body.status == "succeeded") != (body.feature_log_entry_id is not None)
         or any(
             any(character.isspace() for character in value)
-            for value in (body.target_identity, entry_id)
+            for value in (identity, entry_id)
         )
     ):
         raise HTTPException(422, detail="Invalid VR tool execution feedback.")
     record = (
         f"NADOCVR_TOOL_EXECUTION 1 {body.execution_sequence} "
         f"{body.tool_sequence} {body.tool_mode} {body.tool_action} "
-        f"{body.target_kind} {body.target_identity} {body.status} "
+        f"{body.target_kind} {identity} {body.status} "
         f"{body.reason} {entry_id}\n"
     )
     if len(record.encode()) > 4096:
@@ -4597,6 +4648,7 @@ def _viewer_command(
     trajectory_path: Path,
     coordinate_path: Path,
     body: VRLaunchRequest,
+    live_socket_path: Path | None = None,
 ) -> list[str]:
     command = [
         str(_VIEWER),
@@ -4628,6 +4680,13 @@ def _viewer_command(
         "--reference-grid",
         body.reference_grid,
     ]
+    if body.scrywrite_live != "off":
+        if live_socket_path is None:
+            raise ValueError("ScryWrite launch requires a private socket path")
+        command.extend([
+            "--scrywrite-live", str(live_socket_path),
+            "--scrywrite-live-mode", body.scrywrite_live,
+        ])
     for token in body.selected_owner_tokens:
         command.extend(["--selected-owner", token])
     command.extend(["--selected-kind", body.selected_selection_kind])
@@ -4882,6 +4941,9 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         )
         trajectory_path, coordinate_path = _write_trajectory_feeds(body, view_rotation)
 
+        live_socket_path = None
+        if body.scrywrite_live != "off":
+            live_socket_path = Path(tempfile.mkdtemp(prefix="nadoc-scry-")) / "viewer.sock"
         log = _LOG_PATH.open("ab")
         try:
             process = subprocess.Popen(
@@ -4889,7 +4951,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                     scene_path, event_path, feedback_path, tool_feedback_path,
                     plane_feedback_path, preflight_feedback_path,
                     tool_execution_feedback_path, job_path,
-                    visualization_path, trajectory_path, coordinate_path, body
+                    visualization_path, trajectory_path, coordinate_path, body, live_socket_path
                 ),
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
@@ -4941,7 +5003,10 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                 pass
             raise HTTPException(503, detail=detail)
 
+        from backend.api.doc_context import get_current_doc
         state = {
+            "doc_id": get_current_doc(),
+            "launch_request": body.model_dump(mode="json"),
             "pid": process.pid,
             "scene_path": str(scene_path),
             "event_path": str(event_path),
@@ -4966,6 +5031,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "snapshot_ready_at": snapshot_ready_at,
             "process_started_at": process_started_at,
             "view_rotation": view_rotation.tolist(),
+            "scrywrite_live": body.scrywrite_live,
+            "scrywrite_socket": str(live_socket_path) if live_socket_path else None,
             "mirror_eye": body.mirror_eye,
             "reference_grid": body.reference_grid,
         }

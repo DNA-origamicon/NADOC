@@ -13,14 +13,19 @@
  * saved layout, and mutations are routed back through the onSaveLayout callback.
  *
  * Normalized strand record (one per staple the editor wants on the plate):
- *   { strandId, color, lengthNt, groupId, groupOrder, hasMod, modName, sequence, name }
+ *   { strandId, color, lengthNt, groupId, groupOrder, hasMod, modName, sequence, name,
+ *     warning?, warningLevel? }
+ * `warning` (optional text) marks the well with a ⚠ badge — amber, or red when
+ * `warningLevel === 'critical'` — and is appended to the hover tooltip: the
+ * hairpin/self-dimer checker's per-strand finding.
  *
  * Public API:
  *   initPlateView(canvasEl, {
  *     wrapEl, toolbarEl, getTubesContainer,
  *     onSaveLayout(layout), onStrandClick(strandId), enableGroupMode,
+ *     onWarningClick(strandId, name),   // click on a well's / tube row's ⚠
  *   }) → {
- *     setData(strands, savedLayout), autoFill(),
+ *     setData(strands, savedLayout), setWarnings(Map<strandId,{text,level}>), autoFill(),
  *     setOrientation('8x12'|'12x8'), setSelectionMode('staple'|'color'|'group'),
  *     sendToTubes(strandId), sendToPlates(strandId), getLayout(),
  *     resetView(), destroy(),
@@ -58,6 +63,10 @@ const CLR_WELL_EDGE = '#c4cdd5'
 const CLR_LABEL     = '#3a4a58'
 const CLR_TITLE     = '#1a2530'
 const CLR_SEL_RING  = '#111418'
+const CLR_WARN      = '#d29922'
+const CLR_CRIT      = '#f85149'   // hairpin/dimer Tm above the critical threshold
+const BADGE_DX      = WELL_R * 0.72   // ⚠ badge centre offset (up-right) from the well centre
+const BADGE_HIT     = 7               // world-px hit radius of the badge
 const CLR_SEL_HALO  = '#ffffff'
 const CLR_DROP_RING = '#1f6feb'
 
@@ -72,6 +81,7 @@ export function initPlateView(canvasEl, opts = {}) {
     getTubesContainer,
     onSaveLayout,
     onStrandClick,
+    onWarningClick,
     enableGroupMode = false,
   } = opts
   const ctx = canvasEl.getContext('2d')
@@ -272,6 +282,7 @@ export function initPlateView(canvasEl, opts = {}) {
               ctx.beginPath(); ctx.arc(x, y, WELL_R + 3.5, 0, Math.PI * 2)
               ctx.strokeStyle = CLR_SEL_RING; ctx.lineWidth = 2; ctx.stroke()
             }
+            if (rec?.warning) _drawWarningBadge(x + BADGE_DX, y - BADGE_DX, rec.warningLevel)
           } else {
             ctx.fillStyle = CLR_WELL_EMPTY; ctx.fill()
             ctx.strokeStyle = CLR_WELL_EDGE; ctx.lineWidth = 1; ctx.stroke()
@@ -286,6 +297,30 @@ export function initPlateView(canvasEl, opts = {}) {
       }
     }
     ctx.textAlign = 'start'
+  }
+
+  function _hitsWarningBadge(sid, well, wx, wy) {
+    if (!_byId.get(sid)?.warning || well == null) return false
+    const { plate, r, c } = _idxToPRC(well)
+    const { gr, gc } = _rcToScreen(r, c)
+    const { x, y } = _wellCenter(plate, gr, gc)
+    return Math.hypot(wx - (x + BADGE_DX), wy - (y - BADGE_DX)) <= BADGE_HIT
+  }
+
+  // Amber ⚠ triangle at a well's upper-right (hairpin/self-dimer warning).
+  function _drawWarningBadge(cx, cy, level) {
+    const h = 9, w = 10
+    ctx.beginPath()
+    ctx.moveTo(cx, cy - h / 2)
+    ctx.lineTo(cx + w / 2, cy + h / 2)
+    ctx.lineTo(cx - w / 2, cy + h / 2)
+    ctx.closePath()
+    ctx.fillStyle = level === 'critical' ? CLR_CRIT : CLR_WARN; ctx.fill()
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2; ctx.stroke()
+    ctx.fillStyle = '#1a2530'
+    ctx.font = 'bold 7px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('!', cx, cy + h / 2 - 1.5)
   }
 
   function _roundRect(x, y, w, h, r) {
@@ -469,6 +504,10 @@ export function initPlateView(canvasEl, opts = {}) {
       _selected = new Set(_resolveUnit(sid))
       onStrandClick?.(sid)
       _ldown = { strandId: sid, well, cx, cy, moved: false }
+      if (_hitsWarningBadge(sid, well, wx, wy)) {
+        _ldown = null                                   // a badge click never starts a drag
+        onWarningClick?.(sid, _byId.get(sid)?.name ?? null)
+      }
     } else {
       _selected.clear()
       onStrandClick?.(null)
@@ -502,7 +541,8 @@ export function initPlateView(canvasEl, opts = {}) {
       const rec = _byId.get(sid)
       const { plate, r, c } = _idxToPRC(well)
       _showTooltip(ev.clientX, ev.clientY,
-        `${rec?.name ?? sid}\n${rec?.lengthNt ?? '?'} nt · Plate ${plate + 1} ${_wellLabel(r, c)}`)
+        `${rec?.name ?? sid}\n${rec?.lengthNt ?? '?'} nt · Plate ${plate + 1} ${_wellLabel(r, c)}`
+        + (rec?.warning ? `\n\n${rec.warning}` : ''))
     } else {
       _hideTooltip()
     }
@@ -629,7 +669,9 @@ export function initPlateView(canvasEl, opts = {}) {
     const body = rows.map(({ rec, reason }) => {
       const seq = rec.sequence || ''
       return `<tr data-strand-id="${_esc(rec.strandId)}" data-color="${_esc(rec.color || '')}" data-group-id="${_esc(rec.groupId || '')}">
-        <td style="padding:3px 6px">${_esc(rec.name || rec.strandId)}</td>
+        <td style="padding:3px 6px">${rec.warning
+          ? `<span class="hd-warn-icon hd-warn-icon--${rec.warningLevel === 'critical' ? 'critical' : 'warning'}" role="button" tabindex="0" title="${_esc(rec.warning)}\n\nClick to show the structure." style="color:${rec.warningLevel === 'critical' ? CLR_CRIT : CLR_WARN};font-weight:700;margin-right:3px;cursor:pointer">⚠</span>`
+          : ''}${_esc(rec.name || rec.strandId)}</td>
         <td style="padding:3px 6px;font-family:monospace;font-size:11px;word-break:break-all">${_esc(seq)}</td>
         <td style="padding:3px 6px;text-align:right">${rec.lengthNt}</td>
         <td style="padding:3px 6px">${_esc(rec.modName || '—')}</td>
@@ -651,6 +693,13 @@ export function initPlateView(canvasEl, opts = {}) {
       const tsv = rows.map(({ rec }) =>
         `${rec.name || rec.strandId}\t${rec.sequence || ''}\t250 nmol\tHPLC`).join('\n')
       navigator.clipboard?.writeText('Name\tSequence\tScale\tPurification\n' + tsv)
+    })
+    host.querySelectorAll('tr[data-strand-id] .hd-warn-icon').forEach(icon => {
+      icon.addEventListener('click', ev => {
+        ev.stopPropagation()
+        const sid = icon.closest('tr').getAttribute('data-strand-id')
+        onWarningClick?.(sid, _byId.get(sid)?.name ?? null)
+      })
     })
     host.querySelectorAll('[data-copy]').forEach(btn =>
       btn.addEventListener('click', () => navigator.clipboard?.writeText(btn.getAttribute('data-copy'))))
@@ -822,8 +871,22 @@ export function initPlateView(canvasEl, opts = {}) {
   }
   _buildToolbar()
 
+  /** Replace every record's `warning` / `warningLevel` — no layout reset, pan/zoom kept.
+   *  Map values are `{ text, level }` (a bare string means level 'warning'). */
+  function setWarnings(warningByStrandId) {
+    _strands = _strands.map(s => {
+      const w = warningByStrandId?.get?.(s.strandId)
+      const text = typeof w === 'string' ? w : (w?.text ?? null)
+      return { ...s, warning: text, warningLevel: text ? (w?.level ?? 'warning') : null }
+    })
+    _byId = new Map(_strands.map(s => [s.strandId, s]))
+    _renderTubes()
+    _draw()
+  }
+
   return {
     setData,
+    setWarnings,
     autoFill,
     setOrientation,
     setSelectionMode,

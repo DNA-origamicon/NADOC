@@ -38,6 +38,8 @@ URLs are unchanged from their previous home in assembly.py. Mounting is done in
 
 from __future__ import annotations
 
+from backend.core.display_placement import measured_display_placement
+
 from fastapi import APIRouter, Query
 
 from backend.api import assembly_state
@@ -74,7 +76,7 @@ def get_instance_design(instance_id: str) -> dict:
 @router.get("/assembly/instances/{instance_id}/geometry", status_code=200)
 def get_instance_geometry(
     instance_id: str,
-    measured_positioning: bool = Query(False),
+    measured_positioning: bool = Query(True),
 ) -> dict:
     """
     Compute and return nucleotide geometry for a PartInstance's Design.
@@ -92,6 +94,7 @@ def get_instance_geometry(
     Response includes "design" (with cluster_transform_overrides applied) so
     callers do not need a separate /design request.
     """
+    measured_positioning = measured_display_placement(measured_positioning)
     from backend.api.crud import (
         _geometry_for_design,
         _compact_geometry_from_nucleotides,
@@ -126,6 +129,8 @@ def get_instance_geometry(
     axes = deformed_helix_axes(design)
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     design_dict = design.to_dict()
+    from backend.core.cpd_representation import inject_cpd_representation
+    inject_cpd_representation(design_dict)
     # Derive world-space cluster-joint axes (axis_origin / axis_direction) from the
     # local-frame storage, same as the design-view GET. Without this the assembly
     # part-joint drag reads undefined joint.axis_origin and throws.
@@ -241,7 +246,7 @@ def get_instance_surface_geometry(
 
 @router.get("/assembly/geometry", status_code=200)
 def get_assembly_geometry(
-    measured_positioning: bool = Query(False),
+    measured_positioning: bool = Query(True),
 ) -> dict:
     """
     Batch geometry for all visible instances in one request.
@@ -263,6 +268,7 @@ def get_assembly_geometry(
     ``/assembly/instances/{id}/geometry`` is unchanged in shape (it returns
     one ``nucleotides_compact`` directly).
     """
+    measured_positioning = measured_display_placement(measured_positioning)
     from backend.api.crud import (
         _geometry_for_design,
         _compact_geometry_from_nucleotides,
@@ -315,6 +321,8 @@ def get_assembly_geometry(
             axes = deformed_helix_axes(design)
             _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
             design_dict = design.to_dict()
+            from backend.core.cpd_representation import inject_cpd_representation
+            inject_cpd_representation(design_dict)
             if key:
                 _geo_cache_set(
                     key,

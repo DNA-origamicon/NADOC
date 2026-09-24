@@ -62,3 +62,16 @@ describe('crossover extra-base placement abstraction', () => {
     })
   })
 })
+
+it('projects a deformed CPD with independent standard bead and slab sites, then applies one unit pose', () => {
+  const pose = new THREE.Matrix4().makeRotationZ(0.7).setPosition(4, -2, 1)
+  const geometry = { backbone_position: [1, 2, 3], base_position: [-1, 4, 2],
+    frame_rotation: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.3).toArray() }
+  const [p] = buildCrossoverExtraPlacements({ xoId: 'cpd', count: 1,
+    pointA: new THREE.Vector3(), control: new THREE.Vector3(1, 1, 0), pointB: new THREE.Vector3(2, 0, 0),
+    helixAxis: new THREE.Vector3(0, 0, 1), savedTransforms: new Map([[0, pose]]),
+    productGeometry: new Map([[0, geometry]]) })
+  expect(p.center.distanceTo(new THREE.Vector3(...geometry.backbone_position).applyMatrix4(pose))).toBeLessThan(1e-12)
+  expect(p.baseCenter.distanceTo(new THREE.Vector3(...geometry.base_position).applyMatrix4(pose))).toBeLessThan(1e-12)
+  expect(p.frameQuaternion.toArray()).toEqual(geometry.frame_rotation)
+})

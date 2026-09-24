@@ -124,6 +124,27 @@
         "patch_charge_scope": {
           "path": "photoproducts/tt-cpd-cis-syn/patch_charge_scope.json",
           "sha256": "d2b8c4edfccbbfe073bb7d87112f23045444f1e72b0e3c7f5207e3f7337ba99b"
+        },
+        "topology": {
+          "path": "photoproducts/tt-cpd-cis-syn/preliminary-v6/topology.rtf",
+          "sha256": "335a0ba26dc268805aa3e13f4ce4dea760375a462197adac3af32394e5496e27",
+          "patch_name": "CSV6"
+        },
+        "parameters": {
+          "path": "photoproducts/tt-cpd-cis-syn/preliminary-v6/parameters.prm",
+          "sha256": "524893cd4c553ed6e21c459d6957aa74ff4b77108a2f3651b81110f557fa34f9"
+        },
+        "coordinate_template": {
+          "path": "photoproducts/tt-cpd-cis-syn/preliminary-v6/template.json",
+          "sha256": "cfb5cd66b05f210b8e6f5e95478373ad169d9de3dfbfcff91a2b0c9fe908c0d6"
+        },
+        "topology_audit_spec": {
+          "path": "photoproducts/tt-cpd-cis-syn/preliminary-v6/topology_audit.json",
+          "sha256": "2c5c1020da541eff5d552a13427e7fdaf063549add504d969f4beb82d7525913"
+        },
+        "preliminary_review": {
+          "path": "photoproducts/tt-cpd-cis-syn/preliminary-v6/preliminary_review.json",
+          "sha256": "99c01674db30cecdd9503b7bef57a5dbef252afb4427853b14e21c8c85270d3d"
         }
       }
     },

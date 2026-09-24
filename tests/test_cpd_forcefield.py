@@ -32,8 +32,7 @@ def test_product_design_fails_closed_with_no_two_bond_fallback():
         assert_cpd_simulation_supported(_product_design(), path="test exporter")
     message = str(caught.value)
     assert "no reactant-topology or two-bond/restraint fallback" in message
-    assert "gate not passed: qm_reference_data" in message
-    assert "required asset not declared: parameters" in message
+    assert "endpoint resolution failed" in message
 
 
 def test_reactant_design_is_unaffected_by_capability_gate():

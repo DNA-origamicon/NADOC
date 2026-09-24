@@ -93,13 +93,15 @@ def test_readiness_is_derived_and_every_form_starts_fail_closed():
     assert cis_syn["asset_audit"]["passed"] is True
     assert "patch_charge_scope" in cis_syn["asset_audit"]["declared"]
     assert "required asset not declared: qm_reference_report" in cis_syn["blockers"]
-    assert "required asset not declared: parameters" in cis_syn["blockers"]
+    assert cis_syn["simulation_supported"] is True
+    assert cis_syn["qualification"]["status"] == "preliminary-research"
     assert "required asset not declared: license" in cis_syn["blockers"]
 
 
 def test_readiness_requires_loadable_parameter_asset_separate_from_fit_report(tmp_path):
     registry = photoproduct_registry()
     entry = registry["products"][0]
+    entry["assets"] = {}
     for gate in registry["workflow_gates"]:
         entry["gates"][gate] = {"status": "passed", "evidence": ["reviewed"]}
     parameters = tmp_path / "product.prm"
@@ -599,6 +601,7 @@ def test_metric_gate_requires_complete_hash_linked_automated_evidence(tmp_path):
 
 def test_topology_attachment_requires_and_preserves_patch_name(tmp_path):
     registry = photoproduct_registry()
+    registry["products"][0]["assets"] = {}
     path = tmp_path / "registry.json"
     path.write_text(json.dumps(registry))
     topology = tmp_path / "candidate.rtf"
@@ -626,6 +629,7 @@ def test_topology_attachment_requires_and_preserves_patch_name(tmp_path):
 def test_help_trajectory_requires_namd_gate_and_verified_asset(tmp_path):
     registry = photoproduct_registry()
     entry = registry["products"][0]
+    entry["assets"] = {}
     payload = {
         "schema": "nadoc.photoproduct-help-trajectory.v1",
         "product_id": entry["id"],

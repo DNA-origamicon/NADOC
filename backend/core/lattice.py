@@ -920,6 +920,7 @@ def bundle_continuation_conflicts(
     length_bp: int,
     plane: str = "XY",
     offset_nm: float = 0.0,
+    source_frame_id: str | None = None,
 ) -> list[tuple[int, int, str]]:
     """Return existing-helix interval overlaps for a continuation request.
 
@@ -957,10 +958,12 @@ def bundle_continuation_conflicts(
     if requested_high <= requested_low:
         return []
 
+    from backend.core.continuation_source import continuation_source_helices
+    source_helices = continuation_source_helices(existing_design, source_frame_id, plane)
     conflicts: list[tuple[int, int, str]] = []
     for row, col in normalized:
         base_id = f"h_{plane}_{row}_{col}"
-        for helix in existing_design.helices:
+        for helix in source_helices:
             same_cell = helix.grid_pos == (row, col) or helix.grid_pos == [row, col]
             if not same_cell and not (
                 helix.id == base_id or helix.id.startswith(base_id + "_")
@@ -987,6 +990,7 @@ def make_bundle_continuation(
     offset_nm: float = 0.0,
     strand_filter: str = "both",
     extend_inplace: bool = False,
+    source_frame_id: str | None = None,
 ) -> Design:
     """Append a bundle segment to *existing_design*, continuing existing strands where possible.
 
@@ -1020,6 +1024,8 @@ def make_bundle_continuation(
     if plane not in valid_planes:
         raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
 
+    from backend.core.continuation_source import continuation_source_helices
+    source_helices = continuation_source_helices(existing_design, source_frame_id, plane)
     existing_helix_ids: set = {h.id for h in existing_design.helices}
     existing_strand_ids: set = {s.id for s in existing_design.strands}
 
@@ -1039,7 +1045,7 @@ def make_bundle_continuation(
     # first helix that carries grid_pos so new helices are placed at the correct position.
     _lattice_off_lx = 0.0
     _lattice_off_ly = 0.0
-    for _h in existing_design.helices:
+    for _h in source_helices:
         if _h.grid_pos is not None:
             _r0, _c0 = _h.grid_pos
             _lx0, _ly0 = _lattice_position(_r0, _c0, lt)
@@ -1067,13 +1073,13 @@ def make_bundle_continuation(
         phase_offset = _lattice_phase_offset(direction, lt)
 
         cont_helix = _find_continuation_helix(
-            existing_design.helices, row, col, plane, offset_nm
+            source_helices, row, col, plane, offset_nm
         )
         gap_helix = (
             None
             if cont_helix is not None
             else _find_same_cell_helix(
-                existing_design.helices, row, col, plane, offset_nm
+                source_helices, row, col, plane, offset_nm
             )
         )
 
@@ -1134,6 +1140,8 @@ def make_bundle_continuation(
             )
             extended_helix = Helix(
                 id=cont_helix.id,
+                grid_pos=cont_helix.grid_pos,
+                lattice_frame_id=cont_helix.lattice_frame_id,
                 axis_start=new_axis_start,
                 axis_end=cont_helix.axis_end,
                 length_bp=cont_helix.length_bp + actual_length,
@@ -1223,6 +1231,8 @@ def make_bundle_continuation(
                 )
             extended_helix = Helix(
                 id=cont_helix.id,
+                grid_pos=cont_helix.grid_pos,
+                lattice_frame_id=cont_helix.lattice_frame_id,
                 axis_start=cont_helix.axis_start,
                 axis_end=new_axis_end,
                 length_bp=old_length + actual_length,
@@ -1321,6 +1331,8 @@ def make_bundle_continuation(
 
             extended_helix = Helix(
                 id=h.id,
+                grid_pos=h.grid_pos,
+                lattice_frame_id=h.lattice_frame_id,
                 axis_start=h.axis_start,
                 axis_end=new_axis_end,
                 length_bp=new_length_bp,
@@ -1416,6 +1428,7 @@ def make_bundle_continuation(
             helix = Helix(
                 id=helix_id,
                 grid_pos=(row, col),
+                lattice_frame_id=source_frame_id or (cont_helix.lattice_frame_id if cont_helix else None),
                 axis_start=axis_start,
                 axis_end=axis_end,
                 length_bp=actual_length,
@@ -1569,7 +1582,13 @@ def make_bundle_continuation(
     # Cluster-membership update is handled by the API-layer reconciler
     # (backend.core.cluster_reconcile) — it adds each new helix to the
     # cluster of its grid_pos-matching parent.
+    clusters = existing_design.cluster_transforms
+    if source_frame_id is not None and new_helices:
+        frame = next(f for f in existing_design.lattice_frames if f.id == source_frame_id)
+        clusters = [ct.model_copy(update={'helix_ids': [*ct.helix_ids, *(h.id for h in new_helices)]})
+                    if ct.id == frame.placement_cluster_id else ct for ct in clusters]
     return existing_design.copy_with(
+        cluster_transforms=clusters,
         helices=final_helices,
         strands=updated_strands + new_strands,
     )

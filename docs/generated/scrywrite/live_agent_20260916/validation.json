@@ -1,0 +1,394 @@
+{
+  "session": "1379728-685086188925340",
+  "checks": [
+    "tracked focused runtime",
+    "stereo submitted capture",
+    "lattice paint erase",
+    "wheel +21bp without painting",
+    "grip panel drag 0.1m",
+    "cancel and release"
+  ],
+  "captures": {
+    "baseline": {
+      "directory": "/tmp/nadoc-scrywrite-physical-20260916/capture-1379728-685086188925340-20",
+      "frame": 13146,
+      "objects": [
+        {
+          "id": 1,
+          "identity": "long_near",
+          "owner_tokens": []
+        },
+        {
+          "id": 2,
+          "identity": "long_far",
+          "owner_tokens": []
+        },
+        {
+          "id": 3,
+          "identity": "short_near",
+          "owner_tokens": []
+        },
+        {
+          "id": 4,
+          "identity": "short_far",
+          "owner_tokens": []
+        },
+        {
+          "id": 5,
+          "identity": "h_XY_0_1",
+          "owner_tokens": []
+        },
+        {
+          "id": 6,
+          "identity": "h_XY_0_2",
+          "owner_tokens": []
+        },
+        {
+          "id": 7,
+          "identity": "h_XY_0_3",
+          "owner_tokens": []
+        },
+        {
+          "id": 8,
+          "identity": "h_XY_0_4",
+          "owner_tokens": []
+        },
+        {
+          "id": 9,
+          "identity": "h_XY_1_4",
+          "owner_tokens": []
+        },
+        {
+          "id": 10,
+          "identity": "h_XY_1_3",
+          "owner_tokens": []
+        },
+        {
+          "id": 11,
+          "identity": "h_XY_1_2",
+          "owner_tokens": []
+        },
+        {
+          "id": 12,
+          "identity": "h_XY_1_1",
+          "owner_tokens": []
+        },
+        {
+          "id": 13,
+          "identity": "h_XY_2_1",
+          "owner_tokens": []
+        },
+        {
+          "id": 14,
+          "identity": "h_XY_3_1",
+          "owner_tokens": []
+        },
+        {
+          "id": 15,
+          "identity": "h_XY_3_2",
+          "owner_tokens": []
+        },
+        {
+          "id": 16,
+          "identity": "h_XY_2_2",
+          "owner_tokens": []
+        }
+      ],
+      "counts": {
+        "left": {
+          "object_pixels": 92873,
+          "overlay_pixels": 0,
+          "visible_ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ]
+        },
+        "right": {
+          "object_pixels": 88280,
+          "overlay_pixels": 0,
+          "visible_ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16
+          ]
+        }
+      },
+      "sha256": {
+        "evidence.json": "d3e5e2438e79484ab4f94b870fb7e917929ef67e22b7ba52ecd5ced45473947a",
+        "right.png": "ff8bd567be1faef6681bc1bda995dbb03472f7903d16f60c6ccaaa1ba3d6f337",
+        "right.classes.u8": "684079ae58196343c3c0fda9ee8e421fc306832c4b9aedd6ad49650296252b4b",
+        "objects.json": "8d8e9365ab7f63a9ce32bbae73f323d2886a3b4c74ca0eb94d9dfff5d0eb9d39",
+        "left.depth.f32": "5e62338cda8513861086b59231f9e71370215395cf669872408aad9309f2f859",
+        "left.ids.u32": "e66c1fbbda97f124867cbebbd452bec04e69cbe8a0f3c84a4542be6c85827068",
+        "left.png": "7d21395116ec5d956ce673ffc7544341dc865f75495d2f832d75ff26f9433de4",
+        "right.depth.f32": "274befd6933e78a884b12427babcf2048385deb780614e035122dabc724485fd",
+        "right.ids.u32": "c506dcc9e34e85ab47a6df6287eda6a58b04130251f10cad784634877f4a7edb",
+        "left.classes.u8": "6babc7f2de81c59c8dfaa57a1d49584a9691bf47ae1968312e28c1df7f8e0aee"
+      }
+    },
+    "painted": {
+      "directory": "/tmp/nadoc-scrywrite-physical-20260916/capture-1379728-685086188925340-27",
+      "frame": 13214,
+      "objects": [
+        {
+          "id": 2,
+          "identity": "long_far",
+          "owner_tokens": []
+        },
+        {
+          "id": 5,
+          "identity": "h_XY_0_1",
+          "owner_tokens": []
+        },
+        {
+          "id": 6,
+          "identity": "h_XY_0_2",
+          "owner_tokens": []
+        },
+        {
+          "id": 7,
+          "identity": "h_XY_0_3",
+          "owner_tokens": []
+        },
+        {
+          "id": 8,
+          "identity": "h_XY_0_4",
+          "owner_tokens": []
+        },
+        {
+          "id": 9,
+          "identity": "h_XY_1_4",
+          "owner_tokens": []
+        },
+        {
+          "id": 10,
+          "identity": "h_XY_1_3",
+          "owner_tokens": []
+        },
+        {
+          "id": 11,
+          "identity": "h_XY_1_2",
+          "owner_tokens": []
+        },
+        {
+          "id": 12,
+          "identity": "h_XY_1_1",
+          "owner_tokens": []
+        }
+      ],
+      "counts": {
+        "left": {
+          "object_pixels": 65116,
+          "overlay_pixels": 195696,
+          "visible_ids": [
+            2,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12
+          ]
+        },
+        "right": {
+          "object_pixels": 64544,
+          "overlay_pixels": 194124,
+          "visible_ids": [
+            2,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12
+          ]
+        }
+      },
+      "sha256": {
+        "evidence.json": "9a3dd835c8a81c6dea857ee43048d88fb6f43bc75b11fca1c0986f15ae86b0eb",
+        "right.png": "6d7fbfdc3902a85414c95d1173cde3b979a47a19433cefcff6bac311e190bec4",
+        "right.classes.u8": "1e4b69a392cde3cb694e42efe24a7daad5ff7a7eaebd20a14b52f87b649187af",
+        "objects.json": "3b0be5d57fd795cf8ed44f785e1add2d1120b2bafa74ef522ccc67b51d65ff51",
+        "left.depth.f32": "1a6bde0d5bd6b76731e783fa211a3bd6f1366e8f3cc643f11de795c7bca1ab7d",
+        "left.ids.u32": "540af0040945aab1bc86041c1785b2f9326ce72afb5556d1212ecf4213e90aa3",
+        "left.png": "fb0a8925872793ba4e5386c15cef14403222bdebbd88e6ea6c133f14324fb013",
+        "right.depth.f32": "78361152221db1bf1890c2eddc2f866e4c16174913a137f2f9f39a9f03b87311",
+        "right.ids.u32": "25c27182a2c2bae41cc8269de4e8fa58d89a49d74a19f138307ef0a14f5f944e",
+        "left.classes.u8": "740d2d7a300cb7ee7de10623a5c61370894bd45ed96051202759b572efa3a70c"
+      }
+    },
+    "final": {
+      "directory": "/tmp/nadoc-scrywrite-physical-20260916/capture-1379728-685086188925340-44",
+      "frame": 13399,
+      "objects": [
+        {
+          "id": 1,
+          "identity": "long_near",
+          "owner_tokens": []
+        },
+        {
+          "id": 2,
+          "identity": "long_far",
+          "owner_tokens": []
+        },
+        {
+          "id": 3,
+          "identity": "short_near",
+          "owner_tokens": []
+        },
+        {
+          "id": 4,
+          "identity": "short_far",
+          "owner_tokens": []
+        },
+        {
+          "id": 5,
+          "identity": "h_XY_0_1",
+          "owner_tokens": []
+        },
+        {
+          "id": 6,
+          "identity": "h_XY_0_2",
+          "owner_tokens": []
+        },
+        {
+          "id": 7,
+          "identity": "h_XY_0_3",
+          "owner_tokens": []
+        },
+        {
+          "id": 8,
+          "identity": "h_XY_0_4",
+          "owner_tokens": []
+        },
+        {
+          "id": 9,
+          "identity": "h_XY_1_4",
+          "owner_tokens": []
+        },
+        {
+          "id": 10,
+          "identity": "h_XY_1_3",
+          "owner_tokens": []
+        },
+        {
+          "id": 11,
+          "identity": "h_XY_1_2",
+          "owner_tokens": []
+        },
+        {
+          "id": 12,
+          "identity": "h_XY_1_1",
+          "owner_tokens": []
+        },
+        {
+          "id": 13,
+          "identity": "h_XY_2_1",
+          "owner_tokens": []
+        },
+        {
+          "id": 14,
+          "identity": "h_XY_3_1",
+          "owner_tokens": []
+        },
+        {
+          "id": 15,
+          "identity": "h_XY_3_2",
+          "owner_tokens": []
+        },
+        {
+          "id": 16,
+          "identity": "h_XY_2_2",
+          "owner_tokens": []
+        }
+      ],
+      "counts": {
+        "left": {
+          "object_pixels": 92901,
+          "overlay_pixels": 0,
+          "visible_ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ]
+        },
+        "right": {
+          "object_pixels": 88330,
+          "overlay_pixels": 0,
+          "visible_ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16
+          ]
+        }
+      },
+      "sha256": {
+        "evidence.json": "66a15b04ff37bac404dcb9c39584ae1591cefebc42627dced1d09b104a1b92da",
+        "right.png": "dd1d2df1f412daeeb4b7b17b4f49ef7064081a93b6444df4eed0c4dadbbc1f34",
+        "right.classes.u8": "b6bfb43d59f1fd403f679eb9028b1f69d05bfe957a432f62cb59c63f22e5bef7",
+        "objects.json": "8d8e9365ab7f63a9ce32bbae73f323d2886a3b4c74ca0eb94d9dfff5d0eb9d39",
+        "left.depth.f32": "6e88a0461e025b12b955c38ea9268f0ed9323c763e8d537f9d9636a254a1aaa9",
+        "left.ids.u32": "ee23b00533b5b5e6615af197849f63bffda00caf3c3c1da196dbc91e67b12d23",
+        "left.png": "3af3f6e002d7051b27cd90a69ab323c9e1c5eb0a45e72344500c3413bb552b5c",
+        "right.depth.f32": "94f2a20c5fe7f51dc774921b21b9612e9b372a5cedd87c3760c3a4df8f8143b2",
+        "right.ids.u32": "6e3683aa6b70de61896fe83eee38b84c2defbd89fcafe5ec5a2e910e0b2411e1",
+        "left.classes.u8": "524168c184c2688dde91b2d697f2d8782880cf010a0e359819a741176450718f"
+      }
+    }
+  }
+}

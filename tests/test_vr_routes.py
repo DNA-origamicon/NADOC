@@ -426,6 +426,7 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "trajectory_action": "none",
         "trajectory_frame_idx": 0,
         "tool_sequence": 4,
+        "tool_action_config_sequence": 0,
         "tool_mode": "twist",
         "tool_action": "preview",
         "tool_target_identity": "nuc:s1:0:h1:3:FORWARD:0",
@@ -542,7 +543,8 @@ def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
         "display_period_ms": None,
     }
 
-    event_path.write_text("x" * 4097)
+    from backend.core.vr_extrude_draft import MAX_VR_EVENT_BYTES
+    event_path.write_text("x" * (MAX_VR_EVENT_BYTES + 1))
     assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
 
 
@@ -1698,7 +1700,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     sections = _scene_sections(text)
     identities = _scene_identities(text)
 
-    assert text.startswith("NADOCVR 12 full strand\n")
+    assert text.startswith("NADOCVR 13 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
     assert all(len(values) == len(set(values)) for values in identities.values())
     assert "nuc:s1:0:h1:1:FORWARD:0:backbone" in identities["full"]
@@ -3397,3 +3399,21 @@ def test_native_linux_platform_supported(monkeypatch):
     assert routes_vr._native_platform_reason() is None
     monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
     assert "WSL" in routes_vr._native_platform_reason()
+
+
+def test_scrywrite_launch_is_opt_in_and_uses_server_owned_path(tmp_path):
+    paths = [tmp_path / name for name in (
+        "scene", "events", "feedback", "tool", "plane", "preflight",
+        "execution", "jobs", "visualization", "trajectory", "coordinates",
+    )]
+    assert "--scrywrite-live" not in _viewer_command(*paths, VRLaunchRequest())
+    with pytest.raises(ValueError, match="private socket"):
+        _viewer_command(*paths, VRLaunchRequest(scrywrite_live="transactions"))
+    for mode in ("inspect", "transactions"):
+        command = _viewer_command(
+            *paths, VRLaunchRequest(scrywrite_live=mode), tmp_path / "viewer.sock",
+        )
+        assert command[command.index("--scrywrite-live") + 1] == str(tmp_path / "viewer.sock")
+        assert command[command.index("--scrywrite-live-mode") + 1] == mode
+    with pytest.raises(ValueError):
+        VRLaunchRequest(scrywrite_live="control")

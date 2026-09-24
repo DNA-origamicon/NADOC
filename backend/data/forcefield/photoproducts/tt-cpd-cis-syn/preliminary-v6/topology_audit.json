@@ -1,0 +1,411 @@
+{
+  "schema": "nadoc.photoproduct-topology-audit-spec.v1",
+  "product_id": "tt-cpd-cis-syn",
+  "expected_product_atoms": [
+    {
+      "atom": "1:P",
+      "type": "CS042",
+      "charge": 1.5
+    },
+    {
+      "atom": "1:O1P",
+      "type": "CS037",
+      "charge": -0.78
+    },
+    {
+      "atom": "1:O2P",
+      "type": "CS038",
+      "charge": -0.78
+    },
+    {
+      "atom": "1:O5'",
+      "type": "CS036",
+      "charge": -0.57
+    },
+    {
+      "atom": "1:C5'",
+      "type": "CS011",
+      "charge": -0.08
+    },
+    {
+      "atom": "1:H5'",
+      "type": "CS029",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:H5''",
+      "type": "CS030",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:C4'",
+      "type": "CS008",
+      "charge": 0.16
+    },
+    {
+      "atom": "1:H4'",
+      "type": "CS026",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:O4'",
+      "type": "CS041",
+      "charge": -0.5
+    },
+    {
+      "atom": "1:C1'",
+      "type": "CS009",
+      "charge": 0.16
+    },
+    {
+      "atom": "1:H1'",
+      "type": "CS024",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:N1",
+      "type": "CS031",
+      "charge": -0.361
+    },
+    {
+      "atom": "1:C6",
+      "type": "CS006",
+      "charge": 0.096
+    },
+    {
+      "atom": "1:H6",
+      "type": "CS012",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:C2",
+      "type": "CS002",
+      "charge": 0.536
+    },
+    {
+      "atom": "1:O2",
+      "type": "CS033",
+      "charge": -0.49
+    },
+    {
+      "atom": "1:N3",
+      "type": "CS032",
+      "charge": -0.233
+    },
+    {
+      "atom": "1:H3",
+      "type": "CS019",
+      "charge": 0.345
+    },
+    {
+      "atom": "1:C4",
+      "type": "CS001",
+      "charge": 0.509
+    },
+    {
+      "atom": "1:O4",
+      "type": "CS034",
+      "charge": -0.503
+    },
+    {
+      "atom": "1:C5",
+      "type": "CS005",
+      "charge": 0.013
+    },
+    {
+      "atom": "1:C5M",
+      "type": "CS003",
+      "charge": -0.272
+    },
+    {
+      "atom": "1:H51",
+      "type": "CS013",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:H52",
+      "type": "CS014",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:H53",
+      "type": "CS015",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:C2'",
+      "type": "CS010",
+      "charge": -0.18
+    },
+    {
+      "atom": "1:H2''",
+      "type": "CS028",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:H2'",
+      "type": "CS027",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:C3'",
+      "type": "CS007",
+      "charge": 0.01
+    },
+    {
+      "atom": "1:H3'",
+      "type": "CS025",
+      "charge": 0.09
+    },
+    {
+      "atom": "1:O3'",
+      "type": "CS035",
+      "charge": -0.57
+    },
+    {
+      "atom": "2:P",
+      "type": "CS042",
+      "charge": 1.5
+    },
+    {
+      "atom": "2:O1P",
+      "type": "CS037",
+      "charge": -0.78
+    },
+    {
+      "atom": "2:O2P",
+      "type": "CS038",
+      "charge": -0.78
+    },
+    {
+      "atom": "2:O5'",
+      "type": "CS036",
+      "charge": -0.57
+    },
+    {
+      "atom": "2:C5'",
+      "type": "CS011",
+      "charge": -0.08
+    },
+    {
+      "atom": "2:H5'",
+      "type": "CS029",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:H5''",
+      "type": "CS030",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:C4'",
+      "type": "CS008",
+      "charge": 0.16
+    },
+    {
+      "atom": "2:H4'",
+      "type": "CS026",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:O4'",
+      "type": "CS041",
+      "charge": -0.5
+    },
+    {
+      "atom": "2:C1'",
+      "type": "CS009",
+      "charge": 0.16
+    },
+    {
+      "atom": "2:H1'",
+      "type": "CS024",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:N1",
+      "type": "CS031",
+      "charge": -0.361
+    },
+    {
+      "atom": "2:C6",
+      "type": "CS006",
+      "charge": 0.096
+    },
+    {
+      "atom": "2:H6",
+      "type": "CS012",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:C2",
+      "type": "CS002",
+      "charge": 0.536
+    },
+    {
+      "atom": "2:O2",
+      "type": "CS033",
+      "charge": -0.49
+    },
+    {
+      "atom": "2:N3",
+      "type": "CS032",
+      "charge": -0.233
+    },
+    {
+      "atom": "2:H3",
+      "type": "CS019",
+      "charge": 0.345
+    },
+    {
+      "atom": "2:C4",
+      "type": "CS001",
+      "charge": 0.509
+    },
+    {
+      "atom": "2:O4",
+      "type": "CS034",
+      "charge": -0.503
+    },
+    {
+      "atom": "2:C5",
+      "type": "CS005",
+      "charge": 0.013
+    },
+    {
+      "atom": "2:C5M",
+      "type": "CS003",
+      "charge": -0.272
+    },
+    {
+      "atom": "2:H51",
+      "type": "CS013",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:H52",
+      "type": "CS014",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:H53",
+      "type": "CS015",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:C2'",
+      "type": "CS010",
+      "charge": -0.18
+    },
+    {
+      "atom": "2:H2''",
+      "type": "CS028",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:H2'",
+      "type": "CS027",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:C3'",
+      "type": "CS007",
+      "charge": 0.01
+    },
+    {
+      "atom": "2:H3'",
+      "type": "CS025",
+      "charge": 0.09
+    },
+    {
+      "atom": "2:O3'",
+      "type": "CS035",
+      "charge": -0.57
+    }
+  ],
+  "crosslinks": [
+    [
+      "1:C5",
+      "2:C5"
+    ],
+    [
+      "1:C6",
+      "2:C6"
+    ]
+  ],
+  "retained_bonds": [
+    [
+      "1:C5",
+      "1:C6"
+    ],
+    [
+      "2:C5",
+      "2:C6"
+    ]
+  ],
+  "impropers_added": [
+    [
+      "1:C2",
+      "1:N1",
+      "1:N3",
+      "1:O2"
+    ],
+    [
+      "1:C4",
+      "1:N3",
+      "1:C5",
+      "1:O4"
+    ],
+    [
+      "2:C2",
+      "2:N1",
+      "2:N3",
+      "2:O2"
+    ],
+    [
+      "2:C4",
+      "2:N3",
+      "2:C5",
+      "2:O4"
+    ]
+  ],
+  "impropers_removed": [
+    [
+      "1:C2",
+      "1:N1",
+      "1:N3",
+      "1:O2"
+    ],
+    [
+      "1:C4",
+      "1:N3",
+      "1:C5",
+      "1:O4"
+    ],
+    [
+      "2:C2",
+      "2:N1",
+      "2:N3",
+      "2:O2"
+    ],
+    [
+      "2:C4",
+      "2:N3",
+      "2:C5",
+      "2:O4"
+    ],
+    [
+      "1:C5",
+      "1:C4",
+      "1:C6",
+      "1:C5M"
+    ],
+    [
+      "2:C5",
+      "2:C4",
+      "2:C6",
+      "2:C5M"
+    ]
+  ],
+  "improper_interpretation": "Retained carbonyl impropers, not new stereochemical terms. Stereochemistry evaluated from coordinates and trajectories."
+}

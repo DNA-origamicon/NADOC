@@ -19,6 +19,8 @@ import { recordNameEdit } from '../ui/name_edit_audit.js'
 
 import { initSequenceSearch } from '../ui/sequence_search.js'
 import { spreadsheetColumns } from '../ui/spreadsheet_schema.js'
+import { createHairpinDimerIndexCache } from '../ui/hairpin_dimer_report.js'
+import { prependStrandWarningIcon } from '../ui/hairpin_dimer_window.js'
 import { DEFAULT_SPREADSHEET_SORT_ORDER, initSpreadsheetSort } from '../ui/spreadsheet_sort.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
@@ -200,7 +202,7 @@ function _removeCtxMenu() {
  * @param {function} opts.onSelectStrand  — (strandId) => void; select strand in pathview
  * @param {function} opts.onSelectionChange — (strandIds) => void; broadcast selection
  */
-export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEditSequence = null } = {}) {
+export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEditSequence = null, getHairpinDimerReport = () => null } = {}) {
   const panel       = document.getElementById('spreadsheet-panel')
   const body        = document.getElementById('spreadsheet-body')
   const theadRow    = document.getElementById('spreadsheet-thead-row')
@@ -223,6 +225,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
   // ── Track selected strand IDs (from pathview) ──────────────────
   let _selectedStrandIds = new Set()
   let _design = null
+  const hairpinDimerIndex = createHairpinDimerIndexCache()
 
   // ── Persistent column visibility ──────────────────────────────────
   let hiddenCols = new Set()
@@ -362,6 +365,8 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
 
     const strands = sortedStrands(design, sortOrder)
     const displayIds = buildStrandDisplayIdMap(design.strands)
+    const hdReport = getHairpinDimerReport()
+    const hdIndex = hairpinDimerIndex.get(hdReport, design)
     const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, h.label ?? i]))
 
     strands.forEach((strand) => {
@@ -392,6 +397,9 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
             td.className = 'sheet-col-id'
             td.textContent = displayIds.get(strand.id) ?? '—'
             td.title = strand.id
+            prependStrandWarningIcon(td, hdIndex, strand.id, design, hdReport, {
+              title: [displayIds.get(strand.id), strand.name].filter(Boolean).join(' '),
+            })
             break
           }
           case 'name': {

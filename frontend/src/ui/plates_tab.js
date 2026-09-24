@@ -5,6 +5,8 @@ import { hexFromInt } from '../scene/color_util.js'
 import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
 import { initPlateView } from './plate_view.js'
 import { buildIdtStrandNames } from './idt_order.js'
+import { createHairpinDimerIndexCache, hairpinDimerStrandWarnings } from './hairpin_dimer_report.js'
+import { openStrandHairpinDimerWindow } from './hairpin_dimer_window.js'
 
 export function initPlatesTab({ api, designRenderer, selectionManager, store }) {
   const PLATE_STAPLE_PALETTE = STAPLE_PALETTE
@@ -24,6 +26,18 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
       bhq2: 'BHQ-2', atto488: 'ATTO488', atto550: 'ATTO550', biotin: 'Biotin',
     }
 
+    // Hairpin/self-dimer ⚠ per strand (hairpin_dimer_checker.js owns the report).
+    const hairpinDimerIndex = createHairpinDimerIndexCache()
+    let _lastWarnSig = null
+    function _warnings({ currentDesign, hairpinDimerReport }) {
+      const index = hairpinDimerIndex.get(hairpinDimerReport, currentDesign)
+      return hairpinDimerStrandWarnings(index, currentDesign, {
+        threshold: hairpinDimerReport?.threshold_c, severe: hairpinDimerReport?.severe_threshold_c,
+        withStructure: true,
+      })
+    }
+    const _warnSig = warnings => JSON.stringify([...warnings])
+
     // Strand length in nt (domain bp + loop/skip deltas) — mirrors the cadnano
     // spreadsheet's strandLength().
 
@@ -40,6 +54,10 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
         // Select the canonical strand ref; all linked views follow it. Empty well clears.
         if (sid) selectionManager.selectStrand(sid)
         else selectionManager.clearSelection()
+      },
+      onWarningClick: (sid, name) => {
+        const { hairpinDimerReport, currentDesign } = store.getState()
+        openStrandHairpinDimerWindow(hairpinDimerReport, currentDesign, sid, { title: name })
       },
     })
 
@@ -81,6 +99,8 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
         if (e.modification && !modOf.has(e.strand_id)) modOf.set(e.strand_id, e.modification)
       }
 
+      const warnings = _warnings(store.getState())
+      _lastWarnSig = _warnSig(warnings)
       const records = []
       let stapleIdx = 0
       for (const s of design.strands ?? []) {
@@ -110,6 +130,8 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
           modName:    mod ? (MOD_NAMES[mod] || mod) : null,
           sequence:   s.sequence || '',
           name:       idtNames[s.id] || `S${stapleIdx}`,
+          warning:    warnings.get(s.id)?.text ?? null,
+          warningLevel: warnings.get(s.id)?.level ?? null,
         })
       }
       return { records, saved: design.plate_layout ?? null }
@@ -147,7 +169,13 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
       if (paneEl.hasAttribute('hidden')) return
       const sig = _inputsSig(s.currentDesign, s.strandColors, s.strandGroups)
       const layoutSig = _layoutSig(s.currentDesign?.plate_layout)
-      if (sig === _lastSig && layoutSig === _renderedLayoutSig) return
+      if (sig === _lastSig && layoutSig === _renderedLayoutSig) {
+        // Only the ⚠ set changed (a check ran, or an edit made one stale).
+        const warnings = _warnings(s)
+        const warnSig = _warnSig(warnings)
+        if (warnSig !== _lastWarnSig) { _lastWarnSig = warnSig; plateView.setWarnings?.(warnings) }
+        return
+      }
       _lastSig = sig
       _refresh()
     })

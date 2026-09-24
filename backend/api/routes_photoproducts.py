@@ -175,3 +175,56 @@ def delete_photoproduct(photoproduct_id: str) -> dict:
     payload["removed_photoproduct_id"] = photoproduct_id
     payload["geometry_unchanged"] = True
     return payload
+
+
+@router.get("/design/photoproducts/template/{stereochemistry}")
+def get_design_template(stereochemistry: str) -> dict:
+    from backend.core.cpd_design import template_preview
+    try:
+        return template_preview(stereochemistry)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+
+
+@router.post("/design/photoproducts/convert")
+def convert_design_photoproduct(body: PhotoproductCreateBody) -> dict:
+    from backend.core.cpd_design import convert_extra_pair
+    def apply(current):
+        try:
+            return convert_extra_pair(current, body.base_keys, body.stereochemistry)[0]
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(422, detail=str(exc)) from exc
+    updated, validation, entry = design_state.mutate_with_feature_log(
+        "photoproduct-create", f"Convert extra thymines to {body.stereochemistry} CPD",
+        {"base_keys": body.base_keys, "stereochemistry": body.stereochemistry}, apply,
+        expected_revision=body.expected_revision,
+    )
+    payload = _design_response(updated, validation, preserve_feature_log_id=entry.id)
+    payload["geometry_unchanged"] = True  # Extra-base poses are rendered client-side.
+    return payload
+
+
+class PhotoproductRelaxBody(BaseModel):
+    expected_revision: int | None = None
+
+
+@router.post("/design/photoproducts/{photoproduct_id}/relax")
+def relax_design_photoproduct(photoproduct_id: str, body: PhotoproductRelaxBody) -> dict:
+    from backend.core.cpd_design import relax_existing_cpd
+    result = {}
+    def apply(current):
+        try:
+            updated, report = relax_existing_cpd(current, photoproduct_id)
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc)) from exc
+        result.update(report)
+        return updated
+    updated, validation, entry = design_state.mutate_with_feature_log(
+        "photoproduct-relax", "Relax CPD bonds and nearby clashes",
+        {"photoproduct_id": photoproduct_id}, apply,
+        expected_revision=body.expected_revision,
+    )
+    payload = _design_response(updated, validation, preserve_feature_log_id=entry.id)
+    payload["geometry_unchanged"] = True
+    payload["bond_relaxation"] = result
+    return payload

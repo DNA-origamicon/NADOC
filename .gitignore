@@ -228,3 +228,5 @@ experiments/exp46_xb_placement/*_xb_traj.json
 # Bulky campaign evidence is retained losslessly as indexed summary.json.gz.
 experiments/exp59_kimmdy_extra_base_matrix/results/jobs/*/summary.json
 experiments/exp60_extra_vs_native_photoproducts/results/jobs/*/summary.json
+# Local retained development evidence; kept outside the user workspace.
+/.development-artifacts
