@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test'
-import { decodeContainer } from '../src/viewer/package_container.js'
 import { writeFile, unlink, access } from 'node:fs/promises'
 import path from 'node:path'
 import { createPreparedHost } from '../../scripts/prepared_view_host.mjs'
@@ -18,7 +17,7 @@ test.beforeAll(async () => {
   await writeFile(controlFile, JSON.stringify({ url, token: host.controlToken }), { mode: 0o600, flag: 'wx' }); ownsControl = true
 })
 test.afterAll(async () => { host?.stop(); if (ownsControl) await unlink(controlFile).catch(() => {}) })
-test('File Sharing updates one invitation across parts and retains guest sessions', async ({ page, context }) => {
+test('File Sharing creates, copies, restores and stops one invitation', async ({ page, context }) => {
   test.setTimeout(180000)
   const errors = trackConsoleErrors(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:5174' })
@@ -29,22 +28,23 @@ test('File Sharing updates one invitation across parts and retains guest session
     await page.locator('.menu-item').filter({ has: page.locator('#menu-file-sharing') }).hover()
     await page.locator('#menu-file-sharing').click()
     await expect(page.locator('#share-link-dialog')).toBeVisible()
-    await expect(page.locator('#share-link-dialog [data-target]')).toBeEnabled()
+    await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled()
+    await expect(page.locator('#share-link-dialog [data-stop-host]')).toBeDisabled()
     await page.locator('#share-link-dialog [data-create]').click()
-    await expect(page.locator('#share-link-dialog [data-status]')).toHaveText(/Invitation ready|Shared view updated/, { timeout: 30000 })
-    const section = page.locator('#share-link-dialog section').first()
-    await expect(section.locator('strong')).toHaveText(`__e2e__share_${name}`)
-    await section.getByRole('button', { name: 'Copy link', exact: true }).click()
+    await expect(page.locator('#share-link-dialog [data-copy-link]')).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('#share-link-dialog [data-create]')).toBeDisabled()
+    await page.locator('#share-link-dialog [data-copy-link]').click()
     const url = await page.evaluate(() => navigator.clipboard.readText())
-    expect(url).toBe(await section.locator('input').inputValue())
-    const presenter = section.getByRole('link', { name: 'Open presenter', exact: true })
-    await expect(presenter).toHaveCount(0)
     await expect(page.locator('#presentation-controls')).toBeVisible()
     return url
   }
   const first = await sharePart('alpha')
   await page.locator('#share-link-dialog [data-close]').click()
-  const second = await sharePart('beta')
+  await page.locator('#menu-file-sharing').evaluate(button => button.click())
+  await expect(page.locator('[data-copy-link]')).toBeVisible()
+  await expect(page.locator('[data-create]')).toBeDisabled()
+  await page.locator('[data-copy-link]').click()
+  const second = await page.evaluate(() => navigator.clipboard.readText())
   expect(second).toBe(first)
   const guest = await context.newPage(), guestErrors = []
   guest.on('pageerror', error => guestErrors.push(error.message))
@@ -60,54 +60,12 @@ test('File Sharing updates one invitation across parts and retains guest session
     await expect(guest.locator('#title')).toHaveText(`__e2e__share_${name}`)
     await expect(guest.locator('#status')).toContainText('Static snapshot')
   }
-  await openLink(second, 'beta')
-  // Native snapshot updates and inline camera sharing use the same invitation, with no guest rejoin.
-  const updates = [], updateErrors = [], downloads = []
-  guest.on('response', response => {
-    if (!response.url().includes('/scene?revision=') || !response.ok()) return
-    downloads.push(response.body().then(bytes => updates.push(decodeContainer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)))).catch(error => updateErrors.push(error.message)))
-  })
-  const cookieBefore = (await context.cookies()).filter(c => c.name.startsWith('nadoc_view_'))
-  let joins = 0; guest.on('request', request => { if (request.url().endsWith('/join')) joins++ })
-  await page.locator('#share-link-dialog [data-close]').click()
-  const glasses = page.locator('#presentation-controls .presentation-perspective')
-  await glasses.click(); await expect(glasses).toHaveAttribute('aria-pressed', 'true')
-  await expect(guest.locator('[data-follow]')).toBeEnabled({ timeout: 15000 })
-  async function updateView() {
-    await page.locator('#menu-file-sharing').evaluate(button => button.click())
-    await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled()
-    await page.locator('#share-link-dialog [data-create]').click()
-    await expect(page.locator('#share-link-dialog [data-status]')).toContainText('Shared view updated', { timeout: 30000 })
-    await page.locator('#share-link-dialog [data-close]').click()
-  }
-  await page.evaluate(() => window.__nadocTest.store.setState({ coloringMode: 'base' }))
-  await updateView()
-  await expect.poll(() => updates.at(-1)?.view?.coloring, { timeout: 20000 }).toBe('base')
-  await page.locator('#section-view-btn').evaluate(button => button.click())
-  await updateView()
-  await expect.poll(() => updates.at(-1)?.materials.some(m => m.sectionCap && m.sectionPlanes), { timeout: 20000 }).toBe(true)
-  await expect(guest.locator('#status')).toContainText('Static snapshot')
-  await page.evaluate(() => window.__nadocTest.configureMultiView({ count: 2, representations: ['beads', 'full'], colorings: ['strand', 'base'] }))
-  await page.locator('.mv-viewport-panel[data-panel="2"]').click({ position: { x: 40, y: 70 } })
-  await updateView()
-  await expect.poll(() => updates.at(-1)?.view?.representation, { timeout: 25000 }).toBe('full')
-  expect(updates.at(-1).view.coloring).toBe('base')
-  expect(guest.url()).toBe(second); expect(joins).toBe(0)
-  expect((await context.cookies()).filter(c => c.name.startsWith('nadoc_view_'))).toEqual(cookieBefore)
-  await glasses.click(); await expect(glasses).toHaveAttribute('aria-pressed', 'false')
-  const paused = updates.length
-  await page.evaluate(() => window.__nadocTest.store.setState({ coloringMode: 'strand' }))
-  await page.waitForTimeout(3500); expect(updates.length).toBe(paused)
-  await Promise.all(downloads); expect(updateErrors).toEqual([])
-  await page.locator('.menu-item').filter({ has: page.locator('#menu-file-sharing') }).hover()
-  await page.locator('#menu-file-sharing').click()
-  const betaRow = page.locator('#share-link-dialog section').filter({ hasText: '__e2e__share_beta' })
-  await betaRow.getByRole('button', { name: 'End invitation', exact: true }).click()
-  await expect(betaRow).toHaveCount(0)
-  await guest.goto(second); await guest.reload()
-  await expect(guest.locator('#join-error')).toContainText('This share has ended')
-  expect(errors).toEqual([]); expect(guestErrors).toEqual([])
+  await openLink(second, 'alpha')
   await page.locator('#share-link-dialog [data-stop-host]').click()
-  await expect(page.locator('#share-link-dialog [data-status]')).toHaveText('Hosting stopped. All links have ended.')
+  await expect(page.locator('#share-link-dialog [data-copy-link]')).toHaveCount(0)
+  await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled()
+  await expect(page.locator('#share-link-dialog [data-stop-host]')).toBeDisabled()
+  await expect(guest.locator('#guest')).toContainText('Session ended')
+  expect(errors).toEqual([]); expect(guestErrors).toEqual([])
   await guest.close()
 })

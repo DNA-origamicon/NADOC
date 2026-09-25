@@ -13,8 +13,10 @@ see the [sharing audit](audits/sharing_security_hygiene_20260923.md).
 ## Share one invitation throughout a meeting
 
 1. Open the view you want to publish and choose **File → Sharing**.
-2. Press **Create link for current view** and send **Copy invitation**, which includes
-   the link and password. Guests enter their name and password once.
+2. Press **Create link**, then **Copy link**. Send the separately displayed password
+   too. Guests enter their name and password once. Create is disabled while sharing;
+   **Stop sharing all links** ends the session and enables it again. Errors appear
+   in an expandable **Error log**.
 3. Select an oxDNA or NAMD job and click the green **Share** button beside its
    **Visualizations** title. A red dot identifies the published job. Its visualization
    changes and playback stream automatically; guests can orbit independently or follow
@@ -29,10 +31,9 @@ viewer while an invitation is active. Its glasses icon toggles **Share perspecti
 (off initially), allowing guests to jump to or follow the editor camera. All editor
 visualization tools remain available; job sharing publishes the chosen visualization.
 The **End** button stops hosting all links. No separate presenter tab is required
-or offered. For static content, **Update shared view** replaces the snapshot through
-the same invitation.
+or offered. Design edits and view changes update the same invitation automatically.
 The older recorded-clip preparation controls are no longer part of the main sharing
-setup. **End invitation** revokes the invitation; **Stop hosting all links**, host
+setup. **Stop sharing all links**, host
 shutdown or expiry ends the session. Content updates do not extend meeting expiry.
 
 ## Try it locally
@@ -166,10 +167,10 @@ The package viewer's real-GPU performance gate remains open.
 
 ## Share the current part over the internet
 
-On the hosting PC, use **File → Sharing… → Create link for current view**.
+On the hosting PC, use **File → Sharing… → Create link**.
 The default host now prepares an HTTPS invitation for guests on any network.
-**Copy invitation** includes the link, a generated meeting password, and simple
-browser instructions. Guests enter their display name and password; they need no
+**Copy link** copies the URL. Send the generated password displayed separately in
+the popup as well. Guests enter their display name and password; they need no
 NADOC, Tailscale, VPN, extension, account, certificate exception, or file picker.
 **Copy link** remains available for sending the password separately. The invitation
 is a bearer credential; the display name is not verified identity.
@@ -212,9 +213,9 @@ Later editor changes do not alter a published snapshot.
 
 Use the glasses icon in the **Presenting** indicator above NADOC's standard 3D
 canvas. No presenter tab, presenter sign-in, or additional link is needed. The
-editor shares its camera through local host authority; **Copy invitation** supplies
-the guest link. In native multi-view, the active pane supplies the camera and
-explicit snapshot updates. The toggle controls camera sharing independently of live job frames.
+editor shares its camera through local host authority. Send guests the link and
+separately displayed password. In native multi-view, the active pane supplies the
+camera and shared view. The toggle controls camera sharing independently of live job frames.
 
 Guests start with independent navigation. **Jump to presenter** moves once;
 **Follow presenter** tracks subsequent camera changes. Dragging, scrolling,
@@ -266,7 +267,7 @@ An already running helper retains its original server code and built assets.
 New presenter controls become available in the next hosting session after the
 updated frontend is built. Stop/start invalidates existing invitations.
 
-**Stop sharing** revokes one snapshot; **Stop hosting all links**, expiry, or tunnel
+**Stop sharing all links**, expiry, or tunnel
 loss ends the complete session. The helper closes both listeners and its owned
 foreground tunnel. Keep the hosting PC awake while presenting. Tailscale's installed
 background service may remain running, but the meeting route is session-scoped.
@@ -367,7 +368,7 @@ button to replace the publication and move the dot. A failed replacement retains
 the old publication. To stop job sharing, select the shared job and click **Stop
 sharing**. This selects native positions and Full representation in the editor
 and publishes the native NADOC model to guests; it does not end their invitation.
-**End invitation** or **Stop hosting all links** explicitly ends guest access.
+**Stop sharing all links** explicitly ends guest access.
 
 The live path targets at most eight render-state samples per second, independently
 of each browser's render loop. It sends the prepared scene initially, then absolute
@@ -425,27 +426,11 @@ restart ends its old invitations. Active meetings are never restarted automatica
 The WSL frame/camera path uses a persistent Windows Node pipe, avoiding a subprocess
 and temporary upload file per frame. Host credentials remain outside the browser.
 
-## Recorded NAMD clips (including atomistic views)
+## Recorded NAMD clip format
 
-Live job sharing remains available above. **File → Sharing → Include recorded
-trajectory** also prepares a bounded clip for independent guest playback.
-
-Load a NAMD trajectory in the main 3D **Full**, **VDW**, **ball-and-stick**, or **stick** part view, turn water off, and pause.
-Open **File → Sharing**, enable **Include recorded trajectory**, and choose
-first/last frame, interval, and samples per second. Use **Create link for current
-view** for a new presentation or **Update shared view** for the selected existing
-presentation. Preparation visits those frames through the normal
-MD display controller and restores the inspected source frame. Cancel is available.
-Send the invitation and password as usual. **Play shared clip**, **Pause shared clip**,
-and the shared-frame slider operate the prepared recording, independently of the
-editor's private trajectory player. The standalone presenter page also has controls.
-Guests keep their own camera and existing name/password session. Closing the editor
-dialog or privately opening another design does not remove the prepared recording.
-
-A running host from before trajectory sharing cannot serve clips. Same-link content
-replacement also requires the newer `share-content-v1` host capability. After the current meeting,
-use **Stop hosting all links**, then create a new invitation with **Include recorded trajectory** enabled. This deliberately
-ends old links; no active meeting is restarted automatically by the upgrade.
+The Sharing popup no longer offers recorded-clip preparation or playback controls.
+Use the job's **Visualizations → Share** control for live trajectory sharing.
+Existing prepared clip packages remain supported by the guest viewer.
 
 Each frame is an independently applicable, compressed patch against one prepared
 scene. Coordinates match the exported display; patches update existing GPU

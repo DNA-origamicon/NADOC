@@ -59,8 +59,10 @@ test('guest sees presence, measured loading, nanopore paths and vector fields, t
   await page.locator('#simulate-jobs-list [data-job-id="__e2e__guest_ions"]').click()
   await page.locator('#menu-file-sharing').evaluate(button => button.click())
   await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled(); await page.locator('#share-link-dialog [data-create]').click()
-  await expect(page.locator('#share-link-dialog [data-status]')).toContainText('Invitation ready', { timeout: 30000 })
-  const url = await page.locator('.sharing-url').inputValue(); await page.locator('#share-link-dialog [data-close]').click()
+  await expect(page.locator('#share-link-dialog [data-copy-link]')).toBeVisible({ timeout: 30000 })
+  await page.evaluate(() => { navigator.clipboard.writeText = async value => { window.__copiedShare = value } })
+  await page.locator('[data-copy-link]').click()
+  const url = await page.evaluate(() => window.__copiedShare); await page.locator('#share-link-dialog [data-close]').click()
   const guest = await context.newPage(), packets = []
   guest.on('response', async response => { if (response.url().includes('/scene?revision=') && response.ok()) { const bytes = await response.body().catch(() => null); if (bytes) packets.push(decodeContainer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))) } })
   await guest.goto(url); await expect(guest.locator('#join-submit')).toBeEnabled()

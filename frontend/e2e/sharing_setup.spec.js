@@ -4,17 +4,19 @@ import { readFileSync } from 'node:fs'
 // isolated Vite bridge. Provider calls are intercepted: no real public room.
 // Runner screenshots/traces are removed by the cleanup reporter on failure too.
 test('Create link automatically waits for public access and publishes without a setup step', async ({ page }) => {
-  let started = false, polls = 0, publications = 0
+  let started = false, polls = 0, publications = 0, shared = null
   const pending = { state: 'dns_pending', message: 'Waiting for public DNS', checks: [] }
   const ready = { state: 'ready', message: 'Public DNS and HTTPS verified', checks: [] }
   await page.route('**/__nadoc_share/**', route => {
     const action = new URL(route.request().url()).pathname.split('/').pop()
     if (action === 'start') { started = true; return route.fulfill({ json: { shares: [], publicAccess: pending } }) }
+    if (action === 'stop') { started = false; shared = null; return route.fulfill({ json: {} }) }
     if (action === 'create') {
       expect(polls).toBeGreaterThan(1); publications++
-      return route.fulfill({ json: { id: 'a'.repeat(32), title: 'Setup test', url: 'https://example.invalid/viewer', password: 'test-password', expiresAt: Date.now() + 60000 } })
+      shared = { id: 'a'.repeat(32), title: 'Setup test', url: 'https://example.invalid/viewer#invite=guest&password=required', password: 'test-password', expiresAt: Date.now() + 60000 }
+      return route.fulfill({ json: shared })
     }
-    return route.fulfill({ json: { running: started, shares: [], ...(started ? { publicAccess: ++polls > 1 ? ready : pending } : {}) } })
+    return route.fulfill({ json: { running: started, shares: shared ? [shared] : [], ...(started ? { publicAccess: ++polls > 1 ? ready : pending } : {}) } })
   })
   const design = JSON.parse(readFileSync(new URL('../../Examples/2hb_xover_atoms_test.nadoc', import.meta.url)))
   design.id = '__e2e__auto-sharing'; design.metadata.name = '__e2e__auto-sharing'
@@ -26,9 +28,32 @@ test('Create link automatically waits for public access and publishes without a 
   }, design)
   const dialog = page.locator('#share-link-dialog')
   await expect(dialog.locator('[data-host-setup]')).toHaveCount(0)
+  await expect(dialog.locator('[data-create]')).toBeEnabled()
+  await expect(dialog.locator('[data-stop-host]')).toBeDisabled()
+  await expect(dialog.locator('[data-copy-link]')).toHaveCount(0)
   await dialog.locator('[data-create]').click()
-  await expect(dialog.locator('[data-status]')).toContainText('Waiting for public DNS')
+  await expect(dialog.locator('[data-status]')).toHaveText('Connecting…')
   expect(publications).toBe(0)
-  await expect(dialog.locator('[data-status]')).toContainText('Invitation ready', { timeout: 20000 })
+  await expect(dialog.locator('[data-copy-link]')).toBeVisible({ timeout: 20000 })
+  await expect(dialog.locator('[data-create]')).toBeDisabled()
+  await expect(dialog.locator('[data-stop-host]')).toBeEnabled()
+  await expect(dialog.locator('[data-status]')).toBeEmpty()
   expect(publications).toBe(1)
+  await page.evaluate(() => { window.__copiedShare = ''; navigator.clipboard.writeText = async value => { window.__copiedShare = value } })
+  await dialog.locator('[data-copy-link]').click()
+  expect(await page.evaluate(() => window.__copiedShare)).toBe('https://example.invalid/viewer#invite=guest&password=required')
+  await expect(dialog.locator('[data-password]')).toHaveText('Password: test-password')
+  await dialog.locator('[data-stop-host]').click()
+  await expect(dialog.locator('[data-create]')).toBeEnabled()
+  await expect(dialog.locator('[data-stop-host]')).toBeDisabled()
+  await expect(dialog.locator('[data-copy-link]')).toHaveCount(0)
+  await page.route('**/__nadoc_share/start', route => route.fulfill({ status: 503, json: { error: 'Host connection failed' } }))
+  await dialog.locator('[data-create]').click()
+  const errors = dialog.locator('[data-error]')
+  await expect(errors).toBeVisible()
+  await expect(errors).not.toHaveAttribute('open')
+  await expect(errors.locator('pre')).not.toBeVisible()
+  await errors.locator('summary').click()
+  await expect(errors.locator('pre')).toHaveText('Host connection failed')
+  await expect(errors.locator('pre')).toBeVisible()
 })

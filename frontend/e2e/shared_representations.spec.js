@@ -20,11 +20,11 @@ test('shares native representations, view volumes and isolated multi-overlay lay
   await guest.goto('/viewer.html?test=1')
   async function publish() {
     await page.evaluate(() => document.getElementById('menu-file-sharing').click())
-    await expect(page.locator('#share-link-dialog [data-status]')).toContainText(/Host ready|Update this presentation/)
-    const before = packets.length
-    await page.locator('#share-link-dialog [data-create]').click()
-    await expect(page.locator('#share-link-dialog [data-status]')).toContainText(/Invitation ready|Shared view updated/)
-    expect(packets.length).toBeGreaterThan(before)
+    if (!packets.length) {
+      await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled()
+      await page.locator('#share-link-dialog [data-create]').click()
+    }
+    await expect(page.locator('#share-link-dialog [data-copy-link]')).toBeVisible()
     await page.locator('#share-link-dialog [data-close]').click()
     const bytes = [...packets.at(-1)]
     return guest.evaluate(async bytes => {

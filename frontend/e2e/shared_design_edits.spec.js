@@ -26,9 +26,9 @@ test('publishes design edits on the same invitation and preserves the guest came
     document.getElementById('welcome-screen')?.classList.add('hidden')
   }, design)
   await page.evaluate(() => document.getElementById('menu-file-sharing').click())
-  await expect(page.locator('#share-link-dialog [data-status]')).toContainText('Host ready')
+  await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled()
   await page.locator('#share-link-dialog [data-create]').click()
-  await expect(page.locator('#share-link-dialog [data-status]')).toContainText('Invitation ready')
+  await expect(page.locator('#share-link-dialog [data-copy-link]')).toBeVisible()
   await page.locator('#share-link-dialog [data-close]').click()
   // Several sharing polls must not republish an idle renderer's GPU uploads.
   await page.waitForTimeout(2200)

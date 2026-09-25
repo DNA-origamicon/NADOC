@@ -361,10 +361,7 @@ async function main() {
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
   const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView() ?? _multiOverlay?.getBroadcastView(), getRepresentation: () => _currentRepr, getDetailLevel: () => designRenderer.getDetailLevel(), getVisualization: () => captureSharedVisualization(document, simulateJobs?.getSelectedDetails?.()) })
-  const sharing = initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store }, trajectory: {
-    prepared: preparedExport, store, getSource: () => ({ controller: mdViz, companion: mdPanel?.trajectorySolvent,
-      representation: _currentRepr, pause: () => mdPanel?.pauseTrajectory?.() }),
-  } })
+  const sharing = initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store } })
   initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel: () => designRenderer.getDetailLevel(), getFileOpen: () => _fileOpen })
   const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer })
   window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug

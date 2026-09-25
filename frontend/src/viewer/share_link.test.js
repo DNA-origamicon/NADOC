@@ -1,61 +1,104 @@
 import { it, expect, vi, afterEach } from 'vitest'
 import { initShareLink } from './share_link.js'
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks() })
-it('publishes the current snapshot, copies its exact URL, and revokes that share', async () => {
-  document.body.innerHTML = '<button id="menu-file-sharing"></button>'
-  const share = { id: 'a'.repeat(32), title: '<b>Part A</b>', url: 'http://192.168.0.15:5182/viewer.html#room=a&invite=b', expiresAt: Date.now() + 60000 }
-  const fetch = vi.fn(async path => ({ ok: true, json: async () => path.endsWith('/create') ? share : { shares: [] } }))
-  const buffer = new ArrayBuffer(16), exportView = vi.fn().mockResolvedValue({ title: share.title, buffer }), clipboard = { writeText: vi.fn().mockResolvedValue() }
-  const ui = initShareLink({ exportView, fetch, clipboard }); document.querySelector('dialog').showModal = vi.fn(); ui.show()
-  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toContain('Host ready'))
-  document.querySelector('[data-create]').click()
-  await vi.waitFor(() => expect(document.querySelector('section input')?.value).toBe(share.url))
-  expect(document.querySelector('section b')).toBeNull()
-  expect(fetch.mock.calls.find(([p]) => p.endsWith('/create'))[1].body).toBe(buffer)
-  document.querySelector('section button').click()
-  await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith(share.url))
-  document.querySelector('section button:last-child').click()
-  await vi.waitFor(() => expect(document.querySelector('section')).toBeNull())
-  expect(fetch.mock.calls.at(-1)[0]).toBe(`/__nadoc_share/shares/${share.id}`)
-  ui.dispose()
-})
-it('does not start hosting when the current view cannot be exported', async () => {
-  const fetch = vi.fn(), ui = initShareLink({ exportView: async () => { throw new Error('Unsupported representation') }, fetch })
-  document.querySelector('[data-create]').click()
-  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toBe('Unsupported representation'))
-  expect(fetch).not.toHaveBeenCalled(); expect(document.querySelector('[data-create]').disabled).toBe(false)
-  ui.dispose()
-})
-it('copies a complete internet invitation with a separate password', async () => {
-  const share = { id: 'a'.repeat(32), title: 'Voltron', url: 'https://meeting.example/viewer.html#invite=token&password=required', presenterUrl: 'https://meeting.example/viewer.html#invite=presenter-secret&role=presenter', password: 'a-secure-generated-password', expiresAt: Date.now() + 60000 }
-  const clipboard = { writeText: vi.fn().mockResolvedValue() }, fetch = vi.fn(async () => ({ ok: true, json: async () => ({ shares: [share] }) }))
-  const ui = initShareLink({ exportView: vi.fn(), fetch, clipboard }); document.querySelector('dialog').showModal = vi.fn(); ui.show()
-  await vi.waitFor(() => expect(document.querySelector('[data-password]')?.textContent).toContain(share.password))
-  ;[...document.querySelectorAll('button')].find(button => button.textContent === 'Copy invitation').click()
+const share = { id: 'a'.repeat(32), title: 'Part', url: 'https://example.test/viewer.html#invite=guest&password=required', password: 'guest-password', expiresAt: Date.now() + 60000 }
+const el = selector => document.querySelector(selector)
+function setup({ exportView = vi.fn(async () => ({ title: 'Part', buffer: new ArrayBuffer(16) })), fetch, clipboard = { writeText: vi.fn().mockResolvedValue() } } = {}) {
+  const request = fetch ?? vi.fn(async path => ({ ok: true, json: async () => path.endsWith('/create') ? share : { running: false, shares: [] } }))
+  const ui = initShareLink({ exportView, fetch: request, clipboard })
+  el('dialog').showModal = vi.fn()
+  return { ui, request, clipboard }
+}
+it('switches create/stop availability, copies a usable guest link, and resets after stopping', async () => {
+  const { ui, request, clipboard } = setup()
+  expect(el('[data-stop-host]').disabled).toBe(true)
+  expect(el('[data-copy-link]')).toBeNull()
+  ui.show()
+  await vi.waitFor(() => expect(el('[data-create]').disabled).toBe(false))
+  expect(el('[data-status]').textContent).toBe('')
+  el('[data-create]').click()
+  await vi.waitFor(() => expect(el('[data-stop-host]').disabled).toBe(false))
+  expect(el('[data-create]').disabled).toBe(true)
+  expect([...el('dialog').querySelectorAll('button')].map(b => b.textContent)).toEqual(['×', 'Create link', 'Stop sharing all links', 'Copy link'])
+  expect(el('select, textarea, [data-clip-options]')).toBeNull()
+  el('[data-copy-link]').click()
   await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenCalledOnce())
-  expect(clipboard.writeText.mock.calls[0][0]).toContain(share.url)
-  expect(clipboard.writeText.mock.calls[0][0]).toContain(`Meeting password: ${share.password}`)
-  expect(clipboard.writeText.mock.calls[0][0]).not.toContain('presenter-secret')
-  expect([...document.querySelectorAll('a')].some(link => link.href === share.presenterUrl)).toBe(false)
-  expect(document.getElementById('presentation-controls').hidden).toBe(false)
-  expect(share.url).not.toContain(share.password); ui.dispose()
-})
-it('updates an existing invitation without offering a second link', async () => {
-  const share = { id: 'a'.repeat(32), title: 'Part', url: 'https://example.invalid/one-link', expiresAt: Date.now() + 60000 }
-  const request = vi.fn(async path => ({ ok: true, json: async () => path.endsWith('/content') ? share : { shares: [share], capabilities: ['share-content-v1'] } }))
-  const ui = initShareLink({ exportView: async () => ({ title: 'Part', buffer: new ArrayBuffer(16) }), fetch: request })
-  document.querySelector('dialog').showModal = vi.fn(); ui.show()
-  await vi.waitFor(() => expect(document.querySelector('[data-create]').textContent).toBe('Update shared view'))
-  document.querySelector('[data-create]').click()
-  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toContain('same link and sign-in'))
-  expect(request.mock.calls.some(([p]) => p === `/__nadoc_share/shares/${share.id}/content`)).toBe(true)
-  expect(request.mock.calls.some(([p]) => p.endsWith('/create'))).toBe(false)
-  expect(document.querySelectorAll('[data-links] section')).toHaveLength(1)
-  expect(document.querySelector('section input').value).toBe(share.url)
-  expect([...document.querySelector('[data-target]').options].map(option => option.value)).toEqual([share.id])
+  const copied = new URL(clipboard.writeText.mock.calls[0][0])
+  expect(copied.href).toBe(share.url)
+  expect(el('[data-password]').textContent).toBe(`Password: ${share.password}`)
+  expect(copied.search).not.toContain(share.password)
+  expect(copied.hash).toContain('invite=guest')
+  el('[data-stop-host]').click()
+  await vi.waitFor(() => expect(el('[data-create]').disabled).toBe(false))
+  expect(el('[data-stop-host]').disabled).toBe(true)
+  expect(el('[data-copy-link]')).toBeNull()
+  expect(request.mock.calls.at(-1)[0]).toBe('/__nadoc_share/stop')
   ui.dispose()
 })
-
+it('restores an existing link without offering replacement or another invitation', async () => {
+  const { ui, request } = setup({ fetch: vi.fn(async () => ({ ok: true, json: async () => ({ shares: [share] }) })) })
+  ui.show()
+  await vi.waitFor(() => expect(el('[data-copy-link]')).not.toBeNull())
+  expect(el('[data-create]').disabled).toBe(true)
+  expect(el('[data-stop-host]').disabled).toBe(false)
+  el('[data-create]').click()
+  expect(request).toHaveBeenCalledOnce()
+  ui.dispose()
+})
+it('keeps export failures in a collapsed error log and permits retry', async () => {
+  const { ui, request } = setup({ exportView: async () => { throw new Error('<b>Unsupported representation</b>') } })
+  el('[data-create]').click()
+  await vi.waitFor(() => expect(el('[data-error]').hidden).toBe(false))
+  expect(el('[data-error]').open).toBe(false)
+  expect(el('[data-error-log]').textContent).toBe('<b>Unsupported representation</b>')
+  expect(el('[data-error-log] b')).toBeNull()
+  expect(el('[data-status]').textContent).toBe('')
+  expect(request).not.toHaveBeenCalled()
+  expect(el('[data-create]').disabled).toBe(false)
+  expect(el('[data-stop-host]').disabled).toBe(true)
+  ui.dispose()
+})
+it('keeps an active link when stopping fails and reports the error', async () => {
+  const { ui } = setup({ fetch: async path => ({ ok: !path.endsWith('/stop'), json: async () => path.endsWith('/stop') ? { error: 'Host unavailable' } : { shares: [share] } }) })
+  ui.show()
+  await vi.waitFor(() => expect(el('[data-stop-host]').disabled).toBe(false))
+  el('[data-stop-host]').click()
+  await vi.waitFor(() => expect(el('[data-error-log]').textContent).toBe('Host unavailable'))
+  expect(el('[data-create]').disabled).toBe(true)
+  expect(el('[data-stop-host]').disabled).toBe(false)
+  expect(el('[data-copy-link]')).not.toBeNull()
+  ui.dispose()
+})
+it('reports clipboard failures without discarding the link', async () => {
+  const { ui } = setup({ clipboard: { writeText: async () => { throw new Error('Permission denied') } } })
+  el('[data-create]').click()
+  await vi.waitFor(() => expect(el('[data-copy-link]')).not.toBeNull())
+  el('[data-copy-link]').click()
+  await vi.waitFor(() => expect(el('[data-error-log]').textContent).toContain('Permission denied'))
+  expect(el('[data-error]').open).toBe(false)
+  expect(el('[data-copy-link]')).not.toBeNull()
+  ui.dispose()
+})
+it('waits for public access before enabling stop or showing copy', async () => {
+  const { ui, request } = setup({ fetch: vi.fn(async () => ({ ok: true, json: async () => ({ publicAccess: { state: 'dns_pending', message: 'Waiting for public DNS' }, shares: [] }) })) })
+  el('[data-create]').click()
+  await vi.waitFor(() => expect(el('[data-status]').textContent).toBe('Connecting…'))
+  expect(el('[data-create]').disabled).toBe(true)
+  expect(el('[data-stop-host]').disabled).toBe(true)
+  expect(el('[data-copy-link]')).toBeNull()
+  expect(request.mock.calls.some(([path]) => path.endsWith('/create'))).toBe(false)
+  ui.dispose()
+})
+it('shows status failures without clearing an existing link', async () => {
+  let fails = false
+  const { ui } = setup({ fetch: async () => { if (fails) throw new Error('Network down'); return { ok: true, json: async () => ({ shares: [share] }) } } })
+  ui.show(); await vi.waitFor(() => expect(el('[data-copy-link]')).not.toBeNull())
+  fails = true; ui.show()
+  await vi.waitFor(() => expect(el('[data-error-log]').textContent).toBe('Network down'))
+  expect(el('[data-create]').disabled).toBe(true)
+  expect(el('[data-stop-host]').disabled).toBe(false)
+  ui.dispose()
+})
 it('ends hosting from the persistent canvas controls and keeps them on a failed request', async () => {
   document.body.innerHTML = '<div id="canvas-area"></div>'
   let fails = true
@@ -91,7 +134,7 @@ it('mirrors native view tools on the same invitation while camera sharing is off
     document.getElementById('share-link-dialog').showModal = vi.fn(); ui.show()
     await vi.advanceTimersByTimeAsync(0)
     document.querySelector('[data-create]').click(); await vi.advanceTimersByTimeAsync(0)
-    expect(document.querySelector('.sharing-url').value).toBe(share.url)
+    expect(document.querySelector('[data-copy-link]')).not.toBeNull()
     view.viewTools.sequences = true
     await vi.advanceTimersByTimeAsync(1100)
     expect(request.mock.calls.filter(([p]) => p.endsWith('/content'))).toHaveLength(1)
@@ -100,38 +143,6 @@ it('mirrors native view tools on the same invitation while camera sharing is off
     view.viewTools.sequences = false
     await vi.advanceTimersByTimeAsync(1100)
     expect(request.mock.calls.filter(([p]) => p.endsWith('/content'))).toHaveLength(2)
-    expect(document.querySelector('.sharing-url').value).toBe(share.url)
+    expect(document.querySelector('[data-copy-link]')).not.toBeNull()
   } finally { ui.dispose(); vi.useRealTimers() }
-})
-
-it('creates a fresh invitation when upgrading the host invalidates the selected old link', async () => {
-  const old = { id: 'a'.repeat(32), title: 'Part', url: 'https://example.invalid/old', expiresAt: Date.now() + 60000 }
-  const fresh = { ...old, id: 'b'.repeat(32), url: 'https://example.invalid/new' }
-  const request = vi.fn(async path => ({ ok: true, json: async () => path.endsWith('/create') ? fresh : { shares: path.endsWith('/start') ? [] : [old], capabilities: ['share-content-v1'], updateRequired: path.endsWith('/status') } }))
-  const ui = initShareLink({ exportView: async () => ({ title: 'Part', buffer: new ArrayBuffer(16) }), fetch: request })
-  document.querySelector('dialog').showModal = vi.fn(); ui.show()
-  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toContain('update required'))
-  document.querySelector('[data-create]').click()
-  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toContain('Invitation ready'))
-  expect(request.mock.calls.some(([path]) => path.endsWith('/content'))).toBe(false)
-  expect(document.querySelectorAll('[data-links] section')).toHaveLength(1)
-  expect(document.querySelector('.sharing-url').value).toBe(fresh.url)
-  ui.dispose()
-})
-
-it('shows the actual host access error instead of the offline invitation hint', async () => {
-  const message = 'Share links must be created from NADOC on the hosting PC.'
-  const ui = initShareLink({ exportView: vi.fn(), fetch: async () => ({ ok: false, json: async () => ({ error: message }) }) })
-  document.querySelector('dialog').showModal = vi.fn(); ui.show()
-  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toBe(message))
-  ui.dispose()
-})
-
-it('does not publish or claim invitation readiness while public DNS is pending', async () => {
-  const request = vi.fn(async () => ({ ok: true, json: async () => ({ publicAccess: { state: 'dns_pending', message: 'Waiting for public DNS', checks: [] }, shares: [] }) }))
-  const ui = initShareLink({ exportView: async () => ({ title: 'Part', buffer: new ArrayBuffer(16) }), fetch: request })
-  document.querySelector('[data-create]').click()
-  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toBe('Waiting for public DNS'))
-  expect(request.mock.calls.some(([path]) => path.endsWith('/create'))).toBe(false)
-  ui.dispose()
 })

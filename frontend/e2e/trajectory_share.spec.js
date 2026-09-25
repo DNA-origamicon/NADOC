@@ -81,8 +81,10 @@ test('one invitation streams real NAMD frames and returns to the native model', 
   await page.locator('#menu-file-sharing').evaluate(el => el.click())
   await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled()
   await page.locator('#share-link-dialog [data-create]').click()
-  await expect(page.locator('#share-link-dialog [data-status]')).toContainText('Invitation ready', { timeout: 90000 })
-  const url = await page.locator('.sharing-url').inputValue()
+  await expect(page.locator('#share-link-dialog [data-copy-link]')).toBeVisible({ timeout: 90000 })
+  await page.evaluate(() => { navigator.clipboard.writeText = async value => { window.__copiedShare = value } })
+  await page.locator('[data-copy-link]').click()
+  const url = await page.evaluate(() => window.__copiedShare)
   await page.locator('#share-link-dialog [data-close]').click()
   const guest = await context.newPage(); await guest.setViewportSize({ width: 800, height: 600 }); guest.on('pageerror', e => errors.push(e.message))
   const frames = [], joins = []

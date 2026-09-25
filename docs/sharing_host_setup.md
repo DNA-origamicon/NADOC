@@ -17,12 +17,14 @@ available by default. Geographic reach does not mean unlimited simultaneous gues
    If the first hosting attempt shows a Tailscale approval URL, open it on the host
    and complete the account approval. This approval is never a guest requirement.
    See https://tailscale.com/docs/features/tailscale-funnel for current provider steps.
-4. Start NADOC and choose **File → Sharing… → Create link for current view**.
+4. Start NADOC and choose **File → Sharing… → Create link**.
    NADOC builds missing guest-viewer assets, starts the temporary host and waits
    for public DNS/HTTPS checks automatically before publishing. There is no separate
    setup button or required terminal command. Progress appears in the existing
    sharing status; keep the window open while first-time DNS publication completes.
-5. **Copy invitation** includes both the link and password. Copy link alone does not.
+5. **Copy link** copies only the URL. Send the separately displayed password too.
+   **Stop sharing all links** ends guest access and enables **Create link** again.
+   Errors appear in a collapsed **Error log** that you can expand.
    For optional diagnostics, run `node scripts/setup_sharing.mjs --check --browser`.
    The browser check may require `cd frontend && npx playwright install chromium`
    (plus Playwright's documented Linux libraries). This test dependency is not
