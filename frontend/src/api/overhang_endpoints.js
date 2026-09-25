@@ -3,6 +3,7 @@
 // `_syncClusterOnlyDiff` / `_syncPositionsOnlyDiff` helpers.
 
 import { _request, _syncFromDesignResponse } from './client.js'
+import { store } from '../state/store.js'
 
 // Listeners told which overhangs just received a GENERATED sequence (single,
 // sub-domain or bulk generate) — the hairpin/dimer checker re-checks exactly those.
@@ -66,6 +67,9 @@ export async function patchOverhangRotationsBatch(ops) {
 export async function generateOverhangRandomSequence(overhangId, { deferReassign } = {}) {
   const q = deferReassign ? '?defer_reassign=true' : ''
   const json = await _request('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random${q}`)
+  if (!json) {
+    throw new Error(store.getState().lastError?.message ?? 'Sequence generation failed; the existing sequence was preserved.')
+  }
   // This endpoint deliberately preserves the overhang's domain length: it only
   // fills sequence fields (and their feature-log / derived-strand metadata).
   // No nucleotide position or helix axis can change, so keep the geometry that

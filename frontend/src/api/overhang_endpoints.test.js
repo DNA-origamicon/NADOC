@@ -5,6 +5,7 @@ import {
   createConnectionVersion,
   generateOverhangRandomSequence,
   patchOverhang,
+  onOverhangSequencesGenerated,
 } from './overhang_endpoints.js'
 import { store } from '../state/store.js'
 
@@ -40,6 +41,22 @@ describe('overhang sequence endpoints', () => {
     expect(store.getState().currentDesign.id).toBe('after')
     expect(store.getState().currentGeometry).toBe(geometry)
     expect(store.getState().currentHelixAxes).toBe(axes)
+  })
+
+  it('surfaces a rejected structure screen without changing the design or announcing generation', async () => {
+    const before = store.getState().currentDesign
+    const generated = vi.fn()
+    const unsubscribe = onOverhangSequencesGenerated(generated)
+    const detail = 'No overhang sequence passed the hairpin/self-dimer screen.'
+    global.fetch = vi.fn(async () => ({
+      ok: false, status: 422, headers: { get: () => null },
+      json: async () => ({ detail }),
+    }))
+    try {
+      await expect(generateOverhangRandomSequence('oh1')).rejects.toThrow(detail)
+      expect(store.getState().currentDesign).toBe(before)
+      expect(generated).not.toHaveBeenCalled()
+    } finally { unsubscribe() }
   })
 
   it('keeps Connect intermediate mutations geometry-free', async () => {

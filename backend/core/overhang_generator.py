@@ -344,6 +344,7 @@ def generate_overhang_sequences(
 
     results: list[str] = []
     extra_seqs: list[str] = []  # grows as we collect overhangs (diversity)
+    screened: set[str] = set()
 
     max_outer = 50
 
@@ -375,6 +376,15 @@ def generate_overhang_sequences(
         random.shuffle(candidates)
 
         for seq in candidates:
+            if candidate_filter is not None:
+                if seq in screened:
+                    continue
+                # Reserve the rest of the contextual screen's 500-candidate
+                # budget for random exploration. Repeated rare-kmer families
+                # can all fail in the staple/linker context.
+                if len(screened) >= 200:
+                    break
+                screened.add(seq)
             if seq not in results and (
                 candidate_filter is None or candidate_filter(seq)
             ):
@@ -385,6 +395,8 @@ def generate_overhang_sequences(
                 extra_seqs.append(rc * 10)
                 if len(results) >= count:
                     break
+        if candidate_filter is not None and len(screened) >= 200:
+            break
 
     if len(results) < count and candidate_filter is not None:
         # Rare k-mer seeds can concentrate the search on a narrow sequence
@@ -393,10 +405,13 @@ def generate_overhang_sequences(
             fb = _random_fallback(length)
             if (
                 fb not in results
+                and fb not in screened
                 and gc_min <= gc_content(fb) <= gc_max
                 and _filter_structure([fb])
-                and candidate_filter(fb)
             ):
+                screened.add(fb)
+                if not candidate_filter(fb):
+                    continue
                 results.append(fb)
                 if len(results) >= count:
                     return results[:count]

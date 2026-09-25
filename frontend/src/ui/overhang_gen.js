@@ -22,7 +22,7 @@
 import { showChoice as _defaultShowChoice } from './primitives/choice.js'
 import { showToast } from './toast.js'
 
-const JOHNSON = 'Using the Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786'
+const JOHNSON = 'Generating and screening a sequence… (Johnson et al., DOI: 10.1021/acs.nanolett.9b02786)'
 const _WC = { A: 'T', T: 'A', C: 'G', G: 'C', N: 'N' }
 
 /** Reverse complement (ACGTN, uppercased). */

@@ -589,3 +589,42 @@ def test_bulk_generation_failure_is_atomic_with_locked_unsafe_overhang():
     r = client.post("/api/design/generate-overhang-sequences")
     assert r.status_code == 422, r.text
     assert design_state.get_or_404() is before
+
+
+def test_repeated_seed_candidates_do_not_exhaust_screen_before_random_search(monkeypatch):
+    import backend.core.overhang_generator as generator
+    from backend.core.overhang_sequence_screen import OverhangSequenceScreen
+
+    d = _seed(seq_a=BENIGN, seq_b=_rc(BENIGN), linker_type="ss", bridge="TTTT")
+    screen = OverhangSequenceScreen(d, d.overhangs[0], max_candidates=2)
+    monkeypatch.setattr(generator, "_extend_seeds", lambda *args: [BENIGN])
+    monkeypatch.setattr(generator, "_random_fallback", lambda *_: _rc(BENIGN))
+    assert generator.generate_overhang_sequences("", [], 22, candidate_filter=screen) == [
+        _rc(BENIGN)
+    ]
+    assert screen.attempts == 2
+
+
+def test_seed_search_reserves_context_screen_budget_for_random_candidates(monkeypatch):
+    import itertools
+    import backend.core.overhang_generator as generator
+
+    seeds = [
+        "".join(bases)
+        for bases in itertools.islice(itertools.product("ACGT", repeat=6), 600)
+    ]
+    monkeypatch.setattr(generator, "_extend_seeds", lambda *args: seeds)
+    for name in ("_filter_gc", "_filter_structure", "_filter_corpus_score"):
+        monkeypatch.setattr(generator, name, lambda seqs, *args: seqs)
+    monkeypatch.setattr(generator, "_random_fallback", lambda *_: "TACCGA")
+    attempts = []
+
+    def screen(seq):
+        attempts.append(seq)
+        assert len(attempts) <= 500
+        return seq == "TACCGA"
+
+    assert generator.generate_overhang_sequences("", [], 6, candidate_filter=screen) == [
+        "TACCGA"
+    ]
+    assert len(attempts) == 201

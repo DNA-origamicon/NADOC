@@ -1225,7 +1225,7 @@ async function _genSide(side) {
       rcOfPartner: (targetId, sourceId) => overhangRcOfPartner(_design(), targetId, sourceId),
     })
   } catch (err) {
-    showToast(err?.message ?? String(err))
+    showToast(err?.message ?? String(err), { severity: 'error', duration: 12000 })
   } finally {
     if (gen) gen.disabled = false
   }
