@@ -6,12 +6,11 @@ All decisions below select SOFTWARE tests only. tests/conftest.py centrally
 deselects scientific campaigns unless explicitly requested with --scientific;
 scientific campaigns are not deferred debt. See docs/scientific_validation.md.
 
-SLOW-LOCK (the headline rule): heavy (``slow``) tests NEVER run outside a
-test-dedicated session (``just test-session``, TTY-only — see scripts/test_session.sh).
-Outside one, a FULL/AREAS verdict is downgraded to the fast suite and the owed heavy
-groups are parked in ``.nadoc-slow-pending``, where they accumulate until the user opens
-a session and runs ``just test-slow`` / ``just test``. So in a normal coding session this
-script's answer is always "the fast suite" — under a minute, every time.
+BROAD-SUITE LOCK: this selector accumulates changes/debt across tasks, so FULL/AREAS
+sweeps require a user-opened test session. Outside one they are deferred. This is
+NOT a restriction on focused current-development tests or benchmarks: use
+``just test-focused tests/test_topic.py[::test_name]`` even for slow/GPU checks.
+Do not ask for a session merely because relevant validation takes minutes.
 
 The fast suite (``-m "not slow"``, ~21s) is CHEAP and covers every area's unit
 tests, so it ALWAYS runs. This script only decides which HEAVY (``slow``) groups
@@ -61,7 +60,8 @@ import time
 WATERMARK_FILE = ".nadoc-test-watermark"
 
 # Machine-local: the test-dedicated-session window (scripts/test_session.sh, TTY-only).
-# NO SLOW TEST RUNS WITHOUT IT. Outside such a window this script downgrades any
+# This selector's broad/accumulated sweeps require it. Focused current-task tests
+# use test-focused without a session. Outside such a window this script downgrades any
 # slow-group selection to the fast suite and *defers* the groups instead.
 SESSION_FILE = ".nadoc-test-session"
 
@@ -375,7 +375,7 @@ def main() -> int:
     for r in reasons:
         print(f"  {r}", file=sys.stderr)
 
-    # --- Slow-lock: heavy groups only run inside a test-dedicated session -------
+    # --- Broad-suite lock: accumulated groups need a user-opened session -------
     # Outside one, a FULL/AREAS verdict is DOWNGRADED to the fast suite and the owed
     # heavy groups are parked in .nadoc-slow-pending. They accumulate there until the
     # user opens a session (`just test-session`) and runs `just test-slow` / `just test`.
@@ -414,8 +414,9 @@ def main() -> int:
             f"slow[{'+'.join(sorted(deferred_now))}]"
         print(f"\n  DEFERRED: this change would have needed {owed}, but no "
               f"test-dedicated\n  session is open, so only the fast suite ran. Parked in "
-              f"{PENDING_FILE}.\n  Ask the user to run `just test-session` (their terminal), "
-              f"then `just test-slow`.\n", file=sys.stderr)
+              f"{PENDING_FILE}.\n  This is broad-suite debt, not a block on development. "
+              f"Run relevant slow tests with `just test-focused TARGET` without a session.\n"
+              f"  Only request `just test-session` when a broad/full sweep is actually needed.\n", file=sys.stderr)
 
     print(f"$ {' '.join(cmd)}", file=sys.stderr)
     if args.dry_run:

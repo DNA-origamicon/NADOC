@@ -199,3 +199,54 @@ def test_surface_nucleotide_keys_are_finer_than_strand_ids():
     client = TestClient(app)
     js = client.get("/api/design/surface?detail=coarse").json()
     assert len(js["vertex_nuc_index_table"]) > len(js["vertex_strand_index_table"])
+
+
+def test_figure_probe_is_adjustable_and_default_is_preserved(monkeypatch):
+    from backend.api.routes_oxdna import OxdnaSurfaceBody
+    from tests.conftest import build_extruded_bundle, LatticeType
+
+    # Exercise routing/geometry without paying cold CUDA startup in the fast suite.
+    # Real GPU parity is covered by the accelerator tests and browser comparison.
+    monkeypatch.setenv("NADOC_SURFACE_GPU", "0")
+    design_state.set_design(
+        build_extruded_bundle([(0, 0)], 3, lattice=LatticeType.HONEYCOMB)
+    )
+    client = TestClient(app)
+    default = client.get("/api/design/surface?detail=chimerax").json()
+    original = client.get(
+        "/api/design/surface?detail=chimerax&probe_radius=0.14"
+    ).json()
+    larger = client.get("/api/design/surface?detail=chimerax&probe_radius=0.24").json()
+    assert default["vertices"] == original["vertices"]
+    assert default["faces"] == original["faces"]
+    assert larger["vertices"] != original["vertices"]
+    binary = client.get("/api/design/surface-bin?detail=chimerax&probe_radius=0.24")
+    assert binary.content == pack_surface_bin(larger)
+    assert OxdnaSurfaceBody(detail="chimerax").probe_radius == 0.14
+    assert OxdnaSurfaceBody(detail="chimerax", probe_radius=0.24).probe_radius == 0.24
+    assert OxdnaSurfaceBody().probe_radius == 0.28
+
+
+def test_simulated_figure_surface_honors_probe(monkeypatch):
+    from types import SimpleNamespace
+    from backend.core import surface, oxdna_health
+
+    calls = []
+    mesh = surface.SurfaceMesh(
+        vertices=np.empty((0, 3)),
+        faces=np.empty((0, 3), dtype=int),
+        vertex_strand_ids=[],
+    )
+    monkeypatch.setattr(
+        oxdna_health, "build_display_model", lambda *a, **k: SimpleNamespace(atoms=[])
+    )
+    monkeypatch.setattr(surface, "adaptive_grid_spacing", lambda *a, **k: 0.05)
+    monkeypatch.setattr(
+        surface, "compute_surface", lambda *a, **k: calls.append(k) or mesh
+    )
+    monkeypatch.setattr(surface, "smooth_mesh", lambda m, **k: m)
+    for radius in [None, 0.0, 0.24]:
+        oxdna_health.frame_surface_json(
+            None, {}, color_mode="uniform", detail="chimerax", probe_radius=radius
+        )
+    assert [call["probe_radius"] for call in calls] == [0.14, 0.0, 0.24]

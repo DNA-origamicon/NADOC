@@ -18,17 +18,15 @@ dev:
     uv run uvicorn backend.api.main:app --reload --timeout-graceful-shutdown 5 --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 127.0.0.1 --port 8000
 
 # ── TEST POLICY ───────────────────────────────────────────────────────────────
-# THE LAW: heavy (`slow`) tests — real oxDNA/NAMD/mrdna sims, CanDo-FEM solves,
-# trajectory benchmarks — run ONLY inside a TEST-DEDICATED SESSION, a window the
-# USER opens in THEIR terminal (`just test-session`, TTY-only). Everything an agent
-# runs during ordinary coding is fast-only and must finish in under 60s.
+# A user-opened test session gates FULL/broad sweeps, not test duration.
+# Focused tests and benchmarks required for current development may run as long
+# as needed without a session. Use test-focused for selected slow pytest tests.
+# Unrelated long tests remain gated; focused runs never clear broad-suite debt.
 #
 # Every pytest recipe is wrapped by scripts/test_guard.sh <label> <gate> <slow>:
-#   slow=1  can run slow tests -> REFUSES unless a test-dedicated session is open
-#   slow=0  fast-only          -> free to run, but the 60s wall-clock BUDGET applies;
-#                                 over budget prints a banner demanding a triage
-#                                 subagent (.claude/skills/triage-slow-tests) that
-#                                 relegates the offenders to the slow suite
+#   slow=1  broad sweep       -> requires a user-opened test session
+#   slow=0  fast-only         -> fast-suite timing/placement diagnostics
+#   slow=focused             -> current-task checks, no session/duration gate
 #   gate=1  extra "is this really necessary?" confirm (agents: NADOC_TEST_CONFIRM=1)
 # A lock (.nadoc-test.lock/) still blocks overlapping runs in every case.
 # Escape hatch: NADOC_TEST_FORCE=1 bypasses everything — NOT for agents.
@@ -36,7 +34,7 @@ dev:
 #   just test-session          # user, interactive: open a 4h heavy-test window
 #   just test-session status   # is one open?   `just test-session off` closes it
 
-# Open/close/inspect the test-dedicated session window that unlocks the slow suites.
+# Open/close/inspect the user window for full/broad sweeps. Focused checks need none.
 # TTY-only, by design: an agent can fake an env var, it cannot fake a human.
 test-session *ARGS:
     @scripts/test_session.sh {{ARGS}}
@@ -76,7 +74,8 @@ test-scientific-list:
 test-fast:
     scripts/test_guard.sh "test-fast" 0 0 -- uv run pytest tests/ -n auto --dist loadfile -m "not slow"
 
-# DEFAULT per-change test loop. Always allowed, always fast (<60s).
+# DEFAULT broad per-change test loop. Always allowed; outside a session runs fast tests.
+# Add test-focused for relevant slow coverage; deferred debt does not block that work.
 # Runs the fast suite and works out which HEAVY groups your changes have made stale
 # (vs .nadoc-test-watermark, the last full pass here). Outside a test-dedicated session
 # it does NOT run them — it parks them in .nadoc-slow-pending and tells you. Inside one,
@@ -96,6 +95,14 @@ test-smart *ARGS:
 #  against pytest 9.x; see memory/project_test_parallelization.md.)
 test-affected *ARGS:
     scripts/test_guard.sh "test-affected" 0 0 -- uv run pytest -m "not slow" {{ARGS}}
+
+# One current-task file or node, including slow tests. No session or duration gate.
+# Explicit target required; directories/full-suite selection are rejected.
+# Examples: just test-focused tests/test_surface_visual_regression.py -k Voltron
+#           just test-focused tests/test_test_guard_budget.py
+# Scientific campaigns retain their separate explicit-authorization route.
+test-focused TARGET *ARGS:
+    uv run python scripts/test_focused.py {{quote(TARGET)}} {{ARGS}}
 
 # Run frontend unit tests (Vitest), single pass
 test-frontend:
@@ -243,9 +250,8 @@ build-frontend:
 build-primitives:
     cd frontend && node scripts/build-primitives.mjs
 
-# Run a specific test file (fast tests only — any `slow` test in it is skipped, per
-# the test policy at the top. To run that file's heavy tests, the user opens a
-# test-dedicated session and runs `just test-slow -k <pattern>`).
+# Run a specific file fast-only. For current-task slow tests use test-focused FILE;
+# no test session is needed for that focused development validation.
 test-file FILE:
     scripts/test_guard.sh "test-file" 0 0 -- uv run pytest -m "not slow" {{FILE}} -v
 

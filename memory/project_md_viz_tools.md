@@ -12,6 +12,13 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- Figure quality probe control (2026-09-26): the temporary eight-iteration
+  comparison has been removed. Figure quality starts at 0.14 nm with an enabled
+  probe slider; standard and figure presets remember independent radius values.
+  Figure-quality regeneration happens on slider release. Native JSON/binary and
+  simulation figure surfaces honor the chosen probe. Four smoothing iterations
+  remain the default; grid resolution and atom geometry are unchanged.
+
 - Active audit completed (2026-09-26, final batch): solvent matrices use the exact
   shared direct writers and upload only active instances; periodic images upload
   only changed Float32 position/color channels. Ball-and-stick water updates

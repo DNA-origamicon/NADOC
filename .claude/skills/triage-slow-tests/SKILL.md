@@ -1,6 +1,6 @@
 ---
 name: triage-slow-tests
-description: Triage a heavy test that leaked into the fast suite — find what made it slow and relegate it to the test-dedicated (slow) suite. Use when scripts/test_guard.sh prints "HEAVY TEST IN THE FAST SUITE" (an unmarked test over the 5s per-test budget) or "FAST SUITE TOO SLOW" (the 90s aggregate backstop), or when the user asks why the fast suite got slow. NOT for fixing failing tests (that's the issues ledger).
+description: Triage a heavy test that leaked into the fast suite — find what made it slow and classify it out of broad fast sweeps. Use when scripts/test_guard.sh prints "HEAVY TEST IN THE FAST SUITE" (an unmarked test over the 5s per-test budget) or "FAST SUITE TOO SLOW" (the 90s aggregate backstop), or when the user asks why the fast suite got slow. NOT for fixing failing tests (that's the issues ledger).
 ---
 
 # Triage slow tests
@@ -22,9 +22,12 @@ on the machine is competing for CPU — neither is a defect, and neither is your
 
 ## The law you are enforcing
 
-Heavy tests run **only** inside a test-dedicated session (`just test-session`, opened by
-the user in their own terminal). Everything else must be fast. A test that takes minutes
-in an ordinary coding session is a bug in the test layout, not a fact of life.
+The session gate is about **scope, not duration**. Full/broad sweeps and unrelated
+long tests need a user-opened session. Slow tests directly related to current
+code development may run through `just test-focused TARGET` without a session,
+including runs lasting minutes or longer. A `slow` marker keeps expensive work
+out of broad fast sweeps; it does not prohibit focused development validation.
+Do not ask for a test session merely to run or diagnose a relevant slow test.
 
 ## Inputs
 
@@ -56,7 +59,7 @@ in an ordinary coding session is a bug in the test layout, not a fact of life.
    (`oxdna` / `cando` / `namd` / `mrdna` / `atomistic` / `md` / `headless`). If the
    module name doesn't route to the right area there, extend that function — the area
    marker is what lets `scripts/select_tests.py` re-run only the affected heavy group in
-   a later test-dedicated session.
+   a later broad regression sweep; focused runs remain available now.
    Check `scripts/select_tests.py`'s `LEAF_RULES` too: the *source* file that the newly
    relegated test covers should route to the same area.
 4. **Verify the budget is back.** `NADOC_TEST_CONFIRM=1 just test-fast` — it prints
@@ -75,7 +78,7 @@ in an ordinary coding session is a bug in the test layout, not a fact of life.
 - **Never** open a test-dedicated session yourself (`just test-session` is TTY-only for a
   reason) and never hand-write `.nadoc-test-session` or set `NADOC_TEST_FORCE=1`.
 - Relegating a test does **not** delete coverage: it still runs in `just test` /
-  `just test-slow` inside a test-dedicated session, and `select_tests.py` records the
+  `just test-slow` inside a test session, or `just test-focused TARGET` during related development; `select_tests.py` records the
   group as owed in `.nadoc-slow-pending`.
 - If a violator is fast-suite-critical (it guards a topology/geometry invariant), prefer
   **shrinking** it — smaller design, fewer bp, cached fixture — over relegating it.

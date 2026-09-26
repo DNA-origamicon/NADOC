@@ -13,6 +13,30 @@ metadata:
   originSessionId: 2557a198-2648-4182-8f9b-1f6ff948cb26
 ---
 
+## Current scope rule — user clarification, 2026-09-26
+
+`just test-session` authorizes full/broad regression sweeps, not elapsed test time.
+Focused tests, GPU/native integration checks, and benchmarks directly related to
+current development may run for minutes or longer without a session. The task
+already authorizes that validation. Use `just test-focused TARGET` for a specific
+pytest file/node, optionally filtered with `-k` or `-m`; relevant benchmark scripts
+may run directly. Never ask for a session solely because these checks are slow.
+
+Full `just test`, `test-all`, broad `test-slow`, and accumulated `test-smart` debt
+remain gated, as do unrelated long tests. Focused runs retain the execution lock,
+nice priority, and real exit status; they neither enforce fast-suite duration
+budgets nor clear full-suite debt/watermarks. Explicit file/node selection avoids
+accidentally sweeping unrelated slow tests. Scientific campaigns retain their
+separate user-authorization requirement.
+
+The obsolete July wording “heavy tests no longer run at all in an ordinary coding
+session” caused repeated unnecessary permission requests. This section supersedes
+that wording in historical logs. `slow` means exclusion from broad fast sweeps,
+not exclusion from development. Full-suite DEFERRED messages are separate from
+completion of relevant focused checks.
+
+## Historical timing and suite implementation notes
+
 **2026-09-20 portable-fixture follow-up:** the user opened a test
 session and requested full/slow validation, excluding CPD work running on another
 computer. BigO/smallO and cube regressions now build their routed inputs headlessly;
@@ -99,21 +123,6 @@ full minimization/warmup/MD protocol. Preparation is capped at four threads and
 the trial at two, with cancellation/join cleanup even on failure. It passed in
 the full audit after the old 32 bp fixture exceeded its 600 s deadline.
 
-## THE LAW (2026-07-13) — slow tests are locked behind a test-dedicated session
-
-Claude kept escalating to the full suite (~16 min) after changes that only *distantly* touched
-simulations, and that was killing dev velocity. So heavy (`slow`) tests **no longer run at all in
-an ordinary coding session**. Three new pieces, all machine-local + gitignored:
-
-- **`scripts/test_session.sh` + `just test-session`** — the USER opens a 4h window in THEIR OWN
-  terminal; it writes `.nadoc-test-session` (expiry epoch). **TTY-only by design**: an agent can
-  fake an env var, it cannot fake a human. `just test-session status|off`; `just test-status`
-  shows the window + what's owed.
-- **`scripts/test_guard.sh` grew a 3rd arg** → `<label> <gate> <slow>`. `slow=1` recipes
-  (`test`, `test-slow`, `test-all`) **REFUSE to start** unless the session window is open.
-  `slow=0` recipes (`test-smart`, `test-fast`, `test-affected`, `test-file`) are fast-only, need
-  no confirm any more (the gate was pure friction once they couldn't run sims). Budgets are skipped
-  inside a session (test-smart legitimately drains heavy groups there).
 - **Budget policy reworked 2026-07-14 (the 60s ceiling was ratcheting).** The old rule — hard-fail
   any fast run over 60 s — measured three things at once: test weight (a defect), suite SIZE (only
   ever grows), and CPU contention from the user actually *using* NADOC on the same box (not a defect
@@ -129,15 +138,16 @@ an ordinary coding session**. Three new pieces, all machine-local + gitignored:
 - **`scripts/select_tests.py` never escalates outside a session.** A FULL/AREAS verdict is
   **downgraded to FAST and the owed groups are parked in `.nadoc-slow-pending`**, accumulating
   across sessions/commits until the user opens a window and runs `just test-slow` (or `just test`,
-  which also clears it + bumps the watermark). So `just test-smart` is *always* the fast suite only
-  (~60s, and never minutes). Reporting
+  which also clears it + bumps the watermark). Outside a session `just test-smart` runs the fast suite only; relevant slow
+  checks use `just test-focused TARGET` separately. Reporting
   "DEFERRED slow[cando]" IS a complete verification for a normal change — not a gap to close.
 - **Budget watchdog in conftest** (`pytest_runtest_logreport` + `pytest_sessionfinish`, aggregated
   on the xdist controller): times every test, flags any **unmarked** test over 5s
   (`NADOC_PER_TEST_BUDGET_SEC`), writes `.nadoc-slow-candidates.json` (violators + slowest_25 +
   **slowest_files_15** — per-FILE totals matter because `--dist loadfile` makes the slowest single
   file a hard wall-clock floor). That file is the input to **`.claude/skills/triage-slow-tests`**,
-  the mandated subagent when a violator appears. Never raise the budget; relegate the offender.
+  the triage workflow when a broad fast-sweep violator appears. Never raise the budget;
+  diagnose fixture size/cache/contention before classifying it as slow.
   The guard reads `violators` out of that JSON — a non-empty list is what triggers triage now,
   ahead of (and independent of) the 90 s total-time backstop.
 - **BOTH budgets are SUPPRESSED while a production sim is running (2026-07-28).** A NAMD job at
@@ -280,7 +290,7 @@ The full `just test` is ~16 min *by design* (real oxDNA/GROMACS/ARBD binaries + 
 Reserve full `just test` for the pre-push gate on a `backend/` source change, or the first run that introduces a global/autouse fixture. Everything else: scope it.
 
 **Change-based selection — `just test-smart` is the DEFAULT per-change loop (added 2026-07-05, the safe testmon substitute; watermark added 2026-07-10):**
-`scripts/select_tests.py` classifies changed source → runs the fast suite (always) PLUS only the heavy `slow` groups affected — **but since 2026-07-13 it only RUNS those groups inside a test-dedicated session; outside one it defers them to `.nadoc-slow-pending` (see THE LAW).** Foundational/shared/unknown change → FULL; a leaf change (oxdna/cando/namd/mrdna/atomistic/md/headless) → `-m "not slow or <area>"`; frontend/docs-only → FAST (no backend tests — run `just test-frontend` for JS). Safe because the fast suite always runs — a mis-map can only skip a heavy SIM test whose fast cousins still ran, never basic coverage. Slow tests carry a `slow` + one `area` marker (assigned in conftest `_slow_area_for`; areas registered in pyproject `markers`). Full-trigger list + leaf rules live in the script; `--dry-run` shows the decision. Route files (`backend/api/routes_*.py` except main/ws/state) → FULL by default (unknown blast radius; tune leaf rules if too coarse).
+`scripts/select_tests.py` classifies changed source → runs the fast suite (always) PLUS only the heavy `slow` groups affected — **but since 2026-07-13 it only RUNS those groups inside a test-dedicated session; outside one it defers them to `.nadoc-slow-pending` (see Current scope rule above).** Foundational/shared/unknown change → FULL; a leaf change (oxdna/cando/namd/mrdna/atomistic/md/headless) → `-m "not slow or <area>"`; frontend/docs-only → FAST (no backend tests — run `just test-frontend` for JS). Safe because the fast suite always runs — a mis-map can only skip a heavy SIM test whose fast cousins still ran, never basic coverage. Slow tests carry a `slow` + one `area` marker (assigned in conftest `_slow_area_for`; areas registered in pyproject `markers`). Full-trigger list + leaf rules live in the script; `--dry-run` shows the decision. Route files (`backend/api/routes_*.py` except main/ws/state) → FULL by default (unknown blast radius; tune leaf rules if too coarse).
 
 **Watermark — what "changed" means, and why full runs got rare (added 2026-07-10):** `just test-smart` now defaults to `--since-last-full`: it diffs against `.nadoc-test-watermark` (a gitignored, machine-local file holding the git SHA at which the FULL suite last passed *here*), not just uncommitted changes. This fixes the gap where committing your work hid it from the scope — affected slow-areas now **accumulate across sessions/commits** until a full run clears them. A green full run (`just test` / `just test-all`, or a `test-smart` run that itself escalated to FULL) bumps the watermark to HEAD. No watermark yet (fresh clone / fresh worktree) → forced FULL, which establishes the baseline. Net effect: a fresh session touching only frontend runs `just test-frontend` and **zero** backend tests; the ~16min full run happens only before a push or on a foundational change. **Guidance:** CLAUDE.md Verification/Done-checklist + the skill Gates now name `just test-smart` (cite its decision) as the per-change command; full `just test` is the pre-push gate. Note: uncommitted-only scope is still available via `just test-smart --base HEAD` or the raw `python scripts/select_tests.py` (no `--since-last-full`); `--base origin/master` overrides the watermark.
 

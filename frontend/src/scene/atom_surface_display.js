@@ -150,6 +150,9 @@ export function initAtomSurfaceDisplay({
 
   let _surfaceDataCache   = null   // cached API response; null = needs re-fetch
   let _surfaceProbeRadius = 0.28   // current probe radius for SES (nm)
+  let _surfaceRequestId = 0
+  let _standardProbeRadius = 0.28
+  let _figureProbeRadius = 0.14
   let _surfaceDetail      = 'coarse'  // 'coarse' = fast CG-bead envelope | 'fine' = full all-atom
   let _surfaceMode        = 'off'  // mirrors store.surfaceMode
   let _overlayMode        = false  // full CG + global ball-and-stick together
@@ -187,8 +190,10 @@ export function initAtomSurfaceDisplay({
   }
 
   async function _applySurfaceMode(mode) {
+    const requestId = ++_surfaceRequestId
     _surfaceMode = mode
     if (mode === 'off') {
+      dismissToast()
       surfaceRenderer.dispose()
       _surfaceDataCache = null
       // Only restore CG if atomistic overlay is also off
@@ -229,11 +234,13 @@ export function initAtomSurfaceDisplay({
         let data = null
         if (typeof api.getDesignSurfaceBin === 'function') {
           const buf = await api.getDesignSurfaceBin(params)
+          if (requestId !== _surfaceRequestId) return
           if (buf) data = parseSurfaceBin(buf)
         }
         if (!data) {
           const url = `/api/design/surface?color_mode=${surfaceColorMode}&probe_radius=${_surfaceProbeRadius}&detail=${_surfaceDetail}`
           const resp = await fetch(url, { headers: docHeaders() })
+          if (requestId !== _surfaceRequestId) return
           if (!resp.ok) {
             dismissToast()
             console.error('Surface fetch failed:', resp.status)
@@ -241,9 +248,11 @@ export function initAtomSurfaceDisplay({
           }
           data = await resp.json()
         }
+        if (requestId !== _surfaceRequestId) return
         _surfaceDataCache = data
         console.debug(`Surface computed: ${_surfaceDataCache.stats?.n_verts ?? _surfaceDataCache.vertices?.length / 3} verts`)
       } catch (e) {
+        if (requestId !== _surfaceRequestId) return
         dismissToast()
         console.error('Surface fetch error:', e)
         return
@@ -311,23 +320,22 @@ export function initAtomSurfaceDisplay({
   const _svSurfaceProbe = document.getElementById('sv-surface-probe')
   _slSurfaceProbe?.addEventListener('input', () => {
     _surfaceProbeRadius = parseFloat(_slSurfaceProbe.value)
+    if (_surfaceDetail === 'chimerax') _figureProbeRadius = _surfaceProbeRadius
+    else _standardProbeRadius = _surfaceProbeRadius
     if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
-    _regenSurfaceForParamChange()
+    if (_surfaceDetail !== 'chimerax') _regenSurfaceForParamChange()
+  })
+  _slSurfaceProbe?.addEventListener('change', () => {
+    if (_surfaceDetail === 'chimerax') _regenSurfaceForParamChange()
   })
 
-  // Publication preset: per-strand SES at a 0.5 Å target grid, 1.4 Å probe, and true
-  // VdW radii. It owns the probe control while active.
+  // Each preset remembers its probe radius; Figure quality starts at 0.14 nm.
   const _cbFigureQuality = document.getElementById('cb-surface-figure-quality')
   _cbFigureQuality?.addEventListener('change', () => {
-    if (_cbFigureQuality.checked) {
-      _surfaceDetail = 'chimerax'
-      if (_slSurfaceProbe) _slSurfaceProbe.disabled = true
-      if (_svSurfaceProbe) _svSurfaceProbe.textContent = '0.14'
-    } else {
-      _surfaceDetail = 'coarse'
-      if (_slSurfaceProbe) _slSurfaceProbe.disabled = false
-      if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
-    }
+    _surfaceDetail = _cbFigureQuality.checked ? 'chimerax' : 'coarse'
+    _surfaceProbeRadius = _cbFigureQuality.checked ? _figureProbeRadius : _standardProbeRadius
+    if (_slSurfaceProbe) { _slSurfaceProbe.disabled = false; _slSurfaceProbe.value = String(_surfaceProbeRadius) }
+    if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
     _regenSurfaceForParamChange()
   })
 

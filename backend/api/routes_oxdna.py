@@ -3944,6 +3944,17 @@ class OxdnaSurfaceBody(BaseModel):
         "coarse"  # 'coarse' = fast CG-bead envelope (default) | 'fine' = full all-atom
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def preset_probe_default(cls, values):
+        if (
+            isinstance(values, dict)
+            and "probe_radius" not in values
+            and values.get("detail") == "chimerax"
+        ):
+            return {**values, "probe_radius": 0.14}
+        return values
+
 
 @router.post("/oxdna/jobs/{job_id}/display-atomistic")
 async def get_oxdna_display_atomistic(job_id: str, align: bool = True) -> dict:

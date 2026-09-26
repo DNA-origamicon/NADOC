@@ -41,7 +41,7 @@ def main():
                 ):
                     start = time.perf_counter()
                     mesh = _build_design_surface_mesh(
-                        design, 0.2, 0.28, 1.3, 15, "chimerax"
+                        design, 0.2, None, 1.3, 15, "chimerax"
                     )
                     elapsed = time.perf_counter() - start
                 samples[index].append(elapsed)

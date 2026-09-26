@@ -3134,10 +3134,10 @@ export const getOxdnaDisplaySurfaceBin = (id, align = true, params = {}) =>
 /** BINARY molecular surface (ArrayBuffer) for the ACTIVE DESIGN — the binary sibling of the
  *  /design/surface JSON (~2× smaller, no million-number parse; carries the strand-index table
  *  so the surface still recolours client-side). Decode with scene/surface_bin.js. Null on error. */
-export const getDesignSurfaceBin = ({ color_mode = 'strand', probe_radius = 0.28,
+export const getDesignSurfaceBin = ({ color_mode = 'strand', probe_radius,
                                       detail = 'coarse' } = {}) =>
   _oxdnaBin('GET', `/design/surface-bin?color_mode=${color_mode}`
-                   + `&probe_radius=${probe_radius}&detail=${detail}`)
+                   + `&probe_radius=${probe_radius ?? (detail === 'chimerax' ? 0.14 : 0.28)}&detail=${detail}`)
 /** All-atom flat-XYZ for the flexibility-map AVERAGE structure ({ready, atomistic:[…]}). */
 export const getOxdnaRmsfAtomistic = (id, opts) => {
   const { align } = _vizOpts(opts, 'getOxdnaRmsfAtomistic')

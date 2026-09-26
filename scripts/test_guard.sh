@@ -3,9 +3,9 @@
 #
 # Three protections:
 #
-#   1. SLOW-LOCK — recipes that CAN run heavy (`slow`) tests refuse to start unless a
-#                  *test-dedicated session* is open (scripts/test_session.sh, TTY-only).
-#                  Slow suites take minutes; they are not part of the per-change loop.
+#   1. SUITE-LOCK — broad/full sweeps require a user-opened test session.
+#                  Focused current-task checks may include slow tests and take minutes
+#                  or longer without a session. Duration is not an authorization gate.
 #   2. LOCK      — refuse to start if another guarded test run is still alive. An
 #                  atomic mkdir lock (.nadoc-test.lock/) holds the running pid+label.
 #                  Overlapping runs saturate the CPU (pytest runs `-n auto`).
@@ -22,9 +22,10 @@
 #                  timings measure contention, not test weight. Violators are still
 #                  recorded to the report, just not treated as debt.
 #
-# Usage: scripts/test_guard.sh <label> <gate:1|0> <slow:1|0> -- <command...>
+# Usage: scripts/test_guard.sh <label> <gate:1|0> <slow:1|0|focused> -- <command...>
 #   gate=1   "is this really necessary?" confirm (non-interactive: NADOC_TEST_CONFIRM=1)
-#   slow=1   the command CAN run slow tests -> requires an open test-dedicated session
+#   slow=1   broad/full sweep -> requires an open test-dedicated session
+#   slow=focused current-task validation -> no session or fast-suite budget gate
 #   slow=0   fast-only -> no session needed, but the budgets above are enforced
 #
 # Escape hatches:
@@ -55,7 +56,7 @@ if [[ "${NADOC_TEST_FORCE:-}" == "1" ]]; then
   exec "$@"
 fi
 
-# ---- 1. Slow-lock: heavy suites need an open test-dedicated session ---------
+# ---- 1. Suite-lock: broad sweeps need an open test-dedicated session --------
 session_open() {
   local exp
   [[ -f "$SESSION_MARKER" ]] || return 1
@@ -67,21 +68,17 @@ session_open() {
 if [[ "$SLOW" == "1" ]] && ! session_open; then
   cat >&2 <<EOF
 $hr
-REFUSING to run '$LABEL': it can run SLOW tests (real oxDNA/NAMD/mrdna sims,
-CanDo-FEM solves, trajectory benchmarks) and no test-dedicated session is open.
+REFUSING to run '$LABEL': this is a broad/full test sweep and no test session is open.
 
-Slow suites take minutes and saturate the CPU/GPU. They are deliberately NOT part
-of the per-change dev loop.
+For tests directly related to the current development task, use:
+      just test-focused tests/test_topic.py[::test_name]
+Focused tests may include slow/GPU/native checks and run longer than ${BUDGET}s.
+Relevant benchmark scripts are also allowed; duration alone is not a gate.
 
-  Per-change loop (always allowed, <${BUDGET}s):
-      just test-smart            # fast suite, scoped to what you changed
-      just test-affected <file>  # tighter still
+For the full suite or unrelated long tests, the USER opens a window:
+      just test-session          # then just test (or another broad sweep)
 
-  To run the heavy suites, the USER opens a window in THEIR OWN terminal:
-      just test-session          # 4h, TTY-only
-
-Agents: ask the user to open a test-dedicated session. Do not create
-$SESSION_MARKER yourself and do not set NADOC_TEST_FORCE.
+Do not create $SESSION_MARKER yourself or set NADOC_TEST_FORCE.
 $hr
 EOF
   exit 1
@@ -177,6 +174,12 @@ if [[ "$SLOW" != "1" && "$BLAS_THREADS" != "0" ]]; then
   export VECLIB_MAXIMUM_THREADS="$BLAS_THREADS"
 fi
 
+# This mode is selected by the explicit-target development recipe, not an unlock
+# of full suites. It retains locking, nice priority, and the wrapped exit status.
+unset NADOC_TEST_SCOPE
+if [[ "$SLOW" == "focused" ]]; then
+  export NADOC_TEST_SCOPE=focused
+fi
 START=$(date +%s)
 if [[ "$NICE_LEVEL" != "0" ]] && command -v nice >/dev/null 2>&1; then
   nice -n "$NICE_LEVEL" "$@"
@@ -206,7 +209,7 @@ if session_open; then
   exit $RC
 fi
 
-[[ "$SLOW" == "1" ]] && exit $RC
+[[ "$SLOW" == "1" || "$SLOW" == "focused" ]] && exit $RC
 
 # Did conftest flag any unmarked test over the per-test budget, and was a heavy sim
 # running while it measured them?  Both come out of $CANDIDATES in one read.
@@ -232,12 +235,11 @@ triage_banner() {
 $hr
 ⚠  $1
 
-REQUIRED NEXT STEP (agents): launch the triage subagent — do not just move on.
-    Agent tool, subagent_type "general-purpose", following
-    .claude/skills/triage-slow-tests/SKILL.md
+REQUIRED NEXT STEP (agents): follow .claude/skills/triage-slow-tests/SKILL.md
 It reads the slowest-test report, decides which tests are genuinely heavy, and
 relegates them to the slow suite (\`slow\` + area marker in tests/conftest.py) so
-they only run in a test-dedicated session.
+they stay out of broad fast sweeps. Relevant slow tests remain runnable through
+just test-focused without a session; test duration is not an authorization gate.
 
 Slowest unmarked tests: $CANDIDATES
 $hr

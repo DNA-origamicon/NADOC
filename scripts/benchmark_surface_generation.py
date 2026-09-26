@@ -60,7 +60,7 @@ def main():
                     ):
                         start = time.perf_counter()
                         m = _build_design_surface_mesh(
-                            design, 0.2, 0.28, 1.3, 15, detail
+                            design, 0.2, None, 1.3, 15, detail
                         )
                         times[index].append(time.perf_counter() - start)
                     if expected is None:

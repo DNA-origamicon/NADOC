@@ -4100,7 +4100,7 @@ def frame_surface_json(
     design,
     frame: dict,
     color_mode: str = "strand",
-    probe_radius: float = 0.28,
+    probe_radius: float | None = None,
     grid_spacing: float = 0.20,
     radius_inflate: float = 1.30,
     smooth: int = 15,
@@ -4125,6 +4125,9 @@ def frame_surface_json(
         vertex_index_tables,
     )
 
+    if probe_radius is None:
+        probe_radius = 0.14 if detail == "chimerax" else 0.28
+
     if detail == "coarse":
         beads = _cg_beads_from_frame(design, frame)
         mesh = cg_surface_mesh(
@@ -4136,10 +4139,9 @@ def frame_surface_json(
         # skip the phosphate-linker closure (close_backbone=False) to shave the build.
         model = build_display_model(design, frame, close_backbone=False)
         if detail == "chimerax":
-            # EXPERIMENTAL ChimeraX-quality SES: fine 0.5 Å grid + 1.4 Å probe + true VdW.
+            # Figure-quality SES: fine 0.5 Å grid + adjustable probe + true VdW.
             from backend.core.surface import (
                 CHIMERAX_GRID_SPACING,
-                CHIMERAX_PROBE_RADIUS,
                 CHIMERAX_RADIUS_SCALE,
                 CHIMERAX_VOXEL_CAP,
                 CHIMERAX_MAX_SPACING,
@@ -4155,7 +4157,7 @@ def frame_surface_json(
             mesh = compute_surface(
                 model.atoms,
                 grid_spacing=gs,
-                probe_radius=CHIMERAX_PROBE_RADIUS,
+                probe_radius=probe_radius,
                 radius_scale=CHIMERAX_RADIUS_SCALE,
             )
             mesh = smooth_mesh(mesh, iterations=CHIMERAX_SMOOTH)
