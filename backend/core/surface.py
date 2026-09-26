@@ -8,13 +8,12 @@ VdW surface
     the binary occupancy grid.  Each atom type is rasterised by placing its
     centre in the nearest voxel and then binary-dilating by its VdW radius.
 
-SES (Connolly surface)
+Voxel approximation of a solvent-excluded surface (SES)
     Morphological closing of the VdW volume by the probe radius:
         ses_vol = erode(dilate(vdw_vol, r_probe), r_probe)
-    This fills in molecular grooves narrower than the probe diameter (≈1.4 Å
-    for water) and smooths reentrant regions, matching the visual appearance
-    of ChimeraX/VMD Connolly surfaces.  The result is triangulated via
-    marching cubes on the binary closed volume.
+    This fills in grooves narrower than the probe diameter (2.8 Å for a
+    1.4 Å water-probe radius). The result is triangulated via marching cubes
+    on the binary closed volume; it is not an analytical Connolly surface.
 
 Grid resolution
     The default 0.20 nm grid spacing gives voxel-resolution staircase
@@ -32,13 +31,13 @@ import math
 from dataclasses import dataclass, field
 
 import numpy as np
-from scipy.ndimage import binary_dilation, binary_erosion
 from scipy.sparse import csr_matrix
 from scipy.spatial import cKDTree
 from skimage.measure import marching_cubes
 
 from backend.core.atomistic import Atom, VDW_RADIUS
 from backend.core.models import Design
+from backend.core.surface_acceleration import close_volume
 
 
 # ── Strand colour palette ─────────────────────────────────────────────────────
@@ -98,6 +97,42 @@ def _sphere_struct(radius_voxels: float) -> np.ndarray:
     return (x**2 + y**2 + z**2) <= radius_voxels**2
 
 
+def _stamp_spheres(grid: np.ndarray, indices: np.ndarray, radius_voxels: float) -> None:
+    """Union the exact discrete dilation stencil at occupied seed voxels.
+
+    Avoid scanning a mostly empty volume once per element. Interior seeds use
+    bounded NumPy scatter batches (at most 8 MiB of flat indices); boundary
+    seeds are clipped in three dimensions, never wrapped across flat rows.
+    This is the same zero-border binary dilation as SciPy, including duplicate
+    seeds and sub-voxel radii. The caller's grid origin/rounding is unchanged.
+    """
+    if not len(indices):
+        return
+    struct = _sphere_struct(radius_voxels)
+    offsets = np.argwhere(struct) - np.asarray(struct.shape) // 2
+    shape = np.asarray(grid.shape)
+    strides = np.array([shape[1] * shape[2], shape[2], 1])
+    flat = grid.reshape(-1)
+    interior = np.all(
+        (indices + offsets.min(axis=0) >= 0) & (indices + offsets.max(axis=0) < shape),
+        axis=1,
+    )
+    centers = np.unique(indices[interior] @ strides)
+    flat_offsets = offsets @ strides
+    budget = 1_048_576
+    for start in range(0, len(flat_offsets), budget):
+        block = flat_offsets[start : start + budget]
+        batch = max(1, budget // len(block))
+        for row in range(0, len(centers), batch):
+            flat[centers[row : row + batch, None] + block] = True
+    boundary = indices[~interior]
+    if len(boundary):
+        for offset in offsets:
+            shifted = boundary + offset
+            valid = np.all((shifted >= 0) & (shifted < shape), axis=1)
+            flat[shifted[valid] @ strides] = True
+
+
 def _build_occupancy_grid(
     atoms: list[Atom],
     vdw_override: dict[str, float] | None,
@@ -107,11 +142,9 @@ def _build_occupancy_grid(
     """
     Build a boolean occupancy grid (True = inside a VdW sphere).
 
-    Strategy: for each unique element type, mark the single voxel nearest to
-    each atom centre, then binary-dilate that sparse grid by the element's VdW
-    radius.  The union of all four element grids is returned.  This approach
-    requires only 4 dilation operations regardless of atom count and is much
-    faster than per-atom sphere rasterisation in pure Python.
+    Group atoms by element and stamp the discrete spherical dilation stencil
+    at their nearest voxel centres. This preserves the original dense binary
+    dilation exactly while avoiding repeated scans of empty volume.
     """
     radii = vdw_override if vdw_override is not None else VDW_RADIUS
     max_r = max(radii.values())
@@ -131,17 +164,11 @@ def _build_occupancy_grid(
             continue
 
         elem_pos = positions[mask]
-        elem_grid = np.zeros(shape, dtype=bool)
 
         # Map atom centres to nearest voxel indices
         idx = np.round((elem_pos - bbox_min) / grid_spacing).astype(int)
         idx = np.clip(idx, 0, np.array(shape) - 1)
-        elem_grid[idx[:, 0], idx[:, 1], idx[:, 2]] = True
-
-        # Dilate by VdW radius
-        n_voxels = elem_r / grid_spacing
-        struct = _sphere_struct(n_voxels)
-        final_grid |= binary_dilation(elem_grid, structure=struct)
+        _stamp_spheres(final_grid, idx, elem_r / grid_spacing)
 
     return final_grid, bbox_min
 
@@ -173,8 +200,12 @@ def _assign_vertex_owners(
     positions = np.array([[a.x, a.y, a.z] for a in atoms], dtype=np.float64)
     tree = cKDTree(positions)
     _, nearest_idx = tree.query(verts, workers=-1)
-    owners = [atoms[int(i)] for i in nearest_idx]
-    return ([a.strand_id or "" for a in owners], [_nuc_key(a) for a in owners])
+    strand_ids = [a.strand_id or "" for a in atoms]
+    nuc_ids = [_nuc_key(a) for a in atoms]
+    return (
+        [strand_ids[int(i)] for i in nearest_idx],
+        [nuc_ids[int(i)] for i in nearest_idx],
+    )
 
 
 # ── Public surface computation ────────────────────────────────────────────────
@@ -297,8 +328,7 @@ def compute_surface(
     if probe_radius > 0:
         probe_vox = probe_radius / grid_spacing
         struct = _sphere_struct(probe_vox)
-        dilated = binary_dilation(grid, structure=struct)
-        grid = binary_erosion(dilated, structure=struct)
+        grid = close_volume(grid, struct)
 
     return _marching_cubes_safe(grid, 0.5, grid_spacing, bbox_min, atoms)
 
@@ -403,17 +433,16 @@ def compute_surface_from_cloud(
         np.array(shape) - 1,
     )
     # Group by the handful of distinct radii (P/C/N/O × scale) → one dilation each.
-    uniq = np.unique(np.round(radii, 6))
+    rounded_radii = np.round(radii, 6)
+    uniq = np.unique(rounded_radii)
     for r in uniq:
-        mask = np.round(radii, 6) == r
-        sub = np.zeros(shape, dtype=bool)
+        mask = rounded_radii == r
         gi = idx_all[mask]
-        sub[gi[:, 0], gi[:, 1], gi[:, 2]] = True
-        grid |= binary_dilation(sub, structure=_sphere_struct(r / grid_spacing))
+        _stamp_spheres(grid, gi, r / grid_spacing)
 
     if probe_radius > 0:
         struct = _sphere_struct(probe_radius / grid_spacing)
-        grid = binary_erosion(binary_dilation(grid, structure=struct), structure=struct)
+        grid = close_volume(grid, struct)
 
     if grid.max() <= 0.5 or grid.min() >= 0.5:
         return SurfaceMesh(
@@ -450,10 +479,9 @@ def compute_split_surfaces_from_cloud(
 ) -> SurfaceMesh:
     """Per-STRAND independent solvent-excluded surfaces, concatenated into ONE mesh.
 
-    ChimeraX's default ``surface`` builds a separate surface per chain, so complementary
-    strands are DISTINCT geometry with a real solvent gap between them (the double-helix
-    groove pattern).  NADOC's single fused surface instead melts every strand into one blob
-    and colours it — giving a jagged colour seam where strands touch, not a gap.  This builds
+    Inspired by ChimeraX's per-chain default, this retains independently generated
+    strand shells instead of one fused envelope. Independent shells can overlap;
+    they do not establish physical solvent accessibility or guarantee a gap. This builds
     each strand's atoms on their OWN cropped occupancy grid → dilate/erode by the probe →
     marching cubes → Taubin smooth, then concatenates the parts (offsetting face indices).
     Every vertex belongs unambiguously to one strand, so the per-vertex colours are already
@@ -463,22 +491,17 @@ def compute_split_surfaces_from_cloud(
     (small) bbox, and coarsened per strand by the voxel cap, so cost stays bounded."""
     positions = np.asarray(positions, dtype=np.float64)
     radii = np.asarray(radii, dtype=np.float64)
-    sids = [s or "" for s in strand_ids]
-    sids_arr = np.asarray(sids, dtype=object)
-
-    # First-appearance strand order (matches the palette assignment in surface_to_json).
-    order: list = []
-    seen: set = set()
-    for s in sids:
-        if s not in seen:
-            seen.add(s)
-            order.append(s)
+    # One grouping pass, retaining first-appearance strand order AND atom order
+    # within each strand (KD-tree tie ownership must not change).
+    groups: dict[str, list[int]] = {}
+    for i, sid in enumerate(strand_ids):
+        groups.setdefault(sid or "", []).append(i)
 
     # One marching-cubes pass PER strand, so total cost scales with strand count.  Split a
     # global voxel budget across strands (floored) so a small design gets fine per-strand
     # grids while a 200-staple origami auto-coarsens instead of hanging for minutes.
     eff_cap = int(
-        min(cap_voxels, max(2_000_000, _SPLIT_VOXEL_BUDGET // max(1, len(order))))
+        min(cap_voxels, max(2_000_000, _SPLIT_VOXEL_BUDGET // max(1, len(groups))))
     )
 
     parts_v: list[np.ndarray] = []
@@ -486,16 +509,15 @@ def compute_split_surfaces_from_cloud(
     parts_sid: list[str] = []
     parts_nuc: list[str] = []
     voff = 0
-    for s in order:
-        mask = sids_arr == s
-        sub_pos = positions[mask]
+    for s, rows in groups.items():
+        sub_pos = positions[rows]
         if sub_pos.shape[0] < 4:
             continue
-        sub_r = radii[mask]
+        sub_r = radii[rows]
         gs = adaptive_grid_spacing_arr(
             sub_pos, grid_spacing, cap_voxels=eff_cap, max_spacing=max_spacing
         )
-        sub_nuc = [nuc_ids[i] for i in np.nonzero(mask)[0]] if nuc_ids else None
+        sub_nuc = [nuc_ids[i] for i in rows] if nuc_ids else None
         m = compute_surface_from_cloud(
             sub_pos,
             sub_r,
@@ -679,7 +701,7 @@ def compute_colored_surfaces(
     )
     if probe_radius > 0:
         struct = _sphere_struct(probe_radius / grid_spacing)
-        grid = binary_erosion(binary_dilation(grid, structure=struct), structure=struct)
+        grid = close_volume(grid, struct)
 
     if not grid.any():
         return [None] * n_groups

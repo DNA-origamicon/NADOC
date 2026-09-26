@@ -1,0 +1,113 @@
+{
+  "baseline": "0dc8b857378b077a739289f413a23cfad3e234a3",
+  "results": [
+    {
+      "operation": "cpk_selection",
+      "atoms": 30000,
+      "bonds": 29700,
+      "beforeMs": 13.510581999999886,
+      "afterMs": 3.1460520000000542,
+      "speedup": 4.294456035691607,
+      "exactBuffers": true
+    },
+    {
+      "operation": "cluster_colours_fades",
+      "atoms": 30000,
+      "bonds": 29700,
+      "beforeMs": 50.164905999999974,
+      "afterMs": 23.91552700000011,
+      "speedup": 2.0975873122093334,
+      "exactBuffers": true
+    },
+    {
+      "operation": "scalar_selection_fades",
+      "atoms": 30000,
+      "bonds": 29700,
+      "beforeMs": 71.59825400000045,
+      "afterMs": 32.37917500000003,
+      "speedup": 2.2112439245286635,
+      "exactBuffers": true
+    },
+    {
+      "operation": "cpk_selection",
+      "atoms": 150000,
+      "bonds": 148500,
+      "beforeMs": 55.70635500000026,
+      "afterMs": 11.235526000000391,
+      "speedup": 4.958054923285151,
+      "exactBuffers": true
+    },
+    {
+      "operation": "cluster_colours_fades",
+      "atoms": 150000,
+      "bonds": 148500,
+      "beforeMs": 318.98559100000057,
+      "afterMs": 158.9443390000015,
+      "speedup": 2.006901239810734,
+      "exactBuffers": true
+    },
+    {
+      "operation": "scalar_selection_fades",
+      "atoms": 150000,
+      "bonds": 148500,
+      "beforeMs": 405.6125630000024,
+      "afterMs": 202.6981820000001,
+      "speedup": 2.001066605520923,
+      "exactBuffers": true
+    },
+    {
+      "operation": "scalar_surface_repeat",
+      "vertices": 22500,
+      "faces": 44402,
+      "beforeMs": 13.28815099999997,
+      "afterMs": 1.1054280000000176,
+      "speedup": 12.02081999008507,
+      "exactBuffers": true
+    },
+    {
+      "operation": "scalar_surface_recolour",
+      "vertices": 22500,
+      "faces": 44402,
+      "beforeMs": 12.701191999999992,
+      "afterMs": 1.1919329999998354,
+      "speedup": 10.655961366957493,
+      "exactBuffers": true
+    },
+    {
+      "operation": "scalar_surface_motion",
+      "vertices": 22500,
+      "faces": 44402,
+      "beforeMs": 12.855002999999897,
+      "afterMs": 4.936979999999949,
+      "speedup": 2.6038191363951304,
+      "exactBuffers": true
+    },
+    {
+      "operation": "scalar_surface_repeat",
+      "vertices": 160000,
+      "faces": 318402,
+      "beforeMs": 86.7335320000002,
+      "afterMs": 5.685171999999511,
+      "speedup": 15.256096385475699,
+      "exactBuffers": true
+    },
+    {
+      "operation": "scalar_surface_recolour",
+      "vertices": 160000,
+      "faces": 318402,
+      "beforeMs": 88.40508399999999,
+      "afterMs": 5.7563890000001265,
+      "speedup": 15.357732773097517,
+      "exactBuffers": true
+    },
+    {
+      "operation": "scalar_surface_motion",
+      "vertices": 160000,
+      "faces": 318402,
+      "beforeMs": 87.72631399999955,
+      "afterMs": 35.21227699999872,
+      "speedup": 2.4913558983988096,
+      "exactBuffers": true
+    }
+  ]
+}

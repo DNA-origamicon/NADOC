@@ -1,0 +1,4 @@
+NADOC_SURFACE_GPU explicitly unset; backend initializes CUDA at startup.
+SURFACE_GENERATION_APP [{"detail":"coarse","bytes":736655,"census":{"width":1236,"height":634,"visible":16417,"colorful":9761,"black":0,"pixelHash":123419360}},{"detail":"chimerax","bytes":10878386,"census":{"width":1236,"height":634,"visible":11046,"colorful":6923,"black":0,"pixelHash":1735202149}},{"detail":"coarse","bytes":736655,"census":{"width":1236,"height":634,"visible":16417,"colorful":9761,"black":0,"pixelHash":123419360}}]
+  1 passed (41.9s)
+All owned test paths and credentials verified absent after teardown.

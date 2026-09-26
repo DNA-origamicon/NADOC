@@ -12,6 +12,78 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- Active audit completed (2026-09-26, final batch): solvent matrices use the exact
+  shared direct writers and upload only active instances; periodic images upload
+  only changed Float32 position/color channels. Ball-and-stick water updates
+  measured 2.05–2.73× faster (20k/100k waters). Unchanged protein trace refreshes
+  reuse geometry while refreshing picking/centroid metadata; primitive snapshots
+  detect in-place edits. Both part and assembly renderers share this factory.
+  Trace-only synthetic refreshes measured 91–114× faster; cheap box/ovoid rebuilds
+  remain unchanged after measurement rejected their cache. No particle sampling,
+  tessellation or surface fidelity reduction. Evidence:
+  `docs/audits/remaining_visualization_20260926/README.md`.
+
+- Surface generation (2026-09-26, batch 4): object/cloud occupancy stamps the
+  exact discrete spherical stencil with bounded NumPy scatter batches, avoiding
+  full-volume scans per radius. Split surfaces group atoms once without changing
+  strand/atom order; object-path nucleotide keys are resolved once per atom.
+  Grid origins, radii, probe closing, marching cubes, smoothing and ownership
+  remain unchanged. CUDA stencil closing is enabled by default when CUDA-enabled
+  PyTorch is installed. Backend lifespan awaits a synthetic closing warm-up before
+  accepting requests (import/context/convolution startup). Small workloads, memory
+  limits and CUDA errors retain SciPy fallback; `NADOC_SURFACE_GPU=0` is a diagnostic
+  CPU override. No enable flag is needed.
+  The standard preset is a CG envelope; the beautiful design
+  preset uses independent atomistic strand shells, while beautiful simulation
+  frames currently use a fused shell. Neither is an analytical Connolly surface,
+  and independent shells do not guarantee physical solvent gaps.
+  Paired real-design checks preserve every vertex/face/identity: beautiful CPU
+  generation improves 4.3–5.0×; warm CUDA reaches 7.2–8.7× versus the
+  original path. Standard mode improves 1.17–1.25×. App preset toggles and original
+  binary payload parity passed; all 28 new tests passed in the FULL suite (9,747 passed overall, 13 baseline
+  failures unchanged). Default-on startup and app checks also passed.
+  See [surface generation audit and external-method comparison](../docs/audits/surface_generation_20260926/README.md).
+
+- Trajectory/startup performance (2026-09-26, batch 3): compact MD frames now
+  reach the atomistic renderer directly, avoiding sparse serial-span expansion.
+  One immutable page-order mapping is cached and content-checked across pages;
+  topology rebuilds invalidate it. Missing coverage retains the expansion fallback.
+  Superseded queued interactive scrubs are dropped before reading; active reads
+  may fill the cache, while explicit preparation/playback requests stay protected.
+  First-open sphere/bond matrices use direct packed writes with unchanged math.
+  GPU colour/alpha uploads are skipped when final Float32 values are unchanged;
+  instance matrices/colours use dynamic usage from creation. Paired CPU medians
+  at 150k atoms: construction 1.4–1.6×, compact snapshots ~1.6×; the sparse fixture
+  removes 28.8 MB coordinate scratch. These exclude network/shader/render time.
+  Browser A/B matched eight pixel states and picking; unchanged repaint uploads
+  fell from 10 calls / 169,152 bytes to zero on the 5,040-atom fixture.
+  See [batch 3 audit](../docs/audits/loading_open_20260926/README.md).
+
+- Surface/colour performance (2026-09-26): scalar simulation surfaces reuse
+  compatible geometry/normal/colour/alpha buffers; content comparisons detect
+  mutable coordinate/connectivity payloads and attribute versions invalidate
+  normals after ordinary animation. Changed geometry retains exact Three.js
+  normals; incompatible buffers are disposed. Atomistic colouring resolves each
+  endpoint and distinct sRGB colour once per repaint, with one alpha dirty mark
+  per mesh. Caches expire per repaint to preserve mutable-map semantics.
+  Paired CPU medians: large scalar refresh/recolour ~15×, fully moving scalar
+  surfaces ~2.5×, cluster/scalar repaint ~2×, CPK selection ~5×. Browser A/B on
+  5,040 atoms and 31,118 surface faces matched all 18 pixel states and picking
+  for spheres, impostors, Phong and physical materials. No mesh decimation or
+  end-to-end FPS claim. See [batch 2 audit](../docs/audits/surface_colouring_20260926/README.md).
+
+- Active visualization performance (2026-09-25): atomistic interpolation computes
+  each row once in a reusable Float64 workspace and writes sphere/bond buffers
+  directly; live MD updates use the same allocation-free writers. Hidden atomistic
+  representations skip interpolation work. Direct recorded-atom PBC placement
+  batches equal-length strand medians and applies strand lattice shifts in one
+  gather. Paired synthetic benchmarks: interpolation 3.0–4.4×, cluster interpolation
+  ~4.7×, live frame updates ~1.9×, PBC preparation 2.5–2.6×. Coordinates and instance
+  buffers compare exactly against the old paths. Browser check on a real 5,040-atom
+  6hb fixture matched pixels/picking/colour/opacity across interpolation, snapshot
+  and live updates. These are CPU-kernel gains, not measured end-to-end FPS.
+  See [active-feature ranking and verification](../docs/audits/active_visualization_20260925/README.md).
+
 - Guest presence (2026-09-23): compact guest initials in the Presenting toolbar;
   all participant chips (Me/Presenter included) stacked longest-name-first in the
   guest canvas upper left. Random host-assigned

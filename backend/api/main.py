@@ -295,6 +295,13 @@ def _begin_runpod_reload_handoff() -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Server startup/shutdown hook."""
+    from backend.core.surface_acceleration import initialize_surface_cuda
+
+    surface_cuda_ready = await asyncio.to_thread(initialize_surface_cuda)
+    logger.info(
+        "Surface acceleration: %s",
+        "CUDA ready" if surface_cuda_ready else "CPU fallback",
+    )
     _WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
     from backend.core import alpine_operations
 

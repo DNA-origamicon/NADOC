@@ -1,0 +1,54 @@
+/home/joshua/NADOC/backend/api/headless_build.py:201: FastAPIDeprecationWarning: ORJSONResponse is deprecated, FastAPI now serializes data directly to JSON bytes via Pydantic when a return type or response model is set, which is faster and doesn't need a custom response class. Read more in the FastAPI docs: https://fastapi.tiangolo.com/advanced/custom-response/#orjson-or-response-model and https://fastapi.tiangolo.com/tutorial/response-model/
+  _route_create_bundle(
+coarse 57535 115282
+         386514 function calls (383107 primitive calls) in 0.354 seconds
+
+   Ordered by: cumulative time
+   List reduced from 716 to 18 due to restriction <18>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.003    0.003    0.354    0.354 /home/joshua/NADOC/backend/api/routes_display_geometry.py:360(_build_design_surface_mesh)
+        1    0.000    0.000    0.242    0.242 /home/joshua/NADOC/backend/core/surface.py:527(cg_surface_mesh)
+        1    0.000    0.000    0.175    0.175 /home/joshua/NADOC/backend/core/surface.py:254(compute_surface)
+        1    0.001    0.001    0.147    0.147 /home/joshua/NADOC/backend/core/surface.py:183(_marching_cubes_safe)
+     30/1    0.000    0.000    0.097    0.097 <frozen importlib._bootstrap>:1349(_find_and_load)
+     29/1    0.000    0.000    0.097    0.097 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+     29/1    0.000    0.000    0.097    0.097 <frozen importlib._bootstrap>:911(_load_unlocked)
+     25/1    0.000    0.000    0.097    0.097 <frozen importlib._bootstrap_external>:989(exec_module)
+     79/2    0.000    0.000    0.097    0.048 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+     28/1    0.000    0.000    0.097    0.097 {built-in method builtins.exec}
+        1    0.000    0.000    0.097    0.097 /home/joshua/NADOC/backend/core/surface.py:1(<module>)
+        1    0.000    0.000    0.088    0.088 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/ndimage/__init__.py:1(<module>)
+        1    0.000    0.000    0.085    0.085 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/ndimage/_support_alternative_backends.py:1(<module>)
+        1    0.028    0.028    0.081    0.081 /home/joshua/NADOC/backend/core/surface.py:164(_assign_vertex_owners)
+       75    0.001    0.000    0.072    0.001 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/_lib/_array_api.py:840(decorator)
+        1    0.007    0.007    0.066    0.066 /home/joshua/NADOC/backend/core/surface.py:549(smooth_mesh)
+       75    0.000    0.000    0.063    0.001 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/_lib/_docscrape.py:579(__init__)
+        1    0.000    0.000    0.062    0.062 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/skimage/measure/_marching_cubes_lewiner.py:9(marching_cubes)
+
+
+chimerax 908490 1816932
+         76645 function calls (75943 primitive calls) in 22.872 seconds
+
+   Ordered by: cumulative time
+   List reduced from 498 to 18 due to restriction <18>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000   22.874   22.874 /home/joshua/NADOC/backend/api/routes_display_geometry.py:360(_build_design_surface_mesh)
+        1    0.001    0.001   22.874   22.874 /home/joshua/NADOC/backend/api/routes_display_geometry.py:450(_build_chimerax_surface)
+        1    0.035    0.035   22.814   22.814 /home/joshua/NADOC/backend/core/surface.py:439(compute_split_surfaces_from_cloud)
+       12    0.300    0.025   22.298    1.858 /home/joshua/NADOC/backend/core/surface.py:361(compute_surface_from_cloud)
+       72    0.002    0.000   20.697    0.287 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/ndimage/_morphology.py:216(_binary_erosion)
+       72   20.671    0.287   20.671    0.287 {built-in method scipy.ndimage._nd_image.binary_erosion}
+       60    0.001    0.000   20.298    0.338 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/ndimage/_morphology.py:407(binary_dilation)
+       12    0.000    0.000    1.123    0.094 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/skimage/measure/_marching_cubes_lewiner.py:9(marching_cubes)
+       12    1.095    0.091    1.123    0.094 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/skimage/measure/_marching_cubes_lewiner.py:151(_marching_cubes_lewiner)
+       12    0.028    0.002    0.450    0.037 /home/joshua/NADOC/backend/core/surface.py:549(smooth_mesh)
+       12    0.000    0.000    0.400    0.033 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/ndimage/_morphology.py:305(binary_erosion)
+ 1008/720    0.010    0.000    0.326    0.000 {method 'acquire' of '_thread.lock' objects}
+      144    0.000    0.000    0.298    0.002 /usr/lib/python3.12/threading.py:1115(join)
+      144    0.000    0.000    0.293    0.002 /usr/lib/python3.12/threading.py:1153(_wait_for_tstate_lock)
+       48    0.001    0.000    0.202    0.004 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/sparse/_compressed.py:30(__init__)
+      108    0.000    0.000    0.163    0.002 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/sparse/_base.py:919(__matmul__)
+      108    0.000    0.000    0.161    0.001 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/sparse/_base.py:788(_matmul_dispatch)
+       96    0.001    0.000    0.122    0.001 /home/joshua/NADOC/.venv/lib/python3.12/site-packages/scipy/sparse/_compressed.py:399(_matmul_multivector)

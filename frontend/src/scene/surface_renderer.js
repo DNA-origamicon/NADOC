@@ -37,6 +37,7 @@ const UNIFORM_COLOR      = 0xC8D8E8   // soft blue-grey, neutral molecular surfa
 const _isIndexable = (a) => Array.isArray(a) || ArrayBuffer.isView(a)
 
 export function initSurfaceRenderer(scene) {
+  let _normalState  = null   // geometry and versions at the last normal computation
   let _mesh         = null   // THREE.Mesh currently in scene
   let _cachedData   = null   // last data object from API (retains vertex_strand_index*)
   let _colorMode    = 'strand'
@@ -326,7 +327,13 @@ export function initSurfaceRenderer(scene) {
       if (existing) { existing.array.fill(1); existing.needsUpdate = true }
       return
     }
-    _mesh.geometry.setAttribute('instanceAlpha', new THREE.BufferAttribute(arr, 1))
+    const existing = _mesh.geometry.getAttribute('instanceAlpha')
+    if (existing?.array.length === arr.length) {
+      existing.array.set(arr)
+      existing.needsUpdate = true
+    } else {
+      _mesh.geometry.setAttribute('instanceAlpha', new THREE.BufferAttribute(arr, 1))
+    }
     if (!_mesh.material.userData?.instanceAlphaPatch) applyInstanceAlphaMaterial(_mesh.material)
     // The slider's own `transparent = val < 1` would switch blending off at 1.0 and
     // silently kill the per-vertex fade.
@@ -468,6 +475,7 @@ export function initSurfaceRenderer(scene) {
       _mesh = null
     }
     _cachedData = null
+    _normalState = null
     _liveVerts  = null
     _crispFaceVert = null
     _mode       = 'off'
@@ -476,6 +484,7 @@ export function initSurfaceRenderer(scene) {
   // ── Internal ────────────────────────────────────────────────────────────────
 
   function _replaceMesh() {
+    _normalState = null
     // Dispose old mesh
     if (_mesh) {
       scene.remove(_mesh)
@@ -524,9 +533,8 @@ export function initSurfaceRenderer(scene) {
     // opacity resolved against the wrong identity table — or against none at all.
     const _identityChanged = _cachedData !== toData
     _cachedData = toData
-    // Scalar overlay (oxDNA flexibility map): a single colour-baked frame — always
-    // rebuild so the per-vertex viridis colours land even if the vertex count
-    // happens to match the current mesh (the in-place lerp never touches colour).
+    // Scalar overlays must refresh baked colours even at the same vertex count.
+    // The topology updater reuses buffers and normals when their contents match.
     if (toData.scalar) { _rebuildTopology(toData); return }
     const fromV = fromData.vertices
     const toV   = toData.vertices
@@ -575,11 +583,11 @@ export function initSurfaceRenderer(scene) {
   }
 
   /**
-   * Replace the live geometry buffer with new vertex + face data.
+   * Refresh vertex + face data, reusing compatible buffers and unchanged normals.
    * Preserves the existing material AND its strand colouring when the baked
    * data carries `vertex_colors` (surface-batch in `color_mode='strand'`
    * mode does). Falls back to uniform grey only when colour data is absent.
-   * Normals are recomputed immediately.
+   * Changed geometry has its normals recomputed immediately.
    *
    * This is what keeps surface coloring through topology changes during
    * animation preview / video export — both in normal mode and photo mode.
@@ -597,33 +605,67 @@ export function initSurfaceRenderer(scene) {
     // sim frame, so applyClusterDisplay / _applyVertexAlpha early-returned or resolved
     // against the wrong identity table.
     _cachedData    = data
-    const oldGeo   = _mesh.geometry
-    const vertsArr = new Float32Array(data.vertices)
-    _liveVerts     = vertsArr
-    const newGeo   = new THREE.BufferGeometry()
-    newGeo.setAttribute('position', new THREE.BufferAttribute(vertsArr, 3))
-    newGeo.setIndex(new THREE.BufferAttribute(new Uint32Array(data.faces), 1))
-    newGeo.computeVertexNormals()
+    const oldGeo = _mesh.geometry
+    const bakedColors = (data.scalar || _colorMode === 'strand') && data.vertex_colors
+    const oldColors = oldGeo.getAttribute('color')
+    const reuse = oldGeo.index && oldGeo.index.array.length === data.faces.length
+      && oldGeo.attributes.position.array.length === data.vertices.length
+      // Removing/replacing an uploaded attribute must dispose its owning geometry
+      // so Three.js releases the old GPU buffer as well.
+      && (!oldColors || bakedColors?.length === oldColors.array.length)
+    const newGeo = reuse ? oldGeo : new THREE.BufferGeometry()
+    // Payloads may mutate in place. Compare at rendered precision, including
+    // connectivity: equal vertex counts alone do not establish equal topology.
+    function writeAttribute(name, values, size, ArrayType) {
+      const attr = name === 'index' ? newGeo.index : newGeo.getAttribute(name)
+      if (!attr || attr.array.length !== values.length) {
+        const next = new THREE.BufferAttribute(new ArrayType(values), size)
+        if (name === 'index') newGeo.setIndex(next)
+        else newGeo.setAttribute(name, next)
+        return true
+      }
+      let changed = false
+      for (let i = 0; i < values.length; i++) {
+        const value = ArrayType === Float32Array ? Math.fround(values[i]) : values[i] >>> 0
+        if (attr.array[i] !== value) { attr.array[i] = value; changed = true }
+      }
+      if (changed) attr.needsUpdate = true
+      return changed
+    }
+    const positionsChanged = writeAttribute('position', data.vertices, 3, Float32Array)
+    const facesChanged = writeAttribute('index', data.faces, 1, Uint32Array)
+    _liveVerts = newGeo.attributes.position.array
+    _crispFaceVert = null // rebuilt simulation geometry is indexed
+    if (positionsChanged || facesChanged || _normalState?.geometry !== newGeo
+      || _normalState.positionVersion !== newGeo.attributes.position.version
+      || _normalState.indexVersion !== newGeo.index.version) {
+      newGeo.computeVertexNormals()
+      newGeo.boundingBox = null
+      newGeo.boundingSphere = null
+      _normalState = { geometry: newGeo, positionVersion: newGeo.attributes.position.version,
+        indexVersion: newGeo.index.version }
+    }
 
     // `scalar` (flexibility map) shows its baked viridis colours regardless of the
     // user's strand/uniform colour mode; otherwise strand colours need strand mode.
-    if ((data.scalar || _colorMode === 'strand') && data.vertex_colors) {
-      newGeo.setAttribute('color',
-        new THREE.BufferAttribute(new Float32Array(data.vertex_colors), 3))
+    if (bakedColors) {
+      writeAttribute('color', data.vertex_colors, 3, Float32Array)
       if (!_mesh.material.vertexColors) {
         _mesh.material.vertexColors = true
         _mesh.material.color.setHex(0xFFFFFF)
         _mesh.material.needsUpdate = true
       }
-    } else if (_mesh.material.vertexColors) {
-      // No strand colours in this baked state — fall back to uniform so the
-      // shader doesn't read a missing attribute.
-      _mesh.material.vertexColors = false
-      _mesh.material.color.setHex(UNIFORM_COLOR)
-      _mesh.material.needsUpdate = true
+    } else {
+      newGeo.deleteAttribute('color')
+      if (_mesh.material.vertexColors) {
+        // No baked colours: the shader must not read a missing attribute.
+        _mesh.material.vertexColors = false
+        _mesh.material.color.setHex(UNIFORM_COLOR)
+        _mesh.material.needsUpdate = true
+      }
     }
     _mesh.geometry = newGeo
-    oldGeo.dispose()
+    if (!reuse) oldGeo.dispose()
 
     // Per-cluster colour + fade, exactly as _replaceMesh does for the design surface.
     _applyFrameClusterDisplay(data)

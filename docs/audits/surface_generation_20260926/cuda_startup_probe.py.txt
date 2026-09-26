@@ -1,0 +1,48 @@
+"""Five fresh-process timings of the optional surface CUDA backend, in seconds."""
+import json
+import subprocess
+import sys
+import statistics
+
+child = r'''
+import json,time,statistics
+import numpy as np
+from backend.core.surface import _sphere_struct,_stamp_spheres
+from backend.core.surface_acceleration import _try_cuda_closing
+shape=(96,96,192)
+grid=np.zeros(shape,bool)
+rng=np.random.default_rng(3)
+_stamp_spheres(grid,rng.integers([10,10,10],[86,86,182],(2000,3)),3.4)
+structure=_sphere_struct(2.8)
+start=time.perf_counter()
+import torch
+imported=time.perf_counter()
+assert torch.cuda.is_available()
+checked=time.perf_counter()
+torch.cuda.init()
+torch.cuda.synchronize()
+initialized=time.perf_counter()
+result=_try_cuda_closing(grid,structure)
+assert result is not None
+first=time.perf_counter()
+warm=[]
+for _ in range(5):
+ t=time.perf_counter()
+ actual=_try_cuda_closing(grid,structure)
+ elapsed=time.perf_counter()-t
+ np.testing.assert_array_equal(actual,result)
+ warm.append(elapsed)
+w=statistics.median(warm)
+print(json.dumps(dict(import_s=imported-start,availability_s=checked-imported,
+ context_init_s=initialized-checked,first_closing_s=first-initialized,
+ warm_closing_s=w,total_first_use_s=first-start,
+ startup_overhead_s=first-start-w,torch=torch.__version__,gpu=torch.cuda.get_device_name())))
+'''
+results=[]
+for i in range(5):
+ value=json.loads(subprocess.check_output([sys.executable,'-c',child],text=True))
+ results.append(value)
+ print(json.dumps({'fresh_process':i+1,**value}),flush=True)
+fields=[k for k in results[0] if k.endswith('_s')]
+print(json.dumps({'summary':{k:{'median':statistics.median(r[k] for r in results),
+ 'min':min(r[k] for r in results),'max':max(r[k] for r in results)} for k in fields}},indent=2))

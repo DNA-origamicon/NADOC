@@ -1,0 +1,86 @@
+{
+  "baseline": "pre-batch inert sources with SHA256 in audit directory",
+  "results": [
+    {
+      "operation": "first_open_cpu",
+      "atoms": 30000,
+      "bonds": 29700,
+      "format": "object",
+      "beforeMs": 16.419212000000016,
+      "afterMs": 10.034672999999998,
+      "speedup": 1.636247837871749,
+      "exactBuffers": true
+    },
+    {
+      "operation": "first_open_cpu",
+      "atoms": 30000,
+      "bonds": 29700,
+      "format": "columnar",
+      "beforeMs": 17.35791299999994,
+      "afterMs": 11.56573000000003,
+      "speedup": 1.500805656019974,
+      "exactBuffers": true
+    },
+    {
+      "operation": "cached_compact_frame",
+      "atoms": 30000,
+      "serialSpan": 240000,
+      "beforeMs": 2.438224999999875,
+      "afterMs": 1.9924479999999676,
+      "speedup": 1.223733317004968,
+      "exactBuffers": true,
+      "eliminatedSparseScratchBytes": 5760000
+    },
+    {
+      "operation": "first_open_cpu",
+      "atoms": 150000,
+      "bonds": 148500,
+      "format": "object",
+      "beforeMs": 126.9467279999999,
+      "afterMs": 80.38146099999994,
+      "speedup": 1.5793035660299828,
+      "exactBuffers": true
+    },
+    {
+      "operation": "first_open_cpu",
+      "atoms": 150000,
+      "bonds": 148500,
+      "format": "columnar",
+      "beforeMs": 112.41374099999939,
+      "afterMs": 80.28527099999974,
+      "speedup": 1.4001788821264582,
+      "exactBuffers": true
+    },
+    {
+      "operation": "cached_compact_frame",
+      "atoms": 150000,
+      "serialSpan": 1200000,
+      "beforeMs": 15.958177999999862,
+      "afterMs": 10.054508000001078,
+      "speedup": 1.5871664729888473,
+      "exactBuffers": true,
+      "eliminatedSparseScratchBytes": 28800000
+    },
+    {
+      "operation": "rapid_scrub_reads",
+      "version": "before",
+      "reads": [
+        0,
+        8,
+        16,
+        24,
+        32,
+        40,
+        48
+      ]
+    },
+    {
+      "operation": "rapid_scrub_reads",
+      "version": "after",
+      "reads": [
+        0,
+        48
+      ]
+    }
+  ]
+}

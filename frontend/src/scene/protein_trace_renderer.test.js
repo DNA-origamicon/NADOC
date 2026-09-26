@@ -83,3 +83,29 @@ describe('initProteinTraceRenderer', () => {
     renderer.dispose()
   })
 })
+
+it.each(['trace'])('reuses unchanged %s geometry but refreshes metadata and detects in-place edits', mode => {
+  const scene = new THREE.Scene(), r = initProteinTraceRenderer(scene)
+  let atoms = [atom('p1', 'A', 1, 0), atom('p1', 'A', 2, .38)]
+  r.setMode(mode); r.update({ atoms })
+  const mesh = () => scene.getObjectByName('proteinTrace').children[0]
+  const original = mesh().geometry
+  const coordinates = original.attributes.position.array.slice()
+  atoms = atoms.map(a => ({ ...a, serial: 123 }))
+  r.update({ atoms })
+  expect(mesh().geometry).toBe(original)
+  expect(mesh().geometry.attributes.position.array).toEqual(coordinates)
+  expect(r.raycastPick({ intersectObjects: objects => [{ object: objects[0], distance: 2 }] }).atom).toBe(atoms[mode === 'trace' ? 1 : 0])
+  expect(r.centroidOf(a => a.serial === 123).x).toBeCloseTo(.19)
+  r.beginLiveTransform(() => true); r.applyLiveTransform(new THREE.Matrix4().makeTranslation(4, 0, 0))
+  r.update({ atoms }); expect(r.centroidOf().x).toBeCloseTo(.19)
+  atoms[1].x = .7; r.update({ atoms })
+  expect(mesh().geometry).not.toBe(original)
+  expect(r.centroidOf().x).toBeCloseTo(.35)
+  const changed = mesh().geometry
+  atoms[1].chain_id = 'B'; r.update({ atoms })
+  expect(mesh().geometry).not.toBe(changed)
+  r.setMode('off'); r.update({ atoms }); r.setMode(mode)
+  expect(mesh()).toBeDefined()
+  r.dispose(); expect(scene.children).toHaveLength(0)
+})

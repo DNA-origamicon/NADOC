@@ -376,3 +376,16 @@ it('reports membrane ownership only when a frame supplies graphene and releases 
  overlay.setFrame(frame);overlay.clear();expect(states).toEqual([true,false,true,false])
  overlay.dispose()
 })
+
+it('uploads only active solvent matrices after a hydration-shell count decrease', () => {
+  const scene = new THREE.Scene(), r = initMdSolventOverlay(scene)
+  r.setMode('atomistic', true); r.setFrame(atomFrame(100, 100))
+  const mesh = meshFor(scene, 'waterO')
+  r.setFrame(atomFrame(40, 40))
+  expect(meshFor(scene, 'waterO')).toBe(mesh)
+  for (const object of scene.children.filter(o => o.isInstancedMesh)) {
+    expect(object.instanceMatrix.updateRanges).toEqual([{ start: 0, count: object.count * 16 }])
+    expect(object.instanceMatrix.count).toBeGreaterThan(object.count)
+  }
+  r.dispose()
+})

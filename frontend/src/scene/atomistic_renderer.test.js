@@ -4,6 +4,7 @@ import { initAtomisticRenderer } from './atomistic_renderer.js'
 import { CYLINDER_GEO, SPHERE_GEO } from './atomistic_renderer/geometry_builder.js'
 import { IMPOSTOR_QUAD } from './impostor_material.js'
 import { BALL_RADIUS, ELEMENTS } from './atomistic_renderer/atom_palette.js'
+import { expandMdAtomFrame } from './md_atom_frames_bin.js'
 
 // Regression for the oxDNA-display atomistic overlay drawing long bonds across the
 // model: when a position overlay (applyPositionLerp) leaves a nucleotide at its
@@ -42,6 +43,85 @@ function makeTwoAtomBond() {
   })
   return { scene, ar }
 }
+
+it('renders compact frames exactly like expansion, including sparse/reordered serials and topology changes', () => {
+  const scene = new THREE.Scene(), ar = initAtomisticRenderer(scene, { independentColors: true })
+  ar.setMode('ballstick')
+  const serialMap = new Uint32Array([19, 3, 50])
+  const frame = { serialMap, dense: new Float64Array([1, 2, 3, 1.1, 2.1, 3.1, 8, 9, 10]), length: 153 }
+  for (const serials of [[3, 19], [19, 3], [50, 19]]) {
+    ar.update({ atoms: serials.map((serial, i) => ({ serial, element: 'C', x: i * .1, y: 0, z: 0 })), bonds: [serials] })
+    const expanded = expandMdAtomFrame(frame)
+    ar.applyPositionLerp(expanded, expanded, 0)
+    const meshes = scene.children.filter(m => m.isInstancedMesh)
+    const expected = meshes.map(m => m.instanceMatrix.array.slice())
+    expect(ar.applyCompactFrame(frame)).toBe(true)
+    meshes.forEach((m, i) => expect(m.instanceMatrix.array).toEqual(expected[i]))
+  }
+  const before = scene.children.map(m => m.instanceMatrix.array.slice())
+  expect(ar.applyCompactFrame({ ...frame, serialMap: new Uint32Array([3]) })).toBe(false)
+  scene.children.forEach((m, i) => expect(m.instanceMatrix.array).toEqual(before[i]))
+  ar.dispose()
+})
+
+it('avoids unchanged GPU colour/alpha uploads while retaining mutable map repainting', () => {
+  const { scene, ar } = makeTwoAtomBond()
+  const colors = new Map([['h0', 0x3175a9]]), alphas = new Map([['h0', .3]])
+  ar.setClusterDisplay(alphas, colors)
+  const meshes = scene.children.filter(m => m.isInstancedMesh)
+  const versions = meshes.map(m => [m.instanceColor.version, m._instanceAlpha.version])
+  ar.setClusterDisplay(alphas, colors)
+  meshes.forEach((m, i) => {
+    expect([m.instanceColor.version, m._instanceAlpha.version]).toEqual(versions[i])
+    expect(m.instanceMatrix.usage).toBe(THREE.DynamicDrawUsage)
+  })
+  alphas.set('h0', .6)
+  ar.setClusterDisplay(alphas, colors)
+  meshes.forEach((m, i) => {
+    expect(m.instanceColor.version).toBe(versions[i][0])
+    expect(m._instanceAlpha.version).toBe(versions[i][1] + 1)
+  })
+  ar.dispose()
+})
+
+it('keeps compact page ordering and weld lookups correct across consecutive pages', () => {
+  const { scene, ar } = makeTwoAtomBond()
+  const positions = []
+  ar.setWeldOverlay({ update: get => positions.push([get(0), get(1), get(2)]) })
+  for (const serialMap of [new Uint32Array([0, 1]), new Uint32Array([0, 1]), new Uint32Array([1, 0])]) {
+    const frame = { serialMap, dense: new Float64Array([1, 2, 3, 1.1, 2.1, 3.1]), length: 9 }
+    const expanded = expandMdAtomFrame(frame)
+    ar.applyPositionLerp(expanded, expanded, 0)
+    const expected = scene.children.map(m => m.instanceMatrix.array.slice())
+    expect(ar.applyCompactFrame(frame)).toBe(true)
+    scene.children.forEach((m, i) => expect(m.instanceMatrix.array).toEqual(expected[i]))
+    expect(positions.at(-1)).toEqual(positions.at(-2))
+  }
+  ar.dispose()
+})
+
+it('refreshes mutable cluster maps each repaint and uploads alpha once per mesh', () => {
+  const { scene, ar } = makeTwoAtomBond()
+  const colors = new Map([['h0', 0x3175a9]])
+  const alphas = new Map([['h0', .31]])
+  ar.setClusterDisplay(alphas, colors)
+  const meshes = scene.children.filter(m => m.isInstancedMesh)
+  const versions = meshes.map(m => m._instanceAlpha.version)
+  colors.set('h0', 0xb03a71)
+  alphas.set('h0', .47)
+  ar.setClusterDisplay(alphas, colors)
+  meshes.forEach((mesh, i) => {
+    expect(mesh._instanceAlpha.version).toBe(versions[i] + 1)
+    const expected = new THREE.Color(0xb03a71).toArray(new Float32Array(3))
+    for (let j = 0; j < mesh.count; j++) {
+      expect(mesh.instanceColor.array.slice(j * 3, j * 3 + 3)).toEqual(expected)
+      expect(mesh._instanceAlpha.array[j]).toBe(Math.fround(.47))
+    }
+  })
+  ar.setClusterDisplay(new Map(), new Map())
+  for (const mesh of meshes) expect(Array.from(mesh._instanceAlpha.array)).toEqual(Array(mesh.count).fill(1))
+  ar.dispose()
+})
 
 describe('atomistic_renderer stick representation', () => {
   it('renders covalent bond cylinders and no atom spheres', () => {
@@ -887,4 +967,53 @@ describe('CPD rigid-group preview', () => {
     expect(bondCylinderScaleY(scene)).toBeCloseTo(0.15)
     ar.dispose()
   })
+})
+
+describe('interpolated atom workspace', () => {
+  it('preserves sparse serials, rigid cluster motion and weld-overlay policy', () => {
+    const scene = new THREE.Scene(), ar = initAtomisticRenderer(scene)
+    ar.setMode('ballstick')
+    const atoms = [8, 3, 11].map((serial, i) => ({ serial, element: 'C',
+      helix_id: i === 1 ? 'free' : 'cluster', x: i * .1, y: 0, z: 0 }))
+    ar.update({ atoms, bonds: [[8, 3], [3, 11]] })
+    const meshes = scene.children.filter(m => m.isInstancedMesh)
+    const from = new Float64Array(36), to = from.slice()
+    for (const a of atoms) {
+      from.set([a.x, a.y, a.z], a.serial * 3)
+      to.set([a.x + .1, a.y + .2, a.z - .05], a.serial * 3)
+    }
+    const ct = { helix_ids: ['cluster'], center: new THREE.Vector3(.1, 0, 0),
+      dummy: new THREE.Vector3(.15, .05, 0), incrRot: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), .3) }
+    let overlay
+    ar.setWeldOverlay({ update: positions => { overlay = positions } })
+    for (const t of [0, .37, 1]) {
+      ar.applyPositionLerp(from, to, t, from, [ct], new Set(['cluster']))
+      expect(overlay).toBeNull()
+      ar.visitAtoms((a, p) => {
+        const expected = new THREE.Vector3(a.x, a.y, a.z)
+        if (a.helix_id === 'cluster') expected.sub(ct.center).applyQuaternion(ct.incrRot).add(ct.dummy)
+        else expected.add(new THREE.Vector3(.1, .2, -.05).multiplyScalar(t))
+        expect(p.distanceTo(expected)).toBeLessThan(1e-7)
+      })
+    }
+    ar.applyPositionLerp(from, to, .5)
+    expect(overlay(8)).toEqual([.05, .1, -.025])
+    expect(scene.children.filter(m => m.isInstancedMesh)).toEqual(meshes)
+    ar.dispose()
+  })
+})
+
+
+it('does not interpolate cached atoms after switching the representation off', () => {
+  const scene = new THREE.Scene(), ar = initAtomisticRenderer(scene)
+  ar.setMode('vdw')
+  ar.update({ atoms: [{ serial: 8, element: 'C', x: 0, y: 0, z: 0 }], bonds: [] })
+  ar.setMode('off')
+  const unreadable = new Proxy([], { get(target, key) {
+    if (/^\d+$/.test(String(key))) throw new Error('Hidden atoms must not read frame coordinates')
+    return Reflect.get(target, key)
+  } })
+  expect(() => ar.applyPositionLerp(unreadable, [], .5)).not.toThrow()
+  expect(scene.children).toHaveLength(0)
+  ar.dispose()
 })

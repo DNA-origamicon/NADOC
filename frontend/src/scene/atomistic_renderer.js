@@ -38,7 +38,7 @@ import * as THREE from 'three'
 import { ELEMENTS, DEFAULT_ELEMENT, BALL_RADIUS, BOND_RADIUS } from './atomistic_renderer/atom_palette.js'
 import {
   CYLINDER_GEO, createGeometryState,
-  atomOffset, sphereMatrix, bondMatrix,
+  atomOffset, sphereMatrix, bondMatrix, writeSphereMatrix, writeBondMatrix,
   makeBondMaterial,
   atomSphereGeometry, makeAtomSphereMaterial, atomInstanceScale,
 } from './atomistic_renderer/geometry_builder.js'
@@ -205,6 +205,8 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
     }
     _state.bondAtomIdx = null
     _state.frameOffsets = null
+    _lerpPositions = null
+    _compactOffsets = null
   }
 
   // ── Rebuild geometry ──────────────────────────────────────────────────────
@@ -223,18 +225,21 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
 
   // Exact trajectory snapshots are the common playback case. Write the existing
   // instance buffers directly, without allocating atom tuples or bond matrices.
+  let _lerpPositions = null
   const _frameDir = new THREE.Vector3(), _frameMid = new THREE.Vector3()
-  function _applySnapshot(xyz) {
-    if (!_state.frameOffsets) {
-      const offset = r => _state.atoms.serial(r) * 3
-      _state.frameOffsets = {
-        elements: Object.fromEntries(Object.entries(_state.elementAtoms)
-          .map(([el, rows]) => [el, Int32Array.from(rows, offset)])),
-        bonds: Int32Array.from(_state.bondAtomIdx || [], offset),
-      }
+  let _compactOffsets = null
+  function _snapshotOffsets(offset) {
+    return {
+      elements: Object.fromEntries(Object.entries(_state.elementAtoms)
+        .map(([el, rows]) => [el, Int32Array.from(rows, offset)])),
+      bonds: Int32Array.from(_state.bondAtomIdx || [], offset),
     }
+  }
+  function _applySnapshot(xyz, frameOffsets = null) {
+    const offsetsByMesh = frameOffsets ?? (_state.frameOffsets ??=
+      _snapshotOffsets(r => _state.atoms.serial(r) * 3))
     for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
-      const offsets = _state.frameOffsets.elements[el]
+      const offsets = offsetsByMesh.elements[el]
       const out = mesh.instanceMatrix.array, scale = _state.elementScale[el]
       for (let i = 0; i < offsets.length; i++) {
         const s = offsets[i], m = i * 16
@@ -248,7 +253,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
     }
     const mesh = _state.bondMesh
     if (!mesh) return
-    const offsets = _state.frameOffsets.bonds, out = mesh.instanceMatrix.array
+    const offsets = offsetsByMesh.bonds, out = mesh.instanceMatrix.array
     const { tmpMat, tmpQ, tmpS, yAxis } = _state.geom
     for (let i = 0; i < offsets.length; i += 2) {
       const a = offsets[i], b = offsets[i + 1], m = i * 8
@@ -312,16 +317,18 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       // Named so photo_renderer/mesh_repr.js resolves these by NAME rather than by
       // material class — under impostors the material is Phong, which its
       // MeshStandardMaterial inference would misread as the 'full' representation.
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
       mesh.name = 'atomSpheres'
       mesh.userData.element = el
       // Enable per-instance colour (initialised to white; _applyColors sets them)
       mesh.instanceColor = new THREE.InstancedBufferAttribute(
         new Float32Array(rows.length * 3), 3
-      )
+      ).setUsage(THREE.DynamicDrawUsage)
       const group = Int32Array.from(rows)
       for (let i = 0; i < group.length; i++) {
         const a = group[i]
-        mesh.setMatrixAt(i, sphereMatrix(_state.geom, table.x(a), table.y(a), table.z(a), scale))
+        writeSphereMatrix(mesh.instanceMatrix.array, i * 16,
+          table.x(a), table.y(a), table.z(a), scale)
       }
       mesh.instanceMatrix.needsUpdate = true
       // The quad geometry is a flat billboard on the CPU side, so the stock
@@ -346,18 +353,16 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       }
       const ends = [0, 0]
       const idx = new Int32Array(nBonds * 2)
-      const matrices = []
+      const matrices = new Float32Array(nBonds * 16)
       let kept = 0
       for (let k = 0; k < nBonds; k++) {
         _bondEnds(bonds, k, ends)
         const ra = rowOfSerial ? rowOfSerial.get(ends[0]) : ends[0]
         const rb = rowOfSerial ? rowOfSerial.get(ends[1]) : ends[1]
         if (ra === undefined || rb === undefined || ra >= n || rb >= n) continue
-        const m = bondMatrix(_state.geom,
+        if (!writeBondMatrix(_state.geom, matrices, kept * 16,
           table.x(ra), table.y(ra), table.z(ra),
-          table.x(rb), table.y(rb), table.z(rb), BOND_RADIUS)
-        if (!m) continue
-        matrices.push(m)
+          table.x(rb), table.y(rb), table.z(rb), BOND_RADIUS)) continue
         idx[kept * 2] = ra; idx[kept * 2 + 1] = rb
         kept++
       }
@@ -366,9 +371,10 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         const bm = new THREE.InstancedMesh(
           CYLINDER_GEO, _material('bond', makeBondMaterial), kept)
         bm.frustumCulled = false
+        bm.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
         bm.name = 'atomBonds'
-        bm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(kept * 3), 3)
-        for (let i = 0; i < kept; i++) bm.setMatrixAt(i, matrices[i])
+        bm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(kept * 3), 3).setUsage(THREE.DynamicDrawUsage)
+        bm.instanceMatrix.array.set(matrices.subarray(0, kept * 16))
         bm.instanceMatrix.needsUpdate = true
         _state.scene.add(bm)
         _state.bondMesh    = bm
@@ -414,8 +420,8 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       const scale = _state.elementScale[el]
       for (let i = 0; i < group.length; i++) {
         const row = group[i]
-        mesh.setMatrixAt(i, sphereMatrix(
-          _state.geom, next.x(row), next.y(row), next.z(row), scale))
+        writeSphereMatrix(mesh.instanceMatrix.array, i * 16,
+          next.x(row), next.y(row), next.z(row), scale)
       }
       mesh.instanceMatrix.needsUpdate = true
     }
@@ -424,13 +430,12 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
     if (_state.bondMesh && bidx?.length) {
       for (let i = 0; i < bidx.length / 2; i++) {
         const ra = bidx[i * 2], rb = bidx[i * 2 + 1]
-        const m = bondMatrix(
-          _state.geom,
+        const out = _state.bondMesh.instanceMatrix.array
+        if (!writeBondMatrix(_state.geom, out, i * 16,
           next.x(ra), next.y(ra), next.z(ra),
-          next.x(rb), next.y(rb), next.z(rb),
-          BOND_RADIUS,
-        )
-        _state.bondMesh.setMatrixAt(i, m ?? _HIDDEN_BOND)
+          next.x(rb), next.y(rb), next.z(rb), BOND_RADIUS)) {
+          _HIDDEN_BOND.toArray(out, i * 16)
+        }
       }
       _state.bondMesh.instanceMatrix.needsUpdate = true
     }
@@ -453,26 +458,63 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
     const hasSelection = !!(selection && (
       selection.strandIds?.length || selection.domains?.length || selection.bases?.length ||
       selection.extensionIds?.length || selection.helixIds?.length))
-    const tColor = _state.geom.tColor
     const ctx    = _colorCtx()
     const table  = _state.atoms
+    // Re-resolve mutable maps each repaint, but share endpoint results across
+    // spheres and bonds. Three.Color still owns the exact sRGB conversion.
+    const rowHex = new Float64Array(table.count)
+    const resolved = new Uint8Array(table.count)
+    const linearColors = new Map()
+    const rowAlpha = _state.nucAlphas.size ? new Float64Array(table.count) : null
+    const alphaResolved = rowAlpha ? new Uint8Array(table.count) : null
+    function colorAt(row) {
+      if (!resolved[row]) {
+        rowHex[row] = resolveAtomColor(ctx, table.get(row), selection, hasSelection)
+        resolved[row] = 1
+      }
+      const hex = rowHex[row]
+      let color = linearColors.get(hex)
+      if (!color) {
+        color = new THREE.Color().setHex(hex).toArray(new Float32Array(3))
+        linearColors.set(hex, color)
+      }
+      return color
+    }
+    function writeColor(mesh, i, color) {
+      const out = mesh.instanceColor.array, j = i * 3
+      if (out[j] === color[0] && out[j + 1] === color[1] && out[j + 2] === color[2]) return false
+      out[j] = color[0]; out[j + 1] = color[1]; out[j + 2] = color[2]
+      return true
+    }
+    function writeAlpha(mesh, i, value) {
+      const a = Math.fround(value), out = mesh._instanceAlpha.array
+      if (out[i] === a) return false
+      out[i] = a
+      return true
+    }
+    function alphaAt(row) {
+      if (!alphaResolved[row]) {
+        rowAlpha[row] = _alphaOfRow(row)
+        alphaResolved[row] = 1
+      }
+      return rowAlpha[row]
+    }
     for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
       const group = _state.elementAtoms[el]
       let dirty   = false
       for (let i = 0; i < group.length; i++) {
         // table.get() may be a shared flyweight — resolveAtomColor reads it and returns
         // a number, so it never outlives this call. See atom_table.js.
-        const hex = resolveAtomColor(ctx, table.get(group[i]), selection, hasSelection)
-        tColor.setHex(hex)
-        mesh.setColorAt(i, tColor)
-        dirty = true
+        dirty = writeColor(mesh, i, colorAt(group[i])) || dirty
       }
       if (dirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true
       if (_state.nucAlphas.size) {
         _ensureAtomAlpha(mesh)
+        let alphaDirty = false
         for (let i = 0; i < group.length; i++) {
-          setInstanceAlpha(mesh, i, _alphaOfRow(group[i]))
+          alphaDirty = writeAlpha(mesh, i, alphaAt(group[i])) || alphaDirty
         }
+        if (alphaDirty) mesh._instanceAlpha.needsUpdate = true
       }
     }
     // Bond cylinders — colour each half of the cylinder isn't supported by
@@ -481,20 +523,21 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
     // share strand_id and bp_index, so the result matches the connecting balls.
     const bidx = _state.bondAtomIdx
     if (_state.bondMesh && bidx?.length) {
+      let dirty = false
       for (let i = 0; i < bidx.length / 2; i++) {
-        const hex = resolveAtomColor(ctx, table.get(bidx[i * 2]), selection, hasSelection)
-        tColor.setHex(hex)
-        _state.bondMesh.setColorAt(i, tColor)
+        dirty = writeColor(_state.bondMesh, i, colorAt(bidx[i * 2])) || dirty
       }
-      if (_state.bondMesh.instanceColor) _state.bondMesh.instanceColor.needsUpdate = true
+      if (dirty) _state.bondMesh.instanceColor.needsUpdate = true
       if (_state.nucAlphas.size) {
         _ensureAtomAlpha(_state.bondMesh)
+        let alphaDirty = false
         for (let i = 0; i < bidx.length / 2; i++) {
           // A bond spanning two clusters takes the LOWER alpha, so a bond into a
           // faded cluster fades with it rather than hanging on at full strength.
-          setInstanceAlpha(_state.bondMesh, i,
-            Math.min(_alphaOfRow(bidx[i * 2]), _alphaOfRow(bidx[i * 2 + 1])))
+          alphaDirty = writeAlpha(_state.bondMesh, i,
+            Math.min(alphaAt(bidx[i * 2]), alphaAt(bidx[i * 2 + 1]))) || alphaDirty
         }
+        if (alphaDirty) _state.bondMesh._instanceAlpha.needsUpdate = true
       }
     }
     _lastColorPaint = { mode: colors.mode, strands: colors.strands, bases: colors.bases, scalar: colors.scalar }
@@ -552,6 +595,48 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
     update(data) {
       _state.lastData = data
       _rebuild(data)
+    },
+
+    /** Render a decoded compact MD frame without expanding unused serial slots.
+     * serialMap is immutable within a decoded page. False requests the legacy
+     * expansion fallback when the frame does not cover this renderer's topology. */
+    applyCompactFrame(frame) {
+      if (!frame?.dense || !frame.serialMap) return false
+      let cached = _compactOffsets
+      if (cached?.serialMap !== frame.serialMap && cached?.serialMap.length === frame.serialMap.length
+        && cached.serialMap.every((serial, i) => serial === frame.serialMap[i])) {
+        // Decoder pages have separate immutable maps but usually identical order.
+        // Keep only the displayed page's map; never grow a per-page topology cache.
+        cached.serialMap = frame.serialMap
+      }
+      if (!cached || cached.serialMap !== frame.serialMap) {
+        const sameRows = frame.serialMap.length === _state.atoms.count
+          && frame.serialMap.every((serial, row) => serial === _state.atoms.serial(row))
+        const bySerial = sameRows ? null : new Map()
+        if (bySerial) for (let i = 0; i < frame.serialMap.length; i++) bySerial.set(frame.serialMap[i], i * 3)
+        let complete = true
+        const offsets = _snapshotOffsets(row => {
+          const offset = sameRows ? row * 3 : bySerial.get(_state.atoms.serial(row))
+          if (offset === undefined) complete = false
+          return offset ?? 0
+        })
+        cached = complete ? { serialMap: frame.serialMap, offsets,
+          bySerial: _weldOverlay ? bySerial : null } : null
+        _compactOffsets = cached
+      }
+      if (!cached) return false
+      _applySnapshot(frame.dense, cached.offsets)
+      _weldOverlay?.update(serial => {
+        // An attached but empty weld overlay should not allocate a serial map.
+        if (!cached.bySerial) {
+          cached.bySerial = new Map()
+          for (let row = 0; row < frame.serialMap.length; row++) cached.bySerial.set(frame.serialMap[row], row * 3)
+        }
+        const i = cached.bySerial.get(serial)
+        if (i !== undefined) return [frame.dense[i], frame.dense[i + 1], frame.dense[i + 2]]
+        return serial >= 0 && serial * 3 < frame.length ? [0, 0, 0] : [undefined, undefined, undefined]
+      })
+      return true
     },
 
     /** Update an MD trajectory frame in place, rebuilding only if topology changed. */
@@ -1087,62 +1172,54 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         }
       }
 
-      const _tmpV = new THREE.Vector3()
-      const tmpMat = _state.geom.tmpMat
-
-      /**
-       * Compute the display position for one atom.
-       * Cluster atoms: rigid-body rotation applied to play-start (base) position.
-       * Others: linear lerp between from and to.
-       */
-      function _atomXYZ(helix_id, serial) {
-        const s  = serial * 3
-        const ct = helixClusterMap.get(helix_id)
-        if (ct && baseXyz) {
-          // Rigid body: rotate (base_pos − center) by incrRot, translate to dummy.
-          _tmpV.set(baseXyz[s] - ct.center.x, baseXyz[s + 1] - ct.center.y, baseXyz[s + 2] - ct.center.z)
-          _tmpV.applyQuaternion(ct.incrRot)
-          return [_tmpV.x + ct.dummy.x, _tmpV.y + ct.dummy.y, _tmpV.z + ct.dummy.z]
-        }
-        // Linear lerp for non-cluster atoms.
-        return [
-          fromXyz[s]     + (toXyz[s]     - fromXyz[s])     * t,
-          fromXyz[s + 1] + (toXyz[s + 1] - fromXyz[s + 1]) * t,
-          fromXyz[s + 2] + (toXyz[s + 2] - fromXyz[s + 2]) * t,
-        ]
-      }
-
       const table = _state.atoms
-
+      // Animation can retain baked frames after the representation is switched off.
+      const count = _state.mode === 'off' ? 0 : table.count
+      // Compute each atom once, then share the result with all incident bonds.
+      // Float64 retains the previous JS-number precision until the GPU write.
+      if (!_lerpPositions || _lerpPositions.length !== count * 3) {
+        _lerpPositions = new Float64Array(count * 3)
+      }
+      const positions = _lerpPositions
+      const tmpV = _state.geom.bondMid
+      for (let row = 0; row < count; row++) {
+        const s = table.serial(row) * 3, r = row * 3
+        const ct = helixClusterMap.get(table.helixId(row))
+        if (ct && baseXyz) {
+          tmpV.set(baseXyz[s] - ct.center.x, baseXyz[s + 1] - ct.center.y,
+            baseXyz[s + 2] - ct.center.z).applyQuaternion(ct.incrRot)
+          positions[r] = tmpV.x + ct.dummy.x
+          positions[r + 1] = tmpV.y + ct.dummy.y
+          positions[r + 2] = tmpV.z + ct.dummy.z
+        } else {
+          positions[r] = fromXyz[s] + (toXyz[s] - fromXyz[s]) * t
+          positions[r + 1] = fromXyz[s + 1] + (toXyz[s + 1] - fromXyz[s + 1]) * t
+          positions[r + 2] = fromXyz[s + 2] + (toXyz[s + 2] - fromXyz[s + 2]) * t
+        }
+      }
       for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
         const group = _state.elementAtoms[el]
-        const scale = _state.elementScale[el]
-        let dirty = false
+        const scale = _state.elementScale[el], out = mesh.instanceMatrix.array
         for (let i = 0; i < group.length; i++) {
-          const r = group[i]
-          const [x, y, z] = _atomXYZ(table.helixId(r), table.serial(r))
-          tmpMat.identity()
-          tmpMat.makeScale(scale, scale, scale)
-          tmpMat.setPosition(x, y, z)
-          mesh.setMatrixAt(i, tmpMat)
-          dirty = true
+          const r = group[i] * 3
+          writeSphereMatrix(out, i * 16, positions[r], positions[r + 1], positions[r + 2], scale)
         }
-        if (dirty) mesh.instanceMatrix.needsUpdate = true
+        if (group.length) mesh.instanceMatrix.needsUpdate = true
       }
 
       const bidx = _state.bondAtomIdx
       if (_state.bondMesh && bidx?.length) {
+        const out = _state.bondMesh.instanceMatrix.array
         for (let i = 0; i < bidx.length / 2; i++) {
-          const ra = bidx[i * 2], rb = bidx[i * 2 + 1]
-          const [ax, ay, az] = _atomXYZ(table.helixId(ra), table.serial(ra))
-          const [bx, by, bz] = _atomXYZ(table.helixId(rb), table.serial(rb))
+          const a = bidx[i * 2] * 3, b = bidx[i * 2 + 1] * 3
+          const ax = positions[a], ay = positions[a + 1], az = positions[a + 2]
+          const bx = positions[b], by = positions[b + 1], bz = positions[b + 2]
           const dx = bx - ax, dy = by - ay, dz = bz - az
           if (dx * dx + dy * dy + dz * dz > _MAX_BOND_NM * _MAX_BOND_NM) {
-            _state.bondMesh.setMatrixAt(i, _HIDDEN_BOND)   // over-stretched → hide, don't span the model
+            _HIDDEN_BOND.toArray(out, i * 16)
             continue
           }
-          const m = bondMatrix(_state.geom, ax, ay, az, bx, by, bz, BOND_RADIUS)
-          if (m) _state.bondMesh.setMatrixAt(i, m)
+          writeBondMatrix(_state.geom, out, i * 16, ax, ay, az, bx, by, bz, BOND_RADIUS)
         }
         _state.bondMesh.instanceMatrix.needsUpdate = true
       }
@@ -1157,7 +1234,12 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       // this overlay exists for.
       if (_weldOverlay) {
         _weldOverlay.update(
-          helixClusterMap.size ? null : (serial) => _atomXYZ(null, serial))
+          helixClusterMap.size ? null : (serial) => {
+            const s = serial * 3
+            return [fromXyz[s] + (toXyz[s] - fromXyz[s]) * t,
+              fromXyz[s + 1] + (toXyz[s + 1] - fromXyz[s + 1]) * t,
+              fromXyz[s + 2] + (toXyz[s + 2] - fromXyz[s + 2]) * t]
+          })
       }
     },
   }

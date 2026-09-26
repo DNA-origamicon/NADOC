@@ -1,0 +1,10 @@
+{
+  "absent_after_browser": [
+    "workspace/.session/__e2e__loading-open",
+    "workspace/.nadoc-projects/__e2e__loading-open",
+    "workspace/__e2e__loading-open.nadoc",
+    "frontend/test-results",
+    "frontend/playwright-report",
+    "/tmp/nadoc-viewer-test-0d094af3799e-5174.json"
+  ]
+}

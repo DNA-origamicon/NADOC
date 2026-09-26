@@ -58,6 +58,8 @@ export function createGeometryState() {
     tColor:  new THREE.Color(),
     yAxis:   new THREE.Vector3(0, 1, 0),
     zeroVec: new THREE.Vector3(),
+    bondDir: new THREE.Vector3(),
+    bondMid: new THREE.Vector3(),
   }
 }
 
@@ -139,4 +141,26 @@ export function bondMatrix(state, ax, ay, az, bx, by, bz, radius) {
   state.tmpS.set(radius, len, radius)
   state.tmpMat.compose(mid, state.tmpQ, state.tmpS)
   return state.tmpMat.clone()
+}
+
+/** Write an instance directly; no temporary Matrix4 or clone per atom. */
+export function writeSphereMatrix(out, offset, x, y, z, scale) {
+  out[offset] = out[offset + 5] = out[offset + 10] = scale
+  out[offset + 1] = out[offset + 2] = out[offset + 3] = out[offset + 4] = 0
+  out[offset + 6] = out[offset + 7] = out[offset + 8] = out[offset + 9] = out[offset + 11] = 0
+  out[offset + 12] = x; out[offset + 13] = y; out[offset + 14] = z
+  out[offset + 15] = 1
+}
+
+/** Same transform as bondMatrix, written without allocations. False leaves a
+ * degenerate bond's buffer untouched so each caller retains its hiding policy. */
+export function writeBondMatrix(state, out, offset, ax, ay, az, bx, by, bz, radius) {
+  const dir = state.bondDir.set(bx - ax, by - ay, bz - az)
+  const len = dir.length()
+  if (len < 1e-9) return false
+  state.bondMid.set(ax + bx, ay + by, az + bz).multiplyScalar(0.5)
+  state.tmpQ.setFromUnitVectors(state.yAxis, dir.normalize())
+  state.tmpS.set(radius, len, radius)
+  state.tmpMat.compose(state.bondMid, state.tmpQ, state.tmpS).toArray(out, offset)
+  return true
 }

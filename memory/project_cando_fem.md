@@ -13,6 +13,16 @@ metadata:
 bend-gap diagnosis, PRIORITY CanDo designs to run, next-session plan). This file is the running
 log; the HANDOFF is the entry point for a fresh session.
 
+## 2026-09-25 — assembly and correlation performance
+
+Global stiffness assembly now batches nonzero COO contributions and returns the
+same editable LIL API. Generalized correlation batches at most 2,048 pairs per
+row chunk, retaining the existing covariance/MI formula. Benchmark medians:
+assembly 32–59× faster on 504/3,528-node bundle fixtures; correlation after NMA
+6.6× faster on 504/1,500-node synthetic 200-mode inputs. These are kernel timings,
+not whole-solver or UI speedups. Physical parameters and element frames unchanged.
+See [audit and validation](../docs/audits/performance_20260925/README.md).
+
 ## ⚙ 2026-07-13 — disconnected / ssDNA-connected blocks no longer explode (general)
 Symptom: SNUPI "Fine" on VoltronCore "completed" but rendered NOTHING (just axis lines) — the
 nonlinear solve had diverged to **mm-scale** coords (rmsf_max ~1384 nm). Root cause: the duplex-core

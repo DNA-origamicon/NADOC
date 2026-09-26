@@ -701,27 +701,38 @@ def _direct_heavy_pre_positions(
     p_rows = layout["p_heavy_rows"]
     p_segments = layout["p_segment_group"]
     n_segments = int(layout.get("n_segments", 0))
-    segment_p_rows = layout.get("segment_p_rows")
-    segment_heavy_rows = layout.get("segment_heavy_rows")
-    if segment_p_rows is None or segment_heavy_rows is None:
-        # Compatibility with cached/test layouts created before row-list caching.
-        valid = (p_rows >= 0) & (p_segments >= 0)
-        segment_p_rows = [
-            np.flatnonzero(valid & (p_segments == segment))
-            for segment in range(n_segments)
+    batches = layout.get("segment_p_batches")
+    if batches is None:
+        segment_p_rows = layout.get("segment_p_rows")
+        if segment_p_rows is None:
+            # Older cached/test layouts have no precomputed phosphate row lists.
+            valid = (p_rows >= 0) & (p_segments >= 0)
+            segment_p_rows = [
+                np.flatnonzero(valid & (p_segments == segment))
+                for segment in range(n_segments)
+            ]
+        by_count = {}
+        for segment, rows in enumerate(segment_p_rows):
+            if len(rows):
+                by_count.setdefault(len(rows), []).append((segment, rows))
+        # Topology-only cache: group equal lengths so median can operate on a
+        # dense batch without padding or changing its treatment of NaN/ties.
+        batches = [
+            (np.asarray([segment for segment, _ in group]),
+             np.stack([rows for _, rows in group]))
+            for group in by_count.values()
         ]
-        heavy_segments = layout["heavy_segment_group"]
-        segment_heavy_rows = [
-            np.flatnonzero(heavy_segments == segment) for segment in range(n_segments)
-        ]
-    for segment, rows in enumerate(segment_p_rows):
-        if not len(rows):
-            continue
-        delta = np.median(p_pre[rows] - placed[p_rows[rows]], axis=0)
-        lattice = np.zeros(3, dtype=float)
-        good = box > 0
-        lattice[good] = np.round(delta[good] / box[good]) * box[good]
-        placed[segment_heavy_rows[segment]] += lattice
+        layout["segment_p_batches"] = batches
+
+    lattice = np.zeros((n_segments, 3), dtype=float)
+    good = box > 0
+    for segments, rows in batches:
+        delta = np.median(p_pre[rows] - placed[p_rows[rows]], axis=1)
+        lattice[np.ix_(segments, good)] = np.round(delta[:, good] / box[good]) * box[good]
+    if n_segments:
+        # Each heavy atom receives exactly its strand's lattice translation.
+        # One contiguous gather/add replaces hundreds of scattered updates.
+        placed += lattice[layout["heavy_segment_group"]]
     return placed
 
 

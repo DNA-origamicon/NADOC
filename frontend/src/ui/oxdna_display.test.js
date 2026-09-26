@@ -867,6 +867,23 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(atom.applyPositionLerp).toHaveBeenCalledWith([1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6], 0, null, [], null)
   })
 
+  it('passes compact recorded frames directly to capable renderers and keeps the expansion fallback', async () => {
+    for (const direct of [true, false]) {
+      const { ctrl, api, atom } = makeHeavyDeps('ballstick')
+      const frame = { dense: new Float64Array([1, 2, 3, 4, 5, 6]),
+        serialMap: new Uint32Array([0, 1]), length: 6, byteLength: 48 }
+      api.getOxdnaDisplayAtomistic.mockResolvedValue({ ready: true, atomistic: frame })
+      atom.applyCompactFrame = vi.fn(() => direct)
+      await ctrl.displayJob('compact-job')
+      await tick()
+      expect(atom.applyCompactFrame).toHaveBeenCalledWith(frame)
+      expect(atom.update.mock.invocationCallOrder[0]).toBeLessThan(atom.applyCompactFrame.mock.invocationCallOrder[0])
+      if (direct) expect(atom.applyPositionLerp).not.toHaveBeenCalled()
+      else expect(atom.applyPositionLerp).toHaveBeenCalledWith(frame.dense, frame.dense, 0, null, [], null)
+      ctrl.stopAndRestore()
+    }
+  })
+
   it('opts NAMD trajectory topology into compact spheres without changing the cached model', async () => {
     const { ctrl, api, atom } = makeHeavyDeps('vdw')
     api.trajectoryImpostors = true
