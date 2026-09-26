@@ -132,9 +132,18 @@ def test_pooled_source_replaces_per_insert_payload_and_skips_metrics_parse(tmp_p
     assert source["pooled_positions"]["sides"][0]["clusters"][0]["population"] == 0.8
 
 
-def test_read_only_route_serves_the_registered_evidence():
+def test_read_only_route_serves_the_registered_evidence(tmp_path, monkeypatch):
+    from backend.core import extra_base_metrics_audit as audit
+
+    # The route contract needs a registered source, not the host's campaign dumps.
+    source = tmp_path / "24hb_1xT__route-fixture__metrics.json"
+    source.write_text("source listing must not parse this dump")
+    monkeypatch.setattr(audit, "RESULTS_DIR", tmp_path)
     response = TestClient(app).get("/api/design/extra-base-metrics-audit")
     assert response.status_code == 200
     body = response.json()
     assert body["schema"] == "nadoc.extra-base-metrics-audit.v2"
     assert body["excluded_parts"] == []
+    assert body["ready"] is True
+    assert [item["source_id"] for item in body["sources"]] == ["24hb_1xT__route-fixture"]
+    assert source.read_text() == "source listing must not parse this dump"

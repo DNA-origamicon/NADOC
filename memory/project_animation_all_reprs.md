@@ -23,6 +23,12 @@ All three representations are animated via the same pre-bake pipeline in `animat
 
 All three are fetched in parallel inside `_bakeStates`. A `baking` event with `hasSlow=true` is emitted when atomistic or surface is active so the UI shows an indeterminate loading bar.
 
+**2026-09-25 display parity fix:** CG `geometry-batch` explicitly selects the
+accepted measured display placement, matching `GET /design/geometry` for bent
+and straight states. Its compact wrapper forwards this option while retaining
+the raw-geometry default for other callers. Existing endpoint parity tests cover
+both cases; no placement constants or atomistic goldens changed.
+
 ## Per-frame lerp (inside `_applyAt`)
 
 - **CG**: `helixCtrl.applyPositionLerp(fromBaked, toBaked, t, clusterHelixIds)` — cluster helices excluded (handled by rigid-body transform instead)

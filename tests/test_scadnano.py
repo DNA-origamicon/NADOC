@@ -321,7 +321,9 @@ def test_manual_photoproduct_round_trip_preserves_ordered_and_legacy_identity():
     exported = export_scadnano(design)
     restored, _warnings = import_scadnano(exported)
 
-    assert restored.photoproduct_junctions[0].model_dump() == record
+    assert restored.photoproduct_junctions[0].model_dump() == {
+        **record, "design_coordinates": {}, "bond_relaxation": {},
+    }
 
 
 # ═════════════════════════════════════════════════════════════════════════════

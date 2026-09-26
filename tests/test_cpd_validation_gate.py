@@ -1,5 +1,4 @@
 import json
-import math
 import pytest
 from experiments.cpd_anti_additive import validation_gate as gate
 

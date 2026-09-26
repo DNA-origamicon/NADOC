@@ -40,9 +40,9 @@ from backend.core.models import (
 
 def test_flatten_resolves_workspace_relative_file_source(tmp_path, monkeypatch):
     """Current v2 .nass files store file sources relative to workspace/."""
-    from backend.api import assembly
+    from backend.core import assembly_flatten
     from tests.conftest import make_6hb_design
-    monkeypatch.setattr(assembly, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(assembly_flatten, "_WORKSPACE_DIR", tmp_path)
     (tmp_path / "BigO.nadoc").write_text(make_6hb_design().to_json())
     source = PartSourceFile(path="BigO.nadoc")
     asm = Assembly(instances=[PartInstance(id="bigo", name="BigO", source=source)])

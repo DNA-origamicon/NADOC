@@ -4554,7 +4554,7 @@ def test_oxdna_create_rejects_deregistered_sequences(monkeypatch, tmp_path):
     assert "complementary" in detail and "assign sequences" in detail
 
 
-def test_oxdna_create_counts_strand_nucleotides_not_lattice(monkeypatch, tmp_path):
+def test_oxdna_create_counts_strand_nucleotides_not_lattice(monkeypatch, tmp_path, mock_oxdna):
     """n_nucleotides must be the simulated nucleotide count (strand order).  The geometry
     now emits ONLY real strand nucleotides: empty lattice slots no longer leak a ghost
     "_missing" base (ghost-suppression fix — ss-overhang regions render single-stranded),
@@ -4761,12 +4761,7 @@ def test_rmsf_confidence_metric():
     assert rmsf_confidence(RMSF_PRELIM_FRAMES)["preliminary"] is False
 
 
-@pytest.mark.skipif(
-    __import__("backend.core.oxdna_runner", fromlist=["find_oxdna"]).find_oxdna()
-    is None,
-    reason="oxDNA binary not installed",
-)
-def test_oxdna_job_name_from_source_path(monkeypatch, tmp_path):
+def test_oxdna_job_name_from_source_path(monkeypatch, tmp_path, mock_oxdna):
     """The job name comes from the loaded file name, not stale design.metadata.name
     (a 'save as' can leave the old name behind)."""
     from fastapi.testclient import TestClient

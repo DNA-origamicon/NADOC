@@ -58,6 +58,7 @@ from backend.api.crud import (
     _TimingTrace,
 )
 from backend.core.deformation import deformed_helix_axes
+from backend.core.display_placement import measured_display_placement
 from backend.core.feature_evaluation import batch_target_groups, optimization_enabled
 
 router = APIRouter()
@@ -145,7 +146,9 @@ def geometry_batch(body: GeometryBatchBody) -> dict:
         d = _seek_feature_log(design, position)
         entry = {
             "nucleotides_compact": _compact_geometry_for_design(
-                d, junction_balance=True
+                d,
+                measured_positioning=measured_display_placement(),
+                junction_balance=True,
             ),
             "helix_axes": deformed_helix_axes(d),
         }

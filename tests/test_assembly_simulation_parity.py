@@ -65,6 +65,17 @@ def assembly_sim_client(tmp_path, monkeypatch, request):
 
     monkeypatch.setattr(routes_lammps.lammps_runner, "start_job", queue_lammps)
 
+    # Preparation/lifecycle coverage must not depend on installed native engines.
+    # No engine process starts here; native capability guards have separate tests.
+    monkeypatch.setattr(routes_oxdna, "find_oxdna", lambda: "/mock/oxDNA")
+    monkeypatch.setattr(routes_oxdna, "oxdna_supports_cuda", lambda _: True)
+    monkeypatch.setattr(routes_oxdna, "oxdna_supports_physics_v3", lambda _: True)
+    monkeypatch.setattr(routes_mrdna, "mrdna_available", lambda: {"available": True})
+    monkeypatch.setattr(
+        routes_lammps, "lammps_available",
+        lambda: {"available": True, "cgdna_capable": True},
+    )
+
     # NAMD creation normally starts the 60-120 s solvation/preparation coroutine.
     # Pin the route-to-shared-design seam here and persist its frozen topology, while
     # real NAMD execution remains in the guarded slow/manual validation group.

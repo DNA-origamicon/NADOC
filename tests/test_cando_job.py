@@ -83,10 +83,10 @@ def test_snapshot_loader_reconstructs_derived_polymer_crossovers(tmp_path):
     from backend.core import cando_runner as cr
     from backend.core.assembly_flatten import flatten_assembly
     from backend.core.cando_job import new_cando_job
-    from backend.core.models import Assembly, Design
+    from backend.core.models import Design
+    from tests.periodic_assembly_fixture import periodic_assembly
 
-    root = Path(__file__).resolve().parents[1]
-    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    _, assembly = periodic_assembly()
     design = flatten_assembly(assembly)
     assert design.crossovers == []  # reconstructed only after the persisted boundary
 

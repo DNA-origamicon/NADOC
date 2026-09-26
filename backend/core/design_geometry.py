@@ -973,7 +973,7 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
 
 
 def _compact_geometry_for_design(
-    design: "Design", *, junction_balance: bool = False
+    design: "Design", *, measured_positioning: bool = False, junction_balance: bool = False
 ) -> dict:
     """Compute full deformed geometry in COMPACT per-helix-per-direction
     parallel-arrays form. Wire size is ~50% of the equivalent dict-list
@@ -981,7 +981,11 @@ def _compact_geometry_for_design(
     JSON.parse on the frontend is roughly proportionally faster.
     """
     return _compact_geometry_from_nucleotides(
-        _geometry_for_design(design, junction_balance=junction_balance)
+        _geometry_for_design(
+            design,
+            measured_positioning=measured_positioning,
+            junction_balance=junction_balance,
+        )
     )
 
 

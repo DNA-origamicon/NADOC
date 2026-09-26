@@ -61,10 +61,15 @@ def _mark_mock_cuda_capable(p):
 def mock_oxdna(tmp_path, monkeypatch):
     """A fake oxDNA binary (copies the input conf → last_conf, writes energy) bound
     via ``$OXDNA_BIN`` — drives the whole job lifecycle deterministically, no GPU."""
+    from backend.core import oxdna_runner
+
     p = tmp_path / "mock_oxdna.py"
     p.write_text(_MOCK_OXDNA + "\n# NADOC physics corrections v3\n")
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
+    # Keep the mock lifecycle independent of an installed native DNAnalysis.
+    # The real geometry/energy health checks still run using geometric retention.
+    monkeypatch.setattr(oxdna_runner, "find_dnanalysis", lambda: None)
     _mark_mock_cuda_capable(p)
     return p
 
