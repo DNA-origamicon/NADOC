@@ -741,16 +741,22 @@ if integration_path.is_file():
                 "Preliminary startup qualification; ensemble convergence remains separate",
                 integration_source,
             ))
+from experiments.cpd_anti_additive.progress_evidence import append_evidence
+anti_note = append_evidence(models, read, check, model, ART)
+
 priority = {"syn-core-corrected": 0, "syn-corrected-1": 1, "syn-corrected-2": 2}
 models.sort(key=lambda m: priority.get(m["id"], 3))
 payload = {
     "schema": 1,
     "generatedAt": datetime.now(timezone.utc).isoformat(),
     "summary": "No CPD has a full scientific release." + integration_note
-    + pilot_note,
+    + pilot_note + anti_note,
     "models": models,
     "sources": sources,
 }
 path = REPO / "frontend/public/cpd-progress.json"
-path.write_text(json.dumps(attach_isomer_previews(payload), indent=2) + "\n")
+payload = attach_isomer_previews(payload)
+anti_preview = next(m for m in payload["isomers"] if m["id"] == "tt-cpd-cis-anti-i")
+anti_preview["checks"].extend(next(m for m in models if m["id"] == "anti-additive-core")["checks"][:-1])
+path.write_text(json.dumps(payload, indent=2) + "\n")
 print(path, len(models), "structures")

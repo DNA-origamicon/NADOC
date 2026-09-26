@@ -1,0 +1,1210 @@
+{
+  "version": "cpd-anti-validation-v1",
+  "scope": "Additive cis-anti-I fragment qualification; does not authorize product integration or full release",
+  "cases": [
+    {
+      "id": "ep1-grid--180",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": -180,
+      "target_deg": 104.88404407655048,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid--150",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": -150,
+      "target_deg": 134.88404407655048,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid--120",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": -120,
+      "target_deg": 164.88404407655048,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid--90",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": -90,
+      "target_deg": -165.11595592344952,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid--60",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": -60,
+      "target_deg": -135.11595592344952,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid--30",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": -30,
+      "target_deg": -105.1159559234495,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid-+0",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": 0,
+      "target_deg": -75.1159559234495,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid-+30",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": 30,
+      "target_deg": -45.11595592344952,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid-+60",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": 60,
+      "target_deg": -15.115955923449519,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid-+90",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": 90,
+      "target_deg": 14.884044076550481,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid-+120",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": 120,
+      "target_deg": 44.88404407655048,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid-+150",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 1,
+      "offset_deg": 150,
+      "target_deg": 74.88404407655048,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid--157.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 1,
+      "offset_deg": -157.5,
+      "target_deg": 127.38404407655048,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid--112.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 1,
+      "offset_deg": -112.5,
+      "target_deg": 172.38404407655048,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid--67.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 1,
+      "offset_deg": -67.5,
+      "target_deg": -142.61595592344952,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid--22.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 1,
+      "offset_deg": -22.5,
+      "target_deg": -97.6159559234495,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid-+22.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 1,
+      "offset_deg": 22.5,
+      "target_deg": -52.615955923449505,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid-+67.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 1,
+      "offset_deg": 67.5,
+      "target_deg": -7.615955923449519,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid-+112.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 1,
+      "offset_deg": 112.5,
+      "target_deg": 37.38404407655048,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep1-grid-+157.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 1,
+      "offset_deg": 157.5,
+      "target_deg": 82.38404407655048,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-1/model_graph.json",
+        "sha256": "9a2859fd900682e8a5828899e92b27876b2751dd028e436a7e3b19627add4a4b"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1-scan-plan.json",
+        "sha256": "c2b35626cde9d3e4a4603d1152279d7c7b792963e6ff62216752327106a9309f"
+      }
+    },
+    {
+      "id": "ep2-grid--180",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": -180,
+      "target_deg": -95.53405627268634,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid--150",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": -150,
+      "target_deg": -65.53405627268634,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid--120",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": -120,
+      "target_deg": -35.53405627268634,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid--90",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": -90,
+      "target_deg": -5.5340562726863425,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid--60",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": -60,
+      "target_deg": 24.465943727313658,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid--30",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": -30,
+      "target_deg": 54.46594372731366,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid-+0",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": 0,
+      "target_deg": 84.46594372731363,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid-+30",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": 30,
+      "target_deg": 114.46594372731363,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid-+60",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": 60,
+      "target_deg": 144.46594372731363,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid-+90",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": 90,
+      "target_deg": 174.46594372731363,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid-+120",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": 120,
+      "target_deg": -155.53405627268637,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid-+150",
+      "kind": "profile",
+      "role": "development",
+      "endpoint": 2,
+      "offset_deg": 150,
+      "target_deg": -125.53405627268637,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid--157.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 2,
+      "offset_deg": -157.5,
+      "target_deg": -73.03405627268634,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid--112.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 2,
+      "offset_deg": -112.5,
+      "target_deg": -28.034056272686342,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid--67.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 2,
+      "offset_deg": -67.5,
+      "target_deg": 16.965943727313658,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid--22.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 2,
+      "offset_deg": -22.5,
+      "target_deg": 61.96594372731366,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid-+22.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 2,
+      "offset_deg": 22.5,
+      "target_deg": 106.96594372731363,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid-+67.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 2,
+      "offset_deg": 67.5,
+      "target_deg": 151.96594372731363,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid-+112.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 2,
+      "offset_deg": 112.5,
+      "target_deg": -163.03405627268637,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "ep2-grid-+157.5",
+      "kind": "profile",
+      "role": "holdout",
+      "endpoint": 2,
+      "offset_deg": 157.5,
+      "target_deg": -118.03405627268637,
+      "model_graph": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-repaired-anti-fragments-v1/endpoint-2/model_graph.json",
+        "sha256": "9d084d6a91ea0b7df61cd3dd37721974f73421d6d04481fd53ee42cae0fe7d50"
+      },
+      "scan_plan": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-2-scan-plan.json",
+        "sha256": "18c3d976ba819d14ac6924d80b5ca110423e74cd022c9b32703b0835f3e59ac0"
+      }
+    },
+    {
+      "id": "legacy-endpoint-1--15",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 1,
+      "target_deg": -90.11595592344963,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-glycosidic-v1/endpoint-1--15/geometry_audit.json",
+        "sha256": "a1871356a29682cf84dee8cd7e1469dffab03d1e5924bf774ccc16e9e6aa44e6"
+      }
+    },
+    {
+      "id": "legacy-endpoint-1-+15",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 1,
+      "target_deg": -60.11595592344955,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-geometric-endpoint1-v2/assessment.json",
+        "sha256": "58634c755b2922eb70dc84128a388393bc9155a8be30f3cdbf0b0b3ee9fe0e95"
+      }
+    },
+    {
+      "id": "legacy-endpoint-2--15",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 2,
+      "target_deg": 69.46594372731361,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-geometric-pair-v1/endpoint-2--15/assessment.json",
+        "sha256": "329c12532618e20fbafe20c67716021d14298b7a5f8efb9dc974ff4fdf4cb04b"
+      }
+    },
+    {
+      "id": "legacy-endpoint-2-+15",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 2,
+      "target_deg": 99.46594372731363,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-geometric-pilot-v1/assessment.json",
+        "sha256": "d8fb0ef2ee3bb0f35e65fd62d1f337b669f5afde41d7a97d2087bddec1d8f890"
+      }
+    },
+    {
+      "id": "legacy-endpoint-1-reference",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 1,
+      "target_deg": -75.1159559234495,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-endpoint1-soft-mode-v1/reference/result.json",
+        "sha256": "ea04b5549d024abc6b15343f430e2ba542f036290551a2ad9b0f1abece926ea8"
+      }
+    },
+    {
+      "id": "legacy-endpoint-2-reference",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 2,
+      "target_deg": 84.46594372731366,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-endpoint2-soft-mode-v1/reference/result.json",
+        "sha256": "9ea64636ba5bbde091e3ffc0a8d2780b9df5e6e66cc32b4485a6bbd5c54659c3"
+      }
+    },
+    {
+      "id": "legacy-endpoint-1-+7.5",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 1,
+      "target_deg": -67.61595592741205,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-half-v1/endpoint-1-+7.5/assessment.json",
+        "sha256": "34ea85cbc6ee1931dd5569fd94be580cf85539379e265b9ffa5ec0a4fb26ce8c"
+      }
+    },
+    {
+      "id": "legacy-endpoint-2-+7.5",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 2,
+      "target_deg": 91.96594372483176,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-half-v1/endpoint-2-+7.5/assessment.json",
+        "sha256": "8bd28c24020aed0965111266d28250caf3635e75097fed33a2a8b7d1cfa086fd"
+      }
+    },
+    {
+      "id": "legacy-endpoint-2--7.5",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 2,
+      "target_deg": 76.96594372483176,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-half-v1/endpoint-2--7.5/assessment.json",
+        "sha256": "2c8646d2fca9d0a25ae8b4968aabb6936cae8c2dc340bdb0b01b56c4b1da96e3"
+      }
+    },
+    {
+      "id": "legacy-endpoint-1--7.5",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 1,
+      "target_deg": -82.61595592741213,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-half-v2/endpoint-1--7.5/assessment.json",
+        "sha256": "e0a79805cf9f08d3e51f5eca97ea74d890f67934ce4038cfca9902ee700c76a1"
+      }
+    },
+    {
+      "id": "legacy-endpoint-1-+30",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 1,
+      "target_deg": -45.11595592243629,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-outer-v1/endpoint-1-+30/assessment.json",
+        "sha256": "d6b300873379499e8b3f366f316097814bed8d748913a3241f3a6c767543261a"
+      }
+    },
+    {
+      "id": "legacy-endpoint-1--30",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 1,
+      "target_deg": -105.11595592344311,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-outer-v1/endpoint-1--30/assessment.json",
+        "sha256": "c76ae88fae5f1686a3b56f1c09368148d2064e0a7924c006797f8fbe2efb7fc6"
+      }
+    },
+    {
+      "id": "legacy-endpoint-2-+30",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 2,
+      "target_deg": 114.46594372866458,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-outer-v1/endpoint-2-+30/assessment.json",
+        "sha256": "2ac820b48e8bee34c73c49e59f349f43fab62dd05c2f294ea43fd6c185ca9009"
+      }
+    },
+    {
+      "id": "legacy-endpoint-2--30",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 2,
+      "target_deg": 54.46594372086929,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-relaxed-outer-v1/endpoint-2--30/assessment.json",
+        "sha256": "1797239a31c53082bedfb960ae04bb018376fd2365d73e621579a5cb25c8957b"
+      }
+    },
+    {
+      "id": "legacy-endpoint-2-remote-minimum",
+      "kind": "profile",
+      "role": "regression",
+      "endpoint": 2,
+      "target_deg": -168.4701019420193,
+      "exposed": true,
+      "original_evidence": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-remote-unconstrained-v1/endpoint-2-baseline-well/assessment.json",
+        "sha256": "97133ced2d04cee662899b6ad1d68d5720fd2593de1759086a930eb9a141718a"
+      }
+    },
+    {
+      "id": "minimum-core",
+      "kind": "minimum",
+      "role": "regression"
+    },
+    {
+      "id": "minimum-ep1-original",
+      "kind": "minimum",
+      "role": "regression"
+    },
+    {
+      "id": "minimum-ep2-original",
+      "kind": "minimum",
+      "role": "regression"
+    },
+    {
+      "id": "minimum-ep2-remote",
+      "kind": "minimum",
+      "role": "regression"
+    },
+    {
+      "id": "water-ep1-original-1:O2",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep1-original",
+      "site": "1:O2",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep1-original-1:O4",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep1-original",
+      "site": "1:O4",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep1-original-1:H3",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep1-original",
+      "site": "1:H3",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep1-original-2:O2",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep1-original",
+      "site": "2:O2",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep1-original-2:O4",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep1-original",
+      "site": "2:O4",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep1-original-2:H3",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep1-original",
+      "site": "2:H3",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "esp-ep1-original",
+      "kind": "electrostatics",
+      "role": "regression"
+    },
+    {
+      "id": "water-ep2-original-1:O2",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-original",
+      "site": "1:O2",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep2-original-1:O4",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-original",
+      "site": "1:O4",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep2-original-1:H3",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-original",
+      "site": "1:H3",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep2-original-2:O2",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-original",
+      "site": "2:O2",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep2-original-2:O4",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-original",
+      "site": "2:O4",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep2-original-2:H3",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-original",
+      "site": "2:H3",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "esp-ep2-original",
+      "kind": "electrostatics",
+      "role": "regression"
+    },
+    {
+      "id": "water-ep2-remote-1:O2",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-remote",
+      "site": "1:O2",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep2-remote-1:H3",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-remote",
+      "site": "1:H3",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep2-remote-2:O2",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-remote",
+      "site": "2:O2",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep2-remote-2:O4",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-remote",
+      "site": "2:O4",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "water-ep2-remote-2:H3",
+      "kind": "water",
+      "role": "development",
+      "conformer": "ep2-remote",
+      "site": "2:H3",
+      "orientation": "existing frozen curve"
+    },
+    {
+      "id": "esp-ep2-remote",
+      "kind": "electrostatics",
+      "role": "regression"
+    },
+    {
+      "id": "water-blind-ep1-original-1:O2",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep1-original",
+      "site": "1:O2",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep1-original-1:O4",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep1-original",
+      "site": "1:O4",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep1-original-1:H3",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep1-original",
+      "site": "1:H3",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep1-original-2:O2",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep1-original",
+      "site": "2:O2",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep1-original-2:O4",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep1-original",
+      "site": "2:O4",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep1-original-2:H3",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep1-original",
+      "site": "2:H3",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep2-remote-1:O2",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep2-remote",
+      "site": "1:O2",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep2-remote-1:O4",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep2-remote",
+      "site": "1:O4",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep2-remote-1:H3",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep2-remote",
+      "site": "1:H3",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep2-remote-2:O2",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep2-remote",
+      "site": "2:O2",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep2-remote-2:O4",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep2-remote",
+      "site": "2:O4",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "water-blind-ep2-remote-2:H3",
+      "kind": "water",
+      "role": "holdout",
+      "conformer": "ep2-remote",
+      "site": "2:H3",
+      "orientation": "rotate existing frozen probe azimuth +60 degrees about target approach axis; fixed before QM; if obstructed BLOCK, do not replace after candidate results"
+    },
+    {
+      "id": "export-core",
+      "kind": "export",
+      "role": "engineering"
+    },
+    {
+      "id": "export-endpoint-1",
+      "kind": "export",
+      "role": "engineering"
+    },
+    {
+      "id": "export-endpoint-2",
+      "kind": "export",
+      "role": "engineering"
+    }
+  ],
+  "sources": [
+    {
+      "title": "TorsionDrive wavefront propagation",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7320903/"
+    },
+    {
+      "title": "CGenFF original protocol",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/"
+    },
+    {
+      "title": "OpenFF independent benchmark",
+      "url": "https://openforcefield.org/community/news/general/benchmark-small-molecules/"
+    }
+  ],
+  "methods": {
+    "qm": "MP2/6-31G(d), DF, frozen core, RHF, E/D=1e-12, response=1e-10",
+    "water": "HF/6-31G(d); neutral polar energy x1.16, distance -0.2 A; DF/DIRECT error <=0.02 kcal/mol",
+    "basins": "Exact atom map/stereo; proper-rotation heavy-atom RMSD and ALL heavy proper torsions including ring/sugar paths; no reflection or endpoint interchange",
+    "reference": "One frozen QM-selected conformer identity per fragment, same identity for MM subtraction; never independently zero each method or basin",
+    "closure": "Each known seed family and both neighboring directions propagated until no lower basin by >0.05 kcal/mol; fresh final bidirectional sweep; failures or missing branches block closure, no silent energy pruning",
+    "holdout": "All inspected prior data exposed; prospective angular/orientation interpolation only, not independent molecules; acquire blind targets only after candidate hash lock; never propagate held-out targets back into fitting",
+    "freeze": "Freeze reference identities, geometries, basin inventory, method/source hashes, exclusion ledger and development data before fit; newly lower basin invalidates lock, preserve old version"
+  },
+  "thresholds": {
+    "qm_max_gradient_au": 1.5e-05,
+    "qm_rms_gradient_au": 1e-05,
+    "mm_max_gradient_au": 5.1e-07,
+    "mm_rms_gradient_au": 2.1e-07,
+    "torsion_constraint_deg": 0.01,
+    "closure_energy_kcal": 0.05,
+    "basin_rmsd_A": 0.25,
+    "basin_max_torsion_deg": 20.0,
+    "bond_error_A": 0.03,
+    "angle_error_deg": 3.0,
+    "energy_rmse_kcal": 1.0,
+    "energy_max_abs_kcal": 2.0,
+    "water_max_abs_energy_kcal": 0.5,
+    "water_max_abs_distance_A": 0.2,
+    "water_ideal_energy_kcal": 0.2,
+    "dipole_ratio_min": 1.2,
+    "dipole_ratio_max": 1.5,
+    "dipole_angle_deg": 15.0,
+    "esp_relative_rmse_regression": 0.05,
+    "export_energy_kcal": 1e-05,
+    "export_force_kcal_A": 0.0001
+  },
+  "threshold_authority": "Bond/angle limits and ideal water/dipole targets from CGenFF; other hard limits are prospective local engineering choices, not universal literature standards. Water0.5 is a declared practical relaxation of ideal0.2; report both.",
+  "exclusions": [
+    {
+      "id": "water-ep2-remote-1:O4-original",
+      "reason": "Previously documented competing O5-prime contact; exposed mixed-site diagnostic, not clean single-site target; blind orientation remains required"
+    }
+  ],
+  "iteration_limit": {
+    "max_fit_rounds_per_model": 2,
+    "minimum_development_rmse_improvement_fraction": 0.2,
+    "action": "Stop same-model refits after two unsuccessful rounds; review torsion coupling/charges/LJ/QM suitability; no threshold relaxation or repeated blind-set tuning"
+  },
+  "dna": {
+    "design": "workspace/2hb_1xT_CPD.nadoc",
+    "status": "blocked_until_fragment_qualification_and_explicit_candidate_geometry_authorization",
+    "systems": [
+      "cis-anti-I",
+      "matched cis-syn-I",
+      "undamaged"
+    ],
+    "replicas": 3,
+    "seeds": [
+      41017,
+      52021,
+      63029
+    ],
+    "temperature_K": 300,
+    "salt_mM": 150,
+    "timestep_fs": 2,
+    "pilot_production_ps": 100,
+    "extended_production_ns_per_replica": 10,
+    "hard_gates": [
+      "native completion",
+      "topology and all stereo preserved",
+      "heavy bonds 0.8\u20132.1 A",
+      "mean temperature280\u2013320 K",
+      "mean density0.9\u20131.2 g/ml"
+    ],
+    "diagnostics": [
+      "replica/block lesion RMSD",
+      "base-pair contacts and opening",
+      "CPD distances",
+      "glycosidic/sugar populations"
+    ],
+    "limits": "Stability only; no requirement to match syn conformations, no equilibrium or experimental-accuracy claim; unresolved openings stay explicit"
+  },
+  "exposure_snapshot": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-remote-profile-mm-v1/plan.json",
+      "sha256": "bf72f5b0276c4634b747ab40783239f64c9fc8f3b282029165e696af8b3ae2c2"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-refined-basin-qm-v2/energy_comparison.json",
+      "sha256": "2f5471a3c86904d3a199428abfb035f1075da536c7cd8381028c706c7a546daa"
+    }
+  ]
+}

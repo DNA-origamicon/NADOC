@@ -31,7 +31,8 @@ the portable starting cores in `backend/data/cpd_preview_cores.json`.
 
 The **Evidence studies · model fragments** selector group retains the corrected
 cis-syn core, two corrected sugar fragments, three original comparison structures,
-and two deferred cis-anti starting structures. These remain independently
+two verified cis-anti-I sugar-fragment QM minima, and three isolated additive anti
+training candidates that still fail geometry targets. These remain independently
 inspectable studies; their check colors are separate from the endpoint colors
 used in the isomer gallery.
 
@@ -138,3 +139,31 @@ The completed overnight review marks the finite native/stability benchmark passe
 in CPD replica 3. It is not localized as a fitted bond/angle failure, and no
 production-readiness flag is enabled. The linked evidence distinguishes the
 observed state change from an established parameter defect.
+
+## Additive cis-anti-I campaign snapshot (2026-09-21)
+
+The full exporter now incorporates `experiments/cpd_anti_additive/progress_evidence.py`.
+Both anti sugar studies display their audited MP2 geometries, 141-mode harmonic
+minimum checks and tighter soft-direction checks. Separate additive core and
+sugar studies localize each fitted bond/angle failure and show preserved
+stereocenters, stationary MM curvature and CHARMM export agreement. These are
+isolated evidence views; the gallery illustration and normal product coordinates
+are unchanged.
+
+Shared anti checks report 84 water points / 12 bracketed curves, complete
+ESP/dipole targets, three exploratory charge candidates, and pending interstrand
+validation at the frozen `2hb_1xT_CPD` site. The joint geometry criterion remains
+failed; no charge candidate or anti release is accepted. The anti gallery card
+also exposes campaign checks without assigning fragment results to its estimated
+preview atoms. See `docs/cpd_anti_additive_campaign.md` for the evidence chronology.
+
+
+## Paused campaign snapshot (2026-09-25)
+
+The current anti summary explicitly reports paused-by-user status, unresolved basin
+coverage and energetic transfer, and the fixed validation contract. Historical
+training failures remain visible as historical evidence. Later local geometry fits
+pass their own training tests, but no anti parameter set is accepted. Completed
+optimizations are not counted as a completed validation dataset. The latest +15
+lower-basin restart failed; no automatic continuation remains. See
+[closeout](cpd_anti_closeout_20260925.md) for retained evidence and resume conditions.

@@ -1,0 +1,87 @@
+{
+  "date": "2026-09-26T00:26:20.864610+00:00",
+  "authorization": "User requested stop, cleanup and commit",
+  "open_scratch_files": "lsof +D returned no open files before cleanup",
+  "hash_pinned_scratch_dependencies": [],
+  "deleted": [
+    {
+      "path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v5/endpoint-2-+15/psi.710592.model.35",
+      "bytes": 808320,
+      "reason": "Regenerable Psi4 integral scratch; ended run, no open handle or hash-pinned dependency"
+    },
+    {
+      "path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v5/endpoint-2-+15/dfh.pmetric.-0.500000.710592.model.1113502215..dat",
+      "bytes": 59929352,
+      "reason": "Regenerable Psi4 integral scratch; ended run, no open handle or hash-pinned dependency"
+    },
+    {
+      "path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v5/endpoint-2-+15/dfh.pmetric.1.0.710592.model.1328104339..dat",
+      "bytes": 59929352,
+      "reason": "Regenerable Psi4 integral scratch; ended run, no open handle or hash-pinned dependency"
+    },
+    {
+      "path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v5/endpoint-2-+15/psi.710592.model.181",
+      "bytes": 2282230760,
+      "reason": "Regenerable Psi4 integral scratch; ended run, no open handle or hash-pinned dependency"
+    },
+    {
+      "path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v4/endpoint-2--15/psi.4055017.model.35",
+      "bytes": 808320,
+      "reason": "Regenerable Psi4 integral scratch; ended run, no open handle or hash-pinned dependency"
+    },
+    {
+      "path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v4/endpoint-2--15/dfh.pmetric.-0.500000.4055017.model.648031326..dat",
+      "bytes": 59929352,
+      "reason": "Regenerable Psi4 integral scratch; ended run, no open handle or hash-pinned dependency"
+    },
+    {
+      "path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v4/endpoint-2--15/psi.4055017.model.181",
+      "bytes": 2282230760,
+      "reason": "Regenerable Psi4 integral scratch; ended run, no open handle or hash-pinned dependency"
+    },
+    {
+      "path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v4/endpoint-2--15/dfh.pmetric.1.0.4055017.model.213801961..dat",
+      "bytes": 59929352,
+      "reason": "Regenerable Psi4 integral scratch; ended run, no open handle or hash-pinned dependency"
+    },
+    {
+      "path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v4/endpoint-1-+15/psi.4055016.model.181",
+      "bytes": 0,
+      "reason": "Regenerable Psi4 integral scratch; ended run, no open handle or hash-pinned dependency"
+    },
+    {
+      "path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v4/endpoint-1-+15/psi.4055016.model.35",
+      "bytes": 808320,
+      "reason": "Regenerable Psi4 integral scratch; ended run, no open handle or hash-pinned dependency"
+    }
+  ],
+  "relocated_wavefunctions": [
+    {
+      "old_path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v5/endpoint-2-+15/output.model.710592.180.npy",
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-closeout-20260925/retained-wavefunctions/cpd-anti-relaxed-glycosidic-v5/endpoint-2-+15/output.model.710592.180.npy",
+      "bytes": 16141078,
+      "sha256": "34f6f8177ae34b526f5c15431d910c3c3598bde83f71fd2ac4fa74df14351be1"
+    },
+    {
+      "old_path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v4/endpoint-2--15/output.model.4055017.180.npy",
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-closeout-20260925/retained-wavefunctions/cpd-anti-relaxed-glycosidic-v4/endpoint-2--15/output.model.4055017.180.npy",
+      "bytes": 16141054,
+      "sha256": "85f766756de1be020c4343ac15ee34fab8b2f5c29a32e0295c29bf713ce1906b"
+    },
+    {
+      "old_path": "/home/jojo/.cache/nadoc-qm/cpd-anti-relaxed-glycosidic-v4/endpoint-1-+15/output.model.4055016.180.npy",
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-closeout-20260925/retained-wavefunctions/cpd-anti-relaxed-glycosidic-v4/endpoint-1-+15/output.model.4055016.180.npy",
+      "bytes": 16141030,
+      "sha256": "9fa074d276b4901e704ccc4703c77fb395d4850c10da03a0f1d786474faed73d"
+    }
+  ],
+  "retained_evidence_files": 31188,
+  "retained_evidence_bytes": 16350964461,
+  "retained_evidence_inventory_verified": true,
+  "deleted_bytes": 4806603888,
+  "remaining_cpd_scratch_directories": 0,
+  "archived_manifest": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-closeout-20260925/cleanup_manifest.json",
+    "sha256": "9f3168c24cad5cc5e8af4bc9c2214d7cf44a4b846e557b495a4e1fcd1c51c1b1"
+  }
+}
