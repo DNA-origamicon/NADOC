@@ -4,7 +4,7 @@ import { promisify } from 'node:util'
 import { readFile, writeFile, chmod } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 const exec = promisify(execFile)
-export async function launchPreparedShare({ root, controlFile, minutes = 120 }) {
+export async function launchPreparedShare({ root, controlFile, minutes = 120, managed = false }) {
   if (Number(process.versions.node.split('.')[0]) < 20) throw new Error('Hosting requires Node.js 20 or newer. Install Node.js LTS on this computer.')
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 480) throw new Error('Host lifetime must be 1–480 minutes')
   const repo = resolve(root, '..'), dist = join(root, 'dist')
@@ -33,7 +33,7 @@ export async function launchPreparedShare({ root, controlFile, minutes = 120 }) 
         windows(join(repo, 'scripts/prepared_internet_host.mjs')), windows(dist), windows(controlFile),
       ])
       await exec(node, [bootstrap, windowsControl, script, '--dist', windowsDist, '--control-file', windowsControl,
-        '--minutes', String(minutes), '--tailscale', executables.tailscale], { timeout: 15000, windowsHide: true })
+        '--minutes', String(minutes), '--managed', String(managed), '--tailscale', executables.tailscale], { timeout: 15000, windowsHide: true })
     } catch (cause) {
       throw new Error('Could not start internet sharing. Check that Node.js and Tailscale are installed and available on the hosting PC, then try again.', { cause })
     }
@@ -41,7 +41,7 @@ export async function launchPreparedShare({ root, controlFile, minutes = 120 }) 
     // Verify the host prerequisite before detaching; guests need only a browser.
     try { await exec('tailscale', ['version'], { timeout: 10000 }) }
     catch { throw new Error('Install Tailscale on the hosting computer (https://tailscale.com/download), start its service, and sign in with tailscale up. Guests do not need Tailscale.') }
-    const child = spawn(process.execPath, [join(repo, 'scripts/prepared_internet_host.mjs'), '--dist', dist, '--control-file', controlFile, '--minutes', String(minutes)], { stdio: 'ignore', detached: true })
+    const child = spawn(process.execPath, [join(repo, 'scripts/prepared_internet_host.mjs'), '--dist', dist, '--control-file', controlFile, '--minutes', String(minutes), '--managed', String(managed)], { stdio: 'ignore', detached: true })
     await new Promise((ok, fail) => { child.once('spawn', ok); child.once('error', fail) })
     child.unref()
   }

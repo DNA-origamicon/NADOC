@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Owns one foreground Funnel and two loopback listeners for one meeting. */
+/** Owns one foreground Funnel and two loopback listeners while the editor server runs. */
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { writeFile, unlink } from 'node:fs/promises'
@@ -12,13 +12,13 @@ const exec = promisify(execFile)
 const flags = Object.fromEntries(process.argv.slice(2).reduce((pairs, value, i, args) => i % 2 ? pairs : [...pairs, [value, args[i + 1]]], []))
 const controlFile = flags['--control-file'], statusFile = controlFile + '.status.json'
 const tailscale = flags['--tailscale'] || 'tailscale', target = 'http://127.0.0.1:5183'
-let app, tunnel, expiryTimer, checkTimer, closing = false, output = ''
+let app, tunnel, checkTimer, closing = false, output = ''
 let publicAccess = { state: 'checking', message: 'Checking public DNS and HTTPS…', checks: [] }
 const report = value => writeFile(statusFile, JSON.stringify(value), { mode: 0o600 })
 const ts = async args => (await exec(tailscale, args, { windowsHide: true, timeout: 10000, maxBuffer: 1024 * 1024 })).stdout
 async function stop(error) {
   if (closing) return
-  closing = true; clearTimeout(expiryTimer); clearTimeout(checkTimer); app?.stop()
+  closing = true; clearTimeout(checkTimer); app?.stop()
   // Foreground Funnel is owned by this CLI connection and disappears when it exits.
   // Never reset the provider: the user may have unrelated private editor shares.
   tunnel?.kill()
@@ -29,11 +29,10 @@ async function main() {
   if (!controlFile) throw new Error('A private control file is required')
   await report({ state: 'starting' })
   const origin = internetOrigin(JSON.parse(await ts(['status', '--json'])), JSON.parse(await ts(['serve', 'status', '--json'])))
-  app = await createPreparedHost({ dist: resolve(flags['--dist']), publicOrigin: origin, lifetimeMs: Number(flags['--minutes'] || 120) * 60000, getPublicAccess: () => publicAccess })
+  app = await createPreparedHost({ dist: resolve(flags['--dist']), publicOrigin: origin, lifetimeMs: Number(flags['--minutes'] || 120) * 60000, getPublicAccess: () => publicAccess, persistent: true, ownerLeaseMs: flags['--managed'] === 'true' ? 90000 : 0 })
   const listen = (server, port) => new Promise((ok, fail) => { server.once('error', fail); server.listen(port, '127.0.0.1', ok) })
   await listen(app.server, 5183); await listen(app.controlServer, 5184)
   app.server.once('close', () => { void stop() })
-  expiryTimer = setTimeout(() => { void stop() }, app.expiresAt - Date.now())
   tunnel = spawn(tailscale, ['funnel', '--yes', `--https=${new URL(origin).port || '443'}`, '--bg=false', target], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   const collect = bytes => { output = (output + bytes.toString()).slice(-12000) }
   tunnel.stdout.on('data', collect); tunnel.stderr.on('data', collect)

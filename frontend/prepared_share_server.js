@@ -6,7 +6,7 @@ import { shareControlFile } from '../scripts/prepared_share_control.mjs'
 import { hostTransport } from './prepared_share_transport.js'
 import { launchPreparedShare } from '../scripts/launch_prepared_share.mjs'
 
-export function preparedSharePlugin({ controlFile, launch = launchPreparedShare, transport = hostTransport, getBuildId = preparedHostBuildId, publicUrl = process.env.NADOC_PUBLIC_URL } = {}) {
+export function preparedSharePlugin({ controlFile, launch = launchPreparedShare, transport = hostTransport, getBuildId = preparedHostBuildId, publicUrl = process.env.NADOC_PUBLIC_URL, autoStart = true } = {}) {
   function configure(server) {
     let editorOrigin = null
     try {
@@ -16,13 +16,13 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
     } catch { /* Only explicitly configured Tailscale origins are trusted. */ }
     const outdated = async state => {
       const expected = await getBuildId(join(server.config.root, 'dist')).catch(() => null)
-      return !state.capabilities?.includes('live-unlimited-frames-v1') || (!!expected && state.buildId !== expected)
+      return !state.capabilities?.includes('persistent-sharing-v1') || (!!expected && state.buildId !== expected)
     }
-    let starting = null, lifecycle = Promise.resolve(), resolvedCredentialPath = null
+    let starting = null, lifecycle = Promise.resolve(), resolvedCredentialPath = null, closing = false, retryTimer = null, backgroundError = null
     const credentialPath = () => resolvedCredentialPath ?? controlFile ?? shareControlFile(server.config.root, server.httpServer?.address()?.port ?? 5173)
     async function hostRequest(path, options = {}) {
       let config
-      try { config = JSON.parse(await readFile(credentialPath(), 'utf8')) } catch { throw new Error('Sharing host is not running. Choose Create link to start it.') }
+      try { config = JSON.parse(await readFile(credentialPath(), 'utf8')) } catch { throw new Error('Sharing host is not running. Choose Enable link to start it.') }
       if (!/^http:\/\/(?:\d{1,3}\.){3}\d{1,3}:\d+$/.test(config.url) || !/^[a-f0-9]{64}$/.test(config.token)) throw new Error('Invalid local share-host configuration')
       return transport({ root: server.config.root, controlFile: credentialPath(), config, path, options })
     }
@@ -44,11 +44,28 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
       resolvedCredentialPath = credentialPath()
       lifecycle = closePreviousHost()
       // Report failure to the next request without an unhandled background rejection.
-      void lifecycle.catch(() => {})
+      void lifecycle.then(() => { if (autoStart) void maintainHost() }).catch(error => { backgroundError = error.message })
     }
     if (server.httpServer?.listening) opened()
     else server.httpServer?.once('listening', opened)
-    server.httpServer?.once('close', () => { void lifecycle.catch(() => {}).then(closePreviousHost).catch(() => {}) })
+    server.httpServer?.once('close', () => {
+      closing = true; clearTimeout(retryTimer)
+      void lifecycle.catch(() => {}).then(() => starting?.catch(() => {})).then(closePreviousHost).catch(() => {})
+    })
+    async function maintainHost() {
+      if (closing) return
+      try {
+        // Keep an active meeting on its current build; upgrades occur on restart
+        // or the next explicit enable, never during a background health tick.
+        try { await hostRequest('/host/heartbeat', { method: 'POST' }) }
+        catch {
+          await ensureHost()
+          if (!closing) await hostRequest('/host/heartbeat', { method: 'POST' })
+        }
+        backgroundError = null
+      } catch (error) { backgroundError = error.message }
+      if (!closing) { retryTimer = setTimeout(maintainHost, 30000); retryTimer.unref?.() }
+    }
     function ensureHost() {
       if (!starting) starting = (async () => {
         let existing
@@ -60,7 +77,7 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
           if (await outdated(state)) throw new Error('The sharing host did not load the current build. Restart hosting.')
           return state
         }
-        try { await launch({ root: server.config.root, controlFile: credentialPath() }) }
+        try { await launch({ root: server.config.root, controlFile: credentialPath(), managed: true }) }
         catch (error) {
           try { return await ready() } catch { throw error }
         }
@@ -92,7 +109,7 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
         await lifecycle
         if (req.method === 'GET' && path === '/__nadoc_share/status') {
           try { const state = await hostRequest('/host/shares'); return send(200, { running: true, ...state, updateRequired: await outdated(state) }) }
-          catch { return send(200, { running: false, shares: [] }) }
+          catch { return send(200, { running: false, shares: [], publicAccess: { state: backgroundError ? 'unreachable' : 'checking', message: backgroundError || 'Preparing internet sharing in the background…' } }) }
         }
         if (req.method === 'POST' && path === '/__nadoc_share/start') return send(200, await ensureHost())
         if (req.method === 'POST' && path === '/__nadoc_share/create') {
@@ -122,7 +139,7 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
             headers: { 'X-NADOC-Broadcast': req.headers['x-nadoc-broadcast'] ?? '' }, body: Buffer.concat(chunks) }))
         }
         if (req.method === 'DELETE' && remove) return send(200, await hostRequest(`/host/shares/${remove[1]}`, { method: 'DELETE' }))
-        if (req.method === 'POST' && path === '/__nadoc_share/stop') return send(200, await hostRequest('/host/stop', { method: 'POST' }))
+        if (req.method === 'POST' && path === '/__nadoc_share/stop') return send(200, await hostRequest('/host/shares', { method: 'DELETE' }))
         return send(404, { error: 'Unknown share action' })
       } catch (error) { return send(503, { error: error.message }) }
     })

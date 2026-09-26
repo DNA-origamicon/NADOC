@@ -24,6 +24,6 @@ export default defineConfig({
       env: { NADOC_WORKSPACE: workspace, NADOC_DISABLE_SESSION_CACHE: '1', NADOC_MD_PLAYBACK_CACHE_DIR: path.join(workspace, 'md-cache') } },
     { command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${frontendPort} --strictPort`,
       cwd: import.meta.dirname, url: `http://127.0.0.1:${frontendPort}`, reuseExistingServer: false, timeout: 30000,
-      env: { VITE_API_PORT: backendPort } },
+      env: { NADOC_SHARE_AUTOSTART: '0', VITE_API_PORT: backendPort } },
   ],
 })

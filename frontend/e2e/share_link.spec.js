@@ -11,7 +11,7 @@ const root = path.resolve(import.meta.dirname, '..'), controlFile = shareControl
 let host, ownsControl = false
 test.beforeAll(async () => {
   try { await access(controlFile); throw new Error('Isolated control file already exists; refusing to overwrite it') } catch (error) { if (error.code !== 'ENOENT') throw error }
-  host = await createPreparedHost({ dist: path.join(root, 'dist') })
+  host = await createPreparedHost({ dist: path.join(root, 'dist'), persistent: true })
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   const url = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(url)
   await writeFile(controlFile, JSON.stringify({ url, token: host.controlToken }), { mode: 0o600, flag: 'wx' }); ownsControl = true
@@ -66,6 +66,20 @@ test('File Sharing creates, copies, restores and stops one invitation', async ({
   await expect(page.locator('#share-link-dialog [data-create]')).toBeEnabled()
   await expect(page.locator('#share-link-dialog [data-stop-host]')).toBeDisabled()
   await expect(guest.locator('#guest')).toContainText('Session ended')
+  const idle = await (await page.request.get('/__nadoc_share/status')).json()
+  expect(idle.running).toBe(true); expect(idle.shares).toEqual([])
+  const warmed = performance.now()
+  await page.getByRole('button', { name: 'Enable link', exact: true }).click()
+  await expect(page.locator('#share-link-dialog [data-link]')).toBeVisible()
+  console.log(`Warm editor enable (small scaffolded part): ${Math.round(performance.now() - warmed)} ms`)
+  const next = await page.locator('#share-link-dialog [data-link]').inputValue()
+  await openLink(next, 'alpha')
+  await page.locator('#share-link-dialog [data-close]').click()
+  await page.locator('.menu-item').filter({ has: page.locator('#menu-file-close-session') }).hover()
+  await page.locator('#menu-file-close-session').click()
+  await expect(guest.locator('#presentation-ended')).toBeVisible()
+  await expect.poll(async () => (await (await page.request.get('/__nadoc_share/status')).json()).shares.length).toBe(0)
+  expect((await (await page.request.get('/__nadoc_share/status')).json()).running).toBe(true)
   expect(errors).toEqual([]); expect(guestErrors).toEqual([])
   await guest.close()
 })

@@ -39,7 +39,26 @@ it('does not publish when hosting stops or loses its verified state', async () =
   vi.useFakeTimers()
   for (const changed of [{ running: false }, { running: true }]) {
     const api = vi.fn().mockResolvedValueOnce({ publicAccess: { state: 'checking' } }).mockResolvedValue(changed)
-    const result = expect(waitForPublicHosting({ api })).rejects.toThrow('Try Create link again')
+    const result = expect(waitForPublicHosting({ api })).rejects.toThrow('Try Enable link again')
     await vi.advanceTimersByTimeAsync(3000); await result
   }
+})
+it.each(['start', 'status'])('times out a stalled %s request and aborts its transport', async stalled => {
+  vi.useFakeTimers()
+  let requestSignal, release
+  const api = vi.fn(async (path, options) => {
+    if (path === stalled) {
+      requestSignal = options.signal
+      return new Promise(resolve => { release = resolve })
+    }
+    return { publicAccess: { state: 'dns_pending', message: 'Waiting for public DNS' } }
+  })
+  const result = expect(waitForPublicHosting({ api, timeoutMs: 5000, pollMs: 1000 })).rejects.toThrow('keep checking in the background')
+  await vi.advanceTimersByTimeAsync(5000)
+  await result
+  expect(requestSignal.aborted).toBe(true)
+  release({ publicAccess: { state: 'ready' } })
+  await vi.advanceTimersByTimeAsync(10000)
+  expect(api.mock.calls.map(([path]) => path)).toEqual(stalled === 'start' ? ['start'] : ['start', 'status'])
+  expect(vi.getTimerCount()).toBe(0)
 })

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 // Only the __e2e__ copy/history may persist; global teardown removes them and the
 // isolated Vite bridge. Provider calls are intercepted: no real public room.
 // Runner screenshots/traces are removed by the cleanup reporter on failure too.
-test('Create link automatically waits for public access and publishes without a setup step', async ({ page }) => {
+test('Enable link automatically waits for public access and publishes without a setup step', async ({ page }) => {
   let started = false, polls = 0, publications = 0, shared = null
   const pending = { state: 'dns_pending', message: 'Waiting for public DNS', checks: [] }
   const ready = { state: 'ready', message: 'Public DNS and HTTPS verified', checks: [] }
@@ -32,7 +32,7 @@ test('Create link automatically waits for public access and publishes without a 
   await expect(dialog.locator('[data-stop-host]')).toBeDisabled()
   await expect(dialog.locator('[data-copy-link]')).toHaveCount(0)
   await dialog.locator('[data-create]').click()
-  await expect(dialog.locator('[data-status]')).toHaveText('Connecting…')
+  await expect(dialog.locator('[data-status]')).toHaveText('Waiting for public DNS')
   expect(publications).toBe(0)
   await expect(dialog.locator('[data-copy-link]')).toBeVisible({ timeout: 20000 })
   await expect(dialog.locator('[data-create]')).toBeDisabled()
@@ -42,11 +42,27 @@ test('Create link automatically waits for public access and publishes without a 
   await page.evaluate(() => { window.__copiedShare = ''; navigator.clipboard.writeText = async value => { window.__copiedShare = value } })
   await dialog.locator('[data-copy-link]').click()
   expect(await page.evaluate(() => window.__copiedShare)).toBe('https://example.invalid/viewer#invite=guest&password=required')
-  await expect(dialog.locator('[data-password]')).toHaveText('Password: test-password')
+  await expect(dialog.locator('[data-link]')).toHaveValue('https://example.invalid/viewer#invite=guest&password=required')
+  await expect(dialog.locator('[data-password]')).toHaveValue('test-password')
+  for (const key of ['link', 'password']) {
+    const field = dialog.locator(`[data-${key}]`)
+    const copy = dialog.getByRole('button', { name: `Copy ${key}`, exact: true })
+    await expect(field).toBeVisible()
+    await expect(field).toHaveAttribute('readonly', '')
+    await expect(copy.locator('svg')).toBeVisible()
+    const inputBox = await field.boundingBox(), copyBox = await copy.boundingBox()
+    expect(copyBox.x).toBeGreaterThanOrEqual(inputBox.x + inputBox.width)
+    await field.dblclick()
+    expect(await field.evaluate(input => input.value.slice(input.selectionStart, input.selectionEnd))).toBe(await field.inputValue())
+  }
+  await dialog.locator('[data-copy-password]').click()
+  expect(await page.evaluate(() => window.__copiedShare)).toBe('test-password')
+  await expect(dialog.locator('[data-status]')).toHaveText('Password copied')
   await dialog.locator('[data-stop-host]').click()
   await expect(dialog.locator('[data-create]')).toBeEnabled()
   await expect(dialog.locator('[data-stop-host]')).toBeDisabled()
   await expect(dialog.locator('[data-copy-link]')).toHaveCount(0)
+  await expect(dialog.locator('[data-copy-password]')).toHaveCount(0)
   await page.route('**/__nadoc_share/start', route => route.fulfill({ status: 503, json: { error: 'Host connection failed' } }))
   await dialog.locator('[data-create]').click()
   const errors = dialog.locator('[data-error]')

@@ -32,7 +32,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
 
-  reporter: [['list']],
+  reporter: [['list'], ['./e2e/artifact-cleanup-reporter.js']],
 
   use: {
     baseURL: `http://127.0.0.1:${FRONTEND_PORT}`,
@@ -58,7 +58,7 @@ export default defineConfig({
       // --strictPort so it fails loudly instead of drifting to another port.
       command: `npx vite --port ${FRONTEND_PORT} --host 127.0.0.1 --strictPort`,
       cwd: FRONTEND_DIR,
-      env: { VITE_API_PORT: BACKEND_PORT },
+      env: { NADOC_SHARE_AUTOSTART: '0', VITE_API_PORT: BACKEND_PORT },
       url: `http://127.0.0.1:${FRONTEND_PORT}`,
       reuseExistingServer: false,
       timeout: 60_000,

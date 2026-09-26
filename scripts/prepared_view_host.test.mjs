@@ -265,3 +265,55 @@ test('public hosting refuses invitations until verified and exposes only a probe
   assert.ok(share.password); assert.ok(!share.url.includes(share.password))
   assert.equal((await fetch(base + `/meeting/${share.id}/scene`)).status, 401)
 })
+
+test('persistent gateway stays ready across idle time, per-presentation expiry and ending all links', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-persistent-')); t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
+  let time = Date.now()
+  const lifetimeMs = 2 * 60 * 60 * 1000
+  const host = await createPreparedHost({ dist: root, persistent: true, lifetimeMs, now: () => time }); t.after(host.stop)
+  await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
+  const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
+  const auth = { Authorization: `Bearer ${host.controlToken}` }
+  time += 24 * 60 * 60 * 1000 // idle gateway does not use up the presentation window
+  const first = host.createShare(Buffer.from('NADOCVW1first'))
+  assert.equal(first.expiresAt, time + lifetimeMs)
+  const endpoint = `${base}/meeting/${first.id}`
+  const joined = await fetch(endpoint + '/join', { method: 'POST', headers: { Origin: base }, body: JSON.stringify({ name: 'Guest', token: new URLSearchParams(new URL(first.url).hash.slice(1)).get('invite') }) })
+  assert.equal(joined.status, 200)
+  const cookie = joined.headers.get('set-cookie').split(';')[0]
+  const stream = await fetch(endpoint + '/events', { headers: { Cookie: cookie } }), reader = stream.body.getReader()
+  await reader.read()
+  time = first.expiresAt
+  // No guest request needed: expiry must push the terminal state and close SSE.
+  assert.match(new TextDecoder().decode((await reader.read()).value), /"ended":true/)
+  assert.equal((await reader.read()).done, true)
+  assert.equal((await fetch(endpoint + '/scene', { headers: { Cookie: cookie } })).status, 410)
+  const health = await (await fetch(base + '/__nadoc_public_health')).json()
+  assert.equal(health.probeId, host.probeId)
+  const second = host.createShare(Buffer.from('NADOCVW1second'))
+  assert.equal(second.expiresAt, time + lifetimeMs)
+  assert.equal((await fetch(base + '/host/shares', { method: 'DELETE' })).status, 403)
+  assert.equal((await fetch(base + '/host/shares', { method: 'DELETE', headers: auth })).status, 200)
+  assert.equal((await fetch(`${base}/meeting/${second.id}/join`, { method: 'POST' })).status, 410)
+  assert.deepEqual((await (await fetch(base + '/host/shares', { headers: auth })).json()).shares, [])
+  assert.equal((await (await fetch(base + '/__nadoc_public_health')).json()).probeId, host.probeId)
+  assert.ok(host.createShare(Buffer.from('NADOCVW1third')).id)
+})
+
+test('managed gateway shuts down if its editor server stops renewing ownership', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-owner-')); t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
+  let time = Date.now()
+  const host = await createPreparedHost({ dist: root, persistent: true, ownerLeaseMs: 90000, now: () => time }); t.after(host.stop)
+  await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
+  const base = `http://127.0.0.1:${host.server.address().port}`, auth = { Authorization: `Bearer ${host.controlToken}` }
+  time += 80000
+  assert.equal((await fetch(base + '/host/heartbeat', { method: 'POST', headers: auth })).status, 200)
+  time += 80000
+  assert.equal((await fetch(base + '/host/shares', { headers: auth })).status, 200)
+  const closed = new Promise(resolve => host.server.once('close', resolve))
+  time += 10001
+  await closed
+  await assert.rejects(fetch(base + '/__nadoc_public_health'))
+})

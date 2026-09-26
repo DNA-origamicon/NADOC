@@ -13,12 +13,12 @@ test('a failed bootstrap is recovered only when the authenticated host responds'
   let handler, ready = true, launches = 0, requests = 0
   const editor = http.createServer((req, res) => handler(req, res, () => res.end())); t.after(() => { editor.close(); editor.closeAllConnections() })
   await new Promise(ok => editor.listen(0, '127.0.0.1', ok))
-  preparedSharePlugin({ controlFile, launch: async () => {
+  preparedSharePlugin({ autoStart: false, controlFile, launch: async () => {
     launches++
     await writeFile(controlFile, JSON.stringify({ url: 'http://127.0.0.1:5184', token: 'a'.repeat(64) }))
     await writeFile(controlFile + '.status.json', JSON.stringify({ state: 'ready' }))
     throw new Error('Bootstrap timed out')
-  }, transport: async () => { requests++; if (!ready) throw new Error('Host unavailable'); return { shares: [], capabilities: ['live-unlimited-frames-v1'] } } }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
+  }, transport: async () => { requests++; if (!ready) throw new Error('Host unavailable'); return { shares: [], capabilities: ['persistent-sharing-v1', 'live-unlimited-frames-v1'] } } }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
   const start = () => fetch(`http://127.0.0.1:${editor.address().port}/__nadoc_share/start`, { method: 'POST', headers: { 'X-NADOC-Share': '1' } })
   assert.equal((await start()).status, 200)
   assert.equal(launches, 1); assert.equal(requests, 1)
@@ -38,7 +38,7 @@ test('editor middleware keeps host credentials local and publishes only from the
   let handler, launches = 0
   const editor = http.createServer((req, res) => handler(req, res, () => { res.writeHead(404); res.end() })); t.after(() => { editor.close(); editor.closeAllConnections() })
   await new Promise(ok => editor.listen(0, '127.0.0.1', ok))
-  preparedSharePlugin({ controlFile, transport: async ({ config, path, options }) => { const response = await fetch(config.url + path, { ...options, headers: { ...options.headers, Authorization: `Bearer ${config.token}` } }); const result = await response.json(); if (!response.ok) throw new Error(result.error); return result }, launch: async () => { launches++ } }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
+  preparedSharePlugin({ autoStart: false, controlFile, transport: async ({ config, path, options }) => { const response = await fetch(config.url + path, { ...options, headers: { ...options.headers, Authorization: `Bearer ${config.token}` } }); const result = await response.json(); if (!response.ok) throw new Error(result.error); return result }, launch: async () => { launches++ } }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
   const base = `http://127.0.0.1:${editor.address().port}`, headers = { 'X-NADOC-Share': '1', Origin: base }
   await fetch(base + '/__nadoc_share/status') // startup finds no detached host
   await writeFile(controlFile, JSON.stringify({ url: hostUrl, token: host.controlToken }))
@@ -70,7 +70,7 @@ test('server startup and shutdown revoke invitations left in the detached host',
   let handler
   const editor = http.createServer((req, res) => handler(req, res, () => res.end()))
   t.after(() => { editor.close(); editor.closeAllConnections() })
-  preparedSharePlugin({ controlFile, transport }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
+  preparedSharePlugin({ autoStart: false, controlFile, transport }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
   await new Promise(ok => editor.listen(0, '127.0.0.1', ok))
   await fetch(`http://127.0.0.1:${editor.address().port}/__nadoc_share/status`)
   await assert.rejects(fetch(`${url}/meeting/${old.id}/status`))
@@ -94,11 +94,11 @@ test('a stale detached build is stopped and replaced before starting another inv
   const editor = http.createServer((req, res) => handler(req, res, () => res.end()))
   t.after(() => { editor.close(); editor.closeAllConnections() })
   await new Promise(ok => editor.listen(0, '127.0.0.1', ok))
-  preparedSharePlugin({ controlFile, getBuildId: async () => 'current',
+  preparedSharePlugin({ autoStart: false, controlFile, getBuildId: async () => 'current',
     transport: async ({ path }) => {
       if (!ready) throw new Error('Stopped')
       if (path === '/host/stop') { stops++; ready = false; return {} }
-      return { shares: [], capabilities: ['live-unlimited-frames-v1'], buildId }
+      return { shares: [], capabilities: ['persistent-sharing-v1', 'live-unlimited-frames-v1'], buildId }
     }, launch: async () => { launches++; ready = true; buildId = 'current' },
   }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
   const base = `http://127.0.0.1:${editor.address().port}/__nadoc_share`
@@ -119,7 +119,7 @@ test('only the configured private editor origin can publish through loopback', a
   const server = http.createServer((req, res) => handler(req, res, () => res.end()))
   t.after(() => { server.close(); server.closeAllConnections() })
   await new Promise(ok => server.listen(0, '127.0.0.1', ok))
-  preparedSharePlugin({ publicUrl: 'https://this.example.ts.net:5173', controlFile: join(root, 'missing') })
+  preparedSharePlugin({ autoStart: false, publicUrl: 'https://this.example.ts.net:5173', controlFile: join(root, 'missing') })
     .configureServer({ config: { root }, httpServer: server, middlewares: { use: fn => { handler = fn } } })
   const get = headers => new Promise((ok, fail) => {
     const req = http.request({ host: '127.0.0.1', port: server.address().port, path: '/__nadoc_share/status', headers }, res => { res.resume(); ok(res.statusCode) })
@@ -129,4 +129,37 @@ test('only the configured private editor origin can publish through loopback', a
   assert.equal(await get({ Host: 'other.example.ts.net:5173', Origin: 'https://other.example.ts.net:5173' }), 403)
   assert.equal(await get({ Host: 'this.example.ts.net:5173', Origin: 'https://evil.example' }), 403)
   assert.equal(await get({ Host: 'this.example.ts.net:5173', 'Sec-Fetch-Site': 'cross-site' }), 403)
+})
+
+test('server warms hosting without a sharing request and reuses it after End presentation', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-share-warm-')); t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
+  const controlFile = join(root, 'host.json')
+  let handler, host, launches = 0, launched
+  const warmed = new Promise(resolve => { launched = resolve })
+  const editor = http.createServer((req, res) => handler(req, res, () => res.end()))
+  t.after(() => { editor.close(); editor.closeAllConnections(); host?.stop() })
+  preparedSharePlugin({ controlFile, autoStart: true, launch: async ({ managed }) => {
+    assert.equal(managed, true); launches++
+    host = await createPreparedHost({ dist: root, persistent: true, getPublicAccess: () => ({ state: 'ready' }) })
+    await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
+    const url = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(url)
+    await writeFile(controlFile, JSON.stringify({ url, token: host.controlToken })); launched()
+  }, transport: async ({ config, path, options }) => {
+    const response = await fetch(config.url + path, { ...options, headers: { ...options.headers, Authorization: `Bearer ${config.token}` } })
+    const value = await response.json(); if (!response.ok) throw new Error(value.error); return value
+  } }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
+  await new Promise(ok => editor.listen(0, '127.0.0.1', ok))
+  await warmed // no browser or sharing API call has happened
+  const base = `http://127.0.0.1:${editor.address().port}/__nadoc_share`, headers = { 'X-NADOC-Share': '1' }
+  const post = (action, body) => fetch(`${base}/${action}`, { method: 'POST', headers, body })
+  assert.equal((await post('start')).status, 200)
+  const first = await (await post('create', 'NADOCVW1first')).json()
+  const probe = host.probeId
+  assert.equal((await post('stop')).status, 200)
+  const idle = await (await fetch(base + '/status')).json()
+  assert.equal(idle.running, true); assert.equal(idle.publicAccess.state, 'ready'); assert.deepEqual(idle.shares, [])
+  assert.equal((await post('start')).status, 200)
+  const second = await (await post('create', 'NADOCVW1second')).json()
+  assert.notEqual(second.id, first.id); assert.equal(host.probeId, probe); assert.equal(launches, 1)
 })

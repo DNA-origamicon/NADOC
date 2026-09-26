@@ -58,8 +58,9 @@ AccountsService, sign out and back in, then start NADOC. Headless ScryWrite
 validation remains available in either session.
 
 For a new hosting computer, follow [internet-sharing prerequisites](docs/sharing_host_setup.md).
-**Create link** runs hosting setup and public DNS/HTTPS checks automatically in the
-background. No separate setup button or Node command is required;
+The editor server starts its public viewer connection and DNS/HTTPS checks in the
+background, before a design is shared. **Enable link** activates guest access once
+that connection is ready. Ending a presentation keeps the connection available. No separate setup button or Node command is required;
 `node scripts/setup_sharing.mjs --check --browser` is an optional diagnostic.
 
 **File → Sharing…** creates a temporary guest-viewer invitation from localhost or

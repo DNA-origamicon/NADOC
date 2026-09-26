@@ -12,7 +12,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const API_PORT = process.env.VITE_API_PORT || '8000'
 
 export default {
-  plugins: [viewerTestPlugin(), internetSharePlugin()],
+  plugins: [viewerTestPlugin(), internetSharePlugin({ autoStart: process.env.NADOC_SHARE_AUTOSTART !== '0' })],
   define: { __NADOC_BUILD_INFO__: JSON.stringify(frontendBuildInfo(__dirname)) },
   server: {
     port: 5173,

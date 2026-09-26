@@ -13,7 +13,11 @@
 .sharing-dialog::backdrop { background: var(--color-bg-overlay); }
 #share-link-dialog { width: min(420px, 92vw); }
 #share-link-dialog .sharing-links:not(:empty) { margin-top: var(--space-3); }
-#share-link-dialog .sharing-password { flex-basis: 100%; margin: var(--space-2) 0 0; user-select: all; }
+#share-link-dialog .sharing-copy-field { width: 100%; min-width: 0; }
+.sharing-copy-field label { display: block; margin-bottom: var(--space-1); color: var(--color-text-secondary); }
+.sharing-copy-row { display: flex; align-items: stretch; gap: var(--space-2); }
+.sharing-copy-row .input { flex: 1; min-width: 0; width: 0; user-select: text; cursor: text; }
+.sharing-copy-row .sharing-copy-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; padding: var(--space-2); }
 #share-link-dialog .btn:disabled { opacity: .45; cursor: default; filter: grayscale(1); }
 .sharing-error { margin-top: var(--space-3); color: var(--color-text-secondary); }
 .sharing-error summary { cursor: pointer; }

@@ -81,7 +81,7 @@ export default defineConfig({
       // Throwaway Vite — proxies /api → the throwaway backend via VITE_API_PORT.
       command: `npx vite --port ${FRONTEND_PORT} --host 127.0.0.1 --strictPort`,
       cwd: FRONTEND_DIR,
-      env: { VITE_API_PORT: BACKEND_PORT },
+      env: { NADOC_SHARE_AUTOSTART: '0', VITE_API_PORT: BACKEND_PORT },
       url: `http://127.0.0.1:${FRONTEND_PORT}`,
       reuseExistingServer: false,
       timeout: 20_000,

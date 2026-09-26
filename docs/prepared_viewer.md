@@ -13,9 +13,10 @@ see the [sharing audit](audits/sharing_security_hygiene_20260923.md).
 ## Share one invitation throughout a meeting
 
 1. Open the view you want to publish and choose **File → Sharing**.
-2. Press **Create link**, then **Copy link**. Send the separately displayed password
-   too. Guests enter their name and password once. Create is disabled while sharing;
-   **Stop sharing all links** ends the session and enables it again. Errors appear
+2. Press **Enable link**. The link and password appear in visible read-only fields;
+   double-click either to select its full value, or use the copy icon to its right.
+   Send both to guests. Guests enter their name and password once. Create is disabled while sharing;
+   **End presentation** ends the session and enables it again. Errors appear
    in an expandable **Error log**.
 3. Select an oxDNA or NAMD job and click the green **Share** button beside its
    **Visualizations** title. A red dot identifies the published job. Its visualization
@@ -33,8 +34,8 @@ visualization tools remain available; job sharing publishes the chosen visualiza
 The **End** button stops hosting all links. No separate presenter tab is required
 or offered. Design edits and view changes update the same invitation automatically.
 The older recorded-clip preparation controls are no longer part of the main sharing
-setup. **Stop sharing all links**, host
-shutdown or expiry ends the session. Content updates do not extend meeting expiry.
+setup. **End presentation**, host
+shutdown or presentation expiry ends the session. Content updates do not extend meeting expiry.
 
 ## Try it locally
 
@@ -167,7 +168,7 @@ The package viewer's real-GPU performance gate remains open.
 
 ## Share the current part over the internet
 
-On the hosting PC, use **File → Sharing… → Create link**.
+On the hosting PC, use **File → Sharing… → Enable link**.
 The default host now prepares an HTTPS invitation for guests on any network.
 **Copy link** copies the URL. Send the generated password displayed separately in
 the popup as well. Guests enter their display name and password; they need no
@@ -245,9 +246,8 @@ requires the presenter invitation and password; it can reclaim the presenter's
 place after explicit Leave or two minutes disconnected, without affecting guests. The existing snapshot remains listed
 under **File → Sharing**, regardless of which file is open in the editor.
 Leaving the presentation does not stop the background host. The host PC must stay
-awake, and the existing meeting expiry still applies; **Stop sharing**, **Stop
-hosting all links**, host shutdown and expiry end availability. This does not make
-links permanent or automatically restart expired public hosting.
+awake, and the existing meeting expiry still applies; **Stop sharing**, **End presentation**, host shutdown and expiry end availability. This does not make
+links permanent. The public gateway remains running between presentations.
 
 Camera messages carry the exact package SHA-256 and a monotonically increasing
 sequence. The host validates role, origin, bounds and rate; guests receive bounded
@@ -267,7 +267,7 @@ An already running helper retains its original server code and built assets.
 New presenter controls become available in the next hosting session after the
 updated frontend is built. Stop/start invalidates existing invitations.
 
-**Stop sharing all links**, expiry, or tunnel
+**End presentation**, expiry, or tunnel
 loss ends the complete session. The helper closes both listeners and its owned
 foreground tunnel. Keep the hosting PC awake while presenting. Tailscale's installed
 background service may remain running, but the meeting route is session-scoped.
@@ -368,7 +368,7 @@ button to replace the publication and move the dot. A failed replacement retains
 the old publication. To stop job sharing, select the shared job and click **Stop
 sharing**. This selects native positions and Full representation in the editor
 and publishes the native NADOC model to guests; it does not end their invitation.
-**Stop sharing all links** explicitly ends guest access.
+**End presentation** explicitly ends guest access.
 
 The live path targets at most eight render-state samples per second, independently
 of each browser's render loop. It sends the prepared scene initially, then absolute
@@ -534,3 +534,15 @@ host that predates the current sharing runtime or viewer build before starting a
 invitation. Editor-server restart stops the detached host itself, so cached guest code
 cannot survive the restart. Replacing a host closes its old invitations; publish a
 new invitation and have guests reopen it.
+
+### Persistent gateway (2026-09-25)
+
+Editor startup prepares one public connection in the background without sharing
+a design. Enable link exports the current view and activates a fresh password-
+protected invitation. Its two-hour lifetime starts then, independently of gateway
+uptime. End presentation, part close, and document changes revoke guest access
+and release scene data while keeping the gateway ready. Server restart/shutdown
+revokes all rooms. A managed gateway also stops after 90 seconds without the
+editor heartbeat. The dialog displays connection readiness before activation.
+Automatic preparation is disabled for isolated browser tests with
+`NADOC_SHARE_AUTOSTART=0`; no per-file tunnels or uploads are created on file open.
