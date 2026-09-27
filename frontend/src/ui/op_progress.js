@@ -135,6 +135,8 @@ function _ensureRefs() {
     _cancel.addEventListener('click', () => {
       const fn = _cancelHandler
       _cancelHandler = null
+      const top = _entries[_entries.length - 1]
+      if (top) top.onCancel = null
       if (_cancel) _cancel.style.display = 'none'
       if (fn) fn()
     })
@@ -163,6 +165,8 @@ export function showOpProgress(header, label, { indeterminate = false, onCancel 
     header: header ?? 'Working…',
     label: label ?? '',
     detail,
+    fraction: indeterminate ? null : 0,
+    onCancel,
     startedAt: startedAt ?? performance.now(),
   })
   _startTick()
@@ -190,10 +194,12 @@ export function showOpProgress(header, label, { indeterminate = false, onCancel 
 export function hideOpProgress(token = null) {
   _ensureRefs()
   if (!_bar) return
-  _busyDepth = Math.max(0, _busyDepth - 1)
   const at = token == null ? _entries.length - 1 : _entries.findIndex(e => e.token === token)
-  if (at >= 0) _entries.splice(at, 1)
+  if (at < 0) return
+  _entries.splice(at, 1)
+  _busyDepth = _entries.length
   if (_busyDepth > 0) {
+    updateOpProgress(_entries[_entries.length - 1].token, {})
     _renderMeta()
     _emitProgressDiagnostic('hide-deferred')
     return
@@ -225,7 +231,27 @@ export function setOpProgressLabel(header, label) {
 export function setOpProgressFraction(t) {
   _ensureRefs()
   if (!_fill || !_bar) return
+  const top = _entries[_entries.length - 1]
+  if (top) top.fraction = t
   _bar.classList.remove('indeterminate')
   _fill.style.width = `${Math.max(0, Math.min(1, t)) * 100}%`
   _emitProgressDiagnostic('fraction')
+}
+
+/** Token-scoped updates keep concurrent surface/other operations independent.
+ * A null fraction explicitly means this stage has no measurable denominator. */
+export function updateOpProgress(token, patch) {
+  _ensureRefs()
+  const entry = _entries.find(e => e.token === token)
+  if (!entry) return
+  Object.assign(entry, patch)
+  if (entry !== _entries[_entries.length - 1]) return
+  if (_header) _header.textContent = entry.header
+  if (_label) _label.textContent = entry.label
+  _cancelHandler = typeof entry.onCancel === 'function' ? entry.onCancel : null
+  if (_cancel) _cancel.style.display = _cancelHandler ? '' : 'none'
+  _bar?.classList.toggle('indeterminate', entry.fraction == null)
+  if (_fill) _fill.style.width = `${entry.fraction == null ? 0 : Math.max(0, Math.min(1, entry.fraction)) * 100}%`
+  _renderMeta()
+  _emitProgressDiagnostic('update')
 }

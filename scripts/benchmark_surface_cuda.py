@@ -1,5 +1,5 @@
 """Compare optimized CPU vs optional CUDA closing on complete real-design surfaces.
-Run through test_guard with an active test session. Requires local CUDA PyTorch.
+Focused related-development runs need no test session. Requires local CUDA PyTorch.
 """
 
 import gzip

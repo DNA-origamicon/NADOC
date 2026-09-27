@@ -27,7 +27,7 @@ import { clusterOfNucKey } from './color_util.js'
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
-const DEFAULT_OPACITY    = 0.85
+const DEFAULT_OPACITY    = 1.0
 const UNIFORM_COLOR      = 0xC8D8E8   // soft blue-grey, neutral molecular surface
 
 // ── Module ────────────────────────────────────────────────────────────────────

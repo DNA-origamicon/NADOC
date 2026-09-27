@@ -4126,7 +4126,7 @@ def frame_surface_json(
     )
 
     if probe_radius is None:
-        probe_radius = 0.14 if detail == "chimerax" else 0.28
+        probe_radius = 0.06
 
     if detail == "coarse":
         beads = _cg_beads_from_frame(design, frame)
@@ -4138,29 +4138,27 @@ def frame_surface_json(
         # Surface = a VdW envelope, so it needs atom POSITIONS, not a connected backbone —
         # skip the phosphate-linker closure (close_backbone=False) to shave the build.
         model = build_display_model(design, frame, close_backbone=False)
-        if detail == "chimerax":
+        if detail in {"chimerax", "continuous", "remeshed"}:
             # Figure-quality SES: fine 0.5 Å grid + adjustable probe + true VdW.
             from backend.core.surface import (
                 CHIMERAX_GRID_SPACING,
                 CHIMERAX_RADIUS_SCALE,
-                CHIMERAX_VOXEL_CAP,
-                CHIMERAX_MAX_SPACING,
                 CHIMERAX_SMOOTH,
             )
 
-            gs = adaptive_grid_spacing(
-                model.atoms,
-                CHIMERAX_GRID_SPACING,
-                cap_voxels=CHIMERAX_VOXEL_CAP,
-                max_spacing=CHIMERAX_MAX_SPACING,
-            )
+            gs = CHIMERAX_GRID_SPACING
             mesh = compute_surface(
                 model.atoms,
                 grid_spacing=gs,
                 probe_radius=probe_radius,
                 radius_scale=CHIMERAX_RADIUS_SCALE,
+                continuous_field=True,
             )
             mesh = smooth_mesh(mesh, iterations=CHIMERAX_SMOOTH)
+            if detail != "continuous":
+                from backend.core.surface_remesh import remesh_sharp_patches
+
+                mesh = remesh_sharp_patches(mesh)
         else:
             gs = adaptive_grid_spacing(model.atoms, grid_spacing)
             mesh = compute_surface(
@@ -4216,15 +4214,22 @@ def pack_surface_bin(data: dict) -> bytes:
     n_verts == 0 signals "not ready / empty"."""
     import struct
 
-    v = np.asarray(data.get("vertices") or [], dtype=np.float32)
-    f = np.asarray(data.get("faces") or [], dtype=np.uint32)
+    from backend.core.surface_progress import report
+    report("Encoding surface response")
+    v = np.asarray(
+        data.get("vertices") if data.get("vertices") is not None else [],
+        dtype=np.float32,
+    )
+    f = np.asarray(
+        data.get("faces") if data.get("faces") is not None else [], dtype=np.uint32
+    )
     nv, nf = v.size // 3, f.size // 3
-    if data.get("vertex_colors"):
+    if data.get("vertex_colors") is not None and len(data["vertex_colors"]):
         rgb = np.clip(
             np.asarray(data["vertex_colors"], dtype=np.float32) * 255.0, 0, 255
         ).astype(np.uint8)
         color_kind, color_bytes = 1, rgb.tobytes()
-    elif data.get("vertex_rmsf"):
+    elif data.get("vertex_rmsf") is not None and len(data["vertex_rmsf"]):
         color_kind, color_bytes = (
             2,
             np.asarray(data["vertex_rmsf"], dtype=np.float32).tobytes(),
@@ -4370,7 +4375,7 @@ def composite_trajectory_surface(
     reference_conf_path,
     frame_indices,
     color_mode: str = "strand",
-    probe_radius: float = 0.28,
+    probe_radius: float = 0.06,
     grid_spacing: float = 0.20,
     radius_inflate: float = 1.30,
     smooth: int = 15,

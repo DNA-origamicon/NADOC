@@ -35,6 +35,7 @@ import { showPersistentToast, dismissToast, showToast } from '../ui/toast.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { geometryQuerySuffix } from '../ui/new_positioning.js'
 import { parseSurfaceBin } from './surface_bin.js'
+import { withSurfaceProgress } from '../api/surface_progress_request.js'
 
 // Stable signature for a design's per-region surface columns — used to skip a
 // (slow) surface recompute when the pinned columns are unchanged.
@@ -149,10 +150,10 @@ export function initAtomSurfaceDisplay({
   }
 
   let _surfaceDataCache   = null   // cached API response; null = needs re-fetch
-  let _surfaceProbeRadius = 0.28   // current probe radius for SES (nm)
+  let _surfaceProbeRadius = 0.06   // current probe radius for SES (nm)
   let _surfaceRequestId = 0
-  let _standardProbeRadius = 0.28
-  let _figureProbeRadius = 0.14
+  let _standardProbeRadius = 0.06
+  let _figureProbeRadius = 0.06
   let _surfaceDetail      = 'coarse'  // 'coarse' = fast CG-bead envelope | 'fine' = full all-atom
   let _surfaceMode        = 'off'  // mirrors store.surfaceMode
   let _overlayMode        = false  // full CG + global ball-and-stick together
@@ -223,7 +224,7 @@ export function initAtomSurfaceDisplay({
       return
     }
     if (!_surfaceDataCache) {
-      showPersistentToast('Computing surface…')
+      // The surface transport owns request-scoped, measured computation progress.
       try {
         const { surfaceColorMode } = store.getState()
         const params = { color_mode: surfaceColorMode, probe_radius: _surfaceProbeRadius,
@@ -239,14 +240,11 @@ export function initAtomSurfaceDisplay({
         }
         if (!data) {
           const url = `/api/design/surface?color_mode=${surfaceColorMode}&probe_radius=${_surfaceProbeRadius}&detail=${_surfaceDetail}`
-          const resp = await fetch(url, { headers: docHeaders() })
-          if (requestId !== _surfaceRequestId) return
-          if (!resp.ok) {
-            dismissToast()
-            console.error('Surface fetch failed:', resp.status)
-            return
-          }
-          data = await resp.json()
+          data = await withSurfaceProgress('/design/surface', docHeaders(), async headers => {
+            const resp = await fetch(url, { headers })
+            if (!resp.ok) throw new Error(`Surface fetch failed: ${resp.status}`)
+            return resp.json()
+          })
         }
         if (requestId !== _surfaceRequestId) return
         _surfaceDataCache = data
@@ -320,23 +318,27 @@ export function initAtomSurfaceDisplay({
   const _svSurfaceProbe = document.getElementById('sv-surface-probe')
   _slSurfaceProbe?.addEventListener('input', () => {
     _surfaceProbeRadius = parseFloat(_slSurfaceProbe.value)
-    if (_surfaceDetail === 'chimerax') _figureProbeRadius = _surfaceProbeRadius
+    if (_surfaceDetail !== 'coarse') _figureProbeRadius = _surfaceProbeRadius
     else _standardProbeRadius = _surfaceProbeRadius
     if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
-    if (_surfaceDetail !== 'chimerax') _regenSurfaceForParamChange()
+    if (_surfaceDetail === 'coarse') _regenSurfaceForParamChange()
   })
   _slSurfaceProbe?.addEventListener('change', () => {
-    if (_surfaceDetail === 'chimerax') _regenSurfaceForParamChange()
+    if (_surfaceDetail !== 'coarse') _regenSurfaceForParamChange()
   })
 
-  // Each preset remembers its probe radius; Figure quality starts at 0.14 nm.
+  // Figure quality remembers its probe independently of the standard preset.
   const _cbFigureQuality = document.getElementById('cb-surface-figure-quality')
-  _cbFigureQuality?.addEventListener('change', () => {
-    _surfaceDetail = _cbFigureQuality.checked ? 'chimerax' : 'coarse'
-    _surfaceProbeRadius = _cbFigureQuality.checked ? _figureProbeRadius : _standardProbeRadius
+  function _selectSurfaceDetail(detail) {
+    _surfaceDetail = detail
+    if (_cbFigureQuality) _cbFigureQuality.checked = detail === 'chimerax'
+    _surfaceProbeRadius = detail === 'coarse' ? _standardProbeRadius : _figureProbeRadius
     if (_slSurfaceProbe) { _slSurfaceProbe.disabled = false; _slSurfaceProbe.value = String(_surfaceProbeRadius) }
     if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
     _regenSurfaceForParamChange()
+  }
+  _cbFigureQuality?.addEventListener('change', () => {
+    _selectSurfaceDetail(_cbFigureQuality.checked ? 'chimerax' : 'coarse')
   })
 
   // Re-generate the active surface after a param change: if a sim overlay owns it,
@@ -696,6 +698,7 @@ export function initAtomSurfaceDisplay({
           { severity: 'warn' })
         return
       }
+      if (kind === 'surface') return // The surface transport owns measured progress.
       if (e.detail.building) showPersistentToast(_BUSY_TEXT[kind], {
         diagnostic: {
           owner: 'atom_surface_display.heavyStatus',

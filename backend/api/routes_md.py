@@ -993,7 +993,7 @@ class MdFramesAtomisticBody(BaseModel):
 
 class MdFramesSurfaceBody(BaseModel):
     frame_indices: list[int]
-    probe_radius: float = 0.28
+    probe_radius: float = 0.06
     grid_spacing: float = 0.20
     radius_inflate: float = 1.30
     smooth: int = 15
@@ -1001,7 +1001,7 @@ class MdFramesSurfaceBody(BaseModel):
 
 
 class MdRmsfSurfaceBody(BaseModel):
-    probe_radius: float = 0.28
+    probe_radius: float = 0.06
     grid_spacing: float = 0.20
     radius_inflate: float = 1.30
     smooth: int = 15

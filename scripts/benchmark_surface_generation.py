@@ -1,4 +1,4 @@
-"""Real-design before/after surface benchmark; run through test_guard in a test session."""
+"""Real-design surface benchmark; allowed without a session for related development."""
 
 import argparse
 import gzip

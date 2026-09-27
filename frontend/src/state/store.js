@@ -259,7 +259,7 @@ const _initialState = {
   surfaceColorMode: 'strand',
 
   /** Surface opacity (0–1). */
-  surfaceOpacity: 0.85,
+  surfaceOpacity: 1.0,
 
   /**
    * Global coloring mode applied to all representations except Hull Prism

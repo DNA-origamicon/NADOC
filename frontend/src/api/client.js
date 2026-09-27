@@ -1,3 +1,4 @@
+import { withSurfaceProgress } from './surface_progress_request.js'
 import { expandCompactNucleotides as _expandCompactNucleotides, decodeAssemblyGeometry } from '../viewer/geometry_codec.js'
 import { recordPanelRequest } from '../ui/panel_loading.js'
 import { recordRequestDiagnostic } from '../perf/process_log.js'
@@ -2668,7 +2669,11 @@ async function _oxdnaJSON(method, path, body = undefined, { signal } = {}) {
   }
 }
 
-async function _oxdnaJSONRequest(method, path, body = undefined, { signal } = {}) {
+async function _oxdnaJSONRequest(method, path, body = undefined, options = {}) {
+  return withSurfaceProgress(path, docHeaders(), headers => _oxdnaJSONTransport(method, path, body, { ...options, headers }))
+}
+
+async function _oxdnaJSONTransport(method, path, body = undefined, { signal, headers } = {}) {
   // Job endpoints intentionally use a lightweight transport, but assembly jobs still
   // need the same flattened Design projection as ordinary simulation requests.  Without
   // this, the first job launched from a newly opened assembly either used the previous
@@ -2681,7 +2686,7 @@ async function _oxdnaJSONRequest(method, path, body = undefined, { signal } = {}
     phase: 'start', id: diagnosticId, method, path,
     suppressBusy: true, transport: 'job-json',
   })
-  const opts = { method, headers: { ...docHeaders() } }
+  const opts = { method, headers: { ...headers } }
   // Type-check rather than truthiness-check: a positional arg mix-up used to land a
   // non-signal here (e.g. `signal = true` from an `align` bound to the wrong param).
   // `if (signal)` waved that straight through to fetch, which rejects with an opaque
@@ -2740,8 +2745,12 @@ async function _backgroundJobList(path, { waitForIdle = true } = {}) {
 /** Binary sibling of _oxdnaJSON — returns the response as an ArrayBuffer (or null).
  *  When `onProgress` is supplied, stream into one pre-sized buffer (Content-Length)
  *  and report downloaded bytes so multi-megabyte visualization loads stay determinate. */
-async function _oxdnaBin(method, path, body = undefined, { signal, onProgress } = {}) {
-  const opts = { method, headers: { ...docHeaders() } }
+async function _oxdnaBin(method, path, body = undefined, options = {}) {
+  return withSurfaceProgress(path, docHeaders(), headers => _oxdnaBinRequest(method, path, body, { ...options, headers }))
+}
+
+async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProgress, headers } = {}) {
+  const opts = { method, headers: { ...headers } }
   if (signal != null) {
     if (!(signal instanceof AbortSignal)) {
       throw new TypeError(`_oxdnaBin(${method} ${path}): signal must be an AbortSignal`)
@@ -3137,7 +3146,7 @@ export const getOxdnaDisplaySurfaceBin = (id, align = true, params = {}) =>
 export const getDesignSurfaceBin = ({ color_mode = 'strand', probe_radius,
                                       detail = 'coarse' } = {}) =>
   _oxdnaBin('GET', `/design/surface-bin?color_mode=${color_mode}`
-                   + `&probe_radius=${probe_radius ?? (detail === 'chimerax' ? 0.14 : 0.28)}&detail=${detail}`)
+                   + `&probe_radius=${probe_radius ?? 0.06}&detail=${detail}`)
 /** All-atom flat-XYZ for the flexibility-map AVERAGE structure ({ready, atomistic:[…]}). */
 export const getOxdnaRmsfAtomistic = (id, opts) => {
   const { align } = _vizOpts(opts, 'getOxdnaRmsfAtomistic')
@@ -4045,7 +4054,7 @@ export async function getAtomisticBatch(positions, { signal, suppressBusy = fals
  * @param {number}  gridSpacing  nm
  * @returns {Promise<Record<string, {vertices: number[], vertex_count: number}> | null>}
  */
-export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadius = 0.28, gridSpacing = 0.20,
+export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadius = 0.06, gridSpacing = 0.20,
                                       { signal, suppressBusy = false } = {}) {
   return _request('POST', '/design/features/surface-batch', {
     positions,
@@ -4060,7 +4069,7 @@ export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadi
  * `segments` = [{helix_id, bp_start, bp_end}]. Returns the raw mesh JSON
  * ({vertices, faces, vertex_strand_index*, stats}); NOT a design response.
  */
-export async function getRegionSurface(segments, { colorMode = 'strand', probeRadius = 0.28,
+export async function getRegionSurface(segments, { colorMode = 'strand', probeRadius = 0.06,
                                                    signal, suppressBusy = false } = {}) {
   return _request('POST', '/design/surface/region', {
     segments,
@@ -4655,7 +4664,7 @@ export async function getInstanceGeometry(id) {
   return json
 }
 
-export async function getInstanceSurfaceGeometry(id, colorMode = 'strand', probeRadius = 0.28, gridSpacing = 0.20) {
+export async function getInstanceSurfaceGeometry(id, colorMode = 'strand', probeRadius = 0.06, gridSpacing = 0.20) {
   const q = `color_mode=${encodeURIComponent(colorMode)}&probe_radius=${probeRadius}&grid_spacing=${gridSpacing}`
   return _request('GET', `/assembly/instances/${id}/surface-geometry?${q}`)
 }

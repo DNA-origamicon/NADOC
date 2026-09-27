@@ -38,6 +38,7 @@ from skimage.measure import marching_cubes
 from backend.core.atomistic import Atom, VDW_RADIUS
 from backend.core.models import Design
 from backend.core.surface_acceleration import close_volume
+from backend.core.surface_progress import report, strand_scope
 
 
 # ── Strand colour palette ─────────────────────────────────────────────────────
@@ -287,6 +288,7 @@ def compute_surface(
     grid_spacing: float = 0.20,
     probe_radius: float = 0.28,
     radius_scale: float = 1.2,
+    continuous_field: bool = False,
 ) -> SurfaceMesh:
     """
     Unified molecular surface via morphological closing on scaled VdW spheres.
@@ -320,6 +322,19 @@ def compute_surface(
         export, pass a larger value (e.g. 1.56 ≈ 1.2 × 1.3) to inflate the
         envelope by ~30% so thin features print robustly.
     """
+    report("Extracting surface")
+    if continuous_field:
+        from backend.core.surface_tiled import continuous_cloud_surface
+
+        return continuous_cloud_surface(
+            [[a.x, a.y, a.z] for a in atoms],
+            [VDW_RADIUS.get(a.element, VDW_RADIUS["C"]) * radius_scale for a in atoms],
+            [a.strand_id or "" for a in atoms],
+            grid_spacing=grid_spacing,
+            probe_radius=probe_radius,
+            nuc_ids=[_nuc_key(a) for a in atoms],
+        )
+
     scaled_radii = {elem: r * radius_scale for elem, r in VDW_RADIUS.items()}
     grid, bbox_min = _build_occupancy_grid(
         atoms, scaled_radii, grid_spacing, padding=0.5 + probe_radius
@@ -345,14 +360,11 @@ CG_BEAD_RADIUS_NM = (
 )
 
 
-# ── ChimeraX-style publication surface parameters ───────────────────────────────────
-# ChimeraX's documented SES defaults are a 1.4 Å rolling probe and a 0.5 Å grid.
-# Use true VdW radii (the ordinary display/print surface deliberately fattens them).
-# Each DNA strand is surfaced independently, matching ChimeraX's default per-chain
-# grouping. Fine sampling is essential here: it keeps nick gaps real without making
-# the rounded strand shells read as coarse, punched-out polygons.
+# ── Figure-quality display parameters (legacy CHIMERAX API names) ──────────────
+# True VdW radii, a shared 0.5 Å continuous-field grid, and independent DNA strand
+# shells. Shells may overlap; this does not establish solvent accessibility.
 CHIMERAX_GRID_SPACING = 0.05  # nm (0.5 Å — ChimeraX default gridSpacing)
-CHIMERAX_PROBE_RADIUS = 0.14  # nm (1.4 Å — ChimeraX default water probe)
+CHIMERAX_PROBE_RADIUS = 0.06  # nm (Figure quality display default)
 CHIMERAX_RADIUS_SCALE = 1.0  # true VdW radii (no display 1.2× inflation)
 CHIMERAX_VOXEL_CAP = 36_000_000  # preserve fine triangulation on useful-size assemblies
 CHIMERAX_MAX_SPACING = 0.12  # nm (1.2 Å) — never fall back to coarse display polygons
@@ -396,6 +408,7 @@ def compute_surface_from_cloud(
     probe_radius: float = 0.28,
     radius_scale: float = 1.2,
     nuc_ids: list | None = None,
+    continuous_field: bool = False,
 ) -> SurfaceMesh:
     """Molecular surface from a raw point cloud (positions + per-atom VdW radius + per-atom
     strand id) instead of ``Atom`` objects — the fast fine-surface path fed by
@@ -407,6 +420,19 @@ def compute_surface_from_cloud(
     ``nuc_ids`` is the parallel per-point ``helix:bp:direction`` key. Supplying it makes the
     mesh carry a per-vertex NUCLEOTIDE identity, which is what lets per-cluster colouring
     resolve a strand that spans several clusters (LESSONS D15). One KD-tree query serves both."""
+    report("Extracting surface")
+    if continuous_field:
+        from backend.core.surface_tiled import continuous_cloud_surface
+
+        return continuous_cloud_surface(
+            positions,
+            np.asarray(radii) * radius_scale,
+            strand_ids,
+            grid_spacing=grid_spacing,
+            probe_radius=probe_radius,
+            nuc_ids=nuc_ids,
+        )
+
     positions = np.asarray(positions, dtype=np.float64)
     radii = np.asarray(radii, dtype=np.float64) * radius_scale
     if positions.shape[0] == 0:
@@ -476,6 +502,8 @@ def compute_split_surfaces_from_cloud(
     cap_voxels: int = CHIMERAX_VOXEL_CAP,
     max_spacing: float = CHIMERAX_MAX_SPACING,
     nuc_ids: list | None = None,
+    continuous_field: bool = False,
+    local_remesh: bool = False,
 ) -> SurfaceMesh:
     """Per-STRAND independent solvent-excluded surfaces, concatenated into ONE mesh.
 
@@ -487,8 +515,10 @@ def compute_split_surfaces_from_cloud(
     Every vertex belongs unambiguously to one strand, so the per-vertex colours are already
     solid (no crisp-zone flattening needed) and the separation is GEOMETRIC.
 
-    EXPENSIVE: one marching-cubes pass per strand.  Each strand's grid is cropped to its own
-    (small) bbox, and coarsened per strand by the voxel cap, so cost stays bounded."""
+    Legacy binary mode crops/coarsens each strand by the voxel cap. Figure quality
+    continuous-field mode instead preserves the requested spacing on a shared
+    world lattice, with halo tiles bounding working-grid memory. Final mesh size
+    still scales with surface area."""
     positions = np.asarray(positions, dtype=np.float64)
     radii = np.asarray(radii, dtype=np.float64)
     # One grouping pass, retaining first-appearance strand order AND atom order
@@ -497,9 +527,8 @@ def compute_split_surfaces_from_cloud(
     for i, sid in enumerate(strand_ids):
         groups.setdefault(sid or "", []).append(i)
 
-    # One marching-cubes pass PER strand, so total cost scales with strand count.  Split a
-    # global voxel budget across strands (floored) so a small design gets fine per-strand
-    # grids while a 200-staple origami auto-coarsens instead of hanging for minutes.
+    # Legacy binary extraction divides a global voxel budget across strands.
+    # Continuous Figure quality instead preserves resolution with bounded halo tiles.
     eff_cap = int(
         min(cap_voxels, max(2_000_000, _SPLIT_VOXEL_BUDGET // max(1, len(groups))))
     )
@@ -509,32 +538,42 @@ def compute_split_surfaces_from_cloud(
     parts_sid: list[str] = []
     parts_nuc: list[str] = []
     voff = 0
-    for s, rows in groups.items():
-        sub_pos = positions[rows]
-        if sub_pos.shape[0] < 4:
-            continue
-        sub_r = radii[rows]
-        gs = adaptive_grid_spacing_arr(
-            sub_pos, grid_spacing, cap_voxels=eff_cap, max_spacing=max_spacing
-        )
-        sub_nuc = [nuc_ids[i] for i in rows] if nuc_ids else None
-        m = compute_surface_from_cloud(
-            sub_pos,
-            sub_r,
-            None,
-            grid_spacing=gs,
-            probe_radius=probe_radius,
-            radius_scale=radius_scale,
-            nuc_ids=sub_nuc,
-        )
-        if m.vertices.shape[0] == 0:
-            continue
-        m = smooth_mesh(m, iterations=smooth)
-        parts_v.append(m.vertices)
-        parts_f.append(m.faces + voff)
-        parts_sid.extend([s] * m.vertices.shape[0])
-        parts_nuc.extend(m.vertex_nuc_ids or [""] * m.vertices.shape[0])
-        voff += m.vertices.shape[0]
+    for strand_index, (s, rows) in enumerate(groups.items(), 1):
+        with strand_scope(strand_index, len(groups)):
+            sub_pos = positions[rows]
+            if sub_pos.shape[0] < 4:
+                continue
+            sub_r = radii[rows]
+            gs = (
+                grid_spacing
+                if continuous_field
+                else adaptive_grid_spacing_arr(
+                    sub_pos, grid_spacing, cap_voxels=eff_cap, max_spacing=max_spacing
+                )
+            )
+            sub_nuc = [nuc_ids[i] for i in rows] if nuc_ids else None
+            m = compute_surface_from_cloud(
+                sub_pos,
+                sub_r,
+                None,
+                grid_spacing=gs,
+                probe_radius=probe_radius,
+                radius_scale=radius_scale,
+                nuc_ids=sub_nuc,
+                **({"continuous_field": True} if continuous_field else {}),
+            )
+            if m.vertices.shape[0] == 0:
+                continue
+            m = smooth_mesh(m, iterations=smooth)
+            if local_remesh:
+                from backend.core.surface_remesh import remesh_sharp_patches
+
+                m = remesh_sharp_patches(m)
+            parts_v.append(m.vertices)
+            parts_f.append(m.faces + voff)
+            parts_sid.extend([s] * m.vertices.shape[0])
+            parts_nuc.extend(m.vertex_nuc_ids or [""] * m.vertices.shape[0])
+            voff += m.vertices.shape[0]
 
     if not parts_v:
         return SurfaceMesh(np.empty((0, 3), np.float32), np.empty((0, 3), np.int32), [])
@@ -603,9 +642,11 @@ def smooth_mesh(
     Dinv = csr_matrix((1.0 / deg, (np.arange(n), np.arange(n))), shape=(n, n))
     W = Dinv @ A  # neighbour-averaging operator
 
-    for _ in range(iterations):
+    report("Smoothing mesh", 0, iterations)
+    for iteration in range(iterations):
         V += lamb * (W @ V - V)
         V += mu * (W @ V - V)
+        report("Smoothing mesh", iteration + 1, iterations)
 
     return SurfaceMesh(
         vertices=V.astype(np.float32),
@@ -754,7 +795,7 @@ def compute_colored_surfaces(
 # ── JSON serialisation ────────────────────────────────────────────────────────
 
 
-def vertex_index_tables(mesh: SurfaceMesh) -> dict:
+def vertex_index_tables(mesh: SurfaceMesh, *, arrays=False) -> dict:
     """Per-vertex identity as ``(unique table, per-vertex index)`` pairs — the compact
     wire form of ``vertex_strand_ids`` / ``vertex_nuc_ids``.
 
@@ -768,7 +809,13 @@ def vertex_index_tables(mesh: SurfaceMesh) -> dict:
     multi-material path); clients fall back to the strand pair.
     """
 
-    def _dedupe(ids: list[str]) -> tuple[list[str], list[int]]:
+    def _dedupe(ids: list[str]):
+        if arrays:
+            table = list(dict.fromkeys(ids))
+            lookup = {value: i for i, value in enumerate(table)}
+            return table, np.fromiter(
+                map(lookup.__getitem__, ids), dtype=np.uint32, count=len(ids)
+            )
         table: list[str] = []
         index: dict[str, int] = {}
         out: list[int] = []
@@ -796,6 +843,8 @@ def surface_to_json(
     design: Design,
     color_mode: str = "strand",
     t_ms: float = 0.0,
+    *,
+    array_payload: bool = False,
 ) -> dict:
     """
     Serialise a SurfaceMesh to a JSON-safe dict for the frontend.
@@ -809,7 +858,10 @@ def surface_to_json(
     ----------
     color_mode : 'strand' | 'uniform'
     t_ms : computation time in milliseconds (informational).
+    array_payload : internal binary transport only; retain typed arrays instead
+        of building Python number lists. The default remains JSON-safe.
     """
+    report("Packing surface attributes")
     # Build strand → RGB lookup (first-appearance order, matching helix_renderer.js)
     strand_rgb: dict[str, tuple[float, float, float]] = {}
     palette_idx = 0
@@ -830,10 +882,22 @@ def surface_to_json(
             strand_rgb[strand.id] = _PALETTE_RGB[palette_idx % len(_PALETTE_RGB)]
             palette_idx += 1
 
-    verts_flat = mesh.vertices.flatten().tolist()
-    faces_flat = mesh.faces.flatten().tolist()
+    tables = vertex_index_tables(mesh, arrays=array_payload)
+    verts_flat = (
+        mesh.vertices.ravel() if array_payload else mesh.vertices.flatten().tolist()
+    )
+    faces_flat = mesh.faces.ravel() if array_payload else mesh.faces.flatten().tolist()
 
-    if color_mode == "strand":
+    if color_mode == "strand" and array_payload:
+        palette = np.asarray(
+            [
+                strand_rgb.get(sid, _UNASSIGNED_RGB)
+                for sid in tables["vertex_strand_index_table"]
+            ],
+            dtype=np.float32,
+        ).reshape(-1, 3)
+        vertex_colors = palette[tables["vertex_strand_index"]].ravel()
+    elif color_mode == "strand":
         colors: list[float] = []
         for sid in mesh.vertex_strand_ids:
             rgb = strand_rgb.get(sid, _UNASSIGNED_RGB)
@@ -846,8 +910,6 @@ def surface_to_json(
     # surface client-side using the same palette/group/cluster overrides as
     # the bead view.  Sent as (unique_id_list, index_per_vertex) to keep the
     # payload small for large meshes.
-    tables = vertex_index_tables(mesh)
-
     out = {
         "vertices": verts_flat,
         "faces": faces_flat,

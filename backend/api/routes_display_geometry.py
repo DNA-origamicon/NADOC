@@ -47,7 +47,7 @@ class SurfaceRegionRequest(BaseModel):
     segments: List[RepresentationSegment]
     color_mode: str = "strand"
     grid_spacing: float = 0.20
-    probe_radius: float = 0.28
+    probe_radius: float = 0.06
     radius_inflate: float = 1.30
     smooth: int = 15
 
@@ -305,7 +305,7 @@ def get_surface(
     Query params:
       color_mode      — "strand" (per-vertex strand colours) or "uniform".
       grid_spacing    — voxel size in nm (default 0.20; lower = finer).
-      probe_radius    — groove-fill radius in nm (default 0.14 for chimerax, otherwise 0.28).
+      probe_radius    — groove-fill radius in nm (default 0.06).
       radius_inflate  — extra atom-radius fattening (default 1.30; 1.0 = bare).
       smooth          — Taubin smoothing iterations (default 15; 0 = off).
 
@@ -351,7 +351,7 @@ def get_surface_bin(
     mesh = _build_design_surface_mesh(
         design, grid_spacing, probe_radius, radius_inflate, smooth, detail
     )
-    data = surface_to_json(mesh, design, color_mode=color_mode)
+    data = surface_to_json(mesh, design, color_mode=color_mode, array_payload=True)
     return Response(
         content=pack_surface_bin(data), media_type="application/octet-stream"
     )
@@ -375,9 +375,11 @@ def _build_design_surface_mesh(
     )
 
     if probe_radius is None:
-        probe_radius = 0.14 if detail == "chimerax" else 0.28
-    if detail == "chimerax":
-        return _build_chimerax_surface(design, probe_radius=probe_radius)
+        probe_radius = 0.06
+    if detail in {"chimerax", "continuous", "remeshed"}:
+        return _build_chimerax_surface(
+            design, probe_radius=probe_radius, local_remesh=detail != "continuous"
+        )
     # The CG bead cloud only describes nucleotides.  Imported proteins live in
     # ``protein_attachments`` and therefore require the atom model; otherwise a
     # design that visibly contains a protein silently produces a DNA-only
@@ -449,10 +451,12 @@ def _build_design_surface_mesh(
     return smooth_mesh(mesh, iterations=smooth)
 
 
-def _build_chimerax_surface(design, *, probe_radius=0.14):
-    """Publication-quality DNA SES (``detail='chimerax'``).
+def _build_chimerax_surface(
+    design, *, probe_radius=0.06, continuous_field=True, local_remesh=True
+):
+    """Continuous-field Figure quality (legacy ``detail='chimerax'`` name).
 
-    Uses a 0.5 Å target grid, adjustable probe (default 1.4 Å), true VdW radii, and
+    Uses a 0.5 Å target grid, adjustable probe (default 0.6 Å), true VdW radii, and
     per-chain grouping. NADOC maps that grouping to one independent shell per DNA strand,
     retaining independent strand shells (which may overlap).
     """
@@ -485,7 +489,13 @@ def _build_chimerax_surface(design, *, probe_radius=0.14):
         sids = [a.strand_id or "" for a in model.atoms]
         nucs = [_nuc_key(a) for a in model.atoms]
     return compute_split_surfaces_from_cloud(
-        pos, radii, sids, nuc_ids=nucs, probe_radius=probe_radius
+        pos,
+        radii,
+        sids,
+        nuc_ids=nucs,
+        probe_radius=probe_radius,
+        continuous_field=continuous_field,
+        local_remesh=local_remesh,
     )
 
 

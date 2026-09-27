@@ -3299,7 +3299,7 @@ class OxdnaFramesAtomisticBody(BaseModel):
 class OxdnaFramesSurfaceBody(BaseModel):
     frame_indices: list[int]
     color_mode: str = "strand"
-    probe_radius: float = 0.28
+    probe_radius: float = 0.06
     grid_spacing: float = 0.20
     radius_inflate: float = 1.30
     smooth: int = 15
@@ -3936,24 +3936,13 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
 
 class OxdnaSurfaceBody(BaseModel):
     color_mode: str = "strand"
-    probe_radius: float = 0.28
+    probe_radius: float = 0.06
     grid_spacing: float = 0.20
     radius_inflate: float = 1.30
     smooth: int = 15
     detail: str = (
         "coarse"  # 'coarse' = fast CG-bead envelope (default) | 'fine' = full all-atom
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def preset_probe_default(cls, values):
-        if (
-            isinstance(values, dict)
-            and "probe_radius" not in values
-            and values.get("detail") == "chimerax"
-        ):
-            return {**values, "probe_radius": 0.14}
-        return values
 
 
 @router.post("/oxdna/jobs/{job_id}/display-atomistic")
