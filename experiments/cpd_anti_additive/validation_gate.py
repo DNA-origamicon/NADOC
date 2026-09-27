@@ -212,8 +212,11 @@ def evaluate(policy_path=POLICY, packet_path=None, stage='acquisition'):
                 scope='Fragment contract only; successful acquisition is not candidate acceptance or DNA validation')
 
 
-def require_fit_ready():
+def require_fit_ready(stage=None):
     """All parameter fitting entry points call this before creating outputs."""
+    if stage is not None:
+        from experiments.cpd_anti_additive.preliminary_protocol import require
+        return require(stage)
     if (STATE / 'candidate_lock.json').exists():
         raise RuntimeError('CPD fitting blocked: candidate locked for holdout; a new preregistered validation version is required to resume fitting')
     path = STATE / 'dataset_lock.json'

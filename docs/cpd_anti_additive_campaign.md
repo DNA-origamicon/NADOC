@@ -1,8 +1,356 @@
 # Cis-anti-I additive parity campaign
 
-**Paused by user — 2026-09-25.** No new simulations, automatic retries or parameter fits until explicit resume. Latest +15 branch remains unconverged; native evidence and validation gates are preserved. See [closeout](cpd_anti_closeout_20260925.md).
+**Resumed by user — 2026-09-25.** The instruction “Begin next steps. Then resume the campaign to get to NAMD testable cis-anti CPDs” activates the bounded [preliminary protocol v2](cpd_preliminary_protocol_v2.md). The earlier [closeout](cpd_anti_closeout_20260925.md), failed results and v1 gates remain historical evidence.
 
-**Current workflow:** [fixed validation protocol v1](cpd_validation_protocol.md) governs further work. Finish acquisition and basin closure; do not launch another parameter fit before its dataset gate passes. Historical completion notes below do not override this gate.
+**Second fit closed at original deadline — 2026-09-27 04:29:42 UTC.** The
+[recovery closeout](cpd_anti_shape_fit_closeout_20260927.md) records69 complete
+models and an interrupted70th. Selected model61 improves exposed energy RMS/max
+to0.294398/0.915744kcal/mol and retains three endpoint1 shape failures: RMSDs
+0.296755,0.320938,0.321259Å against0.25Å. All three representatives pass. Full
+native audit of36 recovered models plus24 recorded fragments of70 passes;
+original33-model evidence is unchanged. Peak recovery memory approximately672MiB.
+The wake token `5b5de21a-1f24-4815-8a3f-36f4abb54225` / `complete` was ACKed
+04:30:00UTC. This was wall-budget termination, not optimizer convergence or a
+minimum/scientific certificate. Both rounds and wall budget are exhausted; no
+automatic continuation. `cpd-anti-shape-closeout-v2-r2/assessment.json` pins the
+failed selected trial and all evidence. No active fit, newQM, contextMD or cloud.
+
+**Second fit interrupted by memory limit — 2026-09-27 02:41:50 UTC.**
+Kernel/systemd evidence identifies a6GiB cgroup OOM. Supervisor and worker are
+dead; the preserved service `status.json` is stale (`running`). Wake
+`2c49745f-d67f-4036-9db5-0acec5e1b04e` / `supervisor_stopped` ACKed02:43:38UTC.
+The service's `completion_delivery_verified.json` independently checks all33
+complete model evaluations plus16 complete fragments of model34:874 complete
+fragment optimizations /29,870 saved MM evaluations and their final E/F.
+The interrupted seventeenth fragment has8 cached evaluations and is nonstationary.
+Lowest-objective completed model32 has energy RMS.426142/max1.127347 kcal/mol
+over23 exposed cases and six shape failures, including a new endpoint1+30 failure.
+No model passed all gates; this is not a completed fit or minimum certificate.
+
+**Recovery launch history — 2026-09-27 04:16:06 UTC (now closed above).** The user explicitly instructed
+“Resume with the interrupted round.” The [memory-isolation recovery](cpd_anti_shape_fit_oom_recovery_20260927.md)
+verified its frozen plan and preparation checks, recorded the authorization, and
+launched `cpd-anti-shape-fit-recovery-service-v1`. Output:
+`cpd-anti-shape-fit-recovery-v1`. It reuses the33 completed models and the saved
+model34 prefix with fresh processes per uncached model. Model34's independent
+native audit verifies26 fragments /909 saved evaluations and preserves six shape
+failures. At handoff,41 models were complete; service peak memory672MiB. All33 prior
+residuals and complete/partial Sella prefixes reproduced during preparation;
+four guard tests passed. Limits remain6GiB,360 vectors,max_nfev12,original
+per-case caps and absolute fit deadline04:29:42UTC (about815 seconds remained
+at launch). No clock or round reset. The separate watcher subsequently delivered
+token `5b5de21a-1f24-4815-8a3f-36f4abb54225`, now ACKed as above. No automatic repeat.
+
+**Second/final fit round launched — 2026-09-27 02:29:42 UTC (original process stopped; authorized recovery above).** The
+[shape-v2.2 contract](cpd_anti_shape_fit_v2_r2.md) is frozen in
+`cpd-anti-shape-inputs-v2-r2`. The registered successor state
+`cpd-anti-shape-state-v2-r2` inherits the original round and has reserved round two;
+the original candidate lock/policy/ledger are preserved. Both permitted rounds
+are now consumed; the explicitly authorized recovery above has ended.
+No duplicate, third fit or automatic further recovery is permitted.
+Service `cpd-anti-shape-fit-service-v2-r2` ran locally on CPUs4–7 with a 6GiB cap,
+two-hour fitting wall budget and 2.25-hour service limit. It fits 22 coefficients
+against all23 exposed structures plus three representatives, using Sella geometry
+optimization and an objective that includes geometry as well as energies. Limits:
+360 total model evaluations including Jacobian probes, max_nfev12, no continuation.
+Independent audit of its initial model verifies all26 structures/879 saved native
+MM evaluations and final E/F replays, preserving the same eight shape failures.
+Six lineage/budget guard tests and15 static export checks pass. The external
+watcher token `2c49745f-d67f-4036-9db5-0acec5e1b04e` was delivered/ACKed as above.
+Future validation uses preregistered ±18.75° targets only after an exposure audit
+and revised-candidate registration; old ±22.5° targets remain exposed. No context
+MD, minimum claim, app promotion or cloud spending.
+
+**Sella default and scientific continuation — 2026-09-27 UTC.** The user selected
+Sella for future molecular geometry work and requested scientific qualification.
+The [continuation report](cpd_anti_scientific_qualification_20260927.md) records the
+fixed gates, completed native audits, prospective scores and shape diagnosis.
+All four prospective targets now pass independent constrained QM stationarity
+(73 native gradients) and fixed-candidate MM stationarity (133 evaluations).
+The complete prospective energy test passes: RMS 0.855945 / maximum 1.621983
+kcal/mol. Endpoint 1 −22.5° fails the retained shape descriptor (RMSD0.33480Å);
+the seven exposed mismatches also remain. Scientific qualification still fails.
+The [candidate closeout and shape-correction review](cpd_anti_shape_correction_review_20260927.md)
+records the complete result and bounded next correction design. The acquisition
+wake `a88710de-cc8e-4d06-b9c8-116f9aed758e` was acknowledged at 02:06:33 UTC;
+native delivery evidence is in the QM service's `completion_delivery_verified.json`.
+`cpd-anti-prospective-score-v2-r1` is frozen and reentrant by completed target;
+all four attempts are now complete and must not be rerun. Second scoring service
+`cpd-anti-prospective-score-service-v2-r1-b` completed at 02:07:17 UTC; independent
+`scientific_review.json` reproduces all four scores. Its token
+`3f5b0f34-03f8-4151-bf1c-7e2c01fdfd05` was delivered and ACKed at 02:19:31 UTC.
+Fresh `completion_delivery_verified.json` reproduces all73 QM gradients/133 MM
+evaluations and four final E/F checks without changing the earlier review.
+First scoring service `cpd-anti-prospective-score-service-v2-r1-a` completed;
+token `7f89baac-4fc6-4060-86c0-4147f5b7943a` was delivered and acknowledged
+at 2026-09-27 01:43:24 UTC. Read-only delivery review reproduces all 54 native QM
+gradients and 97 saved MM evaluations, with all existing verdicts preserved.
+The service contains `completion_delivery_verified.json` and an immutable copy
+of the three-target scoring progress (`scoring_progress_snapshot.json`). Four
+scoring guard tests pass. `cpd-anti-shape-model-diagnosis-v1c` examines all 23
+saved pairs and inventories the actual ring/cap proper terms. Half the fitted
+coefficients have zero tangent derivative under the scan constraint (66 checks);
+baseline shape failures improved 10→7, but lower +15° regressed 0.1366→0.6885Å.
+Earlier diagnostic v1 failure/v1b classification erratum are retained. Candidate
+lock, policy and original used-round ledger remain unchanged. The successor fit
+above is now closed at its original deadline; no new QM, context production
+or app promotion yet.
+Sella preference: `memory/feedback_sella_default.md`. No cloud spending.
+
+**Full-DNA NAMD-testable milestone reached — 2026-09-26 22:25:57 UTC.**
+The corrected cis-anti and control each passed100ps in30,867-atom explicit solvent.
+Independent replay verifies four static E/F comparisons,200 saved frames plus
+two final geometries, chemical stereo/bond/contact/piercing integrity, and finite
+native energy/final forces. See the [full-system report](cpd_anti_full_dna_engine_20260926.md)
+and [portable runnable bundle](../.development-artifacts/cpd-anti-solvated-namd-bundle-v2-r1/README.md).
+This completes isolated engine testing; scientific qualification, product placement
+and minimum certification remain incomplete. Next scientific stage: the four
+registered prospective QM targets against the locked candidate, retaining seven
+exposed profile geometry mismatches. No automatic refit, trajectory extension or
+normal app integration. No cloud spending.
+
+**Prospective QM validation launched — 2026-09-26 22:40:54 UTC.**
+Delayed solvent-construction v1 wake `8f08635d-0b1f-44e7-a5ee-58f2101a614e`
+was acknowledged at22:33:02UTC. Both native logs confirm parameter-stream startup
+rejection before any energy/minimization/MD; old failure preserved, no duplicate
+construction. The [prospective validation handoff](cpd_anti_prospective_validation_20260926.md)
+now formally registers the first-round candidate and four prescribed ±22.5° targets.
+The new `conformational_candidate_lock.json` blocks further fitting; existing
+input locks/policy and one-used-fit-round ledger are unchanged. Preflight verifies
+exact case/reference identities, chemical stereochemistry, new target angles,
+Sella constraint convention and independent projection. No QM during registration.
+`cpd-anti-prospective-qm-service-v2-r1` is active with its watcher armed; first
+49-atom native MP2 evaluation is running. Four sequential local Sella cases,
+≤40 gradients each/160 total,≤6h per case/12h total,4 CPU threads,6GiB Psi4/10GiB
+service,zero continuations. Check current status before any launch; delayed wakes
+must not start duplicates. Next after acquisition: independent native review and
+one fixed-candidate MM scoring pass, not a refit. No minimum or research certificate.
+
+**Delayed v1c construction wake reviewed — 2026-09-26 22:44:59 UTC.**
+Token `1bdb0fa8-33ef-4994-8a97-098d4259f038` acknowledged. Read-only replay
+verifies frozen inputs, eight native logs/1508 finite energy rows and30 saved
+frames. Both cases stopped at750 minimization steps after D000:7:C3′ inversion;
+first inverted saved frames are550anti/650control. Final forces44.046/80.555
+kcal/mol/Å include positional restraints; neither case reached the unrestrained
+phase or dynamics. The failure and source-reference caveat remain unchanged.
+The active prospective service/watch process identities were checked: first point
+has two completed gradients at this snapshot. Its first native electronic response
+9.649e−11 passes1e−10, while projected force0.00820787au is nonstationary. No
+new calculation or duplicate service was launched in response to this delayed wake.
+Receipt: `cpd-anti-solvated-construction-service-v1c/completion_delivery_verified.json`.
+
+**Delayed stereo-protected construction wake reviewed — 2026-09-26 22:51:54 UTC.**
+Token `70e14be3-e04f-4e45-9373-c508ccd81f1c` acknowledged. Read-only replay
+verifies frozen inputs, 400 native logs / 20,400 finite energy rows and 400 saved
+frames across both cases. Each completed 10,000 steps, including 5,000 with all
+temporary restraints removed. Chemical stereochemistry and final bond/contact/
+piercing screens pass; final solute forces 36.301/38.568 kcal/mol/Å still fail
+the unchanged 0.01 stationarity criterion, and both placement screens remain failed.
+The original independent review is byte-identical and matches its downstream
+engine-plan pin. No minimum certification or historical verdict changed.
+Receipt: `cpd-anti-stereo-protected-construction-service-v2/completion_delivery_verified.json`.
+The active prospective QM supervisor and external watcher were verified alive.
+Four completed gradients at the first target were independently checked against
+native printed energies/gradients, electronic-response residuals, chemical stereo
+and three finite-difference projection steps. Latest projected maximum is
+0.00709593 au, still nonstationary. Candidate/input hashes remain frozen; the
+remaining three targets are queued. No duplicate calculation or cloud spending.
+Continue the existing batch under its registered caps, then perform the prescribed
+independent review and fixed-candidate scoring. The NAMD milestone above remains passed.
+
+**Delayed engine v2 failure wake reviewed — 2026-09-26 22:55:21 UTC.**
+Token `bec5870a-93eb-4c37-823e-b21c2b9c1cd4` acknowledged. Native replay verifies
+both 3043-atom solute static comparisons under the unchanged absolute-or-relative
+tolerances. Both solvent fixtures fail PSF startup (`DIDN'T FIND "NATOM"`);
+their declared title record is blank. No solvent energy, minimization or MD ran.
+The later v2e solvent PSFs differ only in that title line; the original failed
+assessments/logs and downstream hash pins remain intact. Verification receipt:
+`cpd-anti-solvated-engine-service-v2/completion_delivery_verified.json`.
+At 22:57:11 UTC, prospective QM supervisor/watcher remain alive and input/candidate
+hashes match. First target has five completed gradients; latest native energy,
+printed gradient, electronic response and independent projection were checked.
+Projected maximum 0.00204913 au still fails stationarity. Continue the registered
+batch; no duplicate run, refit, minimum claim or cloud spending.
+
+**Delayed engine v2d failure wake reviewed — 2026-09-26 22:58:09 UTC.**
+Token `79b56005-d132-48c7-acde-22d1c85dcd4e` acknowledged. Replay of four v2d
+static logs reproduces passing solute comparisons and failing solvent force
+differences 0.00158725/0.00176688 kcal/mol/Å against the unchanged 0.001 limit.
+Solvent energies pass; no minimization or dynamics ran. Replay of the two saved
+precision-diagnostic logs gives force differences 0.0000250293/0.0000243028.
+Their coordinates, PSFs, PDBs and references are byte-identical to v2d; configuration
+differs only by `bondedGPU 0`. Later v2e uses that setting for both static tests
+and MD. Original failures, input hashes and downstream pins remain intact.
+Receipt: `cpd-anti-solvated-engine-service-v2d/completion_delivery_verified.json`.
+At 23:00:02 UTC the existing prospective QM supervisor/watcher are alive, candidate
+and inputs frozen, with six native gradients independently verified at target one.
+Latest projected maximum 0.00187437 au remains nonstationary. Three other targets
+are queued. Continue the existing bounded batch; no duplicate calculation,
+threshold change, refit, minimum certificate or cloud spending.
+
+**Delivered engine v2e completion verified — 2026-09-26 23:01:16 UTC.**
+Token `8751ba64-5c1a-4491-a580-0259886dd234` acknowledged. Read-only replay of
+native forces/energies against the saved independent references confirms all four
+static comparisons. Both 100,000-step trajectories reproduce the archived review:
+200 saved frames plus two final geometries pass the chemical stereo, bond, contact
+and piercing screens; all 202 energy records and final forces are finite. Native
+configs use 1 fs and CPU bonded terms, without further minimization or artificial
+restraints. The original review/final-geometry files and prospective input pin
+remain unchanged. All 104 portable-bundle files (125,113,925 bytes) match their
+manifest. Receipts: `cpd-anti-solvated-engine-service-v2e/completion_delivery_verified.json`
+and `portable_bundle_delivery_verified.json`. No new energy calculation or MD.
+At 23:02:29 UTC the existing prospective QM supervisor/watcher are alive; seven
+completed gradients at target one independently pass native evidence/chemistry
+checks, but projected maximum 0.00274370 au remains above stationarity tolerance.
+Candidate/input hashes are frozen. Continue that bounded acquisition, followed by
+the registered independent review and fixed-candidate scoring. No automatic refit,
+trajectory extension, minimum certification, research qualification or cloud spending.
+
+**Review after closeout:** the user confirmed the next target is a preliminary
+additive NAMD model for exploratory structural simulations, with documented
+limitations. The [QM-to-MD workflow review](cpd_cis_anti_workflow_review_20260925.md)
+identifies objective/validation mismatches and proposes bounded stages. That review
+ran no calculations; the subsequent explicit resume activates v2.
+
+**Current workflow:** v2 uses independent, hash-locked stage inputs and finite
+round budgets. Original scripts still enforce [v1](cpd_validation_protocol.md);
+new fitting entry points must explicitly name their v2 stage. The bounded
+default-constraint QM test is terminal: native convergence failed the independent
+projected-force check. The water-minimum/dipole charge fit has completed and passed
+its fixed water criteria. The fresh Sella attempt now passes independent constrained
+stationarity after 20 gradients/55.5 minutes. The subsequent user-authorized
+first torsion fit is complete: all19 relaxed energies pass (RMS0.5421,
+maximum1.0099kcal/mol), and the three registered representative geometries pass
+0.03Å/3°. Seven profile geometry descriptors and prospective validation remain
+unresolved. Conformational inputs are now hash-locked; one of two fit rounds is used.
+The updated62-atom candidate passes ten native comparisons and100ps NAMD;
+full3043-atom DNA passes static native comparison with parent sugar/phosphate
+retained. The new bounded SLSQP DNA construction failed at1000 iterations:
+mobile force1.36065>0.01kcal/mol/Å, base displacement14.0515>3.5Å. No extension or
+full-DNA dynamics followed from that failed attempt. Those jobs are terminal;
+the corrected-source construction and isolated engine test below are current. See the
+[fit/native/construction report](cpd_anti_conformational_results_20260926.md) and
+[engineering bundle](../.development-artifacts/cpd-anti-namd-engineering-bundle-v2-r1/README.md).
+No scientific qualification or normal app integration has been granted.
+
+**Current source repair and full-system engine test — 2026-09-26:** the delayed fitted-conditioning
+wake `8f4a206c-9f01-42fa-a115-dbd4a56a044e` was acknowledged at21:40:33UTC;
+the1000-iteration/1.36065-force/14.0515Å failure was independently reproduced.
+The [source-stereo repair](cpd_anti_source_stereo_repair_20260926.md) now uses
+chemically mapped QM sugar references and a concrete four-coordinate-per-case
+reconstruction. Native psfgen's unsuccessful guesses remain archived. The explicit
+reconstruction fixes the two diagnosed sugar signs. The separately frozen
+`cpd-anti-stereo-protected-construction-service-v2` completed10ksteps per case,
+including5000 after all temporary restraints were removed, and repaired adjoining
+phosphate bonds. Independent replay verifies400 native logs/400 saved frames:
+all mapped sugar and lesion stereochemistry retained; no final severe contacts,
+piercings or bond violations. Forces36.30/38.57 and base displacement8.254/3.505Å
+still fail stationarity0.01 and product displacement3.5, separately scored;
+the immutable v2 engine criteria do not require whole-DNA minimum certification.
+An isolated100ps-per-case NAMD smoke completed under
+`cpd-anti-solvated-engine-service-v2e`:30,867 atoms,300K,1fs,normal masses,PME,
+no further minimization/restraints. Both cases passed independent native replay;
+the runnable bundle and report are linked above. Earlier engine v2 solvent-PSF
+format failure and v2b/v2c prelaunch
+checks are retained; zero MD steps consumed. V2d changes only the solvent-fixture
+title line. V2d then failed the solvent force check (.001587/.001767 >.001);
+CPU-bonded diagnostic gives .00002503/.00002430 with identical physical inputs.
+V2e uses `bondedGPU 0` in both comparisons and MD; no tolerance change or prior
+MD steps. Direct solute/solvent energy-force checks passed before MD. This engineering
+stage carries all unresolved scientific and product-placement metrics.
+No old verdict, threshold, policy hash, parameter or fit budget changed.
+
+**Delayed fit wake received — 2026-09-26 21:07:54 UTC:** token
+`e84c10a1-cc03-434f-98bb-f53a1c5529bd` acknowledged. All38 saved MM relaxations/
+1323 evaluations and downstream report hashes verified; no duplicate calculation.
+The [construction-method review](cpd_anti_construction_method_review_20260926.md)
+finds increasing displacement despite decreasing vacuum energy, including22.03Å
+at an unmodified remote nucleotide. The next method direction is solvated,
+neutralized, staged-restraint construction with an undamaged control, under a
+separate bounded engineering plan. Existing criteria, failures and fitting budget
+are unchanged.
+
+**Delayed native wake and solvent construction — 2026-09-26:** token
+`b9d98b9c-40cb-4729-80a5-d760ea8c5d15` acknowledged at21:13:47UTC.
+Saved native forces/energies and102 geometries independently replayed; all ten
+QM-referenced stereocenters preserved. The
+[paired solvent construction](cpd_anti_solvated_construction_20260926.md)
+now has frozen executable inputs:30,867 atoms per case,9223 TIP3P waters,
+124Na+/31Cl−,identical solvent/ions,unchanged CPD/native-DNA potential.
+An unpatched source control retains its known starting defects explicitly.
+`cpd-anti-solvated-construction-service-v1c` ran staged native minimization under
+at most10,000 steps/case and2h total, with250-step geometry checks and no MD.
+V1 native format failure and V1b preparation failure occurred before any energy
+or minimization and are retained. Parameter-only export passes exact full-system
+equivalence; criteria and physical budgets were not expanded. **Both cases failed
+at750 steps on D000:7:C3′ inversion**; neither reached unrestrained minimization.
+Independent review verifies eight native logs and30 saved frames. A separate
+source audit finds D002:26:C3′ opposite to both QM sugar references and95 other
+source nucleotides. Historical source-relative chirality preservation is not
+absolute chemical validation. This failed construction is terminal; the later source
+repair and reviewed construction are described above. No old failure was extended
+or relabeled; no minimum certification.
+
+**First resumed results:** the new charge fit passes all 17 clean water curves;
+a complete 62-atom, two-nucleoside anti fixture passes 10 native engine comparisons
+and 100 ps of NAMD dynamics. Full DNA and conformational qualification remain
+unfinished. See [results and bounded continuation](cpd_anti_resume_results_20260925.md).
+Full-DNA topology/parameter transfer now passes at the frozen 96-nucleotide site
+(`cpd-anti-dna-topology-v2b`), retaining native parent sugar/phosphate terms.
+Rigid base-only placement fails the existing screens: fixed sugars compress
+glycosidic bonds to about 1 Å. The shared-frame rejection artifact is linked from
+the results report. The bounded local construction (`cpd-anti-local-placement-v2`)
+stopped at step24 on neighboring sugar inversion. Independent review confirms
+the last valid iterate is nonstationary and identifies seven inherited parent-DNA
+bond defects, four outside the movable region. The failure and shared-frame
+diagnostic remain archived; no continuation or dynamics. Full-DNA NAMD requires
+source-geometry conditioning as well as the anti patch.
+The versioned source-conditioning diagnostic `cpd-anti-source-conditioning-v1b`
+stopped at its 500-iteration constrained-phase cap. All seven inherited bond
+defects now pass the construction screen; stereochemistry is preserved and the
+two remote severe contacts are gone. However, maximum mobile force is
+19.7611 kcal/mol/Å, and the unconstrained phase never ran. This remains a failed
+construction, with independent evidence and a new shared-frame A/B archived.
+
+Cached QM analysis reproduces the optimizer's premature convergence: its
+internal-coordinate projection reports 2.616e−6 au, while the exact Cartesian
+tangent maximum is 4.6722e−5 au, above the unchanged 1.5e−5 limit. A corrected
+stopping check is implemented and tested. `cpd-anti-projection-repair-proposal-v1`
+prepares at most 15 additional gradients (25 already used; 40 cumulative),
+two hours, one restart and no further continuation. This required an explicit
+exception because the frozen v2 policy permits zero continuations. The user
+subsequently selected a fresh Sella attempt instead; the geomeTRIC correction
+remains unlaunched. An obsolete completion wake does not approve that exception.
+No torsion fit or full-DNA dynamics may follow from the failed results.
+
+**Fresh Sella attempt — explicitly authorized 2026-09-26:** the user selected
+“a from scratch attempt” through Sella. The [frozen attempt record](cpd_anti_sella_attempt_20260926.md)
+starts from the original screened 49-atom +15° lower-basin seed, with new optimizer
+and Hessian state and no replayed gradients. Sella 2.6.0/Psi4 1.11, unchanged
+DF-MP2 method and final force criteria; at most 60 new gradients/six hours,
+no automatic continuation. Three regression tests and native analytic/cached-data
+interface checks passed without new QM. Artifacts: `cpd-anti-sella-fresh-v1`;
+external service/watcher: `cpd-anti-sella-service-v1`. This is a separate versioned
+method attempt; the old geomeTRIC continuation remains unlaunched and is no longer
+the selected next step. No fitting or full-DNA dynamics is chained to the result.
+Completed 19:23 UTC after20 gradients/55.5min; token
+`a4dba472-7edd-497e-9d8b-cc0eef55d68c` received and acknowledged. All20 native
+energies/printed gradients, hashes and trajectory/export coordinates independently
+verified. Final tangent max1.4434545e−5/RMS6.2129007e−6 au and torsion1.219e−8°
+pass the original limits; chemistry preserved. **Constrained stationarity only,
+no Hessian/minimum certification.** The failed geomeTRIC results remain failed.
+`cpd-anti-conformational-inventory-v2b` now contains all15 historical+4lower cases,
+retaining exposed branch identities and explicit common-reference proposals.
+New+15 is1.41969kcal/mol below the old+15 conformer and2.50790above the lower
+reference. No fit or new acquisition was run during this completion review.
+
+**Public-method search — 2026-09-26 UTC:** the requested
+[QM/parameterization alternatives review](cpd_qm_md_alternatives_20260926.md)
+identifies Sella/DL-FIND as independent optimizers, ORCA plus ffTK as a conventional
+CHARMM route, and ForceBalance energy/force fitting as a distinct way to reuse
+verified nonstationary QM snapshots. The latter requires a versioned fitting
+protocol, not reclassification of failed scan points. The review ran no calculations
+and changed no policy; the user subsequently selected the Sella attempt above.
 
 Started 2026-09-20 at the user's request to bring cis-anti-I to cis-syn-I's level.
 User-confirmed target: additive CHARMM parity with the preliminary cis-syn v6

@@ -18,6 +18,8 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 
 - [CPD strand builder](project_cpd_strand_builder.md) — preliminary additive cis-syn support, packaged assets, scope and verification.
 
+- [Sella default](feedback_sella_default.md) — user-selected optimizer for new molecular QM/fragment-MM geometry work; preserve independent gates and frozen evidence.
+
 - [Long-job completion and wakeups](feedback_long_job_completion.md) — event-driven completion, estimated deadlines, and acknowledged agent delivery.
 
 - [Development artifact cleanup](feedback_development_artifact_cleanup.md) — temporary work is deleted; retained evidence belongs in `.development-artifacts/`, outside the user workspace.
