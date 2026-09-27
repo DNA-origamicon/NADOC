@@ -26,6 +26,10 @@ from backend.api.assembly import _WORKSPACE_DIR
 from backend.api.assembly import router as assembly_router
 from backend.api.crud import router as crud_router
 from backend.api.doc_context import DocContextMiddleware
+from backend.api.surface_progress import (
+    SurfaceProgressMiddleware,
+    router as surface_progress_router,
+)
 from backend.api.documents import router as documents_router
 from backend.api.routes import router
 from backend.api.routes_animations import router as animations_router
@@ -295,6 +299,13 @@ def _begin_runpod_reload_handoff() -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Server startup/shutdown hook."""
+    from backend.core.surface_acceleration import initialize_surface_cuda
+
+    surface_cuda_ready = await asyncio.to_thread(initialize_surface_cuda)
+    logger.info(
+        "Surface acceleration: %s",
+        "CUDA ready" if surface_cuda_ready else "CPU fallback",
+    )
     _WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
     from backend.core import alpine_operations
 
@@ -355,9 +366,11 @@ async def _cpd_capability_error_handler(request, exc):
         content={"detail": {"code": "cpd_parameters_unavailable", "message": str(exc)}},
     )
 
+
 # Bind each request's document (X-NADOC-Doc header / ?doc=) to a ContextVar so
 # state.py / assembly_state.py resolve the right per-document session.  Pure-ASGI
 # middleware (not BaseHTTPMiddleware) so the value propagates to the endpoint.
+app.add_middleware(SurfaceProgressMiddleware)
 app.add_middleware(DocContextMiddleware)
 
 # Structural exports and geometry payloads are highly compressible text. A
@@ -376,6 +389,7 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+app.include_router(surface_progress_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
 app.include_router(crud_router, prefix="/api")
 app.include_router(design_loadouts_router, prefix="/api")

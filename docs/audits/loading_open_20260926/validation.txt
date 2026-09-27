@@ -1,0 +1,9 @@
+2026-09-26 — active visualization opportunities 6 and 7
+Final just test-frontend: 543 files passed; 7072 tests passed, 1 skipped; 82.69 s.
+Initial full frontend: 7070 passed, 1 failed, 1 skipped. Timing-dependent meeting_trajectory test assumed SHA-256 completed within 10 ms; now waits for next request. Production module unchanged.
+Final isolated browser: 1 passed, 41.6 s. Eight pixel states and picking equal; no browser/shader errors.
+Unchanged colour/alpha repaint WebGL uploads: 10 calls / 169152 bytes -> 0 / 0 for spheres and impostors.
+Rapid queued scrubs: seven reads -> two; final requested page 48 applied.
+Guarded paired CPU benchmark: exact matrix/colour/alpha comparisons; results in benchmark.json.
+User-opened test session used; no bypasses. No backend behavior change in this batch.
+All inventoried test paths absent after browser run. git diff --check passed.

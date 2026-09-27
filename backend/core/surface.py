@@ -8,13 +8,12 @@ VdW surface
     the binary occupancy grid.  Each atom type is rasterised by placing its
     centre in the nearest voxel and then binary-dilating by its VdW radius.
 
-SES (Connolly surface)
+Voxel approximation of a solvent-excluded surface (SES)
     Morphological closing of the VdW volume by the probe radius:
         ses_vol = erode(dilate(vdw_vol, r_probe), r_probe)
-    This fills in molecular grooves narrower than the probe diameter (≈1.4 Å
-    for water) and smooths reentrant regions, matching the visual appearance
-    of ChimeraX/VMD Connolly surfaces.  The result is triangulated via
-    marching cubes on the binary closed volume.
+    This fills in grooves narrower than the probe diameter (2.8 Å for a
+    1.4 Å water-probe radius). The result is triangulated via marching cubes
+    on the binary closed volume; it is not an analytical Connolly surface.
 
 Grid resolution
     The default 0.20 nm grid spacing gives voxel-resolution staircase
@@ -32,13 +31,14 @@ import math
 from dataclasses import dataclass, field
 
 import numpy as np
-from scipy.ndimage import binary_dilation, binary_erosion
 from scipy.sparse import csr_matrix
 from scipy.spatial import cKDTree
 from skimage.measure import marching_cubes
 
 from backend.core.atomistic import Atom, VDW_RADIUS
 from backend.core.models import Design
+from backend.core.surface_acceleration import close_volume
+from backend.core.surface_progress import report, strand_scope
 
 
 # ── Strand colour palette ─────────────────────────────────────────────────────
@@ -98,6 +98,42 @@ def _sphere_struct(radius_voxels: float) -> np.ndarray:
     return (x**2 + y**2 + z**2) <= radius_voxels**2
 
 
+def _stamp_spheres(grid: np.ndarray, indices: np.ndarray, radius_voxels: float) -> None:
+    """Union the exact discrete dilation stencil at occupied seed voxels.
+
+    Avoid scanning a mostly empty volume once per element. Interior seeds use
+    bounded NumPy scatter batches (at most 8 MiB of flat indices); boundary
+    seeds are clipped in three dimensions, never wrapped across flat rows.
+    This is the same zero-border binary dilation as SciPy, including duplicate
+    seeds and sub-voxel radii. The caller's grid origin/rounding is unchanged.
+    """
+    if not len(indices):
+        return
+    struct = _sphere_struct(radius_voxels)
+    offsets = np.argwhere(struct) - np.asarray(struct.shape) // 2
+    shape = np.asarray(grid.shape)
+    strides = np.array([shape[1] * shape[2], shape[2], 1])
+    flat = grid.reshape(-1)
+    interior = np.all(
+        (indices + offsets.min(axis=0) >= 0) & (indices + offsets.max(axis=0) < shape),
+        axis=1,
+    )
+    centers = np.unique(indices[interior] @ strides)
+    flat_offsets = offsets @ strides
+    budget = 1_048_576
+    for start in range(0, len(flat_offsets), budget):
+        block = flat_offsets[start : start + budget]
+        batch = max(1, budget // len(block))
+        for row in range(0, len(centers), batch):
+            flat[centers[row : row + batch, None] + block] = True
+    boundary = indices[~interior]
+    if len(boundary):
+        for offset in offsets:
+            shifted = boundary + offset
+            valid = np.all((shifted >= 0) & (shifted < shape), axis=1)
+            flat[shifted[valid] @ strides] = True
+
+
 def _build_occupancy_grid(
     atoms: list[Atom],
     vdw_override: dict[str, float] | None,
@@ -107,11 +143,9 @@ def _build_occupancy_grid(
     """
     Build a boolean occupancy grid (True = inside a VdW sphere).
 
-    Strategy: for each unique element type, mark the single voxel nearest to
-    each atom centre, then binary-dilate that sparse grid by the element's VdW
-    radius.  The union of all four element grids is returned.  This approach
-    requires only 4 dilation operations regardless of atom count and is much
-    faster than per-atom sphere rasterisation in pure Python.
+    Group atoms by element and stamp the discrete spherical dilation stencil
+    at their nearest voxel centres. This preserves the original dense binary
+    dilation exactly while avoiding repeated scans of empty volume.
     """
     radii = vdw_override if vdw_override is not None else VDW_RADIUS
     max_r = max(radii.values())
@@ -131,17 +165,11 @@ def _build_occupancy_grid(
             continue
 
         elem_pos = positions[mask]
-        elem_grid = np.zeros(shape, dtype=bool)
 
         # Map atom centres to nearest voxel indices
         idx = np.round((elem_pos - bbox_min) / grid_spacing).astype(int)
         idx = np.clip(idx, 0, np.array(shape) - 1)
-        elem_grid[idx[:, 0], idx[:, 1], idx[:, 2]] = True
-
-        # Dilate by VdW radius
-        n_voxels = elem_r / grid_spacing
-        struct = _sphere_struct(n_voxels)
-        final_grid |= binary_dilation(elem_grid, structure=struct)
+        _stamp_spheres(final_grid, idx, elem_r / grid_spacing)
 
     return final_grid, bbox_min
 
@@ -173,8 +201,12 @@ def _assign_vertex_owners(
     positions = np.array([[a.x, a.y, a.z] for a in atoms], dtype=np.float64)
     tree = cKDTree(positions)
     _, nearest_idx = tree.query(verts, workers=-1)
-    owners = [atoms[int(i)] for i in nearest_idx]
-    return ([a.strand_id or "" for a in owners], [_nuc_key(a) for a in owners])
+    strand_ids = [a.strand_id or "" for a in atoms]
+    nuc_ids = [_nuc_key(a) for a in atoms]
+    return (
+        [strand_ids[int(i)] for i in nearest_idx],
+        [nuc_ids[int(i)] for i in nearest_idx],
+    )
 
 
 # ── Public surface computation ────────────────────────────────────────────────
@@ -256,6 +288,7 @@ def compute_surface(
     grid_spacing: float = 0.20,
     probe_radius: float = 0.28,
     radius_scale: float = 1.2,
+    continuous_field: bool = False,
 ) -> SurfaceMesh:
     """
     Unified molecular surface via morphological closing on scaled VdW spheres.
@@ -289,6 +322,19 @@ def compute_surface(
         export, pass a larger value (e.g. 1.56 ≈ 1.2 × 1.3) to inflate the
         envelope by ~30% so thin features print robustly.
     """
+    report("Extracting surface")
+    if continuous_field:
+        from backend.core.surface_tiled import continuous_cloud_surface
+
+        return continuous_cloud_surface(
+            [[a.x, a.y, a.z] for a in atoms],
+            [VDW_RADIUS.get(a.element, VDW_RADIUS["C"]) * radius_scale for a in atoms],
+            [a.strand_id or "" for a in atoms],
+            grid_spacing=grid_spacing,
+            probe_radius=probe_radius,
+            nuc_ids=[_nuc_key(a) for a in atoms],
+        )
+
     scaled_radii = {elem: r * radius_scale for elem, r in VDW_RADIUS.items()}
     grid, bbox_min = _build_occupancy_grid(
         atoms, scaled_radii, grid_spacing, padding=0.5 + probe_radius
@@ -297,8 +343,7 @@ def compute_surface(
     if probe_radius > 0:
         probe_vox = probe_radius / grid_spacing
         struct = _sphere_struct(probe_vox)
-        dilated = binary_dilation(grid, structure=struct)
-        grid = binary_erosion(dilated, structure=struct)
+        grid = close_volume(grid, struct)
 
     return _marching_cubes_safe(grid, 0.5, grid_spacing, bbox_min, atoms)
 
@@ -315,14 +360,11 @@ CG_BEAD_RADIUS_NM = (
 )
 
 
-# ── ChimeraX-style publication surface parameters ───────────────────────────────────
-# ChimeraX's documented SES defaults are a 1.4 Å rolling probe and a 0.5 Å grid.
-# Use true VdW radii (the ordinary display/print surface deliberately fattens them).
-# Each DNA strand is surfaced independently, matching ChimeraX's default per-chain
-# grouping. Fine sampling is essential here: it keeps nick gaps real without making
-# the rounded strand shells read as coarse, punched-out polygons.
+# ── Figure-quality display parameters (legacy CHIMERAX API names) ──────────────
+# True VdW radii, a shared 0.5 Å continuous-field grid, and independent DNA strand
+# shells. Shells may overlap; this does not establish solvent accessibility.
 CHIMERAX_GRID_SPACING = 0.05  # nm (0.5 Å — ChimeraX default gridSpacing)
-CHIMERAX_PROBE_RADIUS = 0.14  # nm (1.4 Å — ChimeraX default water probe)
+CHIMERAX_PROBE_RADIUS = 0.06  # nm (Figure quality display default)
 CHIMERAX_RADIUS_SCALE = 1.0  # true VdW radii (no display 1.2× inflation)
 CHIMERAX_VOXEL_CAP = 36_000_000  # preserve fine triangulation on useful-size assemblies
 CHIMERAX_MAX_SPACING = 0.12  # nm (1.2 Å) — never fall back to coarse display polygons
@@ -366,6 +408,7 @@ def compute_surface_from_cloud(
     probe_radius: float = 0.28,
     radius_scale: float = 1.2,
     nuc_ids: list | None = None,
+    continuous_field: bool = False,
 ) -> SurfaceMesh:
     """Molecular surface from a raw point cloud (positions + per-atom VdW radius + per-atom
     strand id) instead of ``Atom`` objects — the fast fine-surface path fed by
@@ -377,6 +420,19 @@ def compute_surface_from_cloud(
     ``nuc_ids`` is the parallel per-point ``helix:bp:direction`` key. Supplying it makes the
     mesh carry a per-vertex NUCLEOTIDE identity, which is what lets per-cluster colouring
     resolve a strand that spans several clusters (LESSONS D15). One KD-tree query serves both."""
+    report("Extracting surface")
+    if continuous_field:
+        from backend.core.surface_tiled import continuous_cloud_surface
+
+        return continuous_cloud_surface(
+            positions,
+            np.asarray(radii) * radius_scale,
+            strand_ids,
+            grid_spacing=grid_spacing,
+            probe_radius=probe_radius,
+            nuc_ids=nuc_ids,
+        )
+
     positions = np.asarray(positions, dtype=np.float64)
     radii = np.asarray(radii, dtype=np.float64) * radius_scale
     if positions.shape[0] == 0:
@@ -403,17 +459,16 @@ def compute_surface_from_cloud(
         np.array(shape) - 1,
     )
     # Group by the handful of distinct radii (P/C/N/O × scale) → one dilation each.
-    uniq = np.unique(np.round(radii, 6))
+    rounded_radii = np.round(radii, 6)
+    uniq = np.unique(rounded_radii)
     for r in uniq:
-        mask = np.round(radii, 6) == r
-        sub = np.zeros(shape, dtype=bool)
+        mask = rounded_radii == r
         gi = idx_all[mask]
-        sub[gi[:, 0], gi[:, 1], gi[:, 2]] = True
-        grid |= binary_dilation(sub, structure=_sphere_struct(r / grid_spacing))
+        _stamp_spheres(grid, gi, r / grid_spacing)
 
     if probe_radius > 0:
         struct = _sphere_struct(probe_radius / grid_spacing)
-        grid = binary_erosion(binary_dilation(grid, structure=struct), structure=struct)
+        grid = close_volume(grid, struct)
 
     if grid.max() <= 0.5 or grid.min() >= 0.5:
         return SurfaceMesh(
@@ -447,38 +502,35 @@ def compute_split_surfaces_from_cloud(
     cap_voxels: int = CHIMERAX_VOXEL_CAP,
     max_spacing: float = CHIMERAX_MAX_SPACING,
     nuc_ids: list | None = None,
+    continuous_field: bool = False,
+    local_remesh: bool = False,
 ) -> SurfaceMesh:
     """Per-STRAND independent solvent-excluded surfaces, concatenated into ONE mesh.
 
-    ChimeraX's default ``surface`` builds a separate surface per chain, so complementary
-    strands are DISTINCT geometry with a real solvent gap between them (the double-helix
-    groove pattern).  NADOC's single fused surface instead melts every strand into one blob
-    and colours it — giving a jagged colour seam where strands touch, not a gap.  This builds
+    Inspired by ChimeraX's per-chain default, this retains independently generated
+    strand shells instead of one fused envelope. Independent shells can overlap;
+    they do not establish physical solvent accessibility or guarantee a gap. This builds
     each strand's atoms on their OWN cropped occupancy grid → dilate/erode by the probe →
     marching cubes → Taubin smooth, then concatenates the parts (offsetting face indices).
     Every vertex belongs unambiguously to one strand, so the per-vertex colours are already
     solid (no crisp-zone flattening needed) and the separation is GEOMETRIC.
 
-    EXPENSIVE: one marching-cubes pass per strand.  Each strand's grid is cropped to its own
-    (small) bbox, and coarsened per strand by the voxel cap, so cost stays bounded."""
+    Legacy binary mode crops/coarsens each strand by the voxel cap. Figure quality
+    continuous-field mode instead preserves the requested spacing on a shared
+    world lattice, with halo tiles bounding working-grid memory. Final mesh size
+    still scales with surface area."""
     positions = np.asarray(positions, dtype=np.float64)
     radii = np.asarray(radii, dtype=np.float64)
-    sids = [s or "" for s in strand_ids]
-    sids_arr = np.asarray(sids, dtype=object)
+    # One grouping pass, retaining first-appearance strand order AND atom order
+    # within each strand (KD-tree tie ownership must not change).
+    groups: dict[str, list[int]] = {}
+    for i, sid in enumerate(strand_ids):
+        groups.setdefault(sid or "", []).append(i)
 
-    # First-appearance strand order (matches the palette assignment in surface_to_json).
-    order: list = []
-    seen: set = set()
-    for s in sids:
-        if s not in seen:
-            seen.add(s)
-            order.append(s)
-
-    # One marching-cubes pass PER strand, so total cost scales with strand count.  Split a
-    # global voxel budget across strands (floored) so a small design gets fine per-strand
-    # grids while a 200-staple origami auto-coarsens instead of hanging for minutes.
+    # Legacy binary extraction divides a global voxel budget across strands.
+    # Continuous Figure quality instead preserves resolution with bounded halo tiles.
     eff_cap = int(
-        min(cap_voxels, max(2_000_000, _SPLIT_VOXEL_BUDGET // max(1, len(order))))
+        min(cap_voxels, max(2_000_000, _SPLIT_VOXEL_BUDGET // max(1, len(groups))))
     )
 
     parts_v: list[np.ndarray] = []
@@ -486,33 +538,42 @@ def compute_split_surfaces_from_cloud(
     parts_sid: list[str] = []
     parts_nuc: list[str] = []
     voff = 0
-    for s in order:
-        mask = sids_arr == s
-        sub_pos = positions[mask]
-        if sub_pos.shape[0] < 4:
-            continue
-        sub_r = radii[mask]
-        gs = adaptive_grid_spacing_arr(
-            sub_pos, grid_spacing, cap_voxels=eff_cap, max_spacing=max_spacing
-        )
-        sub_nuc = [nuc_ids[i] for i in np.nonzero(mask)[0]] if nuc_ids else None
-        m = compute_surface_from_cloud(
-            sub_pos,
-            sub_r,
-            None,
-            grid_spacing=gs,
-            probe_radius=probe_radius,
-            radius_scale=radius_scale,
-            nuc_ids=sub_nuc,
-        )
-        if m.vertices.shape[0] == 0:
-            continue
-        m = smooth_mesh(m, iterations=smooth)
-        parts_v.append(m.vertices)
-        parts_f.append(m.faces + voff)
-        parts_sid.extend([s] * m.vertices.shape[0])
-        parts_nuc.extend(m.vertex_nuc_ids or [""] * m.vertices.shape[0])
-        voff += m.vertices.shape[0]
+    for strand_index, (s, rows) in enumerate(groups.items(), 1):
+        with strand_scope(strand_index, len(groups)):
+            sub_pos = positions[rows]
+            if sub_pos.shape[0] < 4:
+                continue
+            sub_r = radii[rows]
+            gs = (
+                grid_spacing
+                if continuous_field
+                else adaptive_grid_spacing_arr(
+                    sub_pos, grid_spacing, cap_voxels=eff_cap, max_spacing=max_spacing
+                )
+            )
+            sub_nuc = [nuc_ids[i] for i in rows] if nuc_ids else None
+            m = compute_surface_from_cloud(
+                sub_pos,
+                sub_r,
+                None,
+                grid_spacing=gs,
+                probe_radius=probe_radius,
+                radius_scale=radius_scale,
+                nuc_ids=sub_nuc,
+                **({"continuous_field": True} if continuous_field else {}),
+            )
+            if m.vertices.shape[0] == 0:
+                continue
+            m = smooth_mesh(m, iterations=smooth)
+            if local_remesh:
+                from backend.core.surface_remesh import remesh_sharp_patches
+
+                m = remesh_sharp_patches(m)
+            parts_v.append(m.vertices)
+            parts_f.append(m.faces + voff)
+            parts_sid.extend([s] * m.vertices.shape[0])
+            parts_nuc.extend(m.vertex_nuc_ids or [""] * m.vertices.shape[0])
+            voff += m.vertices.shape[0]
 
     if not parts_v:
         return SurfaceMesh(np.empty((0, 3), np.float32), np.empty((0, 3), np.int32), [])
@@ -581,9 +642,11 @@ def smooth_mesh(
     Dinv = csr_matrix((1.0 / deg, (np.arange(n), np.arange(n))), shape=(n, n))
     W = Dinv @ A  # neighbour-averaging operator
 
-    for _ in range(iterations):
+    report("Smoothing mesh", 0, iterations)
+    for iteration in range(iterations):
         V += lamb * (W @ V - V)
         V += mu * (W @ V - V)
+        report("Smoothing mesh", iteration + 1, iterations)
 
     return SurfaceMesh(
         vertices=V.astype(np.float32),
@@ -679,7 +742,7 @@ def compute_colored_surfaces(
     )
     if probe_radius > 0:
         struct = _sphere_struct(probe_radius / grid_spacing)
-        grid = binary_erosion(binary_dilation(grid, structure=struct), structure=struct)
+        grid = close_volume(grid, struct)
 
     if not grid.any():
         return [None] * n_groups
@@ -732,7 +795,7 @@ def compute_colored_surfaces(
 # ── JSON serialisation ────────────────────────────────────────────────────────
 
 
-def vertex_index_tables(mesh: SurfaceMesh) -> dict:
+def vertex_index_tables(mesh: SurfaceMesh, *, arrays=False) -> dict:
     """Per-vertex identity as ``(unique table, per-vertex index)`` pairs — the compact
     wire form of ``vertex_strand_ids`` / ``vertex_nuc_ids``.
 
@@ -746,7 +809,13 @@ def vertex_index_tables(mesh: SurfaceMesh) -> dict:
     multi-material path); clients fall back to the strand pair.
     """
 
-    def _dedupe(ids: list[str]) -> tuple[list[str], list[int]]:
+    def _dedupe(ids: list[str]):
+        if arrays:
+            table = list(dict.fromkeys(ids))
+            lookup = {value: i for i, value in enumerate(table)}
+            return table, np.fromiter(
+                map(lookup.__getitem__, ids), dtype=np.uint32, count=len(ids)
+            )
         table: list[str] = []
         index: dict[str, int] = {}
         out: list[int] = []
@@ -774,6 +843,8 @@ def surface_to_json(
     design: Design,
     color_mode: str = "strand",
     t_ms: float = 0.0,
+    *,
+    array_payload: bool = False,
 ) -> dict:
     """
     Serialise a SurfaceMesh to a JSON-safe dict for the frontend.
@@ -787,7 +858,10 @@ def surface_to_json(
     ----------
     color_mode : 'strand' | 'uniform'
     t_ms : computation time in milliseconds (informational).
+    array_payload : internal binary transport only; retain typed arrays instead
+        of building Python number lists. The default remains JSON-safe.
     """
+    report("Packing surface attributes")
     # Build strand → RGB lookup (first-appearance order, matching helix_renderer.js)
     strand_rgb: dict[str, tuple[float, float, float]] = {}
     palette_idx = 0
@@ -808,10 +882,22 @@ def surface_to_json(
             strand_rgb[strand.id] = _PALETTE_RGB[palette_idx % len(_PALETTE_RGB)]
             palette_idx += 1
 
-    verts_flat = mesh.vertices.flatten().tolist()
-    faces_flat = mesh.faces.flatten().tolist()
+    tables = vertex_index_tables(mesh, arrays=array_payload)
+    verts_flat = (
+        mesh.vertices.ravel() if array_payload else mesh.vertices.flatten().tolist()
+    )
+    faces_flat = mesh.faces.ravel() if array_payload else mesh.faces.flatten().tolist()
 
-    if color_mode == "strand":
+    if color_mode == "strand" and array_payload:
+        palette = np.asarray(
+            [
+                strand_rgb.get(sid, _UNASSIGNED_RGB)
+                for sid in tables["vertex_strand_index_table"]
+            ],
+            dtype=np.float32,
+        ).reshape(-1, 3)
+        vertex_colors = palette[tables["vertex_strand_index"]].ravel()
+    elif color_mode == "strand":
         colors: list[float] = []
         for sid in mesh.vertex_strand_ids:
             rgb = strand_rgb.get(sid, _UNASSIGNED_RGB)
@@ -824,8 +910,6 @@ def surface_to_json(
     # surface client-side using the same palette/group/cluster overrides as
     # the bead view.  Sent as (unique_id_list, index_per_vertex) to keep the
     # payload small for large meshes.
-    tables = vertex_index_tables(mesh)
-
     out = {
         "vertices": verts_flat,
         "faces": faces_flat,

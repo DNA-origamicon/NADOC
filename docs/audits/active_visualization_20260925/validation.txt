@@ -1,0 +1,21 @@
+decision: FULL  (FULL suite)  [test-dedicated session OPEN]
+FAILED tests/test_mrdna_pipeline.py::TestSyntheticRoundTrip::test_zero_step_position_accuracy
+FAILED tests/test_surface_visual_regression.py::test_fine_surface_invariants[VoltronCore]
+FAILED tests/test_peg_live.py::test_real_peg_worker_bursts_and_stops[CPU] - R...
+FAILED tests/test_peg_live.py::test_real_peg_worker_bursts_and_stops[CUDA] - ...
+FAILED tests/test_chain_completion_e2e.py::test_full_chain_runs_end_to_end_with_a_mock_binary
+FAILED tests/test_photoproduct_review.py::test_review_catalog_revalidates_sources_and_marks_focus_geometry
+FAILED tests/test_photoproduct_review.py::test_definition_decision_for_old_embedding_is_marked_stale
+FAILED tests/test_photoproduct_review.py::test_visual_decision_is_atomic_gate_neutral_and_revision_stays_unresolved
+FAILED tests/test_photoproduct_review.py::test_conformer_approval_requires_partition_and_source_hashes_are_immutable
+FAILED tests/test_photoproduct_review.py::test_boundary_review_is_hash_pinned_without_fit_partition
+FAILED tests/test_photoproduct_review.py::test_complete_visual_conformer_decisions_materialize_audited_plans
+FAILED tests/test_photoproduct_review.py::test_scientific_review_api_serves_geometry_and_records_gate_neutral_decisions
+FAILED tests/test_cpd_preview.py::test_snapshot_refresh_preserves_evidence_and_release_registry
+==== 13 failed, 9719 passed, 25 skipped, 2558 warnings in 594.27s (0:09:54) ====
+
+Failure IDs exactly match the 13 recorded in ../performance_20260925/validation.txt.
+No new failures and no unmarked test-budget violations.
+
+Final frontend: 543 files passed; 7059 passed, 1 skipped (87.06 s).
+Browser: 1 passed (20.1 s); exact pixel, picking, colour and alpha checks.

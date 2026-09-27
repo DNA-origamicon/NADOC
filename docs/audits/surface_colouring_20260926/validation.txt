@@ -1,0 +1,12 @@
+2026-09-26 — active visualization opportunities 4 and 5
+Final just test-frontend: 543 files passed; 7066 tests passed, 1 skipped; 101.02 s.
+Focused renderer run before final resource-lifetime regression: 89 passed, 2 files.
+Final isolated Playwright: 1 passed, 57.2 s; 18 original/current pixel comparisons and picking matched.
+Fixture: 5040 atoms, 15537 surface vertices, 31118 faces. No browser/shader errors.
+Paired guarded CPU benchmarks: all position/normal/index/colour and atom matrix/colour/alpha comparisons exact.
+Test session reopened by user; no guard bypasses.
+Initial browser attempts: central-pore picking probe missed; subsequent run interrupted by Vite source reload. Corrected final run passed. Cleanup verified after each run.
+Exact workspace/test-port cleanup paths are recorded in cleanup.json; all absent.
+No backend behavior changes in this batch; backend suite not repeated.
+git diff --check: passed.
+Disposable /tmp/nadoc-surface-* logs removed after retaining concise evidence here.

@@ -105,3 +105,76 @@ def test_sim_reason_newlines_cannot_break_the_shell_read(tmp_path):
     )
     assert "BUDGET CHECK SUPPRESSED" in err
     assert "HEAVY TEST IN THE FAST SUITE" not in err
+
+
+@pytest.mark.parametrize("session", ["missing", "expired"])
+@pytest.mark.parametrize("scope,expected", [("1", 1), ("focused", 7)])
+def test_session_gate_distinguishes_broad_and_focused(
+    tmp_path, session, scope, expected
+):
+    marker = tmp_path / "session"
+    if session == "expired":
+        marker.write_text("1\n")
+    (tmp_path / ".nadoc-slow-candidates.json").write_text(
+        json.dumps(_report(n_violators=1))
+    )
+    proc = subprocess.run(
+        ["bash", str(_GUARD), "scope-check", "0", scope, "--", "bash", "-c", "exit 7"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "NADOC_TEST_SESSION_FILE": str(marker)},
+    )
+    assert proc.returncode == expected
+    assert ("REFUSING" in proc.stderr) == (scope == "1")
+    assert "HEAVY TEST IN THE FAST SUITE" not in proc.stderr
+    assert not (tmp_path / ".nadoc-test.lock").exists()
+
+
+def test_focused_still_refuses_overlapping_runs(tmp_path):
+    import os
+
+    lock = tmp_path / ".nadoc-test.lock"
+    lock.mkdir()
+    (lock / "info").write_text(f"{os.getpid()}\nalready-running\n")
+    proc = subprocess.run(
+        ["bash", str(_GUARD), "scope-check", "0", "focused", "--", "true"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin"},
+    )
+    assert proc.returncode == 1
+    assert "already in progress" in proc.stderr
+    assert lock.exists()
+
+
+def test_focused_command_includes_slow_tests_without_expanding_scope():
+    from scripts.test_focused import build_command
+
+    cmd = build_command([str(Path(__file__)), "-m", "slow", "-k", "example"])
+    assert "focused" in cmd
+    assert cmd[-4:] == ["-k", "example", "-m", "slow"]
+    assert "not slow" not in cmd
+
+
+@pytest.mark.parametrize("target", ["tests/", ".", "CLAUDE.md"])
+def test_focused_rejects_broad_or_non_test_targets(target):
+    from scripts.test_focused import build_command
+
+    with pytest.raises(SystemExit) as exc:
+        build_command([target])
+    assert exc.value.code == 2
+
+
+def test_focused_rejects_extra_targets_and_collection_override():
+    from scripts.test_focused import build_command
+
+    for extra in (
+        ["tests/"],
+        ["--pyargs", "tests"],
+        ["--override-ini", "testpaths=tests"],
+    ):
+        with pytest.raises(SystemExit) as exc:
+            build_command([str(Path(__file__)), *extra])
+        assert exc.value.code == 2

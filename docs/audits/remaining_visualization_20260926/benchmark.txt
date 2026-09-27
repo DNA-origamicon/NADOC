@@ -1,0 +1,99 @@
+{
+  "revision": "0dc8b857378b077a739289f413a23cfad3e234a3",
+  "results": [
+    {
+      "feature": "solvent",
+      "mode": "sphere",
+      "waters": 20000,
+      "ions": 5000,
+      "beforeMs": 0.5503930000000139,
+      "afterMs": 0.3637949999999961,
+      "speedup": 1.5129207383279588,
+      "exactMatrices": true
+    },
+    {
+      "feature": "solvent",
+      "mode": "atomistic",
+      "waters": 20000,
+      "ions": 5000,
+      "beforeMs": 8.71929,
+      "afterMs": 3.1907599999999547,
+      "speedup": 2.7326687058882912,
+      "exactMatrices": true
+    },
+    {
+      "feature": "solvent",
+      "mode": "sphere",
+      "waters": 100000,
+      "ions": 25000,
+      "beforeMs": 1.7113789999999653,
+      "afterMs": 1.4496820000000525,
+      "speedup": 1.1805202796198775,
+      "exactMatrices": true
+    },
+    {
+      "feature": "solvent",
+      "mode": "atomistic",
+      "waters": 100000,
+      "ions": 25000,
+      "beforeMs": 39.98883499999965,
+      "afterMs": 19.541311000000178,
+      "speedup": 2.04637421716482,
+      "exactMatrices": true
+    },
+    {
+      "feature": "unchanged protein refresh",
+      "mode": "trace",
+      "atoms": 300,
+      "beforeMs": 10.771963000000142,
+      "afterMs": 0.11770100000012462,
+      "speedup": 91.51972370658478,
+      "exactGeometry": true
+    },
+    {
+      "feature": "unchanged protein refresh",
+      "mode": "ovoid",
+      "atoms": 300,
+      "beforeMs": 0.2909020000001874,
+      "afterMs": 0.31040200000006735,
+      "speedup": 0.9371782398313293,
+      "exactGeometry": true
+    },
+    {
+      "feature": "unchanged protein refresh",
+      "mode": "box",
+      "atoms": 300,
+      "beforeMs": 0.12770000000000437,
+      "afterMs": 0.14970100000027742,
+      "speedup": 0.8530337138680952,
+      "exactGeometry": true
+    },
+    {
+      "feature": "unchanged protein refresh",
+      "mode": "trace",
+      "atoms": 3000,
+      "beforeMs": 102.61484500000006,
+      "afterMs": 0.902704999999969,
+      "speedup": 113.67483840236133,
+      "exactGeometry": true
+    },
+    {
+      "feature": "unchanged protein refresh",
+      "mode": "ovoid",
+      "atoms": 3000,
+      "beforeMs": 0.7564050000000861,
+      "afterMs": 0.8394060000000536,
+      "speedup": 0.901119362978151,
+      "exactGeometry": true
+    },
+    {
+      "feature": "unchanged protein refresh",
+      "mode": "box",
+      "atoms": 3000,
+      "beforeMs": 0.2988019999993412,
+      "afterMs": 0.295802000000549,
+      "speedup": 1.0101419192526981,
+      "exactGeometry": true
+    }
+  ]
+}

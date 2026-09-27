@@ -56,7 +56,7 @@ the carve-up's extraction, applied *before* the code is ever written instead of 
 - **Stateful (DOM/scene/store)** → one **app exercise** + `just smoke` (console-error + teardown gates).
 - **Canvas-gesture** behavior → a `scene_harness` gesture e2e (real raycast, assert on exposed state),
   *or* an `MV-N` manual-validation row if it's a Tier-3 "looks right" check (golden-image stays manual).
-- **Backend change** → `just test` (no exceptions).
+- **Backend change** → `just test-smart` plus focused checks needed for the change, including slow tests via `just test-focused TARGET` without a test session. Full `just test` and equivalent broad sweeps require a user-opened session; see `CLAUDE.md`. Duration alone never blocks focused development validation.
 - **`just lint`** delta ≤ 0.
 
 ## The ratchet (the anti-backslip trigger)

@@ -75,8 +75,39 @@ export function initProteinTraceRenderer(scene) {
   let selectedId = null
   let liveIds = []
   let oxdnaTransforms = {}
+  let geometrySnapshot = null
+  let renderedAtoms = []
+
+  function update(next) {
+    data = next || { atoms: [] }
+    // Boxes/ovoids are cheap to rebuild; snapshotting their full payload costs more.
+    if (mode !== 'trace') { rebuild(); return }
+    const atoms = (data.atoms ?? []).filter(a => attachmentId(a))
+    // Primitive snapshots also detect coordinates/chain IDs edited in place.
+    const values = []
+    for (const a of atoms) values.push(a.helix_id, a.name, a.chain_id, a.x, a.y, a.z)
+    if (geometrySnapshot && values.length === geometrySnapshot.length &&
+        values.every((v, i) => Object.is(v, geometrySnapshot[i]))) {
+      const replacements = new Map(renderedAtoms.map((a, i) => [a, atoms[i]]))
+      for (const group of attachmentGroups.values()) {
+        group.userData.atoms = group.userData.atoms.map(a => replacements.get(a))
+        group.traverse(obj => {
+          if (obj.isMesh) obj.userData.atom = replacements.get(obj.userData.atom)
+        })
+      }
+      // Refresh picking metadata and retain the original update transform semantics.
+      applyOxdnaTransforms(oxdnaTransforms)
+      highlight(selectedId ? { data: { attachment_id: selectedId } } : null)
+    } else {
+      rebuild()
+    }
+    geometrySnapshot = values
+    renderedAtoms = atoms
+  }
 
   function clear() {
+    geometrySnapshot = null
+    renderedAtoms = []
     for (const child of [...root.children]) {
       child.traverse(obj => {
         obj.geometry?.dispose?.()
@@ -181,7 +212,7 @@ export function initProteinTraceRenderer(scene) {
   }
 
   return {
-    update(next) { data = next || { atoms: [] }; rebuild() },
+    update,
     setMode(next) { if (mode === next) return; mode = next; rebuild() },
     getMode: () => mode,
     highlight,

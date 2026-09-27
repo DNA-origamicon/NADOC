@@ -31,7 +31,7 @@ import { initGrapheneRepresentation } from './graphene_representation.js'
 
 import { ELEMENTS, BALL_RADIUS, BOND_RADIUS } from './atomistic_renderer/atom_palette.js'
 import {
-  CYLINDER_GEO, createGeometryState, bondMatrix,
+  CYLINDER_GEO, createGeometryState, writeSphereMatrix, writeBondMatrix,
   atomSphereGeometry, makeAtomSphereMaterial, atomInstanceScale,
 } from './atomistic_renderer/geometry_builder.js'
 
@@ -160,16 +160,18 @@ export function initMdSolventOverlay(scene, { onGrapheneChange = () => {} } = {}
     if (e) { e.mesh.count = 0; e.mesh.visible = false }
   }
 
+  function _uploadMatrices(mesh) {
+    mesh.instanceMatrix.clearUpdateRanges()
+    mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16)
+    mesh.instanceMatrix.needsUpdate = true
+  }
+
   function _writeSpheres(mesh, xyz, n, stride, offset, scale) {
-    const m = _geom.tmpMat
     for (let i = 0; i < n; i++) {
       const o = i * stride + offset
-      m.identity()
-      m.makeScale(scale, scale, scale)
-      m.setPosition(xyz[o], xyz[o + 1], xyz[o + 2])
-      mesh.setMatrixAt(i, m)
+      writeSphereMatrix(mesh.instanceMatrix.array, i * 16, xyz[o], xyz[o + 1], xyz[o + 2], scale)
     }
-    mesh.instanceMatrix.needsUpdate = true
+    _uploadMatrices(mesh)
   }
 
   function _drawWater(frame) {
@@ -193,18 +195,15 @@ export function initMdSolventOverlay(scene, { onGrapheneChange = () => {} } = {}
 
     const hMesh = _sphereMesh('waterH', rH, n * 2, false, ELEMENTS.H.color)
     const hScale = atomInstanceScale(rH)
-    const m = _geom.tmpMat
     for (let i = 0; i < n; i++) {
       const o = i * 9
       for (let k = 0; k < 2; k++) {
         const p = o + 3 + k * 3
-        m.identity()
-        m.makeScale(hScale, hScale, hScale)
-        m.setPosition(xyz[p], xyz[p + 1], xyz[p + 2])
-        hMesh.setMatrixAt(i * 2 + k, m)
+        writeSphereMatrix(hMesh.instanceMatrix.array, (i * 2 + k) * 16,
+          xyz[p], xyz[p + 1], xyz[p + 2], hScale)
       }
     }
-    hMesh.instanceMatrix.needsUpdate = true
+    _uploadMatrices(hMesh)
 
     if (!_ballstick) { _hide('bonds'); return }
     const bonds = _bondMesh(n * 2)
@@ -212,12 +211,11 @@ export function initMdSolventOverlay(scene, { onGrapheneChange = () => {} } = {}
       const o = i * 9
       for (let k = 0; k < 2; k++) {
         const p = o + 3 + k * 3
-        const bm = bondMatrix(_geom, xyz[o], xyz[o + 1], xyz[o + 2],
-          xyz[p], xyz[p + 1], xyz[p + 2], BOND_RADIUS)
-        if (bm) bonds.setMatrixAt(i * 2 + k, bm)
+        writeBondMatrix(_geom, bonds.instanceMatrix.array, (i * 2 + k) * 16,
+          xyz[o], xyz[o + 1], xyz[o + 2], xyz[p], xyz[p + 1], xyz[p + 2], BOND_RADIUS)
       }
     }
-    bonds.instanceMatrix.needsUpdate = true
+    _uploadMatrices(bonds)
   }
 
   function _drawIons(frame) {
@@ -241,7 +239,6 @@ export function initMdSolventOverlay(scene, { onGrapheneChange = () => {} } = {}
       if (!arr) { arr = []; buckets.set(k, arr) }
       arr.push(i)
     }
-    const m = _geom.tmpMat
     for (let s = 0; s < ION_STYLE.length; s++) {
       const rows = buckets.get(s)
       if (!rows?.length) { _hide(`ion${s}`); continue }
@@ -250,12 +247,10 @@ export function initMdSolventOverlay(scene, { onGrapheneChange = () => {} } = {}
       const scale = atomInstanceScale(sp.radius)
       for (let i = 0; i < rows.length; i++) {
         const o = rows[i] * 3
-        m.identity()
-        m.makeScale(scale, scale, scale)
-        m.setPosition(frame.ions[o], frame.ions[o + 1], frame.ions[o + 2])
-        mesh.setMatrixAt(i, m)
+        writeSphereMatrix(mesh.instanceMatrix.array, i * 16,
+          frame.ions[o], frame.ions[o + 1], frame.ions[o + 2], scale)
       }
-      mesh.instanceMatrix.needsUpdate = true
+      _uploadMatrices(mesh)
     }
   }
 

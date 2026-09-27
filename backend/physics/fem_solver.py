@@ -983,7 +983,27 @@ def assemble_global_stiffness(
         )
     n = len(mesh.nodes)
     n_dof = 6 * n
-    K = lil_matrix((n_dof, n_dof), dtype=float)
+    # COO sums shared-node contributions once, avoiding temporary sparse
+    # matrices for every LIL slice addition. Retain LIL for boundary edits.
+    capacity = 144 * (len(mesh.elements) + len(mesh.rigid_links)) + 24 * len(
+        mesh.springs
+    )
+    rows = np.empty(capacity, dtype=np.int64)
+    cols = np.empty(capacity, dtype=np.int64)
+    values = np.empty(capacity, dtype=float)
+    used = 0
+    local_dofs = np.arange(6)
+
+    def add_block(node_i, node_j, block):
+        nonlocal used
+        dofs = np.concatenate((6 * node_i + local_dofs, 6 * node_j + local_dofs))
+        r, c = np.nonzero(block)
+        stop = used + len(r)
+        rows[used:stop] = dofs[r]
+        cols[used:stop] = dofs[c]
+        values[used:stop] = block[r, c]
+        used = stop
+
     f = np.zeros(n_dof, dtype=float)
 
     # ── Beam elements ─────────────────────────────────────────────────────────
@@ -1038,36 +1058,16 @@ def assemble_global_stiffness(
             else el.R
         )
         K_g = _transform_to_global(K_local, R_use)
-        di = 6 * el.node_i
-        dj = 6 * el.node_j
-        # Assemble 4 quadrants of the 12×12 global element matrix.
-        K[di : di + 6, di : di + 6] += K_g[0:6, 0:6]
-        K[di : di + 6, dj : dj + 6] += K_g[0:6, 6:12]
-        K[dj : dj + 6, di : di + 6] += K_g[6:12, 0:6]
-        K[dj : dj + 6, dj : dj + 6] += K_g[6:12, 6:12]
+        add_block(el.node_i, el.node_j, K_g)
 
     # ── Crossover springs ─────────────────────────────────────────────────────
     for sp in mesh.springs:
-        di = 6 * sp.node_i
-        dj = 6 * sp.node_j
-        kt = sp.k_trans
-        kr = sp.k_rot
-
-        # Translational spring: 3×3 identity × k_trans added to diagonal blocks,
-        # subtracted from off-diagonal blocks.
-        for dim in range(3):
-            K[di + dim, di + dim] += kt
-            K[dj + dim, dj + dim] += kt
-            K[di + dim, dj + dim] -= kt
-            K[dj + dim, di + dim] -= kt
-
-        # Rotational spring (zero for ssDNA linkers).
-        if kr != 0.0:
-            for dim in range(3):
-                K[di + 3 + dim, di + 3 + dim] += kr
-                K[dj + 3 + dim, dj + 3 + dim] += kr
-                K[di + 3 + dim, dj + 3 + dim] -= kr
-                K[dj + 3 + dim, di + 3 + dim] -= kr
+        diagonal = np.diag([sp.k_trans] * 3 + [sp.k_rot] * 3)
+        add_block(
+            sp.node_i,
+            sp.node_j,
+            np.block([[diagonal, -diagonal], [-diagonal, diagonal]]),
+        )
 
     # ── Crossover links ─────────────────────────────────────────────────────────
     if material == "snupi":
@@ -1097,11 +1097,7 @@ def assemble_global_stiffness(
                 _co_cache[ckey] = K_local
             R_co = _frame_from_helix_axis(lk.offset / L)  # local z = offset direction
             K_g = _transform_to_global(K_local, R_co)
-            di, dj = 6 * lk.node_i, 6 * lk.node_j
-            K[di : di + 6, di : di + 6] += K_g[0:6, 0:6]
-            K[di : di + 6, dj : dj + 6] += K_g[0:6, 6:12]
-            K[dj : dj + 6, di : di + 6] += K_g[6:12, 0:6]
-            K[dj : dj + 6, dj : dj + 6] += K_g[6:12, 6:12]
+            add_block(lk.node_i, lk.node_j, K_g)
     else:
         # cando: rigid links = penalty on the exact constraint C·d = 0.
         # d = [u_i, θ_i, u_j, θ_j] (12). Constraint rows:
@@ -1119,16 +1115,13 @@ def assemble_global_stiffness(
             C[3:6, 3:6] = -I3  # −θ_i
             C[3:6, 9:12] = I3  # +θ_j
             Kc = K_PENALTY * (C.T @ C)
-            di, dj = 6 * lk.node_i, 6 * lk.node_j
-            idx = list(range(di, di + 6)) + list(range(dj, dj + 6))
-            for a in range(12):
-                ia = idx[a]
-                for b in range(12):
-                    v = Kc[a, b]
-                    if v != 0.0:
-                        K[ia, idx[b]] += v
+            add_block(lk.node_i, lk.node_j, Kc)
 
-    return K, f
+    K = coo_matrix(
+        (values[:used], (rows[:used], cols[:used])), shape=(n_dof, n_dof)
+    ).tocsr()
+    K.eliminate_zeros()
+    return K.tolil(), f
 
 
 # ── SNUPI nodal mass matrix (SI S10 — generalized eigenproblem) ─────────────────
@@ -2038,19 +2031,24 @@ def compute_generalized_correlation_matrix(
     )  # (N,3,3) node self-covariances
     logdet_ii = np.log(np.clip(np.linalg.det(Sii), 1e-300, None))
     GC = np.eye(n_nodes, dtype=float)
+    # Batch the small determinants rather than calling NumPy once per pair.
+    # A bounded row chunk avoids an additional N×N×6×6 covariance allocation;
+    # the output matrix itself remains the unavoidable O(N²) storage.
+    pair_batch = 2048
     for i in range(n_nodes):
-        Wi = W[i]
-        for j in range(i + 1, n_nodes):
-            Sij = Wi @ W[j].T
-            joint = np.empty((6, 6))
-            joint[:3, :3] = Sii[i]
-            joint[3:, 3:] = Sii[j]
-            joint[:3, 3:] = Sij
-            joint[3:, :3] = Sij.T
+        for start in range(i + 1, n_nodes, pair_batch):
+            stop = min(start + pair_batch, n_nodes)
+            Sij = W[i] @ W[start:stop].transpose(0, 2, 1)
+            joint = np.empty((stop - start, 6, 6))
+            joint[:, :3, :3] = Sii[i]
+            joint[:, 3:, 3:] = Sii[start:stop]
+            joint[:, :3, 3:] = Sij
+            joint[:, 3:, :3] = Sij.transpose(0, 2, 1)
             dj = np.linalg.det(joint)
-            mi = 0.5 * (logdet_ii[i] + logdet_ii[j] - np.log(max(dj, 1e-300)))
-            g = np.sqrt(max(0.0, 1.0 - np.exp(-2.0 * max(mi, 0.0) / 3.0)))
-            GC[i, j] = GC[j, i] = g
+            mi = 0.5 * (logdet_ii[i] + logdet_ii[start:stop] - np.log(np.maximum(dj, 1e-300)))
+            g = np.sqrt(np.maximum(0.0, 1.0 - np.exp(-2.0 * np.maximum(mi, 0.0) / 3.0)))
+            GC[i, start:stop] = g
+            GC[start:stop, i] = g
     return GC
 
 

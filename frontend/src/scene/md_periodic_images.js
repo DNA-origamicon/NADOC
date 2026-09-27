@@ -27,8 +27,8 @@ export function initPeriodicImages({scene,getEntries=()=>[]}={}) {
     const stride=Math.max(1,Math.ceil(entries.length/12000)),positions=[],samples=[]
     for(let i=0;i<entries.length;i+=stride){samples.push(entries[i]);positions.push(entries[i].pos.x,entries[i].pos.y,entries[i].pos.z)}
     geometry=new THREE.BufferGeometry()
-    geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3))
-    geometry.setAttribute('color',new THREE.Float32BufferAttribute(new Float32Array(positions.length),3))
+    geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3).setUsage(THREE.DynamicDrawUsage))
+    geometry.setAttribute('color',new THREE.Float32BufferAttribute(new Float32Array(positions.length),3).setUsage(THREE.DynamicDrawUsage))
     let lastFrame=-1
     const color=new THREE.Color()
     function sync(renderer){
@@ -36,13 +36,21 @@ export function initPeriodicImages({scene,getEntries=()=>[]}={}) {
       if(frame!=null && frame===lastFrame)return
       lastFrame=frame
       const pos=geometry.attributes.position,colors=geometry.attributes.color
+      let moved=false,recolored=false
+      function write(attribute,i,x,y,z){
+        const a=attribute.array,o=i*3
+        x=Math.fround(x);y=Math.fround(y);z=Math.fround(z)
+        if(a[o]===x && a[o+1]===y && a[o+2]===z)return false
+        attribute.setXYZ(i,x,y,z);return true
+      }
       samples.forEach((entry,i)=>{
-        pos.setXYZ(i,entry.pos.x,entry.pos.y,entry.pos.z)
+        moved=write(pos,i,entry.pos.x,entry.pos.y,entry.pos.z)||moved
         if(entry.instMesh?.instanceColor)entry.instMesh.getColorAt(entry.id,color)
         else color.set(entry.defaultColor ?? 0x8ba8c4)
-        colors.setXYZ(i,color.r,color.g,color.b)
+        recolored=write(colors,i,color.r,color.g,color.b)||recolored
       })
-      pos.needsUpdate=true;colors.needsUpdate=true
+      if(moved)pos.needsUpdate=true
+      if(recolored)colors.needsUpdate=true
     }
     sync()
     material=new THREE.PointsMaterial({vertexColors:true,size:.5,transparent:true,opacity:.32,depthWrite:false})

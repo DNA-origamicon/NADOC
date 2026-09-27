@@ -3,6 +3,41 @@ import { initTrajectoryStream } from './trajectory_stream.js'
 import { loadProgressiveTrajectory } from './progressive_trajectory.js'
 
 describe('exact trajectory pages', () => {
+  it('drops superseded queued scrubs, preserving the active read and explicit requests', async () => {
+    let release
+    const order = [], applied = []
+    const s = initTrajectoryStream({ total: 100, pageSize: 8, live: () => true,
+      load: async start => { order.push(start); if (start === 0) await new Promise(r => { release = r }); return start },
+      apply: value => applied.push(value) })
+    const active = s.ensure(0)
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    const stale = s.seek(16)
+    const shared = s.seek(32)
+    const required = s.ensure(33) // explicit consumer protects the shared page
+    const latest = s.seek(64)
+    release()
+    expect(await active).toBe(true)
+    expect(await stale).toBe(false)
+    expect(await shared).toBe(true)
+    expect(await required).toBe(true)
+    expect(await latest).toBe(true)
+    expect(order).toEqual([0, 32, 64])
+    expect(applied).toEqual(order)
+  })
+
+  it('allows returning to a cancelled page and cancels queued scrubs when revisiting a ready frame', async () => {
+    const load = vi.fn(async start => start)
+    const s = initTrajectoryStream({ total: 100, load, apply() {}, live: () => true })
+    await s.ensure(0)
+    const first = s.seek(16), second = s.seek(32), final = s.seek(16)
+    expect(await first).toBe(false)
+    expect(await second).toBe(false)
+    expect(await final).toBe(true)
+    const abandoned = s.seek(48)
+    await s.seek(0)
+    expect(await abandoned).toBe(false)
+    expect(load.mock.calls.map(c => c[0])).toEqual([0, 16])
+  })
   it('deduplicates seeks, bounds lookahead, and retries failures', async () => {
     const load=vi.fn().mockRejectedValueOnce(new Error('disk')).mockResolvedValue('frame')
     const apply=vi.fn()

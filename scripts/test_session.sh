@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Test-dedicated session unlock.
 #
-# The heavy (`slow`-marked) suites — real oxDNA/NAMD/mrdna sims, CanDo-FEM solves,
-# trajectory/benchmark runs — take minutes and saturate CPU/GPU. They are NOT part
-# of the per-change dev loop. They run ONLY inside a *test-dedicated session*: a
-# window YOU open, on purpose, in YOUR terminal.
+# Unlocks full/broad regression sweeps, including unrelated long tests. It is not
+# required for focused tests or benchmarks directly related to current development,
+# regardless of duration or the slow marker. Use `just test-focused TARGET` for those.
+# The user deliberately opens a window in their terminal for the broad sweep.
 #
 #   just test-session         # open a 4-hour window (default)
 #   just test-session 1       # open a 1-hour window
@@ -12,12 +12,12 @@
 #   just test-session off     # close it now
 #
 # The window is a marker file (.nadoc-test-session, gitignored) holding an expiry
-# timestamp. scripts/test_guard.sh refuses every slow-capable recipe unless the
+# timestamp. scripts/test_guard.sh refuses broad/full sweep recipes unless the
 # marker exists and is unexpired.
 #
 # WHY A TTY IS REQUIRED: an agent can set any environment variable it likes, so an
 # env-var unlock is no unlock at all. Opening the window requires an interactive
-# terminal — i.e. a human. An agent that wants slow tests must ASK you to open one.
+# terminal — i.e. a human. Agents request a window only for a necessary broad/full sweep.
 # (Agents: do not hand-write .nadoc-test-session. That is the same as disabling the
 # guard, and it is forbidden — see CLAUDE.md → Test policy.)
 set -uo pipefail
@@ -43,7 +43,7 @@ status() {
   fi
   left=$(( exp - $(now) ))
   if (( left <= 0 )); then
-    echo "test-dedicated session: EXPIRED $(( -left / 60 ))m ago — slow suites are locked."
+    echo "test-dedicated session: EXPIRED $(( -left / 60 ))m ago — broad suites are locked."
     return 1
   fi
   echo "test-dedicated session: OPEN — $(( left / 60 ))m left (expires $(date -d "@$exp" '+%H:%M'))"
@@ -54,7 +54,7 @@ case "${1:-}" in
   status) status; exit $? ;;
   off|close|end)
     rm -f "$MARKER"
-    echo "test-dedicated session closed — slow suites are locked again."
+    echo "test-dedicated session closed — broad suites are locked again."
     exit 0
     ;;
 esac
@@ -71,11 +71,12 @@ if [[ ! -t 0 ]]; then
 REFUSED: a test-dedicated session can only be opened from an interactive
 terminal (a human at a keyboard).
 
-If you are an agent: STOP and ask the user to run
+For focused current-development checks, use just test-focused TARGET; no session
+is needed, even for slow tests. For a broad/full sweep, ask the user to run
 
     just test-session
 
-in their own terminal. Then re-run the slow suite. Do NOT create the
+in their own terminal. Then run the broad suite. Do NOT create the
 .nadoc-test-session marker yourself and do NOT set NADOC_TEST_FORCE — that
 defeats the guard this project deliberately put in place.
 ────────────────────────────────────────────────────────────────────
@@ -86,5 +87,5 @@ fi
 EXPIRY=$(( $(now) + HOURS * 3600 ))
 { echo "$EXPIRY"; date '+%Y-%m-%dT%H:%M:%S'; echo "${HOURS}h"; } > "$MARKER"
 echo "test-dedicated session OPEN for ${HOURS}h (until $(date -d "@$EXPIRY" '+%H:%M'))."
-echo "Slow suites are now unlocked:  just test  ·  just test-slow  ·  just test-smart"
+echo "Broad suites are now unlocked:  just test  ·  just test-slow  ·  just test-smart"
 echo "Close early with:  just test-session off"

@@ -1,0 +1,44 @@
+{"fresh_process": 1, "import_s": 2.6545198320000054, "availability_s": 0.1010515639991354, "context_init_s": 0.27785131500058924, "first_closing_s": 0.33729928600041603, "warm_closing_s": 0.02833851700052037, "total_first_use_s": 3.370721997000146, "startup_overhead_s": 3.3423834799996257, "torch": "2.6.0+cu124", "gpu": "NVIDIA GeForce RTX 2080 SUPER"}
+{"fresh_process": 2, "import_s": 1.2630309779997333, "availability_s": 0.09078007999960391, "context_init_s": 0.2438647460003267, "first_closing_s": 0.1659727890000795, "warm_closing_s": 0.028398613998433575, "total_first_use_s": 1.7636485929997434, "startup_overhead_s": 1.7352499790013098, "torch": "2.6.0+cu124", "gpu": "NVIDIA GeForce RTX 2080 SUPER"}
+{"fresh_process": 3, "import_s": 1.3501194639993628, "availability_s": 0.08404590200007078, "context_init_s": 0.24916672300059872, "first_closing_s": 0.15959889300029317, "warm_closing_s": 0.026140190000660368, "total_first_use_s": 1.8429309820003255, "startup_overhead_s": 1.816790791999665, "torch": "2.6.0+cu124", "gpu": "NVIDIA GeForce RTX 2080 SUPER"}
+{"fresh_process": 4, "import_s": 1.7719780970001011, "availability_s": 0.08850850199996785, "context_init_s": 0.29418386299948907, "first_closing_s": 0.16412583100100164, "warm_closing_s": 0.025496654001472052, "total_first_use_s": 2.3187962930005597, "startup_overhead_s": 2.2932996389990876, "torch": "2.6.0+cu124", "gpu": "NVIDIA GeForce RTX 2080 SUPER"}
+{"fresh_process": 5, "import_s": 1.2870915899984539, "availability_s": 0.07966699600001448, "context_init_s": 0.2425164380001661, "first_closing_s": 0.14097078499980853, "warm_closing_s": 0.02880965399890556, "total_first_use_s": 1.750245808998443, "startup_overhead_s": 1.7214361549995374, "torch": "2.6.0+cu124", "gpu": "NVIDIA GeForce RTX 2080 SUPER"}
+{
+  "summary": {
+    "import_s": {
+      "median": 1.3501194639993628,
+      "min": 1.2630309779997333,
+      "max": 2.6545198320000054
+    },
+    "availability_s": {
+      "median": 0.08850850199996785,
+      "min": 0.07966699600001448,
+      "max": 0.1010515639991354
+    },
+    "context_init_s": {
+      "median": 0.24916672300059872,
+      "min": 0.2425164380001661,
+      "max": 0.29418386299948907
+    },
+    "first_closing_s": {
+      "median": 0.16412583100100164,
+      "min": 0.14097078499980853,
+      "max": 0.33729928600041603
+    },
+    "warm_closing_s": {
+      "median": 0.02833851700052037,
+      "min": 0.025496654001472052,
+      "max": 0.02880965399890556
+    },
+    "total_first_use_s": {
+      "median": 1.8429309820003255,
+      "min": 1.750245808998443,
+      "max": 3.370721997000146
+    },
+    "startup_overhead_s": {
+      "median": 1.816790791999665,
+      "min": 1.7214361549995374,
+      "max": 3.3423834799996257
+    }
+  }
+}

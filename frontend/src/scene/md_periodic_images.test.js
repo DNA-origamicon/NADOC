@@ -47,3 +47,19 @@ it('caps large previews at 12000 points per image and hides unavailable geometry
   expect(group.visible).toBe(false)
   ui.dispose()
 })
+
+it('uploads only changed channels and compares stored float precision',()=>{
+  const scene=new THREE.Scene(),entries=[{pos:new THREE.Vector3(.1,.2,.3),defaultColor:0xabcdef}]
+  const ui=initPeriodicImages({scene,getEntries:()=>entries})
+  window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{periodicImages:true,dimensions:[10,20,30]}}))
+  const ghost=scene.getObjectByName('NAMD periodic images').children[0]
+  const {position,color}=ghost.geometry.attributes
+  const pv=position.version,cv=color.version
+  ghost.onBeforeRender({info:{render:{frame:1}}})
+  expect(position.version).toBe(pv);expect(color.version).toBe(cv)
+  entries[0].pos.x=2;ghost.onBeforeRender({info:{render:{frame:2}}})
+  expect(position.version).toBe(pv+1);expect(color.version).toBe(cv)
+  entries[0].defaultColor=0xff0000;ghost.onBeforeRender({info:{render:{frame:3}}})
+  expect(position.version).toBe(pv+1);expect(color.version).toBe(cv+1)
+  ui.dispose()
+})

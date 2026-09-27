@@ -881,7 +881,7 @@ _SLOW_TESTS = {
     # Coverage is not lost: the exhaustive `test_phase_sweep_gate_matches_detector`
     # sweep in the same file is already @pytest.mark.slow and covers both insert
     # counts across all 11 phases, so the historical phase coverage keeps running in a
-    # test-dedicated session.  The fast suite keeps ALL the cheap pins in that
+    # broad session or a related focused development run. The fast suite keeps the cheap pins in that
     # file: the segment/ring intersection primitives, ring identification, the
     # fake-model detector, the two `_synthesise_bonds` scope regressions, the
     # re-derive-on-move regression, `assert_not_pierced` + override, and the
@@ -1135,6 +1135,10 @@ def pytest_runtest_logreport(report):
 
 
 def pytest_sessionfinish(session, exitstatus):
+    # Focused development runs are not fast-suite placement measurements. Keep
+    # their timings in pytest --durations without replacing the broad-suite report.
+    if os.environ.get("NADOC_TEST_SCOPE") == "focused":
+        return
     if hasattr(session.config, "workerinput"):
         return  # xdist worker — the controller owns the aggregate report
     if not _DURATIONS:

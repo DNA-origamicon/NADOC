@@ -790,8 +790,10 @@ export function initOxdnaDisplay({
     // Render native + relax in ONE synchronous tick — the native rebuild is overwritten
     // before the browser paints, so the atoms appear directly at their simulated positions.
     _applyJobTopology(ar)
-    if (arr?.dense) arr = _atomFrameScratch = expandMdAtomFrame(arr, _atomFrameScratch)
-    ar.applyPositionLerp(arr, arr, 0, null, [], null)
+    if (!(arr?.dense && ar.applyCompactFrame?.(arr))) {
+      if (arr?.dense) arr = _atomFrameScratch = expandMdAtomFrame(arr, _atomFrameScratch)
+      ar.applyPositionLerp(arr, arr, 0, null, [], null)
+    }
     // Flexibility map → recolour atoms by RMSF; any other mode → drop the overlay.
     if (colorByKey) ar.applyScalarColors?.(colorByKey)
     else ar.clearScalarColors?.()
@@ -1942,9 +1944,10 @@ export function initOxdnaDisplay({
     const idx = Math.max(0, Math.min(n - 1, i | 0))
     const seekToken = ++_streamSeekToken
     if (!_traj.frames[idx]) {
-      ensureTrajectoryFrame(idx).then(ok => { if (ok && seekToken === _streamSeekToken) showFrame(idx) }).catch(() => {})
+      ensureTrajectoryFrame(idx, { latest: true }).then(ok => { if (ok && seekToken === _streamSeekToken) showFrame(idx) }).catch(() => {})
       return
     }
+    _stream?.cancelPendingSeeks()
     _frameIdx = idx
     _stream?.prefetch(idx)
     nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, _traj.frames[idx])
@@ -1952,10 +1955,10 @@ export function initOxdnaDisplay({
     if (heavy) _applyHeavy()   // atomistic/surface follow the scrub (coarse=snap, fine=exact)
   }
 
-  async function ensureTrajectoryFrame(index) {
+  async function ensureTrajectoryFrame(index, { latest = false } = {}) {
     if (!_stream) return true
     const stream = _stream
-    if (!await stream.ensure(index) || stream !== _stream) return false
+    if (!await (latest ? stream.seek(index) : stream.ensure(index)) || stream !== _stream) return false
     const kind = _repKind()
     if (kind !== 'cg' && !_bakeFor(kind)?.byIdx.has(index)) {
       if (kind === 'atomistic') await _ensureJobAtomistic(getAtomisticRenderer?.(), _epoch)

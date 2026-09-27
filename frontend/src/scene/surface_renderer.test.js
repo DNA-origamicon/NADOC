@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import * as THREE from 'three'
 import { initSurfaceRenderer } from './surface_renderer.js'
 
 // Minimal scene stub — the renderer only add()/remove()s its mesh.
@@ -19,6 +20,105 @@ const DATA = {
   vertex_strand_index: [0, 0, 1, 1],
 }
 const MAP = new Map([['sA', 0xff0000], ['sB', 0x00ff00]])
+
+describe('simulation surface buffer reuse', () => {
+  function setup() {
+    const sr = initSurfaceRenderer(makeScene())
+    const data = { ...DATA, vertices: [...DATA.vertices], faces: [...DATA.faces],
+      scalar: true, vertex_colors: Array(12).fill(.3) }
+    sr.update(data)
+    sr.applyPositionLerp(data, data, 0)
+    return { sr, data, geo: sr.getMesh().geometry }
+  }
+
+  function expectFreshNormals(geo, data) {
+    const reference = new THREE.BufferGeometry()
+    reference.setAttribute('position', new THREE.Float32BufferAttribute(data.vertices, 3))
+    reference.setIndex(new THREE.Uint32BufferAttribute(data.faces, 1))
+    reference.computeVertexNormals()
+    expect(geo.attributes.normal.array).toEqual(reference.attributes.normal.array)
+    reference.dispose()
+  }
+
+  it('reuses buffers and normals for repeated scalar frames while refreshing baked colours', () => {
+    const { sr, data, geo } = setup()
+    const normals = vi.spyOn(geo, 'computeVertexNormals')
+    const color = geo.attributes.color
+    data.vertex_colors[0] = .123456789
+    sr.applyPositionLerp(data, data, .7)
+    expect(sr.getMesh().geometry).toBe(geo)
+    expect(geo.attributes.color).toBe(color)
+    expect(color.array[0]).toBe(Math.fround(data.vertex_colors[0]))
+    expect(normals).not.toHaveBeenCalled()
+    expectFreshNormals(geo, data)
+    sr.dispose()
+  })
+
+  it('detects in-place coordinate and equal-length face mutations, including raycast bounds', () => {
+    const { sr, data, geo } = setup()
+    for (const mutate of [() => { data.vertices[2] = 2 }, () => { data.faces.splice(0, 3, 2, 1, 0) }]) {
+      geo.computeBoundingSphere()
+      mutate()
+      sr.applyPositionLerp(data, data, 0)
+      expect(sr.getMesh().geometry).toBe(geo)
+      expect(geo.boundingSphere).toBeNull()
+      expect(Array.from(geo.index.array)).toEqual(data.faces)
+      expectFreshNormals(geo, data)
+    }
+    sr.dispose()
+  })
+
+  it('restores normals after an intervening ordinary animated frame', () => {
+    const { sr, data, geo } = setup()
+    const frame = { ...data, scalar: false, vertices: [...data.vertices] }
+    frame.vertices[2] = 3
+    sr.applyPositionLerp(frame, frame, 0)
+    sr.applyPositionLerp(frame, { ...frame, scalar: true }, 0)
+    expectFreshNormals(geo, frame)
+    sr.dispose()
+  })
+
+  it('keeps the alpha buffer while changing and clearing per-strand fades', () => {
+    const { sr, data, geo } = setup()
+    const alphas = new Map([['sA', .25], ['sB', .7]])
+    sr.applyClusterDisplay({ strandAlphas: alphas })
+    const attr = geo.attributes.instanceAlpha
+    alphas.set('sB', .4)
+    sr.applyPositionLerp(data, data, 0)
+    expect(geo.attributes.instanceAlpha).toBe(attr)
+    expect(Array.from(attr.array)).toEqual([.25, .25, Math.fround(.4), Math.fround(.4)])
+    sr.applyClusterDisplay({})
+    sr.applyPositionLerp(data, data, 0)
+    expect(geo.attributes.instanceAlpha).toBe(attr)
+    expect(Array.from(attr.array)).toEqual([1, 1, 1, 1])
+    sr.dispose()
+  })
+
+  it('replaces incompatible geometry, disposes it, and preserves the material', () => {
+    const { sr, data, geo } = setup()
+    const dispose = vi.spyOn(geo, 'dispose')
+    const material = sr.getMesh().material
+    const smaller = { ...data, vertices: data.vertices.slice(0, 9), faces: [0, 1, 2],
+      vertex_colors: data.vertex_colors.slice(0, 9) }
+    sr.applyPositionLerp(data, smaller, 0)
+    expect(sr.getMesh().geometry).not.toBe(geo)
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(sr.getMesh().material).toBe(material)
+    expectFreshNormals(sr.getMesh().geometry, smaller)
+    sr.dispose()
+  })
+
+  it('releases the uploaded colour buffer when a frame loses its colour source', () => {
+    const { sr, data, geo } = setup()
+    const dispose = vi.spyOn(geo, 'dispose')
+    const uncoloured = { ...data, vertex_colors: null }
+    sr.applyPositionLerp(data, uncoloured, 0)
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(sr.getMesh().geometry.attributes.color).toBeUndefined()
+    expect(sr.getMesh().material.vertexColors).toBe(false)
+    sr.dispose()
+  })
+})
 
 describe('surface_renderer crisp strand zones', () => {
   it('default (blended) mode keeps indexed geometry + per-vertex colours', () => {

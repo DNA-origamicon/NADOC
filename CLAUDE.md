@@ -36,6 +36,7 @@ just frontend             # Vite :5173
 just test-smart           # default backend loop; fast suite, scoped
 just test-affected FILE…  # tight backend loop
 just test-file FILE       # one fast test file
+just test-focused TARGET  # current-task file/node, including slow tests; no session needed
 just test-frontend        # Vitest
 just fmt
 just lint
@@ -61,7 +62,9 @@ The app is at `http://localhost:5173` when both servers run. See [START.md](STAR
   artifact needs an exact, failure-safe `afterEach`/global-teardown cleanup. After the run, query the
   relevant paths and verify that no test-created artifact remains; if cleanup cannot be proven, the
   Playwright run is not complete. Never rely on a successful test body to perform cleanup.
-- Heavy automated test suites (`just test`, `just test-slow`, `just test-all`, and slow groups selected by `just test-smart`) run only in a user-opened `just test-session`. This gate prevents agents from unexpectedly launching time-consuming test suites; it is not a blanket restriction on native simulations.
+- **Test-session scope (user clarification, 2026-09-26):** `just test-session` gates the full `just test` suite and equivalent broad runs (`test-all`, broad `test-slow`, accumulated slow groups in `test-smart`). It is NOT a duration limit or a prerequisite for development validation.
+- **Focused tests and benchmarks directly related to the code currently being developed are authorized by the development task**, including slow-marked tests, GPU checks, native integration checks, and runs lasting minutes or longer. Use `just test-focused tests/test_topic.py[::test_name]` (optional `-k` / `-m` filtering) for pytest; run relevant benchmark scripts directly. Choose the smallest meaningful scope, explain its relation to the change, and clean up artifacts. Do not ask for a test session just because a focused run is long.
+- Unrelated long tests and broad regression sweeps still require a user-opened test session or explicit user authorization. Do not convert a deferred FULL verdict into a request for permission to finish focused development checks. Report broad-suite debt separately; a focused pass does not clear it.
 - User-requested native simulations, including job-specific validation, troubleshooting, retries, continuations, and monitoring, may run without a test-session marker. Authorization to own a simulation validation loop covers the necessary native retries within that task; do not repeatedly ask the user to open a test session or wrap these job launches in the test-suite guard. This does not authorize unrelated benchmarks or heavy test suites.
 - Preserve the guards on automated test suites: never bypass `scripts/test_guard.sh`, create its session marker, or set force/budget escape hatches to run gated tests.
 - If the guard identifies an unmarked test over its per-test budget or a fast-suite overrun, use the `triage-slow-tests` skill. Do not raise the budget.

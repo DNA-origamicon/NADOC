@@ -1,0 +1,355 @@
+{
+  "atoms": 5040,
+  "vertices": 15537,
+  "faces": 31118,
+  "checks": [
+    {
+      "mode": "spheres",
+      "paired": [
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 34972,
+              "colorful": 8238,
+              "black": 3645,
+              "pixelHash": 3547797409
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 34972,
+              "colorful": 7683,
+              "black": 3365,
+              "pixelHash": 954272320
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 34972,
+              "colorful": 6784,
+              "black": 3689,
+              "pixelHash": 406135383
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 34972,
+              "colorful": 7303,
+              "black": 4008,
+              "pixelHash": 967868469
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 34920,
+              "colorful": 8225,
+              "black": 3755,
+              "pixelHash": 4199555404
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28216,
+              "colorful": 13923,
+              "black": 7834,
+              "pixelHash": 90855522
+            }
+          ],
+          "pick": 0
+        },
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 34972,
+              "colorful": 8238,
+              "black": 3645,
+              "pixelHash": 3547797409
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 34972,
+              "colorful": 7683,
+              "black": 3365,
+              "pixelHash": 954272320
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 34972,
+              "colorful": 6784,
+              "black": 3689,
+              "pixelHash": 406135383
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 34972,
+              "colorful": 7303,
+              "black": 4008,
+              "pixelHash": 967868469
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 34920,
+              "colorful": 8225,
+              "black": 3755,
+              "pixelHash": 4199555404
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28216,
+              "colorful": 13923,
+              "black": 7834,
+              "pixelHash": 90855522
+            }
+          ],
+          "pick": 0
+        }
+      ]
+    },
+    {
+      "mode": "impostors",
+      "paired": [
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35139,
+              "colorful": 8374,
+              "black": 3599,
+              "pixelHash": 560080301
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35139,
+              "colorful": 7887,
+              "black": 3297,
+              "pixelHash": 1151755523
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35139,
+              "colorful": 6983,
+              "black": 3462,
+              "pixelHash": 3869685369
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35139,
+              "colorful": 7459,
+              "black": 3778,
+              "pixelHash": 2470695082
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35139,
+              "colorful": 8370,
+              "black": 3761,
+              "pixelHash": 3994053605
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28235,
+              "colorful": 19264,
+              "black": 8352,
+              "pixelHash": 2212827794
+            }
+          ],
+          "pick": 0
+        },
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35139,
+              "colorful": 8374,
+              "black": 3599,
+              "pixelHash": 560080301
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35139,
+              "colorful": 7887,
+              "black": 3297,
+              "pixelHash": 1151755523
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35139,
+              "colorful": 6983,
+              "black": 3462,
+              "pixelHash": 3869685369
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35139,
+              "colorful": 7459,
+              "black": 3778,
+              "pixelHash": 2470695082
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35139,
+              "colorful": 8370,
+              "black": 3761,
+              "pixelHash": 3994053605
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28235,
+              "colorful": 19264,
+              "black": 8352,
+              "pixelHash": 2212827794
+            }
+          ],
+          "pick": 0
+        }
+      ]
+    },
+    {
+      "mode": "surface_phong",
+      "paired": [
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 31889,
+              "black": 484,
+              "pixelHash": 684495361
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 31889,
+              "black": 484,
+              "pixelHash": 684495361
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 31889,
+              "black": 484,
+              "pixelHash": 684495361
+            }
+          ],
+          "pick": "stpl_XY_1_3"
+        },
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 31889,
+              "black": 484,
+              "pixelHash": 684495361
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 31889,
+              "black": 484,
+              "pixelHash": 684495361
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 31889,
+              "black": 484,
+              "pixelHash": 684495361
+            }
+          ],
+          "pick": "stpl_XY_1_3"
+        }
+      ]
+    },
+    {
+      "mode": "surface_physical",
+      "paired": [
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 32664,
+              "black": 484,
+              "pixelHash": 3600889483
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 32664,
+              "black": 484,
+              "pixelHash": 3600889483
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 32664,
+              "black": 484,
+              "pixelHash": 3600889483
+            }
+          ],
+          "pick": "stpl_XY_1_3"
+        },
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 32664,
+              "black": 484,
+              "pixelHash": 3600889483
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 32664,
+              "black": 484,
+              "pixelHash": 3600889483
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 68542,
+              "colorful": 32664,
+              "black": 484,
+              "pixelHash": 3600889483
+            }
+          ],
+          "pick": "stpl_XY_1_3"
+        }
+      ]
+    }
+  ]
+}

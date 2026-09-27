@@ -27,7 +27,9 @@ it('bounds requests and skips obsolete playback work instead of draining a histo
   for (let i = 0; i < 30; i++) { v.advance(33); v.tick() }
   expect(v.request).toHaveBeenCalledTimes(1)
   v.pending[0].finish(); await vi.waitFor(() => expect(document.querySelector('[data-progress]')).toBeTruthy())
-  await new Promise(resolve => setTimeout(resolve, 10)); v.tick()
+  // Download completion includes asynchronous SHA-256 verification. Wait for the
+  // next request instead of assuming that crypto finishes within 10 ms under load.
+  await vi.waitFor(() => { v.tick(); expect(v.pending).toHaveLength(2) })
   expect(Number(new URL(v.pending[1].url, 'http://localhost').searchParams.get('index'))).toBeGreaterThan(7)
   v.api.dispose(); v.viewer.current.dispose(); vi.unstubAllGlobals()
 })

@@ -208,7 +208,7 @@ def get_instance_surface_geometry(
     instance_id: str,
     color_mode: str = "strand",
     grid_spacing: float = 0.20,
-    probe_radius: float = 0.28,
+    probe_radius: float = 0.06,
     radius_inflate: float = 1.30,
     smooth: int = 15,
 ) -> dict:

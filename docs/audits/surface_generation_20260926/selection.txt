@@ -1,0 +1,3 @@
+  FULL: backend/api/main.py matches foundational/shared 'backend/api/main.py'
+decision: FULL  (FULL suite)  [test-dedicated session OPEN]
+$ uv run pytest tests/ -n auto --dist loadfile

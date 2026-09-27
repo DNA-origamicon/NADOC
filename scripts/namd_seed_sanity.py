@@ -28,8 +28,9 @@ It builds the seed BOTH ways — legacy ``design_axis`` and shipped ``oxdna_a3``
 PASSES the a3 seed when it closes pairs (≤ 3.1 Å) AND has no MORE hard clashes than
 the legacy seed.
 
-The full NAMD startup (psfgen H-build → minimize → dynamics) is validated in a
-test-dedicated session, not here — this is the fast local pre-check.
+The full NAMD startup (psfgen H-build → minimize → dynamics) needs a separate
+native integration check. Focused checks for current development need no test
+session; this script itself is only the geometry pre-check.
 
 Usage
 -----
@@ -199,7 +200,7 @@ def main() -> int:
     print()
     # Gate on closure (the fix's purpose + the reliable, tool-free NAMD-readiness proxy).
     # Base clashes are a secondary reference — the definitive startup check (with psfgen
-    # hydrogens + real minimisation) is the test-dedicated session's job, not this.
+    # hydrogens + real minimisation) needs a separate focused native check.
     if hb_a3 <= CLOSED_A:
         print(f"RESULT: PASS — a3 seed closes WC pairs to {hb_a3:.2f} Å "
               f"(legacy {hb_leg:.2f} Å); base clashes {bc_a3} vs {bc_leg} legacy.")
@@ -207,7 +208,7 @@ def main() -> int:
             print(f"        NOTE: a3 has {bc_a3 - bc_leg} more base-base contacts than "
                   "legacy — expected to relax out; confirm in the NAMD minimisation.")
         print("        Definitive NAMD startup (psfgen H-build → minimize → dynamics) is "
-              "validated in a test-dedicated session.")
+              "a separate native check; focused development validation needs no test session.")
         return 0
     print(f"RESULT: FAIL — a3 seed did not close WC pairs ({hb_a3:.2f} Å > {CLOSED_A}). "
           "Inspect the seed before a production run.")

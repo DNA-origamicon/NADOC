@@ -59,7 +59,7 @@ all live in the ledger head. This skill is the thin driver — same shape as `/a
 7. **Gate.** Per the ledger's Gate section: backend → `just test-smart` (cite decision, pass count,
    any `DEFERRED` group); frontend → `just test-frontend` **plus exercise it in the running app**,
    or lead the report with `NOT VERIFIED IN APP`; prose-only → no tests, say so. Never run
-   `just test` / `just test-slow` — those are test-dedicated-session only; ask the user instead.
+   `just test` / broad `just test-slow` without a user-opened session. For slow tests directly related to the fix, use `just test-focused TARGET` without asking for a session; duration is not a gate.
 8. **Record.** In the ledger: strike each resolved bullet with `~~…~~ — <STATE> YYYY-MM-DD:` plus
    **one line of probe evidence** (what you grepped, what it returned). When every bullet in the
    item is struck, cut the whole `TD-NN` section into `project_tech_debt_archive.md` and strike its

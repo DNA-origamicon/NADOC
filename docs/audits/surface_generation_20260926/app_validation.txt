@@ -1,0 +1,5 @@
+NADOC_SURFACE_GPU=1; isolated backend :8001 / Vite :5174.
+SURFACE_GENERATION_APP [{"detail":"coarse","bytes":736655,"census":{"width":1236,"height":634,"visible":16417,"colorful":9761,"black":0,"pixelHash":123419360}},{"detail":"chimerax","bytes":10878386,"census":{"width":1236,"height":634,"visible":11046,"colorful":6923,"black":0,"pixelHash":1735202149}},{"detail":"coarse","bytes":736655,"census":{"width":1236,"height":634,"visible":16417,"colorful":9761,"black":0,"pixelHash":123419360}}]
+  ✓  1 [chromium] › e2e/surface_generation_performance.spec.js:44:1 › standard and beautiful surfaces preserve every binary byte through the real UI (27.4s)
+  1 passed (44.6s)
+Cleanup: owned __e2e__ design/session/project paths, credential file and Playwright output directories verified absent.

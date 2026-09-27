@@ -272,22 +272,42 @@ describe('initAtomSurfaceDisplay', () => {
     expect(deps.surfaceRenderer.update).not.toHaveBeenCalled() // surface mode is 'off'
   })
 
-  it('figure-quality preset owns detail and probe controls, then restores them', () => {
+  it('keeps an adjustable probe for each preset and rebuilds figure quality on release', async () => {
     mountIds(DOM)
-    const api = initAtomSurfaceDisplay(makeDeps())
+    const deps = makeDeps(), display = initAtomSurfaceDisplay(deps)
     const preset = document.getElementById('cb-surface-figure-quality')
     const probe = document.getElementById('sl-surface-probe')
-
-    preset.checked = true
-    preset.dispatchEvent(new Event('change'))
-    expect(api.getSurfaceParams()).toMatchObject({ detail: 'chimerax' })
-    expect(probe.disabled).toBe(true)
-    expect(document.getElementById('sv-surface-probe').textContent).toBe('0.14')
-
-    preset.checked = false
-    preset.dispatchEvent(new Event('change'))
-    expect(api.getSurfaceParams()).toMatchObject({ detail: 'coarse' })
+    preset.checked = true; preset.dispatchEvent(new Event('change'))
     expect(probe.disabled).toBe(false)
+    expect(display.getSurfaceParams()).toMatchObject({ detail: 'chimerax', probe_radius: .06 })
+    await display.applySurfaceMode('on')
+    fetch.mockClear()
+    probe.value = '.22'; probe.dispatchEvent(new Event('input'))
+    expect(fetch).not.toHaveBeenCalled()
+    probe.dispatchEvent(new Event('change'))
+    expect(fetch.mock.calls[0][0]).toContain('probe_radius=0.22&detail=chimerax')
+    await vi.runOnlyPendingTimersAsync()
+    preset.checked = false; preset.dispatchEvent(new Event('change'))
+    expect(display.getSurfaceParams().probe_radius).toBe(.06)
+    await vi.runOnlyPendingTimersAsync()
+    preset.checked = true; preset.dispatchEvent(new Event('change'))
+    expect(display.getSurfaceParams().probe_radius).toBe(.22)
+  })
+
+  it('ignores an older surface response that finishes after the latest request', async () => {
+    mountIds(DOM)
+    const deps = makeDeps(), display = initAtomSurfaceDisplay(deps)
+    const pending = []
+    global.fetch = vi.fn(() => new Promise(resolve => pending.push(resolve)))
+    const first = display.applySurfaceMode('on')
+    const latest = display.applySurfaceMode('on')
+    const chosen = { vertices: [8, 0, 0], faces: [], stats: {} }
+    pending[1]({ ok: true, json: async () => chosen })
+    await latest
+    pending[0]({ ok: true, json: async () => ({ vertices: [4, 0, 0], faces: [], stats: {} }) })
+    await first
+    expect(deps.surfaceRenderer.update).toHaveBeenCalledTimes(1)
+    expect(deps.surfaceRenderer.update.mock.calls[0][0]).toBe(chosen)
   })
 
   it('surface colour buttons set store mode + active classes', () => {

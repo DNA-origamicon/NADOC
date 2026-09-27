@@ -1,0 +1,33 @@
+"""Isolated CUDA closing feasibility probe, no production surface definitions changed."""
+import json,time
+import numpy as np
+from scipy.ndimage import binary_dilation,binary_erosion
+from backend.core.surface import _sphere_struct,_stamp_spheres
+shape=(96,96,192)
+rng=np.random.default_rng(3)
+a=np.zeros(shape,bool)
+_stamp_spheres(a,rng.integers([10,10,10],[86,86,182],(2000,3)),3.4)
+s=_sphere_struct(2.8)
+t=time.perf_counter();ref=binary_erosion(binary_dilation(a,structure=s),structure=s);cpu=time.perf_counter()-t
+start=time.perf_counter()
+import torch
+import torch.nn.functional as F
+if not torch.cuda.is_available():
+ print(json.dumps({'cuda':False}));raise SystemExit
+# Keep defaults intact; report this as a prototype, not a supported backend.
+torch.cuda.set_per_process_memory_fraction(.20)
+k=torch.as_tensor(s.astype(np.float32),device='cuda')[None,None]
+def run():
+ x=torch.as_tensor(a.astype(np.float32),device='cuda')[None,None]
+ d=(F.conv3d(x,k,padding=3)>.5).float()
+ e=F.conv3d(d,k,padding=3)>float(s.sum())-.5
+ return e[0,0].cpu().numpy()
+out=run();cold=time.perf_counter()-start
+np.testing.assert_array_equal(out,ref)
+times=[]
+for i in range(5):
+ t=time.perf_counter();out=run();times.append(time.perf_counter()-t)
+ np.testing.assert_array_equal(out,ref)
+print(json.dumps(dict(shape=shape,exact=True,cpu_s=cpu,gpu_cold_s=cold,gpu_warm_s=times,
+ peak_allocated_bytes=torch.cuda.max_memory_allocated(),peak_reserved_bytes=torch.cuda.max_memory_reserved(),
+ torch=torch.__version__,gpu=torch.cuda.get_device_name())))

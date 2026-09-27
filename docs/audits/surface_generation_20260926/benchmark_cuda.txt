@@ -1,0 +1,60 @@
+/home/joshua/NADOC/backend/api/headless_build.py:201: FastAPIDeprecationWarning: ORJSONResponse is deprecated, FastAPI now serializes data directly to JSON bytes via Pydantic when a return type or response model is set, which is faster and doesn't need a custom response class. Read more in the FastAPI docs: https://fastapi.tiangolo.com/advanced/custom-response/#orjson-or-response-model and https://fastapi.tiangolo.com/tutorial/response-model/
+  _route_create_bundle(
+{"design": "6hb-84bp", "repeat": 0, "gpu": false, "seconds": 4.545478756000193, "accelerated": 0, "fallback": 0, "exact": true}
+{"design": "6hb-84bp", "repeat": 0, "gpu": true, "seconds": 4.249213131000033, "accelerated": 12, "fallback": 0, "exact": true}
+{"design": "6hb-84bp", "repeat": 1, "gpu": true, "seconds": 2.5727252830001817, "accelerated": 12, "fallback": 0, "exact": true}
+{"design": "6hb-84bp", "repeat": 1, "gpu": false, "seconds": 4.519954906999374, "accelerated": 0, "fallback": 0, "exact": true}
+{"design": "6hb-84bp", "repeat": 2, "gpu": false, "seconds": 4.467602591999821, "accelerated": 0, "fallback": 0, "exact": true}
+{"design": "6hb-84bp", "repeat": 2, "gpu": true, "seconds": 2.4985814049996407, "accelerated": 12, "fallback": 0, "exact": true}
+{"design": "VoltronCore", "repeat": 0, "gpu": false, "seconds": 38.76576306300012, "accelerated": 0, "fallback": 0, "exact": true}
+{"design": "VoltronCore", "repeat": 0, "gpu": true, "seconds": 24.109686967000016, "accelerated": 202, "fallback": 3, "exact": true}
+{"design": "VoltronCore", "repeat": 1, "gpu": true, "seconds": 24.372909929999878, "accelerated": 202, "fallback": 3, "exact": true}
+{"design": "VoltronCore", "repeat": 1, "gpu": false, "seconds": 39.71381476899933, "accelerated": 0, "fallback": 0, "exact": true}
+{"design": "VoltronCore", "repeat": 2, "gpu": false, "seconds": 39.682002165000085, "accelerated": 0, "fallback": 0, "exact": true}
+{"design": "VoltronCore", "repeat": 2, "gpu": true, "seconds": 24.096411694999915, "accelerated": 202, "fallback": 3, "exact": true}
+{
+  "results": [
+    {
+      "design": "6hb-84bp",
+      "cpu_s": 4.519954906999374,
+      "gpu_s": 2.5727252830001817,
+      "speedup": 1.7568742908020212,
+      "samples": [
+        [
+          4.545478756000193,
+          4.519954906999374,
+          4.467602591999821
+        ],
+        [
+          4.249213131000033,
+          2.5727252830001817,
+          2.4985814049996407
+        ]
+      ],
+      "exact": true
+    },
+    {
+      "design": "VoltronCore",
+      "cpu_s": 39.682002165000085,
+      "gpu_s": 24.109686967000016,
+      "speedup": 1.6458945410330121,
+      "samples": [
+        [
+          38.76576306300012,
+          39.71381476899933,
+          39.682002165000085
+        ],
+        [
+          24.109686967000016,
+          24.372909929999878,
+          24.096411694999915
+        ]
+      ],
+      "exact": true
+    }
+  ],
+  "source_sha256": {
+    "backend/core/surface.py": "8627be5edab68f82d93bb5f1122eb07eb4a86a490f04affbcecc216ea5258b52",
+    "backend/core/surface_acceleration.py": "2b1d4c869c90520c2694f12104a617bad8a4508e9a7eb121e97681362e3b5e8d"
+  }
+}

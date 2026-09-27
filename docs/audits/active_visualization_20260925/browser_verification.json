@@ -1,0 +1,35 @@
+{
+  "atoms": 5040,
+  "meshes": 5,
+  "updateKind": "coordinates",
+  "snapshotMatches": true,
+  "sameMeshes": true,
+  "colorsStable": true,
+  "alphaStable": true,
+  "pickA": 0,
+  "pickB": 0,
+  "imageA": {
+    "width": 1236,
+    "height": 634,
+    "visible": 35430,
+    "colorful": 16797,
+    "black": 0,
+    "pixelHash": 3154978965
+  },
+  "imageB": {
+    "width": 1236,
+    "height": 634,
+    "visible": 35430,
+    "colorful": 16797,
+    "black": 0,
+    "pixelHash": 3154978965
+  },
+  "imageC": {
+    "width": 1236,
+    "height": 634,
+    "visible": 35430,
+    "colorful": 16797,
+    "black": 0,
+    "pixelHash": 3154978965
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "baseline": "0dc8b857378b077a739289f413a23cfad3e234a3",
+  "repeats": 3,
+  "statistic": "median",
+  "results": [
+    {
+      "case": "6hb_84",
+      "operation": "cando_assembly",
+      "nodes": 504,
+      "before_s": 0.7563526009980706,
+      "after_s": 0.01285117900260957,
+      "speedup": 58.85472460110353,
+      "max_abs_error": 0.0,
+      "relative_max_error": 0.0
+    },
+    {
+      "case": "6hb_84",
+      "operation": "snupi_assembly",
+      "nodes": 504,
+      "before_s": 0.7269371820002561,
+      "after_s": 0.019390260000363924,
+      "speedup": 37.48981096625897,
+      "max_abs_error": 0.0,
+      "relative_max_error": 0.0
+    },
+    {
+      "case": "18hb_196",
+      "operation": "cando_assembly",
+      "nodes": 3528,
+      "before_s": 4.979090332999476,
+      "after_s": 0.09393612400162965,
+      "speedup": 53.00506472795382,
+      "max_abs_error": 0.0,
+      "relative_max_error": 0.0
+    },
+    {
+      "case": "18hb_196",
+      "operation": "snupi_assembly",
+      "nodes": 3528,
+      "before_s": 5.148439714001142,
+      "after_s": 0.160587932994531,
+      "speedup": 32.059941354226645,
+      "max_abs_error": 0.0,
+      "relative_max_error": 0.0
+    },
+    {
+      "case": "504_nodes_200_modes",
+      "operation": "generalized_correlation_post_nma",
+      "before_s": 1.4542072849944816,
+      "after_s": 0.21839957799966214,
+      "speedup": 6.658471130364232,
+      "max_abs_error": 0.0
+    },
+    {
+      "case": "1500_nodes_200_modes",
+      "operation": "generalized_correlation_post_nma",
+      "before_s": 13.698606411999208,
+      "after_s": 2.0845198210008675,
+      "speedup": 6.57158846559776,
+      "max_abs_error": 0.0
+    }
+  ],
+  "cpu": "AMD Ryzen 5 3600 6-Core Processor",
+  "python": "3.12.3",
+  "assembly_fixture": "unrouted geometric bundles",
+  "correlation_fixture": "seeded synthetic modes; eigensolve excluded"
+}

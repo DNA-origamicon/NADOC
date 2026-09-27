@@ -1,0 +1,215 @@
+{
+  "atoms": 5040,
+  "comparisons": [
+    {
+      "mode": "spheres",
+      "paired": [
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28215,
+              "colorful": 13926,
+              "black": 7832,
+              "pixelHash": 4128810621
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28747,
+              "colorful": 14186,
+              "black": 7979,
+              "pixelHash": 3888002058
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35620,
+              "colorful": 9100,
+              "black": 2548,
+              "pixelHash": 2912195066
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35620,
+              "colorful": 9100,
+              "black": 2548,
+              "pixelHash": 2912195066
+            }
+          ],
+          "uploads": {
+            "calls": 10,
+            "bytes": 169152
+          },
+          "dynamicMatrices": false,
+          "pick": 3
+        },
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28215,
+              "colorful": 13926,
+              "black": 7832,
+              "pixelHash": 4128810621
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28747,
+              "colorful": 14186,
+              "black": 7979,
+              "pixelHash": 3888002058
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35620,
+              "colorful": 9100,
+              "black": 2548,
+              "pixelHash": 2912195066
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35620,
+              "colorful": 9100,
+              "black": 2548,
+              "pixelHash": 2912195066
+            }
+          ],
+          "uploads": {
+            "calls": 0,
+            "bytes": 0
+          },
+          "dynamicMatrices": true,
+          "pick": 3
+        }
+      ]
+    },
+    {
+      "mode": "impostors",
+      "paired": [
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28235,
+              "colorful": 19264,
+              "black": 8352,
+              "pixelHash": 2639758555
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28725,
+              "colorful": 19614,
+              "black": 8469,
+              "pixelHash": 145867385
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35790,
+              "colorful": 9372,
+              "black": 0,
+              "pixelHash": 2503412837
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35790,
+              "colorful": 9372,
+              "black": 0,
+              "pixelHash": 2503412837
+            }
+          ],
+          "uploads": {
+            "calls": 10,
+            "bytes": 169152
+          },
+          "dynamicMatrices": false,
+          "pick": 3
+        },
+        {
+          "images": [
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28235,
+              "colorful": 19264,
+              "black": 8352,
+              "pixelHash": 2639758555
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 28725,
+              "colorful": 19614,
+              "black": 8469,
+              "pixelHash": 145867385
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35790,
+              "colorful": 9372,
+              "black": 0,
+              "pixelHash": 2503412837
+            },
+            {
+              "width": 1236,
+              "height": 634,
+              "visible": 35790,
+              "colorful": 9372,
+              "black": 0,
+              "pixelHash": 2503412837
+            }
+          ],
+          "uploads": {
+            "calls": 0,
+            "bytes": 0
+          },
+          "dynamicMatrices": true,
+          "pick": 3
+        }
+      ]
+    }
+  ],
+  "queues": [
+    {
+      "reads": [
+        0,
+        8,
+        16,
+        24,
+        32,
+        40,
+        48
+      ],
+      "applied": [
+        0,
+        8,
+        16,
+        24,
+        32,
+        40,
+        48
+      ]
+    },
+    {
+      "reads": [
+        0,
+        48
+      ],
+      "applied": [
+        0,
+        48
+      ]
+    }
+  ]
+}

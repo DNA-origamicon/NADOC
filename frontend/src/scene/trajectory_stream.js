@@ -6,22 +6,37 @@ export function initTrajectoryStream({ total, pageSize = 8, firstPageSize = page
   let tail = Promise.resolve()
   const pageAt = i => i < firstPageSize ? 0 : 1 + Math.floor((i - firstPageSize) / pageSize)
   const pageStart = page => page === 0 ? 0 : firstPageSize + (page - 1) * pageSize
-  function ensure(index) {
+  function cancelPendingSeeks(exceptPage = -1) {
+    for (const [page, task] of pending) {
+      if (page !== exceptPage && task.latest && !task.started) task.cancelled = true
+    }
+  }
+  function ensure(index, latest = false) {
     if (!live()) return Promise.resolve(false)
     const page = pageAt(Math.max(0, Math.min(total - 1, index)))
+    if (latest) cancelPendingSeeks(page)
     if (ready.has(page)) return Promise.resolve(true)
-    if (pending.has(page)) return pending.get(page)
+    const existing = pending.get(page)
+    if (existing && !existing.cancelled) {
+      // An explicit preparation/playback consumer must still receive its frame,
+      // even if an interactive scrub shares the same pending page.
+      if (!latest) existing.latest = false
+      return existing.promise
+    }
     const start = pageStart(page), end = Math.min(total - 1, pageStart(page + 1) - 1)
+    const task = { latest, started: false, cancelled: false }
     const promise = tail.catch(() => {}).then(async () => {
-      if (!live()) return false
+      if (!live() || task.cancelled) return false
+      task.started = true
       const result = await load(start, end)
       if (!live()) return false
       await apply(result, start, end)
       if (!live()) return false
       ready.add(page)
       return true
-    }).finally(() => pending.delete(page))
-    pending.set(page, promise)
+    }).finally(() => { if (pending.get(page) === task) pending.delete(page) })
+    task.promise = promise
+    pending.set(page, task)
     tail = promise
     return promise
   }
@@ -44,5 +59,6 @@ export function initTrajectoryStream({ total, pageSize = 8, firstPageSize = page
     })().finally(() => { filling = null })
     return filling
   }
-  return { ensure, prefetch, fill, forget: index => ready.delete(pageAt(index)) }
+  return { ensure: index => ensure(index), seek: index => ensure(index, true),
+    cancelPendingSeeks, prefetch, fill, forget: index => ready.delete(pageAt(index)) }
 }

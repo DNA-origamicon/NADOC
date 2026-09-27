@@ -1,0 +1,20 @@
+2026-09-26 final active performance batch
+NADOC_TEST_CONFIRM=1 just test-frontend:
+  543 files passed; 7075 tests passed, 1 skipped; 93.35 seconds.
+Paired Node benchmark: completed, exact solvent matrices and protein geometry.
+just lint: all checks passed.
+uv run python scripts/sim_guard.py smoke: passed before each browser run.
+Commit smoke configuration, smoke.spec.js + assembly_exit_cleanup.spec.js +
+solvent_protein_performance.spec.js: 24 passed in 2.3 minutes.
+Expanded solvent_protein_performance.spec.js including periodic images:
+  1 passed in 23.1 seconds; exact pixel hashes, picking and centroids.
+Browser artifact cleanup verified after both runs; temporary logs removed.
+main.js LOC delta: 0.
+
+Latest backend validation (preceding startup-default batch; no backend changes
+in the final solvent/protein batch):
+  just test-smart decision: FULL (test-dedicated session OPEN).
+  9747 passed, 25 skipped, 13 failed in 611.50 seconds.
+  DEFERRED groups: none.
+  Failure IDs exactly match the 13 baseline failures.
+  Full IDs: ../surface_generation_20260926/startup_default_validation.txt.
