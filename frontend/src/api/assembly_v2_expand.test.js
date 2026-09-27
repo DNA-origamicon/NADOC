@@ -285,3 +285,18 @@ describe('_expandV2Assembly', () => {
     expect(out.format_version).toBeUndefined()
   })
 })
+
+it('retains acknowledged assembly annotations when a delayed geometry response arrives', async () => {
+  const { saveAssemblyAnnotations, resetRevisionWatermark } = await import('./client.js')
+  resetRevisionWatermark()
+  _syncFromAssemblyResponse({ assembly: { id: 'anno-assembly', instances: [], annotations: [] }, revision: 10 })
+  const annotations = [{ id: 'note', text: 'new', refs: [{ kind: 'assembly-part', instanceId: 'copy' }] }]
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ annotations, annotations_enabled: false, revision: 12 }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+  try {
+    await saveAssemblyAnnotations({ annotations, enabled: false })
+    _syncFromAssemblyResponse({ assembly: { id: 'anno-assembly', instances: [{ id: 'copy' }], annotations: [], annotations_enabled: true }, revision: 11 })
+    expect(store.getState().currentAssembly).toMatchObject({ annotations, annotations_enabled: false, instances: [{ id: 'copy' }] })
+    _syncFromAssemblyResponse({ assembly: { id: 'other', instances: [], annotations: [] }, revision: 1 })
+    expect(store.getState().currentAssembly.annotations).toEqual([])
+  } finally { vi.unstubAllGlobals(); resetRevisionWatermark() }
+})

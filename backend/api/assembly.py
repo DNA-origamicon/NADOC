@@ -140,7 +140,7 @@ def _assembly_response(assembly: Assembly) -> dict:
     full["format_version"] = 2
     full["sources"] = sources
     full["instances_v2"] = instances_v2
-    return {"assembly": full}
+    return {"assembly": full, "revision": assembly_state.revision()}
 
 
 def _find_instance(assembly: Assembly, instance_id: str) -> PartInstance:
@@ -2078,6 +2078,8 @@ def seek_assembly_features(body: SeekAssemblyFeaturesRequest) -> dict:
             "instances": restored_instances,
             "feature_log": full_log,
             "feature_log_cursor": new_cursor,
+            "annotations": current.annotations,
+            "annotations_enabled": current.annotations_enabled,
         }
     )
     assembly_state.set_assembly_silent(final)

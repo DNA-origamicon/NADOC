@@ -1,3 +1,4 @@
+import { bakePreparedAssemblyInstances } from '../scene/prepared_assembly_instances.js'
 import { hullCutoutShader, applyHullCutouts, validateHullCutouts } from '../scene/hull_volume_cutouts.js'
 import { validateSharedOverlay } from './shared_overlay.js'
 import { validateSharedVisualization } from './shared_visualization.js'
@@ -61,6 +62,7 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
   }
   function node(o, depth = 0) {
     if (!o.visible || o.isTransformControlsRoot) return null // Tools stay local; section caps remain part of the view.
+    o = bakePreparedAssemblyInstances(o)
     if (o.isSkinnedMesh || o.isBatchedMesh) fail(`Unsupported scene object ${o.type}`)
     const type = o instanceof THREE.ArrowHelper ? 'Object3D' : o.isLineSegments2 ? 'Mesh' : o.isInstancedMesh ? 'InstancedMesh' : o.isLineSegments ? 'LineSegments' : o.isLineLoop ? 'LineLoop' : o.type
     if (depth > 128 || !NODES.has(type)) fail(`Unsupported scene object ${o.type}`)

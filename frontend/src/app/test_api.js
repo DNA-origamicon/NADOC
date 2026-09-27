@@ -234,6 +234,7 @@ export function installTestApi({
     },
     configureMultiOverlay: options => multiOverlay?.configure?.(options),
     configureMultiView: options => multiView?.configure?.(options),
+    comparisonScenesForTest: () => ({ views: multiView?.panels, overlays: multiOverlay?.layers }),
     applyCameraPoseForTest(pose) {
       camera.position.fromArray(pose.position)
       controls.target.fromArray(pose.target)

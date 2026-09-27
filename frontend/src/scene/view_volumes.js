@@ -1,3 +1,4 @@
+import { assemblyVolumePoints } from './assembly_visualization.js'
 import { COLORING_LABELS, supportedColoringSet, coloringFallbackMode } from './coloring_modes.js'
 import { withSkippedColumnPoints } from './view_volume_points.js'
 import * as THREE from 'three'
@@ -118,7 +119,7 @@ export function createLatestFrameScheduler(task, {
   return { schedule, abort, revision: () => revision }
 }
 
-export function initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer }) {
+export function initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer, assemblyRenderer, applyAssemblyLayers = () => {} }) {
   const pane = document.getElementById('right-tab-content-visualization')
   if (!pane) return null
   const section = document.createElement('div')
@@ -170,6 +171,8 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     const detail = event.detail ?? {}, stage = detail.stage ?? 'renderer-stage'
     note(stage, detail)
     if (!detail.viewVolume) return
+    if (stage === 'assembly-scheduled') busyKinds.add('assembly')
+    if (['assembly-applied', 'assembly-cleared', 'assembly-failed'].includes(stage)) busyKinds.delete('assembly')
     if (stage === 'atom-scheduled') busyKinds.add('atom')
     if (stage === 'surface-scheduled') busyKinds.add('surface')
     if (['atom-applied', 'atom-cleared', 'atom-failed'].includes(stage)) busyKinds.delete('atom')
@@ -179,9 +182,13 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   }
   window.addEventListener('nadoc:view-volume-stage', onStage)
 
-  const volumes = () => draftVolumes ?? store.getState().currentDesign?.view_volumes ?? []
-  const entries = () => volumeBackboneEntries(designRenderer.getBackboneEntries(), store.getState().currentGeometry ?? [])
+  const documentKey = () => store.getState().assemblyActive ? 'currentAssembly' : 'currentDesign'
+  const volumes = () => draftVolumes ?? store.getState()[documentKey()]?.view_volumes ?? []
+  const entries = () => store.getState().assemblyActive
+    ? assemblyVolumePoints(store.getState().currentAssembly, assemblyRenderer).map(p => { const i = p.key.lastIndexOf(':'); return { pos: new THREE.Vector3(...p.position), nuc: { helix_id: p.key.slice(0, i), bp_index: Number(p.key.slice(i + 1)) } } })
+    : volumeBackboneEntries(designRenderer.getBackboneEntries(), store.getState().currentGeometry ?? [])
   function points() {
+    if (store.getState().assemblyActive) return assemblyVolumePoints(store.getState().currentAssembly, assemblyRenderer)
     return withSkippedColumnPoints(entries().map(entry => ({ key: `${entry.nuc.helix_id}:${entry.nuc.bp_index}`, position: entry.pos.toArray() })), store.getState().currentDesign?.helices)
   }
   function computeLayers(sourceVolumes = volumes()) {
@@ -196,6 +203,11 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   }
   function applyLayers(layers, revision) {
     const started = performance.now()
+    if (store.getState().assemblyActive) {
+      void applyAssemblyLayers(layers)
+      return
+    }
+    void applyAssemblyLayers([])
     designRenderer.applyViewVolumeLayers?.(layers)
     window.dispatchEvent(new CustomEvent('nadoc:view-volume-layers', { detail: { layers, revision } }))
     timing.last.rendererApplyMs = performance.now() - started
@@ -229,17 +241,19 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     // against the latest UI state, then serialize persistence to prevent an older
     // response from overwriting a newer edit.
     const generation = ++saveGeneration
-    store.setState({ currentDesign: { ...store.getState().currentDesign, view_volumes: next } })
+    const key = documentKey(), id = store.getState()[key]?.id
+    store.setState({ [key]: { ...store.getState()[key], view_volumes: next } })
     saveQueue = saveQueue.then(async () => {
-      const started = performance.now(), response = await api.saveViewVolumes(next)
+      if (documentKey() !== key || store.getState()[key]?.id !== id) return
+      const started = performance.now(), response = await (key === 'currentAssembly' ? api.saveAssemblyViewVolumes(next) : api.saveViewVolumes(next))
       timing.last.persistMs = performance.now() - started; timing.counters.persisted += 1
       note('persisted', { durationMs: timing.last.persistMs })
       // A stale rebuild response may have replaced currentDesign while this PUT
       // was in flight. Reassert only the newest acknowledged snapshot: applying
       // an older queued acknowledgement would briefly snap a newer drag back.
-      if (response?.view_volumes && generation === saveGeneration) {
+      if (response?.view_volumes && generation === saveGeneration && documentKey() === key && store.getState()[key]?.id === id) {
         store.setState({
-          currentDesign: { ...store.getState().currentDesign, view_volumes: response.view_volumes },
+          [key]: { ...store.getState()[key], view_volumes: response.view_volumes },
         })
       }
     }).then(() => requestPreview())
@@ -487,18 +501,22 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     for (const button of section.querySelectorAll('[data-volume-tool]')) button.classList.toggle('active', button.dataset.volumeTool === next)
   }
   window.addEventListener('keydown', onWindowKeyDown)
-  let previousDesign = store.getState().currentDesign
+  let previousDesign = store.getState()[documentKey()]
+  let previousMode = store.getState().assemblyActive
   let previousGeometry = store.getState().currentGeometry
   const unsubscribe = store.subscribe(state => {
-    const designChanged = state.currentDesign !== previousDesign
+    const designChanged = state[documentKey()] !== previousDesign || previousMode !== state.assemblyActive
+    if (previousMode !== state.assemblyActive || previousDesign?.id !== state[documentKey()]?.id) { draftVolumes = null; selectedId = null; saveGeneration++; previewScheduler.abort('document changed'); clearTimeout(representationTimer) }
+    previousMode = state.assemblyActive
     const geometryChanged = state.currentGeometry !== previousGeometry
     if (!designChanged && !geometryChanged) return
-    previousDesign = state.currentDesign
+    previousDesign = state[documentKey()]
     previousGeometry = state.currentGeometry
     // design_renderer subscribed before this module, so a geometry notification
     // reaches us after its synchronous rebuild has populated backbone entries.
     render()
   })
+  assemblyRenderer?.onRebuildComplete?.(() => { if (store.getState().assemblyActive) render() })
   render()
   const apiDebug = {
     add: (shape = 'box') => section.querySelector(shape === 'hexagonal' ? '#view-volume-add-hexagonal' : '#view-volume-add-box').click(),

@@ -88,7 +88,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
       if (kind === 'cg') {
         const geometry = state.currentGeometry ?? []
         entry.cg = buildHelixObjects(geometry, design, root, {}, state.loopStrandIds, state.currentHelixAxes, layer.representation)
-        const columns = new Map(geometry.map(n => [`${n.helix_id}:${n.bp_index}`, 'surface']))
+        const columns = new Map((layer.allColumnKeys ?? geometry.map(n => `${n.helix_id}:${n.bp_index}`)).map(key => [key, 'surface']))
         for (const key of keys) columns.set(key, layer.representation === 'cylinders' ? 'cylinders' : 'full')
         entry.cg.setReferenceStrands(new Set((design.strands ?? []).filter(s => s.is_reference).map(s => s.id)))
         entry.cg.setDetailLevel(layer.representation === 'cylinders' ? 2 : layer.representation === 'beads' ? 1 : 0)

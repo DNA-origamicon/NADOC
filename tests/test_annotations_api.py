@@ -129,3 +129,63 @@ def test_annotations_do_not_change_topology_identity_or_atomistic_hash():
         _design_dump_for_identity(design),
         atomistic_reference_topology_hash(design),
     ) == before
+
+
+def test_assembly_annotations_scope_persistence_and_history():
+    from backend.api import assembly_state
+    from backend.core.models import Assembly
+
+    assembly_state.load_assembly(Assembly())
+    client = TestClient(app)
+    refs = [
+        {"kind": "assembly-part", "instanceId": "copy-one"},
+        {"kind": "assembly-overhang", "instanceId": "copy-two", "overhangId": "oh"},
+    ]
+    note = _note(refs=refs)
+    before = assembly_state.undo_depth()
+    response = client.put(
+        "/api/assembly/annotations", json={"annotations": [note], "enabled": False}
+    )
+    assert response.status_code == 200
+    assert assembly_state.undo_depth() == before
+    assembly = assembly_state.get_or_404()
+    restored = Assembly.model_validate_json(assembly.model_dump_json())
+    assert restored.annotations[0].refs == refs
+    assert restored.annotations_enabled is False
+    # A transform/history edit followed by a metadata edit must not roll notes back.
+    assembly_state.set_assembly(assembly.model_copy(deep=True))
+    client.put(
+        "/api/assembly/annotations",
+        json={"annotations": [_note(refs=refs, text="newer")]},
+    )
+    assert assembly_state.undo().annotations[0].text == "newer"
+    assert assembly_state.redo().annotations[0].text == "newer"
+    assembly_state.set_assembly_silent(restored)
+    assert assembly_state.get_or_404().annotations[0].text == "newer"
+    assert design_state.get_or_404().annotations == []
+
+
+def test_assembly_annotations_reject_unscoped_or_non_annotation_targets():
+    from backend.api import assembly_state
+    from backend.core.models import Assembly
+
+    assembly_state.load_assembly(Assembly())
+    client = TestClient(app)
+    for ref in [
+        {"kind": "strand", "id": "s"},
+        {"kind": "assembly-part"},
+        {"kind": "assembly-overhang", "instanceId": "i"},
+    ]:
+        assert (
+            client.put(
+                "/api/assembly/annotations", json={"annotations": [_note(refs=[ref])]}
+            ).status_code
+            == 422
+        )
+    note = _note(refs=[])
+    assert (
+        client.put(
+            "/api/assembly/annotations", json={"annotations": [note, note]}
+        ).status_code
+        == 422
+    )

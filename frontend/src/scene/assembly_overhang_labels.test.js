@@ -72,3 +72,10 @@ describe('_overhangLabelAnchorsLocal', () => {
     expect(_overhangLabelAnchorsLocal(design, nucs)).toHaveLength(1)
   })
 })
+
+it('provides pickable anchors for unnamed overhangs without changing the design', () => {
+  const design = { overhangs: [{ id: 'unnamed', label: null }] }
+  const points = [nuc({ overhang_id: 'unnamed', backbone_position: [1, 2, 3], bp_index: 0 })]
+  expect(_overhangLabelAnchorsLocal(design, points, { includeUnlabeled: true })).toEqual([{ overhangId: 'unnamed', label: 'unnamed', x: 1, y: 2, z: 3 }])
+  expect(design.overhangs[0].label).toBeNull()
+})

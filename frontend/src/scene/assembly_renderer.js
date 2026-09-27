@@ -1716,6 +1716,7 @@ export function initAssemblyRenderer(scene, store, api) {
     entry.group.updateMatrixWorld(true)
     return {
       entries:     entry.helixCtrl?.backboneEntries ?? [],
+      nucleotides: entry.nucleotides,
       matrixWorld: entry.group.matrixWorld.clone(),
     }
   }

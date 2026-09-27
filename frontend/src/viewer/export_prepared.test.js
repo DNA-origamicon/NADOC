@@ -54,3 +54,16 @@ it('exports all overlay layers through the presentation path with a compatibilit
   expect(prepareScene.mock.calls.at(-1)[0].view.overlay).toEqual([first.uuid, second.uuid])
   api.dispose()
 })
+
+it('uses the active document title and rejects an absent active assembly', async () => {
+  const state = { currentDesign: { metadata: { name: 'Part' } }, currentAssembly: { name: 'Assembly' }, assemblyActive: false }
+  const api = initPreparedExport({ scene: new Scene(), camera: {}, renderer: {},
+    store: { getState: () => state }, captureCurrentCamera: () => ({}), document: { getElementById: () => null } })
+  expect((await api.exportView()).title).toBe('Part')
+  state.assemblyActive = true
+  expect((await api.exportView()).title).toBe('Assembly')
+  expect(prepareScene.mock.calls.at(-1)[0].view.assembly).toBe(true)
+  state.currentAssembly = null
+  await expect(api.exportView()).rejects.toThrow('Open a design')
+  api.dispose()
+})

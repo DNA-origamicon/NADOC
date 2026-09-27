@@ -4090,6 +4090,9 @@ class Assembly(BaseModel):
     groups: List[PartGroup] = Field(default_factory=list)
     assembly_helices: List[Helix] = Field(default_factory=list)
     assembly_strands: List[Strand] = Field(default_factory=list)
+    view_volumes: List[ViewVolume] = Field(default_factory=list)
+    annotations: List[Annotation] = Field(default_factory=list)
+    annotations_enabled: bool = True
     camera_poses: List[CameraPose] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
     configurations: List[AssemblyConfigurationSnapshot] = Field(default_factory=list)

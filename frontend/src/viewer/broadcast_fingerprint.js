@@ -1,6 +1,8 @@
+import { preparedAssemblyMaterial } from '../scene/prepared_assembly_instances.js'
 // Upload versions are not scene revisions: render helpers can mark unchanged
 // buffers dirty every frame. Cache a content signature per uploaded buffer.
 const buffers = new WeakMap()
+const textureBuffers = new WeakMap()
 function bufferSignature(attribute) {
   if (!attribute) return null
   const buffer = attribute.isInterleavedBufferAttribute ? attribute.data : attribute
@@ -30,6 +32,20 @@ export function broadcastFingerprint({ scene, view, pane }, { coordinates = true
       o.geometry && Object.entries(o.geometry.attributes).map(([k, a]) => [k, coordinates ? [a.count, a.itemSize, a.normalized, a.offset, bufferSignature(a)] : [a.count, a.itemSize, a.normalized]]),
       o.geometry?.instanceCount, bufferSignature(o.geometry?.index), o.geometry?.drawRange, o.color?.getHex(), o.intensity])
     for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
+      const assembly = preparedAssemblyMaterial(m)
+      if (assembly) {
+        rows.push(assembly.baseCount, assembly.offset?.value, assembly.radius,
+          ...['xform', 'visibility', 'local', 'positions', 'color'].map(key => {
+            const tex = assembly[key]?.value
+            if (!tex) return null
+            // Texture uploads can be redundant just like vertex-buffer uploads.
+            if (!coordinates) return tex.image.data.length
+            let buffer = textureBuffers.get(tex)
+            if (!buffer) { buffer = {}; textureBuffers.set(tex, buffer) }
+            buffer.array = tex.image.data; buffer.version = tex.version
+            return bufferSignature(buffer)
+          }))
+      }
       rows.push(m.uuid, m.userData?.hullCutouts)
       if (materials.has(m)) continue
       materials.add(m)

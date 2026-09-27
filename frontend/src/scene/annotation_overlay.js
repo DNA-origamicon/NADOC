@@ -55,7 +55,7 @@ export function initAnnotationOverlay({
   getEntries = () => [], getDesign = () => null, resolveBasePosition = () => null,
   resolveExternal = () => null, getOccluders = () => [],
   addFrameCallback = null, removeFrameCallback = null, getViewport = null,
-  readOnly = false, resolveSharedPoints = null,
+  readOnly = false, resolveSharedPoints = null, resolveTargetEntries = null,
 }) {
   const root = document.createElement('div')
   root.className = 'nadoc-anno-layer'
@@ -198,7 +198,7 @@ export function initAnnotationOverlay({
     rec.src = src
     rec.srcLen = src.length
     rec.design = design
-    rec.matched = matchTargetEntries(entry.refs, design, src)
+    rec.matched = resolveTargetEntries?.(entry.refs) ?? matchTargetEntries(entry.refs, design, src)
     rec.extra = unresolvedBaseKeys(entry.refs, rec.matched)
       .map(key => resolveBasePosition(key)).filter(Boolean)
     rec.externalRefs = entry.refs.filter(isExternalRef)
@@ -330,7 +330,8 @@ export function initAnnotationOverlay({
     for (const entry of list) {
       const rec = records.get(entry.id)
       if (!rec || !annotationIsRenderable(entry)) continue
-      const stale = rec.dirty || !sameTargetDesign(rec.design, design) || (rec.src !== src && (src.length || rec.srcLen))
+      const liveTargets = resolveTargetEntries?.(entry.refs)
+      const stale = (liveTargets != null && liveTargets !== rec.matched) || rec.dirty || !sameTargetDesign(rec.design, design) || (rec.src !== src && (src.length || rec.srcLen))
       if (stale && !resolveSharedPoints) rebuildTarget(rec, entry, src, design)
       const spheres = resolveSharedPoints ? [] : writeHighlight(rec)
       let anchor = null

@@ -60,6 +60,8 @@ const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null (s
 import { createDesignRevisionTracker } from './design_revisions.js'
 
 const _designRevisions = createDesignRevisionTracker()
+const _assemblyRevisions = createDesignRevisionTracker()
+let _assemblyRevisionId = null
 
 // Associate completion with the response, never whichever request started last.
 const _responseTimings = new WeakMap()
@@ -97,6 +99,8 @@ function _isStaleDesignResponse(json) {
 /** Reset both design and field revisions after a backend restart. */
 export function resetRevisionWatermark() {
   _designRevisions.reset()
+  _assemblyRevisions.reset()
+  _assemblyRevisionId = null
 }
 
 /** Latest observed server revision, including metadata, for optimistic concurrency. */
@@ -957,7 +961,13 @@ export function _syncFromAssemblyResponse(json) {
   const trace = _responseTimings.get(json)
   try {
     if (json.assembly) {
-      _setTimedState({ currentAssembly: _expandV2Assembly(json.assembly) }, json)
+      if (_assemblyRevisionId !== json.assembly.id) {
+        _assemblyRevisionId = json.assembly.id
+        _assemblyRevisions.reset()
+      }
+      const snapshot = { design: _expandV2Assembly(json.assembly), revision: json.revision }
+      if (!_assemblyRevisions.acceptDesign(snapshot)) return json
+      _setTimedState({ currentAssembly: snapshot.design }, json)
       persistAssembly()
     }
     if (trace) {
@@ -5360,4 +5370,20 @@ export async function relaxCpd(photoproductId) {
     expected_revision: currentRevisionWatermark(),
   })
   return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
+export async function saveAssemblyViewVolumes(volumes) {
+  return _request('PUT', '/assembly/view-volumes', { volumes }, { suppressBusy: true })
+}
+export async function getInstanceRegionSurface(id, segments, { colorMode = 'strand', probeRadius = .06, signal } = {}) {
+  return _request('POST', `/assembly/instances/${encodeURIComponent(id)}/surface/region`,
+    { segments, color_mode: colorMode, probe_radius: probeRadius }, { signal, suppressBusy: true })
+}
+
+export async function saveAssemblyAnnotations({ annotations, enabled }) {
+  const id = store.getState().currentAssembly?.id
+  const json = await _request('PUT', '/assembly/annotations', { annotations, enabled }, { suppressBusy: true })
+  if (store.getState().currentAssembly?.id === id)
+    _assemblyRevisions.acceptMetadata(json, ['annotations', 'annotations_enabled'], id)
+  return json
 }

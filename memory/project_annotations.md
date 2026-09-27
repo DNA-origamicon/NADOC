@@ -1,6 +1,6 @@
 ---
 name: project-annotations
-description: "Right-sidebar Annotations tab — view-only callouts + coloured target highlights for parts; persistence, scope limits, file map."
+description: "Right-sidebar Annotations tab — view-only callouts + coloured target highlights for parts and assemblies; persistence, scope limits, file map."
 metadata:
   node_type: memory
   type: project
@@ -49,8 +49,22 @@ position, target = the canonical selection refs captured with **Use selection**.
 - **Protein / nanoparticle targets:** `annotation_external.js` → world bounding spheres (nanoparticle: mesh
   world pos + design radius; protein: `proteinRenderer.extentOf`, cached 120 ms). Highlight = halo sprite
   (`depthTest:false`), anchor = sphere centre.
-- **Scope limits:** part mode only (overlay+tab disabled while `assemblyActive`; assembly selection is
-  a separate ref vocabulary). `__xb__` extra-base keys resolve once via `selectionManager.getBaseWorldPosition`
+- **Assembly support (2026-09-27):** same controller/panel/overlay; annotations + global toggle live in
+  `Assembly.annotations` / `annotations_enabled` and save through `PUT /assembly/annotations` in `.nass`.
+  User-limited target vocabulary: `assembly-part {instanceId}` and `assembly-overhang {instanceId,overhangId}`.
+  “Use selection” prefers selected overhangs, then individually multi-selected copies, then the active
+  instance; group and part-editor molecular refs are not captured (`assembly_annotation_refs.js`). Unnamed
+  overhangs now have pick anchors using their IDs as display labels, without changing saved names.
+  `assembly_annotation_targets.js`
+  reuses part overhang matching, transforms source-local beads through the live instance matrix, and
+  excludes hidden/deleted instances. Hull/cylinder views fall back to source nucleotide positions when
+  their renderer deliberately allocates no bead meshes. Repeated sources remain independently addressable. Occupancy uses
+  visible instance bounding spheres to avoid expanding every bead across an entire assembly; only
+  annotated targets allocate world-space bead positions. Source `.nadoc` annotations are unchanged.
+  Assembly undo/redo and feature-history seek preserve current annotations. Assembly response revisions
+  reuse `createDesignRevisionTracker` to retain acknowledged notes against delayed geometry responses.
+  Prepared sharing captures the same highlight UUIDs/callouts as parts.
+- **Scope limits:** `__xb__` extra-base keys resolve once via `selectionManager.getBaseWorldPosition`
   (static position, not per-frame). Occupancy ignores whether a bead is hidden by a visibility filter.
 
 **Open:** no cross-tab live sync beyond the `design-changed` broadcast. Not visually hand-checked: glow

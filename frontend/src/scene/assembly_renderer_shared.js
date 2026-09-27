@@ -1,3 +1,4 @@
+import { registerPreparedAssemblyMaterial } from './prepared_assembly_instances.js'
 /**
  * Shared-instancing assembly renderer (path-to-thousands Phase 3b/3c onward).
  *
@@ -564,6 +565,12 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       userBeforeCompile(shader)
       material.userData.shader = shader
     }
+    registerPreparedAssemblyMaterial(material, {
+      xform: uniformsBundle.uXform, visibility: uniformsBundle.uVis,
+      local: uniformsBundle.uBpTex, color: uniformsBundle.uBpColorTex,
+      baseCount: numBpPerInstance, baseCompile: _isImpostor ? null : _priorOnBeforeCompile,
+      radius: _isImpostor ? (material.userData.impostorRadius ?? 0.1) : null,
+    })
   }
 
   // Build a per-mesh "bp transform" DataTexture from the original per-bp
@@ -818,6 +825,10 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
         `)
       material.userData.shader = shader
     }
+    registerPreparedAssemblyMaterial(material, {
+      xform: bundle.uXform, visibility: bundle.uVis, positions: bundle.uAtomPos,
+      color: bundle.uAtomColor, baseCount: bundle.numAtoms, radius: bundle.radius,
+    })
     material.customProgramCacheKey = () => 'atomImpostor_' + material.uuid
     material.userData.isImpostor = true
     material.userData.isAtomImpostor = true
@@ -2112,6 +2123,9 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     }
 
     const capacity = numSegments * numInstances
+    registerPreparedAssemblyMaterial(mat, { xform: srcEntry.uXformUniform,
+      visibility: srcEntry.uVisUniform, local: { value: segXformTex },
+      color: { value: segColorTex }, baseCount: numSegments, offset: u_instanceOffset })
     const mesh = new THREE.InstancedMesh(geometry, mat, Math.max(1, capacity))
     // Collapse instanceMatrix to identity (bp-path pattern); per-instance
     // and per-segment transforms ride in textures sampled by the shader.
@@ -2444,6 +2458,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
         )
     }
 
+    registerPreparedAssemblyMaterial(mat, { xform: srcEntry.uXformUniform,
+      visibility: srcEntry.uVisUniform, offset: u_instanceOffset })
     const mesh = new THREE.InstancedMesh(hullGeo, mat, Math.max(1, numInstances))
     // Collapse instanceMatrix to a single identity row — real per-instance
     // transforms ride the u_instanceXform texture, read in the shader.
@@ -2555,6 +2571,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
           #include <dithering_fragment>
           `)
     }
+    registerPreparedAssemblyMaterial(mat, { xform: srcEntry.uXformUniform,
+      visibility: srcEntry.uVisUniform, offset: u_instanceOffset })
     const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, numInstances))
     const identityArr = new Float32Array(16)
     identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
@@ -2636,6 +2654,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
         )
     }
 
+    registerPreparedAssemblyMaterial(mat, { xform: srcEntry.uXformUniform,
+      visibility: srcEntry.uVisUniform, offset: u_instanceOffset })
     const mesh = new THREE.InstancedMesh(markerGeo, mat, Math.max(1, numInstances))
     const identityArr = new Float32Array(16)
     identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
@@ -3359,7 +3379,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     if (!assembly) return
     const mat = new THREE.Matrix4()
     for (const srcEntry of _sources.values()) {
-      const locals = _overhangLabelAnchorsLocal(srcEntry.design, srcEntry.nucleotides)
+      const locals = _overhangLabelAnchorsLocal(srcEntry.design, srcEntry.nucleotides, { includeUnlabeled: true })
       if (!locals.length) continue
       for (let i = 0; i < srcEntry.instanceIds.length; i++) {
         if (srcEntry.visibility[i] < 0.5) continue
@@ -3957,7 +3977,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     const srcEntry = srcKey ? _sources.get(srcKey) : null
     if (!srcEntry) return empty
     const mw = getLiveTransform(instanceId) ?? new THREE.Matrix4()
-    return { entries: srcEntry.helixCtrl?.backboneEntries ?? [], matrixWorld: mw }
+    return { entries: srcEntry.helixCtrl?.backboneEntries ?? [], nucleotides: srcEntry.nucleotides, matrixWorld: mw }
   }
 
   // Render data for overhang-locations: the design + source-local nucleotides

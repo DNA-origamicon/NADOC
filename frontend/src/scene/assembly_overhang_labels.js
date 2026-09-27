@@ -51,13 +51,13 @@ export function _makeOverhangNameTexture(text) {
 // [{overhangId, label, x, y, z}] at the overhang domain's midpoint nuc,
 // offset radially out from the backbone. Shared by the per-instance sprite
 // builder and the shared path's world-anchor computation.
-export function _overhangLabelAnchorsLocal(design, nucleotides) {
+export function _overhangLabelAnchorsLocal(design, nucleotides, { includeUnlabeled = false } = {}) {
   const out = []
   if (!design?.overhangs?.length || !nucleotides?.length) return out
 
   const labelMap = new Map()
   for (const ovhg of design.overhangs) {
-    if (ovhg.label) labelMap.set(ovhg.id, ovhg.label)
+    if (ovhg.label || includeUnlabeled) labelMap.set(ovhg.id, ovhg.label || ovhg.id)
   }
   if (labelMap.size === 0) return out
 

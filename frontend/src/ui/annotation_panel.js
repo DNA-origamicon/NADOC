@@ -9,6 +9,7 @@ import { ANNOTATION_ICONS, annotationIconMarkup } from '../scene/annotation_icon
 import {
   CALLOUT_TYPES, SIZE_RANGE, TRANSPARENCY_RANGE, annotationHasContent, MAX_TEXT_LENGTH,
 } from '../scene/annotation_model.js'
+import { assemblyAnnotationSelection } from '../scene/assembly_annotation_refs.js'
 import { describeTarget } from '../scene/annotation_targets.js'
 import { icon } from './primitives/icon.js'
 
@@ -46,7 +47,7 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
   })
   const list = h(document, 'div', 'anno-list', { role: 'list' })
   const unavailable = h(document, 'p', 'anno-note anno-unavailable', {
-    text: 'Annotations are available while editing a part.', hidden: true,
+    text: 'Open a part or assembly to add annotations.', hidden: true,
   })
   panel.append(head, enableRow, disabledNote, hint, list, unavailable)
   root.append(panel)
@@ -56,7 +57,9 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
   let available = true
 
   const selectionItems = () => {
-    const sel = store?.getState?.().selection
+    const state = store?.getState?.() ?? {}
+    if (state.assemblyActive) return assemblyAnnotationSelection(state)
+    const sel = state.selection
     return sel?.context === 'design' || sel?.context == null ? (sel?.items ?? []) : []
   }
 
@@ -266,11 +269,18 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
   })
 
   const refreshAll = () => { for (const id of cards.keys()) refreshTarget(id) }
+  const refreshHost = state => {
+    hint.textContent = state.assemblyActive
+      ? 'Select a part instance or overhang in the viewport, then press “Use selection”. Use the Overhangs tool (O) to pick overhangs; these take priority over the active part.'
+      : 'Select a base, end, domain, strand, cluster… in the viewport, then press “Use selection”.'
+    refreshAll()
+  }
   const unsubscribeStore = store?.subscribe?.((state, prev) => {
-    if (state.selection !== prev?.selection || state.currentDesign !== prev?.currentDesign) refreshAll()
+    if (['selection', 'currentDesign', 'currentAssembly', 'assemblyActive', 'activeInstanceId', 'activeGroupId', 'multiSelectedInstanceIds', 'assemblyOverhangSelection'].some(key => state[key] !== prev?.[key])) refreshHost(state)
   })
 
   renderList()
+  refreshHost(store?.getState?.() ?? {})
 
   return {
     setAvailable(next) {

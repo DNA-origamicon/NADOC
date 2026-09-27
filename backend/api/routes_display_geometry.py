@@ -526,11 +526,14 @@ def get_region_surface(body: SurfaceRegionRequest) -> dict:
     and returns the same payload shape as GET /design/surface. An empty
     ``segments`` list returns a zero-vertex mesh so the client can clear cleanly.
     """
+    return build_region_surface(design_state.get_or_404(), body)
+
+
+def build_region_surface(design, body: SurfaceRegionRequest) -> dict:
+    """Shared region renderer for parts and assembly-instance source geometry."""
     import time
     from backend.core.atomistic import build_atomistic_model
     from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
-
-    design = design_state.get_or_404()
 
     colset: set[tuple[str, int]] = set()
     for seg in body.segments:
