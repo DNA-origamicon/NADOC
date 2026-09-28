@@ -350,7 +350,9 @@ repeatable comfort validation are in
 
 The native renderer uses the Photo-mode Full lighting balance: a camera-pinned
 directional key, low ambient fill, and one 2048² soft self-shadow map shared by
-both eyes. Full representation geometry mirrors the editor's physical display
+both eyes, including Ball-and-Stick and Stick representations. Atomistic views
+cast and receive shadows with the same filtering and bias as Full.
+Full representation geometry mirrors the editor's physical display
 primitives: 0.10 nm backbone beads, 0.18 nm 5′ cubes, oriented
 0.30 × 0.06 × 0.70 nm base slabs, 0.025 nm slab connectors, and 0.075 nm
 same-helix strand connectors.
@@ -392,3 +394,18 @@ The opt-in ScryWrite interface exposes the running Linux viewer through MCP,
 including semantic targets, controller input, Extrude draft inspection, browser
 transaction identifiers, and submitted stereo capture. Setup, isolated tests, and
 remaining evidence limits are in [the live-agent guide](../../docs/scrywrite_live_agent.md).
+
+### Desktop-mapped controller sidebars
+
+Left/right menu buttons now independently open their matching desktop-style
+vertical tab menus. Unsupported controls are gray and inert; native actions
+retain their existing selection requirements. The right menu includes Tools,
+and the right-trackpad shortcut remains available when the right menu is closed.
+With a menu open, trackpad clicks enter/move focus and the matching trigger
+activates. Center-click returns to pointer input; deliberate steady aim also
+restores pointing. See [UI style and input standard](../../docs/vr_ui_style.md).
+
+Run `just vr-menu-tour` from the repository root for a live ScryWrite tour of
+every tab and page, or `just vr-menu-tour --validate --hold 0 --exit` for all four
+human-motion presets. See [VR sidebar menus](../../docs/vr_sidebar_menus.md) for
+mapping details, controls, evidence and regeneration instructions.

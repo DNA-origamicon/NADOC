@@ -227,10 +227,12 @@ proves app-submitted eye visibility at those checkpoints, not every trajectory
 frame or headset compositor scanout. Production guides currently draw without
 depth testing, so scene geometry does not hide them; later UI can cover them.
 
-Menu testing opens the tablet with the left menu button, aims the right controller,
-and checks a reversed-ray miss followed by a Tools click and the resulting page.
-Holding the tablet and aiming with the same hand moves the target; use separate
-hands for this stationary-target test. Reports include production world-space hit
+Menu smoke testing opens the right sidebar, enters Tools → View / selection
+controls, then checks a reversed-ray miss followed by a Tools click and the
+resulting detailed page. For complete sidebar coverage, `just vr-menu-tour
+--validate --hold 0 --exit` opens both independent panels and visits every tab
+and page with all four profiles; see [VR sidebar menus](vr_sidebar_menus.md).
+Keep followed tablets stationary with the other hand when testing fixed targets. Reports include production world-space hit
 rectangle axes, width/height, controller distance, nominal angular size (without
 foreshortening), signed edge margin, independent ray intersection, observed hover,
 and resulting page. One hit and one miss establish a smoke test, not a population

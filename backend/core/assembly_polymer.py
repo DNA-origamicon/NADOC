@@ -64,6 +64,7 @@ def _design_dump_for_identity(design) -> dict:
         "camera_poses",
         "animations",
         "annotations",
+        "dimensions",
         "annotations_enabled",
     }
     return {k: v for k, v in design.model_dump().items() if k not in excluded}

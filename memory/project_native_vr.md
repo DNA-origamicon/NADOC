@@ -17,7 +17,7 @@ recreate that method; this confirmation does not close controller/editing gates.
 
 Make NADOC's native VR view a faithful, comfortable counterpart to the desktop application without creating a second geometry, selection, or job model. As redirected on 2026-08-20, the active implementation priority is now complete in-headset **Extrude** and **Move/Rotate** UI/UX; Twist/Bend and simulation-result expansion remain secondary until those two workflows have safe Confirm/Cancel/Undo transactions and pass their physical gates.
 
-Active branch: `feature/native-vr-navigation` (tracked at `origin/feature/native-vr-navigation`).
+Current integration branch: `master`; optimization branch integrated in `7c235bb4`. The older native navigation baseline was developed on `feature/native-vr-navigation`.
 
 Shipped baseline:
 
@@ -27,7 +27,114 @@ Shipped baseline:
 - `44353007` — faithful overhang half-cylinders and extension markers.
 - Current VR supports headset/controllers, grab and two-hand scale, recenter, in-VR representation/color menus, near inspection, and SteamVR desktop access.
 
+## Controller Dimensions (2026-09-27)
+
+`dimensions.hpp` owns model-space measurements;
+`dimension_panel.hpp` owns focused panel/restore and input arbitration. Dimensions
+or Measure in right Properties hides both sidebars. Each trigger pins/recalls its
+controller tip; new/exit freezes the old line. Model grip movement/resizing carries
+measurements, preserves nm, and pins live endpoints. Eye/eye-off and X match the
+desktop entry controls. Commands stay fixed above five scrolling entries, with
+new-entry auto-scroll; menu-button or main Dimensions-button restores both menus.
+Use `just vr-menu-tour --dimension-checks --validate` for physical-runtime synthetic
+input and stereo/desktop evidence. See `docs/audits/vr_dimensions_20260927.md`.
+Measurements persist through the document-bound native journal and appear in the desktop Dimensions list. Saved document measurements import at VR launch. Human through-lens validation remains separate from synthetic checks.
+
+## Desktop-mapped sidebars (2026-09-27)
+
+Desktop verification now samples X11 concurrently with native capture encoding,
+retaining per-sample scores without pausing XR rendering or relaxing the 95%
+threshold. A desktop mismatch keeps the default tour open for review and reports
+failure; `--exit` still fails immediately. See `docs/audits/vr_desktop_capture_20260927.md`.
+
+Left/right controller menu buttons independently open their matching desktop
+sidebar; both can remain open. Outer vertical tabs preserve desktop ordering,
+labels and dark/blue styling. Tools is appended on the right; the right-trackpad
+shortcut is retained. Unsupported controls are gray and consume clicks. Existing
+native representations/colors, recenter, tools, jobs and trajectory panels remain
+connected through thin adapters. Tool and trajectory availability is contextual.
+
+`sidebar_menu.hpp` owns layout/state and `sidebar_runtime.hpp` owns placement,
+rendering and input. `frontend/scripts/generate-vr-sidebar-catalog.mjs` generates
+851 rows/options in `sidebar_catalog.json` and its native header from the desktop
+DOM plus source-linked dynamic control templates. Check drift with
+`just vr-menu-catalog-check`. Detailed usage: [VR sidebar menus](../docs/vr_sidebar_menus.md).
+`just vr-menu-tour` runs a visible isolated ScryWrite tour; `--validate --hold 0
+--exit` covers all pages with all four unchanged human-motion profiles. It keeps
+stereo/pixel evidence and checks the actual owned desktop mirror. Headset comfort
+still requires physical human review. Evidence lives under
+`.development-artifacts/vr-sidebar/`; failed iterations are retained. Final full
+tour: all four presets passed 113 pages / 851 controls each; imprecise fast and
+deliberate profiles required 43 and 41 retries respectively, all successful on
+the second attempt. Native 37/37 and focused Python 8/8 passed. See the
+[audit](../docs/audits/vr_sidebars_20260927.md).
+
+## Grippable menu frames (2026-09-27)
+
+Sidebars now reserve wide outer rails with corner/side grip marks, proximity and
+move/resize colors plus status text, and acquisition haptics. Shared MenuPlacement
+keeps the 75 mm physical near-grip tolerance; sidebar targeting chooses the nearest
+edge and retains grip ownership. Capture metadata exports frame targets/state and
+panel position/scale. `just vr-menu-tour --grip-checks --validate` exercises both
+menus, model isolation and pixel feedback. Evidence: `.development-artifacts/vr-grip-frame/`.
+Detailed menu/lattice outlines share the frame styling.
+
+## Collapsible VR cards (2026-09-27)
+
+The sidebar catalog now includes desktop card titles and ancestry, including
+nested simulation cards and details. Native sidebars toggle sections via either
+pointer/trigger or touchpad focus/trigger, keep independent session state, hide
+collapsed descendants from input/export/rendering and recalculate scroll ranges.
+Cards start expanded; toggling retains the title on the current visible page.
+The existing focus tour now checks both input paths for both hands. Evidence:
+`.development-artifacts/vr-cards/`; see `docs/vr_sidebar_menus.md`.
+
+## UI style and trackpad focus (2026-09-27)
+
+Sidebar buttons now have rounded fills/outlines, desktop muted borders and subtle
+blue action / red Close accents. Scroll up/down buttons are replaced by a vertical
+scrollbar, on the left of left-menu content and right of right-menu content.
+With rail focus, pad up/down pages while retaining focus; left/right
+exits to adjacent controls. Pointer trigger positioning also scrolls. Tests and
+live evidence are in `.development-artifacts/vr-scrollbar/`.
+
+`ui_style.hpp` centralizes native sidebar colors/focus/press tokens;
+`menu_focus.hpp` owns input arbitration. Per-controller trackpad clicks navigate
+its open sidebar or detailed native menu. Up/down cycles controls (including
+unavailable ones); left/right switches sidebar tabs; trigger activates; center
+click explicitly restores pointing. A ray must leave its initial resting target
+and dwell on one target for 450 ms to restore pointing automatically. Held
+triggers suppress handoff. Gray controls remain inert. The radial Tools shortcut
+now applies when the right menu is closed, as approved by the user. Physical
+trackpad touch scrolling is suppressed while navigation focus is active.
+
+ScryWrite exports mode/focus and accepts validated `trackpad_axis` input before
+ordinary click events. `just vr-menu-tour --focus-checks --validate --hold 0
+--exit` exercises both hands and pointer handoff with all four motion profiles.
+Evidence: `.development-artifacts/vr-ui-focus/`; style research and asset/license
+shortlist: [VR UI standard](../docs/vr_ui_style.md). No third-party assets bundled.
+Final focus checks passed all four profiles (one extra reach per pointer
+handoff); 37 native, 20 live-bridge and 3 pixel tests passed. The actual desktop
+comparison passed at 99.04%. See [focus audit](../docs/audits/vr_ui_focus_20260927.md).
+Headset comfort/haptic strength remains on the manual validation debt list.
+
 ## Binding invariants
+
+VR loading optimization (2026-09-27): export-local bounded caches now reuse
+selection tokens and per-base atomistic ownership; validated atom base keys are
+reused at bond endpoints. Synthetic 6k/30k-atom serialization is 1.92–1.94× faster
+with exact wire/manifest parity. Both natural and expanded outputs of the real
+1,740-atom two-helix fixture are byte-identical and pass native gzip validation.
+77 focused VR tests pass; FAST has 9,257 passes and one unchanged scalar/array
+geometry exact-equality failure. These are export timings, not headset startup
+or FPS measurements. See [loading review](../docs/audits/vr_loading_20260927.md)
+for measurements, incoming optimization review, and larger transport candidates.
+
+Atomistic shadow parity (2026-09-27): Ball-and-Stick and Stick now cast and
+receive the same 2048² soft self-shadows as Full; the representation-specific
+shadow bypass was removed. Native build and all 36 CTest checks pass with the
+system linker. SteamVR was not running during verification, so rendered shadow
+appearance and dense-scene headset frame timing remain unverified.
 
 1. Desktop geometry, topology, job data, and visualization state remain authoritative. VR is a projection and intent source, never a competing model.
 2. VR selection emits normalized intents through the canonical selection controller; it does not become a second state writer. Assembly selection remains an explicit boundary.

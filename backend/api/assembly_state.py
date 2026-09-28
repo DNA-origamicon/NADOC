@@ -769,3 +769,14 @@ def apply_diff_inverse(anchor: Assembly, entry) -> Assembly:
             "joints": new_joints,
         }
     )
+
+
+def mutate_display_metadata(fn):
+    """Apply display metadata under the assembly lock without topology history."""
+    with _lock:
+        s = _session()
+        if s.assembly is None:
+            raise HTTPException(404, detail="No active assembly.")
+        fn(s.assembly)
+        s.revision += 1
+        return s.assembly, s.revision

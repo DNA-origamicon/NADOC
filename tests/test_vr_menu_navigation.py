@@ -55,3 +55,27 @@ def test_end_requires_identity_and_detects_navigation_losing_it():
         live.state['owner_tokens'] = []
     with pytest.raises(RuntimeError,match='changed the selected end'):
         activate_extrude(live,losing_click,Path('.'),preserve_selection=True)
+
+
+@pytest.mark.parametrize('selected', [False, True])
+def test_sidebar_route_uses_right_tools_and_preserves_selection(selected):
+    class Sidebars(Menu):
+        def __init__(self):
+            super().__init__(selected=selected)
+            self.state['sidebars'] = [{'open': True}, {'open': False}]
+        def button(self, button, **kwargs):
+            assert button == 'menu' and kwargs['hand'] == 1
+            self.state['sidebars'][1]['open'] = True
+            self.state.update(menu='sidebars', controls=[
+                {'sidebar':'right', 'id':'tab:tools', 'label':'RIGHT / Tools'}])
+        def click(self, label):
+            super().click(label)
+            if label == 'RIGHT / Tools':
+                self.state['controls'] = [{'sidebar':'right', 'id':'tool-settings', 'label':'RIGHT / Tool settings'}]
+            if label == 'RIGHT / Tool settings':
+                self.state.update(menu='tools', controls=[])
+    live = Sidebars()
+    activate_extrude(live, live.click, Path('.'), preserve_selection=selected)
+    assert live.clicked[:2] == ['RIGHT / Tools', 'RIGHT / Tool settings']
+    assert live.state['sidebars'][0]['open']
+    assert ('INSPECT' in live.clicked) != selected

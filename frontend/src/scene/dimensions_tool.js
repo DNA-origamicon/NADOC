@@ -5,6 +5,7 @@
  * Assemblies expose two independent translation gizmos. Recorded dimensions are
  * frozen world-space snapshots while the live dimension remains editable.
  */
+import { initDimensionPersistence } from './dimension_persistence.js'
 import * as THREE from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { getSectionCollapsed, setSectionCollapsed } from '../ui/section_collapse_state.js'
@@ -112,6 +113,7 @@ function _anchorLabel(anchor, fallback) {
 
 export function initDimensionsTool({
   scene, camera, canvas, controls, store, selectionManager, assemblyRenderer, rightSidebar,
+  persistence = null, showToast = () => {},
 }) {
   const section = document.getElementById('dimensions-section')
   const heading = document.getElementById('dimensions-heading')
@@ -161,12 +163,14 @@ export function initDimensionsTool({
     if (index < 0) return
     records[index].visual.dispose()
     records.splice(index, 1)
+    saved.change([], [String(id)])
     _renderList()
   }
 
   function _toggleVisible(item) {
     item.visible = !item.visible
     item.visual.setVisible(item.visible)
+    if (item.id !== 'live') saved.change([serialize(item)])
     _renderList()
   }
 
@@ -362,11 +366,12 @@ export function initDimensionsTool({
     const source = live ?? pending
     if (!source) return false
     const snapshot = {
-      id: nextId++, name: `Dimension ${nextId - 1}`,
+      id: crypto.randomUUID(), name: `Dimension ${nextId++}`,
       a: source.a.clone(), b: source.b.clone(), labels: [...source.labels], visible: true,
     }
     snapshot.visual = _makeVisual(scene, snapshot.a, snapshot.b, RECORDED_COLOR)
     records.unshift(snapshot)
+    saved.change([serialize(snapshot)])
     if (!_isAssembly()) {
       selectionManager.clearSelectedIndividualBases?.()
       _clearPending()
@@ -375,7 +380,8 @@ export function initDimensionsTool({
     return true
   }
 
-  function clear() {
+  function clear({ persist = true } = {}) {
+    if (persist) saved.change([], records.map(item => String(item.id)))
     _removeLive()
     _clearPending()
     for (const record of records) record.visual.dispose()
@@ -407,11 +413,28 @@ export function initDimensionsTool({
     if (!(openPanels ? openPanels.includes('properties') : activeTab === 'properties') && !collapsed) close()
   })
 
+  function serialize(item) {
+    return { id: String(item.id), name: item.name, a: item.a.toArray(), b: item.b.toArray(), visible: item.visible }
+  }
+  function restore(items) {
+    for (const item of records) item.visual.dispose()
+    records = items.map(item => {
+      const a = new THREE.Vector3().fromArray(item.a), b = new THREE.Vector3().fromArray(item.b)
+      const visual = _makeVisual(scene, a, b, RECORDED_COLOR)
+      visual.setVisible(item.visible)
+      return { ...item, a, b, visual, labels: ['Point A', 'Point B'] }
+    })
+    nextId = Math.max(nextId, records.length + 1)
+    _renderList()
+  }
+  const saved = initDimensionPersistence({ store, transport: persistence, onRecords: restore,
+    onError: () => showToast('Dimensions could not be saved. Please retry before closing.', { type: 'error' }) })
   _applyCollapse()
   _renderList()
 
   return {
     open, close, record, clear,
+    reset: () => { clear({ persist: false }); saved.reload() },
     isActive: () => !collapsed,
     getMeasurements: () => [live, ...records].filter(Boolean).map(item => ({
       id: item.id, name: item.name, distance: dimensionDistance(item.a, item.b), visible: item.visible,
@@ -428,7 +451,8 @@ export function initDimensionsTool({
     dispose() {
       if (disposed) return
       disposed = true
-      clear()
+      saved.dispose()
+      clear({ persist: false })
       _disposeAssemblyHandles()
       unsubscribe?.()
       unsubscribeSidebar?.()

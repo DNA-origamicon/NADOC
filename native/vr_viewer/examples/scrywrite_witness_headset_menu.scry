@@ -1,12 +1,9 @@
 SCRYWRITE_WITNESS 1
-# Keep the scripted menu hand invalid so the production fallback opens the tablet
-# one metre down the current physical-headset gaze and faces the submitted eye.
+# Open the independent right sidebar at the physical eye for human review.
 step 600
 button right menu down
 step 2
 button right menu up
 step 90
-expect menu options
-
-# Leave the live Options tablet open for desktop-mirror / through-lens inspection.
+expect menu sidebars
 step 1000000

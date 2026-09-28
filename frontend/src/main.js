@@ -894,6 +894,7 @@ async function main() {
   // endpoint gizmos in assemblies, plus frozen/individually visible records.
   dimensionsTool = initDimensionsTool({
     scene, camera, canvas, controls, store, selectionManager, assemblyRenderer, rightSidebar,
+    persistence: { load: api.getDimensions, save: api.changeDimensions, capture: api.captureDimensionContext }, showToast,
   })
 
   // One-time hint about selection modifiers and the CAD-style Dimensions mode.
@@ -3143,7 +3144,7 @@ async function main() {
 
   /** Clear per-file state (slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
-    window.dispatchEvent(new Event('nadoc:document-reset')); dimensionsTool?.clear?.()
+    window.dispatchEvent(new Event('nadoc:document-reset')); dimensionsTool?.reset?.()
     dimensionsTool?.close?.()
     selectionController.reload('design')
     // Leave photo mode before tearing the scene down. Otherwise the photo
@@ -3263,7 +3264,7 @@ async function main() {
   let _hiddenStripEls = []
 
   function _enterAssemblyMode() {
-    dimensionsTool?.clear?.()
+    dimensionsTool?.reset?.()
     selectionController.reload('assembly')
     if (window.nadocDebug?.verbose)
       console.log('[restore] _enterAssemblyMode() — assemblyActive →', true)
@@ -3315,7 +3316,7 @@ async function main() {
   }
 
   function _exitAssemblyMode() {
-    dimensionsTool?.clear?.()
+    dimensionsTool?.reset?.()
     selectionController.reload('design')
     _setDesignGeometryVisible(true)
     _assemblyFileHandle = null

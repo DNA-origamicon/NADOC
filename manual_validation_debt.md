@@ -521,3 +521,33 @@ in native and multi-overlay views. Small-design automated edit coverage passes;
 full-snapshot throughput needs real-device validation.
 
 - 2026-09-24 mobile shared viewer: Chromium phone emulation verifies sign-in, landscape layout and actual touch rotate/pinch/pan; physical iPhone Safari/Android Chrome rotation, resume, GPU memory and thermal behavior remain pending. See `docs/audits/mobile_viewer_implementation_20260924.md` for the phone acceptance sequence.
+
+- 2026-09-27 native VR focus navigation: with the Vive, open both sidebars, use
+  each trackpad to focus gray/enabled buttons, switch tabs and page, activate with
+  the matching trigger, then center-click or deliberately aim to restore pointing.
+  Check amber focus visibility, haptic strength and 450 ms handoff comfort. Repeat
+  in the detailed Tools menu; verify the right radial shortcut with its menu
+  closed. Synthetic live checks are recorded under `.development-artifacts/vr-ui-focus/`;
+  physical hand-driven comfort remains pending. See `docs/vr_ui_style.md`.
+
+- 2026-09-27 VR collapsible cards: verify title/child distinction and +/- indicators
+  through the headset, including repeated nested simulation titles, with both real
+  controllers. Automated hierarchy, pointer/trigger, touchpad/trigger and rendered
+  pixel checks are recorded under `.development-artifacts/vr-cards/`; physical
+  legibility and preference for initial expanded state remain for human review.
+
+- 2026-09-27 VR grip frames: check through-headset border/handle visibility, physical
+  reach comfort, grab/resize haptics and near-border acquisition with actual hands.
+  The four synthetic presets exercise the normal grip path but do not establish
+  human reach comfort. Use `just vr-menu-tour --grip-checks --validate` for retained
+  rendered/motion evidence under `.development-artifacts/vr-grip-frame/`.
+
+- 2026-09-27 VR Dimensions: check live nm label and pinned endpoint markers through
+  the headset, plus two-controller pin/recall and model-grip transitions with real
+  hands. Synthetic coverage uses `just vr-menu-tour --dimension-checks --validate`;
+  see `docs/audits/vr_dimensions_20260927.md`. Measurements persist in the desktop document; see `docs/audits/vr_dimension_persistence_20260927.md`.
+
+- 2026-09-27 shared VR measurements: the new isolated native save/file/relaunch
+  workflow is blocked by SteamVR compositor watchdog failure. Run the steady and
+  four-profile commands in `docs/audits/vr_dimension_persistence_20260927.md` once
+  SteamVR is healthy; desktop file/reopen/icon controls and native unit tests pass.

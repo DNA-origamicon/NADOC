@@ -123,11 +123,10 @@ class MenuPlacement {
         update(hands, panelHalfWidth);
     }
 
-    [[nodiscard]] bool nearBorder(
+    [[nodiscard]] float borderDistanceMeters(
         const HandPose& hand, const glm::vec2& minimum,
-        const glm::vec2& maximum,
-        float maximumDistanceMeters = kBorderGrabDistanceMeters) const {
-        if (!hand.valid || maximumDistanceMeters <= 0.0F) return false;
+        const glm::vec2& maximum) const {
+        if (!hand.valid) return std::numeric_limits<float>::infinity();
         const glm::vec3 local = localPoint(hand.position);
         auto segmentDistance = [&](const glm::vec2& first, const glm::vec2& second) {
             const glm::vec2 point(local.x, local.y);
@@ -144,7 +143,15 @@ class MenuPlacement {
             segmentDistance({maximum.x, maximum.y}, {minimum.x, maximum.y}),
             segmentDistance({minimum.x, maximum.y}, {minimum.x, minimum.y}),
         });
-        return std::hypot(inPlane, local.z) * scale_ <= maximumDistanceMeters;
+        return std::hypot(inPlane, local.z) * scale_;
+    }
+
+    [[nodiscard]] bool nearBorder(
+        const HandPose& hand, const glm::vec2& minimum,
+        const glm::vec2& maximum,
+        float maximumDistanceMeters = kBorderGrabDistanceMeters) const {
+        return hand.valid && maximumDistanceMeters > 0.F &&
+            borderDistanceMeters(hand, minimum, maximum) <= maximumDistanceMeters;
     }
 
     [[nodiscard]] bool nearPanel(

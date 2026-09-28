@@ -1139,6 +1139,33 @@ export async function saveAnnotations({ annotations, enabled }) {
   return json
 }
 
+/** Document measurement metadata; no geometry refetch. */
+export function captureDimensionContext() { return { docId: docHeaders()['X-NADOC-Doc'] } }
+
+async function _dimensionsRequest(method, kind, id, changes, context = {}) {
+  const json = await _request(method, `/${kind}/dimensions${method === 'GET' ? `?document_id=${encodeURIComponent(id)}` : ''}`,
+    changes, { suppressBusy: true, ...context })
+  if (!json) throw new Error('Could not save or load dimensions')
+  const field = kind === 'assembly' ? 'currentAssembly' : 'currentDesign'
+  const current = store.getState()[field]
+  if (current?.id !== id || json.document_id !== id) return json
+  if (JSON.stringify(current.dimensions ?? []) === JSON.stringify(json.dimensions)) return json
+  if (kind === 'design') {
+    if (!_designRevisions.acceptMetadata(json, ['dimensions'], id)) return json
+    store.setState({ currentDesign: { ...current, dimensions: json.dimensions } })
+    _signalDesignChanged({ geometryUnchanged: true, metadataOnly: true })
+    persistDesign()
+  } else {
+    store.setState({ currentAssembly: { ...current, dimensions: json.dimensions } })
+    persistAssembly()
+  }
+  return json
+}
+export function getDimensions(kind, id) { return _dimensionsRequest('GET', kind, id) }
+export function changeDimensions(kind, id, upsert, deleted, context) {
+  return _dimensionsRequest('PATCH', kind, id, { document_id: id, upsert, delete: deleted }, context)
+}
+
 /** Persist display-only nucleotide/cluster visibility in the .nadoc file. */
 export async function saveVisibilityState(visibilityState) {
   const json = await _request('PUT', '/design/visibility', visibilityState)

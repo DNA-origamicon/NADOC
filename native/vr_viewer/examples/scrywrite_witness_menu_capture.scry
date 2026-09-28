@@ -9,6 +9,19 @@ button right menu down
 step 2
 button right menu up
 step 30
+# Desktop-mapped right sidebar -> Tools -> detailed VR controls.
+aim_menu left right_tools_[tab:tools]
+step 20
+button left trigger down
+step 2
+button left trigger up
+step 20
+aim_menu left right_view_selection_controls_[vr-options]
+step 20
+button left trigger down
+step 2
+button left trigger up
+step 30
 expect menu options
 expect layout valid
 expect display submitted
@@ -37,6 +50,5 @@ button left trigger down
 step 2
 button left trigger up
 step 60
-expect tool move_rotate
-expect status select_target
-snapshot move_rotate_active
+expect tool inspect
+snapshot move_rotate_disabled

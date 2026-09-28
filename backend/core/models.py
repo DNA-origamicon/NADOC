@@ -22,6 +22,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_validator
+from backend.core.dimensions import Dimension
 from backend.core.lattice_frame_model import LatticeFrame, validate_frame_references
 
 
@@ -3010,6 +3011,7 @@ class Design(BaseModel):
     structure; all geometry and physics are derived from it.
     """
 
+    dimensions: List[Dimension] = Field(default_factory=list)
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     lattice_frames: List[LatticeFrame] = Field(default_factory=list)
     helices: List[Helix] = Field(default_factory=list)
@@ -4080,6 +4082,7 @@ class Assembly(BaseModel):
     Each Part's own feature_log is separate and unaffected by assembly ops.
     """
 
+    dimensions: List[Dimension] = Field(default_factory=list)
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     instances: List[PartInstance] = Field(default_factory=list)

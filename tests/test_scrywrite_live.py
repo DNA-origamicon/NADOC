@@ -23,7 +23,7 @@ SPEC.loader.exec_module(mcp)
 def test_discovery_and_offline_error(tmp_path):
     bridge = mcp.Bridge(tmp_path / "offline.sock")
     tools = mcp.dispatch(bridge, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
-    assert len(tools["result"]["tools"]) == 12
+    assert len(tools["result"]["tools"]) == 13
     reply = mcp.dispatch(bridge, {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scrywrite_observe"}})
     assert reply["result"]["isError"] is True
     assert mcp.dispatch(bridge, {"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
@@ -173,3 +173,17 @@ def test_capture_without_submitted_frames_fails_and_recovers(native):
     assert mcp.tool_result(result, capture=True)['isError']
     assert not mcp.tool_result(native.request('observe'))['isError']
     assert native.request('observe')['command_sequence'] == 1
+
+
+@pytest.mark.parametrize("x,y", [(1.1,0), (0,-1.1), (float("nan"),0), (True,0)])
+def test_invalid_trackpad_axis_never_connects(tmp_path, x, y):
+    with pytest.raises(ValueError):
+        mcp.Bridge(tmp_path / "absent").call("scrywrite_trackpad_axis", {
+            "session":"1-2", "expected_sequence":0, "hand":1, "x":x, "y":y})
+
+
+def test_trackpad_axis_uses_normal_sequenced_transport(native):
+    state=native.call('scrywrite_observe', {})
+    result=native.call('scrywrite_trackpad_axis', {'session':state['session'],
+        'expected_sequence':state['command_sequence'], 'hand':1, 'x':-1, 'y':0})
+    assert result['command_sequence']==state['command_sequence']+1

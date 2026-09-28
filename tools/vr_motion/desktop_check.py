@@ -1,8 +1,14 @@
 """Check the actual X11 desktop client rectangle against a fresh native mirror.
 
 Run after motion finishes (never on the timed input thread). Fails if the viewer
-is covered, offscreen, missing or on another desktop. Does not raise windows.
+is covered, offscreen, missing or on another desktop. Optional reveal raises only
+the verified viewer. Desktop samples overlap capture encoding to avoid comparing
+a saved eye with a later moving-head frame; XR rendering is never paused.
 """
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
 import argparse
 import json
 import os
@@ -70,31 +76,90 @@ def reveal_viewer(live):
     time.sleep(.3)  # Desktop composition, outside all measured motion.
 
 
+def sample_during_capture(capture, grab, *, interval=.02, capacity=32):
+    """Bound memory and retain only samples overlapping this capture request.
+
+    Native PNG encoding happens after mirror presentation. Sampling concurrently
+    observes that frame while it is displayed, before capture_to returns. Samples
+    remain private in memory unless the existing pixel oracle accepts them.
+    """
+    samples = deque(maxlen=capacity)
+    stop = threading.Event()
+    ready = threading.Event()
+    started = time.monotonic()
+
+    def sample():
+        try:
+            while not stop.is_set():
+                image = grab()
+                samples.append((time.monotonic() - started, image))
+                ready.set()
+                stop.wait(interval)
+        finally:
+            ready.set()  # Also unblock the caller if the desktop grab fails.
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        worker = pool.submit(sample)
+        ready.wait()
+        if worker.done():
+            worker.result()
+        try:
+            evidence = capture()
+        finally:
+            stop.set()
+            worker.result()
+    # Include the original post-capture observation for diagnostics/comparison.
+    final_image = grab()
+    samples.append((time.monotonic() - started, final_image))
+    return evidence, list(samples)
+
+
 def run(socket, output, *, live=None, reveal=False):
     import numpy as np
     from PIL import Image, ImageGrab
     if live is None:
-        live=LiveSession(Bridge(socket),physical=True)
-    if reveal:reveal_viewer(live)
-    window=viewer_window(live)
-    info=subprocess.check_output(['xwininfo','-id',window],text=True,timeout=3)
-    def field(name):
-        return int(re.search(re.escape(name)+r':\s*(-?\d+)',info).group(1))
-    x,y,w,h=[field(k) for k in ('Absolute upper-left X','Absolute upper-left Y','Width','Height')]
-    output.mkdir(parents=True,exist_ok=False)
-    evidence,_=live.capture_to(output/'capture',files=('left.png','right.png','mirror.png','evidence.json'),discard_source=True)
-    desktop=ImageGrab.grab(xdisplay=os.environ.get('DISPLAY',':1'))
-    if x<0 or y<0 or x+w>desktop.width or y+h>desktop.height:
-        result={'passed':False,'reason':'viewer partly outside desktop'}
-    else:
-        crop=desktop.crop((x,y,x+w,y+h))
-        result=pixel_agreement(np.asarray(Image.open(output/'capture/mirror.png').convert('RGB')),np.asarray(crop.convert('RGB')))
-        # Never retain other applications exposed by an obscured/failed window.
-        if result['passed']:crop.save(output/'desktop-client.png')
-    result.update(session=live.session,frame=evidence['state']['frame'],window=window,rectangle=[x,y,w,h],
-        revealed_owned_viewer=reveal,
+        live = LiveSession(Bridge(socket), physical=True)
+    if reveal:
+        reveal_viewer(live)
+    window = viewer_window(live)
+
+    def rectangle():
+        info = subprocess.check_output(['xwininfo', '-id', window], text=True, timeout=3)
+        return [int(re.search(re.escape(k) + r':\s*(-?\d+)', info).group(1))
+                for k in ('Absolute upper-left X', 'Absolute upper-left Y', 'Width', 'Height')]
+
+    bounds = rectangle()
+    x, y, w, h = bounds
+    output.mkdir(parents=True, exist_ok=False)
+
+    def grab():
+        desktop = ImageGrab.grab(xdisplay=os.environ.get('DISPLAY', ':1'))
+        if x < 0 or y < 0 or x+w > desktop.width or y+h > desktop.height:
+            return None
+        return desktop.crop((x, y, x+w, y+h)).convert('RGB')
+
+    (evidence, _), samples = sample_during_capture(
+        lambda: live.capture_to(output/'capture',
+            files=('left.png', 'right.png', 'mirror.png', 'evidence.json'), discard_source=True),
+        grab)
+    with Image.open(output/'capture/mirror.png') as expected:
+        expected = np.asarray(expected.convert('RGB'))
+    comparisons = [dict(
+        pixel_agreement(expected, np.asarray(crop)) if crop is not None else
+        {'passed': False, 'reason': 'viewer partly outside desktop'},
+        sample_seconds=seconds) for seconds, crop in samples]
+    best = max(range(len(comparisons)), key=lambda i: comparisons[i].get('matching_fraction', -1))
+    result = dict(comparisons[best])
+    if rectangle() != bounds:
+        result.update(passed=False, reason='viewer moved or resized during capture')
+    # Never retain other applications exposed by an obscured/failed window.
+    if result['passed']:
+        samples[best][1].save(output/'desktop-client.png')
+    result.update(session=live.session, frame=evidence['state']['frame'], window=window,
+        rectangle=bounds, revealed_owned_viewer=reveal, samples=comparisons,
+        selected_sample=best, sampling='concurrent with native capture; no render pause',
         scope='Actual X11 desktop pixels versus submitted-eye mirror; not physical headset scanout')
-    (output/'desktop-check.json').write_text(json.dumps(result,indent=2)+'\n')
+    (output/'desktop-check.json').write_text(json.dumps(result, indent=2)+'\n')
     return result
 
 

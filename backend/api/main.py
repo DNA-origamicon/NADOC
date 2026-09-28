@@ -46,6 +46,7 @@ from backend.api.routes_assembly_joints import router as assembly_joints_router
 from backend.api.routes_assembly_linkers import router as assembly_linkers_router
 from backend.api.routes_assembly_loadouts import router as assembly_loadouts_router
 from backend.api.routes_design_loadouts import router as design_loadouts_router
+from backend.api.routes_dimensions import router as dimensions_router
 from backend.api.routes_design_interchange import router as design_interchange_router
 from backend.api.routes_connection_versions import router as connection_versions_router
 from backend.api.routes_overhang_connections import router as overhang_connections_router
@@ -388,6 +389,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(dimensions_router, prefix="/api")
 app.include_router(router, prefix="/api")
 app.include_router(surface_progress_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")

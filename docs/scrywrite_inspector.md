@@ -13,6 +13,11 @@ VR inspector, scene inspector, inspection mode, menu debugging.
 API, stereo object IDs and human-motion probes rather than introducing a second
 controller driver.
 
+For the desktop-mapped controller sidebars, `just vr-menu-tour` starts an isolated
+viewer and performs a visible tab/page tour using this same live bridge and human
+motion tooling. See [VR sidebar menus](vr_sidebar_menus.md) for full validation
+and retained stereo/desktop evidence.
+
 ## Open the inspector
 
 The active local instance is `http://127.0.0.1:8766`. Session-specific socket,

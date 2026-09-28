@@ -562,6 +562,7 @@ def atomistic_reference_topology_hash(design: Design) -> str:
             "camera_poses",
             "animations",
             "annotations",
+            "dimensions",
             "annotations_enabled",
             "loadouts",
             "active_loadout_id",

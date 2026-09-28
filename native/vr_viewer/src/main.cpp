@@ -28,6 +28,10 @@
 #include "jobs.hpp"
 #include "menu_layout.hpp"
 #include "menu_items.hpp"
+#include "sidebar_menu.hpp"
+#include "dimension_panel.hpp"
+#include "dimension_sync.hpp"
+#include "sidebar_grips.hpp"
 #include "picking.hpp"
 #include "reference_grid.hpp"
 #include "scrywrite_witness.hpp"
@@ -2390,13 +2394,8 @@ class GlScene {
             -radius, radius, -radius, radius, radius * 0.05F, radius * 4.0F)
             * glm::lookAt(eye, worldCenter, up);
 
-        // Dense atomistic views are already depth-rich and their hundreds of
-        // thousands of tiny primitives make a third full geometry pass plus 9-tap
-        // PCF disproportionately expensive. Direct diffuse lighting remains clear
-        // at headset resolution and removes both the shadow draw and texture taps.
-        shadowsEnabled_ = representation_ != Representation::ballstick &&
-                          representation_ != Representation::stick;
-        if (!shadowsEnabled_) return;
+        // Every representation, including atomistic views, casts into the same
+        // soft self-shadow map shared by both eyes.
 
         glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
         glViewport(0, 0, kShadowMapSize, kShadowMapSize);
@@ -3194,7 +3193,7 @@ class GlScene {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, shadowTexture_);
         glUniform1i(shadowMap, 0);
-        glUniform1i(shadowsEnabled, shadowsEnabled_ ? 1 : 0);
+        glUniform1i(shadowsEnabled, 1);
     }
 
     void initializeShadowMap() {
@@ -3836,7 +3835,6 @@ class GlScene {
     float localRadius_ = 0.5F;
     glm::mat4 lightViewProjection_{1.0F};
     glm::vec3 lightDirection_{-0.577F, 0.577F, 0.577F};
-    bool shadowsEnabled_ = true;
     static constexpr GLsizei kShadowMapSize = 2048;
 };
 
@@ -4254,8 +4252,10 @@ class MenuPanelSurface {
 
     bool update(
         const std::vector<Vertex>& localGuides,
-        const nadoc_vr::MenuPanelBounds& bounds, bool transparentBackground) {
-        const uint64_t contentHash = hash(localGuides, bounds, transparentBackground);
+        const nadoc_vr::MenuPanelBounds& bounds, bool transparentBackground,
+        const std::vector<Vertex>& fills = {}) {
+        const uint64_t contentHash = hash(localGuides, bounds, transparentBackground)
+            ^ (hash(fills, bounds, false) << 1);
         if (ready_ && contentHash == contentHash_) {
             ++stats_.hits;
             return false;
@@ -4292,6 +4292,16 @@ class MenuPanelSurface {
         if (transparentBackground) glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
         else glClearColor(0.026F, 0.046F, 0.078F, 1.0F);
         glClear(GL_COLOR_BUFFER_BIT);
+        if (!fills.empty()) {
+            const glm::mat4 projection = glm::ortho(bounds.minimum.x, bounds.maximum.x,
+                bounds.minimum.y, bounds.maximum.y, -1.0F, 1.0F);
+            glUseProgram(lineProgram_);
+            glUniformMatrix4fv(lineProjection_, 1, GL_FALSE, &projection[0][0]);
+            glBindBuffer(GL_ARRAY_BUFFER, lineVbo_);
+            glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(fills.size()*sizeof(Vertex)), fills.data(), GL_DYNAMIC_DRAW);
+            glBindVertexArray(lineVao_);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(fills.size()));
+        }
         if (!localGuides.empty()) {
             const glm::mat4 projection = glm::ortho(
                 bounds.minimum.x, bounds.maximum.x,
@@ -4551,6 +4561,8 @@ class GpuFrameTimer {
     std::vector<Report> reports_;
 };
 
+#include "sidebar_runtime.hpp"
+
 class Viewer {
 #ifdef NADOC_SCRYWRITE_TESTING
     friend struct LiveViewerTest;
@@ -4669,6 +4681,7 @@ class Viewer {
         extrudePlane_ = sceneData_.extrudePlane;
         normalizationCenter_ = sceneData_.normalizationCenter;
         normalizationScale_ = sceneData_.normalizationScale;
+        dimensionSync_.initialize(eventPath_,dimensionPanel_.tool,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
         const RepresentationData& initial = sceneData_.representations[
             static_cast<size_t>(sceneData_.initialRepresentation)];
         const auto identity = nadoc_vr::resolveOwnerIdentity(
@@ -4704,6 +4717,7 @@ class Viewer {
     ~Viewer() {
         gpuFrameTimer_.shutdown();
         menuPanelSurface_.shutdown();
+        sidebarMenus_.shutdown();
         witnessSurface_.shutdown();
         desktopSurface_.shutdown();
         glScene_.reset();
@@ -5054,6 +5068,22 @@ class Viewer {
         }
         desktopSurface_.initialize(glfwGetX11Display());
         menuPanelSurface_.initialize();
+        sidebarMenus_.initialize();
+        for(auto& sidebar:sidebarMenus_.menus) {
+            sidebar.available=[this](const std::string& action) {
+                if(action=="trajectory") return trajectoryState_.active;
+                if(!action.starts_with("tool:")) return true;
+                const auto mode=action=="tool:extrude"?nadoc_vr::ToolMode::extrude
+                    :action=="tool:twist"?nadoc_vr::ToolMode::twist
+                    :action=="tool:bend"?nadoc_vr::ToolMode::bend
+                    :action=="tool:move_rotate"?nadoc_vr::ToolMode::move_rotate:nadoc_vr::ToolMode::inspect;
+                return nadoc_vr::ToolShell::selectionCapability(mode,selectedSelectionKind_)!=nadoc_vr::ToolCapability::unsupported;
+            };
+            sidebar.isActive=[this](const std::string& action) {
+                return (action.starts_with("repr:") && std::stoi(action.substr(5))==static_cast<int>(glScene_->representation()))
+                    || (action.starts_with("color:") && std::stoi(action.substr(6))==static_cast<int>(glScene_->coloring()));
+            };
+        }
         gpuFrameTimer_.initialize();
         if (witness_) witnessSurface_.initialize(makeDesktopProgram());
         glEnable(GL_DEPTH_TEST);
@@ -5275,7 +5305,7 @@ class Viewer {
     }
 
     [[nodiscard]] const char* menuPageName() const {
-        if (!menuOpen_) return "closed";
+        if (!menuOpen_) return sidebarMenus_.anyOpen() ? "sidebars" : "closed";
         switch (menuPage_) {
             case MenuPage::options: return "options";
             case MenuPage::tools: return "tools";
@@ -5291,7 +5321,7 @@ class Viewer {
     [[nodiscard]] std::vector<nadoc_vr::scrywrite::WitnessMenuEntry>
     witnessMenuEntries() const {
         std::vector<nadoc_vr::scrywrite::WitnessMenuEntry> entries;
-        if (!menuOpen_) return entries;
+        if (!menuOpen_) return sidebarMenus_.entries();
         auto append = [&](const auto& items, int hitBase = 0) {
             for (size_t index = 0; index < items.size(); ++index) {
                 const MenuItem item = items[index];
@@ -5306,6 +5336,8 @@ class Viewer {
                     menuPlacement_.worldPoint({item.x, item.y + item.halfHeight, 0.0F})
                         - menuPlacement_.worldPoint({item.x, item.y, 0.0F}),
                 });
+                if(menuPage_==MenuPage::tools && hitBase==0 && index<5)
+                    entries.back().enabled=nadoc_vr::ToolShell::selectionCapability(static_cast<nadoc_vr::ToolMode>(index),selectedSelectionKind_)!=nadoc_vr::ToolCapability::unsupported;
             }
         };
         if (menuPage_ == MenuPage::options) append(kOptionsMenuItems);
@@ -5320,10 +5352,20 @@ class Viewer {
             controls[index] = menuControlItem(index);
         }
         append(controls, kMenuControlHitBase);
+        const auto sidebarEntries=sidebarMenus_.entries();
+        entries.insert(entries.end(),sidebarEntries.begin(),sidebarEntries.end());
         return entries;
     }
 
+    [[nodiscard]] std::string combinedMenuLayoutStatus() const {
+        for(const auto& menu:sidebarMenus_.menus) if(menu.open && !menu.audit.valid()) return menu.audit.status();
+        if(menuOpen_) return menuLayoutAudited_?menuLayoutAudit_.status():"pending";
+        return sidebarMenus_.anyOpen()?"valid":"closed";
+    }
+
     [[nodiscard]] std::string witnessHoverName() const {
+        const auto sidebarHover=sidebarMenus_.hoverLabel();
+        if(!sidebarHover.empty()) return sidebarHover;
         return nadoc_vr::scrywrite::witnessHoverLabel(
             witnessMenuEntries(), menuHover_);
     }
@@ -5346,7 +5388,7 @@ class Viewer {
         if (!witness_ || !witness_->pendingAim()) return;
         const auto aim = *witness_->pendingAim();
         const auto item = nadoc_vr::scrywrite::findWitnessMenuEntry(
-            witnessMenuEntries(), aim.label);
+            liveTargets(), aim.label);
         if (!item) {
             witness_->rejectAim("menu control not present: " + aim.label);
             return;
@@ -5366,22 +5408,47 @@ class Viewer {
     }
 
     void toggleMenu(size_t hand) {
+        if(dimensionPanel_.tool.active) {dimensionPanel_.exit(sidebarMenus_.menus);return;}
         radialToolMenu_.close();
-        trajectoryScrubHand_.reset();
-        menuHand_ = hand;
-        if (menuOpen_) {
-            menuOpen_ = false;
-            menuHover_ = -1;
-            suppressManipulationUntilRelease_ = true;
-        } else if (planePickSlot_) {
-            clearPlanePick();
-            requestedMenuPage_ = MenuPage::tool_config;
-            menuOpenRequested_ = true;
-        } else {
-            requestedMenuPage_ = MenuPage::options;
-            menuOpenRequested_ = true;
+        if(menuHand_==hand) legacyMenuFocus_.focus.reset();
+        if(menuOpen_ && menuHand_==hand) {
+            menuOpen_=false; menuHover_=-1; suppressManipulationUntilRelease_=true;
+            return;
         }
+        sidebarMenus_.toggle(hand, witnessObserverPosition_, witnessObserverOrientation_);
+        suppressManipulationUntilRelease_ = true;
         pulse(hand, 0.45F);
+    }
+
+    void activateSidebarAction(const std::string& action, size_t hand) {
+        if(action=="feedback:activate") {pulse(hand,.22F);return;}
+        if(dimensionPanel_.action(action,sidebarMenus_.menus,normalizationScale_)) {
+            menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();latticeOpen_=false;
+            dimensionPanel_.tool.update(hands_,manipulator_.transform(),false);
+            return;
+        }
+        if (action.starts_with("repr:")) {
+            publishStyleRequest(static_cast<Representation>(std::stoi(action.substr(5))), glScene_->coloring());
+        } else if (action.starts_with("color:")) {
+            publishStyleRequest(glScene_->representation(), static_cast<Coloring>(std::stoi(action.substr(6))));
+        } else if (action == "recenter") {
+            recenterRequested_ = true; recenterHand_ = hand;
+        } else if (action.starts_with("tool:")) {
+            sidebarMenus_.menus[hand].open=false;
+            legacyMenuFocus_.focus.reset();
+            menuHand_=hand;
+            const std::array<std::string,5> names{"extrude","twist","bend","move_rotate","inspect"};
+            const auto item=std::find(names.begin(),names.end(),action.substr(5));
+            if(item!=names.end()) activateRadialTool(static_cast<size_t>(item-names.begin()));
+        } else {
+            sidebarMenus_.menus[hand].open=false;
+            legacyMenuFocus_.focus.reset();
+            requestedMenuPage_ = action == "options" ? MenuPage::options
+                : action == "jobs" ? MenuPage::jobs
+                : action == "trajectory" ? MenuPage::trajectory
+                : action == "desktop" ? MenuPage::desktop : MenuPage::tools;
+            menuHand_ = hand; menuOpenRequested_ = true;
+        }
     }
 
     void appendMenuGuides() {
@@ -5429,14 +5496,10 @@ class Viewer {
         const glm::vec3 border = borderGripAvailable
             ? glm::vec3(1.0F, 0.62F, 0.18F)
             : glm::vec3(0.22F, 0.42F, 0.62F);
-        line(menuWorld(bounds.minimum.x, bounds.maximum.y),
-             menuWorld(bounds.maximum.x, bounds.maximum.y), border);
-        line(menuWorld(bounds.maximum.x, bounds.maximum.y),
-             menuWorld(bounds.maximum.x, bounds.minimum.y), border);
-        line(menuWorld(bounds.maximum.x, bounds.minimum.y),
-             menuWorld(bounds.minimum.x, bounds.minimum.y), border);
-        line(menuWorld(bounds.minimum.x, bounds.minimum.y),
-             menuWorld(bounds.minimum.x, bounds.maximum.y), border);
+        nadoc_vr::drawGripFrame(bounds,menuPlacement_.resizeActive()?nadoc_vr::GripFrameState::resizing:
+            menuPlacement_.dragHand()?nadoc_vr::GripFrameState::moving:borderGripAvailable?nadoc_vr::GripFrameState::ready:nadoc_vr::GripFrameState::idle,
+            [&](glm::vec3 a,glm::vec3 b,glm::vec3 color){line(menuWorld(a.x,a.y),menuWorld(b.x,b.y),color);},
+            [](nadoc_vr::MenuPanelBounds,glm::vec3){});
         const float footerTop = menuPage_ == MenuPage::desktop
             ? bounds.minimum.y + 0.075F : -0.465F;
         line(menuWorld(bounds.minimum.x, footerTop),
@@ -5868,10 +5931,8 @@ class Viewer {
                     capability != nadoc_vr::ToolCapability::configuration_required) {
                     color = {0.30F, 1.0F, 0.48F};
                 }
-                if (static_cast<int>(index) == menuHover_) {
-                    color = capability == nadoc_vr::ToolCapability::unsupported
-                        ? glm::vec3(0.85F, 0.34F, 0.30F)
-                        : glm::vec3(1.0F, 0.78F, 0.22F);
+                if (static_cast<int>(index) == menuHover_ && capability != nadoc_vr::ToolCapability::unsupported) {
+                    color = glm::vec3(1.0F, 0.78F, 0.22F);
                 }
                 if (index == 6 && toolShell_.mode() == nadoc_vr::ToolMode::extrude) color = paintedExtrusionReady() ? glm::vec3(0.30F, 1.0F, 0.48F) : glm::vec3(0.30F, 0.32F, 0.36F);
                 itemBox(kToolMenuItems[index], color);
@@ -5998,14 +6059,9 @@ class Viewer {
             ? glm::vec3(1.0F, 0.62F, 0.18F)
             : glm::vec3(0.22F, 0.62F, 0.82F);
         const auto& bounds = kLatticePanelBounds;
-        line({bounds.minimum.x, bounds.maximum.y, 0},
-             {bounds.maximum.x, bounds.maximum.y, 0}, border);
-        line({bounds.maximum.x, bounds.maximum.y, 0},
-             {bounds.maximum.x, bounds.minimum.y, 0}, border);
-        line({bounds.maximum.x, bounds.minimum.y, 0},
-             {bounds.minimum.x, bounds.minimum.y, 0}, border);
-        line({bounds.minimum.x, bounds.minimum.y, 0},
-             {bounds.minimum.x, bounds.maximum.y, 0}, border);
+        nadoc_vr::drawGripFrame(bounds,latticePlacement_.resizeActive()?nadoc_vr::GripFrameState::resizing:
+            latticePlacement_.dragHand()?nadoc_vr::GripFrameState::moving:nadoc_vr::GripFrameState::idle,
+            line,[](nadoc_vr::MenuPanelBounds,glm::vec3){});
         line({bounds.minimum.x, -0.222F, 0}, {bounds.maximum.x, -0.222F, 0},
              border * 0.65F);
         appendPlacedTextCentered(
@@ -6459,11 +6515,12 @@ class Viewer {
     }
 
     void activateRadialTool(size_t item) {
-        static constexpr std::array<nadoc_vr::ToolMode, 4> modes = {
+        static constexpr std::array<nadoc_vr::ToolMode, 5> modes = {
             nadoc_vr::ToolMode::extrude,
             nadoc_vr::ToolMode::twist,
             nadoc_vr::ToolMode::bend,
             nadoc_vr::ToolMode::move_rotate,
+            nadoc_vr::ToolMode::inspect,
         };
         if (item >= modes.size()) return;
         const nadoc_vr::ToolMode mode = modes[item];
@@ -6596,7 +6653,9 @@ class Viewer {
                     publishTrajectoryRequest("seek", *frame);
                 }
             }
-            const int hit = menuHit(hands_[hand]);
+            if(legacyMenuFocus_.focus.active && hand!=menuHand_) {controlTargeted[hand]=controlTargeted[hand] || menuHit(hands_[hand])>=0;continue;}
+            const int hit = hand==menuHand_ ? legacyMenuFocus_.resolve(witnessMenuEntries(),menuPageName(),menuHit(hands_[hand]),glfwGetTime(),triggerPressed_[hand]) : menuHit(hands_[hand]);
+            controlTargeted[hand]=controlTargeted[hand] || legacyMenuFocus_.focus.active;
             const auto desktopPointer = desktopPointerUv(hands_[hand]);
             controlTargeted[hand] = controlTargeted[hand] || hit >= 0 ||
                                     desktopPointer.has_value();
@@ -6738,6 +6797,7 @@ class Viewer {
                     const auto mode = static_cast<nadoc_vr::ToolMode>(hit);
                     const auto capability = nadoc_vr::ToolShell::selectionCapability(
                         mode, selectedSelectionKind_);
+                    if(capability==nadoc_vr::ToolCapability::unsupported) continue;
                     toolShell_.activate(mode, selectedSelectionKind_);
                     pendingToolTransform_.cancel();
                     publishToolTransform();
@@ -7072,8 +7132,12 @@ class Viewer {
             normalizationCenter_, normalizationScale_, {0,0,-kViewDistanceMeters}, line);
         appendRadialToolGuides();
         appendLatticeGuides();
+        dimensionPanel_.tool.draw(manipulator_.transform(),normalizationScale_,witnessObserverOrientation_,line,
+            [&](const auto&... args){appendPlacedText(args...);});
+        sidebarMenus_.draw();
         const size_t menuGuideBegin = controllerGuides_.size();
         appendMenuGuides();
+        if(menuOpen_) legacyMenuFocus_.draw(witnessMenuEntries(),line);
         menuGuides_.assign(
             controllerGuides_.begin() + static_cast<std::ptrdiff_t>(menuGuideBegin),
             controllerGuides_.end());
@@ -7844,6 +7908,9 @@ class Viewer {
             liveInput_.gripPressed.fill(false);
         }
         liveTrackpadPressed_.fill(false);
+        liveTrackpadAxis_.fill(glm::vec2(0));
+        legacyMenuFocus_.focus.reset();
+        for(auto& menu:sidebarMenus_.menus) menu.focus.reset();
         trackpadPressed_.fill(false);
         radialToolMenu_.close();
         latticePaintStroke_.reset();
@@ -7912,8 +7979,10 @@ class Viewer {
             << ",\"scene_revision\":" << sceneRefresh_.revision()
             << ",\"visualization_sequence\":" << visualizationSequence_
             << ",\"coordinate_sequence\":" << coordinateSequence_
+            << ",\"menu_input_mode\":" << quote(legacyMenuFocus_.focus.active?"trackpad":"pointer")
+            << ",\"menu_focus_hit\":" << quote(legacyMenuFocus_.focus.id)
             << ",\"representation\":" << quote(glScene_ ? representationName(glScene_->representation()) : "none")
-            << ",\"layout\":" << quote(menuLayoutAudited_ ? menuLayoutAudit_.status() : "pending")
+            << ",\"layout\":" << quote(combinedMenuLayoutStatus())
             << ",\"layout_detail\":" << quote(menuLayoutAudited_ ? menuLayoutAudit_.summary() : "")
             << ",\"menu_position\":" << point(menuPlacement_.position())
             << ",\"menu_docked\":" << (menuPlacement_.worldDocked() ? "true" : "false")
@@ -7931,9 +8000,12 @@ class Viewer {
                 << ",\"hit\":" << entries[i].hit
                 << ",\"position\":" << point(entries[i].worldPosition)
                 << ",\"hit_half_right\":" << point(entries[i].hitHalfRight)
-                << ",\"hit_half_up\":" << point(entries[i].hitHalfUp) << '}';
+                << ",\"hit_half_up\":" << point(entries[i].hitHalfUp)
+                << ",\"id\":" << quote(entries[i].id) << ",\"sidebar\":" << quote(entries[i].sidebar)
+                << ",\"tab\":" << quote(entries[i].tab) << ",\"enabled\":" << (entries[i].enabled?"true":"false")
+                << ",\"active\":" << (entries[i].active?"true":"false") << '}';
         }
-        out << "],\"hands\":[";
+        out << "],\"sidebars\":" << sidebarMenus_.json() << ",\"dimensions\":" << dimensionPanel_.tool.json(normalizationScale_,manipulator_.transform()) << ",\"hands\":[";
         for (size_t i = 0; i < hands_.size(); ++i) {
             if (i) out << ',';
             const auto& h = hands_[i];
@@ -8027,6 +8099,10 @@ class Viewer {
                 liveInput_.hands[h].position = {x,y,z};
                 liveInput_.hands[h].orientation = glm::normalize(q);
                 liveInput_.hands[h].valid = true;
+            } else if (operation == "trackpad_axis") {
+                const auto h=hand(); const float x=number(), y=number(); end();
+                if(std::abs(x)>1 || std::abs(y)>1) throw std::runtime_error("axis outside [-1,1]");
+                liveTrackpadAxis_[h]={x,y};
             } else if (operation == "button") {
                 const auto h = hand(); std::string button; int pressed = -1;
                 if (!(in >> button >> pressed) || (pressed != 0 && pressed != 1)) throw std::runtime_error("invalid button");
@@ -8119,8 +8195,7 @@ class Viewer {
                 menuOpen_ ? (menuPlacement_.worldDocked() ? "docked" : "following")
                           : "closed",
                 menuPlacement_.position(),
-                !menuOpen_ ? "closed"
-                    : menuLayoutAudited_ ? menuLayoutAudit_.status() : "pending",
+                combinedMenuLayoutStatus(),
                 menuLayoutAudited_ ? menuLayoutAudit_.summary() : "layout not rendered yet",
                 mirrorSourceInitialized_
                     ? (lastMirrorSubmittedEye_ ? "submitted" : "fallback")
@@ -8246,7 +8321,10 @@ class Viewer {
             const bool touching = !witness_ && !liveSocket_.enabled() && trackpadTouch.isActive && trackpadTouch.currentState &&
                                   trackpadAxis.isActive;
             const bool desktopActive = menuOpen_ && menuPage_ == MenuPage::desktop;
-            if (touching && desktopActive) {
+            const bool sidebarActive=sidebarMenus_.scrollAt(hands_[hand]);
+            const bool focusActive=sidebarMenus_.menus[hand].focus.active || (menuOpen_ && menuHand_==hand && legacyMenuFocus_.focus.active);
+            const bool navigationMenuOpen=sidebarMenus_.menus[hand].open || (menuOpen_ && menuHand_==hand);
+            if (touching && !focusActive && (desktopActive || sidebarActive)) {
                 const float y = glm::clamp(trackpadAxis.currentState.y, -1.0F, 1.0F);
                 if (!desktopTrackpadTouching_[hand]) {
                     desktopTrackpadTouching_[hand] = true;
@@ -8256,13 +8334,14 @@ class Viewer {
                     desktopTrackpadTravel_[hand] += y - desktopTrackpadLastY_[hand];
                     desktopTrackpadLastY_[hand] = y;
                     if (std::abs(desktopTrackpadTravel_[hand]) >= 0.18F) {
-                        desktopSurface_.scroll(desktopTrackpadTravel_[hand] > 0.0F);
+                        if(sidebarActive) sidebarMenus_.scrollAt(hands_[hand],desktopTrackpadTravel_[hand]>0.0F?-1:1);
+                        else desktopSurface_.scroll(desktopTrackpadTravel_[hand] > 0.0F);
                         desktopTrackpadTravel_[hand] = 0.0F;
                         trackpadScrolled_[hand] = true;
                     }
                 }
                 selectionVolumes_[hand].endScroll();
-            } else if (touching && !(hand == 1U && trackpadPressed)) {
+            } else if (touching && !navigationMenuOpen && !(hand == 1U && trackpadPressed)) {
                 desktopTrackpadTouching_[hand] = false;
                 if (!selectionVolumes_[hand].scrolling()) {
                     selectionVolumes_[hand].beginScroll(trackpadAxis.currentState.y);
@@ -8277,7 +8356,12 @@ class Viewer {
                 if (!trackpadPressed) trackpadScrolled_[hand] = false;
             }
 
-            if (!desktopActive && trackpadClicked && !trackpadScrolled_[hand] && hand == 0U) {
+            const glm::vec2 navigationAxis=liveControlsEnabled()?liveTrackpadAxis_[hand]:glm::vec2(trackpadAxis.currentState.x,trackpadAxis.currentState.y);
+            if(trackpadClicked && menuOpen_ && menuHand_==hand && legacyMenuFocus_.trackpad(witnessMenuEntries(),menuPageName(),menuHit(hands_[hand]),navigationAxis.x,navigationAxis.y)) {
+                pulse(hand,.12F);
+            } else if(trackpadClicked && sidebarMenus_.trackpad(hand, navigationAxis, hands_[hand])) {
+                pulse(hand,.12F);
+            } else if (!desktopActive && !sidebarActive && trackpadClicked && !trackpadScrolled_[hand] && hand == 0U) {
                 publishSelectionLevel(nadoc_vr::nextTabSelectionLevel(selectionLevel_));
                 pulse(hand, 0.40F);
             } else if (!desktopActive && hand == 1U && trackpadClicked) {
@@ -8301,8 +8385,8 @@ class Viewer {
             }
         }
 
-        std::array<bool, 2> menuGripTargeted{};
-        if (latticeOpen_) {
+        std::array<bool, 2> menuGripTargeted = sidebarMenus_.grips(hands_, gripClicked_, [this](size_t hand,float strength) { suppressManipulationUntilRelease_=true; pulse(hand,strength); });
+        if (latticeOpen_ && !menuGripTargeted[0] && !menuGripTargeted[1]) {
             const auto& bounds = kLatticePanelBounds;
             const float panelHalfWidth = (bounds.maximum.x - bounds.minimum.x) * 0.5F;
             latticePlacement_.update(hands_, panelHalfWidth);
@@ -8382,7 +8466,7 @@ class Viewer {
         const bool rigidToolPreview =
             toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
             toolShell_.previewRequested();
-        const bool rightToolDrag = rigidToolPreview && !inputSuppressed &&
+        const bool rightToolDrag = !dimensionPanel_.tool.active && rigidToolPreview && !inputSuppressed &&
                                    !menuGripActive &&
                                    hands_[1].valid && hands_[1].pressed &&
                                    !(hands_[0].valid && hands_[0].pressed);
@@ -8403,7 +8487,17 @@ class Viewer {
             }
         }
         const auto wheelTargeted = processThumbwheelInput();
-        std::array<bool, 2> menuControlTargeted = wheelTargeted;
+        std::array<float,2> legacyDistance{1e9F,1e9F};
+        if(menuOpen_) for(size_t hand=0;hand<2;++hand) {
+            auto p=menuRayPanelLocalPoint(hands_[hand]);
+            if(p) legacyDistance[hand]=glm::length(menuPlacement_.worldPoint(*p)-hands_[hand].position);
+        }
+        auto sidebarBlocked=wheelTargeted;
+        if(menuOpen_ && legacyMenuFocus_.focus.active) sidebarBlocked[menuHand_]=true;
+        auto sidebarTargeted = sidebarMenus_.input(hands_, triggerClicked_, triggerPressed_, sidebarBlocked, legacyDistance,glfwGetTime(),
+            [&](const std::string& action, size_t hand) { activateSidebarAction(action,hand); });
+        std::array<bool, 2> menuControlTargeted = sidebarTargeted;
+        if(menuOpen_ && legacyMenuFocus_.focus.active) menuControlTargeted[menuHand_]=wheelTargeted[menuHand_];
         if (menuOpen_) menuControlTargeted = processMenuInput(menuControlTargeted);
         const auto latticeTargeted = processLatticeInput(menuControlTargeted);
         for (size_t hand = 0; hand < menuControlTargeted.size(); ++hand) {
@@ -8414,6 +8508,10 @@ class Viewer {
                                         latticeTargeted[hand];
         }
         if (radialToolMenu_.open()) menuControlTargeted[1] = true;
+        dimensionPanel_.input(hands_,manipulator_.transform(),next!=nadoc_vr::ManipulationMode::none,
+            triggerClicked_,menuControlTargeted,liveInputOwner_,sidebarMenus_.menus,normalizationScale_,
+            [&](size_t hand){pulse(hand,.3F);});
+        dimensionSync_.update(dimensionPanel_.tool,normalizationCenter_,normalizationScale_);
         updateSelectionVolumeCandidates(menuControlTargeted);
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             if (menuControlTargeted[hand] || !triggerClicked_[hand] ||
@@ -8684,6 +8782,7 @@ class Viewer {
     }
 
     void renderMenuSurface(const glm::mat4& viewProjection) {
+        sidebarMenus_.render(viewProjection);
         if (!menuOpen_) return;
         const auto bounds = menuPanelBounds();
         if (menuPage_ == MenuPage::desktop) {
@@ -8768,7 +8867,7 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (menuOpen_) {
+        if (menuOpen_ || sidebarMenus_.anyOpen()) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             renderMenuSurface(viewProjection);
         }
@@ -9168,7 +9267,7 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (menuOpen_) {
+        if (menuOpen_ || sidebarMenus_.anyOpen()) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             renderMenuSurface(viewProjection);
         }
@@ -9234,7 +9333,7 @@ class Viewer {
                         witnessHoverName(),
                         nadoc_vr::toolModeName(toolShell_.mode()),
                         toolShell_.status(),
-                        menuLayoutAudited_ ? menuLayoutAudit_.status() : "pending",
+                        combinedMenuLayoutStatus(),
                         menuLayoutAudited_ ? menuLayoutAudit_.summary()
                                            : "layout not rendered yet",
                     };
@@ -9737,6 +9836,7 @@ class Viewer {
     nadoc_vr::scrywrite::LiveSocket liveSocket_;
     nadoc_vr::scrywrite::WitnessInput liveInput_;
     std::array<bool, 2> liveMenuPressed_{}, liveTrackpadPressed_{};
+    std::array<glm::vec2,2> liveTrackpadAxis_{};
     std::string liveSession_, liveMode_ = "inspect";
     std::array<LiveEyeCapture, 2> liveEyes_{};
     GLuint liveObjectIdTexture_ = 0;
@@ -9971,6 +10071,10 @@ class Viewer {
     size_t selectedJobIndex_ = 0;
     nadoc_vr::MenuPlacement menuPlacement_;
     MenuPanelSurface menuPanelSurface_;
+    SidebarRuntime sidebarMenus_;
+    nadoc_vr::DimensionPanel dimensionPanel_;
+    nadoc_vr::DimensionSync dimensionSync_;
+    nadoc_vr::MenuFocusList legacyMenuFocus_;
     GpuFrameTimer gpuFrameTimer_;
     nadoc_vr::MenuComfortTracker menuComfortTracker_;
     nadoc_vr::TimingWindow menuNearestEyeTiming_{120};

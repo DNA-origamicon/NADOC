@@ -107,6 +107,8 @@ struct WitnessMenuEntry {
     glm::vec3 worldPosition{};
     glm::vec3 hitHalfRight{};
     glm::vec3 hitHalfUp{};
+    std::string id{}, sidebar{}, tab{};
+    bool enabled = true, active = false;
 };
 
 struct WitnessGuideLine {

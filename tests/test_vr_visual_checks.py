@@ -49,3 +49,69 @@ def test_desktop_occlusion_is_not_a_passing_black_background_match():
     assert pixel_agreement(source,source)['passed']
     assert not pixel_agreement(source,np.zeros_like(source))['passed']
     assert not pixel_agreement(np.zeros_like(source),np.zeros_like(source))['passed']
+
+
+def test_desktop_samples_overlap_capture_and_propagate_errors():
+    import threading
+    from tools.vr_motion.desktop_check import sample_during_capture
+    capturing = threading.Event()
+    observed = threading.Event()
+
+    def grab():
+        if capturing.is_set():
+            observed.set()
+        return capturing.is_set()
+
+    def capture():
+        capturing.set()
+        assert observed.wait(2), 'desktop must be sampled before capture returns'
+        return 'evidence'
+
+    evidence, samples = sample_during_capture(capture, grab)
+    assert evidence == 'evidence'
+    assert any(value for _, value in samples)
+
+    def broken_grab():
+        raise OSError('desktop unavailable')
+
+    with pytest.raises(OSError, match='desktop unavailable'):
+        sample_during_capture(capture, broken_grab)
+
+
+@pytest.mark.parametrize('occluded,moved,passed', [
+    (False, False, True), (True, False, False), (False, True, False),
+])
+def test_desktop_capture_uses_overlapping_frame_but_rejects_occlusion_and_movement(
+        tmp_path, monkeypatch, occluded, moved, passed):
+    from PIL import Image
+    from types import SimpleNamespace
+    from tools.vr_motion import desktop_check as check
+    source = np.zeros((50, 50, 3), dtype=np.uint8)
+    source[10:30, 10:30] = [255, 190, 30]
+    frame = Image.fromarray(source)
+    blank = Image.new('RGB', (50, 50))
+    calls = []
+
+    def capture_to(destination, **kwargs):
+        destination.mkdir(parents=True)
+        frame.save(destination/'mirror.png')
+        return {'state': {'frame': 42}}, None
+
+    def sample(capture, grab):
+        return capture(), [(0, blank if occluded else frame), (.1, blank)]
+
+    def geometry(*args, **kwargs):
+        calls.append(True)
+        x = 5 if moved and len(calls) > 1 else 0
+        return f'Absolute upper-left X: {x}\nAbsolute upper-left Y: 0\nWidth: 50\nHeight: 50'
+
+    monkeypatch.setattr(check, 'viewer_window', lambda live: '0x1')
+    monkeypatch.setattr(check, 'sample_during_capture', sample)
+    monkeypatch.setattr(check.subprocess, 'check_output', geometry)
+    live = SimpleNamespace(session='123-test', capture_to=capture_to)
+    output = tmp_path/'desktop'
+    result = check.run(None, output, live=live)
+    assert result['passed'] is passed
+    assert (output/'desktop-client.png').exists() is passed
+    assert not result['samples'][-1]['passed']
+    assert result['required_fraction'] == .95

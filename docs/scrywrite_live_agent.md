@@ -80,6 +80,7 @@ private directory. Captures persist in the private directory for review.
 |---|---|
 | `scrywrite_observe` | Session, frame/time, focus/tracking flags, menu targets, hands, selection/owner identities, layout, browser feedback and Extrude state |
 | `scrywrite_pose` | Test controller pose in OpenXR LOCAL meters, normalized XYZW quaternion |
+| `scrywrite_trackpad_axis` | Set normalized X/Y direction before a real trackpad click; does not navigate by itself |
 | `scrywrite_button` | Menu, trigger, grip, or trackpad press/release through normal input handling |
 | `scrywrite_aim_menu` | Aim at a discovered label, including `EXTRUDE LENGTH WHEEL` and `LATTICE EXIT` |
 | `scrywrite_aim_lattice` | Aim at the visible portion of a lattice cell |
@@ -197,3 +198,7 @@ unsupported by the existing application contract. The live interface reports
 `footprint_state:unresolved` and `commit_supported:false`; this work tests its UI and
 cancellation without inventing a backend geometry mutation path. Human comfort,
 reach, haptics and stereo legibility gates remain unchanged.
+
+Menu observation includes per-sidebar `input_mode` and `focus_id`, and detailed-menu
+`menu_input_mode` / `menu_focus_hit`. `just vr-menu-tour --focus-checks --validate
+--hold 0 --exit` tests focus, disabled triggers and deliberate pointer handoff.

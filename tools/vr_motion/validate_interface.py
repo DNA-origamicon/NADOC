@@ -36,6 +36,9 @@ def run(socket, output):
     report['session'] = probe.session
     try:
         probe.send('release')
+        for hand in (0, 1):
+            if probe.state.get('sidebars', [{}, {}])[hand].get('open'):
+                probe.button('menu', hand=hand)
         if probe.state['menu'] != 'closed':
             probe.button('menu')
         anchor, _ = probe.capture('anchor')
@@ -74,8 +77,14 @@ def run(socket, output):
         for hand, pose in enumerate(saved):
             probe.send('pose', hand=hand, position=pose['position'], orientation=pose['orientation_xyzw'])
         probe.frame()
-        probe.button('menu')
-        report['checks']['menu_button_opens'] = probe.state['menu'] == 'options'
+        probe.button('menu', hand=1)
+        report['checks']['menu_button_opens'] = probe.state['menu'] == 'sidebars'
+        # Enter the ordinary detailed controls through the right Tools tab.
+        for identifier in ('tab:tools', 'vr-options'):
+            control = next(c for c in probe.state['controls'] if c.get('sidebar') == 'right' and c.get('id') == identifier)
+            probe.send('aim_menu', hand=1, label=control['label'])
+            probe.frame()
+            probe.button('trigger')
         target = next(c for c in probe.state['controls'] if c['label'] == 'TOOLS')
         probe.send('aim_menu', hand=1, label='TOOLS')
         probe.frame()
@@ -101,7 +110,7 @@ def run(socket, output):
         report['checks']['target_activated'] = hit['predicted_hit'] and hit['hover'] == 'tools' and probe.state['menu'] == 'tools'
         report['target_trials'] = {'label': 'TOOLS', 'target': target, 'miss': miss, 'hit': hit}
         probe.capture('menu-result')
-        probe.button('menu')
+        probe.button('menu', hand=1)
         report['interaction_counts'] = {'intended_hits': 1, 'successful_hits': int(report['checks']['target_activated']),
             'intended_misses': 1, 'correctly_rejected_misses': int(report['checks']['miss_rejected'])}
         report['passed'] = all(report['checks'].values())

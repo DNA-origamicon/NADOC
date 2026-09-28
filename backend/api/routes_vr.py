@@ -14,6 +14,7 @@ from backend.core.display_placement import measured_display_placement
 
 import copy
 import gzip
+from functools import lru_cache
 import hashlib
 import ipaddress
 import json
@@ -826,6 +827,9 @@ def _serialize_scene(
     }
     active_representation = "full"
 
+    # Repeated base/domain/strand owners dominate atomistic export metadata.
+    # Bound memory and keep tokens local to this immutable export.
+    @lru_cache(maxsize=8192)
     def selection_token(*values) -> str:
         payload = json.dumps(values, ensure_ascii=False, separators=(",", ":"))
         # Match JavaScript encodeURIComponent, which produces the feedback tokens.
@@ -2381,6 +2385,16 @@ def _serialize_scene(
         selection_token("atom", base_key_value, atom_name)
         for base_key_value, atom_name in atom_identity_payloads
     )
+
+    @lru_cache(maxsize=8192)
+    def atom_base_owner_tokens(key: str) -> tuple[str, ...]:
+        nucleotide = nucleotide_by_base_key.get(key)
+        return (
+            nucleotide_owner_tokens(nucleotide)
+            if nucleotide is not None
+            else owner_tokens(("base", key))
+        )
+
     atom_tool_handles = tuple(
         (token, "atom", position)
         for token, position in zip(atom_tool_tokens, atom_positions)
@@ -2474,13 +2488,8 @@ def _serialize_scene(
                 zip(atomistic_model.atoms, atom_positions, atom_palettes)
             ):
                 if position is not None:
-                    key = atom_base_key(atom)
-                    nucleotide = nucleotide_by_base_key.get(key)
-                    aliases = (
-                        nucleotide_owner_tokens(nucleotide)
-                        if nucleotide is not None
-                        else owner_tokens(("base", key))
-                    )
+                    key = atom_identity_payloads[atom_index][0]
+                    aliases = atom_base_owner_tokens(key)
                     emit(
                         "P",
                         atom_primitive_identity(atom_index),
@@ -2511,8 +2520,8 @@ def _serialize_scene(
             )
             first_atom = atomistic_model.atoms[first_index]
             second_atom = atomistic_model.atoms[second_index]
-            first_key = atom_base_key(first_atom)
-            second_key = atom_base_key(second_atom)
+            first_key = atom_identity_payloads[first_index][0]
+            second_key = atom_identity_payloads[second_index][0]
             common_strand = (
                 str(first_atom.strand_id)
                 if first_atom.strand_id == second_atom.strand_id
@@ -2544,16 +2553,8 @@ def _serialize_scene(
                     )
                 )
             )
-            first_endpoint_aliases = (
-                nucleotide_owner_tokens(nucleotide_by_base_key[first_key])
-                if first_key in nucleotide_by_base_key
-                else owner_tokens(("base", first_key))
-            )
-            second_endpoint_aliases = (
-                nucleotide_owner_tokens(nucleotide_by_base_key[second_key])
-                if second_key in nucleotide_by_base_key
-                else owner_tokens(("base", second_key))
-            )
+            first_endpoint_aliases = atom_base_owner_tokens(first_key)
+            second_endpoint_aliases = atom_base_owner_tokens(second_key)
             bond_aliases = tuple(
                 dict.fromkeys(
                     (*bond_aliases, *first_endpoint_aliases, *second_endpoint_aliases)
@@ -3189,6 +3190,8 @@ def _cleanup_after_process(
     coordinate_path: Path,
 ) -> None:
     process.wait()
+    from backend.api.vr_dimensions import finish as finish_dimensions
+    finish_dimensions(event_path)
     from backend.api.routes_vr_scene import cleanup_scene_refresh
     cleanup_scene_refresh(event_path)
     scene_path.unlink(missing_ok=True)
@@ -4941,6 +4944,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         )
         trajectory_path, coordinate_path = _write_trajectory_feeds(body, view_rotation)
 
+        from backend.api import vr_dimensions
+        vr_dimensions.prepare(event_path, body.assembly_active, view_rotation)
         live_socket_path = None
         if body.scrywrite_live != "off":
             live_socket_path = Path(tempfile.mkdtemp(prefix="nadoc-scry-")) / "viewer.sock"
@@ -4964,6 +4969,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             process_started_at = time.time()
         except OSError as exc:
             scene_path.unlink(missing_ok=True)
+            vr_dimensions.finish(event_path)
             event_path.unlink(missing_ok=True)
             feedback_path.unlink(missing_ok=True)
             tool_feedback_path.unlink(missing_ok=True)
@@ -4984,6 +4990,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         time.sleep(0.15)
         if process.poll() is not None:
             scene_path.unlink(missing_ok=True)
+            vr_dimensions.finish(event_path)
             event_path.unlink(missing_ok=True)
             feedback_path.unlink(missing_ok=True)
             tool_feedback_path.unlink(missing_ok=True)
@@ -5037,6 +5044,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "reference_grid": body.reference_grid,
         }
         _write_state(state)
+        vr_dimensions.start(event_path)
         threading.Thread(
             target=_cleanup_after_process,
             args=(

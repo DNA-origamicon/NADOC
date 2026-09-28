@@ -266,3 +266,10 @@ lint:
 # Check agent-memory size, indexing, and link integrity without changing files.
 lint-memory:
     scripts/lint_memory.sh
+
+# Live desktop-mapped VR sidebar tour; unsupported controls remain read-only.
+vr-menu-tour *ARGS:
+    uv run python -m tools.vr_workflows.menu_tour {{ARGS}}
+
+vr-menu-catalog-check:
+    node frontend/scripts/generate-vr-sidebar-catalog.mjs --check

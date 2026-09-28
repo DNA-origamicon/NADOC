@@ -8,7 +8,17 @@ def activate_extrude(live, click, output, *, preserve_selection=False):
     hand = live.state['hands'][1]
     live.send('pose', hand=0, position=hand['position'], orientation=hand['orientation_xyzw'])
     live.frame()
-    if live.state['menu'] == 'closed':
+    if 'sidebars' in live.state and live.state['menu'] in ('closed','sidebars'):
+        if not live.state['sidebars'][1]['open']:
+            live.button('menu', hand=1)
+            live.frame()
+        def sidebar_click(identifier):
+            target = next(c for c in live.state['controls'] if c.get('sidebar') == 'right' and c.get('id') == identifier)
+            click(target['label'])
+        sidebar_click('tab:tools')
+        # Detailed controls retain the transactional Inspect/Extrude workflow.
+        sidebar_click('tool-settings')
+    elif live.state['menu'] == 'closed':
         live.button('menu', hand=0)
         live.frame()
     labels = {c['label'] for c in live.state['controls']}
