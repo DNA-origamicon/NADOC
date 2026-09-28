@@ -2795,6 +2795,11 @@ def test_cylinder_snapshot_distinguishes_single_stranded_overhang_halves() -> No
         "segment:oh1:s1:0:0:0:coarse"
     ]
     assert _owner_token("overhang", "ov1") in coarse.owner_aliases
+    token = _owner_token("overhang", "ov1")
+    for section in parse_scene_contract(text).values():
+        assert section[token].tool_scope_kind == "overhang"
+        assert section[token].values == pytest.approx((1, 0, 0))
+    assert (token, 1.0, 1.0) in coarse.tool_scope_owners
 
     design.overhang_bindings = [
         SimpleNamespace(

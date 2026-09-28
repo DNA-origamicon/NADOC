@@ -2,6 +2,7 @@
 // Unlisted tool × selection pairs are unsupported and must never be widened.
 NADOC_VR_TOOL_CAPABILITY(move_rotate, cluster, direct_preview)
 NADOC_VR_TOOL_CAPABILITY(move_rotate, base, direct_preview)
+NADOC_VR_TOOL_CAPABILITY(move_rotate, overhang, direct_preview)
 NADOC_VR_TOOL_CAPABILITY(move_rotate, end, direct_preview)
 NADOC_VR_TOOL_CAPABILITY(move_rotate, domain, direct_preview)
 NADOC_VR_TOOL_CAPABILITY(move_rotate, strand, direct_preview)

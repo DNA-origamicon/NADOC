@@ -151,7 +151,11 @@ export function initTranslateRotateTool(deps) {
 
   async function _beginVRPreview(clusterId) {
     if (_vrPreview?.clusterId === clusterId) return { accepted: true }
-    if (_vrStarting) return _vrStarting
+    if (_vrStarting) {
+      await _vrStarting
+      return _vrPreview?.clusterId === clusterId
+        ? { accepted: true } : { accepted: false, reason: 'preview_target_changed' }
+    }
     if (getActive()) return { accepted: false, reason: 'desktop_tool_active' }
     const cluster = store.getState().currentDesign?.cluster_transforms?.find(
       candidate => candidate.id === clusterId)

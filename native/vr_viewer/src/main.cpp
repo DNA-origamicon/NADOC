@@ -35,6 +35,7 @@
 #include "dimension_panel.hpp"
 #include "view_volume_panel.hpp"
 #include "extrude_panel.hpp"
+#include "move_panel.hpp"
 #include "view_volume_shader.hpp"
 #include "dimension_sync.hpp"
 #include "sidebar_grips.hpp"
@@ -994,7 +995,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
                   >> handle.center.x >> handle.center.y >> handle.center.z;
             const bool validKind = handle.kind == "base" || handle.kind == "end"
                 || handle.kind == "domain" || handle.kind == "strand"
-                || handle.kind == "crossover" || handle.kind == "atom";
+                || handle.kind == "crossover" || handle.kind == "atom" || handle.kind == "overhang";
             if (handle.id.empty() || handle.id.size() > 64 ||
                 handle.token.empty() || handle.token.size() > 2048 || !validKind ||
                 !scopeHandleIds[poseIndex][activeIndex]
@@ -1614,6 +1615,7 @@ class GlScene {
         if (!toolCommittedToken_.empty()) bakeCommittedLayer();
         toolCommittedToken_ = std::move(toolPreviewToken_);
         toolCommittedTransform_ = toolPreviewTransform_;
+        updateCommittedHandleOffsets();
         toolPreviewToken_.clear();
         toolPreviewTransform_ = glm::mat4(1.0F);
         setStyle(representation_, coloring_);
@@ -1624,6 +1626,7 @@ class GlScene {
         if (toolCommittedToken_.empty()) return false;
         toolCommittedToken_.clear();
         toolCommittedTransform_ = glm::mat4(1.0F);
+        for(auto& offsets:committedHandleOffsets_)offsets.clear();
         setStyle(representation_, coloring_);
         return true;
     }
@@ -2254,6 +2257,11 @@ class GlScene {
         size_t identityBytes = 0;
         for (const nadoc_vr::PickHit& hit : hits) {
             if (result.representatives.size() == 16U) break;
+            // These levels select residues/domains, not the connecting bond.
+            // A bond's center can be closer than its endpoint and otherwise
+            // suppress the valid bead through canonical-token deduplication.
+            if((selectionLevel=="base" || selectionLevel=="end" || selectionLevel=="domain") &&
+               (hit.identity.starts_with("backbone:") || hit.identity.starts_with("atom-bond-ref:")))continue;
             auto token = nadoc_vr::selectionVolumeOwnerToken(
                 source.ownerAliases, tokenKinds, hit.identity, selectionLevel);
             if (selectionLevel == "default") {
@@ -2430,6 +2438,21 @@ class GlScene {
         return bounds.summary(modelTransform);
     }
 
+    // Bounded read-only physical picking observations for ScryWrite. These are
+    // rendered backbone points, never a semantic selection/mutation command.
+    std::string movePickPoints(const glm::mat4& model) const {
+        const auto& source=currentSource();std::ostringstream out;out << '[';size_t count=0;
+        for(const auto& point:source.points) {
+            if(!point.identity.starts_with("nuc:") || !point.identity.ends_with(":backbone"))continue;
+            if(count++>=1024)break;
+            if(count>1)out << ',';
+            const auto world=glm::vec3(model*glm::vec4(displayedPoint(source,point.position,point.identity),1));
+            out << "{\"identity\":\"" << nadoc_vr::scrywrite::visualJson(point.identity)
+                << "\",\"world\":[" << world.x << ',' << world.y << ',' << world.z << "]}";
+        }
+        out << ']';return out.str();
+    }
+
     /** Desktop-equivalent current gizmo center projected by scene v9. */
     [[nodiscard]] std::optional<glm::vec3> ownerHandle(
         const std::vector<std::string>& ownerTokens,
@@ -2440,10 +2463,7 @@ class GlScene {
                 source.toolHandles.begin(), source.toolHandles.end(),
                 [&](const ToolHandle& candidate) { return candidate.token == token; });
             if (toolHandle != source.toolHandles.end()) {
-                glm::vec3 center = toolHandle->center;
-                if (toolHandle->token == toolCommittedToken_) {
-                    center = glm::vec3(toolCommittedTransform_ * glm::vec4(center, 1.0F));
-                }
+                glm::vec3 center = committedHandleCenter(toolHandle->token,toolHandle->center);
                 if (toolHandle->token == toolPreviewToken_) {
                     center = glm::vec3(toolPreviewTransform_ * glm::vec4(center, 1.0F));
                 }
@@ -2454,10 +2474,7 @@ class GlScene {
                 source.ownerHandles.begin(), source.ownerHandles.end(),
                 [&](const OwnerHandle& candidate) { return candidate.token == token; });
             if (handle != source.ownerHandles.end()) {
-                glm::vec3 center = handle->center;
-                if (handle->token == toolCommittedToken_) {
-                    center = glm::vec3(toolCommittedTransform_ * glm::vec4(center, 1.0F));
-                }
+                glm::vec3 center = committedHandleCenter(handle->token,handle->center);
                 if (handle->token == toolPreviewToken_) {
                     center = glm::vec3(toolPreviewTransform_ * glm::vec4(center, 1.0F));
                 }
@@ -3082,7 +3099,46 @@ class GlScene {
             ? std::pair(0.0F, 0.0F) : std::pair(1.0F, 1.0F);
     }
 
-    void bakeCommittedLayer(RepresentationData& source) {
+    // Rigid edits already have exact endpoint ownership in every cached
+    // representation. Keep related pivots current too, without rebuilding a
+    // complete scene: moving a cluster moves its Base/Overhang handles; moving
+    // one base shifts its parent's centroid by that base's contribution.
+    void updateCommittedHandleOffsets() {
+        for(size_t pose=0;pose<2;++pose) {
+            auto& offsets=committedHandleOffsets_[pose];offsets.clear();
+            if(pose && !scene_.hasExpanded)continue;
+            const auto& full=(pose?scene_.expandedRepresentations:scene_.representations)
+                [static_cast<size_t>(Representation::full)];
+            SourceIndex index;index.rebuild(full);
+            std::unordered_map<std::string,size_t> counts;
+            for(const auto& point:full.points) {
+                if(!point.identity.ends_with(":backbone"))continue;
+                const auto aliases=index.aliases.find(point.identity);
+                if(aliases==index.aliases.end())continue;
+                const float weight=layerWeights(full,point.identity,toolCommittedToken_,index).first;
+                const auto delta=nadoc_vr::weightedTransformPoint(point.position,toolCommittedTransform_,weight)-point.position;
+                for(const auto& token:aliases->second->tokens) {
+                    auto [value,inserted]=offsets.try_emplace(token,glm::vec3(0));
+                    value->second+=delta;++counts[token];
+                }
+            }
+            for(auto& [token,delta]:offsets)delta/=float(counts.at(token));
+        }
+    }
+
+    glm::vec3 committedHandleCenter(const std::string& token,const glm::vec3& center,
+                                    float amount=-1.F) const {
+        if(token==toolCommittedToken_)
+            return glm::vec3(toolCommittedTransform_*glm::vec4(center,1));
+        auto offset=[&](size_t pose) {
+            const auto found=committedHandleOffsets_[pose].find(token);
+            return found==committedHandleOffsets_[pose].end()?glm::vec3(0):found->second;
+        };
+        if(amount<0)amount=scene_.hasExpanded?expansion_.value():0.F;
+        return center+glm::mix(offset(0),offset(1),amount);
+    }
+
+    void bakeCommittedLayer(RepresentationData& source,size_t pose) {
         if (toolCommittedToken_.empty()) return;
         SourceIndex index;
         index.rebuild(source);
@@ -3119,16 +3175,10 @@ class GlScene {
                 normal = nadoc_vr::weightedTransformVector(normal, toolCommittedTransform_, weight);
         }
         for (OwnerHandle& handle : source.ownerHandles) {
-            if (handle.token == toolCommittedToken_) {
-                handle.center = glm::vec3(
-                    toolCommittedTransform_ * glm::vec4(handle.center, 1.0F));
-            }
+            handle.center=committedHandleCenter(handle.token,handle.center,float(pose));
         }
         for (ToolHandle& handle : source.toolHandles) {
-            if (handle.token == toolCommittedToken_) {
-                handle.center = glm::vec3(
-                    toolCommittedTransform_ * glm::vec4(handle.center, 1.0F));
-            }
+            handle.center=committedHandleCenter(handle.token,handle.center,float(pose));
         }
     }
 
@@ -3136,13 +3186,14 @@ class GlScene {
         representationBuffers_.clear();
         staticSourceIndices_.clear();
         for (RepresentationData& source : scene_.representations) {
-            bakeCommittedLayer(source);
+            bakeCommittedLayer(source,0);
         }
         if (scene_.hasExpanded) {
             for (RepresentationData& source : scene_.expandedRepresentations) {
-                bakeCommittedLayer(source);
+                bakeCommittedLayer(source,1);
             }
         }
+        for(auto& offsets:committedHandleOffsets_)offsets.clear();
         toolCommittedToken_.clear();
         toolCommittedTransform_ = glm::mat4(1.0F);
         displayedSourceValid_ = false;
@@ -3885,6 +3936,7 @@ class GlScene {
     Coloring coloring_ = Coloring::strand;
     nadoc_vr::SmoothToggle expansion_;
     std::string toolCommittedToken_;
+    std::array<std::unordered_map<std::string,glm::vec3>,2> committedHandleOffsets_;
     glm::mat4 toolCommittedTransform_{1.0F};
     std::string toolPreviewToken_;
     glm::mat4 toolPreviewTransform_{1.0F};
@@ -5235,6 +5287,13 @@ class Viewer {
         sidebarMenus_.initialize();
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.available=[this](const std::string& action) {
+                if(action=="tool:move_rotate")return !toolShell_.executionPending();
+                if(action.starts_with("move:")) {
+                    if(toolShell_.executionPending() || moveAwaitRefresh_)return false;
+                    if(action=="move:apply")return toolShell_.previewRequested()&&!pendingToolTransform_.isIdentity();
+                    if(action=="move:undo")return toolShell_.undoAvailable();
+                    return true;
+                }
                 if(action=="trajectory") return trajectoryState_.active;
                 if(action.starts_with("extrude:")) {
                     if(toolShell_.executionPending()) return action=="extrude:back";
@@ -5583,6 +5642,10 @@ class Viewer {
     }
 
     void toggleMenu(size_t hand) {
+        if(movePanel_.active) {
+            sidebarMenus_.menus[1].open=!sidebarMenus_.menus[1].open;
+            sidebarMenus_.menus[1].focus.reset();return;
+        }
         if(extrudePanel_.active) {extrudePanel_.exit(sidebarMenus_.menus);latticeOpen_=false;return;}
         if(volumePanel_.active) {volumePanel_.exit(sidebarMenus_.menus);return;}
         if(dimensionPanel_.tool.active) {dimensionPanel_.exit(sidebarMenus_.menus);return;}
@@ -5604,8 +5667,47 @@ class Viewer {
             freeformDraft_.placed(),paintedExtrusionReady()?"READY TO EXTRUDE":toolShell_.executionPending()?"EXTRUDING":extrudeLatticeDraft_.cells().empty()?"PAINT CELLS TO EXTRUDE":toolShell_.status());
     }
 
+    void cancelMove() {
+        if(toolShell_.executionPending())return;
+        movePanel_.hand.reset();pendingToolTransform_.cancel();publishToolTransform();
+        toolShell_.apply(nadoc_vr::ToolAction::cancel,selectedSelectionKind_);
+        publishToolIntent(nadoc_vr::ToolAction::cancel);
+    }
+
+    void confirmMove() {
+        if(toolShell_.executionPending() || !toolShell_.previewRequested() || pendingToolTransform_.isIdentity())return;
+        movePanel_.hand.reset();publishToolTransform();
+        toolShell_.apply(nadoc_vr::ToolAction::confirm,selectedSelectionKind_);
+        publishToolIntent(nadoc_vr::ToolAction::confirm);
+        moveAwaitRefresh_=true;
+    }
+
     void activateSidebarAction(const std::string& action, size_t hand) {
         if(action=="feedback:activate") {pulse(hand,.22F);return;}
+        if(action.starts_with("move:")) {
+            if(toolShell_.executionPending() || moveAwaitRefresh_)return;
+            if(action=="move:apply")confirmMove();
+            else if(action=="move:undo") {
+                cancelMove();
+                toolShell_.apply(nadoc_vr::ToolAction::undo,selectedSelectionKind_);
+                publishToolIntent(nadoc_vr::ToolAction::undo);
+            } else if(action=="move:recenter") {recenterRequested_=true;recenterHand_=hand;}
+            else {
+                cancelMove();
+                if(action=="move:back")movePanel_.exit(sidebarMenus_.menus);
+                else if(action!="move:cancel")publishSelectionLevel(action=="move:overhang"?"domain":action.substr(5));
+            }
+            return;
+        }
+        if(movePanel_.active) {if(toolShell_.executionPending())return;cancelMove();movePanel_.exit(sidebarMenus_.menus);}
+        if(action=="tool:move_rotate") {
+            if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
+            if(volumePanel_.active)volumePanel_.exit(sidebarMenus_.menus);
+            if(dimensionPanel_.tool.active)dimensionPanel_.exit(sidebarMenus_.menus);
+            activateRadialTool(3);menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
+            movePanel_.enter(sidebarMenus_.menus);
+            movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());return;
+        }
         if(action.starts_with("extrude:")) {
             if(action=="extrude:back") {extrudePanel_.exit(sidebarMenus_.menus);latticeOpen_=false;return;}
             if(toolShell_.executionPending())return;
@@ -6811,6 +6913,13 @@ class Viewer {
             thumbwheelHovered_ = false;
             extrudeLatticeDraft_.clear();
         }
+        if(mode==nadoc_vr::ToolMode::move_rotate) {
+            if(!sidebarMenus_.menus[1].open)
+                sidebarMenus_.toggle(1,witnessObserverPosition_,witnessObserverOrientation_);
+            menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
+            movePanel_.enter(sidebarMenus_.menus);
+            movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
+        }
     }
 
     std::array<bool, 2> processThumbwheelInput() {
@@ -7355,17 +7464,21 @@ class Viewer {
                      center + glm::vec3(0, 0, markerRadius), color);
             }
             if (toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
-                toolShell_.previewRequested()) {
-                const glm::mat4 previewTransform = manipulator_.transform()
-                                                 * pendingToolTransform_.transform();
+                (movePanel_.active || toolShell_.previewRequested())) {
+                const glm::mat4 previewTransform = manipulator_.transform();
                 const auto bounds = glScene_->ownerBounds(
                     selectedOwnerTokens_, previewTransform);
                 if (bounds) {
                     const glm::vec3 center = glScene_->ownerHandle(
                         selectedOwnerTokens_, previewTransform)
                         .value_or(bounds->center);
-                    const float handleRadius = glm::clamp(
-                        bounds->radius * 0.20F, 0.050F, 0.220F);
+                    const bool nearby=movePanel_.nearby[0] || movePanel_.nearby[1] || movePanel_.hand.has_value();
+                    const float handleRadius = nearby ? .06F : .04F;
+                    if(nearby) {
+                        const glm::vec3 r(.025F);
+                        line(center-r,center+r,{1,1,0});
+                        line(center+glm::vec3(-r.x,r.y,0),center+glm::vec3(r.x,-r.y,0),{1,1,0});
+                    }
                     line(center - glm::vec3(handleRadius, 0, 0),
                          center + glm::vec3(handleRadius, 0, 0), {1.0F, 0.25F, 0.20F});
                     line(center - glm::vec3(0, handleRadius, 0),
@@ -7451,6 +7564,13 @@ class Viewer {
                 manipulator_.transform());
             SelectionVolumeHits resolved = glScene_->resolveSelectionVolumeHits(
                 overlaps, selectionLevel_, selectedSelectionKind_, selectedOwnerTokens_);
+            // Move/Rotate edits one exact target. A generous acquisition sphere
+            // must not turn a nearby base pick into an unusable multi-selection.
+            if(movePanel_.active && resolved.representatives.size()>1) {
+                resolved.representatives.resize(1);
+                if(resolved.ownerTokens.size()>1)resolved.ownerTokens.resize(1);
+                if(resolved.directIdentities.size()>1)resolved.directIdentities.resize(1);
+            }
             snapSelectionHits_[hand] = std::move(resolved.representatives);
             snapSelectionOwnerTokens_[hand] = std::move(resolved.ownerTokens);
             snapSelectionDirectIdentities_[hand] = std::move(resolved.directIdentities);
@@ -7791,6 +7911,7 @@ class Viewer {
             clearPlaneGuides();
             publishToolConfiguration();
         }
+        if(targetChanged)movePanel_.hand.reset();
         if (targetChanged ||
             !toolShell_.previewRequested()) {
             pendingToolTransform_.cancel();
@@ -7829,15 +7950,17 @@ class Viewer {
         }
         toolExecutionFeedbackSequence_ = feedback->sequence;
         if (feedback->status == "succeeded") {
+            moveAwaitRefresh_=false;
             if (feedback->action == "confirm") {
-                if (feedback->mode == "move_rotate" && !glScene_->acceptToolCommit()) return;
+                if (feedback->mode == "move_rotate" && sceneRefresh_.revision()==moveStartRevision_)
+                    (void)glScene_->acceptToolCommit(); // A refreshed scene already contains the saved pose.
                 committedFeatureLogEntryId_ = feedback->featureLogEntryId;
                 if (feedback->mode == "move_rotate") {
                     pendingToolTransform_.activate();
                     publishToolTransform();
                 }
             } else {
-                if (feedback->mode == "move_rotate" && !glScene_->acceptToolUndo()) return;
+                if (feedback->mode == "move_rotate") (void)glScene_->acceptToolUndo();
                 committedFeatureLogEntryId_.clear();
             }
         } else if (feedback->action == "undo" &&
@@ -8221,7 +8344,12 @@ class Viewer {
             if (i) out << ',';
             out << quote(selectedOwnerTokens_[i]);
         }
-        out << "],\"tool_sequence\":" << toolSequence_
+        const auto moveCenter=glScene_?glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform()):std::nullopt;
+        out << "],\"move_targets\":" << (glScene_ && movePanel_.active?glScene_->movePickPoints(manipulator_.transform()):"[]")
+            << ",\"move_handle\":" << (moveCenter?point(*moveCenter):"null")
+            << ",\"move_grabbing\":" << (movePanel_.hand?"true":"false")
+            << ",\"move_nearby\":" << ((movePanel_.nearby[0]||movePanel_.nearby[1])?"true":"false")
+            << ",\"tool_sequence\":" << toolSequence_
             << ",\"painted_commit_ready\":" << (paintedExtrusionReady() ? "true" : "false")
             << ",\"config_sequence\":" << toolConfigSequence_
             << ",\"execution_feedback_sequence\":" << toolExecutionFeedbackSequence_
@@ -8763,18 +8891,12 @@ class Viewer {
         const bool inputSuppressed = suppressManipulationUntilRelease_;
         const bool rigidToolPreview =
             toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
-            toolShell_.previewRequested();
-        const bool rightToolDrag = !dimensionPanel_.tool.active && !volumePanel_.active && !volumePanel_.interaction.hand && rigidToolPreview && !inputSuppressed &&
-                                   !menuGripActive &&
-                                   hands_[1].valid && hands_[1].pressed &&
-                                   !(hands_[0].valid && hands_[0].pressed);
-        const bool toolTransformChanged = pendingToolTransform_.update(
-            hands_[1], manipulator_.transform(), rightToolDrag);
-        if (toolTransformChanged) publishToolTransform();
+            toolShell_.previewRequested() &&
+            (!toolShell_.executionPending() || sceneRefresh_.revision()==moveStartRevision_);
+        // Grips retain scene manipulation in every tool; edit grabs use triggers.
         glScene_->setToolPreview(
             rigidToolPreview ? selectedOwnerTokens_ : std::vector<std::string>{},
             pendingToolTransform_.transform());
-        if (rightToolDrag) manipulationHands[1].pressed = false;
         if (inputSuppressed) {
             for (nadoc_vr::HandPose& hand : manipulationHands) hand.pressed = false;
         }
@@ -8821,6 +8943,7 @@ class Viewer {
             [&](size_t hand){pulse(hand,.3F);});
         dimensionSync_.update(dimensionPanel_.tool,normalizationCenter_,normalizationScale_);
         if(volumePanel_.active) menuControlTargeted.fill(true);
+        processMoveInput(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
         updateSelectionVolumeCandidates(menuControlTargeted);
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             if (menuControlTargeted[hand] || !triggerClicked_[hand] ||
@@ -8864,6 +8987,46 @@ class Viewer {
             glScene_.swap(candidate);
         });
         updateControllerGuides();
+    }
+
+    void processMoveInput(std::array<bool,2>& blocked,bool sceneMoving) {
+        if(!movePanel_.active)return;
+        if(moveAwaitRefresh_ && !toolShell_.executionPending() &&
+           (sceneRefresh_.revision()>moveStartRevision_ || toolShell_.status()=="COMMIT FAILED" || toolShell_.status()=="COMMIT REFUSED"))moveAwaitRefresh_=false;
+        movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
+        movePanel_.nearby.fill(false);
+        const auto center=glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform());
+        const bool available=center && !toolShell_.executionPending() && !moveAwaitRefresh_ &&
+            nadoc_vr::ToolShell::selectionCapability(nadoc_vr::ToolMode::move_rotate,selectedSelectionKind_)==nadoc_vr::ToolCapability::direct_preview;
+        if(movePanel_.hand) {
+            const size_t h=*movePanel_.hand;blocked[h]=true;liveInputOwner_[h]="move-rotate";
+            if(!hands_[h].valid || sessionState_!=XR_SESSION_STATE_FOCUSED || sceneMoving || !available || sceneRefresh_.revision()!=moveStartRevision_) {cancelMove();return;}
+            const auto delta=movePanel_.delta(hands_[h]);
+            if(delta!=pendingToolTransform_.transform()) {
+                pendingToolTransform_.setTransform(delta);publishToolTransform();
+            }
+            if(!triggerPressed_[h]) {
+                const auto delta=poseMatrix(hands_[h])*glm::inverse(movePanel_.startHand);
+                const float angle=glm::angle(glm::quat_cast(glm::mat3(delta)));
+                if(glm::distance(hands_[h].position,glm::vec3(movePanel_.startHand[3]))<.004F && angle<glm::radians(1.5F))cancelMove();
+                else confirmMove();
+            }
+        } else if(available && !sceneMoving) {
+            for(size_t h=0;h<2;++h) {
+                movePanel_.nearby[h]=hands_[h].valid && !blocked[h] &&
+                    glm::distance(hands_[h].position,*center)<=nadoc_vr::MovePanel::grabRadius;
+                if(movePanel_.nearby[h] && triggerClicked_[h]) {
+                    pendingToolTransform_.activate();moveStartRevision_=sceneRefresh_.revision();
+                    toolShell_.apply(nadoc_vr::ToolAction::preview,selectedSelectionKind_);
+                    publishToolIntent(nadoc_vr::ToolAction::preview);
+                    movePanel_.begin(h,hands_[h],manipulator_.transform(),*center);
+                    blocked[h]=true;liveInputOwner_[h]="move-rotate";pulse(h,.35F);break;
+                }
+            }
+        }
+        const bool preview=toolShell_.previewRequested() &&
+            (!toolShell_.executionPending() || sceneRefresh_.revision()==moveStartRevision_);
+        glScene_->setToolPreview(preview?selectedOwnerTokens_:std::vector<std::string>{},pendingToolTransform_.transform());
     }
 
     void applyPendingMenu(uint32_t viewCount) {
@@ -10364,6 +10527,9 @@ class Viewer {
     nadoc_vr::MenuPlacement latticePlacement_;
     nadoc_vr::LatticeGrip latticeGrip_;
     nadoc_vr::ExtrudePanel extrudePanel_;
+    nadoc_vr::MovePanel movePanel_;
+    uint64_t moveStartRevision_=0;
+    bool moveAwaitRefresh_=false;
     nadoc_vr::ExtrudeLatticeDraft extrudeLatticeDraft_;
     nadoc_vr::LatticePaintStroke latticePaintStroke_;
     std::optional<nadoc_vr::LatticeCell> latticeHover_;

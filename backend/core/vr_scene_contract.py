@@ -124,7 +124,7 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
             scope_id, identity, kind = fields[1], fields[2], fields[3]
             if (
                 kind not in {
-                    "base", "end", "domain", "strand", "crossover", "atom"
+                    "base", "end", "domain", "strand", "crossover", "atom", "overhang"
                 }
                 or not scope_id
                 or identity in result[active]

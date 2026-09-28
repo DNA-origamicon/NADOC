@@ -24,7 +24,7 @@ export const VR_TOOL_CAPABILITIES = Object.freeze({
 })
 
 const DIRECT_MOVE_ROTATE_KINDS = new Set([
-  'cluster', 'base', 'end', 'domain', 'strand',
+  'cluster', 'base', 'end', 'domain', 'strand', 'overhang',
 ])
 const CONFIGURATION_KINDS = Object.freeze({
   extrude: new Set(['end']),
@@ -159,6 +159,19 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
       state: { ...base, stage: 'preview', targetKey },
       effect: { type: 'preview_requested', tool: mode, selectedRef, toolTarget },
       accepted: true, reason: 'preview_requested',
+    }
+  }
+  // A native release carries the complete pose and exact action-time target.
+  // It can be the first snapshot seen by a slow poller. Ordinary Confirm still
+  // requires Preview; stale target snapshots were rejected above.
+  const atomicPose = mode === 'move_rotate' && Array.isArray(intent.transformMatrix) &&
+    intent.transformMatrix.length === 16 && intent.transformMatrix.every(Number.isFinite)
+  if (action === 'confirm' && atomicPose && targetKey != null) {
+    return {
+      state: { ...base, stage: 'confirm_pending', targetKey },
+      effect: { type: 'commit_requested', tool: mode, selectedRef, toolTarget },
+      accepted: executorAttached,
+      reason: executorAttached ? 'commit_requested' : 'executor_not_attached',
     }
   }
   const confirmableStage = state.stage === 'preview' || state.stage === 'confirm_pending'

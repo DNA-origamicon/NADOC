@@ -1,3 +1,4 @@
+import { commitVRMovePose } from './scene/vr_move_pose.js'
 import { nativeRepresentation } from './scene/vr_representations.js'
 import { captureSharedVisualization } from './viewer/shared_visualization.js'
 import { restoreNativePresentation } from './viewer/native_presentation.js'
@@ -6651,9 +6652,15 @@ async function main() {
             showToast(`VR ${label}: confirm is staged; its mutation executor is not attached yet.`)
           } else {
             _sendVRToolExecution(event, 'pending', 'committing').catch(() => {})
-            const execute = result.effect.selectedRef.kind === 'cluster'
-              ? _translateRotateTool.confirmVRPreview
-              : _nucleotideTransformTool.confirmVRPreview
+            const adapter = result.effect.selectedRef.kind === 'cluster'
+              ? _translateRotateTool : _nucleotideTransformTool
+            const execute = event.transformMatrix
+              ? () => commitVRMovePose(adapter, result.effect.selectedRef, event.transformMatrix,
+                  () => !!selectionManager.resolveVRToolTargetSnapshot?.({
+                    identity: event.targetIdentity, selectionKind: event.targetKind,
+                    ownerTokens: event.targetOwnerTokens,
+                  }))
+              : adapter.confirmVRPreview
             _vrToolTransaction.commit({
               tool: result.effect.tool,
               targetKey: result.state.targetKey,

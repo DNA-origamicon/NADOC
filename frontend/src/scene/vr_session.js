@@ -311,6 +311,11 @@ export function initVRSession({
               ? event.tool_action_config_sequence : 0,
             mode: event?.tool_mode ?? 'inspect',
             action: event?.tool_action ?? 'activate',
+            // Keep Confirm and its final pose in one event, even when polling
+            // coalesces an entire short grab into a single native snapshot.
+            transformMatrix: Array.isArray(event?.transform_matrix) &&
+              event.transform_matrix.length === 16 && event.transform_matrix.every(Number.isFinite)
+              ? [...event.transform_matrix] : null,
             targetIdentity: typeof event?.tool_target_identity === 'string'
               ? event.tool_target_identity : null,
             targetKind: typeof event?.tool_target_kind === 'string'

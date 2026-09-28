@@ -151,7 +151,7 @@ describe('native VR transactional tool shell', () => {
     const rows = [...definition.matchAll(
       /NADOC_VR_TOOL_CAPABILITY\((\w+),\s*(\w+),\s*(\w+)\)/g,
     )].map(([, mode, kind, capability]) => ({ mode, kind, capability }))
-    expect(rows).toHaveLength(10)
+    expect(rows).toHaveLength(11)
     expect(new Set(rows.map(row => `${row.mode}:${row.kind}`)).size).toBe(rows.length)
     for (const row of rows) {
       expect(vrToolSelectionCapability(row.mode, { kind: row.kind }))

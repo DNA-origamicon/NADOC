@@ -123,3 +123,12 @@ def test_fresh_extrude_tour_is_runnable_and_validation_has_no_workspace_reset():
     assert tour['runnable']
     assert arguments(tour, True) == ['-m', 'tools.vr_workflows.extrude_tour', '--validate']
     assert arguments(tour, False) == ['-m', 'tools.vr_workflows.extrude_tour']
+
+
+def test_move_rotate_has_a_demo_and_full_validation_for_each_scope():
+    entries={tour['id']:tour for tour in catalog()['tours']}
+    for target in ('cluster','overhang','base'):
+        tour=entries['move-'+target]
+        assert tour['runnable'] and tour['module']=='move_tour'
+        assert arguments(tour)==['-m','tools.vr_workflows.move_tour','--target',target]
+        assert arguments(tour,True)[-1]=='--validate'

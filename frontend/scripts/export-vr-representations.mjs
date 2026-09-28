@@ -11,6 +11,9 @@ const hull = _hullGeoForSource(design, geometry, Object.fromEntries(axes.map(a =
 const meshData = g => {
   if (!g) return null
   const flat = g.index ? g.toNonIndexed() : g
+  // Desktop overhang marker quads are unlit and intentionally omit normals.
+  // Native triangles need a geometric normal for the same visible faces.
+  if (!flat.attributes.normal) flat.computeVertexNormals()
   return { vertices: Array.from(flat.attributes.position.array), normals: Array.from(flat.attributes.normal.array),
     colors: flat.attributes.color ? Array.from(flat.attributes.color.array) : null }
 }

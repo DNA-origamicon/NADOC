@@ -349,6 +349,40 @@ int objectIdGlChecks() {
         requireLive(std::count(classes.begin(),classes.end(),5)>10,"uncovered controller erased");
         glDisable(GL_STENCIL_TEST);
     }
+    {
+        SceneData data;data.available.fill(true);
+        auto& full=data.representations[static_cast<size_t>(Representation::full)];
+        full.points={{"a:backbone",{0,0,-1},colors,.1F},{"b:backbone",{2,0,-1},colors,.1F}};
+        full.ownerAliases={{"a:backbone",{"a","overhang","cluster"}},
+                           {"b:backbone",{"b","overhang","cluster"}}};
+        full.toolHandles={{"a","a","base",{0,0,-1}},{"b","b","base",{2,0,-1}},
+                          {"o","overhang","overhang",{1,0,-1}}};
+        full.ownerHandles={{"cluster",{1,0,-1}}};
+        data.representations[static_cast<size_t>(Representation::ballstick)]=full;
+        GlScene scene(std::move(data),true);scene.setStyle(Representation::full,Coloring::strand);
+        auto center=[&](const std::string& token,glm::vec3 expected) {
+            const auto actual=scene.ownerHandle({token},glm::mat4(1));
+            requireLive(actual && glm::distance(*actual,expected)<1e-5F,"cached related handle drifted");
+        };
+        scene.setToolPreview({"cluster"},glm::translate(glm::mat4(1),glm::vec3(1,0,0)));
+        requireLive(scene.acceptToolCommit(),"cluster commit failed");
+        center("a",{1,0,-1});center("overhang",{2,0,-1});
+        scene.setStyle(Representation::ballstick,Coloring::strand);
+        center("a",{1,0,-1});
+        scene.setToolPreview({"a"},glm::translate(glm::mat4(1),glm::vec3(0,1,0)));
+        requireLive(scene.acceptToolCommit(),"base commit failed");
+        center("a",{1,1,-1});center("b",{3,0,-1});
+        center("cluster",{2,.5F,-1});center("overhang",{2,.5F,-1});
+        requireLive(scene.acceptToolUndo(),"base undo failed");
+        center("a",{1,0,-1});center("cluster",{2,0,-1});
+        auto turn=glm::translate(glm::mat4(1),glm::vec3(2,0,-1))
+            *glm::rotate(glm::mat4(1),glm::radians(90.F),glm::vec3(0,0,1))
+            *glm::translate(glm::mat4(1),glm::vec3(-2,0,1));
+        scene.setToolPreview({"overhang"},turn);
+        requireLive(scene.acceptToolCommit(),"overhang commit failed");
+        center("a",{2,-1,-1});center("b",{2,1,-1});center("cluster",{2,0,-1});
+        requireLive(scene.acceptToolUndo(),"overhang undo failed");center("a",{1,0,-1});
+    }
     glDeleteTextures(1,&color); glDeleteTextures(1,&ids);
     glDeleteRenderbuffers(1,&depth); glDeleteFramebuffers(1,&fbo);
     glfwDestroyWindow(window);glfwTerminate();

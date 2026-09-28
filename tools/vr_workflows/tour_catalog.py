@@ -42,6 +42,10 @@ def catalog():
         'Isolated demo part: create square and hex volumes, show/hide, enable/delete, trigger move/rotate, two-hand resize, and grip the scene. Validation runs all four motion profiles.', module='view_volumes_check')
     add('extrude', 'authoring', 'Extrude a 6HB and inspect a volume',
         'Creates a new isolated part; paints a honeycomb ring, zooms the lattice with interior grips, moves/resizes its window, and uses the length wheel. Compares local volume representations. Validation covers honeycomb and square parts with all four motion profiles.', module='extrude_tour')
+    for target in ('cluster','overhang','base'):
+        add('move-'+target, 'authoring', 'Move / Rotate '+target,
+            'Generated isolated part: trigger translate/rotate, exact target persistence and Undo. Validation uses all four controller profiles.',
+            ['--target',target], module='move_tour')
     add('authoring', 'authoring', 'Desktop → VR and VR-first demo',
         'Requires the established owned idle viewer launch record. Replaces review parts only in the marked workspace/VR Testing folder. Run from a terminal.',
         module='demo', runnable=False)
@@ -56,7 +60,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('dimensions_persistence_check', 'representation_tour', 'extrude_tour'):
+    elif tour['module'] in ('dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'move_tour'):
         if validate:
             args += ['--validate']
     return args

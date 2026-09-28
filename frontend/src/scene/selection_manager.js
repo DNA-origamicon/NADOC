@@ -2444,7 +2444,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         isTerminal: !!entry && (entry.nuc.is_five_prime || entry.nuc.is_three_prime),
         hasCluster: !!entry && !!_resolveClusterId(entry.nuc, state.currentDesign),
       })
-      if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
+      if (entry && _selLevel === 'domain' && entry.nuc.overhang_id) {
+        selectionController.select({ kind: 'overhang', id: entry.nuc.overhang_id })
+      } else if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
     } else if (owner.kind === 'backbone_bond' || owner.kind === 'atom_bond') {
       const reversedRef = {
         ...owner.ref,
@@ -2472,7 +2474,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         isTerminal: !!entry && (entry.nuc.is_five_prime || entry.nuc.is_three_prime),
         hasCluster: !!entry && !!_resolveClusterId(entry.nuc, state.currentDesign),
       })
-      if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
+      if (entry && _selLevel === 'domain' && entry.nuc.overhang_id) {
+        selectionController.select({ kind: 'overhang', id: entry.nuc.overhang_id })
+      } else if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
     } else if (owner.kind === 'crossover') {
       arc = getUnfoldView?.()?.getArcEntries?.()
         ?.find(candidate => candidate.crossover_id === owner.ref.id)
@@ -2507,6 +2511,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       entry?.nuc ?? arc?.fromNuc ?? arc?.toNuc
     const key = owner.ref?.key ?? (entry ? baseKey(entry.nuc, entry._copy) : null)
     const selected = accepted && !!selectedRef && (
+      (selectedRef.kind === 'overhang' && selectedRef.id === nucleotide?.overhang_id) ||
       (selectedRef.kind === 'strand' && selectedRef.id === nucleotide?.strand_id) ||
       (selectedRef.kind === 'domain' && selectedRef.strandId === nucleotide?.strand_id &&
         selectedRef.domainIndex === (nucleotide?.domain_index ?? 0)) ||

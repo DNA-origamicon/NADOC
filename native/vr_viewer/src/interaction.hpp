@@ -1344,7 +1344,7 @@ class ToolShell {
             const char* selectionKind;
             ToolCapability capability;
         };
-        static constexpr std::array<CapabilityEntry, 10> entries = {{
+        static constexpr std::array<CapabilityEntry, 11> entries = {{
 #define NADOC_VR_TOOL_CAPABILITY(tool, kind, capability) \
             {ToolMode::tool, #kind, ToolCapability::capability},
 #include "../tool_capabilities.def"
@@ -1520,6 +1520,7 @@ class PendingRigidTransform {
     }
 
     void cancel() { activate(); }
+    void setTransform(const glm::mat4& value) { transform_ = value; }
 
     bool update(const HandPose& hand, const glm::mat4& modelTransform, bool enabled) {
         const bool desired = enabled && hand.valid && hand.pressed;

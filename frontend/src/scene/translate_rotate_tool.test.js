@@ -210,6 +210,16 @@ describe('initTranslateRotateTool — native VR preview adapter', () => {
     await tool.cancelVRPreview()
   })
 
+  it('does not reuse an in-flight cluster activation for a different target', async () => {
+    const ctx = vrContext()
+    const tool = initTranslateRotateTool(ctx.deps)
+    const first = tool.beginVRPreview('C1')
+    const second = tool.beginVRPreview('C2')
+    await expect(first).resolves.toEqual({ accepted: true })
+    await expect(second).resolves.toEqual({ accepted: false, reason: 'preview_target_changed' })
+    await tool.cancelVRPreview()
+  })
+
   it('refuses to attach over an existing desktop tool and blocks preview commit', async () => {
     const ctx = vrContext()
     const tool = initTranslateRotateTool(ctx.deps)

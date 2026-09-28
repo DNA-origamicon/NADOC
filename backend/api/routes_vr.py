@@ -946,6 +946,11 @@ def _serialize_scene(
             position = np.asarray(raw, dtype=float)
             if not np.all(np.isfinite(position)):
                 continue
+            overhang_id = nucleotide.get("overhang_id")
+            if overhang_id:
+                grouped.setdefault(
+                    (selection_token("overhang", str(overhang_id)), "overhang"), []
+                ).append(position)
             key = base_key(nucleotide)
             if key:
                 grouped.setdefault(
