@@ -3,30 +3,32 @@ import { initVrTours } from './vr_tours.js'
 let ui
 const flush = () => new Promise(resolve => setTimeout(resolve, 0))
 afterEach(() => { ui?.dispose(); document.body.innerHTML = ''; vi.restoreAllMocks() })
-it('groups tours, switches keyboard tabs, launches selected mode and stops the owned run', async () => {
-  document.body.innerHTML = '<button id="menu-debug-vr-tours">VR Tours</button>'
-  const data = { groups: [{id:'overview',label:'Overview'}, {id:'right',label:'Right sidebar'}], tours: [
-    {id:'all',group:'overview',title:'All tabs',command:'demo',validation_command:'validate',runnable:true},
-    {id:'right-properties',group:'right',title:'Properties',command:'properties',validation_command:'properties --validate',runnable:true},
-  ] }
-  const run = { id:'owned',tour:'right-properties',status:'running',output:'evidence',log:'Starting…' }
-  const request = vi.fn(async (url, options) => ({ok:true,json:async () => url.endsWith('/start') ? {run} : url.includes('/stop/') ? {run:{...run,status:'stopping'}} : data}))
+const catalog = { groups: [{id:'right',label:'Right sidebar'}], tours: [
+  {id:'representations',group:'right',title:'Visualization',description:'Switch the open design',runnable:true},
+  {id:'authoring',group:'right',title:'Authoring',description:'Requires an idle viewer',runnable:false},
+] }
+it('launches directly from nested menus with tooltips and stops only the owned run', async () => {
+  document.body.innerHTML = '<div id="menu-debug-vr-tours"></div>'
+  const run = { id:'owned',tour:'representations',status:'running',output:'evidence' }
+  const request = vi.fn(async url => ({ok:true,json:async () => url.endsWith('/start') ? {run} : url.includes('/stop/') ? {run:{...run,status:'stopping'}} : catalog}))
   ui = initVrTours({request}); await ui.open()
-  document.querySelector('[role=tab]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}))
-  expect(document.querySelector('[aria-selected=true]').textContent).toBe('Right sidebar')
-  const select=document.querySelector('select');select.value='validate';select.dispatchEvent(new Event('change'))
-  document.querySelector('[data-start]').click();await flush()
-  expect(JSON.parse(request.mock.calls.find(([url])=>url.endsWith('/start'))[1].body)).toEqual({tour:'right-properties',mode:'validate'})
-  expect(document.querySelector('[role=status]').textContent).toContain('running')
-  expect(document.querySelector('[data-start]').disabled).toBe(true)
+  const group = document.querySelector('[data-category=right]')
+  const leaf = group.querySelector('[data-start=representations][data-mode=demo]')
+  expect(leaf.textContent).toBe('Visualization demo')
+  expect(leaf.title).toBe('Switch the open design')
+  expect(document.querySelector('[role=dialog]')).toBeNull()
+  expect(group.querySelector('[data-start=authoring]').disabled).toBe(true)
+  leaf.click();await flush()
+  expect(JSON.parse(request.mock.calls.find(([url])=>url.endsWith('/start'))[1].body)).toEqual({tour:'representations',mode:'demo',assembly_active:false})
+  expect(leaf.disabled).toBe(true)
   Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Stop tour').click();await flush()
   expect(request.mock.calls.some(([url])=>url==='/api/vr/tours/stop/owned')).toBe(true)
-  ui.close();expect(document.querySelector('[role=dialog]')).toBeNull()
 })
-it('shows launch failures without claiming success', async () => {
-  document.body.innerHTML='<button id="menu-debug-vr-tours">VR Tours</button>'
-  const request=vi.fn(async url=>({ok:!url.endsWith('/start'),json:async()=>url.endsWith('/start')?{detail:'Close the active VR viewer'}:{groups:[{id:'overview',label:'Overview'}],tours:[{id:'all',group:'overview',title:'All',command:'demo',runnable:true}]}}))
-  ui=initVrTours({request});await ui.open();document.querySelector('[data-start]').click();await flush()
-  expect(document.querySelector('[role=status]').textContent).toContain('Close the active VR viewer')
+it('reports errors and re-enables launch without opening a popup', async () => {
+  document.body.innerHTML='<div id="menu-debug-vr-tours"></div>'
+  const toast = vi.fn()
+  const request=vi.fn(async url=>({ok:!url.endsWith('/start'),json:async()=>url.endsWith('/start')?{detail:'Open a design'}:catalog}))
+  ui=initVrTours({request, showToast:toast});await ui.open();document.querySelector('[data-start]').click();await flush()
+  expect(toast).toHaveBeenCalledWith('Open a design',{severity:'error'})
   expect(document.querySelector('[data-start]').disabled).toBe(false)
 })

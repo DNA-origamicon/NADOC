@@ -16,6 +16,7 @@
 #include <zlib.h>
 
 #include "interaction.hpp"
+#include "representation_buffers.hpp"
 #include "painted_commit_gate.hpp"
 #include "selection_level_guard.hpp"
 #include "freeform_draft.hpp"
@@ -1336,6 +1337,10 @@ class GlScene {
         bindIds(boxVao_, boxInstanceVbo_, sizeof(Box), offsetof(Box, objectId));
         glBindVertexArray(0);
         initializeShadowMap();
+        // Prepare each static style before the first interactive frame.
+        for (const auto rep : {Representation::cylinders, Representation::full,
+                               Representation::ballstick, Representation::stick})
+            setStyle(rep, scene_.initialColoring);
         setStyle(scene_.initialRepresentation, scene_.initialColoring);
     }
 
@@ -1614,16 +1619,37 @@ class GlScene {
             representation == Representation::cylinders) {
             representation = Representation::full;
         }
+        const bool cacheable = visualizationPositions_.empty() && visualizationColors_.empty() &&
+            visualizationSlabFrames_.empty() && expansion_.value() == 0.0F &&
+            toolPreviewToken_.empty() && toolCommittedToken_.empty() &&
+            snapHighlightOwnerTokens_.empty() && snapHighlightIdentities_.empty() &&
+            selectedHighlightOwnerTokens_.empty() && selectedHighlightIdentities_.empty();
+        const std::array<GLuint,4> buffers{sphereInstanceVbo_,cylinderInstanceVbo_,halfCylinderInstanceVbo_,boxInstanceVbo_};
+        std::array<GLsizei,4> counts{};
+        if (cacheable && representationBuffers_.restore(static_cast<size_t>(representation),
+                static_cast<int>(coloring),buffers,counts,localCenter_,localRadius_)) {
+            representation_=representation; coloring_=coloring; prepareDisplayedSource(); ensureSourceIndex(currentSource());
+            sphereCount_=counts[0]; cylinderCount_=counts[1]; halfCylinderCount_=counts[2]; boxCount_=counts[3];
+            sphereGlowCount_=cylinderGlowCount_=halfCylinderGlowCount_=boxGlowCount_=0;
+            atomisticBuffersResident_=false; // Static cache does not carry trajectory indices.
+            uploadedVisualizationRevision_=visualizationRevision_;
+            const double elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-styleStarted).count();
+            std::cout << "VR_METRIC event=process_progress phase=style_apply representation="
+                << representationName(representation_) << " coloring=" << coloringName(coloring_)
+                << " total_ms=" << elapsed << " fast_path=static_gpu_buffers" << std::endl;
+            return;
+        }
         const bool atomisticPair =
             (representation_ == Representation::ballstick &&
              representation == Representation::stick) ||
             (representation_ == Representation::stick &&
              representation == Representation::ballstick);
-        if (atomisticPair && coloring == coloring_ && atomisticSharedGeometry_ &&
+        if (!cacheable && atomisticPair && coloring == coloring_ && atomisticSharedGeometry_ &&
             atomisticBuffersResident_ &&
             uploadedVisualizationRevision_ == visualizationRevision_) {
             representation_ = representation;
             prepareDisplayedSource();
+            ensureSourceIndex(currentSource());
             sphereCount_ = representation_ == Representation::ballstick
                 ? ballstickSphereCount_ : 0;
             const double milliseconds = std::chrono::duration<double, std::milli>(
@@ -1655,6 +1681,7 @@ class GlScene {
             representation_ = representation;
             coloring_ = coloring;
             prepareDisplayedSource();
+            ensureSourceIndex(currentSource());
             const auto preparedAt = std::chrono::steady_clock::now();
             glBindBuffer(GL_ARRAY_BUFFER, sphereInstanceVbo_);
             glBufferData(GL_ARRAY_BUFFER,
@@ -1698,8 +1725,8 @@ class GlScene {
         ensureSourceIndex(source);
         const auto preparedAt = std::chrono::steady_clock::now();
         auto coordinateIndexFor = [&](const std::string& identity, bool end) -> int32_t {
-            const auto ownership = sourceIndex_.ownership.find(identity);
-            if (ownership != sourceIndex_.ownership.end()) {
+            const auto ownership = sourceIndex_->ownership.find(identity);
+            if (ownership != sourceIndex_->ownership.end()) {
                 for (const TransformOwner& owner : ownership->second->owners) {
                     const float weight = end ? owner.endWeight : owner.startWeight;
                     const auto coordinate = visualizationCoordinateIndex_.find(owner.token);
@@ -1708,8 +1735,8 @@ class GlScene {
                     }
                 }
             }
-            const auto aliases = sourceIndex_.aliases.find(identity);
-            if (aliases != sourceIndex_.aliases.end()) {
+            const auto aliases = sourceIndex_->aliases.find(identity);
+            if (aliases != sourceIndex_->aliases.end()) {
                 for (const std::string& token : aliases->second->tokens) {
                     const auto coordinate = visualizationCoordinateIndex_.find(token);
                     if (coordinate != visualizationCoordinateIndex_.end()) {
@@ -1775,14 +1802,14 @@ class GlScene {
         auto matchesOwner = [&](const std::string& identity,
                                 const std::unordered_set<std::string>& tokens) {
             if (tokens.empty()) return false;
-            const auto aliases = sourceIndex_.aliases.find(identity);
-            if (aliases != sourceIndex_.aliases.end() && std::any_of(
+            const auto aliases = sourceIndex_->aliases.find(identity);
+            if (aliases != sourceIndex_->aliases.end() && std::any_of(
                 aliases->second->tokens.begin(), aliases->second->tokens.end(),
                 [&](const std::string& token) { return tokens.contains(token); })) {
                 return true;
             }
-            const auto ownership = sourceIndex_.ownership.find(identity);
-            return ownership != sourceIndex_.ownership.end() && std::any_of(
+            const auto ownership = sourceIndex_->ownership.find(identity);
+            return ownership != sourceIndex_->ownership.end() && std::any_of(
                 ownership->second->owners.begin(), ownership->second->owners.end(),
                 [&](const TransformOwner& owner) {
                     return (owner.startWeight > 0.0F || owner.endWeight > 0.0F) &&
@@ -2013,6 +2040,8 @@ class GlScene {
                   << " upload_ms=" << uploadMilliseconds
                   << " total_ms=" << (prepareMilliseconds + uploadMilliseconds)
                   << " rss_mib=" << currentResidentMiB() << std::endl;
+        if (cacheable) representationBuffers_.capture(static_cast<size_t>(representation_),
+            static_cast<int>(coloring_),buffers,{sphereCount_,cylinderCount_,halfCylinderCount_,boxCount_},localCenter_,localRadius_);
         uploadedVisualizationRevision_ = visualizationRevision_;
         atomisticBuffersResident_ = representation_ == Representation::ballstick;
         if (atomisticBuffersResident_) ballstickSphereCount_ = sphereCount_;
@@ -2504,10 +2533,10 @@ class GlScene {
             out << "{\"id\":" << id << ",\"identity\":\""
                 << nadoc_vr::scrywrite::visualJson(identity) << "\",\"owner_tokens\":[";
             std::vector<std::string> owners;
-            const auto aliases = sourceIndex_.aliases.find(identity);
-            if (aliases != sourceIndex_.aliases.end()) owners = aliases->second->tokens;
-            const auto ownership = sourceIndex_.ownership.find(identity);
-            if (ownership != sourceIndex_.ownership.end()) {
+            const auto aliases = sourceIndex_->aliases.find(identity);
+            if (aliases != sourceIndex_->aliases.end()) owners = aliases->second->tokens;
+            const auto ownership = sourceIndex_->ownership.find(identity);
+            if (ownership != sourceIndex_->ownership.end()) {
                 for (const auto& owner : ownership->second->owners) {
                     if ((owner.startWeight > 0 || owner.endWeight > 0) &&
                         std::find(owners.begin(), owners.end(), owner.token) == owners.end()) {
@@ -2813,7 +2842,14 @@ class GlScene {
 
     void ensureSourceIndex(const RepresentationData& source) {
         if (!sourceIndexValid_) {
-            sourceIndex_.rebuild(source);
+            if (&source == &interpolatedSource_) {
+                interpolatedIndex_.rebuild(source);
+                sourceIndex_ = &interpolatedIndex_;
+            } else {
+                auto [index, inserted] = staticSourceIndices_.try_emplace(&source);
+                if (inserted) index->second.rebuild(source);
+                sourceIndex_ = &index->second;
+            }
             sourceIndexValid_ = true;
             visualizationDeltasValid_ = false;
         }
@@ -2821,8 +2857,8 @@ class GlScene {
         visualizationDeltas_.clear();
         visualizationDeltas_.reserve(visualizationPositions_.size());
         for (const auto& [token, target] : visualizationPositions_) {
-            const auto handle = sourceIndex_.toolHandles.find(token);
-            if (handle == sourceIndex_.toolHandles.end()) continue;
+            const auto handle = sourceIndex_->toolHandles.find(token);
+            if (handle == sourceIndex_->toolHandles.end()) continue;
             glm::vec3 normalized =
                 (target - scene_.normalizationCenter) * scene_.normalizationScale;
             normalized.z -= kViewDistanceMeters;
@@ -2989,6 +3025,8 @@ class GlScene {
     }
 
     void bakeCommittedLayer() {
+        representationBuffers_.clear();
+        staticSourceIndices_.clear();
         for (RepresentationData& source : scene_.representations) {
             bakeCommittedLayer(source);
         }
@@ -3013,8 +3051,8 @@ class GlScene {
     [[nodiscard]] std::pair<glm::vec3, glm::vec3> visualizationOffsets(
         const RepresentationData& source, const std::string& identity) const {
         if (visualizationPositions_.empty()) return {};
-        const auto ownership = sourceIndex_.ownership.find(identity);
-        if (ownership != sourceIndex_.ownership.end()) {
+        const auto ownership = sourceIndex_->ownership.find(identity);
+        if (ownership != sourceIndex_->ownership.end()) {
             std::array<nadoc_vr::VisualizationOffsetContribution, 32>
                 contributions{};
             size_t contributionCount = 0;
@@ -3034,8 +3072,8 @@ class GlScene {
                     contributions.data(), contributionCount);
             }
         }
-        const auto aliases = sourceIndex_.aliases.find(identity);
-        if (aliases != sourceIndex_.aliases.end()) {
+        const auto aliases = sourceIndex_->aliases.find(identity);
+        if (aliases != sourceIndex_->aliases.end()) {
             for (const std::string& token : aliases->second->tokens) {
                 if (const auto delta = visualizationDelta(source, token)) {
                     return {*delta, *delta};
@@ -3052,8 +3090,8 @@ class GlScene {
     [[nodiscard]] bool hasCompleteVisualizationAtomEndpoints(
         const RepresentationData&, const std::string& identity) const {
         if (visualizationAtomTokens_.empty()) return true;
-        const auto ownership = sourceIndex_.ownership.find(identity);
-        if (ownership == sourceIndex_.ownership.end()) return false;
+        const auto ownership = sourceIndex_->ownership.find(identity);
+        if (ownership == sourceIndex_->ownership.end()) return false;
         bool start = false;
         bool end = false;
         for (const TransformOwner& owner : ownership->second->owners) {
@@ -3067,15 +3105,15 @@ class GlScene {
     [[nodiscard]] std::optional<glm::vec3> visualizationColor(
         const RepresentationData&, const std::string& identity) const {
         if (visualizationColors_.empty()) return std::nullopt;
-        const auto aliases = sourceIndex_.aliases.find(identity);
-        if (aliases != sourceIndex_.aliases.end()) {
+        const auto aliases = sourceIndex_->aliases.find(identity);
+        if (aliases != sourceIndex_->aliases.end()) {
             for (const std::string& token : aliases->second->tokens) {
                 const auto color = visualizationColors_.find(token);
                 if (color != visualizationColors_.end()) return color->second;
             }
         }
-        const auto ownership = sourceIndex_.ownership.find(identity);
-        if (ownership == sourceIndex_.ownership.end()) return std::nullopt;
+        const auto ownership = sourceIndex_->ownership.find(identity);
+        if (ownership == sourceIndex_->ownership.end()) return std::nullopt;
         glm::vec3 total{};
         float weight = 0.0F;
         for (const TransformOwner& owner : ownership->second->owners) {
@@ -3091,15 +3129,15 @@ class GlScene {
     [[nodiscard]] const nadoc_vr::VisualizationPoint* visualizationSlabFrame(
         const RepresentationData&, const std::string& identity) const {
         if (visualizationSlabFrames_.empty()) return nullptr;
-        const auto aliases = sourceIndex_.aliases.find(identity);
-        if (aliases != sourceIndex_.aliases.end()) {
+        const auto aliases = sourceIndex_->aliases.find(identity);
+        if (aliases != sourceIndex_->aliases.end()) {
             for (const std::string& token : aliases->second->tokens) {
                 const auto frame = visualizationSlabFrames_.find(token);
                 if (frame != visualizationSlabFrames_.end()) return &frame->second;
             }
         }
-        const auto ownership = sourceIndex_.ownership.find(identity);
-        if (ownership != sourceIndex_.ownership.end()) {
+        const auto ownership = sourceIndex_->ownership.find(identity);
+        if (ownership != sourceIndex_->ownership.end()) {
             for (const TransformOwner& owner : ownership->second->owners) {
                 const auto frame = visualizationSlabFrames_.find(owner.token);
                 if (frame != visualizationSlabFrames_.end()) return &frame->second;
@@ -3129,9 +3167,9 @@ class GlScene {
         };
         displayed.center.z -= kViewDistanceMeters;
         const float committed = layerWeights(
-            source, identity, toolCommittedToken_, sourceIndex_).first;
+            source, identity, toolCommittedToken_, *sourceIndex_).first;
         const float pending = layerWeights(
-            source, identity, toolPreviewToken_, sourceIndex_).first;
+            source, identity, toolPreviewToken_, *sourceIndex_).first;
         displayed.center = nadoc_vr::weightedTransformPoint(
             displayed.center, toolCommittedTransform_, committed);
         displayed.center = nadoc_vr::weightedTransformPoint(
@@ -3148,12 +3186,12 @@ class GlScene {
 
     [[nodiscard]] std::pair<float, float> previewWeights(
         const RepresentationData& source, const std::string& identity) const {
-        return layerWeights(source, identity, toolPreviewToken_, sourceIndex_);
+        return layerWeights(source, identity, toolPreviewToken_, *sourceIndex_);
     }
 
     [[nodiscard]] std::pair<float, float> committedWeights(
         const RepresentationData& source, const std::string& identity) const {
-        return layerWeights(source, identity, toolCommittedToken_, sourceIndex_);
+        return layerWeights(source, identity, toolCommittedToken_, *sourceIndex_);
     }
 
     [[nodiscard]] glm::vec3 previewPoint(
@@ -3715,7 +3753,9 @@ class GlScene {
 
     RepresentationData interpolatedSource_;
     const RepresentationData* displayedSource_ = nullptr;
-    SourceIndex sourceIndex_;
+    SourceIndex interpolatedIndex_;
+    std::unordered_map<const RepresentationData*, SourceIndex> staticSourceIndices_;
+    SourceIndex* sourceIndex_ = nullptr;
     bool sourceIndexValid_ = false;
     ExpandedPairing expandedPairing_;
     Representation displayedRepresentation_ = Representation::full;
@@ -3741,6 +3781,7 @@ class GlScene {
     bool visualizationDeltasValid_ = false;
     uint64_t visualizationRevision_ = 0;
     uint64_t uploadedVisualizationRevision_ = std::numeric_limits<uint64_t>::max();
+    nadoc_vr::RepresentationBuffers representationBuffers_;
     bool atomisticSharedGeometry_ = false;
     bool atomisticBuffersResident_ = false;
     GLsizei ballstickSphereCount_ = 0;

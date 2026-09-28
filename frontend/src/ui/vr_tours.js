@@ -1,29 +1,19 @@
-import { createModal } from './primitives/modal.js'
 import { el } from './primitives/dom.js'
 import './vr_tours.css'
 
-/** Organized entry points into the maintained VR workflows, with owned-run status. */
-export function initVrTours({ headers = () => ({}), request = fetch } = {}) {
+/** Direct-launch flyouts use the same menu behavior as the other Debug entries. */
+export function initVrTours({ headers = () => ({}), request = fetch, store = {}, showToast = () => {} } = {}) {
   const entry = document.getElementById('menu-debug-vr-tours')
   if (!entry) return null
-  let catalog = null, category = 'overview', run = null, timer = null, busy = false, errorMessage = null
-  const tabs = el('div', { className: 'vr-tours__tabs', attrs: { role: 'tablist', 'aria-label': 'VR tour categories' } })
-  const cards = el('div', { id: 'vr-tour-cards', attrs: { role: 'tabpanel' } })
-  const message = el('p', { attrs: { role: 'status' } })
-  const logs = el('pre', { className: 'vr-tours__log', attrs: { 'aria-label': 'Tour output', tabindex: '0' } })
-  const mode = el('select', { attrs: { 'aria-label': 'Tour mode' }, children: [
-    el('option', { text: 'Demo · steady controller', attrs: { value: 'demo' } }),
-    el('option', { text: 'Validate · all four controller profiles', attrs: { value: 'validate' } }),
-  ], on: { change: () => renderCards() } })
-  const stop = el('button', { className: 'btn', text: 'Stop tour', on: { click: () => action('/stop/'+run.id) } })
-  const body = el('div', { className: 'vr-tours', children: [
-    el('p', { text: 'Run an isolated VR demo or validation. Close any active viewer first. Demo menus stay open for review until you stop the tour; validation exits when finished.' }),
-    el('div', { className: 'vr-tours__toolbar', children: [mode, stop] }),
-    tabs, cards, message, logs,
-  ] })
-  const modal = createModal({ title: 'VR Tours & Tests', size: 'lg', body,
-    onClose: () => { clearInterval(timer); timer = null; entry.focus() } })
-  modal.root.setAttribute('aria-label', 'VR Tours & Tests')
+  let run = null, busy = false, loaded = false, timer = null, disposed = false
+  const menu = el('div', { className: 'submenu vr-tours-menu', attrs: { role: 'menu' } })
+  const status = el('span', { className: 'vr-tours-status', attrs: { role: 'status' } })
+  const stop = el('button', { className: 'dropdown-item', text: 'Stop tour', on: { click: () => action('/stop/'+run.id) } })
+  entry.className = 'submenu-item'
+  entry.replaceChildren(document.createTextNode('VR Tours & Tests'), el('span', { text: '›', attrs: { 'aria-hidden': 'true' } }), menu)
+  entry.tabIndex = 0
+  entry.setAttribute('aria-haspopup', 'menu')
+  menu.append(status)
   async function api(path = '', data) {
     const response = await request('/api/vr/tours'+path, {
       method: data === undefined ? 'GET' : 'POST',
@@ -35,78 +25,83 @@ export function initVrTours({ headers = () => ({}), request = fetch } = {}) {
     return json
   }
   const active = () => run && ['running', 'stopping'].includes(run.status)
-  function renderStatus() {
+  function render() {
     stop.disabled = busy || !active() || run.status === 'stopping'
-    mode.disabled = busy || !!active()
-    cards.querySelectorAll('[data-start]').forEach(button => { button.disabled = busy || !!active() })
-    if (errorMessage) { message.textContent = errorMessage; return }
-    if (run) {
-      const title = catalog?.tours.find(t => t.id === run.tour)?.title ?? run.tour
-      message.textContent = `${title}: ${run.status}${run.exit_code == null ? '' : ` (exit ${run.exit_code})`} · Evidence: ${run.output}`
-      logs.textContent = run.log || 'Waiting for tour output…'
-      logs.hidden = false
-    } else { message.textContent = 'Ready. Evidence is retained under .development-artifacts/vr-debug-tours/.'; logs.hidden = true }
+    menu.querySelectorAll('[data-start]').forEach(b => { b.disabled = busy || !!active() || b.dataset.runnable !== 'true' })
+    status.textContent = run ? `Tour ${run.status}` : 'Ready'
+    status.title = run ? `${run.output}\n${run.log || ''}` : 'Evidence is retained under .development-artifacts/vr-debug-tours/'
+  }
+  function poll() {
+      clearInterval(timer)
+      timer = setInterval(async () => {
+        if (busy || disposed) return
+        try { run = (await api('/status')).run; render(); if (!active()) clearInterval(timer) } catch { clearInterval(timer) }
+      }, 1000)
   }
   async function action(path, payload = {}) {
     if (busy) return
-    errorMessage = null; busy = true; renderStatus()
-    try { run = (await api(path, payload)).run }
-    catch (error) { errorMessage = error.message; message.textContent = errorMessage; busy = false; return }
-    finally { busy = false; stop.disabled = !active() || run?.status === 'stopping'; mode.disabled = !!active(); cards.querySelectorAll('[data-start]').forEach(b => { b.disabled = !!active() }) }
-    renderStatus()
-  }
-  async function refresh() {
-    if (busy || !modal.isOpen()) return
-    try { run = (await api('/status')).run; renderStatus() }
-    catch (error) { message.textContent = error.message }
-  }
-  function renderCards() {
-    if (!catalog) return
-    cards.setAttribute('aria-labelledby', 'vr-tour-tab-'+category)
-    cards.replaceChildren(el('p', { text: catalog.groups.find(g => g.id === category)?.description }))
-    for (const tour of catalog.tours.filter(t => t.group === category)) {
-      const command = mode.value === 'validate' ? tour.validation_command : tour.command
-      const copy = el('button', { className: 'btn btn--sm', text: 'Copy command', on: { click: async () => {
-        try { await navigator.clipboard.writeText(command); copy.textContent = 'Copied' }
-        catch { message.textContent = 'Clipboard unavailable. Select and copy the command below.' }
-      } } })
-      const actions = [copy]
-      if (tour.runnable) actions.unshift(el('button', { className: 'btn btn--primary btn--sm', text: mode.value === 'validate' ? 'Run validation' : 'Run demo',
-        dataset: { start: tour.id }, on: { click: () => action('/start', { tour: tour.id, mode: mode.value }) } }))
-      cards.append(el('article', { className: 'vr-tours__card', children: [
-        el('h3', { text: tour.title }), el('p', { text: tour.description }),
-        el('div', { className: 'vr-tours__toolbar', children: actions }),
-        el('code', { text: command }),
-      ] }))
-    }
-    renderStatus()
-  }
-  function select(id, focus = false) {
-    category = id
-    for (const button of tabs.children) {
-      const selected = button.dataset.category === category
-      button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1
-      if (selected && focus) button.focus()
-    }
-    renderCards()
+    busy = true; render()
+    try {
+      run = (await api(path, payload)).run
+      showToast(`VR tour ${run.status}`)
+      poll()
+    } catch (error) {
+      showToast(error.message, { severity: 'error' })
+      busy = false; render(); status.textContent = error.message; return
+    } finally { busy = false }
+    render()
   }
   async function open() {
-    modal.open(); errorMessage = null; message.textContent = 'Loading tours…'
+    if (loaded || busy) return
+    busy = true; status.textContent = 'Loading tours…'
     try {
-      const result = await api(); if (!modal.isOpen()) return; catalog = result; run = result.run
-      tabs.replaceChildren(...catalog.groups.map(group => el('button', {
-        id: 'vr-tour-tab-'+group.id, text: group.label, dataset: { category: group.id },
-        attrs: { role: 'tab', 'aria-controls': cards.id }, on: { click: () => select(group.id) },
-      })))
-      select(category, true)
-      clearInterval(timer); timer = setInterval(refresh, 1000)
-    } catch (error) { message.textContent = error.message }
+      const catalog = await api()
+      if (disposed) return
+      run = catalog.run
+      for (const group of catalog.groups) {
+        const children = el('div', { className: 'submenu vr-tours-menu vr-tours-leaves', attrs: { role: 'menu' } })
+        for (const tour of catalog.tours.filter(t => t.group === group.id)) {
+          for (const mode of ['demo', 'validate']) {
+            children.append(el('button', {
+              className: 'dropdown-item', text: `${tour.title} ${mode === 'demo' ? 'demo' : 'validation'}`,
+              dataset: { start: tour.id, mode, runnable: String(tour.runnable) },
+              attrs: { title: tour.description },
+              on: { click: () => action('/start', { tour: tour.id, mode,
+                ...(tour.id === 'representations' ? { assembly_active: !!store.assemblyActive } : {}) }) },
+            }))
+          }
+        }
+        menu.insertBefore(el('div', { className: 'submenu-item', text: group.label,
+          dataset: { category: group.id }, attrs: { role: 'menuitem', tabindex: '0', 'aria-haspopup': 'menu', title: group.description },
+          children: [el('span', { text: '›', attrs: { 'aria-hidden': 'true' } }), children] }), status)
+      }
+      menu.append(stop); loaded = true; if (active()) poll()
+    } catch (error) { status.textContent = error.message }
+    finally { busy = false; if (loaded) render() }
   }
-  tabs.addEventListener('keydown', event => {
-    const index = catalog.groups.findIndex(g => g.id === category), count = catalog.groups.length
-    const next = { ArrowRight: (index+1)%count, ArrowLeft: (index+count-1)%count, Home: 0, End: count-1 }[event.key]
-    if (next !== undefined) { event.preventDefault(); select(catalog.groups[next].id, true) }
-  })
+  function keyboard(event) {
+    const branch = event.target.closest('.submenu-item')
+    if (!branch || !entry.contains(branch) || event.target !== branch) return
+    if (['Enter', ' ', 'ArrowRight', 'ArrowDown'].includes(event.key)) {
+      event.preventDefault(); event.stopPropagation()
+      branch.classList.add('a11y-open')
+      open().then(() => branch.querySelector(':scope > .submenu > .submenu-item, :scope > .submenu > button:not(:disabled)')?.focus())
+    } else if (event.key === 'ArrowLeft' && branch !== entry) {
+      event.preventDefault(); event.stopPropagation(); branch.classList.remove('a11y-open'); entry.focus()
+    }
+  }
+  function position(event) {
+    const branch = event.target.closest('[data-category]')
+    if (!branch) return
+    const children = branch.querySelector(':scope > .submenu')
+    const top = branch.getBoundingClientRect().top
+    children.style.top = `${Math.max(8 - top, Math.min(0, window.innerHeight - top - children.getBoundingClientRect().height - 8))}px`
+  }
+  entry.addEventListener('keydown', keyboard)
+  entry.addEventListener('pointerover', position)
+  entry.addEventListener('focusin', position)
+  entry.addEventListener('pointerenter', open)
+  entry.addEventListener('focusin', open)
   entry.addEventListener('click', open)
-  return { open, close: modal.close, dispose() { modal.close(); clearInterval(timer); entry.removeEventListener('click', open) } }
+  return { open, dispose() { disposed = true; clearInterval(timer); entry.removeEventListener('keydown', keyboard); entry.removeEventListener('pointerover', position); entry.removeEventListener('focusin', position); entry.removeEventListener('pointerenter', open); entry.removeEventListener('focusin', open); entry.removeEventListener('click', open) } }
 }

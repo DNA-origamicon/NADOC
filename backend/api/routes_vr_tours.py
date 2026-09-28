@@ -22,6 +22,7 @@ _run = None
 class StartTour(BaseModel):
     tour: str
     mode: Literal['demo', 'validate'] = 'demo'
+    assembly_active: bool = False
 
 
 def _snapshot():
@@ -85,10 +86,23 @@ def start(body: StartTour, request: Request):
             raise HTTPException(409, 'A tour is already running. Stop it before starting another.')
         if _viewer_active():
             raise HTTPException(409, 'Close the active VR viewer before starting an isolated tour.')
+        design = None
+        if tour['id'] == 'representations':
+            from backend.api import state
+            from backend.api.doc_context import get_current_doc
+            if body.assembly_active:
+                raise HTTPException(400, 'Open an individual design for the visualization demo.')
+            design, _revision = state.copy_doc_for_persist(get_current_doc())
+            if design is None:
+                raise HTTPException(400, 'Open a design before starting the visualization demo.')
         identifier = time.strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:8]
         directory = ROOT/'.development-artifacts/vr-debug-tours'/identifier
         directory.mkdir(parents=True)
         argv = [sys.executable, *arguments(tour, body.mode == 'validate'), '--output', str(directory/'evidence')]
+        if design is not None:
+            source = directory/'open-design.nadoc'
+            source.write_text(design.to_json())
+            argv += ['--design', str(source)]
         env = {**os.environ, 'PYTHONUNBUFFERED': '1', 'NADOC_DISABLE_SESSION_CACHE': '1'}
         try:
             with (directory/'tour.log').open('wb') as log:

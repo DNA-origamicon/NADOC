@@ -35,6 +35,34 @@ Shipped baseline:
 - `44353007` — faithful overhang half-cylinders and extension markers.
 - Current VR supports headset/controllers, grab and two-hand scale, recenter, in-VR representation/color menus, near inspection, and SteamVR desktop access.
 
+## Representation switching benchmark (2026-09-27)
+
+Debug → VR Tours & Tests → Right sidebar → Visualization demo (current open design)
+runs the maintained `tools.vr_workflows.representation_tour` workflow. The nested
+Debug menu directly launches a private snapshot of the active document, including
+unsaved edits; CLI defaults to workspace/24hb_0xT.nadoc. It exports all four native representations,
+and exercises all twelve directed transitions with physical OpenXR and ScryWrite.
+Its private style responder isolates native renderer latency from browser polling.
+Visualization tours now reuse byte-verified immutable exports across resets via
+`tools/vr_workflows/snapshot_cache.py`, capped at two entries / 2 GiB under
+`.development-artifacts/vr-scene-cache`. Keys cover full design bytes, backend
+exporter/geometry/template files, workflow exporter and uv.lock; edits invalidate.
+`--no-cache` provides an explicit cold measurement. Paired 24hb measurements were
+42.93 s cold versus 11.09 s warm to live readiness (export 32.54 s vs 0.317 s).
+Native scene/GPU loading still takes roughly 10.6 s; a new design still needs export.
+The tour waits for tracked-eye placement, closes the left sidebar and moves the
+right sidebar 0.35 m along its own horizontal axis using the real grip path.
+An enlarged isometric view and submitted-eye pixel checks require an unclipped
+design separate from the menu before and throughout the switches.
+
+`representation_buffers.hpp` caches GPU instance buffers for unchanged static
+styles; one color per representation, prepared before interactive rendering.
+Natural/expanded ownership indexes are retained separately so object IDs remain
+correct without rebuilding large hash maps on every style change. Highlighted,
+transformed, expanded and trajectory geometry bypasses the static GPU cache;
+baked changes clear caches. See `docs/audits/vr_representation_switching_20260927.md`
+for timings, validation and remaining scope limits.
+
 ## Controller Dimensions (2026-09-27)
 
 `dimensions.hpp` owns model-space measurements;

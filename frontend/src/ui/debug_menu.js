@@ -15,7 +15,7 @@ export function initDebugMenu({
   store,
 }) {
   initTextToIntentModal()
-  initVrTours({ headers: docHeaders })
+  initVrTours({ headers: docHeaders, store, showToast })
 
   document.getElementById('menu-debug-lod-hud')?.addEventListener('click', function () {
     if (!window.__NADOC_DBG__?.toggleLodHud) {

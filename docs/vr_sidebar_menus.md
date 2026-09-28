@@ -137,22 +137,22 @@ is recorded in `measurement-clearance.json`; controller motion profiles are unch
 
 ## Debug tour launcher
 
-Open **Debug → VR Tours & Tests…** on the desktop. Categories organize all
-sidebar tabs plus controls/layout, Dimensions, and Tools/authoring. Each left
-or right tab has a focused scrolling tour. **Demo** uses `steady_fast` and leaves
-menu tours open for review; **Validate** runs all four profiles and exits.
-The quick overview is explicitly partial coverage in either mode.
+Open **Debug → VR Tours & Tests → category → demo/validation** on the desktop.
+Nested menus organize every sidebar tab plus controls/layout, Dimensions, and
+Tools/authoring. Click a final entry to launch directly; descriptions are tooltips.
+Demo uses `steady_fast`; validation uses all four profiles. The quick overview
+is explicitly partial coverage. **Stop tour** closes the owned viewer; status and
+its tooltip retain the outcome, evidence path and recent output. Closing menus
+leaves the run active. Backend shutdown closes its owned run. Active viewers or
+tours block another launch under the same workstation-local access policy.
+The legacy authoring entry remains disabled with its prerequisite in the tooltip.
+Evidence lives beneath `.development-artifacts/vr-debug-tours/<run>/`.
 
-Use **Run demo / Run validation**, watch output and the evidence path, then
-**Stop tour** to release inputs and close the owned viewer. Closing the dialog
-leaves a run active; reopening restores status. Backend shutdown closes its owned
-run. An already active viewer or tour blocks another launch. These endpoints use
-the same workstation-local access policy as native VR launch.
-
-Commands are also available via **Copy command**. The older authoring workflow
-is terminal-only, with its owned-viewer prerequisite and designated review-file
-replacement described in the card. Evidence from direct launches lives beneath
-`.development-artifacts/vr-debug-tours/<run>/`.
+**Right sidebar → Visualization demo** snapshots the currently open individual
+design, including unsaved changes, without saving or changing the original.
+It closes the left sidebar, moves the right menu aside using its grip, and uses
+an enlarged isometric view. Submitted-eye checks require visible, unclipped model
+pixels and separation from the right menu before switching and after each switch.
 
 Focused command-line example:
 
@@ -188,3 +188,45 @@ This is a standing user requirement for future VR development sessions.
    `.development-artifacts/` and verify disposable test files are removed.
 6. Update the relevant VR documentation/current-state memory with the menu route,
    coverage, results and any remaining physical validation debt.
+
+## Representation loading benchmark
+
+**Debug → VR Tours & Tests → Right sidebar → Visualization demo**
+runs all 12 directed transitions among Cylinders, Full, Ball & Stick and Stick.
+Demo uses steady_fast; validation runs all four controller profiles. The open design
+is snapshotted read-only, including unsaved edits. CLI defaults to `24hb_0xT`;
+use `--design PATH` for another file. Each run owns a private snapshot, viewer and native style responder;
+it measures renderer application separately from controller approach time and does
+not include the browser polling/desktop rebuild delay. Evidence includes export and
+load timing, per-transition style metrics, submitted stereo images, design-pixel
+coverage, desktop verification and controller trials.
+
+```bash
+uv run python -m tools.vr_workflows.representation_tour
+uv run python -m tools.vr_workflows.representation_tour --validate
+```
+
+Visualization tours retain a content-addressed export cache under
+`.development-artifacts/vr-scene-cache/` (at most two entries / 2 GiB).
+It survives viewer and backend resets, but design edits, exporter/template code
+changes or dependency updates invalidate reuse. Each hit verifies the complete
+snapshot checksum. Run snapshots are immutable hard links when possible and remain
+valid after cache eviction; retained run evidence has its own lifetime.
+`export.json` reports `cache_hit` and preparation time; `loading.json` reports
+`startup_to_live_ready_s` including preparation and viewer startup. A new or changed
+design still pays the full export cost. The native loader/GPU startup is unchanged.
+Use `--no-cache` for a fresh-export benchmark without reading or populating the cache.
+The Debug Visualization demo/validation entries use caching automatically.
+
+For paired native renderer comparisons, reuse the same previously exported asset:
+
+```bash
+uv run python -m tools.vr_workflows.representation_tour \
+  --snapshot .development-artifacts/vr-representations/24hb_0xT.nadocvr \
+  --output .development-artifacts/vr-representations/new-comparison --validate
+```
+
+Static representation geometry and ownership indexes are warmed before interaction.
+GPU buffer caches retain one coloring per representation, and only apply with no
+live positions/colors, expansion, edit transforms or selection highlights. Baked
+edits invalidate the caches. Dynamic trajectories retain their existing update path.

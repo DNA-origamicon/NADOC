@@ -22,9 +22,11 @@ def catalog():
     add('all', 'overview', 'Complete sidebar tour', 'Open every tab, scroll every page, and check controls and rendered pixels.')
     add('quick', 'overview', 'Quick tab overview', 'Show the first page of every tab. A short demo, not full coverage.', ['--quick'])
     for tab in json.loads((ROOT/'native/vr_viewer/sidebar_catalog.json').read_text())['tabs']:
-        add(f"{tab['side']}-{tab['key']}", tab['side'], tab['label'],
+        add(f"{tab['side']}-{tab['key']}", tab['side'], tab['label'] + ' menu',
             f"Tour every page of the {tab['side']} {tab['label']} tab; check disabled controls and pixels.",
             ['--tab', f"{tab['side']}:{tab['key']}"])
+    add('representations', 'right', 'Visualization',
+        'Switch the open design between Full, Cylinders, Ball & Stick and Stick. Reuses cached exports for unchanged designs. Validation tests all four controller profiles.', module='representation_tour')
     add('focus', 'interaction', 'Trackpad, pointer, cards & scrollbars',
         'Focus enabled and gray controls, activate triggers, collapse cards, scroll, and return to pointing.', ['--focus-checks'])
     add('grips', 'interaction', 'Move & resize menu borders',
@@ -45,7 +47,7 @@ def arguments(tour, validate=False):
     args = ['-m', 'tools.vr_workflows.'+tour['module'], *tour['args']]
     if tour['module'] == 'menu_tour':
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
-    elif tour['module'] == 'dimensions_persistence_check':
+    elif tour['module'] in ('dimensions_persistence_check', 'representation_tour'):
         if validate:
             args += ['--validate']
     return args
