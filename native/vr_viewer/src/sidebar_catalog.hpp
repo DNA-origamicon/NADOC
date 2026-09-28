@@ -900,6 +900,7 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
     {"multi-overlay-repr", "Layer representation", "Multi-overlay", "", {"section:visualization:right-multi-overlay"}},
     {"multi-overlay-color", "Layer coloring", "Multi-overlay", "", {"section:visualization:right-multi-overlay"}},
     {"multi-overlay-opacity", "Layer opacity", "Multi-overlay", "", {"section:visualization:right-multi-overlay"}},
+    {"section:visualization:template:view-volumes", "View Volumes", "", "section:visualization:template:view-volumes", {}},
   }},
   {1, "clustering", "Clustering", {
     {"section:clustering:cluster-panel-heading", "Movable Clusters", "", "section:clustering:cluster-panel-heading", {}},

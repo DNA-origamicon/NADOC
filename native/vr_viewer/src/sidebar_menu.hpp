@@ -160,16 +160,31 @@ class SidebarMenu {
             const auto& row=*page[i];
             const bool header=row.action.starts_with("section:");
             float y=.463F-static_cast<float>(i)*.12F;
-            out.push_back({row.id,row.id=="section:properties:dimensions-heading"?"Dimensions":header?(collapsed.contains(row.id)?"+ ":"- ")+row.label:row.label,row.id=="section:properties:dimensions-heading"?"MEASURE WITH CONTROLLERS":header?(collapsed.contains(row.id)?"EXPAND CARD":"COLLAPSE CARD"):row.section,row.action,{{cx-(hand==0?.247F:.327F),y-.054F},{cx+(hand==0?.327F:.247F),y+.054F}},(row.id=="dimensions-record" || row.id=="dimensions-clear") || header || (!row.action.empty() && available(row.action)), !header && available(row.action) && isActive(row.action)});
+            out.push_back({row.id,row.id=="section:visualization:template:view-volumes"?"View Volumes":row.id=="section:properties:dimensions-heading"?"Dimensions":header?(collapsed.contains(row.id)?"+ ":"- ")+row.label:row.label,row.id=="section:visualization:template:view-volumes"?"MANAGE SAVED VOLUMES":row.id=="section:properties:dimensions-heading"?"MEASURE WITH CONTROLLERS":header?(collapsed.contains(row.id)?"EXPAND CARD":"COLLAPSE CARD"):row.section,row.action,{{cx-(hand==0?.247F:.327F),y-.054F},{cx+(hand==0?.327F:.247F),y+.054F}},(row.id=="dimensions-record" || row.id=="dimensions-clear") || header || (!row.action.empty() && available(row.action)), !header && available(row.action) && isActive(row.action)});
         }
         if(customTab) {
             std::vector<SidebarControl> extra;
+            for(auto& c:out) if(c.id=="extrude:less-period" || c.id=="extrude:less") {
+                auto plus=c;const float middle=(c.bounds.minimum.x+c.bounds.maximum.x)*.5F;
+                c.bounds.maximum.x=middle-.006F;plus.bounds.minimum.x=middle+.006F;
+                plus.id=plus.action=c.id=="extrude:less"?"extrude:more":"extrude:more-period";
+                plus.label="+"+c.label.substr(1);
+                extra.push_back(plus);
+            }
             for(auto& c:out) if(c.action.starts_with("dimension:select:")) {
                 const auto id=c.action.substr(17);
                 const float right=c.bounds.maximum.x;
                 c.bounds.maximum.x-=.208F;
                 extra.push_back({"dimension:visibility:"+id,c.section=="eye"?"Hide dimension":"Show dimension","","dimension:visibility:"+id,{{right-.2F,c.bounds.minimum.y},{right-.104F,c.bounds.maximum.y}},true,false,false,c.section});
                 extra.push_back({"dimension:delete:"+id,"Delete dimension","","dimension:delete:"+id,{{right-.096F,c.bounds.minimum.y},{right,c.bounds.maximum.y}},true,false,false,"x"});
+                c.section.clear();
+            }
+            for(auto& c:out) if(c.action.starts_with("volume:entry:")) {
+                const auto id=c.action.substr(13);const float right=c.bounds.maximum.x;
+                c.bounds.maximum.x-=.30F;c.enabled=false;
+                extra.push_back({"volume:outline:"+id,"Show / hide box","","volume:outline:"+id,{{right-.294F,c.bounds.minimum.y},{right-.202F,c.bounds.maximum.y}},true,false,false,c.section.starts_with("eye:")?"eye":"eye-off"});
+                extra.push_back({"volume:enabled:"+id,c.section.ends_with(":on")?"On":"Off","","volume:enabled:"+id,{{right-.196F,c.bounds.minimum.y},{right-.104F,c.bounds.maximum.y}},true,c.section.ends_with(":on")});
+                extra.push_back({"volume:delete:"+id,"Delete volume","","volume:delete:"+id,{{right-.098F,c.bounds.minimum.y},{right,c.bounds.maximum.y}},true,false,false,"x"});
                 c.section.clear();
             }
             out.insert(out.end(),extra.begin(),extra.end());
@@ -193,6 +208,7 @@ class SidebarMenu {
         if(!c.enabled) return {};
         if(c.action.starts_with("tab:")) { selected=static_cast<size_t>(std::stoul(c.action.substr(4))); return {}; }
         if(c.id=="section:properties:dimensions-heading") return "dimension:toggle";
+        if(c.id=="section:visualization:template:view-volumes") return "volume:toggle";
         if(c.id=="dimensions-record") return "dimension:new";
         if(c.id=="dimensions-clear") return "dimension:clear";
         if(c.action.starts_with("section:")) { toggleSection(c.id); return {}; }
@@ -244,7 +260,7 @@ class SidebarMenu {
         const float cx=hand==0?.058F:-.058F;
         const MenuPanelBounds title{{cx-.327F,.545F},{cx+.327F,.659F}};
         text("title",tab().label,{cx-.31F,.634F},.004F,{1,1,1},title);
-        text("page",std::to_string(total()?offset()+1:0)+"-"+std::to_string(std::min(offset()+pageRows(),total()))+" / "+std::to_string(total())+(customTab?"   TRIGGER: PIN / RECALL":"   GRAY = UNAVAILABLE"),{cx-.31F,.584F},.0023F,{.71F,.76F,.81F},title);
+        text("page",std::to_string(total()?offset()+1:0)+"-"+std::to_string(std::min(offset()+pageRows(),total()))+" / "+std::to_string(total())+(customTab && tab().key=="dimensions"?"   TRIGGER: PIN / RECALL":"   GRAY = UNAVAILABLE"),{cx-.31F,.584F},.0023F,{.71F,.76F,.81F},title);
         if(focus.active) text("input-mode",focus.id=="scrollbar"?"PAD UP/DOWN: SCROLL  LEFT/RIGHT: EXIT":"PAD: MOVE / TRIGGER: SELECT",{cx-.31F,.560F},.002F,ui_style::focus,title);
         for(const auto& c:controls()) {
             const bool hover=c.id==hovered;

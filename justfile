@@ -273,3 +273,11 @@ vr-menu-tour *ARGS:
 
 vr-menu-catalog-check:
     node frontend/scripts/generate-vr-sidebar-catalog.mjs --check
+
+# Isolated ScryWrite view-volume walkthrough (Stop tour / Ctrl+C closes it).
+vr-view-volumes-demo *ARGS:
+    uv run python -m tools.vr_workflows.view_volumes_check --demo {{ARGS}}
+
+# Menu controls, rendered highlights, grabs, resizing, scene grips and persistence.
+vr-view-volumes-test *ARGS:
+    uv run python -m tools.vr_workflows.view_volumes_check --validate {{ARGS}}

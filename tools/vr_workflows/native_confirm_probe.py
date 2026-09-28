@@ -30,18 +30,31 @@ profile_controls = (ProfileControls(live,out/'control-profile.json',
     feedback=os.environ.get('NADOC_VR_FEEDBACK_ACQUISITION') == '1',
     approach=os.environ.get('NADOC_VR_APPROACH_CONTROLS') == '1')
     if os.environ.get('NADOC_VR_PROFILE_CONTROLS') == '1' else None)
+sidebar_controls=None
+if os.environ.get('NADOC_VR_EXTRUDE_SIDEBAR') == '1':
+    from tools.vr_workflows.extrude_sidebar import SidebarControls
+    sidebar_controls=SidebarControls(live,out,os.environ.get('NADOC_VR_PROFILE','steady_fast'))
 def click_control(label):
+    if sidebar_controls and live.state['sidebars'][1]['tab']=='extrude':
+        identifiers={'+':'more','-':'less','CONFIRM':'confirm','PREVIEW':'preview','UNDO':'undo','FREEFORM':'freeform'}
+        if label in identifiers:
+            return sidebar_controls.click('extrude:'+identifiers[label])
     if profile_controls:
         return profile_controls.click(label)
     live.send('aim_menu',hand=1,label=label);live.frame();live.button('trigger');live.frame()
 def activate_extrude_menu():
-    activate_extrude(live,click_control,out)
+    if sidebar_controls: sidebar_controls.activate()
+    else: activate_extrude(live,click_control,out)
 
 def verify_undo():
     before = live.state['scene_revision']
     feature = live.state['committed_feature_id']
     eye,_=live.capture_to(out/'before-undo',discard_source=True)
-    origin=framed_origin(live,eye['eyes'][0],activate=activate_extrude_menu if os.environ.get('NADOC_VR_MENU_ACTIVATION') == '1' else None);put(live,origin['position'],origin['orientation_xyzw'])
+    if sidebar_controls:
+        origin={'position':live.state['hands'][1]['position'],'orientation_xyzw':eye['eyes'][0]['orientation_xyzw']}
+    else:
+        origin=framed_origin(live,eye['eyes'][0],activate=activate_extrude_menu if os.environ.get('NADOC_VR_MENU_ACTIVATION') == '1' else None)
+        put(live,origin['position'],origin['orientation_xyzw'])
     if live.state['menu'] == 'closed':
         live.button('menu', hand=1)
     labels = {c['label'] for c in live.state['controls']}
@@ -84,7 +97,11 @@ try:
     zoom=(.026/live.state['extrude']['lattice_hit_radius_m']
           if zoom_mode == 'fit' else float(zoom_mode))
     if zoom != 1:zoom_scene(live,live.state['head_position'],zoom)
-    origin=framed_origin(live,eye['eyes'][0],activate=activate_extrude_menu if os.environ.get('NADOC_VR_MENU_ACTIVATION') == '1' else None);put(live,origin['position'],origin['orientation_xyzw'])
+    if sidebar_controls:
+        origin={'position':live.state['hands'][1]['position'],'orientation_xyzw':eye['eyes'][0]['orientation_xyzw']}
+    else:
+        origin=framed_origin(live,eye['eyes'][0],activate=activate_extrude_menu if os.environ.get('NADOC_VR_MENU_ACTIVATION') == '1' else None)
+        put(live,origin['position'],origin['orientation_xyzw'])
     if os.environ.get('NADOC_VR_CLEAR_TARGET') == '1':
         # End → freeform transition through ordinary empty-space selection.
         # Inspect closes the old lattice and drops its footprint.
@@ -118,7 +135,15 @@ try:
         side=1 if dot(sub(live.state['hands'][1]['position'],panel['panel_position']),normal)>=0 else -1
         position=[a+side*.25*b for a,b in zip(panel['panel_position'],normal)]
         put(live,position,aim_orientation(position,panel['panel_position']))
-    cells = [[0,0],[0,1],[1,0],[2,1],[0,2],[1,2]]
+    # Matches tests/conftest.py SIX_HB_CELLS and the desktop seed translated
+    # by four columns (parity preserved). Six cells alone do not prove a ring.
+    square = live.state['extrude']['square']
+    period = 8 if square else 7
+    target_length = 6*period
+    if os.environ.get('NADOC_VR_LATTICE'):
+        assert square == (os.environ['NADOC_VR_LATTICE'] == 'SQUARE')
+    cells = ([[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]] if square else
+             [[0,1],[1,1],[1,2],[1,3],[0,3],[0,2]])
     paint_trials=[]
     preset=os.environ.get('NADOC_VR_PROFILE','steady_fast')
     seed=int(os.environ.get('NADOC_VR_SEED','0'))
@@ -157,15 +182,35 @@ try:
         assert acquired, f'cell acquisition failed after three reaches: {row},{col}'
     assert sorted(live.state['extrude']['cells'])==sorted(cells),live.state['extrude']
     hold_demo(live,'painted footprint')
+    if sidebar_controls:
+        from tools.vr_workflows.lattice_grip_check import run as check_lattice_grips
+        check_lattice_grips(live,out/'lattice-grips',preset)
+        for identifier, expected in [('more',period),('less',0),('more-period',3*period),
+                                     ('less-period',0)]:
+            control=next(c for c in live.state['controls'] if c.get('id')=='extrude:'+identifier)
+            step=3*period if identifier.endswith('-period') else period
+            label=('+' if identifier.startswith('more') else '-')+str(step)+' BP'
+            assert control['label']==f'RIGHT / {label} [extrude:{identifier}]',control
+            sidebar_controls.click('extrude:'+identifier)
+            assert live.state['extrude']['length_bp']==expected,live.state['extrude']
+        for expected in [3*period,target_length]:
+            sidebar_controls.click('extrude:more-period')
+            assert live.state['extrude']['length_bp']==expected,live.state['extrude']
     if os.environ.get('NADOC_VR_PROFILE_WHEEL') == '1':
+        if sidebar_controls:
+            sidebar_controls.click('extrude:less-period')
+            sidebar_controls.click('extrude:less-period')
         from tools.vr_workflows.profile_wheel import set_wheel_length
         for _ in range(int(os.environ.get('NADOC_VR_WHEEL_SIZE_STEPS','0'))):
             click_control('SIZE +')
         live.capture_to(out/'wheel-before-drag',discard_source=True)
-        set_wheel_length(live,out/'wheel-profile.json',42,preset,seed+20000,
-            fine_click=profile_controls.click if profile_controls and os.environ.get('NADOC_VR_FINE_LENGTH') == '1' else None)
-    else:
-        for length in range(1,43):
+        set_wheel_length(live,out/'wheel-profile.json',target_length,preset,seed+20000,
+            fine_click=click_control if sidebar_controls or (profile_controls and os.environ.get('NADOC_VR_FINE_LENGTH') == '1') else None,
+            fine_step=period if sidebar_controls else 1)
+        live.capture_to(out/'wheel-after-drag',discard_source=True)
+        hold_demo(live,'Lattice wheel sets extrusion length')
+    elif not sidebar_controls:
+        for length in range(1,target_length+1):
             click_control('+')
             assert live.state['extrude']['length_bp']==length,live.state['extrude']
     if os.environ.get('NADOC_VR_FREEFORM') == '1':
@@ -185,7 +230,7 @@ try:
             'actual_capture_pose':placement_pose,'state':live.state},indent=2))
         live.capture_to(out/'freeform-preview',discard_source=True)
         put(live,origin['position'],origin['orientation_xyzw'])
-    click_control('BACK TO TOOLS')
+    if not sidebar_controls: click_control('BACK TO TOOLS')
     # Wait for browser validation to be published, without holding any input.
     deadline=time.monotonic()+10
     while not live.state.get("painted_commit_ready"):
@@ -195,18 +240,30 @@ try:
     before_feature=live.state.get('committed_feature_id')
     click_control('CONFIRM')
     commit_started=time.monotonic()
+    observation_timeouts=[]
+    def commit_frame():
+        # Observe is read-only: a scene import can exceed the socket's 3 s
+        # response window. Keep the existing 120 s commit/refresh deadline;
+        # never retry Confirm or relax controller motion timing.
+        try: live.frame()
+        except TimeoutError:
+            observation_timeouts.append(time.monotonic()-commit_started)
     deadline=commit_started+120
     while live.state['status']!='COMMITTED' or live.state.get('committed_feature_id') == before_feature:
         if time.monotonic()>deadline:raise RuntimeError('commit not acknowledged: '+str(live.state))
-        live.frame();time.sleep(.1)
+        commit_frame();time.sleep(.1)
     deadline=commit_started+120
     while live.state.get('scene_revision',0)<=before_revision:
         if time.monotonic()>deadline:raise RuntimeError('native scene revision not applied')
-        live.frame();time.sleep(.1)
-    (out/'commit-timing.json').write_text(json.dumps({'commit_and_snapshot_seconds':time.monotonic()-commit_started,'diagnostic_timeout_seconds':120}))
+        commit_frame();time.sleep(.1)
+    (out/'commit-timing.json').write_text(json.dumps({'commit_and_snapshot_seconds':time.monotonic()-commit_started,'diagnostic_timeout_seconds':120,'read_only_observation_timeouts_s':observation_timeouts}))
     live.capture_to(out/'committed',discard_source=True)
-    for label in ['LATTICE EXIT','BACK','RECENTER']:
-        click_control(label)
+    if sidebar_controls:
+        sidebar_controls.click('extrude:recenter')
+        sidebar_controls.click('extrude:back')
+        live.button('menu',hand=1);live.frame()
+    else:
+        for label in ['LATTICE EXIT','BACK','RECENTER']: click_control(label)
     live.capture_to(out/'framed',discard_source=True)
     import array
     counts=[]

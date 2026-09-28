@@ -223,26 +223,46 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     const revision = previewScheduler.schedule(sourceVolumes.map(volume => ({ ...volume })))
     note('preview-requested', { revision })
   }
-  let saveQueue = Promise.resolve(), saveGeneration = 0
+  let saveQueue = Promise.resolve(), saveGeneration = 0, pendingSaves = 0, polling = false, disposed = false
+  const volumePoll = setInterval(async () => {
+    const state = store.getState(), id = state.currentDesign?.id, generation = saveGeneration
+    if (!id || state.assemblyActive || draftVolumes || pendingSaves || polling || !api.loadViewVolumes) return
+    polling = true
+    try { await api.loadViewVolumes(id, () => !disposed && !draftVolumes && !pendingSaves && generation === saveGeneration) }
+    catch (error) { console.warn('Could not refresh view volumes', error) }
+    finally { polling = false }
+  }, 1000)
   function save(next) {
     // Update immediately so rapid rename/representation/opacity gestures compose
     // against the latest UI state, then serialize persistence to prevent an older
     // response from overwriting a newer edit.
     const generation = ++saveGeneration
+    const designId = store.getState().currentDesign?.id
+    const requestContext = api.captureViewVolumeContext?.() ?? {}
+    const previous = store.getState().currentDesign?.view_volumes ?? []
+    const before = new Map(previous.map(v => [v.id, v])), after = new Set(next.map(v => v.id))
+    const changes = { upsert: [], delete: previous.filter(v => !after.has(v.id)).map(v => v.id), patches: {} }
+    for (const volume of next) {
+      const old = before.get(volume.id)
+      if (!old) { changes.upsert.push(volume); continue }
+      const patch = Object.fromEntries(Object.entries(volume).filter(([key, value]) => key !== 'id' && JSON.stringify(value) !== JSON.stringify(old[key])))
+      if (Object.keys(patch).length) changes.patches[volume.id] = patch
+    }
+    pendingSaves++
     store.setState({ currentDesign: { ...store.getState().currentDesign, view_volumes: next } })
-    saveQueue = saveQueue.then(async () => {
-      const started = performance.now(), response = await api.saveViewVolumes(next)
+    saveQueue = saveQueue.catch(() => {}).then(async () => {
+      const started = performance.now(), response = api.changeViewVolumes ? await api.changeViewVolumes(designId, changes, requestContext) : await api.saveViewVolumes(next)
       timing.last.persistMs = performance.now() - started; timing.counters.persisted += 1
       note('persisted', { durationMs: timing.last.persistMs })
       // A stale rebuild response may have replaced currentDesign while this PUT
       // was in flight. Reassert only the newest acknowledged snapshot: applying
       // an older queued acknowledgement would briefly snap a newer drag back.
-      if (response?.view_volumes && generation === saveGeneration) {
+      if (response?.view_volumes && generation === saveGeneration && designId === store.getState().currentDesign?.id) {
         store.setState({
           currentDesign: { ...store.getState().currentDesign, view_volumes: response.view_volumes },
         })
       }
-    }).then(() => requestPreview())
+    }).then(() => requestPreview()).finally(() => { pendingSaves-- })
     return saveQueue
   }
 
@@ -593,5 +613,5 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     timing: () => structuredClone(timing),
     abort: () => previewScheduler.abort('debug-abort'),
   }
-  return { render, debug: apiDebug, dispose: () => { unsubscribe?.(); window.removeEventListener('nadoc:view-volume-stage', onStage); window.removeEventListener('keydown', onWindowKeyDown); canvas.removeEventListener('pointermove', onCanvasPointerMove); canvas.removeEventListener('pointerdown', onCanvasPointerDown, { capture: true }); canvas.removeEventListener('pointerup', onCanvasPointerUp, { capture: true }); canvas.removeEventListener('pointercancel', onCanvasPointerCancel, { capture: true }); previewScheduler.abort('dispose'); if (representationTimer !== null) clearTimeout(representationTimer); transform.dispose(); transform.getHelper().removeFromParent(); root.removeFromParent() } }
+  return { render, debug: apiDebug, dispose: () => { disposed = true; clearInterval(volumePoll); unsubscribe?.(); window.removeEventListener('nadoc:view-volume-stage', onStage); window.removeEventListener('keydown', onWindowKeyDown); canvas.removeEventListener('pointermove', onCanvasPointerMove); canvas.removeEventListener('pointerdown', onCanvasPointerDown, { capture: true }); canvas.removeEventListener('pointerup', onCanvasPointerUp, { capture: true }); canvas.removeEventListener('pointercancel', onCanvasPointerCancel, { capture: true }); previewScheduler.abort('dispose'); if (representationTimer !== null) clearTimeout(representationTimer); transform.dispose(); transform.getHelper().removeFromParent(); root.removeFromParent() } }
 }

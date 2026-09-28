@@ -1128,6 +1128,28 @@ export async function saveViewVolumes(volumes) {
   return json
 }
 
+/** Poll native edits without rebuilding geometry or resetting autosave on unchanged data. */
+export async function loadViewVolumes(designId, accept = () => true) {
+  const json = await _request('GET', `/design/view-volumes?document_id=${encodeURIComponent(designId)}`, undefined, { suppressBusy: true })
+  if (!json || !accept() || designId !== store.getState().currentDesign?.id) return null
+  if (JSON.stringify(json.view_volumes) !== JSON.stringify(store.getState().currentDesign?.view_volumes ?? [])) {
+    if (!_designRevisions.acceptMetadata(json, ['view_volumes'], designId)) return null
+    store.setState({ currentDesign: { ...store.getState().currentDesign, view_volumes: json.view_volumes } })
+    _signalDesignChanged({ geometryUnchanged: true, metadataOnly: true })
+    persistDesign()
+  }
+  return json
+}
+
+export function captureViewVolumeContext() { return { docId: docHeaders()['X-NADOC-Doc'] } }
+
+export async function changeViewVolumes(designId, changes, request = {}) {
+  const json = await _request('PATCH', '/design/view-volumes', { document_id: designId, ...changes }, { ...request, suppressBusy: true })
+  if (!json || designId !== store.getState().currentDesign?.id ||
+      !_designRevisions.acceptMetadata(json, ['view_volumes'], designId)) return null
+  return json
+}
+
 /** Persist viewport annotations (+ their global switch) in the .nadoc file. Display-only:
  *  no undo entry, no geometry refetch, tiny response. */
 export async function saveAnnotations({ annotations, enabled }) {

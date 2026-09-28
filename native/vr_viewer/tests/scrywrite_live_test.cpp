@@ -58,6 +58,16 @@ struct LiveViewerTest {
         }
     }
     static void checks(Viewer& v) {
+        v.extrudePanel_.enter(v.sidebarMenus_.menus);
+        v.activateSidebarAction("feedback:activate",1);
+        requireLive(v.extrudePanel_.active,"menu feedback closed Extrude controls");
+        v.latticeOpen_=true;
+        v.activateSidebarAction("extrude:cancel",1);
+        requireLive(!v.extrudePanel_.active && !v.latticeOpen_ && !v.toolConfig_.active(),
+                    "Cancel left an inactive Extrude panel or painter open");
+        v.extrudePanel_.enter(v.sidebarMenus_.menus);v.latticeOpen_=true;
+        v.cancelExtrudeInterface();
+        requireLive(!v.extrudePanel_.active && !v.latticeOpen_,"lattice Exit left stale Extrude controls");
         nadoc_vr::ControllerPaths paths;
         const auto fixture = v.liveDirectory_ / "controller-path-test.txt";
         { std::ofstream out(fixture); out << "0 0 0 0\n0 .1 0 0\n"; }
@@ -112,6 +122,27 @@ struct LiveViewerTest {
         requireLive(v.liveCommand("123-456 1 button 1 trigger 1").find("stale_session") != std::string::npos, "duplicate accepted");
         command(v, "activate extrude");
         requireLive(v.latticeOpen_ && v.toolConfig_.active(), "Extrude panels not opened");
+        for(bool square:{false,true}) {
+            v.latticeSquare_=square;
+            const int step=square?8:7;
+            v.activateSidebarAction("extrude:more",1);
+            requireLive(v.toolConfig_.lengthBp()==step,"wrong fine lattice step");
+            v.activateSidebarAction("extrude:more-period",1);
+            requireLive(v.toolConfig_.lengthBp()==4*step,"wrong coarse lattice step");
+            v.activateSidebarAction("extrude:less-period",1);
+            requireLive(v.toolConfig_.lengthBp()==step,"wrong coarse decrement");
+            v.activateSidebarAction("extrude:less",1);
+            requireLive(v.toolConfig_.lengthBp()==0,"wrong fine decrement");
+            v.activateSidebarAction("extrude:less-period",1);
+            requireLive(v.toolConfig_.lengthBp()==0,"negative extrusion length");
+        }
+        v.latticeSquare_=false;
+        v.menuOpen_=false;
+        requireLive(v.thumbwheelAvailable(),"wheel still requires legacy menu");
+        auto wheel=v.liveTargets();
+        auto wheelEntry=std::find_if(wheel.begin(),wheel.end(),[](const auto& e){return e.label=="EXTRUDE LENGTH WHEEL";});
+        requireLive(wheelEntry!=wheel.end(),"lattice wheel undiscoverable");
+        v.menuOpen_=true;
         // Put the controller in front of the lattice, then use the live semantic
         // locator. The separate production hit test must find the requested cell.
         const auto cells = v.visibleLatticeCells();
@@ -225,6 +256,7 @@ int objectIdGlChecks() {
     full.cylinders.push_back({"cylinder",{-.6F,-.4F,-1},{-.6F,.4F,-1},.07F,colors});
     full.halfCylinders.push_back({"half",{.5F,-.4F,-1},{.5F,.4F,-1},.1F,colors});
     full.boxes.push_back({"box",{0,.6F,-1},{.12F,0,0},{0,.1F,0},{0,0,.08F},colors});
+    for(auto& point:full.points)point.colors.values[1]={0,1,0};
     auto& stick=data.representations[static_cast<size_t>(Representation::stick)];
     stick.cylinders=full.cylinders;
     data.representations[static_cast<size_t>(Representation::ballstick)]=full;
@@ -235,6 +267,8 @@ int objectIdGlChecks() {
         {"ellipsoid",{0,0,-1},{.8F,0,0},{0,.4F,0},{0,0,.4F},colors});
     {
         GlScene scene(std::move(data),true);
+        std::vector<nadoc_vr::ViewVolumeRecord> volumes;
+        bool volumeMode=false;
         auto render = [&]() {
             glBindFramebuffer(GL_FRAMEBUFFER,fbo); glViewport(0,0,128,128);
             const GLenum buffers[]={GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT1};
@@ -243,7 +277,8 @@ int objectIdGlChecks() {
             glClearStencil(1); glStencilMask(0xff);
             glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
             glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LESS);
-            scene.render(glm::perspective(glm::radians(90.0F),1.0F,.05F,10.0F),glm::mat4(1),{},true);
+            if(volumeMode) scene.renderVolumes(glm::perspective(glm::radians(90.0F),1.0F,.05F,10.0F),glm::mat4(1),{},true,volumes);
+            else scene.render(glm::perspective(glm::radians(90.0F),1.0F,.05F,10.0F),glm::mat4(1),{},true);
             std::vector<uint32_t> pixels(128*128);
             glReadBuffer(GL_COLOR_ATTACHMENT1);
             glReadPixels(0,0,128,128,GL_RED_INTEGER,GL_UNSIGNED_INT,pixels.data());
@@ -261,6 +296,18 @@ int objectIdGlChecks() {
         auto table=scene.objectTable(unique);
         for (const char* name : {"front","cylinder","half","box"}) requireLive(table.find(name)!=std::string::npos,"primitive ID missing");
         requireLive(table.find("rear")==std::string::npos,"occluded rear object leaked");
+        // The right half of the sphere changes style; the left half stays red.
+        nadoc_vr::ViewVolumeRecord volume;volume.enabled=true;volume.editable=true;
+        volume.center={.5F,0,kViewDistanceMeters-1};volume.half={.5F,1,1};
+        volume.representation="beads";volume.coloring="base";volumes={volume};volumeMode=true;
+        render();
+        auto rgb=[&](int x,int y){std::array<unsigned char,4> p{};glReadPixels(x,y,1,1,GL_RGBA,GL_UNSIGNED_BYTE,p.data());return p;};
+        auto left=rgb(59,64),right=rgb(69,64);
+        requireLive(left[0]>left[1] && right[1]>right[0],"local volume did not replace only the inside style");
+        volumes[0].enabled=false;render();right=rgb(69,64);
+        requireLive(right[0]>right[1],"disabled volume still changed representation");
+        volumes.clear();requireLive(render()==pixels,"volume rendering changed unmasked object IDs");
+        volumeMode=false;
         scene.setSelectionHighlights({}, {}, {}, {"front"});
         requireLive(render()==pixels,"decorative glow changed object IDs");
         LiveViewerTest::verifyOverlayMask();

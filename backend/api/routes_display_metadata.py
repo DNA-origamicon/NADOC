@@ -97,9 +97,11 @@ class StapleGroupsSaveRequest(BaseModel):
 
 
 @router.get("/design/view-volumes", status_code=200)
-def get_view_volumes() -> dict:
+def get_view_volumes(document_id: str | None = None) -> dict:
     """Return only persisted view volumes for fast UI/test verification."""
     design = design_state.get_or_404()
+    if document_id is not None and design.id != document_id:
+        raise HTTPException(409, "View-volume document is no longer active.")
     return {
         "view_volumes": [volume.model_dump(mode="json") for volume in design.view_volumes],
         "revision": design_state.revision(),
@@ -264,3 +266,34 @@ def save_visibility_state(body: VisibilityState) -> dict:
 
     design, report = design_state.mutate_and_validate(_apply)
     return _design_response(design, report)
+
+
+class ViewVolumeChanges(BaseModel):
+    document_id: str
+    upsert: list[ViewVolume] = []
+    delete: list[str] = []
+    patches: dict[str, dict] = {}
+
+
+@router.patch("/design/view-volumes", status_code=200)
+def change_view_volumes(body: ViewVolumeChanges) -> dict:
+    def apply(design):
+        if design.id != body.document_id:
+            raise HTTPException(409, "View-volume document is no longer active.")
+        records = {v.id: v.model_copy(deep=True) for v in design.view_volumes}
+        for key in body.delete:
+            records.pop(key, None)
+        for volume in body.upsert:
+            records[volume.id] = volume.model_copy(deep=True)
+        for key, patch in body.patches.items():
+            if key not in records:
+                continue  # A concurrent deletion must not resurrect the volume.
+            if not set(patch) <= set(ViewVolume.model_fields) - {'id'}:
+                raise HTTPException(422, "Unknown view-volume property.")
+            try:
+                records[key] = ViewVolume.model_validate({**records[key].model_dump(), **patch})
+            except ValueError as error:
+                raise HTTPException(422, str(error)) from error
+        design.view_volumes = list(records.values())
+    design, revision = design_state.mutate_display_metadata(apply)
+    return {'view_volumes': [v.model_dump(mode='json') for v in design.view_volumes], 'revision': revision}

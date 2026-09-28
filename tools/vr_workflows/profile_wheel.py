@@ -16,23 +16,23 @@ def wheel_travel(current, target, period, notch):
     return math.copysign((abs(detents)+.5)*notch, detents) if detents else 0
 
 
-def fine_length(live, target, period, click, record):
-    """At most one detent's worth of single-base clicks; verify each effect."""
+def fine_length(live, target, period, click, record, step=1):
+    """At most one detent of button correction; verify each actual step."""
     remaining = target-live.state['extrude']['length_bp']
-    if abs(remaining) > period:
-        raise ValueError('fine correction exceeds one detent')
+    if step <= 0 or remaining % step or abs(remaining) > period:
+        raise ValueError('correction requires whole button steps within one detent')
     cells = [list(cell) for cell in live.state['extrude']['cells']]
-    for _ in range(abs(remaining)):
+    for _ in range(abs(remaining)//step):
         before = live.state['extrude']['length_bp']
         sign = 1 if target > before else -1
         click('+' if sign > 0 else '-')
         after = live.state['extrude']['length_bp']
-        record({'before_bp':before,'after_bp':after,'expected_bp':before+sign})
-        if after != before+sign or live.state['extrude']['cells'] != cells:
+        record({'before_bp':before,'after_bp':after,'expected_bp':before+sign*step})
+        if after != before+sign*step or live.state['extrude']['cells'] != cells:
             raise RuntimeError('Fine length click changed unexpected state')
 
 
-def set_wheel_length(live, output, target, preset, seed=0, fine_click=None):
+def set_wheel_length(live, output, target, preset, seed=0, fine_click=None, fine_step=1):
     output = Path(output)
     trials = []
     cells = live.state['extrude']['cells']
@@ -49,7 +49,7 @@ def set_wheel_length(live, output, target, preset, seed=0, fine_click=None):
             def record(step):
                 trial['fine_clicks'].append(step)
                 save()
-            fine_length(live,target,state['base_pairs_per_detent'],fine_click,record)
+            fine_length(live,target,state['base_pairs_per_detent'],fine_click,record,fine_step)
             return trials
         if correction == 3:
             break  # Final fine correction is allowed; a fourth wheel drag is not.

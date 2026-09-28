@@ -60,7 +60,7 @@ int main() {
             const auto full=menu.total();
             for(size_t index=0;index<menu.tab().rows.size();++index) {
                 const auto& header=menu.tab().rows[index];
-                if(!header.action.starts_with("section:") || header.id=="section:properties:dimensions-heading") continue;
+                if(!header.action.starts_with("section:") || (header.id=="section:properties:dimensions-heading" || header.id=="section:visualization:template:view-volumes")) continue;
                 menu.offsets[tab]=index/nadoc_vr::kSidebarPageRows*nadoc_vr::kSidebarPageRows;
                 auto controls=menu.controls();
                 auto title=std::find_if(controls.begin(),controls.end(),[&](const auto& c){return c.id==header.id;});

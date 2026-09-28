@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url'
 const FRONTEND_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(FRONTEND_DIR, '..')
 
-const BACKEND_PORT = '8001'
-const FRONTEND_PORT = '5174'
+const BACKEND_PORT = process.env.NADOC_SMOKE_BACKEND_PORT || '8001'
+const FRONTEND_PORT = process.env.NADOC_SMOKE_FRONTEND_PORT || '5174'
 
 // Tell the specs/helpers (smoke.spec.js, scene_harness.js) to hit the throwaway
 // backend. Set before the workers fork so they inherit it.

@@ -122,6 +122,7 @@ add('left','feature-log','Feature Log / Configurations','frontend/src/ui/feature
   ['fl-capture','+ Capture Configuration'],['fl-initial','F0 - initial'],['fl-select','Select feature'],['fl-reorder','Reorder feature'],['fl-revert','Revert to before feature'],['fl-edit','Edit feature'],['fl-save','Save edit'],['fl-delete','Delete feature'],
   ['fl-restore','Restore configuration'],['fl-animate','Animate to configuration'],['fl-overwrite','Overwrite configuration'],['fl-rename','Rename configuration'],['fl-save-name','Save name'],['fl-delete-config','Delete configuration'],['fl-pin','Pin keyframe to feature'],['fl-cancel','Cancel'],
 ])
+add('right','visualization','View Volumes','frontend/src/scene/view_volumes.js', [])
 add('right','visualization','Multi-view','frontend/src/ui/multi_view.js', [
   ['multi-view-2','Split into 2 synchronized panels'],['multi-view-3','Split into 3 synchronized panels'],['multi-view-4','Split into 4 synchronized panels'],['multi-view-repr','Panel representation'],['multi-view-color','Panel coloring'],
 ])

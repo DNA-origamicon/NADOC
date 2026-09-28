@@ -56,12 +56,12 @@ test('view volumes add, overlap, edit, persist, and expose validation layers', a
   await page.locator('#view-volume-toggle-all').click()
   await expect(page.locator('.view-volume-outline-toggle')).toHaveAttribute('aria-pressed', 'true')
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.gizmoVisible())).toBe(true)
-  await page.locator('#view-volume-heading').click()
+  await page.getByText('View Volumes', { exact: true }).click()
   await expect(page.locator('#view-volume-body')).toBeHidden()
   await expect(page.locator('#view-volume-heading')).toHaveAttribute('aria-expanded', 'false')
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('nadoc.leftSidebar.sections.v1'))
     ?.visualization?.['view-volumes-section'])).toBe(true)
-  await page.locator('#view-volume-heading').click()
+  await page.getByText('View Volumes', { exact: true }).click()
   await expect(page.locator('#view-volume-body')).toBeVisible()
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', {
     detail: { stage: 'atom-scheduled', viewVolume: true },
@@ -98,26 +98,33 @@ test('view volumes add, overlap, edit, persist, and expose validation layers', a
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).toBe(outline.id)
   expect(await page.evaluate(() => window.__volumeLeakedPointerDowns)).toBe(0)
   await page.keyboard.press('Escape')
-  await page.locator('.view-volume-row').click()
+  await page.locator('.view-volume-row').click({ position: { x: 3, y: 3 } })
   await page.evaluate(() => {
     const debug = window.__NADOC_VIEW_VOLUMES__
     debug.setMode('rotate'); debug.begin(); debug.rotatePreview([0, 0, 1], Math.PI / 6); debug.commit()
   })
   await expect.poll(() => page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.volumes()[0].rotation[2])).not.toBe(0)
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).not.toBeNull()
-  await page.locator('.view-volume-row').click()
+  await page.locator('.view-volume-row').click({ position: { x: 3, y: 3 } })
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).toBeNull()
-  await page.locator('.view-volume-row').click()
+  await page.locator('.view-volume-row').click({ position: { x: 3, y: 3 } })
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).not.toBeNull()
   const selectedBeforeOrbit = await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())
-  await page.mouse.move(60, 100)
+  const emptyCanvas = await page.evaluate(() => {
+    const canvas = document.getElementById('canvas')
+    for (let y = 130; y < innerHeight - 60; y += 30) for (let x = 30; x < innerWidth - 90; x += 30) {
+      if (document.elementFromPoint(x, y) === canvas && document.elementFromPoint(x + 50, y + 40) === canvas) return { x, y }
+    }
+    throw new Error('No unobscured canvas region')
+  })
+  await page.mouse.move(emptyCanvas.x, emptyCanvas.y)
   await page.mouse.down()
-  await page.mouse.move(110, 140, { steps: 4 })
+  await page.mouse.move(emptyCanvas.x + 50, emptyCanvas.y + 40, { steps: 4 })
   await page.mouse.up()
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).toBe(selectedBeforeOrbit)
-  await page.mouse.click(60, 100)
+  await page.mouse.click(emptyCanvas.x, emptyCanvas.y)
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).toBeNull()
-  await page.locator('.view-volume-row').click()
+  await page.locator('.view-volume-row').click({ position: { x: 3, y: 3 } })
   const boxBefore = await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.volumes()[0])
   await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.resizeSelected([1.1, 0.9, 1.2]))
   const boxAfter = await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.volumes()[0])
@@ -228,4 +235,31 @@ test('latest persisted volume survives a stale rebuild response during move comm
     const response = await page.request.get('/api/design', { headers: { 'X-NADOC-Doc': doc } })
     return (await response.json()).design?.view_volumes?.[0]?.min_corner?.[0]
   }).toBeCloseTo(before + 3)
+})
+
+test('external VR volume records appear live and desktop edits preserve their switches', async ({ page }) => {
+  test.setTimeout(60_000)
+  const doc = `view-volumes-native-sync-${Date.now()}`
+  await loadScaffoldedPart(page, { doc, name: 'view-volumes-native-sync' })
+  await page.locator('.right-tab-btn[data-tab="visualization"]').click()
+  const headers = { 'X-NADOC-Doc': doc }
+  const design = (await (await page.request.get('/api/design', { headers })).json()).design
+  const response = await page.request.patch('/api/design/view-volumes', { headers, data: {
+    document_id: design.id,
+    upsert: [{ id: 'native-hex', name: 'VR hex', shape: 'hexagonal', min_corner: [-10,-10,-10], max_corner: [10,10,10], enabled: false, outline_visible: false }],
+  } })
+  expect(response.ok()).toBe(true)
+  await expect(page.locator('.view-volume-row')).toHaveCount(1)
+  await expect(page.locator('.view-volume-name')).toHaveValue('VR hex')
+  await expect(page.locator('.view-volume-enabled-toggle')).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.locator('.view-volume-outline-toggle')).toHaveAttribute('aria-pressed', 'false')
+  await page.locator('.view-volume-row').scrollIntoViewIfNeeded()
+  if (process.env.NADOC_VOLUME_CAPTURE) await page.screenshot({ path: process.env.NADOC_VOLUME_CAPTURE })
+  await page.locator('.view-volume-name').fill('Desktop renamed')
+  await page.locator('.view-volume-name').press('Tab')
+  await expect.poll(async () => (await (await page.request.get('/api/design/view-volumes', { headers })).json()).view_volumes[0].name).toBe('Desktop renamed')
+  const records = (await (await page.request.get('/api/design/view-volumes', { headers })).json()).view_volumes
+  expect(records[0]).toMatchObject({ enabled: false, outline_visible: false, shape: 'hexagonal' })
+  await page.request.patch('/api/design/view-volumes', { headers, data: { document_id: design.id, delete: ['native-hex'] } })
+  await expect(page.locator('.view-volume-row')).toHaveCount(0)
 })

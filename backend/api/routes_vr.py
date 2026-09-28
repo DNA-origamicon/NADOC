@@ -3214,7 +3214,9 @@ def _cleanup_after_process(
 ) -> None:
     process.wait()
     from backend.api.vr_dimensions import finish as finish_dimensions
+    from backend.api.vr_view_volumes import finish as finish_volumes
     finish_dimensions(event_path)
+    finish_volumes(event_path)
     from backend.api.routes_vr_scene import cleanup_scene_refresh
     cleanup_scene_refresh(event_path)
     scene_path.unlink(missing_ok=True)
@@ -4967,8 +4969,9 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         )
         trajectory_path, coordinate_path = _write_trajectory_feeds(body, view_rotation)
 
-        from backend.api import vr_dimensions
+        from backend.api import vr_dimensions, vr_view_volumes
         vr_dimensions.prepare(event_path, body.assembly_active, view_rotation)
+        vr_view_volumes.prepare(event_path, body.assembly_active, view_rotation)
         live_socket_path = None
         if body.scrywrite_live != "off":
             live_socket_path = Path(tempfile.mkdtemp(prefix="nadoc-scry-")) / "viewer.sock"
@@ -4993,6 +4996,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         except OSError as exc:
             scene_path.unlink(missing_ok=True)
             vr_dimensions.finish(event_path)
+            vr_view_volumes.finish(event_path)
             event_path.unlink(missing_ok=True)
             feedback_path.unlink(missing_ok=True)
             tool_feedback_path.unlink(missing_ok=True)
@@ -5014,6 +5018,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         if process.poll() is not None:
             scene_path.unlink(missing_ok=True)
             vr_dimensions.finish(event_path)
+            vr_view_volumes.finish(event_path)
             event_path.unlink(missing_ok=True)
             feedback_path.unlink(missing_ok=True)
             tool_feedback_path.unlink(missing_ok=True)
@@ -5068,6 +5073,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         }
         _write_state(state)
         vr_dimensions.start(event_path)
+        vr_view_volumes.start(event_path)
         threading.Thread(
             target=_cleanup_after_process,
             args=(

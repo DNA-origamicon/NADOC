@@ -1,3 +1,4 @@
+#include "lattice_grip.hpp"
 #define XR_USE_PLATFORM_XLIB
 #define XR_USE_GRAPHICS_API_OPENGL
 #define GL_GLEXT_PROTOTYPES
@@ -32,6 +33,9 @@
 #include "menu_items.hpp"
 #include "sidebar_menu.hpp"
 #include "dimension_panel.hpp"
+#include "view_volume_panel.hpp"
+#include "extrude_panel.hpp"
+#include "view_volume_shader.hpp"
 #include "dimension_sync.hpp"
 #include "sidebar_grips.hpp"
 #include "picking.hpp"
@@ -311,15 +315,19 @@ GLuint makeProgram() {
         layout(location = 0) in vec3 aPosition;
         layout(location = 1) in vec3 aColor;
         uniform mat4 uViewProjection;
+        uniform mat4 uVolumeModel;
         out vec3 vColor;
+        out vec3 vWorldPosition;
         void main() {
             gl_Position = uViewProjection * vec4(aPosition, 1.0);
             vColor = aColor;
+            vWorldPosition=(uVolumeModel*vec4(aPosition,1)).xyz;
         }
     )GLSL";
     static constexpr const char* fragmentSource = R"GLSL(
         #version 330 core
         in vec3 vColor;
+        in vec3 vWorldPosition;
         out vec4 outColor;
         void main() {
             outColor = vec4(vColor, 1.0);
@@ -327,7 +335,7 @@ GLuint makeProgram() {
     )GLSL";
 
     const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER,nadoc_vr::volumeFragment(fragmentSource,"void main() {","vWorldPosition").c_str());
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
@@ -592,7 +600,7 @@ GLuint makeSphereProgram() {
     )GLSL";
 
     const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, nadoc_vr::volumeFragment(fragmentSource, "vec3 worldPosition = vWorldCenter + normal * vWorldRadius;", "worldPosition").c_str());
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
@@ -656,7 +664,7 @@ GLuint makeCylinderProgram() {
     )GLSL";
 
     const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, kLitFragmentSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, nadoc_vr::volumeFragment(kLitFragmentSource, "void main() {", "vWorldPosition").c_str());
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
@@ -685,9 +693,11 @@ GLuint makeAtomisticBondProgram() {
         layout(location = 7) in uint aObjectId;
         flat out uint vObjectId;
         out vec3 vColor;
+        out vec3 vWorldPosition;
         void main() {
             vec3 position = gl_VertexID == 0 ? aStart : aEnd;
             gl_Position = uViewProjection * uModel * vec4(position, 1.0);
+            vWorldPosition = (uModel * vec4(position,1)).xyz;
             vColor = aColor;
             vObjectId = aObjectId;
         }
@@ -695,6 +705,7 @@ GLuint makeAtomisticBondProgram() {
     static constexpr const char* fragmentSource = R"GLSL(
         #version 330 core
         in vec3 vColor;
+        in vec3 vWorldPosition;
         layout(location = 0) out vec4 outColor;
         layout(location = 1) out uint outObjectId;
         flat in uint vObjectId;
@@ -704,7 +715,7 @@ GLuint makeAtomisticBondProgram() {
         }
     )GLSL";
     const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, nadoc_vr::volumeFragment(fragmentSource, "void main() {", "vWorldPosition").c_str());
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
@@ -763,7 +774,7 @@ GLuint makeBoxProgram() {
     )GLSL";
 
     const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, kLitFragmentSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, nadoc_vr::volumeFragment(kLitFragmentSource,"void main() {","vWorldPosition").c_str());
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
@@ -1678,7 +1689,7 @@ class GlScene {
             atomisticBuffersResident_=false; // Static cache does not carry trajectory indices.
             uploadedVisualizationRevision_=visualizationRevision_;
             const double elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-styleStarted).count();
-            std::cout << "VR_METRIC event=process_progress phase=style_apply representation="
+            if(!renderingVolumes_) std::cout << "VR_METRIC event=process_progress phase=style_apply representation="
                 << representationName(representation_) << " coloring=" << coloringName(coloring_)
                 << " total_ms=" << elapsed << " fast_path=static_gpu_buffers" << std::endl;
             return;
@@ -1698,7 +1709,7 @@ class GlScene {
                 ? ballstickSphereCount_ : 0;
             const double milliseconds = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - styleStarted).count();
-            std::cout << "VR_METRIC event=process_progress phase=style_apply"
+            if(!renderingVolumes_) std::cout << "VR_METRIC event=process_progress phase=style_apply"
                       << " representation=" << representationName(representation_)
                       << " coloring=" << coloringName(coloring_)
                       << " points=" << sphereCount_
@@ -1749,7 +1760,7 @@ class GlScene {
                 uploadedAt - preparedAt).count();
             const double milliseconds = std::chrono::duration<double, std::milli>(
                 uploadedAt - styleStarted).count();
-            std::cout << "VR_METRIC event=process_progress phase=style_apply"
+            if(!renderingVolumes_) std::cout << "VR_METRIC event=process_progress phase=style_apply"
                       << " representation=" << representationName(representation_)
                       << " coloring=" << coloringName(coloring_)
                       << " points=" << sphereCount_
@@ -2071,7 +2082,7 @@ class GlScene {
             preparedAt - styleStarted).count();
         const double uploadMilliseconds = std::chrono::duration<double, std::milli>(
             completedAt - preparedAt).count();
-        std::cout << "VR_METRIC event=process_progress phase=style_apply"
+        if(!renderingVolumes_) std::cout << "VR_METRIC event=process_progress phase=style_apply"
                   << " representation=" << representationName(representation_)
                   << " coloring=" << coloringName(coloring_)
                   << " points=" << sphereCount_
@@ -2530,6 +2541,7 @@ class GlScene {
     }
 
     ~GlScene() {
+        glDeleteBuffers(1,&volumeBuffer_);glDeleteTextures(1,&volumeTexture_);
         if (lineVbo_) glDeleteBuffers(1, &lineVbo_);
         if (guideVbo_) glDeleteBuffers(1, &guideVbo_);
         if (sphereMeshVbo_) glDeleteBuffers(1, &sphereMeshVbo_);
@@ -2604,10 +2616,52 @@ class GlScene {
         return out.str();
     }
 
+    void renderVolumes(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,
+            bool ids,const std::vector<nadoc_vr::ViewVolumeRecord>& entries) {
+        std::vector<const nadoc_vr::ViewVolumeRecord*> active;
+        std::vector<glm::vec4> data;
+        const auto frame=nadoc_vr::ViewVolumeInteraction::frame(model,scene_.normalizationCenter,scene_.normalizationScale,{0,0,-kViewDistanceMeters});
+        for(const auto& e:entries) if(e.enabled && e.opacity>0 && supportsRepresentation(representationFromName(e.representation))) {
+            active.push_back(&e);
+            glm::vec3 half=e.half;if(e.sides==6)half.x=half.y=std::min(half.x,half.y);
+            const auto inverse=glm::inverse(frame*glm::translate(glm::mat4(1),e.center)*glm::mat4_cast(e.rotation)*glm::scale(glm::mat4(1),half));
+            for(int i=0;i<4;++i)data.push_back(inverse[i]);
+            data.push_back({float(e.sides),0,0,0});
+        }
+        if(!volumeBuffer_) {glGenBuffers(1,&volumeBuffer_);glGenTextures(1,&volumeTexture_);}
+        glBindBuffer(GL_TEXTURE_BUFFER,volumeBuffer_);
+        glBufferData(GL_TEXTURE_BUFFER,std::max(size_t(1),data.size())*sizeof(glm::vec4),data.empty()?nullptr:data.data(),GL_STREAM_DRAW);
+        glActiveTexture(GL_TEXTURE7);glBindTexture(GL_TEXTURE_BUFFER,volumeTexture_);
+        glTexBuffer(GL_TEXTURE_BUFFER,GL_RGBA32F,volumeBuffer_);glActiveTexture(GL_TEXTURE0);
+        auto clip=[&](int layer,float opacity) {
+            for(GLuint program:{program_,sphereProgram_,cylinderProgram_,boxProgram_,atomisticBondProgram_}) {
+                glUseProgram(program);
+                glUniform1i(glGetUniformLocation(program,"uVolumes"),7);
+                glUniform1i(glGetUniformLocation(program,"uVolumeCount"),int(active.size()));
+                glUniform1i(glGetUniformLocation(program,"uVolumeLayer"),layer);
+                glUniform1f(glGetUniformLocation(program,"uVolumeOpacity"),opacity);
+            }
+        };
+        const auto original=representation_;const auto color=coloring_;
+        renderingVolumes_=!active.empty();
+        clip(-1,1);render(vp,model,{},ids);
+        for(size_t i=0;i<active.size();++i) {
+            const auto& e=*active[i];
+            setStyle(representationFromName(e.representation),coloringFromName(e.coloring=="overhang-only"?"strand":e.coloring));
+            clip(int(i),e.opacity);
+            glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+            render(vp,model,{},ids);glDisable(GL_BLEND);
+        }
+        if(!active.empty())setStyle(original,color);
+        renderingVolumes_=false;active.clear();clip(-1,1);
+        renderGuides(vp,guides);
+    }
+
     void render(const glm::mat4& viewProjection, const glm::mat4& modelTransform,
                 const std::vector<Vertex>& guides, bool captureIds = false) const {
         glUseProgram(program_);
         const glm::mat4 modelViewProjection = viewProjection * modelTransform;
+        glUniformMatrix4fv(glGetUniformLocation(program_,"uVolumeModel"),1,GL_FALSE,&modelTransform[0][0]);
         glUniformMatrix4fv(viewProjection_, 1, GL_FALSE, &modelViewProjection[0][0]);
         glBindVertexArray(lineVao_);
         glLineWidth(1.5F);
@@ -2776,6 +2830,8 @@ class GlScene {
         if (!guides.empty()) {
             glDisable(GL_DEPTH_TEST);
             glUseProgram(program_);
+            glUniform1i(glGetUniformLocation(program_,"uVolumeCount"),0);
+            glUniform1f(glGetUniformLocation(program_,"uVolumeOpacity"),1);
             glUniformMatrix4fv(viewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
             glBindBuffer(GL_ARRAY_BUFFER, guideVbo_);
             glBufferData(GL_ARRAY_BUFFER,
@@ -3796,6 +3852,8 @@ class GlScene {
     }
 
     GLuint program_ = 0;
+    bool renderingVolumes_=false;
+    GLuint volumeBuffer_=0,volumeTexture_=0;
     SceneData scene_;
     bool objectIdsEnabled_ = false;
     std::unordered_map<std::string, uint32_t> objectIds_;
@@ -4785,6 +4843,8 @@ class Viewer {
         extrudePlane_ = sceneData_.extrudePlane;
         normalizationCenter_ = sceneData_.normalizationCenter;
         normalizationScale_ = sceneData_.normalizationScale;
+        volumePanel_.initialize(eventPath_);
+        volumePanel_.update(sidebarMenus_.menus);
         dimensionSync_.initialize(eventPath_,dimensionPanel_.tool,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
         const RepresentationData& initial = sceneData_.representations[
             representationSourceIndex(sceneData_.initialRepresentation)];
@@ -5176,6 +5236,15 @@ class Viewer {
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.available=[this](const std::string& action) {
                 if(action=="trajectory") return trajectoryState_.active;
+                if(action.starts_with("extrude:")) {
+                    if(toolShell_.executionPending()) return action=="extrude:back";
+                    if(action=="extrude:confirm") return paintedExtrusionReady();
+                    if(action=="extrude:freeform") return freeformAvailable();
+                    if(action=="extrude:undo") return toolShell_.undoAvailable();
+                    if(action=="extrude:lattice") return false;
+                    if(action=="extrude:plane") return toolConfig_.targetSelectionKind()=="none";
+                    return true;
+                }
                 if(action.starts_with("repr:")) return glScene_->supportsRepresentation(static_cast<Representation>(std::stoi(action.substr(5))));
                 if(action.starts_with("color:")) return (nadoc_vr::kSidebarColoringMasks.at(static_cast<size_t>(glScene_->representation())) & (1U << std::stoi(action.substr(6)))) != 0;
                 if(!action.starts_with("tool:")) return true;
@@ -5377,7 +5446,7 @@ class Viewer {
         {-0.272F, -0.205F}, {0.272F, 0.210F},
     };
     static constexpr nadoc_vr::MenuPanelBounds kThumbwheelBounds{
-        {0.305F, 0.055F}, {0.405F, 0.225F},
+        {0.305F, -0.085F}, {0.405F, 0.085F},
     };
     static constexpr nadoc_vr::MenuPanelBounds kThumbwheelRayBounds{
         {-nadoc_vr::MenuPlacement::kMenuHalfWidth, kMenuBottom},
@@ -5514,6 +5583,8 @@ class Viewer {
     }
 
     void toggleMenu(size_t hand) {
+        if(extrudePanel_.active) {extrudePanel_.exit(sidebarMenus_.menus);latticeOpen_=false;return;}
+        if(volumePanel_.active) {volumePanel_.exit(sidebarMenus_.menus);return;}
         if(dimensionPanel_.tool.active) {dimensionPanel_.exit(sidebarMenus_.menus);return;}
         radialToolMenu_.close();
         if(menuHand_==hand) legacyMenuFocus_.focus.reset();
@@ -5526,8 +5597,63 @@ class Viewer {
         pulse(hand, 0.45F);
     }
 
+    void refreshExtrudePanel() {
+        extrudePanel_.refresh(sidebarMenus_.menus,toolConfig_.lengthBp(),toolConfig_.directionSign(),
+            extrudePlane_.label(),nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter()),
+            toolConfig_.ligateAdjacent(),extrudeLatticeDraft_.cells().size(),latticeSquare_,
+            freeformDraft_.placed(),paintedExtrusionReady()?"READY TO EXTRUDE":toolShell_.executionPending()?"EXTRUDING":extrudeLatticeDraft_.cells().empty()?"PAINT CELLS TO EXTRUDE":toolShell_.status());
+    }
+
     void activateSidebarAction(const std::string& action, size_t hand) {
         if(action=="feedback:activate") {pulse(hand,.22F);return;}
+        if(action.starts_with("extrude:")) {
+            if(action=="extrude:back") {extrudePanel_.exit(sidebarMenus_.menus);latticeOpen_=false;return;}
+            if(toolShell_.executionPending())return;
+            if(action=="extrude:cancel") {cancelExtrudeInterface();return;}
+            bool changed=false;
+            if(action=="extrude:less" || action=="extrude:more" ||
+               action=="extrude:less-period" || action=="extrude:more-period") {
+                const bool coarse=action.ends_with("-period");
+                const int direction=action.starts_with("extrude:more")?1:-1;
+                changed=toolConfig_.adjustExtrudeLengthBp(
+                    direction*nadoc_vr::extrudeLengthStep(latticeSquare_,coarse));
+            }
+            else if(action=="extrude:direction") changed=toolConfig_.adjustSecondary(toolConfig_.directionSign()>0?-1:1);
+            else if(action=="extrude:strands") changed=toolConfig_.cycleOption();
+            else if(action=="extrude:ligate") changed=toolConfig_.toggleFlag();
+            else if(action=="extrude:plane") {freeformDraft_.clear();extrudePlane_.cycle();changed=true;}
+
+            else if(action=="extrude:paint") latticeOpen_=true;
+            else if(action=="extrude:recenter") {recenterRequested_=true;recenterHand_=hand;}
+            else if(action=="extrude:freeform" && freeformAvailable()) {
+                if(freeformDraft_.placed()) freeformDraft_.clear();
+                else {freeformDraft_.arm();latticeOpen_=false;sidebarMenus_.menus[1].open=false;}
+                changed=true;
+            } else {
+                const auto intent=action=="extrude:confirm"?nadoc_vr::ToolAction::confirm
+                    :action=="extrude:preview"?nadoc_vr::ToolAction::preview
+                    :action=="extrude:undo"?nadoc_vr::ToolAction::undo:nadoc_vr::ToolAction::cancel;
+                if(intent==nadoc_vr::ToolAction::confirm&&!paintedExtrusionReady())return;
+                toolShell_.apply(intent,selectedSelectionKind_,paintedExtrusionReady());
+                if(intent==nadoc_vr::ToolAction::cancel) {freeformDraft_.clear();pendingToolTransform_.cancel();publishToolTransform();}
+                publishToolIntent(intent);
+            }
+            if(changed)publishToolConfiguration();
+            refreshExtrudePanel();return;
+        }
+        if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
+        if(action=="tool:extrude") {
+            activateRadialTool(0);
+            menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
+            extrudePanel_.enter(sidebarMenus_.menus);
+            // Place beside the actual right sidebar, not the last radial menu pose.
+            const auto& placement=sidebarMenus_.menus[1].placement;
+            latticePlacement_.openDocked(placement.worldPoint({-1.20F,0,0}),placement.orientation());
+            refreshExtrudePanel();return;
+        }
+        if(volumePanel_.action(action,sidebarMenus_.menus,normalizationCenter_,normalizationScale_)) {
+            menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();latticeOpen_=false;return;
+        }
         if(dimensionPanel_.action(action,sidebarMenus_.menus,normalizationScale_)) {
             menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();latticeOpen_=false;
             dimensionPanel_.tool.update(hands_,manipulator_.transform(),false);
@@ -6068,7 +6194,7 @@ class Viewer {
     [[nodiscard]] glm::vec2 latticeCellPosition(
         const nadoc_vr::LatticeCell& cell) const {
         const float unitsPerNanometer = nadoc_vr::latticePanelUnitsPerNanometer(
-            normalizationScale_, manipulator_.scale(), latticePlacement_.scale());
+            normalizationScale_, manipulator_.scale(), latticePlacement_.scale()) * latticeGrip_.zoom;
         return nadoc_vr::latticeCellOffsetNanometers(
             cell, latticeOrigin_, latticeSquare_) * unitsPerNanometer;
     }
@@ -6076,13 +6202,13 @@ class Viewer {
     [[nodiscard]] float latticeCellRadius() const {
         return nadoc_vr::kDnaHelixRadiusNanometers *
             nadoc_vr::latticePanelUnitsPerNanometer(
-                normalizationScale_, manipulator_.scale(), latticePlacement_.scale());
+                normalizationScale_, manipulator_.scale(), latticePlacement_.scale()) * latticeGrip_.zoom;
     }
 
     [[nodiscard]] std::vector<nadoc_vr::LatticeCell> visibleLatticeCells() const {
         const float radius = latticeCellRadius();
         const float unitsPerNanometer = nadoc_vr::latticePanelUnitsPerNanometer(
-            normalizationScale_, manipulator_.scale(), latticePlacement_.scale());
+            normalizationScale_, manipulator_.scale(), latticePlacement_.scale()) * latticeGrip_.zoom;
         if (radius <= 0.0F || unitsPerNanometer <= 0.0F) return {};
         const float xPitch = (latticeSquare_
             ? nadoc_vr::kSquareLatticePitchNanometers
@@ -6166,7 +6292,10 @@ class Viewer {
             : glm::vec3(0.22F, 0.62F, 0.82F);
         const auto& bounds = kLatticePanelBounds;
         nadoc_vr::drawGripFrame(bounds,latticePlacement_.resizeActive()?nadoc_vr::GripFrameState::resizing:
-            latticePlacement_.dragHand()?nadoc_vr::GripFrameState::moving:nadoc_vr::GripFrameState::idle,
+            latticePlacement_.dragHand()?nadoc_vr::GripFrameState::moving:
+            (latticePlacement_.nearBorder(hands_[0],bounds.minimum,bounds.maximum) ||
+             latticePlacement_.nearBorder(hands_[1],bounds.minimum,bounds.maximum))?
+                nadoc_vr::GripFrameState::ready:nadoc_vr::GripFrameState::idle,
             line,[](nadoc_vr::MenuPanelBounds,glm::vec3){});
         line({bounds.minimum.x, -0.222F, 0}, {bounds.maximum.x, -0.222F, 0},
              border * 0.65F);
@@ -6178,10 +6307,19 @@ class Viewer {
         appendPlacedTextCentered(
             latticePlacement_, bounds,
             std::string(latticeSquare_ ? "SQUARE" : "HONEYCOMB") +
-                " - CLICK " +
+                " - WHEEL " +
                 std::to_string(nadoc_vr::latticeBasePairPeriod(latticeSquare_)) +
                 " BP - LENGTH " + std::to_string(toolConfig_.lengthBp()) + " BP",
             0.247F, 0.0027F, {0.55F, 0.68F, 0.82F});
+        appendPlacedTextCentered(latticePlacement_,bounds,
+            latticeGrip_.scaling?"SCALING LATTICE": "TWO GRIPS INSIDE: ZOOM / BORDER: WINDOW",
+            .222F,.0018F,latticeGrip_.scaling?glm::vec3(.4F,1.F,.6F):glm::vec3(.6F,.8F,.9F));
+        for(size_t h=0;h<2;++h)if(latticeGrip_.nearby[h] || latticeGrip_.held[h]) {
+            const auto p=latticePlacement_.localPoint(hands_[h].position);
+            const glm::vec3 color=latticeGrip_.held[h]?glm::vec3(.4F,1.F,.6F):glm::vec3(1.F,.8F,.3F);
+            line({p.x-.018F,p.y,.003F},{p.x+.018F,p.y,.003F},color);
+            line({p.x,p.y-.018F,.003F},{p.x,p.y+.018F,.003F},color);
+        }
         const nadoc_vr::MenuPanelBounds legendBounds{
             {-0.278F, -0.298F}, {-0.080F, -0.228F}};
         const auto& countBounds = nadoc_vr::kCenterPaintBounds;
@@ -6396,8 +6534,7 @@ class Viewer {
     }
 
     [[nodiscard]] bool thumbwheelAvailable() const {
-        return menuOpen_ && menuPage_ == MenuPage::tool_config &&
-               toolConfig_.active() &&
+        return latticeOpen_ && toolConfig_.active() &&
                toolConfig_.mode() == nadoc_vr::ToolMode::extrude;
     }
 
@@ -6407,7 +6544,7 @@ class Viewer {
         const nadoc_vr::MenuPanelBounds bounds = unconstrained
             ? nadoc_vr::MenuPanelBounds{{-10.0F, -10.0F}, {10.0F, 10.0F}}
             : kThumbwheelRayBounds;
-        const auto local = menuPlacement_.rayPanelLocalPoint(
+        const auto local = latticePlacement_.rayPanelLocalPoint(
             hand, bounds.minimum, bounds.maximum);
         if (!local || (!unconstrained &&
             (local->x < kThumbwheelBounds.minimum.x ||
@@ -6424,9 +6561,9 @@ class Viewer {
         auto line = [&](const glm::vec3& first, const glm::vec3& second,
                         const glm::vec3& color) {
             controllerGuides_.push_back(
-                {menuPlacement_.worldPoint(first), color, 1.0F});
+                {latticePlacement_.worldPoint(first), color, 1.0F});
             controllerGuides_.push_back(
-                {menuPlacement_.worldPoint(second), color, 1.0F});
+                {latticePlacement_.worldPoint(second), color, 1.0F});
         };
         const float left = kThumbwheelBounds.minimum.x;
         const float right = kThumbwheelBounds.maximum.x;
@@ -6476,7 +6613,7 @@ class Viewer {
         const nadoc_vr::HandPose& hand) const {
         if (!menuOpen_) return std::nullopt;
         const auto bounds = menuPanelBounds();
-        return menuPlacement_.rayPanelLocalPoint(
+        return latticePlacement_.rayPanelLocalPoint(
             hand,
             bounds.minimum, bounds.maximum);
     }
@@ -6539,6 +6676,9 @@ class Viewer {
     }
 
     void cancelExtrudeInterface() {
+        if(toolShell_.executionPending())return;
+        freeformDraft_.clear();
+        if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
         toolShell_.apply(nadoc_vr::ToolAction::cancel, selectedSelectionKind_);
         pendingToolTransform_.cancel();
         publishToolTransform();
@@ -6548,6 +6688,7 @@ class Viewer {
         latticeHover_.reset();
         latticeExitHovered_ = false;
         latticePaintStroke_.reset();
+        latticeGrip_.cancel();
         thumbwheelControl_.reset();
         thumbwheelHovered_ = false;
         extrudeLatticeDraft_.clear();
@@ -6607,6 +6748,7 @@ class Viewer {
     void openExtrudeLattice() {
         extrudeLatticeDraft_.clear();
         latticePaintStroke_.reset();
+        latticeGrip_.cancel();
         thumbwheelControl_.reset();
         thumbwheelHovered_ = false;
         latticeOrigin_ = {};
@@ -7035,7 +7177,7 @@ class Viewer {
                 line(tip, menuPlacement_.worldPoint(*panelHit), color * 0.42F);
             } else if (hand == 1U) {
                 if (const auto wheelHit = thumbwheelLocalPoint(hands_[hand])) {
-                    line(tip, menuPlacement_.worldPoint(*wheelHit), color * 0.50F);
+                    line(tip, latticePlacement_.worldPoint(*wheelHit), color * 0.50F);
                 }
             }
             if (latticeOpen_ && hand == 1U) {
@@ -7238,6 +7380,7 @@ class Viewer {
             normalizationCenter_, normalizationScale_, {0,0,-kViewDistanceMeters}, line);
         appendRadialToolGuides();
         appendLatticeGuides();
+        volumePanel_.draw(manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},line);
         dimensionPanel_.tool.draw(manipulator_.transform(),normalizationScale_,witnessObserverOrientation_,line,
             [&](const auto&... args){appendPlacedText(args...);});
         sidebarMenus_.draw();
@@ -8021,17 +8164,18 @@ class Viewer {
         trackpadPressed_.fill(false);
         radialToolMenu_.close();
         latticePaintStroke_.reset();
+        latticeGrip_.cancel();
         thumbwheelControl_.reset();
     }
 
     std::vector<nadoc_vr::scrywrite::WitnessMenuEntry> liveTargets() const {
         auto entries = witnessMenuEntries();
         if (thumbwheelAvailable()) entries.push_back({"EXTRUDE LENGTH WHEEL", -2,
-            menuPlacement_.worldPoint({
+            latticePlacement_.worldPoint({
                 (kThumbwheelBounds.minimum.x + kThumbwheelBounds.maximum.x) * 0.5F,
                 (kThumbwheelBounds.minimum.y + kThumbwheelBounds.maximum.y) * 0.5F, 0.0F}),
-            menuPlacement_.worldPoint({(kThumbwheelBounds.maximum.x-kThumbwheelBounds.minimum.x)*0.5F,0,0}) - menuPlacement_.worldPoint({0,0,0}),
-            menuPlacement_.worldPoint({0,(kThumbwheelBounds.maximum.y-kThumbwheelBounds.minimum.y)*0.5F,0}) - menuPlacement_.worldPoint({0,0,0})});
+            latticePlacement_.worldPoint({(kThumbwheelBounds.maximum.x-kThumbwheelBounds.minimum.x)*0.5F,0,0}) - latticePlacement_.worldPoint({0,0,0}),
+            latticePlacement_.worldPoint({0,(kThumbwheelBounds.maximum.y-kThumbwheelBounds.minimum.y)*0.5F,0}) - latticePlacement_.worldPoint({0,0,0})});
         if (latticeOpen_) entries.push_back({"LATTICE EXIT", -3,
             latticePlacement_.worldPoint({
                 (kLatticeExitBounds.minimum.x + kLatticeExitBounds.maximum.x) * 0.5F,
@@ -8096,7 +8240,7 @@ class Viewer {
             << ",\"runtime_connected\":" << (instance_ != XR_NULL_HANDLE ? "true" : "false")
             << ",\"head_position\":" << point(witnessObserverPosition_)
             << ",\"presentation\":" << nadoc_vr::livePresentationJson(manipulator_.transform(), normalizationCenter_, normalizationScale_, {0,0,-kViewDistanceMeters})
-            << ",\"thumbwheel_position\":" << point(menuPlacement_.worldPoint({
+            << ",\"thumbwheel_position\":" << point(latticePlacement_.worldPoint({
                 (kThumbwheelBounds.minimum.x + kThumbwheelBounds.maximum.x) * 0.5F,
                 (kThumbwheelBounds.minimum.y + kThumbwheelBounds.maximum.y) * 0.5F, 0.0F}))
             << ",\"controls\":[";
@@ -8112,7 +8256,35 @@ class Viewer {
                 << ",\"tab\":" << quote(entries[i].tab) << ",\"enabled\":" << (entries[i].enabled?"true":"false")
                 << ",\"active\":" << (entries[i].active?"true":"false") << '}';
         }
-        out << "],\"sidebars\":" << sidebarMenus_.json() << ",\"dimensions\":" << dimensionPanel_.tool.json(normalizationScale_,manipulator_.transform()) << ",\"hands\":[";
+        out << "],\"sidebars\":" << sidebarMenus_.json() << ",\"dimensions\":" << dimensionPanel_.tool.json(normalizationScale_,manipulator_.transform());
+        const auto& volumeInteraction=volumePanel_.interaction;
+        out << ",\"view_volumes\":{\"held_id\":" << quote(volumeInteraction.held)
+            << ",\"hand\":" << (volumeInteraction.hand?int(*volumeInteraction.hand):-1)
+            << ",\"resize_face\":" << (volumeInteraction.resizeFace?int(*volumeInteraction.resizeFace):-1)
+            << ",\"centroid_range_m\":" << nadoc_vr::ViewVolumeInteraction::centroidRange
+            << ",\"face_range_m\":" << nadoc_vr::ViewVolumeInteraction::faceRange
+            << ",\"nearby_centroids\":[" << quote(volumeInteraction.nearby[0]) << ',' << quote(volumeInteraction.nearby[1])
+            << "],\"nearby_faces\":[" << volumeInteraction.nearbyFace[0] << ',' << volumeInteraction.nearbyFace[1]
+            << "],\"pending\":" << volumePanel_.pending.size() << ",\"entries\":[";
+        const auto volumeFrame=nadoc_vr::ViewVolumeInteraction::frame(manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
+        bool firstVolume=true;
+        for(const auto& e:volumePanel_.entries) {
+            if(!firstVolume)out << ',';
+            firstVolume=false;
+            out << "{\"id\":" << quote(e.id) << ",\"center_nm\":" << point(e.center) << ",\"half_nm\":" << point(e.half)
+                << ",\"rotation_xyzw\":[" << e.rotation.x << ',' << e.rotation.y << ',' << e.rotation.z << ',' << e.rotation.w << ']'
+                << ",\"representation\":" << quote(e.representation) << ",\"enabled\":" << (e.enabled?"true":"false")
+                << ",\"world_center\":" << point(nadoc_vr::ViewVolumeInteraction::point(volumeFrame,e.center))
+                << ",\"outline\":" << (e.outline?"true":"false") << ",\"faces\":[";
+            for(size_t face=0;face<e.faceCount();++face) {
+                if(face)out << ',';
+                glm::vec3 center{};const auto indices=e.face(face);for(auto i:indices)center+=e.points[i];center/=float(indices.size());
+                out << "{\"world_center\":" << point(nadoc_vr::ViewVolumeInteraction::point(volumeFrame,center))
+                    << ",\"world_normal\":" << point(nadoc_vr::ViewVolumeInteraction::orientation(volumeFrame)*e.rotation*e.normal(face)) << '}';
+            }
+            out << "]}";
+        }
+        out << "]},\"hands\":[";
         for (size_t i = 0; i < hands_.size(); ++i) {
             if (i) out << ',';
             const auto& h = hands_[i];
@@ -8135,11 +8307,19 @@ class Viewer {
             << ",\"wheel_hovered\":" << (thumbwheelHovered_ ? "true" : "false")
             << ",\"wheel_dragging\":" << (thumbwheelControl_.dragging() ? "true" : "false")
             << ",\"square\":" << (latticeSquare_ ? "true" : "false")
-            << ",\"wheel_notch_travel_m\":" << nadoc_vr::ThumbwheelControl::kNotchTravel * menuPlacement_.scale()
+            << ",\"wheel_notch_travel_m\":" << nadoc_vr::ThumbwheelControl::kNotchTravel * latticePlacement_.scale()
             << ",\"base_pairs_per_detent\":" << nadoc_vr::latticeBasePairPeriod(latticeSquare_)
             << ",\"lattice_hit_radius_m\":" << latticeCellRadius() * 1.08F * latticePlacement_.scale()
             << ",\"menu_scale\":" << menuPlacement_.scale()
             << ",\"panel_orientation_xyzw\":[" << latticePlacement_.orientation().x << ',' << latticePlacement_.orientation().y << ',' << latticePlacement_.orientation().z << ',' << latticePlacement_.orientation().w << ']'
+            << ",\"panel_scale\":" << latticePlacement_.scale()
+            << ",\"lattice_zoom\":" << latticeGrip_.zoom
+            << ",\"grid_scaling\":" << (latticeGrip_.scaling?"true":"false")
+            << ",\"grid_grip_held\":[" << (latticeGrip_.held[0]?"true":"false") << ',' << (latticeGrip_.held[1]?"true":"false") << ']'
+            << ",\"grid_grip_nearby\":[" << (latticeGrip_.nearby[0]?"true":"false") << ',' << (latticeGrip_.nearby[1]?"true":"false") << ']'
+            << ",\"grid_grip_depth_m\":" << nadoc_vr::LatticeGrip::kDepthMeters
+            << ",\"window_resizing\":" << (latticePlacement_.resizeActive()?"true":"false")
+            << ",\"window_moving\":" << (latticePlacement_.dragHand()?"true":"false")
             << ",\"panel_position\":" << point(latticePlacement_.position())
             << ",\"hover\":";
         if (latticeHover_) out << '[' << latticeHover_->row << ',' << latticeHover_->column << ']';
@@ -8492,7 +8672,18 @@ class Viewer {
             }
         }
 
-        std::array<bool, 2> menuGripTargeted = sidebarMenus_.grips(hands_, gripClicked_, [this](size_t hand,float strength) { suppressManipulationUntilRelease_=true; pulse(hand,strength); });
+        const bool latticeOwnsGrip=latticeOpen_ && (latticePlacement_.dragHand() ||
+            latticePlacement_.resizeActive() || latticeGrip_.held[0] || latticeGrip_.held[1]);
+        std::array<bool, 2> menuGripTargeted = latticeOwnsGrip ? std::array<bool,2>{} : sidebarMenus_.grips(hands_, gripClicked_, [this](size_t hand,float strength) { suppressManipulationUntilRelease_=true; pulse(hand,strength); });
+        const auto latticeGripTargeted=latticeGrip_.update(latticePlacement_,hands_,gripClicked_,
+            kLatticeGridBounds.minimum,kLatticeGridBounds.maximum,
+            kLatticePanelBounds.minimum,kLatticePanelBounds.maximum,
+            latticeOpen_ && !menuGripTargeted[0] && !menuGripTargeted[1] &&
+            !latticePlacement_.dragHand() && !latticePlacement_.resizeActive());
+        for(size_t h=0;h<2;++h) if(latticeGripTargeted[h]) {
+            menuGripTargeted[h]=true;suppressManipulationUntilRelease_=true;
+            if(gripClicked_[h])pulse(h,.40F);
+        }
         if (latticeOpen_ && !menuGripTargeted[0] && !menuGripTargeted[1]) {
             const auto& bounds = kLatticePanelBounds;
             const float panelHalfWidth = (bounds.maximum.x - bounds.minimum.x) * 0.5F;
@@ -8573,7 +8764,7 @@ class Viewer {
         const bool rigidToolPreview =
             toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
             toolShell_.previewRequested();
-        const bool rightToolDrag = !dimensionPanel_.tool.active && rigidToolPreview && !inputSuppressed &&
+        const bool rightToolDrag = !dimensionPanel_.tool.active && !volumePanel_.active && !volumePanel_.interaction.hand && rigidToolPreview && !inputSuppressed &&
                                    !menuGripActive &&
                                    hands_[1].valid && hands_[1].pressed &&
                                    !(hands_[0].valid && hands_[0].pressed);
@@ -8593,6 +8784,13 @@ class Viewer {
                 if (hands_[hand].valid && hands_[hand].pressed) pulse(hand);
             }
         }
+        volumePanel_.update(sidebarMenus_.menus);
+        refreshExtrudePanel();
+        const auto volumeTargeted=volumePanel_.input(hands_,triggerClicked_,triggerPressed_,
+            manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},
+            !dimensionPanel_.tool.active && !radialToolMenu_.open(),
+            next!=nadoc_vr::ManipulationMode::none || previous!=nadoc_vr::ManipulationMode::none,
+            [&](size_t hand){pulse(hand,.35F);});
         const auto wheelTargeted = processThumbwheelInput();
         std::array<float,2> legacyDistance{1e9F,1e9F};
         if(menuOpen_) for(size_t hand=0;hand<2;++hand) {
@@ -8600,15 +8798,18 @@ class Viewer {
             if(p) legacyDistance[hand]=glm::length(menuPlacement_.worldPoint(*p)-hands_[hand].position);
         }
         auto sidebarBlocked=wheelTargeted;
+        for(size_t h=0;h<2;++h)sidebarBlocked[h]=sidebarBlocked[h]||volumeTargeted[h];
         if(menuOpen_ && legacyMenuFocus_.focus.active) sidebarBlocked[menuHand_]=true;
         auto sidebarTargeted = sidebarMenus_.input(hands_, triggerClicked_, triggerPressed_, sidebarBlocked, legacyDistance,glfwGetTime(),
             [&](const std::string& action, size_t hand) { activateSidebarAction(action,hand); });
         std::array<bool, 2> menuControlTargeted = sidebarTargeted;
-        if(menuOpen_ && legacyMenuFocus_.focus.active) menuControlTargeted[menuHand_]=wheelTargeted[menuHand_];
+        for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h]||volumeTargeted[h];
+        if(menuOpen_ && legacyMenuFocus_.focus.active) menuControlTargeted[menuHand_]=wheelTargeted[menuHand_]||volumeTargeted[menuHand_];
         if (menuOpen_) menuControlTargeted = processMenuInput(menuControlTargeted);
+        for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h] || wheelTargeted[h] || latticeGripTargeted[h];
         const auto latticeTargeted = processLatticeInput(menuControlTargeted);
         for (size_t hand = 0; hand < menuControlTargeted.size(); ++hand) {
-            liveInputOwner_[hand] = (hand == 1U && radialToolMenu_.open()) ? "radial"
+            liveInputOwner_[hand] = latticeGripTargeted[hand] ? "lattice-grip" : volumeTargeted[hand] ? "view-volume" : (hand == 1U && radialToolMenu_.open()) ? "radial"
                 : wheelTargeted[hand] ? "wheel" : menuControlTargeted[hand] ? "menu"
                 : latticeTargeted[hand] ? "lattice" : hands_[hand].valid ? "scene" : "none";
             menuControlTargeted[hand] = menuControlTargeted[hand] ||
@@ -8619,6 +8820,7 @@ class Viewer {
             triggerClicked_,menuControlTargeted,liveInputOwner_,sidebarMenus_.menus,normalizationScale_,
             [&](size_t hand){pulse(hand,.3F);});
         dimensionSync_.update(dimensionPanel_.tool,normalizationCenter_,normalizationScale_);
+        if(volumePanel_.active) menuControlTargeted.fill(true);
         updateSelectionVolumeCandidates(menuControlTargeted);
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             if (menuControlTargeted[hand] || !triggerClicked_[hand] ||
@@ -8627,7 +8829,7 @@ class Viewer {
             }
             if (freeformDraft_.armed()) {
                 if (freeformDraft_.capture(hands_[hand],extrudePlane_.plane,manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})) {
-                    latticeOpen_=true; requestedMenuPage_=MenuPage::tool_config; menuOpenRequested_=true;
+                    latticeOpen_=true; if(extrudePanel_.active) sidebarMenus_.menus[1].open=true; else {requestedMenuPage_=MenuPage::tool_config; menuOpenRequested_=true;}
                     publishToolConfiguration();
                 }
                 continue;
@@ -8907,6 +9109,10 @@ class Viewer {
         }
     }
 
+    void renderVolumeScene(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,bool ids=false) {
+        glScene_->renderVolumes(vp,model,guides,ids,volumePanel_.entries);
+    }
+
     bool renderView(uint32_t index, const XrView& view,
                     XrCompositionLayerProjectionView& layerView) {
         Swapchain& swapchain = swapchains_[index];
@@ -8961,7 +9167,7 @@ class Viewer {
         const glm::mat4 projection = projectionFromFov(view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
-        if (!liveSceneHidden_) glScene_->render(
+        if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(),
             spectatorClassificationEnabled()
                 ? std::vector<Vertex>{} : controllerGuides_, captureIds);
@@ -9365,7 +9571,7 @@ class Viewer {
             view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
-        if (!liveSceneHidden_) glScene_->render(
+        if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(), {});
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
         glScene_->renderGuides(viewProjection, controllerGuides_, &controllerHandEnds_);
@@ -9411,7 +9617,7 @@ class Viewer {
             controllerGuides_.begin(),
             controllerGuides_.begin() + static_cast<std::ptrdiff_t>(
                 std::min(witnessActorGuideCount_, controllerGuides_.size())));
-        if (!liveSceneHidden_) glScene_->render(
+        if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(),
             actorGuides);
         if (referenceGrid_) {
@@ -10156,6 +10362,8 @@ class Viewer {
     nadoc_vr::RadialToolMenu radialToolMenu_;
     bool latticeOpen_ = false;
     nadoc_vr::MenuPlacement latticePlacement_;
+    nadoc_vr::LatticeGrip latticeGrip_;
+    nadoc_vr::ExtrudePanel extrudePanel_;
     nadoc_vr::ExtrudeLatticeDraft extrudeLatticeDraft_;
     nadoc_vr::LatticePaintStroke latticePaintStroke_;
     std::optional<nadoc_vr::LatticeCell> latticeHover_;
@@ -10179,6 +10387,7 @@ class Viewer {
     nadoc_vr::MenuPlacement menuPlacement_;
     MenuPanelSurface menuPanelSurface_;
     SidebarRuntime sidebarMenus_;
+    nadoc_vr::ViewVolumePanel volumePanel_;
     nadoc_vr::DimensionPanel dimensionPanel_;
     nadoc_vr::DimensionSync dimensionSync_;
     nadoc_vr::MenuFocusList legacyMenuFocus_;

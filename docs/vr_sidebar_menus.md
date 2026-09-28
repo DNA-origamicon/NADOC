@@ -242,3 +242,63 @@ Static representation geometry and ownership indexes are warmed before interacti
 GPU buffer caches retain one coloring per representation, and only apply with no
 live positions/colors, expansion, edit transforms or selection highlights. Baked
 edits invalidate the caches. Dynamic trajectories retain their existing update path.
+
+### View volumes
+
+The Visualization **View Volumes** title opens a list like Dimensions, with
+Square and Hex creation buttons and per-volume outline, enable, and delete
+controls. Return or the controller menu button restores the prior sidebars.
+Creation uses a centered 20 cm viewer-space volume. Bring either controller
+within 7.5 cm of its centroid to highlight the center marker, then hold Trigger
+to move and rotate the volume. While holding the center, bring the other
+controller within 5 cm of a face to highlight it; hold that Trigger and move
+along the face normal to resize. Resizing is symmetric about the held centroid.
+Box faces change one dimension; hex side faces change the regular hex radius
+and end faces change length. Ranges use physical metres, independent of scene
+zoom. Release the second Trigger to resume rigid movement, or the first to
+release the volume. Grip continues moving/scaling the scene and rebases the
+trigger anchors so the volume stays attached to the part during scene movement. Disabled volumes retain editable outlines, drawn
+gray in VR; hiding an outline is independent of enabling its representation.
+
+Part volumes are shared metadata in `.nadoc` files. Native controls use an
+acknowledged, document-bound journal, preserving unrelated desktop changes.
+Trigger edits stream through the same journal, with an immediate final write
+on release. Older feed snapshots cannot overwrite an active or unacknowledged
+drag. Hidden outlines have no grab targets; disabled but outlined volumes remain
+editable. Tracking loss ends the grab and requires a fresh trigger press.
+The live feed imports desktop additions, transforms and switches into VR, and
+the desktop polls native edits and schedules normal workspace autosave. New
+unsaved parts still require their first Save. Assembly volume management is
+not enabled. Native rendering in this change shows volume outlines; per-volume
+representation rendering continues through the existing desktop renderer.
+
+Tests cover rotated box/hex outline coordinates, journal replay, invalid and
+wrong-document writes, desktop field patches, part-file reload, pagination,
+outline visibility, and live desktop record discovery/deletion. The trigger
+workflow adds all box/hex faces, controller rotation, two-hand resize, scene-grip
+coexistence, tracking loss and submitted-eye highlight checks. See
+[trigger-grab validation](audits/vr_view_volume_grabs_20260927.md).
+
+### Extrude
+
+Tools → Extrude opens a dedicated right-sidebar panel and an adjacent lattice
+painter. Return, Confirm and Cancel remain visible while scrolling length
+(7/21 bp for honeycomb; 8/24 bp for square), direction, source plane, strand filter, ligation,
+painter recall, freeform placement, Frame model and Undo. The displayed lattice
+comes from the part. Confirm is enabled only for the current validated draft;
+Undo follows the existing transaction acknowledgement. Frame model and Return
+work without navigating through the legacy tool menus.
+
+Native view volumes now use their saved representation, color and opacity to
+render a clipped layer inside each enabled box or hexagonal prism. Overlapping
+volumes remain independent layers. Hidden outlines do not disable the layer.
+The global representation remains outside the volumes; moving a volume changes
+its clipping transform without editing the design geometry.
+
+The Extrude length controls use paired minus/plus buttons: 7 and 21 bp steps
+for honeycomb, 8 and 24 bp for square. Labels and actions follow the part lattice. The length
+thumb wheel belongs to the lattice window and follows its pose/size. Grip inside
+the painting grid with both controllers to zoom the lattice; border grips retain
+window movement/resizing. Interior grips acquire within 9 cm in front or behind
+the panel, excluding the border grab zone. Yellow/green contact crosses indicate
+available/held interior grips. See the [control audit](audits/vr_lattice_controls_20260928.md).

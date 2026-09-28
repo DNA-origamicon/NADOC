@@ -104,3 +104,22 @@ def test_representation_requires_open_individual_design(client, monkeypatch, tou
     monkeypatch.setattr(state, 'copy_doc_for_persist', lambda _: (None, 0))
     assert client.post('/api/vr/tours/start', json={'tour':tour}).status_code == 400
     assert client.post('/api/vr/tours/start', json={'tour':tour,'assembly_active':True}).status_code == 400
+
+@pytest.mark.parametrize('mode,flag', [('demo','--demo'),('validate','--validate')])
+def test_view_volume_tour_launches_isolated_workflow(client, monkeypatch, mode, flag):
+    process=Mock(pid=987654);process.poll.return_value=None
+    popen=Mock(return_value=process);monkeypatch.setattr(tours.subprocess,'Popen',popen)
+    result=client.post('/api/vr/tours/start',json={'tour':'view-volumes','mode':mode})
+    assert result.status_code==200,result.text
+    argv=popen.call_args.args[0]
+    assert argv[1:4]==['-m','tools.vr_workflows.view_volumes_check',flag]
+    assert '--output' in argv and '--design' not in argv
+    assert result.json()['run']['tour']=='view-volumes'
+
+
+def test_fresh_extrude_tour_is_runnable_and_validation_has_no_workspace_reset():
+    from tools.vr_workflows.tour_catalog import catalog, arguments
+    tour = next(t for t in catalog()['tours'] if t['id'] == 'extrude')
+    assert tour['runnable']
+    assert arguments(tour, True) == ['-m', 'tools.vr_workflows.extrude_tour', '--validate']
+    assert arguments(tour, False) == ['-m', 'tools.vr_workflows.extrude_tour']

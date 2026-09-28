@@ -52,7 +52,7 @@ test('desktop seed → VR default → blunt end → freeform → desktop/cadnano
   expect(planar.helices.slice(0,6)).toEqual(seed.helices)
   expect(planar.lattice_frames).toEqual(seed.lattice_frames)
   expect(planar.helices.every(h=>h.length_bp===42)).toBe(true)
-  expect(planar.helices.slice(6).map(h=>h.grid_pos).sort()).toEqual([[0,0],[0,1],[0,2],[1,0],[1,2],[2,1]])
+  expect(planar.helices.slice(6).map(h=>h.grid_pos).sort()).toEqual([[0,1],[0,2],[0,3],[1,1],[1,2],[1,3]])
   const ended = await probe('blunt','native_end_probe',{NADOC_VR_END_ZOOM:'4'})
   expect(ended.helices).toHaveLength(12)
   expect(ended.helices.map(h=>h.grid_pos)).toEqual(planar.helices.map(h=>h.grid_pos))

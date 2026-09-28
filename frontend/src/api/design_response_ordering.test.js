@@ -45,3 +45,26 @@ it('ignores a partial acknowledgement when its design was closed during the requ
     nucleotides: [], helix_axes: [] })
   expect(store.getState().currentDesign.view_volumes).toEqual([])
 })
+
+it('polls native volumes only when the desktop is still ready to receive them', async () => {
+  const { loadViewVolumes } = await import('./client.js')
+  fetch.mockResolvedValueOnce(response({ revision: 2, view_volumes: [{ id: 'native' }] }))
+  expect(await loadViewVolumes('part', () => false)).toBeNull()
+  expect(store.getState().currentDesign.view_volumes).toEqual([])
+  fetch.mockResolvedValueOnce(response({ revision: 2, view_volumes: [{ id: 'native' }] }))
+  await loadViewVolumes('part')
+  expect(store.getState().currentDesign.view_volumes).toEqual([{ id: 'native' }])
+  const current = store.getState().currentDesign
+  fetch.mockResolvedValueOnce(response({ revision: 2, view_volumes: [{ id: 'native' }] }))
+  await loadViewVolumes('part')
+  expect(store.getState().currentDesign).toBe(current)
+})
+
+it('sends document-bound field patches for desktop volume controls', async () => {
+  const { changeViewVolumes } = await import('./client.js')
+  fetch.mockResolvedValueOnce(response({ revision: 3, view_volumes: [{ id: 'native', enabled: false }] }))
+  await changeViewVolumes('part', { patches: { native: { enabled: false } } })
+  const [, request] = fetch.mock.calls[0]
+  expect(request.method).toBe('PATCH')
+  expect(JSON.parse(request.body)).toEqual({ document_id: 'part', patches: { native: { enabled: false } } })
+})

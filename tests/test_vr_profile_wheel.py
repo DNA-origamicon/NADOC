@@ -91,3 +91,20 @@ def test_final_wheel_drag_can_use_fine_correction_without_fourth_drag(monkeypatc
     assert len(result)==4
     assert clicks==['-']*7
     assert state['extrude']['length_bp']==42
+
+
+@pytest.mark.parametrize('period',[7,8])
+@pytest.mark.parametrize('direction',[-1,1])
+def test_lattice_step_correction(period,direction):
+    from types import SimpleNamespace
+    from tools.vr_workflows.profile_wheel import fine_length
+    target=6*period
+    live=SimpleNamespace(state={'extrude':{'length_bp':target-direction*period,'cells':[[0,0]]}})
+    records=[]
+    def click(label):
+        live.state['extrude']['length_bp'] += period if label=='+' else -period
+    fine_length(live,target,period,click,records.append,step=period)
+    assert len(records)==1
+    assert records[0]['after_bp']==target
+    with pytest.raises(ValueError):
+        fine_length(live,target+1,period,click,records.append,step=period)

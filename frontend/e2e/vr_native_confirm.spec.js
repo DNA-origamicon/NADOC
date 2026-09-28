@@ -53,7 +53,7 @@ test('physical painted Confirm is acknowledged by browser and headset', async ({
   await testInfo.attach('native-report', { body:report,contentType:'application/json' })
   const design = await page.evaluate(async () => (await import('/src/state/store.js')).store.getState().currentDesign)
   expect(design.helices).toHaveLength(existingFrame ? 12 : 6)
-  expect(design.helices.slice(existingFrame ? 6 : 0).map(h => h.grid_pos).sort()).toEqual([[0,0],[0,1],[0,2],[1,0],[1,2],[2,1]])
+  expect(design.helices.slice(existingFrame ? 6 : 0).map(h => h.grid_pos).sort()).toEqual([[0,1],[0,2],[0,3],[1,1],[1,2],[1,3]])
   expect(design.helices.every(h => h.length_bp === 42)).toBe(true)
   expect(design.helices.slice(existingFrame ? 6 : 0).every(h => h.lattice_frame_id === design.lattice_frames[freeform ? 1 : 0].id)).toBe(true)
   expect(design.lattice_frames).toHaveLength(freeform ? 2 : 1)

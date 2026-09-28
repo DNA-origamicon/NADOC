@@ -31,7 +31,8 @@ def move(live, targets, preset, trials):
             live.send('pose', hand=hand, position=pose['position'], orientation=pose['orientation'])
         live.frame()
         trial['observed'].append({'frame': live.state['frame'], 'lag_s': lag,
-                                  'hands': live.state['hands'], 'sidebars': live.state['sidebars']})
+                                  'hands': live.state['hands'], 'sidebars': live.state['sidebars'],
+                                  'extrude': live.state.get('extrude')})
 
 
 def acquire(live, panel, hand, edge, preset, trials):

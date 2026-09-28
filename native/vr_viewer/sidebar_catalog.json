@@ -4,6 +4,7 @@
     "frontend/index.html": "2a7b974dd4fb0109d25e4b2bae3a350afe0f9e88da9eb7432658785f61bd6a43",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/scene/coloring_modes.js": "f731e0c1aa718c9450203d6ac7cfced8db732183c77dd2a6335476d95e75ba4e",
+    "frontend/src/scene/view_volumes.js": "894f3f65545b30cf8ee08cb169e9ea26ffc94d6561d5561e6e8429e7e0be705b",
     "frontend/src/scene/vr_representations.js": "e5a447b2419c58ac15a8a09eacdda70a3fa93e4d87d2b37de60637488bdd0819",
     "frontend/src/ui/annotation_panel.js": "a7d938893f5531a678938045c0e480828807959d8656f87f638c6db16ed72ccb",
     "frontend/src/ui/assembly_panel.js": "66d96d1bc91ce4440dd541b0ea57219f41440598f24ce2d54d52f3b121880097",
@@ -12548,6 +12549,17 @@
           ],
           "source": "frontend/src/ui/multi_overlay.js",
           "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "section:visualization:template:view-volumes",
+          "label": "View Volumes",
+          "section": "",
+          "kind": "section",
+          "options": [],
+          "action": "section:visualization:template:view-volumes",
+          "parents": [],
+          "source": "frontend/src/scene/view_volumes.js",
+          "reason": ""
         }
       ]
     },
