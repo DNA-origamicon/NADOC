@@ -18,6 +18,12 @@ leaves the tool. **Cancel** restores an unfinished preview; **Apply** saves it;
 its history position. The panel shows when saving is in progress. Desktop and VR
 share the saved pose, including after reopening the part.
 
+Each committed gesture also appears in the desktop **Feature Log**. Clusters use
+the ordinary `cluster_op` entry; bases and overhangs use one
+`nucleotide-transform-batch` snapshot, labeled with the number of nucleotides
+moved. These are the same entries used by desktop Move / Rotate, with the same
+saved history and Undo behavior.
+
 Preview and saved edits reuse the native geometry and exact endpoint ownership.
 Saving does not regenerate every representation. Related handles follow the
 edit, so moving a cluster and then adjusting one of its bases uses the new pose.
@@ -40,8 +46,9 @@ uv run python -m tools.vr_workflows.move_tour --validate
 
 Validation uses the four unchanged human controller profiles sequentially. It
 checks grip scene movement, exact selection, centroid acquisition, translation and
-rotation, saved target scope, unchanged other bases, one history entry, Undo, and
-save/reopen. Registered submitted-eye ID/depth captures check visible target
+rotation, saved target scope, unchanged other bases, exactly one correctly typed
+feature entry, its visible desktop row, unchanged earlier history, Undo, and exact
+feature-log persistence through save/reopen. Registered submitted-eye ID/depth captures check visible target
 movement and stationary reference geometry in both eyes. Framing adjustments are
 recorded separately from measured reaches. Evidence is retained under
 `.development-artifacts/vr-move/`; it establishes submitted-eye rendering, not

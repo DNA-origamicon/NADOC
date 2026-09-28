@@ -28,7 +28,8 @@ test(`new part → right Tools Extrude → ${square?'square 2×3':'canonical 6HB
   if(square)await page.locator('input[name="new-lattice-type"][value="SQUARE"]').check()
   await page.getByRole('button',{name:'Create',exact:true}).click()
   const read=()=>page.evaluate(async ()=>(await import('/src/state/store.js')).store.getState().currentDesign)
-  expect((await read()).helices).toHaveLength(0)
+  const before=await read()
+  expect(before.helices).toHaveLength(0)
   await page.locator('.menu-item').filter({hasText:'Help'}).first().hover()
   await page.click('#menu-help-view-vr')
   let status
@@ -42,6 +43,19 @@ test(`new part → right Tools Extrude → ${square?'square 2×3':'canonical 6HB
     cwd:path.resolve(process.cwd(),'..'),encoding:'utf8',timeout:240000,env:process.env,stdio:['ignore','inherit','inherit']})
   probe('native_confirm_probe','extrude')
   const design=await read()
+  expect(design.feature_log).toHaveLength(before.feature_log.length+1)
+  expect(design.feature_log.slice(0,-1)).toEqual(before.feature_log)
+  const entry=design.feature_log.at(-1)
+  expect(entry).toMatchObject({feature_type:'snapshot',op_kind:'extrude-frame',
+    label:`Extrude frame: 6 cells × ${length} bp`,params:{length_bp:length,plane:'XY'}})
+  expect(entry.design_snapshot_gz_b64).toBeTruthy();expect(entry.post_state_gz_b64).toBeTruthy()
+  const featureRow=page.locator(`#feature-log-panel [data-fl-row="${design.feature_log.length}"]`)
+  // Sidebar rail clicks add columns. Reuse the existing log so the later
+  // Visualization column still fits alongside the workspace.
+  if(!await featureRow.isVisible())await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+  await expect(featureRow).toBeVisible()
+  await expect(featureRow).toContainText(entry.label)
+  await page.screenshot({path:info.outputPath('desktop-feature-log.png')})
   expect(design.helices).toHaveLength(6)
   expect(design.lattice_type).toBe(square?'SQUARE':'HONEYCOMB')
   expect(design.helices.map(h=>h.grid_pos).sort()).toEqual(square?
@@ -73,6 +87,7 @@ test(`new part → right Tools Extrude → ${square?'square 2×3':'canonical 6HB
   await page.locator('.right-tab-btn[data-tab="visualization"]').click()
   await expect(page.locator('.view-volume-row')).toHaveCount(1)
   // Desktop style edit must reach the same native volume. Geometry comes from native controls.
+  await expect(page.locator('.view-volume-representation')).toBeVisible()
   await page.locator('.view-volume-representation').selectOption('beads')
   await expect.poll(()=>page.evaluate(()=>window.__NADOC_VIEW_VOLUMES__.volumes()[0].representation)).toBe('beads')
   probe('extrude_volume_probe','volume-compare','compare')
@@ -92,6 +107,7 @@ test(`new part → right Tools Extrude → ${square?'square 2×3':'canonical 6HB
   fs.writeFileSync(info.outputPath('saved-result.json'),JSON.stringify(result))
   const file=path.join(process.env.NADOC_WORKSPACE,filename)
   const onDisk=JSON.parse(fs.readFileSync(file,'utf8'))
+  expect(onDisk.feature_log).toEqual(saved.feature_log)
   expect(onDisk.view_volumes).toEqual(saved.view_volumes)
   fs.copyFileSync(file,info.outputPath(square?'fresh-square.nadoc':'fresh-6hb.nadoc'))
   await request.post(`${base}/api/vr/stop`)
@@ -103,5 +119,6 @@ test(`new part → right Tools Extrude → ${square?'square 2×3':'canonical 6HB
   expect(restored.lattice_type).toBe(design.lattice_type)
   expect(restored.helices).toEqual(saved.helices)
   expect(restored.view_volumes).toEqual(saved.view_volumes)
+  expect(restored.feature_log).toEqual(saved.feature_log)
   await reloaded.close()
 })

@@ -42,10 +42,18 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
  probe('edit')
  const saved=(await read()).design
  expect(saved.feature_log.length).toBe(before.design.feature_log.length+1)
+ const entry=saved.feature_log.at(-1)
+ expect(saved.feature_log.slice(0,-1)).toEqual(before.design.feature_log)
  if(kind==='cluster') {
+  expect(entry).toMatchObject({feature_type:'cluster_op',cluster_id:cluster.id,source:null})
+  const pose=saved.cluster_transforms.find(c=>c.id===cluster.id)
+  for(const field of ['translation','rotation','pivot'])expect(entry[field]).toEqual(pose[field])
   expect(saved.cluster_transforms.find(c=>c.id===cluster.id).translation).not.toEqual(cluster.translation)
   expect(saved.cluster_transforms.find(c=>c.id===cluster.id).rotation).not.toEqual(cluster.rotation)
  }else{
+  expect(entry).toMatchObject({feature_type:'snapshot',op_kind:'nucleotide-transform-batch',
+   label:`Move/rotate ${kind==='base'?'1 nucleotide':'7 nucleotides'}`,params:{count:kind==='base'?1:7}})
+  expect(entry.design_snapshot_gz_b64).toBeTruthy();expect(entry.post_state_gz_b64).toBeTruthy()
   expect(saved.nucleotide_transforms).toHaveLength(kind==='base'?1:7)
   for(const t of saved.nucleotide_transforms){expect(Math.hypot(...t.translation)).toBeGreaterThan(.01);expect(Math.hypot(...t.rotation.slice(0,3))).toBeGreaterThan(.01)}
   const selected=JSON.parse(fs.readFileSync(info.outputPath('edit/result.json')))
@@ -59,6 +67,11 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
    expect(saved.nucleotide_transforms.every(t=>targets.some(n=>n.helix_id===t.helix_id&&n.bp_index===t.bp_index&&n.direction===t.direction))).toBe(true)
   }
  }
+ await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+ const featureRow=page.locator(`#feature-log-panel [data-fl-row="${saved.feature_log.length}"]`)
+ await expect(featureRow).toBeVisible()
+ await expect(featureRow).toContainText(kind==='cluster'?cluster.name:entry.label)
+ await page.screenshot({path:info.outputPath('desktop-feature-log.png')})
  const afterGeometry=await page.evaluate(async()=>(await (await import('/src/api/client.js'))._request('GET','/design/geometry')).nucleotides)
  const key=n=>JSON.stringify([n.helix_id,n.bp_index,n.direction,n.copy??0])
  const afterByKey=new Map(afterGeometry.map(n=>[key(n),n]))
@@ -86,16 +99,19 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
  await page.evaluate(async file=>(await import('/src/api/client.js')).saveDesignToWorkspace(file),filename)
  const file=path.join(process.env.NADOC_WORKSPACE,filename)
  const onDisk=JSON.parse(fs.readFileSync(file));expect(onDisk.nucleotide_transforms).toEqual(saved.nucleotide_transforms)
+ expect(onDisk.feature_log).toEqual(saved.feature_log)
  expect(onDisk.cluster_transforms).toEqual(saved.cluster_transforms)
  fs.copyFileSync(file,info.outputPath('transformed.nadoc'))
  await page.screenshot({path:info.outputPath('desktop-transformed.png')})
  probe('undo')
  await expect.poll(async()=>(await read()).design.nucleotide_transforms).toEqual(before.design.nucleotide_transforms)
+ expect((await read()).design.feature_log).toEqual(before.design.feature_log)
  expect((await read()).design.cluster_transforms).toEqual(before.design.cluster_transforms)
  await request.post(`${base}/api/vr/stop`)
  const reload=await page.context().newPage();await reload.goto('/?doc=__e2e__move-reloaded')
  await reload.evaluate(async file=>(await import('/src/api/client.js')).loadDesign(file),info.outputPath('transformed.nadoc'))
  const restored=await reload.evaluate(async()=>(await import('/src/state/store.js')).store.getState().currentDesign)
  expect(restored.nucleotide_transforms).toEqual(saved.nucleotide_transforms);expect(restored.cluster_transforms).toEqual(saved.cluster_transforms)
+ expect(restored.feature_log).toEqual(saved.feature_log)
  await reload.close()
 })
