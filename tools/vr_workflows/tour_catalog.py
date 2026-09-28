@@ -42,6 +42,12 @@ def catalog():
         'Isolated demo part: create square and hex volumes, show/hide, enable/delete, trigger move/rotate, two-hand resize, and grip the scene. Validation runs all four motion profiles.', module='view_volumes_check')
     add('extrude', 'authoring', 'Extrude a 6HB and inspect a volume',
         'Creates a new isolated part; paints a honeycomb ring, zooms the lattice with interior grips, moves/resizes its window, and uses the length wheel. Compares local volume representations. Validation covers honeycomb and square parts with all four motion profiles.', module='extrude_tour')
+    add('presence-ui', 'left', 'VR menus and tools in guest view',
+        'Real guest receives native menu labels, desktop icons, controller guides and scissors; checks closing panels and hiding presence.', module='presence_ui_tour')
+    add('avatar', 'left', 'VR presenter model',
+        'Real local guest sees tracked headset, estimated arms, gestures, inverse model scaling and the Show VR model toggle. No public hosting.', module='avatar_tour')
+    add('share', 'left', 'Share presenter controls',
+        'Control a desktop-started presentation from the left menu. Isolated simulated hosting; creates no public link. All four controller profiles in validation.', module='share_tour')
     add('view-tools', 'right', 'Left-hand view tools',
         'Equip the two-column desktop-icon panel with the left quiver gesture and exercise every view toggle in native stereo.', module='view_tools_tour')
     add('nick', 'authoring', 'Nick with scissors, Undo and Redo',
@@ -68,7 +74,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour'):
+    elif tour['module'] in ('dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

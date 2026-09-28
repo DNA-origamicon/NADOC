@@ -460,3 +460,26 @@ actual desktop state and explains layout prerequisites. Shared meshes, posed
 instances and text textures are transferred to native stereo rendering. Straight
 and 2D layouts suppress canonical edit picking until restored to deformed 3D.
 See `docs/vr_view_tools.md` and the Debug **Left-hand view tools** tour.
+
+### Share presenter controls
+
+The left menu-button sidebar includes **Share**: pause/resume the desktop
+perspective and end an existing presentation. Create links and begin sharing from
+desktop. The status row follows desktop busy/error state; controls expire when the
+browser stops publishing. This does not broadcast headset motion. See
+[VR sharing assessment](../../docs/vr_sharing.md) and the **Share presenter controls**
+demo under Debug → VR Tours & Tests → Left sidebar.
+
+**Show VR model** in that Share tab defaults on. Guests see a procedural headset,
+shoulders, estimated two-link arms and tracked controllers. The transient avatar
+uses the inverse source-to-tracking transform, so enlarging the model in VR shrinks
+the presenter in guest model space. It works independently of camera sharing and
+expires on lost tracking/connection. See [presenter model](../../docs/vr_presenter_model.md).
+
+Guest sharing also exports the actual visible native menu textures and controller/tool
+line geometry alongside the presenter pose. This includes both sidebar tablets,
+the view-icon tablet and desktop/tool panels; the guest display is read-only.
+`presenter_ui.hpp` caches panel PNGs until content changes. The shared inverse model
+transform applies to panels and guides as well as the figure. See
+[VR presenter controls](../../docs/vr_presenter_model.md#guest-visible-vr-controls)
+and Debug → VR Tours & Tests → **VR menus and tools in guest view**.

@@ -87,7 +87,16 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
         atomisticMode: view.atomistic ?? 'off', surfaceMode: view.surface ?? 'off', coloringMode: view.coloring ?? 'strand' }
       runtime.scene.add(next.scene)
       runtime.resetRenderFn()
-      if (view.overlay) runtime.setRenderFn(() => renderSharedOverlay(runtime.renderer, next.scene.children, runtime.camera))
+      if (view.overlay) runtime.setRenderFn(() => {
+        renderSharedOverlay(runtime.renderer, next.scene.children, runtime.camera)
+        // Transient presenter geometry is deliberately outside exported content.
+        const avatar = runtime.scene.getObjectByName('vr-presenter-avatar')
+        if (avatar?.visible) {
+          const autoClear = runtime.renderer.autoClear
+          try { runtime.renderer.autoClear = false; runtime.renderer.render(avatar, runtime.camera) }
+          finally { runtime.renderer.autoClear = autoClear }
+        }
+      })
       annotations = mountSharedAnnotations({ current: next, container: canvas.parentElement, runtime })
       runtime.renderer.toneMapping = next.data.render.toneMapping
       runtime.renderer.toneMappingExposure = next.data.render.toneMappingExposure

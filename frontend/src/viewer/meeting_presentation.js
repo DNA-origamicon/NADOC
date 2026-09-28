@@ -1,12 +1,16 @@
+import { decodeVRUIState } from './vr_ui_stream.js'
+import { createVRAvatar } from './vr_avatar.js'
 import { createPresenterFollow } from './presenter_follow.js'
 import { mountGuestSharedViews } from './guest_shared_views.js'
-/** Camera-only presentation controls. Scientific selection is a separate contract. */
+/** Camera presentation and transient VR presence; scientific selection is separate. */
 import { mountMeetingTrajectory } from './meeting_trajectory.js'
 import { loadMeetingRevision } from './meeting_scene_updates.js'
 import { mountMeetingLiveFrame } from './meeting_live_frame.js'
 export function mountMeetingPresentation({ viewer, base, role, revision, room, document: doc = document, fetch: request = fetch,
   eventSource = url => new EventSource(url), loadRevision = loadMeetingRevision, mountTrajectory = mountMeetingTrajectory, onSharedView = () => {}, onEnded = () => {}, onLoading = () => {}, onPresence = () => {}, onViewReady = () => {}, onViewShared = () => {}, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   const createTrajectory = () => mountTrajectory({ viewer, base, role, document: doc, fetch: request })
+  const vrTextures = new Map()
+  const avatar = createVRAvatar({ scene: viewer.runtime.scene })
   let trajectory = createTrajectory()
   const createLive = () => mountMeetingLiveFrame({ viewer, base, revision, document: doc, fetch: request })
   let live = createLive()
@@ -73,10 +77,10 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   }
   function pause() { broadcasting = false; publicationEpoch++; sent = ''; void post('pause', {}).catch(() => {}); update() }
   const opened = () => { connected = true; publicationEpoch++; sent = ''; update(); void publish() }
-  const lost = () => { connected = false; broadcasting = false; follow(false); update() }
+  const lost = () => { avatar.clear(); connected = false; broadcasting = false; follow(false); update() }
   async function refreshScene() {
     if (updating || disposed || !compatible() || performance.now() < retryAfter) return
-    updating = true; update()
+    updating = true; avatar.clear(); update()
     let failure = null
     try {
       while (pendingRevision && pendingRevision !== revision && !disposed) {
@@ -88,6 +92,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
         if (disposed) return
         if (loaded) {
           revision = next; frozen = viewer.current; onSharedView(frozen)
+          if (latest?.revision === revision) avatar.receive(latest)
           trajectory.dispose(); trajectory = createTrajectory()
           live.dispose(); live = createLive(); if (latest?.revision === revision) live.receive(latest)
           if (latest?.revision === revision) trajectory.receive({ ...latest, serverTime: latest.serverTime + performance.now() - latestAt })
@@ -101,8 +106,10 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     let value; try { value = JSON.parse(event.data) } catch { return }
     if (value.room !== room || !Number.isSafeInteger(value.sequence) || value.sequence <= sequence) return
     if (value.revision !== revision && !/^[a-f0-9]{64}$/.test(value.revision)) return
-    if (value.ended) { onEnded(); return }
+    try { value = decodeVRUIState(value, vrTextures) } catch { avatar.clear(); return }
+    if (value.ended) { avatar.clear(); onEnded(); return }
     onPresence(value.participants ?? [], { serverTime: value.serverTime })
+    if (value.revision === revision && compatible()) avatar.receive(value); else avatar.clear()
     sequence = value.sequence; latest = value; latestAt = performance.now(); pendingRevision = value.revision
     trajectory.receive(value)
     live.receive(value)
@@ -132,6 +139,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   if (el('follow')) el('follow').onclick = () => { guestViews?.cancel(); follow(!following); update() }
   if (el('broadcast')) el('broadcast').onclick = () => { if (broadcasting) pause(); else { broadcasting = true; publicationEpoch++; sent = ''; update(); void publish() } }
   function frame() {
+    if (compatible() && !updating) avatar.frame(); else avatar.clear()
     if (updating) return
     if (!compatible()) { follow(false); broadcasting = false; source.close(); update(); return }
     if (following && connected && latest?.presenting && latest?.revision === revision && !viewer.performanceApi.busy && latest?.camera) {
@@ -145,7 +153,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   update()
   return () => {
     if (disposed) return
-    disposed = true; guestViews?.dispose(); onViewReady(() => {}); trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
+    disposed = true; vrTextures.clear(); avatar.dispose(); guestViews?.dispose(); onViewReady(() => {}); trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
     if (timer !== null) cancel(timer)
     viewer.runtime.removeFrameCallback(frame)
     doc.removeEventListener('visibilitychange', visibility)

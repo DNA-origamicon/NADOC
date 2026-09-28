@@ -260,6 +260,7 @@ describe('initVRSession', () => {
       event: vi.fn()
         .mockResolvedValueOnce({
           sequence: 2,
+          share_control: { sequence: 1, action: 'pause' },
           view_tool: { sequence: 1, index: 4 },
           end_resize: { sequence: 1, version: 7, delta: -6 },
           ligation: { sequence: 1, version: 8, source: 2, target: 3, action },
@@ -302,6 +303,7 @@ describe('initVRSession', () => {
         })
         .mockResolvedValue({
           sequence: 2,
+          share_control: { sequence: 1, action: 'pause' },
           view_tool: { sequence: 1, index: 4 },
           end_resize: { sequence: 1, version: 7, delta: -6 },
           ligation: { sequence: 1, version: 8, source: 2, target: 3, action },
@@ -351,6 +353,7 @@ describe('initVRSession', () => {
     await h.controller.enter()
     await vi.advanceTimersByTimeAsync(25)
     expect(onNativeEvent.mock.calls).toEqual([
+      [{ type: 'share_control', sequence: 1, action: 'pause' }],
       [{ type: 'view_tool', sequence: 1, index: 4 }],
       [{ type: 'ligation', sequence: 1, version: 8, source: 2, target: 3, action }],
       [{ type: 'end_resize', sequence: 1, version: 7, delta: -6 }],

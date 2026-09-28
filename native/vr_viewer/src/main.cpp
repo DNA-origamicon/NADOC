@@ -53,6 +53,7 @@
 #include "live_mirror_capture.hpp"
 #include "live_visual_measure.hpp"
 #include "live_presentation.hpp"
+#include "presenter_ui.hpp"
 #include "trajectory.hpp"
 #include "visualization.hpp"
 
@@ -4200,6 +4201,8 @@ int benchmarkAtomisticStyles(
 
 class DesktopSurface {
   public:
+    GLuint presenterTexture() const {return textureReady_?texture_:0;}
+    uint64_t presenterVersion() const {return presenterVersion_;}
     void initialize(Display* display) {
         display_ = display;
         root_ = DefaultRootWindow(display_);
@@ -4316,7 +4319,7 @@ class DesktopSurface {
             }
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
             glBindTexture(GL_TEXTURE_2D, 0);
-            textureReady_ = true;
+            textureReady_ = true; ++presenterVersion_;
         }
         XDestroyImage(image);
     }
@@ -4379,6 +4382,7 @@ class DesktopSurface {
     int height_ = 0;
     int pointerX_ = -1;
     int pointerY_ = -1;
+    uint64_t presenterVersion_=0;
     bool textureReady_ = false;
     bool pointerVisible_ = false;
     glm::vec2 pointer_{0.5F, 0.5F};
@@ -4388,6 +4392,7 @@ class DesktopSurface {
 /** Cached, multisampled tablet UI rendered as one depth-tested world quad. */
 class MenuPanelSurface {
   public:
+    GLuint presenterTexture() const {return ready_?texture_:0;}
     struct CacheStats {
         uint64_t updates = 0;
         uint64_t hits = 0;
@@ -4941,6 +4946,7 @@ class Viewer {
         sidebarMenus_.shutdown();
         witnessSurface_.shutdown();
         viewTools_.shutdown();
+        presenterUI_.shutdown();
         desktopSurface_.shutdown();
         glScene_.reset();
         for (Swapchain& swapchain : swapchains_) {
@@ -5293,7 +5299,12 @@ class Viewer {
         menuPanelSurface_.initialize();
         sidebarMenus_.initialize();
         for(auto& sidebar:sidebarMenus_.menus) {
+            sidebar.label=[this](const std::string& action,const std::string& fallback) {
+                if(action!="share:status")return fallback;
+                return std::string(shareFailed_?"Action failed - check desktop":!shareActive_?"Start presentation on desktop":shareBusy_ || shareAck_<shareSequence_?"Updating presentation...":sharePerspective_?"Sharing desktop perspective":"Perspective paused");
+            };
             sidebar.available=[this](const std::string& action) {
+                if(action.starts_with("share:")) return shareAvailable(action);
                 if(action=="tool:move_rotate")return !toolShell_.executionPending();
                 if(action.starts_with("move:")) {
                     if(toolShell_.executionPending() || moveAwaitRefresh_)return false;
@@ -5321,6 +5332,8 @@ class Viewer {
                 return nadoc_vr::ToolShell::selectionCapability(mode,selectedSelectionKind_)!=nadoc_vr::ToolCapability::unsupported;
             };
             sidebar.isActive=[this](const std::string& action) {
+                if(action=="share:avatar")return showVRAvatar_;
+                if(action=="share:status")return shareActive_;
                 return (action.starts_with("repr:") && std::stoi(action.substr(5))==static_cast<int>(glScene_->representation()))
                     || (action.starts_with("color:") && std::stoi(action.substr(6))==static_cast<int>(glScene_->coloring()));
             };
@@ -5690,7 +5703,18 @@ class Viewer {
         moveAwaitRefresh_=true;
     }
 
+    bool shareAvailable(const std::string& action) const {
+        if(action=="share:avatar")return true;
+        if(action=="share:status")return false;
+        if(!shareActive_ || shareBusy_ || shareAck_<shareSequence_)return false;
+        return action=="share:end" || (action=="share:pause" && sharePerspective_) || (action=="share:resume" && !sharePerspective_);
+    }
     void activateSidebarAction(const std::string& action, size_t hand) {
+        if(action=="share:avatar") {showVRAvatar_=!showVRAvatar_;return;}
+        if(action.starts_with("share:")) {
+            if(shareAvailable(action)) {shareAction_=action.substr(6);++shareSequence_;publishEventState();}
+            return;
+        }
         if(action=="feedback:activate") {pulse(hand,.22F);return;}
         if(action.starts_with("move:")) {
             if(toolShell_.executionPending() || moveAwaitRefresh_)return;
@@ -7767,6 +7791,30 @@ class Viewer {
         publishEventState();
     }
 
+    void publishPresenterPose() {
+        const double now=glfwGetTime();
+        if(eventPath_.empty() || now-avatarPublishedAt_<.05)return;
+        avatarPublishedAt_=now;
+        const auto trackedFlags=XR_VIEW_STATE_POSITION_TRACKED_BIT|XR_VIEW_STATE_ORIENTATION_TRACKED_BIT;
+        const bool tracked=(currentViewStateFlags_&trackedFlags)==trackedFlags && sessionState_==XR_SESSION_STATE_FOCUSED;
+        const auto path=eventPath_+".avatar", temporary=path+".next";
+        std::ofstream out(temporary,std::ios::trunc);
+        if(!out)return;
+        out<<std::setprecision(9);
+        auto pose=[&](const glm::vec3& p,const glm::quat& q) {
+            out<<"{\"position\":["<<p.x<<','<<p.y<<','<<p.z<<"],\"orientation\":["<<q.x<<','<<q.y<<','<<q.z<<','<<q.w<<"]}";
+        };
+        out<<"{\"enabled\":"<<(showVRAvatar_&&shareActive_?"true":"false")<<",\"tracked\":"<<(tracked?"true":"false")
+           <<",\"presentation\":"<<nadoc_vr::livePresentationJson(manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})<<",\"head\":";
+        pose(witnessObserverPosition_,witnessObserverOrientation_);
+        out<<",\"hands\":[";
+        for(size_t h=0;h<2;++h) {if(h)out<<',';if(hands_[h].valid)pose(hands_[h].position,hands_[h].orientation);else out<<"null";}
+        out<<"]";
+        if(showVRAvatar_ && shareActive_ && tracked)presenterUI_.write(out,controllerGuides_,witnessActorGuideCount_,sidebarMenus_,viewTools_,menuOpen_,menuPage_==MenuPage::desktop,menuPanelSurface_,desktopSurface_,menuPlacement_,menuPanelBounds());
+        out<<"}";out.close();
+        std::error_code error;std::filesystem::rename(temporary,path,error);
+    }
+
     void publishEventState() {
         if (eventPath_.empty()) return;
         std::ofstream output(eventPath_, std::ios::out | std::ios::trunc);
@@ -7777,6 +7825,7 @@ class Viewer {
         };
         output << "{\"sequence\":" << ++eventSequence_ << ",\"hover_identity\":";
         identity(publishedHoverIdentity_);
+        output << ",\"share_control\":{\"sequence\":" << shareSequence_ << ",\"action\":\"" << shareAction_ << "\"}";
         output << ",\"view_tool\":{\"sequence\":" << viewTools_.sequence << ",\"index\":" << viewTools_.requested << "}";
         output << ",\"ligation\":{\"sequence\":" << ligation_.sequence
                << ",\"action\":\"" << ligation_.committedAction << "\""
@@ -8462,6 +8511,7 @@ class Viewer {
             << ",\"menu_position\":" << point(menuPlacement_.position())
             << ",\"menu_docked\":" << (menuPlacement_.worldDocked() ? "true" : "false")
             << ",\"runtime_connected\":" << (instance_ != XR_NULL_HANDLE ? "true" : "false")
+            << ",\"show_vr_model\":" << (showVRAvatar_?"true":"false")
             << ",\"head_position\":" << point(witnessObserverPosition_)
             << ",\"presentation\":" << nadoc_vr::livePresentationJson(manipulator_.transform(), normalizationCenter_, normalizationScale_, {0,0,-kViewDistanceMeters})
             << ",\"thumbwheel_position\":" << point(latticePlacement_.worldPoint({
@@ -9044,6 +9094,12 @@ class Viewer {
             [&](size_t hand){pulse(hand,.3F);});
         dimensionSync_.update(dimensionPanel_.tool,normalizationCenter_,normalizationScale_);
         if(volumePanel_.active) menuControlTargeted.fill(true);
+        { std::error_code error; const auto path=eventPath_+".share";
+          const auto changed=std::filesystem::last_write_time(path,error);
+          if(error || std::filesystem::file_time_type::clock::now()-changed>std::chrono::seconds(3)) {shareActive_=false;shareBusy_=true;}
+          else {std::ifstream share(path); int active=0,perspective=0,busy=1,ack=0,failed=0;
+            if(share>>active>>perspective>>busy>>ack>>failed) {shareActive_=active;sharePerspective_=perspective;shareBusy_=busy;shareAck_=ack;shareFailed_=failed;} }
+        }
         if(viewTools_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})) {
             const bool expanded=(viewTools_.flags&(1<<7))!=0;
             if(expanded!=glScene_->expanded())(void)glScene_->toggleExpanded();
@@ -10109,6 +10165,7 @@ class Viewer {
         const auto sceneFinished = std::chrono::steady_clock::now();
         checkXr(instance_, xrEndFrame(session_, &endInfo), "xrEndFrame");
         const auto endFinished = std::chrono::steady_clock::now();
+        publishPresenterPose();
         finishLiveCapture(layerCount > 0);
         liveMeasure_.finish(layerCount > 0, liveFrame_);
         for (const auto& report : gpuFrameTimer_.takeReports()) {
@@ -10737,6 +10794,12 @@ class Viewer {
     std::vector<Swapchain> swapchains_;
     std::unique_ptr<GlScene> glScene_;
     DesktopSurface desktopSurface_;
+    bool showVRAvatar_=true;
+    double avatarPublishedAt_=-1;
+    nadoc_vr::PresenterUI presenterUI_;
+    bool shareActive_=false,sharePerspective_=false,shareBusy_=true,shareFailed_=false;
+    int shareSequence_=0,shareAck_=0;
+    std::string shareAction_;
     VRViewTools viewTools_;
 };
 

@@ -37,6 +37,7 @@ class SidebarMenu {
     std::string pressed;
     double pressedUntil=0;
     MenuLayoutAudit audit;
+    std::function<std::string(const std::string&,const std::string&)> label = [](const auto&,const auto& fallback){return fallback;};
     std::function<bool(const std::string&)> available = [](const auto&){return true;};
     std::function<bool(const std::string&)> isActive = [](const auto&){return false;};
     const SidebarTab& tab() const { return customTab ? *customTab : kSidebarTabs.at(tabs.at(selected)); }
@@ -160,7 +161,7 @@ class SidebarMenu {
             const auto& row=*page[i];
             const bool header=row.action.starts_with("section:");
             float y=.463F-static_cast<float>(i)*.12F;
-            out.push_back({row.id,row.id=="section:visualization:template:view-volumes"?"View Volumes":row.id=="section:properties:dimensions-heading"?"Dimensions":header?(collapsed.contains(row.id)?"+ ":"- ")+row.label:row.label,row.id=="section:visualization:template:view-volumes"?"MANAGE SAVED VOLUMES":row.id=="section:properties:dimensions-heading"?"MEASURE WITH CONTROLLERS":header?(collapsed.contains(row.id)?"EXPAND CARD":"COLLAPSE CARD"):row.section,row.action,{{cx-(hand==0?.247F:.327F),y-.054F},{cx+(hand==0?.327F:.247F),y+.054F}},(row.id=="dimensions-record" || row.id=="dimensions-clear") || header || (!row.action.empty() && available(row.action)), !header && available(row.action) && isActive(row.action)});
+            out.push_back({row.id,label(row.action,row.id=="section:visualization:template:view-volumes"?"View Volumes":row.id=="section:properties:dimensions-heading"?"Dimensions":header?(collapsed.contains(row.id)?"+ ":"- ")+row.label:row.label),row.id=="section:visualization:template:view-volumes"?"MANAGE SAVED VOLUMES":row.id=="section:properties:dimensions-heading"?"MEASURE WITH CONTROLLERS":header?(collapsed.contains(row.id)?"EXPAND CARD":"COLLAPSE CARD"):row.section,row.action,{{cx-(hand==0?.247F:.327F),y-.054F},{cx+(hand==0?.327F:.247F),y+.054F}},(row.id=="dimensions-record" || row.id=="dimensions-clear") || header || (!row.action.empty() && available(row.action)), !header && available(row.action) && isActive(row.action)});
         }
         if(customTab) {
             std::vector<SidebarControl> extra;

@@ -123,6 +123,12 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
           for await (const chunk of req) { size += chunk.length; if (size > 512 * 1024 * 1024) return send(413, { error: 'Package exceeds 512 MiB' }); chunks.push(chunk) }
           return send(200, await hostRequest(`/host/shares/${content[1]}/content`, { method: 'POST', headers: { 'X-NADOC-Title': req.headers['x-nadoc-title'] ?? 'Shared design' }, body: Buffer.concat(chunks) }))
         }
+        const avatar = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/avatar$/)
+        if (req.method === 'POST' && avatar) {
+          const chunks=[];let size=0
+          for await(const chunk of req){size+=chunk.length;if(size>4*1024*1024)return send(413,{error:'VR presence too large'});chunks.push(chunk)}
+          return send(200,await hostRequest(`/host/shares/${avatar[1]}/avatar`,{method:'POST',body:Buffer.concat(chunks)}))
+        }
         const timeline = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/trajectory$/)
         if (['GET', 'POST'].includes(req.method) && timeline) {
           const chunks = []; let size = 0

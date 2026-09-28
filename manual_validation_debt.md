@@ -558,3 +558,11 @@ full-snapshot throughput needs real-device validation.
   complete (440 directed switches, four controller profiles; 22 final color-menu
   pixel checks; actual desktop correspondence 1.0). This does not prove panel
   scanout or subjective comfort. Evidence: `docs/audits/vr_all_representations_20260927.md`.
+
+- 2026-09-28 VR guest menus: review a live conversation with a physically worn
+  headset for natural arm/menu occlusion and guest readability at independently
+  chosen camera distances. Automated coverage checks real guest pixels for both
+  sidebar menus, the view-icon tablet, wheel and scissors. Four-profile validation
+  was attempted but remains limited by intermittent input-driver timing stalls;
+  it does not establish subjective presentation comfort. Reusable
+  entry: Debug → VR Tours & Tests → Left sidebar → VR menus and tools in guest view.

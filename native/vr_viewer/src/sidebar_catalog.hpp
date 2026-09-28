@@ -973,6 +973,15 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
     {"tool-settings", "Tool settings / Confirm / Cancel / Undo", "Tools", "tools", {}},
     {"vr-desktop", "Desktop", "Tools", "desktop", {}},
   }},
+  {0, "share", "Share", {
+    {"share-avatar", "Show VR model", "Share", "share:avatar", {}},
+    {"share-desktop", "Start sharing and manage links on desktop", "Share", "", {}},
+    {"share-source", "Perspective source: desktop camera", "Share", "", {}},
+    {"share-active", "Presentation active", "Share", "share:status", {}},
+    {"share-pause", "Pause perspective", "Share", "share:pause", {}},
+    {"share-resume", "Resume perspective", "Share", "share:resume", {}},
+    {"share-end", "End presentation (all links)", "Share", "share:end", {}},
+  }},
 };
 inline const std::vector<unsigned> kSidebarColoringMasks = {5,7,15,15,7,15,0,5,0,0,7};
 }

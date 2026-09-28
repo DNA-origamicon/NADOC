@@ -1,3 +1,5 @@
+import { encodeVRUIState } from '../frontend/src/viewer/vr_ui_stream.js'
+import { validateVRAvatar } from '../frontend/src/viewer/vr_avatar_protocol.js'
 import { validateSharedCamera } from './prepared_camera.mjs'
 /** Small, bounded state channel for one immutable prepared snapshot. */
 export function createPresentationState({ id, revision, now = Date.now }) {
@@ -5,10 +7,34 @@ export function createPresentationState({ id, revision, now = Date.now }) {
   const listeners = new Set()
   const presenters = new Set()
   let trajectory = null, liveFrame = null, loading = null, participants = []
-  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, trajectory, liveFrame, loading, participants, ended: closed, serverTime: now() })
-  const encode = () => `event: state\ndata: ${JSON.stringify(snapshot())}\n\n`
-  const send = (response, message) => { if (!response.write(message)) response.destroy() }
-  const broadcast = () => { if (!listeners.size) return; const message = encode(); for (const response of listeners) send(response, message) }
+  let avatar = null, avatarWindow = now(), avatarUpdates = 0
+  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, avatar, trajectory, liveFrame, loading, participants, ended: closed, serverTime: now() })
+  const textureCaches = new WeakMap()
+  const encode = (state, response) => {
+    if (!textureCaches.has(response)) textureCaches.set(response, new Map())
+    return `event: state\ndata: ${JSON.stringify(encodeVRUIState(state, textureCaches.get(response)))}\n\n`
+  }
+  // A complete menu packet can exceed Node's writable high-water mark even
+  // on localhost. Backpressure means wait, not a failed connection. Keep only
+  // the latest state while draining; a stalled guest cannot build a pose queue.
+  const pending = new Map()
+  const send = (response, message) => {
+    if (pending.has(response)) { pending.get(response).message = message; return }
+    if (response.write(encode(message, response))) return
+    const wait = { message: null, timer: null }
+    pending.set(response, wait)
+    const drain = () => {
+      if (pending.get(response) !== wait) return
+      clearTimeout(wait.timer); pending.delete(response); response.removeListener('close', closed)
+      if (wait.message) send(response, wait.message)
+    }
+    wait.timer = setTimeout(() => { pending.delete(response); response.destroy() }, 5000)
+    wait.timer.unref?.()
+    const closed = () => { clearTimeout(wait.timer); pending.delete(response); response.removeListener('drain', drain) }
+    response.once('drain', drain)
+    response.once('close', closed)
+  }
+  const broadcast = () => { if (!listeners.size) return; const message = snapshot(); for (const response of listeners) send(response, message) }
   const pause = () => { if (presenting && !closed) { presenting = false; sequence++; broadcast() } }
   function publish(value) {
     if (closed) throw new Error('This presentation has ended')
@@ -22,6 +48,15 @@ export function createPresentationState({ id, revision, now = Date.now }) {
     return snapshot()
   }
   return { snapshot, publish, pause,
+    publishAvatar(value) {
+      if (closed || value?.revision !== revision) throw Error('VR presenter belongs to a different snapshot')
+      if (now()-avatarWindow >= 1000) {avatarWindow=now();avatarUpdates=0}
+      if (avatarUpdates >= 20) throw Error('Too many VR presenter updates')
+      const pose = validateVRAvatar(value.avatar)
+      avatarUpdates++; avatar = pose ? { pose, expiresAt: now()+1500 } : null
+      sequence++; broadcast(); return { ok:true }
+    },
+    expireAvatar() { if(avatar && now()>=avatar.expiresAt){avatar=null;sequence++;broadcast()} },
     setParticipants(value) { if (!closed && JSON.stringify(value) !== JSON.stringify(participants)) { participants = value; sequence++; broadcast() } },
     setLoading(value) {
       if (value !== null && (!value || typeof value !== 'object' || (value.fraction !== null && (!Number.isFinite(value.fraction) || value.fraction < 0 || value.fraction > 1)))) throw new Error('Invalid visualization progress')
@@ -29,16 +64,16 @@ export function createPresentationState({ id, revision, now = Date.now }) {
     },
     setTrajectory(value) { trajectory = value; sequence++; broadcast(); return snapshot() },
     setLiveFrame(value) { liveFrame = value; sequence++; broadcast(); return snapshot() },
-    replaceContent(next, clip) { revision = next; trajectory = clip; liveFrame = null; camera = null; presenting = false; sequence++; broadcast(); return snapshot() },
-    replaceRevision(next) { revision = next; sequence++; broadcast() },
+    replaceContent(next, clip) { avatar=null; revision = next; trajectory = clip; liveFrame = null; camera = null; presenting = false; sequence++; broadcast(); return snapshot() },
+    replaceRevision(next) { avatar=null; revision = next; sequence++; broadcast() },
     leavePresenter() { pause(); for (const response of presenters) response.end() },
     subscribe(response, { presenter = false } = {}) {
       if (closed) { response.end(); return false }
       if (listeners.size >= 8) { response.destroy(); return false }
       listeners.add(response); if (presenter) presenters.add(response)
-      response.on('close', () => { listeners.delete(response); if (presenters.delete(response) && presenters.size === 0) pause() }); send(response, encode())
+      response.on('close', () => { listeners.delete(response); if (presenters.delete(response) && presenters.size === 0) pause() }); send(response, snapshot())
       return listeners.has(response)
     },
-    close() { if (closed) return; closed = true; presenting = false; loading = null; sequence++; broadcast(); for (const response of listeners) response.end(); listeners.clear(); presenters.clear() },
+    close() { if (closed) return; closed = true; avatar=null; presenting = false; loading = null; sequence++; broadcast(); for (const response of listeners) response.end(); listeners.clear(); presenters.clear() },
   }
 }

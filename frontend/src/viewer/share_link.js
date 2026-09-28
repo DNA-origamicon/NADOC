@@ -1,3 +1,4 @@
+import { initVRAvatarPublisher } from './vr_avatar_publisher.js'
 import { broadcastDocument } from './broadcast_fingerprint.js'
 import { waitForPublicHosting } from './hosting_setup.js'
 import { requireSharingCapabilities } from './sharing_capabilities.js'
@@ -68,6 +69,11 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
       return true
     },
   }) : null
+  const vrAvatar = initVRAvatarPublisher({ getRoom: currentRoom,
+    available: () => !busy && !disposed && capabilities.includes('vr-avatar-v1'), request,
+    publish: (room, body) => api(`shares/${room.id}/avatar`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }),
+    onError: message => controls.error(message),
+  })
   function syncControls() {
     controls.setActive(shares.length > 0)
     controls.setParticipants(currentRoom()?.participants ?? [], { serverTime: currentRoom()?.serverTime })
@@ -256,5 +262,5 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
       finally { polling = false }
     }, 5000)
     return jobs
-  }, dispose() { documentClosed(); unsubscribeDocument?.(); hostWindow?.removeEventListener('nadoc:document-reset', documentClosed); hostWindow?.removeEventListener('pagehide', documentClosed); nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; trigger?.removeEventListener('click', show); dialog.remove() } }
+  }, dispose() { vrAvatar.dispose(); documentClosed(); unsubscribeDocument?.(); hostWindow?.removeEventListener('nadoc:document-reset', documentClosed); hostWindow?.removeEventListener('pagehide', documentClosed); nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; trigger?.removeEventListener('click', show); dialog.remove() } }
 }

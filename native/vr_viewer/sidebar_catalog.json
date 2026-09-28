@@ -6,6 +6,7 @@
     "frontend/src/scene/coloring_modes.js": "f731e0c1aa718c9450203d6ac7cfced8db732183c77dd2a6335476d95e75ba4e",
     "frontend/src/scene/view_volumes.js": "894f3f65545b30cf8ee08cb169e9ea26ffc94d6561d5561e6e8429e7e0be705b",
     "frontend/src/scene/vr_representations.js": "e5a447b2419c58ac15a8a09eacdda70a3fa93e4d87d2b37de60637488bdd0819",
+    "frontend/src/scene/vr_share.js": "16721aa0cacc45bf65f8b5c74e00a297a3678d57f8c4e150d95e74de0bef8ab4",
     "frontend/src/ui/annotation_panel.js": "a7d938893f5531a678938045c0e480828807959d8656f87f638c6db16ed72ccb",
     "frontend/src/ui/assembly_panel.js": "66d96d1bc91ce4440dd541b0ea57219f41440598f24ce2d54d52f3b121880097",
     "frontend/src/ui/cluster_panel.js": "ee15d0bced98582fdf86acf8baca8ccd9ac44c5602f58f96190d58728b04af2f",
@@ -13366,6 +13367,83 @@
           "kind": "button",
           "options": [],
           "source": "native/vr_viewer/src/menu_items.hpp",
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "side": "left",
+      "key": "share",
+      "label": "Share",
+      "rows": [
+        {
+          "id": "share-avatar",
+          "label": "Show VR model",
+          "action": "share:avatar",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": ""
+        },
+        {
+          "id": "share-desktop",
+          "label": "Start sharing and manage links on desktop",
+          "action": "",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": "Desktop only"
+        },
+        {
+          "id": "share-source",
+          "label": "Perspective source: desktop camera",
+          "action": "",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": "Desktop only"
+        },
+        {
+          "id": "share-active",
+          "label": "Presentation active",
+          "action": "share:status",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": ""
+        },
+        {
+          "id": "share-pause",
+          "label": "Pause perspective",
+          "action": "share:pause",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": ""
+        },
+        {
+          "id": "share-resume",
+          "label": "Resume perspective",
+          "action": "share:resume",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": ""
+        },
+        {
+          "id": "share-end",
+          "label": "End presentation (all links)",
+          "action": "share:end",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
           "reason": ""
         }
       ]

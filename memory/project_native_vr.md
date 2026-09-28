@@ -565,3 +565,45 @@ left-trigger non-nicking, right nick and Undo/Redo. Evidence and retained failed
 attempts: `docs/audits/vr_view_tools_20260928.md`; aggregate
 `.development-artifacts/vr-view-tools/view-validation.json`, plus
 `scissors-final/result.json`. Through-lens comfort remains a human check.
+
+### Share sidebar (2026-09-28)
+
+Prior VR authoring/view tools pushed as `d9f9f252`. Left menu-button Share tab now
+controls existing desktop presentation: pause/resume perspective and End all links.
+No creation/start/link management in VR. `vr_share.js` delegates to existing desktop
+presentation controls; `backend/api/vr_share.py` publishes doc-bound `.share` status;
+native sequenced events are acknowledged, busy-gated and status expires after 3 s.
+Camera source remains desktop; headset/model-grab presentation is not broadcast.
+Assessment: `docs/vr_sharing.md`. Four-profile isolated mock-hosting controller tour
+passed with stereo and delivered-mirror checks (`.development-artifacts/vr-share/final`).
+Debug tour: Left sidebar → Share presenter controls. Internet guest transport and
+through-lens comfort were not verified by this tour.
+
+### VR presenter avatar (2026-09-28)
+
+Share tab adds native-local default-on `Show VR model`. Head/controller metric poses
+plus exact model normalization/manipulation are atomically sampled in `.avatar` at
+20 Hz. `/api/vr/presenter-pose` inverts the complete source-nm-to-tracking transform;
+local doc binding and 1 s feed freshness apply. Desktop `vr_avatar_publisher.js`
+sends bounded latest poses at 10 Hz to existing room's host-only `/avatar` endpoint,
+including paused-perspective rooms. `vr-avatar-v1` capability required. Guest SSE
+state validates revision and expires after 1.5 s. No model edits or snapshot churn.
+`vr_avatar.js` draws primitive headset/controllers, shoulder bar and analytic two-link
+estimated arms outside `current.scene`. Reattach after prepared scene replacement;
+overlay mode explicitly renders the transient figure too. Inverse scale applies to
+all avatar dimensions. Research/algorithm: `docs/vr_presenter_model.md`.
+Debug → VR Tours & Tests → Left sidebar → VR presenter model uses real local hosting
+and guest SSE with physical profile-driven poses; no public invitation.
+
+## VR menus in guest presentation (2026-09-28)
+
+Show VR model now includes native menu textures and tracking-space controller/tool
+lines. Both sidebar tablets, the desktop-icon view tablet, legacy/desktop panels,
+selection aids, radius wheel, scissors, nick glow, ligation and resize guides use
+actual XR draw data and the avatar's inverse source transform. Guest controls are
+read-only. Hidden/closed/stale presence removes them. PNGs cache natively and per
+SSE connection; changed images send once, positions/guides continue at pose cadence.
+Room SSE now handles backpressure by coalescing the latest pending state instead
+of destroying the connection on a menu-sized write. The Debug Left-sidebar
+**VR menus and tools in guest view** entry runs the real-host guest pixel checks.
+Details: [presenter model](../docs/vr_presenter_model.md#guest-visible-vr-controls).

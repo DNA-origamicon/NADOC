@@ -141,6 +141,15 @@ tabs.push({side:'right',key:'tools',label:'Tools',rows:[
   ['tool-twist','Twist','tool:twist'],['tool-bend','Bend','tool:bend'],['tool-settings','Tool settings / Confirm / Cancel / Undo','tools'],
   ['vr-desktop','Desktop','desktop'],
 ].map(([id,label,action])=>({id,label,action,section:'Tools',kind:'button',options:[],source:'native/vr_viewer/src/menu_items.hpp',reason:''}))})
+tabs.push({side:'left',key:'share',label:'Share',rows:[
+  ['share-avatar','Show VR model','share:avatar'],
+  ['share-desktop','Start sharing and manage links on desktop',''],
+  ['share-source','Perspective source: desktop camera',''],
+  ['share-active','Presentation active','share:status'],
+  ['share-pause','Pause perspective','share:pause'],
+  ['share-resume','Resume perspective','share:resume'],
+  ['share-end','End presentation (all links)','share:end'],
+].map(([id,label,action])=>({id,label,action,section:'Share',kind:'button',options:[],source:'frontend/src/scene/vr_share.js',reason:action?'':'Desktop only'}))})
 // Select options are separate discoverable disabled choices, preserving all values.
 for (const tab of tabs) tab.rows = tab.rows.flatMap(row => [row, ...row.options.map(o => ({...row,id:`${row.id}:option:${o.value}`,label:`${row.label}: ${o.label}`,kind:'option',options:[],action:'',reason:'Not supported in VR yet'}))])
 for (const tab of tabs) {

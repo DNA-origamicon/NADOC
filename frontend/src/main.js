@@ -43,6 +43,7 @@ import {
   initialVRToolConfigState, reduceVRToolConfig, vrPlaneFeedbackPayload,
 } from './scene/vr_tool_config.js'
 import { createVRLigation } from './scene/vr_ligation.js'
+import { createVRShare } from './scene/vr_share.js'
 import { createVRViewTools } from './scene/vr_view_tools.js'
 import { vrToolFeedbackPayload } from './scene/vr_tool_context.js'
 import { createVRToolPreflightCoordinator } from './scene/vr_tool_preflight_coordinator.js'
@@ -6458,6 +6459,7 @@ async function main() {
 
   let _vrStyleApply = Promise.resolve()
   let _vrTrajectoryPublishCount = 0
+  const vrShare = createVRShare({})
   const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
   const vrLigation = createVRLigation({ getState: store.getState, api,
     clearSelection: () => selectionManager.clearSelection?.(),
@@ -6477,7 +6479,7 @@ async function main() {
     finally { vrEndPublishing = false }
   }
   const vrSession = initVRSession({
-    onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish() },
+    onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish() },
     renderer,
     scene,
     camera,
@@ -6541,9 +6543,11 @@ async function main() {
     },
     onNativeEvent: (_handleNativeVREvent = event => {
       _recordScrywriteBrowser('native_event', event)
-      if (event?.type === 'native_session_end') { vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset() }
+      if (event?.type === 'native_session_end') { vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset(); vrShare.reset() }
       const button = document.getElementById('menu-help-view-vr')
-      if(event?.type === 'view_tool') {
+      if (event?.type === 'share_control') {
+        void vrShare.activate(event).catch(error => showToast(error.message, { severity: 'error' }))
+      } else if(event?.type === 'view_tool') {
         void vrViewTools.activate(event.index,event.sequence)
       } else if (event?.type === 'ligation') {
         void vrLigation.commit(event)

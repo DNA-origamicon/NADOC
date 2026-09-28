@@ -83,7 +83,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['persistent-sharing-v1', 'editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['persistent-sharing-v1', 'editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'vr-avatar-v1', 'vr-ui-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
       if (req.method === 'POST' && route === '/host/heartbeat') { ownerSeenAt = now(); return send(200, { ok: true }) }
       if (req.method === 'DELETE' && route === '/host/shares') {
         for (const id of rooms.keys()) endShare(id)
@@ -97,6 +97,15 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           for await (const chunk of req) { size += chunk.length; if (size > 512 * 1024 * 1024) return send(413, { error: 'Package too large' }); chunks.push(chunk) }
           return send(200, replaceShare(content[1], Buffer.concat(chunks), decodeURIComponent(req.headers['x-nadoc-title'] ?? 'Shared design')))
         } catch (error) { return send(409, { error: error.message }) }
+      }
+      const avatar = route.match(/^\/host\/shares\/([a-f0-9]{32})\/avatar$/)
+      if (req.method === 'POST' && avatar) {
+        const room = rooms.get(avatar[1]); if (!room) return send(410, { error: 'This share has ended.' })
+        try {
+          const chunks=[];let size=0
+          for await(const chunk of req){size+=chunk.length;if(size>4*1024*1024)return send(413,{error:'VR presence too large'});chunks.push(chunk)}
+          return send(200,room.presentation.publishAvatar(JSON.parse(Buffer.concat(chunks))))
+        } catch(error){return send(409,{error:error.message})}
       }
       const timeline = route.match(/^\/host\/shares\/([a-f0-9]{32})\/trajectory$/)
       if (['GET', 'POST'].includes(req.method) && timeline) {
@@ -266,7 +275,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const controlServer = publicOrigin ? http.createServer(handler(true)) : null
   server.requestTimeout = 15000; server.headersTimeout = 10000
   if (controlServer) { controlServer.requestTimeout = 15000; controlServer.headersTimeout = 10000 }
-  const leases = setInterval(() => { if ((expiresAt !== null && now() >= expiresAt) || (ownerLeaseMs && now() - ownerSeenAt >= ownerLeaseMs)) { stop(); return }; expireShares(); for (const room of rooms.values()) { room.editorBroadcast.expire(); room.presence.expireHealth() } }, 1000); leases.unref()
+  const leases = setInterval(() => { if ((expiresAt !== null && now() >= expiresAt) || (ownerLeaseMs && now() - ownerSeenAt >= ownerLeaseMs)) { stop(); return }; expireShares(); for (const room of rooms.values()) { room.presentation.expireAvatar(); room.editorBroadcast.expire(); room.presence.expireHealth() } }, 1000); leases.unref()
   const stop = () => { closed = true; clearInterval(leases); for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); if (listener) setTimeout(() => listener.closeAllConnections(), 250).unref() } }
   return { probeId, server, controlServer, invite, expiresAt, stop, controlToken, createShare, setPublicBase: value => { if (publicOrigin && value !== publicOrigin) throw new Error('Public origin is fixed'); publicBase = value } }
 }
