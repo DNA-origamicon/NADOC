@@ -36,6 +36,7 @@
 #include "view_volume_panel.hpp"
 #include "extrude_panel.hpp"
 #include "move_panel.hpp"
+#include "end_resize.hpp"
 #include "view_volume_shader.hpp"
 #include "dimension_sync.hpp"
 #include "sidebar_grips.hpp"
@@ -7491,6 +7492,7 @@ class Viewer {
         freeformDraft_.preview(extrudeLatticeDraft_.cells(), latticeSquare_, extrudePlane_.plane,
             toolConfig_.lengthBp()*toolConfig_.directionSign(), manipulator_.transform(),
             normalizationCenter_, normalizationScale_, {0,0,-kViewDistanceMeters}, line);
+        endResize_.draw(manipulator_.transform(),normalizationScale_,line);
         appendRadialToolGuides();
         appendLatticeGuides();
         volumePanel_.draw(manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},line);
@@ -7742,6 +7744,9 @@ class Viewer {
         };
         output << "{\"sequence\":" << ++eventSequence_ << ",\"hover_identity\":";
         identity(publishedHoverIdentity_);
+        output << ",\"end_resize\":{\"sequence\":" << endResize_.sequence
+               << ",\"version\":" << endResize_.committedVersion
+               << ",\"delta\":" << endResize_.committedDelta << '}';
         output << ",\"select_sequence\":" << selectSequence_
                << ",\"select_identity\":";
         identity(lastSelectIdentity_);
@@ -8345,7 +8350,20 @@ class Viewer {
             out << quote(selectedOwnerTokens_[i]);
         }
         const auto moveCenter=glScene_?glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform()):std::nullopt;
-        out << "],\"move_targets\":" << (glScene_ && movePanel_.active?glScene_->movePickPoints(manipulator_.transform()):"[]")
+        out << "],\"end_resize\":{\"version\":" << endResize_.version
+            << ",\"grabbing\":" << (endResize_.hand?"true":"false")
+            << ",\"nearby\":" << (endResize_.nearby?"true":"false")
+            << ",\"delta\":" << endResize_.delta << ",\"arrows\":[";
+        for(size_t i=0;i<endResize_.arrows.size();++i) {
+            if(i)out<<',';
+            const auto& a=endResize_.arrows[i];const auto model=manipulator_.transform();
+            const auto origin=endResize_.point(a,model,normalizationScale_,0);
+            out << "{\"origin\":" << point(origin)
+                << ",\"tip\":" << point(endResize_.point(a,model,normalizationScale_,endResize_.arrowLength(model,normalizationScale_)))
+                << ",\"bp_step\":" << point(glm::vec3(model*glm::vec4(a.direction*.334F*normalizationScale_,0))) << '}';
+        }
+        out << "]}";
+        out << ",\"move_targets\":" << (glScene_ && movePanel_.active?glScene_->movePickPoints(manipulator_.transform()):"[]")
             << ",\"move_handle\":" << (moveCenter?point(*moveCenter):"null")
             << ",\"move_grabbing\":" << (movePanel_.hand?"true":"false")
             << ",\"move_nearby\":" << ((movePanel_.nearby[0]||movePanel_.nearby[1])?"true":"false")
@@ -8943,6 +8961,15 @@ class Viewer {
             [&](size_t hand){pulse(hand,.3F);});
         dimensionSync_.update(dimensionPanel_.tool,normalizationCenter_,normalizationScale_);
         if(volumePanel_.active) menuControlTargeted.fill(true);
+        endResize_.expansion=glScene_->expansionAmount();
+        endResize_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
+        endResize_.input(hands_,triggerClicked_,triggerPressed_,menuControlTargeted,
+            manipulator_.transform(),normalizationScale_,
+            sessionState_==XR_SESSION_STATE_FOCUSED && next==nadoc_vr::ManipulationMode::none &&
+            !menuGripActive && !dimensionPanel_.tool.active && !volumePanel_.active &&
+            !movePanel_.active && !toolShell_.executionPending() && !radialToolMenu_.open(),
+            [&]{ publishEventState(); });
+        if(endResize_.hand)liveInputOwner_[*endResize_.hand]="end-resize";
         processMoveInput(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
         updateSelectionVolumeCandidates(menuControlTargeted);
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
@@ -10325,6 +10352,7 @@ class Viewer {
     std::chrono::steady_clock::time_point liveInputDeadline_{}, liveCaptureDeadline_{};
     SceneData sceneData_;
     nadoc_vr::SceneRefreshInbox sceneRefresh_;
+    nadoc_vr::EndResize endResize_;
     std::string eventPath_;
     std::string feedbackPath_;
     std::string toolFeedbackPath_;

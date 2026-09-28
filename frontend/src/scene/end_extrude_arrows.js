@@ -24,6 +24,7 @@ import { resizeStrandEnds } from '../api/client.js'
 import { adjacentBpFree, oneNtResizableEnd } from '../shared/strand_end_resize.js'
 import { parseBaseKey } from './base_ref.js'
 import { canonicalSelection } from './selection_model.js'
+import { expandedHelixOffsetFrame } from './expanded_helix_offsets.js'
 
 // ── Arrow dimensions (nm) ─────────────────────────────────────────────────────
 
@@ -479,6 +480,10 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     _endDrag()
     if (delta === 0) return
 
+    await _commitResize(dragBeads, delta)
+  }
+
+  async function _commitResize(dragBeads, delta) {
     const entries = dragBeads.map(meta => ({
       strand_id: meta.bead.nuc.strand_id,
       helix_id:  meta.bead.nuc.helix_id,
@@ -487,7 +492,8 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     }))
 
     console.debug(`[EndExtrudeArrows] commit resize — delta: ${delta}, entries:`, entries)
-    await resizeStrandEnds(entries)
+    const result = await resizeStrandEnds(entries)
+    if (!result) throw new Error("End resize failed")
 
     // After the API resolves, store has new geometry and all bead positions have
     // been updated (including cadnano reapply).  If the selection was on one of
@@ -608,7 +614,47 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
 
   // ── Public API ────────────────────────────────────────────────────────────
 
+  let vrVersion = 0
+  let vrSnapshot = null
+  let vrSignature = ''
+  let vrDesign = null
+  let vrBusy = false
+
+  function vrHandles() {
+    const state = store.getState()
+    const metas = _arrowGroups.map(ag => ag.userData.dragMeta)
+    const limits = _computeDragLimits(metas, state.currentDesign)
+    const offsets = expandedHelixOffsetFrame(state.currentDesign)?.offsets
+    const handles = !_group.visible || state.cadnanoActive || vrBusy ? [] : _arrowGroups.map(ag => ({
+      position: ag.userData.dragMeta.bead.nuc.backbone_position ?? ag.position.toArray(),
+      expanded_offset: offsets?.get(ag.userData.dragMeta.bead.nuc.helix_id) ?? [0, 0, 0],
+      direction: new THREE.Vector3(0, 1, 0).applyQuaternion(ag.quaternion).toArray(),
+    }))
+    const signature = JSON.stringify([handles, limits, metas.map(m => [m.bead.nuc.strand_id, m.bead.nuc.bp_index, m.endRole])])
+    if (signature !== vrSignature || vrDesign !== state.currentDesign) {
+      vrSignature = signature
+      vrDesign = state.currentDesign
+      vrSnapshot = { version: ++vrVersion, minimum: limits.extMin, maximum: limits.extMax, handles, metas }
+    }
+    if (!vrSnapshot) return { version: 0, minimum: 0, maximum: 0, handles: [] }
+    const { metas: _, ...payload } = vrSnapshot
+    return payload
+  }
+
   return {
+    vrHandles,
+    invalidateVRHandles() { vrSignature = '' },
+    async resizeFromVR(version, delta) {
+      vrHandles()
+      if (vrBusy || !vrSnapshot?.handles.length || version !== vrSnapshot.version ||
+          !Number.isSafeInteger(delta) || delta < vrSnapshot.minimum || delta > vrSnapshot.maximum) {
+        throw new Error('End selection or design changed; grab the arrow again')
+      }
+      const metas = vrSnapshot.metas
+      vrBusy = true
+      try { if (delta) await _commitResize(metas, delta) }
+      finally { vrBusy = false; vrSignature = ''; _rebuild() }
+    },
     refresh() { _rebuild() },
 
     /**

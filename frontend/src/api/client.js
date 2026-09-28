@@ -5410,3 +5410,5 @@ export async function relaxCpd(photoproductId) {
   })
   return _syncFromDesignResponse(json, { skipGeometry: true })
 }
+
+export const sendVREndResizeHandles = body => _request('POST', '/vr/end-resize-handles', body)

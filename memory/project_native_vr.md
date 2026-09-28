@@ -15,6 +15,20 @@ Register it in `tools/vr_workflows/tour_catalog.py` under the related sidebar ta
 or interaction category; follow the [registration checklist](../docs/vr_sidebar_menus.md#adding-future-tours-and-tests).
 Do not leave new major demos or validation workflows as undiscoverable shell commands.
 
+## Selected-end trigger resizing (2026-09-28)
+
+Selected end arrows now accept either controller's trigger grab: outward extends,
+inward shortens, release saves through the desktop strand-end-resize API. Shared
+collision/terminal limits and whole-bp snapping apply to all selected arrows;
+each release is independently undoable. Grips still move the scene and cancel
+an active end drag. Versioned handles reject changed targets/designs.
+Debug → VR Tours & Tests → Tools · Authoring → **Resize selected ends** runs an
+isolated demo or all four motion profiles. Final campaign passed +12/−6 bp,
+scene refresh, projected stereo/mirror pixels, negative control and Undo for all
+profiles. Evidence: `.development-artifacts/vr-end-resize/42939ae168/`.
+See [workflow](../docs/vr_end_resize.md) and [audit](../docs/audits/vr_end_resize_20260928.md)
+for retained failures and the remaining human/Expanded/multi-end validation scope.
+
 ## Mission and current state
 
 VR recovery starts with [the restoration guardrails](feedback_vr_restore_proven_path.md)

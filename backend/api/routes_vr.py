@@ -3225,6 +3225,7 @@ def _cleanup_after_process(
     from backend.api.routes_vr_scene import cleanup_scene_refresh
     cleanup_scene_refresh(event_path)
     scene_path.unlink(missing_ok=True)
+    Path(str(event_path) + ".end-resize").unlink(missing_ok=True)
     event_path.unlink(missing_ok=True)
     feedback_path.unlink(missing_ok=True)
     tool_feedback_path.unlink(missing_ok=True)
@@ -3442,6 +3443,16 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
         "angle_deg": bounded_float(raw.get("angle_deg"), 0, 360),
         "direction_deg": bounded_float(raw.get("direction_deg"), 0, 360),
     }
+
+
+def _parse_end_resize(value):
+    if not isinstance(value, dict):
+        return None
+    if any(type(value.get(k)) is not int for k in ("sequence", "version", "delta")):
+        return None
+    if value["sequence"] < 1 or value["version"] < 1 or not -200 <= value["delta"] <= 200:
+        return None
+    return {k: value[k] for k in ("sequence", "version", "delta")}
 
 
 def _event_payload(state: dict | None) -> dict:
@@ -3679,6 +3690,7 @@ def _event_payload(state: dict | None) -> dict:
         nadoc_transform = np.linalg.inv(basis) @ view_transform @ basis
         return {
             "sequence": sequence,
+            **({"end_resize": resize} if (resize := _parse_end_resize(event.get("end_resize"))) else {}),
             "hover_identity": hover_identity,
             "select_sequence": select_sequence,
             "select_identity": select_identity,
@@ -3812,6 +3824,54 @@ def _write_feedback(state: dict | None, body: VRFeedbackRequest) -> None:
             raise HTTPException(
                 503, detail="Could not acknowledge VR selection."
             ) from exc
+
+
+class VREndResizeHandle(BaseModel):
+    expanded_offset: tuple[float, float, float] = (0, 0, 0)
+    position: tuple[float, float, float]
+    direction: tuple[float, float, float]
+
+
+class VREndResizeHandles(BaseModel):
+    version: int = Field(ge=0)
+    minimum: int = Field(ge=-200, le=0)
+    maximum: int = Field(ge=0, le=200)
+    handles: list[VREndResizeHandle] = Field(max_length=1024)
+
+
+def _end_resize_record(body: VREndResizeHandles, rotation) -> str:
+    rotation = np.asarray(rotation, dtype=float)
+    if rotation.shape != (3, 3) or not np.isfinite(rotation).all():
+        raise HTTPException(422, detail="Invalid VR view rotation")
+    lines = [f"NADOC_END_RESIZE_1 {body.version} {body.minimum} {body.maximum} {len(body.handles)}"]
+    for handle in body.handles:
+        position = rotation @ np.asarray(handle.position)
+        offset = rotation @ np.asarray(handle.expanded_offset)
+        direction = rotation @ np.asarray(handle.direction)
+        if not np.isfinite(offset).all() or not np.isfinite(position).all() or not np.isfinite(direction).all() or np.linalg.norm(direction) < 1e-9:
+            raise HTTPException(422, detail="Invalid end resize handle")
+        direction /= np.linalg.norm(direction)
+        lines.append(" ".join(f"{v:.17g}" for v in [*position, *direction, *offset]))
+    return "\n".join(lines) + "\n"
+
+
+@router.post("/vr/end-resize-handles")
+def vr_end_resize_handles(body: VREndResizeHandles, request: Request) -> dict:
+    _require_local(request)
+    state = _read_state()
+    if not state or not state.get("event_path"):
+        raise HTTPException(409, detail="Native VR is not running")
+    from backend.api.doc_context import get_current_doc
+    if state.get("doc_id") != get_current_doc():
+        raise HTTPException(409, detail="VR session belongs to another document")
+    record = _end_resize_record(body, state.get("view_rotation"))
+    path = Path(state["event_path"] + ".end-resize")
+    temporary = path.with_name(path.name + ".next")
+    with _FEEDBACK_LOCK:
+        temporary.write_text(record)
+        temporary.chmod(0o600)
+        os.replace(temporary, path)
+    return {"published": True}
 
 
 @router.post("/vr/feedback")

@@ -132,3 +132,17 @@ def test_move_rotate_has_a_demo_and_full_validation_for_each_scope():
         assert tour['runnable'] and tour['module']=='move_tour'
         assert arguments(tour)==['-m','tools.vr_workflows.move_tour','--target',target]
         assert arguments(tour,True)[-1]=='--validate'
+
+
+@pytest.mark.parametrize('mode', ['demo', 'validate'])
+def test_end_resize_tour_launches_isolated_workflow(client, monkeypatch, mode):
+    process = Mock(pid=987654)
+    process.poll.return_value = None
+    popen = Mock(return_value=process)
+    monkeypatch.setattr(tours.subprocess, 'Popen', popen)
+    result = client.post('/api/vr/tours/start', json={'tour': 'end-resize', 'mode': mode})
+    assert result.status_code == 200, result.text
+    command = popen.call_args.args[0]
+    assert 'tools.vr_workflows.end_resize_tour' in command
+    assert ('--validate' in command) == (mode == 'validate')
+    assert '--output' in command

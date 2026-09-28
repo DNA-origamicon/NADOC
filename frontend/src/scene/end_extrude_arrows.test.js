@@ -27,6 +27,7 @@ vi.mock('../api/client.js', () => ({
 }))
 
 import { store } from '../state/store.js'
+import { resizeStrandEnds } from '../api/client.js'
 import { initEndExtrudeArrows, terminalRunLength, adjacentBpFree, oneNtResizableEnd } from './end_extrude_arrows.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -451,5 +452,54 @@ describe('deformed axes', () => {
     expect(q.y).toBeCloseTo(0, 4)
     expect(q.z).toBeCloseTo( Math.SQRT2 / 2, 4)
     expect(q.w).toBeCloseTo( Math.SQRT2 / 2, 4)
+  })
+})
+
+
+describe('VR arrow resizing', () => {
+  function fixture() {
+    const arrows = initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, null)
+    selectionStoreSub = store.subscribe.mock.calls[0][0]
+    const state = store.getState()
+    state.currentDesign.strands = [{ id: 's1', domains: [{ helix_id: 'h_XY_0_0', direction: 'FORWARD', start_bp: 0, end_bp: 41 }] }]
+    const bead = makeBead()
+    bead.nuc.strand_id = 's1'
+    selectEndBeads([bead])
+    resizeStrandEnds.mockResolvedValue({ design: {} })
+    return arrows
+  }
+
+  it('exports the selected arrow and commits outward pulls with the correct signed bp delta', async () => {
+    const arrows = fixture()
+    const snapshot = arrows.vrHandles()
+    expect(snapshot.minimum).toBe(-41)
+    expect(snapshot.handles[0].direction[2]).toBeCloseTo(-1)
+    await arrows.resizeFromVR(snapshot.version, 7)
+    expect(resizeStrandEnds).toHaveBeenCalledWith([
+      { strand_id: 's1', helix_id: 'h_XY_0_0', end: '5p', delta_bp: -7 },
+    ])
+    arrows.dispose()
+  })
+
+  it('rejects a stale design, duplicate release, and shortening through the last base', async () => {
+    const arrows = fixture()
+    const snapshot = arrows.vrHandles()
+    await expect(arrows.resizeFromVR(snapshot.version, -42)).rejects.toThrow()
+    await arrows.resizeFromVR(snapshot.version, -3)
+    await expect(arrows.resizeFromVR(snapshot.version, -3)).rejects.toThrow()
+    const fresh = arrows.vrHandles()
+    store.getState.mockReturnValue({ ...store.getState(), currentDesign: { ...store.getState().currentDesign } })
+    await expect(arrows.resizeFromVR(fresh.version, 1)).rejects.toThrow()
+    expect(resizeStrandEnds).toHaveBeenCalledTimes(1)
+    arrows.dispose()
+  })
+
+  it('caps extension at a neighboring strand and clears handles on deselection', () => {
+    const arrows = fixture()
+    store.getState().currentDesign.strands.push({ id: 'obstacle', domains: [{ helix_id: 'h_XY_0_0', direction: 'FORWARD', start_bp: -10, end_bp: -4 }] })
+    expect(arrows.vrHandles().maximum).toBe(3)
+    selectEndBeads([])
+    expect(arrows.vrHandles().handles).toEqual([])
+    arrows.dispose()
   })
 })

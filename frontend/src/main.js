@@ -6453,7 +6453,21 @@ async function main() {
 
   let _vrStyleApply = Promise.resolve()
   let _vrTrajectoryPublishCount = 0
+  let vrEndCommitting = false
+  let vrEndPublished = ''
+  let vrEndPublishing = false
+  const publishVREnds = async () => {
+    if (vrEndPublishing || vrEndCommitting) return
+    const payload = endExtrudeArrows.vrHandles()
+    const key = JSON.stringify(payload)
+    if (key === vrEndPublished) return
+    vrEndPublishing = true
+    try { await api.sendVREndResizeHandles(payload); vrEndPublished = key }
+    catch { /* Retry on the next native poll. */ }
+    finally { vrEndPublishing = false }
+  }
   const vrSession = initVRSession({
+    onNativePoll: publishVREnds,
     renderer,
     scene,
     camera,
@@ -6517,8 +6531,27 @@ async function main() {
     },
     onNativeEvent: (_handleNativeVREvent = event => {
       _recordScrywriteBrowser('native_event', event)
+      if (event?.type === 'native_session_end') vrEndPublished = ''
       const button = document.getElementById('menu-help-view-vr')
-      if (event?.type === 'style') {
+      if (event?.type === 'end_resize') {
+        if (vrEndCommitting) return
+        vrEndCommitting = true
+        void (async () => {
+          try {
+            await endExtrudeArrows.resizeFromVR(event.version, event.delta)
+            const refreshed = await api.refreshNativeVRScene({
+              expected_design_id: store.getState().currentDesign.id,
+              expected_revision: api.currentRevisionWatermark(),
+            })
+            if (!refreshed?.published) throw new Error('Resize saved, but VR scene refresh failed')
+          } catch (error) { showToast(error.message, { severity: 'error' }) }
+          finally {
+            vrEndCommitting = false
+            endExtrudeArrows.invalidateVRHandles()
+            vrEndPublished = ''; await publishVREnds()
+          }
+        })()
+      } else if (event?.type === 'style') {
         // Native menu choices are requests, not local renderer mutations. Route
         // them through the exact desktop representation state machine (including
         // live-MD payload handoffs), serialize rapid requests, then publish the

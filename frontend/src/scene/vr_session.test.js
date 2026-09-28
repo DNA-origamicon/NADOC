@@ -260,6 +260,7 @@ describe('initVRSession', () => {
       event: vi.fn()
         .mockResolvedValueOnce({
           sequence: 2,
+          end_resize: { sequence: 1, version: 7, delta: -6 },
           hover_identity: 'nuc:s1',
           select_sequence: 1,
           select_identity: 'nuc:s1',
@@ -299,6 +300,7 @@ describe('initVRSession', () => {
         })
         .mockResolvedValue({
           sequence: 2,
+          end_resize: { sequence: 1, version: 7, delta: -6 },
           hover_identity: 'nuc:s1',
           select_sequence: 1,
           select_identity: 'nuc:s1',
@@ -345,6 +347,7 @@ describe('initVRSession', () => {
     await h.controller.enter()
     await vi.advanceTimersByTimeAsync(25)
     expect(onNativeEvent.mock.calls).toEqual([
+      [{ type: 'end_resize', sequence: 1, version: 7, delta: -6 }],
       [{ sequence: 2, type: 'hover', identity: 'nuc:s1' }],
       [{ sequence: 1, type: 'selection_level', level: 'domain' }],
       [{
