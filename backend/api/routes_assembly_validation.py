@@ -63,10 +63,10 @@ def get_assembly_flatten() -> dict:
 
 
 @router.post("/assembly/flatten/load-as-design", status_code=200)
-def flatten_load_as_design() -> dict:
+def flatten_load_as_design(simulation_only: bool = False) -> dict:
     """
     Flatten the assembly into a single Design and load it as the active design.
-    Clears assembly mode flag on the frontend side (response includes assemblyActive=False).
+    Simulation-only callers keep the assembly scene and need only an acknowledgement.
     """
     from backend.core.assembly_flatten import flatten_assembly
     from backend.core.models import Design
@@ -78,6 +78,8 @@ def flatten_load_as_design() -> dict:
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(400, detail=str(exc))
     design_state.load_design(design)
+    if simulation_only:
+        return {"design_id": design.id}
     report = validate_design(design)
     from backend.api.crud import _design_response
 

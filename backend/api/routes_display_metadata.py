@@ -103,7 +103,9 @@ def get_view_volumes(document_id: str | None = None) -> dict:
     if document_id is not None and design.id != document_id:
         raise HTTPException(409, "View-volume document is no longer active.")
     return {
-        "view_volumes": [volume.model_dump(mode="json") for volume in design.view_volumes],
+        "view_volumes": [
+            volume.model_dump(mode="json") for volume in design.view_volumes
+        ],
         "revision": design_state.revision(),
     }
 
@@ -219,12 +221,15 @@ def save_view_volumes(body: ViewVolumesSaveRequest) -> dict:
     serializing the complete Design made a pointer-up on VoltronCoreArm transfer an
     82 MB response. This display-only assignment cannot invalidate topology.
     """
+
     def _apply(design: Design) -> None:
         design.view_volumes = [volume.model_copy(deep=True) for volume in body.volumes]
 
     design, revision = design_state.mutate_display_metadata(_apply)
     return {
-        "view_volumes": [volume.model_dump(mode="json") for volume in design.view_volumes],
+        "view_volumes": [
+            volume.model_dump(mode="json") for volume in design.view_volumes
+        ],
         "revision": revision,
     }
 
@@ -297,3 +302,51 @@ def change_view_volumes(body: ViewVolumeChanges) -> dict:
         design.view_volumes = list(records.values())
     design, revision = design_state.mutate_display_metadata(apply)
     return {'view_volumes': [v.model_dump(mode='json') for v in design.view_volumes], 'revision': revision}
+
+@router.get("/assembly/view-volumes")
+def get_assembly_view_volumes() -> dict:
+    from backend.api import assembly_state
+
+    assembly = assembly_state.get_or_404()
+    return {"view_volumes": [v.model_dump(mode="json") for v in assembly.view_volumes]}
+
+
+@router.put("/assembly/view-volumes")
+def save_assembly_view_volumes(body: ViewVolumesSaveRequest) -> dict:
+    from backend.api import assembly_state
+
+    assembly = assembly_state.set_view_volumes(body.volumes)
+    return {"view_volumes": [v.model_dump(mode="json") for v in assembly.view_volumes]}
+
+
+@router.put("/assembly/annotations")
+def save_assembly_annotations(body: AnnotationsSaveRequest) -> dict:
+    from backend.api import assembly_state
+
+    ids = [a.id for a in body.annotations]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="Annotation ids must be unique.")
+    for annotation in body.annotations:
+        for ref in annotation.refs:
+            if (
+                ref.get("kind") not in {"assembly-part", "assembly-overhang"}
+                or not isinstance(ref.get("instanceId"), str)
+                or not ref["instanceId"]
+                or (
+                    ref["kind"] == "assembly-overhang"
+                    and (
+                        not isinstance(ref.get("overhangId"), str)
+                        or not ref["overhangId"]
+                    )
+                )
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Assembly annotation targets must be parts or overhangs with an instance id.",
+                )
+    assembly = assembly_state.set_annotations(body.annotations, body.enabled)
+    return {
+        "annotations": [a.model_dump(mode="json") for a in assembly.annotations],
+        "annotations_enabled": assembly.annotations_enabled,
+        "revision": assembly_state.revision(),
+    }

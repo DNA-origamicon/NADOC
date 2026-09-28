@@ -41,9 +41,10 @@ export function createAnnotationController({
     const wire = toWire()
     lastWire = wire
     inflight += 1
+    const savedId = designId, savedEnabled = enabled
     return Promise.resolve()
-      .then(() => commit({ designId, annotations: wire, enabled }))
-      .catch(() => { dirty = true })   // stays local; the next edit retries
+      .then(() => commit({ designId: savedId, annotations: wire, enabled: savedEnabled }))
+      .catch(() => { if (designId === savedId) dirty = true })   // stays local; the next edit retries
       .finally(() => { inflight -= 1 })
   }
   function touch() {

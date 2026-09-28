@@ -9,6 +9,31 @@ metadata:
 
 # Native CanDo FEM shape predictor
 
+**Completed-result visualization (2026-09-27):** above 50k nucleotides, CanDo
+uses exact-position points and true-axis/joint lines, identified in the UI. A
+bounded compact endpoint avoids full snapshot/ensemble downloads; GPU scalar
+recoloring, cancellation epochs and hidden native source roots prevent stale or
+expensive display work. Deviation now follows the displayed representative
+conformation. Large metric graphs use the same compact data. Solver/topology
+unchanged. See [visualization audit](../docs/audits/cando_visualization_guards_20260927.md).
+
+**Thermal reconstruction (2026-09-27):** a per-job reference context and coordinate-only
+frame path avoid rebuilding reference geometry and discarded orientation/axis records
+48 times. BigO bounded reconstruction measurements: 50–51 s → 9.2–9.9 s/frame
+(5.1–5.5×), coordinate agreement below 1e-12 nm; this does not include normal-mode
+time. Float64 frames stream to the unchanged JSON schema. Progress reports each
+frame, statistics, representative reconstruction and saving; cancellation checks
+those boundaries. See [optimization audit](../docs/audits/cando_thermal_optimization_20260927.md).
+
+**Assembly execution (2026-09-27):** CanDo/SNUPI assembly launches prepare a canonical
+backend-only Design, avoiding full flattened browser geometry. Creation is off the API
+event loop; assembly results render the job snapshot. BigO (30 copies, 211,680 FEM nodes)
+direct static coarse solves complete in ~94–97 s, ~5.5 GiB peak RSS with one BLAS thread.
+Playwright verified both full BigO launches and cylinder result views (~162–163 s
+per job with the browser active), plus full nucleotide display on two copies.
+Full-size NMA/thermal/dynamics performance is not established by that static check.
+See [execution audit](../docs/audits/assembly_fem_execution_20260927.md).
+
 **RESUME HERE →** `experiments/exp36_cando_fem_validation/HANDOFF.md` (scorecard, architecture,
 bend-gap diagnosis, PRIORITY CanDo designs to run, next-session plan). This file is the running
 log; the HANDOFF is the entry point for a fresh session.

@@ -56,7 +56,7 @@ function setSceneOpacity(scene, opacity) {
 }
 
 export function initMultiOverlay({ document, scene, camera, renderer, canvas, controls,
-  store, setRenderFn, resetRenderFn, setRepresentation, setColoringMode, getRepresentation = () => 'full' }) {
+  store, setRenderFn, resetRenderFn, setRepresentation, setColoringMode, getRepresentation = () => 'full', buildAssemblyScene }) {
   const host = document?.getElementById('right-multi-overlay-body')
   if (!host) return null
   const sharedScene = new THREE.Scene()
@@ -170,8 +170,10 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     for (const layer of layers) { disposeMultiScene(layer.renderScene); layer.renderScene = null }
     for (const row of viewportControls.children) row.dataset.ready = 'false'
     for (let i = 0; i < count; i++) {
-      const available = await setRepresentation(layers[i].representation)
-      if (mine !== generation || count === 0) return
+      const assemblyMode = store.getState().assemblyActive && buildAssemblyScene
+      const rendered = assemblyMode ? await buildAssemblyScene(layers[i].representation, layers[i].coloring) : null
+      const available = assemblyMode ? true : await setRepresentation(layers[i].representation)
+      if (mine !== generation || count === 0) { disposeMultiScene(rendered); return }
       if (available === false) {
         layers[i].renderScene = new THREE.Scene()
         const row = viewportControls.children[i]
@@ -180,16 +182,16 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
         if (row) row.dataset.ready = 'unavailable'
         continue
       }
-      if (layers[i].coloring) setColoringMode(layers[i].coloring)
+      if (!assemblyMode && layers[i].coloring) setColoringMode(layers[i].coloring)
       if (mine !== generation || count === 0) return
-      layers[i].renderScene = cloneMultiScene(scene)
+      layers[i].renderScene = rendered ?? cloneMultiScene(scene)
       setSceneOpacity(layers[i].renderScene, layers[i].opacity)
       const loading = viewportControls.children[i]?.querySelector('.mo-loading')
       if (loading) loading.textContent = 'Loading…'
       viewportControls.children[i].dataset.ready = 'true'
     }
     if (refit) fitInitial()
-    else { longestDimension = designLongestDimension(store.getState()); positionLayers() }
+    else { longestDimension = designLongestDimension(store.getState(), multiViewContentBounds(layers[0].renderScene).getSize(new THREE.Vector3())); positionLayers() }
   }
 
   function rebuild({ refit = true } = {}) {
@@ -203,7 +205,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     return rebuildFlight
   }
   const unsubscribe = store.subscribe?.((next, previous) => {
-    if (!count || !['currentDesign', 'currentGeometry', 'currentHelixAxes', 'currentAssembly'].some(key => next[key] !== previous[key])) return
+    if (!count || !['currentDesign', 'currentGeometry', 'currentHelixAxes', 'currentAssembly', 'assemblyActive'].some(key => next[key] !== previous[key])) return
     sourceDirty = true; generation++
     clearTimeout(refreshTimer)
     refreshTimer = setTimeout(() => {
@@ -233,7 +235,9 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
 
   async function activate(next, configured = false) {
     if (!count && next && !configured) {
-      layers[0].representation = getRepresentation()
+      const state = store.getState(), instances = state.currentAssembly?.instances ?? []
+      const target = instances.find(i => i.id === state.activeInstanceId) ?? instances.find(i => i.visible !== false)
+      layers[0].representation = state.assemblyActive ? target?.representation ?? getRepresentation() : getRepresentation()
       for (let i = 1; i < layers.length; i++) layers[i].representation = 'cylinders'
     }
     count = next
@@ -252,8 +256,10 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
         controls.target.fromArray(savedCamera.target); savedCamera = null
         camera.updateProjectionMatrix(); controls.update()
       }
-      await setRepresentation(layers[0].representation)
-      if (layers[0].coloring) setColoringMode(layers[0].coloring)
+      if (!store.getState().assemblyActive) {
+        await setRepresentation(layers[0].representation)
+        if (layers[0].coloring) setColoringMode(layers[0].coloring)
+      }
       return
     }
     const waits = []

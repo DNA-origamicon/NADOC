@@ -19,6 +19,7 @@
  * imports + inits + does thin wiring.
  */
 
+import { store } from '../state/store.js'
 import { initJobsPanelBase } from './jobs_panel_base.js'
 import { selectionUpdatesVisualization } from './visualization_selection_policy.js'
 import { showToast } from './toast.js'
@@ -32,6 +33,8 @@ import { initCandoMetricsCard } from './cando_metrics_card.js'
 const CANDO_DISPLAY_PHASE_LABELS = {
   thermal: 'Load representative thermal conformation',
   'thermal-download': 'Download representative conformation',
+  'compact-view': 'Prepare large result (all positions retained)',
+  'compact-download': 'Download compact result',
   'thermal-decode': 'Decode representative conformation',
   snapshot: 'Build snapshot geometry',
   'display-data': 'Load predicted positions',
@@ -421,8 +424,9 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     if (launchBlocked(_launching, _jobs, _selectedJob())) return
     _launching = true
     _updateLaunchButtons()
+    let optimisticId = null
     try {
-      if (!(await confirmNoConcurrentJob())) return
+      if (!(await confirmNoConcurrentJob({ usesGpu: false }))) return
       const anchors = _anchorsCard.getAnchors()
       const fieldSpec = _efieldCard.getFieldSpec()
       const fieldOn = _efieldCard.isEnabled()
@@ -441,7 +445,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
       // Assembly materialization happens before POST /cando/jobs inside the shared API
       // client. Put a real-looking temporary row on screen before that potentially long
       // request so the click is acknowledged immediately and its current process is clear.
-      const optimisticId = `preparing-${Date.now()}`
+      optimisticId = `preparing-${Date.now()}`
       const optimistic = {
         job_id: optimisticId, design_name: getWorkspacePath?.() || 'assembly',
         design_source_path: getWorkspacePath?.() || null, nonlinear,
@@ -469,9 +473,21 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
         return
       }
       _selectedId = job.job_id
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: {
+        removeJobId: optimisticId, node: { ...job, engine: 'cando' }, select: true,
+      } }))
+      _jobs = _jobs.filter(j => j.job_id !== optimisticId)
+      optimisticId = null
       await _fetchJobs()
-      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+    } catch (error) {
+      showToast(error.message || 'Failed to start CanDo FEM prediction', { severity: 'error' })
     } finally {
+      if (optimisticId) {
+        _jobs = _jobs.filter(j => j.job_id !== optimisticId)
+        if (_selectedId === optimisticId) { _selectedId = null; _progress = null }
+        _renderList(); _renderDetail()
+        window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: { removeJobId: optimisticId } }))
+      }
       _launching = false
       _updateLaunchButtons()   // stays disabled if the new job is now active
     }
@@ -634,8 +650,13 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   }
 
   async function _selectJob(jobId) {
+    const request = ++_displayRequest
+    _displayLoading = false
+    if (candoDisplay?.deformJobId?.() !== jobId) candoDisplay?.stopDeform?.()
     _selectedId = jobId
-    _progress = await api.getCandoProgress(jobId)
+    const progress = await api.getCandoProgress(jobId)
+    if (request !== _displayRequest || _selectedId !== jobId) return
+    _progress = progress
     _renderList()
     _renderDetail()
     if (selectionUpdatesVisualization(_selectedJob())) await _retargetDisplayToSelection()
@@ -649,6 +670,9 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
    *  (and therefore drops) the cached visualization — that's `_retargetDisplayToSelection`,
    *  deliberately NOT called here. */
   function _deselectJob() {
+    _displayRequest++
+    _displayLoading = false
+    candoDisplay?.cancelPending?.()
     _selectedId = null
     _progress = null
     _renderList()
@@ -661,7 +685,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
    *  snapshot + predicted shape (rather than keeping the previous job's shape on
    *  screen).  Turns the display off if the new job can't support the current mode. */
   async function _retargetDisplayToSelection() {
-    if (!candoDisplay?.deformActive?.()) return
+    if (!candoDisplay || checkedMode() === 'off') return
     if (candoDisplay.deformJobId?.() === _selectedId) return   // already showing this job
     const mode = checkedMode()
     const job = _selectedJob()
@@ -671,9 +695,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
       candoDisplay.stopDeform?.(); setMode('off'); _syncDisplayStatus()
       return
     }
-    const r = await candoDisplay[_MODE_FNS[mode]]?.(_selectedId)
-    if (!r?.ok) { candoDisplay.stopDeform?.(); setMode('off') }
-    _syncDisplayStatus()
+    await _onModeChange()
   }
 
   function _renderDetail() {
@@ -715,6 +737,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
 
   /** Readout under the radios: the active mode + its scalar range / RMSD. */
   const _displayLoadPhases = new Map()
+  let _displayLoading = false
   function _showDisplayProgress(p) {
     if (!p || !displayStatus) return
     if (p.reset) _displayLoadPhases.clear()
@@ -724,7 +747,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     renderCandoDisplayProgress(displayStatus, _displayLoadPhases)
   }
   function _syncDisplayStatus() {
-    if (!displayStatus) return
+    if (!displayStatus || _displayLoading) return
     _displayLoadPhases.clear()
     const mode = candoDisplay?.mode?.()
     if (!mode) { displayStatus.textContent = ''; return }
@@ -745,6 +768,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     } else {
       displayStatus.textContent = 'Showing predicted shape.'
     }
+    if (s?.large) displayStatus.textContent += ` · Large-result view: ${s.representation}`
   }
 
   // ── Control buttons ───────────────────────────────────────────────────────────
@@ -775,27 +799,35 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   // ── Display-mode radios (Off / Predicted shape / Flexibility / Deviation) ─────
   // Mutually exclusive; each supersedes the shared FEM overlay + scalar-colour channel.
   const _MODE_FNS = { deform: 'showDeform', flex: 'showFlex', deviation: 'showDeviation', cando: 'showCandoStyle' }
+  let _displayRequest = 0
   async function _onModeChange() {
+    const request = ++_displayRequest
+    _displayLoading = false
+    const selected = _selectedId
     if (!candoDisplay) { setMode('off'); return }
     const mode = checkedMode()
     candoDisplay.stopThermal?.()
     if (mode === 'off') { candoDisplay.stopDeform?.(); _syncDisplayStatus(); return }
     if (!_selectedId) { setMode('off'); return }
+    _displayLoading = true
     _showDisplayProgress({ reset: true })
     let r
     try {
       r = await candoDisplay[_MODE_FNS[mode]]?.(
-        _selectedId, _showDisplayProgress,
-        { reuseLiveGeometry: _selectedJob()?.out_of_date === false },
+        _selectedId, p => { if (request === _displayRequest) _showDisplayProgress(p) },
+        { reuseLiveGeometry: !store.getState().assemblyActive && _selectedJob()?.out_of_date === false,
+          nNucleotides: _selectedJob()?.n_nucleotides },
       )
     } catch (err) {
       r = { ok: false, reason: err?.message || 'load failed' }
     }
+    if (request !== _displayRequest || selected !== _selectedId || checkedMode() !== mode) return
+    _displayLoading = false
     if (!r?.ok) {
       setMode('off'); candoDisplay.stopDeform?.()
       _showDisplayProgress({ phase: 'error', done: 1, total: 1 })
-      showToast(mode === 'flex' ? 'RMSF not available for this job'
-        : 'Predicted positions not ready', { severity: 'warn' })
+      showToast(r?.reason || (mode === 'flex' ? 'RMSF not available for this job'
+        : 'Predicted positions not ready'), { severity: 'warn' })
       return
     }
     _syncDisplayStatus()
@@ -805,6 +837,8 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
 
   // ── Cross-panel coordination ──────────────────────────────────────────────────
   function _stopDisplays() {
+    _displayRequest++
+    _displayLoading = false
     candoDisplay?.stopAndRestore?.()
     setMode('off')
     _syncDisplayStatus()
@@ -813,8 +847,11 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   window.addEventListener('nadoc:left-tab-change', (e) => {
     if (e.detail?.from === 'dynamics') _stopDisplays()
   })
+  window.addEventListener('nadoc:simulation-engine', e => {
+    if (e.detail?.engine !== 'cando' && (_displayLoading || candoDisplay?.deformActive?.())) _stopDisplays()
+  })
   window.addEventListener('nadoc:design-changed', () => { _stopDisplays() })
-  window.addEventListener('nadoc:workspace-path-change', () => { _selectedId = null; if (_base.isOpen()) _fetchJobs() })
+  window.addEventListener('nadoc:workspace-path-change', () => { _stopDisplays(); _selectedId = null; if (_base.isOpen()) _fetchJobs() })
 
   // ── Open ──────────────────────────────────────────────────────────────────────
   function _onOpen() {

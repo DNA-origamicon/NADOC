@@ -147,3 +147,18 @@ it('does not republish idle GPU uploads, but still shares actual buffer edits', 
   await v.ui.tick(); expect(v.publish).toHaveBeenCalledTimes(3)
   v.ui.dispose()
 })
+
+it('coalesces assembly revisions and never publishes the inactive part or another assembly', async () => {
+  const v = setup()
+  v.state.assemblyActive = true; v.state.currentAssembly = { id: 'assembly', instances: [] }
+  v.ui.remember()
+  v.state.currentAssembly = { id: 'assembly', instances: [{ id: 'new' }] }
+  await v.ui.tick(); expect(v.publish).not.toHaveBeenCalled()
+  await v.ui.tick(); expect(v.publish).toHaveBeenCalledOnce()
+  v.state.assemblyActive = false
+  v.state.currentDesign = { id: 'part', private: true }
+  await v.ui.tick(); await v.ui.tick(); expect(v.publish).toHaveBeenCalledOnce()
+  v.state.assemblyActive = true; v.state.currentAssembly = { id: 'private-assembly' }
+  await v.ui.tick(); await v.ui.tick(); expect(v.publish).toHaveBeenCalledOnce()
+  v.ui.dispose()
+})

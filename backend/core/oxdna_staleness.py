@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+import weakref
 
 from backend.core.models import Design
 
@@ -50,7 +51,9 @@ _FINGERPRINT_VERSION = "v4"
 # work on every websocket/REST poll can make unrelated lightweight endpoints appear
 # hung while a large MD package is being prepared.  A design session already exposes a
 # monotonic revision; cache exactly one hash per (document, revision).
-_CURRENT_FP_CACHE: dict[tuple[str, int, int], str | None] = {}
+_CURRENT_FP_CACHE: dict[
+    tuple[str, int, int], tuple[weakref.ReferenceType[Design], str | None]
+] = {}
 _CURRENT_FP_CACHE_LOCK = threading.Lock()
 
 
@@ -65,19 +68,53 @@ def oxdna_design_fingerprint(design: Design) -> str:
     payload = design.model_dump(mode="json", include=_FINGERPRINT_FIELDS)
     # Only coatings add this key: old uncoated designs retain their exact hashes.
     # A pre-coating trajectory must never appear to describe the coated system.
-    coated = [dict(id=p.id, kind=p.kind, diameter_nm=p.diameter_nm, pose=p.pose.values,
-                   mode=p.coating.mode, spacer_nm=p.coating.spacer_nm,
-                   poses=[pose.values for pose in p.coating.poses],
-                   atoms=[a.model_dump(mode='json') for a in p.coating.protein.atoms],
-                   bonds=p.coating.protein.bonds, **({'oxdna_fixed_core': p.oxdna_fixed_core, 'biotin_dna': [r.model_dump(exclude={'linker_chemistry'} | ({'tetramer_index'} if r.tetramer_index == 0 else set()) | ({'placement_version'} if r.placement_version == 1 else set())) for r in p.biotin_dna]} if p.oxdna_fixed_core or p.biotin_dna else {}))
-              for p in design.nanoparticles if p.coating]
+    coated = [
+        dict(
+            id=p.id,
+            kind=p.kind,
+            diameter_nm=p.diameter_nm,
+            pose=p.pose.values,
+            mode=p.coating.mode,
+            spacer_nm=p.coating.spacer_nm,
+            poses=[pose.values for pose in p.coating.poses],
+            atoms=[a.model_dump(mode="json") for a in p.coating.protein.atoms],
+            bonds=p.coating.protein.bonds,
+            **(
+                {
+                    "oxdna_fixed_core": p.oxdna_fixed_core,
+                    "biotin_dna": [
+                        r.model_dump(
+                            exclude={"linker_chemistry"}
+                            | ({"tetramer_index"} if r.tetramer_index == 0 else set())
+                            | (
+                                {"placement_version"}
+                                if r.placement_version == 1
+                                else set()
+                            )
+                        )
+                        for r in p.biotin_dna
+                    ],
+                }
+                if p.oxdna_fixed_core or p.biotin_dna
+                else {}
+            ),
+        )
+        for p in design.nanoparticles
+        if p.coating
+    ]
     from backend.physics.oxdna_mobile_gold import has_mobile_gold
+
     if has_mobile_gold(design):
-        payload["mobile_gold"] = {"model": "mobile_gold_v1",
-            "cores": [p.model_dump(include={"id", "kind", "diameter_nm", "pose"}) for p in design.nanoparticles],
-            "conjugations": [c.model_dump() for c in design.nanoparticle_conjugations]}
+        payload["mobile_gold"] = {
+            "model": "mobile_gold_v1",
+            "cores": [
+                p.model_dump(include={"id", "kind", "diameter_nm", "pose"})
+                for p in design.nanoparticles
+            ],
+            "conjugations": [c.model_dump() for c in design.nanoparticle_conjugations],
+        }
     if coated:
-        payload['streptavidin_coated_particles'] = coated
+        payload["streptavidin_coated_particles"] = coated
     # Strand colours are persisted on the Strand model so they survive a file
     # round-trip, but they do not affect topology, sequence, seed coordinates, or
     # any simulation input.  Hashing them made a purely cosmetic recolour mark all
@@ -130,7 +167,11 @@ def job_out_of_date(
     # cosmetic colour, or there may be no difference at all after an upgrade.
     # Callers with a frozen job snapshot derive a v2 hash before reaching here;
     # callers without one degrade to "unknown" instead of showing a false alert.
-    if ":" in current_fingerprint and len(job_fingerprint) == 64 and ":" not in job_fingerprint:
+    if (
+        ":" in current_fingerprint
+        and len(job_fingerprint) == 64
+        and ":" not in job_fingerprint
+    ):
         return False
     # A version bump means the canonical projection changed. Hashes produced by
     # different algorithms are incomparable; old jobs degrade to unknown rather
@@ -210,8 +251,11 @@ def current_active_design_fingerprint() -> str | None:
             return None
         key = (get_current_doc(), id(design), revision)
         with _CURRENT_FP_CACHE_LOCK:
-            if key in _CURRENT_FP_CACHE:
-                return _CURRENT_FP_CACHE[key]
+            cached = _CURRENT_FP_CACHE.get(key)
+            # Both an object ID and a revision can repeat after closing a document.
+            # A weak identity check avoids stale hashes without retaining large designs.
+            if cached is not None and cached[0]() is design:
+                return cached[1]
         fingerprint = design_build_fingerprint(design)
         # A mutation may have landed while the expensive serialization ran.  Never
         # publish that result under a stale revision; the next poll computes the new one.
@@ -225,7 +269,7 @@ def current_active_design_fingerprint() -> str | None:
             stale = [cached for cached in _CURRENT_FP_CACHE if cached[0] == key[0]]
             for cached in stale:
                 _CURRENT_FP_CACHE.pop(cached, None)
-            _CURRENT_FP_CACHE[key] = fingerprint
+            _CURRENT_FP_CACHE[key] = (weakref.ref(design), fingerprint)
         return fingerprint
     except Exception:  # noqa: BLE001
         return None

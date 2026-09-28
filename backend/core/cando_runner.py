@@ -316,6 +316,13 @@ def job_progress(job: CandoJob, workspace_dir: Path) -> dict:
     }
     if isinstance(live, dict):
         payload.update(live)
+        # Historical size-only ETA knows neither NMA time nor thermal frames.
+        # Report actual phase completion without presenting that guess as time.
+        payload["eta_seconds"] = None
+    if job.status == CandoStatus.completed:
+        payload["overall"] = 1.0
+    elif job.status in (CandoStatus.failed, CandoStatus.stopped):
+        payload["overall"] = 0.0
     return payload
 
 
@@ -344,7 +351,7 @@ class _Cancelled(Exception):
     pass
 
 
-def _cache_fem_analysis(job: CandoJob, jd: Path, result: dict) -> None:
+def _cache_fem_analysis(job: CandoJob, jd: Path, result: dict, progress=None) -> None:
     """Write a ``predict_shape`` result to the job's ``display.json`` + ``rmsf.json`` and record the
     node/RMSF summary on the job — the display cache every CanDo display mode reads.  Shared by the
     plain predict job and the autorefine job (which caches the analysis of its REFINED design), so
@@ -369,16 +376,26 @@ def _cache_fem_analysis(job: CandoJob, jd: Path, result: dict) -> None:
         if vals:
             rmsf_min, rmsf_max = min(vals), max(vals)
     thermal = result.get("thermal_trajectory")
-    if thermal and thermal.get("frames"):
-        (jd / "thermal_trajectory.json").write_text(json.dumps(thermal))
+    if progress:
+        progress(0.2, "Save predicted geometry and flexibility")
+    if thermal and len(thermal.get("frames", [])):
+        from backend.core.cando_thermal_cache import write_thermal_trajectory
+
+        write_thermal_trajectory(
+            jd / "thermal_trajectory.json", thermal,
+            (lambda fraction, label: progress(0.2 + 0.6 * fraction, label)) if progress else None,
+        )
+        if progress:
+            progress(0.8, "Save selected thermal conformation")
         representative = thermal_representative_payload(thermal)
         (jd / "thermal_representative.json").write_text(json.dumps(representative))
         (jd / "thermal_representative.bin").write_bytes(
             pack_thermal_representative_bin(representative)
         )
-    # positions carry two entries (FORWARD/REVERSE) per axis node; the RMSF list is one entry per
-    # node, so it is the honest FEM-node (= base pair) count.
-    job.n_nodes = len(rmsf) if rmsf else (len(positions) // 2 if positions else 0)
+    # Unpaired terminal bases are reconstructed positions, not duplex FEM nodes.
+    # The axis (or RMSF) has one record per node; keep the legacy fallback only
+    # for old callers that provide neither.
+    job.n_nodes = len(rmsf) if rmsf else (len(result["axis"]) if "axis" in result else len(positions) // 2)
     job.rmsf_min_nm = round(rmsf_min, 3) if rmsf_min is not None else None
     job.rmsf_max_nm = round(rmsf_max, 3) if rmsf_max is not None else None
 
@@ -427,7 +444,9 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
                     "name": "thermal",
                     "label": "Build thermal conformations",
                     "fraction": 0.0,
-                    "weight": 0.08,
+                    # Reconstruction covers 48 complete conformations, not one
+                    # cheap finishing step. Weights describe phase work, not ETA.
+                    "weight": 0.8,
                 }
             )
         phases.append(
@@ -440,6 +459,8 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
         )
 
         def report(name: str, fraction: float, label: str | None = None) -> None:
+            if _cancelled():
+                raise _Cancelled()
             for phase in phases:
                 if phase["name"] == name:
                     phase["fraction"] = fraction
@@ -487,8 +508,8 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
             raise _Cancelled()
 
         report("cache", 0.1)
-        _cache_fem_analysis(job, jd, result)
-        report("cache", 1.0)
+        _cache_fem_analysis(job, jd, result, lambda fraction, label: report("cache", fraction, label))
+        report("cache", 1.0, "Results saved")
         job.sim_seconds = round(sim_seconds, 2)
         for st in job.stages:
             st.status = "done"
@@ -831,8 +852,8 @@ def start_job(job: CandoJob, workspace_dir: Path) -> None:
 
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
     """Stop a running CanDo job.  Sets the cancel flag; a running scipy solve can't
-    be interrupted mid-way, so the flagged thread finishes the current solve, then
-    discards the result and marks the job stopped.  If no thread is alive, marks a
+    be interrupted mid-way; cancellation is checked at the next phase/frame or
+    cache progress boundary, discarding results and marking the job stopped.  If no thread is alive, marks a
     stray ``running`` job stopped directly.  Returns True if a live job was found."""
     handle = _RUNNING.get(job_id)
     live = handle is not None and handle.thread.is_alive()

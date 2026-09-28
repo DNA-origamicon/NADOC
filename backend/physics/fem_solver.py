@@ -3233,65 +3233,28 @@ def predict_shape(
         if progress_cb:
             progress_cb("rmsf", 1.0, "Normal modes and RMSF complete")
         if len(thermal_u):
+            from backend.physics.fem_thermal_reconstruction import ThermalReconstruction, ensemble_statistics
+
             if progress_cb:
-                progress_cb("thermal", 0.05, "Reconstruct thermal conformations")
-            # Compact oxDNA/SNUPI-compatible trajectory encoding.  Every frame is an
-            # independent equilibrium draw about the relaxed shape; it deliberately has
-            # no dt/time metadata because this is NMA sampling, not molecular dynamics.
-            keys = None
-            frames = []
+                progress_cb("thermal", 0.0, "Prepare shared thermal reference geometry")
+            reconstruction = ThermalReconstruction(design, mesh, positions)
+            keys = reconstruction.keys
+            frames = np.empty((len(thermal_u), len(keys) * 3), dtype=float)
+            if progress_cb:
+                progress_cb("thermal", 0.05, f"Reconstruct thermal conformations · 0/{len(thermal_u)} frames")
             for frame_index, du in enumerate(thermal_u):
-                frame_positions, _ = deformed_positions_with_axis(design, mesh, u + du)
-                if keys is None:
-                    keys = [
-                        [p["helix_id"], p["bp_index"], p["direction"], p.get("copy", 0)]
-                        for p in frame_positions
-                    ]
-                frames.append(
-                    [coord for p in frame_positions for coord in p["backbone_position"]]
-                )
-                if progress_cb and (frame_index + 1) % 5 == 0:
+                frames[frame_index] = reconstruction.coordinates(u + du).reshape(-1)
+                if progress_cb:
                     progress_cb(
-                        "thermal",
-                        (frame_index + 1) / len(thermal_u),
-                        "Reconstruct thermal conformations",
+                        "thermal", min(0.85, 0.05 + 0.8 * (frame_index + 1) / len(thermal_u)),
+                        f"Reconstruct thermal conformations · {frame_index + 1}/{len(thermal_u)} frames",
                     )
-
-            # Report the fluctuation of the RECONSTRUCTED nucleotide geometry, not just
-            # the translational part of the FEM axis DOF.  The displayed slabs sit off
-            # axis, so rotational modes move them even when an axis node hardly moves.
-            # Pool the two strands (and any copies) at each bp after the same rigid-body
-            # alignment used for the trajectory.  This makes the flex colours describe
-            # the actual representative geometry the user sees.
-            frame_xyz = np.asarray(frames, dtype=float).reshape(len(frames), -1, 3)
-            point_msf_by_frame = np.sum(
-                (frame_xyz - np.mean(frame_xyz, axis=0, keepdims=True)) ** 2,
-                axis=2,
-            )
-            bp_columns: dict[tuple[str, int], list[int]] = {}
-            for col, key in enumerate(keys or []):
-                bp_columns.setdefault((key[0], int(key[1])), []).append(col)
-            modal_rmsf = rmsf
-            bp_msf_by_frame = np.empty((len(frames), len(mesh.nodes)), dtype=float)
-            for i, node in enumerate(mesh.nodes):
-                cols = bp_columns.get((node.helix_id, node.global_bp))
-                if cols:
-                    bp_msf_by_frame[:, i] = np.mean(point_msf_by_frame[:, cols], axis=1)
-                else:
-                    # Defensive fallback for a mesh node absent from reconstruction.
-                    bp_msf_by_frame[:, i] = modal_rmsf[i] ** 2
-            rmsf = np.sqrt(np.mean(bp_msf_by_frame, axis=0))
-
-            # Pick one equilibrium draw whose reconstructed per-bp fluctuation profile
-            # best matches the ensemble RMSF.  This is the single CanDo-style final state,
-            # not an animation or a separately coloured theoretical axis state.
-            target = rmsf**2
-            scale = np.maximum(target, max(float(np.mean(target)), 1e-12) * 0.05)
-            scores = np.mean(
-                ((bp_msf_by_frame - target[None, :]) / scale[None, :]) ** 2,
-                axis=1,
-            )
-            representative_frame = int(np.argmin(scores))
+            if progress_cb:
+                progress_cb("thermal", 0.85, "Measure reconstructed thermal fluctuations")
+            rmsf, representative_frame = ensemble_statistics(frames, keys, mesh.nodes, rmsf)
+            del reconstruction
+            if progress_cb:
+                progress_cb("thermal", 0.9, "Reconstruct selected thermal conformation")
             representative_positions, representative_axis = (
                 deformed_positions_with_axis(
                     design, mesh, u + thermal_u[representative_frame]

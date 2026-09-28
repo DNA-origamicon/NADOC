@@ -8,6 +8,17 @@ metadata:
 
 # SNUPI frontend engine tab — fresh-session build brief (P5)
 
+## Result visualization guards (2026-09-28)
+
+Large static jobs now use the shared compact FEM renderer and guarded metrics
+factory through SNUPI adapters. Deviation/cylinder preparation runs off the API
+event loop. All dynamics playback uses indexed, bounded single-frame requests and
+zoom-adaptive points with GPU-buffer reuse, cancellation and backpressure; it no
+longer loads the full trajectory into the browser. Engine changes release active
+views and pending loads so hidden playback cannot continue. Coordinates remain unchanged;
+trajectory points omit orientations/slabs. See [audit](../docs/audits/snupi_visualization_guards_20260928.md)
+for scale-fixture provenance, validation and manual visual-quality debt.
+
 ## ✅ SHIPPED 2026-07-11 — first-class SNUPI engine tab (separate-tab path)
 
 Chose the **separate tab** (clone cando_* → snupi_*), not the material-selector-on-CanDo fallback —

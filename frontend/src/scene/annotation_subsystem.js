@@ -1,8 +1,8 @@
 /**
  * Annotation subsystem: controller + 3D/DOM overlay + sidebar tab, plus the
- * store bindings (annotations live in `currentDesign` and are saved in the
- * .nadoc; part-only availability). One factory so main.js carries a single init line.
+ * document bindings (saved in the active .nadoc or .nass). One factory so main.js carries a single init line.
  */
+import { createAssemblyAnnotationTargets } from './assembly_annotation_targets.js'
 import { createAnnotationController } from './annotation_controller.js'
 import { createExternalTargets } from './annotation_external.js'
 import { initAnnotationOverlay } from './annotation_overlay.js'
@@ -10,7 +10,8 @@ import { initAnnotationPanel } from '../ui/annotation_panel.js'
 
 export function initAnnotations({
   document = globalThis.document, store, api, scene, getCamera, addFrameCallback, removeFrameCallback,
-  getEntries, resolveBasePosition, getProteinRenderer = () => null, getNanoparticleSubsystem = () => null,
+  getEntries = () => [], resolveBasePosition, getProteinRenderer = () => null, getNanoparticleSubsystem = () => null,
+  getAssemblyRenderer = () => null,
   container = document.getElementById('canvas-area'),
   pane = document.getElementById('right-tab-content-annotations'), legacyStorage,
 }) {
@@ -19,45 +20,60 @@ export function initAnnotations({
   // Sequential PUTs: an older response must never land after a newer edit.
   let saveQueue = Promise.resolve()
   let controller = null
+  const host = () => {
+    const state = store.getState()
+    const assembly = !!state.assemblyActive
+    const key = assembly ? 'currentAssembly' : 'currentDesign'
+    const doc = state[key]
+    return { assembly, key, doc, id: doc ? (assembly ? `assembly:${doc.id}` : doc.id) : null }
+  }
   const commit = ({ designId, annotations, enabled }) => {
-    const current = store.getState().currentDesign
-    if (current?.id !== designId) return Promise.resolve()   // design switched underneath the edit
-    // The store write is what the autosave watches; the PUT gives the backend the same list
-    // so the file writer (which serialises backend state) includes it.
-    store.setState({ currentDesign: { ...current, annotations, annotations_enabled: enabled } })
-    api.persistDesign?.()
-    saveQueue = saveQueue.then(() => api.saveAnnotations({ annotations, enabled })).then(() => {
-      // A design response that raced the PUT may have replaced currentDesign with the old list.
-      const now = store.getState().currentDesign
+    const target = host()
+    if (target.id !== designId) return Promise.resolve()
+    store.setState({ [target.key]: { ...target.doc, annotations, annotations_enabled: enabled } })
+    // Retain local recovery even if the server save fails.
+    if (target.assembly) api.persistAssembly?.()
+    else api.persistDesign?.()
+    const save = async () => {
+      if (host().id !== designId) return
+      const result = await (target.assembly ? api.saveAssemblyAnnotations({ annotations, enabled }) : api.saveAnnotations({ annotations, enabled }))
+      if (result === null) throw new Error("Annotation save failed")
+      return result
+    }
+    saveQueue = saveQueue.catch(() => {}).then(save).then(() => {
+      const now = host()
+      if (now.id !== designId) return
       const latest = controller.getCommitted()
-      if (now?.id === designId && latest.annotations && (now.annotations !== latest.annotations || now.annotations_enabled !== latest.enabled)) {
-        store.setState({ currentDesign: { ...now, annotations: latest.annotations, annotations_enabled: latest.enabled } })
-      }
+      if (latest.annotations && (now.doc.annotations !== latest.annotations || now.doc.annotations_enabled !== latest.enabled))
+        store.setState({ [now.key]: { ...now.doc, annotations: latest.annotations, annotations_enabled: latest.enabled } })
+      if (target.assembly) api.persistAssembly?.()
+      else api.persistDesign?.()
     })
     return saveQueue
   }
   controller = createAnnotationController({ commit, ...(legacyStorage ? { legacyStorage } : {}) })
 
+  const assemblyTargets = createAssemblyAnnotationTargets({ store, getRenderer: getAssemblyRenderer })
   const external = createExternalTargets({
     getDesign: () => store.getState().currentDesign, getProteinRenderer, getNanoparticleSubsystem,
   })
   const overlay = initAnnotationOverlay({
-    document, container, scene, getCamera, controller, getEntries,
-    getDesign: () => store.getState().currentDesign, resolveBasePosition,
-    resolveExternal: external.resolve, getOccluders: external.listAll,
+    document, container, scene, getCamera, controller,
+    getEntries: () => host().assembly ? [] : getEntries(),
+    resolveTargetEntries: refs => host().assembly ? assemblyTargets.resolve(refs) : null,
+    getDesign: () => host().doc, resolveBasePosition,
+    resolveExternal: external.resolve, getOccluders: () => host().assembly ? assemblyTargets.occluders() : external.listAll(),
     addFrameCallback, removeFrameCallback,
   })
-  const panel = initAnnotationPanel({ document, root: pane, controller, store, getDesign: () => store.getState().currentDesign })
+  const panel = initAnnotationPanel({ document, root: pane, controller, store, getDesign: () => host().doc })
 
-  let lastPartMode = null
-  const bind = state => {
-    const partMode = !state.assemblyActive
-    controller.syncFromDesign(partMode ? state.currentDesign : null)
-    if (partMode !== lastPartMode) {
-      lastPartMode = partMode
-      overlay.setEnabled(partMode)
-      panel.setAvailable(partMode)
-    }
+  let lastId = null
+  const bind = () => {
+    const current = host()
+    if (lastId !== current.id) { assemblyTargets.clear(); lastId = current.id }
+    controller.syncFromDesign(current.doc ? { ...current.doc, id: current.id } : null)
+    overlay.setEnabled(!!current.doc)
+    panel.setAvailable(!!current.doc)
   }
   const unsubscribe = store.subscribe(bind)
   bind(store.getState())

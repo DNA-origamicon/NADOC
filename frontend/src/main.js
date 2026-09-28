@@ -1,5 +1,8 @@
 import { commitVRMovePose } from './scene/vr_move_pose.js'
 import { nativeRepresentation } from './scene/vr_representations.js'
+
+import { initAssemblyViewVolumes } from './scene/assembly_view_volumes.js'
+import { buildAssemblyVisualization, unhideAssemblyVisualization } from './scene/assembly_visualization.js'
 import { captureSharedVisualization } from './viewer/shared_visualization.js'
 import { restoreNativePresentation } from './viewer/native_presentation.js'
 import { initPresentationSelection } from './scene/presentation_selection.js'
@@ -286,6 +289,7 @@ import { initBladeDisplay } from './ui/blade_display.js'
 import { initFlexScale } from './ui/flex_scale.js'
 import { initEngineActivityHeaders } from './ui/engine_activity_headers.js'
 import { initCandoCylinders } from './scene/cando_cylinders.js'
+import { initCandoLargeView } from './scene/cando_large_view.js'
 import { initMrdnaConnections } from './scene/mrdna_connections.js'
 import { initOxdnaInputOverlay } from './scene/oxdna_input_overlay.js'
 import { initOxdnaLive } from './ui/oxdna_live_controller.js'
@@ -365,11 +369,9 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
-  const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView() ?? _multiOverlay?.getBroadcastView(), getRepresentation: () => _currentRepr, getDetailLevel: () => designRenderer.getDetailLevel(), getVisualization: () => captureSharedVisualization(document, simulateJobs?.getSelectedDetails?.()) })
+  const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, getAssemblyRenderer: () => assemblyRenderer, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView() ?? _multiOverlay?.getBroadcastView(), getRepresentation: () => _currentRepr, getDetailLevel: () => designRenderer.getDetailLevel(), getVisualization: () => captureSharedVisualization(document, simulateJobs?.getSelectedDetails?.()) })
   const sharing = initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store } })
   initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel: () => designRenderer.getDetailLevel(), getFileOpen: () => _fileOpen })
-  const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer })
-  window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug
 
   // ── Assembly renderer (shows PartInstance geometry when assembly mode active) ─
   // Phase 7e (2026-05-20): the shared-instancing renderer is now the DEFAULT
@@ -388,6 +390,10 @@ async function main() {
     useShared,
   })
 
+  const assemblyVolumes = initAssemblyViewVolumes({ scene, store, api, assemblyRenderer })
+  const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer, assemblyRenderer, applyAssemblyLayers: assemblyVolumes.update })
+  window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug
+
   // Debug hook (gated on shared flag for now): expose enough state for in-
   // browser diagnostic probes without leaking everything to prod. Remove
   // once shared renderer is stable.
@@ -404,6 +410,7 @@ async function main() {
   // snapshot rendered by designRenderer.  Keep this flag outside the clipping
   // closure so its bounds source follows what actually owns the viewport.
   let _simulationVisualizationActive = false
+  let candoDisplay = null, snupiDisplay = null
 
   // ── Adaptive camera clipping for large assemblies ─────────────────────────
   // The camera's far plane is a fixed 2000 nm (sized for a single design — see
@@ -446,6 +453,7 @@ async function main() {
     // only the shadow landing on it, which still has to be inside the far clip.
     const _floorReach = () => _photoFloorReach()
     addFrameCallback(() => {
+      if (!isStandardRender()) { _clipTick = 0; return }
       if (!store.getState().assemblyActive) {
         // Part mode: far is normally pinned at 2000. If a photo floor is up,
         // extend far to include the whole plane so it reaches a far horizon.
@@ -466,12 +474,12 @@ async function main() {
           // the viewport. Its renderer therefore has either empty bounds (classic
           // renderer) or stale native bounds (shared renderer). Build bounds from
           // the live snapshot positions instead; applyFemPositions mutates entry.pos.
-          box = new THREE.Box3()
-          for (const entry of designRenderer.getBackboneEntries?.() || []) {
+          box = candoDisplay?.getBoundingBox?.() ?? snupiDisplay?.getBoundingBox?.() ?? new THREE.Box3()
+          if (box.isEmpty()) for (const entry of designRenderer.getBackboneEntries?.() || []) {
             if (entry.pos) box.expandByPoint(entry.pos)
           }
         } else {
-          box = assemblyRenderer.getBoundingBox?.()
+          box = assemblyVolumes.getBoundingBox() ?? assemblyRenderer.getBoundingBox?.()
         }
         if (box && !box.isEmpty()) {
           box.getCenter(_clipCtr)
@@ -1282,7 +1290,7 @@ async function main() {
   const namdPegCoating = initNamdPegCoating({ api, store })
   const mdPanel = initMdJobsPanel({
     mdDisplayController,
-    getWorkspacePath: () => _workspacePath,
+    getWorkspacePath: () => store.getState().assemblyActive ? _assemblyWorkspacePath : _workspacePath,
     getFlexScale: () => flexScale,
     getOxdnaDisplay: () => oxdnaDisplay,
     // mdViz is declared below (~after oxdnaDisplay): the MD trajectory-scrub +
@@ -1526,9 +1534,10 @@ async function main() {
       assemblyJointRenderer.setVisible(true)
     }
   }
-  const candoDisplay = initCandoDisplay({
+  candoDisplay = initCandoDisplay({
     designRenderer, api,
     cylinderOverlay:  candoCylinderOverlay,
+    largeView: initCandoLargeView(scene),
     setDesignVisible: _setSimulationVisualizationVisible,
     restoreDesignVisible: _restoreNativeAfterSimulation,
     flexScale,
@@ -1544,9 +1553,10 @@ async function main() {
   // display controller + cylinder overlay (independent instance) so its viz modes never
   // collide with CanDo's. Display-only (Three-Layer Law).
   const snupiCylinderOverlay = initCandoCylinders(scene)
-  const snupiDisplay = initSnupiDisplay({
+  snupiDisplay = initSnupiDisplay({
     designRenderer, api,
     cylinderOverlay:  snupiCylinderOverlay,
+    largeView: initCandoLargeView(scene, 'snupi-large-result'),
     setDesignVisible: _setSimulationVisualizationVisible,
     restoreDesignVisible: _restoreNativeAfterSimulation,
     flexScale,
@@ -3381,7 +3391,7 @@ async function main() {
     const state = store.getState()
     const { assemblyActive } = state
     const box = assemblyActive
-      ? assemblyRenderer.getBoundingBox()
+      ? assemblyVolumes.getBoundingBox() ?? assemblyRenderer.getBoundingBox()
       : nucleotideLocalBox(navigationGeometry(state))
     const pose = fitViewPose(box, camera.position, controls.target, camera.fov)
     if (!pose) return
@@ -4224,6 +4234,7 @@ async function main() {
 
   // ── Reset camera button (right panel) ────────────────────────────────────────
   document.getElementById('reset-btn')?.addEventListener('click', () => {
+    if (store.getState().assemblyActive) { _fitToView(); return }
     const { currentGeometry } = store.getState()
     if (currentGeometry && currentGeometry.length > 0) {
       camera.position.set(6, 3, 7)
@@ -4237,10 +4248,9 @@ async function main() {
     controls.update()
   })
 
-  document.getElementById('unhide-all-btn')?.addEventListener('click', () => {
-    visibilityController?.unhideAll()
-    clusterPanel?.resetVisibility?.()
-    spreadsheet?.refresh?.()
+  document.getElementById('unhide-all-btn')?.addEventListener('click', async () => {
+    if (store.getState().assemblyActive) await unhideAssemblyVisualization({ store, api })
+    else { visibilityController?.unhideAll(); clusterPanel?.resetVisibility?.(); spreadsheet?.refresh?.() }
     // "Unhide All" must make the restored structure observable. In particular,
     // recover tabs whose camera/target was poisoned before finite-safe framing
     // shipped, and include elements that were outside a view framed around only
@@ -4322,6 +4332,7 @@ async function main() {
 
   initPropertiesPanel({ clearSelection: () => selectionManager.clearSelection() })
   initAnnotations({
+    getAssemblyRenderer: () => assemblyRenderer,
     store, api, scene, getCamera: getRenderCamera, addFrameCallback, removeFrameCallback,
     getEntries: () => designRenderer.getBackboneEntries?.() ?? [],
     resolveBasePosition: key => selectionManager.getBaseWorldPosition?.(key) ?? null,
@@ -6176,12 +6187,14 @@ async function main() {
     document, scene, camera, renderer, canvas, controls, store,
     setRenderFn, resetRenderFn,
     setRepresentation: _setComparisonRepresentation,
+    buildAssemblyScene: (representation, coloring) => buildAssemblyVisualization({ state: store.getState(), api, sourceScene: scene, representation, coloring }),
     setColoringMode: _setColoringMode,
   })
   const _multiOverlay = initMultiOverlay({
     document, scene, camera, renderer, canvas, controls, store,
     setRenderFn, resetRenderFn,
     getRepresentation: () => _currentRepr, setRepresentation: _setComparisonRepresentation,
+    buildAssemblyScene: (representation, coloring) => buildAssemblyVisualization({ state: store.getState(), api, sourceScene: scene, representation, coloring }),
     setColoringMode: _setColoringMode,
   })
 

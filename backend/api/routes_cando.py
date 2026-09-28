@@ -41,7 +41,7 @@ from typing import Optional
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
@@ -84,15 +84,11 @@ def _load_job(job_id: str) -> CandoJob:
 
 
 def _current_fingerprint() -> "str | None":
-    from backend.core.oxdna_staleness import oxdna_design_fingerprint
+    # Share the document/revision cache with oxDNA and MD. Rehashing the full
+    # flattened topology on every list/status poll starves large FEM jobs.
+    from backend.core.oxdna_staleness import current_active_design_fingerprint
 
-    design = design_state.get_design()
-    if design is None:
-        return None
-    try:
-        return oxdna_design_fingerprint(design)
-    except Exception:  # noqa: BLE001
-        return None
+    return current_active_design_fingerprint()
 
 
 def _is_out_of_date(job: CandoJob, current_fp: "str | None") -> bool:
@@ -149,12 +145,15 @@ class CreateCandoJobRequest(BaseModel):
 
 
 @router.post("/cando/jobs")
-async def create_cando_job(body: CreateCandoJobRequest) -> dict:
+def create_cando_job(body: CreateCandoJobRequest) -> dict:
     """Prepare + run a new CanDo FEM shape-prediction job from the active design."""
+    # FastAPI runs this synchronous route in its worker pool, including topology
+    # counting, fingerprinting, provenance and preparation for large assemblies.
     design = design_state.get_or_404().without_reference_geometry()
     from backend.core.streptavidin import require_coating_simulation_support
+
     try:
-        require_coating_simulation_support(design, 'CanDo')
+        require_coating_simulation_support(design, "CanDo")
     except ValueError as exc:
         raise HTTPException(422, str(exc))
     if not design.helices:
@@ -206,7 +205,7 @@ async def create_cando_job(body: CreateCandoJobRequest) -> dict:
     )
 
     try:
-        await run_in_threadpool(prepare_cando_job, design, job, _workspace())
+        prepare_cando_job(design, job, _workspace())
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "create_cando_job: prepare FAILED for %s: %s",
@@ -273,7 +272,7 @@ def _list_cando_jobs() -> tuple[list[dict], list]:
 
 
 @router.get("/cando/jobs/{job_id}")
-async def get_cando_job(job_id: str) -> dict:
+def get_cando_job(job_id: str) -> dict:
     job = _load_job(job_id)
     d = job.to_dict()
     d["out_of_date"] = _is_out_of_date(job, _current_fingerprint())
@@ -350,6 +349,10 @@ async def delete_cando_job(job_id: str) -> dict:
 
 @router.get("/cando/jobs/{job_id}/snapshot-geometry")
 async def get_cando_snapshot_geometry(job_id: str) -> dict:
+    return await run_in_threadpool(_get_cando_snapshot_geometry, job_id)
+
+
+def _get_cando_snapshot_geometry(job_id: str) -> dict:
     """The full geometry of the job's OWN design snapshot — the topology the design
     had when the analysis was run, not live editor state.  The CanDo display modes
     render THIS (hiding the live model) and then overlay the FEM-predicted shape on
@@ -382,7 +385,7 @@ async def get_cando_snapshot_geometry(job_id: str) -> dict:
         _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
         return nucleotides, axes
 
-    nucleotides, axes = await run_in_threadpool(_compute)
+    nucleotides, axes = _compute()
     return {
         "job_id": job.job_id,
         "ready": True,
@@ -393,7 +396,7 @@ async def get_cando_snapshot_geometry(job_id: str) -> dict:
 
 
 @router.get("/cando/jobs/{job_id}/display")
-async def get_cando_display(job_id: str) -> dict:
+def get_cando_display(job_id: str) -> dict:
     """Predicted per-nucleotide positions as an applyFemPositions update list."""
     job = _load_job(job_id)
     cached = load_display(job.job_dir(_workspace()))
@@ -411,7 +414,7 @@ async def get_cando_display(job_id: str) -> dict:
 
 
 @router.get("/cando/jobs/{job_id}/rmsf")
-async def get_cando_rmsf(job_id: str) -> dict:
+def get_cando_rmsf(job_id: str) -> dict:
     """Per-bp RMSF (nm) for the flexibility map (Item 3).  One entry per FEM
     (duplex-core) node: ``{helix_id, bp_index, rmsf_nm}``."""
     job = _load_job(job_id)
@@ -433,7 +436,7 @@ async def get_cando_rmsf(job_id: str) -> dict:
 
 
 @router.get("/cando/jobs/{job_id}/thermal-trajectory")
-async def get_cando_thermal_trajectory(job_id: str) -> dict:
+def get_cando_thermal_trajectory(job_id: str) -> dict:
     """298 K normal-mode ensemble plus its representative final conformation.
 
     Frames have no physical timestep: this is harmonic ensemble sampling from the
@@ -492,7 +495,7 @@ async def get_cando_thermal_representative_bin(job_id: str) -> Response:
 
 
 @router.get("/cando/jobs/{job_id}/deviation")
-async def get_cando_deviation(job_id: str) -> dict:
+def get_cando_deviation(job_id: str) -> dict:
     """Per-nucleotide deviation of the FEM-predicted shape from the design's intended
     (displayed) geometry + the global RMSD (Item 3 deviation map).  Uses the job's own
     design snapshot so the comparison matches what the FEM solved, not live editor state.
@@ -505,7 +508,12 @@ async def get_cando_deviation(job_id: str) -> dict:
 
     job = _load_job(job_id)
     jd = job.job_dir(_workspace())
-    cached = load_display(jd)
+    thermal = load_thermal_representative(jd)
+    cached = (
+        {"positions": thermal["representative_positions"]}
+        if (thermal and thermal.get("representative_positions"))
+        else load_display(jd)
+    )
     if not cached or not cached.get("positions"):
         return {"job_id": job.job_id, "ready": False, "positions": []}
     design = _load_snapshot_design(jd)
@@ -514,12 +522,12 @@ async def get_cando_deviation(job_id: str) -> dict:
             500, f"CanDo job {job_id!r} has no design snapshot to compare against"
         )
 
-    result = await run_in_threadpool(compute_deviation, design, cached["positions"])
+    result = compute_deviation(design, cached["positions"])
     return {"job_id": job.job_id, "ready": True, **result}
 
 
 @router.get("/cando/jobs/{job_id}/cylinders")
-async def get_cando_cylinders(job_id: str) -> dict:
+def get_cando_cylinders(job_id: str) -> dict:
     """CanDo-style "jointed cylinder" geometry of the predicted shape: per-helix axis
     tubes + crossover joint connectors, in the aligned display frame.  Drives the
     "CanDo style output" display toggle.  Uses the job's cached display positions +
@@ -546,7 +554,7 @@ async def get_cando_cylinders(job_id: str) -> dict:
     # Prefer the solver's cached helix-CENTRE axis nodes; older jobs cached without them
     # fall back to a (wobblier) backbone-midpoint reconstruction, ssDNA still excluded.
     axis_nodes = cached.get("axis") or axis_from_backbones(cached["positions"], rmsf)
-    result = await run_in_threadpool(compute_cylinders, design, axis_nodes, rmsf)
+    result = compute_cylinders(design, axis_nodes, rmsf)
     return {"job_id": job.job_id, "ready": True, **result}
 
 
@@ -591,3 +599,22 @@ async def get_cando_available() -> dict:
     """The CanDo FEM solver runs in-process (scipy) — always available.  Mirrors
     /mrdna/available so the panel's availability check has a uniform shape."""
     return {"available": True, "solver": "native-fem"}
+
+
+@router.get("/cando/jobs/{job_id}/visualization-bin")
+def get_cando_visualization(job_id: str, mode: str = "deform") -> Response:
+    """Large-result points/lines; preparation stays off the API event loop."""
+    from backend.core.cando_visualization import visualization_file
+
+    job = _load_job(job_id)
+    if job.status != CandoStatus.completed:
+        raise HTTPException(409, "Visualization requires a completed job")
+    try:
+        path = visualization_file(job.job_dir(_workspace()), mode)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        headers={"X-NADOC-Uncompressed-Length": str(path.stat().st_size)},
+    )

@@ -1,15 +1,15 @@
+import { preparedAssemblyMaterial } from '../scene/prepared_assembly_instances.js'
 import { capturePresentationSelection } from '../scene/presentation_selection.js'
 import { captureSceneAnnotations } from '../scene/annotation_overlay.js'
 import { captureViewTools } from './shared_view_tools.js'
 import { preparedImpostorSpec } from '../scene/impostor_material.js'
 import { createSharedViewMotion } from './shared_view_motion.js'
 import { prepareScene } from './prepared_scene.js'
-import { axisSegments } from '../scene/multiscale_nav.js'
-import { navigationDesign } from '../scene/reference_navigation.js'
+import { preparedNavigation } from './prepared_navigation.js'
 import { showToast } from '../ui/toast.js'
 
 /** Thin editor host. Export is explicit and runs outside the render loop. */
-export function initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, getPresentationView = () => null, getDetailLevel = () => null, getRepresentation = () => null, getVisualization = () => null, isStandardRender = () => true, document: doc = document }) {
+export function initPreparedExport({ scene, camera, renderer, controls, canvas, store, captureCurrentCamera, getPresentationView = () => null, getDetailLevel = () => null, getAssemblyRenderer = () => null, getRepresentation = () => null, getVisualization = () => null, isStandardRender = () => true, document: doc = document }) {
   const button = doc.getElementById('menu-file-export-viewer')
   let busy = false, motionOptions = {}
   const motion = createSharedViewMotion({ getView: () => {
@@ -29,11 +29,11 @@ export function initPreparedExport({ scene, camera, renderer, controls, canvas, 
   async function exportView({ presentation = false } = {}) {
     if (busy) return
     const state = store.getState()
-    if (!state.currentDesign && !state.currentAssembly) throw new Error('Open a design before exporting a viewer package')
+    if (!(state.assemblyActive ? state.currentAssembly : state.currentDesign)) throw new Error('Open a design before exporting a viewer package')
     const source = captureView(presentation)
     busy = true
     try {
-      const title = state.currentAssembly?.name ?? state.currentDesign?.metadata?.name ?? 'Prepared view'
+      const title = (state.assemblyActive ? state.currentAssembly?.name : state.currentDesign?.metadata?.name) ?? 'Prepared view'
       const background = '#0d1117'
       const bytes = new TextEncoder().encode(JSON.stringify(state.assemblyActive ? state.currentAssembly : state.currentDesign))
       const digest = await crypto.subtle.digest('SHA-256', bytes)
@@ -46,9 +46,9 @@ export function initPreparedExport({ scene, camera, renderer, controls, canvas, 
       source.scene.traverseVisible(object => {
         if ((Array.isArray(object.material) ? object.material : [object.material]).some(m => m?.userData?.hullCutouts?.length)) requiresHullCutoutViewer = true
         if (object.isLineSegments2) requiresWideLineViewer = true
-        if ((Array.isArray(object.material) ? object.material : [object.material]).some(preparedImpostorSpec)) requiresImpostorViewer = true
+        if ((Array.isArray(object.material) ? object.material : [object.material]).some(m => preparedImpostorSpec(m) || preparedAssemblyMaterial(m)?.radius != null)) requiresImpostorViewer = true
       })
-      return { requiresHullCutoutViewer, requiresOverlayViewer: !!view.overlay, requiresVisualizationLabelViewer: !!view.visualization, requiresSelectionViewer: !!view.selection, requiresAnnotationsViewer: !!view.annotations?.length, requiresWideLineViewer, requiresImpostorViewer, requiresViewToolsViewer: Object.values(view.viewTools ?? {}).some(value => value === true), buffer: prepareScene({ scene: source.scene, camera: pose, renderer, navigation: axisSegments(navigationDesign(state)), title, background, sourceHash, view }), title, requiresSectionViewer: !!renderer.localClippingEnabled }
+      return { requiresHullCutoutViewer, requiresOverlayViewer: !!view.overlay, requiresVisualizationLabelViewer: !!view.visualization, requiresSelectionViewer: !!view.selection, requiresAnnotationsViewer: !!view.annotations?.length, requiresWideLineViewer, requiresImpostorViewer, requiresViewToolsViewer: Object.values(view.viewTools ?? {}).some(value => value === true), buffer: prepareScene({ scene: source.scene, camera: pose, renderer, navigation: preparedNavigation(state, getAssemblyRenderer()), title, background, sourceHash, view }), title, requiresSectionViewer: !!renderer.localClippingEnabled }
     } finally { busy = false }
   }
   async function download() {

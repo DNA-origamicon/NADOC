@@ -11,6 +11,7 @@ import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 const getRmsf = vi.fn()
 const getDeviation = vi.fn()
 vi.mock('../api/client.js', () => ({
+  getCandoVisualizationBin: vi.fn(),
   getCandoRmsf: (...a) => getRmsf(...a),
   getCandoDeviation: (...a) => getDeviation(...a),
 }))
@@ -74,7 +75,7 @@ describe('initCandoMetricsCard', () => {
     document.getElementById('cando-metrics-rmsf-display').click()
     await vi.waitFor(() =>
       expect(document.getElementById('cando-metrics-rmsf-status').textContent).toMatch(/2 base pairs/))
-    expect(getRmsf).toHaveBeenCalledWith('candojob1')
+    expect(getRmsf).toHaveBeenCalledWith('candojob1', expect.any(AbortSignal))
     expect(document.getElementById('cando-metric-popup-canvas')).toBeTruthy()
     expect(document.querySelector('#cando-metric-popup-title').textContent).toMatch(/RMSF/)
   })
@@ -90,7 +91,7 @@ describe('initCandoMetricsCard', () => {
     card.sync()
     document.getElementById('cando-metrics-dev-export').click()
     await vi.waitFor(() => expect(mod.downloadText).toHaveBeenCalled())
-    expect(getDeviation).toHaveBeenCalledWith('candojob1')
+    expect(getDeviation).toHaveBeenCalledWith('candojob1', expect.any(AbortSignal))
     expect(mod.downloadHref).toHaveBeenCalled()   // PNG
     expect(mod.downloadText.mock.calls[0][0]).toMatch(/cando_deviation_.*\.csv/)
   })
@@ -118,4 +119,16 @@ describe('initCandoMetricsCard', () => {
     toggle.click(); expect(body.style.display).toBe('')
     toggle.click(); expect(body.style.display).toBe('none')
   })
+})
+
+it('coalesces repeated graph requests and discards results after leaving the tab', async () => {
+  let resolve
+  getRmsf.mockImplementation(() => new Promise(r => { resolve = r }))
+  const card = initCandoMetricsCard({ getSelectedJob: () => completedJob })
+  const first = card._display('rmsf'), second = card._display('rmsf')
+  expect(getRmsf).toHaveBeenCalledOnce()
+  card.refresh()
+  resolve({ rmsf: [{ helix_id: 'h', bp_index: 1, rmsf_nm: 2 }] })
+  await Promise.all([first, second])
+  expect(document.querySelector('#cando-metric-popup-canvas')).toBeNull()
 })

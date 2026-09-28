@@ -15,10 +15,11 @@
  * display-only readout; never mutates topology.
  */
 
-import { getCandoRmsf, getCandoDeviation } from '../api/client.js'
+import { decodeCandoView, LARGE_CANDO_THRESHOLD } from '../scene/cando_large_view.js'
+import { getCandoRmsf, getCandoDeviation, getCandoVisualizationBin } from '../api/client.js'
 import { drawChart, renderToDataURL } from './metric_graph.js'
 import { initResourceMonitor } from './resource_monitor.js'
-import { CANDO_METRIC_META, rmsfRows, deviationRows, candoMetricCSV, buildCandoSpec } from './cando_metrics.js'
+import { CANDO_METRIC_META, compactMetricRows, rmsfRows, deviationRows, candoMetricCSV, buildCandoSpec } from './cando_metrics.js'
 import {
   openMetricExportModal, exportChoiceFiles, downloadText, downloadHref,
 } from './metric_export_modal.js'
@@ -29,13 +30,15 @@ const METRICS = [
   { key: 'deviation', tok: 'dev' },
 ]
 
-export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
-  const card = document.getElementById('cando-metrics-card')
+export function initCandoMetricsCard({ getSelectedJob = null, prefix = 'cando', label = 'CanDo',
+  fetchRmsf = getCandoRmsf, fetchDeviation = getCandoDeviation,
+  fetchCompact = getCandoVisualizationBin } = {}) {
+  const card = document.getElementById(`${prefix}-metrics-card`)
   if (!card) return { refresh() {}, sync() {} }
 
   // Collapsible header (mirrors the panel's other .ox-card blocks) — starts collapsed.
-  const toggle = document.getElementById('cando-metrics-toggle')
-  const arrow = document.getElementById('cando-metrics-arrow')
+  const toggle = document.getElementById(`${prefix}-metrics-toggle`)
+  const arrow = document.getElementById(`${prefix}-metrics-arrow`)
   let _open = false
   toggle?.addEventListener('click', () => {
     _open = !_open
@@ -45,19 +48,22 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
   })
 
   // Live whole-machine CPU/GPU/RAM sparklines (own toggle + poll loop inside the card).
-  initResourceMonitor({ idPrefix: 'cando-metrics' })
+  initResourceMonitor({ idPrefix: `${prefix}-metrics` })
 
   const rows = {}
   for (const { key, tok } of METRICS) {
     rows[key] = {
-      disp: document.getElementById(`cando-metrics-${tok}-display`),
-      exp: document.getElementById(`cando-metrics-${tok}-export`),
-      status: document.getElementById(`cando-metrics-${tok}-status`),
+      disp: document.getElementById(`${prefix}-metrics-${tok}-display`),
+      exp: document.getElementById(`${prefix}-metrics-${tok}-export`),
+      status: document.getElementById(`${prefix}-metrics-${tok}-status`),
     }
   }
 
   // Per-job cache of already-fetched rows, keyed "jobId:metric".
   const _cache = new Map()
+  const _pending = new Map()
+  let _abort = new AbortController()
+  let _cacheJob = null
 
   /** The selected job iff it is completed (only then are FEM profiles available). */
   function _job() {
@@ -90,7 +96,7 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
       const ok = _available(job, key)
       _style(rows[key].disp, !ok)
       _style(rows[key].exp, !ok)
-      if (!job) _setStatus(rows[key], 'Select a completed CanDo job.')
+      if (!job) _setStatus(rows[key], `Select a completed ${label} job.`)
       else if (!ok) _setStatus(rows[key], 'Run a job with RMSF on for this map.', '#d29922')
       else if (!rows[key].status?.textContent) _setStatus(rows[key], 'Ready.')
     }
@@ -98,13 +104,28 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
 
   /** Fetch (cached) the per-bp rows for a metric of the current job. */
   async function _fetchRows(job, metricKey) {
+    if (_cacheJob !== job.job_id) {
+      _abort.abort(); _abort = new AbortController()
+      _cache.clear(); _pending.clear(); _cacheJob = job.job_id
+    }
     const ck = `${job.job_id}:${metricKey}`
     if (_cache.has(ck)) return _cache.get(ck)
-    let out
-    if (metricKey === 'rmsf') out = rmsfRows(await getCandoRmsf(job.job_id))
-    else out = deviationRows(await getCandoDeviation(job.job_id))
-    _cache.set(ck, out)
-    return out
+    if (_pending.has(ck)) return _pending.get(ck)
+    const signal = _abort.signal
+    const task = (async () => {
+      let out
+      if (job.n_nucleotides > LARGE_CANDO_THRESHOLD) {
+        const buffer = await fetchCompact(job.job_id, metricKey === 'rmsf' ? 'flex' : 'deviation', { signal })
+        signal.throwIfAborted()
+        out = await compactMetricRows(decodeCandoView(buffer), signal)
+      } else if (metricKey === 'rmsf') out = rmsfRows(await fetchRmsf(job.job_id, signal))
+      else out = deviationRows(await fetchDeviation(job.job_id, signal))
+      signal.throwIfAborted()
+      _cache.set(ck, out)
+      return out
+    })()
+    _pending.set(ck, task)
+    try { return await task } finally { if (_pending.get(ck) === task) _pending.delete(ck) }
   }
 
   async function _display(metricKey) {
@@ -114,11 +135,17 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
     _setStatus(row, 'Loading…')
     let data
     try { data = await _fetchRows(job, metricKey) } catch (e) {
+      if (e?.name === 'AbortError' || _job()?.job_id !== job.job_id) return
       _setStatus(row, 'Load failed: ' + (e?.message || 'error'), '#f85149'); return
     }
+    if (_job()?.job_id !== job.job_id || _abort.signal.aborted) return
     if (!data.length) { _setStatus(row, 'No data for this metric.', '#d29922'); return }
-    _openPopup(metricKey, data)
-    _setStatus(row, `${data.length} base pairs.`, '#3fb950')
+    try {
+      _openPopup(metricKey, data)
+      _setStatus(row, `${data.length} base pairs.`, '#3fb950')
+    } catch (error) {
+      _setStatus(row, 'Graph failed: ' + (error?.message || 'error'), '#f85149')
+    }
   }
 
   async function _export(metricKey) {
@@ -127,13 +154,15 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
     const row = rows[metricKey]
     let data
     try { data = await _fetchRows(job, metricKey) } catch (e) {
+      if (e?.name === 'AbortError' || _job()?.job_id !== job.job_id) return
       _setStatus(row, 'Load failed: ' + (e?.message || 'error'), '#f85149'); return
     }
+    if (_job()?.job_id !== job.job_id || _abort.signal.aborted) return
     if (!data.length) { _setStatus(row, 'No data for this metric.', '#d29922'); return }
     const choice = await openMetricExportModal()
     if (!choice) return
     const kinds = exportChoiceFiles(choice)
-    const base = `cando_${metricKey}_${job.job_id.slice(0, 8)}`
+    const base = `${prefix}_${metricKey}_${job.job_id.slice(0, 8)}`
     if (kinds.includes('png')) {
       downloadHref(`${base}.png`, renderToDataURL(buildCandoSpec(metricKey, data)))
     }
@@ -157,20 +186,20 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
       <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;
                   padding:16px;max-width:95vw;max-height:92vh;overflow:auto;color:#c9d1d9">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:16px">
-          <div id="cando-metric-popup-title" style="font-size:15px;font-weight:600"></div>
-          <button id="cando-metric-popup-close"
+          <div id="${prefix}-metric-popup-title" style="font-size:15px;font-weight:600"></div>
+          <button id="${prefix}-metric-popup-close"
             style="padding:5px 12px;background:#21262d;border:1px solid #30363d;
                    border-radius:6px;color:#c9d1d9;cursor:pointer">Close</button>
         </div>
-        <canvas id="cando-metric-popup-canvas" width="560" height="300"
+        <canvas id="${prefix}-metric-popup-canvas" width="560" height="300"
                 style="background:#0d1117;border:1px solid #21262d;border-radius:4px"></canvas>
       </div>`
     document.body.appendChild(overlay)
     _popup = overlay
-    _popupTitle = overlay.querySelector('#cando-metric-popup-title')
-    _popupCanvas = overlay.querySelector('#cando-metric-popup-canvas')
+    _popupTitle = overlay.querySelector(`#${prefix}-metric-popup-title`)
+    _popupCanvas = overlay.querySelector(`#${prefix}-metric-popup-canvas`)
     const close = () => { _popup.style.display = 'none' }
-    overlay.querySelector('#cando-metric-popup-close').addEventListener('click', close)
+    overlay.querySelector(`#${prefix}-metric-popup-close`).addEventListener('click', close)
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
   }
 
@@ -190,6 +219,9 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
 
   /** Called by the panel when the design/selection changes → cached rows are stale. */
   function refresh() {
+    _abort.abort(); _abort = new AbortController()
+    _pending.clear(); _cacheJob = null
+    if (_popup) _popup.style.display = 'none'
     _cache.clear()
     for (const { key } of METRICS) _setStatus(rows[key], '')
     sync()

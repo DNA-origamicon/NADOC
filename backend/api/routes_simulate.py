@@ -29,7 +29,7 @@ _ENGINE_LABEL = {"md": "a NAMD run", "oxdna": "an oxDNA run", "mrdna": "an mrDNA
 
 
 @router.get("/simulate/recommendation")
-async def get_recommendation(devices: str = "0") -> dict:
+async def get_recommendation(devices: str = "0", assembly: bool = False) -> dict:
     """Recommend an engine for the active design given live GPU/CPU state.
 
     → ``{recommendation, gpu, free_cores, has_proteins, n_nucleotides, gpu_eta_seconds}``.
@@ -39,15 +39,22 @@ async def get_recommendation(devices: str = "0") -> dict:
     from backend.core.md_vram import detect_gpu_activity, gpu_contention_summary  # noqa: PLC0415
     from backend.core.namd_runner import active_namd_pids  # noqa: PLC0415
     from backend.core.oxdna_runner import _ACTIVE_PIDS as _OX_PIDS  # noqa: PLC0415
-    from backend.physics.oxdna_interface import _strand_nucleotide_order  # noqa: PLC0415
-    from backend.physics.oxdna_protein import has_proteins  # noqa: PLC0415
+    from backend.api.assembly_simulation_facts import assembly_simulation_facts, simulation_facts
 
     # ── Design facts (degrade gracefully when nothing is loaded) ──────────────
     proteins, n_nt = False, 0
     try:
-        design = design_state.get_or_404()
-        proteins = has_proteins(design)
-        n_nt = len(_strand_nucleotide_order(design))
+        if assembly:
+            from backend.api import assembly_state
+            from backend.api.assembly import _load_design_from_source
+
+            current = assembly_state.get_assembly()
+            if current is not None:
+                proteins, n_nt = await run_in_threadpool(
+                    assembly_simulation_facts, current, _load_design_from_source
+                )
+        else:
+            proteins, n_nt = await run_in_threadpool(simulation_facts, design_state.get_or_404())
     except Exception:  # noqa: BLE001 — no active design → neutral facts
         pass
 
@@ -122,7 +129,7 @@ async def get_recommendation(devices: str = "0") -> dict:
 
 @router.get("/simulate/jobs")
 async def list_simulate_jobs(
-    design_source_path: str | None = None, show_all: bool = False
+    design_source_path: str | None = None, show_all: bool = False, assembly: bool = False
 ) -> list[dict]:
     """The UNIFIED simulation job list — every oxDNA + LAMMPS run for the active design,
     normalized into one common node shape (see :mod:`backend.core.sim_jobs`) so the
@@ -162,14 +169,23 @@ async def list_simulate_jobs(
             nodes.extend(normalize(row) for row in rows)
         except Exception:
             continue  # Malformed data from one engine must not hide other engines.
+    project_id = None
+    if assembly:
+        from backend.api import assembly_state
+
+        current = assembly_state.get_assembly()
+        if current is None:
+            return []
+        project_id = f"flat_{current.id}"
     return await run_in_threadpool(
-        _finish_simulate_nodes, nodes, ws, design_source_path, show_all
+        _finish_simulate_nodes, nodes, ws, design_source_path, show_all, project_id
     )
 
 
-def _finish_simulate_nodes(nodes, ws, design_source_path, show_all):
+def _finish_simulate_nodes(nodes, ws, design_source_path, show_all, project_id=None):
     from backend.core import sim_jobs
 
+    assembly_project_id = project_id
     # Simulation metadata is synchronized with project history even when its heavy
     # artifact directory remains on another machine.  Surface those remote-only NAMD
     # and oxDNA records in the same list so users can deliberately bring one local.
@@ -177,8 +193,7 @@ def _finish_simulate_nodes(nodes, ws, design_source_path, show_all):
         from backend.core.collaboration_peers import PeerRegistry
         from backend.core.project_artifacts import ProjectArtifactCatalog
 
-        design = design_state.get_or_404()
-        project_id = design.id
+        project_id = project_id or design_state.get_or_404().id
         identity = PeerRegistry(ws).server_identity()
         local_keys = {
             (
@@ -233,6 +248,8 @@ def _finish_simulate_nodes(nodes, ws, design_source_path, show_all):
             local_keys.add(key)
     except Exception:  # noqa: BLE001 — collaboration metadata is advisory
         pass
+    if not show_all and assembly_project_id is not None:
+        return [n for n in nodes if n.get("project_id") == assembly_project_id]
     if not show_all and not design_source_path:
         # Assembly projections intentionally have no part-file path. Their stable
         # identity is the flattened Design/project id; filtering on a missing path

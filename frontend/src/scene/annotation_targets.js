@@ -10,6 +10,7 @@ import { baseKey } from './base_ref.js'
 import { ovhgDomainIds } from './design_queries.js'
 
 const KIND_LABELS = {
+  'assembly-part': 'Part', 'assembly-overhang': 'Overhang',
   base: 'Base', end: 'End', domain: 'Domain', strand: 'Strand', cluster: 'Cluster',
   crossover: 'Crossover', bond: 'Bond', overhang: 'Overhang', extension: 'Extension',
   protein: 'Protein', nanoparticle: 'Nanoparticle',
@@ -109,6 +110,10 @@ const shortId = id => (String(id).length > 10 ? `${String(id).slice(0, 8)}…` :
 function describeOne(ref, design) {
   const kind = KIND_LABELS[ref.kind] ?? ref.kind
   switch (ref.kind) {
+    case 'assembly-part': case 'assembly-overhang': {
+      const inst = design?.instances?.find(i => i.id === ref.instanceId)
+      return `${kind} · ${inst?.name || shortId(ref.instanceId)}${ref.overhangId ? ` · ${shortId(ref.overhangId)}` : ''}`
+    }
     case 'strand': {
       const s = design?.strands?.find(x => x.id === ref.id)
       return `${kind} · ${s?.name || shortId(ref.id)}`

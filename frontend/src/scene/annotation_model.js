@@ -5,6 +5,7 @@
  * An annotation is VIEW metadata attached to stable selection refs (see
  * selection_ref.js). It never touches topology or geometry.
  */
+import { normalizeAssemblyAnnotationRef } from './assembly_annotation_refs.js'
 import { dedupeSelectionRefs } from './selection_ref.js'
 import { isAnnotationIcon } from './annotation_icons.js'
 
@@ -54,7 +55,10 @@ export function normalizeAnnotation(input = {}, { index = 0 } = {}) {
     manual: input.manual === true,
     screenPos,
     visible: input.visible !== false,
-    refs: dedupeSelectionRefs(input.refs ?? []),
+    refs: [...new Map((Array.isArray(input.refs) ? input.refs : []).flatMap(ref => {
+      const normalized = normalizeAssemblyAnnotationRef(ref) ?? dedupeSelectionRefs([ref])[0]
+      return normalized ? [[JSON.stringify(normalized), normalized]] : []
+    })).values()],
   }
 }
 

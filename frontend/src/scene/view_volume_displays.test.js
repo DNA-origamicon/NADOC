@@ -54,3 +54,17 @@ it('keeps overlapping surfaces colored independently without rebuilding on globa
   expect([...surface('a').geometry.attributes.color.array.slice(0,3)]).toEqual([1,0,0])
   displays.dispose()
 })
+
+it('masks deleted columns in an assembly base layer instead of leaving cylinder slivers', async () => {
+  const store = createMockStore({ currentDesign: { helices: [], strands: [] }, currentGeometry: [] })
+  const scene = new THREE.Scene(), displays = initViewVolumeDisplays({ scene, store, api: {} })
+  // Column 1 has no nucleotide. It is covered by a heavy volume, while 0 and 2
+  // belong to the surrounding cylinder base layer. Absence from the mask means
+  // global cylinders in the helix renderer, so it must be explicitly hidden.
+  await displays.update([{ id: 'base', representation: 'cylinders', keys: ['h:0', 'h:2'], allColumnKeys: ['h:0', 'h:1', 'h:2'], opacity: 1 }])
+  const mask = displays.entries.get('base').columns
+  expect(mask.get('h:0')).toBe('cylinders')
+  expect(mask.get('h:1')).toBe('surface')
+  expect(mask.get('h:2')).toBe('cylinders')
+  displays.dispose()
+})

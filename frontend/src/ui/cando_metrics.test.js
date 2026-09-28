@@ -91,3 +91,15 @@ describe('buildCandoSpec', () => {
     expect(buildCandoSpec('deviation', []).empty).toBe(true)
   })
 })
+
+describe('compact large-result metrics', () => {
+  it('averages every direction/copy per bp and excludes uncovered scalars', async () => {
+    const { compactMetricRows } = await import('./cando_metrics.js')
+    const data = { meta: { count: 4, helix_ids: ['h'] },
+      identities: new Int32Array([0,7,0,0, 0,7,1,0, 0,7,0,1, 0,8,0,0]),
+      scalars: new Float32Array([1,3,5,-1]) }
+    expect(await compactMetricRows(data)).toEqual([{ helix: 'h', bp: 7, val: 3 }])
+    const abort = new AbortController(); abort.abort()
+    await expect(compactMetricRows(data, abort.signal)).rejects.toMatchObject({ name: 'AbortError' })
+  })
+})

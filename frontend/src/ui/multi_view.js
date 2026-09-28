@@ -53,6 +53,7 @@ export function cloneMultiScene(scene) {
 }
 
 export function disposeMultiScene(scene) {
+  if (scene?.disposeVisualization) { scene.disposeVisualization(); return }
   scene?.traverse?.(obj => {
     obj.geometry?.dispose?.()
     const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
@@ -62,6 +63,7 @@ export function disposeMultiScene(scene) {
 
 /** Hull-Audit-style bounds: rendered molecular geometry only, not viewport tools. */
 export function multiViewContentBounds(root) {
+  if (root?.visualizationBounds) return root.visualizationBounds.clone().applyMatrix4(root.matrix)
   const box = new THREE.Box3()
   const childBox = new THREE.Box3()
   root?.updateMatrixWorld?.(true)
@@ -79,6 +81,12 @@ export function multiViewContentBounds(root) {
     if (!obj.geometry || !(obj.isMesh || obj.isLine || obj.isPoints || obj.isSprite)) return
     // Diagnostic/tool overlays are intentionally outside the molecular framing,
     // matching Hull Audit, whose fit root contains only the audited hull mesh.
+    if (obj.isInstancedMesh) {
+      if (!obj.count) return
+      obj.computeBoundingBox()
+      childBox.copy(obj.boundingBox).applyMatrix4(obj.matrixWorld)
+      box.union(childBox); return
+    }
     if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox?.()
     if (!obj.geometry.boundingBox) return
     childBox.copy(obj.geometry.boundingBox).applyMatrix4(obj.matrixWorld)
@@ -104,7 +112,7 @@ export function multiViewDesignCentroid(state, fallback = new THREE.Vector3()) {
 }
 
 export function initMultiView({ document, scene, camera, renderer, canvas, store,
-  controls, setRenderFn, resetRenderFn, setRepresentation, setColoringMode }) {
+  controls, setRenderFn, resetRenderFn, setRepresentation, setColoringMode, buildAssemblyScene }) {
   const host = document?.getElementById('right-multi-view-body')
   if (!host) return null
   let activePanel = 0
@@ -202,12 +210,15 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
     syncingControls = false
   }
 
-  async function rebuild() {
-    const mine = ++generation
+  let rebuildFlight = Promise.resolve(), refreshTimer = null, sourceDirty = false
+  async function build(mine) {
     for (const panel of panels) { disposeMultiScene(panel.renderScene); panel.renderScene = null }
     for (const element of viewportGrid.querySelectorAll('.mv-viewport-panel')) element.dataset.ready = 'false'
     for (let i = 0; i < count; i++) {
-      const available = await setRepresentation(panels[i].representation)
+      const assemblyMode = store.getState().assemblyActive && buildAssemblyScene
+      const rendered = assemblyMode ? await buildAssemblyScene(panels[i].representation, panels[i].coloring) : null
+      if (mine !== generation || count === 1) { disposeMultiScene(rendered); return }
+      const available = assemblyMode ? true : await setRepresentation(panels[i].representation)
       if (available === false) {
         panels[i].renderScene = new THREE.Scene()
         const element = viewportGrid.querySelector(`.mv-viewport-panel[data-panel="${i + 1}"]`)
@@ -216,10 +227,10 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
         if (element) element.dataset.ready = 'unavailable'
         continue
       }
-      if (panels[i].coloring) setColoringMode(panels[i].coloring)
+      if (!assemblyMode && panels[i].coloring) setColoringMode(panels[i].coloring)
       await Promise.resolve()
       if (mine !== generation || count === 1) return
-      panels[i].renderScene = cloneMultiScene(scene)
+      panels[i].renderScene = rendered ?? cloneMultiScene(scene)
       // Molecular Audit frames the inspected geometry once, then synchronizes
       // navigation. Do the same from the first completed panel.
       if (i === 0 && needsFit) {
@@ -253,6 +264,22 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
     }
   }
 
+  function rebuild() {
+    const mine = ++generation
+    sourceDirty = true
+    rebuildFlight = rebuildFlight.catch(() => {}).then(async () => {
+      if (mine !== generation || count <= 1) return
+      await build(mine)
+      if (mine === generation) sourceDirty = false
+    })
+    return rebuildFlight
+  }
+  const unsubscribe = store.subscribe?.((next, previous) => {
+    if (count <= 1 || !['currentDesign', 'currentGeometry', 'currentHelixAxes', 'currentAssembly', 'assemblyActive'].some(k => next[k] !== previous[k])) return
+    sourceDirty = true; generation++; clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(() => { void rebuild() }, 250)
+  })
+
   function renderMulti() {
     const width = canvas.clientWidth || canvas.parentElement?.clientWidth || 1
     const height = canvas.clientHeight || canvas.parentElement?.clientHeight || 1
@@ -282,6 +309,7 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
     }
     renderControls()
     if (count === 1) {
+      clearTimeout(refreshTimer); sourceDirty = false
       generation++; resetRenderFn(); renderer.setScissorTest(false)
       for (const panel of panels) { disposeMultiScene(panel.renderScene); panel.renderScene = null }
       const width = canvas.clientWidth || canvas.parentElement?.clientWidth || 1
@@ -299,8 +327,10 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
       }
       camera.aspect = width / height; camera.updateProjectionMatrix(); controls.update()
       controls.enabled = savedControlsEnabled
-      await setRepresentation(panels[0].representation)
-      if (panels[0].coloring) setColoringMode(panels[0].coloring)
+      if (!store.getState().assemblyActive) {
+        await setRepresentation(panels[0].representation)
+        if (panels[0].coloring) setColoringMode(panels[0].coloring)
+      }
     } else {
       const waits = []
       globalThis.window?.dispatchEvent(new CustomEvent('nadoc:comparison-mode', { detail: { mode: 'multi-view', waits } }))
@@ -338,11 +368,12 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
     getBroadcastView() {
       if (count <= 1) return null
       const panel = panels[activePanel]
-      if (!panel.renderScene || !panel.controls) throw Object.assign(new Error('Waiting for the active multi-view pane to finish loading'), { code: 'VIEW_NOT_READY' })
+      if (sourceDirty || !panel.renderScene || !panel.controls) throw Object.assign(new Error('Waiting for the active multi-view pane to finish loading'), { code: 'VIEW_NOT_READY' })
       return { controls: panel.controls, scene: panel.renderScene, camera: panel.camera, pose: { position: panel.camera.position.toArray(),
         target: panel.controls.target.toArray(), up: panel.camera.up.toArray(), fov: panel.camera.fov, orbitMode: 'orbit' },
         view: { coloring: panel.coloring, representation: panel.representation }, pane: activePanel + 1 }
     }, dispose: () => {
+    unsubscribe?.(); clearTimeout(refreshTimer)
     globalThis.window?.removeEventListener('nadoc:comparison-mode', exclusiveMode)
     activate(1); viewportGrid.remove()
   } }

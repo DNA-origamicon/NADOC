@@ -144,3 +144,15 @@ describe('migration of annotations saved in browser storage before they lived in
     expect(c.list().map(e => e.id)).toEqual(['a'])
   })
 })
+
+it('a flush captures the owning document before its commit microtask runs', async () => {
+  const { c, commit } = make()
+  c.syncFromDesign(design())
+  c.add({ text: 'old document' })
+  const pending = c.flush()
+  c.syncFromDesign({ id: 'assembly:new', annotations: [] })
+  await pending
+  expect(commit.mock.calls[0][0].designId).toBe('d1')
+  expect(c.list()).toEqual([])
+  c.dispose()
+})

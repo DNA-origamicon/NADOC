@@ -77,15 +77,11 @@ def _load_job(job_id: str) -> MrdnaJob:
 
 
 def _current_fingerprint() -> "str | None":
-    from backend.core.oxdna_staleness import oxdna_design_fingerprint
+    # The unified Simulations list polls this engine even on a FEM tab. Share
+    # the revision cache so idle engines cannot rehash a large assembly repeatedly.
+    from backend.core.oxdna_staleness import current_active_design_fingerprint
 
-    design = design_state.get_design()
-    if design is None:
-        return None
-    try:
-        return oxdna_design_fingerprint(design)
-    except Exception:  # noqa: BLE001
-        return None
+    return current_active_design_fingerprint()
 
 
 def _is_out_of_date(job: MrdnaJob, current_fp: "str | None") -> bool:

@@ -18,7 +18,8 @@
 import { buildChartSpec, SERIES_COLORS } from './metric_graph.js'
 
 // Helix ids are strings (e.g. "h_XY_0_1"); numeric-aware compare keeps h_..._2 < h_..._10.
-const _cmpHelix = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })
+const _helixCollator = new Intl.Collator(undefined, { numeric: true })
+const _cmpHelix = (a, b) => _helixCollator.compare(String(a), String(b))
 
 // Per-metric axis metadata (labels + units + CSV value column).
 export const CANDO_METRIC_META = {
@@ -104,4 +105,23 @@ export function buildCandoSpec(metric, rows, { width = 560, height = 300 } = {})
     yLabel: meta.yLabel || '',
     yMin: 0,
   })
+}
+
+/** Aggregate compact nucleotide columns to the graph's per-bp mean, yielding so
+ * job changes/Off stay responsive. Full rows are retained for CSV export. */
+export async function compactMetricRows(data, signal) {
+  const byBp = new Map()
+  for (let i = 0; i < data.meta.count; i++) {
+    if (i % 4096 === 0) {
+      await new Promise(resolve => setTimeout(resolve, 0))
+      signal?.throwIfAborted()
+    }
+    const value = data.scalars[i]
+    if (!Number.isFinite(value) || value < 0) continue
+    const helix = data.meta.helix_ids[data.identities[4*i]], bp = data.identities[4*i+1]
+    const key = `${helix}:${bp}`
+    const row = byBp.get(key) || { helix, bp, sum: 0, n: 0 }
+    row.sum += value; row.n++; byBp.set(key, row)
+  }
+  return [...byBp.values()].map(r => ({ helix: r.helix, bp: r.bp, val: r.sum/r.n }))
 }

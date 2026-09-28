@@ -43,6 +43,7 @@ from backend.core.display_placement import measured_display_placement
 from fastapi import APIRouter, Query
 
 from backend.api import assembly_state
+from backend.api.routes_display_geometry import SurfaceRegionRequest, build_region_surface
 from backend.api.assembly import (
     _assembly_source_path,
     _design_with_instance_overrides,
@@ -186,7 +187,7 @@ def get_instance_atomistic_geometry(instance_id: str) -> dict:
 
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
-    design = _display_design(_load_design_from_source(inst.source))
+    design = _display_design(_design_with_instance_overrides(inst, _assembly_source_path(assembly)))
     return atomistic_to_json(build_atomistic_model(design, include_proteins=True))
 
 
@@ -198,7 +199,7 @@ def get_instance_protein_geometry(instance_id: str) -> dict:
 
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
-    design = _display_design(_load_design_from_source(inst.source))
+    design = _display_design(_design_with_instance_overrides(inst, _assembly_source_path(assembly)))
     atoms, bonds, _ = build_protein_attachment_atoms(design)
     return atomistic_to_json(AtomisticModel(atoms=atoms, bonds=bonds))
 
@@ -230,7 +231,7 @@ def get_instance_surface_geometry(
 
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
-    design = _display_design(_load_design_from_source(inst.source))
+    design = _display_design(_design_with_instance_overrides(inst, _assembly_source_path(assembly)))
     model = build_atomistic_model(design, include_proteins=True)
     t0 = time.perf_counter()
     mesh = compute_surface(
@@ -340,3 +341,11 @@ def get_assembly_geometry(
         except Exception as exc:
             errors[inst.id] = str(exc)
     return {"sources": sources, "instances": instance_to_src, "errors": errors}
+
+
+@router.post("/assembly/instances/{instance_id}/surface/region")
+def get_instance_region_surface(instance_id: str, body: SurfaceRegionRequest) -> dict:
+    assembly = assembly_state.get_or_404()
+    inst = _find_instance(assembly, instance_id)
+    design = _display_design(_design_with_instance_overrides(inst, _assembly_source_path(assembly)))
+    return build_region_surface(design, body)

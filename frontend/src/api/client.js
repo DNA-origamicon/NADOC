@@ -60,6 +60,8 @@ const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null (s
 import { createDesignRevisionTracker } from './design_revisions.js'
 
 const _designRevisions = createDesignRevisionTracker()
+const _assemblyRevisions = createDesignRevisionTracker()
+let _assemblyRevisionId = null
 
 // Associate completion with the response, never whichever request started last.
 const _responseTimings = new WeakMap()
@@ -97,6 +99,8 @@ function _isStaleDesignResponse(json) {
 /** Reset both design and field revisions after a backend restart. */
 export function resetRevisionWatermark() {
   _designRevisions.reset()
+  _assemblyRevisions.reset()
+  _assemblyRevisionId = null
 }
 
 /** Latest observed server revision, including metadata, for optimistic concurrency. */
@@ -355,29 +359,30 @@ export function errorDetailToMessage(detail, fallback = 'Server error') {
 
 const _assemblySimulationContext = createAssemblySimulationContext()
 
-async function _ensureAssemblySimulation(path, { timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true } = {}) {
+async function _ensureAssemblySimulation(path, { method = 'GET', timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true } = {}) {
   const state = store.getState()
   await _assemblySimulationContext.ensure({
-    path,
+    path, method,
     assemblyActive: state.assemblyActive,
     assembly: state.currentAssembly,
-    materialize: async () => {
-      const projection = await _request('POST', '/assembly/flatten/load-as-design', undefined, {
+    materialize: async ({ compact }) => {
+      const projection = await _request('POST', `/assembly/flatten/load-as-design${compact ? '?simulation_only=true' : ''}`, undefined, {
         suppressBusy: false,
         timeoutMs,
         protectedRetry,
         skipSimulationPrepare: true,
       })
+      if (!(compact ? projection?.design_id : projection?.design)) throw new Error(lastErrorMessage() || 'Could not prepare assembly for simulation')
       // The projection is physical simulation state, not a replacement for the
       // assembly document currently open in the editor.
-      await _syncFromDesignResponse(projection, { transient: true, simulationProjection: true })
+      if (!compact) await _syncFromDesignResponse(projection, { transient: true, simulationProjection: true })
     },
   })
 }
 
 export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false } = {}) {
   if (!skipSimulationPrepare && docId === undefined) {
-    await _ensureAssemblySimulation(path, { timeoutMs, protectedRetry })
+    await _ensureAssemblySimulation(path, { method, timeoutMs, protectedRetry })
   }
   const diagnosticId = ++_diagnosticRequestSeq
   _emitRequestDiagnostic({ phase: 'start', id: diagnosticId, method, path, suppressBusy })
@@ -957,7 +962,13 @@ export function _syncFromAssemblyResponse(json) {
   const trace = _responseTimings.get(json)
   try {
     if (json.assembly) {
-      _setTimedState({ currentAssembly: _expandV2Assembly(json.assembly) }, json)
+      if (_assemblyRevisionId !== json.assembly.id) {
+        _assemblyRevisionId = json.assembly.id
+        _assemblyRevisions.reset()
+      }
+      const snapshot = { design: _expandV2Assembly(json.assembly), revision: json.revision }
+      if (!_assemblyRevisions.acceptDesign(snapshot)) return json
+      _setTimedState({ currentAssembly: snapshot.design }, json)
       persistAssembly()
     }
     if (trace) {
@@ -2728,7 +2739,7 @@ async function _oxdnaJSONTransport(method, path, body = undefined, { signal, hea
   // this, the first job launched from a newly opened assembly either used the previous
   // document's Design or failed with "no active design"; merely visiting another engine
   // happened to hide the bug by materializing first.
-  await _ensureAssemblySimulation(path)
+  await _ensureAssemblySimulation(path, { method })
   const diagnosticId = ++_diagnosticRequestSeq
   const diagnosticStarted = performance.now()
   _emitRequestDiagnostic({
@@ -2798,7 +2809,7 @@ async function _oxdnaBin(method, path, body = undefined, options = {}) {
   return withSurfaceProgress(path, docHeaders(), headers => _oxdnaBinRequest(method, path, body, { ...options, headers }))
 }
 
-async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProgress, headers } = {}) {
+async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProgress, headers, maxBytes = Infinity } = {}) {
   const opts = { method, headers: { ...headers } }
   if (signal != null) {
     if (!(signal instanceof AbortSignal)) {
@@ -2812,12 +2823,15 @@ async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProg
   }
   const r = await fetch(`${BASE}${path}`, opts).catch(() => null)
   if (!r || !r.ok) return null
-  if (typeof onProgress !== 'function' || !r.body?.getReader) {
-    return r.arrayBuffer().catch(() => null)
+  if (!r.body?.getReader || (typeof onProgress !== 'function' && maxBytes === Infinity)) {
+    const buffer = await r.arrayBuffer().catch(() => null)
+    if (buffer?.byteLength > maxBytes) throw new Error('Visualization exceeds the browser memory limit')
+    return buffer
   }
   let total = Number(r.headers.get('x-nadoc-uncompressed-length'))
     || Number(r.headers.get('content-length')) || 0
-  onProgress({ phase: 'download', done: 0, total })
+  if (total > maxBytes) { await r.body.cancel(); throw new Error('Visualization exceeds the browser memory limit') }
+  onProgress?.({ phase: 'download', done: 0, total })
   const reader = r.body.getReader()
   let received = 0
   let out = total > 0 ? new Uint8Array(total) : null
@@ -2826,11 +2840,14 @@ async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProg
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
+      if (received + value.byteLength > maxBytes) {
+        await reader.cancel(); throw new Error('Visualization exceeds the browser memory limit')
+      }
       if (out && received + value.byteLength > out.byteLength) {
         // Content-Length can describe compressed bytes while fetch yields decoded chunks
         // (development/reverse proxies). Grow safely; future progress becomes indeterminate
         // unless X-NADOC-Uncompressed-Length supplied the decoded size.
-        const grown = new Uint8Array(Math.max(received + value.byteLength, out.byteLength * 2))
+        const grown = new Uint8Array(Math.min(maxBytes, Math.max(received + value.byteLength, out.byteLength * 2)))
         grown.set(out)
         out = grown
         total = 0
@@ -2838,7 +2855,7 @@ async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProg
       if (out) out.set(value, received)
       else chunks.push(value)
       received += value.byteLength
-      onProgress({ phase: 'download', done: received, total })
+      onProgress?.({ phase: 'download', done: received, total })
     }
   } catch (err) {
     if (err?.name === 'AbortError') return null
@@ -3248,7 +3265,7 @@ export const getMrdnaAnalyticCurvature = ()      => _oxdnaJSON('GET',  '/mrdna/c
 export const candoAvailable      = ()            => _oxdnaJSON('GET',  '/cando/available')
 export const createCandoJob      = (body)        => _oxdnaJSON('POST', '/cando/jobs', body)
 export const listCandoJobs       = ()            => _backgroundJobList('/cando/jobs')
-export const getCandoJob         = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}`)
+export const getCandoJob         = (id, signal)  => _oxdnaJSON('GET', `/cando/jobs/${id}`, undefined, { signal })
 export const getCandoProgress    = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/progress`)
 export const getCandoErrorLog    = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/error-log`)
 export const startCandoJob       = (id)          => _oxdnaJSON('POST', `/cando/jobs/${id}/start`)
@@ -3271,6 +3288,9 @@ export const getCandoThermalRepresentativeBin = (id, { signal, onProgress } = {}
     'GET', `/cando/jobs/${id}/thermal-representative-bin`, undefined,
     { signal, onProgress },
   )
+/** Bounded point/line buffers for large completed results. */
+export const getCandoVisualizationBin = (id, mode, { signal, onProgress } = {}) =>
+  _oxdnaBin('GET', `/cando/jobs/${id}/visualization-bin?mode=${mode}`, undefined, { signal, onProgress, maxBytes: 256 * 1024 * 1024 })
 /** Per-bp deviation from the intended (displayed) geometry + global RMSD (Item 3). */
 export const getCandoDeviation   = (id, signal)  => _oxdnaJSON('GET',  `/cando/jobs/${id}/deviation`, undefined, { signal })
 /** CanDo-style jointed-cylinder geometry (per-helix axis tubes + crossover joints). */
@@ -3289,7 +3309,7 @@ export const getMdShapeSource    = (id)          => _oxdnaJSON('GET',  `/md/jobs
 export const snupiAvailable      = ()            => _oxdnaJSON('GET',  '/snupi/available')
 export const createSnupiJob      = (body)        => _oxdnaJSON('POST', '/snupi/jobs', body)
 export const listSnupiJobs       = ()            => _backgroundJobList('/snupi/jobs')
-export const getSnupiJob         = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}`)
+export const getSnupiJob         = (id, signal)  => _oxdnaJSON('GET',  `/snupi/jobs/${id}`, undefined, { signal })
 export const getSnupiProgress    = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/progress`)
 export const getSnupiErrorLog    = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/error-log`)
 export const startSnupiJob       = (id)          => _oxdnaJSON('POST', `/snupi/jobs/${id}/start`)
@@ -3298,7 +3318,13 @@ export const deleteSnupiJob      = (id)          => _oxdnaJSON('DELETE', `/snupi
 export const getSnupiDisplay     = (id, signal)  => _oxdnaJSON('GET',  `/snupi/jobs/${id}/display`, undefined, { signal })
 /** Compact columnar static FEM frame; JSON remains the compatibility fallback. */
 export const getSnupiDisplayBin = (id, { signal, onProgress } = {}) =>
-  _oxdnaBin('GET', `/snupi/jobs/${id}/display-bin`, undefined, { signal, onProgress })
+  _oxdnaBin('GET', `/snupi/jobs/${id}/display-bin`, undefined, { signal, onProgress, maxBytes: 256 * 1024 * 1024 })
+export const getSnupiVisualizationBin = (id, mode, { signal, onProgress } = {}) =>
+  _oxdnaBin('GET', `/snupi/jobs/${id}/visualization-bin?mode=${encodeURIComponent(mode)}`, undefined,
+    { signal, onProgress, maxBytes: 256 * 1024 * 1024 })
+export const getSnupiTrajectoryFrameBin = (id, frame, { signal, onProgress } = {}) =>
+  _oxdnaBin('GET', `/snupi/jobs/${id}/trajectory-frame-bin?frame=${frame}`, undefined,
+    { signal, onProgress, maxBytes: 256 * 1024 * 1024 })
 /** Full geometry of the job's OWN design snapshot (topology at solve time). */
 export const getSnupiSnapshotGeometry = (id, signal) => _oxdnaJSON('GET',  `/snupi/jobs/${id}/snapshot-geometry`, undefined, { signal })
 /** Per-bp RMSF (nm) for the flexibility map. */
@@ -5061,7 +5087,8 @@ export async function simulateRecommendation(devices = '0') {
   // This read-only policy refresh runs automatically when Dynamics opens. It
   // must not claim the global operation popup while Display MD reports its own
   // precise progress.
-  return _request('GET', `/simulate/recommendation?devices=${encodeURIComponent(devices)}`, null,
+  const assembly = store.getState().assemblyActive ? '&assembly=true' : ''
+  return _request('GET', `/simulate/recommendation?devices=${encodeURIComponent(devices)}${assembly}`, undefined,
     { suppressBusy: true })
 }
 
@@ -5071,6 +5098,7 @@ export async function simulateRecommendation(devices = '0') {
 const _simJobsInflight = new Map()
 export async function listSimJobs(designSourcePath = null, showAll = false, { waitForIdle = true } = {}) {
   const q = new URLSearchParams()
+  if (store.getState().assemblyActive) q.set('assembly', 'true')
   if (designSourcePath) q.set('design_source_path', designSourcePath)
   if (showAll) q.set('show_all', 'true')
   const s = q.toString()
@@ -5414,3 +5442,19 @@ export async function relaxCpd(photoproductId) {
 export const sendVREndResizeHandles = body => _request('POST', '/vr/end-resize-handles', body)
 
 export const sendVRLigationEnds = body => _request('POST', '/vr/ligation-ends', body)
+
+export async function saveAssemblyViewVolumes(volumes) {
+  return _request('PUT', '/assembly/view-volumes', { volumes }, { suppressBusy: true })
+}
+export async function getInstanceRegionSurface(id, segments, { colorMode = 'strand', probeRadius = .06, signal } = {}) {
+  return _request('POST', `/assembly/instances/${encodeURIComponent(id)}/surface/region`,
+    { segments, color_mode: colorMode, probe_radius: probeRadius }, { signal, suppressBusy: true })
+}
+
+export async function saveAssemblyAnnotations({ annotations, enabled }) {
+  const id = store.getState().currentAssembly?.id
+  const json = await _request('PUT', '/assembly/annotations', { annotations, enabled }, { suppressBusy: true })
+  if (store.getState().currentAssembly?.id === id)
+    _assemblyRevisions.acceptMetadata(json, ['annotations', 'annotations_enabled'], id)
+  return json
+}

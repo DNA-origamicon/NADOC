@@ -49,3 +49,17 @@ it('exports selection, pings by button or period, ignores text entry, and clears
   shared.update(null); expect(guestContainer.querySelector('.shared-selection-label').hidden).toBe(true)
   shared.dispose(); guest.dispose(); source.dispose()
 })
+
+it('resolves assembly clusters and overhangs against their own source and live placement', () => {
+  const part = { ...design, overhangs: [{ id: 'o', strand_id: 's' }], strands: [{ id: 's', domains: [{ overhang_id: 'o' }, {}] }] }
+  const entries = [entry(1), entry(2, 1)]
+  const renderer = { getInstanceDesign: () => part, getInstanceBackboneEntries: () => ({ entries, matrixWorld: new THREE.Matrix4().makeTranslation(20, 3, 4) }) }
+  const state = { assemblyActive: true, activeInstanceId: 'i', currentAssembly: { id: 'a' } }
+  const cluster = resolvePresentationSelection({ state, assemblyRenderer: renderer, assemblyCluster: { instanceId: 'i', clusterId: 'c' } })
+  expect(cluster.points.map(p => p.toArray())).toEqual([[21,3,4], [22,3,4]])
+  expect(cluster.label).toBe('Selected cluster')
+  const overhang = resolvePresentationSelection({ state: { ...state, assemblyOverhangSelection: [{ instanceId: 'i', overhangId: 'o' }] }, assemblyRenderer: renderer })
+  expect(overhang.points.map(p => p.toArray())).toEqual([[21,3,4]])
+  expect(overhang.label).toBe('Selected overhang')
+  expect(entries[0].pos.toArray()).toEqual([1,0,0])
+})
