@@ -31,6 +31,7 @@
  * / mode / lastStats).
  */
 
+import { decodeCandoView, LARGE_CANDO_THRESHOLD } from '../scene/cando_large_view.js'
 import { colormapHex } from './colormaps.js'
 import { framesToUpdates } from './oxdna_display.js'
 import { parseCandoRepresentativeBin } from '../scene/cando_representative_bin.js'
@@ -168,14 +169,12 @@ export function thermalCylinderFrame(base, keys, frame) {
     const moving = (byHelix.get(h.helix_id) || []).sort((a, b) => a[0] - b[0]).map(x => x[1])
     return { ...h, points: moving.length === h.points.length ? moving : h.points }
   })
-  const oldPts = [], newPts = []
-  base.helices.forEach((h, hi) => h.points.forEach((p, pi) => { oldPts.push(p); newPts.push(helices[hi].points[pi]) }))
-  const nearest = p => {
-    let bi = 0, bd = Infinity
-    oldPts.forEach((q, i) => { const d = (p[0]-q[0])**2 + (p[1]-q[1])**2 + (p[2]-q[2])**2; if (d < bd) { bd=d; bi=i } })
-    return newPts[bi] || p
-  }
-  return { ...base, helices, joints: (base.joints || []).map(j => [nearest(j[0]), nearest(j[1])]) }
+  const moved = new Map()
+  base.helices.forEach((h, hi) => h.points.forEach((p, pi) => {
+    if (!moved.has(p.join(','))) moved.set(p.join(','), helices[hi].points[pi])
+  }))
+  const endpoint = p => moved.get(p.join(',')) || p
+  return { ...base, helices, joints: (base.joints || []).map(j => j.map(endpoint)) }
 }
 
 /** Prefer the FEM's true representative axis over a backbone-midpoint reconstruction. */
@@ -190,19 +189,17 @@ export function thermalCylinderAxis(base, axis) {
     const points = (byHelix.get(h.helix_id) || []).sort((a, b) => a[0] - b[0]).map(x => x[1])
     return { ...h, points: points.length === h.points.length ? points : h.points }
   })
-  const oldPts = [], newPts = []
-  base.helices.forEach((h, hi) => h.points.forEach((p, pi) => { oldPts.push(p); newPts.push(helices[hi].points[pi]) }))
-  const nearest = p => {
-    let bi = 0, bd = Infinity
-    oldPts.forEach((q, i) => { const d = (p[0]-q[0])**2 + (p[1]-q[1])**2 + (p[2]-q[2])**2; if (d < bd) { bd=d; bi=i } })
-    return newPts[bi] || p
-  }
-  return { ...base, helices, joints: (base.joints || []).map(j => [nearest(j[0]), nearest(j[1])]) }
+  const moved = new Map()
+  base.helices.forEach((h, hi) => h.points.forEach((p, pi) => {
+    if (!moved.has(p.join(','))) moved.set(p.join(','), helices[hi].points[pi])
+  }))
+  const endpoint = p => moved.get(p.join(',')) || p
+  return { ...base, helices, joints: (base.joints || []).map(j => j.map(endpoint)) }
 }
 
 export function initCandoDisplay({
   designRenderer, api, cylinderOverlay = null, setDesignVisible = null,
-  restoreDesignVisible = null, flexScale = null,
+  restoreDesignVisible = null, flexScale = null, largeView = null,
 }) {
   let _epoch = 0            // bumps on every request → stale responses ignored
   let _loadAbort = null
@@ -222,10 +219,12 @@ export function initCandoDisplay({
     return result
   }
   async function _paintBefore(onProgress, phase) {
+    const epoch = _epoch
     _progress(onProgress, phase, 0)
     if (typeof requestAnimationFrame === 'function') {
       await new Promise(resolve => requestAnimationFrame(resolve))
     }
+    if (epoch !== _epoch) throw new DOMException('Display superseded', 'AbortError')
   }
   async function _thermalRequest(jobId, signal, onProgress) {
     if (api.getCandoThermalRepresentativeBin) {
@@ -234,6 +233,7 @@ export function initCandoDisplay({
         signal,
         onProgress: p => _progress(onProgress, 'thermal-download', p.done, p.total),
       })
+      signal.throwIfAborted()
       if (buf) {
         await _paintBefore(onProgress, 'thermal-decode')
         const decoded = parseCandoRepresentativeBin(buf)
@@ -241,7 +241,7 @@ export function initCandoDisplay({
         if (decoded) return decoded
       }
     }
-    const fetcher = api.getCandoThermalRepresentative || api.getCandoThermalTrajectory
+    const fetcher = api.getCandoThermalRepresentative
     return _fetchPhase(onProgress, 'thermal', fetcher?.(jobId, signal) ?? Promise.resolve(null))
   }
   function _thermalDisplay(thermal) {
@@ -278,8 +278,11 @@ export function initCandoDisplay({
   // turning a mode off, and before the cylinder mode (which hides the live model).
   function _clearAll() {
     flexScale?.hide()
+    largeView?.clear()
+    _flexResp = null; _devResp = null; _candoResp = null
     cylinderOverlay?.clear()
     designRenderer.clearScalarColors?.()
+    designRenderer.applyFemPositions?.(null)
     designRenderer.clearExternalGeometry?.()   // rebuilds the live model (no-op if not external)
     if (restoreDesignVisible) restoreDesignVisible()
     else _nativeVisible(true)
@@ -290,6 +293,8 @@ export function initCandoDisplay({
   // subsequent renderExternalGeometry() rebuilds the model in one pass (no live rebuild).
   function _prepareForExternal() {
     flexScale?.hide()
+    largeView?.clear()
+    _flexResp = null; _devResp = null; _candoResp = null
     cylinderOverlay?.clear()
     designRenderer.clearScalarColors?.()
     _nativeVisible(true)
@@ -299,6 +304,8 @@ export function initCandoDisplay({
   // Keep the already-built scene and apply only the physical overlay in that case.
   function _prepareForLive() {
     flexScale?.hide()
+    largeView?.clear()
+    _flexResp = null; _devResp = null; _candoResp = null
     cylinderOverlay?.clear()
     designRenderer.clearScalarColors?.()
     designRenderer.clearExternalGeometry?.()
@@ -343,9 +350,42 @@ export function initCandoDisplay({
     return true
   }
 
+  async function _large(jobId, mode, epoch, signal, onProgress, nNucleotides) {
+    if (!largeView || !api.getCandoVisualizationBin) return null
+    const job = Number.isFinite(nNucleotides) ? { n_nucleotides: nNucleotides }
+      : await api.getCandoJob(jobId, signal)
+    if (epoch !== _epoch) throw new DOMException('Display superseded', 'AbortError')
+    if (!job || !Number.isFinite(job.n_nucleotides)) throw new Error('Could not determine result size; retry loading the job')
+    if (job.n_nucleotides <= LARGE_CANDO_THRESHOLD) return null
+    // Stop spending frames on a heavy native scene while the compact result loads.
+    _nativeVisible(false)
+    _progress(onProgress, 'compact-view', 0)
+    const buffer = await api.getCandoVisualizationBin(jobId, mode, { signal,
+      onProgress: p => { if (epoch === _epoch) _progress(onProgress, 'compact-download', p.done, p.total) } })
+    if (epoch !== _epoch) throw new DOMException('Display superseded', 'AbortError')
+    if (!buffer) throw new Error('Large-result visualization is unavailable; retry after the job completes')
+    const view = decodeCandoView(buffer)
+    await _paintBefore(onProgress, 'apply')
+    _clearAll()
+    largeView.update(view, mode === 'deviation' ? _devCmap : _flexCmap)
+    _nativeVisible(false)
+    _jobId = jobId; _mode = mode
+    _stats = { ...view.meta, large: true,
+      representation: mode === 'cando' ? 'zoom-adaptive axis/joint lines; all segments retained' : 'zoom-adaptive nucleotide points; all positions retained' }
+    if (mode !== 'deform' && (mode !== 'cando' || view.meta.has_rmsf)) {
+      flexScale?.show({ title: mode === 'deviation' ? 'Deviation (nm)' : 'RMSF (nm)',
+        min: view.meta.min, max: view.meta.max, mapType: mode,
+        onRecolor: (lo, hi, cmap) => { if (_mode === mode && largeView.active()) largeView.recolor(lo, hi, cmap) } })
+    }
+    _progress(onProgress, 'compact-view', 1)
+    return { ok: true, n: view.meta.count }
+  }
+
   /** Deform the model to the predicted shape (no recolour). */
-  async function showDeform(jobId, onProgress = null, { reuseLiveGeometry = false } = {}) {
+  async function showDeform(jobId, onProgress = null, { reuseLiveGeometry = false, nNucleotides } = {}) {
     const { epoch, signal } = _beginLoad()
+    const large = await _large(jobId, 'deform', epoch, signal, onProgress, nNucleotides)
+    if (large) return large
     const [thermal, snap] = await Promise.all([
       _thermalRequest(jobId, signal, onProgress),
       reuseLiveGeometry ? Promise.resolve(null)
@@ -397,8 +437,10 @@ export function initCandoDisplay({
   }
 
   /** Deform to the predicted shape + recolour beads by per-bp RMSF (flexibility map). */
-  async function showFlex(jobId, onProgress = null, { reuseLiveGeometry = false } = {}) {
+  async function showFlex(jobId, onProgress = null, { reuseLiveGeometry = false, nNucleotides } = {}) {
     const { epoch, signal } = _beginLoad()
+    const large = await _large(jobId, 'flex', epoch, signal, onProgress, nNucleotides)
+    if (large) return large
     const [rmsf, thermal, snap] = await Promise.all([
       _fetchPhase(onProgress, 'rmsf', api.getCandoRmsf(jobId, signal)),
       _thermalRequest(jobId, signal, onProgress),
@@ -434,8 +476,10 @@ export function initCandoDisplay({
 
   /** Deform to the predicted shape + recolour beads green→red by deviation from the
    *  design's intended geometry (deviation map).  Reports the global RMSD. */
-  async function showDeviation(jobId, onProgress = null, { reuseLiveGeometry = false } = {}) {
+  async function showDeviation(jobId, onProgress = null, { reuseLiveGeometry = false, nNucleotides } = {}) {
     const { epoch, signal } = _beginLoad()
+    const large = await _large(jobId, 'deviation', epoch, signal, onProgress, nNucleotides)
+    if (large) return large
     const [resp, thermal, snap] = await Promise.all([
       _fetchPhase(onProgress, 'deviation', api.getCandoDeviation(jobId, signal)),
       _thermalRequest(jobId, signal, onProgress),
@@ -468,8 +512,10 @@ export function initCandoDisplay({
   /** CanDo-style output: draw the predicted shape as the familiar jointed-cylinder
    *  representation (one grey tube per helix + crossover joints) with the native
    *  NADOC model hidden.  Standalone rep, like the mrDNA CG-beads mode. */
-  async function showCandoStyle(jobId, onProgress = null) {
+  async function showCandoStyle(jobId, onProgress = null, { nNucleotides } = {}) {
     const { epoch, signal } = _beginLoad()
+    const large = await _large(jobId, 'cando', epoch, signal, onProgress, nNucleotides)
+    if (large) return large
     const [resp, thermal] = await Promise.all([
       _fetchPhase(onProgress, 'cylinders', api.getCandoCylinders(jobId, signal)),
       _thermalRequest(jobId, signal, onProgress)])
@@ -479,24 +525,16 @@ export function initCandoDisplay({
     }
     await _paintBefore(onProgress, 'apply')
     _clearAll()   // restore the live model first, then hide it under the tubes
-    cylinderOverlay.update(resp, {
-      lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
-    })
+    const moving = !!_thermalDisplay(thermal)
+    let drawn = resp
+    if (thermal?.representative_axis?.length) drawn = thermalCylinderAxis(resp, thermal.representative_axis)
+    else if (moving) {
+      const positions = thermal.representative_positions
+      drawn = thermalCylinderFrame(resp, positions.map(p => [p.helix_id, p.bp_index, p.direction, p.copy ?? 0]),
+        positions.flatMap(p => p.backbone_position))
+    }
+    cylinderOverlay.update(drawn, { lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap })
     _nativeVisible(false)
-    const moving = _startThermalFrames(thermal, (thermalState) => {
-      if (thermalState.representative_axis?.length) {
-        cylinderOverlay.update(thermalCylinderAxis(resp, thermalState.representative_axis), {
-          lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
-        })
-        return
-      }
-      const positions = thermalState.representative_positions || []
-      const keys = positions.map(p => [p.helix_id, p.bp_index, p.direction, p.copy ?? 0])
-      const frame = positions.flatMap(p => p.backbone_position)
-      cylinderOverlay.update(thermalCylinderFrame(resp, keys, frame), {
-        lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
-      })
-    })
     _candoResp = resp
     _jobId = jobId; _mode = 'cando'
     _stats = { kind: 'cando', helices: resp.n_helices || 0, joints: resp.n_joints || 0,
@@ -524,7 +562,6 @@ export function initCandoDisplay({
 
   function stopDeform() {
     _cancelLoad()
-    if (_mode === null) return
     stopThermal()
     _clearAll()
     _jobId = null; _mode = null; _stats = null
@@ -541,6 +578,8 @@ export function initCandoDisplay({
     showDeviation,
     showCandoStyle,
     stopThermal,
+    cancelPending: () => { _cancelLoad(); if (!_mode) _clearAll() },
+    getBoundingBox: () => largeView?.getBoundingBox?.() ?? null,
     refresh,
     stopDeform,
     stopAndRestore,
@@ -549,6 +588,7 @@ export function initCandoDisplay({
     mode:         () => _mode,
     lastStats:    () => _stats,
     coloringInfo: () => {
+      if (largeView?.active()) return largeView.coloringInfo()
       if (_mode === 'flex' && _flexResp?.disp?.positions?.length) {
         const byBp = new Map((_flexResp.rmsf?.rmsf || []).map(r => [`${r.helix_id}:${r.bp_index}`, r.rmsf_nm]))
         return {

@@ -38,6 +38,7 @@ def assembly_sim_client(tmp_path, monkeypatch, request):
     from backend.api import assembly as routes_assembly
     from backend.api import (
         routes_cando,
+        routes_blade,
         routes_lammps,
         routes_md,
         routes_mrdna,
@@ -47,6 +48,7 @@ def assembly_sim_client(tmp_path, monkeypatch, request):
 
     for module in (
         routes_assembly,
+        routes_blade,
         routes_cando,
         routes_lammps,
         routes_md,
@@ -267,3 +269,90 @@ def test_assembly_prepares_shared_engine_jobs_and_unified_lifecycle(
     ox = nodes["oxdna"]
     assert ox["stages"] and all(stage["status"] == "pending" for stage in ox["stages"])
     assert ox.get("progress_fraction", 0.0) == 0.0
+
+
+def test_compact_fem_projection_keeps_complete_topology(assembly_sim_client):
+    client, headers, *_ = assembly_sim_client
+    response = client.post('/api/assembly/flatten/load-as-design?simulation_only=true', headers=headers)
+    assert response.status_code == 200
+    assert set(response.json()) == {'design_id'}
+    for engine in ('cando', 'snupi'):
+        response = client.post(f'/api/{engine}/jobs', headers=headers, json={'autostart': False, 'with_rmsf': False})
+        assert response.status_code == 200, response.text
+        assert response.json()['n_nucleotides'] == 1008
+
+
+@pytest.mark.parametrize('engine', ['cando', 'snupi'])
+def test_fem_preparation_yields_api_event_loop(assembly_sim_client, monkeypatch, engine):
+    import asyncio
+    import importlib
+    import threading
+    import httpx
+
+    _, headers, _ = assembly_sim_client
+    routes = importlib.import_module(f'backend.api.routes_{engine}')
+    prepare = getattr(routes, f'prepare_{engine}_job')
+    entered, release = threading.Event(), threading.Event()
+
+    def delayed_prepare(*args):
+        entered.set()
+        assert release.wait(2), 'Job preparation blocked the API event loop'
+        return prepare(*args)
+
+    monkeypatch.setattr(routes, f'prepare_{engine}_job', delayed_prepare)
+
+    async def exercise():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test', headers=headers) as client:
+            creation = asyncio.create_task(client.post(f'/api/{engine}/jobs', json={'autostart': False, 'with_rmsf': False}))
+            try:
+                for _ in range(100):
+                    if entered.is_set():
+                        break
+                    await asyncio.sleep(0.005)
+                assert entered.is_set()
+                response = await asyncio.wait_for(client.get(f'/api/{engine}/available'), 0.5)
+                assert response.status_code == 200
+            finally:
+                release.set()
+            response = await creation
+            assert response.status_code == 200
+            assert response.json()['status'] == 'queued'
+            assert response.json()['doc_id'] == headers['X-NADOC-Doc']
+
+    asyncio.run(exercise())
+
+
+def test_fem_polls_share_revision_fingerprint_cache(assembly_sim_client, monkeypatch):
+    from backend.core import oxdna_staleness
+
+    client, headers, _ = assembly_sim_client
+    original = oxdna_staleness.design_build_fingerprint
+    calls = []
+
+    def count(design):
+        calls.append(design.id)
+        return original(design)
+
+    monkeypatch.setattr(oxdna_staleness, 'design_build_fingerprint', count)
+    for _ in range(3):
+        for engine in ('cando', 'snupi', 'mrdna', 'blade'):
+            assert client.get(f'/api/{engine}/jobs', headers=headers).status_code == 200
+    assert len(calls) == 1
+    # Re-materializing the assembly replaces the backend Design/revision and must
+    # invalidate the cached fingerprint, even when the resulting content matches.
+    assert client.post('/api/assembly/flatten/load-as-design?simulation_only=true', headers=headers).status_code == 200
+    assert client.get('/api/cando/jobs', headers=headers).status_code == 200
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('engine', ['cando', 'snupi'])
+def test_fem_node_summary_excludes_unpaired_terminal_bases(tmp_path, engine):
+    import importlib
+
+    runner = importlib.import_module(f'backend.core.{engine}_runner')
+    jobs = importlib.import_module(f'backend.core.{engine}_job')
+    job = getattr(jobs, f'new_{engine}_job')('assembly', with_rmsf=False)
+    positions = [dict(helix_id='h', bp_index=i, direction='forward', x=0., y=0., z=float(i)) for i in range(6)]
+    # Two duplex mesh nodes plus two unpaired nucleotides: positions/2 is wrong.
+    runner._cache_fem_analysis(job, tmp_path, {'solver': 'linear', 'positions': positions, 'axis': positions[:2]})
+    assert job.n_nodes == 2

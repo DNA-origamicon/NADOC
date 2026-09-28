@@ -521,3 +521,28 @@ in native and multi-overlay views. Small-design automated edit coverage passes;
 full-snapshot throughput needs real-device validation.
 
 - 2026-09-24 mobile shared viewer: Chromium phone emulation verifies sign-in, landscape layout and actual touch rotate/pinch/pan; physical iPhone Safari/Android Chrome rotation, resume, GPU memory and thermal behavior remain pending. See `docs/audits/mobile_viewer_implementation_20260924.md` for the phone acceptance sequence.
+
+### MV-ASSEMBLY-FEM-LARGE-GPU — full nucleotide result interaction (2026-09-27)
+
+**Status:** PENDING hardware-GPU performance check. BigO's 30-copy CanDo coarse
+solve completed and its full predicted-shape scene loaded in headless Chromium,
+but SwiftShader took about 80 s per rendered frame. The automated execution check
+therefore uses the standard cylinder result view at 30 copies and full snapshot
+nucleotide deformation at two copies. On the normal GPU-backed app, load BigO,
+run CanDo/SNUPI, inspect/orbit full Predicted shape, and return to the native
+assembly. Check camera continuity and interaction latency. Full-size NMA/thermal
+sampling and SNUPI dynamics performance remain separately unmeasured; the native
+execution check explicitly uses coarse prediction with RMSF unchecked.
+See `docs/audits/assembly_fem_execution_20260927.md`. main.js delta 0.
+
+### MV-CANDO-COMPACT-GLYPHS — large-result visual quality (2026-09-27)
+
+**Status:** PENDING hardware-GPU/close-zoom visual review. The >50k-nucleotide
+CanDo guard retains all positions/segments in zoom-adaptive point/line glyphs, with a
+visible status note; small jobs retain spheres/slabs/cylinders. Review BigO at
+whole-assembly and close-zoom scales, compare scalar legends to colors, inspect
+loop/ssDNA points, and orbit through thermal bends. No molecular positions are
+resampled. Check actual-device readability and point size; software-GPU browser
+checks are recorded in [the audit](docs/audits/cando_visualization_guards_20260927.md).
+This supersedes the CanDo full-snapshot-performance portion of
+MV-ASSEMBLY-FEM-LARGE-GPU; SNUPI's separate full-nucleotide path remains unmeasured.

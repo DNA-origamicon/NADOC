@@ -58,6 +58,44 @@ measurements and phase-progress conclusions remain valid.
 History (every dated block, the phase write-ups, the Chain-Simulations build-out) →
 `project_simulate_panel_overhaul_archive.md`. Don't read it in a routine loop.
 
+## CanDo thermal progress (2026-09-27)
+
+Thermal predictions report each of 48 reconstructed/saved frames, reference setup,
+fluctuation statistics and representative reconstruction. The unified progress bar
+uses these backend labels; thermal work has a larger phase weight and the obsolete
+size-only ETA is suppressed when measured phase progress exists. Cancellation is
+checked at these boundaries, and terminal status overrides stale progress files.
+Numeric ensemble storage and job-local reference reuse cut measured BigO frame
+reconstruction from ~51 s to ~9.5 s, preserving coordinates within 1e-12 nm.
+See [audit](../docs/audits/cando_thermal_optimization_20260927.md) for scope and tests.
+
+## Assembly FEM execution (2026-09-27)
+
+CanDo/SNUPI creation now requests `simulation_only=true` from assembly flattening:
+the canonical Design is loaded for engine input, but no full Design/geometry payload
+is synchronized into the browser. Compact/full preparation cache keys are distinct.
+Job result/lifecycle reads use their immutable snapshot; assembly displays never reuse
+the live part renderer based on the projection fingerprint. Complete creation handlers
+run in the API worker pool (including counts, fingerprints, revisions and hydro preflight).
+CanDo CPU contention and both panels' preparation-error cleanup are fixed.
+FEM polling now shares the revision fingerprint cache with oxDNA/MD; no-RMSF node
+counts come from the actual FEM axis, excluding unpaired terminal nucleotides.
+See [execution audit](../docs/audits/assembly_fem_execution_20260927.md) for full BigO
+native timing, browser validation and explicit expensive-mode coverage limits.
+
+## Assembly browsing correction (2026-09-27)
+
+Opening Simulations no longer materializes the assembly for availability, policy,
+job lists, status, stop/cancel or archives. `api/simulation_context.js` separates
+passive requests from explicit design consumers by method and route; preparation
+failure aborts the dependent request. Recommendation GET carries no body (Chromium
+rejected the old `null` body). Assembly policy counts each source once off the event
+loop; unified jobs use `flat_<assembly id>` without loading a Design. NAMD's source
+path now follows the assembly host like the other engines. Prepared input and job
+lifecycle parity retain the shared engine implementations. Source-count estimates
+are advisory; prepared topology remains authoritative. Validation and scope:
+[assembly Simulations audit](../docs/audits/assembly_simulations_20260927.md).
+
 ## Optimization contract
 
 ### Scope: every active simulation-tab surface

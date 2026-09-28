@@ -117,10 +117,14 @@ def compute_cylinders(
         if v is not None:
             rmsf_by_node[(r["helix_id"], r["bp_index"])] = float(v)
 
+    by_helix = {}
+    for (hid, bp), position in axis.items():
+        by_helix.setdefault(hid, []).append((bp, position))
+
     helices: List[dict] = []
     for helix in design.helices:
         keyed = sorted(
-            (bp, axis[(hid, bp)]) for (hid, bp) in axis if hid == helix.id
+            by_helix.get(helix.id, [])
         )  # sort by bp index → ordered along the helix
         if len(keyed) >= 2:
             helices.append(

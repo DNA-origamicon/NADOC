@@ -237,3 +237,33 @@ coverage/cluster/RGB checks and actual desktop pixel comparison. Original weak
 view retained. A subsequent0%desktop match failure is retained separately; headed
 demo explicitly reveals only its PID-verified native viewer, keeping thresholds.
 Physical through-lens comfort and authoring-trace delivery remain open.
+
+2026-09-27: [x] ISSUE-42 — assembly Simulations tab opening no longer flattens for
+passive API reads; recommendation uses a valid GET and lightweight assembly facts.
+Unified jobs resolve assembly identity without a loaded projection; NAMD source-path
+wiring matches other engines. Tests and limits: docs/audits/assembly_simulations_20260927.md.
+
+2026-09-27: ISSUE-43 — CanDo/SNUPI assembly execution uses a compact backend projection
+and snapshot-based visualization. Root cause: a part-centric preparation/display
+optimization assumed a live flattened part renderer; uncached full-topology fingerprints
+on every FEM poll then competed with the solver. Reused the existing revision cache and
+moved preparation/results off the event loop. Native BigO runs disproved the initial
+missing/disconnected-mesh hypothesis (one connected 211,680-node mesh). A no-RMSF summary
+also mistook unpaired terminal geometry for FEM nodes; corrected from axis records.
+Evidence and gates: `docs/audits/assembly_fem_execution_20260927.md`. main.js delta 0.
+
+2026-09-27: ISSUE-44 — Thermal reconstruction reused the expensive full display
+pipeline for 48 frames while retaining only XYZ. Cache immutable per-job reference
+geometry, batch bead reconstruction, preallocate numeric frames and stream JSON.
+BigO two-frame comparison: 5.1–5.5× reconstruction speedup, <1e-12 nm coordinate
+difference; full-job NMA speedup is not claimed. Progress and cancellation now
+advance at each frame and persistence boundary. See the thermal optimization audit.
+
+- 2026-09-27 · ISSUE-45 · Large completed CanDo results use bounded point/line
+  rendering, compact transport, indexed cylinder joints, native-source visibility
+  guards and cancellation-safe switching; metric graphs reuse compact scalars.
+  [Audit](docs/audits/cando_visualization_guards_20260927.md). main.js Δ +3.
+
+- 2026-09-27 · ISSUE-46 · Verify cached simulation fingerprint ownership with a
+  weak reference; a recycled object ID cannot reuse a closed design's fingerprint.
+  Deterministic regression reproduced the failure before the fix; 18 focused tests pass.

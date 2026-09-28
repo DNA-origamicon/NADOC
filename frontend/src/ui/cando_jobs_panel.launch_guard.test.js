@@ -130,3 +130,68 @@ describe('CanDo launch guard (double-click)', () => {
     }
   })
 })
+
+it('cleans up a failed assembly preparation and allows retry with a CPU launch', async () => {
+  const { confirmNoConcurrentJob } = await import('./job_activity.js')
+  const { showToast } = await import('./toast.js')
+  const { initCandoJobsPanel } = await import('./cando_jobs_panel.js')
+  mountDom()
+  _jobsOnServer = []
+  createCandoJob.mockRejectedValueOnce(new Error('Missing assembly source'))
+  const events = []
+  const listener = e => events.push(e.detail)
+  window.addEventListener('nadoc:sim-jobs-changed', listener)
+  const panel = initCandoJobsPanel({ candoDisplay: null, getWorkspacePath: () => null })
+  try {
+    const coarse = document.getElementById('cando-jobs-coarse-btn')
+    coarse.click()
+    await flush(); await flush()
+    expect(showToast).toHaveBeenCalledWith('Missing assembly source', { severity: 'error' })
+    expect(confirmNoConcurrentJob).toHaveBeenCalledWith({ usesGpu: false })
+    expect(events.some(event => event?.removeJobId?.startsWith('preparing-'))).toBe(true)
+    expect(coarse.disabled).toBe(false)
+    expect(panel.getSelectedJob()).toBeFalsy()
+  } finally {
+    window.removeEventListener('nadoc:sim-jobs-changed', listener)
+  }
+})
+
+it('uses the job snapshot when displaying a current assembly result', async () => {
+  const { store } = await import('../state/store.js')
+  const { initCandoJobsPanel } = await import('./cando_jobs_panel.js')
+  mountDom()
+  _jobsOnServer = [{ job_id: 'assembly-display', status: 'completed', out_of_date: false, n_nucleotides: 424144 }]
+  const display = { showDeform: vi.fn(async () => ({ ok: true })), deformActive: () => false, mode: () => 'deform' }
+  const panel = initCandoJobsPanel({ candoDisplay: display })
+  store.setState({ assemblyActive: true })
+  try {
+    await panel.selectJob('assembly-display')
+    document.querySelector('.cando-display-mode[value="deform"]').click()
+    await flush()
+    expect(display.showDeform).toHaveBeenCalledWith('assembly-display', expect.any(Function), { reuseLiveGeometry: false, nNucleotides: 424144 })
+  } finally { store.setState({ assemblyActive: false }) }
+})
+
+it('a stale mode failure cannot turn off a newer successful visualization', async () => {
+  const { initCandoJobsPanel } = await import('./cando_jobs_panel.js')
+  mountDom()
+  _jobsOnServer = [{ job_id: 'race', status: 'completed', rmsf_max_nm: 1, n_nucleotides: 100000 }]
+  let reject, mode = null
+  const display = {
+    showDeform: () => new Promise((_, r) => { reject = r }),
+    showFlex: async () => { mode = 'flex'; return { ok: true } },
+    stopDeform: vi.fn(() => { mode = null }),
+    deformActive: () => !!mode, mode: () => mode,
+  }
+  const panel = initCandoJobsPanel({ candoDisplay: display })
+  await panel.selectJob('race')
+  display.stopDeform.mockClear()
+  document.querySelector('.cando-display-mode[value="deform"]').click()
+  document.querySelector('.cando-display-mode[value="flex"]').click()
+  await flush()
+  reject(new DOMException('Aborted', 'AbortError'))
+  await flush()
+  expect(mode).toBe('flex')
+  expect(document.querySelector('.cando-display-mode[value="flex"]').checked).toBe(true)
+  expect(display.stopDeform).not.toHaveBeenCalled()
+})

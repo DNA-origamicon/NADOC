@@ -387,9 +387,10 @@ def _cache_fem_analysis(job: SnupiJob, jd: Path, result: dict) -> None:
         vals = [r["rmsf_nm"] for r in rmsf]
         if vals:
             rmsf_min, rmsf_max = min(vals), max(vals)
-    # positions carry two entries (FORWARD/REVERSE) per axis node; the RMSF list is one entry per
-    # node, so it is the honest FEM-node (= base pair) count.
-    job.n_nodes = len(rmsf) if rmsf else (len(positions) // 2 if positions else 0)
+    # Unpaired terminal bases are reconstructed positions, not duplex FEM nodes.
+    # The axis (or RMSF) has one record per node; keep the legacy fallback only
+    # for old callers that provide neither.
+    job.n_nodes = len(rmsf) if rmsf else (len(result["axis"]) if "axis" in result else len(positions) // 2)
     job.rmsf_min_nm = round(rmsf_min, 3) if rmsf_min is not None else None
     job.rmsf_max_nm = round(rmsf_max, 3) if rmsf_max is not None else None
 

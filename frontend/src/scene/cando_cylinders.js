@@ -93,13 +93,14 @@ function _mean(x, y) {
 export function initCandoCylinders(scene) {
   const _meshes = []
 
-  function clear() {
+  function clear(release = true) {
     for (const m of _meshes) {
       scene.remove(m)
       m.material?.dispose?.()
       m.dispose?.()
     }
     _meshes.length = 0
+    if (release) _lastData = null
   }
 
   /** One InstancedMesh of cylinders for `segs` ({a,b,rmsf}); per-instance colormap
@@ -115,6 +116,7 @@ export function initCandoCylinders(scene) {
     const mesh = new THREE.InstancedMesh(_CYL_GEO, mat, segs.length)
     mesh.frustumCulled = false
     const span = hi - lo
+    const scalarValues = new Float32Array(segs.length)
     let n = 0
     for (const s of segs) {
       const p = s.a, q = s.b
@@ -138,9 +140,11 @@ export function initCandoCylinders(scene) {
         _col.copy(_GREY)
       }
       mesh.setColorAt(n, _col)
+      scalarValues[n] = Number.isFinite(s.rmsf) ? s.rmsf : -1
       n++
     }
     mesh.count = n
+    mesh.userData.scalarValues = scalarValues
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
     scene.add(mesh)
@@ -151,7 +155,7 @@ export function initCandoCylinders(scene) {
 
   /** Rebuild the tube overlay from the cached data at [lo,hi] on `colormap`. */
   function _draw(lo, hi, colormap) {
-    clear()
+    clear(false)
     const data = _lastData
     if (!data || (!data.helices?.length && !data.joints?.length)) return
     const { tubes, joints } = cylinderSegments(data)
@@ -172,7 +176,19 @@ export function initCandoCylinders(scene) {
       _draw(dlo, dhi, colormap)
     },
     /** Recolour the current tubes to a new RMSF window / colormap (no re-fetch). */
-    recolor(lo, hi, colormap = 'jet') { _draw(lo, hi, colormap) },
+    recolor(lo, hi, colormap = 'jet') {
+      for (const mesh of _meshes) {
+        for (let i = 0; i < mesh.count; i++) {
+          const value = mesh.userData.scalarValues[i]
+          if (_lastData?.has_rmsf && value >= 0 && hi - lo > 1e-9) {
+            const [r, g, b] = colormapRGB(colormap, (value - lo) / (hi - lo))
+            _col.setRGB(r * JET_BRIGHTNESS, g * JET_BRIGHTNESS, b * JET_BRIGHTNESS, THREE.SRGBColorSpace)
+          } else _col.copy(_GREY)
+          mesh.setColorAt(i, _col)
+        }
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+      }
+    },
     clear,
     active: () => _meshes.length > 0,
   }

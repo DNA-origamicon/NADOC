@@ -46,3 +46,19 @@ describe('jetRGB (CanDo heat map)', () => {
     expect(jetRGB(NaN)).toEqual(jetRGB(0))
   })
 })
+
+describe('cylinder GPU lifecycle', () => {
+  it('recolors existing instances and releases cached geometry on Off', async () => {
+    const THREE = await import('three')
+    const { initCandoCylinders } = await import('./cando_cylinders.js')
+    const scene = new THREE.Scene(), overlay = initCandoCylinders(scene)
+    overlay.update({ helices: [{ points: [[0,0,0],[0,2,0]], rmsf: [1,2] }], has_rmsf: true, rmsf_min: 0, rmsf_p95: 2 })
+    const mesh = scene.children[0], matrix = [...mesh.instanceMatrix.array]
+    overlay.recolor(0, 8, 'viridis')
+    expect(scene.children[0]).toBe(mesh)
+    expect([...mesh.instanceMatrix.array]).toEqual(matrix)
+    overlay.clear()
+    overlay.recolor(0, 1)
+    expect(scene.children).toHaveLength(0)
+  })
+})

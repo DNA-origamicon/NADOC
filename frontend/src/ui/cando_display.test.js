@@ -487,3 +487,16 @@ describe('initCandoDisplay — CanDo-style cylinder mode', () => {
     expect(setDesignVisible).not.toHaveBeenCalled()
   })
 })
+
+it('maps cylinder joints with linear coordinate reads, including repeated endpoints', () => {
+  let reads = 0
+  const count = 300
+  const points = Array.from({ length: count }, (_, i) => new Proxy([i,0,0], {
+    get(target, key) { if (['0','1','2'].includes(key)) reads++; return target[key] },
+  }))
+  const base = { helices: [{ helix_id: 'h', points }], joints: points.slice(1).map((p,i) => [points[i], p]) }
+  const axis = points.map((p,i) => ({ helix_id: 'h', bp_index: i, position: [i,5,0] }))
+  const out = thermalCylinderAxis(base, axis)
+  expect(out.joints.at(-1)).toEqual([[298,5,0],[299,5,0]])
+  expect(reads).toBeLessThan(30 * count)
+})

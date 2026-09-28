@@ -15,10 +15,11 @@
  * display-only readout; never mutates topology.
  */
 
-import { getCandoRmsf, getCandoDeviation } from '../api/client.js'
+import { decodeCandoView, LARGE_CANDO_THRESHOLD } from '../scene/cando_large_view.js'
+import { getCandoRmsf, getCandoDeviation, getCandoVisualizationBin } from '../api/client.js'
 import { drawChart, renderToDataURL } from './metric_graph.js'
 import { initResourceMonitor } from './resource_monitor.js'
-import { CANDO_METRIC_META, rmsfRows, deviationRows, candoMetricCSV, buildCandoSpec } from './cando_metrics.js'
+import { CANDO_METRIC_META, compactMetricRows, rmsfRows, deviationRows, candoMetricCSV, buildCandoSpec } from './cando_metrics.js'
 import {
   openMetricExportModal, exportChoiceFiles, downloadText, downloadHref,
 } from './metric_export_modal.js'
@@ -58,6 +59,9 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
 
   // Per-job cache of already-fetched rows, keyed "jobId:metric".
   const _cache = new Map()
+  const _pending = new Map()
+  let _abort = new AbortController()
+  let _cacheJob = null
 
   /** The selected job iff it is completed (only then are FEM profiles available). */
   function _job() {
@@ -98,13 +102,28 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
 
   /** Fetch (cached) the per-bp rows for a metric of the current job. */
   async function _fetchRows(job, metricKey) {
+    if (_cacheJob !== job.job_id) {
+      _abort.abort(); _abort = new AbortController()
+      _cache.clear(); _pending.clear(); _cacheJob = job.job_id
+    }
     const ck = `${job.job_id}:${metricKey}`
     if (_cache.has(ck)) return _cache.get(ck)
-    let out
-    if (metricKey === 'rmsf') out = rmsfRows(await getCandoRmsf(job.job_id))
-    else out = deviationRows(await getCandoDeviation(job.job_id))
-    _cache.set(ck, out)
-    return out
+    if (_pending.has(ck)) return _pending.get(ck)
+    const signal = _abort.signal
+    const task = (async () => {
+      let out
+      if (job.n_nucleotides > LARGE_CANDO_THRESHOLD) {
+        const buffer = await getCandoVisualizationBin(job.job_id, metricKey === 'rmsf' ? 'flex' : 'deviation', { signal })
+        signal.throwIfAborted()
+        out = await compactMetricRows(decodeCandoView(buffer), signal)
+      } else if (metricKey === 'rmsf') out = rmsfRows(await getCandoRmsf(job.job_id, signal))
+      else out = deviationRows(await getCandoDeviation(job.job_id, signal))
+      signal.throwIfAborted()
+      _cache.set(ck, out)
+      return out
+    })()
+    _pending.set(ck, task)
+    try { return await task } finally { if (_pending.get(ck) === task) _pending.delete(ck) }
   }
 
   async function _display(metricKey) {
@@ -114,11 +133,17 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
     _setStatus(row, 'Loading…')
     let data
     try { data = await _fetchRows(job, metricKey) } catch (e) {
+      if (e?.name === 'AbortError' || _job()?.job_id !== job.job_id) return
       _setStatus(row, 'Load failed: ' + (e?.message || 'error'), '#f85149'); return
     }
+    if (_job()?.job_id !== job.job_id || _abort.signal.aborted) return
     if (!data.length) { _setStatus(row, 'No data for this metric.', '#d29922'); return }
-    _openPopup(metricKey, data)
-    _setStatus(row, `${data.length} base pairs.`, '#3fb950')
+    try {
+      _openPopup(metricKey, data)
+      _setStatus(row, `${data.length} base pairs.`, '#3fb950')
+    } catch (error) {
+      _setStatus(row, 'Graph failed: ' + (error?.message || 'error'), '#f85149')
+    }
   }
 
   async function _export(metricKey) {
@@ -127,8 +152,10 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
     const row = rows[metricKey]
     let data
     try { data = await _fetchRows(job, metricKey) } catch (e) {
+      if (e?.name === 'AbortError' || _job()?.job_id !== job.job_id) return
       _setStatus(row, 'Load failed: ' + (e?.message || 'error'), '#f85149'); return
     }
+    if (_job()?.job_id !== job.job_id || _abort.signal.aborted) return
     if (!data.length) { _setStatus(row, 'No data for this metric.', '#d29922'); return }
     const choice = await openMetricExportModal()
     if (!choice) return
@@ -190,6 +217,9 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
 
   /** Called by the panel when the design/selection changes → cached rows are stale. */
   function refresh() {
+    _abort.abort(); _abort = new AbortController()
+    _pending.clear(); _cacheJob = null
+    if (_popup) _popup.style.display = 'none'
     _cache.clear()
     for (const { key } of METRICS) _setStatus(rows[key], '')
     sync()

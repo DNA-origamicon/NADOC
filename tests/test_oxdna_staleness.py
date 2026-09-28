@@ -274,9 +274,13 @@ def test_cross_design_roll_uses_job_snapshot_history_not_active_file_history(
     active = make_6hb_design().model_copy(update={"id": "other-design"})
     design_state.set_design(active)
     c = TestClient(app)
-    assert c.post(
-        "/api/design/assign-scaffold-sequence", json={"custom_sequence": "ACGT" * 2000}
-    ).status_code == 200
+    assert (
+        c.post(
+            "/api/design/assign-scaffold-sequence",
+            json={"custom_sequence": "ACGT" * 2000},
+        ).status_code
+        == 200
+    )
     assert len(design_state.get_or_404().feature_log) > len(snapshot.feature_log)
 
     response = c.post(f"/api/oxdna/jobs/{job.job_id}/roll-design")
@@ -376,7 +380,9 @@ def test_assign_sequences_are_feature_log_steps(tmp_path):
     assert "assign-staple-sequences" in kinds
 
 
-def test_roll_selects_protected_snapshot_loadout_and_keeps_editable_log(monkeypatch, tmp_path):
+def test_roll_selects_protected_snapshot_loadout_and_keeps_editable_log(
+    monkeypatch, tmp_path
+):
     """Viewing a run restores its exact historical log in a protected loadout while
     retaining the later editable branch independently."""
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
@@ -422,7 +428,12 @@ def test_roll_selects_protected_snapshot_loadout_and_keeps_editable_log(monkeypa
 
     # Explicitly returning to the editable branch restores its independent full log.
     editable_id = r.json()["return_loadout_id"]
-    assert c.post(f"/api/design/loadouts/{editable_id}/select?save_current=false").status_code == 200
+    assert (
+        c.post(
+            f"/api/design/loadouts/{editable_id}/select?save_current=false"
+        ).status_code
+        == 200
+    )
     editable = design_state.get_or_404()
     assert len(editable.feature_log) == full_len
     assert [s.sequence for s in editable.strands] != seqs_at_job
@@ -513,3 +524,20 @@ def test_generate_random_overhang_sequence_is_feature_log_step():
     assert d.feature_log[-1].op_kind == "overhang-sequence"
     gen = next(o for o in d.overhangs if o.id == ovid).sequence
     assert gen and set(gen) <= set("ACGT")
+
+
+def test_fingerprint_cache_rejects_reused_object_id_after_document_reopen(monkeypatch):
+    """Object IDs and revision counters can both repeat after a document closes."""
+    from backend.core import oxdna_staleness
+    from backend.api import doc_context
+
+    monkeypatch.setattr(oxdna_staleness, "id", lambda _: 123, raising=False)
+    monkeypatch.setattr(oxdna_staleness, "_CURRENT_FP_CACHE", {})
+    first = make_6hb_design()
+    design_state.set_design(first)
+    fingerprint = current_active_design_fingerprint()
+    design_state.drop_doc(doc_context.DEFAULT_DOC_ID)
+    second = first.copy_with(strands=first.strands[:-1])
+    design_state.set_design(second)
+    assert current_active_design_fingerprint() == oxdna_design_fingerprint(second)
+    assert current_active_design_fingerprint() != fingerprint

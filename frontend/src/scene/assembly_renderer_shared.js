@@ -1579,6 +1579,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     )
     if (crossoverArcGroup) helixGroup.add(crossoverArcGroup)
 
+    helixGroup.visible = _externallyVisible
     scene.add(helixGroup)
 
     const srcEntry = {
@@ -4313,6 +4314,12 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   function setVisible(visible) {
     _externallyVisible = !!visible
     _linkerGroup.visible = _externallyVisible
+    // Hide source roots too: shader visibility alone still submits source meshes
+    // and executes their per-frame LOD/upload hooks beneath a simulation overlay.
+    for (const source of _sources.values()) source.group.visible = _externallyVisible
+    _ovhgLabelGroup.visible = _externallyVisible
+    _ovhgSelGroup.visible = _externallyVisible
+    if (_activeBoxHelper) _activeBoxHelper.visible = _externallyVisible && !_photoMode && _activeInstanceId != null
     if (_renderDataGroup) _renderDataGroup.visible = _externallyVisible
     if (_matInst?.group) _matInst.group.visible = _externallyVisible
     applyGroupVisibilityOverlay(_groupHiddenInstanceIds)

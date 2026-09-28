@@ -1086,3 +1086,54 @@ and `NADOC_VR_DESKTOP_REVIEW=1`. Combined and variable_deliberate VR-first pilot
 pass independent geometry/round-trip and actual X11 mirror checks. Configuration
 and scene revision remain unchanged by observation. Existing legacy presence-only
 checks remain when flags are absent. Evidence: `.development-artifacts/vr-workflows/review-view-validation.md`.
+
+## ISSUE-42 — Simulations browsing prepares an entire assembly; recommendation GET rejected
+
+2026-09-27: [x] Opening Simulations reached automatic availability/list/recommendation
+requests which all unconditionally materialized the assembly into the Design slot.
+The recommendation also supplied a body with GET, rejected by real Chromium.
+Request preparation now distinguishes passive browsing from design consumers;
+assembly facts and job identity no longer require flattening. Failed preparation
+cannot launch against stale Design state. See
+`docs/audits/assembly_simulations_20260927.md` for the reproduction, parity scope
+and validation. No scientific topology or physical sampling changed.
+
+## ISSUE-43 — Assembly FEM launch rebuilds browser geometry and polling rehashes full topology
+
+CanDo/SNUPI assembly launch prepared a full frontend Design projection before creating
+jobs; matching backend fingerprints could then incorrectly select live-part geometry
+for assembly result display. Preparation and large result reads also occupied the API
+event loop, while FEM polling bypassed the shared revision fingerprint cache.
+
+Fix: compact backend-only preparation, snapshot-owned display, worker-pool API work,
+shared revision fingerprint cache, CPU launch policy and failure-safe optimistic rows.
+The native BigO check additionally exposed a no-RMSF node-summary error: unpaired
+terminal bases were counted as duplex nodes. Counts now use the FEM axis records.
+Validation and expensive-mode limits: [execution audit](docs/audits/assembly_fem_execution_20260927.md).
+
+## ISSUE-44 — CanDo thermal reconstruction repeats immutable geometry and hides progress
+
+BigO's 48 thermal frames rebuilt full reference geometry and discarded full
+orientation/axis records on each iteration; progress updated only every five frames
+and gave all thermal work an 8% weight. Stop waited for the whole prediction.
+Fixed with a job-local numeric reconstruction context, XYZ-only frame path,
+bounded statistics/streaming persistence, per-frame labels and cancellation
+boundaries. The original full reconstruction remains the representative geometry
+path and numerical oracle. [Evidence and limits](docs/audits/cando_thermal_optimization_20260927.md).
+
+## ISSUE-45 — Completed BigO CanDo views freeze during scene rebuilds and joint remapping
+
+Four result modes rebuilt detailed geometry or performed quadratic cylinder-joint
+mapping; hidden shared source meshes remained in render traversal. Stale loads
+could override newer mode choices, and large metric graphs downloaded full JSON.
+Fixed with compact exact-position point/line displays above 50k nucleotides,
+indexed joints, root visibility, bounded transport/caches, cancellation epochs,
+and GPU scalar recoloring. Detailed small-result views remain available. See
+[visualization audit](docs/audits/cando_visualization_guards_20260927.md).
+
+## ISSUE-46 — Simulation fingerprint cache can match a recycled object ID
+
+Closing and reopening a document can recycle the Python design object's ID at
+the same revision. The cache now verifies a weak reference to the actual design
+before returning its fingerprint, avoiding stale results without retaining closed
+large designs. A deterministic ID-reuse regression and all 18 staleness tests pass.

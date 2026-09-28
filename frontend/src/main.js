@@ -283,6 +283,7 @@ import { initBladeDisplay } from './ui/blade_display.js'
 import { initFlexScale } from './ui/flex_scale.js'
 import { initEngineActivityHeaders } from './ui/engine_activity_headers.js'
 import { initCandoCylinders } from './scene/cando_cylinders.js'
+import { initCandoLargeView } from './scene/cando_large_view.js'
 import { initMrdnaConnections } from './scene/mrdna_connections.js'
 import { initOxdnaInputOverlay } from './scene/oxdna_input_overlay.js'
 import { initOxdnaLive } from './ui/oxdna_live_controller.js'
@@ -403,6 +404,7 @@ async function main() {
   // snapshot rendered by designRenderer.  Keep this flag outside the clipping
   // closure so its bounds source follows what actually owns the viewport.
   let _simulationVisualizationActive = false
+  let candoDisplay = null
 
   // ── Adaptive camera clipping for large assemblies ─────────────────────────
   // The camera's far plane is a fixed 2000 nm (sized for a single design — see
@@ -466,8 +468,8 @@ async function main() {
           // the viewport. Its renderer therefore has either empty bounds (classic
           // renderer) or stale native bounds (shared renderer). Build bounds from
           // the live snapshot positions instead; applyFemPositions mutates entry.pos.
-          box = new THREE.Box3()
-          for (const entry of designRenderer.getBackboneEntries?.() || []) {
+          box = candoDisplay?.getBoundingBox?.() ?? new THREE.Box3()
+          if (box.isEmpty()) for (const entry of designRenderer.getBackboneEntries?.() || []) {
             if (entry.pos) box.expandByPoint(entry.pos)
           }
         } else {
@@ -1278,7 +1280,7 @@ async function main() {
   const namdPegCoating = initNamdPegCoating({ api, store })
   const mdPanel = initMdJobsPanel({
     mdDisplayController,
-    getWorkspacePath: () => _workspacePath,
+    getWorkspacePath: () => store.getState().assemblyActive ? _assemblyWorkspacePath : _workspacePath,
     getFlexScale: () => flexScale,
     getOxdnaDisplay: () => oxdnaDisplay,
     // mdViz is declared below (~after oxdnaDisplay): the MD trajectory-scrub +
@@ -1522,9 +1524,10 @@ async function main() {
       assemblyJointRenderer.setVisible(true)
     }
   }
-  const candoDisplay = initCandoDisplay({
+  candoDisplay = initCandoDisplay({
     designRenderer, api,
     cylinderOverlay:  candoCylinderOverlay,
+    largeView: initCandoLargeView(scene),
     setDesignVisible: _setSimulationVisualizationVisible,
     restoreDesignVisible: _restoreNativeAfterSimulation,
     flexScale,

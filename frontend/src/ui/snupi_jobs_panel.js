@@ -24,6 +24,7 @@
  * (module-first law); main.js only imports + inits + does thin wiring.
  */
 
+import { store } from '../state/store.js'
 import { initJobsPanelBase } from './jobs_panel_base.js'
 import { selectionUpdatesVisualization } from './visualization_selection_policy.js'
 import { showToast } from './toast.js'
@@ -496,6 +497,8 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
       } }))
       optimisticId = null
       await _fetchJobs()
+    } catch (error) {
+      showToast(error.message || 'Failed to start SNUPI FEM prediction', { severity: 'error' })
     } finally {
       if (optimisticId) {
         window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', {
@@ -614,7 +617,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     }
     const r = await snupiDisplay[_MODE_FNS[mode]]?.(
       _selectedId, _showDisplayProgress,
-      { reuseLiveGeometry: _selectedJob()?.out_of_date === false },
+      { reuseLiveGeometry: !store.getState().assemblyActive && _selectedJob()?.out_of_date === false },
     )
     if (!r?.ok) { snupiDisplay.stopDeform?.(); setMode('off') }
     _syncDisplayStatus()
@@ -729,7 +732,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     try {
       r = await snupiDisplay[_MODE_FNS[mode]]?.(
         _selectedId, _showDisplayProgress,
-        { reuseLiveGeometry: _selectedJob()?.out_of_date === false },
+        { reuseLiveGeometry: !store.getState().assemblyActive && _selectedJob()?.out_of_date === false },
       )
     } catch (err) {
       r = { ok: false, reason: err?.message || 'load failed' }

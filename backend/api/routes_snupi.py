@@ -87,15 +87,11 @@ def _load_job(job_id: str) -> SnupiJob:
 
 
 def _current_fingerprint() -> "str | None":
-    from backend.core.oxdna_staleness import oxdna_design_fingerprint
+    # Share the document/revision cache with oxDNA and MD. Rehashing the full
+    # flattened topology on every list/status poll starves large FEM jobs.
+    from backend.core.oxdna_staleness import current_active_design_fingerprint
 
-    design = design_state.get_design()
-    if design is None:
-        return None
-    try:
-        return oxdna_design_fingerprint(design)
-    except Exception:  # noqa: BLE001
-        return None
+    return current_active_design_fingerprint()
 
 
 def _is_out_of_date(job: SnupiJob, current_fp: "str | None") -> bool:
@@ -195,8 +191,10 @@ class CreateSnupiJobRequest(BaseModel):
 
 
 @router.post("/snupi/jobs")
-async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
+def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
     """Prepare + run a new SNUPI FEM shape-prediction job from the active design."""
+    # FastAPI runs this synchronous route in its worker pool, including topology
+    # counting, fingerprinting, provenance and preparation for large assemblies.
     design = design_state.get_or_404().without_reference_geometry()
     from backend.core.streptavidin import require_coating_simulation_support
     try:
@@ -304,7 +302,7 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
     )
 
     try:
-        await run_in_threadpool(prepare_snupi_job, design, job, _workspace())
+        prepare_snupi_job(design, job, _workspace())
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "create_snupi_job: prepare FAILED for %s: %s",
@@ -378,7 +376,7 @@ def _list_snupi_jobs() -> tuple[list[dict], list]:
 
 
 @router.get("/snupi/jobs/{job_id}")
-async def get_snupi_job(job_id: str) -> dict:
+def get_snupi_job(job_id: str) -> dict:
     job = _load_job(job_id)
     d = job.to_dict()
     d["out_of_date"] = _is_out_of_date(job, _current_fingerprint())
@@ -455,6 +453,10 @@ async def delete_snupi_job(job_id: str) -> dict:
 
 @router.get("/snupi/jobs/{job_id}/snapshot-geometry")
 async def get_snupi_snapshot_geometry(job_id: str) -> dict:
+    return await run_in_threadpool(_get_snupi_snapshot_geometry, job_id)
+
+
+def _get_snupi_snapshot_geometry(job_id: str) -> dict:
     """The full geometry of the job's OWN design snapshot — the topology the design had
     when the analysis was run, not live editor state.  The display modes render THIS
     (hiding the live model) and then overlay the FEM-predicted shape on it.
@@ -485,7 +487,7 @@ async def get_snupi_snapshot_geometry(job_id: str) -> dict:
         _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
         return nucleotides, axes
 
-    nucleotides, axes = await run_in_threadpool(_compute)
+    nucleotides, axes = _compute()
     return {
         "job_id": job.job_id,
         "ready": True,
@@ -496,7 +498,7 @@ async def get_snupi_snapshot_geometry(job_id: str) -> dict:
 
 
 @router.get("/snupi/jobs/{job_id}/display")
-async def get_snupi_display(job_id: str) -> dict:
+def get_snupi_display(job_id: str) -> dict:
     """Predicted per-nucleotide positions as an applyFemPositions update list."""
     job = _load_job(job_id)
     cached = load_display(job.job_dir(_workspace()))
@@ -528,7 +530,7 @@ async def get_snupi_display_bin(job_id: str) -> Response:
 
 
 @router.get("/snupi/jobs/{job_id}/rmsf")
-async def get_snupi_rmsf(job_id: str) -> dict:
+def get_snupi_rmsf(job_id: str) -> dict:
     """Per-bp RMSF (nm) for the flexibility map.  One entry per FEM (duplex-core) node:
     ``{helix_id, bp_index, rmsf_nm}``."""
     job = _load_job(job_id)
@@ -548,7 +550,7 @@ async def get_snupi_rmsf(job_id: str) -> dict:
 
 
 @router.get("/snupi/jobs/{job_id}/trajectory")
-async def get_snupi_trajectory(job_id: str) -> dict:
+def get_snupi_trajectory(job_id: str) -> dict:
     """The dynamics thermal/reconfiguration TRAJECTORY for the animation toggle (dynamics jobs only).
     ``{keys:[[helix,bp,dir,copy],…], frames:[[6 floats/key],…], n_frames}`` — the same wire shape as
     oxDNA's /trajectory, so the frontend scrubber/player (``framesToUpdates``) is reused."""
