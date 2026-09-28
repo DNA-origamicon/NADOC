@@ -2,6 +2,7 @@
 import argparse
 import json
 import time
+import uuid
 from pathlib import Path
 import numpy as np
 from fastapi.testclient import TestClient
@@ -21,7 +22,7 @@ from tools.vr_workflows.dimensions_check import run
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--output',type=Path,default=Path('.development-artifacts/vr-dimensions')/('persistence-'+uuid.uuid4().hex[:12]))
     parser.add_argument('--validate',action='store_true')
     args=parser.parse_args();args.output.mkdir(parents=True,exist_ok=False)
     if routes_vr._read_state():

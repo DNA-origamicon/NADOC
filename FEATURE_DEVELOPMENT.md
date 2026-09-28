@@ -105,6 +105,19 @@ validation and eventual text-to-DNA-origami. It is bound by *this* document — 
 metric is **"validation gained, not just a passthrough"** (an oracle that asserts a property of the result),
 the analog of the carve-up's back-import-surface gate. Read its backlog's `## Next-session handoff` to start.
 
+## VR tours and tests — required discoverability
+
+For new or changed VR behavior, create or extend a reusable demonstration and
+regression workflow, then register it under **Debug → VR Tours & Tests…** in the
+same change. Group it by the relevant left/right desktop sidebar tab, Dimensions,
+Tools/authoring, or shared interaction category. Extend an existing tour where it
+already covers the behavior; avoid duplicate menu entries for individual unit tests.
+Use the shared catalog in `tools/vr_workflows/tour_catalog.py` and the
+[registration checklist](docs/vr_sidebar_menus.md#adding-future-tours-and-tests).
+A new major VR workflow is not finished until it is discoverable from this menu,
+including a clearly explained terminal-only entry if direct launching needs special
+setup. Keep automated software checks and physical-headset validation claims distinct.
+
 ## Cross-references
 
 - Construction mechanics + init/subscription order: `.claude/rules/main-init.md`

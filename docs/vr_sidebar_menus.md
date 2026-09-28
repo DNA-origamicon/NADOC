@@ -134,3 +134,57 @@ beside the full menu frame, checks controller rays and input ownership before
 endpoint triggers, and freezes newly created lines there before resuming menu
 navigation. Each profile starts with a clean measurement list. Clearance evidence
 is recorded in `measurement-clearance.json`; controller motion profiles are unchanged.
+
+## Debug tour launcher
+
+Open **Debug → VR Tours & Tests…** on the desktop. Categories organize all
+sidebar tabs plus controls/layout, Dimensions, and Tools/authoring. Each left
+or right tab has a focused scrolling tour. **Demo** uses `steady_fast` and leaves
+menu tours open for review; **Validate** runs all four profiles and exits.
+The quick overview is explicitly partial coverage in either mode.
+
+Use **Run demo / Run validation**, watch output and the evidence path, then
+**Stop tour** to release inputs and close the owned viewer. Closing the dialog
+leaves a run active; reopening restores status. Backend shutdown closes its owned
+run. An already active viewer or tour blocks another launch. These endpoints use
+the same workstation-local access policy as native VR launch.
+
+Commands are also available via **Copy command**. The older authoring workflow
+is terminal-only, with its owned-viewer prerequisite and designated review-file
+replacement described in the card. Evidence from direct launches lives beneath
+`.development-artifacts/vr-debug-tours/<run>/`.
+
+Focused command-line example:
+
+```bash
+just vr-menu-tour --tab right:properties --preset steady_fast
+just vr-menu-tour --tab left:photo --validate --hold 0 --exit
+```
+
+## Adding future tours and tests
+
+This is a standing user requirement for future VR development sessions.
+
+1. Create or extend a reusable workflow alongside the VR behavior it exercises.
+   Keep focused software regression tests as well; menu entries represent useful
+   demo/validation workflows, not a button for every individual unit assertion.
+2. Register the workflow in `tools/vr_workflows/tour_catalog.py`. Give it a stable
+   ID, clear title, accurate coverage description and the category corresponding
+   to its desktop sidebar tab or shared interaction. Add a category only when an
+   existing one does not fit. Per-tab page tours are generated from the sidebar
+   catalog; regenerate/check that catalog when adding desktop tabs.
+3. Supply demo and validation arguments in `arguments()`. Preserve steady_fast
+   for initial demos and all four unchanged profiles for interactive validation.
+   State partial coverage and prerequisites explicitly. Do not label a unit-only
+   check as physical headset or rendered-pixel validation.
+4. For direct launch, accept `--output`, isolate test documents/viewers, refuse
+   conflicting sessions, and clean up owned inputs/processes on interruption.
+   Use the existing named-workflow launcher, status and Stop controls. If special
+   setup prevents direct launch, register a terminal-only card with the command
+   and prerequisite explanation so the workflow is still discoverable.
+5. Update catalog/launcher tests as appropriate. Exercise the new category/card,
+   command, mode and error/stop behavior in the desktop app; validate the workflow
+   itself at the scope required by the change. Retain evidence under
+   `.development-artifacts/` and verify disposable test files are removed.
+6. Update the relevant VR documentation/current-state memory with the menu route,
+   coverage, results and any remaining physical validation debt.

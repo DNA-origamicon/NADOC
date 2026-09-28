@@ -81,6 +81,7 @@ Detailed extraction verification lives in the path-scoped [main-init rule](.clau
 - `.claude/rules/*.md` supplies path-scoped architecture. `.claude/runbooks/` supplies debugging procedures. `.claude/skills/` supplies task-specific workflows.
 - Before completing a behavior change, read the relevant project head and any clearly matching feedback file. Update stale current-state claims that the change resolves.
 - Before VR/SteamVR/Vive or left-eye-mirror troubleshooting, read [VR recovery guardrails](memory/feedback_vr_restore_proven_path.md) and [the proven workstation fixes](memory/project_steamvr_drm_lease_fix.md). Recover the established path before proposing a replacement.
+- **VR tour discoverability:** when adding or changing VR behavior, create or extend a reusable tour/test and register its demo or validation entry in **Debug → VR Tours & Tests…**, grouped by the relevant sidebar tab or interaction category. Update `tools/vr_workflows/tour_catalog.py`; do not leave new VR workflows accessible only through ad-hoc commands. Follow [the registration checklist](docs/vr_sidebar_menus.md#adding-future-tours-and-tests).
 - Before adding a feature, read [FEATURE_DEVELOPMENT.md](FEATURE_DEVELOPMENT.md). Cohesive behavior belongs in a tested module; composition roots such as `main.js` receive only imports, initialization, and thin wiring.
 
 ### Part/assembly feature parity

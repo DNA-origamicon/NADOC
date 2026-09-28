@@ -1,7 +1,7 @@
 {
   "version": 2,
   "sourceHashes": {
-    "frontend/index.html": "4a36228b2b015a13eefb6ae672295a8e36f7ad10f1e1d535e9582d64ef121261",
+    "frontend/index.html": "152d57ec1a7091a71ca9b4b4baf13011b13a7cdcd93bc45b845cafa37b675750",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/ui/annotation_panel.js": "a7d938893f5531a678938045c0e480828807959d8656f87f638c6db16ed72ccb",
     "frontend/src/ui/assembly_panel.js": "66d96d1bc91ce4440dd541b0ea57219f41440598f24ce2d54d52f3b121880097",

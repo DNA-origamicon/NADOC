@@ -7,6 +7,14 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Standing user requirement: organized VR tours
+
+Every future session adding or changing VR behavior must create or extend a
+reusable tour/test and organize its entry in **Debug → VR Tours & Tests…**.
+Register it in `tools/vr_workflows/tour_catalog.py` under the related sidebar tab
+or interaction category; follow the [registration checklist](../docs/vr_sidebar_menus.md#adding-future-tours-and-tests).
+Do not leave new major demos or validation workflows as undiscoverable shell commands.
+
 ## Mission and current state
 
 VR recovery starts with [the restoration guardrails](feedback_vr_restore_proven_path.md)
@@ -420,3 +428,12 @@ Scene Focus 60 ms after connecting, then held `SYNCHRONIZED` with zero `STOPPING
 ## Immediate handoff
 
 Implement Phase 5A's shared transaction identity and atomic residue-scope persistence, then attach Move/Rotate Confirm and exact transaction-bound Undo for Cluster/Base/End/Domain/Strand. Native must display pending/succeeded/failed state from browser feedback, suppress duplicate Confirm, keep Cancel exact before commit, and refuse stale Undo after any unrelated desktop edit. Run focused backend/frontend/native tests and then the physical Move/Rotate gate in Full and Ball-and-Stick, including selection change, Firefox reload/session exit, controller transition, large rotation, and SteamVR frame timing. Only after that passes, attach the same lifecycle to exact one-cell End Extrude: final preflight immediately before mutation, explicit footprint/direction summary, duplicate-confirm suppression, committed geometry refresh, and exact one-step Undo. Keep Twist/Bend commits, broader extrusion modes, atom persistence, job actions, and simulation results deferred until 5A/5B are complete or the user redirects again.
+
+## Debug tour entry points (2026-09-27)
+
+Desktop **Debug → VR Tours & Tests…** groups Overview, Left sidebar, Right sidebar,
+Controls & layout, Dimensions and Authoring. Catalog lives in
+`tools/vr_workflows/tour_catalog.py`; `routes_vr_tours.py` owns allowlisted isolated
+subprocess launches/status/cancellation. `menu_tour --tab side:key` scopes page
+coverage. Demo uses steady_fast; validation uses all four profiles. The existing
+authoring demo remains terminal-only because of its special viewer/review assets.

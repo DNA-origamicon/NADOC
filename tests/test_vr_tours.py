@@ -1,0 +1,77 @@
+"""Debug launch catalog and process ownership; never start SteamVR in unit tests."""
+from unittest.mock import Mock
+import pytest
+from fastapi.testclient import TestClient
+from backend.api.main import app
+from backend.api import routes_vr_tours as tours
+from tools.vr_workflows.tour_catalog import catalog, arguments
+
+
+@pytest.fixture
+def client(monkeypatch, tmp_path):
+    monkeypatch.setattr(tours, '_run', None)
+    monkeypatch.setattr(tours, 'ROOT', tmp_path)
+    monkeypatch.setattr(tours, '_viewer_active', lambda: False)
+    # Keep the actual local-origin policy; only skip workstation capability probing.
+    monkeypatch.setattr('backend.api.routes_vr._native_platform_reason', lambda: None)
+    return TestClient(app, client=('127.0.0.1', 12345))
+
+
+def test_catalog_covers_every_tab_and_distinguishes_partial_demo(client):
+    import json
+    from tools.vr_workflows.tour_catalog import ROOT
+    result = client.get('/api/vr/tours').json()
+    tabs = json.loads((ROOT/'native/vr_viewer/sidebar_catalog.json').read_text())['tabs']
+    assert {f"{t['side']}-{t['key']}" for t in tabs} <= {t['id'] for t in result['tours']}
+    assert 'not full coverage' in next(t for t in result['tours'] if t['id']=='quick')['description']
+    assert not next(t for t in result['tours'] if t['id']=='authoring')['runnable']
+    for tour in catalog()['tours']:
+        if tour['module']=='menu_tour':
+            assert '--validate' in arguments(tour, True)
+            assert '--preset' in arguments(tour)
+
+
+def test_launch_fixed_arguments_status_and_duplicate_guard(client, monkeypatch):
+    process = Mock(pid=987654)
+    process.poll.return_value = None
+    popen = Mock(return_value=process)
+    monkeypatch.setattr(tours.subprocess, 'Popen', popen)
+    result = client.post('/api/vr/tours/start', json={'tour':'right-properties','mode':'validate'})
+    assert result.status_code == 200, result.text
+    assert result.json()['run']['status']=='running'
+    args, kwargs = popen.call_args
+    assert args[0][1:7] == ['-m','tools.vr_workflows.menu_tour','--tab','right:properties','--validate','--hold']
+    assert kwargs['start_new_session'] and not kwargs.get('shell')
+    assert client.post('/api/vr/tours/start',json={'tour':'all'}).status_code==409
+    assert client.post('/api/vr/tours/stop/wrong-run').status_code==409
+    process.poll.return_value = 1
+    assert client.get('/api/vr/tours/status').json()['run']['status']=='failed'
+
+
+def test_rejects_arbitrary_commands_and_active_viewers(client, monkeypatch):
+    assert client.post('/api/vr/tours/start',json={'tour':'../../shell'}).status_code==400
+    assert client.post('/api/vr/tours/start',json={'tour':'authoring'}).status_code==400
+    assert client.post('/api/vr/tours/start',json={'tour':'all','mode':'shell'}).status_code==422
+    monkeypatch.setattr(tours, '_viewer_active', lambda: True)
+    assert client.post('/api/vr/tours/start',json={'tour':'all'}).status_code==409
+    assert client.post('/api/vr/tours/start',json={'tour':'all'},headers={'Origin':'https://unrelated.example'}).status_code==403
+
+
+def test_stop_only_signals_owned_group(monkeypatch):
+    process = Mock(pid=123456)
+    kill = Mock()
+    monkeypatch.setattr(tours.os, 'killpg', kill)
+    tours._stop_process(process)
+    kill.assert_called_once_with(123456, tours.signal.SIGINT)
+    process.wait.assert_called_once_with(timeout=15)
+
+
+def test_shutdown_closes_only_the_owned_live_tour(monkeypatch):
+    process = Mock(pid=123456)
+    process.poll.return_value = None
+    monkeypatch.setattr(tours, '_run', {'process': process, 'stopping': False})
+    terminate = Mock()
+    monkeypatch.setattr(tours, '_stop_process', terminate)
+    tours.shutdown_tours()
+    tours.shutdown_tours()
+    terminate.assert_called_once_with(process)

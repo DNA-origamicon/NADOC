@@ -311,6 +311,7 @@ def main():
         action="store_true",
         help="Check trackpad focus, trigger activation and pointer handoff",
     )
+    parser.add_argument("--tab", help="Tour only this side:key, e.g. right:properties")
     parser.add_argument("--socket", help="Use an existing isolated control session")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--preset", choices=PRESETS, default="variable_fast")
@@ -336,8 +337,15 @@ def main():
     output = args.output or root / ".development-artifacts/vr-sidebar" / time.strftime(
         "tour-%Y%m%d-%H%M%S"
     )
-    output.mkdir(parents=True, exist_ok=False)
     catalog = json.loads((root / "native/vr_viewer/sidebar_catalog.json").read_text())
+    if args.tab:
+        if args.focus_checks or args.grip_checks or args.dimension_checks:
+            parser.error('--tab is only supported by the sidebar page tour')
+        tabs = [t for t in catalog['tabs'] if f"{t['side']}:{t['key']}" == args.tab]
+        if not tabs:
+            parser.error('Unknown sidebar tab: '+args.tab)
+        catalog = {**catalog, 'tabs': tabs}
+    output.mkdir(parents=True, exist_ok=False)
     proc = None
     live = None
     with tempfile.TemporaryDirectory(prefix="nadoc-menu-") as temp:
@@ -446,7 +454,8 @@ def main():
                 (output / "result.json").write_text(
                     json.dumps(results, indent=2) + "\n"
                 )
-            check_actions(live, output, args.preset)
+            if not args.tab:
+                check_actions(live, output, args.preset)
             from tools.vr_motion.desktop_check import run as check_desktop
 
             desktop = check_desktop(socket, output / "desktop", live=live, reveal=True)
