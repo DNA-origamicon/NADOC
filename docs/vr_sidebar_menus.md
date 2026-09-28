@@ -14,10 +14,13 @@ right of the right menu content. Use the vertical scrollbar: point and hold the 
 position its thumb, or swipe the trackpad while pointing at a panel. Buttons have
 rounded borders, subtle blue accents for enabled actions, and a muted red Close
 button; unsupported controls remain gray. The right-trackpad Tools shortcut remains available when the right menu is closed.
-With a menu open, click its trackpad to enter focus navigation; up/down moves
-focus, left/right switches tabs, and the same trigger activates. When the scrollbar
+With a menu open, click its trackpad to focus the pointed-at control (or the active
+tab when pointing away). Up/down stops at the ends of the current column; it never
+wraps or crosses into another column. Left/right moves spatially between tabs,
+scrollbar, and content (mirrored on the left menu), or between buttons on the same
+row. Trigger activates the highlighted control, including tab changes. When the scrollbar
 is focused, up/down pages the content while retaining focus; left/right leaves the
-scrollbar for the last row or Close button. No trigger is needed to scroll.
+scrollbar for the nearest row or tab at the entry height. No trigger is needed to scroll.
 A short tab has a gray, inactive scrollbar. Center-click
 returns to pointing, as does moving the ray away and then aiming steadily at a
 button for 450 ms. See [UI style and input standard](vr_ui_style.md).
@@ -192,7 +195,13 @@ This is a standing user requirement for future VR development sessions.
 ## Representation loading benchmark
 
 **Debug → VR Tours & Tests → Right sidebar → Visualization demo**
-runs all 12 directed transitions among Cylinders, Full, Ball & Stick and Stick.
+runs all 110 directed transitions among Hull, Cylinders, Beads, Full, Surface,
+VDW, Ball & Stick, Stick, mrDNA Coarse, mrDNA Fine and oxDNA.
+VDW and Beads share source geometry with Ball & Stick and Full; meshes and
+coarse-grained previews reuse the desktop builders. Validation repeats all
+transitions with all four controller profiles (440 switches).
+**Right sidebar → Representation colors** provides a shorter cycle through all
+eleven styles and both coloring pages, with disabled-control pixel checks.
 Demo uses steady_fast; validation runs all four controller profiles. The open design
 is snapshotted read-only, including unsaved edits. CLI defaults to `24hb_0xT`;
 use `--design PATH` for another file. Each run owns a private snapshot, viewer and native style responder;
@@ -204,6 +213,8 @@ coverage, desktop verification and controller trials.
 ```bash
 uv run python -m tools.vr_workflows.representation_tour
 uv run python -m tools.vr_workflows.representation_tour --validate
+# Short visual pass, including both coloring pages and disabled-control pixels:
+uv run python -m tools.vr_workflows.representation_tour --cycle
 ```
 
 Visualization tours retain a content-addressed export cache under
@@ -214,15 +225,16 @@ snapshot checksum. Run snapshots are immutable hard links when possible and rema
 valid after cache eviction; retained run evidence has its own lifetime.
 `export.json` reports `cache_hit` and preparation time; `loading.json` reports
 `startup_to_live_ready_s` including preparation and viewer startup. A new or changed
-design still pays the full export cost. The native loader/GPU startup is unchanged.
+design still pays the full export cost. The native loader prewarms the complete catalog, including the surface mesh.
 Use `--no-cache` for a fresh-export benchmark without reading or populating the cache.
 The Debug Visualization demo/validation entries use caching automatically.
 
-For paired native renderer comparisons, reuse the same previously exported asset:
+For paired native renderer comparisons, reuse the same previously exported v15 asset (older four-representation snapshots
+do not contain the complete catalog):
 
 ```bash
 uv run python -m tools.vr_workflows.representation_tour \
-  --snapshot .development-artifacts/vr-representations/24hb_0xT.nadocvr \
+  --snapshot .development-artifacts/vr-all-representations/steady/scene.nadocvr \
   --output .development-artifacts/vr-representations/new-comparison --validate
 ```
 

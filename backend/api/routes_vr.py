@@ -126,7 +126,7 @@ class VRLaunchRequest(BaseModel):
     camera: Optional[VRCamera] = None
     measured_positioning: bool = True
     assembly_active: bool = False
-    representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
+    representation: Literal["cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     show_periodic_seam_arcs: bool = False
     # Developer-only opt-in. Paths are server-generated, never client supplied.
@@ -170,7 +170,7 @@ class VRJobsFeedbackRequest(BaseModel):
     active_job_engine: Optional[str] = Field(
         default=None, max_length=24, pattern=r"^[a-z0-9_-]+$"
     )
-    representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
+    representation: Literal["cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     visualization_mode: str = Field(
         default="none", min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$"
@@ -181,7 +181,7 @@ class VRJobsFeedbackRequest(BaseModel):
 
 
 class VRVisualizationFeedbackRequest(BaseModel):
-    representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
+    representation: Literal["cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     visualization_mode: str = Field(
         default="none", min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$"
@@ -787,6 +787,7 @@ def _serialize_scene(
     unligated_crossover_ids: list[str] | None = None,
     show_periodic_seam_arcs: bool = False,
     line_writer: Callable[[str], None] | None = None,
+    extra_geometry=None,
 ) -> str | dict[str, dict[str, tuple[int, str]]]:
     """Create the deliberately trivial line-oriented format read by the C++ viewer."""
     # Stable IDs and aliases need the loop-copy identity that the canonical
@@ -823,7 +824,7 @@ def _serialize_scene(
         return color * 4
 
     primitive_ids: dict[str, set[str]] = {
-        name: set() for name in ("full", "cylinders", "ballstick", "stick")
+        name: set() for name in ("full", "cylinders", "ballstick", "stick", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna")
     }
     active_representation = "full"
 
@@ -1481,7 +1482,7 @@ def _serialize_scene(
     lines = _SceneLineEmitter(line_writer)
     from backend.core.extrude_plane import extrude_plane_record
 
-    lines.append(f"NADOCVR 13 {representation} {coloring}")
+    lines.append(f"NADOCVR 15 {representation} {coloring}")
     lines.append(extrude_plane_record(design))
     lines.append("# stable identities, owner aliases, and endpoint-aware tool scopes")
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]] = {}
@@ -2475,6 +2476,8 @@ def _serialize_scene(
         name: str, include_points: bool, point_radius: float, bond_radius: float
     ) -> None:
         nonlocal active_representation
+        from backend.core.atomistic import VDW_RADIUS, DEFAULT_VDW_RADIUS
+
         lines.append(f"R {name}")
         active_representation = name
         declared_owner_tokens.clear()
@@ -2502,6 +2505,8 @@ def _serialize_scene(
                             (*aliases, atom_tool_tokens[atom_index]),
                         ),
                     )
+                    encoded = quote(atom_primitive_identity(atom_index), safe="-_.:~")
+                    lines.append(f"V {encoded} {nums(VDW_RADIUS.get(atom.element, DEFAULT_VDW_RADIUS))}")
         for first_index, second_index in atomistic_model.bonds:
             # Canonicalize undirected bond endpoint order together with positions
             # and owner weights so identity/value parity survives topology writers
@@ -2587,6 +2592,19 @@ def _serialize_scene(
     # the same bond radius.
     append_atomistic("ballstick", True, 0.070, 0.025)
     append_atomistic("stick", False, 0.0, 0.025)
+
+    if extra_geometry is not None:
+        from backend.core.vr_representation_geometry import append_records
+        def begin_extra(rep):
+            nonlocal active_representation
+            active_representation = rep
+            primitive_ids.setdefault(rep, set())
+            lines.append(f"R {rep}")
+            declared_owner_tokens.clear()
+            lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
+            append_tool_handles()
+        append_records(extra_geometry, nucleotides, rotation, begin_extra, emit, lines,
+                       nucleotide_owner_tokens, base_key, palette_for_index)
 
     if not lines.has_visible:
         raise HTTPException(
@@ -2701,7 +2719,7 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     expanded_lines = expanded_text.splitlines()
     natural_header = natural_lines[0].split()
     expanded_header = expanded_lines[0].split()
-    if natural_header != expanded_header or (natural_header[0] != "NADOCVR" or natural_header[1] not in {"12", "13"}):
+    if natural_header != expanded_header or (natural_header[0] != "NADOCVR" or natural_header[1] not in {"12", "13", "15"}):
         raise HTTPException(500, detail="Expanded VR scene headers do not match.")
 
     def blocks(lines: list[str]) -> dict[str, list[str]]:
@@ -2725,7 +2743,7 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
         " ".join(natural_header),
         "# natural and expanded poses share identities and endpoint-aware tool scopes",
     ]
-    if natural_header[1] == "13":
+    if int(natural_header[1]) >= 13:
         defaults = [line for line in natural_lines if line.startswith("F ")]
         if len(defaults) != 1 or defaults != [line for line in expanded_lines if line.startswith("F ")]:
             raise HTTPException(500, detail="Expanded extrusion defaults differ.")
@@ -2877,7 +2895,7 @@ def _snapshot(
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     from backend.core.atomistic import build_atomistic_model
 
-    # The in-headset menu switches instantly, so all four representations are
+    # The in-headset menu switches instantly, so all eleven representations are
     # preloaded in one immutable snapshot instead of calling back into the browser.
     atomistic_model = build_atomistic_model(
         design,
@@ -2885,6 +2903,9 @@ def _snapshot(
         measured_positioning=measured_display_placement(body.measured_positioning),
     )
     from backend.api.crud import unligated_crossover_ids
+
+    from backend.core.vr_representation_geometry import build as build_extra_geometry
+    extra_geometry = build_extra_geometry(design, nucleotides, axes)
 
     natural_scene = _serialize_scene(
         design,
@@ -2897,6 +2918,7 @@ def _snapshot(
         unligated_crossover_ids(design),
         body.show_periodic_seam_arcs,
         line_writer=line_writer,
+        extra_geometry=extra_geometry,
     )
     expanded_nucleotides, expanded_axes, expanded_atomistic = _expanded_scene_inputs(
         design, nucleotides, axes, atomistic_model
@@ -2919,6 +2941,7 @@ def _snapshot(
         unligated_crossover_ids(design),
         body.show_periodic_seam_arcs,
         line_writer=expanded_writer,
+        extra_geometry=extra_geometry,
     )
     if line_writer is not None:
         assert isinstance(natural_scene, dict) and isinstance(expanded_scene, dict)
@@ -3551,7 +3574,7 @@ def _event_payload(state: dict | None) -> dict:
             )
             or selection_level
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
-            or representation not in {"cylinders", "full", "ballstick", "stick"}
+            or representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"}
             or coloring not in {"strand", "base", "cluster", "cpk"}
             or tool_mode not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
             or tool_action not in {"activate", "preview", "confirm", "cancel", "undo"}
@@ -4232,7 +4255,7 @@ def _visualization_snapshot_record(
     rotation = np.asarray(view_rotation, dtype=float)
     if rotation.shape != (3, 3) or not np.all(np.isfinite(rotation)):
         raise ValueError("Invalid VR visualization view rotation.")
-    if representation not in {"cylinders", "full", "ballstick", "stick"} or coloring not in {
+    if representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"} or coloring not in {
         "strand", "base", "cluster", "cpk",
     }:
         raise ValueError("Invalid VR visualization style.")
@@ -4502,7 +4525,7 @@ def _job_snapshot_record(
             row.engine == active_job_engine and row.job_id == active_job_id
             for row in rows
         ))
-        or representation not in {"cylinders", "full", "ballstick", "stick"}
+        or representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"}
         or coloring not in {"strand", "base", "cluster", "cpk"}
     ):
         raise ValueError("Invalid VR job feed availability or total.")

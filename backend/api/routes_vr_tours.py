@@ -87,7 +87,7 @@ def start(body: StartTour, request: Request):
         if _viewer_active():
             raise HTTPException(409, 'Close the active VR viewer before starting an isolated tour.')
         design = None
-        if tour['id'] == 'representations':
+        if tour['module'] == 'representation_tour':
             from backend.api import state
             from backend.api.doc_context import get_current_doc
             if body.assembly_active:

@@ -216,9 +216,11 @@ int objectIdGlChecks() {
     glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_STENCIL_ATTACHMENT,GL_RENDERBUFFER,depth);
     requireLive(glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE,"ID test framebuffer");
     SceneData data;
+    data.available.fill(true); // Programmatic fixture; file loading normally derives this.
     ColorSet colors; colors.values.fill({1,0,0});
     auto& full=data.representations[static_cast<size_t>(Representation::full)];
     full.points={{"front",{0,0,-1},colors,.2F},{"rear",{0,0,-2},colors,.4F}};
+    full.points[0].vdwSize=.3F;
     full.ownerAliases.push_back({"front", {"canonical-front"}});
     full.cylinders.push_back({"cylinder",{-.6F,-.4F,-1},{-.6F,.4F,-1},.07F,colors});
     full.halfCylinders.push_back({"half",{.5F,-.4F,-1},{.5F,.4F,-1},.1F,colors});
@@ -226,6 +228,11 @@ int objectIdGlChecks() {
     auto& stick=data.representations[static_cast<size_t>(Representation::stick)];
     stick.cylinders=full.cylinders;
     data.representations[static_cast<size_t>(Representation::ballstick)]=full;
+    auto& surface=data.representations[static_cast<size_t>(Representation::surface)];
+    surface.boxes.push_back({"triangle",{0,0,-1},{.8F,0,0},{0,.8F,0},{0,0,.00001F},colors,
+        {glm::vec3(0,0,1),glm::vec3(0,0,1),glm::vec3(0,0,1)}});
+    data.representations[static_cast<size_t>(Representation::oxdna)].boxes.push_back(
+        {"ellipsoid",{0,0,-1},{.8F,0,0},{0,.4F,0},{0,0,.4F},colors});
     {
         GlScene scene(std::move(data),true);
         auto render = [&]() {
@@ -263,6 +270,18 @@ int objectIdGlChecks() {
         requireLive(scene.objectTable(unique).find("cylinder")!=std::string::npos,"atomistic line IDs missing");
         scene.setStyle(Representation::full,Coloring::base);
         requireLive(render()[64*128+64]==front,"object ID changed after style switch");
+        scene.setStyle(Representation::surface,Coloring::strand);
+        requireLive(!scene.pick({{.3F,.3F,0},{0,0,-1}},glm::mat4(1)),"invisible triangle corner remained selectable");
+        requireLive(scene.pick({{-.1F,-.1F,0},{0,0,-1}},glm::mat4(1)).has_value(),"triangle ray target missing");
+        auto triangles=render();
+        requireLive(triangles[60*128+60]!=0 && triangles[76*128+76]==0,"triangle shape or IDs incorrect");
+        scene.setStyle(Representation::oxdna,Coloring::strand);
+        requireLive(!scene.pick({{.38F,.18F,0},{0,0,-1}},glm::mat4(1)),"ellipsoid bounding-box corner remained selectable");
+        auto ellipsoids=render();
+        requireLive(ellipsoids[64*128+64]!=0 && ellipsoids[78*128+78]==0,"ellipsoid shape or IDs incorrect");
+        scene.setStyle(Representation::vdw,Coloring::strand);
+        requireLive(scene.pick({{.25F,0,0},{0,0,-1}},glm::mat4(1)).has_value(),"VDW uses smaller ballstick picking radius");
+        requireLive(!scene.pick({{-.6F,0,0},{0,0,-1}},glm::mat4(1)),"invisible VDW bonds remained selectable");
         glClearStencil(0); glClear(GL_STENCIL_BUFFER_BIT);
         glEnable(GL_STENCIL_TEST); glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
         std::vector<Vertex> guides{

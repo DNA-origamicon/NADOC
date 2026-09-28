@@ -409,3 +409,24 @@ Run `just vr-menu-tour` from the repository root for a live ScryWrite tour of
 every tab and page, or `just vr-menu-tour --validate --hold 0 --exit` for all four
 human-motion presets. See [VR sidebar menus](../../docs/vr_sidebar_menus.md) for
 mapping details, controls, evidence and regeneration instructions.
+
+### Complete representation catalog (scene v15)
+
+The Visualization sidebar accepts all eleven desktop representation IDs. Beads
+shares Full geometry while omitting base slabs/connectors; VDW shares Ball & Stick
+atoms with element radii and no bonds. Hull and Surface are triangle instances;
+mrDNA Coarse/Fine and oxDNA reuse the desktop input-preview builders. Exporting
+these previews requires Node and the frontend dependencies alongside the backend.
+They display the current design without requiring a completed simulation.
+
+Scene v15 retains previous ownership records and adds primitive annotations:
+`V <point-id> <vdw-radius>`, `U <cylinder-id> <end-radius>`, and
+`N <box-id> <nx0 ny0 nz0 nx1 ny1 nz1 nx2 ny2 nz2>`. `W` remains tool ownership.
+Surface/Hull B records encode triangle vertices as center=(v1+v2)/2,
+axisX=v1-v0, axisY=v2-v0; oxDNA B records encode ellipsoid diameters.
+New meshes participate in the shared lighting, shadows and object-ID passes.
+Older snapshots remain readable; representations absent from them are disabled.
+
+The registered Visualization tour covers all 110 directed switches. `--validate`
+repeats them with all four controller profiles. It uses a continuous traversal to
+avoid unnecessary source resets between measured switches.

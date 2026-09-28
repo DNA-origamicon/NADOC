@@ -1,4 +1,4 @@
-"""Stable-identity parser and numeric comparator for native VR scene v6-v12.
+"""Stable-identity parser and numeric comparator for native VR scene v6-v15.
 
 This module deliberately knows nothing about OpenXR or rendering. It compares the
 model-space scene contract before the native viewer normalizes it into metres, making
@@ -28,6 +28,7 @@ class ScenePrimitive:
     tool_scope_id: str | None = None
     tool_scope_kind: str | None = None
     tool_scope_owners: tuple[tuple[str, float, float], ...] = ()
+    annotations: tuple[tuple[str, tuple[float, ...]], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,9 +81,9 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     if (
         len(header) != 4
         or header[0] != "NADOCVR"
-        or header[1] not in {"6", "7", "8", "9", "10", "11", "12", "13"}
+        or header[1] not in {"6", "7", "8", "9", "10", "11", "12", "13", "14", "15"}
     ):
-        raise ValueError("stable comparison requires NADOCVR v6 through v13")
+        raise ValueError("stable comparison requires NADOCVR v6 through v15")
     version = int(header[1])
     result: dict[str, dict[str, ScenePrimitive]] = {}
     handle_tokens: dict[str, set[str]] = {}
@@ -149,6 +150,19 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
             )
             handle_tokens[active].add(identity)
             handle_ids[active][scope_id] = identity
+            continue
+        if fields[0] in {"V", "U", "N"}:
+            kind = fields[0]
+            expected = {"V": (1, "P"), "U": (1, "C"), "N": (9, "B")}[kind]
+            if version < 15 or active is None or len(fields) != expected[0]+2:
+                raise ValueError(f"line {line_number}: malformed primitive annotation")
+            target = result[active].get(fields[1])
+            values = tuple(float(v) for v in fields[2:])
+            if target is None or target.record_type != expected[1] or not np.all(np.isfinite(values)) or (kind != "N" and values[0] <= 0):
+                raise ValueError(f"line {line_number}: invalid primitive annotation")
+            if any(k == kind for k, _ in target.annotations):
+                raise ValueError(f"line {line_number}: duplicate primitive annotation")
+            result[active][fields[1]] = replace(target, annotations=(*target.annotations, (kind, values)))
             continue
         if fields[0] == "D":
             if version < 12:
@@ -515,6 +529,13 @@ def compare_scenes(
                 )
                 continue
             matched += 1
+            expected_annotations = dict(expected_primitive.annotations)
+            actual_annotations = dict(actual_primitive.annotations)
+            if expected_annotations.keys() != actual_annotations.keys() or any(
+                not np.allclose(values, actual_annotations[key], atol=1e-6, rtol=0)
+                for key, values in expected_annotations.items() if key in actual_annotations
+            ):
+                differences.append(SceneDifference(representation, identity, "annotations", "primitive radii/normals differ"))
             if expected_primitive.tool_scope_id != actual_primitive.tool_scope_id:
                 differences.append(
                     SceneDifference(

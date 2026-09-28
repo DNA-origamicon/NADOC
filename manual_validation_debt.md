@@ -551,3 +551,10 @@ full-snapshot throughput needs real-device validation.
   workflow is blocked by SteamVR compositor watchdog failure. Run the steady and
   four-profile commands in `docs/audits/vr_dimension_persistence_20260927.md` once
   SteamVR is healthy; desktop file/reopen/icon controls and native unit tests pass.
+
+- 2026-09-27 complete VR representation catalog: inspect all eleven styles through
+  the physical headset, especially Surface shading and oxDNA base shape at close
+  range, for optical readability and comfort. Automated submitted-eye coverage is
+  complete (440 directed switches, four controller profiles; 22 final color-menu
+  pixel checks; actual desktop correspondence 1.0). This does not prove panel
+  scanout or subjective comfort. Evidence: `docs/audits/vr_all_representations_20260927.md`.

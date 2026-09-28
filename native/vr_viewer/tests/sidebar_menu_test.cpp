@@ -19,7 +19,8 @@ int main() {
     focus.begin("a","");focus.step({"a","disabled","c"},1);
     require(focus.id=="disabled","Unavailable targets must be discoverable");
     focus.step({"a","disabled","c"},-1);focus.step({"a","disabled","c"},-1);
-    require(focus.id=="c","Focus wrap failed");
+    require(focus.id=="a","Focus must stop at top");
+    focus.step({"a","disabled","c"},20);require(focus.id=="c","Focus must stop at bottom");
     focus.reset();require(!focus.active&&focus.id.empty(),"Explicit pointer reset failed");
 
     for(int hand=0;hand<2;++hand) {
@@ -109,7 +110,32 @@ int main() {
     scrolling.scrollTo(-100);require(!scrolling.canScroll(1),"Pointer cannot reach bottom");
     scrolling.scrollTo(100);require(scrolling.offset()==0,"Pointer cannot reach top");
     scrolling.focus.begin("scrollbar","");scrolling.navigate({1,0});
-    require(scrolling.focus.id=="close","Cannot exit scrollbar to footer");
+    require(!scrolling.focus.id.starts_with("tab:") && scrolling.focus.id!="scrollbar","Cannot exit scrollbar to content");
+    for(int hand=0;hand<2;++hand) {
+        nadoc_vr::SidebarMenu menu(hand);
+        const auto selected=menu.selected;
+        auto items=menu.controls();
+        const auto first=items.front().id;
+        std::string last;
+        for(const auto& c:items) if(c.vertical) last=c.id;
+        menu.focus.begin(first,"");
+        menu.navigate({0,1});require(menu.focus.id==first,"Tabs wrap above top");
+        for(int i=0;i<30;++i) menu.navigate({0,-1});
+        require(menu.focus.id==last,"Tabs escape below bottom");
+        require(menu.selected==selected,"Navigation activated a tab without trigger");
+        const float inward=hand==0?1.F:-1.F;
+        menu.navigate({inward,0});require(menu.focus.id=="scrollbar","Tabs must cross scrollbar");
+        menu.navigate({inward,0});
+        require(menu.focus.id!="scrollbar"&&!menu.focus.id.starts_with("tab:"),"Scrollbar must enter content");
+        for(int i=0;i<30;++i) menu.navigate({0,-1});
+        const auto bottom=menu.focus.id;
+        menu.navigate({0,-1});require(menu.focus.id==bottom,"Content wraps below bottom");
+        for(int i=0;i<30;++i) menu.navigate({0,1});
+        const auto top=menu.focus.id;
+        menu.navigate({0,1});require(menu.focus.id==top,"Content wraps above top");
+        menu.navigate({-inward,0});require(menu.focus.id=="scrollbar","Content must cross scrollbar");
+        menu.navigate({-inward,0});require(menu.focus.id.starts_with("tab:"),"Scrollbar must enter tabs");
+    }
     // Selection-dependent actions must pass through the same disabled gate.
     nadoc_vr::SidebarMenu tools(1);
     tools.open=true;

@@ -1,3 +1,4 @@
+import { nativeRepresentation } from './scene/vr_representations.js'
 import { captureSharedVisualization } from './viewer/shared_visualization.js'
 import { restoreNativePresentation } from './viewer/native_presentation.js'
 import { initPresentationSelection } from './scene/presentation_selection.js'
@@ -6389,11 +6390,9 @@ async function main() {
       ['vdw', 'ballstick', 'stick'].includes(renderedAtomisticMode)
         ? renderedAtomisticMode : _currentRepr
     )
-    const representation = renderedRepr === 'vdw' ? 'ballstick' :
-      (['cylinders', 'full', 'ballstick', 'stick'].includes(renderedRepr)
-        ? renderedRepr : 'full')
+    const representation = nativeRepresentation(renderedRepr)
     const visualizationAtoms = []
-    if (activeVisualization && ['ballstick', 'stick'].includes(representation)) {
+    if (activeVisualization && ['vdw', 'ballstick', 'stick'].includes(representation)) {
       atomisticRenderer.visitAtoms?.((atom, position) => {
         visualizationAtoms.push({
           atom: {
@@ -6438,7 +6437,7 @@ async function main() {
     const packStarted = performance.now()
     const state = mdDisplayController.trajectoryState?.() ?? {}
     const renderedRepr = mdDisplayController.renderedRepresentation?.()
-    const atomistic = ['ballstick', 'stick'].includes(renderedRepr)
+    const atomistic = ['vdw', 'ballstick', 'stick'].includes(renderedRepr)
     const packed = coordinates && state.active && atomistic
       ? atomisticRenderer.packedAtomPositions?.() ?? new Float32Array()
       : new Float32Array()
@@ -6738,7 +6737,7 @@ async function main() {
   window.addEventListener('nadoc:md-trajectory-state', event => {
     const coordinatesReady = event.detail?.coordinatesReady === true
     const renderedRepr = mdDisplayController.renderedRepresentation?.()
-    const atomistic = ['ballstick', 'stick'].includes(renderedRepr)
+    const atomistic = ['vdw', 'ballstick', 'stick'].includes(renderedRepr)
     void vrSession.publishNativeTrajectoryState?.({
       coordinates: coordinatesReady && atomistic,
     })

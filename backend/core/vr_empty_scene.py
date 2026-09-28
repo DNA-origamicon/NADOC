@@ -9,10 +9,10 @@ def empty_authoring_scene(design, representation='full', coloring='strand'):
                 'nanoparticles', 'extensions', 'crossovers', 'forced_ligations')
     if any(getattr(design, field, ()) for field in authored):
         return None
-    if representation not in ('full', 'cylinders', 'ballstick', 'stick'):
+    if representation not in ('full', 'cylinders', 'ballstick', 'stick', 'beads', 'vdw', 'hull-prism', 'surface', 'mrdna-coarse', 'mrdna-fine', 'oxdna'):
         raise ValueError('invalid representation')
     if coloring not in ('strand', 'base', 'cluster', 'cpk'):
         raise ValueError('invalid coloring')
     return '\n'.join(['NADOCVR 14 '+representation+' '+coloring,
                       extrude_plane_record(design), 'Q empty_authoring',
-                      *('R '+rep for rep in ('full', 'cylinders', 'ballstick', 'stick'))])+'\n'
+                      *('R '+rep for rep in ('full', 'cylinders', 'ballstick', 'stick', 'beads', 'vdw', 'hull-prism', 'surface', 'mrdna-coarse', 'mrdna-fine', 'oxdna'))])+'\n'

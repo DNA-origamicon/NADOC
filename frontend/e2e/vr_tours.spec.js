@@ -8,6 +8,7 @@ test('Debug flyouts launch visualization directly and retain descriptions as too
   const right = page.locator('[data-category=right]')
   await right.hover()
   const demo = right.locator('[data-start=representations][data-mode=demo]')
+  await expect(right.locator('[data-start=representation-colors][data-mode=demo]')).toHaveText('Representation colors demo')
   await expect(demo).toBeVisible()
   await expect(demo).toHaveText('Visualization demo')
   await expect(demo).toHaveAttribute('title', /open design/)

@@ -77,7 +77,8 @@ def test_shutdown_closes_only_the_owned_live_tour(monkeypatch):
     terminate.assert_called_once_with(process)
 
 
-def test_representation_launch_snapshots_current_document(client, monkeypatch):
+@pytest.mark.parametrize("tour", ["representations", "representation-colors"])
+def test_representation_launch_snapshots_current_document(client, monkeypatch, tour):
     from backend.api import state
     from pathlib import Path
     design = Mock()
@@ -88,7 +89,7 @@ def test_representation_launch_snapshots_current_document(client, monkeypatch):
     process.poll.return_value = None
     popen = Mock(return_value=process)
     monkeypatch.setattr(tours.subprocess, 'Popen', popen)
-    response = client.post('/api/vr/tours/start', json={'tour':'representations'}, headers={'X-NADOC-Doc':'__test_current_tour'})
+    response = client.post('/api/vr/tours/start', json={'tour':tour}, headers={'X-NADOC-Doc':'__test_current_tour'})
     assert response.status_code == 200, response.text
     copied.assert_called_once_with('__test_current_tour')
     argv = popen.call_args.args[0]
@@ -97,8 +98,9 @@ def test_representation_launch_snapshots_current_document(client, monkeypatch):
     assert source.name == 'open-design.nadoc'
 
 
-def test_representation_requires_open_individual_design(client, monkeypatch):
+@pytest.mark.parametrize("tour", ["representations", "representation-colors"])
+def test_representation_requires_open_individual_design(client, monkeypatch, tour):
     from backend.api import state
     monkeypatch.setattr(state, 'copy_doc_for_persist', lambda _: (None, 0))
-    assert client.post('/api/vr/tours/start', json={'tour':'representations'}).status_code == 400
-    assert client.post('/api/vr/tours/start', json={'tour':'representations','assembly_active':True}).status_code == 400
+    assert client.post('/api/vr/tours/start', json={'tour':tour}).status_code == 400
+    assert client.post('/api/vr/tours/start', json={'tour':tour,'assembly_active':True}).status_code == 400

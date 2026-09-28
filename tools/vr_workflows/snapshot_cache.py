@@ -22,11 +22,11 @@ MAX_ENTRIES = 2
 def exporter_fingerprint(root=ROOT):
     """Conservatively invalidate on exporter, geometry, template or dependency edits."""
     digest = hashlib.sha256(b'vr-tour-export-v1\0')
-    paths = [root/'uv.lock', root/'tools/vr_workflows/snapshot_cache.py',
+    paths = [root/'uv.lock', root/'frontend/package-lock.json', root/'tools/vr_workflows/snapshot_cache.py',
              root/'tools/vr_workflows/representation_tour.py']
-    for directory in ('backend/api', 'backend/core', 'backend/data'):
+    for directory in ('backend/api', 'backend/core', 'backend/data', 'frontend/src/scene', 'frontend/src/ui', 'frontend/scripts'):
         paths.extend(p for p in (root/directory).rglob('*')
-                     if p.is_file() and p.suffix in {'.py', '.json', '.npz', '.npy', '.pdb'})
+                     if p.is_file() and p.suffix in {'.py', '.json', '.npz', '.npy', '.pdb', '.js', '.mjs'})
     for path in sorted(paths):
         if path.is_file():
             digest.update(str(path.relative_to(root)).encode())

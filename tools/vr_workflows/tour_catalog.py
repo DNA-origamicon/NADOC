@@ -26,9 +26,11 @@ def catalog():
             f"Tour every page of the {tab['side']} {tab['label']} tab; check disabled controls and pixels.",
             ['--tab', f"{tab['side']}:{tab['key']}"])
     add('representations', 'right', 'Visualization',
-        'Switch the open design between Full, Cylinders, Ball & Stick and Stick. Reuses cached exports for unchanged designs. Validation tests all four controller profiles.', module='representation_tour')
+        'Switch the open design between all eleven desktop representations, including Hull, Surface, mrDNA and oxDNA. Reuses cached exports for unchanged designs. Validation tests all four controller profiles.', module='representation_tour')
+    add('representation-colors', 'right', 'Representation colors',
+        'Quick pass through all eleven styles and both coloring pages. Checks enabled/gray controls and rendered pixels; not the full switching matrix.', ['--cycle'], module='representation_tour')
     add('focus', 'interaction', 'Trackpad, pointer, cards & scrollbars',
-        'Focus enabled and gray controls, activate triggers, collapse cards, scroll, and return to pointing.', ['--focus-checks'])
+        'Check bounded columns and lateral navigation, focus gray controls, activate triggers, collapse cards, scroll, and return to pointing.', ['--focus-checks'])
     add('grips', 'interaction', 'Move & resize menu borders',
         'Acquire both menu frames, reposition them and resize with two controllers.', ['--grip-checks'])
     add('dimensions', 'dimensions', 'Place & manage dimensions',

@@ -1,4 +1,5 @@
 #pragma once
+#include "representations.hpp"
 
 #include <charconv>
 #include <cmath>
@@ -122,8 +123,7 @@ inline VisualizationSnapshot loadVisualizationSnapshot(const std::string& path) 
     const uint64_t version = strictVisualizationUnsigned(versionToken, 1, 3);
     if (version >= 3) {
         if (!(headerStream >> representation >> coloring >> countToken) ||
-            (representation != "cylinders" && representation != "full" &&
-             representation != "ballstick" && representation != "stick") ||
+            !validRepresentation(representation) ||
             (coloring != "strand" && coloring != "base" &&
              coloring != "cluster" && coloring != "cpk")) {
             throw std::runtime_error("invalid VR visualization style");

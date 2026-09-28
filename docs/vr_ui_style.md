@@ -78,17 +78,19 @@ Each controller navigates its own open menu. The right-trackpad radial Tools
 shortcut is available when that controller's menu is closed. Opening or closing
 the other sidebar does not cancel the active controller's focus.
 
-1. Click the trackpad once to enter focus mode on the selected sidebar tab (or
-   first detailed-menu control). This first click does not activate anything.
-2. Click top/bottom to move focus through tabs, visible controls and footer
-   controls. Gray controls remain focusable for discovery; their triggers are inert.
-3. Click left/right to switch sidebar tabs. In detailed menus, left/right also
-   steps through controls. There is one step per click, no uncontrolled repeat.
+1. Click the trackpad once to enter focus mode on the pointed-at sidebar control,
+   falling back to the selected tab (or first detailed-menu control). This first click does not activate anything.
+2. Click top/bottom to move within the current column, stopping at its ends.
+   It never wraps into a neighboring column. Gray controls remain focusable
+   for discovery; their triggers are inert.
+3. Click left/right to move spatially between tabs, scrollbar, and content,
+   mirrored for the left hand, or between buttons on the same row. Tab changes
+   require Trigger. In detailed menus, left/right steps through the bounded list. There is one step per click, no uncontrolled repeat.
 4. Pull the same controller's trigger to activate the focused control. A card
    title toggles its contents, retaining title focus for a second press to reopen.
    Card titles remain enabled even if their children are unsupported. When the
    **scrollbar** is focused, top/bottom clicks page up/down directly and retain
-   scrollbar focus. Left/right leaves the rail for the last row / Close button.
+   scrollbar focus. Left/right leaves the rail for the nearest row or tab at the entry height.
    The thumb shows the visible fraction, with a minimum size for visibility;
    pointer trigger positioning works along the rail. Short tabs have an inactive thumb.
 5. Center-click again to return immediately to pointing. Alternatively, move the

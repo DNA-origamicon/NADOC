@@ -452,7 +452,7 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
     assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
 
     for invalid_style in (
-        {"representation": "surface", "coloring": "strand"},
+        {"representation": "unknown", "coloring": "strand"},
         {"representation": "full", "coloring": "source"},
         {"style_sequence": -1, "representation": "full", "coloring": "strand"},
     ):
@@ -1700,7 +1700,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     sections = _scene_sections(text)
     identities = _scene_identities(text)
 
-    assert text.startswith("NADOCVR 13 full strand\n")
+    assert text.startswith("NADOCVR 15 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
     assert all(len(values) == len(set(values)) for values in identities.values())
     assert "nuc:s1:0:h1:1:FORWARD:0:backbone" in identities["full"]

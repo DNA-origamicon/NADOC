@@ -14,13 +14,36 @@ def pad(live, hand, x=0, y=0):
 
 
 def seek(live, hand, identifier):
+    """Use physical columns, never a flattened list or a wraparound shortcut."""
+    side = "left" if hand == 0 else "right"
+    def column(key):
+        if key.startswith("tab:"):
+            return 0 if hand == 0 else 2
+        if key == "scrollbar":
+            return 1
+        return 2 if hand == 0 else 0
+    if live.state["sidebars"][hand]["input_mode"] != "trackpad":
+        pad(live, hand)
     for _ in range(40):
-        if live.state["sidebars"][hand]["focus_id"] == identifier:
+        current = live.state["sidebars"][hand]["focus_id"]
+        if current == identifier:
             return
-        if live.state["sidebars"][hand]["focus_id"] == "scrollbar":
-            pad(live, hand, x=1)
+        controls = {c["id"]: c for c in live.state["controls"]
+                    if c.get("sidebar") == side}
+        source, target = controls[current], controls[identifier]
+        delta = column(identifier) - column(current)
+        if delta:
+            pad(live, hand, x=1 if delta > 0 else -1)
         else:
-            pad(live, hand, y=-1)
+            displacement = np.asarray(target["position"]) - source["position"]
+            up = np.asarray(source["hit_half_up"])
+            right = np.asarray(source["hit_half_right"])
+            y = float(displacement @ up / np.linalg.norm(up))
+            x = float(displacement @ right / np.linalg.norm(right))
+            if abs(y) > 0.015:
+                pad(live, hand, y=1 if y > 0 else -1)
+            else:
+                pad(live, hand, x=1 if x > 0 else -1)
     raise AssertionError("Unreachable focus target: " + identifier)
 
 
@@ -72,7 +95,9 @@ def run(live, catalog, output, preset):
             assert live.state["sidebars"][hand]["input_mode"] == "trackpad"
             hold(live, 0.6)
             assert live.state["sidebars"][hand]["input_mode"] == "trackpad"
-            pad(live, hand, x=1)
+            # Explicitly choose a long tab with unavailable rows.
+            seek(live, hand, "tab:" + ("dynamics" if hand == 0 else "assembly"))
+            live.button("trigger", hand=hand)
             tab = next(
                 t
                 for t in catalog["tabs"]
@@ -82,6 +107,30 @@ def run(live, catalog, output, preset):
             while live.state["sidebars"][hand]["offset"]:
                 seek(live, hand, "scrollbar")
                 pad(live, hand, y=1)
+            # Down/up cannot leave the tab column or activate a different tab.
+            tabs = [c["id"] for c in live.state["controls"]
+                    if c.get("sidebar") == ("left" if hand == 0 else "right")
+                    and c["id"].startswith("tab:")]
+            seek(live, hand, tabs[-1])
+            pad(live, hand, y=-1)
+            assert live.state["sidebars"][hand]["focus_id"] == tabs[-1]
+            seek(live, hand, tabs[0])
+            pad(live, hand, y=1)
+            assert live.state["sidebars"][hand]["focus_id"] == tabs[0]
+            assert live.state["sidebars"][hand]["tab"] == tab["key"]
+            inward = 1 if hand == 0 else -1
+            pad(live, hand, x=inward)
+            assert live.state["sidebars"][hand]["focus_id"] == "scrollbar"
+            pad(live, hand, x=inward)
+            assert not live.state["sidebars"][hand]["focus_id"].startswith("tab:")
+            for _ in range(12):
+                pad(live, hand, y=-1)
+            bottom = live.state["sidebars"][hand]["focus_id"]
+            pad(live, hand, y=-1)
+            assert live.state["sidebars"][hand]["focus_id"] == bottom
+            assert bottom != "scrollbar" and not bottom.startswith("tab:")
+            capture(live, output, f"{hand}-bounded-content")
+            checks[f"{hand}_bounded_columns"] = True
             disabled = next(r for r in tab["rows"][:8] if not r["action"])
             seek(live, hand, disabled["id"])
             capture(live, output, f"{hand}-disabled-focus")
@@ -145,10 +194,8 @@ def run(live, catalog, output, preset):
         assert live.state["sidebars"][1]["input_mode"] == "trackpad"
         checks["resting_ray_cannot_steal"] = True
         # Enter Tools and detailed settings entirely through the pad.
-        for _ in range(8):
-            if live.state["sidebars"][1]["tab"] == "tools":
-                break
-            pad(live, 1, x=1)
+        seek(live, 1, "tab:tools")
+        live.button("trigger", hand=1)
         seek(live, 1, "tool-settings")
         live.button("trigger", hand=1)
         assert live.state["menu"] == "tools" and live.state["sidebars"][0]["open"]
@@ -180,7 +227,7 @@ def run(live, catalog, output, preset):
         for _ in range(40):
             if live.state["menu_focus_hit"] == str(target["hit"]):
                 break
-            pad(live, 1, y=-1)
+            pad(live, 1, y=1)
         assert live.state["menu_focus_hit"] == str(target["hit"])
         live.button("trigger", hand=1)
         assert live.state["tool"] == "inspect"

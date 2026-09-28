@@ -10,7 +10,8 @@ def test_every_supported_directed_transition_is_covered_once():
         get_args(VRLaunchRequest.model_fields["representation"].annotation)
     )
     pairs = transitions()
-    assert len(pairs) == 12 and len(set(pairs)) == 12
+    assert len(pairs) == len(REPS)*(len(REPS)-1) and len(set(pairs)) == len(pairs)
+    assert all(first[1] == second[0] for first, second in zip(pairs, pairs[1:]))
     for source in REPS:
         assert {target for start, target in pairs if start == source} == set(REPS) - {
             source
@@ -47,3 +48,24 @@ def test_framing_rejects_empty_clipped_and_menu_obscured_design(tmp_path):
         else: changed[60:70,30:70] = 1
         changed.tofile(path)
         with pytest.raises(AssertionError): check_framing(evidence, tmp_path)
+
+
+def test_fixed_color_preview_controls_are_disabled_and_unselected():
+    import pytest
+    from tools.vr_workflows.representation_tour import check_color_controls
+
+    control = {"id": "repr-color-strand", "enabled": False, "active": False}
+    evidence = {"state": {"representation": "mrdna-fine", "controls": [control]}}
+    check_color_controls(evidence)
+    control["active"] = True
+    with pytest.raises(AssertionError):
+        check_color_controls(evidence)
+    control.update(enabled=True, active=True)
+    evidence["state"]["representation"] = "vdw"
+    check_color_controls(evidence)
+
+
+def test_color_pixel_cycle_is_registered_without_replacing_full_matrix():
+    tour = next(t for t in catalog()["tours"] if t["id"] == "representation-colors")
+    assert tour["group"] == "right"
+    assert arguments(tour, True)[-2:] == ["--cycle", "--validate"]

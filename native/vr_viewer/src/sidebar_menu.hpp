@@ -93,22 +93,54 @@ class SidebarMenu {
         const float fraction=std::clamp((b.maximum.y-half-y)/travel,0.F,1.F);
         offsets[selected]=size_t(std::round(fraction*((total()-1)/pageRows())))*pageRows();
     }
+    // Keep the row height while crossing the full-height scrollbar.
+    float navigationY=0;
     void navigate(glm::vec2 axis) {
-        if(focus.id=="scrollbar") {
-            if(std::abs(axis.y)>=std::abs(axis.x)) scroll(axis.y>0?-1:1);
-            else {
-                std::vector<std::string> ids;
-                for(const auto& c:controls()) ids.push_back(c.id);
-                focus.step(ids,axis.x>0?1:-1);
-            }
-        } else if(!customTab && std::abs(axis.x)>std::abs(axis.y)) {
-            selected=(selected+tabs.size()+(axis.x>0?1:-1))%tabs.size();
-            focus.id="tab:"+tab().key;
-        } else {
-            std::vector<std::string> ids;
-            for(const auto& c:controls()) ids.push_back(c.id);
-            focus.step(ids,axis.y>0?-1:1);
+        const auto items=controls();
+        auto current=std::find_if(items.begin(),items.end(),[&](const auto& c){return c.id==focus.id;});
+        if(current==items.end()) return;
+        const auto center=[](const auto& c){return (c.bounds.minimum+c.bounds.maximum)*.5F;};
+        const auto column=[&](const auto& c) {
+            if(c.vertical) return hand==0?0:2;
+            if(c.id=="scrollbar") return 1;
+            return hand==0?2:0;
+        };
+        const bool horizontal=std::abs(axis.x)>std::abs(axis.y);
+        if(current->id=="scrollbar" && !horizontal) {
+            scroll(axis.y>0?-1:1);
+            return;
         }
+        auto origin=center(*current);
+        if(current->id=="scrollbar") origin.y=navigationY;
+        else navigationY=origin.y;
+        const int direction=horizontal?(axis.x>0?1:-1):(axis.y>0?1:-1);
+        const SidebarControl* best=nullptr;
+        float score=1e9F;
+        for(const auto& c:items) {
+            if(c.id==current->id) continue;
+            const auto target=center(c);
+            const int delta=column(c)-column(*current);
+            float distance;
+            if(horizontal) {
+                // Neighboring columns take priority over controls farther away.
+                // Within content, only a control on the same row is lateral.
+                if(delta==0) {
+                    if(std::abs(target.y-origin.y)>.025F || direction*(target.x-origin.x)<=.001F) continue;
+                    distance=std::abs(target.x-origin.x);
+                } else {
+                    if(direction*delta<=0) continue;
+                    distance=10.F*std::abs(delta)+(c.id=="scrollbar"?0.F:std::abs(target.y-origin.y));
+                }
+            } else {
+                if(delta!=0 || direction*(target.y-origin.y)<=.025F) continue;
+                // Do not jump to another button column at its bottom.
+                if(std::min(c.bounds.maximum.x,current->bounds.maximum.x)-
+                   std::max(c.bounds.minimum.x,current->bounds.minimum.x)<=.001F) continue;
+                distance=std::abs(target.y-origin.y)+.01F*std::abs(target.x-origin.x);
+            }
+            if(distance<score) {score=distance;best=&c;}
+        }
+        if(best) focus.id=best->id;
     }
     std::vector<SidebarControl> controls() const {
         std::vector<SidebarControl> out;
@@ -128,7 +160,7 @@ class SidebarMenu {
             const auto& row=*page[i];
             const bool header=row.action.starts_with("section:");
             float y=.463F-static_cast<float>(i)*.12F;
-            out.push_back({row.id,row.id=="section:properties:dimensions-heading"?"Dimensions":header?(collapsed.contains(row.id)?"+ ":"- ")+row.label:row.label,row.id=="section:properties:dimensions-heading"?"MEASURE WITH CONTROLLERS":header?(collapsed.contains(row.id)?"EXPAND CARD":"COLLAPSE CARD"):row.section,row.action,{{cx-(hand==0?.247F:.327F),y-.054F},{cx+(hand==0?.327F:.247F),y+.054F}},(row.id=="dimensions-record" || row.id=="dimensions-clear") || header || (!row.action.empty() && available(row.action)), !header && isActive(row.action)});
+            out.push_back({row.id,row.id=="section:properties:dimensions-heading"?"Dimensions":header?(collapsed.contains(row.id)?"+ ":"- ")+row.label:row.label,row.id=="section:properties:dimensions-heading"?"MEASURE WITH CONTROLLERS":header?(collapsed.contains(row.id)?"EXPAND CARD":"COLLAPSE CARD"):row.section,row.action,{{cx-(hand==0?.247F:.327F),y-.054F},{cx+(hand==0?.327F:.247F),y+.054F}},(row.id=="dimensions-record" || row.id=="dimensions-clear") || header || (!row.action.empty() && available(row.action)), !header && available(row.action) && isActive(row.action)});
         }
         if(customTab) {
             std::vector<SidebarControl> extra;

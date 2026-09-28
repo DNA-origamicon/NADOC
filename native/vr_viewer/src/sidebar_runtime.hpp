@@ -37,7 +37,9 @@ class SidebarRuntime {
         }
         const bool center=glm::length(axis)<.45F;
         if(!m.focus.active) {
-            m.focus.begin(m.customTab?m.controls().front().id:"tab:"+m.tab().key,rayId);
+            const auto controls=m.controls();
+            const bool ownRay=std::any_of(controls.begin(),controls.end(),[&](const auto& c){return c.id==rayId;});
+            m.focus.begin(ownRay?rayId:m.customTab?controls.front().id:"tab:"+m.tab().key,rayId);
             return true;
         }
         if(center) {m.focus.reset();return true;}

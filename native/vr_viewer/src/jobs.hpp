@@ -1,4 +1,5 @@
 #pragma once
+#include "representations.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -163,7 +164,8 @@ inline JobSnapshot loadJobSnapshot(const std::string& path) {
         representation = decodeJobField(representationToken, 16);
         coloring = decodeJobField(coloringToken, 16);
         static const std::unordered_set<std::string> representations = {
-            "cylinders", "full", "ballstick", "stick",
+            "cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism",
+            "surface", "mrdna-coarse", "mrdna-fine", "oxdna",
         };
         static const std::unordered_set<std::string> colorings = {
             "strand", "base", "cluster", "cpk",

@@ -20,7 +20,7 @@ class MenuFocus {
         if(ids.empty()) {reset();return;}
         auto it=std::find(ids.begin(),ids.end(),id);
         int index=it==ids.end()?0:static_cast<int>(it-ids.begin());
-        index=(index+direction+static_cast<int>(ids.size()))%static_cast<int>(ids.size());
+        index=std::clamp(index+direction,0,static_cast<int>(ids.size())-1);
         id=ids[static_cast<size_t>(index)];candidate_.clear();
     }
     // A ray already resting on a button when navigation starts cannot steal focus.

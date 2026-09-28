@@ -1,10 +1,11 @@
 #pragma once
 #include <array>
+#include "representations.hpp"
 #include <GL/gl.h>
 #include <glm/glm.hpp>
 
 namespace nadoc_vr {
-// Four slots, one color per representation. GPU-local copies avoid re-running
+// One slot and one color per supported representation. GPU-local copies avoid re-running
 // semantic ownership/color/coordinate loops on unchanged static geometry.
 class RepresentationBuffers {
     struct Slot {
@@ -16,7 +17,7 @@ class RepresentationBuffers {
         glm::vec3 center{};
         float radius=0;
     };
-    std::array<Slot,4> slots_{};
+    std::array<Slot,kRepresentationCount> slots_{};
     static void copy(GLuint source,GLuint destination,GLint64 size) {
         glBindBuffer(GL_COPY_WRITE_BUFFER,destination);
         glBufferData(GL_COPY_WRITE_BUFFER,size,nullptr,GL_DYNAMIC_DRAW);

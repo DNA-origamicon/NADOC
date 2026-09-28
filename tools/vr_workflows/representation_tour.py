@@ -7,7 +7,6 @@ not included. Never modifies the source design or attaches to a user's viewer.
 
 import argparse
 import hashlib
-import itertools
 import json
 import subprocess
 import tempfile
@@ -30,12 +29,30 @@ REPS = {
     "full": "menu-view-detail-full",
     "ballstick": "menu-view-atomistic-ballstick",
     "stick": "menu-view-atomistic-stick",
+    "beads": "menu-view-detail-beads",
+    "vdw": "menu-view-atomistic-vdw",
+    "hull-prism": "menu-view-hull-prism",
+    "surface": "menu-view-surface",
+    "mrdna-coarse": "menu-view-mrdna-coarse",
+    "mrdna-fine": "menu-view-mrdna-fine",
+    "oxdna": "menu-view-oxdna",
 }
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def transitions():
-    return list(itertools.permutations(REPS, 2))
+    # Euler circuit visits every directed pair once without resetting the source
+    # between trials. This halves controller travel as the catalog grows.
+    remaining = {source: [target for target in reversed(REPS) if target != source]
+                 for source in REPS}
+    stack, path = [next(iter(REPS))], []
+    while stack:
+        if remaining[stack[-1]]:
+            stack.append(remaining[stack[-1]].pop())
+        else:
+            path.append(stack.pop())
+    path.reverse()
+    return list(zip(path, path[1:]))
 
 
 def _produce_snapshot(raw, destination):
@@ -79,6 +96,21 @@ def check_framing(evidence, directory):
     return result
 
 
+
+def check_color_controls(evidence):
+    catalog = json.loads((ROOT / "native/vr_viewer/sidebar_catalog.json").read_text())
+    rep = evidence["state"]["representation"]
+    mask = catalog["coloringMasks"][list(REPS).index(rep)]
+    modes = ["strand", "base", "cluster", "cpk"]
+    for control in evidence["state"]["controls"]:
+        if not control.get("id", "").startswith("repr-color-"):
+            continue
+        mode = control["id"].removeprefix("repr-color-")
+        expected = mode in modes and bool(mask & (1 << modes.index(mode)))
+        assert control["enabled"] == expected, (rep, control)
+        assert expected or not control["active"], (rep, control)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -97,6 +129,7 @@ def main():
         / ("tour-" + uuid.uuid4().hex[:12]),
     )
     parser.add_argument("--validate", action="store_true")
+    parser.add_argument("--cycle", action="store_true", help="Quick one-cycle visual check; does not cover all directed pairs")
     parser.add_argument("--no-cache", action="store_true", help="Measure a fresh design export without reading or populating the cache")
     parser.add_argument("--repeats", type=int, default=1)
     args = parser.parse_args()
@@ -278,6 +311,10 @@ def main():
             initial, _ = live.capture_to(args.output / "initial-view", files=["left.png", "right.png", "mirror.png", "left.classes.u8", "right.classes.u8", "evidence.json"], discard_source=True)
             (args.output / "framing.json").write_text(json.dumps(check_framing(initial, args.output / "initial-view"), indent=2))
 
+            catalog = json.loads((ROOT / "native/vr_viewer/sidebar_catalog.json").read_text())
+            visualization_tab = next(t for t in catalog["tabs"] if t["side"] == "right" and t["key"] == "visualization")
+            row_indices = {row["id"]: i for i, row in enumerate(visualization_tab["rows"])}
+
             def switch(rep, preset):
                 if live.state["representation"] == rep:
                     return
@@ -288,7 +325,7 @@ def main():
                         for c in live.state["controls"]
                     ):
                         break
-                    scroll_page(live, 1, -1 if rep != "stick" else 1)
+                    scroll_page(live, 1, -1 if row_indices[identifier] < live.state["sidebars"][1]["offset"] else 1)
                 started = time.perf_counter()
                 click(live, 1, identifier, preset, trials)
                 deadline = time.monotonic() + 20
@@ -302,7 +339,8 @@ def main():
 
             for preset in PRESETS if args.validate else ["steady_fast"]:
                 for repeat in range(args.repeats):
-                    for source, target in transitions():
+                    pairs = list(zip(REPS, [*REPS][1:]+[*REPS][:1])) if args.cycle else transitions()
+                    for source, target in pairs:
                         switch(source, preset)
                         start_size = (args.output / "viewer.log").stat().st_size
                         elapsed = switch(target, preset)
@@ -315,6 +353,13 @@ def main():
                             ]
                         assert metrics, "Missing renderer style measurement"
                         name = f"{preset}-{repeat}-{source}-to-{target}"
+                        if args.cycle:
+                            # Both coloring pages expose every disabled/available
+                            # choice; the ordinary matrix keeps the clicked row visible.
+                            for _ in range(3):
+                                if any(c.get("id") == "repr-color-strand" for c in live.state["controls"]):
+                                    break
+                                scroll_page(live, 1, 1)
                         evidence, _ = live.capture_to(
                             args.output / name,
                             files=[
@@ -328,6 +373,20 @@ def main():
                             discard_source=True,
                         )
                         assert evidence["state"]["representation"] == target
+                        if args.cycle:
+                            from tools.vr_workflows.menu_pixels import check as check_pixels
+                            check_color_controls(evidence)
+                            pixel_report = check_pixels(args.output / name, evidence)
+                            (args.output / name / "pixels.json").write_text(json.dumps(pixel_report, indent=2))
+                            assert pixel_report["passed"], pixel_report
+                            scroll_page(live, 1, 1)
+                            colors_dir = args.output / (name + "-colors")
+                            color_evidence, _ = live.capture_to(colors_dir, files=["left.png", "right.png", "evidence.json"], discard_source=True)
+                            assert any(c.get("id") == "repr-color-cpk" for c in color_evidence["state"]["controls"])
+                            check_color_controls(color_evidence)
+                            pixel_report = check_pixels(colors_dir, color_evidence)
+                            (colors_dir / "pixels.json").write_text(json.dumps(pixel_report, indent=2))
+                            assert pixel_report["passed"], pixel_report
                         coverage = {
                             eye["eye"]: int(
                                 np.count_nonzero(
@@ -357,7 +416,7 @@ def main():
                         results.append(record)
                         (args.output / "result.json").write_text(
                             json.dumps(
-                                {"transitions": results, "passed": False}, indent=2
+                                {"transitions": results, "passed": False, "coverage": "cycle" if args.cycle else "all-directed"}, indent=2
                             )
                         )
                         print(name, metrics[-1], flush=True)
@@ -369,7 +428,7 @@ def main():
             assert desktop["passed"], desktop
             (args.output / "result.json").write_text(
                 json.dumps(
-                    {"transitions": results, "passed": True, "desktop": desktop},
+                    {"transitions": results, "passed": True, "desktop": desktop, "coverage": "cycle" if args.cycle else "all-directed"},
                     indent=2,
                 )
             )

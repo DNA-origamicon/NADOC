@@ -65,6 +65,13 @@ def test_exporter_fingerprint_tracks_code_templates_and_dependencies(tmp_path):
     second = cache.exporter_fingerprint(tmp_path)
     (tmp_path/'uv.lock').write_text('new dependencies')
     assert cache.exporter_fingerprint(tmp_path) != second
+    third = cache.exporter_fingerprint(tmp_path)
+    (tmp_path/'frontend/scripts').mkdir(parents=True)
+    (tmp_path/'frontend/scripts/export-vr-representations.mjs').write_text('desktop preview builder')
+    assert cache.exporter_fingerprint(tmp_path) != third
+    fourth = cache.exporter_fingerprint(tmp_path)
+    (tmp_path/'frontend/package-lock.json').write_text('new Three.js version')
+    assert cache.exporter_fingerprint(tmp_path) != fourth
 
 
 def test_concurrent_launches_publish_one_complete_export(tmp_path):

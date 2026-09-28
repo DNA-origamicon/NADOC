@@ -17,6 +17,7 @@
 
 #include "interaction.hpp"
 #include "representation_buffers.hpp"
+#include "representation_meshes.hpp"
 #include "painted_commit_gate.hpp"
 #include "selection_level_guard.hpp"
 #include "freeform_draft.hpp"
@@ -34,6 +35,7 @@
 #include "dimension_sync.hpp"
 #include "sidebar_grips.hpp"
 #include "picking.hpp"
+#include "representation_picking.hpp"
 #include "reference_grid.hpp"
 #include "scrywrite_witness.hpp"
 #include "scrywrite_live.hpp"
@@ -129,6 +131,7 @@ struct Cylinder {
     float radius = 0.01F;
     glm::vec3 color{};
     uint32_t objectId = 0;
+    float endRadius = -1.0F;
 };
 
 struct Box {
@@ -138,6 +141,7 @@ struct Box {
     glm::vec3 axisZ{};
     glm::vec3 color{};
     uint32_t objectId = 0;
+    std::array<glm::vec3,3> normals{};
 };
 
 struct CylinderMeshVertex {
@@ -145,7 +149,7 @@ struct CylinderMeshVertex {
     glm::vec3 normal{};
 };
 
-enum class Representation : size_t { cylinders = 0, full = 1, ballstick = 2, stick = 3 };
+#include "representations.hpp"
 enum class Coloring : size_t { strand = 0, base = 1, cluster = 2, cpk = 3 };
 
 struct ColorSet {
@@ -160,6 +164,7 @@ struct StyledPoint {
     glm::vec3 position{};
     ColorSet colors{};
     float size = 1.0F;
+    float vdwSize = 0.0F;
 };
 
 struct StyledCylinder {
@@ -168,6 +173,7 @@ struct StyledCylinder {
     glm::vec3 end{};
     float radius = 0.01F;
     ColorSet colors{};
+    float endRadius = -1.0F;
 };
 
 struct StyledBox {
@@ -177,6 +183,7 @@ struct StyledBox {
     glm::vec3 axisY{};
     glm::vec3 axisZ{};
     ColorSet colors{};
+    std::array<glm::vec3,3> normals{};
 };
 
 struct OwnerHandle {
@@ -220,8 +227,9 @@ struct RepresentationData {
 
 struct SceneData {
     nadoc_vr::ExtrudePlane extrudePlane;
-    std::array<RepresentationData, 4> representations;
-    std::array<RepresentationData, 4> expandedRepresentations;
+    std::array<RepresentationData, kRepresentationCount> representations;
+    std::array<RepresentationData, kRepresentationCount> expandedRepresentations;
+    std::array<bool,kRepresentationCount> available{};
     bool hasExpanded = false;
     bool emptyAuthoring = false;
     Representation initialRepresentation = Representation::full;
@@ -237,10 +245,8 @@ struct SelectionVolumeHits {
 };
 
 Representation representationFromName(const std::string& name) {
-    if (name == "cylinders") return Representation::cylinders;
-    if (name == "full") return Representation::full;
-    if (name == "ballstick") return Representation::ballstick;
-    if (name == "stick") return Representation::stick;
+    for (size_t i = 0; i < kRepresentationCount; ++i)
+        if (name == kRepresentationNames[i]) return static_cast<Representation>(i);
     throw std::runtime_error("Unknown VR representation: " + name);
 }
 
@@ -253,13 +259,7 @@ Coloring coloringFromName(const std::string& name) {
 }
 
 const char* representationName(Representation representation) {
-    switch (representation) {
-        case Representation::cylinders: return "cylinders";
-        case Representation::full: return "full";
-        case Representation::ballstick: return "ballstick";
-        case Representation::stick: return "stick";
-    }
-    return "full";
+    return kRepresentationNames.at(static_cast<size_t>(representation)).data();
 }
 
 const char* coloringName(Coloring coloring) {
@@ -440,6 +440,7 @@ constexpr const char* kLitFragmentSource = R"GLSL(
     #version 330 core
     in vec3 vColor;
     in vec3 vNormal;
+    flat in int vTwoSided;
     in vec3 vWorldPosition;
     uniform sampler2DShadow uShadowMap;
     uniform mat4 uLightViewProjection;
@@ -474,7 +475,7 @@ constexpr const char* kLitFragmentSource = R"GLSL(
     }
 
     void main() {
-        vec3 normal = normalize(vNormal);
+        vec3 normal = normalize(vNormal) * (vTwoSided != 0 && !gl_FrontFacing ? -1.0 : 1.0);
         float diffuse = max(dot(normal, uLightDirection), 0.0);
         float lighting = 0.20 + 0.90 * diffuse * shadowVisibility(normal);
         lighting = mix(lighting, 1.0, uEmissive);
@@ -617,6 +618,7 @@ GLuint makeCylinderProgram() {
         layout(location = 1) in vec3 aStart;
         layout(location = 2) in vec3 aEnd;
         layout(location = 3) in float aRadius;
+        layout(location = 6) in float aEndRadius;
         layout(location = 4) in vec3 aColor;
         uniform mat4 uViewProjection;
         uniform mat4 uModel;
@@ -624,6 +626,7 @@ GLuint makeCylinderProgram() {
         flat out uint vObjectId;
         out vec3 vColor;
         out vec3 vNormal;
+        flat out int vTwoSided;
         out vec3 vWorldPosition;
         void main() {
             vec3 delta = aEnd - aStart;
@@ -636,13 +639,16 @@ GLuint makeCylinderProgram() {
             vec3 basisY = cross(axis, basisX);
             vec3 radial = basisX * aUnitPosition.x + basisY * aUnitPosition.y;
             vec3 localPosition = mix(aStart, aEnd, aUnitPosition.z)
-                               + radial * aRadius;
+                               + radial * mix(aRadius, aEndRadius < 0.0 ? aRadius : aEndRadius, aUnitPosition.z);
             vec3 localNormal = basisX * aUnitNormal.x
                              + basisY * aUnitNormal.y
                              + axis * aUnitNormal.z;
+            if (aEndRadius >= 0.0 && abs(aUnitNormal.z) < 0.5)
+                localNormal -= axis * ((aEndRadius-aRadius)/max(lengthAlongAxis, 0.000001));
             vec4 worldPosition = uModel * vec4(localPosition, 1.0);
             gl_Position = uViewProjection * worldPosition;
             vNormal = normalize(mat3(uModel) * localNormal);
+            vTwoSided = 0;
             vWorldPosition = worldPosition.xyz;
             vColor = aColor;
             vObjectId = aObjectId;
@@ -726,25 +732,30 @@ GLuint makeBoxProgram() {
         layout(location = 3) in vec3 aAxisY;
         layout(location = 4) in vec3 aAxisZ;
         layout(location = 6) in vec3 aColor;
+        layout(location = 8) in vec3 aNormal0;
+        layout(location = 9) in vec3 aNormal1;
+        layout(location = 10) in vec3 aNormal2;
         uniform mat4 uViewProjection;
         uniform mat4 uModel;
         layout(location = 7) in uint aObjectId;
         flat out uint vObjectId;
         out vec3 vColor;
         out vec3 vNormal;
+        flat out int vTwoSided;
         out vec3 vWorldPosition;
         void main() {
             vec3 localPosition = aCenter
                 + aAxisX * aUnitPosition.x
                 + aAxisY * aUnitPosition.y
                 + aAxisZ * aUnitPosition.z;
-            vec3 localNormal = normalize(
-                normalize(aAxisX) * aUnitNormal.x
-                + normalize(aAxisY) * aUnitNormal.y
-                + normalize(aAxisZ) * aUnitNormal.z);
+            vec3 localNormal = length(aNormal0) > 0.0
+                ? normalize(aNormal0 * (-aUnitPosition.x-aUnitPosition.y)
+                    + aNormal1 * (aUnitPosition.x+0.5) + aNormal2 * (aUnitPosition.y+0.5))
+                : normalize(transpose(inverse(mat3(aAxisX,aAxisY,aAxisZ))) * aUnitNormal);
             vec4 worldPosition = uModel * vec4(localPosition, 1.0);
             gl_Position = uViewProjection * worldPosition;
             vNormal = normalize(mat3(uModel) * localNormal);
+            vTwoSided = length(aNormal0) > 0.0 ? 1 : 0;
             vWorldPosition = worldPosition.xyz;
             vColor = aColor;
             vObjectId = aObjectId;
@@ -834,7 +845,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" || (version < 4 || version > 14)) {
+    if (magic != "NADOCVR" || (version < 4 || version > 15)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -844,18 +855,18 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
     RepresentationData* active = nullptr;
     size_t activeIndex = 0;
     size_t legacyIdentityIndex = 0;
-    std::array<std::array<std::unordered_set<std::string>, 4>, 2> identities;
-    std::array<std::array<std::unordered_set<std::string>, 4>, 2> aliasIdentities;
-    std::array<std::array<std::unordered_set<std::string>, 4>, 2> handleTokens;
-    std::array<std::array<std::unordered_set<std::string>, 4>, 2> transformIdentities;
-    std::array<std::array<std::unordered_set<std::string>, 4>, 2> scopeHandleTokens;
-    std::array<std::array<std::unordered_map<std::string, std::string>, 4>, 2>
+    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> identities;
+    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> aliasIdentities;
+    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> handleTokens;
+    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> transformIdentities;
+    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> scopeHandleTokens;
+    std::array<std::array<std::unordered_map<std::string, std::string>, kRepresentationCount>, 2>
         scopeHandleIds;
-    std::array<std::array<std::unordered_set<std::string>, 4>, 2>
+    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2>
         declaredOwnerTokens;
-    std::array<std::array<std::unordered_set<std::string>, 4>, 2> scopeIdentities;
+    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> scopeIdentities;
     std::array<std::array<
-        std::vector<std::tuple<std::string, std::string, std::string>>, 4>, 2>
+        std::vector<std::tuple<std::string, std::string, std::string>>, kRepresentationCount>, 2>
         toolHandleKeys;
     size_t poseIndex = 0;
     size_t recordsRead = 0;
@@ -1098,6 +1109,22 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             }
             if (type == 'H') active->halfCylinders.push_back(cylinder);
             else active->cylinders.push_back(cylinder);
+        } else if (type == 'N' && version >= 15) {
+            std::string identity; input >> identity;
+            if (!active || active->boxes.empty() || active->boxes.back().identity != identity)
+                throw std::runtime_error("Invalid triangle normal annotation");
+            for (auto& n : active->boxes.back().normals) input >> n.x >> n.y >> n.z;
+        } else if (type == 'U' && version >= 15) {
+            std::string identity; float radius; input >> identity >> radius;
+            if (!active || active->cylinders.empty() || active->cylinders.back().identity != identity || !(radius > 0))
+                throw std::runtime_error("Invalid tapered cylinder annotation");
+            active->cylinders.back().endRadius = radius;
+        } else if (type == 'V' && version >= 15) {
+            std::string identity; float radius;
+            input >> identity >> radius;
+            if (!active || active->points.empty() || active->points.back().identity != identity || !(radius > 0))
+                throw std::runtime_error("Invalid VDW radius annotation");
+            active->points.back().vdwSize = radius;
         } else if (type == 'B') {
             if (!active) throw std::runtime_error("Box appears before representation block");
             StyledBox box;
@@ -1124,6 +1151,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
     };
     const bool empty = std::all_of(scene.representations.begin(), scene.representations.end(), noPrimitives);
     if (scene.emptyAuthoring) {
+        scene.available.fill(true);
         if (!empty || scene.hasExpanded) throw std::runtime_error("Empty authoring scene contains geometry");
         scene.normalizationCenter = fixedNormalization ? fixedNormalization->first : glm::vec3(0.0F);
         scene.normalizationScale = fixedNormalization ? fixedNormalization->second : kViewSizeMeters / 100.0F; // 100 nm initial working extent.
@@ -1135,6 +1163,14 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
         return scene; // No synthetic axes/part primitives in an empty document.
     }
     if (empty) throw std::runtime_error("The scene snapshot contains no visible geometry");
+    for (size_t i=0; i<kRepresentationCount; ++i) {
+        const auto rep=static_cast<Representation>(i);
+        const auto& source=scene.representations[representationSourceIndex(rep)];
+        scene.available[i]=!noPrimitives(source);
+        if (rep==Representation::vdw) scene.available[i]=!source.points.empty() && std::all_of(
+            source.points.begin(),source.points.end(),[](const auto& point){return point.vdwSize>0;});
+    }
+
     if (scene.hasExpanded) {
         for (size_t index = 0; index < scene.representations.size(); ++index) {
             if (identities[0][index] != identities[1][index]) {
@@ -1188,13 +1224,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             include(cylinder.end);
         }
         for (const StyledBox& box : rep.boxes) {
-            for (float x : {-0.5F, 0.5F}) {
-                for (float y : {-0.5F, 0.5F}) {
-                    for (float z : {-0.5F, 0.5F}) {
-                        include(box.center + box.axisX * x + box.axisY * y + box.axisZ * z);
-                    }
-                }
-            }
+            nadoc_vr::includeMeshBounds(box, include);
         }
     }
     const glm::vec3 center = fixedNormalization ? fixedNormalization->first : (lo + hi) * 0.5F;
@@ -1208,6 +1238,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             point.position = (point.position - center) * scale;
             point.position.z -= kViewDistanceMeters;
             point.size *= scale;
+            point.vdwSize *= scale;
         }
         for (StyledCylinder& cylinder : rep.cylinders) {
             cylinder.start = (cylinder.start - center) * scale;
@@ -1215,6 +1246,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             cylinder.start.z -= kViewDistanceMeters;
             cylinder.end.z -= kViewDistanceMeters;
             cylinder.radius *= scale;
+            if (cylinder.endRadius >= 0) cylinder.endRadius *= scale;
         }
         for (StyledCylinder& cylinder : rep.halfCylinders) {
             cylinder.start = (cylinder.start - center) * scale;
@@ -1222,6 +1254,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             cylinder.start.z -= kViewDistanceMeters;
             cylinder.end.z -= kViewDistanceMeters;
             cylinder.radius *= scale;
+            if (cylinder.endRadius >= 0) cylinder.endRadius *= scale;
         }
         for (StyledBox& box : rep.boxes) {
             box.center = (box.center - center) * scale;
@@ -1338,9 +1371,16 @@ class GlScene {
         glBindVertexArray(0);
         initializeShadowMap();
         // Prepare each static style before the first interactive frame.
-        for (const auto rep : {Representation::cylinders, Representation::full,
-                               Representation::ballstick, Representation::stick})
-            setStyle(rep, scene_.initialColoring);
+        for (auto [vao, buffer] : {std::pair{cylinderVao_,cylinderInstanceVbo_},
+             std::pair{cylinderGlowVao_,cylinderGlowInstanceVbo_},
+             std::pair{halfCylinderVao_,halfCylinderInstanceVbo_},
+             std::pair{halfCylinderGlowVao_,halfCylinderGlowInstanceVbo_}})
+            nadoc_vr::bindInstanceAttribute(vao, buffer, 6, 1, sizeof(Cylinder), offsetof(Cylinder,endRadius));
+        for (auto [vao, buffer] : {std::pair{boxVao_,boxInstanceVbo_}, std::pair{boxGlowVao_,boxGlowInstanceVbo_}})
+            for (int i=0; i<3; ++i)
+                nadoc_vr::bindInstanceAttribute(vao, buffer, 8+i, 3, sizeof(Box), offsetof(Box,normals)+i*sizeof(glm::vec3));
+        for (size_t i = 0; i < kRepresentationCount; ++i)
+            if (scene_.available[i]) setStyle(static_cast<Representation>(i), scene_.initialColoring);
         setStyle(scene_.initialRepresentation, scene_.initialColoring);
     }
 
@@ -1610,7 +1650,11 @@ class GlScene {
         setStyle(representation_, coloring_);
     }
 
+    bool supportsRepresentation(Representation representation) const {
+        return scene_.available.at(static_cast<size_t>(representation));
+    }
     void setStyle(Representation representation, Coloring coloring) {
+        if (!supportsRepresentation(representation)) throw std::runtime_error("Representation missing from scene snapshot: " + std::string(representationName(representation)));
         const auto styleStarted = std::chrono::steady_clock::now();
         // Coarse helix cylinders have domain-level ownership and cannot represent
         // independent per-base MD motion. Keep an active desktop visualization in
@@ -1668,8 +1712,7 @@ class GlScene {
             return;
         }
         const bool restoringAtomistic =
-            representation != Representation::full &&
-            representation != Representation::cylinders &&
+            (representation == Representation::ballstick || representation == Representation::stick) &&
             representation_ != Representation::ballstick &&
             representation_ != Representation::stick &&
             cachedAtomisticVisualizationRevision_ == visualizationRevision_ &&
@@ -1845,10 +1888,10 @@ class GlScene {
                 position,
                 visualizationColor(source, point.identity)
                     .value_or(point.colors.get(coloring)),
-                point.size, objectId(point.identity)});
+                representationPointRadius(representation_, point), objectId(point.identity)});
             sphereCoordinateIndices.push_back(coordinateIndexFor(point.identity, false));
             if (const auto color = glowColor(point.identity)) {
-                glowPoints.push_back(Vertex{position, *color, point.size * 1.55F});
+                glowPoints.push_back(Vertex{position, *color, representationPointRadius(representation_, point) * 1.55F});
             }
         }
         glBindBuffer(GL_ARRAY_BUFFER, sphereInstanceVbo_);
@@ -1868,6 +1911,7 @@ class GlScene {
         cylinders.reserve(source.cylinders.size());
         cylinderCoordinateIndices.reserve(source.cylinders.size());
         for (const StyledCylinder& cylinder : source.cylinders) {
+            if (!representationCylinderVisible(representation_, cylinder.identity)) continue;
             if (cylinder.identity.starts_with("atom-bond-ref:") &&
                 !hasCompleteVisualizationAtomEndpoints(source, cylinder.identity)) {
                 continue;
@@ -1887,14 +1931,15 @@ class GlScene {
             cylinders.push_back(Cylinder{
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
-                    .value_or(cylinder.colors.get(coloring)), objectId(cylinder.identity)});
+                    .value_or(cylinder.colors.get(coloring)), objectId(cylinder.identity), cylinder.endRadius});
             cylinderCoordinateIndices.push_back({
                 coordinateIndexFor(cylinder.identity, false),
                 coordinateIndexFor(cylinder.identity, true),
             });
             if (const auto color = glowColor(cylinder.identity)) {
                 glowCylinders.push_back(Cylinder{
-                    start, end, cylinder.radius * 1.55F, *color});
+                    start, end, cylinder.radius * 1.55F, *color, 0,
+                    cylinder.endRadius < 0 ? -1.0F : cylinder.endRadius * 1.55F});
             }
         }
         glBindBuffer(GL_ARRAY_BUFFER, cylinderInstanceVbo_);
@@ -1932,10 +1977,11 @@ class GlScene {
             halfCylinders.push_back(Cylinder{
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
-                    .value_or(cylinder.colors.get(coloring)), objectId(cylinder.identity)});
+                    .value_or(cylinder.colors.get(coloring)), objectId(cylinder.identity), cylinder.endRadius});
             if (const auto color = glowColor(cylinder.identity)) {
                 glowHalfCylinders.push_back(Cylinder{
-                    start, end, cylinder.radius * 1.55F, *color});
+                    start, end, cylinder.radius * 1.55F, *color, 0,
+                    cylinder.endRadius < 0 ? -1.0F : cylinder.endRadius * 1.55F});
             }
         }
         glBindBuffer(GL_ARRAY_BUFFER, halfCylinderInstanceVbo_);
@@ -1954,6 +2000,7 @@ class GlScene {
         std::vector<Box> glowBoxes;
         boxes.reserve(source.boxes.size());
         for (const StyledBox& box : source.boxes) {
+            if (!representationBoxVisible(representation_, box.identity)) continue;
             glm::vec3 center;
             glm::vec3 axisX;
             glm::vec3 axisY;
@@ -1975,7 +2022,8 @@ class GlScene {
             boxes.push_back(Box{
                 center, axisX, axisY, axisZ,
                 visualizationColor(source, box.identity)
-                    .value_or(box.colors.get(coloring)), objectId(box.identity)});
+                    .value_or(box.colors.get(coloring)), objectId(box.identity),
+                {transformVector(box.normals[0], box.identity), transformVector(box.normals[1], box.identity), transformVector(box.normals[2], box.identity)}});
             if (const auto color = glowColor(box.identity)) {
                 glowBoxes.push_back(Box{
                     center, axisX * 1.18F, axisY * 1.18F, axisZ * 1.18F, *color});
@@ -2008,13 +2056,7 @@ class GlScene {
             include(cylinder.end, cylinder.radius);
         }
         for (const Box& box : boxes) {
-            for (float x : {-0.5F, 0.5F}) {
-                for (float y : {-0.5F, 0.5F}) {
-                    for (float z : {-0.5F, 0.5F}) {
-                        include(box.center + box.axisX * x + box.axisY * y + box.axisZ * z);
-                    }
-                }
-            }
+            nadoc_vr::includeMeshBounds(box, include);
         }
         if (source.points.empty() && source.cylinders.empty()
             && source.halfCylinders.empty() && source.boxes.empty()) {
@@ -2084,9 +2126,10 @@ class GlScene {
         };
         for (const StyledPoint& point : source.points) {
             consider(point.identity, nadoc_vr::raySphere(
-                ray, displayedPoint(source, point.position, point.identity), point.size));
+                ray, displayedPoint(source, point.position, point.identity), representationPointRadius(representation_, point)));
         }
         for (const StyledCylinder& cylinder : source.cylinders) {
+            if (!representationCylinderVisible(representation_, cylinder.identity)) continue;
             consider(cylinder.identity, nadoc_vr::rayCapsule(
                 ray, displayedPoint(source, cylinder.start, cylinder.identity),
                 displayedPoint(source, cylinder.end, cylinder.identity, true),
@@ -2099,10 +2142,11 @@ class GlScene {
                 cylinder.radius));
         }
         for (const StyledBox& box : source.boxes) {
+            if (!representationBoxVisible(representation_, box.identity)) continue;
             const float committed = committedWeights(source, box.identity).first;
             const float pending = previewWeights(source, box.identity).first;
-            consider(box.identity, nadoc_vr::rayBox(
-                ray, displayedPoint(source, box.center, box.identity),
+            consider(box.identity, nadoc_vr::rayRepresentationMesh(
+                representation_, ray, displayedPoint(source, box.center, box.identity),
                 previewVector(box.axisX, committed, pending),
                 previewVector(box.axisY, committed, pending),
                 previewVector(box.axisZ, committed, pending)));
@@ -2136,11 +2180,12 @@ class GlScene {
             const glm::vec3 position = displayedPoint(
                 source, point.position, point.identity);
             include(point.identity, nadoc_vr::sphereOverlapsSphere(
-                center, radius, position, point.size), position);
+                center, radius, position, representationPointRadius(representation_, point)), position);
         }
         auto includeCylinders = [&](const std::vector<StyledCylinder>& cylinders,
                                     bool half) {
             for (const StyledCylinder& cylinder : cylinders) {
+            if (!representationCylinderVisible(representation_, cylinder.identity)) continue;
                 const glm::vec3 start = displayedPoint(
                     source, cylinder.start, cylinder.identity);
                 const glm::vec3 end = displayedPoint(
@@ -2157,6 +2202,7 @@ class GlScene {
         includeCylinders(source.cylinders, false);
         includeCylinders(source.halfCylinders, true);
         for (const StyledBox& box : source.boxes) {
+            if (!representationBoxVisible(representation_, box.identity)) continue;
             const float committed = committedWeights(source, box.identity).first;
             const float pending = previewWeights(source, box.identity).first;
             const glm::vec3 boxCenter = displayedPoint(
@@ -2280,12 +2326,13 @@ class GlScene {
             if (point.identity == resolvedIdentity) {
                 return result(
                     displayedPoint(source, point.position, point.identity),
-                    point.size);
+                    representationPointRadius(representation_, point));
             }
         }
         auto cylinderAnchor = [&](const std::vector<StyledCylinder>& cylinders)
             -> std::optional<nadoc_vr::PickHit> {
             for (const StyledCylinder& cylinder : cylinders) {
+            if (!representationCylinderVisible(representation_, cylinder.identity)) continue;
                 if (cylinder.identity == resolvedIdentity) {
                     return result(
                         (displayedPoint(source, cylinder.start, cylinder.identity)
@@ -2299,6 +2346,7 @@ class GlScene {
         if (auto found = cylinderAnchor(source.cylinders)) return found;
         if (auto found = cylinderAnchor(source.halfCylinders)) return found;
         for (const StyledBox& box : source.boxes) {
+            if (!representationBoxVisible(representation_, box.identity)) continue;
             if (box.identity == resolvedIdentity) {
                 const float committed = committedWeights(source, box.identity).first;
                 const float pending = previewWeights(source, box.identity).first;
@@ -2339,11 +2387,12 @@ class GlScene {
         for (const StyledPoint& point : source.points) {
             if (identities.contains(point.identity)) {
                 bounds.includePoint(displayedPoint(
-                    source, point.position, point.identity), point.size);
+                    source, point.position, point.identity), representationPointRadius(representation_, point));
             }
         }
         auto includeCylinders = [&](const std::vector<StyledCylinder>& cylinders) {
             for (const StyledCylinder& cylinder : cylinders) {
+            if (!representationCylinderVisible(representation_, cylinder.identity)) continue;
                 if (identities.contains(cylinder.identity)) {
                     bounds.includeSegment(
                         displayedPoint(source, cylinder.start, cylinder.identity),
@@ -2356,6 +2405,7 @@ class GlScene {
         includeCylinders(source.cylinders);
         includeCylinders(source.halfCylinders);
         for (const StyledBox& box : source.boxes) {
+            if (!representationBoxVisible(representation_, box.identity)) continue;
             if (identities.contains(box.identity)) {
                 const float committed = committedWeights(source, box.identity).first;
                 const float pending = previewWeights(source, box.identity).first;
@@ -2471,7 +2521,7 @@ class GlScene {
                            boxLightViewProjection_, boxLightDirection_);
             glBindVertexArray(boxVao_);
             glDrawElementsInstanced(
-                GL_TRIANGLES, boxIndexCount_, GL_UNSIGNED_SHORT, nullptr, boxCount_);
+                GL_TRIANGLES, boxDrawCount(), GL_UNSIGNED_SHORT, boxDrawOffset(), boxCount_);
         }
         glDisable(GL_POLYGON_OFFSET_FILL);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -2638,7 +2688,7 @@ class GlScene {
                 boxShadowsEnabled_);
             glBindVertexArray(boxVao_);
             glDrawElementsInstanced(
-                GL_TRIANGLES, boxIndexCount_, GL_UNSIGNED_SHORT, nullptr, boxCount_);
+                GL_TRIANGLES, boxDrawCount(), GL_UNSIGNED_SHORT, boxDrawOffset(), boxCount_);
         }
 
         // Glow and UI do not own design pixels. Keep their color rendering unchanged.
@@ -2708,7 +2758,7 @@ class GlScene {
                     boxShadowsEnabled_);
                 glBindVertexArray(boxGlowVao_);
                 glDrawElementsInstanced(
-                    GL_TRIANGLES, boxIndexCount_, GL_UNSIGNED_SHORT, nullptr,
+                    GL_TRIANGLES, boxDrawCount(), GL_UNSIGNED_SHORT, boxDrawOffset(),
                     boxGlowCount_);
             }
             glDisable(GL_BLEND);
@@ -2869,7 +2919,7 @@ class GlScene {
 
     void updateDisplayedGeometry() {
         if (!displayedSourceValid_) return;
-        const size_t index = static_cast<size_t>(representation_);
+        const size_t index = representationSourceIndex(representation_);
         const RepresentationData& natural = scene_.representations[index];
         if (!scene_.hasExpanded || expansion_.value() <= 0.0F) {
             if (displayedSource_ != &natural) sourceIndexValid_ = false;
@@ -3009,6 +3059,8 @@ class GlScene {
                 box.axisY, toolCommittedTransform_, weight);
             box.axisZ = nadoc_vr::weightedTransformVector(
                 box.axisZ, toolCommittedTransform_, weight);
+            for (auto& normal : box.normals)
+                normal = nadoc_vr::weightedTransformVector(normal, toolCommittedTransform_, weight);
         }
         for (OwnerHandle& handle : source.ownerHandles) {
             if (handle.token == toolCommittedToken_) {
@@ -3616,6 +3668,16 @@ class GlScene {
         glBindVertexArray(0);
     }
 
+    GLsizei boxDrawCount() const {
+        if (representation_ == Representation::surface || representation_ == Representation::hull) return 3;
+        if (representation_ == Representation::oxdna) return nadoc_vr::ellipsoidIndexCount;
+        return boxIndexCount_;
+    }
+    const void* boxDrawOffset() const {
+        const size_t offset = representation_ == Representation::surface || representation_ == Representation::hull
+            ? nadoc_vr::triangleIndexOffset : representation_ == Representation::oxdna ? nadoc_vr::ellipsoidIndexOffset : 0;
+        return reinterpret_cast<void*>(offset*sizeof(GLushort));
+    }
     void uploadBoxes() {
         boxProgram_ = makeBoxProgram();
         boxViewProjection_ = glGetUniformLocation(boxProgram_, "uViewProjection");
@@ -3649,6 +3711,7 @@ class GlScene {
         face({n,n,p}, {p,n,p}, {p,p,p}, {n,p,p}, {0,0,1});
         face({p,n,n}, {n,n,n}, {n,p,n}, {p,p,n}, {0,0,-1});
         boxIndexCount_ = static_cast<GLsizei>(indices.size());
+        nadoc_vr::appendRepresentationMeshes(vertices, indices);
 
         glGenVertexArrays(1, &boxVao_);
         glBindVertexArray(boxVao_);
@@ -4724,7 +4787,7 @@ class Viewer {
         normalizationScale_ = sceneData_.normalizationScale;
         dimensionSync_.initialize(eventPath_,dimensionPanel_.tool,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
         const RepresentationData& initial = sceneData_.representations[
-            static_cast<size_t>(sceneData_.initialRepresentation)];
+            representationSourceIndex(sceneData_.initialRepresentation)];
         const auto identity = nadoc_vr::resolveOwnerIdentity(
             initial.ownerAliases, selectedOwnerTokens);
         if (identity && selectedSelectionKind != "none") {
@@ -5113,6 +5176,8 @@ class Viewer {
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.available=[this](const std::string& action) {
                 if(action=="trajectory") return trajectoryState_.active;
+                if(action.starts_with("repr:")) return glScene_->supportsRepresentation(static_cast<Representation>(std::stoi(action.substr(5))));
+                if(action.starts_with("color:")) return (nadoc_vr::kSidebarColoringMasks.at(static_cast<size_t>(glScene_->representation())) & (1U << std::stoi(action.substr(6)))) != 0;
                 if(!action.starts_with("tool:")) return true;
                 const auto mode=action=="tool:extrude"?nadoc_vr::ToolMode::extrude
                     :action=="tool:twist"?nadoc_vr::ToolMode::twist
@@ -7335,6 +7400,7 @@ class Viewer {
     }
 
     void publishStyleRequest(Representation representation, Coloring coloring) {
+        if (glScene_ && !glScene_->supportsRepresentation(representation)) return;
         if (glScene_ && representation == glScene_->representation() &&
             coloring == glScene_->coloring()) return;
         if (witness_ && eventPath_.empty()) {

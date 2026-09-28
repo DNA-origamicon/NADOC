@@ -250,7 +250,7 @@ describe('initVRSession', () => {
     expect(publishNativeJobs).toHaveBeenCalledOnce()
   })
 
-  it('delivers sequenced native events only while the companion is active', async () => {
+  it.each(['ballstick', 'beads', 'vdw', 'hull-prism', 'surface', 'mrdna-coarse', 'mrdna-fine', 'oxdna'])('delivers sequenced %s events only while the companion is active', async (representation) => {
     vi.useFakeTimers()
     const onNativeEvent = vi.fn()
     const native = {
@@ -267,7 +267,7 @@ describe('initVRSession', () => {
           level_sequence: 1,
           selection_level: 'domain',
           style_sequence: 1,
-          representation: 'ballstick',
+          representation,
           coloring: 'cpk',
           trajectory_sequence: 1,
           trajectory_action: 'seek',
@@ -305,7 +305,7 @@ describe('initVRSession', () => {
           level_sequence: 1,
           selection_level: 'domain',
           style_sequence: 1,
-          representation: 'ballstick',
+          representation,
           coloring: 'cpk',
           trajectory_sequence: 1,
           trajectory_action: 'seek',
@@ -354,7 +354,7 @@ describe('initVRSession', () => {
         identities: ['nuc:s1', 'nuc:s2'],
       }],
       [{
-        sequence: 1, type: 'style', representation: 'ballstick', coloring: 'cpk',
+        sequence: 1, type: 'style', representation, coloring: 'cpk',
       }],
       [{ sequence: 1, type: 'trajectory', action: 'seek', frameIdx: 42 }],
       [{

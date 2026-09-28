@@ -1,3 +1,4 @@
+import { VR_REPRESENTATIONS } from './vr_representations.js'
 import * as THREE from 'three'
 import { refreshNativeVRJobs } from '../api/client.js'
 
@@ -277,7 +278,7 @@ export function initVRSession({
         const styleSequence = Number(event?.style_sequence ?? 0)
         if (Number.isSafeInteger(styleSequence) &&
             styleSequence > lastNativeStyleSequence &&
-            ['cylinders', 'full', 'ballstick', 'stick'].includes(event?.representation) &&
+            VR_REPRESENTATIONS.includes(event?.representation) &&
             ['strand', 'base', 'cluster', 'cpk'].includes(event?.coloring)) {
           lastNativeStyleSequence = styleSequence
           onNativeEvent({
