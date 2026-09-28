@@ -158,7 +158,7 @@ export function initViewToolButtons({
     document.querySelector('.vt-btn[data-vt="grid"]')?.classList.toggle('active', _gridHelper.visible)
     document.querySelector('.vt-btn[data-vt="overhangNames"]')?.classList.toggle('active', showOverhangNames)
     document.querySelector('.vt-btn[data-vt="clashes"]')?.classList.toggle('active', getClashesOn?.() ?? false)
-    document.querySelector('.vt-btn[data-vt="expanded"]')?.classList.toggle('active', expandedSpacing.isActive())
+    document.querySelector('.vt-btn[data-vt="expanded"]')?.classList.toggle('active', expandedSpacing.isRequestedActive?.() ?? expandedSpacing.isActive())
     document.querySelector('.vt-btn[data-vt="deform"]')?.classList.toggle('active', deformVisuActive)
     document.querySelector('.vt-btn[data-vt="unfold"]')?.classList.toggle('active', unfoldActive)
     document.querySelector('.vt-btn[data-vt="cadnano2d"]')?.classList.toggle('active', cadnanoActive)

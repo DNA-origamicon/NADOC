@@ -71,3 +71,40 @@ test('end resizing exposes its Authoring demo and validation launchers', async (
   expect((await requested).postDataJSON()).toEqual({ tour: 'end-resize', mode: 'validate' })
   await expect(page.getByText('Test launch captured').first()).toBeVisible()
 })
+
+
+test('Ligate exposes its Authoring demo and validation launchers', async ({ page }) => {
+  await page.goto('/?doc=e2e-ligation-tour-menu')
+  await page.locator('#menu-item-debug > button').click()
+  await page.locator('#menu-debug-vr-tours').hover()
+  const group = page.locator('[data-category="authoring"]')
+  await group.hover()
+  await expect(group.locator('[data-start="ligate"][data-mode="demo"]')).toBeVisible()
+  const validation = group.locator('[data-start="ligate"][data-mode="validate"]')
+  await expect(validation).toHaveText('Ligate ends with the radius wheel validation')
+  await page.route('**/api/vr/tours/start', route => route.fulfill({ json: { detail: 'Test launch captured' }, status: 409 }))
+  const requested = page.waitForRequest(request => request.url().endsWith('/api/vr/tours/start'))
+  await validation.click()
+  expect((await requested).postDataJSON()).toEqual({ tour: 'ligate', mode: 'validate' })
+  await expect(page.getByText('Test launch captured').first()).toBeVisible()
+})
+
+
+test('Nick scissors and history tour is discoverable', async ({ page }) => {
+  await page.goto('/?doc=e2e-nick-tour-menu')
+  await page.locator('#menu-item-debug > button').click()
+  await page.locator('#menu-debug-vr-tours').hover()
+  await page.locator('[data-category="authoring"]').hover()
+  await expect(page.locator('[data-start="nick"][data-mode="demo"]')).toBeVisible()
+  await expect(page.locator('[data-start="nick"][data-mode="validate"]')).toBeVisible()
+})
+
+
+test('left quiver view-tools tour is discoverable', async ({ page }) => {
+  await page.goto('/?doc=e2e-view-tools-tour-menu')
+  await page.locator('#menu-item-debug > button').click()
+  await page.locator('#menu-debug-vr-tours').hover()
+  await page.locator('[data-category="right"]').hover()
+  await expect(page.locator('[data-start="view-tools"][data-mode="demo"]')).toBeVisible()
+  await expect(page.locator('[data-start="view-tools"][data-mode="validate"]')).toBeVisible()
+})

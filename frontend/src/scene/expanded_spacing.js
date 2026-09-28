@@ -145,7 +145,7 @@ export function initExpandedSpacing(
    * mode or turn spacing off — the menu toggle, the Q toggle taking ownership,
    * and `forceOff` from slice/unfold/extrude — so the pill cannot go stale.
    */
-  function _publishMode() { onModeChange?.(_isXbAdjust()) }
+  function _publishMode() { onModeChange?.(_isXbAdjust(), _desiredOn) }
 
   /**
    * Spacing the current mode wants, in nm.
@@ -358,6 +358,7 @@ export function initExpandedSpacing(
     toggleExtraBaseAdjust,
     forceOff,
     isActive:   () => _active,
+    isRequestedActive: () => _desiredOn,
     isExtraBaseAdjustActive: _isXbAdjust,
     setSpacing,
     getSpacing: () => _spacingNm,

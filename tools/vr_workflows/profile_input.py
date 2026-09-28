@@ -50,9 +50,9 @@ class AcquisitionWindow:
 
 
 def reach_target(live, target, preset, seed, acquired=None, target_position=None,
-                 target_orientation=None):
+                 target_orientation=None, hand=1):
     """Aim at a point, or reach an explicit pose retaining its requested wrist roll."""
-    intended, desired = target_reaches(live.state['hands'][1], target, preset, seed,
+    intended, desired = target_reaches(live.state['hands'][hand], target, preset, seed,
                                       target_position, target_orientation)
     samples = []
     duration, profile = PRESETS[preset]
@@ -65,9 +65,9 @@ def reach_target(live, target, preset, seed, acquired=None, target_position=None
         if lag > .15:
             raise TimeoutError(f'profile playback late by {lag:.3f}s')
         pose = noisy['hands']['right']
-        live.send('pose', hand=1, position=pose['position'], orientation=pose['orientation'])
+        live.send('pose', hand=hand, position=pose['position'], orientation=pose['orientation'])
         live.frame()
-        actual = dict(live.state['hands'][1])
+        actual = dict(live.state['hands'][hand])
         samples.append({'t':noisy['t'], 'lag_s':lag, 'frame':live.state['frame'],
                         'intended':ideal['hands']['right'], 'desired':pose, 'actual':actual,
                         'applied_error':pose_error(pose,actual)})
@@ -77,7 +77,7 @@ def reach_target(live, target, preset, seed, acquired=None, target_position=None
             if window.update(noisy['t'],hit):
                 stopped = True
                 break
-    return {'preset':preset, 'seed':seed, 'target':target, 'samples':samples,
+    return {'preset':preset, 'seed':seed, 'hand':hand, 'target':target, 'samples':samples,
             'target_position':target_position,
             'target_orientation':target_orientation,
             'position_policy':('explicit_pose' if target_orientation is not None else

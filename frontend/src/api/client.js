@@ -5412,3 +5412,5 @@ export async function relaxCpd(photoproductId) {
 }
 
 export const sendVREndResizeHandles = body => _request('POST', '/vr/end-resize-handles', body)
+
+export const sendVRLigationEnds = body => _request('POST', '/vr/ligation-ends', body)

@@ -72,6 +72,8 @@ export function initVRSession({
   let lastNativeToolSequence = 0
   let lastNativeToolConfigSequence = 0
   let lastNativePlanePickSequence = 0
+  let lastNativeViewToolSequence = 0
+  let lastNativeLigationSequence = 0
   let lastNativeResizeSequence = 0
   let lastNativeTransformSequence = 0
   let nativeTimingReported = false
@@ -251,6 +253,15 @@ export function initVRSession({
       try { event = await native.event() } catch { /* transient partial record/network */ }
       if (disposed || !nativeActive) return
       onNativePoll?.()
+      const viewTool = event?.view_tool
+      if(Number.isSafeInteger(viewTool?.sequence) && viewTool.sequence>lastNativeViewToolSequence) {
+        lastNativeViewToolSequence=viewTool.sequence;onNativeEvent({type:'view_tool',...viewTool})
+      }
+      const ligation = event?.ligation
+      if (Number.isSafeInteger(ligation?.sequence) && ligation.sequence > lastNativeLigationSequence) {
+        lastNativeLigationSequence = ligation.sequence
+        onNativeEvent({ type: 'ligation', ...ligation })
+      }
       const resize = event?.end_resize
       if (Number.isSafeInteger(resize?.sequence) && resize.sequence > lastNativeResizeSequence) {
         lastNativeResizeSequence = resize.sequence
@@ -399,6 +410,8 @@ export function initVRSession({
       lastNativePlanePickSequence = 0
       lastNativeTransformSequence = 0
       lastNativeResizeSequence = 0
+      lastNativeViewToolSequence = 0
+      lastNativeLigationSequence = 0
       nativeTimingReported = false
       _scheduleNativeEventPoll()
       _scheduleNativeJobPoll({ immediate: true })

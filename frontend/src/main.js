@@ -42,6 +42,8 @@ import { createVRToolTransactionCoordinator } from './scene/vr_tool_transaction.
 import {
   initialVRToolConfigState, reduceVRToolConfig, vrPlaneFeedbackPayload,
 } from './scene/vr_tool_config.js'
+import { createVRLigation } from './scene/vr_ligation.js'
+import { createVRViewTools } from './scene/vr_view_tools.js'
 import { vrToolFeedbackPayload } from './scene/vr_tool_context.js'
 import { createVRToolPreflightCoordinator } from './scene/vr_tool_preflight_coordinator.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
@@ -1000,7 +1002,10 @@ async function main() {
     () => sequenceOverlay,
     () => unfoldView,
     () => atomisticRenderer,
-    (on) => _setMenuToggle('menu-view-extra-base-spacing', on),
+    (on, expanded) => {
+      _setMenuToggle('menu-view-extra-base-spacing', on)
+      document.querySelector('.vt-btn[data-vt="expanded"]')?.classList.toggle('active', expanded)
+    },
     () => _atomSurface,   // lazy: assigned ~900 lines below this init
   )
 
@@ -6453,6 +6458,11 @@ async function main() {
 
   let _vrStyleApply = Promise.resolve()
   let _vrTrajectoryPublishCount = 0
+  const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
+  const vrLigation = createVRLigation({ getState: store.getState, api,
+    clearSelection: () => selectionManager.clearSelection?.(),
+    onOutcome: message => showToast(message, { severity: 'error' }),
+  })
   let vrEndCommitting = false
   let vrEndPublished = ''
   let vrEndPublishing = false
@@ -6467,7 +6477,7 @@ async function main() {
     finally { vrEndPublishing = false }
   }
   const vrSession = initVRSession({
-    onNativePoll: publishVREnds,
+    onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish() },
     renderer,
     scene,
     camera,
@@ -6531,9 +6541,13 @@ async function main() {
     },
     onNativeEvent: (_handleNativeVREvent = event => {
       _recordScrywriteBrowser('native_event', event)
-      if (event?.type === 'native_session_end') vrEndPublished = ''
+      if (event?.type === 'native_session_end') { vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset() }
       const button = document.getElementById('menu-help-view-vr')
-      if (event?.type === 'end_resize') {
+      if(event?.type === 'view_tool') {
+        void vrViewTools.activate(event.index,event.sequence)
+      } else if (event?.type === 'ligation') {
+        void vrLigation.commit(event)
+      } else if (event?.type === 'end_resize') {
         if (vrEndCommitting) return
         vrEndCommitting = true
         void (async () => {

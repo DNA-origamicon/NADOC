@@ -15,6 +15,59 @@ Register it in `tools/vr_workflows/tour_catalog.py` under the related sidebar ta
 or interaction category; follow the [registration checklist](../docs/vr_sidebar_menus.md#adding-future-tours-and-tests).
 Do not leave new major demos or validation workflows as undiscoverable shell commands.
 
+## Quiver gesture for scissors (2026-09-28)
+
+Either controller can now toggle global Nick mode by reaching from in front of
+the headset to behind the head/shoulder and dwelling 0.35 s, with buttons released.
+A 0.15 s front dwell rearms it; remaining behind cannot repeat. Head-relative
+position uses horizontal headset facing, with a real controller-travel requirement
+so head turns alone do not count. Tracking loss, menus, buttons, active gestures
+and pending edits suppress detection. Equip/stow use different haptic amplitudes.
+Selecting Nick again on the wheel remains the alternate way to put scissors away.
+The existing **Nick with scissors, Undo and Redo** tour now includes two quiver
+reaches, held-behind non-repetition, no design mutation and visible sphere/scissors
+restoration before its cut/history checks.
+All four profiles passed; evidence `.development-artifacts/vr-nick/a4fdd8b73e/`.
+See the [gesture audit](../docs/audits/vr_quiver_gesture_20260928.md) for the precise
+region/dwell, rendered pixel checks and remaining human comfort/tracking limits.
+
+## Radius-wheel Nick and history (2026-09-28)
+
+All four wheel sectors are now active. Undo/Redo use the ordinary desktop design
+history and refresh native geometry. Nick replaces both selection spheres with
+scissors: analog trigger pressure closes the blades and brightens the candidate
+backbone bond; the existing full-click threshold creates one backend nick. A held
+trigger cannot repeat the edit. The browser shares the versioned, serialized
+ligation transaction path for Nick/Undo/Redo; requests are deduplicated per session.
+Nick keeps the canonical selection level `base` while owning bond targeting itself
+(the event protocol does not have a `bond` selection level).
+Debug → VR Tours & Tests → Tools · Authoring → **Nick with scissors, Undo and Redo**
+is the discoverable demo and four-profile validation route. The API excludes
+synthetic/loop-copy/ambiguous-coordinate targets. See [workflow](../docs/vr_ligation.md).
+All four physical runtime profiles passed nick, partial-pressure pixels, empty
+click, held-trigger non-repetition and exact wheel Undo/Redo. Evidence:
+`.development-artifacts/vr-nick/145d008fa4/`; see the
+[audit](../docs/audits/vr_nick_history_20260928.md) for the retained protocol failure
+and remaining Expanded/large-design/human checks. User deferred the previously
+reported apparent moving/resetting base; do not claim this work resolves it.
+
+## Radius-wheel Ligate (2026-09-28)
+
+Latest user direction replaces the four radial tool sectors with Ligate/Nick/Undo/
+Redo. Ligate was implemented first; Nick and history now also work as described
+above. Existing tools retain sidebar entry points. Either controller can
+trigger-pick a real 3′ or 5′ end, stretch a cyan preview, snap green to a compatible
+opposite end on another strand, and release to create one forced ligation through
+the desktop API. Versioned catalogs and deduplicated release events protect the
+transaction; scene/menu/tracking changes cancel active drags. Each saved bond is
+independently undoable on desktop.
+Debug → VR Tours & Tests → Tools · Authoring → **Ligate ends with the radius wheel**
+runs the reusable demo or four-profile validation. All four profiles passed both
+pickup polarities, invalid release, native refresh, stereo/mirror preview pixels,
+saved-bond pixels and exact Undo. Evidence: `.development-artifacts/vr-ligation/69c3958ea7/`.
+See [workflow](../docs/vr_ligation.md) and [audit](../docs/audits/vr_ligation_20260928.md)
+for the retained acquisition failure/retry and human/Expanded/large-design limits.
+
 ## Selected-end trigger resizing (2026-09-28)
 
 Selected end arrows now accept either controller's trigger grab: outward extends,
@@ -491,3 +544,24 @@ Controls & layout, Dimensions and Authoring. Catalog lives in
 subprocess launches/status/cancellation. `menu_tour --tab side:key` scopes page
 coverage. Demo uses steady_fast; validation uses all four profiles. The existing
 authoring demo remains terminal-only because of its special viewer/review assets.
+
+## Hand-specific quiver tools (2026-09-28)
+
+Scissors/Nick now belongs to the **right hand only**, including the radius-wheel
+entry point. Left quiver gestures independently toggle a two-column view tablet.
+Its eleven controls use the original desktop SVGs and invoke the shared desktop
+view handlers: Length, Sequence, Undefined, Loop/skip, Grid, Overhang names,
+Clashes, Expanded, Deform, Unfold and Cadnano 2D. The native stereo renderer reads
+validated document-bound binary geometry/texture snapshots, retaining mesh
+instancing; world manipulation remains native. Straight and 2D inspection layouts
+suppress canonical edit picks whose positions no longer match. Panel feedback
+explains desktop layout prerequisites. See `docs/vr_view_tools.md` and the
+`view-tools` Debug tour (`tools.vr_workflows.view_tools_tour --validate`).
+
+
+Validation for the hand-specific view-tablet checkpoint: all four profiles passed
+both the complete eleven-toggle menu workflow and scissors/left-menu independence,
+left-trigger non-nicking, right nick and Undo/Redo. Evidence and retained failed
+attempts: `docs/audits/vr_view_tools_20260928.md`; aggregate
+`.development-artifacts/vr-view-tools/view-validation.json`, plus
+`scissors-final/result.json`. Through-lens comfort remains a human check.

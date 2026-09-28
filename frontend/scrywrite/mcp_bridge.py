@@ -53,6 +53,8 @@ TOOLS = [
     action("pose", "Set one test hand pose in OpenXR LOCAL meters, quaternion XYZW. Does not move the physical head. Held buttons expire after two seconds without a control command; neutral poses remain available.",
            {"hand": HAND, "position": VECTOR,
             "orientation": {**VECTOR, "minItems": 4, "maxItems": 4}}),
+    action("trigger_value", "Set analog trigger pressure through production input handling.",
+           {"hand": HAND, "value": {"type": "number", "minimum": 0, "maximum": 1}}),
     action("trackpad_axis", "Set normalized trackpad direction for an ordinary trackpad click.",
            {"hand": HAND, "x": {"type": "number", "minimum": -1, "maximum": 1}, "y": {"type": "number", "minimum": -1, "maximum": 1}}),
     action("button", "Set menu, trigger, grip or trackpad state. Uses production input handling on subsequent focused frames. Always release held buttons.",
@@ -209,6 +211,8 @@ class Bridge:
             if not 0.99 <= math.sqrt(sum(v*v for v in args["orientation"])) <= 1.01:
                 raise ValueError("orientation must be normalized XYZW")
             command += " " + " ".join(map(str, [args["hand"], *args["position"], *args["orientation"]]))
+        elif operation == "trigger_value":
+            command += f" {args['hand']} {args['value']}"
         elif operation == "trackpad_axis":
             command += f" {args['hand']} {args['x']} {args['y']}"
         elif operation == "button":

@@ -37,6 +37,8 @@
 #include "extrude_panel.hpp"
 #include "move_panel.hpp"
 #include "end_resize.hpp"
+#include "ligation.hpp"
+#include "quiver_gesture.hpp"
 #include "view_volume_shader.hpp"
 #include "dimension_sync.hpp"
 #include "sidebar_grips.hpp"
@@ -4778,6 +4780,8 @@ class GpuFrameTimer {
 
 #include "sidebar_runtime.hpp"
 
+#include "view_tools.hpp"
+
 class Viewer {
 #ifdef NADOC_SCRYWRITE_TESTING
     friend struct LiveViewerTest;
@@ -4936,6 +4940,7 @@ class Viewer {
         menuPanelSurface_.shutdown();
         sidebarMenus_.shutdown();
         witnessSurface_.shutdown();
+        viewTools_.shutdown();
         desktopSurface_.shutdown();
         glScene_.reset();
         for (Swapchain& swapchain : swapchains_) {
@@ -5284,6 +5289,7 @@ class Viewer {
             }
         }
         desktopSurface_.initialize(glfwGetX11Display());
+        viewTools_.initialize();
         menuPanelSurface_.initialize();
         sidebarMenus_.initialize();
         for(auto& sidebar:sidebarMenus_.menus) {
@@ -5643,6 +5649,7 @@ class Viewer {
     }
 
     void toggleMenu(size_t hand) {
+        ligation_.cancel();
         if(movePanel_.active) {
             sidebarMenus_.menus[1].open=!sidebarMenus_.menus[1].open;
             sidebarMenus_.menus[1].focus.reset();return;
@@ -5705,7 +5712,7 @@ class Viewer {
             if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
             if(volumePanel_.active)volumePanel_.exit(sidebarMenus_.menus);
             if(dimensionPanel_.tool.active)dimensionPanel_.exit(sidebarMenus_.menus);
-            activateRadialTool(3);menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
+            activateAuthoringTool(3);menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
             movePanel_.enter(sidebarMenus_.menus);
             movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());return;
         }
@@ -5746,7 +5753,7 @@ class Viewer {
         }
         if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
         if(action=="tool:extrude") {
-            activateRadialTool(0);
+            activateAuthoringTool(0);
             menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
             extrudePanel_.enter(sidebarMenus_.menus);
             // Place beside the actual right sidebar, not the last radial menu pose.
@@ -5774,7 +5781,7 @@ class Viewer {
             menuHand_=hand;
             const std::array<std::string,5> names{"extrude","twist","bend","move_rotate","inspect"};
             const auto item=std::find(names.begin(),names.end(),action.substr(5));
-            if(item!=names.end()) activateRadialTool(static_cast<size_t>(item-names.begin()));
+            if(item!=names.end()) activateAuthoringTool(static_cast<size_t>(item-names.begin()));
         } else {
             sidebarMenus_.menus[hand].open=false;
             legacyMenuFocus_.focus.reset();
@@ -6573,16 +6580,14 @@ class Viewer {
                 }
             }
         };
-        static constexpr std::array<const char*, 4> labels = {
-            "EXTRUDE", "TWIST", "BEND", "MOVE/ROTATE",
-        };
+        const auto& labels = nadoc_vr::kRadialEditLabels;
         constexpr int arcSegments = 8;
         for (size_t item = 0; item < labels.size(); ++item) {
             const float centerAngle = static_cast<float>(item) * glm::half_pi<float>();
             const float startAngle = centerAngle - glm::quarter_pi<float>();
             const float endAngle = centerAngle + glm::quarter_pi<float>();
             const bool hovered = radialToolMenu_.hovered() == item;
-            const glm::vec3 color = hovered
+            const glm::vec3 color = !nadoc_vr::radialEditEnabled(item) ? glm::vec3(.32F,.34F,.38F) : hovered
                 ? glm::vec3(1.0F, 0.78F, 0.20F)
                 : glm::vec3(0.28F, 0.72F, 0.96F);
             for (float z : {-nadoc_vr::RadialToolMenu::kHalfDepth,
@@ -6865,7 +6870,30 @@ class Viewer {
         publishToolConfiguration(); // Publish cleared cells and the new lattice together.
     }
 
-    void activateRadialTool(size_t item) {
+    void activateRadialEdit(size_t item) {
+        if(!nadoc_vr::radialEditEnabled(item) || toolShell_.executionPending() || ligation_.waiting || endResize_.waitingVersion)return;
+        if(item>=2) {
+            if(movePanel_.active){cancelMove();movePanel_.exit(sidebarMenus_.menus);}
+            if(!ligation_.active && !ligation_.nickActive)activateAuthoringTool(4);
+            ligation_.request(item==2?"undo":"redo",0,[&]{publishEventState();});return;
+        }
+        const bool wasEditing=ligation_.active||ligation_.nickActive;
+        if((item==0&&ligation_.active)||(item==1&&ligation_.nickActive)) {
+            ligation_.setActive(false);publishSelectionLevel(ligationPreviousLevel_);return;
+        }
+        const auto prior=wasEditing?ligationPreviousLevel_:selectionLevel_;
+        if(movePanel_.active){cancelMove();movePanel_.exit(sidebarMenus_.menus);}
+        if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
+        if(volumePanel_.active)volumePanel_.exit(sidebarMenus_.menus);
+        if(dimensionPanel_.tool.active)dimensionPanel_.exit(sidebarMenus_.menus);
+        activateAuthoringTool(4);
+        menuOpen_=false;menuOpenRequested_=false;latticeOpen_=false;
+        ligationPreviousLevel_=prior;ligation_.setActive(item==0);ligation_.nickActive=item==1;publishSelectionLevel(item==0?"end":"base");
+    }
+
+    void activateAuthoringTool(size_t item) {
+        if(ligation_.active||ligation_.nickActive){ligation_.setActive(false);publishSelectionLevel(ligationPreviousLevel_);}
+
         static constexpr std::array<nadoc_vr::ToolMode, 5> modes = {
             nadoc_vr::ToolMode::extrude,
             nadoc_vr::ToolMode::twist,
@@ -7300,9 +7328,12 @@ class Viewer {
             const glm::vec3 sphereColor = triggerPartial_[hand]
                 ? glm::mix(color, glm::vec3(1.0F), 0.35F) : color * 0.52F;
             const float radius = selectionVolumes_[hand].radius();
+            if(ligation_.nickActive && hand==1) ligation_.scissors(sphereCenter,hands_[hand].orientation,triggerValues_[hand],line);
+            else {
             circle(sphereCenter, radius, 0, 1, sphereColor);
             circle(sphereCenter, radius, 0, 2, sphereColor);
             circle(sphereCenter, radius, 1, 2, sphereColor);
+            }
             controllerHandEnds_[hand] = controllerGuides_.size();
         }
         if (hands_[0].valid && hands_[1].valid &&
@@ -7492,7 +7523,9 @@ class Viewer {
         freeformDraft_.preview(extrudeLatticeDraft_.cells(), latticeSquare_, extrudePlane_.plane,
             toolConfig_.lengthBp()*toolConfig_.directionSign(), manipulator_.transform(),
             normalizationCenter_, normalizationScale_, {0,0,-kViewDistanceMeters}, line);
-        endResize_.draw(manipulator_.transform(),normalizationScale_,line);
+        if(!ligation_.active && !ligation_.nickActive)endResize_.draw(manipulator_.transform(),normalizationScale_,line);
+        ligation_.draw(manipulator_.transform(),line);
+        ligation_.drawNick(manipulator_.transform(),line);
         appendRadialToolGuides();
         appendLatticeGuides();
         volumePanel_.draw(manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},line);
@@ -7744,6 +7777,12 @@ class Viewer {
         };
         output << "{\"sequence\":" << ++eventSequence_ << ",\"hover_identity\":";
         identity(publishedHoverIdentity_);
+        output << ",\"view_tool\":{\"sequence\":" << viewTools_.sequence << ",\"index\":" << viewTools_.requested << "}";
+        output << ",\"ligation\":{\"sequence\":" << ligation_.sequence
+               << ",\"action\":\"" << ligation_.committedAction << "\""
+               << ",\"version\":" << ligation_.committedVersion
+               << ",\"source\":" << ligation_.committedSource
+               << ",\"target\":" << ligation_.committedTarget << '}';
         output << ",\"end_resize\":{\"sequence\":" << endResize_.sequence
                << ",\"version\":" << endResize_.committedVersion
                << ",\"delta\":" << endResize_.committedDelta << '}';
@@ -8279,10 +8318,11 @@ class Viewer {
     }
 
     void neutralLiveInput(bool forgetPoses = true) {
+        ligation_.cancel();quiver_.reset();liveTriggerValues_.fill(0);
         if (forgetPoses) liveInput_ = {};
         else {
             liveInput_.menuPressed.fill(false);
-            liveInput_.triggerPressed.fill(false);
+            liveInput_.triggerPressed.fill(false);liveTriggerValues_.fill(0);
             liveInput_.gripPressed.fill(false);
         }
         liveTrackpadPressed_.fill(false);
@@ -8350,7 +8390,45 @@ class Viewer {
             out << quote(selectedOwnerTokens_[i]);
         }
         const auto moveCenter=glScene_?glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform()):std::nullopt;
-        out << "],\"end_resize\":{\"version\":" << endResize_.version
+        out << "],\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
+            << ",\"sequence\":" << viewTools_.sequence << ",\"ack_sequence\":" << viewTools_.acknowledged << ",\"version\":" << viewTools_.version << ",\"flags\":" << viewTools_.flags << ",\"triangles\":" << viewTools_.triangles.size()/3
+            << ",\"parse_ms\":" << viewTools_.parseMs << ",\"upload_ms\":" << viewTools_.uploadMs << ",\"instances\":" << viewTools_.instanceCount() << ",\"lines\":" << viewTools_.lines.size()/2 << ",\"sprites\":" << viewTools_.sprites.size() << ",\"hover\":[" << viewTools_.hover[0] << ',' << viewTools_.hover[1] << "],\"items\":[";
+        for(size_t i=0;i<11;++i){if(i)out<<',';out<<"{\"key\":"<<quote(VRViewTools::keys[i])<<",\"active\":"<<((viewTools_.flags&(1<<i))?"true":"false")<<",\"center\":"<<point(viewTools_.world(VRViewTools::cell(i)))<<'}';}
+        out << "]}";
+        out << ",\"radial_edit\":{\"open\":" << (radialToolMenu_.open()?"true":"false")
+            << ",\"hovered\":" << (radialToolMenu_.hovered()?std::to_string(*radialToolMenu_.hovered()):"null") << ",\"items\":[";
+        for(size_t i=0;i<4;++i) {
+            if(i)out<<',';
+            const float angle=float(i)*glm::half_pi<float>();
+            out << "{\"label\":" << quote(nadoc_vr::kRadialEditLabels[i])
+                << ",\"enabled\":" << (nadoc_vr::radialEditEnabled(i)?"true":"false")
+                << ",\"center\":" << point(radialToolMenu_.worldPoint({.092F*std::cos(angle),.092F*std::sin(angle),0})) << '}';
+        }
+        out << "]},\"ligation\":{\"active\":" << (ligation_.active?"true":"false")
+            << ",\"grabbing\":" << (ligation_.hand?"true":"false")
+            << ",\"waiting\":" << (ligation_.waiting?"true":"false")
+            << ",\"version\":" << ligation_.version << ",\"status\":" << quote(ligation_.status)
+            << ",\"source\":" << (ligation_.hand?std::to_string(ligation_.source):"null")
+            << ",\"target\":" << (ligation_.target?std::to_string(*ligation_.target):"null")
+            << ",\"preview_end\":" << (ligation_.hand?point(ligation_.previewEnd(manipulator_.transform())):"null")
+            << ",\"hover\":[" << (ligation_.hover[0]?std::to_string(*ligation_.hover[0]):"null") << ','
+            << (ligation_.hover[1]?std::to_string(*ligation_.hover[1]):"null") << "],\"ends\":[";
+        for(size_t i=0;i<ligation_.ends.size();++i) {
+            if(i)out<<',';
+            const auto& e=ligation_.ends[i];
+            out << "{\"role\":" << e.role << ",\"strand\":" << e.strand
+                << ",\"identity\":" << quote(e.identity)
+                << ",\"world\":" << point(ligation_.point(i,manipulator_.transform())) << '}';
+        }
+        out << "],\"quiver\":{\"sequence\":" << quiver_.sequence
+            << ",\"armed\":[" << (quiver_.armed[0]?"true":"false") << ',' << (quiver_.armed[1]?"true":"false")
+            << "],\"inside\":[" << (quiver_.inside[0]?"true":"false") << ',' << (quiver_.inside[1]?"true":"false") << "]}"
+            << ",\"nick_active\":" << (ligation_.nickActive?"true":"false") << ",\"nick_hover\":[";
+        for(size_t h=0;h<2;++h){if(h)out<<',';out<<(ligation_.nickHover[h]?std::to_string(*ligation_.nickHover[h]):"null");}
+        out << "],\"scissor_angles\":[" << nadoc_vr::Ligation::scissorAngle(triggerValues_[0]) << ',' << nadoc_vr::Ligation::scissorAngle(triggerValues_[1]) << "],\"bonds\":[";
+        for(size_t i=0;i<ligation_.bonds.size();++i){if(i)out<<',';out<<"{\"a\":"<<point(ligation_.bondPoint(i,false,manipulator_.transform()))<<",\"b\":"<<point(ligation_.bondPoint(i,true,manipulator_.transform()))<<'}';}
+        out << "]}";
+        out << ",\"end_resize\":{\"version\":" << endResize_.version
             << ",\"grabbing\":" << (endResize_.hand?"true":"false")
             << ",\"nearby\":" << (endResize_.nearby?"true":"false")
             << ",\"delta\":" << endResize_.delta << ",\"arrows\":[";
@@ -8522,6 +8600,11 @@ class Viewer {
             if (operation != "release" && sessionState_ != XR_SESSION_STATE_FOCUSED)
                 return "{\"error\":\"session_not_focused\"}";
             if (operation == "release") { end(); neutralLiveInput(); }
+            else if(operation=="trigger_value") {
+                const auto h=hand();const float v=number();end();
+                if(v<0||v>1)throw std::runtime_error("trigger outside [0,1]");
+                liveTriggerValues_[h]=v;
+            }
             else if (operation == "pose") {
                 const auto h = hand();
                 const float x = number(), y = number(), z = number();
@@ -8540,7 +8623,7 @@ class Viewer {
                 const auto h = hand(); std::string button; int pressed = -1;
                 if (!(in >> button >> pressed) || (pressed != 0 && pressed != 1)) throw std::runtime_error("invalid button");
                 end();
-                if (button == "trigger") liveInput_.triggerPressed[h] = pressed;
+                if (button == "trigger") {liveInput_.triggerPressed[h] = pressed;liveTriggerValues_[h]=pressed?1.F:0.F;}
                 else if (button == "grip") liveInput_.gripPressed[h] = pressed;
                 else if (button == "menu") liveInput_.menuPressed[h] = pressed;
                 else if (button == "trackpad") liveTrackpadPressed_[h] = pressed;
@@ -8590,7 +8673,7 @@ class Viewer {
                 const auto it = std::find(names.begin(), names.end(), tool);
                 if (it == names.end() || !liveInput_.hands[1].valid) throw std::runtime_error("invalid tool or right pose");
                 radialToolMenu_.open(liveInput_.hands[1], liveInput_.hands[1].position);
-                activateRadialTool(static_cast<size_t>(it - names.begin()));
+                activateAuthoringTool(static_cast<size_t>(it - names.begin()));
                 radialToolMenu_.close();
             } else throw std::runtime_error("unknown operation");
             liveInputDeadline_ = std::chrono::steady_clock::now() + std::chrono::seconds(2);
@@ -8671,7 +8754,7 @@ class Viewer {
             if (witness_) {
                 triggerValues_[hand] = witness_->input().triggerPressed[hand] ? 1.0F : 0.0F;
             }
-            if (liveControlsEnabled()) triggerValues_[hand] = liveInput_.triggerPressed[hand] ? 1.0F : 0.0F;
+            if (liveControlsEnabled()) triggerValues_[hand] = liveTriggerValues_[hand];
             triggerPartial_[hand] = triggerValues_[hand] >= 0.15F;
             const bool wasPressed = triggerPressed_[hand];
             const float threshold = wasPressed ? 0.60F : 0.88F;
@@ -8809,7 +8892,7 @@ class Viewer {
                 if (hover && hover != previousHover) pulse(hand, 0.14F);
                 if (trackpadReleased) {
                     if (hover) {
-                        activateRadialTool(*hover);
+                        activateRadialEdit(*hover);
                         pulse(hand, 0.62F);
                     }
                     radialToolMenu_.close();
@@ -8961,13 +9044,37 @@ class Viewer {
             [&](size_t hand){pulse(hand,.3F);});
         dimensionSync_.update(dimensionPanel_.tool,normalizationCenter_,normalizationScale_);
         if(volumePanel_.active) menuControlTargeted.fill(true);
+        if(viewTools_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})) {
+            const bool expanded=(viewTools_.flags&(1<<7))!=0;
+            if(expanded!=glScene_->expanded())(void)glScene_->toggleExpanded();
+        }
+        viewTools_.input(hands_,triggerClicked_,menuControlTargeted,[&](size_t hand){publishEventState();pulse(hand,.3F);});
+        // Alternate layouts have different positions from canonical edit targets.
+        // Keep tablet input and world manipulation, but never cut an unseen bond.
+        if(viewTools_.inspectionLayout()) menuControlTargeted.fill(true);
+        ligation_.expansion=glScene_->expansionAmount();
+        ligation_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
+        ligation_.input(hands_,{selectionVolumeCenter(0),selectionVolumeCenter(1)},
+            {selectionVolumes_[0].radius(),selectionVolumes_[1].radius()},triggerClicked_,triggerPressed_,
+            menuControlTargeted,manipulator_.transform(),
+            sessionState_==XR_SESSION_STATE_FOCUSED && next==nadoc_vr::ManipulationMode::none &&
+            !menuGripActive && !radialToolMenu_.open() && !dimensionPanel_.tool.active && !volumePanel_.active,
+            [&](const std::string& identity,size_t hand){publishSelect({identity});pulse(hand,.35F);},
+            [&]{publishEventState();});
+        if(ligation_.active)for(size_t h=0;h<2;++h)if(menuControlTargeted[h])liveInputOwner_[h]="ligate";
+        ligation_.nickInput(hands_,{selectionVolumeCenter(0),selectionVolumeCenter(1)},
+            {selectionVolumes_[0].radius(),selectionVolumes_[1].radius()},triggerValues_,triggerClicked_,menuControlTargeted,
+            manipulator_.transform(),sessionState_==XR_SESSION_STATE_FOCUSED && next==nadoc_vr::ManipulationMode::none &&
+            !menuGripActive && !radialToolMenu_.open() && !dimensionPanel_.tool.active && !volumePanel_.active,
+            [&]{publishEventState();});
+        if(ligation_.nickActive)for(size_t h=0;h<2;++h)if(menuControlTargeted[h])liveInputOwner_[h]="nick";
         endResize_.expansion=glScene_->expansionAmount();
         endResize_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
         endResize_.input(hands_,triggerClicked_,triggerPressed_,menuControlTargeted,
             manipulator_.transform(),normalizationScale_,
             sessionState_==XR_SESSION_STATE_FOCUSED && next==nadoc_vr::ManipulationMode::none &&
             !menuGripActive && !dimensionPanel_.tool.active && !volumePanel_.active &&
-            !movePanel_.active && !toolShell_.executionPending() && !radialToolMenu_.open(),
+            !ligation_.active && !ligation_.nickActive && !ligation_.waiting && !movePanel_.active && !toolShell_.executionPending() && !radialToolMenu_.open(),
             [&]{ publishEventState(); });
         if(endResize_.hand)liveInputOwner_[*endResize_.hand]="end-resize";
         processMoveInput(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
@@ -9282,6 +9389,7 @@ class Viewer {
 
     void renderMenuSurface(const glm::mat4& viewProjection) {
         sidebarMenus_.render(viewProjection);
+        viewTools_.renderPanel(viewProjection);
         if (!menuOpen_) return;
         const auto bounds = menuPanelBounds();
         if (menuPage_ == MenuPage::desktop) {
@@ -9300,7 +9408,8 @@ class Viewer {
     }
 
     void renderVolumeScene(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,bool ids=false) {
-        glScene_->renderVolumes(vp,model,guides,ids,volumePanel_.entries);
+        if(viewTools_.overrideScene()) {viewTools_.renderScene(vp,model,witnessObserverOrientation_);if(!guides.empty())glScene_->renderGuides(vp,guides);}
+        else glScene_->renderVolumes(vp,model,guides,ids,volumePanel_.entries);
     }
 
     bool renderView(uint32_t index, const XrView& view,
@@ -9370,7 +9479,7 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (menuOpen_ || sidebarMenus_.anyOpen()) {
+        if (menuOpen_ || sidebarMenus_.anyOpen() || viewTools_.open) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             renderMenuSurface(viewProjection);
         }
@@ -9770,7 +9879,7 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (menuOpen_ || sidebarMenus_.anyOpen()) {
+        if (menuOpen_ || sidebarMenus_.anyOpen() || viewTools_.open) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             renderMenuSurface(viewProjection);
         }
@@ -9910,6 +10019,7 @@ class Viewer {
             const bool orientationTracked = completeViewSet &&
                 (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_TRACKED_BIT) != 0;
             const bool validViewSet = positionValid && orientationValid;
+            if(!validViewSet || !positionTracked || !orientationTracked)quiver_.reset();
             if (completeViewSet) {
                 applyInitialScenePlacement(
                     viewCount, nadoc_vr::spectatorPoseReadyForPlacement(
@@ -9926,6 +10036,21 @@ class Viewer {
                 witnessObserverOrientation_ = glm::normalize(glm::quat(
                     views_[0].pose.orientation.w, views_[0].pose.orientation.x,
                     views_[0].pose.orientation.y, views_[0].pose.orientation.z));
+                const bool quiverEnabled=validViewSet && positionTracked && orientationTracked &&
+                    sessionState_==XR_SESSION_STATE_FOCUSED && !menuOpen_ && !menuOpenRequested_ &&
+                    !sidebarMenus_.menus[0].open && !sidebarMenus_.menus[1].open && !radialToolMenu_.open() &&
+                    !ligation_.waiting && !endResize_.waitingVersion && !toolShell_.executionPending() &&
+                    !ligation_.hand && !endResize_.hand && !movePanel_.active && !volumePanel_.active &&
+                    !dimensionPanel_.tool.active && !latticeOpen_ &&
+                    !triggerPartial_[0] && !triggerPartial_[1] && !gripPressed_[0] && !gripPressed_[1] &&
+                    !trackpadPressed_[0] && !trackpadPressed_[1];
+                if(const auto hand=quiver_.update(hands_,witnessObserverPosition_,witnessObserverOrientation_,
+                        double(frameState.predictedDisplayTime)/1e9,quiverEnabled)) {
+                    if(*hand==1)activateRadialEdit(1);
+                    else viewTools_.toggle(witnessObserverPosition_,witnessObserverOrientation_);
+                    pulse(*hand,(*hand==1?ligation_.nickActive:viewTools_.open)?.55F:.25F);
+                    updateControllerGuides();
+                }
                 const XrQuaternionf& head = views_[0].pose.orientation;
                 const glm::quat headOrientation(head.w, head.x, head.y, head.z);
                 const glm::vec3 keyDirection = headOrientation * glm::normalize(
@@ -10294,7 +10419,7 @@ class Viewer {
         std::cout << "NADOC VR viewer ready. Grip: move; both grips: resize; "
                      "grip a menu border or Desktop surface: move panel; "
                      "both grips at a border: resize panel; "
-                     "trigger: Selection Volume snap/select; hold right trackpad: radial tools; "
+                     "trigger: Selection Volume snap/select; hold right trackpad: Ligate/Nick/Undo/Redo wheel; "
                      "left trackpad: cycle selection level; "
                      "menu: options; Escape: exit.\n";
         if (mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off) {
@@ -10340,6 +10465,7 @@ class Viewer {
     nadoc_vr::scrywrite::WitnessInput liveInput_;
     std::array<bool, 2> liveMenuPressed_{}, liveTrackpadPressed_{};
     std::array<glm::vec2,2> liveTrackpadAxis_{};
+    std::array<float,2> liveTriggerValues_{};
     std::string liveSession_, liveMode_ = "inspect";
     std::array<LiveEyeCapture, 2> liveEyes_{};
     GLuint liveObjectIdTexture_ = 0;
@@ -10352,6 +10478,9 @@ class Viewer {
     std::chrono::steady_clock::time_point liveInputDeadline_{}, liveCaptureDeadline_{};
     SceneData sceneData_;
     nadoc_vr::SceneRefreshInbox sceneRefresh_;
+    nadoc_vr::Ligation ligation_;
+    nadoc_vr::QuiverGesture quiver_;
+    std::string ligationPreviousLevel_="default";
     nadoc_vr::EndResize endResize_;
     std::string eventPath_;
     std::string feedbackPath_;
@@ -10608,6 +10737,7 @@ class Viewer {
     std::vector<Swapchain> swapchains_;
     std::unique_ptr<GlScene> glScene_;
     DesktopSurface desktopSurface_;
+    VRViewTools viewTools_;
 };
 
 }  // namespace

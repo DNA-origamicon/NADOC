@@ -146,3 +146,18 @@ def test_end_resize_tour_launches_isolated_workflow(client, monkeypatch, mode):
     assert 'tools.vr_workflows.end_resize_tour' in command
     assert ('--validate' in command) == (mode == 'validate')
     assert '--output' in command
+
+
+@pytest.mark.parametrize('mode', ['demo', 'validate'])
+@pytest.mark.parametrize('tool,module', [('ligate','ligation_tour'), ('nick','nick_tour'), ('view-tools','view_tools_tour')])
+def test_ligation_tour_launches_isolated_workflow(client, monkeypatch, mode, tool, module):
+    process = Mock(pid=987654)
+    process.poll.return_value = None
+    popen = Mock(return_value=process)
+    monkeypatch.setattr(tours.subprocess, 'Popen', popen)
+    result = client.post('/api/vr/tours/start', json={'tour': tool, 'mode': mode})
+    assert result.status_code == 200, result.text
+    command = popen.call_args.args[0]
+    assert 'tools.vr_workflows.' + module in command
+    assert ('--validate' in command) == (mode == 'validate')
+    assert '--output' in command

@@ -99,6 +99,8 @@ from backend.api.routes_system import router as system_router
 from backend.api.routes_vr import router as vr_router
 from backend.api.routes_vr_tours import router as vr_tours_router, shutdown_tours
 from backend.api.routes_vr_scene import router as vr_scene_router
+from backend.api.vr_ligation import router as vr_ligation_router
+from backend.api.vr_view_tools import router as vr_view_tools_router
 from backend.api.routes_frame_extrusion import router as frame_extrusion_router
 from backend.api.routes_simulate import router as simulate_router
 from backend.api.routes_primitives import router as primitives_router
@@ -421,6 +423,8 @@ app.include_router(display_geometry_router, prefix="/api")
 app.include_router(vr_router, prefix="/api")
 app.include_router(vr_tours_router, prefix="/api")
 app.include_router(vr_scene_router, prefix="/api")
+app.include_router(vr_ligation_router, prefix="/api")
+app.include_router(vr_view_tools_router, prefix="/api")
 app.include_router(frame_extrusion_router, prefix="/api")
 app.include_router(display_metadata_router, prefix="/api")
 app.include_router(flexible_segments_router, prefix="/api")

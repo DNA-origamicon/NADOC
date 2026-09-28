@@ -23,7 +23,7 @@ SPEC.loader.exec_module(mcp)
 def test_discovery_and_offline_error(tmp_path):
     bridge = mcp.Bridge(tmp_path / "offline.sock")
     tools = mcp.dispatch(bridge, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
-    assert len(tools["result"]["tools"]) == 13
+    assert len(tools["result"]["tools"]) == 14
     reply = mcp.dispatch(bridge, {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scrywrite_observe"}})
     assert reply["result"]["isError"] is True
     assert mcp.dispatch(bridge, {"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
@@ -186,4 +186,18 @@ def test_trackpad_axis_uses_normal_sequenced_transport(native):
     state=native.call('scrywrite_observe', {})
     result=native.call('scrywrite_trackpad_axis', {'session':state['session'],
         'expected_sequence':state['command_sequence'], 'hand':1, 'x':-1, 'y':0})
+    assert result['command_sequence']==state['command_sequence']+1
+
+
+@pytest.mark.parametrize('value', [-.01, 1.01, float('nan'), True])
+def test_invalid_trigger_pressure_never_connects(tmp_path, value):
+    with pytest.raises(ValueError):
+        mcp.Bridge(tmp_path/'absent').call('scrywrite_trigger_value', {
+            'session':'1-2','expected_sequence':0,'hand':1,'value':value})
+
+
+def test_analog_trigger_uses_normal_sequenced_transport(native):
+    state=native.call('scrywrite_observe', {})
+    result=native.call('scrywrite_trigger_value', {'session':state['session'],
+        'expected_sequence':state['command_sequence'],'hand':1,'value':.45})
     assert result['command_sequence']==state['command_sequence']+1

@@ -183,12 +183,13 @@ target need not be reselected in VR and an absent owner cannot become a false ma
 
 Controls on the original HTC Vive wands:
 
-- Hold the right trackpad to open a world-fixed radial **Tools** menu around that
+- Hold the right trackpad to open a world-fixed radial **Edit** menu around that
   controller's Selection Volume. Its volumetric sectors tilt 45° back from the
   controller pose for a more readable wrist angle. Move the right controller until the volume enters
-  one of the four depth-bearing sectors (Extrude, Twist, Bend, or Move/Rotate); the
+  one of the four depth-bearing sectors (Ligate, Nick, Undo, Redo); the
   sector highlights and gives a light haptic tick. Release the trackpad to activate
-  the highlighted tool, or release in the center/outside the ring to cancel. The old
+  the enabled highlighted action, or release in the center/outside the ring to cancel.
+  All four actions are enabled. The old
   right-trackpad Expanded Quick View toggle is intentionally unbound.
 - Each controller carries a wireframe **Selection Volume** 12 cm beyond its tip. Slide a
   thumb upward or downward on that controller's trackpad to grow or shrink the volume
@@ -430,3 +431,32 @@ Older snapshots remain readable; representations absent from them are disabled.
 The registered Visualization tour covers all 110 directed switches. `--validate`
 repeats them with all four controller profiles. It uses a continuous traversal to
 avoid unnecessary source resets between measured switches.
+
+
+### Ligate from the radius wheel
+
+Hold the right trackpad, move the selection sphere into **Ligate**, and release
+the trackpad. Hold either trigger on a 3′ or 5′ end, stretch the preview to a
+compatible opposite-polarity end on another strand, and release to create a forced
+ligation. A cyan preview follows an unsnapped hand; green means a valid target;
+red marks an incompatible end. Empty/incompatible release cancels. Choose Ligate
+again to exit. Nick replaces the right selection sphere with scissors: partial trigger
+pressure closes the blades and brightens the impending bond; a full click creates
+one backend nick. To equip/stow without the wheel, move the right controller from
+in front of you to behind your head/shoulder and pause 0.35 s with buttons released.
+A haptic pulse confirms the toggle; return in front before repeating. Undo/Redo
+act on desktop design history and refresh native geometry.
+Authoring tools remain available through the sidebar.
+
+See `docs/vr_ligation.md` and the Debug → VR Tours & Tests → Authoring ligation tour.
+
+
+### Left-hand view tablet
+
+The same quiver reach with the left controller independently opens/closes a
+world-placed two-column panel containing all eleven desktop view toggles and
+their original icons. Point and trigger-click a tile. The panel reports the
+actual desktop state and explains layout prerequisites. Shared meshes, posed
+instances and text textures are transferred to native stereo rendering. Straight
+and 2D layouts suppress canonical edit picking until restored to deformed 3D.
+See `docs/vr_view_tools.md` and the Debug **Left-hand view tools** tour.
