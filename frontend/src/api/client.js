@@ -3260,7 +3260,7 @@ export const getMdShapeSource    = (id)          => _oxdnaJSON('GET',  `/md/jobs
 export const snupiAvailable      = ()            => _oxdnaJSON('GET',  '/snupi/available')
 export const createSnupiJob      = (body)        => _oxdnaJSON('POST', '/snupi/jobs', body)
 export const listSnupiJobs       = ()            => _backgroundJobList('/snupi/jobs')
-export const getSnupiJob         = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}`)
+export const getSnupiJob         = (id, signal)  => _oxdnaJSON('GET',  `/snupi/jobs/${id}`, undefined, { signal })
 export const getSnupiProgress    = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/progress`)
 export const getSnupiErrorLog    = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/error-log`)
 export const startSnupiJob       = (id)          => _oxdnaJSON('POST', `/snupi/jobs/${id}/start`)
@@ -3269,7 +3269,13 @@ export const deleteSnupiJob      = (id)          => _oxdnaJSON('DELETE', `/snupi
 export const getSnupiDisplay     = (id, signal)  => _oxdnaJSON('GET',  `/snupi/jobs/${id}/display`, undefined, { signal })
 /** Compact columnar static FEM frame; JSON remains the compatibility fallback. */
 export const getSnupiDisplayBin = (id, { signal, onProgress } = {}) =>
-  _oxdnaBin('GET', `/snupi/jobs/${id}/display-bin`, undefined, { signal, onProgress })
+  _oxdnaBin('GET', `/snupi/jobs/${id}/display-bin`, undefined, { signal, onProgress, maxBytes: 256 * 1024 * 1024 })
+export const getSnupiVisualizationBin = (id, mode, { signal, onProgress } = {}) =>
+  _oxdnaBin('GET', `/snupi/jobs/${id}/visualization-bin?mode=${encodeURIComponent(mode)}`, undefined,
+    { signal, onProgress, maxBytes: 256 * 1024 * 1024 })
+export const getSnupiTrajectoryFrameBin = (id, frame, { signal, onProgress } = {}) =>
+  _oxdnaBin('GET', `/snupi/jobs/${id}/trajectory-frame-bin?frame=${frame}`, undefined,
+    { signal, onProgress, maxBytes: 256 * 1024 * 1024 })
 /** Full geometry of the job's OWN design snapshot (topology at solve time). */
 export const getSnupiSnapshotGeometry = (id, signal) => _oxdnaJSON('GET',  `/snupi/jobs/${id}/snapshot-geometry`, undefined, { signal })
 /** Per-bp RMSF (nm) for the flexibility map. */

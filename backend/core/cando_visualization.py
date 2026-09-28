@@ -87,10 +87,23 @@ def pack_view(meta, positions, scalars, identities=None):
     )
 
 
-def _build(jd, mode):
+def _build(jd, mode, engine="cando"):
     from backend.core.cando_runner import load_rmsf, _load_snapshot_design
 
-    header, records, axis, thermal = _frame(jd)
+    if engine == "snupi":
+        from backend.core.snupi_runner import (
+            load_display_bin,
+            load_rmsf,
+            _load_snapshot_design,
+        )
+
+        payload = load_display_bin(jd)
+        if not payload:
+            raise ValueError("Predicted positions are not ready")
+        header, records, axis = read_frame(payload)
+        thermal = False
+    else:
+        header, records, axis, thermal = _frame(jd)
     names = header["helix_ids"]
     meta = dict(
         kind=mode,
@@ -178,15 +191,18 @@ def _position_dicts(records, names):
     ]
 
 
-def visualization_file(job_dir: Path, mode: str) -> Path:
+def visualization_file(job_dir: Path, mode: str, engine="cando") -> Path:
     if mode not in ("deform", "flex", "deviation", "cando"):
         raise ValueError("Unknown visualization mode")
-    target = job_dir / f"visualization-v1-{mode}.bin"
+    target = (
+        job_dir / f"{'snupi-' if engine == 'snupi' else ''}visualization-v1-{mode}.bin"
+    )
     with _BUILD_LOCK:
         sources = [
             job_dir / name
             for name in (
                 "display.json",
+                "display.bin",
                 "design.json",
                 "rmsf.json",
                 "thermal_representative.bin",
@@ -197,7 +213,11 @@ def visualization_file(job_dir: Path, mode: str) -> Path:
         newest = max((p.stat().st_mtime_ns for p in sources if p.exists()), default=0)
         if target.exists() and target.stat().st_mtime_ns >= newest:
             return target
-        payload = _build(job_dir, mode)
+        payload = (
+            _build(job_dir, mode)
+            if engine == "cando"
+            else _build(job_dir, mode, engine)
+        )
         fd, temporary = tempfile.mkstemp(dir=job_dir, prefix=target.name, suffix=".tmp")
         try:
             with os.fdopen(fd, "wb") as output:

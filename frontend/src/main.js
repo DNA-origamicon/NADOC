@@ -404,7 +404,7 @@ async function main() {
   // snapshot rendered by designRenderer.  Keep this flag outside the clipping
   // closure so its bounds source follows what actually owns the viewport.
   let _simulationVisualizationActive = false
-  let candoDisplay = null
+  let candoDisplay = null, snupiDisplay = null
 
   // ── Adaptive camera clipping for large assemblies ─────────────────────────
   // The camera's far plane is a fixed 2000 nm (sized for a single design — see
@@ -468,7 +468,7 @@ async function main() {
           // the viewport. Its renderer therefore has either empty bounds (classic
           // renderer) or stale native bounds (shared renderer). Build bounds from
           // the live snapshot positions instead; applyFemPositions mutates entry.pos.
-          box = candoDisplay?.getBoundingBox?.() ?? new THREE.Box3()
+          box = candoDisplay?.getBoundingBox?.() ?? snupiDisplay?.getBoundingBox?.() ?? new THREE.Box3()
           if (box.isEmpty()) for (const entry of designRenderer.getBackboneEntries?.() || []) {
             if (entry.pos) box.expandByPoint(entry.pos)
           }
@@ -1543,9 +1543,10 @@ async function main() {
   // display controller + cylinder overlay (independent instance) so its viz modes never
   // collide with CanDo's. Display-only (Three-Layer Law).
   const snupiCylinderOverlay = initCandoCylinders(scene)
-  const snupiDisplay = initSnupiDisplay({
+  snupiDisplay = initSnupiDisplay({
     designRenderer, api,
     cylinderOverlay:  snupiCylinderOverlay,
+    largeView: initCandoLargeView(scene, 'snupi-large-result'),
     setDesignVisible: _setSimulationVisualizationVisible,
     restoreDesignVisible: _restoreNativeAfterSimulation,
     flexScale,

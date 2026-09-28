@@ -197,8 +197,9 @@ def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
     # counting, fingerprinting, provenance and preparation for large assemblies.
     design = design_state.get_or_404().without_reference_geometry()
     from backend.core.streptavidin import require_coating_simulation_support
+
     try:
-        require_coating_simulation_support(design, 'SNUPI')
+        require_coating_simulation_support(design, "SNUPI")
     except ValueError as exc:
         raise HTTPException(422, str(exc))
     if not design.helices:
@@ -570,7 +571,7 @@ def get_snupi_trajectory(job_id: str) -> dict:
 
 
 @router.get("/snupi/jobs/{job_id}/deviation")
-async def get_snupi_deviation(job_id: str) -> dict:
+def get_snupi_deviation(job_id: str) -> dict:
     """Per-nucleotide deviation of the FEM-predicted shape from the design's intended
     (displayed) geometry + the global RMSD.  Uses the job's own design snapshot so the
     comparison matches what the FEM solved, not live editor state."""
@@ -588,12 +589,12 @@ async def get_snupi_deviation(job_id: str) -> dict:
             500, f"SNUPI job {job_id!r} has no design snapshot to compare against"
         )
 
-    result = await run_in_threadpool(compute_deviation, design, cached["positions"])
+    result = compute_deviation(design, cached["positions"])
     return {"job_id": job.job_id, "ready": True, **result}
 
 
 @router.get("/snupi/jobs/{job_id}/cylinders")
-async def get_snupi_cylinders(job_id: str) -> dict:
+def get_snupi_cylinders(job_id: str) -> dict:
     """CanDo-style "jointed cylinder" geometry of the predicted shape: per-helix axis
     tubes + crossover joint connectors, in the aligned display frame.  Uses the job's
     cached display positions + its own design snapshot (crossovers)."""
@@ -614,7 +615,7 @@ async def get_snupi_cylinders(job_id: str) -> dict:
     rmsf_cached = load_rmsf(jd)
     rmsf = rmsf_cached.get("rmsf") if rmsf_cached else None
     axis_nodes = cached.get("axis") or axis_from_backbones(cached["positions"], rmsf)
-    result = await run_in_threadpool(compute_cylinders, design, axis_nodes, rmsf)
+    result = compute_cylinders(design, axis_nodes, rmsf)
     return {"job_id": job.job_id, "ready": True, **result}
 
 
@@ -657,3 +658,40 @@ async def get_snupi_available() -> dict:
     """The SNUPI FEM solver runs in-process (scipy) — always available.  Mirrors
     /cando/available so the panel's availability check has a uniform shape."""
     return {"available": True, "solver": "native-fem"}
+
+
+@router.get("/snupi/jobs/{job_id}/visualization-bin")
+def get_snupi_visualization_bin(job_id: str, mode: str = "deform"):
+    from fastapi.responses import FileResponse
+    from backend.core.cando_visualization import visualization_file
+
+    job = _load_job(job_id)
+    if job.status.value != "completed":
+        raise HTTPException(409, "Wait for the job to complete")
+    try:
+        path = visualization_file(job.job_dir(_workspace()), mode, engine="snupi")
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        headers={"X-NADOC-Uncompressed-Length": str(path.stat().st_size)},
+    )
+
+
+@router.get("/snupi/jobs/{job_id}/trajectory-frame-bin")
+def get_snupi_trajectory_frame_bin(job_id: str, frame: int = 0):
+    from backend.core.snupi_visualization import trajectory_frame
+
+    job = _load_job(job_id)
+    if job.status.value != "completed":
+        raise HTTPException(409, "Wait for the job to complete")
+    try:
+        payload = trajectory_frame(job.job_dir(_workspace()), frame)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return Response(
+        payload,
+        media_type="application/octet-stream",
+        headers={"X-NADOC-Uncompressed-Length": str(len(payload))},
+    )

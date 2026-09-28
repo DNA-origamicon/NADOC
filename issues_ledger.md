@@ -1137,3 +1137,11 @@ Closing and reopening a document can recycle the Python design object's ID at
 the same revision. The cache now verifies a weak reference to the actual design
 before returning its fingerprint, avoiding stale results without retaining closed
 large designs. A deterministic ID-reuse regression and all 18 staleness tests pass.
+
+## ISSUE-47 — SNUPI result views rebuild large scenes and unbounded trajectories
+
+SNUPI retained the pre-guard FEM visualization paths, uncancelled panel races and
+per-job metric caches. Dynamics downloaded every JSON frame and rebuilt position
+objects on every tick. Static modes now reuse the bounded compact renderer and
+metrics controller; trajectory playback indexes and loads one frame at a time,
+reuses GPU buffers and cancels stale scrubs. [Audit](docs/audits/snupi_visualization_guards_20260928.md).

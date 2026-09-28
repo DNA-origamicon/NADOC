@@ -267,3 +267,8 @@ advance at each frame and persistence boundary. See the thermal optimization aud
 - 2026-09-27 · ISSUE-46 · Verify cached simulation fingerprint ownership with a
   weak reference; a recycled object ID cannot reuse a closed design's fingerprint.
   Deterministic regression reproduced the failure before the fix; 18 focused tests pass.
+
+- 2026-09-28 · ISSUE-47 · SNUPI shares guarded large FEM views/metrics; bounded,
+  indexed trajectory playback preserves scrubbing with cancellation/backpressure
+  and GPU-buffer reuse. [Audit](docs/audits/snupi_visualization_guards_20260928.md).
+  main.js Δ +1.

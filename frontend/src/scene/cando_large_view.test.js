@@ -80,3 +80,16 @@ it('reveals full tile detail on zoom without rebuilding or changing positions', 
   expect(geometry.attributes.position.array.buffer).toBe(positions.buffer)
   view.clear()
 })
+
+it('trajectory updates preserve GPU geometry and refresh camera bounds', () => {
+  const scene = new THREE.Scene(), view = initCandoLargeView(scene)
+  const data = { meta: { kind: 'deform', count: 2, min: 0, max: 0 },
+    positions: new Float32Array([0,0,0,1,1,1]), scalars: new Float32Array([-1,-1]) }
+  view.update(data)
+  const geometry = scene.children[0].children[0].geometry
+  view.updatePositions({ ...data, positions: new Float32Array([10,10,10,20,20,20]) })
+  expect(scene.children[0].children[0].geometry).toBe(geometry)
+  expect(view.getBoundingBox().max.x).toBe(20)
+  expect([...geometry.attributes.position.array]).toEqual([10,10,10,20,20,20])
+  view.clear()
+})

@@ -46,7 +46,7 @@ export function projectedDrawCount(radiusPixels, count, lines = false) {
   return Math.min(count, unit * Math.max(32, Math.ceil(radiusPixels * radiusPixels * 2)))
 }
 
-export function initCandoLargeView(scene) {
+export function initCandoLargeView(scene, name = 'cando-large-result') {
   let object = null, data = null, texture = null, material = null, boundsBox = null
   let bounds = null, cmap = 'jet'
   function clear() {
@@ -101,7 +101,7 @@ export function initCandoLargeView(scene) {
         }`,
     })
     object = new THREE.Group()
-    object.name = 'cando-large-result'
+    object.name = name
     object.userData.count = data.meta.count
     boundsBox = new THREE.Box3()
     const center = new THREE.Vector3()
@@ -129,6 +129,18 @@ export function initCandoLargeView(scene) {
     recolor(data.meta.min, data.meta.max, colormap)
     scene.add(object)
   }
+  function updatePositions(next) {
+    if (!object || next.meta.count !== data.meta.count || next.meta.kind !== data.meta.kind) {
+      update(next); return
+    }
+    data.positions.set(next.positions)
+    boundsBox.makeEmpty()
+    for (const tile of object.children) {
+      tile.geometry.attributes.position.needsUpdate = true
+      tile.geometry.computeBoundingBox(); tile.geometry.computeBoundingSphere()
+      boundsBox.union(tile.geometry.boundingBox)
+    }
+  }
   function coloringInfo() {
     if (!data?.identities || !['flex', 'deviation'].includes(data.meta.kind)) return null
     const { meta, identities, scalars } = data
@@ -142,6 +154,6 @@ export function initCandoLargeView(scene) {
     return { attribute: flex ? 'rmsf' : 'deviation', title: flex ? 'RMSF' : 'Deviation', unit: 'nm',
       colormap: cmap, ...bounds, values }
   }
-  return { update, recolor, clear, coloringInfo, active: () => !!object,
+  return { update, updatePositions, recolor, clear, coloringInfo, active: () => !!object,
     getBoundingBox: () => boundsBox }
 }

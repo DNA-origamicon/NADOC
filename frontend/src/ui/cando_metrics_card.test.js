@@ -11,6 +11,7 @@ import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 const getRmsf = vi.fn()
 const getDeviation = vi.fn()
 vi.mock('../api/client.js', () => ({
+  getCandoVisualizationBin: vi.fn(),
   getCandoRmsf: (...a) => getRmsf(...a),
   getCandoDeviation: (...a) => getDeviation(...a),
 }))

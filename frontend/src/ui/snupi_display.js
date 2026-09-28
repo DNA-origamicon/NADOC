@@ -17,19 +17,21 @@
  * refresh / stopDeform / stopAndRestore + deformActive / deformJobId / mode / lastStats).
  */
 
-import { toFemUpdates, flexColorMap, deviationColorMap } from './cando_display.js'
-import { framesToUpdates } from './oxdna_display.js'
-import { initFrameSteppers } from './frame_steppers.js'
+import { initCandoDisplay, toFemUpdates, flexColorMap, deviationColorMap } from './cando_display.js'
+import { initSnupiTrajectoryPlayer } from './snupi_trajectory_player.js'
+import { LARGE_CANDO_THRESHOLD } from '../scene/cando_large_view.js'
 import { parseCandoRepresentativeBin } from '../scene/cando_representative_bin.js'
 
 export function initSnupiDisplay({
   designRenderer, api, cylinderOverlay = null, setDesignVisible = null,
-  restoreDesignVisible = null, flexScale = null,
+  restoreDesignVisible = null, flexScale = null, largeView = null,
 }) {
   let _epoch = 0            // bumps on every request → stale responses ignored
   let _loadAbort = null
   function _beginLoad() {
     _loadAbort?.abort()
+    compact.cancelPending()
+    player.stop()
     _loadAbort = new AbortController()
     return { epoch: ++_epoch, signal: _loadAbort.signal }
   }
@@ -44,10 +46,12 @@ export function initSnupiDisplay({
     return result
   }
   async function _paintBefore(onProgress, phase) {
+    const epoch = _epoch
     _progress(onProgress, phase, 0)
     if (typeof requestAnimationFrame === 'function') {
       await new Promise(resolve => requestAnimationFrame(resolve))
     }
+    if (epoch !== _epoch) throw new DOMException('Display superseded', 'AbortError')
   }
   async function _displayRequest(jobId, signal, onProgress) {
     if (api.getSnupiDisplayBin) {
@@ -56,6 +60,7 @@ export function initSnupiDisplay({
         signal,
         onProgress: p => _progress(onProgress, 'display-download', p.done, p.total),
       })
+      signal.throwIfAborted()
       if (buf) {
         await _paintBefore(onProgress, 'display-decode')
         const decoded = parseCandoRepresentativeBin(buf)
@@ -92,14 +97,19 @@ export function initSnupiDisplay({
 
   function _clearAll() {
     flexScale?.hide()
+    largeView?.clear()
+    _flexResp = null; _devResp = null; _candoResp = null
     cylinderOverlay?.clear()
     designRenderer.clearScalarColors?.()
+    designRenderer.applyFemPositions?.(null)
     designRenderer.clearExternalGeometry?.()
     _restoreNative()
   }
 
   function _prepareForExternal() {
     flexScale?.hide()
+    largeView?.clear()
+    _flexResp = null; _devResp = null; _candoResp = null
     cylinderOverlay?.clear()
     designRenderer.clearScalarColors?.()
     _nativeVisible(true)
@@ -107,6 +117,8 @@ export function initSnupiDisplay({
 
   function _prepareForLive() {
     flexScale?.hide()
+    largeView?.clear()
+    _flexResp = null; _devResp = null; _candoResp = null
     cylinderOverlay?.clear()
     designRenderer.clearScalarColors?.()
     designRenderer.clearExternalGeometry?.()
@@ -129,9 +141,29 @@ export function initSnupiDisplay({
     designRenderer.renderExternalGeometry(snap.design, snap.nucleotides, axes)
   }
 
+  const compact = initCandoDisplay({ designRenderer, cylinderOverlay, setDesignVisible,
+    restoreDesignVisible, flexScale, largeView, api: {
+      getCandoJob: api.getSnupiJob, getCandoVisualizationBin: api.getSnupiVisualizationBin,
+    } })
+  async function _large(jobId, fn, epoch, signal, onProgress, nNucleotides) {
+    if (!largeView || !api.getSnupiVisualizationBin) return null
+    const n = nNucleotides ?? (await api.getSnupiJob(jobId, signal))?.n_nucleotides
+    signal.throwIfAborted()
+    if (epoch !== _epoch) throw new DOMException('Display superseded', 'AbortError')
+    if (!Number.isFinite(n)) throw new Error('Could not determine result size')
+    if (n <= LARGE_CANDO_THRESHOLD) return null
+    const result = await compact[fn](jobId, onProgress, { nNucleotides: n })
+    if (epoch !== _epoch) throw new DOMException('Display superseded', 'AbortError')
+    _jobId = jobId; _mode = compact.mode(); _stats = compact.lastStats()
+    _flexResp = null; _devResp = null; _candoResp = null
+    return result
+  }
+
   /** Deform the model to the predicted shape (no recolour). */
-  async function showDeform(jobId, onProgress, { reuseLiveGeometry = false } = {}) {
+  async function showDeform(jobId, onProgress, { reuseLiveGeometry = false, nNucleotides } = {}) {
     const { epoch, signal } = _beginLoad()
+    const large = await _large(jobId, 'showDeform', epoch, signal, onProgress, nNucleotides)
+    if (large) return large
     const [resp, snap] = await Promise.all([
       _displayRequest(jobId, signal, onProgress),
       reuseLiveGeometry ? Promise.resolve(null)
@@ -176,8 +208,10 @@ export function initSnupiDisplay({
   }
 
   /** Deform to the predicted shape + recolour beads by per-bp RMSF (flexibility map). */
-  async function showFlex(jobId, onProgress, { reuseLiveGeometry = false } = {}) {
+  async function showFlex(jobId, onProgress, { reuseLiveGeometry = false, nNucleotides } = {}) {
     const { epoch, signal } = _beginLoad()
+    const large = await _large(jobId, 'showFlex', epoch, signal, onProgress, nNucleotides)
+    if (large) return large
     const [disp, rmsf, snap] = await Promise.all([
       _displayRequest(jobId, signal, onProgress),
       _fetchPhase(onProgress, 'rmsf', api.getSnupiRmsf(jobId, signal)),
@@ -207,8 +241,10 @@ export function initSnupiDisplay({
 
   /** Deform to the predicted shape + recolour beads green→red by deviation from the
    *  design's intended geometry (deviation map).  Reports the global RMSD. */
-  async function showDeviation(jobId, onProgress, { reuseLiveGeometry = false } = {}) {
+  async function showDeviation(jobId, onProgress, { reuseLiveGeometry = false, nNucleotides } = {}) {
     const { epoch, signal } = _beginLoad()
+    const large = await _large(jobId, 'showDeviation', epoch, signal, onProgress, nNucleotides)
+    if (large) return large
     const [resp, snap] = await Promise.all([
       _fetchPhase(onProgress, 'deviation', api.getSnupiDeviation(jobId, signal)),
       reuseLiveGeometry ? Promise.resolve(null)
@@ -236,8 +272,10 @@ export function initSnupiDisplay({
   }
 
   /** CanDo-style output: draw the predicted shape as jointed-cylinder tubes (native model hidden). */
-  async function showCandoStyle(jobId, onProgress) {
+  async function showCandoStyle(jobId, onProgress, { reuseLiveGeometry = false, nNucleotides } = {}) {
     const { epoch, signal } = _beginLoad()
+    const large = await _large(jobId, 'showCandoStyle', epoch, signal, onProgress, nNucleotides)
+    if (large) return large
     const resp = await _fetchPhase(onProgress, 'cylinders', api.getSnupiCylinders(jobId, signal))
     if (epoch !== _epoch) return { ok: false }
     if (!resp?.ready || !cylinderOverlay || (!resp.helices?.length && !resp.joints?.length)) {
@@ -259,87 +297,22 @@ export function initSnupiDisplay({
     return { ok: true, helices: resp.n_helices, joints: resp.n_joints }
   }
 
-  // ── Trajectory player (dynamics jobs) — animate the actual thermal motion ───────
-  let _traj = null           // { keys, frames } payload
-  let _trajIdx = 0
-  let _trajRaf = null
-  let _trajPlaying = false
-  let _trajLast = 0
-  const _TRAJ_FPS = 12       // playback rate (frames are downsampled snapshots, not real-time)
-  const _tel = (id) => (typeof document !== 'undefined' ? document.getElementById(id) : null)
-
-  function _trajApplyFrame(idx) {
-    if (!_traj || !_traj.frames?.length) return
-    _trajIdx = ((idx % _traj.frames.length) + _traj.frames.length) % _traj.frames.length
-    designRenderer.applyFemPositions(framesToUpdates(_traj.keys, _traj.frames[_trajIdx]))
-    const sc = _tel('snupi-traj-scrubber'); if (sc) sc.value = String(_trajIdx)
-    const lbl = _tel('snupi-traj-frame'); if (lbl) lbl.textContent = `${_trajIdx + 1}/${_traj.frames.length}`
-    _trajSteppers?.refresh()
-  }
-
-  function _trajTick(now) {
-    if (!_trajPlaying) return
-    if (now - _trajLast >= 1000 / _TRAJ_FPS) { _trajLast = now; _trajApplyFrame(_trajIdx + 1) }
-    _trajRaf = requestAnimationFrame(_trajTick)
-  }
-
-  function _trajSetPlaying(on) {
-    _trajPlaying = on
-    const btn = _tel('snupi-traj-play'); if (btn) btn.textContent = on ? '⏸' : '▶'
-    if (on) { _trajLast = 0; _trajRaf = requestAnimationFrame(_trajTick) }
-    else if (_trajRaf) { cancelAnimationFrame(_trajRaf); _trajRaf = null }
-  }
-
-  let _trajWired = false
-  let _trajSteppers = null
-  function _wireTrajControls() {
-    if (_trajWired) return
-    _trajWired = true
-    _tel('snupi-traj-play')?.addEventListener('click', () => _trajSetPlaying(!_trajPlaying))
-    _tel('snupi-traj-scrubber')?.addEventListener('input', (e) => {
-      _trajSetPlaying(false); _trajApplyFrame(parseInt(e.target.value, 10) || 0)
-    })
-    // ◂ / ▸ — one frame at a time; playback wraps, so these do too.
-    _trajSteppers = initFrameSteppers({
-      prevBtn: _tel('snupi-traj-prev'), nextBtn: _tel('snupi-traj-next'), wrap: true,
-      count: () => _traj?.frames?.length || 0, current: () => _trajIdx,
-      onStep: (i) => { _trajSetPlaying(false); _trajApplyFrame(i) },
-    })
-  }
-
-  /** Animate a dynamics job's thermal trajectory (the actual motion, not just its mean shape). */
-  async function showTrajectory(jobId, onProgress, { reuseLiveGeometry = false } = {}) {
-    const { epoch, signal } = _beginLoad()
-    const [resp, snap] = await Promise.all([
-      _fetchPhase(onProgress, 'trajectory', api.getSnupiTrajectory(jobId, signal)),
-      reuseLiveGeometry ? Promise.resolve(null)
-        : _fetchPhase(onProgress, 'snapshot', api.getSnupiSnapshotGeometry(jobId, signal))])
+  const player = initSnupiTrajectoryPlayer({ api, view: largeView,
+    onPrepare: () => { _clearAll(); _nativeVisible(false) } })
+  async function showTrajectory(jobId, onProgress) {
+    const { epoch } = _beginLoad()
+    if (!largeView) return { ok: false, reason: 'Trajectory renderer unavailable' }
+    _nativeVisible(false)
+    const result = await player.show(jobId, onProgress)
     if (epoch !== _epoch) return { ok: false }
-    if (!resp?.ready || !resp.n_frames || (!reuseLiveGeometry && !_snapshotReady(snap))) return { ok: false, reason: 'not-ready' }
-    const scenePhase = reuseLiveGeometry ? 'reuse-scene' : 'render-snapshot'
-    await _paintBefore(onProgress, scenePhase)
-    if (reuseLiveGeometry) _prepareForLive()
-    else { _prepareForExternal(); _renderExternal(snap) }
-    _progress(onProgress, scenePhase, 1)
-    _traj = { keys: resp.keys, frames: resp.frames }
-    _trajIdx = 0
-    _wireTrajControls()
-    const ctl = _tel('snupi-traj-controls'); if (ctl) ctl.style.display = 'flex'
-    const sc = _tel('snupi-traj-scrubber'); if (sc) { sc.max = String(resp.n_frames - 1); sc.value = '0' }
-    await _paintBefore(onProgress, 'apply')
-    _trajApplyFrame(0)
-    _progress(onProgress, 'apply', 1)
-    _trajSetPlaying(true)
-    _jobId = jobId; _mode = 'trajectory'
-    _stats = { kind: 'trajectory', frames: resp.n_frames }
-    return { ok: true, frames: resp.n_frames }
+    if (result.ok) {
+      _jobId = jobId; _mode = 'trajectory'
+      _stats = { kind: 'trajectory', frames: result.frames, large: true,
+        representation: 'zoom-adaptive nucleotide points; one frame in memory' }
+    }
+    return result
   }
-
-  function stopTrajectory() {
-    _trajSetPlaying(false)
-    _traj = null
-    const ctl = _tel('snupi-traj-controls'); if (ctl) ctl.style.display = 'none'
-  }
+  function stopTrajectory() { player.stop() }
 
   /** Re-apply the active mode for the current job (e.g. after a running job completes). */
   async function refresh() {
@@ -353,7 +326,7 @@ export function initSnupiDisplay({
 
   function stopDeform() {
     _cancelLoad()
-    if (_mode === null) return
+    compact.stopDeform()
     stopTrajectory()
     _clearAll()
     _jobId = null; _mode = null; _stats = null
@@ -377,11 +350,12 @@ export function initSnupiDisplay({
     deformActive: () => _mode !== null,
     deformJobId:  () => _jobId,
     mode:         () => _mode,
-    trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
-      ? { frame: _trajIdx + 1, total: _traj.frames.length }
-      : null,
+    trajectoryInfo: () => _mode === 'trajectory' ? player.info() : null,
+    cancelPending: () => { _cancelLoad(); compact.cancelPending(); player.cancelPending(); if (!_mode) { player.stop(); _clearAll() } },
+    getBoundingBox: () => largeView?.getBoundingBox?.() ?? null,
     lastStats:    () => _stats,
     coloringInfo: () => {
+      if (largeView?.active()) return compact.coloringInfo()
       if (_mode === 'flex' && _flexResp?.disp?.positions?.length) {
         const byBp = new Map((_flexResp.rmsf?.rmsf || []).map(r => [`${r.helix_id}:${r.bp_index}`, r.rmsf_nm]))
         return {

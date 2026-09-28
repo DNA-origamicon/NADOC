@@ -546,3 +546,12 @@ resampled. Check actual-device readability and point size; software-GPU browser
 checks are recorded in [the audit](docs/audits/cando_visualization_guards_20260927.md).
 This supersedes the CanDo full-snapshot-performance portion of
 MV-ASSEMBLY-FEM-LARGE-GPU; SNUPI's separate full-nucleotide path remains unmeasured.
+
+## MV-SNUPI-COMPACT-GLYPHS — hardware-GPU close-up result review
+
+2026-09-28: review SNUPI large static point/axis-line views and trajectory point
+playback at whole-assembly and nucleotide zoom on a hardware GPU. All coordinates
+remain available, but point glyphs omit orientation/slabs and lines omit cylinder
+radii. The automated BigO transport fixture is CanDo static FEM data; a completed
+native BigO SNUPI result should also be reviewed when available. SmallO native
+SNUPI dynamics is the playback fixture. See the SNUPI visualization audit.

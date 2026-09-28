@@ -47,6 +47,8 @@ const SNUPI_DISPLAY_PHASE_LABELS = {
   'display-data': 'Load predicted positions', snapshot: 'Build snapshot geometry',
   'display-download': 'Download predicted positions',
   'display-decode': 'Decode predicted positions',
+  'compact-view': 'Prepare bounded result view', 'compact-download': 'Download compact result',
+  'trajectory-frame': 'Download trajectory frame',
   rmsf: 'Load flexibility values', deviation: 'Compute deviation map',
   cylinders: 'Build CanDo cylinders', trajectory: 'Load thermal trajectory',
   transform: 'Transform display data', 'render-snapshot': 'Build snapshot scene',
@@ -572,8 +574,14 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   }
 
   async function _selectJob(jobId) {
+    const request = ++_displayRequest
+    _displayLoading = false
+    if (snupiDisplay?.deformJobId?.() !== jobId) snupiDisplay?.stopDeform?.()
+    _metricsCard?.refresh()
     _selectedId = jobId
-    _progress = await api.getSnupiProgress(jobId)
+    const progress = await api.getSnupiProgress(jobId)
+    if (request !== _displayRequest || _selectedId !== jobId) return
+    _progress = progress
     if (selectionUpdatesVisualization(_selectedJob())) _applyRunConfig(_selectedJob())
     _renderList()
     _renderDetail()
@@ -586,6 +594,9 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
    *  discards cached visualization — only selecting a DIFFERENT job retargets it, via
    *  `_retargetDisplayToSelection`, deliberately not called here). */
   function _deselectJob() {
+    _displayRequest++; _displayLoading = false
+    snupiDisplay?.cancelPending?.()
+    _metricsCard?.refresh()
     _selectedId = null
     _progress = null
     _renderList()
@@ -605,7 +616,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   /** When a display mode is active and the user selects a DIFFERENT job, retarget the
    *  active mode to the newly-selected job. */
   async function _retargetDisplayToSelection() {
-    if (!snupiDisplay?.deformActive?.()) return
+    if (!snupiDisplay || checkedMode() === 'off') return
     if (snupiDisplay.deformJobId?.() === _selectedId) return
     const mode = checkedMode()
     const job = _selectedJob()
@@ -615,12 +626,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
       snupiDisplay.stopDeform?.(); setMode('off'); _syncDisplayStatus()
       return
     }
-    const r = await snupiDisplay[_MODE_FNS[mode]]?.(
-      _selectedId, _showDisplayProgress,
-      { reuseLiveGeometry: !store.getState().assemblyActive && _selectedJob()?.out_of_date === false },
-    )
-    if (!r?.ok) { snupiDisplay.stopDeform?.(); setMode('off') }
-    _syncDisplayStatus()
+    await _onModeChange()
   }
 
   function _renderDetail() {
@@ -664,6 +670,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   }
 
   /** Readout under the radios: the active mode + its scalar range / RMSD. */
+  let _displayLoading = false
   const _displayLoadPhases = new Map()
   function _showDisplayProgress(p) {
     if (!p || !displayStatus) return
@@ -674,7 +681,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     renderSnupiDisplayProgress(displayStatus, _displayLoadPhases)
   }
   function _syncDisplayStatus() {
-    if (!displayStatus) return
+    if (!displayStatus || _displayLoading) return
     _displayLoadPhases.clear()
     const mode = snupiDisplay?.mode?.()
     if (!mode) { displayStatus.textContent = ''; return }
@@ -688,8 +695,9 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
       displayStatus.textContent =
         `CanDo-style cylinders — ${s.helices} helix tubes, ${s.joints} crossover joints`
     } else {
-      displayStatus.textContent = 'Showing predicted shape.'
+      displayStatus.textContent = mode === 'trajectory' ? `Thermal trajectory · ${s?.frames || 0} frames` : 'Showing predicted shape.'
     }
+    if (s?.large) displayStatus.textContent += ` · Large-result view: ${s.representation}`
   }
 
   // ── Control buttons ───────────────────────────────────────────────────────────
@@ -709,7 +717,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     if (!_selectedId) return false
     const r = await api.deleteSnupiJob(_selectedId)
     if (r?.ok) {
-      if (snupiDisplay?.deformJobId?.() === _selectedId) snupiDisplay.stopDeform?.()
+      _stopDisplays()
       _selectedId = null
       detail && (detail.style.display = 'none')
       await _fetchJobs()
@@ -721,28 +729,35 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
 
   // ── Display-mode radios (Off / Predicted shape / Flexibility / Deviation / CanDo) ──
   const _MODE_FNS = { deform: 'showDeform', flex: 'showFlex', deviation: 'showDeviation', cando: 'showCandoStyle', trajectory: 'showTrajectory' }
+  let _displayRequest = 0
   async function _onModeChange() {
+    const request = ++_displayRequest
+    _displayLoading = false
+    const selected = _selectedId
     if (!snupiDisplay) { setMode('off'); return }
     const mode = checkedMode()
-    if (mode !== 'trajectory') snupiDisplay.stopTrajectory?.()   // leaving the player → halt the loop
+    // The controller cancels playback and pending loads when beginning a new mode.
     if (mode === 'off') { snupiDisplay.stopDeform?.(); _syncDisplayStatus(); return }
     if (!_selectedId) { setMode('off'); return }
+    _displayLoading = true
     _showDisplayProgress({ reset: true })
     let r
     try {
       r = await snupiDisplay[_MODE_FNS[mode]]?.(
-        _selectedId, _showDisplayProgress,
-        { reuseLiveGeometry: !store.getState().assemblyActive && _selectedJob()?.out_of_date === false },
+        _selectedId, p => { if (request === _displayRequest) _showDisplayProgress(p) },
+        { reuseLiveGeometry: !store.getState().assemblyActive && _selectedJob()?.out_of_date === false,
+          nNucleotides: _selectedJob()?.n_nucleotides },
       )
     } catch (err) {
       r = { ok: false, reason: err?.message || 'load failed' }
     }
+    if (request !== _displayRequest || selected !== _selectedId || checkedMode() !== mode) return
+    _displayLoading = false
     if (!r?.ok) {
       setMode('off'); snupiDisplay.stopDeform?.()
       _showDisplayProgress({ phase: 'error', done: 1, total: 1 })
-      showToast(mode === 'flex' ? 'RMSF not available for this job'
-        : mode === 'trajectory' ? 'No trajectory — run a Langevin dynamics job (Advanced ▸ Langevin dynamics)'
-        : 'Predicted positions not ready', { severity: 'warn' })
+      showToast(r?.reason || (mode === 'flex' ? 'RMSF not available for this job'
+        : 'Predicted positions not ready'), { severity: 'warn' })
       return
     }
     _syncDisplayStatus()
@@ -752,6 +767,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
 
   // ── Cross-panel coordination ──────────────────────────────────────────────────
   function _stopDisplays() {
+    _displayRequest++; _displayLoading = false
     snupiDisplay?.stopAndRestore?.()
     setMode('off')
     _syncDisplayStatus()
@@ -760,8 +776,11 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   window.addEventListener('nadoc:left-tab-change', (e) => {
     if (e.detail?.from === 'dynamics') _stopDisplays()
   })
+  window.addEventListener('nadoc:simulation-engine', e => {
+    if (e.detail?.engine !== 'snupi' && (_displayLoading || snupiDisplay?.deformActive?.())) _stopDisplays()
+  })
   window.addEventListener('nadoc:design-changed', () => { _stopDisplays() })
-  window.addEventListener('nadoc:workspace-path-change', () => { _selectedId = null; if (_base.isOpen()) _fetchJobs() })
+  window.addEventListener('nadoc:workspace-path-change', () => { _stopDisplays(); _selectedId = null; if (_base.isOpen()) _fetchJobs() })
 
   // ── Open ──────────────────────────────────────────────────────────────────────
   function _onOpen() {

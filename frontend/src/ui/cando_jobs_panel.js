@@ -847,6 +847,9 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   window.addEventListener('nadoc:left-tab-change', (e) => {
     if (e.detail?.from === 'dynamics') _stopDisplays()
   })
+  window.addEventListener('nadoc:simulation-engine', e => {
+    if (e.detail?.engine !== 'cando' && (_displayLoading || candoDisplay?.deformActive?.())) _stopDisplays()
+  })
   window.addEventListener('nadoc:design-changed', () => { _stopDisplays() })
   window.addEventListener('nadoc:workspace-path-change', () => { _stopDisplays(); _selectedId = null; if (_base.isOpen()) _fetchJobs() })
 
