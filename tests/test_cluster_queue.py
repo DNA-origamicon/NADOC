@@ -6,12 +6,77 @@ key=value lines, pipe-delimited ``squeue``/``sacct``).  Nothing here touches SSH
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 
 import pytest
 
 from backend.core import cluster_config as cc
 from backend.core import cluster_queue as cq
+from backend.core.cluster_ssh import ClusterSSHError, RunResult
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_history_shared_between_concurrent_probes(alpine, fails):
+    async def scenario():
+        calls = []
+
+        class Conn:
+            async def run(self, cmd, timeout):
+                calls.append(cmd)
+                if cmd.startswith("sacct "):
+                    await asyncio.sleep(0.01)
+                    if fails:
+                        raise ClusterSSHError("command timed out", kind="timeout")
+                    return RunResult(0, "ah200|2026-08-06T10:00:00|2026-08-06T11:00:00|COMPLETED", "")
+                return RunResult(0, "", "")
+
+        cq.clear_cache()
+        conn = Conn()
+        try:
+            results = await asyncio.gather(
+                cq.probe_availability(conn, alpine, now=NOW, force=True),
+                cq.probe_availability(conn, alpine, now=NOW, force=True,
+                                      job_shape={"n_atoms": 1000, "total_ns": 1}),
+            )
+            histories = [c for c in calls if c.startswith("sacct ")]
+            assert len(histories) == (2 if fails else 1)  # all users, then fallback
+            assert len(set(histories)) == len(histories)
+            assert all(bool(r["warnings"]) == fails for r in results)
+            assert not cq._history_inflight
+        finally:
+            cq.clear_cache()
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_history_caller_does_not_cancel_other_waiter():
+    async def scenario():
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        calls = []
+
+        class Conn:
+            async def run(self, cmd, timeout):
+                calls.append(cmd)
+                entered.set()
+                await release.wait()
+                return RunResult(0, "history", "")
+
+        conn = Conn()
+        first = asyncio.create_task(cq._shared_history(conn, "sacct -a"))
+        await asyncio.wait_for(entered.wait(), 1)
+        second = asyncio.create_task(cq._shared_history(conn, "sacct -a"))
+        await asyncio.sleep(0)
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        release.set()
+        assert (await second).stdout == "history"
+        assert calls == ["sacct -a"]
+        assert not cq._history_inflight
+
+    asyncio.run(scenario())
 
 
 # ── fixtures ──────────────────────────────────────────────────────────────────

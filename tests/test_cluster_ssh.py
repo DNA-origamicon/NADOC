@@ -39,6 +39,9 @@ class _FakeConn:
     def close(self):
         self.closed = True
 
+    def is_closed(self):
+        return self.closed
+
 
 def _connector_returning(conn, *, captured=None):
     async def _connect(host, user, password, duo_method):
@@ -411,6 +414,70 @@ def test_timeout_records_timeout_kind():
         _run(c.run("whoami", timeout=0.01))
     assert ei.value.kind == "timeout"
     assert c.status()["error_kind"] == "timeout"
+    assert c.is_connected()
+
+
+def test_command_timeout_does_not_interrupt_download_queue(tmp_path):
+    async def scenario():
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        class SlowFile(_FakeRemoteFile):
+            async def read(self, size):
+                started.set()
+                await release.wait()
+                return await super().read(size)
+
+        class SlowSftp(_FakeSftp):
+            def open(self, *_):
+                return SlowFile(self.data)
+
+        class Conn(_FakeConn):
+            async def run(self, cmd, check=False):
+                if cmd == "sacct":
+                    await asyncio.Event().wait()
+                return await super().run(cmd, check=check)
+
+            def start_sftp_client(self):
+                return SlowSftp(b"complete download")
+
+        c = ClusterConnection()
+        fake = Conn()
+        await c.connect("h", "u", "pw", connector=_connector_returning(fake))
+        first = tmp_path / "first.bin"
+        transfer = asyncio.create_task(c.sftp_get("/first", str(first)))
+        await asyncio.wait_for(started.wait(), 1)
+        try:
+            with pytest.raises(ClusterSSHError, match="timed out"):
+                await c.run("sacct", timeout=0.01)
+        finally:
+            release.set()
+            await transfer
+        # Both the in-flight file and the NEXT queued file must succeed.
+        second = tmp_path / "second.bin"
+        await c.sftp_get("/second", str(second))
+        assert first.read_bytes() == second.read_bytes() == b"complete download"
+        assert (await c.run("true")).rc == 0
+        assert c.is_connected()
+        assert not fake.closed
+
+    _run(scenario())
+
+
+def test_timeout_on_closed_transport_expires_session():
+    class ClosedConn(_FakeConn):
+        async def run(self, cmd, check=False):
+            self.closed = True
+            await asyncio.Event().wait()
+
+    async def scenario():
+        c = ClusterConnection()
+        await c.connect("h", "u", "pw", connector=_connector_returning(ClosedConn()))
+        with pytest.raises(ClusterSSHError, match="timed out"):
+            await c.run("sacct", timeout=0.01)
+        assert c.state == ConnState.EXPIRED
+
+    _run(scenario())
 
 
 def test_connect_failure_records_error_and_kind():
