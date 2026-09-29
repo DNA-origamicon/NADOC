@@ -28,6 +28,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   let publicBase = publicOrigin, ownerSeenAt = now()
   const summary = room => ({ id: room.id, title: room.title, revision: room.revision, participants: room.presentation.snapshot().participants, serverTime: now(), expiresAt: room.expiresAt, ...(room.trajectory ? { trajectory: { id: room.trajectory.id, count: room.trajectory.count, fps: room.trajectory.fps, state: room.presentation.snapshot().trajectory, serverTime: now() } } : {}), ...(room.password ? { password: room.password } : {}),
     url: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.invite}${room.password ? '&password=required' : ''}`,
+    qrUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.qrToken}&entry=qr`,
     presenterUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.presenterToken}&role=presenter${room.password ? '&password=required' : ''}` })
   function prepareContent(scene, replacing = null) {
     if (scene.length > 512 * 1024 * 1024 || scene.subarray(0, 8).toString() !== 'NADOCVW1') throw new Error('Choose a prepared .nadocview package (maximum 512 MiB)')
@@ -49,7 +50,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (getPublicAccess && getPublicAccess()?.state !== 'ready') throw new Error(getPublicAccess()?.message || 'Public access checks are still running. Wait before creating an invitation.')
     if (rooms.size >= 8) throw new Error('Share capacity reached. Stop an existing share first (eight snapshots).')
     const { scene, trajectory, revision } = prepareContent(bytes)
-    const room = { id, expiresAt: persistent ? now() + lifetimeMs : expiresAt, revision, title: String(title).slice(0, 200), scene, trajectory, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), presenterToken: randomBytes(32).toString('hex'), sessions: new Map(), presentation: createPresentationState({ id, revision, now }) }
+    const room = { id, expiresAt: persistent ? now() + lifetimeMs : expiresAt, revision, title: String(title).slice(0, 200), scene, trajectory, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), presenterToken: randomBytes(32).toString('hex'), qrToken: randomBytes(32).toString('hex'), sessions: new Map(), presentation: createPresentationState({ id, revision, now }) }
     if (trajectory) room.presentation.setTrajectory(initialTrajectory(trajectory, now))
     rooms.set(id, room)
     room.presence = createRoomPresence({ ...room, now })
@@ -162,7 +163,8 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         if (rooms.get(room.id) !== room || now() >= room.expiresAt) return send(410, { error: 'This share has ended.' })
         const role = value.role === 'presenter' ? 'presenter' : 'guest'
         if (role === 'presenter' && room.editorBroadcast.active) return send(409, { error: 'The NADOC editor is presenting. Turn off Broadcast to presentation before using this presenter page.' })
-        if (!same(value.token, role === 'presenter' ? room.presenterToken : room.invite)) return send(403, { error: 'Invalid or expired invite.' })
+        const qrEntry = role === 'guest' && value.entry === 'qr'
+        if (!same(value.token, role === 'presenter' ? room.presenterToken : qrEntry ? room.qrToken : room.invite)) return send(403, { error: 'Invalid or expired invite.' })
         const previous = req.headers.cookie?.match(cookiePattern)?.[1]
         // Keep presenter credentials and their occupied slot until the meeting
         // ends. Leaving the viewer does not revoke the meeting or its guests.
@@ -174,7 +176,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           return send(200, { name: existing.name, participantId: room.presence.identify(existing), role, revision: room.revision, expiresAt: room.expiresAt })
         }
         // Generated passwords contain 96 bits of entropy; compare fixed-size hashes.
-        if (room.password && (typeof value.password !== 'string' || !timingSafeEqual(createHash('sha256').update(value.password).digest(), createHash('sha256').update(room.password).digest()))) return send(403, { error: 'Incorrect meeting password.' })
+        if (!qrEntry && room.password && (typeof value.password !== 'string' || !timingSafeEqual(createHash('sha256').update(value.password).digest(), createHash('sha256').update(room.password).digest()))) return send(403, { error: 'Incorrect meeting password.' })
         const name = typeof value.name === 'string' ? value.name.trim() : ''
         if (!name || name.length > 40 || /[\x00-\x1f\x7f]/.test(name)) return send(400, { error: 'Enter a display name of 1–40 characters.' })
         // A separately authenticated presenter can reclaim an absent presenter's

@@ -1,5 +1,18 @@
+import jsQR from 'jsqr'
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+async function qrPixels(svg) {
+    const source = svg.cloneNode(true), size = source.viewBox.baseVal.width * 6
+    source.setAttribute('width', size); source.setAttribute('height', size)
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(source)], { type: 'image/svg+xml' }))
+    try {
+      const image = new Image(); image.src = url; await image.decode()
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = size
+      const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0, size, size)
+      return { data: Array.from(ctx.getImageData(0, 0, size, size).data), size }
+    } finally { URL.revokeObjectURL(url) }
+  }
+
 // Only the __e2e__ copy/history may persist; global teardown removes them and the
 // isolated Vite bridge. Provider calls are intercepted: no real public room.
 // Runner screenshots/traces are removed by the cleanup reporter on failure too.
@@ -13,7 +26,7 @@ test('Enable link automatically waits for public access and publishes without a 
     if (action === 'stop') { started = false; shared = null; return route.fulfill({ json: {} }) }
     if (action === 'create') {
       expect(polls).toBeGreaterThan(1); publications++
-      shared = { id: 'a'.repeat(32), title: 'Setup test', url: 'https://example.invalid/viewer#invite=guest&password=required', password: 'test-password', expiresAt: Date.now() + 60000 }
+      shared = { id: 'a'.repeat(32), title: 'Setup test', url: 'https://example.invalid/viewer#invite=guest&password=required', qrUrl: 'https://example.invalid/viewer#invite=qr-guest&entry=qr', password: 'test-password', expiresAt: Date.now() + 60000 }
       return route.fulfill({ json: shared })
     }
     return route.fulfill({ json: { running: started, shares: shared ? [shared] : [], ...(started ? { publicAccess: ++polls > 1 ? ready : pending } : {}) } })
@@ -44,6 +57,35 @@ test('Enable link automatically waits for public access and publishes without a 
   expect(await page.evaluate(() => window.__copiedShare)).toBe('https://example.invalid/viewer#invite=guest&password=required')
   await expect(dialog.locator('[data-link]')).toHaveValue('https://example.invalid/viewer#invite=guest&password=required')
   await expect(dialog.locator('[data-password]')).toHaveValue('test-password')
+  const qr = dialog.locator('[data-guest-qr] svg')
+  await expect(qr).toBeVisible()
+  const raster = await qr.evaluate(qrPixels)
+  expect(jsQR(new Uint8ClampedArray(raster.data), raster.size, raster.size)?.data).toBe(shared.qrUrl)
+  await page.context().addInitScript(() => { window.print = () => { window.__printRequested = true } })
+  const printPagePromise = page.waitForEvent('popup')
+  await dialog.getByRole('button', { name: 'Print meeting target' }).click()
+  const printPage = await printPagePromise
+  await expect(printPage.locator('[data-room-marker]')).toBeVisible()
+  await expect.poll(() => printPage.evaluate(() => window.__printRequested)).toBe(true)
+  const dimensions = await printPage.locator('[data-room-marker]').evaluate(el => ({ width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height }))
+  expect(dimensions.width).toBeCloseTo(187.5 * 96 / 25.4, 0)
+  expect(dimensions.height).toBeCloseTo(dimensions.width, 1)
+  expect(await printPage.evaluate(() => window.opener)).toBeNull()
+  await printPage.close()
+  const largePopup = page.waitForEvent('popup')
+  await dialog.getByRole('button', { name: 'Print large tracking QR' }).click()
+  const largePage = await largePopup, marker = largePage.locator('[data-mobile-marker]')
+  await expect(marker).toBeVisible()
+  expect((await marker.boundingBox()).width).toBeCloseTo(150 * 96 / 25.4, 0)
+  const largePixels = await marker.evaluate(qrPixels)
+  const largeURL = new URL(jsQR(new Uint8ClampedArray(largePixels.data), largePixels.size, largePixels.size).data)
+  const largeParams = new URLSearchParams(largeURL.hash.slice(1))
+  expect(largeParams.get('qrmm')).toBe('150')
+  expect(largeParams.get('invite')).toBe('qr-guest')
+  expect(largeParams.get('entry')).toBe('qr')
+  await largePage.close()
+
+
   for (const key of ['link', 'password']) {
     const field = dialog.locator(`[data-${key}]`)
     const copy = dialog.getByRole('button', { name: `Copy ${key}`, exact: true })
@@ -63,6 +105,7 @@ test('Enable link automatically waits for public access and publishes without a 
   await expect(dialog.locator('[data-stop-host]')).toBeDisabled()
   await expect(dialog.locator('[data-copy-link]')).toHaveCount(0)
   await expect(dialog.locator('[data-copy-password]')).toHaveCount(0)
+  await expect(dialog.locator('[data-guest-qr] svg')).toHaveCount(0)
   await page.route('**/__nadoc_share/start', route => route.fulfill({ status: 503, json: { error: 'Host connection failed' } }))
   await dialog.locator('[data-create]').click()
   const errors = dialog.locator('[data-error]')
