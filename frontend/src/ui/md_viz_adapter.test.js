@@ -181,6 +181,39 @@ describe('mdVizApiAdapter', () => {
       applyPositionLerp: vi.fn(), clearScalarColors: vi.fn(),
     })
 
+    it('interpolates exact atom endpoints and restores a saved snapshot on pause', async () => {
+      const api = heavyApi(), ar = AR(), ctrl = heavyCtrl(api, ar)
+      await ctrl.loadTrajectory('J1', true, 'lineage', 20)
+      ctrl.setPlaying(true)
+      expect(await ctrl.ensureInterpolationFrames(1, 2)).toBe(true)
+      ctrl.showInterpolatedFrame(1, 2, .4)
+      const [a, b, t] = ar.applyPositionLerp.mock.calls.at(-1)
+      for (const coordinate of a) expect(coordinate).toBeCloseTo(1.4)
+      expect(b).toBe(a)
+      expect(t).toBe(0)
+      ctrl.showFrame(1); ctrl.setPlaying(false)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      const [saved, same, alpha] = ar.applyPositionLerp.mock.calls.at(-1)
+      expect(Array.from(saved)).toEqual([1, 1, 1])
+      expect(same).toBe(saved)
+      expect(alpha).toBe(0)
+      const calls = ar.applyPositionLerp.mock.calls.length
+      ctrl.showInterpolatedFrame(1, 2, .9)
+      expect(ar.applyPositionLerp).toHaveBeenCalledTimes(calls)
+      ctrl.stopAndRestore()
+    })
+
+    it('allows solvent-only interpolation when no DNA atom model exists', async () => {
+      const api = heavyApi({
+        getMdTrajectory: vi.fn(async () => ({ ...TRAJ(2), keys: [], frames: [[], []] })),
+        getMdAtomisticModel: vi.fn(async () => ({ atoms: [], bonds: [] })),
+      })
+      const ctrl = heavyCtrl(api, AR())
+      await ctrl.loadTrajectory('graphene')
+      expect(await ctrl.ensureInterpolationFrames(0, 1)).toBe(true)
+      ctrl.stopAndRestore()
+    })
+
     it('starts from a small exact page and gates a far seek on both representations', async () => {
       const api=heavyApi({
         getMdTrajectoryMeta:vi.fn(async()=>({n_frames:250,stages:[],markers:[]})),

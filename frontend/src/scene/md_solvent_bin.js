@@ -30,8 +30,8 @@
  *
  * NOTE the per-frame water count VARIES: a hydration shell is a different set of
  * molecules every frame because water diffuses. That is why the count is per-frame
- * (`header.per_frame_nw`) rather than global, and why the overlay must snap to a
- * frame rather than interpolate between two of them.
+ * (`header.per_frame_nw`) rather than global. Water must snap to a saved frame;
+ * the fixed-order ions can be interpolated separately during playback.
  */
 const _MAGIC = 0x4E534C56
 // Bumped when the block layout changed to make every block optional. A stale tab

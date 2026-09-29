@@ -11,6 +11,38 @@ function fixture() {
   return { scene, mesh, pack: () => prepareScene({ scene, camera }) }
 }
 describe('independent trajectory patches', () => {
+  it('smooths sparse positions and rotations without collapsing geometry, then restores exact frames', async () => {
+    const f = fixture(), buffer = f.pack(), base = sceneChannels(decodeContainer(buffer)), current = await loadPreparedScene(buffer)
+    const empty = encodeFrame(base, base), apply = createClipApplier(current)
+    f.mesh.position.x = 8; f.mesh.rotation.z = Math.PI
+    f.mesh.geometry.attributes.position.setY(0, 6)
+    const end = encodeFrame(base, sceneChannels(decodeContainer(f.pack())))
+    apply.interpolate(empty, end, .5)
+    const matrix = current.scene.children[0].matrix, position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3()
+    matrix.decompose(position, rotation, scale)
+    expect(position.x).toBe(4)
+    for (const value of scale) expect(value).toBeCloseTo(1)
+    expect(new THREE.Vector3(1, 0, 0).applyQuaternion(rotation).y).toBeCloseTo(1)
+    expect(current.scene.children[0].geometry.attributes.position.getY(0)).toBeCloseTo(3.25)
+    apply.interpolate(empty, end, .75)
+    expect(matrix.elements[12]).toBe(6)
+    apply.apply(empty)
+    expect(matrix.elements).toEqual(new THREE.Matrix4().elements)
+    expect(current.scene.children[0].geometry.attributes.position.getY(0)).toBe(.5)
+    current.dispose()
+  })
+  it('keeps hidden instances discrete and never writes NaN matrices', async () => {
+    const f = fixture(), buffer = f.pack(), base = sceneChannels(decodeContainer(buffer)), current = await loadPreparedScene(buffer)
+    const empty = encodeFrame(base, base), apply = createClipApplier(current)
+    f.mesh.scale.setScalar(0); f.mesh.position.x = 8
+    const end = encodeFrame(base, sceneChannels(decodeContainer(f.pack())))
+    apply.interpolate(empty, end, .5)
+    expect(current.scene.children[0].matrix.elements).toEqual(new THREE.Matrix4().elements)
+    apply.interpolate(empty, end, 1)
+    expect(current.scene.children[0].matrix.elements.every(Number.isFinite)).toBe(true)
+    expect(current.scene.children[0].matrix.elements[0]).toBe(0)
+    current.dispose()
+  })
   it('restores unchanged baseline values after out-of-order seeks without recreating geometry', async () => {
     const f = fixture(), buffer = f.pack(), base = sceneChannels(decodeContainer(buffer)), current = await loadPreparedScene(buffer)
     const geometry = current.scene.children[0].geometry, apply = createClipApplier(current)

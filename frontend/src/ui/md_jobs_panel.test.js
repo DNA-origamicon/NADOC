@@ -1794,7 +1794,7 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     expect(overlay.clear).toHaveBeenCalled()
   })
 
-  it('the NAMD Play button waits for all ion/box frames before advancing DNA', async () => {
+  it('keeps the initial load active until all ion/box frames are ready, then Play starts without another load', async () => {
     for (const [id, tag] of Object.entries({ 'md-jobs-traj-play': 'button', 'md-jobs-solvent-opts': 'div',
       'md-jobs-solvent-status': 'div', 'md-jobs-ions-toggle': 'input', 'md-jobs-box-toggle': 'input' })) {
       const el = document.createElement(tag); el.id = id; document.body.appendChild(el)
@@ -1829,11 +1829,19 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     await vi.advanceTimersByTimeAsync(3000)
     expect(viz.showFrame).not.toHaveBeenCalled()
     expect($('md-jobs-traj-play').disabled).toBe(true)
+    expect($('md-jobs-traj-load-progress').style.display).not.toBe('none')
+    expect($('md-jobs-traj-load-progress').textContent).toContain('Prepare ions and periodic cell')
     release(); await flushMicro(100)
+    expect($('md-jobs-traj-load-progress').style.display).toBe('none')
+    expect($('md-jobs-traj-play').disabled).toBe(false)
+    const prepared = viz.prebuildHeavy.mock.calls.length
+    $('md-jobs-traj-play').click()
+    expect($('md-jobs-traj-play').textContent).toBe('⏸')
     await vi.advanceTimersByTimeAsync(2500)
     expect(viz.showFrame.mock.calls.at(-1)).toEqual([20])
     expect(overlay.setFrame.mock.calls.at(-1)[0].ions[0]).toBe(20)
     expect(mdApi.getMdFramesSolventBin).toHaveBeenCalledTimes(2)
+    expect(viz.prebuildHeavy).toHaveBeenCalledTimes(prepared)
     $('md-jobs-traj-play').click()
   })
 
@@ -1841,6 +1849,37 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     await openWithJob()
     // 3 x ceil(100/20) = 15 of the 300 frames actually written.
     expect($('md-jobs-traj-frames-hint').textContent).toMatch(/15 frames of 300 written/)
+  })
+
+  it('joins progressive buffering into the initial loading bars before enabling Play', async () => {
+    const play = document.createElement('button'); play.id = 'md-jobs-traj-play'; document.body.appendChild(play)
+    let release
+    viz.isProgressiveTrajectory = () => true
+    viz.trajectoryInfo = () => ({ frame: 1, total: 50 })
+    viz.ensureTrajectoryFrame = vi.fn(async () => true)
+    viz.bufferTrajectory = vi.fn(onProgress => {
+      onProgress({ buffered: 8, total: 50, complete: false })
+      return new Promise(resolve => { release = () => {
+        onProgress({ buffered: 50, total: 50, complete: true })
+        resolve({ buffered: 50, total: 50, complete: true })
+      } })
+    })
+    await openWithJob()
+    $('md-jobs-traj-toggle').checked = true
+    $('md-jobs-traj-toggle').dispatchEvent(new Event('change'))
+    await flushMicro(100)
+    expect(play.disabled).toBe(true)
+    expect($('md-jobs-traj-load-progress').textContent).toContain('Buffer trajectory playback · 8 of 50')
+    release(); await flushMicro(100)
+    expect(play.disabled).toBe(false)
+    expect($('md-jobs-traj-load-progress').style.display).toBe('none')
+    vi.useFakeTimers()
+    play.click()
+    expect(play.textContent).toBe('⏸')
+    expect(viz.bufferTrajectory).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(125)
+    expect(viz.showFrame).toHaveBeenLastCalledWith(1)
+    play.click()
   })
 
   it('re-prices as the user types, without another network read', async () => {

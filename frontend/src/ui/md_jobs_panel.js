@@ -1808,6 +1808,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // both price against ONE budget. Null until it has been read once, which is
     // the honest answer (an unknown machine is not assumed to be a large one).
     getAvailableBytes: () => _memPlan.lastFreeRamBytes(),
+    onPreparationChange: () => {
+      if (!_trajJobId || _trajLoading) return
+      trajPlayer.pause()
+      void trajPlayer.prepare().finally(() => trajPlayer.setLoading(null))
+    },
   })
   // CPD weld pair — markers on the designed extra-base UV weld. Owns its own DOM +
   // readout ticker; the panel only tells it which job is selected. Most designs have no
@@ -2860,6 +2865,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
     loadProgressEl: trajLoadProgress,
     prevBtn: trajPrev, nextBtn: trajNext,
+    interpolationToggle: document.getElementById('md-jobs-traj-interpolate'),
+    preparationKey: () => `${getCurrentRepr?.()}|${solvent?.preparationKey()}`,
+    onBeforeInterpolate: async (from, to, neighbors) => {
+      if (await getMdViz?.()?.ensureInterpolationFrames?.(from, to, neighbors) === false) return false
+      for (const i of [from, to, neighbors?.before, neighbors?.after].filter(i => i != null)) {
+        if (await solvent?.ensureFrame(i) === false) return false
+      }
+      return true
+    },
+    onInterpolate: (from, to, t, neighbors) => {
+      getMdViz?.()?.showInterpolatedFrame?.(from, to, t, neighbors)
+      solvent?.showInterpolatedFrame(from, to, t, neighbors)
+    },
     onBeforeSeek: async (i) => {
       if (await getMdViz?.()?.ensureTrajectoryFrame?.(i) === false) return false
       return solvent?.ensureFrame(i) ?? true
@@ -2868,21 +2886,27 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     onBeforePlay: async () => {
       const v = getMdViz?.()
       if (!v) return true
-      // DNA and its companions share one playback clock. Join the background
-      // ion/box preparation before allowing the timer to advance either layer.
-      if (await solvent?.prepareAll() === false) return false
-      // CG plays instantly (prebuildHeavy is a no-op for the bead model). A heavy rep has
-      // to have every played frame in hand first, and on a long trajectory that is tens of
-      // seconds — REPORT IT. Discarding the progress callback (`() => {}`) left the play
-      // button sitting on a bare ⏳ with nothing moving anywhere, which reads as "play is
-      // broken", not "play is waiting". Same status line the toggle's own prebuild uses.
+      // This hook is joined by the INITIAL load, including every visible companion.
+      // Play reuses its completed preparation until the display settings change.
+      const jobId = _trajJobId
       const base = (trajStatus?.textContent || '').split(' · preparing')[0].split(' · atoms')[0]
-      if (v.isProgressiveTrajectory?.()) return v.ensureTrajectoryFrame(v.trajectoryInfo().frame - 1)
-      const r = await v.prebuildHeavy((done, total) => {
-        if (total) _setTrajStatus(`${base} · preparing atoms ${done}/${total}…`, _C.accent)
-      })
-      if (r?.n) _setTrajStatus(`${base} · atoms ready (${r.frames ?? r.n} frames)`, _C.ok)
-      return r?.ok !== false
+      const progress = p => {
+        if (_trajJobId === jobId) _showTrajLoadProgress(p)
+      }
+      if (await solvent?.prepareAll({ onProgress: p => progress({ ...p, label: 'Prepare ions and periodic cell' }) }) === false) return false
+      if (_trajJobId !== jobId) return false
+      const grapheneOnly = !!mdInheritedPrepParams(_jobs.find(j => j.job_id === jobId), _jobs).graphene_only
+      if (v.isProgressiveTrajectory?.()) {
+        const buffered = await v.bufferTrajectory?.(p => progress({ phase: 'buffer', done: p.buffered,
+          total: p.total, label: 'Buffer trajectory playback' }))
+        if (_trajJobId !== jobId) return false
+        if (!grapheneOnly && await _prebuildTrajHeavy(v, base) === false) return false
+        if (buffered?.limited && !buffered.complete) {
+          _setTrajStatus(`${base} · ${buffered.buffered}/${buffered.total} buffered (memory limit; later frames may buffer)`, _C.warn)
+        } else if (grapheneOnly) _setTrajStatus(`${base} · ready to play`, _C.ok)
+        return await v.ensureTrajectoryFrame?.(v.trajectoryInfo().frame - 1) !== false
+      }
+      return grapheneOnly || await _prebuildTrajHeavy(v, base) !== false
     },
     onPlayStateChange: (playing) => { getMdViz?.()?.setPlaying?.(playing) },
   })
@@ -3289,13 +3313,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         + `${formatBytes(free ?? 0)} of memory is free on this machine.\n\n`
         + `Loading all ${_trajTotalFrames(v)} frames could exhaust it. `
         + `Prepare ${plan.frames} evenly-spaced frames instead?`)
-      if (!ok) { _setTrajStatus(`${baseStatus} · atoms not prepared`, _C.warn); return }
+      if (!ok) { _setTrajStatus(`${baseStatus} · atoms not prepared`, _C.warn); return false }
     }
     const r = await v.prebuildHeavy((done, total) => {
       _setTrajStatus(`${baseStatus} · preparing atoms ${done}/${total}…`, _C.accent)
       trajPlayer.setPreparing({ done, total })   // same count, on the button's tooltip
+      _showTrajLoadProgress({ phase: 'atoms', done, total, label: 'Prepare visible trajectory frames' })
     }, { budgetBytes: plan?.budgetBytes ?? null }).catch(() => null)
-    if (!r || !r.n) { _setTrajStatus(baseStatus, _C.ok); return }   // CG, or cancelled
+    if (!r || r.ok === false) { _setTrajStatus(`${baseStatus} · playback preparation failed`, _C.warn); return false }
+    if (!r.n) { _setTrajStatus(`${baseStatus} · ready to play`, _C.ok); return true }
     // Say plainly when memory forced a coarser set than the slider has — and WHICH limit
     // bound — otherwise the atomistic view silently snaps to neighbours and looks laggy.
     const why = _LIMIT_WHY[plan?.limitedBy] || 'memory limit'
@@ -3304,6 +3330,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         ? `${baseStatus} · atoms: ${r.frames} of ${r.trajFrames} frames (${why})`
         : `${baseStatus} · atoms ready (${r.frames} frames)`,
       r.capped ? _C.warn : _C.ok)
+    return true
   }
 
   function _trajTotalFrames(v) { return Number(v?.trajectoryInfo?.()?.total) || 0 }
@@ -3328,6 +3355,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const interval = _trajInterval()
     _trajLoadJobId = jobId
     _trajLoading = true
+    trajPlayer.pause()
+    trajPlayer.setPreparing({ done: 0, total: 1 })
     const spinner = makeSpinner(_C.accent, 12)
     spinner.setAttribute('aria-label', 'Loading trajectory')
     trajToggle?.after(spinner)
@@ -3353,6 +3382,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     } finally {
       _trajLoading = false
       _trajLoadJobId = null
+      trajPlayer.setPreparing(null)
+      trajPlayer.setLoading(null)
       spinner.remove()
       trajToggle?.removeAttribute('aria-busy')
       if (trajInterval) trajInterval.disabled = false
@@ -3364,6 +3395,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const v = getMdViz?.()
     if (!jobId || !v) return
     _setTrajStatus('Loading trajectory…', _C.accent)
+    trajPlayer.pause()
+    trajPlayer.setPreparing({ done: 0, total: 1 })
     trajPlayer.setLoading({ phase: 'extract', done: 0, total: 0, reset: true,
       label: _TRAJ_LOAD_LABELS.extract })
     const poll = setInterval(async () => {
@@ -3375,7 +3408,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       r = await v.loadTrajectory(jobId, true, 'lineage', interval, _showTrajLoadProgress)
     } finally {
       clearInterval(poll)
-      trajPlayer.setLoading(null)
     }
     if (_trajLoadJobId !== jobId) return
     if (r.ok) {
@@ -3390,22 +3422,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // the player's onSeek — so the solvent for frame 0 has to be asked for here.
       solvent?.setEnabled(true, 'traj')
       await solvent?.setJob(jobId, { stride: interval, nFrames: r.n_frames })
+      if (_trajLoadJobId !== jobId) return
       weld?.setJob(jobId)
       solvent?.showFrame(0)
-      // A graphene control has no DNA heavy model to prebuild. Its visible trajectory is
-      // graphene + solvent/ions/box; sending it through the nucleotide-aligned atomistic
-      // frame endpoint produces an avoidable empty-DNA 500 after the trajectory itself
-      // has loaded successfully.
-      const grapheneOnly = !!mdInheritedPrepParams(_jobs.find(j => j.job_id === jobId), _jobs).graphene_only
-      if (!grapheneOnly && !v.isProgressiveTrajectory?.()) await _prebuildTrajHeavy(v, base)
-      else if (v.isProgressiveTrajectory?.()) {
-        _setTrajStatus(`${base} · buffered playback`, _C.ok)
-        v.bufferTrajectory?.(p => {
-          if (_trajJobId !== jobId || !trajToggle?.checked) return
-          _setTrajStatus(`${base} · ${p.complete ? 'fully buffered' : `${p.buffered}/${p.total} buffered${p.limited ? ' · memory limit' : ' · loading remaining frames…'}`}`, _C.ok)
-        })?.catch(err => {
-          if (_trajJobId === jobId) _setTrajStatus(`${base} · background buffering stopped: ${err.message}`, _C.warn)
-        })
+      // Readiness includes DNA, ions/cell, and the first spline neighbourhood.
+      if (!await trajPlayer.prepare() && _trajJobId === jobId) {
+        _setTrajStatus(`${base} · playback preparation incomplete — retry Play`, _C.warn)
       }
     } else {
       if (trajToggle) trajToggle.checked = false
@@ -3447,8 +3469,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (!_trajJobId) return
     const v = getMdViz?.()
     if (v?.mode?.() !== 'trajectory') return
-    const base = (trajStatus?.textContent || '').split(' · preparing')[0].split(' · atoms')[0]
-    _prebuildTrajHeavy(v, base)
+    if (_trajLoading) return
+    trajPlayer.pause()
+    void trajPlayer.prepare().finally(() => trajPlayer.setLoading(null))
   })
 
   // Enable/disable one view radio + dim its label.

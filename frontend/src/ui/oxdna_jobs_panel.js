@@ -1261,12 +1261,19 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   }
 
   // Trajectory player (play/pause + scrub slider); seeks drive the display frame.
-  // Heavy reps (atomistic/surface) rebuild each frame slowly, so PLAY first pre-builds
-  // every coarse playback frame (spinner + "building k/N"), then runs the loop smoothly.
+  // The initial load joins heavy-frame preparation before advertising a ready Play.
   const trajPlayer = initOxdnaTrajectoryPlayer({
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
     loadProgressEl: trajLoadProgress,
     prevBtn: trajPrev, nextBtn: trajNext,
+    interpolationToggle: document.getElementById('oxdna-jobs-traj-interpolate'),
+    preparationKey: () => `${oxdnaDisplay?.trajectoryPreparationKey?.()}|${_lammpsMode}`,
+    onBeforeInterpolate: (from, to, neighbors) => _lammpsMode
+      ? true : oxdnaDisplay?.ensureInterpolationFrames?.(from, to, neighbors),
+    onInterpolate: (from, to, t, neighbors) => {
+      if (_lammpsMode) lammpsDisplay?.showInterpolatedFrame?.(from, to, t, neighbors)
+      else oxdnaDisplay?.showInterpolatedFrame?.(from, to, t, neighbors)
+    },
     onSeek: (i) => {
       if (_lammpsMode) { lammpsDisplay?.showFrame(i); return }   // CG only — no field arrow
       oxdnaDisplay?.showFrame(i); _applyTrajField(i)
@@ -1274,9 +1281,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     onBeforePlay: async () => {
       if (_lammpsMode) return true   // LAMMPS is CG — no heavy-rep prebuild
       if (!oxdnaDisplay) return true
-      oxdnaDisplay.setPlaying(true)
       const r = await oxdnaDisplay.prebuildHeavy((done, total) => {
         _trajPrep = total > 1 ? { done, total } : null   // total≤1 = CG (instant) → no notice
+        trajPlayer.setLoading({ phase: 'atoms', done, total, label: 'Prepare visible trajectory frames' })
         _renderTrajStatus()
       })
       _trajPrep = null
@@ -1284,8 +1291,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       return r?.ok !== false
     },
     onPlayStateChange: (playing) => {
-      if (!playing) { oxdnaDisplay?.setPlaying(false); _trajPrep = null; _renderTrajStatus() }
+      oxdnaDisplay?.setPlaying(playing)
+      if (!playing) { _trajPrep = null; _renderTrajStatus() }
     },
+  })
+  window.addEventListener('nadoc:representation-change', () => {
+    if (!_trajJobId || _trajBusy || _lammpsMode || oxdnaDisplay?.mode?.() !== 'trajectory') return
+    trajPlayer.pause()
+    void trajPlayer.prepare().finally(() => trajPlayer.setLoading(null))
   })
 
   // The shared workspace colour-scale widget (middle-right, injected from main.js) is
@@ -2535,6 +2548,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (!_selectedId || !oxdnaDisplay) return
     const full = scope === 'job'
     _trajBusy = true
+    trajPlayer.pause()
+    trajPlayer.setPreparing({ done: 0, total: 1 })
     const phaseLabels = {
       align: 'Read & align frames',
       aligning: 'Read & align frames',
@@ -2580,11 +2595,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       r = await oxdnaDisplay.loadTrajectory(
         _selectedId, alignToggle ? alignToggle.checked : true, scope, undefined,
         showProgress)
+    } catch (error) {
+      r = { ok: false, reason: error.message || 'Could not load trajectory' }
     } finally {
       clearInterval(poll)
-      trajPlayer.setLoading(null)
     }
-    _trajBusy = false
     if (r.ok) {
       _trajJobId = jobId   // the loaded frames belong to THIS job (see _selectJob's unload gate)
       if (trajControls) trajControls.style.display = ''
@@ -2599,12 +2614,16 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         ? `${r.n_frames} frames · this job only, every frame (no downsampling)`
         : `${r.n_frames} frames · relaxation + ${nProd} production run${nProd === 1 ? '' : 's'}`,
         _C.ok)
+      if (!await trajPlayer.prepare()) _setTrajStatus('Playback preparation incomplete — retry Play', _C.warn)
     } else {
       if (trajToggle) trajToggle.checked = false
       if (trajFullToggle) trajFullToggle.checked = false
       if (trajControls) trajControls.style.display = 'none'
       _setTrajStatus(r.reason || 'no trajectory', _C.warn)
     }
+    _trajBusy = false
+    trajPlayer.setPreparing(null)
+    trajPlayer.setLoading(null)
     _updateButtons(_selectedJob())
   }
   // Both trajectory radios run the same path and differ only in composite scope.

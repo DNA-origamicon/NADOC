@@ -4994,6 +4994,9 @@
                       <button id="oxdna-jobs-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
                     </div>
                     <div id="oxdna-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px" title="Use a cubic curve through nearby saved frames for smoother motion. Pause returns to the last saved frame. Surfaces stay on saved frames; curves may overshoot or pass through obstacles.">
+                      <input id="oxdna-jobs-traj-interpolate" type="checkbox" checked> Smooth playback
+                    </label>
                   </div>
                   <!-- Heavy-rep (atomistic/surface) reconstruction detail for ALL three
                        displays above. Only matters when the scene is in an atomistic or
@@ -6448,6 +6451,9 @@
                       <button id="md-jobs-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
                     </div>
                     <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px" title="Use a cubic curve through nearby saved frames for smoother beads, atoms and ions. Pause returns to the last saved frame. Surfaces stay on saved frames; curves may overshoot or pass through obstacles.">
+                      <input id="md-jobs-traj-interpolate" type="checkbox" checked> Smooth playback
+                    </label>
                   </div>
 
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;opacity:0.5" title="Available for NAMD nanopore simulations with a saved trajectory.">

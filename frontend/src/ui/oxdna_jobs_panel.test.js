@@ -968,6 +968,33 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
   })
 
   // ── Click-the-selected-row-to-deselect ──────────────────────────────────────
+  it('includes heavy preparation in the initial trajectory load and starts Play from cache', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 4, stages: relaxStages({ kind: 'production', status: 'done' }) }])
+    const disp = fakeDisplay()
+    let release
+    disp.setPlaying = vi.fn()
+    disp.prebuildHeavy = vi.fn(onProgress => {
+      onProgress(1, 6)
+      return new Promise(resolve => { release = () => { onProgress(6, 6); resolve({ ok: true, n: 6 }) } })
+    })
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+    $('oxdna-jobs-traj-toggle').checked = true
+    $('oxdna-jobs-traj-toggle').dispatchEvent(new Event('change'))
+    await flush()
+    const play = $('oxdna-jobs-traj-play'), progress = $('oxdna-jobs-traj-load-progress')
+    expect(play.disabled).toBe(true)
+    expect(progress.textContent).toContain('Prepare visible trajectory frames · 1 of 6')
+    release(); await flush()
+    expect(play.disabled).toBe(false)
+    expect(progress.style.display).toBe('none')
+    play.click()
+    expect(play.textContent).toBe('⏸')
+    expect(disp.prebuildHeavy).toHaveBeenCalledTimes(1)
+    play.click()
+  })
+
   // Deselecting is NOT a job switch: whatever was loaded for that job (here a scrubbable
   // trajectory) has to stay on screen and in the controller, so re-selecting costs nothing.
   // Only picking a DIFFERENT job unloads it (with the "Unload trajectory?" confirm).

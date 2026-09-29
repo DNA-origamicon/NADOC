@@ -17,6 +17,7 @@
  */
 
 import { toFemUpdates, rmsfColorMap, deviationColorMap, framesToUpdates } from './oxdna_display.js'
+import { cubicCoordinates } from '../scene/trajectory_interpolation.js'
 import * as client from '../api/client.js'
 import { parseOxdnaTrajectoryBin } from '../scene/oxdna_trajectory_bin.js'
 
@@ -187,6 +188,13 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
     if (f) designRenderer.applyFemPositions(framesToUpdates(_traj.keys, f))
   }
 
+  let interpolationFrame = null
+  function showInterpolatedFrame(from, to, t, { before = null, after = null } = {}) {
+    if (_mode !== 'trajectory' || !_traj) return
+    interpolationFrame = cubicCoordinates(_traj.frames[before], _traj.frames[from], _traj.frames[to], _traj.frames[after], t, interpolationFrame)
+    if (interpolationFrame) designRenderer.applyFemPositions(framesToUpdates(_traj.keys, interpolationFrame))
+  }
+
   function stopAndRestore() {
     _cancelLoad()
     // No-op when nothing is displayed. `_restore()` reverts every backbone bead to
@@ -203,7 +211,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   }
 
   return {
-    displayJob, displayRmsf, displayDeviation, recolorRmsf, recolorDeviation, loadTrajectory, showFrame, stopAndRestore,
+    displayJob, displayRmsf, displayDeviation, recolorRmsf, recolorDeviation, loadTrajectory, showFrame, showInterpolatedFrame, stopAndRestore,
     mode: () => _mode, activeJobId: () => _jobId, isActive: () => _mode !== null,
     alignment: () => _align,
     trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
