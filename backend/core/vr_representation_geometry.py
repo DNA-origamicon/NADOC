@@ -27,7 +27,7 @@ REPRESENTATIONS = (
 )
 
 
-def build(design, nucleotides, axes):
+def build(design, nucleotides, axes, representations=None):
     from backend.api.routes_display_geometry import _build_design_surface_mesh
 
     from backend.core.vr_scene_projection import normalize_geometry_copy_indices
@@ -37,7 +37,7 @@ def build(design, nucleotides, axes):
     if not source:
         return None
     encoded = json.dumps(
-        {"design": json.loads(design.to_json()), "geometry": source, "axes": axes},
+        {"design": json.loads(design.to_json()), "geometry": source, "axes": axes, "representations": sorted(representations) if representations is not None else None},
         default=lambda x: x.tolist() if isinstance(x, np.ndarray) else float(x),
     )
     result = subprocess.run(
@@ -49,22 +49,24 @@ def build(design, nucleotides, axes):
         check=True,
     )
     desktop = json.loads(result.stdout)
-    surface = _build_design_surface_mesh(design, 0.20, 0.06, 1.30, 15, "coarse")
-    vertices = np.asarray(surface.vertices)
-    normals = np.zeros_like(vertices)
-    faces = np.asarray(surface.faces)
-    if len(faces):
-        triangles = vertices[faces]
-        face_normals = np.cross(
-            triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]
-        )
-        for column in range(3):
-            np.add.at(normals, faces[:, column], face_normals)
-        normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12)
-    desktop["surface"] = {
-        "vertices": vertices[faces].reshape(-1, 3),
-        "normals": normals[faces].reshape(-1, 3),
-    }
+    desktop["surface"] = {"vertices": np.empty((0, 3)), "normals": np.empty((0, 3))}
+    if representations is None or "surface" in representations:
+        surface = _build_design_surface_mesh(design, 0.20, 0.06, 1.30, 15, "coarse")
+        vertices = np.asarray(surface.vertices)
+        normals = np.zeros_like(vertices)
+        faces = np.asarray(surface.faces)
+        if len(faces):
+            triangles = vertices[faces]
+            face_normals = np.cross(
+                triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]
+            )
+            for column in range(3):
+                np.add.at(normals, faces[:, column], face_normals)
+            normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12)
+        desktop["surface"] = {
+            "vertices": vertices[faces].reshape(-1, 3),
+            "normals": normals[faces].reshape(-1, 3),
+        }
     desktop["source"] = source
     desktop["anchors"] = np.asarray([n["backbone_position"] for n in source])
     desktop["tree"] = cKDTree(desktop["anchors"])
@@ -103,7 +105,7 @@ def records(data, nucleotides):
         owners = tree.query(points)[1]
         return points + offsets[owners], owners
 
-    for rep, meshes in [("hull-prism", data["hull"]), ("surface", [data["surface"]])]:
+    for rep, meshes in [("cylinders", data.get("cylinders", [])), ("hull-prism", data["hull"]), ("surface", [data["surface"]])]:
         face_id = 0
         for mesh in meshes:
             points, owners = moved(mesh["vertices"])
@@ -127,7 +129,7 @@ def records(data, nucleotides):
             )
             for i in range(0, len(points), 3):
                 coords = frames[i // 3]
-                color = (
+                color = mesh["palettes"] if rep == "cylinders" else (
                     np.tile(
                         colors[i : i + 3].mean(axis=0)
                         if colors is not None
@@ -149,6 +151,8 @@ def records(data, nucleotides):
                 face_id += 1
     for resolution, radius in [("coarse", 0.55), ("fine", 0.28)]:
         rep = "mrdna-" + resolution
+        if resolution not in data["mrdna"]:
+            continue
         preview = data["mrdna"][resolution]
         points, owners = moved([[p["x"], p["y"], p["z"]] for p in preview["points"]])
         blue = np.tile([0x58 / 255, 0xA6 / 255, 1], 4)
@@ -228,6 +232,7 @@ def append_records(
     nucleotide_owner_tokens,
     base_key,
     palette_for_index,
+    progress=lambda fraction: None,
 ):
     from urllib.parse import quote
 
@@ -240,10 +245,15 @@ def append_records(
     source_palettes = [
         palette_for_index(by_key.get(base_key(n), 0)) for n in data["source"]
     ]
+    total = (sum(len(m["vertices"]) // 9 for m in data.get("cylinders", []))
+             + sum(len(m["vertices"]) // 9 for m in data["hull"])
+             + len(data["surface"]["vertices"]) // 3
+             + sum(len(p["points"]) + len(p["edges"]) for p in data["mrdna"].values())
+             + sum(len(g["entries"]) for g in data["oxdna"]))
     active = None
-    for rep, kind, identity, coordinates, owners, palette, annotation in records(
-        data, nucleotides
-    ):
+    for record_index, (rep, kind, identity, coordinates, owners, palette, annotation) in enumerate(records(data, nucleotides)):
+        if record_index % 256 == 0:
+            progress(record_index / max(1, total))
         if active != rep:
             begin(rep)
             active = rep

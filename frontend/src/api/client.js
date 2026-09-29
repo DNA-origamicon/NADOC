@@ -1,3 +1,4 @@
+import { nativeRepresentation } from '../scene/vr_representations.js'
 import { withSurfaceProgress } from './surface_progress_request.js'
 import { expandCompactNucleotides as _expandCompactNucleotides, decodeAssemblyGeometry } from '../viewer/geometry_codec.js'
 import { recordPanelRequest } from '../ui/panel_loading.js'
@@ -5008,9 +5009,7 @@ export async function fetchVRJobSnapshot(companionState = {}) {
     jobs,
     active_job_engine: active.engine,
     active_job_id: active.id,
-    representation: ['cylinders', 'full', 'ballstick', 'stick'].includes(
-      companionState.representation,
-    ) ? companionState.representation : 'full',
+    representation: nativeRepresentation(companionState.representation),
     coloring: ['strand', 'base', 'cluster', 'cpk'].includes(companionState.coloring)
       ? companionState.coloring : 'strand',
     visualization_mode: typeof companionState.visualization_mode === 'string'
@@ -5031,9 +5030,7 @@ export async function refreshNativeVRJobs(companionState = {}) {
  * so the live VR loop no longer fetches the unified job tree every 1.5 seconds. */
 export async function refreshNativeVRVisualization(companionState = {}) {
   return sendVRVisualizationFeedback({
-    representation: ['cylinders', 'full', 'ballstick', 'stick'].includes(
-      companionState.representation,
-    ) ? companionState.representation : 'full',
+    representation: nativeRepresentation(companionState.representation),
     coloring: ['strand', 'base', 'cluster', 'cpk'].includes(companionState.coloring)
       ? companionState.coloring : 'strand',
     visualization_mode: typeof companionState.visualization_mode === 'string'

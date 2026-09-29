@@ -23,7 +23,13 @@ def publish_scene(body):
         if design is None or design.id != body.expected_design_id or revision != body.expected_revision:
             raise HTTPException(409, detail='Design changed before scene refresh')
         request = vr.VRLaunchRequest.model_validate(session['launch_request'])
-        source = vr._write_scene_snapshot(producer=lambda write: vr._snapshot(request, line_writer=write))
+        if session.get('lazy_representations'):
+            rep = vr._event_payload(session).get('representation', 'full')
+            request = request.model_copy(update={'representation': rep})
+            selected = {'full', {'beads': 'full', 'vdw': 'ballstick'}.get(rep, rep)}
+            source = vr._write_scene_snapshot(producer=lambda write: vr._snapshot(request, line_writer=write, representations=selected))
+        else:
+            source = vr._write_scene_snapshot(producer=lambda write: vr._snapshot(request, line_writer=write))
         manifest = Path(session['event_path'] + '.scene')
         destination = Path(session['event_path'] + f'.scene-{revision}')
         pending = manifest.with_name(manifest.name + '.next')

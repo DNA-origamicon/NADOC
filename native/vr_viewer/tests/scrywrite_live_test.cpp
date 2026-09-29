@@ -9,7 +9,71 @@ namespace {
 void requireLive(bool condition, const char* detail) {
     if (!condition) throw std::runtime_error(detail);
 }
+#include "representation_shadow_check.hpp"
 struct LiveViewerTest {
+    static void verifyFirstStyleAcknowledgement() {
+        SceneData data;
+        data.available.fill(false);
+        data.available[static_cast<size_t>(Representation::full)]=true;
+        data.available[static_cast<size_t>(Representation::cylinders)]=true;
+        ColorSet colors;colors.values.fill({1,0,0});
+        data.representations[static_cast<size_t>(Representation::full)].points.push_back(
+            {"base",{0,0,-1},colors,.1F});
+        data.representations[static_cast<size_t>(Representation::cylinders)].cylinders.push_back(
+            {"helix",{0,-.4F,-1},{0,.4F,-1},.15F,colors});
+        char directory[]="/tmp/nadoc-first-style-XXXXXX";
+        requireLive(::mkdtemp(directory)!=nullptr,"temporary style directory");
+        const auto path=std::filesystem::path(directory)/"visualization.txt";
+        for(size_t i=0;i<kRepresentationCount;++i) {
+            data.available[i]=true;
+            data.representations[i].points.push_back({"base",{0,0,-1},colors,.1F});
+        }
+        try {
+          for(size_t i=0;i<kRepresentationCount;++i) {
+            const auto rep=static_cast<Representation>(i);
+            Viewer viewer(data);
+            viewer.glScene_=std::make_unique<GlScene>(data,true);
+            viewer.visualizationPath_=path.string();
+            auto& loading=viewer.representationLoading_;
+            loading.enabled=true;loading.pending=true;loading.target=rep;
+            loading.color=Coloring::strand;loading.phase="waiting";loading.percent=99;
+            {std::ofstream out(path);out<<"NADOCVR_VISUALIZATION 3 2 none "<<representationName(rep)<<" strand 0\n";}
+            viewer.pollVisualizationSnapshot();
+            viewer.pollRepresentationLoading();
+            requireLive(glGetError()==GL_NO_ERROR,representationName(rep));
+            requireLive(viewer.glScene_->representation()==rep,
+                        "first desktop acknowledgement was ignored");
+            requireLive(viewer.visualizationSequence_==2 && !loading.pending && loading.percent==100,
+                        "acknowledged representation load stayed at 99 percent");
+          }
+        } catch(...) {std::filesystem::remove_all(directory);throw;}
+        std::filesystem::remove_all(directory);
+    }
+    static void verifySidebarHoverRay() {
+        SceneData scene; scene.available[static_cast<size_t>(Representation::full)]=true;
+        ColorSet colors;colors.values.fill({1,0,0});
+        scene.representations[static_cast<size_t>(Representation::full)].points.push_back({"base",{0,0,-1},colors,.1F});
+        Viewer viewer(scene);
+        viewer.glScene_=std::make_unique<GlScene>(std::move(scene),true);
+        viewer.sidebarMenus_.initialize();
+        viewer.hands_[1].valid=true;
+        viewer.hands_[1].position={0,0,0};
+        viewer.hands_[1].orientation=glm::quat(1,0,0,0);
+        auto& menu=viewer.sidebarMenus_.menus[0];
+        menu.open=true;
+        menu.placement.openDocked({0,0,-1},glm::quat(1,0,0,0));
+        viewer.updateControllerGuides();
+        auto longest=[&]() {
+            float length=0;
+            for(size_t i=0;i+1<viewer.controllerGuides_.size();i+=2)
+                length=std::max(length,glm::length(viewer.controllerGuides_[i+1].position-viewer.controllerGuides_[i].position));
+            return length;
+        };
+        requireLive(longest()>.5F,"unpressed controller lacks sidebar hover ray");
+        menu.open=false;viewer.updateControllerGuides();
+        requireLive(glGetError()==GL_NO_ERROR,"hover ray GL error");
+        requireLive(longest()<.5F,"closed sidebar retains hover ray");
+    }
     static void verifyOverlayMask() {
         Viewer viewer(SceneData{});
         viewer.liveCapturePending_ = 1;
@@ -246,6 +310,9 @@ int objectIdGlChecks() {
     glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH24_STENCIL8,128,128);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_STENCIL_ATTACHMENT,GL_RENDERBUFFER,depth);
     requireLive(glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE,"ID test framebuffer");
+    verifyRepresentationShadows(fbo);
+    LiveViewerTest::verifyFirstStyleAcknowledgement();
+    LiveViewerTest::verifySidebarHoverRay();
     SceneData data;
     data.available.fill(true); // Programmatic fixture; file loading normally derives this.
     ColorSet colors; colors.values.fill({1,0,0});
@@ -266,7 +333,14 @@ int objectIdGlChecks() {
     data.representations[static_cast<size_t>(Representation::oxdna)].boxes.push_back(
         {"ellipsoid",{0,0,-1},{.8F,0,0},{0,.4F,0},{0,0,.4F},colors});
     {
+        SceneData partial;
+        partial.available[static_cast<size_t>(Representation::surface)]=true;
+        partial.representations[static_cast<size_t>(Representation::surface)]=data.representations[static_cast<size_t>(Representation::surface)];
+        partial.representations[static_cast<size_t>(Representation::full)].cylinders.push_back(
+            {"viewer:axis",{10,10,-1},{11,10,-1},.01F,colors});
         GlScene scene(std::move(data),true);
+        scene.installRepresentation(std::move(partial));
+        scene.setStyle(Representation::full,Coloring::strand);
         std::vector<nadoc_vr::ViewVolumeRecord> volumes;
         bool volumeMode=false;
         auto render = [&]() {
@@ -359,7 +433,14 @@ int objectIdGlChecks() {
                           {"o","overhang","overhang",{1,0,-1}}};
         full.ownerHandles={{"cluster",{1,0,-1}}};
         data.representations[static_cast<size_t>(Representation::ballstick)]=full;
-        GlScene scene(std::move(data),true);scene.setStyle(Representation::full,Coloring::strand);
+        SceneData partial;
+        partial.available[static_cast<size_t>(Representation::surface)]=true;
+        partial.representations[static_cast<size_t>(Representation::surface)]=data.representations[static_cast<size_t>(Representation::surface)];
+        partial.representations[static_cast<size_t>(Representation::full)].cylinders.push_back(
+            {"viewer:axis",{10,10,-1},{11,10,-1},.01F,colors});
+        GlScene scene(std::move(data),true);
+        scene.installRepresentation(std::move(partial));
+        scene.setStyle(Representation::full,Coloring::strand);scene.setStyle(Representation::full,Coloring::strand);
         auto center=[&](const std::string& token,glm::vec3 expected) {
             const auto actual=scene.ownerHandle({token},glm::mat4(1));
             requireLive(actual && glm::distance(*actual,expected)<1e-5F,"cached related handle drifted");

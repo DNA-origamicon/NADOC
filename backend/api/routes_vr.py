@@ -33,6 +33,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 from typing import Callable, Literal, Optional
 from urllib.parse import quote, urlparse
 
@@ -135,6 +136,7 @@ class VRLaunchRequest(BaseModel):
     show_periodic_seam_arcs: bool = False
     # Developer-only opt-in. Paths are server-generated, never client supplied.
     scrywrite_live: Literal["off", "inspect", "transactions"] = "off"
+    scrywrite_place_scene_in_view: bool = False
     mirror_eye: Literal["off", "left", "right"] = "left"
     reference_grid: Literal["off", "room"] = "off"
     selection_level: Literal[
@@ -710,8 +712,10 @@ _SCENE_MANIFEST_CATEGORIES = ("primitive", "D", "A", "T", "W", "K", "J")
 class _SceneLineEmitter:
     """Optional line sink plus constant-memory natural/Expanded parity digest."""
 
-    def __init__(self, writer: Callable[[str], None] | None = None):
+    def __init__(self, writer: Callable[[str], None] | None = None, representations=None):
         self._writer = writer
+        self._representations = representations
+        self._include = True
         self._lines: list[str] | None = [] if writer is None else None
         self._active: str | None = None
         self._digests: dict[str, dict[str, object]] = {}
@@ -726,6 +730,10 @@ class _SceneLineEmitter:
         return entry
 
     def append(self, line: str) -> None:
+        if line.startswith("R "):
+            self._include = self._representations is None or line[2:] in self._representations
+        if not self._include:
+            return
         if self._lines is not None:
             self._lines.append(line)
         else:
@@ -792,6 +800,8 @@ def _serialize_scene(
     show_periodic_seam_arcs: bool = False,
     line_writer: Callable[[str], None] | None = None,
     extra_geometry=None,
+    representations=None,
+    work_progress=lambda fraction: None,
 ) -> str | dict[str, dict[str, tuple[int, str]]]:
     """Create the deliberately trivial line-oriented format read by the C++ viewer."""
     # Stable IDs and aliases need the loop-copy identity that the canonical
@@ -1488,7 +1498,7 @@ def _serialize_scene(
             transform_owners=transform_owners,
         )
 
-    lines = _SceneLineEmitter(line_writer)
+    lines = _SceneLineEmitter(line_writer, representations)
     from backend.core.extrude_plane import extrude_plane_record
 
     lines.append(f"NADOCVR 15 {representation} {coloring}")
@@ -2109,226 +2119,227 @@ def _serialize_scene(
 
     append_axes(0.05)
 
-    lines.append("R cylinders")
-    active_representation = "cylinders"
-    declared_owner_tokens.clear()
-    lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
-    append_tool_handles()
-    direct_overhang_ids: set[str] = set()
-    for binding in getattr(design, "overhang_bindings", []):
-        if getattr(binding, "bound", True) is False or getattr(
-            binding, "connection_type", None
-        ) not in {"root-to-root", "end-to-root"}:
-            continue
-        for attribute in (
-            "driver_oh_id",
-            "driven_oh_id",
-            "overhang_a_id",
-            "overhang_b_id",
-        ):
-            value = getattr(binding, attribute, None)
-            if value:
-                direct_overhang_ids.add(str(value))
-    for duplex in getattr(design, "duplexes", []):
-        if getattr(duplex, "bound", True) is False or getattr(
-            duplex, "connection_type", None
-        ) not in {"root-to-root", "end-to-root"}:
-            continue
-        for side_name in ("left", "right"):
-            value = getattr(getattr(duplex, side_name, None), "overhang_id", None)
-            if value:
-                direct_overhang_ids.add(str(value))
+    if extra_geometry is None or "cylinders" not in extra_geometry:
+        lines.append("R cylinders")
+        active_representation = "cylinders"
+        declared_owner_tokens.clear()
+        lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
+        append_tool_handles()
+        direct_overhang_ids: set[str] = set()
+        for binding in getattr(design, "overhang_bindings", []):
+            if getattr(binding, "bound", True) is False or getattr(
+                binding, "connection_type", None
+            ) not in {"root-to-root", "end-to-root"}:
+                continue
+            for attribute in (
+                "driver_oh_id",
+                "driven_oh_id",
+                "overhang_a_id",
+                "overhang_b_id",
+            ):
+                value = getattr(binding, attribute, None)
+                if value:
+                    direct_overhang_ids.add(str(value))
+        for duplex in getattr(design, "duplexes", []):
+            if getattr(duplex, "bound", True) is False or getattr(
+                duplex, "connection_type", None
+            ) not in {"root-to-root", "end-to-root"}:
+                continue
+            for side_name in ("left", "right"):
+                value = getattr(getattr(duplex, side_name, None), "overhang_id", None)
+                if value:
+                    direct_overhang_ids.add(str(value))
 
-    first_palette_by_helix = {}
-    for index, nucleotide in enumerate(nucleotides):
-        first_palette_by_helix.setdefault(
-            nucleotide.get("helix_id"), palette_for_index(index)
-        )
-    design_strands_by_id = {strand.id: strand for strand in design.strands}
-    emitted_linker_binding_domains: set[tuple[str, int]] = set()
-    for axis in axes:
-        fallback_palette = first_palette_by_helix.get(
-            axis.get("helix_id"), solid_palette((0.45, 0.55, 0.72))
-        )
-        for first, second, segment, edge_identity in axis_edges(axis):
-            palette = fallback_palette
-            if segment is not None and segment.get("strand_id"):
-                match = next(
-                    (
-                        index
-                        for index, nucleotide in enumerate(nucleotides)
-                        if nucleotide.get("strand_id") == segment.get("strand_id")
-                        and int(nucleotide.get("domain_index") or 0)
-                        == int(segment.get("domain_index") or 0)
+        first_palette_by_helix = {}
+        for index, nucleotide in enumerate(nucleotides):
+            first_palette_by_helix.setdefault(
+                nucleotide.get("helix_id"), palette_for_index(index)
+            )
+        design_strands_by_id = {strand.id: strand for strand in design.strands}
+        emitted_linker_binding_domains: set[tuple[str, int]] = set()
+        for axis in axes:
+            fallback_palette = first_palette_by_helix.get(
+                axis.get("helix_id"), solid_palette((0.45, 0.55, 0.72))
+            )
+            for first, second, segment, edge_identity in axis_edges(axis):
+                palette = fallback_palette
+                if segment is not None and segment.get("strand_id"):
+                    match = next(
+                        (
+                            index
+                            for index, nucleotide in enumerate(nucleotides)
+                            if nucleotide.get("strand_id") == segment.get("strand_id")
+                            and int(nucleotide.get("domain_index") or 0)
+                            == int(segment.get("domain_index") or 0)
+                        ),
+                        None,
+                    )
+                    if match is not None:
+                        palette = palette_for_index(match)
+                segment_strand = (
+                    design_strands_by_id.get(segment.get("strand_id"))
+                    if segment is not None
+                    else None
+                )
+                is_linker_binding = bool(
+                    segment is not None
+                    and segment_strand is not None
+                    and getattr(segment_strand, "strand_type", None) == "linker"
+                    and not str(axis.get("helix_id") or "").startswith("__lnk__")
+                )
+                record_type = (
+                    "H"
+                    if segment is not None
+                    and (
+                        is_linker_binding
+                        or (
+                            segment.get("ovhg_id")
+                            and str(segment.get("ovhg_id")) not in direct_overhang_ids
+                        )
+                    )
+                    else "C"
+                )
+                # Reversing the endpoints reverses the native half-cylinder's
+                # deterministic radial basis. The linker complement therefore fills
+                # the opposite half of the authored overhang, matching desktop's π
+                # axial roll without adding a second orientation convention.
+                if is_linker_binding:
+                    first, second = second, first
+                    emitted_linker_binding_domains.add(
+                        (
+                            str(segment.get("strand_id")),
+                            int(segment.get("domain_index") or 0),
+                        )
+                    )
+                emit(
+                    record_type,
+                    f"{edge_identity}:coarse",
+                    *first,
+                    *second,
+                    0.72,
+                    *palette,
+                    aliases=(
+                        domain_owner_tokens(
+                            segment.get("strand_id"),
+                            int(segment.get("domain_index") or 0),
+                            str(axis.get("helix_id") or ""),
+                            segment.get("ovhg_id"),
+                        )
+                        if segment is not None
+                        else ()
                     ),
+                )
+
+        # deformed_helix_axes intentionally deduplicates coincident domain ranges.
+        # On a paired overhang that means the authored overhang segment usually wins
+        # and its linker-complement domain has no separate axis record. Reuse that
+        # exact authoritative interval, reversed, for the complementary half.
+        for strand in design.strands:
+            if getattr(strand, "strand_type", None) != "linker":
+                continue
+            for domain_index, domain in enumerate(getattr(strand, "domains", [])):
+                if (
+                    str(domain.helix_id).startswith("__lnk__")
+                    or (
+                        strand.id,
+                        domain_index,
+                    )
+                    in emitted_linker_binding_domains
+                ):
+                    continue
+                domain_lo = min(int(domain.start_bp), int(domain.end_bp))
+                domain_hi = max(int(domain.start_bp), int(domain.end_bp))
+                axis = next(
+                    (item for item in axes if item.get("helix_id") == domain.helix_id),
                     None,
                 )
-                if match is not None:
-                    palette = palette_for_index(match)
-            segment_strand = (
-                design_strands_by_id.get(segment.get("strand_id"))
-                if segment is not None
-                else None
-            )
-            is_linker_binding = bool(
-                segment is not None
-                and segment_strand is not None
-                and getattr(segment_strand, "strand_type", None) == "linker"
-                and not str(axis.get("helix_id") or "").startswith("__lnk__")
-            )
-            record_type = (
-                "H"
-                if segment is not None
-                and (
-                    is_linker_binding
-                    or (
-                        segment.get("ovhg_id")
-                        and str(segment.get("ovhg_id")) not in direct_overhang_ids
+                if axis is None:
+                    continue
+                palette = palette_for_strand(strand.id)
+                for segment in axis.get("segments") or []:
+                    segment_lo = int(segment.get("bp_lo", domain_lo))
+                    segment_hi = int(segment.get("bp_hi", domain_hi))
+                    if segment_lo < domain_lo or segment_hi > domain_hi:
+                        continue
+                    first, second = point(segment.get("start")), point(segment.get("end"))
+                    if first is None or second is None:
+                        continue
+                    emit(
+                        "H",
+                        f"linker:{strand.id}:binding:{domain_index}:{segment_lo}:{segment_hi}",
+                        *second,
+                        *first,
+                        0.72,
+                        *palette,
+                        aliases=domain_owner_tokens(
+                            strand.id, domain_index, str(domain.helix_id)
+                        ),
                     )
-                )
-                else "C"
+
+        # A ds linker bridge lives on a synthetic helix intentionally omitted from
+        # deformed_helix_axes. Desktop reconstructs its coarse cylinder from the
+        # mean base/backbone position at the minimum and maximum bridge bp.
+        for connection in getattr(design, "overhang_connections", []):
+            if getattr(connection, "linker_type", "ds") != "ds":
+                continue
+            bridge_helix_id = f"__lnk__{connection.id}"
+            bridge_nucleotides = [
+                nucleotide
+                for nucleotide in nucleotides
+                if nucleotide.get("helix_id") == bridge_helix_id
+            ]
+            if len(bridge_nucleotides) < 2:
+                continue
+            bp_values = [
+                int(nucleotide.get("bp_index") or 0) for nucleotide in bridge_nucleotides
+            ]
+
+            def bridge_axis_at(bp_index: int) -> np.ndarray | None:
+                positions = []
+                for nucleotide in bridge_nucleotides:
+                    if int(nucleotide.get("bp_index") or 0) != bp_index:
+                        continue
+                    raw = nucleotide.get("base_position")
+                    if raw is None:
+                        raw = nucleotide.get("backbone_position")
+                    position = point(raw)
+                    if position is not None:
+                        positions.append(position)
+                return np.mean(positions, axis=0) if positions else None
+
+            first = bridge_axis_at(min(bp_values))
+            second = bridge_axis_at(max(bp_values))
+            if first is None or second is None:
+                continue
+            if float(np.linalg.norm(second - first)) < 1e-3:
+                # Desktop gives a one-bp bridge a 0.001 nm minimum Y extent so the
+                # coarse primitive remains non-degenerate.
+                second = first + rotation @ np.array([0.0, 0.001, 0.0])
+            palette = palette_for_strand(f"{bridge_helix_id}__a")
+            from backend.core.linker_relax import linker_anchor_nucleotide
+
+            anchor_a = linker_anchor_nucleotide(
+                nucleotides, connection, connection.overhang_a_id, True
             )
-            # Reversing the endpoints reverses the native half-cylinder's
-            # deterministic radial basis. The linker complement therefore fills
-            # the opposite half of the authored overhang, matching desktop's π
-            # axial roll without adding a second orientation convention.
-            if is_linker_binding:
-                first, second = second, first
-                emitted_linker_binding_domains.add(
-                    (
-                        str(segment.get("strand_id")),
-                        int(segment.get("domain_index") or 0),
-                    )
-                )
+            anchor_b = linker_anchor_nucleotide(
+                nucleotides, connection, connection.overhang_b_id, False
+            )
             emit(
-                record_type,
-                f"{edge_identity}:coarse",
+                "C",
+                f"linker:{connection.id}:ds:bridge",
                 *first,
                 *second,
                 0.72,
                 *palette,
-                aliases=(
-                    domain_owner_tokens(
-                        segment.get("strand_id"),
-                        int(segment.get("domain_index") or 0),
-                        str(axis.get("helix_id") or ""),
-                        segment.get("ovhg_id"),
-                    )
-                    if segment is not None
-                    else ()
+                endpoint_aliases=(
+                    nucleotide_owner_tokens(anchor_a) if anchor_a else (),
+                    nucleotide_owner_tokens(anchor_b) if anchor_b else (),
                 ),
             )
 
-    # deformed_helix_axes intentionally deduplicates coincident domain ranges.
-    # On a paired overhang that means the authored overhang segment usually wins
-    # and its linker-complement domain has no separate axis record. Reuse that
-    # exact authoritative interval, reversed, for the complementary half.
-    for strand in design.strands:
-        if getattr(strand, "strand_type", None) != "linker":
-            continue
-        for domain_index, domain in enumerate(getattr(strand, "domains", [])):
-            if (
-                str(domain.helix_id).startswith("__lnk__")
-                or (
-                    strand.id,
-                    domain_index,
-                )
-                in emitted_linker_binding_domains
-            ):
-                continue
-            domain_lo = min(int(domain.start_bp), int(domain.end_bp))
-            domain_hi = max(int(domain.start_bp), int(domain.end_bp))
-            axis = next(
-                (item for item in axes if item.get("helix_id") == domain.helix_id),
-                None,
-            )
-            if axis is None:
-                continue
-            palette = palette_for_strand(strand.id)
-            for segment in axis.get("segments") or []:
-                segment_lo = int(segment.get("bp_lo", domain_lo))
-                segment_hi = int(segment.get("bp_hi", domain_hi))
-                if segment_lo < domain_lo or segment_hi > domain_hi:
-                    continue
-                first, second = point(segment.get("start")), point(segment.get("end"))
-                if first is None or second is None:
-                    continue
-                emit(
-                    "H",
-                    f"linker:{strand.id}:binding:{domain_index}:{segment_lo}:{segment_hi}",
-                    *second,
-                    *first,
-                    0.72,
-                    *palette,
-                    aliases=domain_owner_tokens(
-                        strand.id, domain_index, str(domain.helix_id)
-                    ),
-                )
-
-    # A ds linker bridge lives on a synthetic helix intentionally omitted from
-    # deformed_helix_axes. Desktop reconstructs its coarse cylinder from the
-    # mean base/backbone position at the minimum and maximum bridge bp.
-    for connection in getattr(design, "overhang_connections", []):
-        if getattr(connection, "linker_type", "ds") != "ds":
-            continue
-        bridge_helix_id = f"__lnk__{connection.id}"
-        bridge_nucleotides = [
-            nucleotide
-            for nucleotide in nucleotides
-            if nucleotide.get("helix_id") == bridge_helix_id
-        ]
-        if len(bridge_nucleotides) < 2:
-            continue
-        bp_values = [
-            int(nucleotide.get("bp_index") or 0) for nucleotide in bridge_nucleotides
-        ]
-
-        def bridge_axis_at(bp_index: int) -> np.ndarray | None:
-            positions = []
-            for nucleotide in bridge_nucleotides:
-                if int(nucleotide.get("bp_index") or 0) != bp_index:
-                    continue
-                raw = nucleotide.get("base_position")
-                if raw is None:
-                    raw = nucleotide.get("backbone_position")
-                position = point(raw)
-                if position is not None:
-                    positions.append(position)
-            return np.mean(positions, axis=0) if positions else None
-
-        first = bridge_axis_at(min(bp_values))
-        second = bridge_axis_at(max(bp_values))
-        if first is None or second is None:
-            continue
-        if float(np.linalg.norm(second - first)) < 1e-3:
-            # Desktop gives a one-bp bridge a 0.001 nm minimum Y extent so the
-            # coarse primitive remains non-degenerate.
-            second = first + rotation @ np.array([0.0, 0.001, 0.0])
-        palette = palette_for_strand(f"{bridge_helix_id}__a")
-        from backend.core.linker_relax import linker_anchor_nucleotide
-
-        anchor_a = linker_anchor_nucleotide(
-            nucleotides, connection, connection.overhang_a_id, True
-        )
-        anchor_b = linker_anchor_nucleotide(
-            nucleotides, connection, connection.overhang_b_id, False
-        )
-        emit(
-            "C",
-            f"linker:{connection.id}:ds:bridge",
-            *first,
-            *second,
-            0.72,
-            *palette,
-            endpoint_aliases=(
-                nucleotide_owner_tokens(anchor_a) if anchor_a else (),
-                nucleotide_owner_tokens(anchor_b) if anchor_b else (),
-            ),
-        )
-
-    # Cylinders retains thin ssDNA and dsDNA connector paths but omits the
-    # fine ssDNA bead/slab decoration, matching desktop detail visibility.
-    append_linker_geometry(include_full_bases=False)
+        # Cylinders retains thin ssDNA and dsDNA connector paths but omits the
+        # fine ssDNA bead/slab decoration, matching desktop detail visibility.
+        append_linker_geometry(include_full_bases=False)
 
     if atomistic_model is None:
         raise HTTPException(500, detail="Atomistic VR snapshot was not built.")
@@ -2499,6 +2510,8 @@ def _serialize_scene(
             for atom_index, (atom, position, palette) in enumerate(
                 zip(atomistic_model.atoms, atom_positions, atom_palettes)
             ):
+                if atom_index % 256 == 0:
+                    work_progress(atom_index / max(1, len(atomistic_model.atoms) + len(atomistic_model.bonds)))
                 if position is not None:
                     key = atom_identity_payloads[atom_index][0]
                     aliases = atom_base_owner_tokens(key)
@@ -2516,7 +2529,9 @@ def _serialize_scene(
                     )
                     encoded = quote(atom_primitive_identity(atom_index), safe="-_.:~")
                     lines.append(f"V {encoded} {nums(VDW_RADIUS.get(atom.element, DEFAULT_VDW_RADIUS))}")
-        for first_index, second_index in atomistic_model.bonds:
+        for bond_index, (first_index, second_index) in enumerate(atomistic_model.bonds):
+            if bond_index % 256 == 0:
+                work_progress(((len(atomistic_model.atoms) if include_points else 0) + bond_index) / max(1, (len(atomistic_model.atoms) if include_points else 0) + len(atomistic_model.bonds)))
             # Canonicalize undirected bond endpoint order together with positions
             # and owner weights so identity/value parity survives topology writers
             # that enumerate the same edge in the opposite direction.
@@ -2599,8 +2614,10 @@ def _serialize_scene(
     # Match desktop atomistic_renderer/atom_palette.js exactly. Ball-and-stick
     # uses uniform balls rather than scaled VdW radii; both atomistic modes use
     # the same bond radius.
-    append_atomistic("ballstick", True, 0.070, 0.025)
-    append_atomistic("stick", False, 0.0, 0.025)
+    if representations is None or "ballstick" in representations:
+        append_atomistic("ballstick", True, 0.070, 0.025)
+    if representations is None or "stick" in representations:
+        append_atomistic("stick", False, 0.0, 0.025)
 
     if extra_geometry is not None:
         from backend.core.vr_representation_geometry import append_records
@@ -2613,7 +2630,7 @@ def _serialize_scene(
             lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
             append_tool_handles()
         append_records(extra_geometry, nucleotides, rotation, begin_extra, emit, lines,
-                       nucleotide_owner_tokens, base_key, palette_for_index)
+                       nucleotide_owner_tokens, base_key, palette_for_index, progress=work_progress)
 
     if not lines.has_visible:
         raise HTTPException(
@@ -2878,6 +2895,9 @@ def _validate_streamed_scene_manifests(
 def _snapshot(
     body: VRLaunchRequest,
     line_writer: Callable[[str], None] | None = None,
+    progress: Callable[[int, str], None] = lambda percent, detail: None,
+    design_snapshot=None,
+    representations=None,
 ) -> str | None:
     from backend.core.deformation import (
         _apply_ovhg_rotations_to_axes,
@@ -2885,7 +2905,8 @@ def _snapshot(
     )
     from backend.core.design_geometry import _geometry_for_design
 
-    design = design_state.get_or_404()
+    progress(5, "Preparing document and nucleotide geometry")
+    design = design_snapshot if design_snapshot is not None else design_state.get_or_404()
     from backend.core.vr_empty_scene import empty_authoring_scene
 
     empty_scene = empty_authoring_scene(design, body.representation, body.coloring)
@@ -2904,18 +2925,24 @@ def _snapshot(
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     from backend.core.atomistic import build_atomistic_model
 
-    # The in-headset menu switches instantly, so all eleven representations are
-    # preloaded in one immutable snapshot instead of calling back into the browser.
+    # Normal VR startup exports Full only; additional styles are requested lazily.
+    needs_atoms = representations is None or bool(set(representations) & {"ballstick", "stick"})
+    progress(15, "Building atoms and bonds" if needs_atoms else "Preparing selected representation")
     atomistic_model = build_atomistic_model(
         design,
         fast_bridges=True,
         measured_positioning=measured_display_placement(body.measured_positioning),
-    )
+    ) if needs_atoms else SimpleNamespace(atoms=[], bonds=[])
     from backend.api.crud import unligated_crossover_ids
 
     from backend.core.vr_representation_geometry import build as build_extra_geometry
-    extra_geometry = build_extra_geometry(design, nucleotides, axes)
+    progress(40, "Building display geometry")
+    extras = {"cylinders", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"}
+    extra_geometry = (build_extra_geometry(design, nucleotides, axes) if representations is None
+                      else build_extra_geometry(design, nucleotides, axes, representations=set(representations))
+                      if set(representations) & extras else None)
 
+    progress(50, "Exporting natural representations")
     natural_scene = _serialize_scene(
         design,
         nucleotides,
@@ -2928,7 +2955,10 @@ def _snapshot(
         body.show_periodic_seam_arcs,
         line_writer=line_writer,
         extra_geometry=extra_geometry,
+        representations=representations,
+        work_progress=lambda fraction: progress(50 + 14 * fraction, "Exporting natural representations"),
     )
+    progress(65, "Preparing expanded geometry")
     expanded_nucleotides, expanded_axes, expanded_atomistic = _expanded_scene_inputs(
         design, nucleotides, axes, atomistic_model
     )
@@ -2939,6 +2969,7 @@ def _snapshot(
                 return
             line_writer(f"E {line[2:]}") if line.startswith("R ") else line_writer(line)
 
+    progress(75, "Exporting expanded representations")
     expanded_scene = _serialize_scene(
         design,
         expanded_nucleotides,
@@ -2951,9 +2982,12 @@ def _snapshot(
         body.show_periodic_seam_arcs,
         line_writer=expanded_writer,
         extra_geometry=extra_geometry,
+        representations=representations,
+        work_progress=lambda fraction: progress(75 + 6 * fraction, "Exporting expanded representations"),
     )
     if line_writer is not None:
         assert isinstance(natural_scene, dict) and isinstance(expanded_scene, dict)
+        progress(82, "Checking identities and finalizing compressed snapshot")
         _validate_streamed_scene_manifests(natural_scene, expanded_scene)
         return None
     assert isinstance(natural_scene, str) and isinstance(expanded_scene, str)
@@ -3228,7 +3262,11 @@ def _cleanup_after_process(
     finish_volumes(event_path)
     from backend.api.routes_vr_scene import cleanup_scene_refresh
     cleanup_scene_refresh(event_path)
+    from backend.api.vr_representation_loading import cleanup as cleanup_representations
+    cleanup_representations(event_path)
     scene_path.unlink(missing_ok=True)
+    Path(str(scene_path) + ".loading").unlink(missing_ok=True)
+    Path(str(scene_path) + ".loading.next").unlink(missing_ok=True)
     Path(str(event_path) + ".ligation").unlink(missing_ok=True)
     Path(str(event_path) + ".avatar").unlink(missing_ok=True)
     Path(str(event_path) + ".avatar.next").unlink(missing_ok=True)
@@ -3250,9 +3288,14 @@ def _cleanup_after_process(
     trajectory_path.unlink(missing_ok=True)
     coordinate_path.unlink(missing_ok=True)
     with _STATE_LOCK:
-        state = _read_state()
-        if state and int(state["pid"]) == process.pid:
-            _STATE_PATH.unlink(missing_ok=True)
+        try:
+            state = json.loads(_STATE_PATH.read_text())
+            if int(state["pid"]) == process.pid:
+                _STATE_PATH.unlink(missing_ok=True)
+        except (OSError, ValueError, KeyError):
+            pass
+    from backend.api import vr_lifecycle
+    vr_lifecycle.forget(process.pid)
 
 
 def _status_payload() -> dict:
@@ -4814,6 +4857,8 @@ def _viewer_command(
     if body.scrywrite_live != "off":
         if live_socket_path is None:
             raise ValueError("ScryWrite launch requires a private socket path")
+        if body.scrywrite_place_scene_in_view:
+            command.extend(["--place-scene-in-view", "on", "--scene-view", "head"])
         command.extend([
             "--scrywrite-live", str(live_socket_path),
             "--scrywrite-live-mode", body.scrywrite_live,
@@ -4961,6 +5006,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
     ):
         raise HTTPException(422, detail="Invalid VR job snapshot availability or total.")
 
+    body = body.model_copy(update={"representation": "full"})
+
     # Starting SteamVR through the Steam client (rather than incidentally through
     # xrCreateInstance) keeps Dashboard/Desktop available after the NADOC scene exits.
     _start_steamvr()
@@ -4971,10 +5018,12 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             return _status_payload()
         _ensure_viewer_built()
         snapshot_started_at = time.time()
-        scene_path = _write_scene_snapshot(
-            producer=lambda write_line: _snapshot(body, line_writer=write_line)
-        )
-        snapshot_ready_at = time.time()
+        # Start the OpenXR application before any molecular geometry is built.
+        scene_path = _write_scene_snapshot("NADOCVR 14 full strand\nQ empty_authoring\nR full\n")
+        from backend.api import vr_startup
+        progress_path = Path(str(scene_path) + ".loading")
+        vr_startup.publish(progress_path, "loading", 2, "Starting VR and preparing document")
+        snapshot_ready_at = None
         with tempfile.NamedTemporaryFile(
             mode="w",
             prefix="nadoc-vr-event-",
@@ -5086,7 +5135,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                     plane_feedback_path, preflight_feedback_path,
                     tool_execution_feedback_path, job_path,
                     visualization_path, trajectory_path, coordinate_path, body, live_socket_path
-                ),
+                ) + ["--loading-status", str(progress_path)],
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
                 stdin=subprocess.DEVNULL,
@@ -5098,6 +5147,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             process_started_at = time.time()
         except OSError as exc:
             scene_path.unlink(missing_ok=True)
+            progress_path.unlink(missing_ok=True)
             vr_dimensions.finish(event_path)
             vr_view_volumes.finish(event_path)
             event_path.unlink(missing_ok=True)
@@ -5120,6 +5170,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         time.sleep(0.15)
         if process.poll() is not None:
             scene_path.unlink(missing_ok=True)
+            progress_path.unlink(missing_ok=True)
             vr_dimensions.finish(event_path)
             vr_view_volumes.finish(event_path)
             event_path.unlink(missing_ok=True)
@@ -5145,6 +5196,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         state = {
             "doc_id": get_current_doc(),
             "launch_request": body.model_dump(mode="json"),
+            "lazy_representations": True,
             "pid": process.pid,
             "scene_path": str(scene_path),
             "event_path": str(event_path),
@@ -5175,9 +5227,17 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "reference_grid": body.reference_grid,
         }
         _write_state(state)
+        # Preserve the request's document context in the export worker.
+        import contextvars
+        context = contextvars.copy_context()
+        threading.Thread(
+            target=context.run,
+            args=(vr_startup.prepare_scene, body, scene_path, progress_path, process, event_path),
+            daemon=True, name="nadoc-vr-startup",
+        ).start()
         vr_dimensions.start(event_path)
         vr_view_volumes.start(event_path)
-        threading.Thread(
+        cleanup_thread = threading.Thread(
             target=_cleanup_after_process,
             args=(
                 process, scene_path, event_path, feedback_path, tool_feedback_path,
@@ -5187,7 +5247,10 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             ),
             daemon=True,
             name="nadoc-vr-cleanup",
-        ).start()
+        )
+        from backend.api import vr_lifecycle
+        vr_lifecycle.track(process, cleanup_thread)
+        cleanup_thread.start()
         return _status_payload()
 
 

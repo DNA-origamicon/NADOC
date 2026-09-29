@@ -8,6 +8,21 @@ class SidebarRuntime {
     void initialize() { for(auto& s:surfaces) s.initialize(); }
     void shutdown() { for(auto& s:surfaces) s.shutdown(); }
     bool anyOpen() const {return menus[0].open||menus[1].open;}
+    // Pointer feedback shares panel hit testing with input, independently of
+    // molecular selection or trigger pressure, including blank panel areas.
+    std::optional<glm::vec3> rayEndpoint(const nadoc_vr::HandPose& pose) const {
+        std::optional<glm::vec3> nearest;
+        float distance=std::numeric_limits<float>::max();
+        for(const auto& menu:menus) if(menu.open) {
+            const auto bounds=menu.bounds();
+            if(const auto hit=menu.placement.rayPanelLocalPoint(pose,bounds.minimum,bounds.maximum)) {
+                const auto world=menu.placement.worldPoint(*hit);
+                const float d=glm::length(world-pose.position);
+                if(d<distance){nearest=world;distance=d;}
+            }
+        }
+        return nearest;
+    }
     void toggle(size_t hand,const glm::vec3& head,const glm::quat& orientation) {
         auto& m=menus.at(hand); m.open=!m.open; m.hovered.clear(); m.focus.reset(); m.pressed.clear();
         if(m.open) {
@@ -40,6 +55,7 @@ class SidebarRuntime {
             const auto controls=m.controls();
             const bool ownRay=std::any_of(controls.begin(),controls.end(),[&](const auto& c){return c.id==rayId;});
             m.focus.begin(ownRay?rayId:m.customTab?controls.front().id:"tab:"+m.tab().key,rayId);
+            if(!center)m.navigate(axis);
             return true;
         }
         if(center) {m.focus.reset();return true;}

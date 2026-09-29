@@ -1,3 +1,4 @@
+import { VR_REPRESENTATIONS } from '../scene/vr_representations.js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../state/store.js', () => ({
@@ -127,7 +128,7 @@ describe('job JSON GET coalescing', () => {
     }))
   })
 
-  it('publishes visualization updates without fetching the archived job list', async () => {
+  it.each(VR_REPRESENTATIONS)('publishes %s without fetching the archived job list', async representation => {
     let body = null
     global.fetch = vi.fn(async (url, options = {}) => {
       body = JSON.parse(options.body)
@@ -136,14 +137,14 @@ describe('job JSON GET coalescing', () => {
       }) }
     })
     await expect(refreshNativeVRVisualization({
-      representation: 'stick', coloring: 'cpk',
+      representation, coloring: 'cpk',
       visualization_mode: 'oxdna_rmsf',
       visualization_points: [{ owner_token: 'base-token', position: [1, 2, 3], color: 9 }],
     })).resolves.toEqual({ acknowledged: true, visualization_sequence: 3 })
     expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(global.fetch.mock.calls[0][0]).toBe('/api/vr/visualization-feedback')
     expect(body).toEqual({
-      representation: 'stick',
+      representation,
       coloring: 'cpk',
       visualization_mode: 'oxdna_rmsf',
       visualization_points: [{ owner_token: 'base-token', position: [1, 2, 3], color: 9 }],

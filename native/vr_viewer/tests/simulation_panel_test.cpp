@@ -8,12 +8,18 @@ int main() {
     panel.views={{"v:0","Off","",true,true},{"v:1","Predicted shape","",true,false},{"v:2","Unavailable RMSF","",false,false}};
     assert(menu.bounds().maximum.x==.80F);panel.selected=true;assert(menu.bounds().maximum.x==1.56F);
     auto items=menu.controls();assert(items.size()>15);
-    menu.focus.begin("sim:scroll:jobs","");menu.navigate({0,-1});assert(panel.jobOffset==7);assert(menu.focus.id=="sim:scroll:jobs");
-    menu.navigate({0,-1});menu.navigate({0,-1});menu.navigate({0,-1});assert(panel.jobOffset==14);
-    menu.navigate({0,1});assert(panel.jobOffset==7);
+    menu.focus.begin("sim:scroll:jobs","");menu.navigate({0,-1});assert(panel.jobOffset==1);assert(menu.focus.id=="sim:scroll:jobs");
+    menu.navigate({0,-1});menu.navigate({0,-1});menu.navigate({0,-1});assert(panel.jobOffset==4);
+    menu.navigate({0,1});assert(panel.jobOffset==3);
+    panel.jobOffset=7;
     menu.focus.begin("sim:e:cando","");menu.navigate({1,0});assert(menu.focus.id=="sim:e:snupi");
     menu.focus.begin("sim:j:7","");menu.navigate({1,0});assert(menu.focus.id=="sim:v:0");
     menu.navigate({0,-1});assert(menu.focus.id=="sim:v:1");
+    double now=10;menu.animationClock=[&]{return now;};
+    panel.jobOffset=0;menu.focus.begin("sim:j:6","");menu.navigate({0,-1});
+    assert(panel.jobOffset==1 && menu.focus.id=="sim:j:7");
+    now+=.1;assert(std::abs(panel.jobScroll.value(1,now)-.5F)<.001F);
+    now+=.2;assert(panel.jobScroll.value(1,now)==1);
     assert(panel.activate("simulation:v:1"));assert(panel.requested=="v:1"&&panel.requestedVersion==1);
     assert(!panel.activate("simulation:v:1"));panel.acknowledged=1;assert(panel.activate("simulation:e:snupi"));
 }

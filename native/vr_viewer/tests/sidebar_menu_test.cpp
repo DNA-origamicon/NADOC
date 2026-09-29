@@ -104,7 +104,7 @@ int main() {
     nadoc_vr::SidebarMenu scrolling(0);scrolling.selected=1;
     scrolling.focus.begin("scrollbar","");
     scrolling.navigate({0,-1});
-    require(scrolling.offset()==8 && scrolling.focus.id=="scrollbar","Pad down must scroll and retain focus");
+    require(scrolling.offset()==1 && scrolling.focus.id=="scrollbar","Pad down must scroll and retain focus");
     scrolling.navigate({0,1});require(scrolling.offset()==0,"Pad up must scroll back");
     scrolling.navigate({-1,0});require(scrolling.focus.id!="scrollbar","Cannot exit scrollbar to rows");
     scrolling.scrollTo(-100);require(!scrolling.canScroll(1),"Pointer cannot reach bottom");
@@ -120,21 +120,68 @@ int main() {
         for(const auto& c:items) if(c.vertical) last=c.id;
         menu.focus.begin(first,"");
         menu.navigate({0,1});require(menu.focus.id==first,"Tabs wrap above top");
-        for(int i=0;i<30;++i) menu.navigate({0,-1});
+        for(int i=0;i<1000;++i) menu.navigate({0,-1});
         require(menu.focus.id==last,"Tabs escape below bottom");
         require(menu.selected==selected,"Navigation activated a tab without trigger");
         const float inward=hand==0?1.F:-1.F;
         menu.navigate({inward,0});require(menu.focus.id=="scrollbar","Tabs must cross scrollbar");
         menu.navigate({inward,0});
         require(menu.focus.id!="scrollbar"&&!menu.focus.id.starts_with("tab:"),"Scrollbar must enter content");
-        for(int i=0;i<30;++i) menu.navigate({0,-1});
+        for(int i=0;i<1000;++i) menu.navigate({0,-1});
         const auto bottom=menu.focus.id;
         menu.navigate({0,-1});require(menu.focus.id==bottom,"Content wraps below bottom");
-        for(int i=0;i<30;++i) menu.navigate({0,1});
+        for(int i=0;i<1000;++i) menu.navigate({0,1});
         const auto top=menu.focus.id;
         menu.navigate({0,1});require(menu.focus.id==top,"Content wraps above top");
         menu.navigate({-inward,0});require(menu.focus.id=="scrollbar","Content must cross scrollbar");
         menu.navigate({-inward,0});require(menu.focus.id.starts_with("tab:"),"Scrollbar must enter tabs");
+    }
+    {
+        glm::vec3 a(-2,0,0),b(2,0,0);
+        const nadoc_vr::MenuPanelBounds clip{{-1,-1},{1,1}};
+        require(nadoc_vr::clipSidebarLine(a,b,clip) && a.x==-1 && b.x==1,"Crossing stroke was not clipped");
+        a={-2,2,0};b={2,2,0};
+        require(!nadoc_vr::clipSidebarLine(a,b,clip),"Offscreen stroke escaped clipping");
+        nadoc_vr::SidebarScroll motion;motion.move(0,1,1);
+        motion.move(1,0,1.1);
+        require(std::abs(motion.value(0,1.1)-.5F)<.001F,"Reversing scroll jumped");
+        require(motion.value(0,2)==0,"Reverse scroll failed to settle");
+    }
+    // A down click reveals exactly one next row, with continuous 200 ms motion.
+    for(int hand=0;hand<2;++hand) {
+        nadoc_vr::SidebarMenu menu(hand);
+        double time=100;menu.animationClock=[&]{return time;};
+        menu.selected=1;
+        const auto rows=menu.visibleRows();
+        require(rows.size()>8,"Scroll fixture needs overflow");
+        menu.focus.begin(rows[7]->id,"");
+        menu.navigate({0,-1});
+        require(menu.offset()==1 && menu.focus.id==rows[8]->id,"Down did not reveal next item");
+        require(menu.rowScroll.value(1,time)==0,"Scroll jumped immediately");
+        time+=.001;
+        for(const auto& c:menu.controls())require(c.bounds.maximum.y>c.bounds.minimum.y,"Invisible animated row exported an inverted hit box");
+        time+=.099;
+        require(std::abs(menu.rowScroll.value(1,time)-.5F)<.001F,"Scroll midpoint is not smooth");
+        const auto items=menu.controls();
+        for(const auto& c:items) if(c.viewport) {
+            require(nadoc_vr::menuLayoutContains(*c.viewport,c.bounds),"Animated hit target escapes viewport");
+        }
+        menu.draw([](glm::vec3,glm::vec3,glm::vec3){},[](nadoc_vr::MenuPanelBounds,glm::vec3){});
+        require(menu.audit.valid(),"Animated layout audit failed");
+        time+=.11;
+        require(menu.rowScroll.value(1,time)==1,"Scroll did not settle");
+        menu.navigate({0,1}); // previous visible row, no scrolling
+        require(menu.offset()==1 && menu.focus.id==rows[7]->id,"Up skipped a row");
+        for(int i=0;i<7;++i)menu.navigate({0,1});
+        require(menu.offset()==0 && menu.focus.id==rows[0]->id,"Up did not reveal previous item");
+        time+=1;
+        for(const auto& c:menu.controls()) {
+            auto r=std::find_if(rows.begin(),rows.end(),[&](const auto* row){return row->id==c.id;});
+            if(r!=rows.end()) {
+                const float base=hand==0?.058F-.247F:-.058F-.327F;
+                require(std::abs(c.bounds.minimum.x-base-.022F*float((*r)->parents.size()))<.00001F,"Child indent does not match ancestry");
+            }
+        }
     }
     // Selection-dependent actions must pass through the same disabled gate.
     nadoc_vr::SidebarMenu tools(1);

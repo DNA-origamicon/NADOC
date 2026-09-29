@@ -6600,7 +6600,8 @@ async function main() {
           await _setRepresentation(event.representation)
           _setColoringMode(event.coloring)
           await vrSession.publishNativeState?.()
-        }).catch(() => {
+        }).catch(error => {
+          console.error('VR representation failed:', error)
           showToast('Could not apply the VR representation on desktop.', { severity: 'error' })
         })
       } else if (event?.type === 'trajectory') {

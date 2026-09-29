@@ -1145,3 +1145,29 @@ per-job metric caches. Dynamics downloaded every JSON frame and rebuilt position
 objects on every tick. Static modes now reuse the bounded compact renderer and
 metrics controller; trajectory playback indexes and loads one frame at a time,
 reuses GPU buffers and cancels stale scrubs. [Audit](docs/audits/snupi_visualization_guards_20260928.md).
+
+## ISSUE-48 — VR representation acknowledgements fall back to Full; selective loads erase Full
+
+- [x] Share all eleven representation names across both browser publishers.
+- [x] Install only genuinely available native blocks; injected reference axes do
+  not replace Full geometry or blank Beads.
+- [x] Reuse desktop cylinder geometry/default radius and persisted colors; draw
+  sidebar aiming rays before trigger presses.
+- [x] Add actual browser acknowledgements and per-representation stereo model
+  pixel checks to the reusable VR tour.
+
+The stale four-name API allowlist caused the 99% state despite desktop success.
+A separate nonempty-block test confused injected reference axes with requested
+geometry. See [audit](docs/audits/vr_representation_parity_20260929.md).
+
+## ISSUE-49 — VR shadow parity and continuous sidebar navigation (2026-09-29)
+
+- [x] Stick/Ball & Stick bonds bypassed lighting via a GL_LINES branch; use the
+  shared cylinder color/shadow geometry and lighting path.
+- [x] Touchpad focus could not reach off-page rows; reveal one adjacent item with
+  a 200 ms eased transition, including simulation jobs/visualizations.
+- [x] Clip moving row graphics and hit boxes consistently; retain fixed custom
+  headers, prevent inverted offscreen hit rectangles, and clamp scrollbar thumbs.
+- [x] Indent category descendants from catalog ancestry rather than label guesses.
+
+Verification and retained failed attempts: [audit](docs/audits/vr_shadow_scroll_20260929.md).

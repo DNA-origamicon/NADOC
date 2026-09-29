@@ -334,6 +334,8 @@ async def lifespan(app: FastAPI):
     yield
     # FIRST shutdown instruction: setting this after even one await has killed live pods.
     _begin_runpod_reload_handoff()
+    from backend.api.vr_lifecycle import shutdown as shutdown_vr
+    await asyncio.to_thread(shutdown_vr)
     await asyncio.to_thread(shutdown_tours)
     runpod_connect.cancel()
     with contextlib.suppress(asyncio.CancelledError):

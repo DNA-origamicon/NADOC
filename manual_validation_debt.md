@@ -669,3 +669,20 @@ and re-registration after target/SteamVR-room changes. USB exposure timestamps a
 not synchronized; do not infer motion accuracy from synthetic pose tests.
 See [workflow and limits](docs/vr_qr_calibration.md). Mobile cube alignment and
 mobile-to-VR attendee positions remain separate work.
+
+## MV-VR-REPRESENTATION-PARITY — through-lens appearance (2026-09-29)
+
+Submitted stereo images and real GL checks establish visible representations,
+shared default cylinder geometry/palettes, and unpressed sidebar rays. Subjective
+headset comfort and through-lens appearance across lighting/head movement remain
+an on-site check. Compare saved-color cylinders and aim at both sidebars with
+molecular point selection active, without squeezing the trigger. Desktop/native
+lighting differs. [Evidence and limits](docs/audits/vr_representation_parity_20260929.md).
+
+## MV-VR-SHADOW-SCROLL — through-lens review (2026-09-29)
+
+Review fine atomistic bond shadows and the comfort/readability of 200 ms menu
+scrolling in the headset. Submitted stereo images and controller-state samples
+verify the rendered path; they do not establish physical through-lens comfort.
+Large atomistic scenes exceeded the existing human-motion transport timing limit
+in one retained matrix attempt. [Evidence](docs/audits/vr_shadow_scroll_20260929.md).

@@ -272,3 +272,18 @@ advance at each frame and persistence boundary. See the thermal optimization aud
   indexed trajectory playback preserves scrubbing with cancellation/backpressure
   and GPU-buffer reuse. [Audit](docs/audits/snupi_visualization_guards_20260928.md).
   main.js Δ +1.
+
+- 2026-09-29 · ISSUE-48 · Browser representation publication shares the complete
+  identifier contract; native partial installs honor pre-axis availability.
+  Desktop cylinder builder supplies native radius/topology/palettes. Sidebar
+  hit-testing also supplies unpressed pointer rays. main.js Δ +1 (error logging).
+  Root cause: duplicated allowlists diverged, while synthetic axes satisfied an
+  incorrect presence check. Initial suspicion of unfinished Surface generation
+  was disproved by completed export and a visible desktop Surface paired with
+  repeated Full acknowledgements. [Audit](docs/audits/vr_representation_parity_20260929.md).
+
+- 2026-09-29 · ISSUE-49 · Native atomistic bonds now share Full's lit cylinder
+  renderer. Sidebar navigation follows the logical row list across viewport edges
+  and uses shared easing/clipping; descendants indent by ancestry. A real GL
+  removed-occluder control distinguishes cast shadows from diffuse shading.
+  main.js Δ 0 for this change. [Audit](docs/audits/vr_shadow_scroll_20260929.md).

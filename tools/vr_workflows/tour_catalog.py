@@ -32,6 +32,16 @@ def catalog():
         'Quick pass through all eleven styles and both coloring pages. Checks enabled/gray controls and rendered pixels; not the full switching matrix.', ['--cycle'], module='representation_tour')
     add('simulations', 'left', 'Simulation results · 2hb_1xT',
         'Desktop engine tabs, touchpad job/result navigation and existing static visualizations for 2hb_1xT. Copies job metadata/caches into a temporary workspace; trajectories are excluded. Validation runs all four motion profiles.', module='simulation_tour')
+    add('backend-lifetime', 'interaction', 'Backend shutdown closes VR',
+        'Launch an isolated backend and empty VR viewer; terminate only that backend and require viewer exit and sidecar cleanup.', module='backend_lifecycle_check')
+    add('browser-representations', 'interaction', 'Browser-to-headset representation loading',
+        'Open the current part in an automated browser, launch VR through its UI, select all eleven representations with ScryWrite, and require 100% plus visible model pixels in both eyes. Validation repeats Full/Surface/Cylinders under all four motion presets. Also checks one-row touchpad scrolling and captures nested menu indentation. Stick and Ball & Stick use the shared shadow renderer. No mocked desktop responder.', module='browser_representation_tour')
+    add('representation-loading', 'interaction', 'Full startup and on-demand representation progress',
+        'Start with Full, select other representations with real controller inputs, and verify the percentage bar below the button text in both eyes. Validation uses all four motion profiles.', ['--representations'], module='startup_tour')
+    add('startup', 'interaction', 'Cold startup and headset loading progress',
+        'Launch a read-only private copy of 24HB through the normal launch route. Capture loading and first model stereo frames and verify advancing headset frames during export.', module='startup_tour')
+    add('menu-depth', 'interaction', 'Menu blur and controller depth',
+        'Move the controller stick and sphere in front of and behind a menu. Check sharp foreground pixels and behind-menu occlusion in both eyes, across all four motion profiles.', ['--depth-checks'])
     add('room-ui', 'interaction', 'Frosted menus & SteamVR floor',
         'Barely visible white glass, subtle button tints and stereo background blur, a calibrated floor grid and SteamVR play-area outline. Checks native pixels and all four motion profiles.', ['--room-checks'])
     add('focus', 'interaction', 'Trackpad, pointer, cards & scrollbars',
@@ -84,7 +94,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

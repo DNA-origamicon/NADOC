@@ -5,6 +5,7 @@
 #include "menu_focus.hpp"
 #include "ui_style.hpp"
 #include "menu_grip_frame.hpp"
+#include "sidebar_scroll.hpp"
 #include <functional>
 #include <optional>
 #include <set>
@@ -19,12 +20,13 @@ struct SidebarControl {
     MenuPanelBounds bounds;
     bool enabled = true, active = false, vertical = false;
     std::string icon{};
+    std::optional<MenuPanelBounds> drawingBounds{}, viewport{};
 };
 class SidebarMenu {
  public:
     explicit SidebarMenu(int hand=0): hand(hand) { for(size_t i=0;i<kSidebarTabs.size();++i) if(kSidebarTabs[i].hand==hand) tabs.push_back(i); offsets.resize(tabs.size()); if(hand==1) selected=1; }
     std::function<bool()> dynamic = []{return false;};
-    std::function<std::vector<SidebarControl>()> dynamicControls;
+    std::function<std::vector<SidebarControl>(bool)> dynamicControls;
     std::function<MenuPanelBounds()> dynamicBounds;
     std::function<size_t()> dynamicTotal, dynamicOffset;
     std::function<void(glm::vec2)> dynamicNavigate;
@@ -51,6 +53,7 @@ class SidebarMenu {
     MenuLayoutAudit audit;
     std::function<std::string(const std::string&,const std::string&)> label = [](const auto&,const auto& fallback){return fallback;};
     std::function<bool(const std::string&)> available = [](const auto&){return true;};
+    std::function<std::optional<std::pair<float,std::string>>(const std::string&)> loadingProgress=[](const auto&){return std::optional<std::pair<float,std::string>>{};};
     std::function<bool(const std::string&)> isActive = [](const auto&){return false;};
     const SidebarTab& tab() const { return customTab ? *customTab : kSidebarTabs.at(tabs.at(selected)); }
     size_t offset() const { return dynamicActive()?dynamicOffset():offsets.at(selected); }
@@ -74,6 +77,7 @@ class SidebarMenu {
     void toggleSection(const std::string& id) {
         auto rows=visibleRows();
         if(std::none_of(rows.begin(),rows.end(),[&](const auto* r){return r->id==id && r->action.starts_with("section:");})) return;
+        rowScroll={};
         if(!collapsed.erase(id)) collapsed.insert(id);
         rows=visibleRows();
         auto title=std::find_if(rows.begin(),rows.end(),[&](const auto* r){return r->id==id;});
@@ -84,6 +88,7 @@ class SidebarMenu {
     }
     void scroll(int direction) {
         if(dynamicActive()){dynamicScroll(direction);return;}
+        rowScroll={};
         if(direction<0) offsets[selected] = offset()>pageRows() ? offset()-pageRows() : 0;
         else if(canScroll(1)) offsets[selected]+=pageRows();
     }
@@ -97,8 +102,8 @@ class SidebarMenu {
         auto b=scrollBounds();
         const float height=b.maximum.y-b.minimum.y;
         const float thumb=std::max(.085F,height*std::min(1.F,float(pageRows())/std::max(size_t(1),total())));
-        const size_t last=total()==0?0:(total()-1)/pageRows()*pageRows();
-        const float top=b.maximum.y-(height-thumb)*(last?float(offset())/last:0);
+        const size_t last=total()>pageRows()?total()-pageRows():0;
+        const float top=b.maximum.y-(height-thumb)*(last?std::clamp(rowScroll.value(float(offset()),animationClock())/last,0.F,1.F):0);
         return {{b.minimum.x+.008F,top-thumb},{b.maximum.x-.008F,top}};
     }
     void scrollTo(float y) {
@@ -107,13 +112,22 @@ class SidebarMenu {
         const float travel=b.maximum.y-b.minimum.y-2*half;
         if(travel<=0) return;
         const float fraction=std::clamp((b.maximum.y-half-y)/travel,0.F,1.F);
+        rowScroll={};
         offsets[selected]=size_t(std::round(fraction*((total()-1)/pageRows())))*pageRows();
     }
     // Keep the row height while crossing the full-height scrollbar.
+    SidebarScroll rowScroll;
+    std::function<double()> animationClock=SidebarScroll::now;
+    void scrollRow(int direction) {
+        const size_t old=offset();
+        if(direction<0 && old>0) --offsets[selected];
+        else if(direction>0 && canScroll(1)) ++offsets[selected];
+        rowScroll.move(float(old),float(offset()),animationClock());
+    }
     float navigationY=0;
     void navigate(glm::vec2 axis) {
         if(dynamicActive()){dynamicNavigate(axis);return;}
-        const auto items=controls();
+        const auto items=controls(false);
         auto current=std::find_if(items.begin(),items.end(),[&](const auto& c){return c.id==focus.id;});
         if(current==items.end()) return;
         const auto center=[](const auto& c){return (c.bounds.minimum+c.bounds.maximum)*.5F;};
@@ -124,8 +138,24 @@ class SidebarMenu {
         };
         const bool horizontal=std::abs(axis.x)>std::abs(axis.y);
         if(current->id=="scrollbar" && !horizontal) {
-            scroll(axis.y>0?-1:1);
+            scrollRow(axis.y>0?-1:1);
             return;
+        }
+        if(!horizontal && total()>pageRows()) {
+            const auto rows=visibleRows();
+            const auto row=std::find_if(rows.begin(),rows.end(),[&](const auto* r){return r->id==focus.id;});
+            if(row!=rows.end()) {
+                const auto index=std::ptrdiff_t(row-rows.begin())+(axis.y>0?-1:1);
+                const size_t fixed=customTab?3:0;
+                if(index>=0 && index<std::ptrdiff_t(rows.size())) {
+                    focus.id=rows[size_t(index)]->id;
+                    if(size_t(index)>=fixed) {
+                        if(size_t(index)<offset()+fixed) scrollRow(-1);
+                        else if(size_t(index)>=offset()+fixed+pageRows()) scrollRow(1);
+                    }
+                    return;
+                }
+            }
         }
         auto origin=center(*current);
         if(current->id=="scrollbar") origin.y=navigationY;
@@ -159,7 +189,16 @@ class SidebarMenu {
         }
         if(best) focus.id=best->id;
     }
-    std::vector<SidebarControl> controls() const {
+    std::vector<SidebarControl> controls(bool animated=true) const {
+        auto out=layoutControls(animated);
+        for(auto& c:out) if(c.viewport) {
+            c.drawingBounds=c.bounds;
+            c.bounds=clipSidebarBounds(c.bounds,*c.viewport);
+        }
+        std::erase_if(out,[](const auto& c){return c.bounds.maximum.x<=c.bounds.minimum.x || c.bounds.maximum.y<=c.bounds.minimum.y;});
+        return out;
+    }
+    std::vector<SidebarControl> layoutControls(bool animated) const {
         std::vector<SidebarControl> out;
         const float tx=hand==0 ? -.397F : .397F;
         const float cx=hand==0 ? .058F : -.058F;
@@ -169,7 +208,7 @@ class SidebarMenu {
             out.push_back({"tab:"+t.key,t.label,"","tab:"+std::to_string(i),{{tx-.05F,y-.087F},{tx+.05F,y+.087F}},true,i==selected,true});
         }
         if(dynamicActive()) {
-            const auto extra=dynamicControls();out.insert(out.end(),extra.begin(),extra.end());
+            const auto extra=dynamicControls(animated);out.insert(out.end(),extra.begin(),extra.end());
             out.push_back({"close","Close","","close",{{-.269F,-.657F},{.046F,-.585F}}});
             out.push_back({"dock","Dock / Follow","","dock",{{.07F,-.657F},{.385F,-.585F}}});
             return out;
@@ -201,13 +240,23 @@ class SidebarMenu {
         const auto rows=visibleRows();
         std::vector<const SidebarRow*> page;
         if(customTab) page.insert(page.end(),rows.begin(),rows.begin()+3);
-        const size_t start=offset()+(customTab?3:0);
-        for(size_t i=start;i<std::min(start+pageRows(),rows.size());++i)page.push_back(rows[i]);
+        const size_t fixed=customTab?3:0;
+        const float position=animated?rowScroll.value(float(offset()),animationClock()):float(offset());
+        const size_t start=size_t(std::floor(position))+fixed;
+        const size_t end=std::min(size_t(std::ceil(position))+fixed+pageRows(),rows.size());
+        for(size_t i=start;i<end;++i)page.push_back(rows[i]);
         for(size_t i=0;i<page.size();++i) {
             const auto& row=*page[i];
             const bool header=row.action.starts_with("section:");
             float y=.463F-static_cast<float>(i)*.12F;
+            if(i>=fixed)y+=(position-std::floor(position))*.12F;
             out.push_back({row.id,label(row.action,row.id=="section:visualization:template:view-volumes"?"View Volumes":row.id=="section:properties:dimensions-heading"?"Dimensions":header?(collapsed.contains(row.id)?"+ ":"- ")+row.label:row.label),row.id=="section:visualization:template:view-volumes"?"MANAGE SAVED VOLUMES":row.id=="section:properties:dimensions-heading"?"MEASURE WITH CONTROLLERS":header?(collapsed.contains(row.id)?"EXPAND CARD":"COLLAPSE CARD"):row.section,row.action,{{cx-(hand==0?.247F:.327F),y-.054F},{cx+(hand==0?.327F:.247F),y+.054F}},(row.id=="dimensions-record" || row.id=="dimensions-clear") || header || (!row.action.empty() && available(row.action)), !header && available(row.action) && isActive(row.action)});
+            auto& control=out.back();
+            control.bounds.minimum.x+=.022F*float(row.parents.size());
+            if(i>=fixed) {
+                const MenuPanelBounds viewport{{-.5F,.463F-float(fixed+pageRows()-1)*.12F-.054F},{.5F,.463F-float(fixed)*.12F+.054F}};
+                control.viewport=viewport;
+            }
         }
         if(customTab) {
             std::vector<SidebarControl> extra;
@@ -253,7 +302,7 @@ class SidebarMenu {
     // Unsupported actions are blocked here, before any production action adapter.
     std::string activate(const SidebarControl& c) {
         if(!c.enabled) return {};
-        if(c.action.starts_with("tab:")) { selected=static_cast<size_t>(std::stoul(c.action.substr(4))); return {}; }
+        if(c.action.starts_with("tab:")) { rowScroll={}; selected=static_cast<size_t>(std::stoul(c.action.substr(4))); return {}; }
         if(c.id=="section:properties:dimensions-heading") return "dimension:toggle";
         if(c.id=="section:visualization:template:view-volumes") return "volume:toggle";
         if(c.id=="dimensions-record") return "dimension:new";
@@ -275,7 +324,15 @@ class SidebarMenu {
         return result;
     }
     // Callbacks consume local-space line segments and filled rectangles.
-    template<class Line,class Fill> void draw(Line line,Fill fill) {
+    template<class Line,class Fill> void draw(Line rawLine,Fill rawFill) {
+        std::optional<MenuPanelBounds> clip;
+        auto line=[&](glm::vec3 a,glm::vec3 b,glm::vec3 color) {
+            if(!clip || clipSidebarLine(a,b,*clip))rawLine(a,b,color);
+        };
+        auto fill=[&](MenuPanelBounds b,glm::vec3 color) {
+            if(clip)b=clipSidebarBounds(b,*clip);
+            if(b.maximum.x>b.minimum.x && b.maximum.y>b.minimum.y)rawFill(b,color);
+        };
         audit.reset(bounds());
         fill(bounds(),ui_style::panel);
         auto text=[&](const std::string& id,const std::string& value,glm::vec2 at,float scale,glm::vec3 color,const MenuPanelBounds& box,bool vertical=false) {
@@ -311,11 +368,12 @@ class SidebarMenu {
         if(focus.active) text("input-mode",focus.id=="scrollbar"?"PAD UP/DOWN: SCROLL  LEFT/RIGHT: EXIT":"PAD: MOVE / TRIGGER: SELECT",{cx-.31F,.560F},.002F,ui_style::focus,title);
         }
         for(const auto& c:controls()) {
+            clip=c.viewport;
             const bool hover=c.id==hovered;
             glm::vec3 bg=c.active?ui_style::selected : c.id==pressed?ui_style::pressed : hover&&c.enabled?ui_style::hover:ui_style::surface;
             if(c.action.starts_with("section:") && c.id!=pressed && !hover) bg=ui_style::hover;
             glm::vec3 fg=c.enabled?ui_style::text:ui_style::disabledText;
-            const auto& b=c.bounds;
+            const auto& b=c.drawingBounds?*c.drawingBounds:c.bounds;
             const bool scrollbar=isScrollbar(c.id);
             const glm::vec3 accent=ui_style::buttonAccent(c.id);
             if(!scrollbar) bg=glm::mix(glm::vec3(.075F),accent,c.active?.10F:c.enabled?(hover?.075F:.045F):.02F);
@@ -327,7 +385,7 @@ class SidebarMenu {
                 const auto color=focus.active && c.id==focus.id?ui_style::focus:ui_style::selectedBorder;
                 ui_style::rounded({lo,hi},bg,color,line,[](MenuPanelBounds,glm::vec3){},ui_style::cornerRadius-.004F,.003F);
             }
-            audit.addControl(c.id,b,b,!c.icon.empty()?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,.15F):glm::vec2(.15F,.065F));
+            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,!c.icon.empty()?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,.15F):glm::vec2(.15F,.065F));
             if(scrollbar) {
                 const auto thumb=dynamicActive()?dynamicThumb(c.id):scrollThumb();
                 const auto color=c.enabled?ui_style::disabledText:glm::vec3(.55F);
@@ -353,6 +411,14 @@ class SidebarMenu {
                 float s=std::min(.0033F,(b.maximum.y-b.minimum.y-.018F)/std::max(1.F,static_cast<float>(c.label.size()*6-1)));
                 text(c.id,c.label,{(b.minimum.x+b.maximum.x)*.5F+(hand==0?-3:3)*s,(b.minimum.y+b.maximum.y+(hand==0?-1:1)*strokeTextWidth(c.label.size(),s))*.5F},s,fg,b,true);
             } else {
+                if(const auto progress=loadingProgress(c.action)) {
+                    const float scale=.0028F;
+                    text(c.id+":label",c.label,{b.minimum.x+.012F,b.maximum.y-.020F},scale,fg,b);
+                    text(c.id+":progress",progress->second,{b.minimum.x+.012F,b.minimum.y+.032F},.0022F,{.55F,.85F,.75F},b);
+                    fill({{b.minimum.x+.012F,b.minimum.y+.009F},{b.maximum.x-.012F,b.minimum.y+.017F}},{.12F,.16F,.19F});
+                    fill({{b.minimum.x+.012F,b.minimum.y+.009F},{b.minimum.x+.012F+(b.maximum.x-b.minimum.x-.024F)*progress->first,b.minimum.y+.017F}},{.25F,.8F,.6F});
+                    continue;
+                }
                 auto lines=wrap(c.label,32);
                 // Fit long desktop descriptions without silently truncating them.
                 size_t longest=1;for(const auto& value:lines) longest=std::max(longest,value.size());

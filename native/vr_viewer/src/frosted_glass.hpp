@@ -4,6 +4,7 @@
 // Sample only the scene already rendered into this view, never the other eye.
 inline constexpr const char* frostedGlassShader = R"GLSL(
 uniform sampler2D uMenuBackdrop;
+uniform sampler2D uMenuDepth;
 uniform vec4 uBackdropViewport;
 uniform bool uFrostEnabled;
 vec4 frostedMenu(vec4 ink) {
@@ -14,10 +15,13 @@ vec4 frostedMenu(vec4 ink) {
     float total = 0.0;
     for (int y=-2;y<=2;y++) for (int x=-2;x<=2;x++) {
         float weight = exp(-float(x*x+y*y)/3.0);
-        blurred += textureLod(uMenuBackdrop,clamp(uv+vec2(x,y)*stepUV,vec2(0),vec2(1)),1.0).rgb*weight;
+        vec2 sampleUV = clamp(uv+vec2(x,y)*stepUV,vec2(0),vec2(1));
+        // Foreground geometry must neither be blurred nor bleed into its neighbours.
+        if (texture(uMenuDepth,sampleUV).r <= gl_FragCoord.z) continue;
+        blurred += texture(uMenuBackdrop,sampleUV).rgb*weight;
         total += weight;
     }
-    vec3 glass = mix(blurred/total,vec3(0.90,0.92,0.94),0.10);
+    vec3 glass = mix((total>0.0 ? blurred/total : texture(uMenuBackdrop,uv).rgb),vec3(0.90,0.92,0.94),0.10);
     float high = max(ink.r,max(ink.g,ink.b));
     float low = min(ink.r,min(ink.g,ink.b));
     // Low-valued colored fills encode subtle button tints. Neutral panel fills
@@ -32,7 +36,7 @@ vec4 frostedMenu(vec4 ink) {
 
 class FrostedGlass {
  public:
-    inline static GLuint backdrop=0;
+    inline static GLuint backdrop=0, depth=0;
     inline static GLint viewport[4]={0,0,1,1};
     inline static bool available=false;
     GLuint framebuffer=0;
@@ -45,14 +49,22 @@ class FrostedGlass {
         glGetIntegerv(GL_VIEWPORT,viewport);
         glGetIntegerv(GL_TEXTURE_BINDING_2D,&texture);
         if(!backdrop)glGenTextures(1,&backdrop);
+        if(!depth)glGenTextures(1,&depth);
         if(!framebuffer)glGenFramebuffers(1,&framebuffer);
         glBindTexture(GL_TEXTURE_2D,backdrop);
-        const int w=std::max(1,viewport[2]/2),h=std::max(1,viewport[3]/2);
+        const int w=std::max(1,viewport[2]),h=std::max(1,viewport[3]);
         if(width!=w||height!=h) {
             width=w;height=h;
+            glBindTexture(GL_TEXTURE_2D,depth);
+            glTexImage2D(GL_TEXTURE_2D,0,GL_DEPTH24_STENCIL8,w,h,0,GL_DEPTH_STENCIL,GL_UNSIGNED_INT_24_8,nullptr);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+            glBindTexture(GL_TEXTURE_2D,backdrop);
             glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
-            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
             glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
         }
@@ -60,9 +72,9 @@ class FrostedGlass {
         glReadBuffer(draw?GL_COLOR_ATTACHMENT0:GL_BACK);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER,framebuffer);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,backdrop,0);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,GL_DEPTH_STENCIL_ATTACHMENT,GL_TEXTURE_2D,depth,0);
         glDrawBuffer(GL_COLOR_ATTACHMENT0);
-        glBlitFramebuffer(viewport[0],viewport[1],viewport[0]+viewport[2],viewport[1]+viewport[3],0,0,w,h,GL_COLOR_BUFFER_BIT,GL_LINEAR);
-        glGenerateMipmap(GL_TEXTURE_2D);
+        glBlitFramebuffer(viewport[0],viewport[1],viewport[0]+viewport[2],viewport[1]+viewport[3],0,0,w,h,GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT,GL_NEAREST);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER,draw);
         glBindFramebuffer(GL_READ_FRAMEBUFFER,read);
         glReadBuffer(readBuffer);
@@ -74,12 +86,15 @@ class FrostedGlass {
         glUniform4f(glGetUniformLocation(program,"uBackdropViewport"),viewport[0],viewport[1],viewport[2],viewport[3]);
         glActiveTexture(GL_TEXTURE7);glBindTexture(GL_TEXTURE_2D,backdrop);
         glUniform1i(glGetUniformLocation(program,"uMenuBackdrop"),7);
+        glActiveTexture(GL_TEXTURE8);glBindTexture(GL_TEXTURE_2D,depth);
+        glUniform1i(glGetUniformLocation(program,"uMenuDepth"),8);
         glActiveTexture(GL_TEXTURE0);
     }
     void shutdown() {
         if(backdrop)glDeleteTextures(1,&backdrop);
+        if(depth)glDeleteTextures(1,&depth);
         if(framebuffer)glDeleteFramebuffers(1,&framebuffer);
-        backdrop=framebuffer=0;available=false;
+        backdrop=depth=framebuffer=0;available=false;
     }
 };
 

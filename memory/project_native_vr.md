@@ -7,6 +7,32 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Browser/native verification and backend lifetime (2026-09-29)
+
+Use the registered `browser-representations` tour for real browser launch/style
+acknowledgements; `startup_tour` has a private responder and cannot establish that
+path. Browser readiness requires loaded geometry and a dismissed Welcome screen,
+not only backend document metadata. The tour opens an isolated __e2e__ copy,
+asserts identifiable geometry in both eyes, and owns cleanup. `backend-lifetime`
+checks real worker shutdown. `vr_lifecycle` tracks Popen ownership and joins native
+cleanup on FastAPI lifespan teardown. Do not ask the user for the View in VR click
+when automated browser orchestration can perform it.
+
+## Early VR loading and menu depth (2026-09-29)
+
+Normal launch now enters OpenXR before model export, with a head-height,
+view-facing loading panel and named preparation stages. Export uses a private
+copy of the document; native parsing is asynchronous, and GPU preparation submits
+loading frames during preparation. First-frame readiness continues to mean the part.
+Startup loads Full only (including Expanded Quick View). Other styles export and
+parse on demand, with a counted-work percentage/bar inside the selected button;
+previous geometry stays visible. Cached CPU geometry is reused until scene refresh.
+Menu blur uses same-eye depth rejection; controller sticks, spheres and other
+world-space guides write depth so foreground elements remain sharp.
+See [startup and depth behavior](../docs/vr_startup.md). Debug Controls & layout
+includes reusable `startup`, `representation-loading`, and `menu-depth` checks. Stereo evidence does not
+establish worn-headset comfort or a fresh operating-system reboot.
+
 ## Frosted menus and calibrated floor (2026-09-28)
 
 Native menus now use per-eye blurred white glass (`frosted_glass.hpp`), including
@@ -278,6 +304,13 @@ receive the same 2048² soft self-shadows as Full; the representation-specific
 shadow bypass was removed. Native build and all 36 CTest checks pass with the
 system linker. SteamVR was not running during verification, so rendered shadow
 appearance and dense-scene headset frame timing remain unverified.
+
+2026-09-29 correction: the atomistic color pass still used an unlit GL_LINES
+branch despite the earlier shadow-pass fix. It now uses Full's lit cylinder
+renderer. A real GL removed-occluder control proves cast shadows (36 receiver
+pixels); the browser/ScryWrite tour captures visible Stick/Ball & Stick in both
+eyes. Sidebar pad navigation now reveals one logical row with 200 ms easing and
+ancestry indentation. See [shadow/scroll audit](../docs/audits/vr_shadow_scroll_20260929.md).
 
 1. Desktop geometry, topology, job data, and visualization state remain authoritative. VR is a projection and intent source, never a competing model.
 2. VR selection emits normalized intents through the canonical selection controller; it does not become a second state writer. Assembly selection remains an explicit boundary.
@@ -651,3 +684,23 @@ Physical target accuracy/comfort remain pending. See docs/vr_qr_calibration.md,
 manual_validation_debt.md and Debug's qr-calibration tour. `generate-qr-cube.mjs`
 produces a 150 mm core and six paint/two-color face plates with stable IDs; these
 are separate from expiring meeting invitations. Mobile cube registration is pending.
+
+### 2026-09-29: representation parity and real-browser coverage
+
+- Both API client visualization publishers must use `nativeRepresentation` from
+  `scene/vr_representations.js`; the former four-name list silently acknowledged
+  Surface/Hull/Beads/VDW/input previews as Full and stranded their VR buttons at 99%.
+- Selective native scene installation must check `incoming.available[i]` before
+  replacing blocks. `loadScene` injects reference axes into Full after deriving
+  availability, so nonempty geometry alone can erase resident Full/Beads.
+- Cylinder exports reuse desktop `buildHelixObjects(..., 'cylinders')`, including
+  default radius and saved strand/group colors. They are triangle-backed native
+  geometry, like Surface/Hull. Transient desktop radius-slider changes after
+  export are not synchronized by this static export bridge.
+- Sidebar hover rays use the same panel intersection as input and do not require
+  the trigger to be held. GL regression checks open/closed panels.
+- Browser representation checks now cover every representation and require
+  nonzero model IDs in both eyes for every style, in addition to 100% and correct
+  acknowledged style. Let delayed display uploads settle outside measured reaches;
+  do not run broad parallel suites during timing-sensitive controller playback.
+  Details and retained attempts: `docs/audits/vr_representation_parity_20260929.md`.

@@ -26,17 +26,20 @@ position its thumb, or swipe the trackpad while pointing at a panel. Buttons hav
 rounded borders, subtle blue accents for enabled actions, and a muted red Close
 button; unsupported controls remain gray. The right-trackpad Tools shortcut remains available when the right menu is closed.
 With a menu open, click its trackpad to focus the pointed-at control (or the active
-tab when pointing away). Up/down stops at the ends of the current column; it never
+tab when pointing away). A directional click also moves focus immediately. Moving
+down past the last visible item reveals the next row with a 200 ms smooth scroll;
+up reverses this at the top edge. This also applies to simulation jobs and views. Up/down stops at the ends of the current column; it never
 wraps or crosses into another column. Left/right moves spatially between tabs,
 scrollbar, and content (mirrored on the left menu), or between buttons on the same
 row. Trigger activates the highlighted control, including tab changes. When the scrollbar
-is focused, up/down pages the content while retaining focus; left/right leaves the
+is focused, up/down smoothly advances one row while retaining focus; left/right leaves the
 scrollbar for the nearest row or tab at the entry height. No trigger is needed to scroll.
 A short tab has a gray, inactive scrollbar. Center-click
 returns to pointing, as does moving the ray away and then aiming steadily at a
 button for 450 ms. See [UI style and input standard](vr_ui_style.md).
 
-Card titles use the desktop's section names and nesting. Point at a title and
+Card titles use the desktop's section names and nesting. Children are indented
+slightly for each level of ancestry, including nested category titles. Point at a title and
 pull the trigger, or focus it with the matching touchpad and pull that trigger,
 to collapse or expand it. `+` means collapsed and `-` means expanded. Titles remain
 usable even when every child control is unavailable. Hidden children are removed

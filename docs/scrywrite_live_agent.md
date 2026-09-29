@@ -202,3 +202,27 @@ reach, haptics and stereo legibility gates remain unchanged.
 Menu observation includes per-sidebar `input_mode` and `focus_id`, and detailed-menu
 `menu_input_mode` / `menu_focus_hit`. `just vr-menu-tour --focus-checks --validate
 --hold 0 --exit` tests focus, disabled triggers and deliberate pointer handoff.
+
+## Browser-owned representation verification
+
+Use **Debug → VR Tours & Tests → Controls & layout → Browser-to-headset
+representation loading** for the complete acknowledgement path. This opens an
+isolated copy of the current part in a real automated browser, waits for geometry
+and dismissal of Welcome, clicks the production View in VR handler, and drives
+native menu input with ScryWrite. No synthetic acknowledgement responder is used.
+The first pass checks all eleven representations; validation then repeats
+Full/Surface/Cylinders under the other three motion presets. Every representation
+must reach 100% and show identifiable model pixels in both eyes; the final desktop
+menu must select Cylinders. Timing failures remain recorded as failed trials;
+bounded fresh reaches retain the original motion deadlines. Diagnostic launch
+opts into ScryWrite and tracked-head framing; ordinary launch defaults are unchanged.
+
+The wrapper owns a uniquely named __e2e__ source file, document and session cache;
+it removes them and its browser/viewer on exit. Original document equality and
+cleanup are checked. Evidence goes under the selected output directory.
+Do not launch the backend companion alone and then ask the user to supply the
+missing browser synchronization click; that bypasses the behavior being tested.
+
+Backend clean shutdown/reload now stops the viewers launched by that worker and
+waits for their IPC cleanup. **Backend shutdown closes VR** runs a separate
+backend/native process check, without restarting the user's development servers.

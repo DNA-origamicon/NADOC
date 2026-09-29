@@ -103,6 +103,9 @@ def start(body: StartTour, request: Request):
             source = directory/'open-design.nadoc'
             source.write_text(design.to_json())
             argv += ['--design', str(source)]
+        if tour['module'] == 'browser_representation_tour':
+            from backend.api.doc_context import get_current_doc
+            argv += ['--doc', get_current_doc()]
         env = {**os.environ, 'PYTHONUNBUFFERED': '1', 'NADOC_DISABLE_SESSION_CACHE': '1'}
         try:
             with (directory/'tour.log').open('wb') as log:

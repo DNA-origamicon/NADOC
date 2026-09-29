@@ -13,6 +13,7 @@ class SimulationPanel {
     bool selected=false;
     std::vector<Row> engines,jobs,views;
     size_t jobOffset=0,viewOffset=0;
+    SidebarScroll jobScroll,viewScroll;
     SidebarMenu* menu=nullptr;
     SidebarMenu* adjacent=nullptr;
     static constexpr size_t page=7;
@@ -20,13 +21,13 @@ class SimulationPanel {
         adjacent=right;
         menu=&target;target.dynamic=[]{return true;};
         target.dynamicTotal=[this]{return jobs.size();};target.dynamicOffset=[this]{return jobOffset;};
-        target.dynamicControls=[this]{return controls();};
+        target.dynamicControls=[this](bool animated){return controls(animated);};
         target.dynamicBounds=[this]{return MenuPanelBounds{{-.515F,-.735F},{selected?1.56F:.80F,.735F}};};
         target.dynamicNavigate=[this](glm::vec2 axis){navigate(axis);};
         target.dynamicScrollAt=[this](glm::vec2 p,int d){scroll(p.x>.78F,d);};
         target.dynamicScroll=[this](int d){scroll(menu->focus.id.starts_with("sim:scroll:views") || menu->focus.id.starts_with("sim:v:") || menu->hovered.starts_with("sim:v:"),d);};
         target.dynamicScrollTo=[this](const std::string& id,float y){const bool right=id=="sim:scroll:views";auto& offset=right?viewOffset:jobOffset;const size_t count=right?views.size():jobs.size();if(count>page){const float half=.84F*float(page)/count*.5F;offset=size_t(std::round(std::clamp((.36F-half-y)/(.84F-2*half),0.F,1.F)*((count-1)/page)))*page;}};
-        target.dynamicThumb=[this](const std::string& id){const bool right=id=="sim:scroll:views";auto b=scrollBounds(right);const size_t n=right?views.size():jobs.size(),o=right?viewOffset:jobOffset;const float h=.84F*std::min(1.F,float(page)/std::max(size_t(1),n));const size_t last=n?(n-1)/page*page:0;const float top=b.maximum.y-(.84F-h)*(last?float(o)/last:0);return MenuPanelBounds{{b.minimum.x+.008F,top-h},{b.maximum.x-.008F,top}};};
+        target.dynamicThumb=[this](const std::string& id){const bool right=id=="sim:scroll:views";auto b=scrollBounds(right);const size_t n=right?views.size():jobs.size(),o=right?viewOffset:jobOffset;const float h=.84F*std::min(1.F,float(page)/std::max(size_t(1),n));const size_t last=n>page?n-page:0;const float top=b.maximum.y-(.84F-h)*(last?std::clamp((right?viewScroll:jobScroll).value(float(o),menu->animationClock())/last,0.F,1.F):0);return MenuPanelBounds{{b.minimum.x+.008F,top-h},{b.maximum.x-.008F,top}};};
     }
     bool poll(const std::string& path) {
         if(path.empty() || ++pollFrames%15)return false;
@@ -47,7 +48,15 @@ class SimulationPanel {
     }
     static MenuPanelBounds scrollBounds(bool right) {return {{right?1.43F:-.269F,-.48F},{right?1.492F:-.207F,.36F}};}
     void scroll(bool right,int direction) {auto& o=right?viewOffset:jobOffset;const size_t n=right?views.size():jobs.size();if(direction<0)o=o>page?o-page:0;else if(o+page<n)o+=page;}
-    std::vector<SidebarControl> controls() const {
+    void scrollRow(bool right,int direction) {
+        auto& offset=right?viewOffset:jobOffset;
+        const auto old=offset;
+        const auto count=right?views.size():jobs.size();
+        if(direction<0 && offset>0)--offset;
+        else if(direction>0 && offset+page<count)++offset;
+        (right?viewScroll:jobScroll).move(float(old),float(offset),menu->animationClock());
+    }
+    std::vector<SidebarControl> controls(bool animated=true) const {
         std::vector<SidebarControl> out;
         const bool ready=sequence<=acknowledged;
         for(size_t i=0;i<engines.size();++i){const auto& r=engines[i];const float x=-.269F+i*.20F;out.push_back({"sim:"+r.id,r.label,"","simulation:"+r.id,{{x,.55F},{x+.19F,.65F}},r.enabled&&ready,r.active});}
@@ -57,7 +66,12 @@ class SimulationPanel {
         for(bool right:{false,true}) {
             if(right&&!selected)continue;
             const auto& rows=right?views:jobs;const size_t offset=right?viewOffset:jobOffset;
-            for(size_t i=offset;i<std::min(offset+page,rows.size());++i){const auto& r=rows[i];const float y=.30F-(i-offset)*.12F;out.push_back({"sim:"+r.id,r.label,"","simulation:"+r.id,{{right?.81F:-.19F,y-.054F},{right?1.41F:.73F,y+.054F}},r.enabled&&ready,r.active});}
+            const float position=animated?(right?viewScroll:jobScroll).value(float(offset),menu->animationClock()):float(offset);
+            for(size_t i=size_t(std::floor(position));i<std::min(size_t(std::ceil(position))+page,rows.size());++i) {
+                const auto& r=rows[i];const float y=.30F-(float(i)-position)*.12F;
+                out.push_back({"sim:"+r.id,r.label,"","simulation:"+r.id,{{right?.81F:-.19F,y-.054F},{right?1.41F:.73F,y+.054F}},r.enabled&&ready,r.active});
+                out.back().viewport=MenuPanelBounds{{right?.81F:-.19F,-.474F},{right?1.41F:.73F,.354F}};
+            }
             const auto id=right?"sim:scroll:views":"sim:scroll:jobs";
             out.push_back({id,"Scroll","","",scrollBounds(right),rows.size()>page});
         }
@@ -68,9 +82,22 @@ class SimulationPanel {
         requested=action.substr(11);requestedVersion=version;++sequence;return true;
     }
     void navigate(glm::vec2 axis) {
-        const auto items=menu->controls();auto at=std::find_if(items.begin(),items.end(),[&](const auto& c){return c.id==menu->focus.id;});if(at==items.end())return;
+        const auto items=menu->controls(false);auto at=std::find_if(items.begin(),items.end(),[&](const auto& c){return c.id==menu->focus.id;});if(at==items.end())return;
         const bool horizontal=std::abs(axis.x)>std::abs(axis.y);
-        if(SidebarMenu::isScrollbar(at->id)&&!horizontal){scroll(at->id=="sim:scroll:views",axis.y>0?-1:1);return;}
+        if(SidebarMenu::isScrollbar(at->id)&&!horizontal){scrollRow(at->id=="sim:scroll:views",axis.y>0?-1:1);return;}
+        if(!horizontal) for(bool right:{false,true}) {
+            const auto& rows=right?views:jobs;
+            auto current=std::find_if(rows.begin(),rows.end(),[&](const auto& r){return "sim:"+r.id==menu->focus.id;});
+            if(current==rows.end())continue;
+            const auto index=std::ptrdiff_t(current-rows.begin())+(axis.y>0?-1:1);
+            if(index>=0 && index<std::ptrdiff_t(rows.size())) {
+                menu->focus.id="sim:"+rows[size_t(index)].id;
+                const size_t offset=right?viewOffset:jobOffset;
+                if(size_t(index)<offset)scrollRow(right,-1);
+                else if(size_t(index)>=offset+page)scrollRow(right,1);
+                return;
+            }
+        }
         const auto center=[](const auto& c){return (c.bounds.minimum+c.bounds.maximum)*.5F;};
         auto origin=center(*at);if(SidebarMenu::isScrollbar(at->id))origin.y=menu->navigationY;else menu->navigationY=origin.y;
         float best=1e9F;const SidebarControl* next=nullptr;

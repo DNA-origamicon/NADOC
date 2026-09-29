@@ -78,7 +78,10 @@ def scroll_page(live, hand, direction):
     if live.state["sidebars"][hand]["input_mode"] != "trackpad":
         pad(live, hand)
     seek(live, hand, "scrollbar")
-    pad(live, hand, y=-direction)
+    for _ in range(8):
+        pad(live, hand, y=-direction)
+    time.sleep(.25)  # One-row touchpad steps settle before the next measured reach.
+    live.frame()
     pad(live, hand)  # Explicitly restore pointing for the next noisy reach.
 
 
@@ -324,6 +327,7 @@ def main():
         action="store_true",
         help="Check trackpad focus, trigger activation and pointer handoff",
     )
+    parser.add_argument("--depth-checks", action="store_true", help="Check sharp foreground controllers and behind-menu occlusion")
     parser.add_argument("--tab", help="Tour only this side:key, e.g. right:properties")
     parser.add_argument("--socket", help="Use an existing isolated control session")
     parser.add_argument("--output", type=Path)
@@ -352,7 +356,7 @@ def main():
     )
     catalog = json.loads((root / "native/vr_viewer/sidebar_catalog.json").read_text())
     if args.tab:
-        if args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.qr_checks:
+        if args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks:
             parser.error('--tab is only supported by the sidebar page tour')
         tabs = [t for t in catalog['tabs'] if f"{t['side']}:{t['key']}" == args.tab]
         if not tabs:
@@ -376,7 +380,7 @@ def main():
                 socket = str(Path(temp) / "viewer.sock")
                 command = [
                     str(root / "native/vr_viewer/build/nadoc-vr-viewer"),
-                    str(root / ("native/vr_viewer/examples/scrywrite_simple_origami.nadocvr" if args.room_checks or args.qr_checks else "native/vr_viewer/examples/empty_authoring.nadocvr")),
+                    str(root / ("native/vr_viewer/examples/scrywrite_simple_origami.nadocvr" if args.room_checks or args.depth_checks or args.qr_checks else "native/vr_viewer/examples/empty_authoring.nadocvr")),
                     "--scrywrite-live",
                     socket,
                     "--scrywrite-live-mode",
@@ -438,7 +442,9 @@ def main():
             )
             live.button("menu", hand=0)
             results = []
-            if args.qr_checks:
+            if args.depth_checks:
+                from tools.vr_workflows.menu_depth_check import run as focus_run
+            elif args.qr_checks:
                 from tools.vr_workflows.qr_calibration_check import run as focus_run
             elif args.room_checks:
                 from tools.vr_workflows.room_ui_check import run as focus_run
@@ -456,7 +462,7 @@ def main():
                         "preset": preset,
                         **(
                             focus_run(live, catalog, destination, preset)
-                            if args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.qr_checks
+                            if args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks
                             else run_tour(
                                 live,
                                 catalog,
@@ -471,7 +477,7 @@ def main():
                 (output / "result.json").write_text(
                     json.dumps(results, indent=2) + "\n"
                 )
-            if not args.tab and not args.room_checks and not args.qr_checks:
+            if not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks:
                 check_actions(live, output, args.preset)
             from tools.vr_motion.desktop_check import run as check_desktop
 

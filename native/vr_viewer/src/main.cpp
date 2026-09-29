@@ -1,3 +1,5 @@
+#include <atomic>
+#include <future>
 #include "lattice_grip.hpp"
 #define XR_USE_PLATFORM_XLIB
 #define XR_USE_GRAPHICS_API_OPENGL
@@ -855,7 +857,8 @@ class GzipInputStream : public std::istream {
     GzipStreamBuffer buffer_;
 };
 
-SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, float>> fixedNormalization = std::nullopt) {
+SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, float>> fixedNormalization = std::nullopt,
+                    const std::function<void(size_t)>& readProgress = {}) {
     const auto started = std::chrono::steady_clock::now();
     std::cout << "VR_METRIC event=process_progress phase=scene_load_start rss_mib="
               << currentResidentMiB() << std::endl;
@@ -914,6 +917,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
     char type = '\0';
     while (input >> type) {
         ++recordsRead;
+        if(readProgress && recordsRead%2048==0)readProgress(recordsRead);
         if (recordsRead % 250000U == 0U) {
             const double milliseconds = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started).count();
@@ -1364,7 +1368,8 @@ nadoc_vr::HandPose handPoseFromXr(const XrPosef& pose) {
 
 class GlScene {
   public:
-    explicit GlScene(SceneData scene, bool objectIds = false, const std::vector<std::string>& priorIdentities = {})
+    explicit GlScene(SceneData scene, bool objectIds = false, const std::vector<std::string>& priorIdentities = {},
+                     const std::function<void(size_t)>& preparing = {}, bool prewarm = true)
         : scene_(std::move(scene)), objectIdsEnabled_(objectIds) {
         if (!priorIdentities.empty()) {
             objectIdentities_ = priorIdentities;
@@ -1403,8 +1408,10 @@ class GlScene {
         for (auto [vao, buffer] : {std::pair{boxVao_,boxInstanceVbo_}, std::pair{boxGlowVao_,boxGlowInstanceVbo_}})
             for (int i=0; i<3; ++i)
                 nadoc_vr::bindInstanceAttribute(vao, buffer, 8+i, 3, sizeof(Box), offsetof(Box,normals)+i*sizeof(glm::vec3));
-        for (size_t i = 0; i < kRepresentationCount; ++i)
+        for (size_t i = 0; prewarm && i < kRepresentationCount; ++i) {
+            if (preparing) preparing(i);
             if (scene_.available[i]) setStyle(static_cast<Representation>(i), scene_.initialColoring);
+        }
         setStyle(scene_.initialRepresentation, scene_.initialColoring);
     }
 
@@ -1675,6 +1682,27 @@ class GlScene {
         selectedHighlightOwnerTokens_ = nextSelectedTokens;
         selectedHighlightIdentities_ = nextSelectedIdentities;
         setStyle(representation_, coloring_);
+    }
+
+    void installRepresentation(SceneData incoming) {
+        // Full remains the normalization/presentation anchor. Replace only blocks
+        // delivered in this request; retain previously loaded representations.
+        for(size_t i=0;i<kRepresentationCount;++i) {
+            // loadScene adds reference axes to Full even in a selective export.
+            // Availability is derived before those axes: only real source blocks
+            // may replace resident geometry. Otherwise Beads/Full become blank.
+            if(!incoming.available[i])continue;
+            auto& source=incoming.representations[i];
+            if(source.points.empty() && source.cylinders.empty() && source.halfCylinders.empty() && source.boxes.empty())continue;
+            scene_.representations[i]=std::move(source);
+            scene_.expandedRepresentations[i]=std::move(incoming.expandedRepresentations[i]);
+        }
+        for(size_t i=0;i<kRepresentationCount;++i)scene_.available[i]=scene_.available[i]||incoming.available[i];
+        scene_.hasExpanded=scene_.hasExpanded||incoming.hasExpanded;
+        representationBuffers_.clear();staticSourceIndices_.clear();
+        displayedSourceValid_=sourceIndexValid_=false;visualizationDeltasValid_=false;
+        atomisticBuffersResident_=false;
+        atomisticSharedGeometry_=atomisticCylindersEquivalent(scene_);
     }
 
     bool supportsRepresentation(Representation representation) const {
@@ -2718,34 +2746,17 @@ class GlScene {
         }
 
         if (cylinderCount_ > 0) {
-            const bool atomistic = representation_ == Representation::ballstick ||
-                                   representation_ == Representation::stick;
-            if (atomistic) {
-                glUseProgram(atomisticBondProgram_);
-                glUniformMatrix4fv(
-                    atomisticBondViewProjection_, 1, GL_FALSE,
-                    &viewProjection[0][0]);
-                glUniformMatrix4fv(
-                    atomisticBondModel_, 1, GL_FALSE, &modelTransform[0][0]);
-                glBindVertexArray(atomisticBondVao_);
-                glLineWidth(1.25F);
-                glDrawArraysInstanced(GL_LINES, 0, 2, cylinderCount_);
-            } else {
-                glUseProgram(cylinderProgram_);
-                glUniformMatrix4fv(
-                    cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
-                glUniformMatrix4fv(
-                    cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
-                glUniform1f(cylinderAlpha_, 1.0F);
-                glUniform1f(cylinderEmissive_, 0.0F);
-                applyLightingUniforms(
-                    cylinderLightViewProjection_, cylinderLightDirection_,
-                    cylinderShadowMap_, cylinderShadowsEnabled_);
-                glBindVertexArray(cylinderVao_);
-                glDrawElementsInstanced(
-                    GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
-                    cylinderCount_);
-            }
+            // Bonds use the same lit geometry in the color and shadow passes.
+            glUseProgram(cylinderProgram_);
+            glUniformMatrix4fv(cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+            glUniformMatrix4fv(cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            glUniform1f(cylinderAlpha_, 1.0F);
+            glUniform1f(cylinderEmissive_, 0.0F);
+            applyLightingUniforms(cylinderLightViewProjection_, cylinderLightDirection_,
+                                  cylinderShadowMap_, cylinderShadowsEnabled_);
+            glBindVertexArray(cylinderVao_);
+            glDrawElementsInstanced(GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT,
+                                    nullptr, cylinderCount_);
         }
 
         if (halfCylinderCount_ > 0) {
@@ -2860,7 +2871,8 @@ class GlScene {
         const glm::mat4& viewProjection, const std::vector<Vertex>& guides,
         const std::array<size_t, 2>* handEnds = nullptr, float lineWidth = 3.0F) const {
         if (!guides.empty()) {
-            glDisable(GL_DEPTH_TEST);
+            glEnable(GL_DEPTH_TEST);
+            glDepthMask(GL_TRUE);
             glUseProgram(program_);
             glUniform1i(glGetUniformLocation(program_,"uVolumeCount"),0);
             glUniform1f(glGetUniformLocation(program_,"uVolumeOpacity"),1);
@@ -3791,12 +3803,12 @@ class GlScene {
     }
 
     GLsizei boxDrawCount() const {
-        if (representation_ == Representation::surface || representation_ == Representation::hull) return 3;
+        if (representation_ == Representation::surface || representation_ == Representation::hull || representation_ == Representation::cylinders) return 3;
         if (representation_ == Representation::oxdna) return nadoc_vr::ellipsoidIndexCount;
         return boxIndexCount_;
     }
     const void* boxDrawOffset() const {
-        const size_t offset = representation_ == Representation::surface || representation_ == Representation::hull
+        const size_t offset = representation_ == Representation::surface || representation_ == Representation::hull || representation_ == Representation::cylinders
             ? nadoc_vr::triangleIndexOffset : representation_ == Representation::oxdna ? nadoc_vr::ellipsoidIndexOffset : 0;
         return reinterpret_cast<void*>(offset*sizeof(GLushort));
     }
@@ -4586,7 +4598,7 @@ class MenuPanelSurface {
     void render(
         const glm::mat4& viewProjection,
         const nadoc_vr::MenuPlacement& placement,
-        const nadoc_vr::MenuPanelBounds& bounds, float localDepth = 0.002F) const {
+        const nadoc_vr::MenuPanelBounds& bounds, float localDepth = 0.002F, bool frosted = true) const {
         if (!ready_) return;
         const std::array<DesktopVertex, 4> vertices = {{
             {placement.worldPoint({bounds.minimum.x, bounds.maximum.y, localDepth}),
@@ -4607,7 +4619,7 @@ class MenuPanelSurface {
             glDisable(GL_BLEND);
         }
         glUseProgram(panelProgram_);
-        FrostedGlass::bind(panelProgram_);
+        FrostedGlass::bind(panelProgram_, frosted);
         glUniformMatrix4fv(panelProjection_, 1, GL_FALSE, &viewProjection[0][0]);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture_);
@@ -4799,6 +4811,9 @@ class GpuFrameTimer {
 
 #include "view_tools.hpp"
 
+#include "startup_loading.hpp"
+#include "representation_loading.hpp"
+
 class Viewer {
 #ifdef NADOC_SCRYWRITE_TESTING
     friend struct LiveViewerTest;
@@ -4944,6 +4959,72 @@ class Viewer {
         }
     }
 
+    void beginStartup(const std::string& scene,const std::string& status,
+                      std::vector<std::string> owners,const std::string& kind) {
+        representationLoading_.enabled=true;representationLoading_.eventPath=eventPath_;
+        startup_.begin(scene,status);startupOwners_=std::move(owners);startupKind_=kind;
+    }
+
+    void pollStartup() {
+        if(!startup_.active)return;
+        // Submit the upload stage before doing GPU work on this context.
+        if(startup_.candidate && startup_.uploadPending) {
+            startup_.uploadPending=false;
+            try {
+                auto scene=std::move(*startup_.candidate);startup_.candidate.reset();
+                normalizationCenter_=scene.normalizationCenter;normalizationScale_=scene.normalizationScale;
+                extrudePlane_=scene.extrudePlane;
+                const auto identity=nadoc_vr::resolveOwnerIdentity(
+                    scene.representations[representationSourceIndex(scene.initialRepresentation)].ownerAliases,startupOwners_);
+                if(identity && startupKind_!="none") {
+                    selectedIdentity_=*identity;selectedOwnerTokens_=startupOwners_;selectedSelectionKind_=startupKind_;
+                    committedSelectionIdentities_={selectedIdentity_};
+                    committedSelectionOwnerTokens_=startupOwners_;
+                }
+                auto candidate=std::make_unique<GlScene>(std::move(scene),liveSocket_.enabled(),std::vector<std::string>{},
+                    [this](size_t index) {
+                        startup_.percent=92+static_cast<int>(6*index/kRepresentationCount);
+                        startup_.detail=std::string("Preparing GPU: ")+representationName(static_cast<Representation>(index));
+                        // Each style upload is self-contained. Keep the existing
+                        // loading scene submitting between GPU preparation stages.
+                        glfwPollEvents();pollXrEvents();
+                        if(gStopRequested || glfwWindowShouldClose(window_) || !sessionRunning_)
+                            throw std::runtime_error("VR loading interrupted");
+                        renderFrame();
+                    },false);
+                candidate->setVisualization(visualizationSnapshot_);
+                candidate->setSelectionHighlights({}, {}, committedSelectionOwnerTokens_, committedSelectionIdentities_);
+                glScene_.swap(candidate);
+                dimensionSync_.initialize(eventPath_,dimensionPanel_.tool,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
+                startup_.percent=98;startup_.detail="Submitting first part frame";
+                startup_.completedAt=glfwGetTime();
+            } catch(const std::exception& e){startup_.phase="error";startup_.detail=e.what();}
+        } else startup_.poll();
+        if(startup_.completedAt>=0 && glfwGetTime()-startup_.completedAt>.75) {
+            startup_.active=false;startup_.surface.shutdown();
+            requestedRepresentation_="full";requestedColoring_=coloringName(glScene_->coloring());
+            ++styleSequence_;publishEventState();
+        }
+    }
+
+    void pollRepresentationLoading() {
+        auto& loading=representationLoading_;
+        if(!loading.enabled || startup_.active)return;
+        if(loading.pending && loading.generation!=sceneRefresh_.revision())loading.cancel();
+        if(loading.candidate) {
+            try {
+                glScene_->installRepresentation(std::move(*loading.candidate));loading.candidate.reset();
+                visualizationModified_.reset();
+                if(!glScene_->supportsRepresentation(loading.target))throw std::runtime_error("Representation has no display geometry");
+                loading.percent=99;loading.phase="waiting";loading.detail="Applying desktop style";
+                publishStyleRequest(loading.target,loading.color);
+            } catch(const std::exception& e){loading.fail(e.what());}
+        } else loading.poll(normalizationCenter_,normalizationScale_);
+        if(loading.pending && loading.phase=="waiting" && glScene_->representation()==loading.target && glScene_->coloring()==loading.color) {
+            loading.percent=100;loading.phase="ready";loading.pending=false;loading.visibleUntil=glfwGetTime()+1;
+        }
+    }
+
     int run() {
         initializeWindow();
         initializeOpenXr();
@@ -4957,6 +5038,7 @@ class Viewer {
         qrCalibration_.shutdown();
         roomFloor_.shutdown();
         menuGlass_.shutdown();
+        startup_.surface.shutdown();
         menuPanelSurface_.shutdown();
         sidebarMenus_.shutdown();
         witnessSurface_.shutdown();
@@ -5360,6 +5442,7 @@ class Viewer {
                     if(action=="extrude:plane") return toolConfig_.targetSelectionKind()=="none";
                     return true;
                 }
+                if(action.starts_with("repr:") && representationLoading_.enabled)return true;
                 if(action.starts_with("repr:")) return glScene_->supportsRepresentation(static_cast<Representation>(std::stoi(action.substr(5))));
                 if(action.starts_with("color:")) return (nadoc_vr::kSidebarColoringMasks.at(static_cast<size_t>(glScene_->representation())) & (1U << std::stoi(action.substr(6)))) != 0;
                 if(!action.starts_with("tool:")) return true;
@@ -5369,6 +5452,7 @@ class Viewer {
                     :action=="tool:move_rotate"?nadoc_vr::ToolMode::move_rotate:nadoc_vr::ToolMode::inspect;
                 return nadoc_vr::ToolShell::selectionCapability(mode,selectedSelectionKind_)!=nadoc_vr::ToolCapability::unsupported;
             };
+            sidebar.loadingProgress=[this](const std::string& action){return representationLoading_.button(action);};
             sidebar.isActive=[this](const std::string& action) {
                 if(action=="share:avatar")return showVRAvatar_;
                 if(action=="share:status")return shareActive_;
@@ -5376,6 +5460,7 @@ class Viewer {
                     || (action.starts_with("color:") && std::stoi(action.substr(6))==static_cast<int>(glScene_->coloring()));
             };
         }
+        if(startup_.active)startup_.surface.initialize();
         gpuFrameTimer_.initialize();
         if (witness_) witnessSurface_.initialize(makeDesktopProgram());
         glEnable(GL_DEPTH_TEST);
@@ -7478,6 +7563,9 @@ class Viewer {
             line(origin, tip, color);
             line(tip - right * 0.008F, tip + right * 0.008F, color);
             line(tip - up * 0.008F, tip + up * 0.008F, color);
+            if (const auto hit = sidebarMenus_.rayEndpoint(hands_[hand])) {
+                line(tip, *hit, color * 0.55F);
+            }
             if (const auto panelHit = menuRayPanelLocalPoint(hands_[hand])) {
                 line(tip, menuPlacement_.worldPoint(*panelHit), color * 0.42F);
             } else if (hand == 1U) {
@@ -7861,7 +7949,11 @@ class Viewer {
     }
 
     void publishStyleRequest(Representation representation, Coloring coloring) {
-        if (glScene_ && !glScene_->supportsRepresentation(representation)) return;
+        if (glScene_ && !glScene_->supportsRepresentation(representation)) {
+            if(representationLoading_.enabled)representationLoading_.start(representation,coloring,sceneRefresh_.revision());
+            return;
+        }
+        if(representationLoading_.pending && representationLoading_.target!=representation)representationLoading_.cancel();
         if (glScene_ && representation == glScene_->representation() &&
             coloring == glScene_->coloring()) return;
         if (witness_ && eventPath_.empty()) {
@@ -7878,6 +7970,11 @@ class Viewer {
                       << " representation=" << requestedRepresentation_
                       << " coloring=" << requestedColoring_ << std::endl;
             return;
+        }
+        if(representationLoading_.enabled && !representationLoading_.pending) {
+            auto& loading=representationLoading_;
+            loading.target=representation;loading.color=coloring;loading.generation=sceneRefresh_.revision();
+            loading.pending=true;loading.percent=99;loading.phase="waiting";loading.detail="Applying display";
         }
         requestedRepresentation_ = representationName(representation);
         requestedColoring_ = coloringName(coloring);
@@ -8597,6 +8694,13 @@ class Viewer {
             << ",\"xr_session_state\":" << static_cast<int>(sessionState_)
             << ",\"focused\":" << (sessionState_ == XR_SESSION_STATE_FOCUSED ? "true" : "false")
             << ",\"space\":\"OpenXR_LOCAL\",\"units\":\"meters\""
+            << ",\"representation_loading\":{\"pending\":" << (representationLoading_.pending?"true":"false")
+            << ",\"representation\":" << quote(representationName(representationLoading_.target))
+            << ",\"percent\":" << representationLoading_.percent << ",\"phase\":" << quote(representationLoading_.phase)
+            << ",\"detail\":" << quote(representationLoading_.detail) << "}"
+            << ",\"startup\":{\"active\":" << (startup_.active?"true":"false")
+            << ",\"percent\":" << startup_.percent << ",\"phase\":" << quote(startup_.phase)
+            << ",\"detail\":" << quote(startup_.detail) << "}"
             << ",\"menu\":" << quote(menuPageName())
             << ",\"hover\":" << quote(witnessHoverName())
             << ",\"tool\":" << quote(nadoc_vr::toolModeName(toolShell_.mode()))
@@ -10021,6 +10125,14 @@ class Viewer {
             setSpectatorRenderClass(trace ? nadoc_vr::SpectatorRenderClass::contact_actual : nadoc_vr::SpectatorRenderClass::contact_intended);
             glScene_->renderGuides(viewProjection, controllerContactGuides_[trace], nullptr, pass==0 ? 17.0F : pass==1 ? 9.0F : 3.0F);
         }
+        setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
+        XrPosef head=views_[0].pose;
+        if(views_.size()>1) {
+            head.position.x=(head.position.x+views_[1].pose.position.x)*.5F;
+            head.position.y=(head.position.y+views_[1].pose.position.y)*.5F;
+            head.position.z=(head.position.z+views_[1].pose.position.z)*.5F;
+        }
+        startup_.render(viewProjection, head);
         captureLiveEye(index, view, swapchain.width, swapchain.height);
         liveMeasure_.readEye(index, swapchain.width, swapchain.height);
         if (captureIds) {
@@ -10418,6 +10530,7 @@ class Viewer {
                 viewProjection, witnessObserverPosition_, witnessObserverOrientation_);
         }
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
+        startup_.render(viewProjection, view.pose);
         glScene_->renderGuides(viewProjection, controllerPathGuides_);
         for(size_t pass=0;pass<3;++pass) {
             const size_t trace=pass==1 ? 1 : 0;
@@ -10522,7 +10635,7 @@ class Viewer {
         const auto frameStarted = std::chrono::steady_clock::now();
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
-        syncActions(frameState.predictedDisplayTime);
+        if(!startup_.active) syncActions(frameState.predictedDisplayTime);
         const auto inputFinished = std::chrono::steady_clock::now();
         desktopSurface_.update(menuOpen_ && menuPage_ == MenuPage::desktop);
         glScene_->updateExpanded(
@@ -10661,7 +10774,10 @@ class Viewer {
                       << " query_skips=" << gpuFrameTimer_.skipped()
                       << std::endl;
         }
-        if (layerCount > 0 && readySequence_ == 0) {
+        if(layerCount>0 && startup_.active && startup_.completedAt>=0) {
+            startup_.percent=100;startup_.detail="Part ready";
+        }
+        if (layerCount > 0 && readySequence_ == 0 && !startup_.active) {
             firstFrameAtMilliseconds_ = std::chrono::duration<double, std::milli>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
             firstFrameCpuMilliseconds_ = std::chrono::duration<double, std::milli>(
@@ -10810,6 +10926,14 @@ class Viewer {
             auto next = nadoc_vr::loadVisualizationSnapshot(visualizationPath_);
             const auto parsedAt = std::chrono::steady_clock::now();
             if (next.sequence <= visualizationSequence_) return;
+            // Startup already displays Full. The desktop may not publish a redundant
+            // Full revision, so accept the first newer acknowledged style directly.
+            if(representationLoading_.enabled && !next.representation.empty() &&
+               !glScene_->supportsRepresentation(representationFromName(next.representation))) {
+                if(!representationLoading_.pending && representationLoading_.phase!="error")
+                    representationLoading_.start(representationFromName(next.representation),coloringFromName(next.coloring),sceneRefresh_.revision());
+                return;
+            }
             const uint64_t previousSequence = visualizationSequence_;
             visualizationSequence_ = next.sequence;
             visualizationSnapshot_ = std::move(next);
@@ -10998,8 +11122,10 @@ class Viewer {
                 gStopRequested = false;
             }
             if (sessionRunning_) {
+                pollStartup();
+                pollRepresentationLoading();
                 pollJobSnapshot();
-                pollVisualizationSnapshot();
+                if(!startup_.active)pollVisualizationSnapshot();
                 const auto receivedSequence = coordinateSequence_;
                 pollTrajectoryFeeds();
                 if (glScene_->representation() == Representation::ballstick ||
@@ -11034,6 +11160,10 @@ class Viewer {
     std::filesystem::path liveDirectory_;
     uint64_t liveFrame_ = 0, liveCommandSequence_ = 0;
     std::chrono::steady_clock::time_point liveInputDeadline_{}, liveCaptureDeadline_{};
+    RepresentationLoading representationLoading_;
+    StartupLoading startup_;
+    std::vector<std::string> startupOwners_;
+    std::string startupKind_;
     SceneData sceneData_;
     nadoc_vr::SceneRefreshInbox sceneRefresh_;
     nadoc_vr::Ligation ligation_;
@@ -11390,6 +11520,7 @@ int main(int argc, char** argv) {
     std::string visualizationPath;
     std::string trajectoryPath;
     std::string coordinatePath;
+    std::string loadingStatusPath;
     std::string liveSocketPath, liveMode = "inspect";
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
@@ -11414,6 +11545,7 @@ int main(int argc, char** argv) {
         }
         const std::string option(argv[index]);
         if (option == "--events") eventPath = argv[index + 1];
+        else if (option == "--loading-status") loadingStatusPath = argv[index + 1];
         else if (option == "--feedback") feedbackPath = argv[index + 1];
         else if (option == "--tool-feedback") toolFeedbackPath = argv[index + 1];
         else if (option == "--plane-feedback") planeFeedbackPath = argv[index + 1];
@@ -11576,8 +11708,13 @@ int main(int argc, char** argv) {
         const auto processStarted = std::chrono::steady_clock::now();
         std::cout << "VR_METRIC event=process_start mode=openxr_viewer rss_mib="
                   << currentResidentMiB() << std::endl;
+        SceneData initialScene;
+        if(loadingStatusPath.empty())initialScene=loadScene(argv[1]);
+        else {initialScene.emptyAuthoring=true;initialScene.available.fill(true);}
+        const auto startupOwners=selectedOwnerTokens;
+        const auto startupKind=selectedSelectionKind;
         Viewer viewer(
-            loadScene(argv[1]), eventPath, feedbackPath, toolFeedbackPath,
+            std::move(initialScene), eventPath, feedbackPath, toolFeedbackPath,
             planeFeedbackPath, preflightFeedbackPath, toolExecutionFeedbackPath,
             jobPath,
             nadoc_vr::loadJobSnapshot(jobPath), visualizationPath,
@@ -11588,6 +11725,7 @@ int main(int argc, char** argv) {
             sceneViewPlacement,
             mirrorDiagnosticsPath, witnessCaptureDirectory,
             witnessVisualExpectationDirectory, exitOnWitnessComplete, liveSocketPath, liveMode);
+        if(!loadingStatusPath.empty())viewer.beginStartup(argv[1],loadingStatusPath,startupOwners,startupKind);
         viewer.loadControllerPath(controllerPath);
         const int result = viewer.run();
         const double milliseconds = std::chrono::duration<double, std::milli>(
