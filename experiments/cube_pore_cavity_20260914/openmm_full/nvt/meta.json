@@ -1,0 +1,68 @@
+{
+  "engine": "OpenMM 8.6.0.dev-c6173db CUDA mixed precision",
+  "mode": "nvt",
+  "duration_ps": 50.0,
+  "dt_fs": 2,
+  "source_job": "60e854232e8c",
+  "source_stage": "04_300K_NPT_MGHH_only_p10",
+  "same_initial_coordinates_and_velocities": true,
+  "source_velocity_to_nm_ps": 2.045482706,
+  "same_force_field_and_masses": true,
+  "differences_from_NAMD": [
+    "LangevinMiddle integrator; thermostat also acts on hydrogen",
+    "2 fs single-rate PME instead of 4 fs/8 fs MTS",
+    "PME interpolation implementation",
+    "Monte Carlo z-only pressure control in NPzAT branch"
+  ],
+  "energy_validation": {
+    "0_HarmonicBondForce": 41874.06191790168,
+    "1_HarmonicAngleForce": 73724.2310172451,
+    "2_HarmonicBondForce": 27987.598727401943,
+    "3_PeriodicTorsionForce": 135318.60086126355,
+    "4_CustomTorsionForce": 2170.6575011613577,
+    "5_CMAPTorsionForce": 0.0,
+    "6_NonbondedForce": -6918518.46946637,
+    "7_CustomNonbondedForce": 454708.8004684622,
+    "total_kcal": -6182734.54913374,
+    "namd_reference_kcal": -6183718.3541,
+    "fractional_total_difference": 0.0001590960179496943,
+    "exception_LJ_kcal": 65829.06807634367,
+    "nonzero_LJ_exceptions": 310194,
+    "component_comparison": {
+      "bond": {
+        "NAMD_kcal": 41874.0944,
+        "OpenMM_kcal": 41874.06191790168,
+        "difference_kcal": -0.03248209832236171
+      },
+      "angle_including_urey": {
+        "NAMD_kcal": 101711.83,
+        "OpenMM_kcal": 101711.82974464704,
+        "difference_kcal": -0.00025535296299494803
+      },
+      "dihedral": {
+        "NAMD_kcal": 135318.5789,
+        "OpenMM_kcal": 135318.60086126355,
+        "difference_kcal": 0.02196126355556771
+      },
+      "improper": {
+        "NAMD_kcal": 2170.6578,
+        "OpenMM_kcal": 2170.6575011613577,
+        "difference_kcal": -0.00029883864226576407
+      },
+      "vdw": {
+        "NAMD_kcal": 520539.0316,
+        "OpenMM_kcal": 520537.8685448059,
+        "difference_kcal": -1.1630551940761507
+      },
+      "electrostatics": {
+        "NAMD_kcal": -6985332.5469,
+        "OpenMM_kcal": -6984347.537542713,
+        "difference_kcal": 985.0093572875485
+      }
+    },
+    "all_source_masses_match": true,
+    "component_gate_passed": true
+  },
+  "initial_wall_energy_kcal": 23039.56035188115,
+  "pressure_target_bar": null
+}

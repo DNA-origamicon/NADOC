@@ -1,0 +1,87 @@
+[
+  {
+    "shift": [
+      0,
+      0,
+      1
+    ],
+    "min_A": 2.6249130759014987,
+    "source_atoms_with_neighbor_within_10A": 327,
+    "source_atoms_with_neighbor_within_4A": 105,
+    "reference_z_nm_percentiles": [
+      1.8034,
+      2.32364,
+      2.8097000000000003,
+      3.68586,
+      4.4447
+    ]
+  },
+  {
+    "shift": [
+      0,
+      1,
+      0
+    ],
+    "min_A": 2.571575390338231,
+    "source_atoms_with_neighbor_within_10A": 2108,
+    "source_atoms_with_neighbor_within_4A": 181,
+    "reference_z_nm_percentiles": [
+      3.0694,
+      4.97926,
+      41.57525,
+      70.62098,
+      74.3086
+    ]
+  },
+  {
+    "shift": [
+      1,
+      -1,
+      0
+    ],
+    "min_A": 3.7886555665608523,
+    "source_atoms_with_neighbor_within_10A": 48,
+    "source_atoms_with_neighbor_within_4A": 1,
+    "reference_z_nm_percentiles": [
+      34.3406,
+      34.53621,
+      52.96005,
+      53.78685,
+      54.21509999999999
+    ]
+  },
+  {
+    "shift": [
+      1,
+      0,
+      0
+    ],
+    "min_A": 2.8317517350647305,
+    "source_atoms_with_neighbor_within_10A": 1481,
+    "source_atoms_with_neighbor_within_4A": 66,
+    "reference_z_nm_percentiles": [
+      6.940600000000001,
+      15.245099999999999,
+      28.359199999999998,
+      67.64410000000001,
+      73.3348
+    ]
+  },
+  {
+    "shift": [
+      1,
+      1,
+      0
+    ],
+    "min_A": 3.640014237429605,
+    "source_atoms_with_neighbor_within_10A": 43,
+    "source_atoms_with_neighbor_within_4A": 1,
+    "reference_z_nm_percentiles": [
+      7.5474000000000006,
+      7.7348799999999995,
+      8.4229,
+      8.9232,
+      9.1446
+    ]
+  }
+]

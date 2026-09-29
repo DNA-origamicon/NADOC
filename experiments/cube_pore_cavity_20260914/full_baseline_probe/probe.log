@@ -1,0 +1,258 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 6 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: v80000
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 6 cores x 2 PUs = 12-way SMP)
+Charm++> cpu topology info is gathered in 0.008 seconds.
+Pe 1 physical rank 1 will use CUDA device of pe 4
+Pe 2 physical rank 2 will use CUDA device of pe 4
+Pe 3 physical rank 3 will use CUDA device of pe 4
+Pe 4 physical rank 4 binding to CUDA device 0 on DESKTOP-T44QS0K: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 8191MB  Rev: 7.5  PCI: 0:7:0
+Pe 5 physical rank 5 will use CUDA device of pe 4
+Info: Built with CUDA version 12060
+Pe 0 physical rank 0 will use CUDA device of pe 4
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64
+Info: Built Sun Jul 12 01:58:16 MDT 2026 by joshua on DESKTOP-T44QS0K
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  6    DESKTOP-T44QS0K  joshua
+Info: Running on 6 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.643754 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 0 MB of memory in use based on /proc/self/stat
+Info: Configuration file is experiments/cube_pore_cavity_20260914/full_baseline_probe/probe.conf
+Info: Changed directory to experiments/cube_pore_cavity_20260914/full_baseline_probe
+TCL: Suspending until startup complete.
+Info: EXTENDED SYSTEM FILE   /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.xsc
+Info: Tuning parameters to improve GPU-resident performance
+Info: Setting margin to 4
+Warning: The Langevin gamma parameters differ over the particles,
+Warning: requiring extra work per step to constrain rigid bonds.
+Warning: Disabling lonepair support due to incompatability with GPU-resident.
+Info: Running with GPU-resident mode
+Info: SIMULATION PARAMETERS:
+Info: TIMESTEP               2
+Info: NUMBER OF STEPS        0
+Info: STEPS PER CYCLE        20
+Info: PERIODIC CELL BASIS 1  267.492 0 0
+Info: PERIODIC CELL BASIS 2  0 268.239 0
+Info: PERIODIC CELL BASIS 3  0 0 242.394
+Info: PERIODIC CELL CENTER   133.746 134.119 121.197
+Info: WRAPPING WATERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: LOAD BALANCER  Centralized
+Info: LOAD BALANCING STRATEGY  New Load Balancers -- DEFAULT
+Info: LDB PERIOD             4000 steps
+Info: FIRST LDB TIMESTEP     100
+Info: LAST LDB TIMESTEP     -1
+Info: LDB BACKGROUND SCALING 1
+Info: HOM BACKGROUND SCALING 1
+Info: PME BACKGROUND SCALING 1
+Info: MIN ATOMS PER PATCH    40
+Info: EMPTY PATCH LOAD       40 ATOMS
+Info: VELOCITY FILE          /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.vel
+Info: CENTER OF MASS MOVING INITIALLY? NO
+Info: DIELECTRIC             1
+Info: EXCLUDE                SCALED ONE-FOUR
+Info: 1-4 ELECTROSTATICS SCALED BY 1
+Info: MODIFIED 1-4 VDW PARAMETERS WILL BE USED
+Info: DCD FILENAME           /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/full_baseline_probe/probe.dcd
+Info: DCD FREQUENCY          500
+Info: DCD FIRST STEP         500
+Info: DCD FILE WILL CONTAIN UNIT CELL DATA
+Info: XST FILENAME           /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/full_baseline_probe/probe.xst
+Info: XST FREQUENCY          500
+Info: NO VELOCITY DCD OUTPUT
+Info: NO FORCE DCD OUTPUT
+Info: OUTPUT FILENAME        /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/full_baseline_probe/probe
+Info: BINARY OUTPUT FILES WILL BE USED
+Info: RESTART FILENAME       /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/full_baseline_probe/probe.restart
+Info: RESTART FREQUENCY      500
+Info: BINARY RESTART FILES WILL BE USED
+Info: SWITCHING ACTIVE
+Info: SWITCHING ON           8
+Info: SWITCHING OFF          10
+Info: PAIRLIST DISTANCE      13.5
+Info: PAIRLIST SHRINK RATE   0.01
+Info: PAIRLIST GROW RATE     0.01
+Info: PAIRLIST TRIGGER       0.3
+Info: PAIRLISTS PER CYCLE    2
+Info: PAIRLISTS ENABLED
+Info: MARGIN                 4
+Info: HYDROGEN GROUP CUTOFF  2.5
+Info: PATCH DIMENSION        20
+Info: ENERGY OUTPUT STEPS    500
+Info: ENERGY EVALUATION STEPS    500
+Info: OUTPUT ENERGY PRECISION 4
+Info: CROSSTERM ENERGY INCLUDED IN DIHEDRAL
+Info: TIMING OUTPUT STEPS    5000
+Info: HARMONIC CONSTRAINTS ACTIVE
+Info: HARMONIC CONS EXP      2
+Info: LANGEVIN DYNAMICS ACTIVE
+Info: LANGEVIN TEMPERATURE   300
+Info: LANGEVIN USING BBK INTEGRATOR
+Info: LANGEVIN DAMPING COEFFICIENT IS 5 INVERSE PS
+Info: LANGEVIN DYNAMICS NOT APPLIED TO HYDROGENS
+Info: PARTICLE MESH EWALD (PME) ACTIVE
+Info: PME TOLERANCE               1e-06
+Info: PME EWALD COEFFICIENT       0.312341
+Info: PME INTERPOLATION ORDER     4
+Info: PME GRID DIMENSIONS         180 180 162
+Info: PME MAXIMUM GRID SPACING    1.5
+Info: PME CALCULATION WILL BE PERFORMED ON GPU
+Info: FULL ELECTROSTATIC EVALUATION FREQUENCY      2
+Info: USING VERLET I (r-RESPA) MTS SCHEME.
+Info: C1 SPLITTING OF LONG RANGE ELECTROSTATICS
+Info: PLACING ATOMS IN PATCHES BY HYDROGEN GROUPS
+Info: RIGID BONDS TO HYDROGEN : ALL
+Info:         ERROR TOLERANCE : 1e-08
+Info:          MAX ITERATIONS : 100
+Info: RIGID WATER USING SETTLE ALGORITHM
+Info: RANDOM NUMBER SEED     520613578
+Info: USE HYDROGEN BONDS?    NO
+Info: COORDINATE PDB         /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore.pdb
+Info: STRUCTURE FILE         /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_hmr.psf
+Info: PARAMETER file: CHARMM format! 
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36_na.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36m_prot.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_np_thiol.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/toppar_water_ions_cufix.str
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_stub_ions_nbfix.str
+Info: USING ARITHMETIC MEAN TO COMBINE L-J SIGMA PARAMETERS
+Info: BINARY COORDINATES     /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.coor
+Info: SKIPPING rtf SECTION IN STREAM FILE
+Warning: DUPLICATE vdW PAIR ENTRY FOR NC2-OC
+PREVIOUS VALUES  A=829897 B=717.124 A14=829897 B14717.124
+   USING VALUES  A=1.19807e+06 B=861.635 A14=1.19807e+06 B14861.635
+Warning: DUPLICATE vdW ENTRY FOR OC
+PREVIOUS VALUES  sigma=3.02906 epsilon=0.12 sigma14=3.02906 epsilon14=0.12
+   USING VALUES  sigma=3.02941 epsilon=0.12 sigma14=3.02941 epsilon14=0.12
+Info: SUMMARY OF PARAMETERS:
+Info: 234 BONDS
+Info: 618 ANGLES
+Info: 1256 DIHEDRAL
+Info: 50 IMPROPER
+Info: 6 CROSSTERM
+Info: 129 VDW
+Info: 109 VDW_PAIRS
+Info: 0 NBTHOLE_PAIRS
+Warning: Ignored 508219 bonds with zero force constants.
+Warning: Will get H-H distance in rigid H2O from H-O-H angle.
+Info: TIME FOR READING PSF FILE: 11.4531
+Info: READING EXTRA BONDS FILE /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_k0.5.enm.extra
+Info: READ 616147 EXTRA BONDS
+Info: Reading pdb file /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore.pdb
+Info: TIME FOR READING PDB FILE: 2.14027
+Info: 
+Info: ****************************
+Info: STRUCTURE SUMMARY:
+Info: 1679987 ATOMS
+Info: 1765375 BONDS
+Info: 749638 ANGLES
+Info: 350768 DIHEDRALS
+Info: 10568 IMPROPERS
+Info: 0 CROSSTERMS
+Info: 0 EXCLUSIONS
+Info: 25544 CONSTRAINTS
+Info: 1568504 RIGID BONDS
+Info: 3471457 DEGREES OF FREEDOM
+Info: 619702 HYDROGEN GROUPS
+Info: 4 ATOMS IN LARGEST HYDROGEN GROUP
+Info: 619702 MIGRATION GROUPS
+Info: 4 ATOMS IN LARGEST MIGRATION GROUP
+Info: TOTAL MASS = 1.0823e+07 amu
+Info: TOTAL CHARGE = 0.000281518 e
+Info: MASS DENSITY = 1.03336 g/cm^3
+Info: ATOM DENSITY = 0.0965943 atoms/A^3
+Info: *****************************
+Info: Reading from binary file /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.coor
+Info: 
+Info: Entering startup at 17.6855 s, 0 MB of memory in use
+Info: Startup phase 0 took 0.000978219 s, 0 MB of memory in use
+Info: ADDED 2209060 IMPLICIT EXCLUSIONS
+Info: Startup phase 1 took 0.68872 s, 0 MB of memory in use
+Info: NONBONDED TABLE R-SQUARED SPACING: 0.0625
+Info: NONBONDED TABLE SIZE: 705 POINTS
+Info: INCONSISTENCY IN FAST TABLE ENERGY VS FORCE: 0.000290479 AT 0.251946
+Info: INCONSISTENCY IN SCOR TABLE ENERGY VS FORCE: 0.000178193 AT 9.97184
+Info: INCONSISTENCY IN VDWA TABLE ENERGY VS FORCE: 0.0040507 AT 0.251946
+Info: INCONSISTENCY IN VDWB TABLE ENERGY VS FORCE: 0.00150189 AT 0.251946
+Info: Startup phase 2 took 0.000812093 s, 0 MB of memory in use
+Info: Startup phase 3 took 7.7082e-05 s, 0 MB of memory in use
+Info: Startup phase 4 took 0.023496 s, 0 MB of memory in use
+Info: Startup phase 5 took 0.000219562 s, 0 MB of memory in use
+Info: PATCH GRID IS 13 (PERIODIC) BY 13 (PERIODIC) BY 12 (PERIODIC)
+Info: PATCH GRID IS 1-AWAY BY 1-AWAY BY 1-AWAY
+Info: Reading from binary file /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.vel
+Info: REMOVING COM VELOCITY 0 0 0
+Info: LARGEST PATCH (920) HAS 986 ATOMS
+Info: TORUS A SIZE 1 USING 0
+Info: TORUS B SIZE 1 USING 0
+Info: TORUS C SIZE 1 USING 0
+Info: TORUS MINIMAL MESH SIZE IS 1 BY 1 BY 1
+Info: Placed 100% of base nodes on same physical node as patch
+Info: Startup phase 6 took 2.13094 s, 0 MB of memory in use
+Info: Use 3D box decompostion in PME FFT.
+Info: PME using 1 x 1 x 1 pencil grid for FFT and reciprocal sum.
+Info: Startup phase 7 took 0.000507158 s, 0 MB of memory in use
+Info: Updated CUDA force table with 4096 elements.
+Info: Updated CUDA LJ table with 124 x 124 elements.
+Info: Startup phase 8 took 0.00741288 s, 0 MB of memory in use
+Info: Startup phase 9 took 0.000254898 s, 0 MB of memory in use
+Info: Startup phase 10 took 0.000222954 s, 0 MB of memory in use
+Info: Startup phase 11 took 0.956749 s, 0 MB of memory in use
+LDB: Central LB being created...
+Info: Startup phase 12 took 0.377136 s, 0 MB of memory in use
+Info: CREATING 44664 COMPUTE OBJECTS
+Info: Found 97 unique exclusion lists needing 328 bytes
+Info: useSync: 0 useProxySync: 0
+Info: Startup phase 13 took 0.24019 s, 0 MB of memory in use
+Info: Startup phase 14 took 0.000117508 s, 0 MB of memory in use
+Info: Startup phase 15 took 0.000413774 s, 0 MB of memory in use
+Info: Finished startup at 22.1138 s, 0 MB of memory in use
+
+TCL: Running for 2000 steps
+FATAL ERROR: CUDA error cudaMallocHost(pp, sizeofT*len) in file src/CudaUtils.C, function allocate_host_T, line 88
+ on Pe 4 (DESKTOP-T44QS0K device 0 pci 0:7:0): out of memory
+------------- Processor 4 Exiting: Called CmiAbort ------------
+Reason: REPLICA 0 FATAL ERROR: CUDA error cudaMallocHost(pp, sizeofT*len) in file src/CudaUtils.C, function allocate_host_T, line 88
+ on Pe 4 (DESKTOP-T44QS0K device 0 pci 0:7:0): out of memory
+
+[4] Stack Traceback:
+  [4:0] namd3 0x152e825 
+  [4:1] namd3 0xa20b21 NAMD_die(char const*)
+  [4:2] namd3 0xdbb80c cudaDie(char const*, cudaError)
+  [4:3] namd3 0xdbbdb5 allocate_host_T(void**, unsigned long, unsigned long)
+  [4:4] namd3 0xf9e358 SequencerCUDA::reallocateArrays(int, int)
+  [4:5] namd3 0xfa81c9 SequencerCUDA::copyPatchData(bool, bool)
+  [4:6] namd3 0xf7f86d Sequencer::updateDeviceData(int, int, int)
+  [4:7] namd3 0xf99edc Sequencer::integrate_CUDA_SOA(int)
+  [4:8] namd3 0xf9a952 Sequencer::algorithm()
+  [4:9] namd3 0x14daa79 CthStartThread
+  [4:10] namd3 0x14db0d7 make_fcontext
+Charm++ fatal error:
+REPLICA 0 FATAL ERROR: CUDA error cudaMallocHost(pp, sizeofT*len) in file src/CudaUtils.C, function allocate_host_T, line 88
+ on Pe 4 (DESKTOP-T44QS0K device 0 pci 0:7:0): out of memory
+
+[4] Stack Traceback:
+  [4:0] namd3 0x152e682 LrtsAbort(char const*)
+  [4:1] namd3 0x152e716 CmiAbortHelper(char const*, char const*, char const*, int, int)
+  [4:2] namd3 0x152e825 
+  [4:3] namd3 0xa20b21 NAMD_die(char const*)
+  [4:4] namd3 0xdbb80c cudaDie(char const*, cudaError)
+  [4:5] namd3 0xdbbdb5 allocate_host_T(void**, unsigned long, unsigned long)
+  [4:6] namd3 0xf9e358 SequencerCUDA::reallocateArrays(int, int)
+  [4:7] namd3 0xfa81c9 SequencerCUDA::copyPatchData(bool, bool)
+  [4:8] namd3 0xf7f86d Sequencer::updateDeviceData(int, int, int)
+  [4:9] namd3 0xf99edc Sequencer::integrate_CUDA_SOA(int)
+  [4:10] namd3 0xf9a952 Sequencer::algorithm()
+  [4:11] namd3 0x14daa79 CthStartThread
+  [4:12] namd3 0x14db0d7 make_fcontext

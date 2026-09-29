@@ -1,0 +1,25 @@
+{
+  "source_job": "60e854232e8c",
+  "source_checkpoint": "cube_pore_04_300K_NPT_MGHH_only_p10",
+  "changes": [
+    "GPUresident off (local memory limitation)",
+    "constant normal pressure, fixed lateral area",
+    "cell origin shifted to graphene plane (same periodic lattice)",
+    "output cadence increased"
+  ],
+  "unchanged": [
+    "all atom coordinates",
+    "velocities",
+    "PSF",
+    "force field",
+    "wall restraint coefficients",
+    "timestep 4 fs",
+    "PME force interval 8 fs"
+  ],
+  "requested_ps": 10,
+  "pore_center_nm": [
+    13.374599999999997,
+    13.41195,
+    1.2
+  ]
+}

@@ -1,0 +1,1 @@
+reason=maximum steps=40 max=40 energy=-656966.1086820697

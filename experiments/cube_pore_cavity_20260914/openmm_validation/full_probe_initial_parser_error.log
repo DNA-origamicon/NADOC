@@ -1,0 +1,115 @@
+CPU experiment finished; loading independent GPU probe
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('HN2', 'X', 'X', 'NN2') and New param. k: 1.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('HN2', 'CN5', 'CN4', 'NN2B') and New param. k: 7.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('HN1', 'X', 'X', 'NN1') and New param. k: 4.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('HN1', 'HN1', 'CN2', 'NN1') and New param. k: 6.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN1', 'X', 'X', 'ON1') and New param. k: 90.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN1T', 'X', 'X', 'ON1') and New param. k: 90.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN1', 'NN2G', 'CN5G', 'ON1') and New param. k: 90.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN1T', 'NN2B', 'NN2U', 'ON1') and New param. k: 110.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN1', 'NN2U', 'CN3T', 'ON1') and New param. k: 90.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN1', 'X', 'X', 'ON1C') and New param. k: 80.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN2', 'X', 'X', 'NN1') and New param. k: 90.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN2', 'NN3G', 'NN2G', 'NN1') and New param. k: 40.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN2', 'NN3A', 'CN5', 'NN1') and New param. k: 40.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN2', 'NN3', 'CN3', 'NN1') and New param. k: 60.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CN3T', 'X', 'X', 'CN9') and New param. k: 14.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CE2', 'CE2', 'HE2', 'HE2') and New param. k: 3.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CPH2', 'NR2', 'NR1', 'HR1') and New param. k: 0.500000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CPH2', 'NR1', 'NR2', 'HR1') and New param. k: 0.500000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CPH1', 'NR1', 'CPH1', 'HR3') and New param. k: 0.500000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CPH1', 'NR2', 'CPH1', 'HR3') and New param. k: 0.500000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CPH1', 'NR3', 'CPH1', 'HR3') and New param. k: 1.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CPH1', 'CPH1', 'NR1', 'HR3') and New param. k: 0.500000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CPH1', 'CPH1', 'NR2', 'HR3') and New param. k: 0.500000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CP3', 'CP1', 'C', 'N') and New param. k: 0.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('C', 'X', 'X', 'NC2') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('C', 'HC', 'HC', 'NC2') and New param. k: 0.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('HC', 'X', 'X', 'NC2') and New param. k: -2.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('H', 'X', 'X', 'NH1') and New param. k: 20.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('H', 'X', 'X', 'NH2') and New param. k: 4.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('H', 'CPH2', 'CPH1', 'NR1') and New param. k: 0.450000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('H', 'CPH1', 'CPH2', 'NR1') and New param. k: 0.450000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('H', 'CPH2', 'CPH1', 'NR3') and New param. k: 1.200000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('H', 'CPH1', 'CPH2', 'NR3') and New param. k: 1.200000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'NH2', 'CP1', 'O') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'NH2', 'CT1', 'O') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'NH2', 'CT2', 'O') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'NH2', 'CT3', 'O') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'NH2', 'HA1', 'O') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'CT2', 'N', 'O') and New param. k: 120.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'CP1', 'NH2', 'O') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'CT1', 'NH2', 'O') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'CT2', 'NH2', 'O') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'CT3', 'NH2', 'O') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'HA1', 'NH2', 'O') and New param. k: 45.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('C', 'X', 'X', 'O') and New param. k: 120.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CD', 'X', 'X', 'OB') and New param. k: 100.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'X', 'X', 'OC') and New param. k: 96.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'X', 'X', 'CT1') and New param. k: 96.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'X', 'X', 'CT2') and New param. k: 96.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmparameterset.py:429: UserWarning: Repeat improper dihedral found ('CC', 'X', 'X', 'CT3') and New param. k: 96.000000  ,thetaq: 0.000000 will use
+  warnings.warn('Repeat improper dihedral found %r and New param. k: %f  ,thetaq: %f will use' %
+load PSF
+Traceback (most recent call last):
+  File "/home/joshua/NADOC/experiments/cube_pore_cavity_20260914/openmm_validation/full_probe.py", line 28, in <module>
+    psf=app.CharmmPsfFile(str(out/'parser_compatible.psf'));g=json.loads((p/'graphene_nanopore.json').read_text());box=np.array(g['periodic_box_nm']);center=np.array(g['pore_center_nm']);psf.setBox(*(box*u.nanometer))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmpsffile.py", line 73, in newfunc
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmpsffile.py", line 209, in __init__
+    sec, ptr, data = CharmmPsfFile._parse_psf_section(psf)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/joshua/NADOC/.venv/lib/python3.12/site-packages/openmm/app/charmmpsffile.py", line 566, in _parse_psf_section
+    raise CharmmPSFError('Could not determine section title')
+openmm.app.internal.charmm.exceptions.CharmmPSFError: Could not determine section title

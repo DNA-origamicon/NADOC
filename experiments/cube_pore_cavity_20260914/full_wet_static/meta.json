@@ -1,0 +1,8 @@
+{
+  "purpose": "Check virial before a large cavity develops",
+  "source_stage": "cube_pore_01_300K_NPT_ENM_k0p5_p10",
+  "source_frame": 0,
+  "source_time_ps": 8,
+  "same_stage_forces_including_ENM_and_graphene_restraints": true,
+  "velocities": "Original frame velocities unavailable; thermal velocities initialized at 300 K. Static virial diagnostic, not archived runtime pressure or new dynamics."
+}

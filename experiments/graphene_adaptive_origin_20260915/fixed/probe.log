@@ -1,0 +1,366 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 1 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: v80000
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 6 cores x 2 PUs = 12-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Info: Built with CUDA version 12060
+Pe 0 physical rank 0 binding to CUDA device 0 on DESKTOP-T44QS0K: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 8191MB  Rev: 7.5  PCI: 0:7:0
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64
+Info: Built Sun Jul 12 01:58:16 MDT 2026 by joshua on DESKTOP-T44QS0K
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  1    DESKTOP-T44QS0K  joshua
+Info: Running on 1 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.254317 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 0 MB of memory in use based on /proc/self/stat
+Info: Configuration file is probe.conf
+Info: Working in the current directory /home/joshua/NADOC/experiments/graphene_adaptive_origin_20260915/fixed
+TCL: Reduction callback proc set to nadoc_min_callback
+TCL: Suspending until startup complete.
+Info: Tuning parameters to improve GPU-resident performance
+Info: Setting margin to 4
+Warning: Keeping outputEnergies at user-specified value 20
+Warning: Performance might be improved by increasing outputEnergies to >= 100
+Warning: The Langevin gamma parameters differ over the particles,
+Warning: requiring extra work per step to constrain rigid bonds.
+Warning: Disabling lonepair support due to incompatability with GPU-resident.
+Info: Running with GPU-resident mode
+Info: SIMULATION PARAMETERS:
+Info: TIMESTEP               2
+Info: NUMBER OF STEPS        0
+Info: STEPS PER CYCLE        20
+Info: PERIODIC CELL BASIS 1  123.54 0 0
+Info: PERIODIC CELL BASIS 2  0 122.976 0
+Info: PERIODIC CELL BASIS 3  0 0 120
+Info: PERIODIC CELL CENTER   61.77 61.4878 12
+Info: WRAPPING WATERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: LOAD BALANCER  Centralized
+Info: LOAD BALANCING STRATEGY  New Load Balancers -- DEFAULT
+Info: LDB PERIOD             4000 steps
+Info: FIRST LDB TIMESTEP     100
+Info: LAST LDB TIMESTEP     -1
+Info: LDB BACKGROUND SCALING 1
+Info: HOM BACKGROUND SCALING 1
+Info: PME BACKGROUND SCALING 1
+Info: MIN ATOMS PER PATCH    40
+Info: EMPTY PATCH LOAD       40 ATOMS
+Info: INITIAL TEMPERATURE    0
+Info: CENTER OF MASS MOVING INITIALLY? NO
+Info: DIELECTRIC             1
+Info: EXCLUDE                SCALED ONE-FOUR
+Info: 1-4 ELECTROSTATICS SCALED BY 1
+Info: MODIFIED 1-4 VDW PARAMETERS WILL BE USED
+Info: NO DCD TRAJECTORY OUTPUT
+Info: XST FILENAME           output/probe.xst
+Info: XST FREQUENCY          1000
+Info: NO VELOCITY DCD OUTPUT
+Info: NO FORCE DCD OUTPUT
+Info: OUTPUT FILENAME        output/probe
+Info: BINARY OUTPUT FILES WILL BE USED
+Info: RESTART FILENAME       output/probe.restart
+Info: RESTART FREQUENCY      1000
+Info: BINARY RESTART FILES WILL BE USED
+Info: SWITCHING ACTIVE
+Info: SWITCHING ON           8
+Info: SWITCHING OFF          10
+Info: PAIRLIST DISTANCE      13.5
+Info: PAIRLIST SHRINK RATE   0.01
+Info: PAIRLIST GROW RATE     0.01
+Info: PAIRLIST TRIGGER       0.3
+Info: PAIRLISTS PER CYCLE    2
+Info: PAIRLISTS ENABLED
+Info: MARGIN                 4
+Info: HYDROGEN GROUP CUTOFF  2.5
+Info: PATCH DIMENSION        20
+Info: ENERGY OUTPUT STEPS    20
+Info: ENERGY EVALUATION STEPS    20
+Info: OUTPUT ENERGY PRECISION 4
+Info: CROSSTERM ENERGY INCLUDED IN DIHEDRAL
+Info: TIMING OUTPUT STEPS    200
+Info: HARMONIC CONSTRAINTS ACTIVE
+Info: HARMONIC CONS EXP      2
+Info: LANGEVIN DYNAMICS ACTIVE
+Info: LANGEVIN TEMPERATURE   0
+Info: LANGEVIN USING BBK INTEGRATOR
+Info: LANGEVIN DAMPING COEFFICIENT IS 5 INVERSE PS
+Info: LANGEVIN DYNAMICS NOT APPLIED TO HYDROGENS
+Info: PARTICLE MESH EWALD (PME) ACTIVE
+Info: PME TOLERANCE               1e-06
+Info: PME EWALD COEFFICIENT       0.312341
+Info: PME INTERPOLATION ORDER     4
+Info: PME GRID DIMENSIONS         84 84 80
+Info: PME MAXIMUM GRID SPACING    1.5
+Info: PME CALCULATION WILL BE PERFORMED ON GPU
+Info: FULL ELECTROSTATIC EVALUATION FREQUENCY      2
+Info: USING VERLET I (r-RESPA) MTS SCHEME.
+Info: C1 SPLITTING OF LONG RANGE ELECTROSTATICS
+Info: PLACING ATOMS IN PATCHES BY HYDROGEN GROUPS
+Info: RANDOM NUMBER SEED     6142026
+Info: USE HYDROGEN BONDS?    NO
+Info: COORDINATE PDB         /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/z/system.pdb
+Info: STRUCTURE FILE         /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/open_pore/fill_100/system.psf
+Info: PARAMETER file: CHARMM format! 
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36_na.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36m_prot.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_np_thiol.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/toppar_water_ions_cufix.str
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_stub_ions_nbfix.str
+Info: USING ARITHMETIC MEAN TO COMBINE L-J SIGMA PARAMETERS
+Info: BINARY COORDINATES     /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/z/resume.coor
+Info: SKIPPING rtf SECTION IN STREAM FILE
+Warning: DUPLICATE vdW PAIR ENTRY FOR NC2-OC
+PREVIOUS VALUES  A=829897 B=717.124 A14=829897 B14717.124
+   USING VALUES  A=1.19807e+06 B=861.635 A14=1.19807e+06 B14861.635
+Warning: DUPLICATE vdW ENTRY FOR OC
+PREVIOUS VALUES  sigma=3.02906 epsilon=0.12 sigma14=3.02906 epsilon14=0.12
+   USING VALUES  sigma=3.02941 epsilon=0.12 sigma14=3.02941 epsilon14=0.12
+Info: SUMMARY OF PARAMETERS:
+Info: 234 BONDS
+Info: 618 ANGLES
+Info: 1256 DIHEDRAL
+Info: 50 IMPROPER
+Info: 6 CROSSTERM
+Info: 129 VDW
+Info: 109 VDW_PAIRS
+Info: 0 NBTHOLE_PAIRS
+Warning: Ignored 57179 bonds with zero force constants.
+Warning: Will get H-H distance in rigid H2O from H-O-H angle.
+Info: TIME FOR READING PSF FILE: 0.379901
+Info: Reading pdb file /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/z/system.pdb
+Info: TIME FOR READING PDB FILE: 0.150028
+Info: 
+Info: ****************************
+Info: STRUCTURE SUMMARY:
+Info: 175743 ATOMS
+Info: 114358 BONDS
+Info: 57179 ANGLES
+Info: 0 DIHEDRALS
+Info: 0 IMPROPERS
+Info: 0 CROSSTERMS
+Info: 0 EXCLUSIONS
+Info: 3876 CONSTRAINTS
+Info: 527229 DEGREES OF FREEDOM
+Info: 61385 HYDROGEN GROUPS
+Info: 3 ATOMS IN LARGEST HYDROGEN GROUP
+Info: 61385 MIGRATION GROUPS
+Info: 3 ATOMS IN LARGEST MIGRATION GROUP
+Info: TOTAL MASS = 1.0863e+06 amu
+Info: TOTAL CHARGE = 0 e
+Info: MASS DENSITY = 0.989467 g/cm^3
+Info: ATOM DENSITY = 0.0963985 atoms/A^3
+Info: *****************************
+Info: Reading from binary file /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/z/resume.coor
+Info: 
+Info: Entering startup at 0.977345 s, 0 MB of memory in use
+Info: Startup phase 0 took 0.000513832 s, 0 MB of memory in use
+Info: ADDED 171537 IMPLICIT EXCLUSIONS
+Info: Startup phase 1 took 0.0268565 s, 0 MB of memory in use
+Info: NONBONDED TABLE R-SQUARED SPACING: 0.0625
+Info: NONBONDED TABLE SIZE: 705 POINTS
+Info: INCONSISTENCY IN FAST TABLE ENERGY VS FORCE: 0.000290479 AT 0.251946
+Info: INCONSISTENCY IN SCOR TABLE ENERGY VS FORCE: 0.000178193 AT 9.97184
+Info: INCONSISTENCY IN VDWA TABLE ENERGY VS FORCE: 0.0040507 AT 0.251946
+Info: INCONSISTENCY IN VDWB TABLE ENERGY VS FORCE: 0.00150189 AT 0.251946
+Info: Startup phase 2 took 0.000669972 s, 0 MB of memory in use
+Info: Startup phase 3 took 7.5186e-05 s, 0 MB of memory in use
+Info: Startup phase 4 took 0.000579526 s, 0 MB of memory in use
+Info: Startup phase 5 took 4.0478e-05 s, 0 MB of memory in use
+Info: PATCH GRID IS 6 (PERIODIC) BY 6 (PERIODIC) BY 6 (PERIODIC)
+Info: PATCH GRID IS 1-AWAY BY 1-AWAY BY 1-AWAY
+Info: REMOVING COM VELOCITY 0 0 0
+Info: LARGEST PATCH (133) HAS 897 ATOMS
+Info: TORUS A SIZE 1 USING 0
+Info: TORUS B SIZE 1 USING 0
+Info: TORUS C SIZE 1 USING 0
+Info: TORUS MINIMAL MESH SIZE IS 1 BY 1 BY 1
+Info: Placed 100% of base nodes on same physical node as patch
+Info: Startup phase 6 took 0.115623 s, 0 MB of memory in use
+Info: Use 3D box decompostion in PME FFT.
+Info: PME using 1 x 1 x 1 pencil grid for FFT and reciprocal sum.
+Info: Startup phase 7 took 0.000143486 s, 0 MB of memory in use
+Info: Updated CUDA force table with 4096 elements.
+Info: Updated CUDA LJ table with 124 x 124 elements.
+Info: Startup phase 8 took 0.00272195 s, 0 MB of memory in use
+Info: Startup phase 9 took 3.5639e-05 s, 0 MB of memory in use
+Info: Startup phase 10 took 1.8331e-05 s, 0 MB of memory in use
+Info: Startup phase 11 took 0.00108461 s, 0 MB of memory in use
+LDB: Central LB being created...
+Info: Startup phase 12 took 0.00594935 s, 0 MB of memory in use
+Info: CREATING 4760 COMPUTE OBJECTS
+Info: Found 4 unique exclusion lists needing 4 bytes
+Info: Startup phase 13 took 0.0182658 s, 0 MB of memory in use
+Info: Startup phase 14 took 8.9981e-05 s, 0 MB of memory in use
+Info: Startup phase 15 took 0.00057413 s, 0 MB of memory in use
+Info: Finished startup at 1.15059 s, 0 MB of memory in use
+
+TCL: Minimizing for 20 steps
+Warning: Energy evaluation is expensive, increase computeEnergies to improve performance.
+Warning: If computeEnergies is not defined, its value defaults to the same as outputEnergies, and increasing outputEnergies would be helpful to improve the performance.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:       0         0.0000         0.0000         0.0000         0.0000        -641428.6845   3783523.6651      3444.1442         0.0000         0.0000        3145539.1247         0.0000   3145539.1247   3145539.1247         0.0000           -666.7960    -61833.9040   1823088.7837      -666.7960    -61833.9040
+
+OPENING EXTENDED SYSTEM TRAJECTORY FILE
+MINIMIZER SLOWLY MOVING 29 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       1         0.0000         0.0000         0.0000         0.0000        -641469.2609    557787.1353      3444.1442         0.0000         0.0000         -80237.9815         0.0000    -80237.9815    -80237.9815         0.0000           -666.8063    -41768.0433   1823088.7837      -666.8063    -41768.0433
+
+MINIMIZER SLOWLY MOVING 26 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       2         0.0000         0.0000         0.0000         0.0000        -641475.1433    159416.7085      3444.1442         0.0000         0.0000        -478614.2906         0.0000   -478614.2906   -478614.2906         0.0000           -666.8223    -39582.4011   1823088.7837      -666.8223    -39582.4011
+
+MINIMIZER SLOWLY MOVING 21 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       3         0.0000         0.0000         0.0000         0.0000        -641481.5534     90305.6692      3444.1442         0.0000         0.0000        -547731.7401         0.0000   -547731.7401   -547731.7401         0.0000           -666.8070    -39203.7181   1823088.7837      -666.8070    -39203.7181
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       4         0.0000         0.0000         0.0000         0.0000        -641478.8494     73720.1649      3444.1442         0.0000         0.0000        -564314.5404         0.0000   -564314.5404   -564314.5404         0.0000           -666.7930    -39268.1166   1823088.7837      -666.7930    -39268.1166
+
+MINIMIZER SLOWLY MOVING 10 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       5         0.0000         0.0000         0.0000         0.0000        -641454.2576     67358.6633      3444.1442         0.0000         0.0000        -570651.4501         0.0000   -570651.4501   -570651.4501         0.0000           -666.7954    -39612.3201   1823088.7837      -666.7954    -39612.3201
+
+MINIMIZER SLOWLY MOVING 6 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       6         0.0000         0.0000         0.0000         0.0000        -641441.3058     66181.4232      3444.1442         0.0000         0.0000        -571815.7384         0.0000   -571815.7384   -571815.7384         0.0000           -666.7934    -39661.6775   1823088.7837      -666.7934    -39661.6775
+
+MINIMIZER STARTING CONJUGATE GRADIENT ALGORITHM
+LINE MINIMIZER REDUCING GRADIENT FROM 1.56511e+08 TO 156511
+ENERGY:       7       109.8073        23.3949         0.0000         0.0000        -645198.8117     64013.9306      3414.7153         0.0000         0.0000        -577636.9637         0.0000   -577636.9637   -577636.9637         0.0000           -664.0238    -38218.0364   1823088.7837      -664.0238    -38218.0364
+
+ENERGY:       8       439.7971        93.3163         0.0000         0.0000        -648969.4876     62756.5880      3385.4135         0.0000         0.0000        -582294.3727         0.0000   -582294.3727   -582294.3727         0.0000           -661.2637    -36761.1003   1823088.7837      -661.2637    -36761.1003
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 8.08483e+07 TO 80848.3
+ENERGY:       9      1827.6026       398.7339         0.0000         0.0000        -657008.7579     61617.0271      3315.1345         0.0000         0.0000        -589850.2597         0.0000   -589850.2597   -589850.2597         0.0000           -654.5990    -33711.8344   1823088.7837      -654.5990    -33711.8344
+
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      10      4172.7061       913.0793         0.0000         0.0000        -665098.4864     60814.3897      3245.5974         0.0000         0.0000        -595952.7138         0.0000   -595952.7138   -595952.7138         0.0000           -647.9795    -30621.5356   1823088.7837      -647.9795    -30621.5356
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.73122e+07 TO 37312.2
+ENERGY:      11     10109.1884      2402.5437         0.0000         0.0000        -679491.9585     59706.4061      3072.8680         0.0000         0.0000        -604200.9521         0.0000   -604200.9521   -604200.9521         0.0000           -631.2499    -25463.1763   1823088.7837      -631.2499    -25463.1763
+
+ENERGY:      12     18719.1149      4579.8204         0.0000         0.0000        -694032.5575     58823.3760      2904.8922         0.0000         0.0000        -609005.3539         0.0000   -609005.3539   -609005.3539         0.0000           -614.7580    -20195.1992   1823088.7837      -614.7580    -20195.1992
+
+ENERGY:      13     30055.0680      7426.1066         0.0000         0.0000        -708720.6312     58104.5673      2741.6699         0.0000         0.0000        -610393.2195         0.0000   -610393.2195   -610393.2195         0.0000           -598.5047    -14817.0471   1823088.7837      -598.5047    -14817.0471
+
+ENERGY:      14     44169.1354     10922.7130         0.0000         0.0000        -723556.9693     57523.0762      2583.2010         0.0000         0.0000        -608358.8436         0.0000   -608358.8436   -608358.8436         0.0000           -582.4903     -9327.4554   1823088.7837      -582.4903     -9327.4554
+
+LINE MINIMIZER BRACKET: DX 0.000268385 0.000268385 DU -1387.87 2034.38 DUDX -1.15317e+07 1.19363e+06 1.39829e+07 
+ENERGY:      15     28797.3120      7111.9056         0.0000         0.0000        -707245.0555     58170.0200      2757.7782         0.0000         0.0000        -610408.0397         0.0000   -610408.0397   -610408.0397         0.0000           -600.1193    -15359.8520   1823088.7837      -600.1193    -15359.8520
+
+LINE MINIMIZER BRACKET: DX 0.000241546 2.68385e-05 DU -1402.69 14.8201 DUDX -1.15317e+07 -80584.5 1.19363e+06 
+ENERGY:      16     28921.8424      7143.0331         0.0000         0.0000        -707392.5729     58163.3988      2756.1652         0.0000         0.0000        -610408.1335         0.0000   -610408.1335   -610408.1335         0.0000           -599.9577    -15305.6184   1823088.7837      -599.9577    -15305.6184
+
+LINE MINIMIZER BRACKET: DX 2.68385e-06 2.41546e-05 DU -0.0937999 14.9139 DUDX -80584.5 46817.1 1.19363e+06 
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM
+LINE MINIMIZER REDUCING GRADIENT FROM 1.16994e+07 TO 11699.4
+ENERGY:      17     22604.4883      7083.5377         0.0000         0.0000        -704067.7681     57716.3639      2560.4371         0.0000         0.0000        -614102.9410         0.0000   -614102.9410   -614102.9410         0.0000           -579.8217    -18229.4423   1823088.7837      -579.8217    -18229.4423
+
+ENERGY:      18     17203.2197      7049.1732         0.0000         0.0000        -700749.3722     57342.4238      2371.9689         0.0000         0.0000        -616782.5865         0.0000   -616782.5865   -616782.5865         0.0000           -559.9926    -21111.2222   1823088.7837      -559.9926    -21111.2222
+
+ENERGY:      19     12707.3943      7040.4877         0.0000         0.0000        -697437.6210     57026.2787      2190.7608         0.0000         0.0000        -618472.6994         0.0000   -618472.6994   -618472.6994         0.0000           -540.4705    -23951.7929   1823088.7837      -540.4705    -23951.7929
+
+LDB: ============= START OF LOAD BALANCING ============== 1.82757
+LDB: ============== END OF LOAD BALANCING =============== 1.82762
+LDB: =============== DONE WITH MIGRATION ================ 1.82776
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 9.52544e+06 TO 9525.44
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      20     12707.3943      7040.4877         0.0000         0.0000        -697437.6271     57026.2788      2190.7608         0.0000         0.0000        -618472.7054         0.0000   -618472.7054   -618472.7054         0.0000           -540.4705    -23951.7930   1823088.7837      -540.4705    -23951.7930
+
+TCL: NADOC_ADAPTIVE_MIN step=20 energy=-618472.7054303115 improvement= stable=0/3
+TCL: Minimizing for 20 steps
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      20     12707.3943      7040.4877         0.0000         0.0000        -697437.6271     57026.2788      2190.7608         0.0000         0.0000        -618472.7054         0.0000   -618472.7054   -618472.7054         0.0000           -540.4705    -23951.7930   1823088.7837      -540.4705    -23951.7930
+
+MINIMIZER STARTING CONJUGATE GRADIENT ALGORITHM
+LINE MINIMIZER REDUCING GRADIENT FROM 9.52544e+06 TO 9525.44
+ENERGY:      21     15378.4362      8166.7065         0.0000         0.0000        -702789.2752     56381.4683      2069.2940         0.0000         0.0000        -620793.3703         0.0000   -620793.3703   -620793.3703         0.0000           -526.4915    -22480.1658   1823088.7837      -526.4915    -22480.1658
+
+ENERGY:      22     18458.1365      9382.5935         0.0000         0.0000        -708151.6150     55804.4715      1951.3198         0.0000         0.0000        -622555.0938         0.0000   -622555.0938   -622555.0938         0.0000           -512.6777    -20984.5208   1823088.7837      -512.6777    -20984.5208
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 5.5302e+06 TO 5530.2
+ENERGY:      23     18268.0594      9928.9585         0.0000         0.0000        -709931.6818     55475.0945      1814.9102         0.0000         0.0000        -624444.6593         0.0000   -624444.6593   -624444.6593         0.0000           -496.8848    -21088.8144   1823088.7837      -496.8848    -21088.8144
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 4.90437e+06 TO 4904.37
+ENERGY:      24     17966.0957     11808.5517         0.0000         0.0000        -715994.6896     54280.5243      1364.5440         0.0000         0.0000        -630574.9739         0.0000   -630574.9739   -630574.9739         0.0000           -441.0998    -21505.4892   1823088.7837      -441.0998    -21505.4892
+
+ENERGY:      25     17945.0794     13936.1618         0.0000         0.0000        -722032.9892     53259.4759       978.9710         0.0000         0.0000        -635913.3013         0.0000   -635913.3013   -635913.3013         0.0000           -387.7406    -21765.3410   1823088.7837      -387.7406    -21765.3410
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.45115e+06 TO 3451.15
+ENERGY:      26     17554.8034     13819.3223         0.0000         0.0000        -722599.6016     52915.8734       892.2552         0.0000         0.0000        -637417.3474         0.0000   -637417.3474   -637417.3474         0.0000           -374.1928    -22140.1518   1823088.7837      -374.1928    -22140.1518
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.05035e+06 TO 3050.35
+ENERGY:      27     17391.8685     13833.1582         0.0000         0.0000        -726141.7372     52139.2023       629.2477         0.0000         0.0000        -642148.2605         0.0000   -642148.2605   -642148.2605         0.0000           -330.1554    -22458.2231   1823088.7837      -330.1554    -22458.2231
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.59314e+06 TO 2593.14
+ENERGY:      28     18100.0765     14109.5272         0.0000         0.0000        -730678.2423     51584.9561       432.8882         0.0000         0.0000        -646450.7943         0.0000   -646450.7943   -646450.7943         0.0000           -291.8539    -22156.8412   1823088.7837      -291.8539    -22156.8412
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.25816e+06 TO 2258.16
+ENERGY:      29     17356.7677     13875.8816         0.0000         0.0000        -732000.9756     51097.8865       326.5947         0.0000         0.0000        -649343.8452         0.0000   -649343.8452   -649343.8452         0.0000           -267.2300    -22861.1250   1823088.7837      -267.2300    -22861.1250
+
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      30     16813.7038     13676.0028         0.0000         0.0000        -733318.4984     50668.2338       235.7841         0.0000         0.0000        -651924.7739         0.0000   -651924.7739   -651924.7739         0.0000           -243.2183    -23502.1541   1823088.7837      -243.2183    -23502.1541
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 2.5831e+06 TO 2583.1
+ENERGY:      31     17264.6173     13859.6906         0.0000         0.0000        -734529.0925     50692.4048       224.6387         0.0000         0.0000        -652487.7411         0.0000   -652487.7411   -652487.7411         0.0000           -240.1544    -23110.9607   1823088.7837      -240.1544    -23110.9607
+
+ENERGY:      32     17778.5892     14049.7774         0.0000         0.0000        -735740.9474     50725.8714       213.7784         0.0000         0.0000        -652972.9310         0.0000   -652972.9310   -652972.9310         0.0000           -237.1057    -22716.2278   1823088.7837      -237.1057    -22716.2278
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.90122e+06 TO 1901.22
+ENERGY:      33     17915.9725     14091.9974         0.0000         0.0000        -736421.2315     50668.9862       200.6134         0.0000         0.0000        -653543.6620         0.0000   -653543.6620   -653543.6620         0.0000           -233.0450    -22661.3386   1823088.7837      -233.0450    -22661.3386
+
+ENERGY:      34     18058.8350     14135.1614         0.0000         0.0000        -737102.0018     50615.7232       187.8929         0.0000         0.0000        -654104.3892         0.0000   -654104.3892   -654104.3892         0.0000           -229.0031    -22603.6883   1823088.7837      -229.0031    -22603.6883
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.82114e+06 TO 1821.14
+ENERGY:      35     18061.0236     14138.5668         0.0000         0.0000        -737617.7116     50560.3752       175.6755         0.0000         0.0000        -654682.0706         0.0000   -654682.0706   -654682.0706         0.0000           -224.9649    -22630.7572   1823088.7837      -224.9649    -22630.7572
+
+ENERGY:      36     18067.0252     14142.8077         0.0000         0.0000        -738133.4223     50507.9180       163.8978         0.0000         0.0000        -655251.7735         0.0000   -655251.7735   -655251.7735         0.0000           -220.9454    -22655.0374   1823088.7837      -220.9454    -22655.0374
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.76499e+06 TO 1764.99
+ENERGY:      37     18093.4358     14152.2411         0.0000         0.0000        -738684.3990     50454.5909       152.8365         0.0000         0.0000        -655831.2946         0.0000   -655831.2946   -655831.2946         0.0000           -217.0155    -22669.8557   1823088.7837      -217.0155    -22669.8557
+
+ENERGY:      38     18123.8250     14162.5680         0.0000         0.0000        -739235.3906     50402.8318       142.1931         0.0000         0.0000        -656403.9728         0.0000   -656403.9728   -656403.9728         0.0000           -213.1039    -22682.0254   1823088.7837      -213.1039    -22682.0254
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 1.70454e+06 TO 1704.54
+ENERGY:      39     18143.6708     14170.1063         0.0000         0.0000        -739766.5882     50354.1135       132.5882         0.0000         0.0000        -656966.1094         0.0000   -656966.1094   -656966.1094         0.0000           -209.4234    -22699.7932   1823088.7837      -209.4234    -22699.7932
+
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      40     18143.6708     14170.1063         0.0000         0.0000        -739766.5877     50354.1137       132.5882         0.0000         0.0000        -656966.1087         0.0000   -656966.1087   -656966.1087         0.0000           -209.4234    -22699.7931   1823088.7837      -209.4234    -22699.7931
+
+TCL: NADOC_ADAPTIVE_MIN step=40 energy=-656966.1086820697 improvement=38493.403251758195 stable=0/3
+TCL: NADOC_ADAPTIVE_MIN_STOP reason=maximum steps=40 max=40
+WRITING EXTENDED SYSTEM TO OUTPUT FILE AT STEP 40
+CLOSING EXTENDED SYSTEM TRAJECTORY FILE
+WRITING COORDINATES TO OUTPUT FILE AT STEP 40
+The last position output (seq=-2) takes 0.004 seconds, 0.000 MB of memory in use
+WRITING VELOCITIES TO OUTPUT FILE AT STEP 40
+The last velocity output (seq=-2) takes 0.002 seconds, 0.000 MB of memory in use
+====================================================
+
+WallClock: 2.585439  CPUTime: 2.567061  Memory: 0.000000 MB
+[Partition 0][Node 0] End of program

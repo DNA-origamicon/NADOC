@@ -1,0 +1,334 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 1 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: v80000
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 6 cores x 2 PUs = 12-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Info: Built with CUDA version 12060
+Pe 0 physical rank 0 binding to CUDA device 0 on DESKTOP-T44QS0K: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 8191MB  Rev: 7.5  PCI: 0:7:0
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64
+Info: Built Sun Jul 12 01:58:16 MDT 2026 by joshua on DESKTOP-T44QS0K
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  1    DESKTOP-T44QS0K  joshua
+Info: Running on 1 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.28184 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 0 MB of memory in use based on /proc/self/stat
+Info: Configuration file is probe.conf
+Info: Working in the current directory /home/joshua/NADOC/experiments/graphene_adaptive_origin_20260915/broken
+TCL: Reduction callback proc set to nadoc_min_callback
+TCL: Suspending until startup complete.
+Info: Tuning parameters to improve GPU-resident performance
+Info: Setting margin to 4
+Warning: Keeping outputEnergies at user-specified value 20
+Warning: Performance might be improved by increasing outputEnergies to >= 100
+Warning: The Langevin gamma parameters differ over the particles,
+Warning: requiring extra work per step to constrain rigid bonds.
+Warning: Disabling lonepair support due to incompatability with GPU-resident.
+Info: Running with GPU-resident mode
+Info: SIMULATION PARAMETERS:
+Info: TIMESTEP               2
+Info: NUMBER OF STEPS        0
+Info: STEPS PER CYCLE        20
+Info: PERIODIC CELL BASIS 1  123.54 0 0
+Info: PERIODIC CELL BASIS 2  0 122.976 0
+Info: PERIODIC CELL BASIS 3  0 0 120
+Info: PERIODIC CELL CENTER   61.77 61.4878 12
+Info: WRAPPING WATERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: LOAD BALANCER  Centralized
+Info: LOAD BALANCING STRATEGY  New Load Balancers -- DEFAULT
+Info: LDB PERIOD             4000 steps
+Info: FIRST LDB TIMESTEP     100
+Info: LAST LDB TIMESTEP     -1
+Info: LDB BACKGROUND SCALING 1
+Info: HOM BACKGROUND SCALING 1
+Info: PME BACKGROUND SCALING 1
+Info: MIN ATOMS PER PATCH    40
+Info: EMPTY PATCH LOAD       40 ATOMS
+Info: INITIAL TEMPERATURE    0
+Info: CENTER OF MASS MOVING INITIALLY? NO
+Info: DIELECTRIC             1
+Info: EXCLUDE                SCALED ONE-FOUR
+Info: 1-4 ELECTROSTATICS SCALED BY 1
+Info: MODIFIED 1-4 VDW PARAMETERS WILL BE USED
+Info: NO DCD TRAJECTORY OUTPUT
+Info: XST FILENAME           output/probe.xst
+Info: XST FREQUENCY          1000
+Info: NO VELOCITY DCD OUTPUT
+Info: NO FORCE DCD OUTPUT
+Info: OUTPUT FILENAME        output/probe
+Info: BINARY OUTPUT FILES WILL BE USED
+Info: RESTART FILENAME       output/probe.restart
+Info: RESTART FREQUENCY      1000
+Info: BINARY RESTART FILES WILL BE USED
+Info: SWITCHING ACTIVE
+Info: SWITCHING ON           8
+Info: SWITCHING OFF          10
+Info: PAIRLIST DISTANCE      13.5
+Info: PAIRLIST SHRINK RATE   0.01
+Info: PAIRLIST GROW RATE     0.01
+Info: PAIRLIST TRIGGER       0.3
+Info: PAIRLISTS PER CYCLE    2
+Info: PAIRLISTS ENABLED
+Info: MARGIN                 4
+Info: HYDROGEN GROUP CUTOFF  2.5
+Info: PATCH DIMENSION        20
+Info: ENERGY OUTPUT STEPS    20
+Info: ENERGY EVALUATION STEPS    20
+Info: OUTPUT ENERGY PRECISION 4
+Info: CROSSTERM ENERGY INCLUDED IN DIHEDRAL
+Info: TIMING OUTPUT STEPS    200
+Info: HARMONIC CONSTRAINTS ACTIVE
+Info: HARMONIC CONS EXP      2
+Info: LANGEVIN DYNAMICS ACTIVE
+Info: LANGEVIN TEMPERATURE   0
+Info: LANGEVIN USING BBK INTEGRATOR
+Info: LANGEVIN DAMPING COEFFICIENT IS 5 INVERSE PS
+Info: LANGEVIN DYNAMICS NOT APPLIED TO HYDROGENS
+Info: PARTICLE MESH EWALD (PME) ACTIVE
+Info: PME TOLERANCE               1e-06
+Info: PME EWALD COEFFICIENT       0.312341
+Info: PME INTERPOLATION ORDER     4
+Info: PME GRID DIMENSIONS         84 84 80
+Info: PME MAXIMUM GRID SPACING    1.5
+Info: PME CALCULATION WILL BE PERFORMED ON GPU
+Info: FULL ELECTROSTATIC EVALUATION FREQUENCY      2
+Info: USING VERLET I (r-RESPA) MTS SCHEME.
+Info: C1 SPLITTING OF LONG RANGE ELECTROSTATICS
+Info: PLACING ATOMS IN PATCHES BY HYDROGEN GROUPS
+Info: RANDOM NUMBER SEED     6142026
+Info: USE HYDROGEN BONDS?    NO
+Info: COORDINATE PDB         /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/z/system.pdb
+Info: STRUCTURE FILE         /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/open_pore/fill_100/system.psf
+Info: PARAMETER file: CHARMM format! 
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36_na.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36m_prot.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_np_thiol.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/toppar_water_ions_cufix.str
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_stub_ions_nbfix.str
+Info: USING ARITHMETIC MEAN TO COMBINE L-J SIGMA PARAMETERS
+Info: BINARY COORDINATES     /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/z/resume.coor
+Info: SKIPPING rtf SECTION IN STREAM FILE
+Warning: DUPLICATE vdW PAIR ENTRY FOR NC2-OC
+PREVIOUS VALUES  A=829897 B=717.124 A14=829897 B14717.124
+   USING VALUES  A=1.19807e+06 B=861.635 A14=1.19807e+06 B14861.635
+Warning: DUPLICATE vdW ENTRY FOR OC
+PREVIOUS VALUES  sigma=3.02906 epsilon=0.12 sigma14=3.02906 epsilon14=0.12
+   USING VALUES  sigma=3.02941 epsilon=0.12 sigma14=3.02941 epsilon14=0.12
+Info: SUMMARY OF PARAMETERS:
+Info: 234 BONDS
+Info: 618 ANGLES
+Info: 1256 DIHEDRAL
+Info: 50 IMPROPER
+Info: 6 CROSSTERM
+Info: 129 VDW
+Info: 109 VDW_PAIRS
+Info: 0 NBTHOLE_PAIRS
+Warning: Ignored 57179 bonds with zero force constants.
+Warning: Will get H-H distance in rigid H2O from H-O-H angle.
+Info: TIME FOR READING PSF FILE: 0.393085
+Info: Reading pdb file /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/z/system.pdb
+Info: TIME FOR READING PDB FILE: 0.188825
+Info: 
+Info: ****************************
+Info: STRUCTURE SUMMARY:
+Info: 175743 ATOMS
+Info: 114358 BONDS
+Info: 57179 ANGLES
+Info: 0 DIHEDRALS
+Info: 0 IMPROPERS
+Info: 0 CROSSTERMS
+Info: 0 EXCLUSIONS
+Info: 3876 CONSTRAINTS
+Info: 527229 DEGREES OF FREEDOM
+Info: 61385 HYDROGEN GROUPS
+Info: 3 ATOMS IN LARGEST HYDROGEN GROUP
+Info: 61385 MIGRATION GROUPS
+Info: 3 ATOMS IN LARGEST MIGRATION GROUP
+Info: TOTAL MASS = 1.0863e+06 amu
+Info: TOTAL CHARGE = 0 e
+Info: MASS DENSITY = 0.989467 g/cm^3
+Info: ATOM DENSITY = 0.0963985 atoms/A^3
+Info: *****************************
+Info: Reading from binary file /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/z/resume.coor
+Info: 
+Info: Entering startup at 1.10281 s, 0 MB of memory in use
+Info: Startup phase 0 took 0.000480389 s, 0 MB of memory in use
+Info: ADDED 171537 IMPLICIT EXCLUSIONS
+Info: Startup phase 1 took 0.0302094 s, 0 MB of memory in use
+Info: NONBONDED TABLE R-SQUARED SPACING: 0.0625
+Info: NONBONDED TABLE SIZE: 705 POINTS
+Info: INCONSISTENCY IN FAST TABLE ENERGY VS FORCE: 0.000290479 AT 0.251946
+Info: INCONSISTENCY IN SCOR TABLE ENERGY VS FORCE: 0.000178193 AT 9.97184
+Info: INCONSISTENCY IN VDWA TABLE ENERGY VS FORCE: 0.0040507 AT 0.251946
+Info: INCONSISTENCY IN VDWB TABLE ENERGY VS FORCE: 0.00150189 AT 0.251946
+Info: Startup phase 2 took 0.000970011 s, 0 MB of memory in use
+Info: Startup phase 3 took 4.1086e-05 s, 0 MB of memory in use
+Info: Startup phase 4 took 0.000642612 s, 0 MB of memory in use
+Info: Startup phase 5 took 5.7706e-05 s, 0 MB of memory in use
+Info: PATCH GRID IS 6 (PERIODIC) BY 6 (PERIODIC) BY 6 (PERIODIC)
+Info: PATCH GRID IS 1-AWAY BY 1-AWAY BY 1-AWAY
+Info: REMOVING COM VELOCITY 0 0 0
+Info: LARGEST PATCH (133) HAS 897 ATOMS
+Info: TORUS A SIZE 1 USING 0
+Info: TORUS B SIZE 1 USING 0
+Info: TORUS C SIZE 1 USING 0
+Info: TORUS MINIMAL MESH SIZE IS 1 BY 1 BY 1
+Info: Placed 100% of base nodes on same physical node as patch
+Info: Startup phase 6 took 0.395359 s, 0 MB of memory in use
+Info: Use 3D box decompostion in PME FFT.
+Info: PME using 1 x 1 x 1 pencil grid for FFT and reciprocal sum.
+Info: Startup phase 7 took 0.00170551 s, 0 MB of memory in use
+Info: Updated CUDA force table with 4096 elements.
+Info: Updated CUDA LJ table with 124 x 124 elements.
+Info: Startup phase 8 took 0.00403497 s, 0 MB of memory in use
+Info: Startup phase 9 took 0.000104332 s, 0 MB of memory in use
+Info: Startup phase 10 took 3.5085e-05 s, 0 MB of memory in use
+Info: Startup phase 11 took 0.00230574 s, 0 MB of memory in use
+LDB: Central LB being created...
+Info: Startup phase 12 took 0.0395894 s, 0 MB of memory in use
+Info: CREATING 4760 COMPUTE OBJECTS
+Info: Found 4 unique exclusion lists needing 4 bytes
+Info: Startup phase 13 took 0.0293795 s, 0 MB of memory in use
+Info: Startup phase 14 took 0.000150682 s, 0 MB of memory in use
+Info: Startup phase 15 took 0.000881929 s, 0 MB of memory in use
+Info: Finished startup at 1.60876 s, 0 MB of memory in use
+
+TCL: Minimizing for 20 steps
+Warning: Energy evaluation is expensive, increase computeEnergies to improve performance.
+Warning: If computeEnergies is not defined, its value defaults to the same as outputEnergies, and increasing outputEnergies would be helpful to improve the performance.
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:       0         0.0000         0.0000         0.0000         0.0000        -641428.6845   3783523.6651      3444.1442         0.0000         0.0000        3145539.1248         0.0000   3145539.1248   3145539.1248         0.0000           -666.7960    -61833.9040   1823088.7837      -666.7960    -61833.9040
+
+OPENING EXTENDED SYSTEM TRAJECTORY FILE
+MINIMIZER SLOWLY MOVING 29 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       1         0.0000         0.0000         0.0000         0.0000        -641469.2609    557787.1353      3444.1442         0.0000         0.0000         -80237.9815         0.0000    -80237.9815    -80237.9815         0.0000           -666.8063    -41768.0433   1823088.7837      -666.8063    -41768.0433
+
+MINIMIZER SLOWLY MOVING 26 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       2         0.0000         0.0000         0.0000         0.0000        -641475.1432    159416.7085      3444.1442         0.0000         0.0000        -478614.2905         0.0000   -478614.2905   -478614.2905         0.0000           -666.8223    -39582.4011   1823088.7837      -666.8223    -39582.4011
+
+MINIMIZER SLOWLY MOVING 21 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       3         0.0000         0.0000         0.0000         0.0000        -641481.5534     90305.6692      3444.1442         0.0000         0.0000        -547731.7400         0.0000   -547731.7400   -547731.7400         0.0000           -666.8070    -39203.7181   1823088.7837      -666.8070    -39203.7181
+
+MINIMIZER SLOWLY MOVING 13 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       4         0.0000         0.0000         0.0000         0.0000        -641478.8494     73720.1649      3444.1442         0.0000         0.0000        -564314.5403         0.0000   -564314.5403   -564314.5403         0.0000           -666.7930    -39268.1166   1823088.7837      -666.7930    -39268.1166
+
+MINIMIZER SLOWLY MOVING 10 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       5         0.0000         0.0000         0.0000         0.0000        -641454.2575     67358.6633      3444.1442         0.0000         0.0000        -570651.4501         0.0000   -570651.4501   -570651.4501         0.0000           -666.7954    -39612.3201   1823088.7837      -666.7954    -39612.3201
+
+MINIMIZER SLOWLY MOVING 6 ATOMS WITH BAD CONTACTS DOWNHILL
+ENERGY:       6         0.0000         0.0000         0.0000         0.0000        -641441.3058     66181.4232      3444.1442         0.0000         0.0000        -571815.7385         0.0000   -571815.7385   -571815.7385         0.0000           -666.7934    -39661.6775   1823088.7837      -666.7934    -39661.6775
+
+MINIMIZER STARTING CONJUGATE GRADIENT ALGORITHM
+LINE MINIMIZER REDUCING GRADIENT FROM 1.56511e+08 TO 156511
+ENERGY:       7       109.8073        23.3949         0.0000         0.0000        -645198.8114     64013.9307      3414.7153         0.0000         0.0000        -577636.9633         0.0000   -577636.9633   -577636.9633         0.0000           -664.0238    -38218.0364   1823088.7837      -664.0238    -38218.0364
+
+ENERGY:       8       439.7971        93.3163         0.0000         0.0000        -648969.4876     62756.5880      3385.4135         0.0000         0.0000        -582294.3727         0.0000   -582294.3727   -582294.3727         0.0000           -661.2637    -36761.1003   1823088.7837      -661.2637    -36761.1003
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 8.08483e+07 TO 80848.3
+ENERGY:       9      1827.6026       398.7339         0.0000         0.0000        -657008.7588     61617.0272      3315.1345         0.0000         0.0000        -589850.2606         0.0000   -589850.2606   -589850.2606         0.0000           -654.5990    -33711.8344   1823088.7837      -654.5990    -33711.8344
+
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      10      4172.7062       913.0794         0.0000         0.0000        -665098.4868     60814.3895      3245.5974         0.0000         0.0000        -595952.7143         0.0000   -595952.7143   -595952.7143         0.0000           -647.9795    -30621.5356   1823088.7837      -647.9795    -30621.5356
+
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 3.73122e+07 TO 37312.2
+ENERGY:      11     10109.1884      2402.5437         0.0000         0.0000        -679491.9601     59706.4057      3072.8680         0.0000         0.0000        -604200.9542         0.0000   -604200.9542   -604200.9542         0.0000           -631.2499    -25463.1764   1823088.7837      -631.2499    -25463.1764
+
+ENERGY:      12     18719.1149      4579.8204         0.0000         0.0000        -694032.5603     58823.3755      2904.8922         0.0000         0.0000        -609005.3574         0.0000   -609005.3574   -609005.3574         0.0000           -614.7580    -20195.1992   1823088.7837      -614.7580    -20195.1992
+
+ENERGY:      13     30055.0677      7426.1065         0.0000         0.0000        -708720.6307     58104.5677      2741.6699         0.0000         0.0000        -610393.2190         0.0000   -610393.2190   -610393.2190         0.0000           -598.5047    -14817.0472   1823088.7837      -598.5047    -14817.0472
+
+ENERGY:      14     44169.1345     10922.7129         0.0000         0.0000        -723556.9725     57523.0764      2583.2010         0.0000         0.0000        -608358.8478         0.0000   -608358.8478   -608358.8478         0.0000           -582.4903     -9327.4557   1823088.7837      -582.4903     -9327.4557
+
+LINE MINIMIZER BRACKET: DX 0.000268385 0.000268385 DU -1387.86 2034.37 DUDX -1.15317e+07 1.19363e+06 1.39829e+07 
+ENERGY:      15     28797.3118      7111.9055         0.0000         0.0000        -707245.0516     58170.0196      2757.7782         0.0000         0.0000        -610408.0365         0.0000   -610408.0365   -610408.0365         0.0000           -600.1193    -15359.8520   1823088.7837      -600.1193    -15359.8520
+
+LINE MINIMIZER BRACKET: DX 0.000241546 2.68385e-05 DU -1402.68 14.8175 DUDX -1.15317e+07 -80584.6 1.19363e+06 
+ENERGY:      16     28921.8423      7143.0330         0.0000         0.0000        -707392.5738     58163.3987      2756.1652         0.0000         0.0000        -610408.1345         0.0000   -610408.1345   -610408.1345         0.0000           -599.9577    -15305.6183   1823088.7837      -599.9577    -15305.6183
+
+LINE MINIMIZER BRACKET: DX 2.68385e-06 2.41546e-05 DU -0.0979795 14.9155 DUDX -80584.6 46816.9 1.19363e+06 
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM
+LINE MINIMIZER REDUCING GRADIENT FROM 1.16994e+07 TO 11699.4
+ENERGY:      17     22604.4880      7083.5376         0.0000         0.0000        -704067.7683     57716.3644      2560.4371         0.0000         0.0000        -614102.9412         0.0000   -614102.9412   -614102.9412         0.0000           -579.8217    -18229.4423   1823088.7837      -579.8217    -18229.4423
+
+ENERGY:      18     17203.2199      7049.1731         0.0000         0.0000        -700749.3700     57342.4231      2371.9690         0.0000         0.0000        -616782.5850         0.0000   -616782.5850   -616782.5850         0.0000           -559.9926    -21111.2222   1823088.7837      -559.9926    -21111.2222
+
+ENERGY:      19     12707.3942      7040.4875         0.0000         0.0000        -697437.6228     57026.2790      2190.7609         0.0000         0.0000        -618472.7012         0.0000   -618472.7012   -618472.7012         0.0000           -540.4705    -23951.7931   1823088.7837      -540.4705    -23951.7931
+
+LDB: ============= START OF LOAD BALANCING ============== 2.46731
+LDB: ============== END OF LOAD BALANCING =============== 2.46764
+LDB: =============== DONE WITH MIGRATION ================ 2.46783
+MINIMIZER RESTARTING CONJUGATE GRADIENT ALGORITHM DUE TO POOR PROGRESS
+LINE MINIMIZER REDUCING GRADIENT FROM 9.52543e+06 TO 9525.43
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:      20     12707.3942      7040.4876         0.0000         0.0000        -697437.6288     57026.2791      2190.7609         0.0000         0.0000        -618472.7071         0.0000   -618472.7071   -618472.7071         0.0000           -540.4705    -23951.7931   1823088.7837      -540.4705    -23951.7931
+
+TCL: NADOC_ADAPTIVE_MIN step=20 energy=-618472.7070624783 improvement= stable=0/3
+TCL: Setting parameter cellOrigin to 61.77 61.48780367 12
+FATAL ERROR: Setting parameter cellOrigin from script failed!
+
+------------- Processor 0 Exiting: Called CmiAbort ------------
+Reason: REPLICA 0 FATAL ERROR: Setting parameter cellOrigin from script failed!
+
+
+[0] Stack Traceback:
+  [0:0] namd3 0x152e825 
+  [0:1] namd3 0xa20b21 NAMD_die(char const*)
+  [0:2] namd3 0xeb378e CkIndex_Node::_call_scriptParam_ScriptParamMsg(void*, void*)
+  [0:3] namd3 0x141ba20 CkDeliverMessageFree
+  [0:4] namd3 0x141f1bb _processHandler(void*, CkCoreState*)
+  [0:5] namd3 0x14e0f72 CsdScheduleForever
+  [0:6] namd3 0x14e1555 CsdScheduler
+  [0:7] namd3 0xf731b5 ScriptTcl::Tcl_param(void*, Tcl_Interp*, int, char const**)
+  [0:8] namd3 0x17344eb TclInvokeStringCommand
+  [0:9] namd3 0x17391a7 TclNRRunCallbacks
+  [0:10] namd3 0x173b019 
+  [0:11] namd3 0x17eee78 Tcl_FSEvalFileEx
+  [0:12] namd3 0x17eeff7 Tcl_EvalFile
+  [0:13] namd3 0xf750c6 ScriptTcl::load(char*)
+  [0:14] namd3 0xa32344 after_backend_init(int, char**)
+  [0:15] namd3 0x6ebc4c main
+  [0:16] libc.so.6 0x76773ea2a1ca 
+  [0:17] libc.so.6 0x76773ea2a28b __libc_start_main
+  [0:18] namd3 0x9a9555 _start
+Charm++ fatal error:
+REPLICA 0 FATAL ERROR: Setting parameter cellOrigin from script failed!
+
+
+[0] Stack Traceback:
+  [0:0] namd3 0x152e682 LrtsAbort(char const*)
+  [0:1] namd3 0x152e716 CmiAbortHelper(char const*, char const*, char const*, int, int)
+  [0:2] namd3 0x152e825 
+  [0:3] namd3 0xa20b21 NAMD_die(char const*)
+  [0:4] namd3 0xeb378e CkIndex_Node::_call_scriptParam_ScriptParamMsg(void*, void*)
+  [0:5] namd3 0x141ba20 CkDeliverMessageFree
+  [0:6] namd3 0x141f1bb _processHandler(void*, CkCoreState*)
+  [0:7] namd3 0x14e0f72 CsdScheduleForever
+  [0:8] namd3 0x14e1555 CsdScheduler
+  [0:9] namd3 0xf731b5 ScriptTcl::Tcl_param(void*, Tcl_Interp*, int, char const**)
+  [0:10] namd3 0x17344eb TclInvokeStringCommand
+  [0:11] namd3 0x17391a7 TclNRRunCallbacks
+  [0:12] namd3 0x173b019 
+  [0:13] namd3 0x17eee78 Tcl_FSEvalFileEx
+  [0:14] namd3 0x17eeff7 Tcl_EvalFile
+  [0:15] namd3 0xf750c6 ScriptTcl::load(char*)
+  [0:16] namd3 0xa32344 after_backend_init(int, char**)
+  [0:17] namd3 0x6ebc4c main
+  [0:18] libc.so.6 0x76773ea2a1ca 
+  [0:19] libc.so.6 0x76773ea2a28b __libc_start_main
+  [0:20] namd3 0x9a9555 _start

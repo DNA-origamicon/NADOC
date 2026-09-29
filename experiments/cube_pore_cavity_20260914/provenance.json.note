@@ -1,0 +1,1 @@
+The parent relaxation uses 2 fs in stage 01 (240 ps), then 4 fs in stages 02–04 (480 ps each). The cavity begins during the 2 fs stage. Labels in the original follow-up figure identify stages rather than elapsed time. Early exploratory /tmp scripts assumed 8 ps/frame for every stage; original_trajectory_analysis.json and analyze_original.py now use the actual config timestep.
