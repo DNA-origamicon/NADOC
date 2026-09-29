@@ -128,7 +128,7 @@ describe('initOxdnaTrajectoryPlayer', () => {
     } finally { p.stop() }
   })
 
-  it('snaps across stage and loop boundaries and when the experiment is switched off', async () => {
+  it('snaps across stage and loop boundaries and when smoothing is switched off', async () => {
     vi.useFakeTimers()
     const interpolationToggle = document.createElement('input')
     interpolationToggle.checked = true
@@ -137,7 +137,8 @@ describe('initOxdnaTrajectoryPlayer', () => {
     p.setTrajectory(3, [{ frame: 1 }])
     try {
       await p.play(); await vi.advanceTimersByTimeAsync(120)
-      expect(onInterpolate).not.toHaveBeenCalled()
+      // Residual time now draws the next valid segment in the boundary callback.
+      expect(onInterpolate.mock.calls.every(([a, b]) => a === 1 && b === 2)).toBe(true)
       expect(p.current()).toBe(1)
       await vi.advanceTimersByTimeAsync(210)
       expect(onInterpolate.mock.calls.every(([a, b]) => a === 1 && b === 2)).toBe(true)

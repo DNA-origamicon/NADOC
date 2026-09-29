@@ -7,6 +7,7 @@ vi.mock('three', async importOriginal => {
   }) }
 })
 import { initScene } from './runtime.js'
+import { requestTrajectoryFrame } from '../ui/trajectory_render_clock.js'
 afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = '' })
 it('stops rendering, controls, resize observer and pending camera animation on disposal', async () => {
   const disconnect = vi.fn()
@@ -37,5 +38,10 @@ it('caps mobile resolution and skips rendering while the document is hidden', ()
   expect(runtime.renderer.setPixelRatio.mock.calls[0][0]).toBeLessThanOrEqual(1)
   frame(); expect(runtime.renderer.render).not.toHaveBeenCalled()
   hidden.mockReturnValue(false); frame(); expect(runtime.renderer.render).toHaveBeenCalledOnce()
+  hidden.mockReturnValue(true); runtime.renderer.xr.isPresenting = true
+  const trajectory = vi.fn(); requestTrajectoryFrame(trajectory)
+  frame()
+  expect(trajectory).toHaveBeenCalledOnce()
+  expect(runtime.renderer.render).toHaveBeenCalledTimes(2)
   runtime.dispose(); hidden.mockRestore()
 })

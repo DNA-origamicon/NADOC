@@ -56,6 +56,7 @@
 #include "live_presentation.hpp"
 #include "presenter_ui.hpp"
 #include "trajectory.hpp"
+#include "coordinate_playback.hpp"
 #include "visualization.hpp"
 
 #include <glm/glm.hpp>
@@ -1494,9 +1495,10 @@ class GlScene {
         double* cpuMilliseconds = nullptr, double* uploadMilliseconds = nullptr) {
         const auto started = std::chrono::steady_clock::now();
         if ((representation_ != Representation::ballstick &&
-             representation_ != Representation::stick) ||
+             representation_ != Representation::stick && representation_ != Representation::vdw) ||
             coordinates.size() != visualizationCoordinateTokens_.size() ||
-            coordinates.empty() || atomisticCylinderInstances_.empty() ||
+            coordinates.empty() || (atomisticCylinderInstances_.empty() && atomisticSphereInstances_.empty()) ||
+            atomisticSphereCoordinateIndices_.size() != atomisticSphereInstances_.size() ||
             atomisticCylinderCoordinateIndices_.size() !=
                 atomisticCylinderInstances_.size() ||
             !toolCommittedToken_.empty() || !toolPreviewToken_.empty()) {
@@ -1546,7 +1548,7 @@ class GlScene {
         glBufferSubData(GL_ARRAY_BUFFER, 0,
             static_cast<GLsizeiptr>(atomisticCylinderInstances_.size() * sizeof(Cylinder)),
             atomisticCylinderInstances_.data());
-        sphereCount_ = representation_ == Representation::ballstick
+        sphereCount_ = representation_ != Representation::stick
             ? static_cast<GLsizei>(atomisticSphereInstances_.size()) : 0;
         cylinderCount_ = static_cast<GLsizei>(atomisticCylinderInstances_.size());
         const auto uploaded = std::chrono::steady_clock::now();
@@ -1977,14 +1979,16 @@ class GlScene {
         cylinderGlowCount_ = static_cast<GLsizei>(glowCylinders.size());
 
         if ((representation_ == Representation::ballstick ||
-             representation_ == Representation::stick) &&
+             representation_ == Representation::stick || representation_ == Representation::vdw) &&
             !visualizationAtomTokens_.empty()) {
             atomisticSphereInstances_ = points;
             atomisticSphereCoordinateIndices_ = std::move(sphereCoordinateIndices);
             atomisticCylinderInstances_ = cylinders;
             atomisticCylinderCoordinateIndices_ =
                 std::move(cylinderCoordinateIndices);
-            cachedAtomisticVisualizationRevision_ = visualizationRevision_;
+            // VDW radii differ from ball-and-stick; do not restore these buffers
+            // through the ball-and-stick/stick style-switch shortcut.
+            cachedAtomisticVisualizationRevision_ = representation_ == Representation::vdw ? 0 : visualizationRevision_;
             cachedAtomisticColoring_ = coloring_;
         }
 
@@ -10351,6 +10355,7 @@ class Viewer {
             const uint64_t previousSequence = visualizationSequence_;
             visualizationSequence_ = next.sequence;
             visualizationSnapshot_ = std::move(next);
+            coordinatePlayback_.clear();
             glScene_->setVisualization(visualizationSnapshot_);
             const auto appliedAt = std::chrono::steady_clock::now();
             if (!visualizationSnapshot_.representation.empty()) {
@@ -10397,6 +10402,7 @@ class Viewer {
                     auto next = nadoc_vr::loadTrajectoryState(input);
                     if (next.sequence >= trajectoryState_.sequence) {
                         trajectoryState_ = next;
+                        if (!next.active || !next.playing) coordinatePlayback_.pause();
                     }
                     trajectoryModified_ = modified;
                 } catch (const std::exception&) {
@@ -10419,16 +10425,18 @@ class Viewer {
             coordinateModified_ = modified;
             if (frame.sequence <= coordinateSequence_) return;
             if (frame.positions.empty()) {
+                coordinatePlayback_.clear();
                 coordinateSequence_ = frame.sequence;
                 return;
             }
             if (glScene_->representation() != Representation::ballstick &&
-                glScene_->representation() != Representation::stick) {
+                glScene_->representation() != Representation::stick && glScene_->representation() != Representation::vdw) {
                 // The compact feed contains atom XYZ only. Full also needs coarse
                 // slab orientation and therefore arrives through the authoritative
                 // visualization feed. Consume this revision so returning to an
                 // atomistic mode does not report an intentional Full hold as loss.
                 coordinateSequence_ = frame.sequence;
+                coordinatePlayback_.clear();
                 std::cout << "VR_METRIC event=process_progress phase=coordinate_update"
                           << " status=skipped_incompatible_representation"
                           << " sequence=" << frame.sequence
@@ -10441,8 +10449,12 @@ class Viewer {
             }
             double cpuMilliseconds = 0.0;
             double uploadMilliseconds = 0.0;
+            coordinatePlayback_.push(frame, trajectoryState_.active && trajectoryState_.playing,
+                std::chrono::duration<double>(parsed.time_since_epoch()).count());
+            coordinatePlayback_.sample(std::chrono::duration<double>(parsed.time_since_epoch()).count());
             if (!glScene_->updateAtomCoordinates(
-                    frame.positions, &cpuMilliseconds, &uploadMilliseconds)) {
+                    coordinatePlayback_.positions(), &cpuMilliseconds, &uploadMilliseconds)) {
+                coordinatePlayback_.clear();
                 std::cout << "VR_METRIC event=process_progress phase=coordinate_update"
                           << " status=rejected sequence=" << frame.sequence
                           << " frame_idx=" << frame.frameIndex
@@ -10530,7 +10542,18 @@ class Viewer {
             if (sessionRunning_) {
                 pollJobSnapshot();
                 pollVisualizationSnapshot();
+                const auto receivedSequence = coordinateSequence_;
                 pollTrajectoryFeeds();
+                if (glScene_->representation() == Representation::ballstick ||
+                    glScene_->representation() == Representation::stick || glScene_->representation() == Representation::vdw) {
+                    const double time = std::chrono::duration<double>(
+                        std::chrono::steady_clock::now().time_since_epoch()).count();
+                    // New packets already uploaded a sample in pollTrajectoryFeeds.
+                    if (receivedSequence == coordinateSequence_ && coordinatePlayback_.sample(time)) {
+                        if (!glScene_->updateAtomCoordinates(coordinatePlayback_.positions()))
+                            coordinatePlayback_.clear();
+                    }
+                } else coordinatePlayback_.clear();
                 renderFrame();
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -10584,6 +10607,7 @@ class Viewer {
     std::optional<std::filesystem::file_time_type> trajectoryModified_;
     std::optional<std::filesystem::file_time_type> coordinateModified_;
     nadoc_vr::CoordinateFrame coordinateFrameScratch_;
+    nadoc_vr::CoordinatePlayback coordinatePlayback_;
     uint64_t coordinateSequence_ = 0;
     uint64_t coordinateUpdateCount_ = 0;
     uint64_t coordinateSequenceGaps_ = 0;

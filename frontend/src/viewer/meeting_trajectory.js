@@ -84,7 +84,7 @@ export function mountMeetingTrajectory({ viewer, base, role, document: doc = doc
     finally { clearTimeout(timeout); clockAbort.signal.removeEventListener('abort', stop); syncing = false; syncAt = now() + 10000 }
   }
   function tick() {
-    if (disposed || viewer.current !== current || doc.hidden || !state || viewer.performanceApi.busy) return
+    if (disposed || viewer.current !== current || (doc.hidden && !viewer.runtime?.renderer.xr.isPresenting) || !state || viewer.performanceApi.busy) return
     const index = target(), time = now()
     if (time >= syncAt && !syncing) void syncClock()
     // Never drain a historical queue. Choose the newest already-received frame at this meeting time.
@@ -134,8 +134,10 @@ export function mountMeetingTrajectory({ viewer, base, role, document: doc = doc
   el('preload').onclick = () => { preload = true; tick() }
   el('smooth').onchange = tick
   el('metrics').onclick = async () => { const value = '[NADOC_TRAJECTORY_PERF v1] ' + JSON.stringify(report()); try { await doc.defaultView.navigator.clipboard.writeText(value) } catch { status.textContent = value } }
-  const visibility = () => { if (doc.hidden) resetRequest(); else { syncAt = now(); tick() } }
+  const visibility = () => { if (doc.hidden && !viewer.runtime?.renderer.xr.isPresenting) resetRequest(); else { syncAt = now(); tick() } }
   doc.addEventListener('visibilitychange', visibility)
-  const timer = repeat(tick, 33)
-  return { receive, dispose() { disposed = true; clockAbort.abort(); resetRequest(); cancel(timer); doc.removeEventListener('visibilitychange', visibility); apply.clearInterpolation(); cache.clear(); bar.remove(); timeline?.dispose(); report() } }
+  const frameRuntime = viewer.runtime?.addFrameCallback ? viewer.runtime : null
+  frameRuntime?.addFrameCallback(tick)
+  const timer = frameRuntime ? null : repeat(tick, 33)
+  return { receive, dispose() { disposed = true; clockAbort.abort(); resetRequest(); if (timer !== null) cancel(timer); frameRuntime?.removeFrameCallback(tick); doc.removeEventListener('visibilitychange', visibility); apply.clearInterpolation(); cache.clear(); bar.remove(); timeline?.dispose(); report() } }
 }

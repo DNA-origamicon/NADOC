@@ -781,9 +781,10 @@ export function initOxdnaDisplay({
   }
 
   let _atomFrameScratch = null
-  // Experimental playback retains at most four extra exact atom frames, independently
+  // Smooth playback retains at most five extra exact atom frames, independently
   // of the coarse reconstruction grid. Subframes never enter a trajectory cache.
   const _interpolationAtoms = new Map()
+  let _interpolationRequest = 0
   let _interpolationPair = null, _interpolationCg = null
   async function _pushAtomistic(arr, epoch, live, colorByKey = null) {
     const ar = getAtomisticRenderer?.()
@@ -1981,35 +1982,45 @@ export function initOxdnaDisplay({
 
   async function ensureInterpolationFrames(from, to, { before = null, after = null } = {}) {
     const epoch = _epoch, offset = _traj?.frame_start ?? 0
+    const request = ++_interpolationRequest
+    const live = () => epoch === _epoch && request === _interpolationRequest
     from -= offset; to -= offset
     if (_mode !== 'trajectory' || !_traj) return false
     const frames = [...new Set([from, to, before == null ? null : before - offset,
       after == null ? null : after - offset].filter(i => i != null))]
     for (const index of frames) {
-      if (!await ensureTrajectoryFrame(index) || epoch !== _epoch) return false
+      if (!await ensureTrajectoryFrame(index) || !live()) return false
     }
     if (_repKind() !== 'atomistic') return true
     if (!await _ensureJobAtomistic(getAtomisticRenderer?.(), epoch)) {
       // A graphene/solvent-only run has no DNA atom model; its companion ions
       // and sheet still use the same interpolation clock.
-      return epoch === _epoch && _traj?.keys?.length === 0
+      return live() && _traj?.keys?.length === 0
     }
-    if (epoch !== _epoch) return false
+    if (!live()) return false
     const bake = _bakedAtom
     const missing = frames.filter(i => !bake?.byIdx.has(i) && _interpolationAtoms.get(i)?.epoch !== epoch)
     if (missing.length) {
-      const result = await _queueFrameFetch(() => epoch === _epoch
+      const result = await _queueFrameFetch(() => live()
         ? api.getOxdnaFramesAtomistic(_jobId, missing.map(sourceFrame), _align, _trajScope, _trajStride) : null)
-      if (epoch !== _epoch) return false
+      if (!live()) return false
       for (const i of missing) {
         const data = result?.[String(sourceFrame(i))]
         if (!data) return false
         _interpolationAtoms.set(i, { epoch, data: _narrowFrame(data) })
       }
     }
-    for (const i of _interpolationAtoms.keys()) if (!frames.includes(i)) _interpolationAtoms.delete(i)
+    // Preparing the next segment must retain the current segment's rear spline
+    // neighbour. Five expanded frames cover both windows without a growing cache.
+    for (const i of _interpolationAtoms.keys()) if (!frames.includes(i) && i !== from - 2) _interpolationAtoms.delete(i)
     // Preserve exact endpoints even when the ordinary playback path uses a coarse grid.
-    for (const i of frames) if (bake?.byIdx.has(i)) _interpolationAtoms.set(i, { epoch, data: bake.byIdx.get(i) })
+    for (const i of frames) {
+      if (bake?.byIdx.has(i) && _interpolationAtoms.get(i)?.data !== bake.byIdx.get(i)) {
+        _interpolationAtoms.set(i, { epoch, data: bake.byIdx.get(i) })
+      }
+      const entry = _interpolationAtoms.get(i)
+      if (entry) entry.expanded ??= expandMdAtomFrame(entry.data)
+    }
     return true
   }
 
@@ -2034,8 +2045,8 @@ export function initOxdnaDisplay({
     if (_interpolationPair?.a !== aa.data || _interpolationPair?.b !== bb.data
       || _interpolationPair?.prev !== prev || _interpolationPair?.next !== next) {
       _interpolationPair = { a: aa.data, b: bb.data,
-        prev, next, before: expandMdAtomFrame(prev), after: expandMdAtomFrame(next),
-        from: expandMdAtomFrame(aa.data), to: expandMdAtomFrame(bb.data), out: null }
+        prev, next, before: _interpolationAtoms.get(before)?.expanded, after: _interpolationAtoms.get(after)?.expanded,
+        from: aa.expanded, to: bb.expanded, out: _interpolationPair?.out ?? null }
     }
     if (_interpolationPair.from.length !== _interpolationPair.to.length) return
     ++_heavyToken // a saved-frame async paint must not overwrite a newer subframe
