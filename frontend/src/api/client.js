@@ -1821,12 +1821,14 @@ export async function exportSurface3mf({ targetMm = 200, gridSpacing, probeRadiu
 
 // ── Deformation endpoints ──────────────────────────────────────────────────
 
-export async function addDeformation(type, planeA, planeB, params, helixIds = [], preview = false, clusterIds = []) {
+export async function addDeformation(type, planeA, planeB, params, helixIds = [], preview = false, clusterIds = [], guard = {}) {
   const body = {
     type,
     plane_a_bp: planeA,
     plane_b_bp: planeB,
     params,
+    expected_design_id: guard.expectedDesignId,
+    expected_revision: guard.expectedRevision,
     affected_helix_ids: helixIds,
     cluster_ids: Array.isArray(clusterIds) ? clusterIds : (clusterIds ? [clusterIds] : []),
     preview,

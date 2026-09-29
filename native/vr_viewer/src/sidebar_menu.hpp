@@ -62,10 +62,11 @@ class SidebarMenu {
         return rows;
     }
     size_t total() const { if(dynamicActive())return dynamicTotal();return visibleRows().size()-(customTab?3:0); }
-    size_t pageRows() const { return dynamicActive()?7:customTab?5:kSidebarPageRows; }
+    size_t pageRows() const { if(customTab && tab().key=="bend")return total();return dynamicActive()?7:customTab?5:kSidebarPageRows; }
     MenuPanelBounds bounds() const {
         if(dynamicActive()) return dynamicBounds();
         auto b=kSidebarBounds;
+        if(customTab && tab().key=="bend") {b.minimum.y=-.60F;return b;}
         if(customTab) b.minimum.y=.463F-float((customTab?3:0)+std::min(pageRows(),total())-1)*.12F-.11F;
         return b;
     }
@@ -171,6 +172,25 @@ class SidebarMenu {
             const auto extra=dynamicControls();out.insert(out.end(),extra.begin(),extra.end());
             out.push_back({"close","Close","","close",{{-.269F,-.657F},{.046F,-.585F}}});
             out.push_back({"dock","Dock / Follow","","dock",{{.07F,-.657F},{.385F,-.585F}}});
+            return out;
+        }
+        if(customTab && tab().key=="bend") {
+            // Keep every bend input visible; paired coarse adjustments share a row.
+            auto add=[&](const std::string& id,float y,int column=0,float height=.09F) {
+                const auto& rows=tab().rows;
+                const auto r=std::find_if(rows.begin(),rows.end(),[&](const auto& row){return row.id=="bend:"+id;});
+                if(r==rows.end())return;
+                const float left=cx-.327F,right=cx+.327F,middle=(left+right)*.5F;
+                const MenuPanelBounds box{{column==2?middle+.006F:left,y-height*.5F},
+                                          {column==1?middle-.006F:right,y+height*.5F}};
+                out.push_back({r->id,label(r->action,r->label),column?"":r->section,r->action,box,available(r->action),isActive(r->action)});
+            };
+            add("back",.463F);add("confirm",.36F,1,.08F);add("cancel",.36F,2,.08F);
+            add("plane1",.26F,1);add("plane2",.26F,2);
+            add("angle",.15F);add("direction",.04F);
+            add("direction-less",-.055F,1,.07F);add("direction-more",-.055F,2,.07F);
+            add("radius",-.15F);add("radius-less",-.245F,1,.07F);add("radius-more",-.245F,2,.07F);
+            add("target",-.35F);add("undo",-.46F,1,.08F);add("recenter",-.46F,2,.08F);
             return out;
         }
         const auto rows=visibleRows();

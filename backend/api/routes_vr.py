@@ -273,7 +273,7 @@ class VRToolExecutionFeedbackRequest(BaseModel):
 
     execution_sequence: int = Field(ge=1, le=2**53 - 1)
     tool_sequence: int = Field(ge=1, le=2**53 - 1)
-    tool_mode: Literal["move_rotate", "extrude"]
+    tool_mode: Literal["move_rotate", "extrude", "bend"]
     tool_action: Literal["confirm", "undo"]
     target_identity: Optional[str] = Field(default=None, min_length=1, max_length=2048)
     target_kind: SelectionKind
@@ -3449,8 +3449,22 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
             "amount_mode": raw["amount_mode"],
             "amount": bounded_float(raw.get("amount"), -1_000_000, 1_000_000),
         }
+    endpoints = {}
+    if "bend_endpoints" in raw:
+        points = raw["bend_endpoints"]
+        if not isinstance(points, list) or len(points) != 2 or any(
+            not isinstance(p, list) or len(p) != 3 for p in points
+        ):
+            raise ValueError("invalid bend endpoints")
+        endpoints["bend_endpoints"] = [[bounded_float(v, -1e9, 1e9) for v in p] for p in points]
+    if "bend_midpoint" in raw:
+        point = raw["bend_midpoint"]
+        if "bend_endpoints" not in raw or not isinstance(point, list) or len(point) != 3:
+            raise ValueError("invalid bend midpoint")
+        endpoints["bend_midpoint"] = [bounded_float(v, -1e9, 1e9) for v in point]
     return {
         **common,
+        **endpoints,
         "plane_a_bp": plane_a_bp,
         "plane_b_bp": plane_b_bp,
         "angle_deg": bounded_float(raw.get("angle_deg"), 0, 360),
@@ -3556,6 +3570,12 @@ def _event_payload(state: dict | None) -> dict:
         plane_pick_config_sequence = raw_plane_pick_config_sequence
         plane_pick_slot = event.get("plane_pick_slot")
         plane_pick_identity = event.get("plane_pick_identity")
+        plane_pick_position = event.get("plane_pick_position")
+        if plane_pick_position is not None and (
+            not isinstance(plane_pick_position, list) or len(plane_pick_position) != 3 or
+            any(type(v) not in (int, float) or not math.isfinite(v) or abs(v) > 1e9 for v in plane_pick_position)
+        ):
+            raise ValueError("invalid plane pick position")
         transform_sequence = int(event.get("transform_sequence", 0))
         transform_values = event.get(
             "transform_matrix",
@@ -3733,6 +3753,7 @@ def _event_payload(state: dict | None) -> dict:
             "plane_pick_config_sequence": plane_pick_config_sequence,
             "plane_pick_slot": plane_pick_slot,
             "plane_pick_identity": plane_pick_identity,
+            **({"plane_pick_position": plane_pick_position} if plane_pick_position is not None else {}),
             "transform_sequence": transform_sequence,
             "transform_matrix": nadoc_transform.flatten(order="F").tolist(),
             "ready_sequence": ready_sequence,

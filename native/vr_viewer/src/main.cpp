@@ -36,6 +36,7 @@
 #include "dimension_panel.hpp"
 #include "view_volume_panel.hpp"
 #include "extrude_panel.hpp"
+#include "bend_panel.hpp"
 #include "move_panel.hpp"
 #include "end_resize.hpp"
 #include "ligation.hpp"
@@ -5321,6 +5322,15 @@ class Viewer {
                 if(action=="qr:status")return false;
                 if(action=="qr:calibrate")return true;
                 if(action.starts_with("share:")) return shareAvailable(action);
+                if(action=="tool:bend")return !toolShell_.executionPending();
+                if(action.starts_with("bend:")) {
+                    if(toolShell_.executionPending())return false;
+                    if(action.starts_with("bend:radius-"))return toolConfig_.bendAngleDegrees()>0 && planeGuides_[0] && planeGuides_[1];
+                    if(bendPanel_.hand)return action=="bend:cancel" || action=="bend:angle" || action=="bend:direction" || action=="bend:radius" || action.starts_with("bend:direction-") || action.starts_with("bend:radius-");
+                    if(action=="bend:confirm")return bendReady();
+                    if(action=="bend:undo")return toolShell_.undoAvailable();
+                    return true;
+                }
                 if(action=="tool:move_rotate")return !toolShell_.executionPending();
                 if(action.starts_with("move:")) {
                     if(toolShell_.executionPending() || moveAwaitRefresh_)return false;
@@ -5679,6 +5689,7 @@ class Viewer {
 
     void toggleMenu(size_t hand) {
         ligation_.cancel();
+        if(bendPanel_.active) {sidebarMenus_.menus[1].open=true;return;}
         if(movePanel_.active) {
             sidebarMenus_.menus[1].open=!sidebarMenus_.menus[1].open;
             sidebarMenus_.menus[1].focus.reset();return;
@@ -5697,7 +5708,19 @@ class Viewer {
         pulse(hand, 0.45F);
     }
 
+    bool bendReady() const {
+        return bendPanel_.active && planeGuides_[0] && planeGuides_[1] &&
+            toolConfig_.planeABp() && toolConfig_.planeBBp() &&
+            *toolConfig_.planeABp()<*toolConfig_.planeBBp() &&
+            (toolConfig_.targetSelectionKind()=="cluster" || toolConfig_.targetSelectionKind()=="end") &&
+            !bendPanel_.hand && !bendPanel_.planeHand && !bendPanel_.wheelHand && !activePlanePickSequence_;
+    }
     void refreshExtrudePanel() {
+        const std::string bendStatus=toolShell_.executionPending()?toolShell_.status()
+            :bendPanel_.hand?"PLANE "+std::to_string(2-bendPanel_.grabbed)+" FIXED / RELEASE TO FINISH"
+            :bendPanel_.pickSlot?"HOLD TRIGGER CLOSE TO ELEMENT"
+            :bendReady()?"GRAB AN END / CONFIRM":toolShell_.status();
+        bendPanel_.refresh(sidebarMenus_.menus,toolConfig_,bendStatus);
         extrudePanel_.refresh(sidebarMenus_.menus,toolConfig_.lengthBp(),toolConfig_.directionSign(),
             extrudePlane_.label(),nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter()),
             toolConfig_.ligateAdjacent(),extrudeLatticeDraft_.cells().size(),latticeSquare_,
@@ -5726,6 +5749,65 @@ class Viewer {
         return action=="share:end" || (action=="share:pause" && sharePerspective_) || (action=="share:resume" && !sharePerspective_);
     }
     void activateSidebarAction(const std::string& action, size_t hand) {
+        if(action.starts_with("bend:")) {
+            if(toolShell_.executionPending())return;
+            if(bendPanel_.hand && action!="bend:cancel" && action!="bend:angle" && action!="bend:direction" && action!="bend:radius" && !action.starts_with("bend:direction-") && !action.starts_with("bend:radius-"))return;
+            if(action=="bend:back") {
+                bendPanel_.exit(sidebarMenus_.menus);clearPlanePick();clearPlaneGuides();
+                if(toolConfig_.clear())publishToolConfiguration();
+                toolShell_.activate(nadoc_vr::ToolMode::inspect,selectedSelectionKind_);
+                publishToolIntent(nadoc_vr::ToolAction::activate);return;
+            }
+            if(action=="bend:cancel") {
+                bendPanel_.reset();clearPlanePick();clearPlaneGuides();
+                (void)toolConfig_.clear();(void)toolConfig_.bind(nadoc_vr::ToolMode::bend,selectedIdentity_,selectedSelectionKind_,selectedOwnerTokens_);
+                publishToolConfiguration();
+                toolShell_.apply(nadoc_vr::ToolAction::cancel,selectedSelectionKind_);
+                publishToolIntent(nadoc_vr::ToolAction::cancel);return;
+            }
+            if(action=="bend:target") {
+                bendPanel_.elements=!bendPanel_.elements;
+                publishSelectionLevel(bendPanel_.elements?"end":"cluster");return;
+            }
+            if(action=="bend:plane1" || action=="bend:plane2") {
+                clearPlanePick(); // Discard feedback bound to the previous draft sequence.
+                bendPanel_.pickSlot=action=="bend:plane1"?"a":"b";
+                bendPanel_.lastPick.clear();bendPanel_.posed=false;bendPanel_.grabbed=1;
+                (void)toolConfig_.setBend(0,0);publishToolConfiguration();
+                publishSelectionLevel(bendPanel_.elements?"end":"cluster");
+                planePickStatus_="HOLD TRIGGER CLOSE TO ELEMENT";return;
+            }
+            if(action.starts_with("bend:direction-") || action.starts_with("bend:radius-")) {
+                double angle=toolConfig_.bendAngleDegrees(),direction=toolConfig_.bendDirectionDegrees();
+                const double sign=action.ends_with("more")?1:-1;
+                if(action.starts_with("bend:direction-"))direction=std::fmod(direction+sign*5+360,360);
+                else {
+                    if(angle<=0 || !toolConfig_.planeABp() || !toolConfig_.planeBBp())return;
+                    const double contour=(*toolConfig_.planeBBp()-*toolConfig_.planeABp())*.334;
+                    const double radius=std::max(contour/glm::radians(359.0),contour/glm::radians(angle)+sign*10);
+                    angle=glm::degrees(contour/radius);
+                }
+                applyBendAdjustment(angle,direction);pulse(hand,.16F);return;
+            }
+            if(action=="bend:angle" || action=="bend:direction" || action=="bend:radius") {
+                clearPlanePick();bendPanel_.lastPick.clear();
+                bendPanel_.wheelIndex=action=="bend:direction"?1:action=="bend:radius"?2:0;
+                bendPanel_.wheelHand=hand;
+                bendPanel_.wheel.begin(sidebarMenus_.menus[1].placement.localPoint(hands_[hand].position).y);return;
+            }
+            if(action=="bend:recenter") {recenterRequested_=true;recenterHand_=hand;return;}
+            const auto intent=action=="bend:confirm"?nadoc_vr::ToolAction::confirm:nadoc_vr::ToolAction::undo;
+            if(intent==nadoc_vr::ToolAction::confirm && !bendReady())return;
+            toolShell_.apply(intent,selectedSelectionKind_,bendReady());publishToolIntent(intent);return;
+        }
+        if(bendPanel_.active && action.starts_with("tool:")) {bendPanel_.exit(sidebarMenus_.menus);clearPlanePick();}
+        if(action=="tool:bend") {
+            if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
+            if(movePanel_.active){cancelMove();movePanel_.exit(sidebarMenus_.menus);}
+            if(volumePanel_.active)volumePanel_.exit(sidebarMenus_.menus);
+            if(dimensionPanel_.tool.active)dimensionPanel_.exit(sidebarMenus_.menus);
+            activateAuthoringTool(2);return;
+        }
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
         if(action=="qr:calibrate") {qrCalibration_.start();return;}
         if(action=="share:avatar") {showVRAvatar_=!showVRAvatar_;return;}
@@ -6934,6 +7016,7 @@ class Viewer {
     }
 
     void activateAuthoringTool(size_t item) {
+        if(bendPanel_.active && item!=2) {bendPanel_.exit(sidebarMenus_.menus);clearPlanePick();clearPlaneGuides();}
         if(ligation_.active||ligation_.nickActive){ligation_.setActive(false);publishSelectionLevel(ligationPreviousLevel_);}
 
         static constexpr std::array<nadoc_vr::ToolMode, 5> modes = {
@@ -6983,6 +7066,12 @@ class Viewer {
             thumbwheelControl_.reset();
             thumbwheelHovered_ = false;
             extrudeLatticeDraft_.clear();
+        }
+        if(mode==nadoc_vr::ToolMode::bend) {
+            if(!sidebarMenus_.menus[1].open)sidebarMenus_.toggle(1,witnessObserverPosition_,witnessObserverOrientation_);
+            menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
+            bendPanel_.enter(sidebarMenus_.menus);bendPanel_.pickSlot="a";
+            publishSelectionLevel("cluster");refreshExtrudePanel();
         }
         if(mode==nadoc_vr::ToolMode::move_rotate) {
             if(!sidebarMenus_.menus[1].open)
@@ -7404,17 +7493,7 @@ class Viewer {
             };
             for (size_t slot = 0; slot < planeGuides_.size(); ++slot) {
                 if (!planeGuides_[slot]) continue;
-                const DeformationPlaneGuide& guide = *planeGuides_[slot];
-                DeformationPlanePose pose = guide.natural;
-                if (guide.expanded) {
-                    const float amount = glScene_->expansionAmount();
-                    pose.center = glm::mix(
-                        guide.natural.center, guide.expanded->center, amount);
-                    pose.normal = glm::normalize(glm::mix(
-                        guide.natural.normal, guide.expanded->normal, amount));
-                    pose.halfExtent = glm::mix(
-                        guide.natural.halfExtent, guide.expanded->halfExtent, amount);
-                }
+                const auto pose = deformationPlanePose(slot);
                 const glm::vec3 reference = std::abs(pose.normal.y) < 0.90F
                     ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
                 const glm::vec3 axisU = glm::normalize(glm::cross(
@@ -7566,7 +7645,8 @@ class Viewer {
         freeformDraft_.preview(extrudeLatticeDraft_.cells(), latticeSquare_, extrudePlane_.plane,
             toolConfig_.lengthBp()*toolConfig_.directionSign(), manipulator_.transform(),
             normalizationCenter_, normalizationScale_, {0,0,-kViewDistanceMeters}, line);
-        if(!ligation_.active && !ligation_.nickActive)endResize_.draw(manipulator_.transform(),normalizationScale_,line);
+        drawBend(line);
+        if(!bendPanel_.active && !ligation_.active && !ligation_.nickActive)endResize_.draw(manipulator_.transform(),normalizationScale_,line);
         ligation_.draw(manipulator_.transform(),line);
         ligation_.drawNick(manipulator_.transform(),line);
         appendRadialToolGuides();
@@ -7642,9 +7722,14 @@ class Viewer {
                 manipulator_.transform());
             SelectionVolumeHits resolved = glScene_->resolveSelectionVolumeHits(
                 overlaps, selectionLevel_, selectedSelectionKind_, selectedOwnerTokens_);
+            if(bendPanel_.active && bendPanel_.elements && selectedSelectionKind_=="end" &&
+               resolved.representatives.empty() && !overlaps.empty()) {
+                resolved.representatives.push_back(overlaps.front());
+                resolved.ownerTokens=selectedOwnerTokens_;
+            }
             // Move/Rotate edits one exact target. A generous acquisition sphere
             // must not turn a nearby base pick into an unusable multi-selection.
-            if(movePanel_.active && resolved.representatives.size()>1) {
+            if((movePanel_.active || bendPanel_.active) && resolved.representatives.size()>1) {
                 resolved.representatives.resize(1);
                 if(resolved.ownerTokens.size()>1)resolved.ownerTokens.resize(1);
                 if(resolved.directIdentities.size()>1)resolved.directIdentities.resize(1);
@@ -7941,9 +8026,24 @@ class Viewer {
                     output << ",\"angle_deg\":" << toolConfig_.bendAngleDegrees()
                            << ",\"direction_deg\":"
                            << toolConfig_.bendDirectionDegrees();
+                    if(bendPanel_.posed) {
+                        output<<",\"bend_endpoints\":[";
+                        for(size_t i=0;i<2;++i) {
+                            const auto q=((i==0?bendPanel_.arc.a:bendPanel_.arc.b)-glm::vec3(0,0,-kViewDistanceMeters))/normalizationScale_+normalizationCenter_;
+                            if(i)output<<",";
+                            output<<"["<<q.x<<","<<q.y<<","<<q.z<<"]";
+                        }
+                        output<<"]";
+                        const auto mid=(bendPanel_.arc.point(.5F)-glm::vec3(0,0,-kViewDistanceMeters))/normalizationScale_+normalizationCenter_;
+                        output<<",\"bend_midpoint\":["<<mid.x<<","<<mid.y<<","<<mid.z<<"]";
+                    }
                 }
             }
             output << '}';
+        }
+        if(bendPickPosition_ && bendPanel_.active && activePlanePickSequence_) {
+            const auto& p=*bendPickPosition_;
+            output<<",\"plane_pick_position\":["<<p.x<<","<<p.y<<","<<p.z<<"]";
         }
         output << ",\"plane_pick_sequence\":" << activePlanePickSequence_
                << ",\"plane_pick_config_sequence\":" << planePickConfigSequence_
@@ -8012,6 +8112,7 @@ class Viewer {
             ? feedback->ownerTokens : std::vector<std::string>{};
         selectedSelectionKind_ = feedback->accepted && feedback->selected
             ? feedback->selectionKind : "none";
+        if(bendPanel_.active)bendPanel_.pendingSelection.clear();
         const bool targetChanged = selectedIdentity_ != previousIdentity ||
             selectedOwnerTokens_ != previousOwnerTokens ||
             selectedSelectionKind_ != previousSelectionKind;
@@ -8022,6 +8123,7 @@ class Viewer {
                 selectedOwnerTokens_)) {
             clearPlanePick();
             clearPlaneGuides();
+            bendPanel_.posed=false;
             publishToolConfiguration();
         }
         if(targetChanged)movePanel_.hand.reset();
@@ -8063,6 +8165,7 @@ class Viewer {
         }
         toolExecutionFeedbackSequence_ = feedback->sequence;
         if (feedback->status == "succeeded") {
+            if(feedback->mode=="bend") {bendPanel_.reset();clearPlaneGuides();clearPlanePick();}
             moveAwaitRefresh_=false;
             if (feedback->action == "confirm") {
                 if (feedback->mode == "move_rotate" && sceneRefresh_.revision()==moveStartRevision_)
@@ -8251,7 +8354,12 @@ class Viewer {
                 guide.expanded = expanded;
             }
             planeGuides_[slotIndex] = guide;
+            if(bendPanel_.active) {
+                bendPanel_.posed=false;bendPanel_.grabbed=1;
+                (void)toolConfig_.setBend(0,0);
+            }
             changed = toolConfig_.setPlaneBp(slot, feedback->planeBp);
+            changed = changed || bendPanel_.active;
         }
         const auto reasonLabel = [&]() -> const char* {
             if (feedback->reason == "ambiguous_primitive") return "COARSE OR SPANNING HIT";
@@ -8263,13 +8371,20 @@ class Viewer {
         };
         planePickStatus_ = accepted
             ? std::string("PLANE ") + (slot == "a" ? "A " : "B ") +
-                std::to_string(feedback->planeBp) + " FRAMED - READ ONLY"
+                std::to_string(feedback->planeBp) + (bendPanel_.active?" BP":" FRAMED - READ ONLY")
             : std::string("PLANE ") + (slot == "a" ? "A " : "B ") +
                 (retainedGuide ? "RETAINED: " : "NOT SET: ") + reasonLabel();
         std::cout << "VR " << planePickStatus_ << '\n';
         clearPlanePick(true);
         if (changed) publishToolConfiguration();
         else publishEventState();
+        if(bendPanel_.active) {
+            if(!bendPanel_.planeHand && accepted) {
+                if(planeGuides_[0] && planeGuides_[1])bendPanel_.pickSlot.reset();
+                else bendPanel_.pickSlot=slot=="a"?"b":"a";
+            }
+            return;
+        }
         requestedMenuPage_ = MenuPage::tool_config;
         menuHand_ = 1U;
         menuOpenRequested_ = true;
@@ -8508,6 +8623,35 @@ class Viewer {
             out << "{\"origin\":" << point(origin)
                 << ",\"tip\":" << point(endResize_.point(a,model,normalizationScale_,endResize_.arrowLength(model,normalizationScale_)))
                 << ",\"bp_step\":" << point(glm::vec3(model*glm::vec4(a.direction*.334F*normalizationScale_,0))) << '}';
+        }
+        out << "]}";
+        out << ",\"bend\":{\"active\":" << (bendPanel_.active?"true":"false")
+            << ",\"grabbing\":" << (bendPanel_.hand?"true":"false")
+            << ",\"ready\":" << (bendReady()?"true":"false")
+            << ",\"plane1\":" << (toolConfig_.planeABp()?std::to_string(*toolConfig_.planeABp()):"null")
+            << ",\"plane2\":" << (toolConfig_.planeBBp()?std::to_string(*toolConfig_.planeBBp()):"null")
+            << ",\"direction\":" << toolConfig_.bendDirectionDegrees()
+            << ",\"hand\":" << (bendPanel_.hand?std::to_string(*bendPanel_.hand):"null")
+            << ",\"grabbed\":" << bendPanel_.grabbed
+            << ",\"wheel_hand\":" << (bendPanel_.wheelHand?std::to_string(*bendPanel_.wheelHand):"null")
+            << ",\"contour_m\":" << bendPanel_.arc.length*glm::length(glm::vec3(manipulator_.transform()[0]))
+            << ",\"endpoints\":[" << point(glm::vec3(manipulator_.transform()*glm::vec4(bendPanel_.arc.a,1)))
+            << ',' << point(glm::vec3(manipulator_.transform()*glm::vec4(bendPanel_.arc.b,1))) << ']'
+            << ",\"tangents\":[" << point(glm::normalize(glm::mat3(manipulator_.transform())*bendPanel_.arc.endTangent(0)))
+            << ',' << point(glm::normalize(glm::mat3(manipulator_.transform())*bendPanel_.arc.endTangent(1))) << ']'
+            << ",\"targets\":" << (glScene_ && bendPanel_.active?glScene_->movePickPoints(manipulator_.transform()):"[]")
+            << ",\"angle\":" << toolConfig_.bendAngleDegrees()
+            << ",\"handles\":[";
+        if(bendPanel_.active && planeGuides_[0] && planeGuides_[1])for(size_t i=0;i<2;++i) {
+            if(i)out<<',';
+            out<<point(glm::vec3(manipulator_.transform()*glm::vec4(bendHandle(i),1)));
+        }
+        out << "],\"planes\":[";
+        if(bendPanel_.active && planeGuides_[0] && planeGuides_[1])for(size_t i=0;i<2;++i) {
+            if(i)out<<',';
+            const auto pose=deformationPlanePose(i);
+            out<<"{\"center\":"<<point(glm::vec3(manipulator_.transform()*glm::vec4(pose.center,1)))
+                <<",\"normal\":"<<point(glm::normalize(glm::mat3(manipulator_.transform())*pose.normal))<<'}';
         }
         out << "]}";
         out << ",\"move_targets\":" << (glScene_ && movePanel_.active?glScene_->movePickPoints(manipulator_.transform()):"[]")
@@ -9084,7 +9228,8 @@ class Viewer {
             !dimensionPanel_.tool.active && !radialToolMenu_.open(),
             next!=nadoc_vr::ManipulationMode::none || previous!=nadoc_vr::ManipulationMode::none,
             [&](size_t hand){pulse(hand,.35F);});
-        const auto wheelTargeted = processThumbwheelInput();
+        auto wheelTargeted = processThumbwheelInput();
+        processBendWheel(wheelTargeted);
         std::array<float,2> legacyDistance{1e9F,1e9F};
         if(menuOpen_) for(size_t hand=0;hand<2;++hand) {
             auto p=menuRayPanelLocalPoint(hands_[hand]);
@@ -9151,11 +9296,14 @@ class Viewer {
             manipulator_.transform(),normalizationScale_,
             sessionState_==XR_SESSION_STATE_FOCUSED && next==nadoc_vr::ManipulationMode::none &&
             !menuGripActive && !dimensionPanel_.tool.active && !volumePanel_.active &&
-            !ligation_.active && !ligation_.nickActive && !ligation_.waiting && !movePanel_.active && !toolShell_.executionPending() && !radialToolMenu_.open(),
+            !ligation_.active && !ligation_.nickActive && !ligation_.waiting && !movePanel_.active && !bendPanel_.active && !toolShell_.executionPending() && !radialToolMenu_.open(),
             [&]{ publishEventState(); });
         if(endResize_.hand)liveInputOwner_[*endResize_.hand]="end-resize";
         processMoveInput(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
+        processBendHandles(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
         updateSelectionVolumeCandidates(menuControlTargeted);
+        processBendPlanePick(menuControlTargeted);
+        if(bendPanel_.active)menuControlTargeted.fill(true);
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             if (menuControlTargeted[hand] || !triggerClicked_[hand] ||
                 !hands_[hand].valid) {
@@ -9198,6 +9346,200 @@ class Viewer {
             glScene_.swap(candidate);
         });
         updateControllerGuides();
+    }
+
+    DeformationPlanePose deformationPlanePose(size_t slot) const {
+        const DeformationPlaneGuide& guide = *planeGuides_[slot];
+        DeformationPlanePose pose = guide.natural;
+        if(bendPanel_.active && bendPanel_.posed) {
+            pose.center=slot==0?bendPanel_.arc.a:bendPanel_.arc.b;
+            pose.normal=bendPanel_.arc.endTangent(float(slot));
+        }
+        else if (guide.expanded) {
+            const float amount = glScene_->expansionAmount();
+            pose.center = glm::mix(
+                guide.natural.center, guide.expanded->center, amount);
+            pose.normal = glm::normalize(glm::mix(
+                guide.natural.normal, guide.expanded->normal, amount));
+            pose.halfExtent = glm::mix(
+                guide.natural.halfExtent, guide.expanded->halfExtent, amount);
+        }
+        return pose;
+    }
+    void prepareBendArc() {
+        if(bendPanel_.posed || !planeGuides_[0] || !planeGuides_[1] || !toolConfig_.planeABp() || !toolConfig_.planeBBp())return;
+        auto& arc=bendPanel_.arc;
+        arc.fixedEnd=1-bendPanel_.grabbed;
+        arc.a=planeGuides_[0]->natural.center;
+        arc.tangent=glm::normalize(planeGuides_[arc.fixedEnd]->natural.normal);
+        const float phi=glm::radians(float(toolConfig_.bendDirectionDegrees()));
+        arc.direction=glm::angleAxis(phi,arc.tangent)*arc.referenceDirection();
+        arc.length=float(*toolConfig_.planeBBp()-*toolConfig_.planeABp())*.334F*normalizationScale_;
+        arc.angle=glm::radians(float(toolConfig_.bendAngleDegrees()));
+        arc.b=planeGuides_[1]->natural.center;
+        if(arc.angle>0)arc.updateEndpoint();
+    }
+    void resetBendToPlanes() {
+        bendPanel_.posed=false;
+        (void)toolConfig_.setBend(0,0);
+        prepareBendArc();
+        refreshExtrudePanel();
+    }
+    void processBendWheel(std::array<bool,2>& blocked) {
+        if(!bendPanel_.active || !bendPanel_.wheelHand)return;
+        const size_t h=*bendPanel_.wheelHand;blocked[h]=true;
+        if(!hands_[h].valid || !triggerPressed_[h] || toolShell_.executionPending()) {
+            bendPanel_.wheelHand.reset();bendPanel_.wheel.reset();return;
+        }
+        const float y=sidebarMenus_.menus[1].placement.localPoint(hands_[h].position).y;
+        const int steps=bendPanel_.wheel.drag(y,frameDeltaSeconds_);
+        if(!steps)return;
+        const int sign=bendPanel_.wheelIndex==2?-1:1;
+        const double angle=bendPanel_.wheelIndex==1?toolConfig_.bendAngleDegrees():
+            std::clamp(std::round(toolConfig_.bendAngleDegrees())+sign*steps,0.0,359.0);
+        const double direction=bendPanel_.wheelIndex==1?
+            std::fmod(std::round(toolConfig_.bendDirectionDegrees())+steps+720.0,360.0):toolConfig_.bendDirectionDegrees();
+        applyBendAdjustment(angle,direction);pulse(h,.16F);
+    }
+    void applyBendAdjustment(double angle,double direction) {
+        prepareBendArc();
+        auto& arc=bendPanel_.arc;
+        const float turn=glm::radians(float(direction-toolConfig_.bendDirectionDegrees()));
+        arc.direction=glm::angleAxis(turn,arc.tangent)*arc.direction;
+        arc.angle=glm::radians(float(angle));
+        arc.updateEndpoint();
+        if(bendPanel_.hand) {
+            const auto position=glm::vec3(glm::inverse(manipulator_.transform())*glm::vec4(hands_[*bendPanel_.hand].position,1));
+            bendPanel_.grabOffset=(bendPanel_.grabbed==0?arc.a:arc.b)-position;
+        }
+        (void)toolConfig_.setBend(angle,direction);
+        bendPanel_.posed=arc.length>0;refreshExtrudePanel();publishToolConfiguration();
+    }
+    glm::vec3 bendHandle(size_t end) const {
+        const auto& arc=bendPanel_.arc;
+        const float offset=.028F/glm::length(glm::vec3(manipulator_.transform()[0]));
+        return (end==0?arc.a:arc.b)+arc.endTangent(float(end))*(end==0?-offset:offset);
+    }
+    void processBendHandles(std::array<bool,2>& blocked,bool sceneMoving) {
+        if(!bendPanel_.active)return;
+        if(sceneMoving || toolShell_.executionPending() || glScene_->expanded() || viewTools_.inspectionLayout()) {
+            if(bendPanel_.hand) {bendPanel_.hand.reset();publishToolConfiguration();}
+            return;
+        }
+        prepareBendArc();
+        const auto model=manipulator_.transform();
+        if(bendPanel_.hand) {
+            const size_t h=*bendPanel_.hand;blocked[h]=true;
+            if(!hands_[h].valid || model!=bendPanel_.startModel) {bendPanel_.hand.reset();publishToolConfiguration();return;}
+            if(!triggerPressed_[h]) {
+                bendPanel_.hand.reset();publishToolConfiguration();return;
+            }
+            if(bendPanel_.wheelHand)return; // The other hand may tune the live preview.
+            auto target=glm::vec3(glm::inverse(model)*glm::vec4(hands_[h].position,1))+bendPanel_.grabOffset;
+            auto& arc=bendPanel_.arc;
+            arc.move(bendPanel_.grabbed,target);
+            const auto transverse=(arc.b-arc.a)-arc.tangent*glm::dot(arc.b-arc.a,arc.tangent);
+            double direction=toolConfig_.bendDirectionDegrees();
+            if(glm::length(transverse)>1e-6F) {
+                const auto x=arc.referenceDirection();
+                const auto y=glm::cross(arc.tangent,x);
+                direction=std::fmod(glm::degrees(double(std::atan2(glm::dot(transverse,y),glm::dot(transverse,x))))+360.0,360.0);
+                arc.direction=glm::normalize(transverse);
+            }
+            bendPanel_.posed=true;
+            (void)toolConfig_.setBend(glm::degrees(double(arc.angle)),direction);
+            refreshExtrudePanel();
+            return;
+        }
+        if(!bendReady() || bendPanel_.pickSlot || bendPanel_.arc.length<=0)return;
+        float best=.055F;size_t end=0,h=0;bool found=false;
+        for(size_t i=0;i<2;++i)for(size_t j=0;j<2;++j)if(!blocked[j] && hands_[j].valid && triggerClicked_[j]) {
+            const float distance=glm::distance(hands_[j].position,glm::vec3(model*glm::vec4(bendHandle(i),1)));
+            if(distance<best) {best=distance;end=i;h=j;found=true;}
+        }
+        if(found) {
+            // Switching ends starts a new bend. The previously moved endpoint
+            // returns to its original plane before becoming the fixed anchor.
+            if(bendPanel_.posed && bendPanel_.grabbed!=end) {
+                resetBendToPlanes();publishToolConfiguration();
+            }
+            bendPanel_.hand=h;bendPanel_.grabbed=end;bendPanel_.startModel=model;
+            if(!bendPanel_.posed) {
+                bendPanel_.arc.fixedEnd=1-end;
+                bendPanel_.arc.tangent=glm::normalize(planeGuides_[1-end]->natural.normal);
+                bendPanel_.arc.direction=bendPanel_.arc.referenceDirection();
+            }
+            bendPanel_.grabOffset=(end==0?bendPanel_.arc.a:bendPanel_.arc.b)-glm::vec3(glm::inverse(model)*glm::vec4(hands_[h].position,1));
+            blocked[h]=true;pulse(h,.35F);
+        }
+    }
+    void processBendPlanePick(std::array<bool,2>& blocked) {
+        if(!bendPanel_.active || toolShell_.executionPending() || bendPanel_.hand)return;
+        if(bendPanel_.planeHand && (!hands_[*bendPanel_.planeHand].valid || !triggerPressed_[*bendPanel_.planeHand])) {
+            bendPanel_.planeHand.reset();
+            if(!activePlanePickSequence_) {
+                if(planeGuides_[0] && planeGuides_[1])bendPanel_.pickSlot.reset();
+                else if(planeGuides_[0])bendPanel_.pickSlot="b";
+                else if(planeGuides_[1])bendPanel_.pickSlot="a";
+            }
+        }
+        if(!bendPanel_.pickSlot)return;
+        if(!bendPanel_.planeHand)for(size_t h=0;h<2;++h)
+            if(!blocked[h] && hands_[h].valid && triggerClicked_[h]) {bendPanel_.planeHand=h;break;}
+        if(!bendPanel_.planeHand)return;
+        const size_t h=*bendPanel_.planeHand;
+        if(blocked[h])return;
+        blocked[h]=true;
+        if(snapSelectionHits_[h].empty() || activePlanePickSequence_)return;
+        const auto& hit=snapSelectionHits_[h].front();
+        // Selection acknowledgement must bind the target before a plane request.
+        const bool sameOwner=std::any_of(snapSelectionOwnerTokens_[h].begin(),snapSelectionOwnerTokens_[h].end(),[&](const auto& token){
+            return std::find(selectedOwnerTokens_.begin(),selectedOwnerTokens_.end(),token)!=selectedOwnerTokens_.end();
+        });
+        if(!sameOwner) {
+            if(bendPanel_.pendingSelection!=hit.identity) {
+                bendPanel_.pendingSelection=hit.identity;publishSelect({hit.identity});
+            }
+            return;
+        }
+        bendPanel_.pendingSelection.clear();
+        const auto local=glm::vec3(glm::inverse(manipulator_.transform())*glm::vec4(selectionVolumeCenter(h),1));
+        const auto source=(local-glm::vec3(0,0,-kViewDistanceMeters))/normalizationScale_+normalizationCenter_;
+        if(hit.identity==bendPanel_.lastPick && bendPickPosition_ && glm::distance(source,*bendPickPosition_)<.167F)return;
+        bendPickPosition_=source;
+        bendPanel_.lastPick=hit.identity;
+        planePickSlot_=bendPanel_.pickSlot;
+        publishPlanePick(hit.identity);
+    }
+    template<class Line> void drawBend(Line line) {
+        if(!bendPanel_.active)return;
+        prepareBendArc();
+        const auto& menu=sidebarMenus_.menus[1];
+        if(menu.open)for(const auto& c:menu.controls()) {
+            if(c.id!="bend:angle" && c.id!="bend:direction" && c.id!="bend:radius")continue;
+            const float x=c.bounds.maximum.x-.018F,y=(c.bounds.minimum.y+c.bounds.maximum.y)*.5F;
+            for(int i=-3;i<=3;++i) {
+                const float offset=float(i)*.011F;
+                line(menu.placement.worldPoint({x-.023F,y+offset,.007F}),menu.placement.worldPoint({x,y+offset,.007F}),glm::vec3(.4F,.9F,1));
+            }
+        }
+        if(!planeGuides_[0] || !planeGuides_[1] || bendPanel_.arc.length<=0 || glScene_->expanded())return;
+        const auto model=manipulator_.transform();
+        auto world=[&](glm::vec3 p){return glm::vec3(model*glm::vec4(p,1));};
+        const glm::vec3 color(.25F,1,.8F);
+        for(int i=0;i<96;++i)line(world(bendPanel_.arc.point(i/96.F)),world(bendPanel_.arc.point((i+1)/96.F)),color);
+        for(size_t end=0;end<2;++end) {
+            const auto center=world(bendHandle(end));
+            const auto face=world(end==0?bendPanel_.arc.a:bendPanel_.arc.b);
+            line(face,center,color);
+            // Three rings remain visible from every approach direction.
+            for(int axis=0;axis<3;++axis)for(int i=0;i<24;++i) {
+                glm::vec3 a(0),b(0);const float t=glm::two_pi<float>()*i/24.F,u=glm::two_pi<float>()*(i+1)/24.F;
+                a[(axis+1)%3]=std::cos(t)*.019F;a[(axis+2)%3]=std::sin(t)*.019F;
+                b[(axis+1)%3]=std::cos(u)*.019F;b[(axis+2)%3]=std::sin(u)*.019F;
+                line(center+a,center+b,bendPanel_.hand && bendPanel_.grabbed==end?glm::vec3(1,1,.2F):color);
+            }
+        }
     }
 
     void processMoveInput(std::array<bool,2>& blocked,bool sceneMoving) {
@@ -10705,6 +11047,7 @@ class Viewer {
     uint64_t planePickConfigSequence_ = 0;
     uint64_t planePickFeedbackSequence_ = 0;
     uint32_t planeFeedbackPollFrame_ = 0;
+    std::optional<glm::vec3> bendPickPosition_;
     std::optional<std::string> planePickSlot_;
     std::string planePickIdentity_;
     std::string planePickStatus_;
@@ -10778,6 +11121,7 @@ class Viewer {
     nadoc_vr::MenuPlacement latticePlacement_;
     nadoc_vr::LatticeGrip latticeGrip_;
     nadoc_vr::ExtrudePanel extrudePanel_;
+    nadoc_vr::BendPanel bendPanel_;
     nadoc_vr::MovePanel movePanel_;
     uint64_t moveStartRevision_=0;
     bool moveAwaitRefresh_=false;

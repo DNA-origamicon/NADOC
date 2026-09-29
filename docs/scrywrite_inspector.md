@@ -273,3 +273,14 @@ they measure mapping error, not distance from the user's intended pose. The
 combined workflow writes `freeform/placement-mapping.json`; failure output is
 retained separately. This is coordinate consistency, not a physical headset
 visibility or human motor-performance claim.
+
+## Bend controller validation
+
+`just vr-bend-demo` runs the guided, isolated Bend authoring tour;
+`just vr-bend-test` runs all four motion profiles in one viewer session. Both use
+the existing ScryWrite bridge and `LiveSession` transaction opt-in. Read-only
+`bend` observation exports plane indices, handle/end positions, current grab hand,
+wheel ownership, angle/direction, contour length, and rendered pick targets.
+The probe checks real controller inputs and stereo handle pixels; the browser
+checks desktop geometry, feature-log identity, saved endpoint constraints, reload,
+and Undo. See [VR Bend](vr_bend.md#scrywrite-test-and-guided-vr-tour).

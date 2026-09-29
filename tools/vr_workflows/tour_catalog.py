@@ -60,6 +60,8 @@ def catalog():
         'Equip/stow scissors with a behind-head reach, close them with analog trigger pressure, preview the glowing bond, click to nick, then use radial Undo and Redo. Validation uses all four motion profiles.', module='nick_tour')
     add('ligate', 'authoring', 'Ligate ends with the radius wheel',
         'Select Ligate through the four-volume wheel, stretch a preview from either end polarity, reject incompatible ends, release to create a forced ligation and verify Undo. Validation uses all four motion profiles.', module='ligation_tour')
+    add('bend', 'authoring', 'Bend between two planes',
+        'Isolated part: trigger-held plane picking, both end handles, angle/direction/radius wheels, Confirm, desktop feature log, save/reopen and Undo. Validation runs all four motion profiles in one viewer session.', module='bend_tour')
     add('end-resize', 'authoring', 'Resize selected ends',
         'Trigger grab the selected end arrow, pull to resize, release to save, and verify one-step desktop Undo. Validation uses all four controller profiles.', module='end_resize_tour')
     for target in ('cluster','overhang','base'):
@@ -80,7 +82,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

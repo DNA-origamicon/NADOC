@@ -123,6 +123,11 @@ export function normalizeVRToolConfig(input) {
       amount,
     }
   }
+  if (input.bend_endpoints !== undefined && (!Array.isArray(input.bend_endpoints) ||
+      input.bend_endpoints.length !== 2 || input.bend_endpoints.some(p =>
+        !Array.isArray(p) || p.length !== 3 || p.some(v => !Number.isFinite(v) || Math.abs(v) > 1e9)))) return null
+  if (input.bend_midpoint !== undefined && (!input.bend_endpoints || !Array.isArray(input.bend_midpoint) ||
+      input.bend_midpoint.length !== 3 || input.bend_midpoint.some(v => !Number.isFinite(v) || Math.abs(v) > 1e9))) return null
   const angle = _boundedNumber(input.angle_deg, 0, 360)
   const direction = _boundedNumber(input.direction_deg, 0, 360)
   if (angle === undefined || direction === undefined) return null
@@ -130,6 +135,8 @@ export function normalizeVRToolConfig(input) {
     mode: input.mode, ...target,
     plane_a_bp: planeA,
     plane_b_bp: planeB,
+    ...(input.bend_endpoints ? { bend_endpoints: input.bend_endpoints.map(p => [...p]) } : {}),
+    ...(input.bend_midpoint ? { bend_midpoint: [...input.bend_midpoint] } : {}),
     angle_deg: angle,
     direction_deg: direction,
   }

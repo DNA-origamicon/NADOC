@@ -1,7 +1,7 @@
 {
   "version": 2,
   "sourceHashes": {
-    "frontend/index.html": "d7843d78a6c9360461b7e1e24d0fd2c756a515e002f874c2d1a06e7f355a6f1c",
+    "frontend/index.html": "e027def20967532fd14fd8ca8cf418b651d53008632e427a95c6c0ba0f115630",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/scene/coloring_modes.js": "f731e0c1aa718c9450203d6ac7cfced8db732183c77dd2a6335476d95e75ba4e",
     "frontend/src/scene/view_volumes.js": "8cb5f50859a2394fa47cf78b1d60ffd6aaf3e6319dc8cae4585ee452f3f24c9b",
@@ -11696,7 +11696,7 @@
           "parents": [
             "section:properties:def-panel-title"
           ],
-          "label": "Plane A:",
+          "label": "Plane 1:",
           "section": "Twist",
           "kind": "input",
           "options": [],
@@ -11709,7 +11709,7 @@
           "parents": [
             "section:properties:def-panel-title"
           ],
-          "label": "Plane B:",
+          "label": "Plane 2:",
           "section": "Twist",
           "kind": "input",
           "options": [],

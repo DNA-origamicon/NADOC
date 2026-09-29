@@ -857,9 +857,31 @@ function _numericHelixAxes(clusterIdsOverride = null) {
   }))
 }
 
+/** Closest integer bp on the scoped contour, including coarse representations. */
+export function nearestVRDeformationPlane(position, clusterIds, helixIds = null) {
+  if (!Array.isArray(position) || position.length !== 3 || !position.every(Number.isFinite)) return null
+  const point = new THREE.Vector3(...position)
+  let best = null
+  for (const axis of _numericHelixAxes(clusterIds).filter(a => !helixIds?.length || helixIds.includes(a.id))) {
+    const samples = axis.samples?.length > 1 ? axis.samples : [axis.start, axis.end]
+    for (let i = 0; i < samples.length - 1; i++) {
+      const a = new THREE.Vector3(...samples[i]), b = new THREE.Vector3(...samples[i + 1])
+      const delta = b.clone().sub(a)
+      const t = delta.lengthSq() ? Math.max(0, Math.min(1, point.clone().sub(a).dot(delta) / delta.lengthSq())) : 0
+      const distance = point.distanceToSquared(a.addScaledVector(delta, t))
+      const lo = samples.length === 2 ? 0 : i * _SAMPLE_STEP
+      const hi = i === samples.length - 2 ? axis.lengthBp - 1 : (i + 1) * _SAMPLE_STEP
+      if (!best || distance < best.distance) best = {
+        bp: axis.bpStart + Math.round(lo + t * (hi - lo)), helixId: axis.id, distance,
+      }
+    }
+  }
+  return best ? { ...best, resolved: true, reason: 'resolved' } : null
+}
+
 /** Natural and 5 nm Expanded frames for the immutable native scene pair. */
-export function getVRDeformationPlaneFrames(globalBp, clusterIdsOverride = null) {
-  const axes = _numericHelixAxes(clusterIdsOverride)
+export function getVRDeformationPlaneFrames(globalBp, clusterIdsOverride = null, helixIds = null) {
+  const axes = _numericHelixAxes(clusterIdsOverride).filter(a => !helixIds?.length || helixIds.includes(a.id))
   const expansion = expandedHelixOffsetFrame(store.getState().currentDesign)
   return expansion
     ? deformationPlaneFramePair(globalBp, axes, expansion.offsets) : null

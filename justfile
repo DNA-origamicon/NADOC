@@ -281,3 +281,10 @@ vr-view-volumes-demo *ARGS:
 # Menu controls, rendered highlights, grabs, resizing, scene grips and persistence.
 vr-view-volumes-test *ARGS:
     uv run python -m tools.vr_workflows.view_volumes_check --validate {{ARGS}}
+
+# Isolated ScryWrite Bend tour and four-profile validation.
+vr-bend-demo *ARGS:
+    uv run python -m tools.vr_workflows.bend_tour {{ARGS}}
+
+vr-bend-test *ARGS:
+    uv run python -m tools.vr_workflows.bend_tour --validate {{ARGS}}

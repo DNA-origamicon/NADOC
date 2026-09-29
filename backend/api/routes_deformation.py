@@ -38,6 +38,7 @@ from backend.core.deformation import (
     helices_crossing_planes,
     parse_deformation_params,
     resolve_cluster_scope,
+    validate_bend_endpoint_fit,
 )
 from backend.core.models import DeformationLogEntry, DeformationOp, Design
 
@@ -45,6 +46,8 @@ router = APIRouter()
 
 
 class AddDeformationBody(BaseModel):
+    expected_design_id: str | None = None
+    expected_revision: int | None = None
     type: str  # 'twist' | 'bend'
     plane_a_bp: int
     plane_b_bp: int
@@ -98,6 +101,11 @@ def add_deformation(body: AddDeformationBody) -> dict:
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
+    if ((body.expected_design_id is not None and design.id != body.expected_design_id) or
+            (body.expected_revision is not None and design_state.revision() != body.expected_revision)):
+        raise HTTPException(409, detail="Design changed before bend commit")
+    if body.plane_a_bp >= body.plane_b_bp:
+        raise HTTPException(400, detail="Plane 1 must precede Plane 2")
     try:
         params = parse_deformation_params(body.type, body.params)
     except ValueError as e:
@@ -112,6 +120,8 @@ def add_deformation(body: AddDeformationBody) -> dict:
     resolved_cluster_ids = resolve_cluster_scope(design, body.cluster_ids, helix_ids)
     helix_ids = resolved_cluster_ids["helix_ids"]
     cluster_ids = resolved_cluster_ids["cluster_ids"]
+    if body.expected_revision is not None and (not helix_ids or set(body.cluster_ids) != set(cluster_ids)):
+        raise HTTPException(409, detail="Bend target no longer crosses the selected planes")
 
     op = DeformationOp(
         type=body.type,
@@ -122,6 +132,10 @@ def add_deformation(body: AddDeformationBody) -> dict:
         params=params,
     )
     new_deformations = list(design.deformations) + [op]
+    try:
+        validate_bend_endpoint_fit(design.copy_with(deformations=new_deformations), op)
+    except ValueError as error:
+        raise HTTPException(422, detail=str(error)) from error
     if body.preview:
         updated = design.copy_with(deformations=new_deformations)
         design_state.set_design_silent(updated)
@@ -151,6 +165,8 @@ def add_deformation(body: AddDeformationBody) -> dict:
         body.plane_b_bp,
         params,
     )
+    if not body.preview:
+        response["vr_transaction"] = {"feature_log_entry_id": log_entry.id, "target_count": len(helix_ids)}
     return response
 
 

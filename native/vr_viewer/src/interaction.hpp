@@ -1243,7 +1243,7 @@ class ToolConfigurationDraft {
             return true;
         }
         if (mode_ == ToolMode::bend) {
-            bendDirectionDegrees_ += direction > 0 ? 5.0 : -5.0;
+            bendDirectionDegrees_ += direction > 0 ? 1.0 : -1.0;
             if (bendDirectionDegrees_ < 0.0) bendDirectionDegrees_ += 360.0;
             if (bendDirectionDegrees_ >= 360.0) bendDirectionDegrees_ -= 360.0;
             return true;
@@ -1273,6 +1273,11 @@ class ToolConfigurationDraft {
         return true;
     }
 
+    bool setBend(double angle,double direction) {
+        if(!active_ || mode_!=ToolMode::bend || !std::isfinite(angle) || !std::isfinite(direction))return false;
+        bendAngleDegrees_=std::clamp(angle,0.0,360.0);
+        bendDirectionDegrees_=std::fmod(direction+360.0,360.0);return true;
+    }
     [[nodiscard]] bool setPlaneBp(const std::string& slot, int32_t bp) {
         if (!active_ || (mode_ != ToolMode::twist && mode_ != ToolMode::bend)) {
             return false;
@@ -1391,7 +1396,8 @@ class ToolShell {
                 status_ = "PREVIEW ONLY";
             }
         } else if (action == ToolAction::confirm) {
-            if (mode_ == ToolMode::extrude && (!hasSelection || selectionKind == "end")) {
+            if ((mode_ == ToolMode::bend && paintedReady) ||
+                (mode_ == ToolMode::extrude && (!hasSelection || selectionKind == "end"))) {
                 if (!executionPending_ && paintedReady) executionPending_ = true;
                 status_ = executionPending_ ? "COMMITTING" : "VALIDATE DRAFT";
             } else if (capability == ToolCapability::configuration_required) {
@@ -1699,8 +1705,8 @@ inline std::optional<ToolExecutionFeedback> parseToolExecutionFeedback(
         fields >> trailing) {
         return std::nullopt;
     }
-    static constexpr std::array<const char*, 2> modes = {
-        "move_rotate", "extrude",
+    static constexpr std::array<const char*, 3> modes = {
+        "move_rotate", "extrude", "bend",
     };
     static constexpr std::array<const char*, 2> actions = {"confirm", "undo"};
     static constexpr std::array<const char*, 4> statuses = {

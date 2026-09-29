@@ -272,17 +272,24 @@ def _arm_helices_for(design: "Design", ref_helix_id: str) -> list["Helix"]:
     # Exclude overhang helices (centroid skew). Reference status is deliberately
     # absent here: changing an activity flag must never change geometry or the
     # deformation frame used by neighbouring helices.
+    candidates = list(design.helices)
+    constrained = next((op for op in reversed(design.deformations)
+                        if isinstance(op.params, BendParams) and op.params.endpoints is not None
+                        and ref_helix_id in op.affected_helix_ids), None)
+    if constrained is not None:
+        affected = set(constrained.affected_helix_ids)
+        candidates = [h for h in candidates if h.id in affected]
     overhang_helix_ids = {o.helix_id for o in design.overhangs}
     ref = design.find_helix(ref_helix_id)
     if ref is None:
-        return [h for h in design.helices if h.id not in overhang_helix_ids]
+        return [h for h in candidates if h.id not in overhang_helix_ids]
     ref_axis = ref.axis_end.to_array() - ref.axis_start.to_array()
     ref_norm = np.linalg.norm(ref_axis)
     if ref_norm < 1e-12:
-        return [h for h in design.helices if h.id not in overhang_helix_ids]
+        return [h for h in candidates if h.id not in overhang_helix_ids]
     ref_dir = ref_axis / ref_norm
     result = []
-    for h in design.helices:
+    for h in candidates:
         if h.id in overhang_helix_ids:
             continue
         ax = h.axis_end.to_array() - h.axis_start.to_array()
@@ -295,7 +302,7 @@ def _arm_helices_for(design: "Design", ref_helix_id: str) -> list["Helix"]:
     return (
         result
         if result
-        else [h for h in design.helices if h.id not in overhang_helix_ids]
+        else [h for h in candidates if h.id not in overhang_helix_ids]
     )
 
 
@@ -512,6 +519,7 @@ def _frame_at_bp(
     design: "Design",
     target_bp: int,
     arm_helices: list["Helix"] | None = None,
+    *, apply_endpoint_pose: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Return (spine_position, R_matrix, tangent) at *target_bp*.
@@ -565,7 +573,91 @@ def _frame_at_bp(
         omega = _omega_world_for(active, R, tangent)
         spine, R, tangent = _advance_frame(spine, R, tangent, omega, b1 - b0)
 
+    if apply_endpoint_pose:
+        pose = _bend_endpoint_pose(design, helices, relevant_ops)
+        if pose is not None:
+            rotation, translation = pose
+            spine, R, tangent = rotation @ spine + translation, rotation @ R, rotation @ tangent
     return spine, R, tangent
+
+
+def _bend_endpoint_pose(design, helices, relevant_ops):
+    """Rigidly orient a length-preserving arc between controller plane centers.
+
+    Stored endpoints use design-world coordinates; frame propagation precedes
+    cluster transforms, so undo those transforms before fitting. No scaling is
+    introduced: the ordinary bend curvature remains the source of arc length.
+    """
+    op = next((op for op in reversed(relevant_ops)
+               if isinstance(op.params, BendParams) and op.params.endpoints is not None), None)
+    if op is None:
+        return None
+    targets = np.array([*op.params.endpoints, *([op.params.midpoint] if op.params.midpoint is not None else [])], dtype=float)
+    clusters = [c for c in design.cluster_transforms
+                if all(h.id in c.helix_ids for h in helices)
+                and (not c.domain_ids or c.id in op.cluster_ids)]
+    for cluster in reversed(sorted(clusters, key=lambda c: 0 if c.parent_cluster_id else 1)):
+        rotation = _rot_from_quaternion(*cluster.rotation)
+        pivot = np.array(cluster.pivot)
+        targets = (targets - pivot - np.array(cluster.translation)) @ rotation + pivot
+    start = min(h.bp_start for h in helices) if helices else 0
+    a = _frame_at_bp(design, op.plane_a_bp - start, helices, apply_endpoint_pose=False)[0]
+    b = _frame_at_bp(design, op.plane_b_bp - start, helices, apply_endpoint_pose=False)[0]
+    before, after = b - a, targets[1] - targets[0]
+    if np.linalg.norm(before) < 1e-9 or np.linalg.norm(after) < 1e-9:
+        return np.eye(3), targets[0] - a
+    u, v = before / np.linalg.norm(before), after / np.linalg.norm(after)
+    axis = np.cross(u, v)
+    sin_angle, cos_angle = np.linalg.norm(axis), float(np.clip(np.dot(u, v), -1, 1))
+    if sin_angle > 1e-9:
+        rotation = _rot_around_axis(axis / sin_angle, math.atan2(sin_angle, cos_angle))
+    elif cos_angle < 0:
+        axis = np.cross(u, np.eye(3)[np.argmin(np.abs(u))])
+        rotation = _rot_around_axis(axis / np.linalg.norm(axis), math.pi)
+    else:
+        rotation = np.eye(3)
+    if len(targets) == 3:
+        mid = _frame_at_bp(design, (op.plane_a_bp + op.plane_b_bp) / 2 - start,
+                           helices, apply_endpoint_pose=False)[0]
+        raw_side = mid - (a + b) / 2
+        target_side = targets[2] - (targets[0] + targets[1]) / 2
+        raw_side -= u * np.dot(raw_side, u)
+        target_side -= v * np.dot(target_side, v)
+        if np.linalg.norm(raw_side) > 1e-8 and np.linalg.norm(target_side) > 1e-8:
+            raw_side /= np.linalg.norm(raw_side)
+            target_side /= np.linalg.norm(target_side)
+            before_basis = np.column_stack((u, raw_side, np.cross(u, raw_side)))
+            after_basis = np.column_stack((v, target_side, np.cross(v, target_side)))
+            rotation = after_basis @ before_basis.T
+    return rotation, targets[0] - rotation @ a
+
+
+def validate_bend_endpoint_fit(design, op):
+    """Reject a constrained arc that existing overlapping ops cannot reproduce.
+
+    Do this before publishing a design: a preview must never silently turn into
+    a different endpoint position because pre-existing twist/bend changed reach.
+    """
+    if not isinstance(op.params, BendParams) or op.params.endpoints is None:
+        return
+    ids = set(op.affected_helix_ids)
+    helices = [effective_helix_for_geometry(h, design) for h in design.helices if h.id in ids]
+    if not helices:
+        raise ValueError("Bend planes do not intersect the selected element")
+    start = min(h.bp_start for h in helices)
+    points = [(op.plane_a_bp, op.params.endpoints[0]), (op.plane_b_bp, op.params.endpoints[1])]
+    if op.params.midpoint is not None:
+        points.append(((op.plane_a_bp + op.plane_b_bp) / 2, op.params.midpoint))
+    clusters = [c for c in design.cluster_transforms
+                if all(h.id in c.helix_ids for h in helices)
+                and (not c.domain_ids or c.id in op.cluster_ids)]
+    for bp, target in points:
+        point = _frame_at_bp(design, bp - start, helices)[0]
+        for cluster in sorted(clusters, key=lambda c: 0 if c.parent_cluster_id else 1):
+            pivot = np.array(cluster.pivot)
+            point = _rot_from_quaternion(*cluster.rotation) @ (point - pivot) + pivot + np.array(cluster.translation)
+        if np.linalg.norm(point - np.array(target)) > max(.002, abs(op.plane_b_bp-op.plane_a_bp)*BDNA_RISE_PER_BP*1e-5):
+            raise ValueError("Existing deformations conflict with this fixed-length bend; edit or remove the overlapping bend first")
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -1560,6 +1652,12 @@ def _precompute_arm_frames(
             )
         spine, R, tangent = _advance_frame(spine, R, tangent, omega, b1 - b0)
 
+    pose = _bend_endpoint_pose(design, arm_helices, relevant_ops)
+    if pose is not None:
+        rotation, translation = pose
+        spines_out = spines_out @ rotation.T + translation
+        Rs_out = rotation @ Rs_out
+        tans_out = tans_out @ rotation.T
     return spines_out, Rs_out, tans_out
 
 

@@ -98,7 +98,7 @@ describe('native VR parameterized tool execution plans', () => {
     })
     expect(resolveVRDeformationScope(endRef, {
       design: { cluster_transforms: [] }, geometry,
-    })).toEqual({ resolved: true, reason: 'resolved', clusterIds: [] })
+    })).toEqual({ resolved: true, reason: 'resolved', clusterIds: [], helixIds: ['h1'] })
   })
 
   it('describes Twist preflight, transient preview cleanup, commit, and undo', () => {

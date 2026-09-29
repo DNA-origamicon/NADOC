@@ -122,3 +122,9 @@ uv run python -m tools.vr_workflows.extrude_tour --validate --lattice square
 The square case creates a new square-lattice part through File → New, paints a
 2×3 rectangle, extrudes 48 bp and checks equal perpendicular 2.25 nm grid pitches,
 local view-volume rendering, and save/reload. It uses temporary workspace files.
+
+Bending has a dedicated **Bend between two planes** authoring tour:
+`just vr-bend-demo` or `just vr-bend-test`. The test restores the generated part
+between all four controller profiles in one viewer session, checks both end grabs,
+plane movement, wheels, desktop history, save/reload and Undo. See
+[VR Bend](vr_bend.md#scrywrite-test-and-guided-vr-tour) for evidence and prerequisites.

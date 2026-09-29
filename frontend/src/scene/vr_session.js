@@ -379,6 +379,7 @@ export function initVRSession({
             toolConfigSequence: planePickConfigSequence,
             slot: event.plane_pick_slot,
             identity: event.plane_pick_identity,
+            ...(event.plane_pick_position ? { position: event.plane_pick_position } : {}),
           })
         }
         const transformSequence = Number(event?.transform_sequence ?? 0)

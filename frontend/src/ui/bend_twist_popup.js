@@ -221,7 +221,7 @@ export function initBendTwistPopup(callbacks) {
 
   // Plane position inputs — reposition the plane and re-preview
   _planeABp?.addEventListener('change', () => {
-    const bp = Math.max(0, Math.round(parseFloat(_planeABp.value) || 0))
+    const bp = Math.round(parseFloat(_planeABp.value) || 0)
     _planeABp.value = bp
     if (_planeANm) _planeANm.textContent = (bp * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
     if (_toolType === 'bend') _syncBendFieldsForSpan()
@@ -230,7 +230,7 @@ export function initBendTwistPopup(callbacks) {
     else _fireValidate()  // window width changed → re-check achievability
   })
   _planeBBp?.addEventListener('change', () => {
-    const bp = Math.max(0, Math.round(parseFloat(_planeBBp.value) || 0))
+    const bp = Math.round(parseFloat(_planeBBp.value) || 0)
     _planeBBp.value = bp
     if (_planeBNm) _planeBNm.textContent = (bp * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
     if (_toolType === 'bend') _syncBendFieldsForSpan()

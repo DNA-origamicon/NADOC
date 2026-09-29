@@ -49,7 +49,7 @@ export function resolveVRDeformationScope(selectedRef, { design = null, geometry
     return { resolved: false, reason: 'stale_end', clusterIds: [] }
   }
   if (!clusters.length) {
-    return { resolved: true, reason: 'resolved', clusterIds: [] }
+    return { resolved: true, reason: 'resolved', clusterIds: [], helixIds: [nucleotide.helix_id] }
   }
   const clusterId = clusterIdForNucleotide(nucleotide, design)
   return clusterId
@@ -147,13 +147,13 @@ function _deformationPlan(config, toolTarget, environment) {
   if (!scope.resolved) return { accepted: false, reason: scope.reason, plan: null }
   const params = config.mode === 'twist'
     ? { [config.amount_mode]: config.amount }
-    : { angle_deg: config.angle_deg, direction_deg: config.direction_deg }
+    : { kind: 'bend', curvature_deg_per_bp: config.angle_deg / (config.plane_b_bp - config.plane_a_bp), direction_deg: config.direction_deg, ...(config.bend_endpoints ? { endpoints: config.bend_endpoints, ...(config.bend_midpoint ? { midpoint: config.bend_midpoint } : {}) } : {}) }
   const args = {
     type: config.mode,
     planeA: config.plane_a_bp,
     planeB: config.plane_b_bp,
     params,
-    helixIds: [],
+    helixIds: scope.helixIds ?? [],
     clusterIds: [...scope.clusterIds],
   }
   return {

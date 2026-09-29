@@ -1,0 +1,57 @@
+import { describe, it, expect, vi } from 'vitest'
+import { createVRBend } from './vr_bend.js'
+import { createVRToolTransactionCoordinator } from './vr_tool_transaction.js'
+
+function setup() {
+  const state = { currentDesign: { id: 'design', cluster_transforms: [{ id: 'c', helix_ids: ['h'] }], feature_log: [] }, currentGeometry: [] }
+  const config = { sequence: 3, draft: { mode: 'bend', target_identity: 'hit', target_kind: 'cluster', target_owner_tokens: ['owner'], plane_a_bp: 10, plane_b_bp: 110, angle_deg: 90, direction_deg: 30 } }
+  const event = { mode: 'bend', action: 'confirm', sequence: 1, configSequence: 3, targetIdentity: 'hit', targetKind: 'cluster', targetOwnerTokens: ['owner'] }
+  const api = {
+    currentRevisionWatermark: () => 4,
+    validateDeformation: vi.fn(async () => ({ status: 'ok' })),
+    addDeformation: vi.fn(async () => { state.currentDesign.feature_log.push({ id: 'entry' }); return { vr_transaction: { feature_log_entry_id: 'entry', target_count: 1 } } }),
+    refreshNativeVRScene: vi.fn(async () => ({ published: true })),
+  }
+  const feedback = vi.fn(async () => ({ published: true }))
+  const transaction = createVRToolTransactionCoordinator({ getState: () => state, undoDesign: async () => { state.currentDesign.feature_log.pop(); return {} } })
+  const bend = createVRBend({ api, getState: () => state, getConfig: () => config, transaction, sendFeedback: feedback,
+    resolveTarget: () => ({ identity: 'hit', selectionKind: 'cluster', ownerTokens: ['owner'], selectedRef: { kind: 'cluster', id: 'c' } }),
+  })
+  return { bend, api, feedback, config, event, state }
+}
+const settled = () => new Promise(resolve => setTimeout(resolve, 0))
+describe('VR bend desktop executor', () => {
+  it('commits curvature, mirrors the scene and undoes exactly one feature', async () => {
+    const { bend, api, feedback, event, state } = setup()
+    expect(bend.handle(event)).toBe(true); await settled()
+    expect(api.addDeformation).toHaveBeenCalledWith('bend', 10, 110, { kind: 'bend', curvature_deg_per_bp: .9, direction_deg: 30 }, [], false, ['c'], { expectedDesignId: 'design', expectedRevision: 4 })
+    expect(api.refreshNativeVRScene).toHaveBeenCalledOnce()
+    expect(feedback.mock.calls.at(-1)[1]).toBe('succeeded')
+    bend.handle(event); await settled();expect(api.addDeformation).toHaveBeenCalledOnce()
+    bend.handle({ ...event, sequence: 2, action: 'undo' });await settled()
+    expect(state.currentDesign.feature_log).toEqual([])
+    expect(feedback.mock.calls.at(-1)[2]).toBe('undone')
+  })
+  it('refuses stale config, backend blocks and stale desktop history', async () => {
+    const s = setup()
+    s.bend.handle({ ...s.event, configSequence: 2 }); await settled()
+    expect(s.api.addDeformation).not.toHaveBeenCalled()
+    s.api.validateDeformation.mockResolvedValue({ status: 'block' })
+    s.bend.handle({ ...s.event, sequence: 2 }); await settled()
+    expect(s.api.addDeformation).not.toHaveBeenCalled()
+    s.api.validateDeformation.mockResolvedValue({ status: 'ok' })
+    s.bend.handle({ ...s.event, sequence: 3 }); await settled()
+    s.state.currentDesign.feature_log.push({ id: 'desktop-edit' })
+    s.bend.handle({ ...s.event, sequence: 4, action: 'undo' }); await settled()
+    expect(s.feedback.mock.calls.at(-1)[2]).toBe('undo_stale_desktop_changed')
+  })
+  it('rechecks revision after asynchronous validation', async () => {
+    const s = setup()
+    let revision = 4
+    s.api.currentRevisionWatermark = () => revision
+    s.api.validateDeformation.mockImplementation(async () => { revision++; return { status: 'ok' } })
+    s.bend.handle(s.event);await settled()
+    expect(s.api.addDeformation).not.toHaveBeenCalled()
+    expect(s.feedback.mock.calls.at(-1)[2]).toBe('document_changed')
+  })
+})

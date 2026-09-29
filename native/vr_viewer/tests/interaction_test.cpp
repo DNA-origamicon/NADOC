@@ -1327,7 +1327,7 @@ void parameterizedToolDraftsResetOnTargetChangesAndStayBounded() {
         nadoc_vr::ToolMode::bend, "cluster:c1", "cluster", {"cluster-token"}));
     require(!draft.adjustPrimary(-1));
     require(draft.adjustPrimary(1) && draft.bendAngleDegrees() == 1.0);
-    require(draft.adjustSecondary(-1) && draft.bendDirectionDegrees() == 355.0);
+    require(draft.adjustSecondary(-1) && draft.bendDirectionDegrees() == 359.0);
     require(draft.clear() && !draft.active());
     require(!draft.clear());
 }

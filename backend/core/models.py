@@ -1375,6 +1375,27 @@ class BendParams(BaseModel):
         0.0  # per-bp curvature; positive = bend toward +direction
     )
     direction_deg: float = 0.0  # 0 = +X in the bundle cross-section plane
+    # Optional controller-constrained plane centers, in design world nm.
+    endpoints: Optional[tuple[tuple[float, float, float], tuple[float, float, float]]] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    midpoint: Optional[tuple[float, float, float]] = Field(default=None, exclude_if=lambda value: value is None)
+
+    @field_validator("midpoint")
+    @classmethod
+    def finite_midpoint(cls, value):
+        if value is not None and any(not math.isfinite(v) or abs(v) > 1e9 for v in value):
+            raise ValueError("Bend midpoint must be finite")
+        return value
+
+    @field_validator("endpoints")
+    @classmethod
+    def finite_endpoints(cls, value):
+        if value is not None and any(not math.isfinite(v) or abs(v) > 1e9 for p in value for v in p):
+            raise ValueError("Bend endpoints must be finite design coordinates")
+        return value
+
     # Persisted bend-editor intent. Non-null means "Curve to make polymer
     # circle" is enabled and this many copies should close one revolution.
     # Geometry remains canonical in curvature_deg_per_bp so legacy consumers
