@@ -1508,6 +1508,18 @@ void menuComfortTelemetryMeasuresDepthMotionAndControllerResiduals() {
 
 int main() {
     {
+        SceneManipulator model;
+        nadoc_vr::SceneViewPlacement placement; placement.scale=2.3F;
+        model.placeInView({.2F,1.2F,-.4F},glm::angleAxis(.4F,glm::vec3(0,1,0)),placement);
+        const auto before=model.transform();
+        const glm::vec3 origin(-.2F,.12F,-1.6F),target(.3F,1.1F,-.8F);
+        model.anchorOrigin(target,origin);
+        require(glm::length(glm::vec3(model.transform()*glm::vec4(origin,1))-target)<1e-5F);
+        for(int c=0;c<3;++c)require(glm::length(glm::vec3(before[c]-model.transform()[c]))<1e-6F);
+        require(std::abs(model.scale()-2.3F)<1e-6F);
+    }
+
+    {
         glm::mat4 model(1);
         model[0][1]=2; model[3][0]=3;
         const auto json=nadoc_vr::livePresentationJson(model,{10,20,30},.5F,{0,0,-1});

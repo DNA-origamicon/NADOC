@@ -50,6 +50,8 @@ def catalog():
         'Real guest receives native menu labels, desktop icons, controller guides and scissors; checks closing panels and hiding presence.', module='presence_ui_tour')
     add('avatar', 'left', 'VR presenter model',
         'Real local guest sees tracked headset, estimated arms, gestures, inverse model scaling and the Show VR model toggle. No public hosting.', module='avatar_tour')
+    add('qr-calibration', 'left', 'Calibrate QR code · Vive camera',
+        'Real edge-filtered camera preview and cancellation through Share controls. Software validates QR pose and origin snapping separately; physical target alignment requires on-site review.', ['--qr-checks'])
     add('share', 'left', 'Share presenter controls',
         'Control a desktop-started presentation from the left menu. Isolated simulated hosting; creates no public link. All four controller profiles in validation.', module='share_tour')
     add('view-tools', 'right', 'Left-hand view tools',

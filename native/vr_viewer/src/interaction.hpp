@@ -1990,6 +1990,13 @@ class SceneManipulator {
         mode_ = ManipulationMode::none;
     }
 
+    // Snap the source scene origin without rotating/scaling or editing geometry.
+    void anchorOrigin(const glm::vec3& target, const glm::vec3& normalizedOrigin) {
+        const glm::vec3 current = glm::vec3(transform_ * glm::vec4(normalizedOrigin, 1));
+        transform_ = glm::translate(glm::mat4(1), target-current) * transform_;
+        mode_ = ManipulationMode::none;
+    }
+
     // Presentation-only fit; canonical normalization and coordinates stay fixed.
     void fitInView(const glm::vec3& headPosition, const glm::quat& headOrientation,
                    const std::optional<BoundsSummary>& bounds) {

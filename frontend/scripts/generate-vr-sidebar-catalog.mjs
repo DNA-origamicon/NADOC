@@ -143,6 +143,8 @@ tabs.push({side:'right',key:'tools',label:'Tools',rows:[
 ].map(([id,label,action])=>({id,label,action,section:'Tools',kind:'button',options:[],source:'native/vr_viewer/src/menu_items.hpp',reason:''}))})
 tabs.push({side:'left',key:'share',label:'Share',rows:[
   ['share-avatar','Show VR model','share:avatar'],
+  ['qr-calibrate','Calibrate QR code','qr:calibrate'],
+  ['qr-status','QR not calibrated','qr:status'],
   ['share-desktop','Start sharing and manage links on desktop',''],
   ['share-source','Perspective source: desktop camera',''],
   ['share-active','Presentation active','share:status'],

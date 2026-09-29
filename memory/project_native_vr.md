@@ -635,3 +635,19 @@ Room SSE now handles backpressure by coalescing the latest pending state instead
 of destroying the connection on a menu-sized write. The Debug Left-sidebar
 **VR menus and tools in guest view** entry runs the real-host guest pixel checks.
 Details: [presenter model](../docs/vr_presenter_model.md#guest-visible-vr-controls).
+
+## QR calibration and cube (2026-09-29)
+
+VR Share has Calibrate QR code / Cancel and status rows. `qr_calibration.hpp`
+launches an offline isolated `tools.vr_qr.worker` for the original Vive V4L2 feed,
+serial-specific FTHETA calibration, OpenVR camera-to-head and standing poses.
+The native OpenXR STAGE-to-LOCAL mapping registers a stable QR anchor. Source
+scene origin snaps to it, preserving presentation scale/orientation and geometry.
+An RGB axis marker persists; the camera panel is an edge-filtered mono preview.
+The helper needs cached openvr 2.12.1401 / opencv-python-headless 4.12.0.88 in uv's
+isolated Python 3.12 environment; no research-venv dependency changes. The sanitized
+VR PATH omits ~/.local/bin, so the launcher explicitly resolves uv there first.
+Physical target accuracy/comfort remain pending. See docs/vr_qr_calibration.md,
+manual_validation_debt.md and Debug's qr-calibration tour. `generate-qr-cube.mjs`
+produces a 150 mm core and six paint/two-color face plates with stable IDs; these
+are separate from expiring meeting invitations. Mobile cube registration is pending.

@@ -977,6 +977,8 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
   }},
   {0, "share", "Share", {
     {"share-avatar", "Show VR model", "Share", "share:avatar", {}},
+    {"qr-calibrate", "Calibrate QR code", "Share", "qr:calibrate", {}},
+    {"qr-status", "QR not calibrated", "Share", "qr:status", {}},
     {"share-desktop", "Start sharing and manage links on desktop", "Share", "", {}},
     {"share-source", "Perspective source: desktop camera", "Share", "", {}},
     {"share-active", "Presentation active", "Share", "share:status", {}},

@@ -51,7 +51,8 @@ tracking QR** (150 mm including quiet zone, `qrmm=150` configures the phone).
 QR guests can start a local camera diagnostic showing a target outline and
 approximate phone position relative to the QR. It uses jsQR and a planar pose
 estimate with assumed/adjustable vertical FOV; target must stay visible. No
-camera frames or poses are transmitted, and no Vive alignment/portal or VR
-attendee markers are implemented. See `docs/meeting_room_target.md`.
+camera frames or poses are transmitted. Mobile poses are not connected to VR
+portal rendering or attendee markers. Native Share now has separate Vive QR
+calibration (docs/vr_qr_calibration.md); physical alignment is still unverified. See `docs/meeting_room_target.md`.
 Software-only synthetic camera validation is separate from pending physical
 print, phone compatibility, calibration and headset testing.

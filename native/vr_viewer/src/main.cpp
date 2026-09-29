@@ -410,6 +410,7 @@ GLuint makeDesktopProgram() {
 
 #include "frosted_glass.hpp"
 #include "room_floor.hpp"
+#include "qr_calibration.hpp"
 
 GLuint makeMenuPanelProgram() {
     static constexpr const char* vertexSource = R"GLSL(
@@ -4948,6 +4949,7 @@ class Viewer {
 
     ~Viewer() {
         gpuFrameTimer_.shutdown();
+        qrCalibration_.shutdown();
         roomFloor_.shutdown();
         menuGlass_.shutdown();
         menuPanelSurface_.shutdown();
@@ -5310,10 +5312,14 @@ class Viewer {
         simulationPanel_.bind(sidebarMenus_.menus[0], &sidebarMenus_.menus[1]);
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.label=[this](const std::string& action,const std::string& fallback) {
+                if(action=="qr:calibrate")return std::string(qrCalibration_.running()?"Cancel QR calibration":"Calibrate QR code");
+                if(action=="qr:status")return qrCalibration_.status;
                 if(action!="share:status")return fallback;
                 return std::string(shareFailed_?"Action failed - check desktop":!shareActive_?"Start presentation on desktop":shareBusy_ || shareAck_<shareSequence_?"Updating presentation...":sharePerspective_?"Sharing desktop perspective":"Perspective paused");
             };
             sidebar.available=[this](const std::string& action) {
+                if(action=="qr:status")return false;
+                if(action=="qr:calibrate")return true;
                 if(action.starts_with("share:")) return shareAvailable(action);
                 if(action=="tool:move_rotate")return !toolShell_.executionPending();
                 if(action.starts_with("move:")) {
@@ -5721,6 +5727,7 @@ class Viewer {
     }
     void activateSidebarAction(const std::string& action, size_t hand) {
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
+        if(action=="qr:calibrate") {qrCalibration_.start();return;}
         if(action=="share:avatar") {showVRAvatar_=!showVRAvatar_;return;}
         if(action.starts_with("share:")) {
             if(shareAvailable(action)) {shareAction_=action.substr(6);++shareSequence_;publishEventState();}
@@ -7303,6 +7310,7 @@ class Viewer {
             controllerGuides_.push_back(Vertex{a, color, 1.0F});
             controllerGuides_.push_back(Vertex{b, color, 1.0F});
         };
+        qrCalibration_.drawAnchor(line);
         auto circle = [&](const glm::vec3& center, float radius,
                           int axisA, int axisB, const glm::vec3& color) {
             constexpr int segments = 24;
@@ -8451,7 +8459,7 @@ class Viewer {
             out << quote(selectedOwnerTokens_[i]);
         }
         const auto moveCenter=glScene_?glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform()):std::nullopt;
-        out << "],\"room_floor\":" << roomFloor_.json() << ",\"menu_glass\":{\"enabled\":true,\"gray_opacity\":0.10,\"blur_radius_px\":15},\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
+        out << "],\"qr_calibration\":" << qrCalibration_.json() << ",\"room_floor\":" << roomFloor_.json() << ",\"menu_glass\":{\"enabled\":true,\"gray_opacity\":0.10,\"blur_radius_px\":15},\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
             << ",\"sequence\":" << viewTools_.sequence << ",\"ack_sequence\":" << viewTools_.acknowledged << ",\"version\":" << viewTools_.version << ",\"flags\":" << viewTools_.flags << ",\"triangles\":" << viewTools_.triangles.size()/3
             << ",\"parse_ms\":" << viewTools_.parseMs << ",\"upload_ms\":" << viewTools_.uploadMs << ",\"instances\":" << viewTools_.instanceCount() << ",\"lines\":" << viewTools_.lines.size()/2 << ",\"sprites\":" << viewTools_.sprites.size() << ",\"hover\":[" << viewTools_.hover[0] << ',' << viewTools_.hover[1] << "],\"items\":[";
         for(size_t i=0;i<11;++i){if(i)out<<',';out<<"{\"key\":"<<quote(VRViewTools::keys[i])<<",\"active\":"<<((viewTools_.flags&(1<<i))?"true":"false")<<",\"center\":"<<point(viewTools_.world(VRViewTools::cell(i)))<<'}';}
@@ -9537,6 +9545,7 @@ class Viewer {
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::reference_grid);
         roomFloor_.render(viewProjection);
+        qrCalibration_.render(viewProjection,witnessObserverPosition_,witnessObserverOrientation_);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
         if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(),
@@ -9943,6 +9952,7 @@ class Viewer {
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::reference_grid);
         roomFloor_.render(viewProjection);
+        qrCalibration_.render(viewProjection,witnessObserverPosition_,witnessObserverOrientation_);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
         if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(), {});
@@ -9991,6 +10001,7 @@ class Viewer {
             controllerGuides_.begin() + static_cast<std::ptrdiff_t>(
                 std::min(witnessActorGuideCount_, controllerGuides_.size())));
         roomFloor_.render(viewProjection);
+        qrCalibration_.render(viewProjection,witnessObserverPosition_,witnessObserverOrientation_);
         if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(),
             actorGuides);
@@ -10057,6 +10068,12 @@ class Viewer {
         ++liveFrame_;
         currentPredictedDisplayTime_ = frameState.predictedDisplayTime;
         roomFloor_.update(session_,space_,frameState.predictedDisplayTime);
+        qrCalibration_.update(roomFloor_.located?std::optional<glm::mat4>(roomFloor_.stageToLocal):std::nullopt);
+        if(const auto position=qrCalibration_.takePosition()) {
+            manipulator_.anchorOrigin(*position, -normalizationCenter_*normalizationScale_+glm::vec3(0,0,-kViewDistanceMeters));
+            initialScenePlacementRequested_=false;
+            recenterRequested_=false;
+        }
         const auto frameStarted = std::chrono::steady_clock::now();
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
@@ -10786,6 +10803,7 @@ class Viewer {
     size_t selectedJobIndex_ = 0;
     nadoc_vr::MenuPlacement menuPlacement_;
     RoomFloor roomFloor_;
+    QrCalibration qrCalibration_;
     FrostedGlass menuGlass_;
     MenuPanelSurface menuPanelSurface_;
     SidebarRuntime sidebarMenus_;

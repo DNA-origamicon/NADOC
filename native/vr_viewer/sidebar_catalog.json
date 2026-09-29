@@ -13415,6 +13415,26 @@
           "reason": ""
         },
         {
+          "id": "qr-calibrate",
+          "label": "Calibrate QR code",
+          "action": "qr:calibrate",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": ""
+        },
+        {
+          "id": "qr-status",
+          "label": "QR not calibrated",
+          "action": "qr:status",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": ""
+        },
+        {
           "id": "share-desktop",
           "label": "Start sharing and manage links on desktop",
           "action": "",

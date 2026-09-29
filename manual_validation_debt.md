@@ -656,3 +656,16 @@ calibration before trusting metric pose. Confirm camera release on Stop/tab hide
 and room end. Synthetic-video browser checks do not establish physical accuracy.
 Vive registration, world tracking off-target, portal rendering and VR guest
 markers are outside this first mobile diagnostic and remain pending.
+
+## MV-VIVE-QR-CALIBRATION — printed-target spatial alignment (2026-09-29)
+
+Pending on-site: print and measure the 150 mm meeting QR or assemble/paint the QR
+cube. In VR Share, Calibrate QR code; check edge-preview orientation/comfort,
+QR lock, stationary acquisition, and scene **source origin** registration against
+the physical target. Test each cube face, range, lighting and perspective; compare
+measured physical offsets, repeatability and scene scale/orientation preservation.
+Verify cancellation, camera-busy/lost-tracking failure, no movement without lock,
+and re-registration after target/SteamVR-room changes. USB exposure timestamps are
+not synchronized; do not infer motion accuracy from synthetic pose tests.
+See [workflow and limits](docs/vr_qr_calibration.md). Mobile cube alignment and
+mobile-to-VR attendee positions remain separate work.

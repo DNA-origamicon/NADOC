@@ -32,6 +32,8 @@ prompts and do not expose the large-tracking print button.
 
 This is a local mobile tracking diagnostic, not yet a registered VR portal or
 an attendee-position feed to the Vive. Frames and poses stay in the browser.
+Native Vive calibration is a separate [Share-tab workflow](vr_qr_calibration.md);
+it does not yet connect these mobile poses to VR.
 The QR must remain visible; there is no inertial/world tracking after it leaves
 the image. Loss, mismatched invitation and stalled video clear the current position.
 Stop, hiding the page, closing the panel, leaving the page or ending the meeting
