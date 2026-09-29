@@ -1,0 +1,11 @@
+{
+  "0_HarmonicBondForce": 4.403750645696933e-09,
+  "1_HarmonicAngleForce": 4.720655929675039e-11,
+  "2_HarmonicBondForce": 0.0,
+  "3_PeriodicTorsionForce": 0.0,
+  "4_CustomTorsionForce": 0.0,
+  "5_CMAPTorsionForce": 0.0,
+  "6_NonbondedForce": -644086.3021431289,
+  "7_CustomNonbondedForce": 58601.80205079879,
+  "total_kcal": -585484.5000923257
+}

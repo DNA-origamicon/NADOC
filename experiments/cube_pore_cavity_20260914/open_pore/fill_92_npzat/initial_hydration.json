@@ -1,0 +1,14 @@
+{
+  "frame": 15,
+  "step": 80000,
+  "time_ps": 156.0,
+  "box_nm": [
+    12.354,
+    12.297560733739028,
+    12.0
+  ],
+  "pore_slice_water": 550,
+  "pore_core_density_nm3": 23.438001415328916,
+  "total_water_void_nm3": 80.51200000000001,
+  "largest_water_void_nm3": 16.704000000000004
+}

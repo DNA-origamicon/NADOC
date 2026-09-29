@@ -1,0 +1,7 @@
+{
+  "paused_pid": 256111,
+  "command": "/home/joshua/Applications/NAMD_3.0.2p1_Linux-x86_64-multicore-CUDA/namd3 +p1 +devices 0 /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/open_pore/fill_96 run.conf ",
+  "paused_at": 1789417658.6236897,
+  "resume_reason": "full pair finished",
+  "resumed_at": 1789420089.8660595
+}

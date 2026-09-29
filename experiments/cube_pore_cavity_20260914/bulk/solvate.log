@@ -1,0 +1,49 @@
+          :-) GROMACS - gmx solvate, 2023.3-Ubuntu_2023.3_1ubuntu3 (-:
+
+Executable:   /usr/bin/gmx
+Data prefix:  /usr
+Working dir:  /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/bulk
+Command line:
+  gmx solvate -cs spc216.gro -box 6 6 6 -o solvated.gro -nobackup
+
+Reading solvent configuration
+
+Initialising inter-atomic distances...
+
+WARNING: Masses and atomic (Van der Waals) radii will be guessed
+         based on residue and atom names, since they could not be
+         definitively assigned from the information in your input
+         files. These guessed numbers might deviate from the mass
+         and radius of the atom type. Please check the output
+         files if necessary. Note, that this functionality may
+         be removed in a future GROMACS version. Please, consider
+         using another file format for your input.
+
+NOTE: From version 5.0 gmx solvate uses the Van der Waals radii
+from the source below. This means the results may be different
+compared to previous GROMACS versions.
+
+++++ PLEASE READ AND CITE THE FOLLOWING REFERENCE ++++
+A. Bondi
+van der Waals Volumes and Radii
+J. Phys. Chem. 68 (1964) pp. 441-451
+-------- -------- --- Thank You --- -------- --------
+
+Generating solvent configuration
+Will generate new solvent configuration of 4x4x4 boxes
+Solvent box contains 25131 atoms in 8377 residues
+Removed 4044 solvent atoms due to solvent-solvent overlap
+Sorting configuration
+Found 1 molecule type:
+    SOL (   3 atoms):  7029 residues
+Generated solvent containing 21087 atoms in 7029 residues
+Writing generated configuration to solvated.gro
+
+Output configuration contains 21087 atoms in 7029 residues
+Volume                 :         216 (nm^3)
+Density                :     973.493 (g/l)
+Number of solvent molecules:   7029   
+
+
+GROMACS reminds you: "I have not failed. I've just found 10,000 ways that won't work" (Thomas Alva Edison)
+

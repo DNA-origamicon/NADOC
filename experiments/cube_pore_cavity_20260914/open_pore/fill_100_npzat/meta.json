@@ -1,0 +1,21 @@
+{
+  "box_nm": [
+    12.354,
+    12.297560733739028,
+    12.0
+  ],
+  "pore_center_nm": [
+    6.177,
+    6.148780366869514,
+    6.0
+  ],
+  "pore_radius_nm": 4,
+  "water_count": 57179,
+  "salt_pairs": 165,
+  "graphene_atoms": 3876,
+  "fill_fraction_of_solvated": 1.0,
+  "removed_overlapping_waters": 698,
+  "parent_restart_step": 30000,
+  "ensemble": "NPzAT",
+  "change": "Only normal pressure equilibration, fixed lateral dimensions, origin on membrane plane."
+}

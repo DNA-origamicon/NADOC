@@ -1,0 +1,33 @@
+{
+  "box_nm": [
+    12.354,
+    12.297560733739028,
+    12.0
+  ],
+  "pore_center_nm": [
+    6.177,
+    6.148780366869514,
+    6.0
+  ],
+  "pore_radius_nm": 4,
+  "water_count": 52605,
+  "salt_pairs": 165,
+  "graphene_atoms": 3876,
+  "fill_fraction_of_solvated": 0.92,
+  "removed_overlapping_waters": 698,
+  "parent": "fill_92",
+  "parent_restart_step": 80000,
+  "parent_time_ps": 156.0,
+  "ensemble": "NVT",
+  "requested_ps": 344,
+  "change": "Fixed volume and alternate execution mode; same source coordinates, velocities, cell, masses, ion counts, wall parameters and restraints.",
+  "snapshot_sha256": {
+    "coor": "3ab281a0fcb6d956c53feb9bf5606257da70485e19f260a8bc713f29c52d3999",
+    "vel": "da5105eadb3584f80bfdfb05426ca34e61279fa155b0b79e2864dae340082b52",
+    "xsc": "016b4a26455d379c2079fed713688d693d4a7cc8468411a14fac7b9ef31da7f8"
+  },
+  "execution_mode": "GPU offload, CPU integration, +p4",
+  "reason": "Original GPU-resident depleted control failed at step96012, atoms moving too fast. Restart the fixed-volume comparison from the SAME156ps checkpoint as the pressure branch; preserve all failed outputs.",
+  "computational_margin_angstrom": 4,
+  "computational_note": "Patch margin enlarged to 4 A; this changes decomposition/buffering, not force-field parameters."
+}

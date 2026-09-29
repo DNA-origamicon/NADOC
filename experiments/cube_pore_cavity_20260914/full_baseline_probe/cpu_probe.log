@@ -1,0 +1,267 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 8 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: 
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 6 cores x 2 PUs = 12-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64-gcc
+Info: Built Wed Aug 27 15:39:24 CDT 2025 by dhardy on athine.ks.uiuc.edu
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore  8    DESKTOP-T44QS0K  joshua
+Info: Running on 8 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.00674446 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 527.707 MB of memory in use based on /proc/self/stat
+Info: Configuration file is experiments/cube_pore_cavity_20260914/full_baseline_probe/cpu_probe.conf
+Info: Changed directory to experiments/cube_pore_cavity_20260914/full_baseline_probe
+TCL: Suspending until startup complete.
+Info: EXTENDED SYSTEM FILE   /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.xsc
+Warning: The Langevin gamma parameters differ over the particles,
+Warning: requiring extra work per step to constrain rigid bonds.
+Info: SIMULATION PARAMETERS:
+Info: TIMESTEP               2
+Info: NUMBER OF STEPS        0
+Info: STEPS PER CYCLE        20
+Info: PERIODIC CELL BASIS 1  267.492 0 0
+Info: PERIODIC CELL BASIS 2  0 268.239 0
+Info: PERIODIC CELL BASIS 3  0 0 242.394
+Info: PERIODIC CELL CENTER   133.746 134.119 121.197
+Info: WRAPPING WATERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: LOAD BALANCER  Centralized
+Info: LOAD BALANCING STRATEGY  New Load Balancers -- DEFAULT
+Info: LDB PERIOD             4000 steps
+Info: FIRST LDB TIMESTEP     100
+Info: LAST LDB TIMESTEP     -1
+Info: LDB BACKGROUND SCALING 1
+Info: HOM BACKGROUND SCALING 1
+Info: PME BACKGROUND SCALING 1
+Info: MIN ATOMS PER PATCH    40
+Info: EMPTY PATCH LOAD       40 ATOMS
+Info: VELOCITY FILE          /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.vel
+Info: CENTER OF MASS MOVING INITIALLY? NO
+Info: DIELECTRIC             1
+Info: EXCLUDE                SCALED ONE-FOUR
+Info: 1-4 ELECTROSTATICS SCALED BY 1
+Info: MODIFIED 1-4 VDW PARAMETERS WILL BE USED
+Info: DCD FILENAME           /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/full_baseline_probe/cpu_probe.dcd
+Info: DCD FREQUENCY          500
+Info: DCD FIRST STEP         500
+Info: DCD FILE WILL CONTAIN UNIT CELL DATA
+Info: XST FILENAME           /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/full_baseline_probe/cpu_probe.xst
+Info: XST FREQUENCY          500
+Info: NO VELOCITY DCD OUTPUT
+Info: NO FORCE DCD OUTPUT
+Info: OUTPUT FILENAME        /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/full_baseline_probe/cpu_probe
+Info: BINARY OUTPUT FILES WILL BE USED
+Info: RESTART FILENAME       /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/full_baseline_probe/cpu_probe.restart
+Info: RESTART FREQUENCY      500
+Info: BINARY RESTART FILES WILL BE USED
+Info: SWITCHING ACTIVE
+Info: SWITCHING ON           8
+Info: SWITCHING OFF          10
+Info: PAIRLIST DISTANCE      13.5
+Info: PAIRLIST SHRINK RATE   0.01
+Info: PAIRLIST GROW RATE     0.01
+Info: PAIRLIST TRIGGER       0.3
+Info: PAIRLISTS PER CYCLE    2
+Info: PAIRLISTS ENABLED
+Info: MARGIN                 0
+Info: HYDROGEN GROUP CUTOFF  2.5
+Info: PATCH DIMENSION        16
+Info: ENERGY OUTPUT STEPS    10
+Info: ENERGY EVALUATION STEPS    10
+Info: OUTPUT ENERGY PRECISION 4
+Info: CROSSTERM ENERGY INCLUDED IN DIHEDRAL
+Info: TIMING OUTPUT STEPS    100
+Info: HARMONIC CONSTRAINTS ACTIVE
+Info: HARMONIC CONS EXP      2
+Info: LANGEVIN DYNAMICS ACTIVE
+Info: LANGEVIN TEMPERATURE   300
+Info: LANGEVIN USING BBK INTEGRATOR
+Info: LANGEVIN DAMPING COEFFICIENT IS 5 INVERSE PS
+Info: LANGEVIN DYNAMICS NOT APPLIED TO HYDROGENS
+Info: PARTICLE MESH EWALD (PME) ACTIVE
+Info: PME TOLERANCE               1e-06
+Info: PME EWALD COEFFICIENT       0.312341
+Info: PME INTERPOLATION ORDER     4
+Info: PME GRID DIMENSIONS         180 180 162
+Info: PME MAXIMUM GRID SPACING    1.5
+Info: Attempting to read FFTW data from FFTW_NAMD_3.0.2_Linux-x86_64-multicore.txt
+Info: Optimizing 6 FFT steps.  1... 2... 3... 4... 5... 6...   Done.
+Info: Writing FFTW data to FFTW_NAMD_3.0.2_Linux-x86_64-multicore.txt
+Info: FULL ELECTROSTATIC EVALUATION FREQUENCY      2
+Info: USING VERLET I (r-RESPA) MTS SCHEME.
+Info: C1 SPLITTING OF LONG RANGE ELECTROSTATICS
+Info: PLACING ATOMS IN PATCHES BY HYDROGEN GROUPS
+Info: RIGID BONDS TO HYDROGEN : ALL
+Info:         ERROR TOLERANCE : 1e-08
+Info:          MAX ITERATIONS : 100
+Info: RIGID WATER USING SETTLE ALGORITHM
+Info: RANDOM NUMBER SEED     520613578
+Info: USE HYDROGEN BONDS?    NO
+Info: COORDINATE PDB         /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore.pdb
+Info: STRUCTURE FILE         /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_hmr.psf
+Info: PARAMETER file: CHARMM format! 
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36_na.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36m_prot.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_np_thiol.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/toppar_water_ions_cufix.str
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_stub_ions_nbfix.str
+Info: USING ARITHMETIC MEAN TO COMBINE L-J SIGMA PARAMETERS
+Info: BINARY COORDINATES     /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.coor
+Info: SKIPPING rtf SECTION IN STREAM FILE
+Warning: DUPLICATE vdW PAIR ENTRY FOR NC2-OC
+PREVIOUS VALUES  A=829897 B=717.124 A14=829897 B14717.124
+   USING VALUES  A=1.19807e+06 B=861.635 A14=1.19807e+06 B14861.635
+Warning: DUPLICATE vdW ENTRY FOR OC
+PREVIOUS VALUES  sigma=3.02906 epsilon=0.12 sigma14=3.02906 epsilon14=0.12
+   USING VALUES  sigma=3.02941 epsilon=0.12 sigma14=3.02941 epsilon14=0.12
+Info: SUMMARY OF PARAMETERS:
+Info: 234 BONDS
+Info: 618 ANGLES
+Info: 1256 DIHEDRAL
+Info: 50 IMPROPER
+Info: 6 CROSSTERM
+Info: 129 VDW
+Info: 109 VDW_PAIRS
+Info: 0 NBTHOLE_PAIRS
+Warning: Ignored 508219 bonds with zero force constants.
+Warning: Will get H-H distance in rigid H2O from H-O-H angle.
+Info: TIME FOR READING PSF FILE: 8.66674
+Info: READING EXTRA BONDS FILE /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore_k0.5.enm.extra
+Info: READ 616147 EXTRA BONDS
+Info: Reading pdb file /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/cube_pore.pdb
+Info: TIME FOR READING PDB FILE: 2.36282
+Info: 
+Info: ****************************
+Info: STRUCTURE SUMMARY:
+Info: 1679987 ATOMS
+Info: 1765375 BONDS
+Info: 749638 ANGLES
+Info: 350768 DIHEDRALS
+Info: 10568 IMPROPERS
+Info: 0 CROSSTERMS
+Info: 0 EXCLUSIONS
+Info: 25544 CONSTRAINTS
+Info: 1568504 RIGID BONDS
+Info: 3471457 DEGREES OF FREEDOM
+Info: 619702 HYDROGEN GROUPS
+Info: 4 ATOMS IN LARGEST HYDROGEN GROUP
+Info: 619702 MIGRATION GROUPS
+Info: 4 ATOMS IN LARGEST MIGRATION GROUP
+Info: TOTAL MASS = 1.0823e+07 amu
+Info: TOTAL CHARGE = 0.000281518 e
+Info: MASS DENSITY = 1.03336 g/cm^3
+Info: ATOM DENSITY = 0.0965943 atoms/A^3
+Info: *****************************
+Info: Reading from binary file /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.coor
+Info: 
+Info: Entering startup at 68.0515 s, 1.62511 MB of memory in use
+Info: Startup phase 0 took 0.000966694 s, 1.62511 MB of memory in use
+Info: ADDED 2209060 IMPLICIT EXCLUSIONS
+Info: Startup phase 1 took 1.03105 s, 1.62511 MB of memory in use
+Info: NONBONDED TABLE R-SQUARED SPACING: 0.0625
+Info: NONBONDED TABLE SIZE: 705 POINTS
+Info: INCONSISTENCY IN FAST TABLE ENERGY VS FORCE: 0.000290479 AT 0.251946
+Info: INCONSISTENCY IN SCOR TABLE ENERGY VS FORCE: 0.000178193 AT 9.97184
+Info: INCONSISTENCY IN VDWA TABLE ENERGY VS FORCE: 0.0040507 AT 0.251946
+Info: INCONSISTENCY IN VDWB TABLE ENERGY VS FORCE: 0.00150189 AT 0.251946
+Info: Startup phase 2 took 0.000803426 s, 1.62511 MB of memory in use
+Info: Startup phase 3 took 0.00012066 s, 1.62511 MB of memory in use
+Info: Startup phase 4 took 0.0190797 s, 1.62511 MB of memory in use
+Info: Startup phase 5 took 0.000286285 s, 1.62511 MB of memory in use
+Info: PATCH GRID IS 16 (PERIODIC) BY 16 (PERIODIC) BY 15 (PERIODIC)
+Info: PATCH GRID IS 1-AWAY BY 1-AWAY BY 1-AWAY
+Info: Reading from binary file /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/output/cube_pore_00_min_enm_k0p5.vel
+Info: REMOVING COM VELOCITY 0 0 0
+Info: LARGEST PATCH (2707) HAS 551 ATOMS
+Info: TORUS A SIZE 1 USING 0
+Info: TORUS B SIZE 1 USING 0
+Info: TORUS C SIZE 1 USING 0
+Info: TORUS MINIMAL MESH SIZE IS 1 BY 1 BY 1
+Info: Placed 100% of base nodes on same physical node as patch
+Info: Startup phase 6 took 0.602288 s, 1.62511 MB of memory in use
+Info: PME using 8 and 8 processors for FFT and reciprocal sum.
+Info: PME GRID LOCATIONS: 0 1 2 3 4 5 6 7
+Info: PME TRANS LOCATIONS: 0 1 2 3 4 5 6 7
+Info: PME USING 1 GRID NODES AND 1 TRANS NODES
+Info: Optimizing 4 FFT steps.  1... 2... 3... 4...   Done.
+Info: Startup phase 7 took 0.013596 s, 1.62511 MB of memory in use
+Info: Startup phase 8 took 0.000128861 s, 1.62511 MB of memory in use
+Info: Startup phase 9 took 0.000266677 s, 1.62511 MB of memory in use
+Info: Startup phase 10 took 8.2483e-05 s, 1.62511 MB of memory in use
+Info: Startup phase 11 took 0.0116411 s, 1.62511 MB of memory in use
+LDB: Central LB being created...
+Info: Startup phase 12 took 0.0037332 s, 1.62511 MB of memory in use
+Info: CREATING 80680 COMPUTE OBJECTS
+Info: useSync: 0 useProxySync: 0
+Info: Startup phase 13 took 0.153585 s, 1.62511 MB of memory in use
+Info: Startup phase 14 took 0.000220393 s, 1.62511 MB of memory in use
+Info: Startup phase 15 took 0.00914622 s, 1.62511 MB of memory in use
+Info: Finished startup at 69.8985 s, 1.62511 MB of memory in use
+
+TCL: Running for 100 steps
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:       0     23893.1336     65498.4496    129886.5564      1261.1393       -8583536.5236   1104959.4028        28.8230         0.0000         0.0000       -7258009.0189         0.0000  -7258009.0189  -7257656.2707         0.0000          -2661.4266     -1052.1555  17392202.5582     -2661.4266     -1052.1555
+
+OPENING EXTENDED SYSTEM TRAJECTORY FILE
+ENERGY:      10     26004.3581     69074.5147    130408.8464      1507.8969       -8578924.7286   1105923.5045      1348.4232         0.0000     83048.7623       -7161608.4225        24.0775  -7244657.1848  -7157958.7704        15.1796          -1995.9261      -577.0270  17392202.5582      -808.0644      -827.0918
+
+LDB: ============= START OF LOAD BALANCING ============== 96.0366
+LDB: ============== END OF LOAD BALANCING =============== 96.0368
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 96.0381
+ENERGY:      20     28162.0163     71898.2035    131150.5707      1643.2712       -8551511.0738   1113165.7130      4856.0213         0.0000    126842.8155       -7073792.4624        36.7743  -7200635.2779  -7072485.8725        31.4693          -1907.8634      -383.5567  17392202.5582      -467.6046      -455.6934
+
+ENERGY:      30     30311.6576     74192.1992    131671.1788      1771.4389       -8502787.4942   1094581.1801      5386.9231         0.0000    171232.3060       -6993640.6104        49.6437  -7164872.9165  -6993161.3625        43.8675          -1632.1743      -184.2832  17392202.5582      -250.8861      -256.3628
+
+ENERGY:      40     31955.6562     76619.9814    132291.5369      1846.2869       -8446840.1835   1069273.5643      7453.2923         0.0000    206918.0634       -6920481.8021        59.9897  -7127399.8656  -6920974.7822        55.6631          -1858.3167      -382.7088  17392202.5582      -274.8646      -270.2868
+
+ENERGY:      50     33661.1224     79071.5319    132724.4477      1991.9247       -8390264.1882   1044146.3762      9449.0660         0.0000    237121.7906       -6852097.9287        68.7464  -7089219.7193  -6852921.8068        64.8412          -1914.6996      -483.6830  17392202.5582      -421.2681      -423.4694
+
+ENERGY:      60     35279.9614     80846.1238    133169.3521      2048.2147       -8334388.3881   1019615.0899      9745.6676         0.0000    265568.1058       -6788115.8728        76.9936  -7053683.9786  -6789222.3577        73.3637          -2205.5758      -767.6597  17392202.5582      -651.3587      -648.3169
+
+ENERGY:      70     36663.2898     82748.1564    133480.3011      2087.8648       -8281117.1105    996115.4701     11824.5530         0.0000    290502.3679       -6727695.1073        84.2225  -7018197.4752  -6728766.4885        80.9720          -2256.5838      -843.0786  17392202.5582      -790.4621      -790.2772
+
+ENERGY:      80     37957.3413     84326.2195    133907.3994      2111.0346       -8232992.0159    975875.0392     12584.3350         0.0000    314758.3526       -6671472.2943        91.2548  -6986230.6469  -6672627.4513        88.0628          -2455.3310     -1052.4766  17392202.5582      -981.9915      -981.5358
+
+ENERGY:      90     39092.4538     85847.2012    134099.4467      2144.6347       -8191021.3429    959932.7648     13332.3952         0.0000    337622.6327       -6618949.8138        97.8836  -6956572.4465  -6620131.9767        94.9538          -2610.1560     -1217.7783  17392202.5582     -1177.6959     -1177.3655
+
+LDB: ============= START OF LOAD BALANCING ============== 206.397
+LDB: Largest compute 6344 load 0.106172 is 0.1% of average load 105.780172
+LDB: Average compute 0.009977 is 0.0% of average load 105.780172
+LDB: Partitioning computes with target load 10.578017
+LDB: Increased migratable compute count from 72960 to 72960
+LDB: Largest unpartitionable compute is 0.016664
+LDB: ============== END OF LOAD BALANCING =============== 206.44
+Info: useSync: 0 useProxySync: 0
+LDB: =============== DONE WITH MIGRATION ================ 206.447
+Info: Initial time: 8 CPUs 1.3543 s/step 7.83738 days/ns 1.62511 MB memory
+TIMING: 100  CPU: 146.899, 1.43105/step  Wall: 139.065, 1.35482/step, 0 hours remaining, 1.625111 MB of memory in use.
+PERFORMANCE: 100  averaging 0.127545 ns/day, 1.35482 sec/step with standard deviation 0
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL         TOTAL3        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:     100     40346.8248     87271.6309    134541.6616      2228.4203       -8155709.8461    947728.9059     14833.5647         0.0000    359358.3635       -6569400.4746       104.1853  -6928758.8380  -6570538.9929       101.3893          -2305.1161      -925.0557  17392202.5582     -1053.6131     -1053.9798
+
+WRITING EXTENDED SYSTEM TO OUTPUT FILE AT STEP 100
+CLOSING EXTENDED SYSTEM TRAJECTORY FILE
+WRITING COORDINATES TO OUTPUT FILE AT STEP 100
+COORDINATE DCD FILE /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/full_baseline_probe/cpu_probe.dcd WAS NOT CREATED
+The last position output (seq=-2) takes 0.107 seconds, 1.625 MB of memory in use
+WRITING VELOCITIES TO OUTPUT FILE AT STEP 100
+The last velocity output (seq=-2) takes 0.037 seconds, 1.625 MB of memory in use
+====================================================
+
+WallClock: 209.141754  CPUTime: 220.903473  Memory: 1.625111 MB
+[Partition 0][Node 0] End of program

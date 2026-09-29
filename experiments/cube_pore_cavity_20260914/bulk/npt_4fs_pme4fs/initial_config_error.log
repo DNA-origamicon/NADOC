@@ -1,0 +1,40 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 1 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: v80000
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 6 cores x 2 PUs = 12-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Info: Built with CUDA version 12060
+Pe 0 physical rank 0 binding to CUDA device 0 on DESKTOP-T44QS0K: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 8191MB  Rev: 7.5  PCI: 0:7:0
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64
+Info: Built Sun Jul 12 01:58:16 MDT 2026 by joshua on DESKTOP-T44QS0K
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  1    DESKTOP-T44QS0K  joshua
+Info: Running on 1 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.439155 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 0 MB of memory in use based on /proc/self/stat
+Info: Configuration file is /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/bulk/npt_4fs_pme4fs/run.conf
+Info: Changed directory to /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/bulk/npt_4fs_pme4fs
+TCL: Suspending until startup complete.
+ERROR: Multiple definitions of 'LangevinPiston'
+ERROR:   in the configuration file are not allowed
+Warning: The following variables were set in the
+Warning: configuration file but will be ignored:
+Warning:    LangevinPistonTarget (LangevinPiston)
+Warning:    LangevinPistonPeriod (LangevinPiston)
+Warning:    LangevinPistonDecay (LangevinPiston)
+Warning:    LangevinPistonTemp (LangevinPiston)
+FATAL ERROR: ERROR(S) IN THE CONFIGURATION FILE
+FATAL ERROR: ERROR(S) IN THE CONFIGURATION FILE
+[Partition 0][Node 0] End of program

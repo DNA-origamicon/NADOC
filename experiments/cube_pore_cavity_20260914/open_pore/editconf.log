@@ -1,0 +1,17 @@
+         :-) GROMACS - gmx editconf, 2023.3-Ubuntu_2023.3_1ubuntu3 (-:
+
+Executable:   /usr/bin/gmx
+Data prefix:  /usr
+Working dir:  /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/open_pore
+Command line:
+  gmx editconf -f dry.pdb -o dry.gro -noc -box 12.354 12.297560733739028 12.0 -nobackup
+
+
+GROMACS reminds you: "I was detained, I was restrained" (The Smiths)
+
+Note that major changes are planned in future for editconf, to improve usability and utility.
+Read 3876 atoms
+No velocities found
+new box vectors : 12.354 12.298 12.000 (nm)
+new box angles  :  90.00  90.00  90.00 (degrees)
+new box volume  :1823.09               (nm^3)

@@ -1,0 +1,17 @@
+         :-) GROMACS - gmx editconf, 2023.3-Ubuntu_2023.3_1ubuntu3 (-:
+
+Executable:   /usr/bin/gmx
+Data prefix:  /usr
+Working dir:  /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/resolvate_relaxed
+Command line:
+  gmx editconf -f dry.pdb -o dry.gro -noc -box 26.749200000000002 26.823900000000002 24.239399999999996 -nobackup
+
+
+GROMACS reminds you: "Bailed Out Of Edge Synchronization After 10,000 Iterations" (X/Motif)
+
+Note that major changes are planned in future for editconf, to improve usability and utility.
+Read 148711 atoms
+No velocities found
+new box vectors : 26.749 26.824 24.239 (nm)
+new box angles  :  90.00  90.00  90.00 (degrees)
+new box volume  :17392.20               (nm^3)

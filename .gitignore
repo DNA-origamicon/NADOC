@@ -230,3 +230,14 @@ experiments/exp59_kimmdy_extra_base_matrix/results/jobs/*/summary.json
 experiments/exp60_extra_vs_native_photoproducts/results/jobs/*/summary.json
 # Local retained development evidence; kept outside the user workspace.
 /.development-artifacts
+
+# Generated structures, checkpoints and coordinate arrays from local pore campaigns.
+# Retain scripts, configurations and compact reports; leave bulky run data local.
+/experiments/cube_pore_cavity_20260914/**/*.pdb
+/experiments/cube_pore_cavity_20260914/**/*.psf
+/experiments/cube_pore_cavity_20260914/**/*.npy
+/experiments/cube_pore_cavity_20260914/**/*.chk
+/experiments/cube_pore_cavity_20260914/**/*.xml
+/experiments/cube_pore_cavity_20260914/**/FFTW_*.txt
+/experiments/cube_pore_cavity_20260914/**/xstFile
+/experiments/graphene_pressure_implementation_20260914/**/*.pdb

@@ -1,0 +1,278 @@
+Charm++: standalone mode (not using charmrun)
+Charm++> Running in Multicore mode: 1 threads (PEs)
+Charm++> Using recursive bisection (scheme 3) for topology aware partitions
+Converse/Charm++ Commit ID: v80000
+CharmLB> Load balancer assumes all CPUs are same.
+Charm++> Running on 1 hosts (1 sockets x 6 cores x 2 PUs = 12-way SMP)
+Charm++> cpu topology info is gathered in 0.000 seconds.
+Info: Built with CUDA version 12060
+Pe 0 physical rank 0 binding to CUDA device 0 on DESKTOP-T44QS0K: 'NVIDIA GeForce RTX 2080 SUPER'  Mem: 8191MB  Rev: 7.5  PCI: 0:7:0
+CharmLB> Load balancing instrumentation for communication is off.
+Info: NAMD 3.0.2 for Linux-x86_64-multicore-CUDA
+Info: 
+Info: Please visit http://www.ks.uiuc.edu/Research/namd/
+Info: for updates, documentation, and support information.
+Info: 
+Info: Please cite Phillips et al., J. Chem. Phys. 153:044130 (2020) doi:10.1063/5.0014475
+Info: in all publications reporting results obtained with NAMD.
+Info: 
+Info: Based on Charm++/Converse 80000 for multicore-linux-x86_64
+Info: Built Sun Jul 12 01:58:16 MDT 2026 by joshua on DESKTOP-T44QS0K
+Info: 1 NAMD  3.0.2  Linux-x86_64-multicore-CUDA  1    DESKTOP-T44QS0K  joshua
+Info: Running on 1 processors, 1 nodes, 1 physical nodes.
+Info: CPU topology information available.
+Info: Charm++/Converse parallel runtime startup completed at 0.282312 s
+CkLoopLib is used in SMP with simple dynamic scheduling (converse-level notification)
+Info: 0 MB of memory in use based on /proc/self/stat
+Info: Configuration file is /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/resume.conf
+Info: Changed directory to /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x
+TCL: Suspending until startup complete.
+Info: EXTENDED SYSTEM FILE   /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/equilibrate.xsc
+Info: Tuning parameters to improve GPU-resident performance
+Warning: The Langevin gamma parameters differ over the particles,
+Warning: requiring extra work per step to constrain rigid bonds.
+Warning: Disabling lonepair support due to incompatability with GPU-resident.
+Info: Running with GPU-resident mode
+Info: SIMULATION PARAMETERS:
+Info: TIMESTEP               2
+Info: NUMBER OF STEPS        0
+Info: STEPS PER CYCLE        20
+Info: PERIODIC CELL BASIS 1  114.775 0 0
+Info: PERIODIC CELL BASIS 2  0 123.54 0
+Info: PERIODIC CELL BASIS 3  0 0 122.976
+Info: PERIODIC CELL CENTER   12 61.77 61.4878
+Info: WRAPPING WATERS AROUND PERIODIC BOUNDARIES ON OUTPUT.
+Info: LOAD BALANCER  Centralized
+Info: LOAD BALANCING STRATEGY  New Load Balancers -- DEFAULT
+Info: LDB PERIOD             4000 steps
+Info: FIRST LDB TIMESTEP     100
+Info: LAST LDB TIMESTEP     -1
+Info: LDB BACKGROUND SCALING 1
+Info: HOM BACKGROUND SCALING 1
+Info: PME BACKGROUND SCALING 1
+Info: MIN ATOMS PER PATCH    40
+Info: EMPTY PATCH LOAD       40 ATOMS
+Info: VELOCITY FILE          /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/equilibrate.vel
+Info: CENTER OF MASS MOVING INITIALLY? NO
+Info: DIELECTRIC             1
+Info: EXCLUDE                SCALED ONE-FOUR
+Info: 1-4 ELECTROSTATICS SCALED BY 1
+Info: MODIFIED 1-4 VDW PARAMETERS WILL BE USED
+Info: DCD FILENAME           /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/resume.dcd
+Info: DCD FREQUENCY          1000
+Info: DCD FIRST STEP         1000
+Info: DCD FILE WILL CONTAIN UNIT CELL DATA
+Info: XST FILENAME           /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/resume.xst
+Info: XST FREQUENCY          1000
+Info: NO VELOCITY DCD OUTPUT
+Info: NO FORCE DCD OUTPUT
+Info: OUTPUT FILENAME        /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/resume
+Info: BINARY OUTPUT FILES WILL BE USED
+Info: RESTART FILENAME       /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/resume.restart
+Info: RESTART FREQUENCY      1000
+Info: BINARY RESTART FILES WILL BE USED
+Info: SWITCHING ACTIVE
+Info: SWITCHING ON           8
+Info: SWITCHING OFF          10
+Info: PAIRLIST DISTANCE      13.5
+Info: PAIRLIST SHRINK RATE   0.01
+Info: PAIRLIST GROW RATE     0.01
+Info: PAIRLIST TRIGGER       0.3
+Info: PAIRLISTS PER CYCLE    2
+Info: PAIRLISTS ENABLED
+Info: MARGIN                 4
+Info: HYDROGEN GROUP CUTOFF  2.5
+Info: PATCH DIMENSION        20
+Info: ENERGY OUTPUT STEPS    1000
+Info: ENERGY EVALUATION STEPS    1000
+Info: OUTPUT ENERGY PRECISION 4
+Info: CROSSTERM ENERGY INCLUDED IN DIHEDRAL
+Info: TIMING OUTPUT STEPS    10000
+Info: PRESSURE OUTPUT STEPS  1000
+Info: HARMONIC CONSTRAINTS ACTIVE
+Info: HARMONIC CONS EXP      2
+Info: LANGEVIN DYNAMICS ACTIVE
+Info: LANGEVIN TEMPERATURE   300
+Info: LANGEVIN USING BBK INTEGRATOR
+Info: LANGEVIN DAMPING COEFFICIENT IS 5 INVERSE PS
+Info: LANGEVIN DYNAMICS NOT APPLIED TO HYDROGENS
+Info: LANGEVIN PISTON PRESSURE CONTROL ACTIVE
+Info:        TARGET PRESSURE IS 1.01325 BAR
+Info:     OSCILLATION PERIOD IS 1000 FS
+Info:             DECAY TIME IS 500 FS
+Info:     PISTON TEMPERATURE IS 300 K
+Info:       PRESSURE CONTROL IS GROUP-BASED
+Info:    INITIAL STRAIN RATE IS -2.59561e-06 0 0
+Info:       CELL FLUCTUATION IS ANISOTROPIC
+Info: PARTICLE MESH EWALD (PME) ACTIVE
+Info: PME TOLERANCE               1e-06
+Info: PME EWALD COEFFICIENT       0.312341
+Info: PME INTERPOLATION ORDER     4
+Info: PME GRID DIMENSIONS         80 84 84
+Info: PME MAXIMUM GRID SPACING    1.5
+Info: PME CALCULATION WILL BE PERFORMED ON GPU
+Info: FULL ELECTROSTATIC EVALUATION FREQUENCY      2
+Info: USING VERLET I (r-RESPA) MTS SCHEME.
+Info: C1 SPLITTING OF LONG RANGE ELECTROSTATICS
+Info: PLACING ATOMS IN PATCHES BY HYDROGEN GROUPS
+Info: RIGID BONDS TO HYDROGEN : ALL
+Info:         ERROR TOLERANCE : 1e-08
+Info:          MAX ITERATIONS : 100
+Info: RIGID WATER USING SETTLE ALGORITHM
+Info: RANDOM NUMBER SEED     6142026
+Info: USE HYDROGEN BONDS?    NO
+Info: COORDINATE PDB         /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/system.pdb
+Info: STRUCTURE FILE         /home/joshua/NADOC/experiments/cube_pore_cavity_20260914/open_pore/fill_100/system.psf
+Info: PARAMETER file: CHARMM format! 
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36_na.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_all36m_prot.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_np_thiol.prm
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/toppar_water_ions_cufix.str
+Info: PARAMETERS             /home/joshua/NADOC/workspace/md_jobs/60e854232e8c/package/cube_pore_namd_solvated/forcefield/par_stub_ions_nbfix.str
+Info: USING ARITHMETIC MEAN TO COMBINE L-J SIGMA PARAMETERS
+Info: BINARY COORDINATES     /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/equilibrate.coor
+Info: SKIPPING rtf SECTION IN STREAM FILE
+Warning: DUPLICATE vdW PAIR ENTRY FOR NC2-OC
+PREVIOUS VALUES  A=829897 B=717.124 A14=829897 B14717.124
+   USING VALUES  A=1.19807e+06 B=861.635 A14=1.19807e+06 B14861.635
+Warning: DUPLICATE vdW ENTRY FOR OC
+PREVIOUS VALUES  sigma=3.02906 epsilon=0.12 sigma14=3.02906 epsilon14=0.12
+   USING VALUES  sigma=3.02941 epsilon=0.12 sigma14=3.02941 epsilon14=0.12
+Info: SUMMARY OF PARAMETERS:
+Info: 234 BONDS
+Info: 618 ANGLES
+Info: 1256 DIHEDRAL
+Info: 50 IMPROPER
+Info: 6 CROSSTERM
+Info: 129 VDW
+Info: 109 VDW_PAIRS
+Info: 0 NBTHOLE_PAIRS
+Warning: Ignored 57179 bonds with zero force constants.
+Warning: Will get H-H distance in rigid H2O from H-O-H angle.
+Info: TIME FOR READING PSF FILE: 0.382545
+Info: Reading pdb file /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/system.pdb
+Info: TIME FOR READING PDB FILE: 0.15586
+Info: 
+Info: ****************************
+Info: STRUCTURE SUMMARY:
+Info: 175743 ATOMS
+Info: 114358 BONDS
+Info: 57179 ANGLES
+Info: 0 DIHEDRALS
+Info: 0 IMPROPERS
+Info: 0 CROSSTERMS
+Info: 0 EXCLUSIONS
+Info: 3876 CONSTRAINTS
+Info: 171537 RIGID BONDS
+Info: 355692 DEGREES OF FREEDOM
+Info: 61385 HYDROGEN GROUPS
+Info: 3 ATOMS IN LARGEST HYDROGEN GROUP
+Info: 61385 MIGRATION GROUPS
+Info: 3 ATOMS IN LARGEST MIGRATION GROUP
+Info: TOTAL MASS = 1.0863e+06 amu
+Info: TOTAL CHARGE = 0 e
+Info: MASS DENSITY = 1.03451 g/cm^3
+Info: ATOM DENSITY = 0.100787 atoms/A^3
+Info: *****************************
+Info: Reading from binary file /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/equilibrate.coor
+Info: 
+Info: Entering startup at 1.02595 s, 0 MB of memory in use
+Info: Startup phase 0 took 0.00058041 s, 0 MB of memory in use
+Info: ADDED 171537 IMPLICIT EXCLUSIONS
+Info: Startup phase 1 took 0.0286873 s, 0 MB of memory in use
+Info: NONBONDED TABLE R-SQUARED SPACING: 0.0625
+Info: NONBONDED TABLE SIZE: 705 POINTS
+Info: INCONSISTENCY IN FAST TABLE ENERGY VS FORCE: 0.000290479 AT 0.251946
+Info: INCONSISTENCY IN SCOR TABLE ENERGY VS FORCE: 0.000178193 AT 9.97184
+Info: INCONSISTENCY IN VDWA TABLE ENERGY VS FORCE: 0.0040507 AT 0.251946
+Info: INCONSISTENCY IN VDWB TABLE ENERGY VS FORCE: 0.00150189 AT 0.251946
+Info: Startup phase 2 took 0.00057501 s, 0 MB of memory in use
+Info: Startup phase 3 took 2.925e-05 s, 0 MB of memory in use
+Info: Startup phase 4 took 0.00058365 s, 0 MB of memory in use
+Info: Startup phase 5 took 4.923e-05 s, 0 MB of memory in use
+Info: PATCH GRID IS 5 (PERIODIC) BY 6 (PERIODIC) BY 6 (PERIODIC)
+Info: PATCH GRID IS 1-AWAY BY 1-AWAY BY 1-AWAY
+Info: Reading from binary file /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/equilibrate.vel
+Info: REMOVING COM VELOCITY 0.0167637 -0.0131831 -0.014835
+Info: LARGEST PATCH (52) HAS 1019 ATOMS
+Info: TORUS A SIZE 1 USING 0
+Info: TORUS B SIZE 1 USING 0
+Info: TORUS C SIZE 1 USING 0
+Info: TORUS MINIMAL MESH SIZE IS 1 BY 1 BY 1
+Info: Placed 100% of base nodes on same physical node as patch
+Info: Startup phase 6 took 0.127044 s, 0 MB of memory in use
+Info: Use 3D box decompostion in PME FFT.
+Info: PME using 1 x 1 x 1 pencil grid for FFT and reciprocal sum.
+Info: Startup phase 7 took 0.00017811 s, 0 MB of memory in use
+Info: Updated CUDA force table with 4096 elements.
+Info: Updated CUDA LJ table with 124 x 124 elements.
+Info: Startup phase 8 took 0.00336411 s, 0 MB of memory in use
+Info: Startup phase 9 took 5.994e-05 s, 0 MB of memory in use
+Info: Startup phase 10 took 3.051e-05 s, 0 MB of memory in use
+Info: Startup phase 11 took 0.00092502 s, 0 MB of memory in use
+LDB: Central LB being created...
+Info: Startup phase 12 took 0.00546354 s, 0 MB of memory in use
+Info: CREATING 3968 COMPUTE OBJECTS
+Info: Found 4 unique exclusion lists needing 4 bytes
+Info: Startup phase 13 took 0.019066 s, 0 MB of memory in use
+Info: Startup phase 14 took 0.00011808 s, 0 MB of memory in use
+Info: Startup phase 15 took 0.00050337 s, 0 MB of memory in use
+Info: Finished startup at 1.21321 s, 0 MB of memory in use
+
+TCL: Running for 2000 steps
+PRESSURE: 0 -67.5893 570.272 1484.18 39.8844 -1005.58 -476.735 -21.4991 -244.632 -1580.45
+GPRESSURE: 0 -20.2273 590.917 1502.44 49.3819 -928.687 -453.224 -17.9404 -248.231 -1533.6
+ETITLE:      TS           BOND          ANGLE          DIHED          IMPRP               ELECT            VDW       BOUNDARY           MISC        KINETIC               TOTAL           TEMP      POTENTIAL       TOTALAVG        TEMPAVG            PRESSURE      GPRESSURE         VOLUME       PRESSAVG      GPRESSAVG
+
+ENERGY:       0         0.0000         0.0000         0.0000         0.0000        -652644.1781     60531.1926      3443.1735         0.0000    105693.2896        -482976.5225       299.0637   -588669.8120   -482976.5225       299.0637           -884.5383      -827.5054   1743713.3605      -884.5383      -827.5054
+
+OPENING EXTENDED SYSTEM TRAJECTORY FILE
+Info: Initial time: 1 CPUs 0.00906643 s/step 19.0593 ns/day 0 MB memory
+Info: Initial time: 1 CPUs 0.00875932 s/step 19.7276 ns/day 0 MB memory
+Info: Initial time: 1 CPUs 0.0095573 s/step 18.0804 ns/day 0 MB memory
+Info: Benchmark time: 1 CPUs 0.0103071 s/step 16.7651 ns/day 0 MB memory
+Info: Benchmark time: 1 CPUs 0.010835 s/step 15.9484 ns/day 0 MB memory
+Info: Benchmark time: 1 CPUs 0.0130897 s/step 13.2012 ns/day 0 MB memory
+Info: Benchmark time: 1 CPUs 0.012244 s/step 14.1131 ns/day 0 MB memory
+Info: Benchmark time: 1 CPUs 0.0148758 s/step 11.6161 ns/day 0 MB memory
+Info: Benchmark time: 1 CPUs 0.0137412 s/step 12.5753 ns/day 0 MB memory
+PRESSURE: 1000 -49.9323 -958.72 205.158 6.68309 -556.386 -1.20959 64.7815 1368.47 297.672
+GPRESSURE: 1000 -3.78085 -991.919 185.886 42.9664 -508.057 -31.553 107.302 1367.14 370.48
+PRESSAVG: 1000 -58.7608 23.2837 21.6412 23.2837 -780.983 561.919 21.6412 561.919 -641.387
+GPRESSAVG: 1000 -12.0041 -200.501 844.162 46.1741 -718.372 -242.388 44.6807 559.455 -581.561
+ENERGY:    1000         0.0000         0.0000         0.0000         0.0000        -652373.2990     60445.5045      3469.2970         0.0000    105766.7394        -482691.7581       299.2715   -588458.4975   -482834.1403       299.1676           -102.8823       -47.1193   1742035.4759      -493.7103      -437.3124
+
+WRITING EXTENDED SYSTEM TO RESTART FILE AT STEP 1000
+OPENING COORDINATE DCD FILE
+WRITING COORDINATES TO DCD FILE /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/resume.dcd AT STEP 1000
+WRITING COORDINATES TO RESTART FILE AT STEP 1000
+FINISHED WRITING RESTART COORDINATES
+The last position output (seq=1000) takes 0.010 seconds, 0.000 MB of memory in use
+WRITING VELOCITIES TO RESTART FILE AT STEP 1000
+FINISHED WRITING RESTART VELOCITIES
+The last velocity output (seq=1000) takes 0.004 seconds, 0.000 MB of memory in use
+PRESSURE: 2000 -107.854 296.008 -1149.52 -64.5188 -732.445 -338.317 -77.9043 -476.927 417.257
+GPRESSURE: 2000 -57.9661 292.327 -1126.35 -34.6215 -684.613 -316.226 -108.277 -483.653 489.66
+PRESSAVG: 2000 -75.1251 -5.98376 -11.5407 -5.98376 -764.804 215.637 -11.5407 215.637 -288.506
+GPRESSAVG: 2000 -27.3248 -36.2249 187.325 19.2423 -707.119 -267.001 -6.3052 211.753 -224.487
+ENERGY:    2000         0.0000         0.0000         0.0000         0.0000        -652361.2453     60260.2047      3504.9742         0.0000    105701.7969        -482894.2694       299.0878   -588596.0663   -482854.1833       299.1410           -141.0141       -84.3064   1742481.5803      -376.1449      -319.6437
+
+WRITING EXTENDED SYSTEM TO RESTART FILE AT STEP 2000
+WRITING COORDINATES TO DCD FILE /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/resume.dcd AT STEP 2000
+WRITING COORDINATES TO RESTART FILE AT STEP 2000
+FINISHED WRITING RESTART COORDINATES
+The last position output (seq=2000) takes 0.007 seconds, 0.000 MB of memory in use
+WRITING VELOCITIES TO RESTART FILE AT STEP 2000
+FINISHED WRITING RESTART VELOCITIES
+The last velocity output (seq=2000) takes 0.004 seconds, 0.000 MB of memory in use
+WRITING EXTENDED SYSTEM TO OUTPUT FILE AT STEP 2000
+CLOSING EXTENDED SYSTEM TRAJECTORY FILE
+WRITING COORDINATES TO OUTPUT FILE AT STEP 2000
+CLOSING COORDINATE DCD FILE /home/joshua/NADOC/experiments/graphene_pressure_implementation_20260914/x/resume.dcd
+The last position output (seq=-2) takes 0.010 seconds, 0.000 MB of memory in use
+WRITING VELOCITIES TO OUTPUT FILE AT STEP 2000
+The last velocity output (seq=-2) takes 0.003 seconds, 0.000 MB of memory in use
+====================================================
+
+WallClock: 26.045456  CPUTime: 28.079014  Memory: 0.000000 MB
+[Partition 0][Node 0] End of program

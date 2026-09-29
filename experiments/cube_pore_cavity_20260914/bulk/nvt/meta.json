@@ -1,0 +1,10 @@
+{
+  "box_nm": [
+    6,
+    6,
+    6
+  ],
+  "water_count": 6989,
+  "salt_pairs": 20,
+  "ensemble": "nvt"
+}

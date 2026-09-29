@@ -1,0 +1,13 @@
+{
+  "box_nm": [
+    6,
+    6,
+    6
+  ],
+  "water_count": 6989,
+  "salt_pairs": 20,
+  "ensemble": "npt",
+  "timestep_fs": 4,
+  "pme_interval_fs": 8,
+  "parent": "bulk/npt 2fs"
+}
