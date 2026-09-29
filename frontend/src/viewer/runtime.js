@@ -12,6 +12,7 @@ import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
 import { makeMultiscaleControls } from '../scene/multiscale_controls.js'
 import { fovPanScale } from '../scene/fov_pan.js'
 import { screenPlaneCameraUp } from '../scene/camera_basis.js'
+import { attachTrajectoryRenderClock } from '../ui/trajectory_render_clock.js'
 
 function _makeOrbitControls(camera, canvas, target) {
   const c = new OrbitControls(camera, canvas)
@@ -271,9 +272,11 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false }
   // Render loop — setAnimationLoop works in both normal and WebXR modes.
   // _cnFrame is a global frame counter used by the cadnano debug logger.
   let _cnFrame = 0
+  const trajectoryClock = attachTrajectoryRenderClock()
   window._cnFrame = 0
   renderer.setAnimationLoop(() => {
-    if (pauseWhenHidden && canvas.ownerDocument.hidden) return
+    if (pauseWhenHidden && canvas.ownerDocument.hidden && !renderer.xr.isPresenting) return
+    trajectoryClock.tick()
     _cnFrame++
     window._cnFrame = _cnFrame
     if (!renderer.xr.isPresenting) _inner.update()
@@ -301,6 +304,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false }
   function dispose() {
     if (disposed) return
     disposed = true
+    trajectoryClock.dispose()
     renderer.setAnimationLoop(null)
     resizeObserver.disconnect()
     canvas.removeEventListener('wheel', fastZoom, true)

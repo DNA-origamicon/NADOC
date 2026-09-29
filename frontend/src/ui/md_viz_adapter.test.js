@@ -203,6 +203,26 @@ describe('mdVizApiAdapter', () => {
       ctrl.stopAndRestore()
     })
 
+    it('preserves the active cubic window during lookahead and reuses its output buffer', async () => {
+      const api = heavyApi({
+        getMdTrajectory: vi.fn(async () => TRAJ(6)),
+        getMdFramesAtomistic: vi.fn(async (_id, indices) => Object.fromEntries(indices.map(i => [String(i), [i*i, i*i, i*i]]))),
+      }), ar = AR(), ctrl = heavyCtrl(api, ar)
+      await ctrl.loadTrajectory('J1', true, 'lineage', 20)
+      ctrl.setPlaying(true)
+      await ctrl.ensureInterpolationFrames(1, 2, { before: 0, after: 3 })
+      ctrl.showInterpolatedFrame(1, 2, .5, { before: 0, after: 3 })
+      const output = ar.applyPositionLerp.mock.calls.at(-1)[0]
+      expect(output[0]).toBeCloseTo(2.25)
+      await ctrl.ensureInterpolationFrames(2, 3, { before: 1, after: 4 })
+      ctrl.showInterpolatedFrame(1, 2, .5, { before: 0, after: 3 })
+      expect(ar.applyPositionLerp.mock.calls.at(-1)[0][0]).toBeCloseTo(2.25)
+      ctrl.showInterpolatedFrame(2, 3, .5, { before: 1, after: 4 })
+      expect(ar.applyPositionLerp.mock.calls.at(-1)[0]).toBe(output)
+      expect(output[0]).toBeCloseTo(6.25)
+      ctrl.stopAndRestore()
+    })
+
     it('allows solvent-only interpolation when no DNA atom model exists', async () => {
       const api = heavyApi({
         getMdTrajectory: vi.fn(async () => ({ ...TRAJ(2), keys: [], frames: [[], []] })),

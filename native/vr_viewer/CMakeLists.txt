@@ -88,6 +88,10 @@ if(BUILD_TESTING)
   target_include_directories(nadoc-vr-trajectory-test PRIVATE src)
   target_compile_options(nadoc-vr-trajectory-test PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME nadoc-vr-trajectory-unit COMMAND nadoc-vr-trajectory-test)
+  add_executable(nadoc-vr-coordinate-playback-test tests/coordinate_playback_test.cpp)
+  target_include_directories(nadoc-vr-coordinate-playback-test PRIVATE src)
+  target_compile_options(nadoc-vr-coordinate-playback-test PRIVATE -Wall -Wextra -Wpedantic -UNDEBUG)
+  add_test(NAME nadoc-vr-coordinate-playback-unit COMMAND nadoc-vr-coordinate-playback-test)
   add_test(
     NAME nadoc-vr-scrywrite-evidence-export
     COMMAND nadoc-vr-scrywrite-export

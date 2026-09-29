@@ -21,17 +21,20 @@ export function mountMeetingLiveFrame({ viewer, base, revision, fetch: request =
     apply.apply(sample.raw); timeline.update(sample.timeline); displayed = sample; segment = null
   }
   function animate() {
-    if (disposed || viewer.current !== current || doc.hidden || viewer.performanceApi?.busy) return
+    if (disposed || viewer.current !== current || (doc.hidden && !viewer.runtime?.renderer.xr.isPresenting) || viewer.performanceApi?.busy) return
+    let nextStart = now()
     if (segment) {
       const t = Math.min(1, (now() - segment.at) / segment.duration)
-      if (t >= 1) exact(segment.to)
+      if (t >= 1) { nextStart = segment.at + segment.duration; exact(segment.to) }
       else apply.interpolate(displayed.raw, segment.to.raw, t)
     }
     if (!segment && pending) {
       const next = pending; pending = null
       if (smooth.checked && displayed?.timeline?.playing && next.timeline?.playing &&
         displayed.timeline.total === next.timeline.total && next.timeline.frame >= displayed.timeline.frame) {
-        segment = { to: next, at: now(), duration: next.duration }
+        segment = { to: next, at: Math.max(nextStart, now() - next.duration), duration: next.duration }
+        const t = Math.min(1, (now() - segment.at) / segment.duration)
+        if (t > 0) apply.interpolate(displayed.raw, segment.to.raw, t)
       } else exact(next)
     }
   }
@@ -43,7 +46,7 @@ export function mountMeetingLiveFrame({ viewer, base, revision, fetch: request =
     }
   }
   async function tick() {
-    if (disposed || doc.hidden || flight || !latest || latest.sequence <= shown || viewer.current !== current || Date.now() < retryAt) return
+    if (disposed || (doc.hidden && !viewer.runtime?.renderer.xr.isPresenting) || flight || !latest || latest.sequence <= shown || viewer.current !== current || Date.now() < retryAt) return
     const frame = latest, abort = new AbortController(); flight = abort
     timeline.setBuffering(true, frame.timeline)
     try {
@@ -78,7 +81,9 @@ export function mountMeetingLiveFrame({ viewer, base, revision, fetch: request =
       if (!disposed && !abort.signal.aborted) { status.textContent = `${error.message}. Retrying…`; retryAt = Date.now() + 1000 }
     } finally { if (flight === abort) flight = null; if (!disposed) timeline.setBuffering(shown < (latest?.sequence ?? -1), latest?.timeline) }
   }
-  const timer = repeat(() => { animate(); void tick() }, 33)
+  const frameRuntime = viewer.runtime?.addFrameCallback ? viewer.runtime : null
+  frameRuntime?.addFrameCallback(animate)
+  const timer = repeat(() => { if (!frameRuntime) animate(); void tick() }, 33)
   return { receive(value) {
     const frame = value.liveFrame
     if (value.revision !== revision || frame?.revision !== revision || !Number.isSafeInteger(frame.sequence) || frame.sequence < 1 ||
@@ -89,5 +94,5 @@ export function mountMeetingLiveFrame({ viewer, base, revision, fetch: request =
       pending = null; if (displayed) exact(displayed)
     }
     latest = frame; timeline.setBuffering(true, frame.timeline); void tick()
-  }, dispose() { disposed = true; flight?.abort(); cancel(timer); apply?.clearInterpolation(); displayed = pending = segment = null; status.remove(); smoothLabel.remove(); timeline.dispose() } }
+  }, dispose() { disposed = true; flight?.abort(); cancel(timer); frameRuntime?.removeFrameCallback(animate); apply?.clearInterpolation(); displayed = pending = segment = null; status.remove(); smoothLabel.remove(); timeline.dispose() } }
 }

@@ -7,7 +7,7 @@ import { decodeContainer } from './package_container.js'
 import { sceneChannels, encodeFrame } from './trajectory_clip.js'
 vi.mock('./trajectory_clip.js', async original => ({ ...await original(), gzipFrame: async b => b }))
 
-async function setup() {
+async function setup(xr = false) {
   vi.stubGlobal('crypto', webcrypto)
   document.body.innerHTML = '<main></main>'
   const scene = new THREE.Scene(), mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial()); scene.add(mesh)
@@ -18,6 +18,7 @@ async function setup() {
   let tick, time = 0
   const pending = [], request = vi.fn((url, options) => new Promise(resolve => pending.push({ url, options, finish: () => { const index = Number(new URL(url, 'http://localhost').searchParams.get('index')); resolve({ ok: true, headers: new Headers({ 'Content-Length': frames[index].byteLength }), arrayBuffer: async () => frames[index] }) } })))
   const viewer = { current, performanceApi: { busy: false } }, log = vi.fn()
+  if (xr) viewer.runtime = { renderer: { xr: { isPresenting: true } }, addFrameCallback: fn => { tick = fn }, removeFrameCallback: vi.fn() }
   const api = mountMeetingTrajectory({ viewer, base: '/meeting/x', role: 'guest', fetch: request, now: () => time, setInterval: fn => { tick = fn; return 1 }, clearInterval: vi.fn(), log })
   const state = (frame, playing, at = 1000) => api.receive({ serverTime: at, trajectory: { id: 'a'.repeat(64), frame, playing, fps: 8, at } })
   return { api, viewer, pending, request, state, tick: () => tick(), advance: ms => { time += ms }, log }
@@ -52,8 +53,9 @@ it('ignores an older timeline snapshot arriving after a newer seek', async () =>
   v.api.dispose(); v.viewer.current.dispose(); vi.unstubAllGlobals()
 })
 
-it('defaults to smoothing between sparse loaded frames and snaps on pause or toggle off', async () => {
-  const v = await setup()
+it.each([false, true])('smooths sparse loaded frames and snaps on pause (WebXR: %s)', async xr => {
+  const v = await setup(xr)
+  const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(xr)
   // Cache two nonadjacent recorded frames without loading the missing samples.
   v.state(0, false); v.pending[0].finish()
   await vi.waitFor(() => { v.tick(); expect(document.querySelector('[data-progress]').textContent).toContain('1/12 buffered') })
@@ -71,6 +73,7 @@ it('defaults to smoothing between sparse loaded frames and snaps on pause or tog
   v.state(0, false, 4000)
   expect(v.viewer.current.scene.children[0].matrix.elements[12]).toBe(0)
   v.api.dispose(); v.advance(100); v.tick()
+  if (xr) expect(v.viewer.runtime.removeFrameCallback).toHaveBeenCalledOnce()
   expect(v.viewer.current.scene.children[0].matrix.elements[12]).toBe(0)
-  v.viewer.current.dispose(); vi.unstubAllGlobals()
+  v.viewer.current.dispose(); hidden.mockRestore(); vi.unstubAllGlobals()
 })

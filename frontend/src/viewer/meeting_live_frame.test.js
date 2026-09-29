@@ -7,23 +7,26 @@ import { decodeContainer } from './package_container.js'
 import { createLiveFrameCapture } from './live_frame_capture.js'
 vi.mock('./trajectory_clip.js', async original => ({ ...await original(), gzipFrame: async b => b }))
 afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = '' })
-it('automatically applies frames, coalesces slow transfers, and cancels obsolete scene work', async () => {
+it.each([false, true])('smooths live boundaries and cancels obsolete work (WebXR: %s)', async xr => {
   vi.stubGlobal('crypto', webcrypto); document.body.innerHTML = '<main></main>'
   const scene = new THREE.Scene(), mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial()); scene.add(mesh)
   const camera = { position: [0, 0, 10], target: [0, 0, 0], up: [0, 1, 0], fov: 55, near: .1, far: 1000, orbitMode: 'orbit' }
   const buffer = prepareScene({ scene, camera }), current = await loadPreparedScene(buffer), capture = createLiveFrameCapture(decodeContainer(buffer), { scene })
   const packets = [], descriptions = [], revision = 'a'.repeat(64)
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 1; i <= 6; i++) {
     mesh.position.x = i; const packet = capture.frame({ scene }); packets.push(packet)
-    descriptions.push({ timeline: { frame: i * 10, total: 100, playing: i !== 4 }, revision, sequence: i, bytes: packet.byteLength, sha256: Buffer.from(await webcrypto.subtle.digest('SHA-256', packet)).toString('hex') })
+    descriptions.push({ timeline: { frame: i * 10, total: 100, playing: i !== 5 }, revision, sequence: i, bytes: packet.byteLength, sha256: Buffer.from(await webcrypto.subtle.digest('SHA-256', packet)).toString('hex') })
   }
   const pending = [], request = vi.fn((url, options) => new Promise(resolve => pending.push({ options, finish: () => {
     const requested = Number(new URL(url, 'http://localhost').searchParams.get('sequence')) - 1
     const i = requested === 0 ? 1 : requested
     resolve({ ok: true, headers: new Headers({ 'Content-Length': packets[i].byteLength, 'X-NADOC-Sequence': i + 1, 'X-NADOC-SHA256': descriptions[i].sha256, 'X-NADOC-Timeline': JSON.stringify(descriptions[i].timeline) }), arrayBuffer: async () => packets[i] })
   } })))
-  let tick, time = 0
-  const ui = mountMeetingLiveFrame({ viewer: { current }, base: '/meeting/room', revision, fetch: request, now: () => time, setInterval: fn => { tick = fn; return null }, clearInterval: () => {} })
+  let poll, render, time = 0
+  const runtime = xr ? { renderer: { xr: { isPresenting: true } }, addFrameCallback: fn => { render = fn }, removeFrameCallback: vi.fn() } : null
+  const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(xr)
+  const tick = () => { render?.(); poll() }
+  const ui = mountMeetingLiveFrame({ viewer: { current, runtime }, base: '/meeting/room', revision, fetch: request, now: () => time, setInterval: fn => { poll = fn; return null }, clearInterval: () => {} })
   expect(document.querySelector('[data-live-smooth]').checked).toBe(true)
   for (const frame of descriptions.slice(0, 3)) ui.receive({ revision, liveFrame: frame })
   expect(document.querySelector('[data-frame-buffering]').hidden).toBe(false)
@@ -42,17 +45,23 @@ it('automatically applies frames, coalesces slow transfers, and cancels obsolete
   expect(document.querySelector('[data-frame-buffering]').hidden).toBe(true)
   ui.receive({ revision, liveFrame: descriptions[3] })
   expect(document.querySelector('[data-frame-buffering]').hidden).toBe(false)
-  pending[2].finish()
-  await vi.waitFor(() => expect(current.scene.children[0].matrix.elements[12]).toBe(4))
+  time = 350; pending[2].finish()
+  await vi.waitFor(() => expect(document.querySelector('[data-frame-buffering]').hidden).toBe(true))
+  time = 425; tick()
+  expect(current.scene.children[0].matrix.elements[12]).toBeCloseTo(3 + 25 / 150)
+  ui.receive({ revision, liveFrame: descriptions[4] }); pending[3].finish()
+  await vi.waitFor(() => expect(current.scene.children[0].matrix.elements[12]).toBe(5))
   time = 600; tick()
-  expect(current.scene.children[0].matrix.elements[12]).toBe(4)
+  expect(current.scene.children[0].matrix.elements[12]).toBe(5)
   expect(document.querySelector('[data-frame-number]').textContent).toContain('Paused')
-  ui.receive({ revision, liveFrame: descriptions[4] })
-  ui.dispose(); expect(pending[3].options.signal.aborted).toBe(true)
-  pending[3].finish(); await new Promise(resolve => setTimeout(resolve, 10))
-  expect(current.scene.children[0].matrix.elements[12]).toBe(4)
+  ui.receive({ revision, liveFrame: descriptions[5] })
+  ui.dispose(); expect(pending[4].options.signal.aborted).toBe(true)
+  if (runtime) expect(runtime.removeFrameCallback).toHaveBeenCalledWith(render)
+  pending[4].finish(); await new Promise(resolve => setTimeout(resolve, 10))
+  expect(current.scene.children[0].matrix.elements[12]).toBe(5)
   expect(document.querySelector('[data-live-timeline]')).toBeNull()
   current.dispose()
+  hidden.mockRestore()
 })
 
 it('accepts large announced transfers and keeps buffering visible through a failed download', async () => {
