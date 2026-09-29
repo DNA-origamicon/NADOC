@@ -9,10 +9,9 @@
  * Factory: initOxdnaTrajectoryPlayer({ playBtn, slider, markersEl, label, onSeek,
  *   onBeforePlay, onPlayStateChange, fps })
  *
- * `onBeforePlay` (optional, async) runs BEFORE the play loop starts and is awaited —
- * the heavy (atomistic/surface) path uses it to pre-build every coarse playback frame
- * (each is a slow all-atom rebuild) so playback is then smooth instead of stalling one
- * frame at a time. While it runs the button shows a spinner; clicking again cancels.
+ * `prepare()` joins onBeforePlay and the first interpolation neighbourhood during
+ * initial loading. Play reuses that result while the trajectory/display settings
+ * match. Preparation shows a disabled spinner; pause/stop cancel pending starts.
  * `onPlayStateChange(playing)` fires when the loop actually starts / stops.
  *
  * `setPreparing({done, total} | null)` — tell the player that frames are being prepared in
@@ -30,6 +29,8 @@
  */
 
 import { initFrameSteppers } from './frame_steppers.js'
+import { initTrajectoryInterpolationClock } from './trajectory_interpolation_clock.js'
+import { interpolationNeighbors } from '../scene/trajectory_interpolation.js'
 
 /**
  * Pure: place stage-transition markers along the slider track.
@@ -73,6 +74,8 @@ const _MARKER_COLOR ={ production: '#3fb950', equil: '#4a9eff', md_relax: '#e0a8
 export function initOxdnaTrajectoryPlayer({
   playBtn, slider, markersEl, label, onSeek, prevBtn = null, nextBtn = null,
   loadProgressEl = null, onBeforePlay = null, onBeforeSeek = null, onPlayStateChange = null, fps = 8,
+  interpolationToggle = null, onInterpolate = null, onBeforeInterpolate = null,
+  preparationKey = () => '',
 } = {}) {
   let _n = 0          // frame count
   let _i = 0          // current frame
@@ -84,6 +87,22 @@ export function initOxdnaTrajectoryPlayer({
   let _seekToken = 0
   let _waitingForFrame = false
   const _loadPhases = new Map() // phase → latest progress; completed rows stay visible
+  let _smooth = false
+  let _preparePromise = null, _readyKey = null
+  const readyKey = () => `${preparationKey()}|${!!interpolationToggle?.checked}|${_i}`
+  const neighbors = (from, to) => interpolationNeighbors(from, to, _n, _markers)
+  const interpolation = initTrajectoryInterpolationClock({
+    current: () => _i, count: () => _n, fps,
+    ensure: async (from, to, blend) => {
+      if (blend && onBeforeInterpolate) return onBeforeInterpolate(from, to, neighbors(from, to))
+      return onBeforeSeek?.(to) ?? true
+    },
+    draw: (from, to, t) => onInterpolate?.(from, to, t, neighbors(from, to)),
+    commit: i => { seek(i, false); onSeek?.(i) },
+    canBlend: (_from, to) => !_markers.some(m => m.frame === to),
+    buffering: waiting => { _waitingForFrame = waiting; _setLabel() },
+    failed: () => pause(),
+  })
 
   /** Shared oxDNA/NAMD trajectory-build bar. The engines only supply counts; this
    * component owns identical bar/readout rendering for both. */
@@ -189,6 +208,7 @@ export function initOxdnaTrajectoryPlayer({
    * No-op for CG, where the caller never has anything to prepare.
    */
   function setPreparing(progress) {
+    if (progress) _readyKey = null
     _bgPrep = progress && progress.total ? { done: progress.done | 0, total: progress.total | 0 } : null
     _renderPlayBtn()
   }
@@ -209,6 +229,7 @@ export function initOxdnaTrajectoryPlayer({
 
   function seek(i, fire = true) {
     if (_n <= 0) return
+    if (fire && _smooth) pause()
     const target = Math.max(0, Math.min(_n - 1, i | 0))
     const token = ++_seekToken
     const apply = () => {
@@ -243,35 +264,60 @@ export function initOxdnaTrajectoryPlayer({
     seek(_i + 1 >= _n ? 0 : _i + 1)   // loop continuously
   }
 
-  async function play() {
-    // A background prepare is still running — the frames simply are not there yet. The
-    // button is already a disabled spinner, so this is only reachable programmatically.
-    if (_n < 2 || _timer || _preparing || _bgPrep) return
-    if (onBeforePlay) {                                // heavy reps: pre-build frames first
-      _preparing = true
-      const myToken = ++_prepToken
-      _renderPlayBtn()
-      let go = true
-      try { go = (await onBeforePlay()) !== false }
-      catch { go = false }
-      _preparing = false
-      if (!go || _timer || myToken !== _prepToken) {   // cancelled / superseded while preparing
-        _renderPlayBtn()
-        return
+  /** Called during initial loading, not deferred until the user presses Play. */
+  function prepare() {
+    if (_preparePromise) return _preparePromise
+    const key = readyKey()
+    if (_readyKey === key) return Promise.resolve(true)
+    const token = ++_prepToken
+    _preparing = true
+    _renderPlayBtn()
+    _preparePromise = (async () => {
+      try {
+        if (await onBeforePlay?.() === false) return false
+        if (token !== _prepToken) return false
+        if (interpolationToggle?.checked && onBeforeInterpolate && _i + 1 < _n) {
+          setLoading({ phase: 'interpolation', done: 0, total: 1, label: 'Prepare smooth playback' })
+          if (await onBeforeInterpolate(_i, _i + 1, neighbors(_i, _i + 1)) === false) return false
+          if (token !== _prepToken) return false
+          setLoading({ phase: 'interpolation', done: 1, total: 1, label: 'Prepare smooth playback' })
+        }
+        if (token !== _prepToken || key !== readyKey()) return false
+        _readyKey = key
+        return true
+      } catch { return false }
+      finally {
+        if (token === _prepToken) { _preparing = false; _preparePromise = null; _renderPlayBtn() }
       }
-    }
-    _timer = setInterval(_tick, Math.max(1, Math.round(1000 / fps)))
+    })()
+    return _preparePromise
+  }
+
+  async function play() {
+    if (_n < 2 || _timer || _preparing || _bgPrep) return
+    const needsPreparation = onBeforePlay || (interpolationToggle?.checked && onBeforeInterpolate)
+    if (needsPreparation && _readyKey !== readyKey() && !await prepare()) return
+    if (_timer) return
+    setLoading(null)
+    _smooth = !!interpolationToggle?.checked && !!onInterpolate
+    _timer = _smooth ? -1 : setInterval(_tick, Math.max(1, Math.round(1000 / fps)))
     _renderPlayBtn()
     onPlayStateChange?.(true)
+    if (_smooth) interpolation.start()
   }
   function pause() {
+    const restore = interpolation.stop()
     _seekToken++
     _waitingForFrame = false
     _setLabel()
     _prepToken++   // cancel any in-flight prepare so it won't start the loop on resolve
+    _preparePromise = null
     const wasActive = !!_timer || _preparing
     _preparing = false
-    if (_timer) { clearInterval(_timer); _timer = null }
+    if (_timer && !_smooth) clearInterval(_timer)
+    _timer = null; _smooth = false
+    // A pause always displays the last saved frame, including during buffering.
+    if (restore) onSeek?.(_i)
     _renderPlayBtn()
     if (wasActive) onPlayStateChange?.(false)
   }
@@ -280,6 +326,7 @@ export function initOxdnaTrajectoryPlayer({
   /** Load a new trajectory: set frame count + markers, reset to frame 0, paused. */
   function setTrajectory(nFrames, markers) {
     pause()
+    _readyKey = null
     _n = Math.max(0, nFrames | 0)
     _markers = markers || []
     _i = 0
@@ -292,6 +339,7 @@ export function initOxdnaTrajectoryPlayer({
   /** Clear everything (toggle off / job switch). */
   function stop() {
     pause()
+    _readyKey = null
     _n = 0; _i = 0; _markers = []
     // A job switch invalidates any prepare that was running for the OLD job; leaving the
     // spinner up would disable the button for a trajectory that has nothing pending.
@@ -304,10 +352,18 @@ export function initOxdnaTrajectoryPlayer({
   }
 
   playBtn?.addEventListener('click', toggle)
+  interpolationToggle?.addEventListener('change', async () => {
+    const resume = !!_timer
+    pause()
+    if (_n < 2) return
+    const ready = await prepare()
+    setLoading(null)
+    if (resume && ready) void play()
+  })
   slider?.addEventListener('input', () => { pause(); seek(parseInt(slider.value, 10) || 0) })
 
   return {
-    setTrajectory, play, pause, toggle, seek, stop, setPreparing, setLoading,
+    setTrajectory, play, pause, toggle, seek, stop, setPreparing, setLoading, prepare,
     isPlaying: () => !!_timer,
     isPreparing: () => _preparing || !!_bgPrep,
     current: () => _i,

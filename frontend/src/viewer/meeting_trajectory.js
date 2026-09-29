@@ -11,9 +11,13 @@ export function mountMeetingTrajectory({ viewer, base, role, document: doc = doc
   bar.dataset.trajectory = ''; bar.style.cssText = 'display:flex;gap:12px;padding:8px 18px;align-items:center;flex-wrap:wrap'
   bar.innerHTML = `<strong>Recorded trajectory</strong>${role === 'presenter' ? '<button data-play>Play</button><input data-seek type="range" min="0" value="0" aria-label="Shared trajectory frame"><select data-speed aria-label="Trajectory frames per second"><option>4</option><option>8</option><option>15</option><option>30</option></select>' : ''}<button data-preload>Buffer clip</button><span data-progress role="status"></span><button data-metrics>Copy trajectory metrics</button>`
   doc.body.insertBefore(bar, doc.querySelector('main'))
+  const smoothLabel = doc.createElement('label')
+  smoothLabel.innerHTML = '<input data-smooth type="checkbox" checked> Smooth playback'
+  smoothLabel.title = 'Smooth between downloaded snapshots. Pausing displays an exact recorded frame.'
+  bar.append(smoothLabel)
   const timeline = role === 'guest' ? mountLiveTimeline(doc) : null
   const el = key => bar.querySelector(`[data-${key}]`), status = el('progress')
-  let state = null, anchor = 0, serverAt = 0, disposed = false, flight = null, epoch = 0, bytes = 0, shown = -1, fetchMs = 150, lastTick = now(), lastReport = now(), preload = false, retryAt = 0, syncAt = now() + 5000, syncing = false, networkDelay = 0, sequence = -1
+  let state = null, anchor = 0, serverAt = 0, disposed = false, flight = null, epoch = 0, bytes = 0, shown = -1, fetchMs = 150, lastTick = now(), lastReport = now(), preload = false, retryAt = 0, syncAt = now() + 5000, syncing = false, networkDelay = 0, sequence = -1, blended = false
   const startedAt = now(), clockAbort = new AbortController()
   const metrics = { schema: 1, clip: clip.id, downloaded_bytes: 0, applied_frames: 0, skipped_frames: 0, waiting_ms: 0, errors: 0, peak_cache_bytes: 0, max_apply_ms: 0, last_fetch_ms: null, temporal_step: 1 }
   const currentTime = () => serverAt + now() - anchor
@@ -55,7 +59,10 @@ export function mountMeetingTrajectory({ viewer, base, role, document: doc = doc
     const next = value.trajectory
     if (!next || next.id !== clip.id || !Number.isFinite(value.serverTime)) return
     const changed = !state || next.at !== state.at || next.frame !== state.frame || next.playing !== state.playing || next.fps !== state.fps
-    if (changed) { resetRequest(); preload = false; shown = -1 }
+    if (changed) {
+      if (blended && cache.has(shown)) apply.apply(cache.get(shown))
+      blended = false; resetRequest(); preload = false; shown = -1; apply.clearInterpolation()
+    }
     state = next; serverAt = value.serverTime + networkDelay; anchor = now()
     if (el('play')) { el('play').textContent = next.playing ? 'Pause' : 'Play'; el('speed').value = String(next.fps) }
     tick()
@@ -82,12 +89,24 @@ export function mountMeetingTrajectory({ viewer, base, role, document: doc = doc
     if (time >= syncAt && !syncing) void syncClock()
     // Never drain a historical queue. Choose the newest already-received frame at this meeting time.
     const available = state.playing ? [...cache.keys()].filter(i => i <= index).sort((a, b) => b - a)[0] : cache.has(index) ? index : undefined
-    if (available !== undefined && available !== shown) {
-      try { const started = now(); apply.apply(cache.get(available)); metrics.max_apply_ms = Math.max(metrics.max_apply_ms, now() - started); if (shown >= 0) metrics.skipped_frames += Math.max(0, available - shown - 1); shown = available; metrics.applied_frames++ }
+    const ahead = state.playing && el('smooth').checked ? [...cache.keys()].filter(i => i > index).sort((a, b) => a - b)[0] : undefined
+    const smoothing = available !== undefined && ahead !== undefined
+    if (available !== undefined && (available !== shown || smoothing || blended)) {
+      try {
+        const started = now()
+        if (smoothing) {
+          const position = state.frame + Math.max(0, currentTime() - state.at) * state.fps / 1000
+          apply.interpolate(cache.get(available), cache.get(ahead), Math.min(1, (position - available) / (ahead - available)))
+        } else apply.apply(cache.get(available))
+        blended = smoothing
+        metrics.max_apply_ms = Math.max(metrics.max_apply_ms, now() - started)
+        if (available !== shown) { if (shown >= 0) metrics.skipped_frames += Math.max(0, available - shown - 1); metrics.applied_frames++ }
+        shown = available
+      }
       catch (error) { status.textContent = error.message; resetRequest(); disposed = true; return }
     }
     if (shown >= 0) timeline?.update({ frame: clip.sourceFrames[shown] + 1, total: clip.sourceFrames.at(-1) + 1, playing: state.playing })
-    const waiting = shown !== index
+    const waiting = shown !== index && !smoothing
     timeline?.setBuffering(waiting, { total: clip.sourceFrames.at(-1) + 1 })
     if (waiting && time - lastTick > 0) metrics.waiting_ms += Math.min(250, time - lastTick)
     lastTick = time
@@ -113,9 +132,10 @@ export function mountMeetingTrajectory({ viewer, base, role, document: doc = doc
   if (el('seek')) el('seek').onchange = () => invoke(Number(el('seek').value), false)
   if (el('speed')) el('speed').onchange = () => invoke(target(), !!state?.playing)
   el('preload').onclick = () => { preload = true; tick() }
+  el('smooth').onchange = tick
   el('metrics').onclick = async () => { const value = '[NADOC_TRAJECTORY_PERF v1] ' + JSON.stringify(report()); try { await doc.defaultView.navigator.clipboard.writeText(value) } catch { status.textContent = value } }
   const visibility = () => { if (doc.hidden) resetRequest(); else { syncAt = now(); tick() } }
   doc.addEventListener('visibilitychange', visibility)
   const timer = repeat(tick, 33)
-  return { receive, dispose() { disposed = true; clockAbort.abort(); resetRequest(); cancel(timer); doc.removeEventListener('visibilitychange', visibility); cache.clear(); bar.remove(); timeline?.dispose(); report() } }
+  return { receive, dispose() { disposed = true; clockAbort.abort(); resetRequest(); cancel(timer); doc.removeEventListener('visibilitychange', visibility); apply.clearInterpolation(); cache.clear(); bar.remove(); timeline?.dispose(); report() } }
 }

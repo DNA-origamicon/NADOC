@@ -1,3 +1,5 @@
+import { Matrix4, Quaternion, Vector3 } from 'three'
+
 /** Portable rendered-frame clips. Absolute patches never depend on a preceding frame. */
 export const CLIP_LIMIT = 128 * 1024 * 1024
 export const FRAME_LIMIT = 16 * 1024 * 1024
@@ -97,7 +99,7 @@ export function createClipApplier(current, limits = {}) {
     const attribute = c.kind === 'attribute' ? object.geometry.attributes[c.name] : c.kind === 'matrix' ? null : object[c.kind]
     return { ...c, object, attribute, target: attribute?.array ?? object.matrix.elements }
   })
-  let previous = null
+  let previous = null, blend = null
   function write(patch, restore) {
     let ci = 0
     for (let i = 0; i < patch.indices.length; i++) {
@@ -106,8 +108,7 @@ export function createClipApplier(current, limits = {}) {
       const c = channels[ci]; c.target[index - c.offset] = restore ? layout.values[index] : patch.values[i]; touched.add(c)
     }
   }
-  return { apply(buffer) {
-    const patch = decodeFrame(buffer, layout.values.length, limits)
+  function paint(patch) {
     if (previous) write(previous, true)
     write(patch, false); previous = patch
     for (const c of touched) {
@@ -117,5 +118,82 @@ export function createClipApplier(current, limits = {}) {
       if (c.object.isInstancedMesh) { c.object.boundingSphere = null; c.object.boundingBox = null }
     }
     touched.clear(); current.scene.updateMatrixWorld(true)
+  }
+  return {
+    apply(buffer) { blend = null; paint(decodeFrame(buffer, layout.values.length, limits)) },
+    interpolate(from, to, fraction) {
+      if (fraction <= 0) { this.apply(from); return }
+      if (fraction >= 1) { this.apply(to); return }
+      if (blend?.from !== from || blend?.to !== to) blend = prepareBlend(layout, from, to, limits)
+      paint(blend.sample(fraction))
+    },
+    // Release endpoint buffers when playback stops or the cache is cleared.
+    clearInterpolation() { blend = null },
+  }
+}
+
+/** Only interpolate spatial channels. IDs, colors and visibility remain exact.
+ * Work/storage scale with changed values, not the static geometry in the scene.
+ * Matrices use decomposed transforms so rotating bonds do not collapse/shear.
+ */
+function prepareBlend(layout, from, to, limits) {
+  const a = decodeFrame(from, layout.values.length, limits), b = decodeFrame(to, layout.values.length, limits)
+  const indices = [], spatial = [], matrices = []
+  let ai = 0, bi = 0, ci = 0
+  while (ai < a.indices.length || bi < b.indices.length) {
+    const index = Math.min(a.indices[ai] ?? Infinity, b.indices[bi] ?? Infinity)
+    while (ci + 1 < layout.channels.length && index >= layout.channels[ci + 1].offset) ci++
+    const channel = layout.channels[ci]
+    if (channel.kind === 'matrix' || channel.kind === 'instanceMatrix') {
+      const start = channel.offset + Math.floor((index - channel.offset) / 16) * 16
+      let ae = ai, be = bi, translationOnly = true
+      while (ae < a.indices.length && a.indices[ae] < start + 16) { const n = a.indices[ae++] - start; if (n < 12 || n > 14) translationOnly = false }
+      while (be < b.indices.length && b.indices[be] < start + 16) { const n = b.indices[be++] - start; if (n < 12 || n > 14) translationOnly = false }
+      // Most sphere/ion instances only translate: retain their tiny sparse patch
+      // instead of allocating/decomposing a full transform per atom.
+      if (translationOnly) {
+        while (ai < ae || bi < be) {
+          const n = Math.min(ai < ae ? a.indices[ai] : Infinity, bi < be ? b.indices[bi] : Infinity)
+          indices.push(n); spatial.push(true)
+          if (a.indices[ai] === n) ai++
+          if (b.indices[bi] === n) bi++
+        }
+        continue
+      }
+      matrices.push(indices.length)
+      for (let j = 0; j < 16; j++) { indices.push(start + j); spatial.push(false) }
+      while (ai < a.indices.length && a.indices[ai] < start + 16) ai++
+      while (bi < b.indices.length && b.indices[bi] < start + 16) bi++
+    } else {
+      indices.push(index)
+      spatial.push(channel.kind === 'attribute' && ['position', 'instanceStart', 'instanceEnd'].includes(channel.name))
+      if (a.indices[ai] === index) ai++
+      if (b.indices[bi] === index) bi++
+    }
+  }
+  const values = new Float64Array(indices.length), av = new Float64Array(indices.length), bv = new Float64Array(indices.length)
+  ai = 0; bi = 0
+  for (let i = 0; i < indices.length; i++) {
+    const index = indices[i]
+    av[i] = a.indices[ai] === index ? a.values[ai++] : layout.values[index]
+    bv[i] = b.indices[bi] === index ? b.values[bi++] : layout.values[index]
+  }
+  const matrix = new Matrix4(), position = new Vector3(), rotation = new Quaternion(), scale = new Vector3()
+  const transforms = matrices.map(offset => {
+    const ap = new Vector3(), aq = new Quaternion(), as = new Vector3(), bp = new Vector3(), bq = new Quaternion(), bs = new Vector3()
+    matrix.fromArray(av, offset).decompose(ap, aq, as)
+    matrix.fromArray(bv, offset).decompose(bp, bq, bs)
+    // Zero scale encodes hidden instances; never animate their appearance/location.
+    const valid = [...as, ...bs].every(v => Number.isFinite(v) && Math.abs(v) > 1e-12) && [...aq, ...bq].every(Number.isFinite)
+    return { offset, ap, aq, as, bp, bq, bs, valid }
+  })
+  const patch = { indices: new Uint32Array(indices), values }
+  return { from, to, sample(t) {
+    for (let i = 0; i < values.length; i++) values[i] = spatial[i] ? av[i] + (bv[i] - av[i]) * t : av[i]
+    for (const m of transforms) if (m.valid) {
+      position.lerpVectors(m.ap, m.bp, t); rotation.slerpQuaternions(m.aq, m.bq, t); scale.lerpVectors(m.as, m.bs, t)
+      matrix.compose(position, rotation, scale).toArray(values, m.offset)
+    }
+    return patch
   } }
 }

@@ -26,6 +26,7 @@ it.each(['vdw', 'ballstick', 'stick'])('streams real %s atom/bond buffers during
   const buffer = prepareScene({ scene, camera: { position: [0,0,10], target: [0,0,0], up: [0,1,0], fov: 55, orbitMode: 'orbit' } })
   const capture = createLiveFrameCapture(decodeContainer(buffer), source)
   const guest = await loadPreparedScene(buffer), apply = createClipApplier(guest)
+  const first = capture.frame(source)
   controller.setPlaying(true)
   for (const index of [2, 0, 1]) {
     controller.showFrame(index)
@@ -35,6 +36,10 @@ it.each(['vdw', 'ballstick', 'stick'])('streams real %s atom/bond buffers during
     })
     const packet = capture.frame(source)
     expect(packet).not.toBeNull()
+    apply.interpolate(first, packet, .5)
+    const interpolated = guest.scene.children.find(o => o.isInstancedMesh)
+    expect(interpolated.instanceMatrix.array[12]).toBeCloseTo(mode === 'stick' ? index / 2 + .075 : index / 2)
+    expect(interpolated.instanceMatrix.array.every(Number.isFinite)).toBe(true)
     apply.apply(packet)
     scene.traverseVisible(object => {
       if (!object.isInstancedMesh) return

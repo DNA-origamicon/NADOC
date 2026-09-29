@@ -57,6 +57,101 @@ describe('initOxdnaTrajectoryPlayer', () => {
   })
   afterEach(() => { player.stop(); vi.useRealTimers() })
 
+  it('prepares while paused, then starts synchronously without redoing preparation', async () => {
+    let release, settings = 'atoms'
+    const onBeforePlay = vi.fn(() => new Promise(resolve => { release = resolve }))
+    const p = initOxdnaTrajectoryPlayer({ playBtn, onBeforePlay, preparationKey: () => settings })
+    p.setTrajectory(4)
+    try {
+      const prepared = p.prepare()
+      expect(playBtn.disabled).toBe(true)
+      expect(p.isPlaying()).toBe(false)
+      release(true); expect(await prepared).toBe(true)
+      expect(playBtn.disabled).toBe(false)
+      p.play()
+      expect(p.isPlaying()).toBe(true)
+      expect(onBeforePlay).toHaveBeenCalledTimes(1)
+      p.pause()
+      settings = 'atoms+ions'
+      const reprepare = p.prepare()
+      expect(playBtn.disabled).toBe(true)
+      release(true); await reprepare
+      p.play()
+      expect(p.isPlaying()).toBe(true)
+      expect(onBeforePlay).toHaveBeenCalledTimes(2)
+    } finally { p.stop() }
+  })
+
+  it('blends only during play, pauses on the last saved frame, and resumes from it', async () => {
+    vi.useFakeTimers()
+    const interpolationToggle = document.createElement('input')
+    interpolationToggle.checked = true
+    const onInterpolate = vi.fn(), onSeek = vi.fn()
+    const p = initOxdnaTrajectoryPlayer({ interpolationToggle, onInterpolate, onSeek, fps: 10 })
+    p.setTrajectory(3)
+    try {
+      await p.play()
+      await vi.advanceTimersByTimeAsync(64)
+      expect(onInterpolate.mock.calls.at(-1)).toEqual([0, 1, expect.any(Number), { before: null, after: 2 }])
+      expect(onInterpolate.mock.calls.at(-1)[2]).toBeGreaterThan(0)
+      expect(onInterpolate.mock.calls.at(-1)[2]).toBeLessThan(1)
+      p.pause()
+      expect(onSeek).toHaveBeenLastCalledWith(0)
+      const calls = onInterpolate.mock.calls.length
+      await vi.advanceTimersByTimeAsync(200)
+      expect(onInterpolate).toHaveBeenCalledTimes(calls)
+      await p.play()
+      await vi.advanceTimersByTimeAsync(150)
+      expect(p.current()).toBe(1)
+      p.pause()
+      expect(onSeek).toHaveBeenLastCalledWith(1)
+    } finally { p.stop() }
+  })
+
+  it('does not blend before endpoints load or repaint after pause cancels the load', async () => {
+    vi.useFakeTimers()
+    const interpolationToggle = { checked: true, addEventListener() {} }
+    let release
+    const onInterpolate = vi.fn(), onSeek = vi.fn()
+    const p = initOxdnaTrajectoryPlayer({ interpolationToggle, onInterpolate, onSeek,
+      onBeforeInterpolate: () => new Promise(resolve => { release = resolve }) })
+    p.setTrajectory(3)
+    try {
+      const playing = p.play(); await vi.advanceTimersByTimeAsync(500)
+      expect(onInterpolate).not.toHaveBeenCalled()
+      expect(p.current()).toBe(0)
+      p.pause(); release(true)
+      await playing
+      await vi.advanceTimersByTimeAsync(500)
+      expect(onInterpolate).not.toHaveBeenCalled()
+      expect(onSeek).not.toHaveBeenCalled()
+    } finally { p.stop() }
+  })
+
+  it('snaps across stage and loop boundaries and when the experiment is switched off', async () => {
+    vi.useFakeTimers()
+    const interpolationToggle = document.createElement('input')
+    interpolationToggle.checked = true
+    const onInterpolate = vi.fn(), onSeek = vi.fn()
+    const p = initOxdnaTrajectoryPlayer({ interpolationToggle, onInterpolate, onSeek, fps: 10 })
+    p.setTrajectory(3, [{ frame: 1 }])
+    try {
+      await p.play(); await vi.advanceTimersByTimeAsync(120)
+      expect(onInterpolate).not.toHaveBeenCalled()
+      expect(p.current()).toBe(1)
+      await vi.advanceTimersByTimeAsync(210)
+      expect(onInterpolate.mock.calls.every(([a, b]) => a === 1 && b === 2)).toBe(true)
+      await vi.advanceTimersByTimeAsync(180)
+      interpolationToggle.checked = false
+      interpolationToggle.dispatchEvent(new Event('change'))
+      const calls = onInterpolate.mock.calls.length
+      expect(onSeek.mock.calls.at(-1)[0]).toBe(p.current())
+      await vi.advanceTimersByTimeAsync(300)
+      expect(onInterpolate).toHaveBeenCalledTimes(calls)
+      expect(p.isPlaying()).toBe(true)
+    } finally { p.stop() }
+  })
+
   it('setTrajectory configures the slider, markers, and frame label', () => {
     player.setTrajectory(8, [{ frame: 4, label: '→ production', kind: 'production' }])
     expect(slider.max).toBe('7')

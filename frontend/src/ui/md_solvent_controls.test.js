@@ -561,6 +561,21 @@ describe('ion legend precedence', () => {
     await settle()
   })
 
+  it('blends cached ions without changing saved frames and requests the hidden periodic cell', async () => {
+    await boot({ nFrames: 2 })
+    api.getMdFramesSolventBin.mockImplementation(async (_job, ids) => packIonFrame([0], ids))
+    await turnIonsOn()
+    await made.prepareAll()
+    expect(api.getMdFramesSolventBin.mock.calls[0][2]).toMatchObject({ ions: true, box: true })
+    made.showFrame(0)
+    const saved = overlay.setFrame.mock.calls.at(-1)[0]
+    made.showInterpolatedFrame(0, 1, .25)
+    expect(Array.from(overlay.setFrame.mock.calls.at(-1)[0].ions)).toEqual([1.25, 1.25, 1.25])
+    expect(Array.from(saved.ions)).toEqual([1, 1, 1])
+    made.showFrame(0)
+    expect(overlay.setFrame.mock.calls.at(-1)[0]).toBe(saved)
+  })
+
   it('prepares every companion frame beyond the old window and replays without fetching', async () => {
     await boot({ nFrames: 280 })
     api.getMdFramesSolventBin.mockImplementation(async (_job, ids) => packIonFrame([0, 2], ids))

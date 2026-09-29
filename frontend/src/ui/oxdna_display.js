@@ -23,6 +23,7 @@
  */
 
 import { expandMdAtomFrame } from '../scene/md_atom_frames_bin.js'
+import { cubicCoordinates } from '../scene/trajectory_interpolation.js'
 import { loadProgressiveTrajectory } from '../scene/progressive_trajectory.js'
 import { initTrajectoryPreparationCache } from '../scene/trajectory_preparation_cache.js'
 import { initTrajectoryDownloads } from '../scene/trajectory_downloads.js'
@@ -780,6 +781,10 @@ export function initOxdnaDisplay({
   }
 
   let _atomFrameScratch = null
+  // Experimental playback retains at most four extra exact atom frames, independently
+  // of the coarse reconstruction grid. Subframes never enter a trajectory cache.
+  const _interpolationAtoms = new Map()
+  let _interpolationPair = null, _interpolationCg = null
   async function _pushAtomistic(arr, epoch, live, colorByKey = null) {
     const ar = getAtomisticRenderer?.()
     // arr may be a plain Array (legacy flat route) OR a Float32Array (fast stamp
@@ -1089,7 +1094,7 @@ export function initOxdnaDisplay({
     const token = ++_prebuildToken
     const live = () => epoch === _epoch && token === _prebuildToken
     const kind = _repKind()
-    if (_stream) return { ok: await _stream.ensure(_frameIdx), n: 0 }
+    if (_stream && !await _stream.ensure(_frameIdx)) return { ok: false, n: 0 }
     if (kind === 'cg') return { ok: true, n: 0 }   // CG plays instantly — nothing to bake
     // Size the grid BEFORE building it: how many frames fit the budget depends on the
     // structure's serial span, which only the topology fetch knows. Without this the
@@ -1250,6 +1255,11 @@ export function initOxdnaDisplay({
         }
       } else if (_mode === 'trajectory') {
         const idx = _frameIdx
+        const interpolatedEndpoint = _interpolationAtoms.get(idx)
+        if (kind === 'atomistic' && interpolatedEndpoint?.epoch === _epoch) {
+          await _pushAtomistic(interpolatedEndpoint.data, epoch, live)
+          return
+        }
         if (useFine) {
           // Fine selects the exact frame; prepared grid cells already contain that
           // exact frame. Reuse them, including while a background batch is pending.
@@ -1874,6 +1884,7 @@ export function initOxdnaDisplay({
     jobId, align = true, scope = 'lineage', stride = undefined, onProgress = null, range = {},
   ) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
+    _interpolationAtoms.clear(); _interpolationPair = null; _interpolationCg = null
     const epoch = ++_epoch
     const signal = _beginLoad()
     _stream = null
@@ -1968,6 +1979,74 @@ export function initOxdnaDisplay({
     return stream === _stream
   }
 
+  async function ensureInterpolationFrames(from, to, { before = null, after = null } = {}) {
+    const epoch = _epoch, offset = _traj?.frame_start ?? 0
+    from -= offset; to -= offset
+    if (_mode !== 'trajectory' || !_traj) return false
+    const frames = [...new Set([from, to, before == null ? null : before - offset,
+      after == null ? null : after - offset].filter(i => i != null))]
+    for (const index of frames) {
+      if (!await ensureTrajectoryFrame(index) || epoch !== _epoch) return false
+    }
+    if (_repKind() !== 'atomistic') return true
+    if (!await _ensureJobAtomistic(getAtomisticRenderer?.(), epoch)) {
+      // A graphene/solvent-only run has no DNA atom model; its companion ions
+      // and sheet still use the same interpolation clock.
+      return epoch === _epoch && _traj?.keys?.length === 0
+    }
+    if (epoch !== _epoch) return false
+    const bake = _bakedAtom
+    const missing = frames.filter(i => !bake?.byIdx.has(i) && _interpolationAtoms.get(i)?.epoch !== epoch)
+    if (missing.length) {
+      const result = await _queueFrameFetch(() => epoch === _epoch
+        ? api.getOxdnaFramesAtomistic(_jobId, missing.map(sourceFrame), _align, _trajScope, _trajStride) : null)
+      if (epoch !== _epoch) return false
+      for (const i of missing) {
+        const data = result?.[String(sourceFrame(i))]
+        if (!data) return false
+        _interpolationAtoms.set(i, { epoch, data: _narrowFrame(data) })
+      }
+    }
+    for (const i of _interpolationAtoms.keys()) if (!frames.includes(i)) _interpolationAtoms.delete(i)
+    // Preserve exact endpoints even when the ordinary playback path uses a coarse grid.
+    for (const i of frames) if (bake?.byIdx.has(i)) _interpolationAtoms.set(i, { epoch, data: bake.byIdx.get(i) })
+    return true
+  }
+
+  function showInterpolatedFrame(from, to, t, { before = null, after = null } = {}) {
+    if (!_playing || _mode !== 'trajectory' || !_traj) return
+    const offset = _traj.frame_start ?? 0
+    from -= offset; to -= offset
+    before = before == null ? null : before - offset
+    after = after == null ? null : after - offset
+    const a = _traj.frames[from], b = _traj.frames[to]
+    if (!a || !b || a.length !== b.length) return
+    _interpolationCg = cubicCoordinates(_traj.frames[before], a, b, _traj.frames[after], t, _interpolationCg)
+    nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, _interpolationCg)
+    _applyFem(framesToUpdates(_traj.keys, _interpolationCg))
+    // Surfaces have changing mesh topology and stay on the saved frame.
+    if (_repKind() !== 'atomistic') return
+    const aa = _interpolationAtoms.get(from), bb = _interpolationAtoms.get(to)
+    if (aa?.epoch !== _epoch || bb?.epoch !== _epoch) return
+    const ar = getAtomisticRenderer?.()
+    if (!ar || ar.getMode?.() === 'off') return
+    const prev = _interpolationAtoms.get(before)?.data, next = _interpolationAtoms.get(after)?.data
+    if (_interpolationPair?.a !== aa.data || _interpolationPair?.b !== bb.data
+      || _interpolationPair?.prev !== prev || _interpolationPair?.next !== next) {
+      _interpolationPair = { a: aa.data, b: bb.data,
+        prev, next, before: expandMdAtomFrame(prev), after: expandMdAtomFrame(next),
+        from: expandMdAtomFrame(aa.data), to: expandMdAtomFrame(bb.data), out: null }
+    }
+    if (_interpolationPair.from.length !== _interpolationPair.to.length) return
+    ++_heavyToken // a saved-frame async paint must not overwrite a newer subframe
+    _applyJobTopology(ar)
+    const p = _interpolationPair
+    p.out = cubicCoordinates(p.before, p.from, p.to, p.after, t, p.out)
+    ar.applyPositionLerp(p.out, p.out, 0, null, [], null)
+    _heavyActive = true
+    onHeavyApplied()
+  }
+
   /** Switch heavy-rep reconstruction granularity. 'fine' rebuilds the exact frame
    *  on every scrub (accurate, can be very slow); 'coarse' snaps to a downsampled
    *  bake. Re-applies the current frame in the new granularity. */
@@ -2026,6 +2105,7 @@ export function initOxdnaDisplay({
 
   /** Clear the overlay (positions + colours) and restore the design. */
   function stopAndRestore() {
+    _interpolationAtoms.clear(); _interpolationPair = null; _interpolationCg = null
     trajectoryDownloads.clear()
     _stream = null
     _traj = null
@@ -2092,6 +2172,8 @@ export function initOxdnaDisplay({
     },
     retainTrajectoryDownloads: requests => trajectoryDownloads.retain(requests),
     showFrame: i => showFrame(i - (_traj?.frame_start ?? 0)),
+    ensureInterpolationFrames, showInterpolatedFrame,
+    trajectoryPreparationKey: () => `${_epoch}|${getCurrentRepr?.()}`,
     async showFrameForExport(i) {
       if (_mode !== 'trajectory' || !_traj) throw new Error('Load a trajectory before preparing a clip')
       const index = i - (_traj.frame_start ?? 0)

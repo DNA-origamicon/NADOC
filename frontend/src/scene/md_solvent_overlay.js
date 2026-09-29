@@ -16,9 +16,10 @@
  *    here would mean a full reallocation on every single frame. This module
  *    allocates with headroom and only ever moves `mesh.count`.
  *
- * 2. **It must SNAP, never lerp.** Interpolating between two different molecule
- *    sets is meaningless — molecule *i* of frame N is not molecule *i* of frame N+1.
- *    This is the opposite of the DNA path's `applyPositionLerp`.
+ * 2. **Water must snap.** Interpolating between different water selections is
+ *    meaningless — molecule *i* need not have the same identity in the next frame.
+ *    Ions have stable ordering; the trajectory controller can supply experimental
+ *    interpolated ion coordinates while retaining the saved water snapshot.
  *
  * Counts are large (10^4–10^6 spheres), so this uses the impostor path when it is
  * enabled: a 2-triangle billboard instead of a ~160-triangle sphere. No picking
@@ -273,8 +274,8 @@ export function initMdSolventOverlay(scene, { onGrapheneChange = () => {} } = {}
     setIonSpecies(codes) { _ionSpecies = codes ?? null },
 
     /**
-     * Draw one frame. SNAPS: solvent is never interpolated between frames, because
-     * the molecule set itself differs (see the module header).
+     * Draw supplied coordinates. Water is a saved snapshot; ions may be a
+     * playback-only interpolation supplied by the trajectory controller.
      * @param {{water:Float32Array, nWater:number, ions:Float32Array}} frame
      */
     setFrame(frame) {

@@ -26,6 +26,7 @@
  */
 
 import { parseSolventBin } from '../scene/md_solvent_bin.js'
+import { lerpCoordinates, cubicCoordinates, periodicPositionInterpolator } from '../scene/trajectory_interpolation.js'
 import { solventRepMode } from './md_display_state.js'
 import { BROWSER_HEAP_CEILING_BYTES, FREE_RAM_SAFE_FRACTION } from './oxdna_display.js'
 import { formatBytes } from './format_bytes.js'
@@ -151,6 +152,7 @@ const _LIMIT_WHY = { ram: 'free RAM', heap: 'browser memory limit', budget: 'mem
 export function initMdSolventControls({
   api, getSolventOverlay = null, getBoxOverlay = null, simulationGraphene = false,
   getCurrentRepr = null, getAvailableBytes = () => null,
+  onPreparationChange = () => {},
   // The live "Display MD" stream. Its frames arrive over the job WebSocket rather
   // than the REST route, so solvent for that view is requested with `setSolvent`
   // and pushed back through `liveBlob` — no fetching or caching on this side.
@@ -176,6 +178,7 @@ export function initMdSolventControls({
   let _measuredSpecies = null   // real ion census, once a frame has landed
   let _cache = new Map()        // frame index → parsed frame
   let _frameIdx = 0
+  let _interpolationPair = null
   let _inflight = null
   let _generation = 0
   let _frameStart = 0, _frameEnd = null
@@ -249,7 +252,8 @@ export function initMdSolventControls({
   function _plan() {
     return solventFetchPlan({
       repMode: _repMode(),
-      water: _waterOn(), ions: !!ionsToggle?.checked, box: _hasGraphene() || !!boxToggle?.checked,
+      water: _waterOn(), ions: !!ionsToggle?.checked,
+      box: _hasGraphene() || !!boxToggle?.checked || (!_live && !!ionsToggle?.checked),
       scope: _scope(), shellAng: _shellAng(),
       nWatersTotal: _meta?.n_waters ?? 0, nIons: _meta?.n_ions ?? 0,
       nFrames: _nFrames || 1, availableBytes: getAvailableBytes?.() ?? null,
@@ -309,7 +313,8 @@ export function initMdSolventControls({
     return {
       water: _waterOn(),
       ions: !!ionsToggle?.checked,
-      box: _hasGraphene() || !!boxToggle?.checked,
+      // The 96-byte cell also supports periodic ion interpolation when hidden.
+      box: _hasGraphene() || !!boxToggle?.checked || (!_live && !!ionsToggle?.checked),
       shellAng: _scope() === 'all' ? null : _shellAng(),
       atomistic: p.atomistic,
       maxWaters: p.maxWaters,
@@ -363,7 +368,7 @@ export function initMdSolventControls({
         stride: _stride,
         water: false,
         ions: ionsOn,
-        box: _hasGraphene() || !!boxToggle?.checked,
+        box: _request().box,
         shellAng: _scope() === 'all' ? null : _shellAng(),
         atomistic: false, // Trajectory companions contain no water; ion coordinates are unchanged by representation.
         maxWaters: p.maxWaters,
@@ -451,12 +456,14 @@ export function initMdSolventControls({
 
   // ── draw ──────────────────────────────────────────────────────────────────
   function _draw(i) {
+    return _drawData(_cache.get(i))
+  }
+
+  function _drawData(f) {
     const ov = getSolventOverlay?.()
     const bx = getBoxOverlay?.()
-    const f = _cache.get(i)
     if (!f) return false
-    // SNAP: solvent is drawn at the frame it belongs to and never interpolated —
-    // molecule k of frame i is a different molecule from molecule k of frame i+1.
+    // Water remains a saved snapshot: its selected molecule identities can change.
     if (ov) {
       ov.setMode(_repMode(), ['ballstick', 'stick'].includes(getCurrentRepr?.()))
       ov.setWaterVisible(_waterOn())
@@ -471,6 +478,7 @@ export function initMdSolventControls({
   }
 
   function _clearScene() {
+    _interpolationPair = null
     getSolventOverlay?.()?.clear()
     getBoxOverlay?.()?.hide()
   }
@@ -500,12 +508,16 @@ export function initMdSolventControls({
 
   // ── wiring ────────────────────────────────────────────────────────────────
   _restore()
+  const changed = () => {
+    _refresh()
+    if (_enabled && !_live) onPreparationChange()
+  }
   for (const el of [waterToggle, ionsToggle, boxToggle, scopeShell, scopeBox]) {
-    el?.addEventListener('change', _refresh)
+    el?.addEventListener('change', changed)
   }
   // Typing re-prices for free; committing re-fetches.
   shellInput?.addEventListener('input', () => { _measuredWater = null; _renderCount() })
-  shellInput?.addEventListener('change', _refresh)
+  shellInput?.addEventListener('change', changed)
 
   // A rep change MAY flip between two different WIRE payloads (3 vs 9 floats per
   // molecule) — when it does the cache must be dropped, not just re-rendered.  But
@@ -657,6 +669,27 @@ export function initMdSolventControls({
       if (!_draw(_frameIdx)) { _clearScene(); void prepareAll() }
     },
 
+    showInterpolatedFrame(from, to, t, { before = null, after = null } = {}) {
+      if (!_enabled || _live || !_anyOn() || _repMode() === 'off') return
+      const a = _cache.get(from), b = _cache.get(to)
+      if (!a || !b) return
+      const prev = _cache.get(before), next = _cache.get(after)
+      if (_interpolationPair?.a !== a || _interpolationPair?.b !== b
+        || _interpolationPair?.prev !== prev || _interpolationPair?.next !== next) {
+        _interpolationPair = { a, b, prev, next, frame: { ...a },
+          ions: periodicPositionInterpolator(a.ions, b.ions, a.box, b.box, {
+            before: prev?.ions, after: next?.ions, boxBefore: prev?.box, boxAfter: next?.box,
+          }) }
+      }
+      const p = _interpolationPair
+      p.frame.ions = p.ions(t)
+      p.frame.box = lerpCoordinates(a.box, b.box, t, p.box)
+      p.box = p.frame.box
+      p.frame.graphene = cubicCoordinates(prev?.graphene, a.graphene, b.graphene, next?.graphene, t, p.graphene) ?? a.graphene
+      p.graphene = p.frame.graphene
+      _drawData(p.frame)
+    },
+
     /** Wait until the requested companion frame is drawable. Video exporters call
      * this after seeking so they never capture before an async solvent chunk lands. */
     async settleFrame(i, timeoutMs = 120_000) {
@@ -712,6 +745,7 @@ export function initMdSolventControls({
 
     isAnyOn: _anyOn,
     prepareAll,
+    preparationKey: () => `${_generation}|${_needsFrames()}`,
     cancelPreparation() { _generation++; _preparation = null },
     ensureFrame,
     plan: _plan,
