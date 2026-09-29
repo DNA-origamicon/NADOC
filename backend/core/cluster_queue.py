@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 # often than this, however eagerly the UI polls.
 CACHE_TTL_S = 60.0
 
-# Per-command ceiling.  A wedged login node must not hold the single serialized
-# ClusterConnection lock for minutes.
+# Per-command ceiling so a slow scheduler cannot hold an availability request
+# indefinitely. Timing out a probe must not expire the shared SSH session.
 _CMD_TIMEOUT_S = 20.0
 
 _UNKNOWN_TIMES = {"", "unknown", "n/a", "none", "invalid", "(null)"}
@@ -851,6 +851,26 @@ def build_test_only_cmd(
 # ── Live probe ────────────────────────────────────────────────────────────────
 
 _cache: dict[str, tuple[float, dict]] = {}
+_history_inflight: dict[tuple, asyncio.Task] = {}
+
+
+async def _shared_history(conn, cmd: str):
+    """Share concurrent history queries across generic and job-specific probes."""
+    key = (asyncio.get_running_loop(), id(conn), cmd)
+    task = _history_inflight.get(key)
+    if task is None:
+        task = asyncio.create_task(conn.run(cmd, timeout=_CMD_TIMEOUT_S))
+        _history_inflight[key] = task
+
+        def finished(done):
+            _history_inflight.pop(key, None)
+            # A cancelled HTTP caller must not cancel another caller's query or
+            # leave an unobserved exception if all callers have gone away.
+            if not done.cancelled():
+                done.exception()
+
+        task.add_done_callback(finished)
+    return await asyncio.shield(task)
 
 
 def _cache_key(profile_name: str, job_shape: dict | None, history_days: int) -> str:
@@ -885,9 +905,8 @@ async def probe_availability(
     Read-only: ``scontrol show node``, ``squeue``, ``sacct``, and ``sbatch
     --test-only``.  Nothing is submitted and nothing on the cluster changes.
 
-    Commands run **sequentially** — ``ClusterConnection`` serializes on a single
-    lock, and asyncssh ops must stay on the uvicorn loop the connection is bound to
-    (see ``backend/api/main.py`` supervisor note).  Results are cached for
+    Commands within each probe run sequentially. Concurrent probes share identical
+    in-flight history queries, including across different job shapes. Results are cached for
     ``CACHE_TTL_S`` so an auto-refreshing popup cannot hammer a shared login node.
     """
     key = _cache_key(profile.name, job_shape, history_days)
@@ -905,7 +924,8 @@ async def probe_availability(
 
     async def _run(cmd: str) -> tuple[int, str, str]:
         try:
-            res = await conn.run(cmd, timeout=_CMD_TIMEOUT_S)
+            res = (await _shared_history(conn, cmd) if cmd.startswith("sacct ")
+                   else await conn.run(cmd, timeout=_CMD_TIMEOUT_S))
             return res.rc, res.stdout or "", res.stderr or ""
         except asyncio.TimeoutError:
             warnings.append(f"timed out: {cmd.split()[0]}")

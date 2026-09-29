@@ -37,6 +37,12 @@ lives in `alpine_transfer.json` and overrides stale job records. Explicit Discon
 stops transfers; worker/workstation/transport loss requires reconnecting, with partial
 file validation/resume preserved. See the restart-recovery document above.
 
+**2026-09-28 scheduler timeout isolation:** A command timeout preserves an open SSH
+transport, so slow availability/history queries do not interrupt result downloads.
+Closed transports still expire. Timeout logs include transport/session state;
+concurrent identical history queries share one request across job shapes. Restart
+an idle detached worker to load the change, then reconnect through Duo.
+
 **2026-09-21 fixed-pose image clearance:** The submission review and submit/resume/ensemble
 routes now require a separate acknowledgment for low or unverified solute-to-image
 envelope gaps. Production uses its actual equilibrated coordinates/cell. The recommendation

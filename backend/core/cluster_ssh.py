@@ -327,6 +327,10 @@ class ClusterConnection:
         """A transport-level failure that means the session is likely dead: record
         the classified error, flip to EXPIRED, and return the error to raise."""
         self._record_error(message)
+        alpine_operations.event(
+            "transport_expired", host=self.host, user=self.user,
+            prior_state=self.state.value, error=message, error_kind=self.last_error_kind,
+        )
         self.state = ConnState.EXPIRED
         return ClusterSSHError(message, kind=self.last_error_kind)
 
@@ -360,12 +364,20 @@ class ClusterConnection:
             )
             raise
         except asyncio.TimeoutError as exc:
+            # A command channel can stall while SFTP on the same authenticated
+            # connection is still transferring. Only a closed transport proves
+            # that this timeout also invalidated the session.
+            closed = getattr(conn, "is_closed", lambda: False)()
             alpine_operations.finish(
-                "command", op_id, started, outcome="timeout", command=cmd, timeout_s=timeout
+                "command", op_id, started, outcome="timeout", command=cmd,
+                timeout_s=timeout, transport_closed=closed,
+                session_preserved=not closed and self.is_connected(),
             )
-            raise self._fail_transport(
-                f"command timed out after {timeout}s: {cmd}"
-            ) from exc
+            message = f"command timed out after {timeout}s: {cmd}"
+            if closed:
+                raise self._fail_transport(message) from exc
+            self._record_error(message)
+            raise ClusterSSHError(message, kind="timeout") from exc
         except Exception as exc:  # noqa: BLE001 — broken pipe / channel loss
             alpine_operations.finish(
                 "command", op_id, started, outcome="error", command=cmd, error=str(exc)

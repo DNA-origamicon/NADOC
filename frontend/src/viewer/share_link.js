@@ -1,3 +1,4 @@
+import { initMeetingTarget } from './meeting_target_ui.js'
 import { initVRAvatarPublisher } from './vr_avatar_publisher.js'
 import { broadcastDocument } from './broadcast_fingerprint.js'
 import { waitForPublicHosting } from './hosting_setup.js'
@@ -32,6 +33,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
   let hostingAbort = new AbortController(), documentEpoch = 0
   let polling = false, busy = false, refreshing = false, disposed = false, revision = 0, selectedId = null, shares = [], capabilities = [], jobs = null, statusTimer = null, jobOptions = null, hadSharedJob = false
   const currentRoom = () => shares.find(s => s.id === selectedId) ?? shares[0]
+  const meetingTarget = initMeetingTarget({ parent: dialog, document: doc, onError: reportError })
   async function stopNative() {
     preservingPerspective = true
     try { await presenter?.stop(); await nativeFlight?.catch(() => {}) } finally { preservingPerspective = false }
@@ -94,6 +96,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     log.textContent += `${log.textContent ? '\n\n' : ''}${error.message ?? error}`
   }
   function syncButtons() {
+    meetingTarget.setBusy(busy || refreshing)
     el('[data-create]').disabled = busy || refreshing || shares.length > 0
     el('[data-stop-host]').disabled = busy || refreshing || shares.length === 0
     for (const copy of dialog.querySelectorAll('[data-copy-link], [data-copy-password]')) copy.disabled = busy || refreshing
@@ -120,6 +123,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     return value
   }
   function renderShares() {
+    meetingTarget.setShare(currentRoom())
     selectedId = shares.some(share => share.id === selectedId) ? selectedId : shares[0]?.id ?? null
     if (!currentRoom()) list.replaceChildren()
     for (const [key, label, value] of [
@@ -262,5 +266,5 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
       finally { polling = false }
     }, 5000)
     return jobs
-  }, dispose() { vrAvatar.dispose(); documentClosed(); unsubscribeDocument?.(); hostWindow?.removeEventListener('nadoc:document-reset', documentClosed); hostWindow?.removeEventListener('pagehide', documentClosed); nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; trigger?.removeEventListener('click', show); dialog.remove() } }
+  }, dispose() { meetingTarget.dispose(); vrAvatar.dispose(); documentClosed(); unsubscribeDocument?.(); hostWindow?.removeEventListener('nadoc:document-reset', documentClosed); hostWindow?.removeEventListener('pagehide', documentClosed); nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; trigger?.removeEventListener('click', show); dialog.remove() } }
 }

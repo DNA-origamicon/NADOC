@@ -6,7 +6,7 @@ authority: canonical
 # Password-protected public sharing
 
 User requirement: guests on any network use an ordinary browser plus the invitation
-and meeting password; never require guest Tailscale/VPN installation or accounts.
+and meeting password, or scan a guest-only QR and enter a name (2026-09-28); never require guest Tailscale/VPN installation or accounts.
 The hosting computer needs Node, signed-in Tailscale, HTTPS and Funnel permission.
 
 The previous Windows success and full public-relay check are recorded in
@@ -39,3 +39,20 @@ copy the new invitation/password after restarting. Current concurrency remains t
 guests plus presenter, and links expire with each presentation (two hours by default), never with gateway age.
 Native Windows/WSL transport is preserved; the 2026-09-24 setup changes were exercised
 on Linux, not freshly executed on a new Windows installation.
+
+## QR guest entry / mobile tracking (2026-09-28)
+
+New hosts expose `qrUrl` with a separate per-room 256-bit guest-only credential.
+The QR join bypasses the password only after server validation; ordinary guest
+links keep password authentication. A copied QR grants the same guest access
+until room expiry/revocation, so this is not proof of physical presence.
+Sharing shows a QR, the combined AprilTag/40 mm QR sheet, and **Print large
+tracking QR** (150 mm including quiet zone, `qrmm=150` configures the phone).
+QR guests can start a local camera diagnostic showing a target outline and
+approximate phone position relative to the QR. It uses jsQR and a planar pose
+estimate with assumed/adjustable vertical FOV; target must stay visible. No
+camera frames or poses are transmitted. Mobile poses are not connected to VR
+portal rendering or attendee markers. Native Share now has separate Vive QR
+calibration (docs/vr_qr_calibration.md); physical alignment is still unverified. See `docs/meeting_room_target.md`.
+Software-only synthetic camera validation is separate from pending physical
+print, phone compatibility, calibration and headset testing.

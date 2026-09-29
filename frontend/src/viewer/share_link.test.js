@@ -19,7 +19,7 @@ it('switches create/stop availability, copies a usable guest link, and resets af
   el('[data-create]').click()
   await vi.waitFor(() => expect(el('[data-stop-host]').disabled).toBe(false))
   expect(el('[data-create]').disabled).toBe(true)
-  expect([...el('dialog').querySelectorAll('button')].map(b => b.getAttribute('aria-label') || b.textContent)).toEqual(['Close', 'Enable link', 'End presentation', 'Copy link', 'Copy password'])
+  expect([...el('dialog').querySelectorAll('button')].map(b => b.getAttribute('aria-label') || b.textContent)).toEqual(['Close', 'Enable link', 'End presentation', 'Copy link', 'Copy password', 'Print meeting target', 'Print large tracking QR'])
   expect(el('select, textarea, [data-clip-options]')).toBeNull()
   el('[data-copy-link]').click()
   await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenCalledOnce())

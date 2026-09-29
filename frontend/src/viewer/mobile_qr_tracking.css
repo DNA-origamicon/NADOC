@@ -1,0 +1,4 @@
+.mobile-qr-tracking input { position: static; width: 76px; height: auto; opacity: 1; padding: 4px; color: inherit; background: #21262d; border: 1px solid #484f58; border-radius: 4px; }
+.mobile-qr-tracking label { display: block; margin: 8px 0; }
+.mobile-qr-tracking summary { cursor: pointer; }
+.mobile-qr-tracking [hidden] { display: none !important; }

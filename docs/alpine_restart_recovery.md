@@ -134,6 +134,15 @@ be migrated mid-stream; the worker applies when a download is next started/resum
 The worker remains an independent process and uses the code loaded when it started;
 updating its implementation requires restarting it after transfers have finished.
 
+Command timeouts no longer expire an otherwise open SSH transport (2026-09-28).
+In particular, a slow availability/history `sacct` query reports a probe warning
+without blocking the next SFTP file. A timeout on an already closed transport still
+expires the session, as do transport failures. The operation log records
+`transport_closed` and `session_preserved` on command timeouts and a separate
+`transport_expired` event when NADOC invalidates the connection. Concurrent
+availability probes share identical in-flight history requests, including probes
+for different job shapes; cancelling one waiter does not cancel another's query.
+
 Validation: dedicated tests exercise client cancellation and reattachment, a real
 client-process kill while the separate worker completes, stale job saves, stopped
 snapshot recovery, offline indexing, expired status, and cancelled lock waiters.

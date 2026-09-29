@@ -317,3 +317,35 @@ test('managed gateway shuts down if its editor server stops renewing ownership',
   await closed
   await assert.rejects(fetch(base + '/__nadoc_public_health'))
 })
+
+test('QR invitation grants guest-only name-based entry, preserves passwords and expires with its room', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nadoc-qr-auth-')); t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
+  let time = Date.now()
+  const origin = 'https://meeting.example.test'
+  const host = await createPreparedHost({ dist: root, publicOrigin: origin, now: () => time }); t.after(host.stop)
+  await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
+  const base = `http://127.0.0.1:${host.server.address().port}`
+  const share = host.createShare(Buffer.from('NADOCVW1qr')), other = host.createShare(Buffer.from('NADOCVW1other'))
+  const token = url => new URLSearchParams(new URL(url).hash.slice(1)).get('invite')
+  const post = (body, id = share.id, headers = {}) => fetch(`${base}/meeting/${id}/join`, { method: 'POST', headers: { Origin: origin, ...headers }, body: JSON.stringify(body) })
+  const qr = { token: token(share.qrUrl), entry: 'qr', name: 'QR guest' }
+  assert.notEqual(qr.token, token(share.url)); assert.ok(!share.qrUrl.includes(share.password))
+  assert.equal((await post({ token: token(share.url), name: 'Normal guest' })).status, 403)
+  assert.equal((await post({ ...qr, token: token(share.url) })).status, 403)
+  assert.equal((await post({ ...qr, role: 'presenter' })).status, 403)
+  assert.equal((await post({ ...qr, entry: undefined })).status, 403)
+  assert.equal((await post(qr, other.id)).status, 403)
+  assert.equal((await post({ ...qr, name: '' })).status, 400)
+  assert.equal((await post(qr, share.id, { Origin: 'https://evil.example' })).status, 403)
+  const response = await post(qr); assert.equal(response.status, 200)
+  const cookie = response.headers.get('set-cookie').split(';')[0]
+  assert.equal((await response.json()).role, 'guest')
+  assert.equal((await post({ ...qr, resume: true }, share.id, { Cookie: cookie })).status, 200)
+  const status = await (await fetch(`${base}/meeting/${share.id}/status`, { headers: { Cookie: cookie } })).text()
+  assert.ok(!status.includes(qr.token)); assert.ok(!status.includes('qrUrl'))
+  assert.equal((await post({ token: token(share.url), name: 'Normal guest', password: share.password })).status, 200)
+  time = share.expiresAt
+  assert.equal((await post(qr)).status, 410)
+  assert.equal((await fetch(`${base}/meeting/${share.id}/scene`, { headers: { Cookie: cookie } })).status, 410)
+})

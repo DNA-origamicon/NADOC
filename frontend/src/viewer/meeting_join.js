@@ -1,4 +1,5 @@
 import { mountViewerHealth } from './viewer_health.js'
+import { mountMobileQRTracking } from './mobile_qr_tracking.js'
 import { createMeetingPing } from './meeting_ping.js'
 /** Invite-only loading for the temporary static host; no editor API dependency. */
 import { mountMeetingPresentation } from './meeting_presentation.js'
@@ -14,7 +15,8 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   const error = doc.getElementById('join-error'), button = doc.getElementById('join-submit')
   const status = doc.getElementById('status'), identity = doc.getElementById('guest')
   const passwordField = doc.getElementById('meeting-password'), passwordRow = doc.getElementById('meeting-password-row')
-  const needsPassword = params.get('password') === 'required'
+  const qrEntry = params.get('entry') === 'qr' && params.get('role') !== 'presenter'
+  const needsPassword = !qrEntry && params.get('password') === 'required'
   if (passwordRow) passwordRow.hidden = !needsPassword
   if (passwordField) { passwordField.required = needsPassword; passwordField.value = '' }
   const abort = new AbortController()
@@ -22,20 +24,21 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   let disposed = false, ended = false, timer = null, polling = false, busy = false, disconnectPresentation = () => {}
   const display = mountMeetingStatus({ viewer, document: doc })
   const ping = createMeetingPing({ document: doc })
+  let tracking = null
   let presence = null, moveView = () => {}
   const health = mountViewerHealth({ viewer, base, document: doc, fetch: request, onChange: value => presence?.setHealth(value) })
   const measuredRequest = health.fetch
   function finish() {
     if (ended || disposed) return
     ended = true; abort.abort(); if (timer) cancel(timer); timer = null
-    disconnectPresentation(); health.dispose(); presence?.dispose(); ping.dispose(); display.end(); identity.textContent = 'Presentation ended · Session ended'
+    disconnectPresentation(); tracking?.dispose(); health.dispose(); presence?.dispose(); ping.dispose(); display.end(); identity.textContent = 'Presentation ended · Session ended'
     if (dialog.open) dialog.close()
   }
   doc.querySelector('.open').hidden = true
   dialog.showModal()
   const preventClose = event => event.preventDefault()
   dialog.addEventListener('cancel', preventClose)
-  const credential = { token, ...(params.get('role') === 'presenter' ? { role: 'presenter' } : {}) }
+  const credential = { token, ...(qrEntry ? { entry: 'qr' } : {}), ...(params.get('role') === 'presenter' ? { role: 'presenter' } : {}) }
   async function join(body) {
     const response = await request(`${base}/join`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: abort.signal })
     return { response, details: await response.json() }
@@ -72,6 +75,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
       identity.textContent = `${details.name} · Private test`
       if (passwordField) passwordField.value = ''
       dialog.close()
+      if (qrEntry) tracking = mountMobileQRTracking({ document: doc, invitation: loc.href })
       presence?.dispose()
       presence = mountMeetingPresence({ parent: doc.querySelector('main') ?? doc.body, selfId: details.participantId, onView: view => moveView(view), ping, document: doc })
       if (details.role && details.revision) {
@@ -105,7 +109,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   const submit = event => { event.preventDefault(); void enter() }
   form.addEventListener('submit', submit)
   void enter(true)
-  return () => { disposed = true; abort.abort(); disconnectPresentation(); health.dispose(); presence?.dispose(); ping.dispose(); display.dispose(); if (timer) cancel(timer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
+  return () => { disposed = true; abort.abort(); disconnectPresentation(); tracking?.dispose(); health.dispose(); presence?.dispose(); ping.dispose(); display.dispose(); if (timer) cancel(timer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
 }
 
 /** A second invite can change only the fragment in an already-open viewer tab. */

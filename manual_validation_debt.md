@@ -632,3 +632,40 @@ geometry, comfortable blur in both eyes, and floor/outline alignment while walki
 and moving/scaling the design. Repeat after SteamVR room recalibration. Automated
 stereo and actual desktop checks pass all four controller profiles; they do not
 establish subjective comfort. See [audit](docs/audits/vr_room_ui_20260928.md).
+
+## MV-MEETING-ROOM-TARGET — physical print and phone scan (2026-09-28)
+
+**Status:** PENDING on-site review. File → Sharing → enable a guest link → Print
+meeting target. Print A4/US Letter at actual size (no fit-to-page), measure the
+100 mm ruler and 150 mm marker black border, and scan the small QR on a real
+phone. Confirm QR guest-name-only join (ordinary copied links retain passwords) and expiration after ending
+the presentation. Software verifies independent QR decode, browser print dimensions
+and AprilTag ID 0 with zero bit errors from a rendered sheet. Printer scaling,
+lighting/distance and Vive capture remain unverified. Vive spatial alignment remains future work. Mobile QR-relative pose now has a
+separate diagnostic; its physical checks are listed below. See
+[meeting target instructions](docs/meeting_room_target.md).
+
+
+## MV-MOBILE-QR-TRACKING — physical phone tracking / name-only QR entry (2026-09-28)
+
+Pending on-site: print the large 150 mm QR at actual size, check its 100 mm ruler,
+scan in iOS Safari and Android Chrome, join with only a name, grant camera access,
+check target lock/loss/reacquisition, portrait/landscape, realistic room lighting,
+range and frame rate. Measure translation/rotation against a ruler and camera
+calibration before trusting metric pose. Confirm camera release on Stop/tab hide
+and room end. Synthetic-video browser checks do not establish physical accuracy.
+Vive registration, world tracking off-target, portal rendering and VR guest
+markers are outside this first mobile diagnostic and remain pending.
+
+## MV-VIVE-QR-CALIBRATION — printed-target spatial alignment (2026-09-29)
+
+Pending on-site: print and measure the 150 mm meeting QR or assemble/paint the QR
+cube. In VR Share, Calibrate QR code; check edge-preview orientation/comfort,
+QR lock, stationary acquisition, and scene **source origin** registration against
+the physical target. Test each cube face, range, lighting and perspective; compare
+measured physical offsets, repeatability and scene scale/orientation preservation.
+Verify cancellation, camera-busy/lost-tracking failure, no movement without lock,
+and re-registration after target/SteamVR-room changes. USB exposure timestamps are
+not synchronized; do not infer motion accuracy from synthetic pose tests.
+See [workflow and limits](docs/vr_qr_calibration.md). Mobile cube alignment and
+mobile-to-VR attendee positions remain separate work.
