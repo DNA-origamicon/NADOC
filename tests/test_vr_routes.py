@@ -3422,3 +3422,13 @@ def test_scrywrite_launch_is_opt_in_and_uses_server_owned_path(tmp_path):
         assert command[command.index("--scrywrite-live-mode") + 1] == mode
     with pytest.raises(ValueError):
         VRLaunchRequest(scrywrite_live="control")
+
+
+def test_twist_execution_acknowledgement(tmp_path):
+    path = tmp_path / 'twist-execution.txt'
+    body = VRToolExecutionFeedbackRequest(execution_sequence=1, tool_sequence=2,
+        tool_mode='twist', tool_action='confirm', target_identity='cluster:1',
+        target_kind='cluster', status='succeeded', reason='committed',
+        feature_log_entry_id='feature:twist')
+    assert _write_tool_execution_feedback({'tool_execution_feedback_path': str(path)}, body) == (True, 1)
+    assert path.read_text() == 'NADOCVR_TOOL_EXECUTION 1 1 2 twist confirm cluster cluster:1 succeeded committed feature:twist\n'

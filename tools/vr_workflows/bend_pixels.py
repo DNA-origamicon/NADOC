@@ -10,7 +10,8 @@ from tools.vr_motion.visual_checks import project
 def check(directory, *, displacement=0):
     directory = Path(directory)
     evidence = json.loads((directory/'evidence.json').read_text())
-    handles = evidence['state']['bend']['handles']
+    state = evidence['state']
+    handles = state.get('twist', state.get('bend'))['handles']
     eyes = {}
     for eye in evidence['eyes']:
         rgb = np.asarray(Image.open(directory/(eye['eye']+'.png')).convert('RGB'))

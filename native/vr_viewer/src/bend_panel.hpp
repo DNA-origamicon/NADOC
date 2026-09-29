@@ -53,7 +53,7 @@ struct BendArc {
 };
 class BendPanel {
  public:
-    bool active=false, posed=false, elements=false;
+    bool active=false, posed=false, elements=false, twist=false;
     size_t savedOffset=0, grabbed=1, wheelIndex=0;
     std::optional<size_t> hand, planeHand, wheelHand;
     std::optional<std::string> pickSlot;
@@ -74,14 +74,26 @@ class BendPanel {
     void refresh(std::array<SidebarMenu,2>& menus,const ToolConfigurationDraft& config,const std::string& status) const {
         if(!active)return;
         menus[1].open=true;menus[1].offsets[menus[1].selected]=0;
-        SidebarTab tab{1,"bend","Bend",{}};
+        const std::string key=twist?"twist":"bend";
+        SidebarTab tab{1,key,twist?"Twist":"Bend",{}};
         auto row=[&](std::string id,std::string label,std::string detail="") {
-            tab.rows.push_back({"bend:"+id,label,detail,"bend:"+id,{}});
+            tab.rows.push_back({key+":"+id,label,detail,key+":"+id,{}});
         };
-        row("back","Bend - Return to tools",status);row("confirm","CONFIRM");row("cancel","CANCEL");
+        row("back",(twist?"Twist":"Bend")+std::string(" - Return to tools"),status);row("confirm","CONFIRM");row("cancel","CANCEL");
         auto bp=[](auto v){return v?std::to_string(*v):std::string("--");};
         row("plane1","Plane 1: "+bp(config.planeABp()),"TRIGGER HOLD NEAREST ELEMENT / BP");
         row("plane2","Plane 2: "+bp(config.planeBBp()),"TRIGGER HOLD NEAREST ELEMENT / BP");
+        if(twist) {
+            const bool total=config.twistAmountMode()==TwistAmountMode::total_degrees;
+            std::ostringstream amount;amount<<std::fixed<<std::setprecision(total?1:3)<<config.twistAmount();
+            row("amount","Amount: "+amount.str()+(total?" deg":" deg/nm"),total?"DRAG THUMBWHEEL / 1 DEG":"DRAG THUMBWHEEL / 0.1 DEG/NM");
+            row("less",total?"-5 deg":"-0.5 deg/nm");row("more",total?"+5 deg":"+0.5 deg/nm");
+            row("units",total?"Units: total degrees":"Units: degrees / nm","SWITCH UNITS / PRESERVE TOTAL TWIST");
+            row("reverse","Reverse direction");row("zero","Zero twist");
+            row("target",elements?"Targets: element ends":"Targets: clusters");
+            row("undo","UNDO");row("recenter","Frame model");
+            menus[1].customTab=std::move(tab);return;
+        }
         row("angle","Angle: "+std::to_string(int(std::round(config.bendAngleDegrees())))+" deg","DRAG THUMBWHEEL / 1 DEG");
         row("direction","Direction: "+std::to_string(int(std::round(config.bendDirectionDegrees())))+" deg","DRAG THUMBWHEEL / 1 DEG");
         row("direction-less","-5 deg");row("direction-more","+5 deg");

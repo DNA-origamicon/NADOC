@@ -54,4 +54,23 @@ int main() {
     menus[1].focus.id="bend:plane1";menus[1].navigate({1,0});
     assert(menus[1].focus.id=="bend:plane2");
     assert(!found.contains("tab:tools"));panel.exit(menus);assert(!menus[1].customTab);
+    const auto feedback=parseToolExecutionFeedback("NADOCVR_TOOL_EXECUTION 1 1 2 twist confirm cluster cluster:1 succeeded committed feature:twist\n",0,2);
+    assert(feedback && feedback->mode=="twist");
+    panel.twist=true;panel.enter(menus);
+    (void)config.bind(ToolMode::twist,"cluster:1","cluster",{"owner:1"});
+    (void)config.setPlaneBp("a",5);(void)config.setPlaneBp("b",105);
+    assert(config.setTwist(-90));assert(config.toggleTwistUnits());
+    assert(std::abs(config.twistTotalDegrees()+90)<1e-8);
+    assert(config.toggleTwistUnits());assert(std::abs(config.twistAmount()+90)<1e-8);
+    assert(!config.setTwist(std::numeric_limits<double>::quiet_NaN()));
+    panel.refresh(menus,config,"READY");assert(menus[1].tab().key=="twist");
+    const auto twist=menus[1].controls();
+    for(const auto* id:{"back","confirm","cancel","plane1","plane2","amount","units","reverse","zero","less","more","undo"})
+        assert(std::any_of(twist.begin(),twist.end(),[&](const auto& c){return c.id==std::string("twist:")+id;}));
+    assert(!menus[1].canScroll(1));
+    menus[1].focus.id="twist:less";menus[1].navigate({1,0});assert(menus[1].focus.id=="twist:more");
+    for(size_t i=0;i<twist.size();++i)for(size_t j=i+1;j<twist.size();++j) {
+        const auto a=twist[i].bounds,b=twist[j].bounds;
+        assert(a.maximum.x<=b.minimum.x || b.maximum.x<=a.minimum.x || a.maximum.y<=b.minimum.y || b.maximum.y<=a.minimum.y);
+    }
 }

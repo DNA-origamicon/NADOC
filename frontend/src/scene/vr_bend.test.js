@@ -2,10 +2,11 @@ import { describe, it, expect, vi } from 'vitest'
 import { createVRBend } from './vr_bend.js'
 import { createVRToolTransactionCoordinator } from './vr_tool_transaction.js'
 
-function setup() {
+function setup(mode = 'bend') {
   const state = { currentDesign: { id: 'design', cluster_transforms: [{ id: 'c', helix_ids: ['h'] }], feature_log: [] }, currentGeometry: [] }
   const config = { sequence: 3, draft: { mode: 'bend', target_identity: 'hit', target_kind: 'cluster', target_owner_tokens: ['owner'], plane_a_bp: 10, plane_b_bp: 110, angle_deg: 90, direction_deg: 30 } }
-  const event = { mode: 'bend', action: 'confirm', sequence: 1, configSequence: 3, targetIdentity: 'hit', targetKind: 'cluster', targetOwnerTokens: ['owner'] }
+  if (mode === 'twist') config.draft = { ...config.draft, mode, amount_mode: 'total_degrees', amount: -90 }
+  const event = { mode, action: 'confirm', sequence: 1, configSequence: 3, targetIdentity: 'hit', targetKind: 'cluster', targetOwnerTokens: ['owner'] }
   const api = {
     currentRevisionWatermark: () => 4,
     validateDeformation: vi.fn(async () => ({ status: 'ok' })),
@@ -53,5 +54,22 @@ describe('VR bend desktop executor', () => {
     s.bend.handle(s.event);await settled()
     expect(s.api.addDeformation).not.toHaveBeenCalled()
     expect(s.feedback.mock.calls.at(-1)[2]).toBe('document_changed')
+  })
+})
+
+describe('VR twist desktop executor', () => {
+  it('commits signed twist and undoes its exact feature entry', async () => {
+    const s = setup('twist')
+    expect(s.bend.handle(s.event)).toBe(true); await settled()
+    expect(s.api.addDeformation.mock.calls[0].slice(0,4)).toEqual(['twist',10,110,{ total_degrees: -90 }])
+    expect(s.feedback.mock.calls.at(-1)[1]).toBe('succeeded')
+    s.bend.handle({ ...s.event, sequence: 2, action: 'undo' });await settled()
+    expect(s.state.currentDesign.feature_log).toEqual([])
+    expect(s.feedback.mock.calls.at(-1)[2]).toBe('undone')
+  })
+  it('rejects a bend draft attached to a twist event', async () => {
+    const s = setup()
+    s.bend.handle({ ...s.event, mode: 'twist' });await settled()
+    expect(s.api.addDeformation).not.toHaveBeenCalled()
   })
 })

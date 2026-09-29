@@ -62,11 +62,11 @@ class SidebarMenu {
         return rows;
     }
     size_t total() const { if(dynamicActive())return dynamicTotal();return visibleRows().size()-(customTab?3:0); }
-    size_t pageRows() const { if(customTab && tab().key=="bend")return total();return dynamicActive()?7:customTab?5:kSidebarPageRows; }
+    size_t pageRows() const { if(customTab && (tab().key=="bend" || tab().key=="twist"))return total();return dynamicActive()?7:customTab?5:kSidebarPageRows; }
     MenuPanelBounds bounds() const {
         if(dynamicActive()) return dynamicBounds();
         auto b=kSidebarBounds;
-        if(customTab && tab().key=="bend") {b.minimum.y=-.60F;return b;}
+        if(customTab && (tab().key=="bend" || tab().key=="twist")) {b.minimum.y=-.60F;return b;}
         if(customTab) b.minimum.y=.463F-float((customTab?3:0)+std::min(pageRows(),total())-1)*.12F-.11F;
         return b;
     }
@@ -174,11 +174,11 @@ class SidebarMenu {
             out.push_back({"dock","Dock / Follow","","dock",{{.07F,-.657F},{.385F,-.585F}}});
             return out;
         }
-        if(customTab && tab().key=="bend") {
+        if(customTab && (tab().key=="bend" || tab().key=="twist")) {
             // Keep every bend input visible; paired coarse adjustments share a row.
             auto add=[&](const std::string& id,float y,int column=0,float height=.09F) {
                 const auto& rows=tab().rows;
-                const auto r=std::find_if(rows.begin(),rows.end(),[&](const auto& row){return row.id=="bend:"+id;});
+                const auto r=std::find_if(rows.begin(),rows.end(),[&](const auto& row){return row.id==tab().key+":"+id;});
                 if(r==rows.end())return;
                 const float left=cx-.327F,right=cx+.327F,middle=(left+right)*.5F;
                 const MenuPanelBounds box{{column==2?middle+.006F:left,y-height*.5F},
@@ -187,6 +187,11 @@ class SidebarMenu {
             };
             add("back",.463F);add("confirm",.36F,1,.08F);add("cancel",.36F,2,.08F);
             add("plane1",.26F,1);add("plane2",.26F,2);
+            if(tab().key=="twist") {
+                add("amount",.15F);add("less",.055F,1,.07F);add("more",.055F,2,.07F);
+                add("units",-.05F);add("reverse",-.15F,1);add("zero",-.15F,2);
+                add("target",-.26F);add("undo",-.37F,1);add("recenter",-.37F,2);return out;
+            }
             add("angle",.15F);add("direction",.04F);
             add("direction-less",-.055F,1,.07F);add("direction-more",-.055F,2,.07F);
             add("radius",-.15F);add("radius-less",-.245F,1,.07F);add("radius-more",-.245F,2,.07F);

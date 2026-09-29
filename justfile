@@ -288,3 +288,9 @@ vr-bend-demo *ARGS:
 
 vr-bend-test *ARGS:
     uv run python -m tools.vr_workflows.bend_tour --validate {{ARGS}}
+
+vr-twist-demo *ARGS:
+    uv run python -m tools.vr_workflows.twist_tour {{ARGS}}
+
+vr-twist-test *ARGS:
+    uv run python -m tools.vr_workflows.twist_tour --validate {{ARGS}}

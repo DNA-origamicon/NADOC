@@ -273,7 +273,7 @@ class VRToolExecutionFeedbackRequest(BaseModel):
 
     execution_sequence: int = Field(ge=1, le=2**53 - 1)
     tool_sequence: int = Field(ge=1, le=2**53 - 1)
-    tool_mode: Literal["move_rotate", "extrude", "bend"]
+    tool_mode: Literal["move_rotate", "extrude", "bend", "twist"]
     tool_action: Literal["confirm", "undo"]
     target_identity: Optional[str] = Field(default=None, min_length=1, max_length=2048)
     target_kind: SelectionKind

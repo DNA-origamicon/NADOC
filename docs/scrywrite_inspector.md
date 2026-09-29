@@ -284,3 +284,12 @@ wheel ownership, angle/direction, contour length, and rendered pick targets.
 The probe checks real controller inputs and stereo handle pixels; the browser
 checks desktop geometry, feature-log identity, saved endpoint constraints, reload,
 and Undo. See [VR Bend](vr_bend.md#scrywrite-test-and-guided-vr-tour).
+
+## Twist controller validation
+
+`just vr-twist-demo` runs the guided Twist authoring tour; `just vr-twist-test`
+runs all four controller profiles in one viewer. The `twist` observation includes
+plane indices/frames, signed amount and units, total angle, wheel/rotation-handle
+ownership, and rendered pick targets. Tests require stereo handle pixels, fixed
+plane positions/normals, desktop feature identity, persistence and exact Undo.
+See [VR Twist](vr_twist.md) for controls, evidence, and validation entry points.

@@ -149,7 +149,7 @@ def test_end_resize_tour_launches_isolated_workflow(client, monkeypatch, mode):
 
 
 @pytest.mark.parametrize('mode', ['demo', 'validate'])
-@pytest.mark.parametrize('tool,module', [('bend','bend_tour'), ('ligate','ligation_tour'), ('nick','nick_tour'), ('view-tools','view_tools_tour'), ('share','share_tour'), ('avatar','avatar_tour'), ('presence-ui','presence_ui_tour')])
+@pytest.mark.parametrize('tool,module', [('twist','twist_tour'), ('bend','bend_tour'), ('ligate','ligation_tour'), ('nick','nick_tour'), ('view-tools','view_tools_tour'), ('share','share_tour'), ('avatar','avatar_tour'), ('presence-ui','presence_ui_tour')])
 def test_ligation_tour_launches_isolated_workflow(client, monkeypatch, mode, tool, module):
     process = Mock(pid=987654)
     process.poll.return_value = None
