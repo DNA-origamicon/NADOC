@@ -1,3 +1,4 @@
+import { simulationViewActive } from './vr_simulations.js'
 import * as THREE from 'three'
 import { docHeaders } from '../shared/doc_id.js'
 import { broadcastFingerprint } from '../viewer/broadcast_fingerprint.js'
@@ -23,20 +24,25 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
     x+=w+2;row=Math.max(row,h+2);return r
   }
   const panel=doc.createElement('canvas');panel.width=768;panel.height=768
-  const c=panel.getContext('2d');c.fillStyle='#111c2c';c.fillRect(0,0,768,768)
+  const c=panel.getContext('2d');c.fillStyle='#111111';c.fillRect(0,0,768,768)
   c.fillStyle='#e0eaff';c.font='bold 28px sans-serif';c.fillText('VIEW TOOLS',24,40)
-  const flags=VR_VIEW_KEYS.reduce((v,k,i)=>v|(doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?1<<i:0),0)
+  const flags=VR_VIEW_KEYS.reduce((v,k,i)=>v|(doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?1<<i:0),0) | (simulationViewActive(doc)?2048:0)
   for(let i=0;i<VR_VIEW_KEYS.length;i++) {
     const b=doc.querySelector(`[data-vt="${VR_VIEW_KEYS[i]}"]`),px=16+(i%2)*376,py=62+Math.floor(i/2)*112
-    c.fillStyle=flags&(1<<i)?'#164b43':'#243146';c.fillRect(px,py,360,100)
+    // Read the desktop's actual computed colors, including its active tint.
+    // SVG children retain their explicit RGB values and gradient definitions.
+    const desktopStyle=b?doc.defaultView.getComputedStyle(b):null
+    c.fillStyle='#131313';c.fillRect(px,py,360,100)
+    c.globalAlpha=.35;c.fillStyle=desktopStyle?.backgroundColor||'transparent';c.fillRect(px,py,360,100);c.globalAlpha=1
+    c.strokeStyle=desktopStyle?.borderColor||'#6e7681';c.lineWidth=1;c.strokeRect(px+.5,py+.5,359,99)
     const svg=b?.querySelector('svg')?.outerHTML
     if(svg) {
-      const icon=b.querySelector('svg').cloneNode(true);icon.setAttribute('xmlns','http://www.w3.org/2000/svg');icon.style.color='#e0eaff'
+      const icon=b.querySelector('svg').cloneNode(true);icon.setAttribute('xmlns','http://www.w3.org/2000/svg');icon.style.color=desktopStyle?.color||'#e6edf3'
       const im=new Image();im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(icon))
       await im.decode();c.drawImage(im,px+18,py+16,64,40)
     }
     c.fillStyle='#e0eaff';c.font='21px sans-serif';c.fillText(VR_VIEW_LABELS[i],px+18,py+82)
-    c.fillStyle=flags&(1<<i)?'#64efad':'#8592a5';c.font='bold 17px sans-serif';c.fillText(flags&(1<<i)?'ON':'OFF',px+304,py+35)
+    c.fillStyle=flags&(1<<i)?'#e0eaff':'#8592a5';c.font='bold 17px sans-serif';c.fillText(flags&(1<<i)?'ON':'OFF',px+304,py+35)
   }
   c.fillStyle='#b6c7dc';c.font='18px sans-serif'
   const words=(message || (!(flags&256)||(flags&1536)?'Layout inspection. Restore Deform and exit 2D layouts to edit.':'Left quiver: show / hide. Right quiver: scissors.')).split(' ')
@@ -143,7 +149,7 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
   async function publish() {
     const s=getState(),now=performance.now()
     if(now-lastStampAt>700){stamp=broadcastFingerprint({scene});lastStampAt=now}
-    const key=fingerprint()+stamp
+    const key=fingerprint()+simulationViewActive(doc)+stamp
     if(key!==last || geometry!==s.currentGeometry || design!==s.currentDesign){if(!dirty||!last)settle=now+1200;last=key;geometry=s.currentGeometry;design=s.currentDesign;dirty=true}
     if(busy||!dirty||performance.now()<settle)return
     busy=true;dirty=false;const generation=epoch,requestSequence=appliedSequence

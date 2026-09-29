@@ -1340,7 +1340,10 @@ def geometry_deviation_map(
     def _k(p):
         return (
             p["helix_id"],
-            int(p["bp_index"]),
+            # Crossover insert addresses carry a UUID here, not a helix column.
+            # Preserve that identity; inserts absent from the reference naturally
+            # drop out of the existing shared-key intersection below.
+            p["bp_index"] if p["helix_id"] == "__xb__" else int(p["bp_index"]),
             getattr(p["direction"], "value", p["direction"]),
             int(p.get("copy", 0)),
         )

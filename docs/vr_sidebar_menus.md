@@ -1,8 +1,19 @@
 # VR sidebar menus
 
+A floor grid follows SteamVR’s calibrated floor, with a cyan outline of its
+play-area rectangle. Neither moves when the molecular model is moved or scaled.
+See [VR room appearance](vr_room_ui.md) for the demo and runtime fallback behavior.
+
+The left **Simulations** tab has desktop-order engine tabs, a scrollable Jobs card,
+and a rightward Visualizations extension after job selection. Both lists support
+the same touchpad focus/Trigger and pointer controls described below. The result
+extension has its own scrollbar. See [VR simulation results](vr_simulations.md)
+for job-specific options, the `2hb_1xT` demo and validation limits.
+
 Each controller's menu button independently toggles its matching sidebar. Both
-can remain open. Tabs preserve desktop order, labels, dark backgrounds and blue
-active styling; their text runs vertically on the outside edge. Controls are
+can remain open. Menus have translucent white backgrounds that blur the scene
+behind them, with sharp text and blue active styling. Tabs preserve desktop order
+and labels; their text runs vertically on the outside edge. Controls are
 larger for ray selection. The wide framed border has textured corner handles and
 side grip marks. Bring a controller within 7.5 cm of an edge: the nearest frame
 highlights blue. Hold one **Grip** to move (amber frame), add the other controller's

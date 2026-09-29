@@ -32,6 +32,7 @@
 #include "menu_layout.hpp"
 #include "menu_items.hpp"
 #include "sidebar_menu.hpp"
+#include "simulation_panel.hpp"
 #include "dimension_panel.hpp"
 #include "view_volume_panel.hpp"
 #include "extrude_panel.hpp"
@@ -407,6 +408,9 @@ GLuint makeDesktopProgram() {
     throw std::runtime_error("OpenGL desktop shader link failed: " + log);
 }
 
+#include "frosted_glass.hpp"
+#include "room_floor.hpp"
+
 GLuint makeMenuPanelProgram() {
     static constexpr const char* vertexSource = R"GLSL(
         #version 330 core
@@ -419,19 +423,20 @@ GLuint makeMenuPanelProgram() {
             vUv = aUv;
         }
     )GLSL";
-    static constexpr const char* fragmentSource = R"GLSL(
+    const std::string fragmentSource = std::string(R"GLSL(
         #version 330 core
         in vec2 vUv;
         uniform sampler2D uPanel;
         out vec4 outColor;
+    )GLSL") + frostedGlassShader + R"GLSL(
         void main() {
             vec4 color = texture(uPanel, vUv);
             if (color.a < 0.004) discard;
-            outColor = color;
+            outColor = frostedMenu(color);
         }
     )GLSL";
     const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource.c_str());
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
@@ -4596,6 +4601,7 @@ class MenuPanelSurface {
             glDisable(GL_BLEND);
         }
         glUseProgram(panelProgram_);
+        FrostedGlass::bind(panelProgram_);
         glUniformMatrix4fv(panelProjection_, 1, GL_FALSE, &viewProjection[0][0]);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture_);
@@ -4942,6 +4948,8 @@ class Viewer {
 
     ~Viewer() {
         gpuFrameTimer_.shutdown();
+        roomFloor_.shutdown();
+        menuGlass_.shutdown();
         menuPanelSurface_.shutdown();
         sidebarMenus_.shutdown();
         witnessSurface_.shutdown();
@@ -5296,8 +5304,10 @@ class Viewer {
         }
         desktopSurface_.initialize(glfwGetX11Display());
         viewTools_.initialize();
+        roomFloor_.initialize(session_);
         menuPanelSurface_.initialize();
         sidebarMenus_.initialize();
+        simulationPanel_.bind(sidebarMenus_.menus[0], &sidebarMenus_.menus[1]);
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.label=[this](const std::string& action,const std::string& fallback) {
                 if(action!="share:status")return fallback;
@@ -5710,6 +5720,7 @@ class Viewer {
         return action=="share:end" || (action=="share:pause" && sharePerspective_) || (action=="share:resume" && !sharePerspective_);
     }
     void activateSidebarAction(const std::string& action, size_t hand) {
+        if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
         if(action=="share:avatar") {showVRAvatar_=!showVRAvatar_;return;}
         if(action.starts_with("share:")) {
             if(shareAvailable(action)) {shareAction_=action.substr(6);++shareSequence_;publishEventState();}
@@ -7572,7 +7583,7 @@ class Viewer {
         }
         if (menuOpen_) {
             menuPanelSurface_.update(
-                menuLocalGuides_, menuPanelBounds(), menuPage_ == MenuPage::desktop);
+                menuLocalGuides_, menuPanelBounds(), menuPage_ == MenuPage::desktop, frostedButtonFills<Vertex>(menuPlacement_, witnessMenuEntries(), menuPage_ == MenuPage::desktop));
         }
         appendThumbwheelGuides();
         witnessActorGuideCount_ = controllerGuides_.size();
@@ -7826,6 +7837,7 @@ class Viewer {
         output << "{\"sequence\":" << ++eventSequence_ << ",\"hover_identity\":";
         identity(publishedHoverIdentity_);
         output << ",\"share_control\":{\"sequence\":" << shareSequence_ << ",\"action\":\"" << shareAction_ << "\"}";
+        output << ",\"simulation\":{\"sequence\":" << simulationPanel_.sequence << ",\"version\":" << simulationPanel_.requestedVersion << ",\"id\":\"" << simulationPanel_.requested << "\"}";
         output << ",\"view_tool\":{\"sequence\":" << viewTools_.sequence << ",\"index\":" << viewTools_.requested << "}";
         output << ",\"ligation\":{\"sequence\":" << ligation_.sequence
                << ",\"action\":\"" << ligation_.committedAction << "\""
@@ -8439,7 +8451,7 @@ class Viewer {
             out << quote(selectedOwnerTokens_[i]);
         }
         const auto moveCenter=glScene_?glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform()):std::nullopt;
-        out << "],\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
+        out << "],\"room_floor\":" << roomFloor_.json() << ",\"menu_glass\":{\"enabled\":true,\"gray_opacity\":0.10,\"blur_radius_px\":15},\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
             << ",\"sequence\":" << viewTools_.sequence << ",\"ack_sequence\":" << viewTools_.acknowledged << ",\"version\":" << viewTools_.version << ",\"flags\":" << viewTools_.flags << ",\"triangles\":" << viewTools_.triangles.size()/3
             << ",\"parse_ms\":" << viewTools_.parseMs << ",\"upload_ms\":" << viewTools_.uploadMs << ",\"instances\":" << viewTools_.instanceCount() << ",\"lines\":" << viewTools_.lines.size()/2 << ",\"sprites\":" << viewTools_.sprites.size() << ",\"hover\":[" << viewTools_.hover[0] << ',' << viewTools_.hover[1] << "],\"items\":[";
         for(size_t i=0;i<11;++i){if(i)out<<',';out<<"{\"key\":"<<quote(VRViewTools::keys[i])<<",\"active\":"<<((viewTools_.flags&(1<<i))?"true":"false")<<",\"center\":"<<point(viewTools_.world(VRViewTools::cell(i)))<<'}';}
@@ -9094,6 +9106,7 @@ class Viewer {
             [&](size_t hand){pulse(hand,.3F);});
         dimensionSync_.update(dimensionPanel_.tool,normalizationCenter_,normalizationScale_);
         if(volumePanel_.active) menuControlTargeted.fill(true);
+        simulationPanel_.poll(eventPath_);
         { std::error_code error; const auto path=eventPath_+".share";
           const auto changed=std::filesystem::last_write_time(path,error);
           if(error || std::filesystem::file_time_type::clock::now()-changed>std::chrono::seconds(3)) {shareActive_=false;shareBusy_=true;}
@@ -9259,7 +9272,7 @@ class Viewer {
         const XrQuaternionf& orientation = views_[0].pose.orientation;
         manipulator_.fitInView(
             headPosition, {orientation.w, orientation.x, orientation.y, orientation.z},
-            glScene_->ownerBounds({}, glm::mat4(1.0F), true));
+            (viewTools_.flags&2048)?viewTools_.sceneBounds():glScene_->ownerBounds({}, glm::mat4(1.0F), true));
         pulse(recenterHand_, 0.55F);
         recenterRequested_ = false;
         updateControllerGuides();
@@ -9444,6 +9457,7 @@ class Viewer {
     }
 
     void renderMenuSurface(const glm::mat4& viewProjection) {
+        menuGlass_.capture();
         sidebarMenus_.render(viewProjection);
         viewTools_.renderPanel(viewProjection);
         if (!menuOpen_) return;
@@ -9521,6 +9535,8 @@ class Viewer {
         glClear(clearMask);
         const glm::mat4 projection = projectionFromFov(view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
+        setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::reference_grid);
+        roomFloor_.render(viewProjection);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
         if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(),
@@ -9925,6 +9941,8 @@ class Viewer {
         const glm::mat4 projection = projectionFromFov(
             view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
+        setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::reference_grid);
+        roomFloor_.render(viewProjection);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
         if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(), {});
@@ -9972,6 +9990,7 @@ class Viewer {
             controllerGuides_.begin(),
             controllerGuides_.begin() + static_cast<std::ptrdiff_t>(
                 std::min(witnessActorGuideCount_, controllerGuides_.size())));
+        roomFloor_.render(viewProjection);
         if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(),
             actorGuides);
@@ -10037,6 +10056,7 @@ class Viewer {
         checkXr(instance_, xrWaitFrame(session_, &waitInfo, &frameState), "xrWaitFrame");
         ++liveFrame_;
         currentPredictedDisplayTime_ = frameState.predictedDisplayTime;
+        roomFloor_.update(session_,space_,frameState.predictedDisplayTime);
         const auto frameStarted = std::chrono::steady_clock::now();
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
@@ -10765,6 +10785,8 @@ class Viewer {
     size_t jobPage_ = 0;
     size_t selectedJobIndex_ = 0;
     nadoc_vr::MenuPlacement menuPlacement_;
+    RoomFloor roomFloor_;
+    FrostedGlass menuGlass_;
     MenuPanelSurface menuPanelSurface_;
     SidebarRuntime sidebarMenus_;
     nadoc_vr::ViewVolumePanel volumePanel_;
@@ -10800,6 +10822,7 @@ class Viewer {
     bool shareActive_=false,sharePerspective_=false,shareBusy_=true,shareFailed_=false;
     int shareSequence_=0,shareAck_=0;
     std::string shareAction_;
+    nadoc_vr::SimulationPanel simulationPanel_;
     VRViewTools viewTools_;
 };
 

@@ -91,6 +91,9 @@ def _slab_centroids(positions: list[dict], n_slices: int = 15) -> "np.ndarray | 
 
     bp_pts: dict = {}
     for p in positions:
+        # Insert particles have crossover UUID addresses, not paired helix slabs.
+        if p["helix_id"] == "__xb__":
+            continue
         bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
             np.asarray(p["backbone_position"], dtype=float)
         )

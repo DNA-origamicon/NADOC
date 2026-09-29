@@ -17,7 +17,7 @@ def check(directory, evidence):
             up = control["hit_half_up"]
             # Sample the interior, excluding outlines and the small section heading.
             vertical = control["id"].startswith("tab:")
-            scrollbar = control["id"] == "scrollbar"
+            scrollbar = control["id"] == "scrollbar" or control["id"].startswith("sim:scroll:")
             footer = control["id"] == "scrollbar" or control["id"] in (
                 "close",
                 "dock",
@@ -61,20 +61,20 @@ def check(directory, evidence):
             )
             # A scrollbar has a thumb rather than a text label. Disabled thumbs
             # use the desktop muted border color; demand visible neutral pixels.
-            neutral = (pixels.min(axis=1) > (50 if scrollbar and not control["enabled"] else 100)) & (
-                np.ptp(pixels.astype(int), axis=1) < (110 if control["active"] else 40)
-            )
+            # Light foreground on nearly transparent glass; blank dark/white
+            # panels are separately rejected by the room-tour negative checks.
+            neutral = (pixels.min(axis=1)>100) & (np.ptp(pixels.astype(int),axis=1)<40)
+            if scrollbar:
+                neutral = (pixels.min(axis=1)>(100 if control["enabled"] else 50)) & (np.ptp(pixels.astype(int),axis=1)<40)
             text = int(neutral.sum())
             gray = True
             if not control["enabled"]:
-                gray = bool(
-                    text and np.quantile(pixels[neutral].max(axis=1), 0.98) < 230
-                )
+                gray = bool(text and np.quantile(pixels[neutral].max(axis=1),.98)<230)
             active = True
             if control["active"]:
                 active = bool(
                     (
-                        (pixels[:, 2] > 160) & (pixels[:, 0] < 80) & (pixels[:, 1] > 60)
+                        (pixels[:, 2] > pixels[:, 0].astype(int)+18) & (pixels[:, 2] > pixels[:, 1].astype(int)+8)
                     ).sum()
                     > 20
                 )

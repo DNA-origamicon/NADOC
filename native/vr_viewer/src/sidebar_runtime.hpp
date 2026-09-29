@@ -90,9 +90,9 @@ class SidebarRuntime {
             auto c=target->hit(hands[h]);
             if(!c) continue;
             target->hovered=c->id;
-            if(c->id=="scrollbar" && c->enabled && held[h]) {
+            if(nadoc_vr::SidebarMenu::isScrollbar(c->id) && c->enabled && held[h]) {
                 auto point=target->placement.rayPanelLocalPoint(hands[h],target->bounds().minimum,target->bounds().maximum);
-                if(point) target->scrollTo(point->y);
+                if(point) target->scrollControl(c->id,point->y);
             } else if(clicked[h]) {
                 activate(*target,*c,h,hands,now,action);
             }
@@ -106,7 +106,11 @@ class SidebarRuntime {
             auto p=m.placement.rayPanelLocalPoint(hand,b.minimum,b.maximum);
             if(p) {float d=glm::length(m.placement.worldPoint(*p)-hand.position);if(d<distance){target=&m;distance=d;}}
         }
-        if(target&&direction) target->scroll(direction);
+        if(target&&direction) {
+            const auto b=target->bounds();const auto p=target->placement.rayPanelLocalPoint(hand,b.minimum,b.maximum);
+            if(target->dynamicActive() && p)target->dynamicScrollAt(glm::vec2(*p),direction);
+            else target->scroll(direction);
+        }
         return target!=nullptr;
     }
     static std::string label(const nadoc_vr::SidebarMenu& m,const nadoc_vr::SidebarControl& c) {

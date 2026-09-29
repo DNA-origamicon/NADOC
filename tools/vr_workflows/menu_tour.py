@@ -87,6 +87,8 @@ def check_page(live, tab):
     state = live.state["sidebars"][side]
     assert state["open"] and state["tab"] == tab["key"], state
     assert state["layout"] == "valid", state
+    if tab["key"] == "dynamics" and any(c["id"]=="sim:jobs" for c in live.state["controls"]):
+        return []  # Live jobs/results have their own document-backed simulation tour.
     rows = tab["rows"][state["offset"] : state["offset"] + 8]
     actual = {
         c["id"]: c for c in live.state["controls"] if c.get("sidebar") == tab["side"]
@@ -108,6 +110,12 @@ def run_tour(live, catalog, output, preset, hold, quick):
     try:
         for tab in catalog["tabs"]:
             hand = 0 if tab["side"] == "left" else 1
+            # Expanded simulation panes can occlude the opposite sidebar. Inspect
+            # each page with its own menu visible, through normal menu buttons.
+            if live.state["sidebars"][1-hand]["open"]:
+                live.button("menu", hand=1-hand)
+            if not live.state["sidebars"][hand]["open"]:
+                live.button("menu", hand=hand)
             click(live, hand, "tab:" + tab["key"], preset, trials)
             while live.state["sidebars"][hand]["offset"]:
                 scroll_page(live, hand, -1)
@@ -160,6 +168,9 @@ def run_tour(live, catalog, output, preset, hold, quick):
                 if quick or offset + len(rows) >= len(tab["rows"]):
                     break
                 scroll_page(live, hand, 1)
+        for hand in (0, 1):
+            if not live.state["sidebars"][hand]["open"]:
+                live.button("menu", hand=hand)
         if not quick:
             expected = {
                 (t["side"], t["key"], r["id"])
@@ -304,6 +315,7 @@ def enlarge_mirror(live):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--room-checks", action="store_true", help="Check frosted menus and the calibrated SteamVR floor")
     mode.add_argument("--dimension-checks", action="store_true", help="Check live dimensions, pinning, entry controls and model transforms")
     mode.add_argument("--grip-checks", action="store_true", help="Check border grabbing, movement and two-hand resize")
     mode.add_argument(
@@ -339,7 +351,7 @@ def main():
     )
     catalog = json.loads((root / "native/vr_viewer/sidebar_catalog.json").read_text())
     if args.tab:
-        if args.focus_checks or args.grip_checks or args.dimension_checks:
+        if args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks:
             parser.error('--tab is only supported by the sidebar page tour')
         tabs = [t for t in catalog['tabs'] if f"{t['side']}:{t['key']}" == args.tab]
         if not tabs:
@@ -363,7 +375,7 @@ def main():
                 socket = str(Path(temp) / "viewer.sock")
                 command = [
                     str(root / "native/vr_viewer/build/nadoc-vr-viewer"),
-                    str(root / "native/vr_viewer/examples/empty_authoring.nadocvr"),
+                    str(root / ("native/vr_viewer/examples/scrywrite_simple_origami.nadocvr" if args.room_checks else "native/vr_viewer/examples/empty_authoring.nadocvr")),
                     "--scrywrite-live",
                     socket,
                     "--scrywrite-live-mode",
@@ -425,7 +437,9 @@ def main():
             )
             live.button("menu", hand=0)
             results = []
-            if args.dimension_checks:
+            if args.room_checks:
+                from tools.vr_workflows.room_ui_check import run as focus_run
+            elif args.dimension_checks:
                 from tools.vr_workflows.dimensions_check import run as focus_run
             elif args.grip_checks:
                 from tools.vr_workflows.menu_grip_check import run as focus_run
@@ -439,7 +453,7 @@ def main():
                         "preset": preset,
                         **(
                             focus_run(live, catalog, destination, preset)
-                            if args.focus_checks or args.grip_checks or args.dimension_checks
+                            if args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks
                             else run_tour(
                                 live,
                                 catalog,
@@ -454,7 +468,7 @@ def main():
                 (output / "result.json").write_text(
                     json.dumps(results, indent=2) + "\n"
                 )
-            if not args.tab:
+            if not args.tab and not args.room_checks:
                 check_actions(live, output, args.preset)
             from tools.vr_motion.desktop_check import run as check_desktop
 

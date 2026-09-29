@@ -30,6 +30,10 @@ def catalog():
         'Switch the open design between all eleven desktop representations, including Hull, Surface, mrDNA and oxDNA. Reuses cached exports for unchanged designs. Validation tests all four controller profiles.', module='representation_tour')
     add('representation-colors', 'right', 'Representation colors',
         'Quick pass through all eleven styles and both coloring pages. Checks enabled/gray controls and rendered pixels; not the full switching matrix.', ['--cycle'], module='representation_tour')
+    add('simulations', 'left', 'Simulation results · 2hb_1xT',
+        'Desktop engine tabs, touchpad job/result navigation and existing static visualizations for 2hb_1xT. Copies job metadata/caches into a temporary workspace; trajectories are excluded. Validation runs all four motion profiles.', module='simulation_tour')
+    add('room-ui', 'interaction', 'Frosted menus & SteamVR floor',
+        'Barely visible white glass, subtle button tints and stereo background blur, a calibrated floor grid and SteamVR play-area outline. Checks native pixels and all four motion profiles.', ['--room-checks'])
     add('focus', 'interaction', 'Trackpad, pointer, cards & scrollbars',
         'Check bounded columns and lateral navigation, focus gray controls, activate triggers, collapse cards, scroll, and return to pointing.', ['--focus-checks'])
     add('grips', 'interaction', 'Move & resize menu borders',
@@ -74,7 +78,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

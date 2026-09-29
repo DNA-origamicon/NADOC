@@ -1,3 +1,4 @@
+import { createVRSimulations } from './scene/vr_simulations.js'
 import { commitVRMovePose } from './scene/vr_move_pose.js'
 import { nativeRepresentation } from './scene/vr_representations.js'
 
@@ -6472,6 +6473,7 @@ async function main() {
 
   let _vrStyleApply = Promise.resolve()
   let _vrTrajectoryPublishCount = 0
+  const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
   const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
   const vrLigation = createVRLigation({ getState: store.getState, api,
@@ -6492,7 +6494,7 @@ async function main() {
     finally { vrEndPublishing = false }
   }
   const vrSession = initVRSession({
-    onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish() },
+    onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish() },
     renderer,
     scene,
     camera,
@@ -6556,9 +6558,11 @@ async function main() {
     },
     onNativeEvent: (_handleNativeVREvent = event => {
       _recordScrywriteBrowser('native_event', event)
-      if (event?.type === 'native_session_end') { vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset(); vrShare.reset() }
+      if (event?.type === 'native_session_end') { vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset(); vrShare.reset(); vrSimulations.reset() }
       const button = document.getElementById('menu-help-view-vr')
-      if (event?.type === 'share_control') {
+      if (event?.type === 'simulation') {
+        void vrSimulations.activate(event)
+      } else if (event?.type === 'share_control') {
         void vrShare.activate(event).catch(error => showToast(error.message, { severity: 'error' }))
       } else if(event?.type === 'view_tool') {
         void vrViewTools.activate(event.index,event.sequence)

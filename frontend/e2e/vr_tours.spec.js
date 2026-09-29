@@ -108,3 +108,18 @@ test('left quiver view-tools tour is discoverable', async ({ page }) => {
   await expect(page.locator('[data-start="view-tools"][data-mode="demo"]')).toBeVisible()
   await expect(page.locator('[data-start="view-tools"][data-mode="validate"]')).toBeVisible()
 })
+
+test('Simulation results offers the 2hb_1xT demo and validation under Left sidebar', async ({ page }) => {
+  await page.goto('/?doc=__e2e__simulation-tour-menu')
+  await page.locator('#menu-item-debug > button').click()
+  await page.locator('#menu-debug-vr-tours').hover()
+  await page.locator('[data-category="left"]').hover()
+  const demo = page.locator('[data-start="simulations"][data-mode="demo"]')
+  await expect(demo).toBeVisible()
+  await expect(demo).toHaveAttribute('title', /trajectories are excluded/)
+  await expect(page.locator('[data-start="simulations"][data-mode="validate"]')).toBeVisible()
+  await page.route('**/api/vr/tours/start', route => route.fulfill({ json: { detail: 'Test launch captured' }, status: 409 }))
+  const requested = page.waitForRequest(request => request.url().endsWith('/api/vr/tours/start'))
+  await demo.click()
+  expect((await requested).postDataJSON()).toEqual({ tour: 'simulations', mode: 'demo' })
+})

@@ -13,7 +13,7 @@ import uuid
 from tools.vr_workflows.tour_catalog import ROOT
 
 
-def main(kind="ligation"):
+def main(kind="ligation", prepare_workspace=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--validate', action='store_true')
     parser.add_argument('--output', type=Path)
@@ -28,6 +28,8 @@ def main(kind="ligation"):
     if args.profile: profiles = [args.profile]
     results = []
     with tempfile.TemporaryDirectory(prefix='nadoc-ligation-tour-') as temporary:
+        if prepare_workspace:
+            prepare_workspace(Path(temporary))
         for profile in profiles:
             with socket.socket() as backend, socket.socket() as frontend:
                 backend.bind(('127.0.0.1', 0))
@@ -40,7 +42,7 @@ def main(kind="ligation"):
                 'NADOC_WORKSPACE': temporary, 'NADOC_PHYSICAL_VR_TEST': '1',
                 'NADOC_VR_PROFILE': profile, 'NADOC_VR_DEMO': '0' if args.validate else '1',
                 'NADOC_VR_DEMO_HOLD': '3'}
-            command = ['npx', 'playwright', 'test', '--config', 'playwright.smoke.config.js',
+            command = ['npx', 'playwright', 'test', '--config', 'playwright.vr-simulations.config.js' if kind == 'simulations' else 'playwright.smoke.config.js',
                 f'vr_{kind}.spec.js', '--workers=1', '--output', str(output/'end'/profile)]
             if not args.validate:
                 command.append('--headed')
@@ -48,9 +50,11 @@ def main(kind="ligation"):
             results.append({'profile': profile, 'passed': result.returncode == 0})
             (output/'result.json').write_text(json.dumps({'results': results,
                 'workspace': 'temporary, removed on exit'}, indent=2))
-            if result.returncode:
+            if result.returncode and kind != 'simulations':
                 raise SystemExit(result.returncode)
     print(output, flush=True)
+    if any(not result['passed'] for result in results):
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':

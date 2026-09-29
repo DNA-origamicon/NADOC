@@ -592,6 +592,28 @@ checks are recorded in [the audit](docs/audits/cando_visualization_guards_202609
 This supersedes the CanDo full-snapshot-performance portion of
 MV-ASSEMBLY-FEM-LARGE-GPU; SNUPI's separate full-nucleotide path remains unmeasured.
 
+### BUG-CANDO-SMALL-DESIGN-EXPANSION — predicted shape (2026-09-28)
+
+**Status:** OPEN, debugging deferred at the user's request. The completed
+`2hb_1xT` CanDo predicted shape expands implausibly beyond its native shape.
+The user confirms this is a known unresolved bug. Suspect a design-specific or
+small-design issue; the cause is not established. Reproduce on `2hb_1xT`, compare
+other small designs, and trace solver output and predicted-shape transforms in a
+separate investigation. VR navigation/activation validation must not be reported
+as validation of these coordinates. Preserve the saved results in this task.
+
+### MV-VR-SIMULATIONS-HEADSET — physical readability and comfort (2026-09-28)
+
+**Status:** PENDING worn-headset review. The simulation tour verifies 22 available
+static modes for completed `2hb_1xT` jobs using software-generated controller input,
+submitted stereo pixels and actual desktop-mirror correspondence. Review engine
+tabs, long job labels, independently scrolling result options and the rightward
+extension with physical controllers. Captured eyes do not prove panel scanout or
+subjective comfort. Trajectories are outside this task. Launch **Debug → VR Tours
+& Tests → Left sidebar → Simulation results · 2hb_1xT**. See
+[the audit](docs/audits/vr_simulations_20260928.md) for exact profile coverage and
+retained failed attempts. The separate CanDo shape bug above remains open.
+
 ## MV-SNUPI-COMPACT-GLYPHS — hardware-GPU close-up result review
 
 2026-09-28: review SNUPI large static point/axis-line views and trajectory point
@@ -600,3 +622,13 @@ remain available, but point glyphs omit orientation/slabs and lines omit cylinde
 radii. The automated BigO transport fixture is CanDo static FEM data; a completed
 native BigO SNUPI result should also be reviewed when available. SmallO native
 SNUPI dynamics is the playback fixture. See the SNUPI visualization audit.
+
+
+## VR frosted menus and floor — 2026-09-28
+
+**Status:** PENDING worn-headset review. Open Debug → VR Tours & Tests → Controls
+& layout → Frosted menus & SteamVR floor demo. Check text contrast over bright
+geometry, comfortable blur in both eyes, and floor/outline alignment while walking
+and moving/scaling the design. Repeat after SteamVR room recalibration. Automated
+stereo and actual desktop checks pass all four controller profiles; they do not
+establish subjective comfort. See [audit](docs/audits/vr_room_ui_20260928.md).

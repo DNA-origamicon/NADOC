@@ -1,20 +1,20 @@
 {
   "version": 2,
   "sourceHashes": {
-    "frontend/index.html": "2a7b974dd4fb0109d25e4b2bae3a350afe0f9e88da9eb7432658785f61bd6a43",
+    "frontend/index.html": "d7843d78a6c9360461b7e1e24d0fd2c756a515e002f874c2d1a06e7f355a6f1c",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/scene/coloring_modes.js": "f731e0c1aa718c9450203d6ac7cfced8db732183c77dd2a6335476d95e75ba4e",
-    "frontend/src/scene/view_volumes.js": "894f3f65545b30cf8ee08cb169e9ea26ffc94d6561d5561e6e8429e7e0be705b",
+    "frontend/src/scene/view_volumes.js": "8cb5f50859a2394fa47cf78b1d60ffd6aaf3e6319dc8cae4585ee452f3f24c9b",
     "frontend/src/scene/vr_representations.js": "e5a447b2419c58ac15a8a09eacdda70a3fa93e4d87d2b37de60637488bdd0819",
     "frontend/src/scene/vr_share.js": "16721aa0cacc45bf65f8b5c74e00a297a3678d57f8c4e150d95e74de0bef8ab4",
-    "frontend/src/ui/annotation_panel.js": "a7d938893f5531a678938045c0e480828807959d8656f87f638c6db16ed72ccb",
+    "frontend/src/ui/annotation_panel.js": "c4555b987b01a80f1e900f21945a38c0a93758352e5fa4702bb9b7f2678e68ad",
     "frontend/src/ui/assembly_panel.js": "66d96d1bc91ce4440dd541b0ea57219f41440598f24ce2d54d52f3b121880097",
     "frontend/src/ui/cluster_panel.js": "ee15d0bced98582fdf86acf8baca8ccd9ac44c5602f58f96190d58728b04af2f",
     "frontend/src/ui/engine_selector.js": "fd02c24efd621426ffbfd84c66bbcb5eb22f4972aa88cca76c498df359f87488",
     "frontend/src/ui/feature_log_panel.js": "84265e7a287e9d5ae9468472d4f85d1818f5a282872a8ccd3518a1aec4b71cc0",
     "frontend/src/ui/jobs_panel_base.js": "6062e22fb1881a79f576267311216455f7ea1e3de3a7e07d050277905558540b",
-    "frontend/src/ui/multi_overlay.js": "2bc3d2417b4a03cc86d93f504e5c5d001c87ec19cc22b70ed1cd51dd5d627ca5",
-    "frontend/src/ui/multi_view.js": "eb846f784af3d72ad11cdcf94cec0333996c72702763237264a4d329257d2aa3",
+    "frontend/src/ui/multi_overlay.js": "567f177c9f8f267e7a45883bf782d776f5263af5ebb1a2abca4098fc4265b310",
+    "frontend/src/ui/multi_view.js": "d897f8b8f2bbe22a6ec27c5fb049e3710a3d5ff86733c6546f52f2461f2c9ab2",
     "frontend/src/ui/overhang_connections_panel.js": "21bc3e08cc2345d013c2bfe87b97c6e3b31ca942a3d9d9e65f519912a16eb304",
     "frontend/src/ui/plate_view.js": "47b0a22b46e0f086005660cf2ef584c15852a78914ee850a778f40d537fa819c",
     "frontend/src/ui/right_sidebar_tabs.js": "64bf0aadb73ec729d1f5fd2ea4a8e6a0b68c3ec13e519a7621ce12392bbed9c9",
@@ -2017,6 +2017,20 @@
           "reason": "Not supported in VR yet"
         },
         {
+          "id": "oxdna-jobs-traj-interpolate",
+          "parents": [
+            "section:dynamics:simulate-heading",
+            "section:dynamics:oxdna-jobs-viz-toggle"
+          ],
+          "label": "Smooth playback",
+          "section": "Simulations",
+          "kind": "input",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
           "id": "oxdna-jobs-heavy-granularity",
           "parents": [
             "section:dynamics:simulate-heading",
@@ -2343,7 +2357,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:98",
+          "id": "dynamics:control:99",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:oxdna-export-toggle"
@@ -2890,7 +2904,7 @@
           "reason": ""
         },
         {
-          "id": "dynamics:control:123",
+          "id": "dynamics:control:124",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:mrdna-jobs-display-toggle"
@@ -2904,7 +2918,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:124",
+          "id": "dynamics:control:125",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:mrdna-jobs-display-toggle"
@@ -2918,7 +2932,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:125",
+          "id": "dynamics:control:126",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:mrdna-jobs-display-toggle"
@@ -2932,7 +2946,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:126",
+          "id": "dynamics:control:127",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:mrdna-jobs-display-toggle"
@@ -2946,7 +2960,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:127",
+          "id": "dynamics:control:128",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:mrdna-jobs-display-toggle"
@@ -2960,7 +2974,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:128",
+          "id": "dynamics:control:129",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:mrdna-jobs-display-toggle"
@@ -3326,7 +3340,7 @@
           "reason": ""
         },
         {
-          "id": "dynamics:control:150",
+          "id": "dynamics:control:151",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:cando-display-toggle"
@@ -3340,7 +3354,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:151",
+          "id": "dynamics:control:152",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:cando-display-toggle"
@@ -3354,7 +3368,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:152",
+          "id": "dynamics:control:153",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:cando-display-toggle"
@@ -3368,7 +3382,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:153",
+          "id": "dynamics:control:154",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:cando-display-toggle"
@@ -3382,7 +3396,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:154",
+          "id": "dynamics:control:155",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:cando-display-toggle"
@@ -3945,7 +3959,7 @@
           "reason": ""
         },
         {
-          "id": "dynamics:control:181",
+          "id": "dynamics:control:182",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -3959,7 +3973,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:182",
+          "id": "dynamics:control:183",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -3973,7 +3987,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:183",
+          "id": "dynamics:control:184",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -3987,7 +4001,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:184",
+          "id": "dynamics:control:185",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -4001,7 +4015,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:185",
+          "id": "dynamics:control:186",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -4015,7 +4029,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:186",
+          "id": "dynamics:control:187",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -4418,7 +4432,7 @@
           "reason": ""
         },
         {
-          "id": "dynamics:control:206",
+          "id": "dynamics:control:207",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:blade-display-toggle"
@@ -4432,7 +4446,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:207",
+          "id": "dynamics:control:208",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:blade-display-toggle"
@@ -4446,7 +4460,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:208",
+          "id": "dynamics:control:209",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:blade-display-toggle"
@@ -4599,7 +4613,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:217",
+          "id": "dynamics:control:218",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -4612,7 +4626,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:218",
+          "id": "dynamics:control:219",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -4625,7 +4639,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:219",
+          "id": "dynamics:control:220",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -4638,7 +4652,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:220",
+          "id": "dynamics:control:221",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -4651,7 +4665,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:221",
+          "id": "dynamics:control:222",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -4664,7 +4678,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:222",
+          "id": "dynamics:control:223",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -6134,7 +6148,7 @@
           "reason": ""
         },
         {
-          "id": "dynamics:control:279",
+          "id": "dynamics:control:280",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:md-surface-toggle",
@@ -6149,7 +6163,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:280",
+          "id": "dynamics:control:281",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:md-surface-toggle",
@@ -6703,6 +6717,20 @@
           "label": "Next frame (+1)",
           "section": "Simulations",
           "kind": "button",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "md-jobs-traj-interpolate",
+          "parents": [
+            "section:dynamics:simulate-heading",
+            "section:dynamics:md-jobs-viz-toggle"
+          ],
+          "label": "Smooth playback",
+          "section": "Simulations",
+          "kind": "input",
           "options": [],
           "action": "",
           "source": "frontend/index.html",

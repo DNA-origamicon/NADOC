@@ -7,6 +7,34 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Frosted menus and calibrated floor (2026-09-28)
+
+Native menus now use per-eye blurred white glass (`frosted_glass.hpp`), including
+sidebars and the view-tools tablet. The user prefers barely visible frosting: 10% white, 90% blurred scene, with light
+lettering and very faint button fills. Tablet SVGs retain desktop RGB/gradients
+and computed styles; native-only controls use stable subtle accents. See the
+[white-glass audit](../docs/audits/vr_white_glass_20260928.md). `room_floor.hpp` anchors a 0.5 m grid and cyan
+play-area rectangle to OpenXR STAGE, never model transforms or invented bounds.
+Debug → VR Tours & Tests → Controls & layout → Frosted menus & SteamVR floor
+runs the isolated `room-ui` demo/validation. All four profiles pass stereo blur,
+calibrated-edge and actual desktop checks. Worn-headset review remains pending.
+See [usage](../docs/vr_room_ui.md) and [audit](../docs/audits/vr_room_ui_20260928.md).
+
+## Simulation results (2026-09-28)
+
+The left Simulations tab now mirrors desktop engine tabs and job selection through
+`vr_simulations.js` and `simulation_panel.hpp`. Selecting a job extends a separately
+scrollable Visualizations pane to the right. Native touchpad focus/Trigger and ray
+input invoke the desktop's real result handlers; trajectories are omitted. Actual
+static meshes use the existing view-tools scene feed. **Frame result** uses result
+bounds. The Debug Left-sidebar tour `simulations` uses private copies of completed
+`2hb_1xT` jobs, including archived NAMD results. See [usage](../docs/vr_simulations.md)
+for operation and the known, deferred CanDo small-design predicted-shape bug.
+The complete tour verified 22 available static modes; a final navigation campaign
+passed all four motion profiles with one mode per engine. Actual stereo/menu and
+desktop-mirror checks passed. Physical headset comfort remains pending. Exact
+coverage and failed attempts: [audit](../docs/audits/vr_simulations_20260928.md).
+
 ## Standing user requirement: organized VR tours
 
 Every future session adding or changing VR behavior must create or extend a

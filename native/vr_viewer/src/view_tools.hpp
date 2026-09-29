@@ -22,6 +22,18 @@ class VRViewTools {
     static constexpr std::array<const char*,11> keys{"lengthHeatmap","sequences","undefinedBases","loopSkips","grid","overhangNames","clashes","expanded","deform","unfold","cadnano2d"};
     GLuint program=0,vao=0,vbo=0,triangleVbo=0,lineVbo=0,texture=0;unsigned frames=0;
     size_t instanceCount() const {size_t n=0;for(const auto& b:batches)n+=b.instances.size();return n;}
+    std::optional<nadoc_vr::BoundsSummary> sceneBounds() const {
+        nadoc_vr::BoundsAccumulator bounds;
+        for(const auto* vertices:{&triangles,&lines})for(const auto& v:*vertices)bounds.includePoint(v.p,0);
+        for(const auto& batch:batches) {
+            glm::vec3 lo(1e30F),hi(-1e30F);
+            for(const auto& v:batch.vertices){lo=glm::min(lo,v.p);hi=glm::max(hi,v.p);}
+            for(const auto& instance:batch.instances)for(int i=0;i<8;++i)
+                bounds.includePoint(glm::vec3(instance.matrix*glm::vec4(i&1?hi.x:lo.x,i&2?hi.y:lo.y,i&4?hi.z:lo.z,1)),0);
+        }
+        for(const auto& sprite:sprites)bounds.includePoint(sprite.p,glm::length(sprite.size)*.5F);
+        return bounds.summary(glm::mat4(1));
+    }
     bool inspectionLayout() const {return overrideScene() && (!(flags&256) || (flags&1536));}
     bool overrideScene() const {return version && flags!=256;}
     void initialize() {
@@ -30,9 +42,11 @@ layout(location=0) in vec3 p;layout(location=1) in vec4 color;layout(location=2)
 layout(location=3) in mat4 instanceMatrix;layout(location=7) in vec4 instanceColor;
 uniform mat4 vp;uniform bool instanced;out vec4 c;out vec2 t;
 void main(){gl_Position=vp*(instanced?instanceMatrix*vec4(p,1):vec4(p,1));c=color*(instanced?instanceColor:vec4(1));t=uv;})");
-        const auto fs=compileShader(GL_FRAGMENT_SHADER,R"(#version 330 core
+        const std::string fragment=std::string(R"(#version 330 core
 in vec4 c;in vec2 t;uniform sampler2D atlas;layout(location=0) out vec4 outColor;layout(location=1) out uint objectId;
-void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(pow(max(c.rgb,vec3(0)),vec3(1.0/2.2))*tex.rgb,c.a*tex.a);if(outColor.a<0.02)discard;})");
+)")+frostedGlassShader+R"(
+void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(pow(max(c.rgb,vec3(0)),vec3(1.0/2.2))*tex.rgb,c.a*tex.a);if(outColor.a<0.02)discard;outColor=frostedMenu(outColor);})";
+        const auto fs=compileShader(GL_FRAGMENT_SHADER,fragment.c_str());
         program=glCreateProgram();glAttachShader(program,vs);glAttachShader(program,fs);glLinkProgram(program);glDeleteShader(vs);glDeleteShader(fs);
         GLint ok;glGetProgramiv(program,GL_LINK_STATUS,&ok);if(!ok)throw std::runtime_error("VR view tools shader failed");
         glGenBuffers(1,&triangleVbo);glGenBuffers(1,&lineVbo);glGenVertexArrays(1,&vao);glGenBuffers(1,&vbo);glBindVertexArray(vao);glBindBuffer(GL_ARRAY_BUFFER,vbo);
@@ -72,7 +86,7 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
         const double started=glfwGetTime();
         std::ifstream in(path+".viewtools",std::ios::binary);char magic[8];std::array<uint32_t,10> h{};
         if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||h[0]!=3||h[1]==version)return false;
-        if(h[2]>=2048||h[3]+uint64_t(h[4])>4000000||h[3]%3||h[4]%2||h[5]>100000||h[6]!=2048||h[7]!=2048||h[8]>10000)return false;
+        if(h[2]>=4096||h[3]+uint64_t(h[4])>4000000||h[3]%3||h[4]%2||h[5]>100000||h[6]!=2048||h[7]!=2048||h[8]>10000)return false;
         std::vector<V> t(h[3]),l(h[4]);std::vector<Sprite> s(h[5]);std::vector<unsigned char> rgba(2048*2048*4);
         static_assert(sizeof(V)==36 && sizeof(Sprite)==60 && sizeof(Instance)==80);
         if(!in.read((char*)t.data(),t.size()*sizeof(V))||!in.read((char*)l.data(),l.size()*sizeof(V))||!in.read((char*)s.data(),s.size()*sizeof(Sprite)))return false;
@@ -101,9 +115,9 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
         glBindBuffer(GL_ARRAY_BUFFER,lineVbo);glBufferData(GL_ARRAY_BUFFER,lines.size()*sizeof(V),lines.data(),GL_STATIC_DRAW);
         glBindTexture(GL_TEXTURE_2D,texture);glPixelStorei(GL_UNPACK_ALIGNMENT,1);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,2048,2048,0,GL_RGBA,GL_UNSIGNED_BYTE,rgba.data());glBindTexture(GL_TEXTURE_2D,0);uploadMs=(glfwGetTime()-uploading)*1000;return true;
     }
-    void draw(const glm::mat4& vp,const std::vector<V>& data,GLenum mode){
+    void draw(const glm::mat4& vp,const std::vector<V>& data,GLenum mode,bool glass=false){
         if(data.empty()||!version)return;
-        glUseProgram(program);glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&vp[0][0]);
+        glUseProgram(program);FrostedGlass::bind(program,glass);glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&vp[0][0]);
         glUniform1i(glGetUniformLocation(program,"instanced"),0);
         glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"atlas"),0);
         glEnable(GL_DEPTH_TEST);glDisable(GL_CULL_FACE);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
@@ -120,7 +134,7 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
         for(int i:{0,1,2,2,1,3})out.push_back({p[i],color,u[i]});
     }
     void renderPanel(const glm::mat4& vp){if(!open)return;std::vector<V> v;
-        quad(v,{{world({0,0}),world({0,1}),world({1,0}),world({1,1})}},{0,0,768.F/2048,768.F/2048},{1,1,1,1});draw(vp,v,GL_TRIANGLES);
+        quad(v,{{world({0,0}),world({0,1}),world({1,0}),world({1,1})}},{0,0,768.F/2048,768.F/2048},{1,1,1,1});draw(vp,v,GL_TRIANGLES,true);
         std::vector<V> border;
         for(int i:hover)if(i>=0){const auto c=cell(i);const glm::vec2 d{180.F/768,50.F/768};
             const std::array<glm::vec2,4> corners{{c-d,c+glm::vec2(d.x,-d.y),c+d,c+glm::vec2(-d.x,d.y)}};
@@ -130,7 +144,7 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
     void renderScene(const glm::mat4& vp,const glm::mat4& model,glm::quat camera){
         draw(vp*model,triangles,GL_TRIANGLES);draw(vp*model,lines,GL_LINES);
         if(!batches.empty()) {
-            glUseProgram(program);const auto matrix=vp*model;
+            glUseProgram(program);FrostedGlass::bind(program,false);const auto matrix=vp*model;
             glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&matrix[0][0]);
             glUniform1i(glGetUniformLocation(program,"instanced"),1);
             glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"atlas"),0);

@@ -10,17 +10,22 @@ def check(directory, *, offscreen=False):
     directory=Path(directory);e=json.loads((directory/'evidence.json').read_text())
     items=e['state']['view_tools']['items']
     centers=np.array([i['center'] for i in items]);right=centers[1]-centers[0];down=centers[2]-centers[0]
-    points=[(p+right*.25+down*.2+(1000 if offscreen else 0)).tolist() for p in centers]
+    points=[(p-right*(130/376)-down*(14/112)+(1000 if offscreen else 0)).tolist() for p in centers]
     checks={}
     for name in ('left','right','mirror'):
         eye=next(v for v in e['eyes'] if v['eye']==(e['mirror']['eye'] if name=='mirror' else name))
         rgb=np.asarray(Image.open(directory/(name+'.png')).convert('RGB')).astype(int)
-        mask=np.any(np.stack([np.max(abs(rgb-c),axis=2)<9 for c in ([36,49,70],[22,75,67])]),axis=0)
+        # With barely visible fills, require the desktop glyphs themselves.
+        # Neutral light strokes and explicit heatmap/loop-skip RGB values count;
+        # the white veil and cyan floor cannot satisfy this mask.
+        mask=(rgb.min(axis=2)>100)&(np.ptp(rgb,axis=2)<80)
+        for color in ([59,130,246],[168,85,247],[239,68,68],[255,136,0],[255,34,34]):
+            mask |= np.max(abs(rgb-color),axis=2)<15
         projected=[project(p,eye) for p in points]
         if name=='mirror':
             x,y,w,h=e['mirror']['viewport_bottom_up']
             projected=[None if p is None else (x+p[0]*w/eye['width'],rgb.shape[0]-y-h+p[1]*h/eye['height']) for p in projected]
-        checks[name]=coverage(mask,projected,radius=2 if name=='mirror' else 4)
+        checks[name]=coverage(mask,projected,radius=5 if name=='mirror' else 12)
     result={'passed':min(checks.values())>=.8,'coverage':checks}
     if not offscreen:(directory/'tablet-pixels.json').write_text(json.dumps(result,indent=2))
     return result

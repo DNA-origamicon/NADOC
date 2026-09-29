@@ -72,6 +72,7 @@ export function initVRSession({
   let lastNativeToolSequence = 0
   let lastNativeToolConfigSequence = 0
   let lastNativePlanePickSequence = 0
+  let lastNativeSimulationSequence = 0
   let lastNativeShareSequence = 0
   let lastNativeViewToolSequence = 0
   let lastNativeLigationSequence = 0
@@ -254,6 +255,10 @@ export function initVRSession({
       try { event = await native.event() } catch { /* transient partial record/network */ }
       if (disposed || !nativeActive) return
       onNativePoll?.()
+      const simulation = event?.simulation
+      if (Number.isSafeInteger(simulation?.sequence) && simulation.sequence > lastNativeSimulationSequence) {
+        lastNativeSimulationSequence = simulation.sequence; onNativeEvent({ type: 'simulation', ...simulation })
+      }
       const share = event?.share_control
       if (Number.isSafeInteger(share?.sequence) && share.sequence > lastNativeShareSequence) {
         lastNativeShareSequence = share.sequence; onNativeEvent({ type: 'share_control', ...share })
@@ -415,6 +420,7 @@ export function initVRSession({
       lastNativePlanePickSequence = 0
       lastNativeTransformSequence = 0
       lastNativeResizeSequence = 0
+      lastNativeSimulationSequence = 0
       lastNativeShareSequence = 0
       lastNativeViewToolSequence = 0
       lastNativeLigationSequence = 0
