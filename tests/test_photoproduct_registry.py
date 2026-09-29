@@ -205,12 +205,18 @@ def test_registry_rejects_missing_gate_instead_of_weakening_release(tmp_path):
         photoproduct_registry(path)
 
 
-def test_toolchain_does_not_mistake_gnome_orca_for_quantum_orca():
+def test_toolchain_does_not_mistake_gnome_orca_for_quantum_orca(tmp_path, monkeypatch):
+    from backend.core import photoproduct_toolchain as toolchain
+    screen_reader = tmp_path / "orca"
+    screen_reader.write_text("#!/bin/sh\n# GNOME Orca screen reader\n")
+    monkeypatch.delenv("NADOC_QM_ORCA", raising=False)
+    commands = {"orca": str(screen_reader), "namd3": "/mock/namd3", "psfgen": "/mock/psfgen"}
+    monkeypatch.setattr(toolchain, "_command", lambda name: commands.get(name))
     status = photoproduct_toolchain_status()
     orca = status["quantum"]["orca"]
-    if orca["path"] == "/usr/bin/orca":
-        assert orca["available"] is False
-        assert "screen reader" in orca["reason"]
+    assert orca["path"] == str(screen_reader)
+    assert orca["available"] is False
+    assert "screen reader" in orca["reason"]
     assert status["simulation"]["namd"]
     assert status["simulation"]["psfgen"]
     distributed = status["quantum"]["distributed_hessian"]

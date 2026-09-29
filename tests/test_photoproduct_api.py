@@ -62,7 +62,10 @@ def test_preflight_reports_antiparallel_interstrand_pair_without_using_a_geometr
     assert report["simulation_ready"] is False
 
 
-def test_catalog_and_toolchain_are_read_only_and_fail_closed():
+def test_catalog_and_toolchain_are_read_only_and_fail_closed(monkeypatch):
+    from backend.core import photoproduct_toolchain as toolchain
+    # Missing optional executables must still yield a usable, read-only response.
+    monkeypatch.setattr(toolchain, "_command", lambda name: None)
     design_state.set_design(_sequenced_design())
     revision = design_state.revision()
     catalog = client.get("/api/design/photoproducts/catalog")
@@ -87,7 +90,7 @@ def test_catalog_and_toolchain_are_read_only_and_fail_closed():
     assert "NAMD smoke validation has not passed" in trajectory.json()["detail"]
     doctor = client.get("/api/design/photoproducts/toolchain")
     assert doctor.status_code == 200
-    assert doctor.json()["simulation"]["namd"]
+    assert doctor.json()["simulation"]["namd"] is None
     assert design_state.revision() == revision
 
 
