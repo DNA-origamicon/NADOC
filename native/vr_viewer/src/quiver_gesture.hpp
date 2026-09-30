@@ -2,15 +2,14 @@
 #include "interaction.hpp"
 
 namespace nadoc_vr {
-// A head-relative, yaw-only quiver. A hand must first dwell in front, then
-// dwell behind the shoulder; remaining behind cannot repeatedly toggle tools.
+// Mirrored shoulder holsters in the horizontal head frame. Enter with the
+// controller pointing upward/backward; return in front to rearm, without timers.
 class QuiverGesture {
  public:
     std::array<bool,2> armed{},inside{};
-    std::array<double,2> frontSince{-1,-1},behindSince{-1,-1};
     std::array<glm::vec3,2> frontPosition{};
     uint64_t sequence=0;
-    void reset() {armed={};inside={};frontSince={-1,-1};behindSince={-1,-1};}
+    void reset() {armed={};inside={};}
     static glm::vec3 local(glm::vec3 hand,glm::vec3 head,glm::quat orientation) {
         auto forward=orientation*glm::vec3(0,0,-1);forward.y=0;
         if(glm::length(forward)<.1F)return {0,-10,0};
@@ -19,26 +18,22 @@ class QuiverGesture {
         return {glm::dot(delta,glm::cross(forward,glm::vec3(0,1,0))),delta.y,-glm::dot(delta,forward)};
     }
     std::optional<size_t> update(const std::array<HandPose,2>& hands,glm::vec3 head,
-        glm::quat orientation,double now,bool enabled) {
+        glm::quat orientation,double /*now*/,bool enabled) {
         if(!enabled){reset();return std::nullopt;}
         for(size_t h=0;h<2;++h) {
-            if(!hands[h].valid){armed[h]=inside[h]=false;frontSince[h]=behindSince[h]=-1;continue;}
+            if(!hands[h].valid){armed[h]=inside[h]=false;continue;}
             const auto p=local(hands[h].position,head,orientation);
             const bool front=p.z<-.12F && glm::length(p)<1.2F;
-            if(!armed[h]) {
-                if(!front)frontSince[h]=-1;
-                else if(frontSince[h]<0)frontSince[h]=now;
-                else if(now-frontSince[h]>=.15)armed[h]=true;
-            }
-            if(front)frontPosition[h]=hands[h].position;
+            if(front) {armed[h]=true;frontPosition[h]=hands[h].position;}
             const bool travelled=glm::distance(frontPosition[h],hands[h].position)>.18F;
-            const bool inner=std::abs(p.x)<.55F && p.y>-.25F && p.y<.35F && p.z>.12F && p.z<.55F;
-            const bool outer=std::abs(p.x)<.65F && p.y>-.35F && p.y<.45F && p.z>.06F && p.z<.65F;
-            inside[h]=inner || (inside[h]&&outer);
-            if(!armed[h] || !inside[h] || !travelled)behindSince[h]=-1;
-            else if(behindSince[h]<0)behindSince[h]=now;
-            else if(now-behindSince[h]>=.35) {
-                reset();++sequence;return h;
+            const float side=p.x*(h==0?-1.F:1.F);
+            // 12–45 cm to the matching side, 10 cm below to 30 cm above
+            // eye height, from the ear plane to 35 cm behind it.
+            const auto aim=local(head+hands[h].orientation*glm::vec3(0,0,-1),head,orientation);
+            const bool oriented=glm::dot(aim,glm::normalize(glm::vec3(0,1,1)))>=.70710678F;
+            inside[h]=side>=.12F && side<=.45F && p.y>=-.10F && p.y<=.30F && p.z>=0 && p.z<=.35F && oriented;
+            if(armed[h] && inside[h] && travelled) {
+                armed[h]=false;++sequence;return h;
             }
         }
         return std::nullopt;

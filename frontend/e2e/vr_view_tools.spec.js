@@ -39,7 +39,7 @@ test('left quiver tablet exposes supported view tools without Quick Expand in st
     if (status.pid) pid = status.pid
     return status.running && !!status.scrywrite_socket
   }, { timeout: 30000 }).toBe(true)
-  const keys=['lengthHeatmap','sequences','undefinedBases','loopSkips','grid','overhangNames','clashes','deform','unfold','cadnano2d']
+  const keys=['lengthHeatmap','sequences','undefinedBases','loopSkips','grid','overhangNames','clashes','deform']
   let step=0
   const probe=async action=>{
     const output=info.outputPath(`${step++}-${action}`)
@@ -59,10 +59,5 @@ test('left quiver tablet exposes supported view tools without Quick Expand in st
     await expect(page.locator(`[data-vt="${keys[i]}"]`)).not.toHaveAttribute('class',before)
     await probe(i)
   }
-  await probe(7) // Straight geometry is the desktop prerequisite for 2D layouts.
-  await probe(8)
-  await probe(9)
-  await probe(9)
-  await probe(8)
   await probe('stow')
 })

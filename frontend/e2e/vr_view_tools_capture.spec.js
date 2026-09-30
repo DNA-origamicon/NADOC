@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test'
 import fs from 'node:fs'
-test('Cadnano display snapshot contains only finite drawable primitives',async({page},info)=>{
+test('Desktop 2D layouts stay out of VR snapshots',async({page},info)=>{
  test.setTimeout(90000)
   await page.goto(`/?doc=__e2e__view-capture-${process.pid}`)
   await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
@@ -34,10 +34,13 @@ test('Cadnano display snapshot contains only finite drawable primitives',async({
    const scan=(a,name)=>{const i=a.findIndex(x=>!Number.isFinite(x)||Math.abs(x)>1e9);if(i>=0)bad.push({name,index:i,value:String(a[i]),near:Array.from(a.slice(Math.max(0,i-10),i+15)).map(String)})}
    for(const key of ['triangles','lines','sprites'])scan(v[key],key)
    for(const b of v.batches){scan(b.vertices,b.name+':vertices');scan(b.instances,b.name+':instances')}
-   return bad
+   return {bad,flags:v.flags,counts:[v.triangles.length,v.lines.length,v.sprites.length,v.batches.length],atlas:(()=>{const c=document.createElement('canvas');c.width=2048;c.height=2048;c.getContext('2d').putImageData(new ImageData(v.pixels,2048,2048),0,0);return c.toDataURL()})()}
  })
  fs.writeFileSync(info.outputPath('invalid.json'),JSON.stringify(invalid,null,2))
- expect(invalid).toEqual([])
+ fs.writeFileSync(info.outputPath('view-panel.png'),Buffer.from(invalid.atlas.split(',')[1],'base64'))
+ expect(invalid.bad).toEqual([])
+ expect(invalid.flags).toBe(256)
+ expect(invalid.counts).toEqual([0,0,0,0])
 })
 
 test('old uploads cannot acknowledge a newer tablet click, and failed views remain dismissible',async({page},info)=>{

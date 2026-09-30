@@ -139,8 +139,11 @@ tabs.push({side:'right',key:'tools',label:'Tools',rows:[
   ['vr-options','View / selection controls','options'],
   ['tool-inspect','Inspect','tool:inspect'],['tool-move','Move / Rotate','tool:move_rotate'],['tool-extrude','Extrude','tool:extrude'],
   ['tool-twist','Twist','tool:twist'],['tool-bend','Bend','tool:bend'],['tool-settings','Tool settings / Confirm / Cancel / Undo','tools'],
-  ['vr-desktop','Desktop','desktop'],
 ].map(([id,label,action])=>({id,label,action,section:'Tools',kind:'button',options:[],source:'native/vr_viewer/src/menu_items.hpp',reason:''}))})
+tabs.push({side:'left',key:'vr',label:'VR',rows:[
+  ['vr-desktop','View desktop','desktop'],
+  ['vr-exit','Exit VR','vr:exit'],
+].map(([id,label,action])=>({id,label,action,section:'VR',kind:'button',options:[],source:'frontend/scripts/generate-vr-sidebar-catalog.mjs',reason:''}))})
 tabs.push({side:'left',key:'share',label:'Share',rows:[
   ['share-avatar','Show VR model','share:avatar'],
   ['qr-calibrate','Calibrate QR code','qr:calibrate'],

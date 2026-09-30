@@ -43,24 +43,41 @@ int main() {
     l.request("undo",0,[&]{++commits;});assert(commits==3 && l.committedAction=="undo");
     l.request("redo",0,[&]{++commits;});assert(commits==3);
     l.waiting=false;l.request("redo",0,[&]{++commits;});assert(commits==4 && l.committedAction=="redo");
-    QuiverGesture q;std::array<HandPose,2> qs{};qs[1].valid=true;
-    auto gesture=[&](double time,bool enabled=true){return q.update(qs,{0,1.6F,0},glm::quat(1,0,0,0),time,enabled);};
-    qs[1].position={.25F,1.6F,.25F};assert(!gesture(0));assert(!gesture(1)); // starts behind: no toggle
-    qs[1].position={.25F,1.4F,-.35F};gesture(2);gesture(2.2);assert(q.armed[1]);
-    qs[1].position={.25F,1.6F,.25F};assert(!gesture(3));assert(!gesture(3.2));assert(gesture(3.4)==1);
-    assert(q.sequence==1);assert(!gesture(4));assert(!gesture(5)); // held behind: no repeat
-    qs[1].position={.25F,1.4F,-.35F};gesture(6);gesture(6.2);
-    qs[1].position={.25F,1.6F,.25F};gesture(7);gesture(7.2,false);assert(!gesture(8));
-    qs[1].position={.25F,1.4F,-.35F};gesture(9);gesture(9.2);
-    qs[1].position={.25F,1.6F,.25F};gesture(10);qs[1].valid=false;gesture(10.2);qs[1].valid=true;assert(!gesture(11));
-    q.reset();qs[1].position={.25F,1.6F,-.25F};gesture(12);gesture(12.2);
-    auto turned=glm::angleAxis(glm::pi<float>(),glm::vec3(0,1,0));
-    assert(!q.update(qs,{0,1.6F,0},turned,13,true));
-    assert(!q.update(qs,{0,1.6F,0},turned,14,true)); // turning the head alone is not a reach
-    q.reset();qs[0].valid=true;qs[1].valid=false;qs[0].position={-.25F,1.6F,-.35F};
-    gesture(15);gesture(15.2);qs[0].position={-.25F,1.6F,.25F};gesture(16);assert(gesture(16.4)==0);
-    const auto yaw=glm::angleAxis(glm::half_pi<float>(),glm::vec3(0,1,0));
-    const auto rel=QuiverGesture::local(glm::vec3(3,2,1)+yaw*glm::vec3(.25F,0,.25F),{3,2,1},yaw);
-    assert(glm::distance(rel,glm::vec3(.25F,0,.25F))<1e-5F);
+    // Scissor tips follow controller forward, with the cutting center on the
+    // closed blades, for both neutral and rotated controller poses.
+    for(const auto orientation:{glm::quat(1,0,0,0),glm::angleAxis(.8F,glm::vec3(0,1,0))}) {
+        const glm::vec3 center(.2F,1.4F,-.3F);
+        std::vector<std::pair<glm::vec3,glm::vec3>> strokes;
+        l.scissors(center,orientation,1,[&](glm::vec3 a,glm::vec3 b,glm::vec3){strokes.emplace_back(a,b);});
+        const auto inv=glm::inverse(orientation);
+        const auto back=inv*(strokes[1].first-center),tip=inv*(strokes[1].second-center);
+        assert(glm::distance(tip,glm::vec3(0,0,-.033F))<1e-5F);
+        assert(back.z>0 && std::abs(back.x)<1e-5F && std::abs(back.y)<1e-5F);
+    }
+    // Every accepted pose fires on its first frame, independently for both hands.
+    const glm::vec3 head(0,1.6F,0);
+    const auto aim=glm::rotation(glm::vec3(0,0,-1),glm::normalize(glm::vec3(0,1,1)));
+    for(size_t h=0;h<2;++h)for(float yawAngle:{0.F,glm::half_pi<float>()}) {
+        QuiverGesture q;std::array<HandPose,2> qs{};qs[h].valid=true;
+        const auto yaw=glm::angleAxis(yawAngle,glm::vec3(0,1,0));
+        const float side=h==0?-.28F:.28F;
+        auto pose=[&](glm::vec3 p,bool oriented=true){qs[h].position=head+yaw*p;qs[h].orientation=yaw*(oriented?aim:glm::quat(1,0,0,0));};
+        auto step=[&](bool enabled=true){return q.update(qs,head,yaw,0,enabled);};
+        pose({side,.08F,.28F});assert(!step()); // starting in holster is not a reach
+        pose({side,-.1F,-.4F});assert(!step());assert(q.armed[h]);
+        pose({side,.08F,.28F},false);assert(!step()); // wrong orientation
+        pose({-side,.08F,.28F});assert(!step()); // opposite shoulder
+        pose({side,-.2F,.28F});assert(!step()); // below shoulder
+        pose({side,.08F,.5F});assert(!step()); // too far behind
+        pose({side,.08F,.28F});assert(step()==h);assert(q.sequence==1);
+        assert(!step());assert(!step()); // no repeat while held
+        pose({side,-.1F,-.4F});step();step(false);
+        pose({side,.08F,.28F});assert(!step());
+        pose({side,-.1F,-.4F});step();qs[h].valid=false;step();qs[h].valid=true;
+        pose({side,.08F,.28F});assert(!step()); // tracking loss disarms
+        pose({side,-.1F,-.4F});step();pose({side,.08F,.28F});assert(step()==h);
+        q.reset();pose({side,0,-.25F});step();
+        assert(!q.update(qs,head,yaw*glm::angleAxis(glm::pi<float>(),glm::vec3(0,1,0)),0,true));
+    }
     std::cout<<"Ligation: both polarities, stretch, invalid targets, cancellation, single commit passed\n";
 }

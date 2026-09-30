@@ -2,6 +2,7 @@
   "version": 2,
   "sourceHashes": {
     "frontend/index.html": "bcd795b309f53b6808b00d5aa8bc5dfefd77011d36b8e5f2ca048b0744b14aa7",
+    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "54f9e7e6ac5c90d9dabf1016220cdbb3318ea0077f569f4b40f7676fb8cd7e87",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/scene/coloring_modes.js": "38b8f278e205a935a63413a0aa0d32d89762759d0b77c7da7eaba28c7d802bae",
     "frontend/src/scene/view_volumes.js": "8cb5f50859a2394fa47cf78b1d60ffd6aaf3e6319dc8cae4585ee452f3f24c9b",
@@ -13387,15 +13388,32 @@
           "options": [],
           "source": "native/vr_viewer/src/menu_items.hpp",
           "reason": ""
-        },
+        }
+      ]
+    },
+    {
+      "side": "left",
+      "key": "vr",
+      "label": "VR",
+      "rows": [
         {
           "id": "vr-desktop",
-          "label": "Desktop",
+          "label": "View desktop",
           "action": "desktop",
-          "section": "Tools",
+          "section": "VR",
           "kind": "button",
           "options": [],
-          "source": "native/vr_viewer/src/menu_items.hpp",
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "vr-exit",
+          "label": "Exit VR",
+          "action": "vr:exit",
+          "section": "VR",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
           "reason": ""
         }
       ]

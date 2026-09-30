@@ -11,6 +11,17 @@ int main() {
     require(nadoc_vr::ui_style::buttonAccent("tab:visualization")==nadoc_vr::ui_style::accent,"Tab lost its blue accent");
     const auto fallback=nadoc_vr::ui_style::buttonAccent("menu-view-cylinders");
     require(std::max({fallback.r,fallback.g,fallback.b})>.5F,"Unmapped button accent became black");
+    for(bool assembly:{false,true}) {
+        nadoc_vr::SidebarMenu menu(1,assembly);menu.open=true;
+        const auto controls=menu.controls();
+        const bool shown=std::any_of(controls.begin(),controls.end(),[](const auto& c){return c.id=="tab:assembly";});
+        require(shown==assembly,"Assembly tab must match the document context");
+        require(menu.tab().key=="properties","Default Properties tab changed with Assembly visibility");
+    }
+    const auto vrTab=std::find_if(nadoc_vr::kSidebarTabs.begin(),nadoc_vr::kSidebarTabs.end(),[](const auto& tab){return tab.key=="vr";});
+    require(vrTab!=nadoc_vr::kSidebarTabs.end(),"VR tab missing");
+    nadoc_vr::SidebarMenu part(1);
+    require(std::none_of(part.tabs.begin(),part.tabs.end(),[](auto i){return nadoc_vr::kSidebarTabs[i].key=="assembly";}),"Part session exposed Assembly navigation");
     nadoc_vr::MenuFocus focus;
     focus.begin("a","resting");
     require(!focus.pointer("resting",10,false),"Resting pointer stole focus");
@@ -30,7 +41,7 @@ int main() {
     focus.reset();require(!focus.active&&focus.id.empty(),"Explicit pointer reset failed");
 
     for(int hand=0;hand<2;++hand) {
-        nadoc_vr::SidebarMenu menu(hand);menu.open=true;
+        nadoc_vr::SidebarMenu menu(hand,true);menu.open=true;
         for(size_t tab=0;tab<menu.tabs.size();++tab) {
             menu.selected=tab;std::set<std::string> seen;
             do {

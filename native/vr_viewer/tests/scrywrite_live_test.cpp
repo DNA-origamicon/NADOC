@@ -11,6 +11,100 @@ void requireLive(bool condition, const char* detail) {
 }
 #include "representation_shadow_check.hpp"
 struct LiveViewerTest {
+    static void verifyVRTabActions() {
+        Viewer v(SceneData{});
+        auto& left=v.sidebarMenus_.menus[0];
+        const auto tab=std::find_if(left.tabs.begin(),left.tabs.end(),[](auto i){return nadoc_vr::kSidebarTabs[i].key=="vr";});
+        requireLive(tab!=left.tabs.end(),"Left VR tab missing");
+        left.selected=static_cast<size_t>(tab-left.tabs.begin());left.open=true;
+        auto activate=[&](const std::string& id) {
+            const auto controls=left.controls();
+            const auto c=std::find_if(controls.begin(),controls.end(),[&](const auto& item){return item.id==id;});
+            requireLive(c!=controls.end()&&c->enabled,"VR control unavailable");
+            v.activateSidebarAction(left.activate(*c),0);
+        };
+        activate("vr-desktop");
+        requireLive(left.open&&v.desktopPanel_.open&&!v.menuOpenRequested_,"Desktop must pop out independently of sidebar");
+        const auto b=v.desktopPanel_.content(),c=v.desktopPanel_.closeBounds();
+        requireLive(c.minimum.y>v.desktopPanel_.bounds().maximum.y && c.minimum.y>b.maximum.y,"Close overlaps desktop pixels or outer frame");
+        v.desktopPanel_.placement.openDocked({0,0,-1},glm::quat(1,0,0,0));
+        v.hands_[1].valid=true;v.hands_[1].orientation=glm::quat(1,0,0,0);
+        v.hands_[1].position=v.desktopPanel_.placement.worldPoint({0,0,0})+glm::vec3(0,0,.4F);
+        v.triggerValues_[1]=.4F;v.triggerPartial_[1]=true;
+        requireLive(v.processDesktopInput({})[1]&&v.desktopPanel_.magnifying,"Partial trigger must magnify desktop");
+        v.triggerPressed_[1]=true;v.processDesktopInput({});
+        requireLive(!v.desktopPanel_.magnifying,"Full trigger must leave lens mode");
+        v.triggerPartial_[1]=v.triggerPressed_[1]=false;v.triggerValues_[1]=0;v.processDesktopInput({});
+        requireLive(!v.desktopPanel_.magnifying,"Released trigger retained magnifier");
+        std::array<bool,2> grips{};
+        const auto frame=v.desktopPanel_.bounds();
+        v.hands_[1].position=v.desktopPanel_.placement.worldPoint({frame.maximum.x,0,0});v.hands_[1].pressed=true;
+        v.desktopPanel_.grips(v.hands_,{false,true},grips,[](size_t,float){});
+        requireLive(grips[1]&&v.desktopPanel_.placement.dragHand(),"Desktop border must grab");
+        const auto old=v.desktopPanel_.placement.position();v.hands_[1].position.x+=.1F;
+        v.desktopPanel_.placement.update(v.hands_);
+        requireLive(v.desktopPanel_.placement.position().x>old.x+.09F,"Desktop grip did not move panel");
+        v.hands_[1].pressed=false;v.desktopPanel_.placement.update(v.hands_);
+        for(size_t h=0;h<2;++h) {
+            v.hands_[h].valid=v.hands_[h].pressed=true;v.hands_[h].orientation=glm::quat(1,0,0,0);
+            v.hands_[h].position=v.desktopPanel_.placement.worldPoint({h?frame.maximum.x:frame.minimum.x,0,0});
+        }
+        grips={};v.desktopPanel_.grips(v.hands_,{true,true},grips,[](size_t,float){});
+        const auto oldScale=v.desktopPanel_.placement.scale();
+        v.hands_[0].position.x-=.1F;v.hands_[1].position.x+=.1F;v.desktopPanel_.placement.update(v.hands_);
+        requireLive(v.desktopPanel_.placement.scale()>oldScale,"Two border grips must resize desktop");
+        v.hands_[0].pressed=v.hands_[1].pressed=false;v.desktopPanel_.placement.update(v.hands_);
+        v.hands_[1].position=v.desktopPanel_.placement.worldPoint({(c.minimum.x+c.maximum.x)*.5F,(c.minimum.y+c.maximum.y)*.5F,0})+glm::vec3(0,0,.4F);
+        requireLive(!v.desktopPanel_.uv(v.hands_[1]),"Close must not map to an OS click");
+        v.triggerClicked_[1]=true;v.processDesktopInput({});
+        requireLive(!v.desktopPanel_.open&&left.open,"Closing desktop must preserve hand menu");
+        requireLive(!v.exitRequested_,"View desktop requested VR exit");
+        for(auto page:{Viewer::MenuPage::trajectory,Viewer::MenuPage::jobs}) {
+            left.open=false;v.menuOpen_=true;v.menuOpenRequested_=false;v.menuPage_=page;
+            v.menuPlacement_.openDocked({0,0,-1},glm::quat(1,0,0,0));
+            const auto item=page==Viewer::MenuPage::desktop?v.desktopBackItem():page==Viewer::MenuPage::trajectory?v.kTrajectoryMenuItems[4]:v.kJobsMenuItems[7];
+            v.hands_[1].valid=true;
+            v.hands_[1].orientation=glm::quat(1,0,0,0);
+            v.hands_[1].position=v.menuPlacement_.worldPoint({item.x,item.y,0})+glm::vec3(0,0,.4F);
+            v.triggerClicked_[1]=v.triggerPressed_[1]=true;
+            v.menuHoverTargets_[1]=static_cast<int>(page)*1000+(page==Viewer::MenuPage::desktop?0:page==Viewer::MenuPage::trajectory?4:7);
+            v.processMenuInput();
+            requireLive(!v.menuOpen_&&left.open&&left.tab().key=="vr","Back opened obsolete options instead of original sidebar tab");
+        }
+        left.open=true;activate("vr-exit");
+        requireLive(v.exitRequested_&&!v.exitLoop_,"Exit VR must request normal session shutdown");
+        v.menuOpen_=v.latticeOpen_=v.viewTools_.open=v.desktopPanel_.open=true;
+        v.sidebarMenus_.menus[1].open=true;
+        const auto panels=v.remotePanelTargets();
+        for(auto* placement:{&left.placement,&v.sidebarMenus_.menus[1].placement,&v.menuPlacement_,
+                &v.latticePlacement_,&v.viewTools_.placement,&v.desktopPanel_.placement})
+            requireLive(std::any_of(panels.begin(),panels.end(),[&](auto p){return p.placement==placement;}),
+                "A VR window was omitted from shared remote border handling");
+    }
+    static void verifyDashboardFocusLoss() {
+        Viewer v(SceneData{}); // ordinary physical mode, no live control socket
+        v.sessionState_=XR_SESSION_STATE_VISIBLE;
+        v.hands_[1].valid=v.hands_[1].pressed=true;
+        v.hands_[1].position={.2F,1.2F,-.5F};
+        v.manipulator_.update(v.hands_);
+        const auto model=v.manipulator_.transform();
+        v.triggerPressed_[1]=v.triggerPartial_[1]=v.gripPressed_[1]=true;
+        v.triggerValues_[1]=1;
+        v.endResize_.hand=1;v.endResize_.delta=8;
+        v.ligation_.hand=1;
+        v.quiver_.armed[1]=true;
+        v.viewTools_.placement.openDocked(v.hands_[1].position,glm::quat(1,0,0,0));
+        const auto half=VRViewTools::half;
+        v.hands_[1].position=v.viewTools_.placement.worldPoint({half,0,0});
+        requireLive(v.viewTools_.placement.beginDrag(1,v.hands_,{-half,-half},{half,half}),"view panel grab setup failed");
+        const auto panel=v.viewTools_.placement.position();
+        v.syncActions(1); // unfocused path must not call OpenXR or commit edits
+        requireLive(!v.hands_[1].valid&&!v.triggerPressed_[1]&&!v.gripPressed_[1]&&v.triggerValues_[1]==0,"dashboard retained held physical input");
+        requireLive(v.inputResumeBlocked_[1],"dashboard return did not require button release");
+        requireLive(v.manipulator_.mode()==nadoc_vr::ManipulationMode::none && v.manipulator_.transform()==model,"dashboard moved the scene");
+        requireLive(!v.viewTools_.placement.dragHand() && v.viewTools_.placement.position()==panel,"dashboard retained panel grab or moved panel");
+        requireLive(!v.endResize_.hand && v.endResize_.delta==0 && v.endResize_.sequence==0 && !v.ligation_.hand && !v.quiver_.armed[1],"dashboard left an edit gesture latched");
+    }
     static void verifyFirstStyleAcknowledgement() {
         SceneData data;
         data.available.fill(false);
@@ -485,6 +579,8 @@ int main(int argc, char** argv) {
     try {
         if (argc == 2 && std::string(argv[1]) == "--gl-ids") return objectIdGlChecks();
         if (argc < 2) return 2;
+        LiveViewerTest::verifyDashboardFocusLoss();
+        LiveViewerTest::verifyVRTabActions();
         if (argc == 4 && std::string(argv[2]) == "--serve") {
             Viewer viewer(loadScene(argv[1]));
             LiveViewerTest::setup(viewer, argv[3]);

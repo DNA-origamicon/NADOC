@@ -103,7 +103,7 @@ def check_page(live, tab):
             assert not actual[row["id"]]["enabled"], row["id"]
     for row in rows:
         control = actual[row["id"]]
-        assert sum(x * x for x in control["hit_half_up"]) ** 0.5 >= 0.03, control
+        assert sum(x * x for x in control["hit_half_up"]) ** 0.5 / state["scale"] >= 0.045, control
     return rows
 
 
@@ -168,6 +168,15 @@ def run_tour(live, catalog, output, preset, hold, quick):
                         assert live.state["sidebars"][hand]["tab"] == tab["key"]
                 # Review time is outside measured human reaches.
                 time.sleep(hold)
+                if tab["key"] == "vr":
+                    click(live, hand, "vr-desktop", preset, trials)
+                    from .desktop_panel_check import run as check_desktop_panel
+                    from tools.vr_motion.desktop_check import reveal_viewer
+                    reveal_viewer(live, lower=True)
+                    try:
+                        check_desktop_panel(live, output, preset, hand, trials)
+                    finally:
+                        reveal_viewer(live)
                 if quick or offset + len(rows) >= len(tab["rows"]):
                     break
                 scroll_page(live, hand, 1)
@@ -321,6 +330,7 @@ def main():
     mode.add_argument("--qr-checks", action="store_true", help="Check Share-tab Vive camera preview and cancellation")
     mode.add_argument("--room-checks", action="store_true", help="Check frosted menus and the calibrated SteamVR floor")
     mode.add_argument("--dimension-checks", action="store_true", help="Check live dimensions, pinning, entry controls and model transforms")
+    mode.add_argument("--remote-checks", action="store_true", help="Check trigger border movement and double-trigger resize")
     mode.add_argument("--grip-checks", action="store_true", help="Check border grabbing, movement and two-hand resize")
     mode.add_argument(
         "--focus-checks",
@@ -356,7 +366,7 @@ def main():
     )
     catalog = json.loads((root / "native/vr_viewer/sidebar_catalog.json").read_text())
     if args.tab:
-        if args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks:
+        if args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks:
             parser.error('--tab is only supported by the sidebar page tour')
         tabs = [t for t in catalog['tabs'] if f"{t['side']}:{t['key']}" == args.tab]
         if not tabs:
@@ -442,7 +452,9 @@ def main():
             )
             live.button("menu", hand=0)
             results = []
-            if args.depth_checks:
+            if args.remote_checks:
+                from tools.vr_workflows.remote_border_check import run as focus_run
+            elif args.depth_checks:
                 from tools.vr_workflows.menu_depth_check import run as focus_run
             elif args.qr_checks:
                 from tools.vr_workflows.qr_calibration_check import run as focus_run
@@ -462,7 +474,7 @@ def main():
                         "preset": preset,
                         **(
                             focus_run(live, catalog, destination, preset)
-                            if args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks
+                            if args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks
                             else run_tour(
                                 live,
                                 catalog,
@@ -477,7 +489,7 @@ def main():
                 (output / "result.json").write_text(
                     json.dumps(results, indent=2) + "\n"
                 )
-            if not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks:
+            if not args.remote_checks and not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks:
                 check_actions(live, output, args.preset)
             from tools.vr_motion.desktop_check import run as check_desktop
 

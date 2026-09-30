@@ -973,7 +973,10 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
     {"tool-twist", "Twist", "Tools", "tool:twist", {}},
     {"tool-bend", "Bend", "Tools", "tool:bend", {}},
     {"tool-settings", "Tool settings / Confirm / Cancel / Undo", "Tools", "tools", {}},
-    {"vr-desktop", "Desktop", "Tools", "desktop", {}},
+  }},
+  {0, "vr", "VR", {
+    {"vr-desktop", "View desktop", "VR", "desktop", {}},
+    {"vr-exit", "Exit VR", "VR", "vr:exit", {}},
   }},
   {0, "share", "Share", {
     {"share-avatar", "Show VR model", "Share", "share:avatar", {}},

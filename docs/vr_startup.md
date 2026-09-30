@@ -78,3 +78,58 @@ Full-only startup measurements and on-demand checks: [lazy-loading audit](audits
 Backend clean shutdown/reload now closes its owned native viewer and waits for
 session-file cleanup. The registered browser-to-headset check uses real browser
 acknowledgements; see [workflow and lifecycle audit](audits/vr_browser_lifecycle_20260929.md).
+
+The Vive System button (below the trackpad) belongs to SteamVR; the application
+Menu button opens NADOC sidebars. NADOC does not bind `/input/system/click`.
+When SteamVR takes OpenXR focus, NADOC now releases held inputs, cancels active
+controller grabs and uncommitted end pulls, and preserves scene/menu placement.
+On return, release the controller buttons before starting a new interaction.
+
+September 30 dashboard investigation: SteamVR 2.17.10 has dashboard, desktop and
+new-desktop settings enabled; system-button forwarding to applications is off.
+The Steam browser helper had logged a GPU crash and was restarted. A temporary
+explicit toolbar-display diagnostic produced readable Steam toolbar pixels and
+was restored afterward. That attempt changed no Steam configuration settings. This does
+not establish normal System-button activation or desktop mouse interaction:
+the connected headset had no valid pose and no controllers were connected.
+Evidence is in `.development-artifacts/steamvr-dashboard-20260930/`.
+Finish with a tracked headset and powered controllers: open SteamVR's dashboard
+and Desktop in SteamVR Home, then repeat during a normal NADOC session and check
+that returning does not move the model or leave a button held.
+
+The subsequent tracked-headset test confirmed that System opens the dashboard,
+but selecting Desktop crashes Steam itself. At 10:35:02, the 32-bit Steam VR
+client logged `Failed to load pixel shader ! (size=2147483647)` while initializing
+`CVulkanVRRenderer`; the kernel recorded a fault in NVIDIA's
+`libnvidia-glcore.so.580.178.04`. Steam's exit then tears down SteamVR. This matches
+the failure reported in [Valve's Linux issue 963](https://github.com/ValveSoftware/SteamVR-for-Linux/issues/963).
+It occurred outside NADOC. The browser-helper restart does not fix this failure.
+Crash logs, dump and the original settings are preserved under the evidence
+directory's `desktop-crash-103502/` subdirectory.
+
+The older-renderer workaround (`dashboard.useNewDesktop=false`) also failed
+on this X11 machine: the physical Desktop click at 10:42:41 produced the same
+shader error and Steam crash. The setting was verified false and has now been
+removed. Evidence is retained in `desktop-crash-104241/`. Do not repeat this
+workaround as a known fix.
+
+The next diagnostic uses Steam's Game Versions & Betas UI to select Valve's
+`previous` branch (SteamVR 2.16.7, build 23791826), replacing build 25330290.
+The user confirmed selecting Desktop no longer crashes, but the desktop is blank.
+This is not a working Desktop fix. NADOC's separate X11 desktop tablet is now
+reachable from the left-hand VR tab for comparison. Restore the current
+release by choosing Default Public Version in the same UI; do not mix individual
+runtime libraries across releases.
+
+September 30 appearance investigation restored Default Public Version,
+SteamVR 2.17.10 build 25330290. The Visualization color regression reproduced
+under both 2.16.7 and 2.17.10; it was traced to NADOC's native accent table,
+not the runtime downgrade. Standard SteamVR Desktop remains unresolved.
+
+September 30, 14:33: kernel logs confirmed a global out-of-memory event during
+VR development. The automatic viewer build could run Ninja's default parallel
+build of every target, including test executables; multiple compiler processes
+were consuming about 1 GB each. Automatic builds now serialize across processes
+with a file lock and compile only `nadoc-vr-viewer` with `--parallel 1`. The
+freshness check runs under the lock. Manual verification must likewise avoid
+overlapping builds and VR sessions on this host.

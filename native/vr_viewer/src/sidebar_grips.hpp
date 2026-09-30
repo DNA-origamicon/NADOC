@@ -39,9 +39,9 @@ std::array<bool,2> updateSidebarGrips(Menus& menus,const std::array<HandPose,2>&
             }
         }
         m.placement.update(hands,halfWidth);
-        m.gripState=m.placement.resizeActive()?GripFrameState::resizing:
-            m.placement.dragHand()?GripFrameState::moving:
-            (m.gripNearby[0]||m.gripNearby[1])?GripFrameState::ready:GripFrameState::idle;
+        m.gripState=(m.placement.resizeActive()||m.placement.remoteMode()==2)?GripFrameState::resizing:
+            (m.placement.dragHand()||m.placement.remoteMode()==1)?GripFrameState::moving:
+            (m.gripNearby[0]||m.gripNearby[1]||m.placement.remoteHovered)?GripFrameState::ready:GripFrameState::idle;
     }
     return {owner[0]>=0,owner[1]>=0};
 }

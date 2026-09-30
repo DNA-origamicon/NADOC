@@ -140,14 +140,18 @@ only to the log because even the bounded 284-frame menu trace is roughly 4 MB.
 The backend selects SteamVR's `steamxr_linux64.json` automatically when it
 launches the viewer. Help → Open SteamVR / Desktop starts SteamVR independently,
 so its Dashboard remains available before, during, and after a NADOC VR session.
-NADOC also provides its own X11 desktop surface in the controller tablet because
-SteamVR's Linux Desktop overlay can be present but blank. Open the VR menu and
-select Desktop; aim with either controller, fully pull the trigger to click, and
-swipe vertically on either trackpad to scroll. The Desktop panel opens at twice
-the regular tablet area and uses the live X11 desktop aspect ratio. Grip anywhere
-within 7.5 cm of its surface to grab it directly, or hold both grips within 7.5 cm
-of its border and change the controller spacing to resize it uniformly. The same
-Dock/Follow and Size controls also apply to the desktop tablet.
+NADOC also provides an independent X11 desktop window because SteamVR's Linux
+Desktop overlay can be present but blank. Open **VR → View desktop** in the left
+hand menu. Aim and lightly pull Trigger for a 3× magnifier; fully click to select,
+and swipe the trackpad vertically to scroll. The Close button sits above the
+outer VR frame, with a gap from both the frame and desktop pixels. Closing a hand
+menu does not close or reposition this window.
+
+All interactive window borders support remote manipulation: hold Trigger on a
+border to move at the current radius from your head; quickly trigger twice and
+hold the second pull to resize, then release to fix the window in space. Blue,
+amber and green frames indicate hover, movement and resizing. Nearby one-hand
+and two-hand border grips still move and resize the window normally.
 MD/FEM visualization overlays are also mirrored into the native model while VR is
 running. Selecting MD Display moves the corresponding VR bases and backbone geometry;
 selecting a Flex Map applies both its mean positions and scalar colors. Clearing the
@@ -201,8 +205,8 @@ Controls on the original HTC Vive wands:
 - Click the left trackpad to cycle the exact desktop Tab order:
   Strand, Domain, End, Crossover, Base, then Auto / Drill. Cluster remains menu-only.
 - Hold either grip/squeeze button to grab, move, and rotate the structure outside a
-  tool preview. A grip within 7.5 cm of a menu border grabs the panel instead; on the
-  Desktop page the whole surface is a grab target. During Move/Rotate Preview, the
+  tool preview. A grip within 7.5 cm of a menu border grabs the panel instead.
+  During Move/Rotate Preview, the
   right grip alone moves/rotates the pending handle while the left grip remains a
   structure grab unless it is targeting a panel.
 - Hold both grips and change the distance between the controllers to resize the
@@ -210,14 +214,11 @@ Controls on the original HTC Vive wands:
   menu or Desktop border, the same gesture resizes that panel instead and preserves
   its aspect ratio. A second border grip transitions an active one-hand panel grab
   directly into resizing; the captured grips cannot also transform the structure.
-- Press either application-menu button to open or close the in-headset menu.
-  The menu sits close to the controller that opened it, with its matching side edge
-  aligned to that controller and its top tilted farther away like a large hand-held
-  tablet; use either wand to point and select. Choose
-  Dock to leave the panel fixed in the world, or Follow to
-  attach it to the controller that selected the button. Size - and Size + resize
-  the panel while preserving accurate pointing. Gripping near a border grabs and
-  docks the panel at its current pose; release it to leave the panel fixed, or choose
+- Press either application-menu button to toggle its matching sidebar. Sidebars
+  first open 60 cm ahead, 24 cm to either side, at scale 0.45. Their chosen size
+  survives reopening. Dock/Follow switches between world-fixed and controller
+  placement. Aim at a border to move or resize remotely, or grip a nearby border.
+  Gripping docks the panel at its current pose; release to leave it fixed, or choose
   Follow to attach it to a controller again. The tablet is non-modal: grips,
   Selection Volumes, trackpads, and scene tools remain active while it is open.
   A trigger is routed to the menu only while its controller points at a menu control;
@@ -442,7 +443,8 @@ red marks an incompatible end. Empty/incompatible release cancels. Choose Ligate
 again to exit. Nick replaces the right selection sphere with scissors: partial trigger
 pressure closes the blades and brightens the impending bond; a full click creates
 one backend nick. To equip/stow without the wheel, move the right controller from
-in front of you to behind your head/shoulder and pause 0.35 s with buttons released.
+in front of you to above the right shoulder, pointing upward/backward with buttons
+released. The pose activates immediately without a dwell.
 A haptic pulse confirms the toggle; return in front before repeating. Undo/Redo
 act on desktop design history and refresh native geometry.
 Authoring tools remain available through the sidebar.
@@ -453,11 +455,13 @@ See `docs/vr_ligation.md` and the Debug → VR Tours & Tests → Authoring ligat
 ### Left-hand view tablet
 
 The same quiver reach with the left controller independently opens/closes a
-world-placed two-column panel containing ten supported desktop view toggles and
+world-placed two-column panel containing eight supported desktop view toggles and
 their original icons. Point and trigger-click a tile. The panel reports the
 actual desktop state and explains layout prerequisites. Shared meshes, posed
 instances and text textures are transferred to native stereo rendering. Straight
-and 2D layouts suppress canonical edit picking until restored to deformed 3D.
+layouts suppress canonical edit picking until restored to deformed 3D.
+Unfold and Cadnano 2D remain desktop-only. Border grips move/resize the tablet;
+release fixes it in space, and Dock / Follow switches controller following.
 See `docs/vr_view_tools.md` and the Debug **Left-hand view tools** tour.
 
 ### Share presenter controls

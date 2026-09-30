@@ -82,12 +82,12 @@ class PresenterTexture {
     }
 };
 class PresenterUI {
-    std::array<PresenterTexture,5> textures_;
+    std::array<PresenterTexture,6> textures_;
  public:
     void shutdown(){for(auto& texture:textures_)texture.shutdown();}
     template<class Vertex,class Sidebars,class Views,class Surface,class Desktop>
     void write(std::ostream& out,const std::vector<Vertex>& guides,size_t count,Sidebars& sidebars,Views& views,
-        bool menuOpen,bool desktop,Surface& surface,Desktop& screen,const MenuPlacement& placement,const MenuPanelBounds& bounds) {
+        bool menuOpen,bool desktop,Surface& surface,Desktop& screen,const MenuPlacement& placement,const MenuPanelBounds& bounds,const DesktopPanel& detached,Surface& desktopFrame) {
         out<<",\"ui\":{\"lines\":[";bool comma=false;
         auto vertex=[&](glm::vec3 p,glm::vec3 c){if(comma)out<<',';comma=true;out<<p.x<<','<<p.y<<','<<p.z<<','<<c.r<<','<<c.g<<','<<c.b;};
         for(size_t i=0;i<std::min(count,guides.size());++i)vertex(guides[i].position,guides[i].color);
@@ -107,6 +107,10 @@ class PresenterUI {
         if(views.open&&views.version)panel("view-tools",2,views.texture,views.version,{{views.world({0,0}),views.world({0,1}),views.world({1,0}),views.world({1,1})}},768,true);
         if(menuOpen){if(desktop)panel("desktop",4,screen.presenterTexture(),screen.presenterVersion(),corners(placement,bounds,.004F),0,true);
             panel("tool-menu",3,surface.presenterTexture(),surface.stats().updates,corners(placement,bounds,desktop?.008F:.002F));}
+        if(detached.open) {
+            panel("desktop",4,screen.presenterTexture(),screen.presenterVersion(),corners(detached.placement,detached.content(),.004F),0,true);
+            panel("desktop-frame",5,desktopFrame.presenterTexture(),desktopFrame.stats().updates,corners(detached.placement,detached.chromeBounds(),.008F));
+        }
         out<<"]}";
     }
 };

@@ -39,6 +39,10 @@ install(TARGETS nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export
 
 include(CTest)
 if(BUILD_TESTING)
+  add_executable(nadoc-vr-remote-panel-test tests/remote_panel_test.cpp)
+  target_include_directories(nadoc-vr-remote-panel-test PRIVATE src)
+  target_compile_options(nadoc-vr-remote-panel-test PRIVATE -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-remote-panel COMMAND nadoc-vr-remote-panel-test)
   add_executable(nadoc-vr-sidebar-grips-test tests/sidebar_grips_test.cpp)
   target_include_directories(nadoc-vr-sidebar-grips-test PRIVATE src)
   target_compile_options(nadoc-vr-sidebar-grips-test PRIVATE -Wall -Wextra -Wpedantic)

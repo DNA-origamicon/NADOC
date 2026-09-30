@@ -5,6 +5,7 @@ class SidebarRuntime {
  public:
     std::array<nadoc_vr::SidebarMenu,2> menus{nadoc_vr::SidebarMenu(0),nadoc_vr::SidebarMenu(1)};
     std::array<MenuPanelSurface,2> surfaces;
+    std::array<bool,2> openedBefore{};
     void initialize() { for(auto& s:surfaces) s.initialize(); }
     void shutdown() { for(auto& s:surfaces) s.shutdown(); }
     bool anyOpen() const {return menus[0].open||menus[1].open;}
@@ -28,8 +29,8 @@ class SidebarRuntime {
         if(m.open) {
             // Independent world-docked columns, centered below the tracked eye.
             // Border grip/resize and Dock/Follow retain the existing tablet contract.
-            m.placement.openDocked(head+orientation*glm::vec3(hand==0?-.34F:.34F,-.13F,-.95F),orientation);
-            while(m.placement.scale()>.651F) if(!m.placement.adjustScale(-1)) break;
+            m.placement.openDocked(head+orientation*glm::vec3(hand==0?-.24F:.24F,-.10F,-.60F),orientation);
+            if(!openedBefore[hand]) {m.placement.setScale(.45F);openedBefore[hand]=true;}
         }
     }
     template<class Feedback> std::array<bool,2> grips(const std::array<nadoc_vr::HandPose,2>& hands,

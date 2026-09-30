@@ -48,16 +48,30 @@ def viewer_window(live):
     return window
 
 
-def reveal_viewer(live):
-    """Raise only the verified owned viewer's frame, without restarting anything."""
+def reveal_viewer(live, *, lower=False):
+    """Stack only the verified owned viewer; lower exposes real desktop content."""
     import ctypes as c
     import ctypes.util
     import time
     window = int(viewer_window(live),16)
+    client = window
     x = c.CDLL(ctypes.util.find_library('X11'))
     x.XOpenDisplay.argtypes=[c.c_char_p];x.XOpenDisplay.restype=c.c_void_p
     x.XQueryTree.argtypes=[c.c_void_p,c.c_ulong,c.POINTER(c.c_ulong),c.POINTER(c.c_ulong),c.POINTER(c.POINTER(c.c_ulong)),c.POINTER(c.c_uint)]
     x.XRaiseWindow.argtypes=[c.c_void_p,c.c_ulong]
+    x.XIconifyWindow.argtypes=[c.c_void_p,c.c_ulong,c.c_int]
+    x.XDefaultScreen.argtypes=[c.c_void_p];x.XDefaultScreen.restype=c.c_int
+    x.XMapRaised.argtypes=[c.c_void_p,c.c_ulong]
+    x.XInternAtom.argtypes=[c.c_void_p,c.c_char_p,c.c_int];x.XInternAtom.restype=c.c_ulong
+    class ClientData(c.Union):
+        _fields_=[('b',c.c_char*20),('s',c.c_short*10),('l',c.c_long*5)]
+    class ClientMessage(c.Structure):
+        _fields_=[('type',c.c_int),('serial',c.c_ulong),('send_event',c.c_int),
+                  ('display',c.c_void_p),('window',c.c_ulong),('message_type',c.c_ulong),
+                  ('format',c.c_int),('data',ClientData)]
+    class Event(c.Union):
+        _fields_=[('client',ClientMessage),('pad',c.c_long*24)]
+    x.XSendEvent.argtypes=[c.c_void_p,c.c_ulong,c.c_int,c.c_long,c.POINTER(Event)]
     x.XSync.argtypes=[c.c_void_p,c.c_int];x.XCloseDisplay.argtypes=[c.c_void_p]
     x.XFree.argtypes=[c.c_void_p]
     display=x.XOpenDisplay(os.environ.get('DISPLAY',':1').encode())
@@ -71,7 +85,19 @@ def reveal_viewer(live):
             if parent.value in (0,root.value):break
             window=parent.value
         else:raise RuntimeError('unexpected viewer window ancestry')
-        x.XRaiseWindow(display,window);x.XSync(display,0)
+        if lower:
+            x.XIconifyWindow(display,client,x.XDefaultScreen(display))
+        else:
+            x.XMapRaised(display,client)
+            # Ask the window manager to activate/unminimize this owned client;
+            # raising its decoration alone can leave another app above it.
+            event=Event();event.client.type=33;event.client.send_event=1
+            event.client.display=display;event.client.window=client
+            event.client.message_type=x.XInternAtom(display,b'_NET_ACTIVE_WINDOW',False)
+            event.client.format=32;event.client.data.l[0]=2
+            x.XSendEvent(display,root.value,False,(1<<20)|(1<<19),c.byref(event))
+            x.XRaiseWindow(display,window)
+        x.XSync(display,0)
     finally:x.XCloseDisplay(display)
     time.sleep(.3)  # Desktop composition, outside all measured motion.
 

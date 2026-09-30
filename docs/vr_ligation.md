@@ -53,7 +53,7 @@ attempts and remaining headset checks.
 Choose **Nick** to replace the right controller selection sphere with scissors.
 You can also equip or put them away with a **quiver gesture**: start with the right
 controller in front of you, reach behind your head/shoulder with buttons released,
-and pause for about **0.35 seconds**. A haptic pulse confirms the toggle. Bring
+pointing upward/backward above that shoulder. Activation is **immediate**. A haptic pulse confirms the toggle. Bring
 your hand back in front before repeating; leaving it behind does not toggle again.
 A stronger pulse equips, a lighter pulse stows. The wheel's Nick sector remains
 an alternative toggle.

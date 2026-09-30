@@ -1,5 +1,40 @@
 # VR sidebar menus
 
+The left-hand **VR** tab contains **View desktop** and **Exit VR**. View desktop
+opens a separate, world-fixed X11 desktop window. Hand-menu buttons only toggle
+hand menus; the desktop remains open at its own position and scale. Grab its
+outer border to move it, or grip opposite borders with both hands to resize.
+The **Close** button and title are above the desktop image, outside its mouse
+hit area. No menu controls cover desktop pixels.
+
+Aim at the desktop and lightly pull Trigger (starting at 15%) to show a circular
+3× magnifier at the pointer. A full trigger click selects the desktop location
+at the lens center; release removes the lens. The pointer has an open center so
+it does not obscure the click target. Swipe the touchpad vertically to scroll.
+The desktop panel uses the same full-click threshold/hysteresis as other VR
+controls. Scripted control/witness sessions inject neither OS pointer motion nor
+OS clicks. Physical mouse interaction still needs a normal controller session.
+Exit VR uses normal OpenXR shutdown, leaving the browser and SteamVR running.
+This X11 capture path does not depend on SteamVR's Desktop tab.
+
+Trajectory, job-list and tool-menu Back buttons return to the current sidebar
+and selected tab, preserving placement. Earlier desktop Back-button evidence
+under `.development-artifacts/vr-menu-return-final-20260930/` describes the
+superseded embedded tablet. The detached desktop has an external Close button.
+The old detail-panel ray-placement fix remains in place.
+
+September 30 validation: the generated catalog and three native tests pass.
+`just vr-menu-tour --tab left:vr --preset steady_fast --validate --exit` exercises
+the new tab and native desktop capture with all four motion profiles. Retained
+passing results and mirror checks are under
+`.development-artifacts/vr-desktop-tab-review-20260930/`. Native eye images show
+the captured X11 desktop. A separate diagnostic temporarily minimized the mirror
+and showed VS Code and the GNOME dock inside the tablet; its final monitor
+comparison failed after restoring the minimized window, so that attempt is not
+an overall pass (`vr-desktop-tab-visible-20260930/`). The normal workflow leaves
+the mirror visible and can therefore capture its own image recursively. These
+are submitted-eye observations, not physical headset or mouse-click validation.
+
 A floor grid follows SteamVR’s calibrated floor, with a cyan outline of its
 play-area rectangle. Neither moves when the molecular model is moved or scaled.
 See [VR room appearance](vr_room_ui.md) for the demo and runtime fallback behavior.
@@ -316,3 +351,100 @@ the painting grid with both controllers to zoom the lattice; border grips retain
 window movement/resizing. Interior grips acquire within 9 cm in front or behind
 the panel, excluding the border grab zone. Yellow/green contact crosses indicate
 available/held interior grips. See the [control audit](audits/vr_lattice_controls_20260928.md).
+
+Assembly visibility follows document context: Part sessions omit Assembly from the
+right-hand tabs and controller navigation. The native viewer currently launches
+Part sessions only; future assembly hosts must explicitly pass assembly context
+to the sidebar. Properties remains the initial right-hand tab in either context.
+
+September 30 appearance regression: commit `a5eb541e` (September 29, 21:38 MDT)
+removed the Quick Expand accent entry while retaining a 15-element array. The
+remaining 14 initializers left an empty-key/black entry; substring matching
+selected it for every otherwise-unmatched button, bypassing danger, tab and
+fallback accents. The table now infers its size with `std::to_array`. Regression
+checks cover Close, Visualization tab and an unmapped representation button.
+The 19:56 reference is
+`.development-artifacts/vr-motion-shadows/run-motion-native/native/steady_fast-scroll-before/left.png`.
+Pre-fix runtime comparisons are retained under
+`.development-artifacts/vr-appearance-investigation-20260930/`.
+Comparing only against the 23:01 commit missed this earlier regression. Font
+source and sidebar text drawing are unchanged across the reference interval;
+the reference and current diagnostic both report sidebar scale 0.65. These
+facts do not establish physical-headset legibility or explain a separately
+reported apparent font-size difference.
+The rebuilt viewer restores colored outlines/tints in
+`vr-appearance-investigation-20260930/accent-fixed-initial/steady_fast/right-visualization-0/left.png`.
+Native sidebar tests pass (957 controls); Visualization stereo pixel checks
+pass under all four motion presets in `accent-fixed-final/`. The initial
+desktop-mirror comparison passed, but the final run's desktop comparison failed
+(matching fraction 0.018); retain that failed result rather than claiming full
+desktop-delivery or physical-headset validation. No pixel thresholds changed.
+
+The user confirmed the accent fix also resolved the apparent font-size change;
+no font-size adjustment was needed. The accent fix is committed and pushed as
+`63caa1d1`.
+
+Detached desktop initial evidence is retained under
+`.development-artifacts/vr-desktop-detached-20260930/`. The first `initial/` run
+passed input assertions but revealed a blank desktop when both hand menus closed;
+`visible/` corrects the render condition and passes stereo lens-rim checks (with
+released-trigger negative controls) and the desktop mirror comparison. The
+probe minimizes only its owned mirror for X11 desktop observation, then restores
+it before the final monitor check. These captures do not establish physical
+headset comfort or actual OS click delivery.
+
+Final detached-desktop validation: all four motion profiles passed the separate
+panel, grip movement, two-hand resize, external Close, partial/full/released
+trigger states, and stereo lens-rim positive/negative checks in
+`vr-desktop-detached-20260930/final/`. The magnifier capture shows actual VS Code
+text enlarged inside the lens. Three native regression tests passed. The final
+monitor comparison failed after restoring the minimized mirror (0.0119 matching
+fraction), while the earlier `visible/` monitor comparison passed; the final
+run therefore is not an overall desktop-delivery pass. No thresholds were relaxed.
+
+Remote borders (September 30): the desktop Close button is now above the outer
+VR frame with a visible gap, not merely outside the captured image. Its chrome
+has separate render/hit bounds; the desktop image and border bounds remain
+independent. Controller sidebars initially use scale 0.45 at 0.60 m forward
+(previously 0.65 at 0.95 m), with centers 0.24 m either side and 0.10 m below
+the eye. A user-selected size survives reopening.
+
+Aim at any interactive window border and hold Trigger to move it around the
+head at its current radius. Release fixes it in space. Quickly trigger twice
+and hold the second pull to resize by sweeping outward/inward from the window
+center. The shared handler covers both sidebars, desktop, View tools, legacy
+tool/trajectory/job panels and the lattice window; ordinary nearby grips remain
+available. The nearest whole panel blocks border hits behind it. Tracking loss,
+dashboard focus loss and panel closure release the gesture. Scale range is
+0.25–8.0 and panel ray reach is 30 m, allowing large distant windows to remain
+accessible. Frame feedback uses blue hover, amber movement and green resize.
+
+Remote border targets include an outside-only margin of at least 5 cm, so
+smaller nearby windows tolerate hand tremor without expanding into their
+buttons. Overlapping margins defer to actual foreground content, then the
+nearest rail. External desktop chrome, including Close, is excluded from the
+margin. A ray endpoint and colored frame show which border will receive a click.
+
+Remote-border validation is retained in
+`.development-artifacts/vr-remote-borders-20260930/final-pass/`: all four motion
+profiles passed both hands, fixed-radius movement, center-fixed resize, unchanged
+scene/tab, stereo frame-color checks and final monitor delivery. Five focused
+native tests and the automatic-build budget regression test also passed.
+Earlier failed runs remain alongside it. No motion-noise presets or pixel
+thresholds were relaxed: corrective aims use observed ray error, and gesture
+completion uses observed movement/size feedback. The desktop probe uses the
+same corrections after its first four-profile run missed a rail in variable_fast.
+Restoring the owned mirror now requests normal EWMH activation, resolving the
+previous covered-window monitor comparison failure without changing thresholds.
+
+Final desktop validation passed all four profiles plus the final monitor
+comparison in `vr-remote-borders-20260930/desktop-feedback-final/`: independent
+panel persistence, nearby grip movement/two-hand resize, remote trigger movement
+and resize, partial-trigger lens pixels with released-trigger negative controls,
+and external Close. The native desktop stereo capture visibly separates Close
+from the outer frame. Acquisition allows up to six measured corrective aims;
+`desktop-verified/` retains the slow/noisy miss with the previous three-attempt
+budget after cumulative panel enlargement. This verifies rendered stereo and
+monitor delivery, not physical headset comfort or OS click injection (disabled
+for scripted tests). Validation ran without builds overlapping VR sessions;
+available memory stayed around 14 GiB.

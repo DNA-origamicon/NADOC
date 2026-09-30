@@ -2667,6 +2667,17 @@ def _build_environment() -> dict[str, str]:
 
 
 def _ensure_viewer_built() -> None:
+    # Multiple API workers and VR probes share one build directory. Serialize
+    # automatic builds across processes, then recheck freshness under the lock.
+    import fcntl
+
+    _BUILD_DIR.mkdir(parents=True, exist_ok=True)
+    with (_BUILD_DIR / ".viewer-build.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        _build_viewer_locked()
+
+
+def _build_viewer_locked() -> None:
     sources = [
         _VIEWER_DIR / "CMakeLists.txt",
         *(_VIEWER_DIR / "src").glob("*.cpp"),
@@ -2701,12 +2712,13 @@ def _ensure_viewer_built() -> None:
             503, detail=f"VR viewer configure failed: {configure.stderr[-1200:]}"
         )
     build = subprocess.run(
-        ["/usr/bin/cmake", "--build", str(_BUILD_DIR)],
+        ["/usr/bin/cmake", "--build", str(_BUILD_DIR),
+         "--target", "nadoc-vr-viewer", "--parallel", "1"],
         env=env,
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=600,
         check=False,
     )
     if build.returncode != 0 or not _VIEWER.is_file():

@@ -4,9 +4,9 @@ import { docHeaders } from '../shared/doc_id.js'
 import { broadcastFingerprint } from '../viewer/broadcast_fingerprint.js'
 import { preparedImpostorSpec } from './impostor_material.js'
 
-export const VR_VIEW_KEYS = ['lengthHeatmap','sequences','undefinedBases','loopSkips','grid','overhangNames','clashes','deform','unfold','cadnano2d']
-export const VR_VIEW_LABELS = ['Length','Sequence','Undefined','Loop / skip','Grid','Overhang names','Clashes','Deform','Unfold','Cadnano 2D']
-// Retain wire flag positions for the remaining view tools. Bit 7 is retired.
+export const VR_VIEW_KEYS = ['lengthHeatmap','sequences','undefinedBases','loopSkips','grid','overhangNames','clashes','deform']
+export const VR_VIEW_LABELS = ['Length','Sequence','Undefined','Loop / skip','Grid','Overhang names','Clashes','Deform']
+// Retain wire flag positions for the remaining view tools. Bits 7, 9 and 10 are retired.
 const viewBit = i => 1 << (i < 7 ? i : i + 1)
 const MAX_VERTICES = 4000000
 const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve))
@@ -28,13 +28,13 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
   const panel=doc.createElement('canvas');panel.width=768;panel.height=768
   const c=panel.getContext('2d');c.fillStyle='#111111';c.fillRect(0,0,768,768)
   c.fillStyle='#e0eaff';c.font='bold 28px sans-serif';c.fillText('VIEW TOOLS',24,40)
-  const desktopExpanded=doc.querySelector('[data-vt="expanded"]')?.classList.contains('active')
-  const flags=desktopExpanded ? 256 : VR_VIEW_KEYS.reduce((v,k,i)=>v|(doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?viewBit(i):0),0) | (simulationViewActive(doc)?2048:0)
+  const desktopOnlyLayout=['expanded','unfold','cadnano2d'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
+  const flags=desktopOnlyLayout ? 256 : VR_VIEW_KEYS.reduce((v,k,i)=>v|(doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?viewBit(i):0),0) | (simulationViewActive(doc)?2048:0)
   for(let i=0;i<VR_VIEW_KEYS.length;i++) {
     const b=doc.querySelector(`[data-vt="${VR_VIEW_KEYS[i]}"]`),px=16+(i%2)*376,py=62+Math.floor(i/2)*112
     // Read the desktop's actual computed colors, including its active tint.
     // SVG children retain their explicit RGB values and gradient definitions.
-    const desktopStyle=b?doc.defaultView.getComputedStyle(b):null
+    const desktopStyle=b?(doc.defaultView??document.defaultView).getComputedStyle(b):null
     c.fillStyle='#131313';c.fillRect(px,py,360,100)
     c.globalAlpha=.35;c.fillStyle=desktopStyle?.backgroundColor||'transparent';c.fillRect(px,py,360,100);c.globalAlpha=1
     c.strokeStyle=desktopStyle?.borderColor||'#6e7681';c.lineWidth=1;c.strokeRect(px+.5,py+.5,359,99)
@@ -48,10 +48,12 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
     c.fillStyle=flags&viewBit(i)?'#e0eaff':'#8592a5';c.font='bold 17px sans-serif';c.fillText(flags&viewBit(i)?'ON':'OFF',px+304,py+35)
   }
   c.fillStyle='#b6c7dc';c.font='18px sans-serif'
-  const words=(message || (!(flags&256)||(flags&1536)?'Layout inspection. Restore Deform and exit 2D layouts to edit.':'Left quiver: show / hide. Right quiver: scissors.')).split(' ')
+  const words=(message || (!(flags&256)?'Layout inspection. Restore Deform to edit.':'Left quiver: show / hide. Right quiver: scissors.')).split(' ')
   let line='',lineY=644
   for(const word of words){if(c.measureText(line+word).width>326){c.fillText(line,410,lineY);line='';lineY+=23}line+=word+' '}
   c.fillText(line,410,lineY)
+  c.strokeStyle='#6e7681';c.strokeRect(24,620,320,64)
+  c.fillStyle='#e0eaff';c.font='bold 22px sans-serif';c.fillText('DOCK / FOLLOW',48,661)
   const menu=allocate(panel)
   const mapUV=map=>{
     if(!map?.image)return null
@@ -134,7 +136,7 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
     }
     for(const child of o.children)visit(child)
   }
-  if(!panelOnly&&!desktopExpanded&&flags!==256)visit(scene);sphere.dispose()
+  if(!panelOnly&&!desktopOnlyLayout&&flags!==256)visit(scene);sphere.dispose()
   return {flags,menu,batches,triangles:new Float32Array(triangles),lines:new Float32Array(lines),sprites:new Float32Array(sprites),pixels:ctx.getImageData(0,0,2048,2048).data,width:2048,height:2048}
 }
 
@@ -147,7 +149,7 @@ export function encodeVRView(view,version,requestSequence=0) {
 }
 export function createVRViewTools({scene,getState,onError=console.error,doc=document}) {
   let busy=false,dirty=true,version=Math.floor(Math.random()*1e9)+1,last='',settle=0,stamp='',lastStampAt=0,message='',epoch=0,appliedSequence=0,lastGood=null,lastError=''
-  const fingerprint=()=>VR_VIEW_KEYS.map(k=>doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?'1':'0').join('')
+  const fingerprint=()=>[...VR_VIEW_KEYS,'expanded','unfold','cadnano2d'].map(k=>doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?'1':'0').join('')
   let geometry,design
   async function publish() {
     const s=getState(),now=performance.now()
@@ -195,16 +197,12 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
 }
 
 export function viewToolUnavailable(key,state) {
-  if(!['deform','unfold','cadnano2d'].includes(key))return ''
+  if(!VR_VIEW_KEYS.includes(key))return 'This view is not available in VR.'
+  if(key!=='deform')return ''
   const design=state.currentDesign
   const posed=!!design?.deformations?.length || !!design?.cluster_transforms?.some(c=>
     c.translation?.some(v=>Math.abs(v)>1e-9) || c.rotation?.some((v,i)=>Math.abs(v-(i===3?1:0))>1e-9))
-  if(key==='deform') {
-    if(state.unfoldActive||state.cadnanoActive)return 'Exit Unfold and Cadnano 2D before changing Deform.'
-    if(!posed)return 'This design is already straight; there is no deformation to toggle.'
-  } else if(!(key==='unfold'?state.unfoldActive:state.cadnanoActive)) {
-    if(state.atomisticMode!=='off')return 'Exit atomistic representation to use 2D layouts.'
-    if(posed&&state.deformVisuActive)return 'Turn Deform off before entering a 2D layout.'
-  }
+  if(state.unfoldActive||state.cadnanoActive)return 'Exit the desktop 2D layout before changing Deform.'
+  if(!posed)return 'This design is already straight; there is no deformation to toggle.'
   return ''
 }

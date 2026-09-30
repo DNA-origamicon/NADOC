@@ -142,6 +142,9 @@ class Ligation {
     }
     static float scissorAngle(float value) {return .65F*(1.F-glm::clamp(value/0.9F,0.F,1.F));}
     template<class Line> void scissors(glm::vec3 center,glm::quat orientation,float value,Line line) const {
+        // Model blades use +Y; align them with the controller's forward -Z ray.
+        // Rotate about the cutting center so the nick target stays between blades.
+        orientation=orientation*glm::angleAxis(-glm::half_pi<float>(),glm::vec3(1,0,0));
         const auto pivot=center-orientation*glm::vec3(0,.022F,0);
         auto stroke=[&](glm::vec3 a,glm::vec3 b,glm::vec3 color) {
             for(float z:{-.001F,0.F,.001F})line(pivot+orientation*(a+glm::vec3(0,0,z)),pivot+orientation*(b+glm::vec3(0,0,z)),color);

@@ -17,9 +17,12 @@ class VRViewTools {
     double parseMs=0,uploadMs=0;
     uint64_t sequence=0;int requested=0;
     std::array<int,2> hover{-1,-1};
+    nadoc_vr::MenuPlacement placement;
+    nadoc_vr::GripFrameState gripState=nadoc_vr::GripFrameState::idle;
+    static constexpr float half=.34666667F;
     glm::vec3 position{};glm::quat orientation{1,0,0,0};
     std::vector<V> triangles,lines;std::vector<Sprite> sprites;
-    static constexpr std::array<const char*,10> keys{"lengthHeatmap","sequences","undefinedBases","loopSkips","grid","overhangNames","clashes","deform","unfold","cadnano2d"};
+    static constexpr std::array<const char*,8> keys{"lengthHeatmap","sequences","undefinedBases","loopSkips","grid","overhangNames","clashes","deform"};
     GLuint program=0,vao=0,vbo=0,triangleVbo=0,lineVbo=0,texture=0;unsigned frames=0;
     size_t instanceCount() const {size_t n=0;for(const auto& b:batches)n+=b.instances.size();return n;}
     std::optional<nadoc_vr::BoundsSummary> sceneBounds() const {
@@ -34,7 +37,7 @@ class VRViewTools {
         for(const auto& sprite:sprites)bounds.includePoint(sprite.p,glm::length(sprite.size)*.5F);
         return bounds.summary(glm::mat4(1));
     }
-    bool inspectionLayout() const {return overrideScene() && (!(flags&256) || (flags&1536));}
+    bool inspectionLayout() const {return overrideScene() && !(flags&256);}
     bool overrideScene() const {return version && flags!=256;}
     void initialize() {
         const auto vs=compileShader(GL_VERTEX_SHADER,R"(#version 330 core
@@ -59,24 +62,36 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
     }
     void clearBatches(){for(auto& b:batches){if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}batches.clear();}
     void shutdown(){clearBatches();if(triangleVbo)glDeleteBuffers(1,&triangleVbo);if(lineVbo)glDeleteBuffers(1,&lineVbo);if(texture)glDeleteTextures(1,&texture);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(program)glDeleteProgram(program);}
-    void toggle(glm::vec3 head,glm::quat facing) {open=!open;hover={-1,-1};if(open){orientation=facing;position=head+facing*glm::vec3(-.34F,0,-.8F);}}
-    glm::vec3 world(glm::vec2 uv) const {return position+orientation*glm::vec3((uv.x-.5F)*.52F,(.5F-uv.y)*.52F,0);}
+    void syncPose(){position=placement.position();orientation=placement.orientation();}
+    void toggle(glm::vec3 head,glm::quat facing) {open=!open;hover={-1,-1};if(open){placement.openDocked(head+facing*glm::vec3(-.34F,0,-.8F),facing);syncPose();}}
+    glm::vec3 world(glm::vec2 uv) const {return placement.worldPoint({(uv.x-.5F)*2*half,(.5F-uv.y)*2*half,0});}
+    template<class Feedback> void grips(const std::array<nadoc_vr::HandPose,2>& hands,const std::array<bool,2>& clicked,std::array<bool,2>& blocked,Feedback feedback) {
+        if(!open)return;
+        placement.update(hands,half);
+        if(!blocked[0]&&!blocked[1]&&(clicked[0]||clicked[1])&&placement.beginBorderResize(hands,{-half,-half},{half,half})) {feedback(0,.52F);feedback(1,.52F);}
+        if(!placement.resizeActive()&&!placement.dragHand())for(size_t h=0;h<2;++h)
+            if(!blocked[h]&&clicked[h]&&placement.beginDrag(h,hands,{-half,-half},{half,half})){feedback(h,.48F);break;}
+        placement.update(hands,half);syncPose();
+        if(placement.resizeActive())blocked.fill(true);
+        if(placement.dragHand())blocked[*placement.dragHand()]=true;
+        const bool near=placement.nearBorder(hands[0],{-half,-half},{half,half})||placement.nearBorder(hands[1],{-half,-half},{half,half});
+        gripState=(placement.resizeActive()||placement.remoteMode()==2)?nadoc_vr::GripFrameState::resizing:(placement.dragHand()||placement.remoteMode()==1)?nadoc_vr::GripFrameState::moving:(near||placement.remoteHovered)?nadoc_vr::GripFrameState::ready:nadoc_vr::GripFrameState::idle;
+    }
     static glm::vec2 cell(size_t i){return {(16.F+(i%2)*376+180)/768,(62.F+(i/2)*112+50)/768};}
     std::optional<glm::vec2> hit(const nadoc_vr::HandPose& hand) const {
         if(!open||!hand.valid)return std::nullopt;
-        const auto inv=glm::inverse(orientation);const auto p=inv*(hand.position-position),d=inv*(hand.orientation*glm::vec3(0,0,-1));
-        if(std::abs(d.z)<1e-6)return std::nullopt;
-        const float distance=-p.z/d.z;if(distance<0||distance>3)return std::nullopt;
-        const auto q=p+distance*d;const glm::vec2 uv{q.x/.52F+.5F,.5F-q.y/.52F};
-        if(uv.x<0||uv.y<0||uv.x>1||uv.y>1)return std::nullopt;
-        return uv;
+        const auto p=placement.rayPanelLocalPoint(hand,{-half,-half},{half,half},30);
+        if(!p)return std::nullopt;
+        return glm::vec2(p->x/(2*half)+.5F,.5F-p->y/(2*half));
     }
+
     template<class Commit> void input(const std::array<nadoc_vr::HandPose,2>& hands,const std::array<bool,2>& clicked,std::array<bool,2>& blocked,Commit commit){
         hover={-1,-1};if(!open)return;
         for(size_t h=0;h<2;++h)if(auto uv=hit(hands[h])) {
             if(blocked[h])continue;
             blocked[h]=true;
             const float px=uv->x*768,py=uv->y*768;
+            if(clicked[h] && px>=24 && px<=344 && py>=620 && py<=684) {placement.toggleDock(h,hands,half);syncPose();continue;}
             for(int i=0;i<int(keys.size());++i){const auto c=cell(i)*768.F;if(std::abs(px-c.x)<180 && std::abs(py-c.y)<50){hover[h]=i;break;}}
             if(clicked[h]&&hover[h]>=0&&!waiting&&version){requested=hover[h];waiting=true;++sequence;commit(h);}
         }
@@ -86,7 +101,7 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
         const double started=glfwGetTime();
         std::ifstream in(path+".viewtools",std::ios::binary);char magic[8];std::array<uint32_t,10> h{};
         if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||h[0]!=4||h[1]==version)return false;
-        if((h[2]>=4096 || (h[2]&128))||h[3]+uint64_t(h[4])>4000000||h[3]%3||h[4]%2||h[5]>100000||h[6]!=2048||h[7]!=2048||h[8]>10000)return false;
+        if((h[2]>=4096 || (h[2]&(128|512|1024)))||h[3]+uint64_t(h[4])>4000000||h[3]%3||h[4]%2||h[5]>100000||h[6]!=2048||h[7]!=2048||h[8]>10000)return false;
         std::vector<V> t(h[3]),l(h[4]);std::vector<Sprite> s(h[5]);std::vector<unsigned char> rgba(2048*2048*4);
         static_assert(sizeof(V)==36 && sizeof(Sprite)==60 && sizeof(Instance)==80);
         if(!in.read((char*)t.data(),t.size()*sizeof(V))||!in.read((char*)l.data(),l.size()*sizeof(V))||!in.read((char*)s.data(),s.size()*sizeof(Sprite)))return false;
@@ -139,6 +154,9 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
         for(int i:hover)if(i>=0){const auto c=cell(i);const glm::vec2 d{180.F/768,50.F/768};
             const std::array<glm::vec2,4> corners{{c-d,c+glm::vec2(d.x,-d.y),c+d,c+glm::vec2(-d.x,d.y)}};
             for(int j=0;j<4;++j)for(int k:{j,(j+1)%4})border.push_back({world(corners[k])+orientation*glm::vec3(0,0,.001F),{1,.7F,.1F,1},{-1,-1}});}
+        nadoc_vr::drawGripFrame({{-half,-half},{half,half}},gripState,
+            [&](glm::vec3 a,glm::vec3 b,glm::vec3 color){for(auto p:{a,b})border.push_back({placement.worldPoint(p),glm::vec4(color,1),{-1,-1}});},
+            [](nadoc_vr::MenuPanelBounds,glm::vec3){});
         draw(vp,border,GL_LINES);
     }
     void renderScene(const glm::mat4& vp,const glm::mat4& model,glm::quat camera){

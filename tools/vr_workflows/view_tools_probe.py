@@ -64,13 +64,14 @@ def run(socket, output, action):
                 live.send('button',hand=1,button='grip',pressed=False);live.frame()
             forward=rotate(q,[0,0,-1]);forward[1]=0;forward/=np.linalg.norm(forward)
             right=np.cross(forward,[0,1,0])
+            holster=multiply(q,[np.sin(3*np.pi/8),0,0,np.cos(3*np.pi/8)])
             front=head-right*.28+forward*.4+[0,-.1,0]
             behind=head-right*.28-forward*.28+[0,.08,0]
             nick=live.state['ligation']['nick_active']
             reach(front.tolist(),q);dwell(.25)
             assert live.state['ligation']['quiver']['armed'][0]
             seq=live.state['ligation']['quiver']['sequence']
-            reach(behind.tolist(),q);dwell(.6)
+            reach(behind.tolist(),holster)
             assert live.state['ligation']['quiver']['sequence']==seq+1
             assert live.state['view_tools']['open']==(action=='equip')
             assert live.state['ligation']['nick_active']==nick,'Left gesture changed scissors'

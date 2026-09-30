@@ -21,8 +21,8 @@ def test_binary_limits_and_events():
     with pytest.raises(HTTPException):validate_and_rotate(data[:-1],np.eye(3))
     invalid=bytearray(data);struct.pack_into('<f',invalid,48,float('nan'))
     with pytest.raises(HTTPException):validate_and_rotate(invalid,np.eye(3))
-    for index in range(10):assert parse_event(dict(sequence=1,index=index))==dict(sequence=1,index=index)
-    for value in [None,{},dict(sequence=True,index=0),dict(sequence=1,index=10)]:assert parse_event(value) is None
+    for index in range(8):assert parse_event(dict(sequence=1,index=index))==dict(sequence=1,index=index)
+    for value in [None,{},dict(sequence=True,index=0),dict(sequence=1,index=8),dict(sequence=1,index=9),dict(sequence=1,index=10)]:assert parse_event(value) is None
 
 
 def test_instanced_mesh_rotates_pose_without_expanding_shared_geometry():
@@ -37,3 +37,8 @@ def test_instanced_mesh_rotates_pose_without_expanding_shared_geometry():
     assert list(posed[12:15])==[3,2,-1]
     assert np.allclose(posed[16:],[.2,.4,.6,.8])
     assert len(result)==len(data)
+
+@pytest.mark.parametrize('flag',[128,512,1024])
+def test_screen_layout_flags_are_rejected(flag):
+    data=bytearray(packet());struct.pack_into('<I',data,16,flag)
+    with pytest.raises(HTTPException):validate_and_rotate(data,np.eye(3))

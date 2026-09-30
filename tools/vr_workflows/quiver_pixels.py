@@ -12,7 +12,7 @@ def check(directory,offscreen=False):
     q=h['orientation_xyzw'];center=np.array(h['position'])+rotate(q,[0,0,-.12])
     equipped=s['ligation']['nick_active']
     if equipped:
-        points=[center+rotate(q,[side*np.sin(.65)*t,np.cos(.65)*t-.022,0]) for side in (-1,1) for t in (.025,.04,.052)]
+        points=[center+rotate(q,[side*np.sin(.65)*t,0,.022-np.cos(.65)*t]) for side in (-1,1) for t in (.025,.04,.052)]
     else:
         # Default selection radius is retained throughout this fixture. Spheres
         # use world-axis circles, unlike the controller-oriented scissors.

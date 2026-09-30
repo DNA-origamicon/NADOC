@@ -40,8 +40,8 @@ inline glm::mat4 poseMatrix(const HandPose& pose);
  */
 class MenuPlacement {
   public:
-    static constexpr float kMinimumScale = 0.55F;
-    static constexpr float kMaximumScale = 1.25F;
+    static constexpr float kMinimumScale = 0.25F;
+    static constexpr float kMaximumScale = 8.0F;
     static constexpr float kScaleStep = 0.10F;
     static constexpr float kDefaultScale = 0.75F;
     static constexpr float kMenuHalfWidth = 0.33F;
@@ -53,6 +53,7 @@ class MenuPlacement {
         anchorHand_ = std::min(hand, hands.size() - 1U);
         worldDocked_ = false;
         dragHand_.reset();
+        remoteMode_=0;
         resizeActive_ = false;
         position_ = fallbackPosition;
         orientation_ = glm::normalize(fallbackOrientation);
@@ -67,6 +68,7 @@ class MenuPlacement {
         orientation_ = glm::normalize(orientation);
         worldDocked_ = true;
         dragHand_.reset();
+        remoteMode_=0;
         resizeActive_ = false;
     }
 
@@ -74,6 +76,7 @@ class MenuPlacement {
         const std::array<HandPose, 2>& hands,
         float panelHalfWidth = kMenuHalfWidth) {
         panelHalfWidth_ = std::max(panelHalfWidth, 1.0e-4F);
+        if(remoteMode_)return;
         if (resizeActive_) {
             if (std::any_of(hands.begin(), hands.end(), [](const HandPose& hand) {
                     return !hand.valid || !hand.pressed;
@@ -113,6 +116,7 @@ class MenuPlacement {
         size_t hand, const std::array<HandPose, 2>& hands,
         float panelHalfWidth = kMenuHalfWidth) {
         dragHand_.reset();
+        remoteMode_=0;
         resizeActive_ = false;
         if (!worldDocked_) {
             worldDocked_ = true;
@@ -122,6 +126,15 @@ class MenuPlacement {
         worldDocked_ = false;
         update(hands, panelHalfWidth);
     }
+
+    void setScale(float value) { scale_=glm::clamp(value,kMinimumScale,kMaximumScale); }
+    void remoteTransform(glm::vec3 position,glm::quat orientation,float scale,int mode) {
+        worldDocked_=true;dragHand_.reset();resizeActive_=false;
+        position_=position;orientation_=glm::normalize(orientation);setScale(scale);remoteMode_=mode;
+    }
+    void endRemote() {remoteMode_=0;}
+    int remoteMode() const {return remoteMode_;}
+    bool remoteHovered=false;
 
     [[nodiscard]] float borderDistanceMeters(
         const HandPose& hand, const glm::vec2& minimum,
@@ -169,7 +182,7 @@ class MenuPlacement {
         size_t hand, const std::array<HandPose, 2>& hands,
         const glm::vec2& minimum, const glm::vec2& maximum,
         bool allowPanelInterior = false) {
-        if (dragHand_ || resizeActive_ || hand >= hands.size() ||
+        if (remoteMode_ || dragHand_ || resizeActive_ || hand >= hands.size() ||
             !hands[hand].pressed ||
             (!nearBorder(hands[hand], minimum, maximum) &&
              !(allowPanelInterior && nearPanel(hands[hand], minimum, maximum)))) {
@@ -187,7 +200,7 @@ class MenuPlacement {
     [[nodiscard]] bool beginBorderResize(
         const std::array<HandPose, 2>& hands,
         const glm::vec2& minimum, const glm::vec2& maximum) {
-        if (resizeActive_ ||
+        if (remoteMode_ || resizeActive_ ||
             std::any_of(hands.begin(), hands.end(), [](const HandPose& hand) {
                 return !hand.valid || !hand.pressed;
             }) ||
@@ -232,7 +245,7 @@ class MenuPlacement {
 
     [[nodiscard]] std::optional<glm::vec3> rayPanelLocalPoint(
         const HandPose& hand, const glm::vec2& minimum,
-        const glm::vec2& maximum, float maximumDistance = 5.0F) const {
+        const glm::vec2& maximum, float maximumDistance = 30.0F) const {
         if (!hand.valid) return std::nullopt;
         const glm::vec3 direction = hand.orientation * glm::vec3(0, 0, -1);
         const glm::vec3 normal = orientation_ * glm::vec3(0, 0, 1);
@@ -264,6 +277,7 @@ class MenuPlacement {
         glm::radians(-38.0F), glm::vec3(1.0F, 0.0F, 0.0F));
     static constexpr glm::vec3 kControllerOffset{0.0F, 0.18F, -0.13F};
 
+    int remoteMode_=0;
     glm::vec3 position_{};
     glm::quat orientation_{1.0F, 0.0F, 0.0F, 0.0F};
     float scale_ = kDefaultScale;

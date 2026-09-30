@@ -24,7 +24,17 @@ struct SidebarControl {
 };
 class SidebarMenu {
  public:
-    explicit SidebarMenu(int hand=0): hand(hand) { for(size_t i=0;i<kSidebarTabs.size();++i) if(kSidebarTabs[i].hand==hand) tabs.push_back(i); offsets.resize(tabs.size()); if(hand==1) selected=1; }
+    // Native Part sessions must not expose Assembly controls. An assembly host
+    // must explicitly opt in with its actual document context.
+    explicit SidebarMenu(int hand=0,bool assemblyActive=false): hand(hand) {
+        for(size_t i=0;i<kSidebarTabs.size();++i) {
+            const auto& tab=kSidebarTabs[i];
+            if(tab.hand!=hand || (tab.key=="assembly" && !assemblyActive))continue;
+            if(tab.key=="properties")selected=tabs.size();
+            tabs.push_back(i);
+        }
+        offsets.resize(tabs.size());
+    }
     std::function<bool()> dynamic = []{return false;};
     std::function<std::vector<SidebarControl>(bool)> dynamicControls;
     std::function<MenuPanelBounds()> dynamicBounds;
@@ -371,9 +381,9 @@ class SidebarMenu {
             }
         };
         drawGripFrame(bounds(),gripState,line,fill,.04F);
-        const std::string gripHint=gripState==GripFrameState::resizing?"RESIZING - RELEASE GRIPS TO SET":
-            gripState==GripFrameState::moving?"MOVING - SECOND GRIP RESIZES":
-            "GRIP BORDER TO MOVE / TWO GRIPS TO RESIZE";
+        const std::string gripHint=gripState==GripFrameState::resizing?"RESIZING - RELEASE TO SET":
+            gripState==GripFrameState::moving?"MOVING - RELEASE TO SET":
+            "BORDER: HOLD TO MOVE / DOUBLE TO RESIZE";
         text("grip-hint",gripHint,{-strokeTextWidth(gripHint.size(),.0028F)*.5F,.721F},.0028F,
             ui_style::text,{{-.42F,.690F},{.42F,.733F}});
         const float cx=hand==0?.058F:-.058F;

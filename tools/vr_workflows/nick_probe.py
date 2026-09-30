@@ -76,6 +76,7 @@ def run(socket, output, action):
             head=np.mean([e['position'] for e in evidence['eyes']],axis=0)
             forward=rotate(q,[0,0,-1]);forward[1]=0;forward=forward/np.linalg.norm(forward)
             right=np.cross(forward,[0,1,0])
+            holster=multiply(q,[np.sin(3*np.pi/8),0,0,np.cos(3*np.pi/8)])
             front=head+right*.28+forward*.4+[0,-.1,0]
             behind=head+right*.28-forward*.28+[0,.08,0]
             def dwell(seconds,hand=1):
@@ -88,7 +89,7 @@ def run(socket, output, action):
                 reach(front.tolist(),q);dwell(.2)
                 assert live.state['ligation']['quiver']['armed'][1]
                 sequence=live.state['ligation']['quiver']['sequence']
-                reach(behind.tolist(),q);dwell(.6)
+                reach(behind.tolist(),holster)
                 assert live.state['ligation']['quiver']['sequence']==sequence+1
                 assert live.state['ligation']['nick_active']==equipped
                 dwell(.7)
@@ -105,7 +106,7 @@ def run(socket, output, action):
             left_behind=head-right*.28-forward*.28+[0,.08,0]
             for opened,label in [(True,'left-menu-open'),(False,'left-menu-closed')]:
                 for point,pause in [(left_front,.25),(left_behind,.6),(left_front,.05)]:
-                    trial=reach_target(live,point.tolist(),preset,9800+len(trials),target_position=point.tolist(),target_orientation=q,hand=0)
+                    trial=reach_target(live,point.tolist(),preset,9800+len(trials),target_position=point.tolist(),target_orientation=holster if point is left_behind else q,hand=0)
                     trials.append(trial);dwell(pause,hand=0)
                 (out/'reaches.json').write_text(json.dumps(trials,indent=2))
                 assert live.state['view_tools']['open']==opened
