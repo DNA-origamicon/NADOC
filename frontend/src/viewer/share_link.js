@@ -1,7 +1,7 @@
 import { initMeetingTarget } from './meeting_target_ui.js'
 import { initVRAvatarPublisher } from './vr_avatar_publisher.js'
 import { broadcastDocument } from './broadcast_fingerprint.js'
-import { waitForPublicHosting } from './hosting_setup.js'
+import { waitForPublicHosting, publicHostingMessage } from './hosting_setup.js'
 import { requireSharingCapabilities } from './sharing_capabilities.js'
 import { initNativeViewToolSharing } from './native_view_tool_sharing.js'
 import './sharing_controls.css'
@@ -18,13 +18,17 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
   const oldBroadcast = doc.getElementById('menu-help-broadcast')
   if (oldBroadcast) oldBroadcast.hidden = true
   const trigger = doc.getElementById('menu-file-sharing')
+  const qrTrigger = doc.getElementById('menu-presentation-qr')
+  const startTrigger = doc.getElementById('menu-presentation-start')
+  const stopTrigger = doc.getElementById('menu-presentation-stop')
   const dialog = doc.createElement('dialog')
   dialog.id = 'share-link-dialog'
   dialog.className = 'sharing-dialog'
   dialog.setAttribute('aria-labelledby', 'share-link-title')
   dialog.innerHTML = `<header class="sharing-header"><h2 id="share-link-title">Sharing</h2><button class="btn" data-close aria-label="Close">×</button></header>
-    <div class="sharing-actions" data-publish-actions><button class="btn btn--primary" data-create>Enable link</button><button class="btn btn--danger" data-stop-host disabled>End presentation</button></div>
+    <div class="sharing-actions" data-publish-actions><button class="btn btn--primary" data-create>Start presentation</button><button class="btn btn--danger" data-stop-host disabled>End presentation</button><button class="btn" data-reset-link hidden>Reset link</button></div>
     <div data-links class="sharing-actions sharing-links"></div>
+    <progress data-preparation hidden aria-label="Preparing presentation"></progress>
     <p class="sharing-status" data-connection role="status" aria-live="polite"></p>
     <p class="sharing-status" data-status role="status" aria-live="polite"></p>
     <details class="sharing-error" data-error hidden><summary>Error log</summary><pre data-error-log></pre></details>`
@@ -32,7 +36,31 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
   const el = selector => dialog.querySelector(selector), status = el('[data-status]'), list = el('[data-links]')
   let hostingAbort = new AbortController(), documentEpoch = 0
   let polling = false, busy = false, refreshing = false, disposed = false, revision = 0, selectedId = null, shares = [], capabilities = [], jobs = null, statusTimer = null, jobOptions = null, hadSharedJob = false
+  let invitation = null, invitationFlight = null
+  const designKey = () => broadcast?.store ? broadcastDocument(broadcast.store.getState()) : null
+  const designShares = value => (value.running === false ? [] : value.shares ?? []).filter(share => !broadcast?.store || share.key === designKey())
+  const invitationCache = new Map()
+  async function ensureInvitation(reset = false, background = false) {
+    const key = designKey(), epoch = documentEpoch
+    if (!key) return null
+    if (!reset && invitationFlight?.key === key && invitationFlight.epoch === epoch && (background || !invitationFlight.background)) return invitationFlight.promise
+    const promise = api('links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, reset, background }) }).then(value => {
+      if (value.pending) return null
+      if (!value.id || !value.url) throw new Error('Restart sharing hosting to enable persistent design links.')
+      invitationCache.set(key, value)
+      if (!disposed && epoch === documentEpoch && key === designKey()) { invitation = value; renderShares() }
+      return value
+    }).finally(() => { if (invitationFlight?.promise === promise) invitationFlight = null })
+    invitationFlight = { key, epoch, background, promise }
+    return promise
+  }
+  function prepareInvitation() {
+    invitation = invitationCache.get(designKey()) ?? null
+    renderShares()
+    void ensureInvitation(false, true).catch(() => { /* Start or opening Sharing reports actionable setup errors. */ })
+  }
   const currentRoom = () => shares.find(s => s.id === selectedId) ?? shares[0]
+  const currentInvitation = () => invitation ?? currentRoom()
   const meetingTarget = initMeetingTarget({ parent: dialog, document: doc, onError: reportError })
   async function stopNative() {
     preservingPerspective = true
@@ -96,10 +124,20 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     log.textContent += `${log.textContent ? '\n\n' : ''}${error.message ?? error}`
   }
   function syncButtons() {
-    meetingTarget.setBusy(busy || refreshing)
-    el('[data-create]').disabled = busy || refreshing || shares.length > 0
+    meetingTarget.setBusy(false)
+    el('[data-create]').disabled = busy || refreshing || shares.length > 0 || (!!broadcast?.store && !designKey())
+    if (startTrigger) startTrigger.disabled = el('[data-create]').disabled
+    el('[data-reset-link]').hidden = !invitation
+    el('[data-reset-link]').disabled = busy || refreshing
+    el('[data-preparation]').hidden = !busy
     el('[data-stop-host]').disabled = busy || refreshing || shares.length === 0
-    for (const copy of dialog.querySelectorAll('[data-copy-link], [data-copy-password]')) copy.disabled = busy || refreshing
+    if (stopTrigger) stopTrigger.disabled = el('[data-stop-host]').disabled
+    if (qrTrigger) {
+      const room = currentInvitation()
+      qrTrigger.disabled = !room?.qrUrl || (Number.isFinite(room.expiresAt) && room.expiresAt <= Date.now())
+      qrTrigger.title = room?.qrUrl ? 'Show the current passwordless guest invitation' : 'Open a design to prepare its passwordless QR code'
+    }
+    for (const copy of dialog.querySelectorAll('[data-copy-link], [data-copy-password]')) copy.disabled = false
   }
   async function stopHosting() {
     if (busy) return
@@ -123,12 +161,12 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     return value
   }
   function renderShares() {
-    meetingTarget.setShare(currentRoom())
+    meetingTarget.setShare(currentInvitation())
     selectedId = shares.some(share => share.id === selectedId) ? selectedId : shares[0]?.id ?? null
-    if (!currentRoom()) list.replaceChildren()
+    if (!currentInvitation()) list.replaceChildren()
     for (const [key, label, value] of [
-      ['link', 'Link', currentRoom()?.url],
-      ['password', 'Password', currentRoom()?.password],
+      ['link', 'Link', currentInvitation()?.url],
+      ['password', 'Password', currentInvitation()?.password],
     ]) {
       let row = el(`[data-share-field="${key}"]`)
       if (!value) { row?.remove(); continue }
@@ -165,7 +203,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
   }
   function connectionStatus(value) {
     el('[data-connection]').textContent = value.publicAccess?.state === 'ready'
-      ? 'Internet sharing ready' : value.publicAccess?.message ?? ''
+      ? 'Internet sharing ready' : publicHostingMessage(value.publicAccess)
   }
   async function refresh() {
     const ticket = ++revision
@@ -173,12 +211,12 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     try {
       const value = await api('status')
       if (disposed || ticket !== revision) return
-      shares = value.running === false ? [] : value.shares ?? []
+      shares = designShares(value)
       capabilities = value.capabilities ?? []
       connectionStatus(value)
       renderShares()
       if (value.updateRequired) reportError(new Error('End the presentation, then enable the link to load the updated viewer.'))
-      else if (shares.length && value.publicAccess?.state !== 'ready' && value.publicAccess) reportError(new Error(value.publicAccess.message))
+
     } catch (error) { if (!disposed && ticket === revision) reportError(error) }
     finally { if (!disposed && ticket === revision) { refreshing = false; syncButtons() } }
   }
@@ -193,7 +231,11 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
       await nativeTools?.settle()
       const nativeContext = nativeTools?.capture()
       nativeTools?.clear()
-      status.textContent = 'Enabling link…'
+      status.textContent = 'Preparing presentation…'
+      const link = await ensureInvitation()
+      if (!current()) return
+      if (link) await api(`links/${link.id}/preparing`, { method: 'POST' })
+      if (!current()) return
       const result = await exportView({ presentation: true })
       if (!current()) return
       if (!result) throw new Error('Another export is busy; please retry.')
@@ -202,11 +244,12 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
       connectionStatus(host)
       capabilities = host.capabilities ?? []
       // Another editor may have created a link while this dialog was connecting.
-      if (host.shares?.length) {
-        shares = host.shares; renderShares(); status.textContent = ''; return
+      if (designShares(host).length) {
+        shares = designShares(host); renderShares(); status.textContent = ''; return
       }
       requireSharingCapabilities(result, capabilities)
-      const share = await api('create', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-NADOC-Title': encodeURIComponent(result.title) }, body: result.buffer })
+      status.textContent = 'Starting presentation…'
+      const share = await api('create', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-NADOC-Title': encodeURIComponent(result.title), ...(link ? { 'X-NADOC-Link': link.id } : {}) }, body: result.buffer })
       if (!current()) { await api(`shares/${share.id}`, { method: 'DELETE', keepalive: true }); return }
       if (!disposed) {
         shares = [share]; selectedId = share.id; renderShares()
@@ -215,13 +258,17 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
         status.textContent = ''
       }
     } catch (error) { if (current()) reportError(error) }
-    finally { busy = false; if (!disposed) { dialog.setAttribute('aria-busy', 'false'); syncButtons() } }
+    finally {
+      if (invitation && current()) void api(`links/${invitation.id}/preparing`, { method: 'DELETE' }).catch(() => {})
+      busy = false; if (!disposed) { dialog.setAttribute('aria-busy', 'false'); syncButtons() }
+    }
   }
   function documentClosed() {
     documentEpoch++; revision++; refreshing = false
     hostingAbort.abort(new DOMException('Part session closed', 'AbortError'))
     nativeTools?.clear()
-    const previous = shares; shares = []; selectedId = null; renderShares()
+    if (invitation) void api(`links/${invitation.id}/preparing`, { method: 'DELETE', keepalive: true }).catch(() => {})
+    const previous = shares; invitation = null; shares = []; selectedId = null; renderShares()
     status.textContent = ''
     for (const share of previous) void api(`shares/${share.id}`, { method: 'DELETE', keepalive: true }).catch(reportError)
   }
@@ -231,11 +278,36 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
   let identity = broadcast?.store ? broadcastDocument(broadcast.store.getState()) : null
   const unsubscribeDocument = broadcast?.store?.subscribe(() => {
     const next = broadcastDocument(broadcast.store.getState())
-    if (next !== identity) { identity = next; documentClosed() }
+    if (next !== identity) { identity = next; documentClosed(); prepareInvitation() }
   })
-  const show = () => { dialog.showModal(); if (!busy) refresh() }
+  const show = () => {
+    dialog.showModal()
+    if (!busy) {
+      void refresh()
+      void ensureInvitation().catch(reportError)
+    }
+  }
+  const startFromMenu = () => { if (!dialog.open) dialog.showModal(); void create() }
+  const resetLink = async () => {
+    if (busy || refreshing) return
+    busy = true; revision++; clearError(); syncButtons()
+    try {
+      await ensureInvitation(true)
+      shares = []; selectedId = null; renderShares()
+      status.textContent = 'Link reset. Previous invitations no longer work.'
+    } catch (error) { reportError(error) }
+    finally { busy = false; syncButtons() }
+  }
+  const showQR = () => meetingTarget.showQR()
+  const stopFromMenu = () => { void stopHosting().catch(error => controls.error(error.message)) }
+  startTrigger?.addEventListener('click', startFromMenu)
   trigger?.addEventListener('click', show)
+  qrTrigger?.addEventListener('click', showQR)
+  stopTrigger?.addEventListener('click', stopFromMenu)
+  syncButtons()
   el('[data-create]').onclick = create
+  el('[data-reset-link]').onclick = resetLink
+  if (designKey()) prepareInvitation()
   el('[data-close]').onclick = () => dialog.close()
   el('[data-stop-host]').onclick = () => { void stopHosting().catch(() => {}) }
   return { show, bindJobs(options) {
@@ -257,14 +329,15 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     clearInterval(statusTimer)
     statusTimer = setInterval(async () => {
       if (busy || disposed || polling) return
+      if (designKey() && !invitation && !invitationFlight) prepareInvitation()
       polling = true
       const ticket = revision
       try {
         const value = await api('status')
-        if (!disposed && !busy && !refreshing && ticket === revision) { shares = value.shares ?? []; capabilities = value.capabilities ?? []; connectionStatus(value); renderShares() }
+        if (!disposed && !busy && !refreshing && ticket === revision) { shares = designShares(value); capabilities = value.capabilities ?? []; connectionStatus(value); renderShares() }
       } catch { /* The next authenticated write reports an interruption. */ }
       finally { polling = false }
     }, 5000)
     return jobs
-  }, dispose() { meetingTarget.dispose(); vrAvatar.dispose(); documentClosed(); unsubscribeDocument?.(); hostWindow?.removeEventListener('nadoc:document-reset', documentClosed); hostWindow?.removeEventListener('pagehide', documentClosed); nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; trigger?.removeEventListener('click', show); dialog.remove() } }
+  }, dispose() { meetingTarget.dispose(); vrAvatar.dispose(); documentClosed(); unsubscribeDocument?.(); hostWindow?.removeEventListener('nadoc:document-reset', documentClosed); hostWindow?.removeEventListener('pagehide', documentClosed); nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; startTrigger?.removeEventListener('click', startFromMenu); trigger?.removeEventListener('click', show); qrTrigger?.removeEventListener('click', showQR); stopTrigger?.removeEventListener('click', stopFromMenu); dialog.remove() } }
 }

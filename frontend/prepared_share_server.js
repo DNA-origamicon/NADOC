@@ -16,13 +16,13 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
     } catch { /* Only explicitly configured Tailscale origins are trusted. */ }
     const outdated = async state => {
       const expected = await getBuildId(join(server.config.root, 'dist')).catch(() => null)
-      return !state.capabilities?.includes('persistent-sharing-v1') || (!!expected && state.buildId !== expected)
+      return !state.capabilities?.includes('design-links-v1') || (!!expected && state.buildId !== expected)
     }
     let starting = null, lifecycle = Promise.resolve(), resolvedCredentialPath = null, closing = false, retryTimer = null, backgroundError = null
     const credentialPath = () => resolvedCredentialPath ?? controlFile ?? shareControlFile(server.config.root, server.httpServer?.address()?.port ?? 5173)
     async function hostRequest(path, options = {}) {
       let config
-      try { config = JSON.parse(await readFile(credentialPath(), 'utf8')) } catch { throw new Error('Sharing host is not running. Choose Enable link to start it.') }
+      try { config = JSON.parse(await readFile(credentialPath(), 'utf8')) } catch { throw new Error('Sharing host is not running. Choose Start presentation to start it.') }
       if (!/^http:\/\/(?:\d{1,3}\.){3}\d{1,3}:\d+$/.test(config.url) || !/^[a-f0-9]{64}$/.test(config.token)) throw new Error('Invalid local share-host configuration')
       return transport({ root: server.config.root, controlFile: credentialPath(), config, path, options })
     }
@@ -112,10 +112,24 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
           catch { return send(200, { running: false, shares: [], publicAccess: { state: backgroundError ? 'unreachable' : 'checking', message: backgroundError || 'Preparing internet sharing in the background…' } }) }
         }
         if (req.method === 'POST' && path === '/__nadoc_share/start') return send(200, await ensureHost())
+        const linkRoute = path.match(/^\/__nadoc_share\/(links(?:\/[a-f0-9]{32}\/preparing)?)$/)
+        if (linkRoute && ['POST', 'DELETE'].includes(req.method)) {
+          const chunks = []; let size = 0
+          for await (const chunk of req) { size += chunk.length; if (size > 2048) return send(413, { error: 'Request too large' }); chunks.push(chunk) }
+          const body = Buffer.concat(chunks)
+          if (linkRoute[1] === 'links' && JSON.parse(body).background === true) {
+            // Allocation should not trigger provider setup or an upgrade while
+            // merely opening a file. The existing background lifecycle owns that.
+            let state
+            try { state = await hostRequest('/host/shares') } catch { return send(202, { pending: true }) }
+            if (!state.capabilities?.includes('design-links-v1')) return send(202, { pending: true })
+          } else await ensureHost()
+          return send(200, await hostRequest(`/host/${linkRoute[1]}`, { method: req.method, body }))
+        }
         if (req.method === 'POST' && path === '/__nadoc_share/create') {
           const chunks = []; let size = 0
           for await (const chunk of req) { size += chunk.length; if (size > 512 * 1024 * 1024) return send(413, { error: 'Package exceeds 512 MiB' }); chunks.push(chunk) }
-          return send(201, await hostRequest('/host/shares', { method: 'POST', headers: { 'X-NADOC-Title': req.headers['x-nadoc-title'] ?? 'Shared design' }, body: Buffer.concat(chunks) }))
+          return send(201, await hostRequest('/host/shares', { method: 'POST', headers: { 'X-NADOC-Title': req.headers['x-nadoc-title'] ?? 'Shared design', ...(req.headers['x-nadoc-link'] ? { 'X-NADOC-Link': req.headers['x-nadoc-link'] } : {}) }, body: Buffer.concat(chunks) }))
         }
         const content = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/content$/)
         if (req.method === 'POST' && content) {

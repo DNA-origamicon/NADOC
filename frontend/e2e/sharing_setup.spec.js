@@ -16,17 +16,20 @@ async function qrPixels(svg) {
 // Only the __e2e__ copy/history may persist; global teardown removes them and the
 // isolated Vite bridge. Provider calls are intercepted: no real public room.
 // Runner screenshots/traces are removed by the cleanup reporter on failure too.
-test('Enable link automatically waits for public access and publishes without a setup step', async ({ page }) => {
+test('Start waits for public access while its persistent invitation remains copyable', async ({ page }) => {
+  test.setTimeout(120000)
   let started = false, polls = 0, publications = 0, shared = null
   const pending = { state: 'dns_pending', message: 'Waiting for public DNS', checks: [] }
   const ready = { state: 'ready', message: 'Public DNS and HTTPS verified', checks: [] }
   await page.route('**/__nadoc_share/**', route => {
     const action = new URL(route.request().url()).pathname.split('/').pop()
+    if (action === 'links') return route.fulfill({ json: { id: 'a'.repeat(32), key: JSON.parse(route.request().postData()).key, url: 'https://example.invalid/viewer#invite=guest&password=required', qrUrl: 'https://example.invalid/viewer#invite=qr-guest&entry=qr', password: 'test-password' } })
+    if (action === 'preparing') return route.fulfill({ json: {} })
     if (action === 'start') { started = true; return route.fulfill({ json: { shares: [], publicAccess: pending } }) }
     if (action === 'stop') { started = false; shared = null; return route.fulfill({ json: {} }) }
     if (action === 'create') {
       expect(polls).toBeGreaterThan(1); publications++
-      shared = { id: 'a'.repeat(32), title: 'Setup test', url: 'https://example.invalid/viewer#invite=guest&password=required', qrUrl: 'https://example.invalid/viewer#invite=qr-guest&entry=qr', password: 'test-password', expiresAt: Date.now() + 60000 }
+      shared = { key: 'part:__e2e__auto-sharing', id: 'a'.repeat(32), title: 'Setup test', url: 'https://example.invalid/viewer#invite=guest&password=required', qrUrl: 'https://example.invalid/viewer#invite=qr-guest&entry=qr', password: 'test-password', expiresAt: Date.now() + 60000 }
       return route.fulfill({ json: shared })
     }
     return route.fulfill({ json: { running: started, shares: shared ? [shared] : [], ...(started ? { publicAccess: ++polls > 1 ? ready : pending } : {}) } })
@@ -43,11 +46,11 @@ test('Enable link automatically waits for public access and publishes without a 
   await expect(dialog.locator('[data-host-setup]')).toHaveCount(0)
   await expect(dialog.locator('[data-create]')).toBeEnabled()
   await expect(dialog.locator('[data-stop-host]')).toBeDisabled()
-  await expect(dialog.locator('[data-copy-link]')).toHaveCount(0)
+  await expect(dialog.locator('[data-copy-link]')).toBeVisible()
   await dialog.locator('[data-create]').click()
   await expect(dialog.locator('[data-status]')).toHaveText('Waiting for public DNS')
   expect(publications).toBe(0)
-  await expect(dialog.locator('[data-copy-link]')).toBeVisible({ timeout: 20000 })
+  await expect(dialog.locator('[data-stop-host]')).toBeEnabled({ timeout: 20000 })
   await expect(dialog.locator('[data-create]')).toBeDisabled()
   await expect(dialog.locator('[data-stop-host]')).toBeEnabled()
   await expect(dialog.locator('[data-status]')).toBeEmpty()
@@ -100,12 +103,27 @@ test('Enable link automatically waits for public access and publishes without a 
   await dialog.locator('[data-copy-password]').click()
   expect(await page.evaluate(() => window.__copiedShare)).toBe('test-password')
   await expect(dialog.locator('[data-status]')).toHaveText('Password copied')
-  await dialog.locator('[data-stop-host]').click()
+  await dialog.locator('[data-close]').click()
+  const presentation = page.locator('#menu-item-presentation')
+  await presentation.hover()
+  await expect(presentation.locator('> button')).toHaveText('Presentation')
+  await presentation.locator('#menu-presentation-qr').click()
+  const qrDialog = page.locator('#presentation-qr-dialog')
+  await expect(qrDialog).toBeVisible()
+  const invitationPixels = await qrDialog.locator('svg').evaluate(qrPixels)
+  expect(jsQR(new Uint8ClampedArray(invitationPixels.data), invitationPixels.size, invitationPixels.size)?.data).toBe(shared.qrUrl)
+  await qrDialog.locator('[data-close]').click()
+  await presentation.hover()
+  await presentation.locator('#menu-presentation-stop').click()
+  await expect(presentation.locator('#menu-presentation-stop')).toBeDisabled()
+  await expect(presentation.locator('#menu-presentation-qr')).toBeEnabled()
+  await presentation.hover()
+  await presentation.locator('#menu-file-sharing').click()
   await expect(dialog.locator('[data-create]')).toBeEnabled()
   await expect(dialog.locator('[data-stop-host]')).toBeDisabled()
-  await expect(dialog.locator('[data-copy-link]')).toHaveCount(0)
-  await expect(dialog.locator('[data-copy-password]')).toHaveCount(0)
-  await expect(dialog.locator('[data-guest-qr] svg')).toHaveCount(0)
+  await expect(dialog.locator('[data-copy-link]')).toBeVisible()
+  await expect(dialog.locator('[data-copy-password]')).toBeVisible()
+  await expect(dialog.locator('[data-guest-qr] svg')).toBeVisible()
   await page.route('**/__nadoc_share/start', route => route.fulfill({ status: 503, json: { error: 'Host connection failed' } }))
   await dialog.locator('[data-create]').click()
   const errors = dialog.locator('[data-error]')

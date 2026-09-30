@@ -17,19 +17,19 @@ available by default. Geographic reach does not mean unlimited simultaneous gues
    If the first hosting attempt shows a Tailscale approval URL, open it on the host
    and complete the account approval. This approval is never a guest requirement.
    See https://tailscale.com/docs/features/tailscale-funnel for current provider steps.
-4. Start NADOC and choose **File → Sharing… → Enable link**.
-   Server startup already builds missing guest-viewer assets and starts one public
-   connection in the background. The Sharing dialog shows its readiness even before
-   activation. Enabling waits for public DNS/HTTPS verification if still pending;
-   closing the dialog does not interrupt background setup. No design is published
-   until you enable its link.
-5. The link and password are visible in read-only fields. Double-click a field to
-   select its full value, or use its right-hand copy icon (**Copy link** or
-   **Copy password**). Send both to your guests.
-   **End presentation** disconnects guests and enables **Enable link** again,
-   while retaining the public connection. Closing the part session also revokes access.
-   Each activation gets two hours; expiry releases the shared data but keeps the
-   connection ready. Restarting the server invalidates all invitations.
+4. Start NADOC and open a design. Its persistent invitation is prepared automatically,
+   without exporting or uploading the design. Server startup keeps one public
+   connection warm. Choose **Presentation → Sharing…** to copy the link/password
+   or show the reusable passwordless QR.
+5. Choose **Presentation → Start** (or **Start presentation** in Sharing) to publish
+   the current design. Preparation shows a progress indicator; temporary connection
+   checks say they are retrying. Guests opening the link before Start see
+   **Presentation not active**, then **Preparing presentation…**, and automatically
+   reach the join screen when ready. Copy controls remain usable during preparation.
+   **End presentation** disconnects guests and releases the scene while preserving
+   the link/password/QR. Closing/changing the design, two-hour expiry, and server
+   restart also end active sessions. Choose Start again to reuse the invitation.
+   **Reset link** ends the session and invalidates the previous link, password, and QR.
    Errors appear in a collapsed **Error log** that you can expand.
    For optional diagnostics, run `node scripts/setup_sharing.mjs --check --browser`.
    The browser check may require `cd frontend && npx playwright install chromium`
@@ -59,7 +59,7 @@ management API.
   no workspace design, screenshot, trace, invitation file or browser profile.
 
 The browser check needs one free snapshot/guest slot; run it before a meeting.
-Continuous host checks run every 30 seconds. Each Enable link request waits automatically for public access before publication. A later outage is reported without revoking existing rooms.
+Continuous host checks run every 30 seconds. Each Start request waits automatically for public access before publication. A later outage is reported without revoking existing rooms.
 A green check demonstrates this public relay path from the host's network, not
 that every guest ISP permits the connection. A phone on cellular with Tailscale
 turned off is a useful independent final acceptance check.
@@ -68,24 +68,22 @@ turned off is a useful independent final acceptance check.
 
 `node scripts/setup_sharing.mjs --check` checks the running host without starting
 one or exposing a design. Add `--browser` for the complete guest check.
-Server startup prepares hosting automatically. Enable link also retries setup if needed. The CLI
+Server startup prepares hosting automatically. Start also retries setup if needed. The CLI
 is an optional diagnostic/setup tool, not a one-time requirement for each computer.
 The dialog shows the current DNS or HTTPS wait reason. Its fifteen-minute deadline
-also covers stalled startup/status requests; on timeout, Enable link becomes
+also covers stalled startup/status requests; on timeout, Start becomes
 available again and the error log explains the failure. The background host keeps
-running, and a late response cannot publish an invitation from the timed-out attempt.
+running, and a late response cannot publish a scene from the timed-out attempt.
 
 For NXDOMAIN, keep hosting running. The provider documents up to ten minutes for
 DNS publication; on Compy5000 on 2026-09-24 publication took longer than ten minutes.
-Automatic link creation and the optional setup command wait up to fifteen minutes, then reports failure with hosting
-left running so publication can finish; try Enable link again later (or run the optional `--check`). Do not send invitations
-until both public DNS checks pass. Restarting repeatedly can prolong the delay.
+Presentation activation and the optional setup command wait up to fifteen minutes, then stop that attempt while leaving hosting running; try Start again later (or run the optional `--check`). Links can be handed out before verification, but guests cannot connect until the public route is reachable. Restarting repeatedly can prolong the delay.
 If authoritative DNS still lacks the hostname, collect the checks for Tailscale
 support; do not ask guests to install Tailscale, disable certificate checking,
 modify hosts files, or replace the link with a raw IP address.
 
 A stale host must be stopped and restarted after a viewer/server upgrade; that
-invalidates old invitations. End the presentation before upgrading and restart
+ends active sessions but preserves persistent invitations. End the presentation before upgrading and restart
 the NADOC server. Background heartbeat checks do not upgrade an active host. Missing CLI/sign-in/approval errors require completing the
 named host setup step and retrying. If all three public ports are occupied, free
 only a known obsolete service or choose another host; NADOC does not overwrite it.
@@ -93,14 +91,17 @@ only a known obsolete service or choose another host; NADOC does not overwrite i
 ## Connection lifetime and resource use
 
 One public gateway serves all presentations. Opening additional files does not
-create tunnels or upload designs. Only explicitly enabled snapshots occupy host
+create tunnels or upload designs. Only explicitly started snapshots occupy host
 memory, and ending/expiry releases them. The gateway checks public access every
 30 seconds and receives a local editor heartbeat every 30 seconds. An abruptly
 terminated editor loses its gateway within 90 seconds; normal shutdown ends it
 immediately. Set `NADOC_SHARE_AUTOSTART=0` to disable automatic preparation.
 
-A warm, healthy connection avoids DNS publication on subsequent enables. First
+A warm, healthy connection avoids DNS publication on subsequent presentations. First
 startup and recovery can still encounter provider delays. Snapshot export and
 guest downloads still depend on design size and the network. No cloud storage
-is used. Links are currently fresh invitations per activation; automatic stable
-per-file URLs are not needed to reuse the connection.
+is used. Stable links are keyed by part/assembly identity in the private
+`~/.nadoc/presentation-links-<workspace hash>.json` on the hosting OS; existing `.nadoc` files are not rewritten.
+The host must remain online to display the waiting screen. A powered-off host
+produces the browser’s normal connection error. Moving to another host or changing
+its public hostname/port requires handing out the new address.

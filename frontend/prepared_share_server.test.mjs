@@ -18,7 +18,7 @@ test('a failed bootstrap is recovered only when the authenticated host responds'
     await writeFile(controlFile, JSON.stringify({ url: 'http://127.0.0.1:5184', token: 'a'.repeat(64) }))
     await writeFile(controlFile + '.status.json', JSON.stringify({ state: 'ready' }))
     throw new Error('Bootstrap timed out')
-  }, transport: async () => { requests++; if (!ready) throw new Error('Host unavailable'); return { shares: [], capabilities: ['persistent-sharing-v1', 'live-unlimited-frames-v1'] } } }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
+  }, transport: async () => { requests++; if (!ready) throw new Error('Host unavailable'); return { shares: [], capabilities: ['design-links-v1', 'persistent-sharing-v1', 'live-unlimited-frames-v1'] } } }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
   const start = () => fetch(`http://127.0.0.1:${editor.address().port}/__nadoc_share/start`, { method: 'POST', headers: { 'X-NADOC-Share': '1' } })
   assert.equal((await start()).status, 200)
   assert.equal(launches, 1); assert.equal(requests, 1)
@@ -41,6 +41,8 @@ test('editor middleware keeps host credentials local and publishes only from the
   preparedSharePlugin({ autoStart: false, controlFile, transport: async ({ config, path, options }) => { const response = await fetch(config.url + path, { ...options, headers: { ...options.headers, Authorization: `Bearer ${config.token}` } }); const result = await response.json(); if (!response.ok) throw new Error(result.error); return result }, launch: async () => { launches++ } }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
   const base = `http://127.0.0.1:${editor.address().port}`, headers = { 'X-NADOC-Share': '1', Origin: base }
   await fetch(base + '/__nadoc_share/status') // startup finds no detached host
+  const background = await fetch(base + '/__nadoc_share/links', { method: 'POST', headers, body: JSON.stringify({ key: 'part:background', background: true }) })
+  assert.equal(background.status, 202); assert.deepEqual(await background.json(), { pending: true }); assert.equal(launches, 0)
   await writeFile(controlFile, JSON.stringify({ url: hostUrl, token: host.controlToken }))
   const create = options => fetch(base + '/__nadoc_share/create', { method: 'POST', body: 'NADOCVW1test', ...options })
   assert.equal((await create()).status, 403)
@@ -98,7 +100,7 @@ test('a stale detached build is stopped and replaced before starting another inv
     transport: async ({ path }) => {
       if (!ready) throw new Error('Stopped')
       if (path === '/host/stop') { stops++; ready = false; return {} }
-      return { shares: [], capabilities: ['persistent-sharing-v1', 'live-unlimited-frames-v1'], buildId }
+      return { shares: [], capabilities: ['design-links-v1', 'persistent-sharing-v1', 'live-unlimited-frames-v1'], buildId }
     }, launch: async () => { launches++; ready = true; buildId = 'current' },
   }).configureServer({ config: { root }, httpServer: editor, middlewares: { use: fn => { handler = fn } } })
   const base = `http://127.0.0.1:${editor.address().port}/__nadoc_share`

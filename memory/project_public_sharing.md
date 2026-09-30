@@ -15,11 +15,20 @@ initially hid authoritative public NXDOMAIN. Public DNS subsequently appeared;
 network access must be verified publicly, not inferred from private browser success.
 
 The editor server warms one public gateway at startup, without publishing a design.
-File → Sharing → Enable link uses that connection; End presentation revokes rooms
-without stopping the gateway. Each enabled room gets two hours starting at activation.
-Part close/document changes revoke its invitation, including late uploads. Gateway
-shutdown/server restart closes all rooms. Managed hosts stop after 90 seconds without
-an editor heartbeat, protecting against abrupt editor-process death.
+Opening a part or assembly allocates a stable invitation without exporting or
+publishing its scene. Presentation → Sharing offers Copy link/password and a
+reusable guest QR; Presentation → Start exports and publishes the current design.
+Guests see an automatically updating inactive/preparing page until Start completes.
+Stop, document close/change, expiry, and host restart revoke sessions and release
+scene data, while retaining the design invitation. Reset link rotates its address,
+password, and QR and ends any active session. Host-local credentials are stored
+atomically in private `~/.nadoc/presentation-links-<workspace hash>.json` on the hosting OS, keyed by
+part/assembly ID; no existing design files are rewritten. Keep this file private.
+Links persist on this host at its current public address; changing computers or
+public hostname/port requires distributing the new address. With the host off,
+the browser cannot load a waiting page. Each active session still gets two hours.
+Late uploads after document close are revoked. Managed hosts stop after 90 seconds
+without an editor heartbeat, protecting against abrupt editor-process death.
 Background retries/heartbeats run every 30 seconds; active builds are not upgraded
 by these ticks. NADOC_SHARE_AUTOSTART=0 disables warming (used by isolated tests).
 No separate setup button or terminal command is required. Tailscale installation,
@@ -28,15 +37,14 @@ sign-in and owner approval remain host prerequisites.
 See `docs/sharing_host_setup.md`.
 The runtime checks Google + Cloudflare public DNS, pinned public IPv4 relay HTTPS
 with normal TLS validation and exact host identity, and isolated editor/admin URLs.
-New invitations remain blocked until verified; repeated checks retain existing rooms.
+Starting presentations remains blocked until verified; repeated checks retain existing rooms.
 The optional browser check verifies password denial/acceptance, scene load/orbit and
 isolation using a disposable invitation, revoked in finally. No workspace files.
 
 Preserve unrelated Tailscale services. Choose free supported HTTPS ports 443,8443,
 10000; never reset the provider or weaken passwords/certificates to work around DNS.
-Keep pending hosting running while DNS publishes. Host upgrades end old invitations;
-copy the new invitation/password after restarting. Current concurrency remains three
-guests plus presenter, and links expire with each presentation (two hours by default), never with gateway age.
+Keep pending hosting running while DNS publishes. Host upgrades end active sessions; stable invitations remain inactive until Start. Current concurrency remains three
+guests plus presenter, and active sessions expire after two hours by default, never with gateway age.
 Native Windows/WSL transport is preserved; the 2026-09-24 setup changes were exercised
 on Linux, not freshly executed on a new Windows installation.
 
@@ -45,7 +53,7 @@ on Linux, not freshly executed on a new Windows installation.
 New hosts expose `qrUrl` with a separate per-room 256-bit guest-only credential.
 The QR join bypasses the password only after server validation; ordinary guest
 links keep password authentication. A copied QR grants the same guest access
-until room expiry/revocation, so this is not proof of physical presence.
+whenever that design is presenting until Reset link, so this is not proof of physical presence.
 Sharing shows a QR, the combined AprilTag/40 mm QR sheet, and **Print large
 tracking QR** (150 mm including quiet zone, `qrmm=150` configures the phone).
 QR guests can start a local camera diagnostic showing a target outline and

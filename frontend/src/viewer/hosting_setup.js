@@ -1,4 +1,11 @@
-/** Automatic host startup and public-access wait for the ordinary Enable link flow. */
+/** Retryable connection checks are progress, not terminal presentation errors. */
+export function publicHostingMessage(access) {
+  if (!access) return ''
+  if (access.state === 'ready') return 'Internet sharing ready'
+  if (access.state === 'unreachable') return 'Still connecting—retrying automatically…'
+  return access.message || 'Connecting internet sharing…'
+}
+/** Automatic host startup and public-access wait for the ordinary Start presentation flow. */
 function pause(ms, signal) {
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted()
@@ -13,7 +20,7 @@ export async function waitForPublicHosting({ api, onProgress = () => {}, signal,
   const controller = new AbortController()
   const cancel = () => controller.abort(signal.reason)
   signal?.addEventListener('abort', cancel, { once: true })
-  const expired = () => controller.abort(new Error('Public access is still unavailable. Hosting will keep checking in the background; try Enable link again later.'))
+  const expired = () => controller.abort(new Error('Public access is still unavailable. Hosting will keep checking in the background; try Start presentation again later.'))
   const timer = setTimeout(expired, timeoutMs)
   const pendingSignal = controller.signal
   let aborted
@@ -26,12 +33,12 @@ export async function waitForPublicHosting({ api, onProgress = () => {}, signal,
     let host = await api('start', { method: 'POST', signal: pendingSignal })
     while (host.publicAccess && host.publicAccess.state !== 'ready') {
       pendingSignal.throwIfAborted()
-      onProgress(host.publicAccess.message || 'Checking public DNS and HTTPS…')
+      onProgress(publicHostingMessage(host.publicAccess))
       if (now() >= deadline) { expired(); pendingSignal.throwIfAborted() }
       await pause(Math.min(pollMs, Math.max(0, deadline - now())), pendingSignal)
       host = await api('status', { signal: pendingSignal })
-      if (host.running === false) throw new Error('Hosting stopped before the link was ready. Try Enable link again.')
-      if (!host.publicAccess) throw new Error('The hosting session changed before verification completed. Try Enable link again.')
+      if (host.running === false) throw new Error('Hosting stopped before the link was ready. Try Start presentation again.')
+      if (!host.publicAccess) throw new Error('The hosting session changed before verification completed. Try Start presentation again.')
     }
     pendingSignal.throwIfAborted()
     return host

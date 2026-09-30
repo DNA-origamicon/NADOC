@@ -37,3 +37,18 @@ it('uses the separate QR credential and exposes the larger tracking print only f
   expect(root.textContent).toContain('guest name')
   ui.dispose()
 })
+it('opens only a current passwordless QR and clears the display when it expires', () => {
+  const { ui } = setup()
+  const dialog = document.querySelector('#presentation-qr-dialog')
+  dialog.showModal = vi.fn()
+  ui.setShare(share); ui.showQR()
+  expect(dialog.showModal).not.toHaveBeenCalled()
+  const passwordless = { ...share, qrUrl: 'https://example.test/#invite=qr-only&entry=qr' }
+  ui.setShare(passwordless); ui.showQR()
+  expect(dialog.showModal).toHaveBeenCalledOnce()
+  expect(dialog.querySelector('svg')).not.toBeNull()
+  ui.setShare({ ...passwordless, expiresAt: 999 })
+  expect(dialog.querySelector('svg')).toBeNull()
+  expect(dialog.querySelector('[data-qr-unavailable]').hidden).toBe(false)
+  ui.dispose()
+})

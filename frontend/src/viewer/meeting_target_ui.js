@@ -4,12 +4,27 @@ import { createGuestQR, createMeetingTarget, createMobileTrackingTarget } from '
 export function initMeetingTarget({ parent, document: doc = document, onError = () => {}, now = Date.now }) {
   let share = null, busy = false, renderedURL = ''
   const root = doc.createElement('section'); root.className = 'meeting-target'; root.hidden = true
-  root.innerHTML = '<div data-guest-qr></div><p data-join-instructions></p><button type="button" class="btn" data-print-meeting-target>Print meeting target</button><button type="button" class="btn" data-print-mobile-target hidden>Print large tracking QR</button><p class="meeting-target-note">Includes a QR camera-tracking prototype and a reference marker for future headset alignment. Generate a new guest QR when you start a new presentation.</p>'
+  root.innerHTML = '<div data-guest-qr></div><p data-join-instructions></p><button type="button" class="btn" data-print-meeting-target>Print meeting target</button><button type="button" class="btn" data-print-mobile-target hidden>Print large tracking QR</button><p class="meeting-target-note">Includes a QR camera-tracking prototype and a reference marker for future headset alignment. The design’s QR is reusable. Reset the link to revoke old invitations.</p>'
   parent.querySelector('[data-links]').after(root)
   const qr = root.querySelector('[data-guest-qr]'), button = root.querySelector('button')
   const mobileButton = root.querySelector('[data-print-mobile-target]')
+  const qrDialog = doc.createElement('dialog')
+  qrDialog.id = 'presentation-qr-dialog'
+  qrDialog.className = 'sharing-dialog'
+  qrDialog.setAttribute('aria-labelledby', 'presentation-qr-title')
+  qrDialog.innerHTML = '<header class="sharing-header"><h2 id="presentation-qr-title">Passwordless link QR code</h2><button type="button" class="btn" data-close aria-label="Close">×</button></header><div class="meeting-target meeting-target--presentation"><div data-guest-qr></div><p>Scan to join with your guest name. Anyone with this QR can join without a password.</p><p data-qr-unavailable hidden>Open a design to prepare its passwordless invitation.</p></div>'
+  qrDialog.querySelector('[data-close]').onclick = () => qrDialog.close()
+  doc.body.append(qrDialog)
+  const presentationQR = qrDialog.querySelector('[data-guest-qr]')
   const active = () => !!share?.url && (!Number.isFinite(share.expiresAt) || share.expiresAt > now())
-  function update() { root.hidden = !active(); button.disabled = busy || !active(); mobileButton.disabled = button.disabled; mobileButton.hidden = !share?.qrUrl }
+  function update() {
+    root.hidden = !active(); button.disabled = busy || !active(); mobileButton.disabled = button.disabled; mobileButton.hidden = !share?.qrUrl
+    const available = active() && !!share?.qrUrl
+    const svg = available ? qr.innerHTML : ''
+    if (presentationQR.innerHTML !== svg) presentationQR.innerHTML = svg
+    qrDialog.querySelector('[data-qr-unavailable]').hidden = available
+    qrDialog.querySelector('.meeting-target > p').hidden = !available
+  }
   const print = mobile => {
     if (busy || !active()) { update(); return }
     let popup
@@ -31,6 +46,10 @@ export function initMeetingTarget({ parent, document: doc = document, onError = 
   button.onclick = () => print(false)
   mobileButton.onclick = () => print(true)
   return {
+    showQR() {
+      update()
+      if (!busy && active() && share?.qrUrl && !qrDialog.open) qrDialog.showModal()
+    },
     setShare(value) {
       share = value ? { ...value, url: value.qrUrl || value.url } : null
       const next = share?.url ?? ''
@@ -42,6 +61,6 @@ export function initMeetingTarget({ parent, document: doc = document, onError = 
       update()
     },
     setBusy(value) { busy = value; update() },
-    dispose() { share = null; root.remove() },
+    dispose() { share = null; root.remove(); qrDialog.remove() },
   }
 }

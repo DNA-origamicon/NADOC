@@ -66,3 +66,5 @@
 .meeting-target p { margin: var(--space-2) 0; font-size: var(--text-sm); }
 .meeting-target .meeting-target-note { color: var(--color-text-secondary); text-align: left; line-height: 1.45; }
 .meeting-target[hidden], .meeting-target [hidden] { display: none !important; }
+
+.meeting-target--presentation [data-guest-qr] { width: min(420px, 100%); }

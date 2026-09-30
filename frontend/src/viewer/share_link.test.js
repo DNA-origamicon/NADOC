@@ -19,7 +19,7 @@ it('switches create/stop availability, copies a usable guest link, and resets af
   el('[data-create]').click()
   await vi.waitFor(() => expect(el('[data-stop-host]').disabled).toBe(false))
   expect(el('[data-create]').disabled).toBe(true)
-  expect([...el('dialog').querySelectorAll('button')].map(b => b.getAttribute('aria-label') || b.textContent)).toEqual(['Close', 'Enable link', 'End presentation', 'Copy link', 'Copy password', 'Print meeting target', 'Print large tracking QR'])
+  expect([...el('dialog').querySelectorAll('button')].map(b => b.getAttribute('aria-label') || b.textContent)).toEqual(['Close', 'Start presentation', 'End presentation', 'Reset link', 'Copy link', 'Copy password', 'Print meeting target', 'Print large tracking QR'])
   expect(el('select, textarea, [data-clip-options]')).toBeNull()
   el('[data-copy-link]').click()
   await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenCalledOnce())
@@ -139,12 +139,12 @@ it('ends hosting from the persistent canvas controls and keeps them on a failed 
 
 it('mirrors native view tools on the same invitation while camera sharing is off', async () => {
   vi.useFakeTimers()
-  const share = { id: 'a'.repeat(32), title: 'Part', url: 'https://example.test/part', expiresAt: Date.now() + 60000 }
+  const share = { id: 'a'.repeat(32), key: 'part:part', title: 'Part', url: 'https://example.test/part', expiresAt: Date.now() + 60000 }
   const caps = ['share-content-v1', 'editor-broadcast-v1']
   let hosted = false
   const request = vi.fn(async path => ({ ok: true, json: async () => {
     if (path.endsWith('/create')) { hosted = true; return share }
-    if (path.endsWith('/content')) return share
+    if (path.endsWith('/content') || path.endsWith('/links')) return share
     return { capabilities: caps, shares: hosted ? [share] : [] }
   } }))
   const view = { viewTools: { sequences: false } }
@@ -204,4 +204,90 @@ it('closing a part during status refresh leaves Enable link usable and ignores t
   await Promise.resolve(); await Promise.resolve()
   expect(el('[data-link]')).toBeNull(); expect(el('[data-create]').disabled).toBe(false)
   ui.dispose()
+})
+
+it('Presentation menu shows the current passwordless QR and stops the same active presentation', async () => {
+  document.body.innerHTML = '<button id="menu-file-sharing"></button><button id="menu-presentation-qr"></button><button id="menu-presentation-stop"></button>'
+  const activeShare = { ...share, qrUrl: 'https://example.test/viewer.html#invite=qr-only&entry=qr' }
+  const { ui, request } = setup({ fetch: vi.fn(async path => ({ ok: true, json: async () => path.endsWith('/stop') ? {} : { shares: [activeShare] } })) })
+  const qrButton = el('#menu-presentation-qr'), stopButton = el('#menu-presentation-stop')
+  const qrDialog = el('#presentation-qr-dialog'); qrDialog.showModal = vi.fn()
+  expect(stopButton.disabled).toBe(true)
+  expect(qrButton.disabled).toBe(true)
+  el('#menu-file-sharing').click()
+  await vi.waitFor(() => expect(qrButton.disabled).toBe(false))
+  expect(stopButton.disabled).toBe(false)
+  qrButton.click()
+  expect(qrDialog.showModal).toHaveBeenCalledOnce()
+  expect(qrDialog.querySelector('svg').outerHTML).toBe(el('#share-link-dialog [data-guest-qr] svg').outerHTML)
+  expect(qrDialog.textContent).not.toContain(share.password)
+  const requestsBeforeStop = request.mock.calls.length
+  stopButton.click(); stopButton.click()
+  await vi.waitFor(() => expect(stopButton.disabled).toBe(true))
+  await vi.waitFor(() => expect(el('#presentation-controls').hidden).toBe(true))
+  expect(request.mock.calls.slice(requestsBeforeStop).filter(([path]) => path.endsWith('/stop'))).toHaveLength(1)
+  expect(qrButton.disabled).toBe(true)
+  expect(qrDialog.querySelector('svg')).toBeNull()
+  ui.dispose()
+  expect(el('#presentation-qr-dialog')).toBeNull()
+})
+
+it('Presentation menu preserves active sharing and displays stop failures', async () => {
+  document.body.innerHTML = '<button id="menu-presentation-stop"></button><button id="menu-presentation-qr"></button>'
+  const { ui } = setup({ fetch: async path => ({ ok: !path.endsWith('/stop'), json: async () => path.endsWith('/stop') ? { error: 'Host unavailable' } : { shares: [share] } }) })
+  ui.show()
+  await vi.waitFor(() => expect(el('#menu-presentation-stop').disabled).toBe(false))
+  expect(el('#menu-presentation-qr').disabled).toBe(true) // Password-only invitation.
+  el('#menu-presentation-stop').click()
+  await vi.waitFor(() => expect(el('#presentation-controls').textContent).toContain('Host unavailable'))
+  expect(el('#menu-presentation-stop').disabled).toBe(false)
+  expect(el('#presentation-controls').hidden).toBe(false)
+  ui.dispose()
+})
+
+it('allocates on open without export, starts from Presentation, keeps the link on Stop, and isolates switched designs', async () => {
+  document.body.innerHTML = '<button id="menu-presentation-start"></button><button id="menu-presentation-stop"></button>'
+  let changed, active = [], sequence = 0
+  const state = { currentDesign: { id: 'alpha' } }, links = new Map()
+  const store = { getState: () => state, subscribe: fn => { changed = fn; return () => {} } }
+  const request = vi.fn(async (url, options = {}) => ({ ok: true, json: async () => {
+    if (url.endsWith('/links')) {
+      const { key, reset } = JSON.parse(options.body)
+      if (!links.has(key) || reset) links.set(key, { ...share, key, id: String(++sequence).padStart(32, '0'), url: `https://example.test/${sequence}` })
+      if (reset) active = []
+      return links.get(key)
+    }
+    if (url.endsWith('/create')) { active = [links.get(`part:${state.currentDesign.id}`)]; return active[0] }
+    if (url.endsWith('/stop')) active = []
+    return { shares: active, capabilities: [], publicAccess: { state: 'ready' } }
+  } }))
+  const exportView = vi.fn(async () => ({ title: 'Part', buffer: new ArrayBuffer(16) }))
+  const ui = initShareLink({ exportView, broadcast: { store, prepared: { captureView: () => ({ scene: { uuid: 'native' }, view: {} }) } }, fetch: request })
+  el('#share-link-dialog').showModal = vi.fn()
+  try {
+    await vi.waitFor(() => expect(el('[data-link]')).not.toBeNull())
+    const original = el('[data-link]').value
+    expect(exportView).not.toHaveBeenCalled()
+    expect(el('#presentation-controls').hidden).toBe(true)
+    expect(el('#menu-presentation-start').disabled).toBe(false)
+    el('#menu-presentation-start').click()
+    await vi.waitFor(() => expect(el('#menu-presentation-stop').disabled).toBe(false))
+    expect(exportView).toHaveBeenCalledOnce()
+    expect(request.mock.calls.find(([url]) => url.endsWith('/create'))[1].headers['X-NADOC-Link']).toBe(active[0].id)
+    el('#menu-presentation-stop').click()
+    await vi.waitFor(() => expect(el('#menu-presentation-start').disabled).toBe(false))
+    expect(el('[data-link]').value).toBe(original)
+    state.currentDesign = { id: 'beta' }; changed()
+    await vi.waitFor(() => expect(el('[data-link]')?.value).toBe('https://example.test/2'))
+    state.currentDesign = { id: 'alpha' }; changed()
+    expect(el('[data-link]').value).toBe(original)
+    await vi.waitFor(() => expect(el('[data-reset-link]').disabled).toBe(false))
+    el('[data-reset-link]').click()
+    await vi.waitFor(() => expect(el('[data-link]').value).toBe('https://example.test/3'))
+    state.assemblyActive = true; state.currentAssembly = { id: 'alpha' }; changed()
+    await vi.waitFor(() => expect(el('[data-link]')?.value).toBe('https://example.test/4'))
+    expect(links.has('assembly:alpha')).toBe(true)
+    expect(links.get('part:alpha').url).toBe('https://example.test/3')
+    expect(exportView).toHaveBeenCalledOnce()
+  } finally { ui.dispose() }
 })

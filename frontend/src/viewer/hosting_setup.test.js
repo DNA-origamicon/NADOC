@@ -39,7 +39,7 @@ it('does not publish when hosting stops or loses its verified state', async () =
   vi.useFakeTimers()
   for (const changed of [{ running: false }, { running: true }]) {
     const api = vi.fn().mockResolvedValueOnce({ publicAccess: { state: 'checking' } }).mockResolvedValue(changed)
-    const result = expect(waitForPublicHosting({ api })).rejects.toThrow('Try Enable link again')
+    const result = expect(waitForPublicHosting({ api })).rejects.toThrow('Try Start presentation again')
     await vi.advanceTimersByTimeAsync(3000); await result
   }
 })
@@ -61,4 +61,12 @@ it.each(['start', 'status'])('times out a stalled %s request and aborts its tran
   await vi.advanceTimersByTimeAsync(10000)
   expect(api.mock.calls.map(([path]) => path)).toEqual(stalled === 'start' ? ['start'] : ['start', 'status'])
   expect(vi.getTimerCount()).toBe(0)
+})
+it('reports temporary HTTPS failures as retrying progress until readiness', async () => {
+  vi.useFakeTimers()
+  const api = vi.fn().mockResolvedValueOnce({ publicAccess: { state: 'unreachable', message: 'Public HTTPS verification failed' } }).mockResolvedValue({ publicAccess: { state: 'ready' } })
+  const onProgress = vi.fn(), waiting = waitForPublicHosting({ api, onProgress })
+  await vi.advanceTimersByTimeAsync(3000); await waiting
+  expect(onProgress).toHaveBeenCalledWith('Still connecting—retrying automatically…')
+  expect(onProgress.mock.calls.flat().join(' ')).not.toContain('failed')
 })

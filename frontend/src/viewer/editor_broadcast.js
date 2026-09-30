@@ -111,8 +111,8 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
       const value = await api('status'); if (disposed) return
       capabilities = value.capabilities ?? []
       el('room').replaceChildren(...(value.shares ?? []).map(share => { const option = doc.createElement('option'); option.value = share.id; option.textContent = share.title; return option }))
-      if (!value.capabilities?.includes('editor-broadcast-v1')) throw new Error(value.running ? 'This host was started before editor broadcasting was installed. After your current meeting, stop hosting and create a new share link to use this feature.' : 'Create a link with File → Sharing first.')
-      if (!value.shares.length) throw new Error('Create a link with File → Sharing first.')
+      if (!value.capabilities?.includes('editor-broadcast-v1')) throw new Error(value.running ? 'This host was started before editor broadcasting was installed. After your current meeting, stop hosting and create a new share link to use this feature.' : 'Create a link with Presentation → Sharing first.')
+      if (!value.shares.length) throw new Error('Create a link with Presentation → Sharing first.')
       el('start').disabled = false; message('Broadcasting is off. Guests will keep the same link and sign-in.')
     } catch (error) { message(error.message) }
   }

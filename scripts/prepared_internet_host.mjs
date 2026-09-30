@@ -5,6 +5,7 @@ import { promisify } from 'node:util'
 import { writeFile, unlink } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { designLinksFile } from './prepared_design_links.mjs'
 import { createPreparedHost } from './prepared_view_host.mjs'
 import { checkPublicAccess } from './sharing_public_access.mjs'
 import { internetOrigin, hasInternetRoute } from './prepared_internet_config.mjs'
@@ -29,7 +30,7 @@ async function main() {
   if (!controlFile) throw new Error('A private control file is required')
   await report({ state: 'starting' })
   const origin = internetOrigin(JSON.parse(await ts(['status', '--json'])), JSON.parse(await ts(['serve', 'status', '--json'])))
-  app = await createPreparedHost({ dist: resolve(flags['--dist']), publicOrigin: origin, lifetimeMs: Number(flags['--minutes'] || 120) * 60000, getPublicAccess: () => publicAccess, persistent: true, ownerLeaseMs: flags['--managed'] === 'true' ? 90000 : 0 })
+  app = await createPreparedHost({ dist: resolve(flags['--dist']), publicOrigin: origin, lifetimeMs: Number(flags['--minutes'] || 120) * 60000, getPublicAccess: () => publicAccess, persistent: true, linksFile: designLinksFile(flags['--dist']), ownerLeaseMs: flags['--managed'] === 'true' ? 90000 : 0 })
   const listen = (server, port) => new Promise((ok, fail) => { server.once('error', fail); server.listen(port, '127.0.0.1', ok) })
   await listen(app.server, 5183); await listen(app.controlServer, 5184)
   app.server.once('close', () => { void stop() })

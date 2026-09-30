@@ -1,3 +1,4 @@
+import { mountInvitationLobby } from './invitation_lobby.js'
 import { mountViewerHealth } from './viewer_health.js'
 import { mountMobileQRTracking } from './mobile_qr_tracking.js'
 import { createMeetingPing } from './meeting_ping.js'
@@ -6,11 +7,26 @@ import { mountMeetingPresentation } from './meeting_presentation.js'
 import { mountMeetingStatus } from './meeting_status.js'
 import { mountMeetingPresence } from './meeting_presence.js'
 import { mountPresenterAttendance } from './meeting_attendance.js'
-export function mountMeetingJoin({ viewer, document: doc = document, location: loc = location, fetch: request = fetch, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
+export function mountMeetingJoin({ viewer, document: doc = document, location: loc = location, fetch: request = fetch, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval, activeVerified = false, onInactive }) {
   const params = new URLSearchParams(loc.hash.slice(1)), token = params.get('invite')
   const room = params.get('room')
   const base = room && /^(?:[a-f0-9]{32}|default)$/.test(room) ? `/meeting/${room}` : '/meeting'
   if (!token) return () => {}
+  if (params.get('persistent') === '1' && !activeVerified) {
+    let disposePhase = () => {}, disposed = false
+    const options = { viewer, document: doc, location: loc, fetch: request, setInterval: repeat, clearInterval: cancel }
+    const wait = () => {
+      if (disposed) return
+      disposePhase()
+      disposePhase = mountInvitationLobby({ ...options, base, onActive: () => {
+        if (disposed) return
+        disposePhase()
+        disposePhase = mountMeetingJoin({ ...options, activeVerified: true, onInactive: () => queueMicrotask(wait) })
+      } })
+    }
+    wait()
+    return () => { disposed = true; disposePhase() }
+  }
   const dialog = doc.getElementById('join'), form = doc.getElementById('join-form')
   const error = doc.getElementById('join-error'), button = doc.getElementById('join-submit')
   const status = doc.getElementById('status'), identity = doc.getElementById('guest')
@@ -21,7 +37,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   if (passwordField) { passwordField.required = needsPassword; passwordField.value = '' }
   const abort = new AbortController()
   const sharedViews = new WeakSet()
-  let disposed = false, ended = false, timer = null, polling = false, busy = false, disconnectPresentation = () => {}
+  let disposed = false, ended = false, timer = null, promptTimer = null, polling = false, busy = false, disconnectPresentation = () => {}
   const display = mountMeetingStatus({ viewer, document: doc })
   const ping = createMeetingPing({ document: doc })
   let tracking = null
@@ -31,8 +47,10 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   function finish() {
     if (ended || disposed) return
     ended = true; abort.abort(); if (timer) cancel(timer); timer = null
+    if (promptTimer) cancel(promptTimer); promptTimer = null
     disconnectPresentation(); tracking?.dispose(); health.dispose(); presence?.dispose(); ping.dispose(); display.end(); identity.textContent = 'Presentation ended · Session ended'
     if (dialog.open) dialog.close()
+    onInactive?.()
   }
   doc.querySelector('.open').hidden = true
   dialog.showModal()
@@ -46,6 +64,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   async function loadSharedView(details) {
     if (sharedViews.has(viewer.current) && (!viewer.current?.packageHash || viewer.current.packageHash === details.revision)) return
     const response = await measuredRequest(`${base}/scene`, { signal: abort.signal })
+    if (response.status === 410 && onInactive) { finish(); return }
     if (!response.ok) throw new Error('The host is unavailable or the session has ended.')
     const size = Number(response.headers.get('Content-Length'))
     if (!Number.isFinite(size) || size <= 0 || size > 512 * 1024 * 1024) throw new Error('Invalid package size')
@@ -66,12 +85,14 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
         ...credential, name: doc.getElementById('guest-name').value.trim(), ...(needsPassword ? { password: passwordField?.value.trim() ?? '' } : {}) })
       if (disposed) return
       if (!response.ok) {
+        if (response.status === 410 && onInactive) { finish(); return }
         if (resume && [401, 403, 404, 405].includes(response.status)) return
         throw new Error(details.error || 'Could not join this session')
       }
       button.textContent = 'Loading design…'
       await loadSharedView(details)
-      if (disposed) return
+      if (disposed || ended) return
+      if (promptTimer) cancel(promptTimer); promptTimer = null
       identity.textContent = `${details.name} · Private test`
       if (passwordField) passwordField.value = ''
       dialog.close()
@@ -108,8 +129,18 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   }
   const submit = event => { event.preventDefault(); void enter() }
   form.addEventListener('submit', submit)
+  if (onInactive) promptTimer = repeat(async () => {
+    if (disposed || ended || busy || polling || !dialog.open) return
+    polling = true
+    try {
+      const response = await request(`${base}/availability`, { signal: abort.signal })
+      if (disposed || ended) return
+      if (response.status === 404 || (response.ok && (await response.json()).state !== 'active')) finish()
+    } catch { /* Keep the sign-in form usable through temporary network loss. */ }
+    finally { polling = false }
+  }, 3000)
   void enter(true)
-  return () => { disposed = true; abort.abort(); disconnectPresentation(); tracking?.dispose(); health.dispose(); presence?.dispose(); ping.dispose(); display.dispose(); if (timer) cancel(timer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
+  return () => { disposed = true; abort.abort(); disconnectPresentation(); tracking?.dispose(); health.dispose(); presence?.dispose(); ping.dispose(); display.dispose(); if (timer) cancel(timer); if (promptTimer) cancel(promptTimer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
 }
 
 /** A second invite can change only the fragment in an already-open viewer tab. */

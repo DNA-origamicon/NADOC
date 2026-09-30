@@ -2,6 +2,7 @@
 /** Meeting-scoped static test host. Deliberately independent of the editor API. */
 import { preparedHostBuildId } from './prepared_host_build.mjs'
 import http from 'node:http'
+import { createDesignLinks } from './prepared_design_links.mjs'
 import { readFile, readdir, writeFile, unlink } from 'node:fs/promises'
 import { resolve, join, basename } from 'node:path'
 import { randomBytes, timingSafeEqual, createHash } from 'node:crypto'
@@ -14,9 +15,11 @@ import { unpackTrajectory, updateTrajectory, initialTrajectory } from './prepare
 const same = (a, b) => typeof a === 'string' && /^[a-f0-9]{64}$/.test(a) && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 const mime = name => name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.html') ? 'text/html' : name.endsWith('.png') ? 'image/png' : name.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream'
 
-export async function createPreparedHost({ dist, packagePath, publicOrigin = '', lifetimeMs = 2 * 60 * 60 * 1000, maxGuests = 4, now = Date.now, getPublicAccess = null, persistent = false, ownerLeaseMs = 0 }) {
+export async function createPreparedHost({ dist, packagePath, publicOrigin = '', lifetimeMs = 2 * 60 * 60 * 1000, maxGuests = 4, now = Date.now, getPublicAccess = null, persistent = false, ownerLeaseMs = 0, linksFile = null }) {
   if (publicOrigin && (!publicOrigin.startsWith('https://') || new URL(publicOrigin).origin !== publicOrigin)) throw new Error('Public sharing requires an exact HTTPS origin')
   if (!Number.isFinite(lifetimeMs) || lifetimeMs < 1000 || lifetimeMs > 8 * 60 * 60 * 1000) throw new Error('Lifetime must be between one second and eight hours')
+  const designLinks = await createDesignLinks(linksFile)
+  const preparing = new Map()
   const buildId = await preparedHostBuildId(dist)
   const initial = packagePath ? await readFile(packagePath) : null
   const assets = new Map([['/viewer.html', await readFile(join(dist, 'viewer.html'))]])
@@ -26,10 +29,10 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const invite = randomBytes(32).toString('hex'), expiresAt = persistent ? null : now() + lifetimeMs
   const rooms = new Map(), controlToken = randomBytes(32).toString('hex'), probeId = randomBytes(16).toString('hex')
   let publicBase = publicOrigin, ownerSeenAt = now()
-  const summary = room => ({ id: room.id, title: room.title, revision: room.revision, participants: room.presentation.snapshot().participants, serverTime: now(), expiresAt: room.expiresAt, ...(room.trajectory ? { trajectory: { id: room.trajectory.id, count: room.trajectory.count, fps: room.trajectory.fps, state: room.presentation.snapshot().trajectory, serverTime: now() } } : {}), ...(room.password ? { password: room.password } : {}),
-    url: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.invite}${room.password ? '&password=required' : ''}`,
-    qrUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.qrToken}&entry=qr`,
-    presenterUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.presenterToken}&role=presenter${room.password ? '&password=required' : ''}` })
+  const summary = room => ({ id: room.id, ...(room.key ? { key: room.key } : {}), title: room.title, revision: room.revision, participants: room.presentation?.snapshot().participants ?? [], serverTime: now(), expiresAt: room.expiresAt, ...(room.trajectory ? { trajectory: { id: room.trajectory.id, count: room.trajectory.count, fps: room.trajectory.fps, state: room.presentation.snapshot().trajectory, serverTime: now() } } : {}), ...(room.password ? { password: room.password } : {}),
+    url: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.invite}${room.password ? '&password=required' : ''}${room.key ? '&persistent=1' : ''}`,
+    qrUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.qrToken}&entry=qr${room.key ? '&persistent=1' : ''}`,
+    ...(room.presenterToken ? { presenterUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.presenterToken}&role=presenter${room.password ? '&password=required' : ''}` } : {}) })
   function prepareContent(scene, replacing = null) {
     if (scene.length > 512 * 1024 * 1024 || scene.subarray(0, 8).toString() !== 'NADOCVW1') throw new Error('Choose a prepared .nadocview package (maximum 512 MiB)')
     const unpacked = unpackTrajectory(scene), others = [...rooms.values()].filter(room => room.id !== replacing)
@@ -46,11 +49,14 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     room.presentation.replaceContent(room.revision, initialTrajectory(room.trajectory, now))
     return summary(room)
   }
-  function createShare(bytes, title = 'Shared design', id = randomBytes(16).toString('hex')) {
+  function createShare(bytes, title = 'Shared design', id = randomBytes(16).toString('hex'), link = null) {
     if (getPublicAccess && getPublicAccess()?.state !== 'ready') throw new Error(getPublicAccess()?.message || 'Public access checks are still running. Wait before creating an invitation.')
+    if (rooms.has(id)) throw new Error('This design is already presenting.')
     if (rooms.size >= 8) throw new Error('Share capacity reached. Stop an existing share first (eight snapshots).')
     const { scene, trajectory, revision } = prepareContent(bytes)
     const room = { id, expiresAt: persistent ? now() + lifetimeMs : expiresAt, revision, title: String(title).slice(0, 200), scene, trajectory, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), presenterToken: randomBytes(32).toString('hex'), qrToken: randomBytes(32).toString('hex'), sessions: new Map(), presentation: createPresentationState({ id, revision, now }) }
+    if (link) Object.assign(room, link, { password: publicOrigin ? link.password : '' })
+    preparing.delete(id)
     if (trajectory) room.presentation.setTrajectory(initialTrajectory(trajectory, now))
     rooms.set(id, room)
     room.presence = createRoomPresence({ ...room, now })
@@ -84,10 +90,28 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['persistent-sharing-v1', 'editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'vr-avatar-v1', 'vr-ui-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['design-links-v1', 'persistent-sharing-v1', 'editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'vr-avatar-v1', 'vr-ui-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
       if (req.method === 'POST' && route === '/host/heartbeat') { ownerSeenAt = now(); return send(200, { ok: true }) }
       if (req.method === 'DELETE' && route === '/host/shares') {
         for (const id of rooms.keys()) endShare(id)
+        return send(200, { ok: true })
+      }
+      if (req.method === 'POST' && route === '/host/links') {
+        try {
+          const chunks = []; let size = 0
+          for await (const chunk of req) { size += chunk.length; if (size > 2048) return send(413, { error: 'Request too large' }); chunks.push(chunk) }
+          const { key, reset } = JSON.parse(Buffer.concat(chunks))
+          const previous = designLinks.get(key)
+          const link = await designLinks.ensure(key, reset === true)
+          if (reset && previous) { endShare(previous.id); preparing.delete(previous.id) }
+          return send(200, summary({ ...link, password: publicOrigin ? link.password : '' }))
+        } catch (error) { return send(400, { error: error.message }) }
+      }
+      const preparation = route.match(/^\/host\/links\/([a-f0-9]{32})\/preparing$/)
+      if (preparation && ['POST', 'DELETE'].includes(req.method)) {
+        if (!designLinks.find(preparation[1])) return send(404, { error: 'Invitation not found' })
+        if (req.method === 'POST') preparing.set(preparation[1], now() + 20 * 60 * 1000)
+        else preparing.delete(preparation[1])
         return send(200, { ok: true })
       }
       const content = route.match(/^\/host\/shares\/([a-f0-9]{32})\/content$/)
@@ -137,13 +161,21 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         try {
           const chunks = []; let size = 0
           for await (const chunk of req) { size += chunk.length; if (size > 512 * 1024 * 1024) return send(413, { error: 'Package too large' }); chunks.push(chunk) }
-          return send(201, createShare(Buffer.concat(chunks), decodeURIComponent(req.headers['x-nadoc-title'] ?? 'Shared design')))
+          const linkId = req.headers['x-nadoc-link']
+          const link = linkId ? designLinks.find(linkId) : null
+          if (linkId && !link) return send(404, { error: 'Invitation was reset. Copy the new link and start again.' })
+          return send(201, createShare(Buffer.concat(chunks), decodeURIComponent(req.headers['x-nadoc-title'] ?? 'Shared design'), link?.id, link))
         } catch (error) { return send(400, { error: error.message }) }
       }
       return send(404, { error: 'Unknown host action' })
     }
     if (req.method === 'GET' && route === '/__nadoc_public_health') return send(200, { service: 'nadoc-prepared-viewer', probeId })
     if (publicOrigin && management) return send(404, { error: 'Not found' })
+    const availability = route?.match(/^\/meeting\/([a-f0-9]{32})\/availability$/)
+    if (req.method === 'GET' && availability) {
+      if (!designLinks.find(availability[1])) return send(404, { error: 'This invitation is no longer available. Ask the presenter for a new link.' })
+      return send(200, { state: rooms.has(availability[1]) ? 'active' : preparing.get(availability[1]) > now() ? 'preparing' : 'inactive' })
+    }
     const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|share-view|health|pause|leave|trajectory|frame|live-frame)$/)
     const room = rooms.get(match ? match[1] : 'default')
     if (match) route = `/meeting/${match[2]}`
