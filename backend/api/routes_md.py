@@ -8098,7 +8098,7 @@ async def optimize_advanced_hardware(devices: str = "0") -> dict:
 @router.get("/md/optimize-advanced")
 async def optimize_advanced(
     devices: str = "0",
-    padding_nm: float = 1.2,
+    padding_nm: float = 6.0,
     minimize_steps: int = 10_000,
 ) -> dict:
     """Recommend Advanced-card settings for the active design on THIS machine.

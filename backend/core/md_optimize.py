@@ -150,7 +150,7 @@ def recommend_advanced(
     design,
     *,
     devices: str = "0",
-    padding_nm: float = 1.2,
+    padding_nm: float = 6.0,
     minimize_steps: int = 10_000,
     atomistic_model=None,
 ) -> dict:

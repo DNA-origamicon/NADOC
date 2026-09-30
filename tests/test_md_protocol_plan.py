@@ -650,7 +650,7 @@ def test_provenance_distinguishes_a_preset_default_from_a_user_choice(client):
     """Without this the wizard shows a number with no way to tell if changing it matters."""
     from_preset = _plan(client, relax_preset="literature")["request"]["padding_nm"]
     assert from_preset == {
-        "value": 2.0,
+        "value": 6.0,
         "provenance": "preset",
         "reason": "set by the Match the literature (Aksimentiev) preset",
     }

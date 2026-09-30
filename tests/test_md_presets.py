@@ -78,12 +78,12 @@ def test_no_preset_exposes_the_retired_water_carving_feature():
         assert "allow_water_shell_carve" not in preset.defaults
 
 
-def test_full_physics_disables_early_stop_and_pads_wider():
+def test_full_physics_disables_early_stop_and_preserves_padding_margin():
     assert PRESETS[FULL_PHYSICS].defaults["early_stop_relax"] is False
     assert PRESETS[STANDARD].defaults["early_stop_relax"] is True
     assert (
         PRESETS[FULL_PHYSICS].defaults["padding_nm"]
-        > PRESETS[STANDARD].defaults["padding_nm"]
+        >= PRESETS[STANDARD].defaults["padding_nm"]
     )
 
 
@@ -97,7 +97,7 @@ def test_literature_trades_nothing_for_speed():
     d = PRESETS[LITERATURE].defaults
     assert d["early_stop_relax"] is False  # never truncate a stage you will publish
     assert d["fast"] is False  # no hydrogen-mass repartitioning
-    assert d["padding_nm"] == 2.0  # the tutorial's bounding box +/- 20 A
+    assert d["padding_nm"] == 6.0  # NADOC safety padding, beyond the reference spacing
     assert d["salt_mode"] == "screening"  # Mg(H2O)6 neutralises, no sodium
     assert d["minimize_steps"] == 4_800  # the tutorial's literal figure
     assert "Methods Mol Biol 1811" in PRESETS[LITERATURE].reference
@@ -121,14 +121,14 @@ def test_design_speed_turns_every_measured_accelerator_on():
     d = PRESETS[DESIGN_SPEED].defaults
     assert d["fast"] is True  # HMR + 4 fs + GPU-resident
     assert d["early_stop_relax"] is True
-    assert d["padding_nm"] == 1.2  # the cheap bounding-box cell
+    assert d["padding_nm"] == 6.0  # speed presets retain the same solvent safety margin
     assert d["protocol"] == EXPLICIT_PROTOCOL  # same chemistry, only scheduling moves
 
 
 def test_the_two_wizard_tiers_disagree_on_every_speed_axis():
     """If they ever agreed on one, that axis would be a control with no effect."""
     fast, lit = PRESETS[DESIGN_SPEED].defaults, PRESETS[LITERATURE].defaults
-    for key in ("fast", "early_stop_relax", "padding_nm"):
+    for key in ("fast", "early_stop_relax"):
         assert fast[key] != lit[key], key
 
 
@@ -150,7 +150,7 @@ def test_every_preset_default_names_a_real_request_field():
 def test_apply_preset_fills_unset_fields():
     out = apply_preset(STANDARD, {"mg_conc_mM": 12.5}, explicit={"mg_conc_mM"})
     assert out["mg_conc_mM"] == 12.5  # untouched
-    assert out["padding_nm"] == 2.0  # from the preset (the tutorial's ±20 Å)
+    assert out["padding_nm"] == 6.0  # from the current preset
     assert out["early_stop_relax"] is True
 
 

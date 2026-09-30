@@ -2689,7 +2689,7 @@ def _overwrite_solute_coords(pdb_text: str, coords) -> str:
 def build_namd_solvated_package(
     design: Design,
     *,
-    padding_nm: float = 1.2,
+    padding_nm: float = 6.0,
     box_mode: str = DEFAULT_BOX_MODE,
     box_size_nm: "tuple[float | None, float | None, float | None] | None" = None,
     ion_conc_mM: float = 150.0,
@@ -2728,7 +2728,7 @@ def build_namd_solvated_package(
         Water is then placed fresh around the seeded conformation.  Row count must
         equal the built solute atom count or a ValueError is raised.
     padding_nm:
-        Water padding around the DNA bounding box (nm). Default 1.2 nm.
+        Water padding around the DNA bounding box (nm). Default 6.0 nm.
     ion_conc_mM:
         Target NaCl bulk concentration (mM). Default 150 mM.
     mg_conc_mM:
@@ -3169,7 +3169,7 @@ def build_namd_solvated_package(
 def get_solvation_stats(
     design: Design,
     *,
-    padding_nm: float = 1.2,
+    padding_nm: float = 6.0,
     ion_conc_mM: float = 150.0,
     mg_conc_mM: float = 0.0,
     mg_hexahydrate: bool = False,

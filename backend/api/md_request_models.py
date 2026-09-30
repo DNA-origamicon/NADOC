@@ -53,7 +53,7 @@ class CreateJobRequest(BaseModel):
     # Advanced overrides (all optional)
     ion_conc_mM: float = Field(0.0, ge=0.0)
     mg_conc_mM: float = Field(12.5, ge=0.0)
-    padding_nm: float = Field(1.2, gt=0.0)
+    padding_nm: float = Field(6.0, gt=0.0)
     box_size_nm: Optional[tuple[
         Optional[Annotated[float, Field(gt=0, allow_inf_nan=False)]],
         Optional[Annotated[float, Field(gt=0, allow_inf_nan=False)]],

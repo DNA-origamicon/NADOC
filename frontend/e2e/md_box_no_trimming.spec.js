@@ -31,15 +31,15 @@ test('View details preserves rotation sizing and padding without a trim warning'
   await expect.poll(() => page.evaluate(() => window.__nadocScene.getObjectByName('NAMD box and solvent details')?.visible)).toBe(true)
   const recommended = page.waitForResponse(response => response.url().includes('/md/protocol-box-preview') &&
     response.request().postDataJSON()?.box_mode === 'bbox' &&
-    response.request().postDataJSON()?.padding_nm === 2)
+    response.request().postDataJSON()?.padding_nm === 6)
   await page.fill('#md-box-padding', '3')
   await page.selectOption('#md-box-sizing', 'auto')
   const fitted = (await (await recommended).json()).box_preview
   const spans = fitted.solute_bounds_nm.max.map((v,i)=>v-fitted.solute_bounds_nm.min[i])
-  fitted.calculated_nm.forEach((v,i)=>expect(v-spans[i]).toBeCloseTo(4,2))
-  await expect(page.locator('#md-box-clearance')).toContainText('X− 2.00 / X+ 2.00')
-  await expect(page.locator('#md-box-clearance')).toContainText('Z− 2.00 / Z+ 2.00')
-  await expect(page.locator('#md-box-padding')).toHaveValue('2')
+  fitted.calculated_nm.forEach((v,i)=>expect(v-spans[i]).toBeCloseTo(12,2))
+  await expect(page.locator('#md-box-clearance')).toContainText('X− 6.00 / X+ 6.00')
+  await expect(page.locator('#md-box-clearance')).toContainText('Z− 6.00 / Z+ 6.00')
+  await expect(page.locator('#md-box-padding')).toHaveValue('6')
   await page.uncheck('#md-box-view-details')
   await page.check('#md-box-view-periodic')
   const ghosts = await page.evaluate(() => {

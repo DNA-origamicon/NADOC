@@ -1,7 +1,7 @@
 import './md_box_solvent.css'
 
 export const PREPARATION_KEYS = new Set(['padding_nm','box_mode','box_size_nm','salt_mode','mg_conc_mM','ion_conc_mM','graphene_temperature_K'])
-const DEFAULTS = {sizing:'auto',padding:2,x:10,y:10,z:10,salt:'screening',na:0,mg:12.5,temperature:300}
+const DEFAULTS = {sizing:'auto',padding:6,x:10,y:10,z:10,salt:'screening',na:0,mg:12.5,temperature:300}
 
 /** Bulk-salt estimate only: excluded molecular volume/counterions require preparation. */
 export function solventNumbers(dimensions, na, mg) {
@@ -144,7 +144,7 @@ export function initBoxSolvent({api,store,root=document}={}) {
   }
   function change(event){
     if(event.target===view || event.target===periodic){if((view.checked || periodic?.checked) && stale)schedule();else emit();return}
-    if(event.target===inputs.sizing && inputs.sizing.value==='auto')inputs.padding.value=2
+    if(event.target===inputs.sizing && inputs.sizing.value==='auto')inputs.padding.value=DEFAULTS.padding
     if(host.contains(event.target)){if(event.target===inputs.salt && inputs.salt.value==='screening'){inputs.na.value=0;inputs.mg.value=12.5}paint();schedule();save()}
     else if(event.target?.closest?.('#md-surface-body')){paint();schedule()}
   }

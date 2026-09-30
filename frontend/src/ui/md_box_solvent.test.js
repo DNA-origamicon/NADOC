@@ -66,7 +66,7 @@ it('tracks the latest calculation, reports failures inline and keeps automatic s
  expect(document.getElementById('md-box-x').value).toBe('12.000')
  document.getElementById('md-hard-surface-enable').checked=true
  document.getElementById('md-box-sizing').dispatchEvent(new Event('change',{bubbles:true}))
- expect(ui.payload()).toMatchObject({box_mode:'bbox',box_size_nm:null,padding_nm:2})
+ expect(ui.payload()).toMatchObject({box_mode:'bbox',box_size_nm:null,padding_nm:6})
  document.getElementById('md-box-sizing').value='rotation'
  document.getElementById('md-box-sizing').dispatchEvent(new Event('change',{bubbles:true}))
  expect(ui.payload().box_mode).toBe('rotation')
@@ -98,16 +98,16 @@ it('measures all six face clearances, including asymmetric and negative gaps',()
  expect(faceClearances([10,12,14],[0,0,0],null)).toBeNull()
 })
 
-it('recommends 2 nm per face for free DNA and displays measured clearance',async()=>{
+it('recommends 6 nm per face for free DNA and displays measured clearance',async()=>{
  const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
  for(const id of ['md-box-solvent-toggle','md-box-solvent-body','md-surface-body'])document.body.append(source.getElementById(id))
  const api={fetchProtocolBoxPreview:vi.fn(async()=>({box_preview:{selected_nm:[10,12,14],center_nm:[0,0,0],solute_bounds_nm:{min:[-3,-4,-5],max:[3,4,5]}}}))}
  ui=initBoxSolvent({api,store:{getState:()=>({}),subscribe:()=>()=>{}}})
- expect(ui.payload()).toMatchObject({box_mode:'bbox',padding_nm:2})
+ expect(ui.payload()).toMatchObject({box_mode:'bbox',padding_nm:6})
  document.getElementById('md-box-solvent-toggle').click()
  await vi.waitFor(()=>expect(document.getElementById('md-box-clearance').textContent).toContain('X− 2.00 / X+ 2.00'))
  ui.restore({box_mode:'rotation',padding_nm:3})
  const sizing=document.getElementById('md-box-sizing');sizing.value='auto';sizing.dispatchEvent(new Event('change',{bubbles:true}))
- expect(ui.payload()).toMatchObject({box_mode:'bbox',padding_nm:2})
+ expect(ui.payload()).toMatchObject({box_mode:'bbox',padding_nm:6})
  expect(document.getElementById('md-box-clearance').textContent).toContain('unavailable')
 })

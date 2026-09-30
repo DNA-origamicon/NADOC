@@ -4,9 +4,9 @@
 
 In **Simulations → NAMD → Box and solvent**, select:
 
-- **Recommended · 2 nm per face**: fits the current structure's axis-aligned
-  bounding box and resets requested padding to 2 nm on each face. Padding remains
-  editable. Selecting Recommended again resets it to 2 nm.
+- **Recommended · 6 nm per face**: fits the current structure's axis-aligned
+  bounding box and resets requested padding to 6 nm on each face. Padding remains
+  editable. Selecting Recommended again resets it to 6 nm.
 - **Current orientation · custom padding**: uses that bounding box with the
   requested padding.
 - **Allow any orientation**: fits a cube around the structure's rotational
@@ -14,8 +14,8 @@ In **Simulations → NAMD → Box and solvent**, select:
   envelope, not a rotational-diffusion estimate.
 - **Custom dimensions**: uses explicit X/Y/Z lengths; preparation validates fit.
 
-The 2 nm default provides 4 nm initial separation between opposing bounding
-envelopes. This is consistent with the water-buffer criterion in
+The 6 nm default provides 12 nm initial separation between opposing bounding
+envelopes. This deliberately exceeds the 4 nm image-buffer criterion in
 [Yoo & Aksimentiev (2013), Materials and Methods](https://pmc.ncbi.nlm.nih.gov/articles/PMC3864285/).
 It does not guarantee clearance throughout NPT contraction, deformation or rotation.
 Existing production/submission clearance guards and explicit overrides remain active.

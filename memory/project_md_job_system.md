@@ -6,6 +6,24 @@ review_after: 2026-10-01
 ---
 # MD job system
 
+## Solvent padding default (2026-09-30)
+
+New explicit-solvent jobs, the Recommended box control, hardware estimates, and
+all built-in explicit-solvent relaxation presets now default to 6 nm per face.
+This is NADOC's safety margin, deliberately larger than the literature's initial
+4 nm inter-image gap; it is not a claim that the reference used 6 nm per face.
+Explicit user values, saved setup choices and existing production cells retain
+their settings. The archive envelope audit is in
+`.development-artifacts/padding-envelope-20260930/`; reusable analysis is
+`tools/trajectory_padding_audit.py`. It reads only the final 20 ns of each selected
+trajectory and distinguishes aligned deformation from motion in the cell axes.
+Six eligible 24HB trajectories (related restarts, not independent replicas)
+required 5.68–5.97 nm per face from the prepared shape to enclose the aligned
+3σ envelope plus a 4 nm inter-envelope gap; retaining rotation reached 6.05 nm.
+Use 6.5 nm as a provisional allowance for this family, then verify equilibrated
+clearance. The user selected 6 nm per face as the application default based on this audit. Existing tight cells
+and one sparse 13-frame window limit this estimate; it is not a general guarantee.
+
 ## Bare gold qualification (2026-09-14)
 
 Neutral INTERFACE 12–6 Au has shared model/geometry/package modules and the

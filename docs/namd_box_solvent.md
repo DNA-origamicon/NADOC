@@ -1,9 +1,9 @@
 # Box and solvent
 
 In Simulations → NAMD, expand **Box and solvent** above the surface card. Choose
-Recommended (current bounding box + 2 nm per face), custom bounding-box padding,
+Recommended (current bounding box + 6 nm per face), custom bounding-box padding,
 Allow any orientation (rotation envelope), or explicit X/Y/Z dimensions in nm.
-Selecting Recommended resets padding to 2 nm. Explicit dimensions work on a blank
+Selecting Recommended resets padding to 6 nm. Explicit dimensions work on a blank
 part without first estimating DNA geometry. Fit modes recalculate when geometry,
 requested padding or surface settings change. Actual six-face water clearances are
 shown separately from requested envelope padding. Preparation does not automatically

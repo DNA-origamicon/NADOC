@@ -139,8 +139,8 @@ PRESETS: dict[str, RelaxPreset] = {
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "box_mode": "rotation",
-            # Reference padding; preview and preparation honor this without trimming.
-            "padding_nm": 2.0,
+            # NADOC safety default; the literature chemistry does not prescribe this box.
+            "padding_nm": 6.0,
             "early_stop_relax": True,
         },
         reference="Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018)",
@@ -157,10 +157,8 @@ PRESETS: dict[str, RelaxPreset] = {
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "box_mode": "rotation",
-            # Wider than Standard's (now-faithful) 2.0 nm: this is the tier whose
-            # numbers go in a paper, so give the solute more room to tumble than the
-            # reference strictly needs.
-            "padding_nm": 2.5,
+            # Same conservative padding floor as the other explicit-solvent presets.
+            "padding_nm": 6.0,
             "early_stop_relax": False,  # never truncate a stage you intend to publish
         },
         reference=(
@@ -182,7 +180,7 @@ PRESETS: dict[str, RelaxPreset] = {
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "box_mode": "bbox",
-            "padding_nm": 1.2,
+            "padding_nm": 6.0,
             "salt_mode": "screening",
             "early_stop_relax": True,
             "fast": True,
@@ -204,7 +202,7 @@ PRESETS: dict[str, RelaxPreset] = {
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "box_mode": "bbox",
-            "padding_nm": 1.2,
+            "padding_nm": 6.0,
             "salt_mode": "screening",
             "early_stop_relax": True,
             "fast": True,
@@ -221,13 +219,13 @@ PRESETS: dict[str, RelaxPreset] = {
             "The published protocol with nothing traded for speed. Full periodic water "
             "box, every stage run to its full length, standard hydrogen masses, and the paper's "
             "2 fs relaxation integrator rather than NADOC's 4 fs fast path. Slower, and "
-            "reproducible against the reference."
+            "uses NADOC's 6 nm-per-face solvent padding beyond the reference spacing."
         ),
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "box_mode": "rotation",
-            # The tutorial's own recipe is the DNA bounding box +/- 20 A.
-            "padding_nm": 2.0,
+            # NADOC uses 6 nm per face; this deliberately exceeds the reference spacing.
+            "padding_nm": 6.0,
             # Mg(H2O)6 neutralises, no sodium — the published ionic condition.
             "salt_mode": "screening",
             # The tutorial's literal figure.  Still a floor: minimisation has to scale

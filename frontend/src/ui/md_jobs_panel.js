@@ -1761,7 +1761,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         // the wizard, which reads the package PSF directly. No panel-side cache needed.
         return await api.optimizeMdAdvanced({
           devices: _wizardDevices(),
-          padding_nm: cur.padding_nm || 1.2,
+          padding_nm: cur.padding_nm ?? 6.0,
           minimize_steps: cur.minimize_steps || 10000,
         })
       },

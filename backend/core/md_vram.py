@@ -572,7 +572,7 @@ def clear_profile_cache() -> None:
     _PROFILE_CACHE.clear()
 
 
-def estimate_atoms_from_design_geometry(design, *, padding_nm: float = 1.2) -> Optional[int]:
+def estimate_atoms_from_design_geometry(design, *, padding_nm: float = 6.0) -> Optional[int]:
     """Fast, conservative solvated-atom estimate for interactive previews.
 
     Unlike :func:`estimate_profile_from_design`, this does not build the all-atom PDB.  That
@@ -627,7 +627,7 @@ def estimate_atoms_from_design_geometry(design, *, padding_nm: float = 1.2) -> O
 def estimate_profile_from_design(
     design,
     *,
-    padding_nm: float = 1.2,
+    padding_nm: float = 6.0,
     atomistic_model=None,
     nacl_mM: float = 0.0,
     mgcl2_mM: float = 12.5,
@@ -738,7 +738,7 @@ def classify_vram_fit(rec: Optional[dict]) -> str:
 
 
 def preflight_vram_advice(
-    design, *, padding_nm: float = 1.2, devices: str = "0", atomistic_model=None
+    design, *, padding_nm: float = 6.0, devices: str = "0", atomistic_model=None
 ) -> dict:
     """Pre-flight full-solvent size verdict computed from the dry design.
 

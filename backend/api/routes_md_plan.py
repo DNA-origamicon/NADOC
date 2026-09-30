@@ -246,7 +246,7 @@ def _provenance(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> dict:
     return out
 
 
-def _design_flags(*, padding_nm: float = 1.2) -> dict:
+def _design_flags(*, padding_nm: float = 6.0) -> dict:
     """Design facts that change the protocol, if a design is loaded (never raises)."""
     try:
         design = design_state.get_or_404()

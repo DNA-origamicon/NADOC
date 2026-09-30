@@ -5065,7 +5065,7 @@ export async function stopNativeVR() {
  *  (backs the Advanced card's ⚡ Optimize button). Read-only — it proposes, the
  *  panel applies only after the user confirms. Returns
  *  { recommended, rationale, warnings, facts }. See routes_md.py optimize_advanced. */
-export async function optimizeMdAdvanced({ devices = '0', padding_nm = 1.2, minimize_steps = 10000 } = {}) {
+export async function optimizeMdAdvanced({ devices = '0', padding_nm = 6.0, minimize_steps = 10000 } = {}) {
   const q = new URLSearchParams({
     devices, padding_nm: String(padding_nm), minimize_steps: String(minimize_steps),
   })

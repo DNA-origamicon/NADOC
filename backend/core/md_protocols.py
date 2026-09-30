@@ -3571,7 +3571,7 @@ def prepare_mgh_slow_release(
     ion_conc_mM: float = 0.0,
     mg_conc_mM: float = 12.5,
     salt_mode: str = "custom",
-    padding_nm: float = 1.2,
+    padding_nm: float = 6.0,
     box_mode: str = "rotation",
     box_size_nm: Optional[tuple[Optional[float], Optional[float], Optional[float]]] = None,
     #: Deprecated compatibility input. Cell geometry is now selected directly with
