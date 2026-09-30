@@ -14,6 +14,17 @@ changes. Isolate that regression rather than changing shadow quality or lighting
 Rendering experiments did not clear the timing gate and were reverted.
 See [investigation](../docs/audits/vr_motion_regression_20260929.md).
 
+## Quick Expand removed from VR (2026-09-29)
+
+VR now exports, parses and caches natural geometry only. The View Tools tablet
+has ten entries; the Expanded control and native animation are removed. End,
+plane, ligation and resize catalogs no longer calculate expanded placements.
+Legacy feedback readers accept old paired fields only for wire compatibility;
+there is no expansion rendering or interaction state. Desktop expansion stays
+separate and cannot override the natural VR model. Use model scaling and physical
+movement for close inspection. See the startup/load-time comparison in
+[removal audit](../docs/audits/vr_quick_expand_removal_20260929.md).
+
 ## Visible model during representation loading (2026-09-29)
 
 The frame-gap guard now draws an unlit point cloud from the displayed GPU
@@ -59,7 +70,7 @@ Normal launch now enters OpenXR before model export, with a head-height,
 view-facing loading panel and named preparation stages. Export uses a private
 copy of the document; native parsing is asynchronous, and GPU preparation submits
 loading frames during preparation. First-frame readiness continues to mean the part.
-Startup loads Full only (including Expanded Quick View). Other styles export and
+Startup loads Full in its natural pose only. Other styles export and
 parse on demand, with a counted-work percentage/bar inside the selected button;
 previous geometry stays visible. Cached CPU geometry is reused until scene refresh or budgeted eviction.
 Menu blur uses same-eye depth rejection; controller sticks, spheres and other
@@ -213,9 +224,9 @@ design separate from the menu before and throughout the switches.
 
 `representation_buffers.hpp` caches GPU instance buffers for unchanged static
 styles; one color per representation, prepared before interactive rendering.
-Natural/expanded ownership indexes are retained separately so object IDs remain
+Natural ownership indexes are retained so object IDs remain
 correct without rebuilding large hash maps on every style change. Highlighted,
-transformed, expanded and trajectory geometry bypasses the static GPU cache;
+transformed and trajectory geometry bypasses the static GPU cache;
 baked changes clear caches. See `docs/audits/vr_representation_switching_20260927.md`
 for timings, validation and remaining scope limits.
 

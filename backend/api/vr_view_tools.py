@@ -13,7 +13,7 @@ def validate_and_rotate(data, rotation):
     if len(data)<48 or data[:8]!=b'NADOCVT1':
         raise HTTPException(422,detail='Invalid VR display header')
     schema,version,flags,triangles,lines,sprites,width,height,batches,ack=struct.unpack_from('<10I',data,8)
-    if schema!=3 or version<1 or flags>=4096 or triangles%3 or lines%2 or triangles+lines>4000000 or sprites>100000 or batches>10000 or width!=2048 or height!=2048 or len(data)>MAX_BYTES:
+    if schema!=4 or version<1 or (flags>=4096 or flags&128) or triangles%3 or lines%2 or triangles+lines>4000000 or sprites>100000 or batches>10000 or width!=2048 or height!=2048 or len(data)>MAX_BYTES:
         raise HTTPException(422,detail='Invalid VR display dimensions')
     r=np.asarray(rotation,dtype=float)
     if r.shape!=(3,3) or not np.isfinite(r).all():raise HTTPException(422,detail='Invalid VR view rotation')
@@ -63,5 +63,5 @@ async def publish(request:Request):
 
 def parse_event(value):
     if not isinstance(value,dict) or type(value.get('sequence')) is not int or type(value.get('index')) is not int:return None
-    if value['sequence']<1 or not 0<=value['index']<11:return None
+    if value['sequence']<1 or not 0<=value['index']<10:return None
     return {'sequence':value['sequence'],'index':value['index']}

@@ -16,7 +16,6 @@ from backend.api.vr_view_tools import parse_event as parse_view_tool_event
 from backend.api.vr_simulations import parse_event as parse_simulation_event
 from backend.api.vr_share import parse_share_event
 
-import copy
 import gzip
 from functools import lru_cache
 import hashlib
@@ -242,15 +241,6 @@ class VRToolFeedbackRequest(BaseModel):
     preview_origin: Optional[list[float]] = Field(
         default=None, min_length=3, max_length=3
     )
-    expanded_face_position: Optional[list[float]] = Field(
-        default=None, min_length=3, max_length=3
-    )
-    expanded_face_normal: Optional[list[float]] = Field(
-        default=None, min_length=3, max_length=3
-    )
-    expanded_preview_origin: Optional[list[float]] = Field(
-        default=None, min_length=3, max_length=3
-    )
     occupied: bool = False
     deformed: bool = False
     footprint_resolved: bool = False
@@ -312,15 +302,6 @@ class VRPlaneFeedbackRequest(BaseModel):
         default=None, min_length=3, max_length=3
     )
     plane_half_extent_nm: Optional[float] = Field(default=None, gt=0, le=1e6)
-    expanded_plane_center: Optional[list[float]] = Field(
-        default=None, min_length=3, max_length=3
-    )
-    expanded_plane_normal: Optional[list[float]] = Field(
-        default=None, min_length=3, max_length=3
-    )
-    expanded_plane_half_extent_nm: Optional[float] = Field(
-        default=None, gt=0, le=1e6
-    )
 
 
 def _tailnet_origin(url: str | None) -> tuple[str, str, int] | None:
@@ -706,28 +687,15 @@ def _cluster_gizmo_handle_centers(
     return tuple(records)
 
 
-_SCENE_MANIFEST_CATEGORIES = ("primitive", "D", "A", "T", "W", "K", "J")
-
-
 class _SceneLineEmitter:
-    """Optional line sink plus constant-memory natural/Expanded parity digest."""
+    """Stream or retain selected natural-pose representation records."""
 
     def __init__(self, writer: Callable[[str], None] | None = None, representations=None):
         self._writer = writer
         self._representations = representations
         self._include = True
         self._lines: list[str] | None = [] if writer is None else None
-        self._active: str | None = None
-        self._digests: dict[str, dict[str, object]] = {}
         self.has_visible = False
-
-    def _category(self, representation: str, category: str):
-        categories = self._digests.setdefault(representation, {})
-        entry = categories.get(category)
-        if entry is None:
-            entry = [hashlib.blake2b(digest_size=20), 0]
-            categories[category] = entry
-        return entry
 
     def append(self, line: str) -> None:
         if line.startswith("R "):
@@ -737,55 +705,16 @@ class _SceneLineEmitter:
         if self._lines is not None:
             self._lines.append(line)
         else:
-            assert self._writer is not None
             self._writer(line)
-        fields = line.split()
-        if not fields or fields[0] == "#" or fields[0] == "NADOCVR":
-            return
-        record_type = fields[0]
-        if record_type == "R":
-            self._active = fields[1]
-            self._digests.setdefault(self._active, {})
-            return
-        if self._active is None:
-            return
-        if record_type in {"P", "C", "H", "B"}:
-            category = "primitive"
-            payload = f"{record_type} {fields[1]}"
+        if line.startswith(("P ", "C ", "H ", "B ")):
             self.has_visible = True
-        elif record_type in _SCENE_MANIFEST_CATEGORIES:
-            category = record_type
-            payload = (
-                " ".join(fields[:4])
-                if record_type == "J"
-                else " ".join(fields[:2])
-                if record_type == "K"
-                else line
-            )
-        else:
-            return
-        digest, count = self._category(self._active, category)
-        digest.update(payload.encode())
-        digest.update(b"\n")
-        self._category(self._active, category)[1] = count + 1
 
     def extend(self, lines) -> None:
         for line in lines:
             self.append(line)
 
     def text(self) -> str:
-        if self._lines is None:
-            raise RuntimeError("Streaming scene emitter has no text buffer")
         return "\n".join(self._lines) + "\n"
-
-    def manifest(self) -> dict[str, dict[str, tuple[int, str]]]:
-        return {
-            representation: {
-                category: (entry[1], entry[0].hexdigest())
-                for category, entry in categories.items()
-            }
-            for representation, categories in self._digests.items()
-        }
 
 
 def _serialize_scene(
@@ -802,7 +731,7 @@ def _serialize_scene(
     extra_geometry=None,
     representations=None,
     work_progress=lambda fraction: None,
-) -> str | dict[str, dict[str, tuple[int, str]]]:
+) -> str | None:
     """Create the deliberately trivial line-oriented format read by the C++ viewer."""
     # Stable IDs and aliases need the loop-copy identity that the canonical
     # geometry transport deliberately leaves implicit in emission order.
@@ -2636,260 +2565,7 @@ def _serialize_scene(
         raise HTTPException(
             409, detail="The active design contains no display geometry."
         )
-    return lines.text() if line_writer is None else lines.manifest()
-
-
-def _expanded_helix_offsets(design, spacing_nm: float = 5.0) -> dict[str, np.ndarray]:
-    """Mirror Expanded Quick View's per-helix lateral translations.
-
-    This is display-only geometry.  The 2.25 nm reference spacing and centroid
-    expansion intentionally match ``frontend/src/scene/expanded_spacing.js``.
-    """
-    helices = list(getattr(design, "helices", []) or [])
-    if not helices:
-        return {}
-    first = helices[0]
-    start = np.asarray(
-        [first.axis_start.x, first.axis_start.y, first.axis_start.z], dtype=float
-    )
-    end = np.asarray(
-        [first.axis_end.x, first.axis_end.y, first.axis_end.z], dtype=float
-    )
-    delta = np.abs(end - start)
-    # Match desktop Expanded Quick View's deterministic Z/Y/X tie priority.
-    axis_index = (
-        2 if delta[2] >= delta[0] and delta[2] >= delta[1]
-        else 1 if delta[1] >= delta[0] and delta[1] >= delta[2]
-        else 0
-    )
-    lateral_indices = [index for index in range(3) if index != axis_index]
-    starts = np.asarray(
-        [
-            [helix.axis_start.x, helix.axis_start.y, helix.axis_start.z]
-            for helix in helices
-        ],
-        dtype=float,
-    )
-    centroid = np.mean(starts[:, lateral_indices], axis=0)
-    scale_delta = float(spacing_nm) / 2.25 - 1.0
-    result: dict[str, np.ndarray] = {}
-    for helix, position in zip(helices, starts):
-        offset = np.zeros(3, dtype=float)
-        offset[lateral_indices] = (position[lateral_indices] - centroid) * scale_delta
-        result[str(helix.id)] = offset
-    return result
-
-
-def _expanded_scene_inputs(design, nucleotides, axes, atomistic_model):
-    """Translate immutable scene inputs to Expanded Quick View's target pose."""
-    offsets = _expanded_helix_offsets(design)
-    expanded_nucleotides = copy.deepcopy(nucleotides)
-
-    extension_parents: dict[str, str] = {}
-    strands = {str(strand.id): strand for strand in getattr(design, "strands", [])}
-    for extension in getattr(design, "extensions", []) or []:
-        strand = strands.get(str(extension.strand_id))
-        domains = list(getattr(strand, "domains", []) or []) if strand else []
-        if not domains:
-            continue
-        domain = domains[0] if extension.end == "five_prime" else domains[-1]
-        extension_parents[f"__ext_{extension.id}"] = str(domain.helix_id)
-
-    def owner_offset(helix_id) -> np.ndarray:
-        key = str(helix_id or "")
-        return offsets.get(extension_parents.get(key, key), np.zeros(3, dtype=float))
-
-    for nucleotide in expanded_nucleotides:
-        offset = owner_offset(nucleotide.get("helix_id"))
-        for field in ("backbone_position", "base_position"):
-            value = nucleotide.get(field)
-            if isinstance(value, (list, tuple)) and len(value) == 3:
-                nucleotide[field] = (np.asarray(value, dtype=float) + offset).tolist()
-
-    expanded_axes = copy.deepcopy(axes)
-    for axis in expanded_axes:
-        offset = owner_offset(axis.get("helix_id"))
-
-        def translate(value):
-            if isinstance(value, (list, tuple)) and len(value) == 3:
-                return (np.asarray(value, dtype=float) + offset).tolist()
-            return value
-
-        for field in ("start", "end"):
-            if field in axis:
-                axis[field] = translate(axis[field])
-        if isinstance(axis.get("samples"), list):
-            axis["samples"] = [translate(value) for value in axis["samples"]]
-        for segment in axis.get("segments") or []:
-            for field in ("start", "end"):
-                if field in segment:
-                    segment[field] = translate(segment[field])
-
-    expanded_atomistic = copy.deepcopy(atomistic_model)
-    for atom in expanded_atomistic.atoms:
-        offset = owner_offset(atom.helix_id)
-        aux_helix_id = getattr(atom, "aux_helix_id", "")
-        if aux_helix_id:
-            aux_offset = owner_offset(aux_helix_id)
-            weight = float(getattr(atom, "aux_t", 0.0))
-            offset = offset * (1.0 - weight) + aux_offset * weight
-        atom.x += float(offset[0])
-        atom.y += float(offset[1])
-        atom.z += float(offset[2])
-    return expanded_nucleotides, expanded_axes, expanded_atomistic
-
-
-def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
-    """Combine two identity/ownership-equivalent v12 scenes into one contract."""
-    natural_lines = natural_text.splitlines()
-    expanded_lines = expanded_text.splitlines()
-    natural_header = natural_lines[0].split()
-    expanded_header = expanded_lines[0].split()
-    if natural_header != expanded_header or (natural_header[0] != "NADOCVR" or natural_header[1] not in {"12", "13", "15"}):
-        raise HTTPException(500, detail="Expanded VR scene headers do not match.")
-
-    def blocks(lines: list[str]) -> dict[str, list[str]]:
-        result: dict[str, list[str]] = {}
-        active = None
-        for line in lines[1:]:
-            fields = line.split()
-            if not fields or fields[0] == "#":
-                continue
-            if fields[0] == "R":
-                active = fields[1]
-                result[active] = []
-            elif active is not None:
-                result[active].append(line)
-        return result
-
-    natural_blocks, expanded_blocks = blocks(natural_lines), blocks(expanded_lines)
-    if set(natural_blocks) != set(expanded_blocks):
-        raise HTTPException(500, detail="Expanded VR representations do not match.")
-    output = [
-        " ".join(natural_header),
-        "# natural and expanded poses share identities and endpoint-aware tool scopes",
-    ]
-    if int(natural_header[1]) >= 13:
-        defaults = [line for line in natural_lines if line.startswith("F ")]
-        if len(defaults) != 1 or defaults != [line for line in expanded_lines if line.startswith("F ")]:
-            raise HTTPException(500, detail="Expanded extrusion defaults differ.")
-        output.extend(defaults)
-    for representation, natural_records in natural_blocks.items():
-        expanded_records = expanded_blocks[representation]
-        primitive_types = {"P", "C", "H", "B"}
-        natural_keys = [
-            (line.split()[0], line.split()[1])
-            for line in natural_records
-            if line.split()[0] in primitive_types
-        ]
-        expanded_keys = [
-            (line.split()[0], line.split()[1])
-            for line in expanded_records
-            if line.split()[0] in primitive_types
-        ]
-        if natural_keys != expanded_keys:
-            raise HTTPException(
-                500,
-                detail=f"Expanded VR primitive identities differ in {representation}.",
-            )
-        natural_declarations = [
-            line for line in natural_records if line.startswith("D ")
-        ]
-        expanded_declarations = [
-            line for line in expanded_records if line.startswith("D ")
-        ]
-        if natural_declarations != expanded_declarations:
-            raise HTTPException(
-                500,
-                detail=f"Expanded VR owner dictionaries differ in {representation}.",
-            )
-        natural_aliases = [line for line in natural_records if line.startswith("A ")]
-        expanded_aliases = [line for line in expanded_records if line.startswith("A ")]
-        if natural_aliases != expanded_aliases:
-            raise HTTPException(
-                500,
-                detail=f"Expanded VR primitive owner aliases differ in {representation}.",
-            )
-        natural_transforms = [line for line in natural_records if line.startswith("T ")]
-        expanded_transforms = [
-            line for line in expanded_records if line.startswith("T ")
-        ]
-        if natural_transforms != expanded_transforms:
-            raise HTTPException(
-                500,
-                detail=f"Expanded VR transform owners differ in {representation}.",
-            )
-        natural_scope_owners = [
-            line for line in natural_records if line.startswith("W ")
-        ]
-        expanded_scope_owners = [
-            line for line in expanded_records if line.startswith("W ")
-        ]
-        if natural_scope_owners != expanded_scope_owners:
-            raise HTTPException(
-                500,
-                detail=f"Expanded VR tool-scope owners differ in {representation}.",
-            )
-        natural_handles = [
-            line.split()[1] for line in natural_records if line.startswith("K ")
-        ]
-        expanded_handles = [
-            line.split()[1] for line in expanded_records if line.startswith("K ")
-        ]
-        if natural_handles != expanded_handles:
-            raise HTTPException(
-                500,
-                detail=f"Expanded VR cluster handles differ in {representation}.",
-            )
-        natural_tool_handles = [
-            tuple(line.split()[1:4])
-            for line in natural_records
-            if line.startswith("J ")
-        ]
-        expanded_tool_handles = [
-            tuple(line.split()[1:4])
-            for line in expanded_records
-            if line.startswith("J ")
-        ]
-        if natural_tool_handles != expanded_tool_handles:
-            raise HTTPException(
-                500,
-                detail=f"Expanded VR tool handles differ in {representation}.",
-            )
-        output.append(f"R {representation}")
-        output.extend(natural_records)
-        output.append(f"E {representation}")
-        output.extend(expanded_records)
-    return "\n".join(output) + "\n"
-
-
-def _validate_streamed_scene_manifests(
-    natural: dict[str, dict[str, tuple[int, str]]],
-    expanded: dict[str, dict[str, tuple[int, str]]],
-) -> None:
-    if set(natural) != set(expanded):
-        raise HTTPException(500, detail="Expanded VR representations do not match.")
-    labels = {
-        "primitive": "primitive identities",
-        "D": "owner dictionaries",
-        "A": "primitive owner aliases",
-        "T": "transform owners",
-        "W": "tool-scope owners",
-        "K": "cluster handles",
-        "J": "tool handles",
-    }
-    for representation in natural:
-        for category in _SCENE_MANIFEST_CATEGORIES:
-            if natural[representation].get(category) != expanded[representation].get(
-                category
-            ):
-                raise HTTPException(
-                    500,
-                    detail=(
-                        f"Expanded VR {labels[category]} differ in "
-                        f"{representation}."
-                    ),
-                )
+    return lines.text() if line_writer is None else None
 
 
 def _snapshot(
@@ -2956,42 +2632,10 @@ def _snapshot(
         line_writer=line_writer,
         extra_geometry=extra_geometry,
         representations=representations,
-        work_progress=lambda fraction: progress(50 + 14 * fraction, "Exporting natural representations"),
+        work_progress=lambda fraction: progress(50 + 31 * fraction, "Exporting natural representations"),
     )
-    progress(65, "Preparing expanded geometry")
-    expanded_nucleotides, expanded_axes, expanded_atomistic = _expanded_scene_inputs(
-        design, nucleotides, axes, atomistic_model
-    )
-    expanded_writer = None
-    if line_writer is not None:
-        def expanded_writer(line: str) -> None:
-            if line.startswith(("NADOCVR ", "#", "F ")):
-                return
-            line_writer(f"E {line[2:]}") if line.startswith("R ") else line_writer(line)
-
-    progress(75, "Exporting expanded representations")
-    expanded_scene = _serialize_scene(
-        design,
-        expanded_nucleotides,
-        expanded_axes,
-        body.camera,
-        body.representation,
-        body.coloring,
-        expanded_atomistic,
-        unligated_crossover_ids(design),
-        body.show_periodic_seam_arcs,
-        line_writer=expanded_writer,
-        extra_geometry=extra_geometry,
-        representations=representations,
-        work_progress=lambda fraction: progress(75 + 6 * fraction, "Exporting expanded representations"),
-    )
-    if line_writer is not None:
-        assert isinstance(natural_scene, dict) and isinstance(expanded_scene, dict)
-        progress(82, "Checking identities and finalizing compressed snapshot")
-        _validate_streamed_scene_manifests(natural_scene, expanded_scene)
-        return None
-    assert isinstance(natural_scene, str) and isinstance(expanded_scene, str)
-    return _bundle_expanded_scene(natural_scene, expanded_scene)
+    progress(82, "Finalizing compressed snapshot")
+    return natural_scene
 
 
 def _build_environment() -> dict[str, str]:
@@ -3908,7 +3552,6 @@ def _write_feedback(state: dict | None, body: VRFeedbackRequest) -> None:
 
 
 class VREndResizeHandle(BaseModel):
-    expanded_offset: tuple[float, float, float] = (0, 0, 0)
     position: tuple[float, float, float]
     direction: tuple[float, float, float]
 
@@ -3927,12 +3570,11 @@ def _end_resize_record(body: VREndResizeHandles, rotation) -> str:
     lines = [f"NADOC_END_RESIZE_1 {body.version} {body.minimum} {body.maximum} {len(body.handles)}"]
     for handle in body.handles:
         position = rotation @ np.asarray(handle.position)
-        offset = rotation @ np.asarray(handle.expanded_offset)
         direction = rotation @ np.asarray(handle.direction)
-        if not np.isfinite(offset).all() or not np.isfinite(position).all() or not np.isfinite(direction).all() or np.linalg.norm(direction) < 1e-9:
+        if not np.isfinite(position).all() or not np.isfinite(direction).all() or np.linalg.norm(direction) < 1e-9:
             raise HTTPException(422, detail="Invalid end resize handle")
         direction /= np.linalg.norm(direction)
-        lines.append(" ".join(f"{v:.17g}" for v in [*position, *direction, *offset]))
+        lines.append(" ".join(f"{v:.17g}" for v in [*position, *direction, 0, 0, 0]))
     return "\n".join(lines) + "\n"
 
 
@@ -3973,12 +3615,9 @@ def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> Non
         or body.resolved != (
             body.face_position is not None
             and body.face_normal is not None
-            and body.expanded_face_position is not None
-            and body.expanded_face_normal is not None
         )
         or body.footprint_resolved != (
             body.preview_origin is not None
-            and body.expanded_preview_origin is not None
             and body.footprint_lattice_type is not None
             and body.footprint_cell is not None
         )
@@ -3998,9 +3637,6 @@ def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> Non
                     body.face_position,
                     body.face_normal,
                     body.preview_origin,
-                    body.expanded_face_position,
-                    body.expanded_face_normal,
-                    body.expanded_preview_origin,
                     body.footprint_lattice_type,
                     body.footprint_cell,
                 )
@@ -4047,16 +3683,9 @@ def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> Non
         values = pose_values(
             body.face_position, body.face_normal, body.preview_origin
         )
-        values.extend(
-            pose_values(
-                body.expanded_face_position,
-                body.expanded_face_normal,
-                body.expanded_preview_origin,
-            )
-        )
 
     record = (
-        f"NADOCVR_TOOL_FEEDBACK 4 {body.tool_config_sequence} "
+        f"NADOCVR_TOOL_FEEDBACK 5 {body.tool_config_sequence} "
         f"{int(body.resolved)} {int(body.occupied)} {int(body.deformed)} "
         f"{int(body.footprint_resolved)} "
         f"{body.reason} {body.target_kind} {body.target_identity}"
@@ -4109,9 +3738,6 @@ def _write_plane_feedback(state: dict | None, body: VRPlaneFeedbackRequest) -> N
             and body.plane_center is not None
             and body.plane_normal is not None
             and body.plane_half_extent_nm is not None
-            and body.expanded_plane_center is not None
-            and body.expanded_plane_normal is not None
-            and body.expanded_plane_half_extent_nm is not None
         )
         or (
             not body.resolved
@@ -4122,9 +3748,6 @@ def _write_plane_feedback(state: dict | None, body: VRPlaneFeedbackRequest) -> N
                     body.plane_center,
                     body.plane_normal,
                     body.plane_half_extent_nm,
-                    body.expanded_plane_center,
-                    body.expanded_plane_normal,
-                    body.expanded_plane_half_extent_nm,
                 )
             )
         )
@@ -4163,16 +3786,9 @@ def _write_plane_feedback(state: dict | None, body: VRPlaneFeedbackRequest) -> N
         values = frame_values(
             body.plane_center, body.plane_normal, body.plane_half_extent_nm
         )
-        values.extend(
-            frame_values(
-                body.expanded_plane_center,
-                body.expanded_plane_normal,
-                body.expanded_plane_half_extent_nm,
-            )
-        )
 
     record = (
-        f"NADOCVR_PLANE_FEEDBACK 3 {body.plane_pick_sequence} "
+        f"NADOCVR_PLANE_FEEDBACK 2 {body.plane_pick_sequence} "
         f"{body.tool_config_sequence} {int(body.resolved)} {body.reason} "
         f"{body.plane_slot} {body.target_kind} {body.target_identity} "
         f"{body.picked_identity}"

@@ -5,13 +5,13 @@ from pydantic import ValidationError
 from backend.api.vr_ligation import Catalog, record, parse_event
 
 
-def test_catalog_rotates_positions_tangents_and_expanded_offsets():
+def test_catalog_rotates_positions_and_tangents_with_reserved_zero_offsets():
     body = Catalog(version=4, ends=[dict(role=3, strand=2, identity='nuc%3As1',
         position=[1,2,3], tangent=[0,0,1], expanded_offset=[0,2,0])])
     lines = record(body, [[0,0,1],[0,1,0],[-1,0,0]]).splitlines()
     assert lines[0] == 'NADOC_LIGATION_1 4 ready 1'
     assert lines[1].split()[:3] == ['3', '2', 'nuc%3As1']
-    assert list(map(float, lines[1].split()[3:])) == [3,2,-1,1,0,0,0,2,0]
+    assert list(map(float, lines[1].split()[3:])) == [3,2,-1,1,0,0,0,0,0]
 
 
 def test_invalid_catalog_and_releases_are_rejected():

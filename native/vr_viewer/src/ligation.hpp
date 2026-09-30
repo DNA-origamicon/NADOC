@@ -27,7 +27,6 @@ class Ligation {
     std::optional<size_t> hand, target;
     std::array<std::optional<size_t>,2> hover{};
     glm::mat4 startModel{1};
-    float expansion=0, startExpansion=0;
     glm::vec3 loosePoint{};
     std::string status="ready";
     bool incompatible=false;
@@ -66,7 +65,7 @@ class Ligation {
         cancel();waiting=false;version=next;ends=std::move(loaded);status=nextStatus;
     }
     glm::vec3 point(size_t i,const glm::mat4& model) const {
-        const auto& e=ends[i];return glm::vec3(model*glm::vec4(e.position+expansion*e.offset,1));
+        const auto& e=ends[i];return glm::vec3(model*glm::vec4(e.position,1));
     }
     bool compatible(size_t a,size_t b) const {
         return a!=b && ends[a].role!=ends[b].role && ends[a].strand!=ends[b].strand;
@@ -90,7 +89,7 @@ class Ligation {
             const size_t h=*hand;
             const bool uiBlocked=blocked[h];blocked[h]=true;
             // Tracking loss, mode/menu change and scene movement must not be a release.
-            if(!enabled||uiBlocked||!hands[h].valid||model!=startModel||expansion!=startExpansion) {cancel();status="cancelled";return;}
+            if(!enabled||uiBlocked||!hands[h].valid||model!=startModel) {cancel();status="cancelled";return;}
             loosePoint=centers[h];target=nearest(loosePoint,radii[h],model,true);
             incompatible=!target && nearest(loosePoint,radii[h],model).has_value();
             if(!pressed[h]) {
@@ -108,14 +107,14 @@ class Ligation {
             if(!enabled||waiting)continue;
             hover[h]=nearest(centers[h],radii[h],model);
             if(hover[h]&&clicked[h]) {
-                source=*hover[h];hand=h;startModel=model;startExpansion=expansion;
+                source=*hover[h];hand=h;startModel=model;
                 loosePoint=centers[h];status="dragging";select(ends[source].identity,h);break;
             }
         }
     }
     glm::vec3 bondPoint(size_t i,bool second,const glm::mat4& model) const {
         const auto& b=bonds[i];
-        return glm::vec3(model*glm::vec4((second?b.b:b.a)+expansion*(second?b.offsetB:b.offsetA),1));
+        return glm::vec3(model*glm::vec4((second?b.b:b.a),1));
     }
     template<class Commit> void request(const std::string& action,size_t index,Commit commit) {
         if(waiting||!version)return;

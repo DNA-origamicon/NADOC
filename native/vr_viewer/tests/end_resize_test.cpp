@@ -22,9 +22,8 @@ int main() {
     step(false);assert(!tool.hand && tool.delta==0 && commits==1);
     hands[0].position={0,0,.02F};clicked[0]=true;step();assert(tool.hand);
     hands[0].valid=false;step();assert(!tool.hand && commits==1);
-    tool.arrows[0].offset={.1F,0,0};tool.expansion=1;
-    assert(glm::distance(tool.point(tool.arrows[0],model,.01F,0),glm::vec3(.2F,0,0))<.00001F);
-    hands[0].valid=true;hands[0].position={.2F,0,.02F};clicked[0]=true;step();assert(tool.hand);
-    clicked[0]=false;tool.expansion=.5F;step();assert(!tool.hand && commits==1);
+    // Retired wire offsets cannot move natural handles.
+    tool.arrows[0].offset={.1F,0,0};
+    assert(glm::distance(tool.point(tool.arrows[0],model,.01F,0),glm::vec3(0))<.00001F);
     std::cout<<"End resize: scaled projection, clamping, one release, focus/tracking cancellation passed\n";
 }

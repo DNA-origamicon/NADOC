@@ -15,14 +15,11 @@ class End(BaseModel):
     identity: str = Field(min_length=1, max_length=2048, pattern=r'^[A-Za-z0-9%_.!~*\x27()-]+$')
     position: tuple[float, float, float]
     tangent: tuple[float, float, float]
-    expanded_offset: tuple[float, float, float] = (0, 0, 0)
 
 
 class Bond(BaseModel):
     a: tuple[float, float, float]
     b: tuple[float, float, float]
-    offset_a: tuple[float, float, float] = (0, 0, 0)
-    offset_b: tuple[float, float, float] = (0, 0, 0)
 
 
 class Catalog(BaseModel):
@@ -38,13 +35,13 @@ def record(body, rotation):
         raise HTTPException(422, detail='Invalid VR view rotation')
     lines = [f'NADOC_LIGATION_1 {body.version} {body.status} {len(body.ends)}']
     for end in body.ends:
-        values = [*(rotation @ end.position), *(rotation @ end.tangent), *(rotation @ end.expanded_offset)]
+        values = [*(rotation @ end.position), *(rotation @ end.tangent), 0, 0, 0]
         if not np.isfinite(values).all() or np.max(np.abs(values)) > 1e9:
             raise HTTPException(422, detail='Invalid ligation end geometry')
         lines.append(f'{end.role} {end.strand} {end.identity} ' + ' '.join(f'{v:.17g}' for v in values))
     lines.append(f'BONDS {len(body.bonds)}')
     for bond in body.bonds:
-        values = [*(rotation @ bond.a), *(rotation @ bond.b), *(rotation @ bond.offset_a), *(rotation @ bond.offset_b)]
+        values = [*(rotation @ bond.a), *(rotation @ bond.b), 0, 0, 0, 0, 0, 0]
         if not np.isfinite(values).all() or np.max(np.abs(values)) > 1e9:
             raise HTTPException(422, detail='Invalid nick bond geometry')
         lines.append(' '.join(f'{v:.17g}' for v in values))

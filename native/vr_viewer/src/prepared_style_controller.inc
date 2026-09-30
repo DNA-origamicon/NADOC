@@ -73,14 +73,13 @@ public:
         for(size_t i=0;i<kRepresentationCount;++i){
             if(i==current || i==size_t(Representation::full) || pinnedSources_[i])continue;
             bytes+=scene_.cpuBytes[i];
-            if(scene_.cpuBytes[i]>largest && !staticSourceIndices_.contains(&scene_.representations[i]) && !staticSourceIndices_.contains(&scene_.expandedRepresentations[i])){
+            if(scene_.cpuBytes[i]>largest && !staticSourceIndices_.contains(&scene_.representations[i])){
                 largest=scene_.cpuBytes[i];victim=i;
             }
         }
         if(bytes<=budget || victim==kRepresentationCount)return;
         SceneData obsolete;
         obsolete.representations[victim]=std::move(scene_.representations[victim]);
-        obsolete.expandedRepresentations[victim]=std::move(scene_.expandedRepresentations[victim]);
         scene_.cpuBytes[victim]=0;
         for(size_t i=0;i<kRepresentationCount;++i)if(representationSourceIndex(static_cast<Representation>(i))==victim){
             residentStyles_[i].reset();representationBuffers_.invalidate(i);

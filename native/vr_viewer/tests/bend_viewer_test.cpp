@@ -23,7 +23,6 @@ struct LiveViewerTest {
         DeformationPlaneGuide a,b;
         a.natural.center={0,0,0};a.natural.normal={0,0,1};a.natural.halfExtent=.03F;
         b=a;b.natural.center.z=.6F;
-        a.expanded=a.natural;b.expanded=b.natural;
         v.planeGuides_[0]=a;v.planeGuides_[1]=b;v.bendPanel_.pickSlot.reset();
         v.bendPanel_.grabbed=0;
         v.planeGuides_[1]->natural.normal=glm::normalize(glm::vec3(.2F,0,1));

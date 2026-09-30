@@ -18,8 +18,7 @@ def test_full_only_does_not_construct_atoms_or_extra_representations(monkeypatch
     monkeypatch.setattr('backend.core.vr_representation_geometry.build', unwanted)
     output = vr._snapshot(vr.VRLaunchRequest(), design_snapshot=design, representations={'full'})
     parsed = parse_scene_contract(output)
-    assert set(parsed) == {'full', 'expanded/full'}
-    assert parsed['full'].keys() == parsed['expanded/full'].keys()
+    assert set(parsed) == {'full'}
     path = tmp_path/'full.nadocvr'
     path.write_text(output)
     subprocess.run(['native/vr_viewer/build/nadoc-vr-viewer', '--validate', str(path)], check=True, capture_output=True)
@@ -32,8 +31,8 @@ def test_selective_export_matches_same_blocks_in_complete_snapshot(representatio
     complete = parse_scene_contract(vr._snapshot(body, design_snapshot=design))
     selective = vr._snapshot(body, design_snapshot=design, representations={representation})
     parsed = parse_scene_contract(selective)
-    assert set(parsed) == {representation, 'expanded/'+representation}
-    for pose in (representation, 'expanded/'+representation):
+    assert set(parsed) == {representation}
+    for pose in (representation,):
         assert parsed[pose] == complete[pose]
     path=tmp_path/'selected.nadocvr';path.write_text(selective)
     subprocess.run(['native/vr_viewer/build/nadoc-vr-viewer','--validate',str(path)],check=True,capture_output=True)

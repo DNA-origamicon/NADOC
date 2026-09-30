@@ -663,38 +663,6 @@ inline MenuPanelBounds aspectScaledMenuBounds(
     return {center - half, center + half};
 }
 
-/** Reversible eased 0..1 transition used by Expanded Quick View. */
-class SmoothToggle {
-  public:
-    explicit SmoothToggle(float durationSeconds = 0.24F)
-        : durationSeconds_(std::max(durationSeconds, 1.0e-4F)) {}
-
-    void toggle() { target_ = !target_; }
-    void setTarget(bool target) { target_ = target; }
-
-    [[nodiscard]] bool update(float elapsedSeconds) {
-        if (!std::isfinite(elapsedSeconds) || elapsedSeconds <= 0.0F) return false;
-        const float before = progress_;
-        const float direction = target_ ? 1.0F : -1.0F;
-        progress_ = glm::clamp(
-            progress_ + direction * elapsedSeconds / durationSeconds_, 0.0F, 1.0F);
-        return std::abs(progress_ - before) > 1.0e-6F;
-    }
-
-    [[nodiscard]] float value() const {
-        return progress_ * progress_ * (3.0F - 2.0F * progress_);
-    }
-    [[nodiscard]] bool target() const { return target_; }
-    [[nodiscard]] bool settled() const {
-        return target_ ? progress_ >= 1.0F : progress_ <= 0.0F;
-    }
-
-  private:
-    float durationSeconds_ = 0.24F;
-    float progress_ = 0.0F;
-    bool target_ = false;
-};
-
 inline std::string nextTabSelectionLevel(const std::string& current) {
     static constexpr std::array<const char*, 6> cycle = {
         "strand", "domain", "end", "xover", "base", "default",
@@ -1763,7 +1731,7 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
     ToolContextFeedback result;
     if (!(fields >> magic >> version >> result.sequence >> resolved >> occupied >> deformed) ||
         magic != "NADOCVR_TOOL_FEEDBACK" ||
-        (version != 1 && version != 2 && version != 3 && version != 4)) {
+        (version != 1 && version != 2 && version != 3 && version != 4 && version != 5)) {
         return std::nullopt;
     }
     if (version >= 2 && !(fields >> footprintResolved)) return std::nullopt;
@@ -1832,7 +1800,7 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
                 result.facePosition, result.faceNormal, result.previewOrigin)) {
             return std::nullopt;
         }
-        if (version >= 3) {
+        if (version >= 3 && version <= 4) { // Legacy paired-pose wire records.
             if (!readPose(
                     result.expandedFacePosition, result.expandedFaceNormal,
                     result.expandedPreviewOrigin)) {

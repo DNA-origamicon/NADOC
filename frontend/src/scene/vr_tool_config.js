@@ -222,8 +222,7 @@ export function vrPlaneFeedbackPayload(event, state, { toolTarget = null, planeP
     toolTarget.selectionKind === draft.target_kind &&
     JSON.stringify(toolTarget.ownerTokens) === JSON.stringify(draft.target_owner_tokens)
   const frame = planePick?.frame
-  const expandedFrame = planePick?.expandedFrame
-  const validFrames = _validPlaneFrame(frame) && _validPlaneFrame(expandedFrame)
+  const validFrames = _validPlaneFrame(frame)
   const resolved = targetMatches && planePick?.resolved === true && validFrames &&
     Number.isSafeInteger(planePick.bp) &&
     Math.abs(planePick.bp) <= VR_TOOL_CONFIG_LIMITS.maxPlaneBp
@@ -246,8 +245,5 @@ export function vrPlaneFeedbackPayload(event, state, { toolTarget = null, planeP
     plane_center: resolved ? [...frame.center] : null,
     plane_normal: resolved ? [...frame.normal] : null,
     plane_half_extent_nm: resolved ? frame.halfExtentNm : null,
-    expanded_plane_center: resolved ? [...expandedFrame.center] : null,
-    expanded_plane_normal: resolved ? [...expandedFrame.normal] : null,
-    expanded_plane_half_extent_nm: resolved ? expandedFrame.halfExtentNm : null,
   }
 }

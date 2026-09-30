@@ -189,8 +189,7 @@ Controls on the original HTC Vive wands:
   one of the four depth-bearing sectors (Ligate, Nick, Undo, Redo); the
   sector highlights and gives a light haptic tick. Release the trackpad to activate
   the enabled highlighted action, or release in the center/outside the ring to cancel.
-  All four actions are enabled. The old
-  right-trackpad Expanded Quick View toggle is intentionally unbound.
+  All four actions are enabled. Quick Expand has been removed from VR.
 - Each controller carries a wireframe **Selection Volume** 12 cm beyond its tip. Slide a
   thumb upward or downward on that controller's trackpad to grow or shrink the volume
   from precision-pick to area-selection size. A partial trigger pull resolves overlaps
@@ -292,7 +291,7 @@ Controls on the original HTC Vive wands:
   transform adapter from one immutable baseline. Confirm locks the tool while the
   browser commits the exact scope as one feature-log entry. Native keeps the preview
   visible until a sequenced success/failure acknowledgement arrives, retains a
-  successful transform across representation/Expanded changes, and exposes Undo
+  successful transform across representation changes, and exposes Undo
   only for that exact current feature-log tail. A later desktop edit makes the token
   stale instead of undoing unrelated work. Cancel or native session exit restores an
   uncommitted preview exactly.
@@ -454,7 +453,7 @@ See `docs/vr_ligation.md` and the Debug → VR Tours & Tests → Authoring ligat
 ### Left-hand view tablet
 
 The same quiver reach with the left controller independently opens/closes a
-world-placed two-column panel containing all eleven desktop view toggles and
+world-placed two-column panel containing ten supported desktop view toggles and
 their original icons. Point and trigger-click a tile. The panel reports the
 actual desktop state and explains layout prerequisites. Shared meshes, posed
 instances and text textures are transferred to native stereo rendering. Straight

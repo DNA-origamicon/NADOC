@@ -58,6 +58,18 @@ def run(live, session, output, validate=False):
         assert live.state['representation']=='full'
         if live.state['sidebars'][0]['open']:live.button('menu',hand=0)
         if not live.state['sidebars'][1]['open']:live.button('menu',hand=1)
+        # Keep the retained model from occluding the loading bar in either eye.
+        # Move the real sidebar through its grip frame before timed requests.
+        from tools.vr_workflows.menu_grip_check import acquire, move
+        placement=[]
+        acquire(live,1,1,1,'steady_fast',placement)
+        live.send('button',hand=1,button='grip',pressed=True);live.frame()
+        assert live.state['sidebars'][1]['grip_state']=='moving'
+        left,right,*_=map(np.asarray,live.state['sidebars'][1]['grip_targets'])
+        delta=(right-left)/np.linalg.norm(right-left)*.35
+        move(live,{1:(np.asarray(live.state['hands'][1]['position'])+delta).tolist()},'steady_fast',placement)
+        live.send('button',hand=1,button='grip',pressed=False);live.frame()
+        (output/'observation-placement.json').write_text(json.dumps(placement,indent=2))
         click(live,1,'tab:visualization','steady_fast',trials)
         catalog=json.loads(Path('native/vr_viewer/sidebar_catalog.json').read_text())
         tab=next(t for t in catalog['tabs'] if t['side']=='right' and t['key']=='visualization')

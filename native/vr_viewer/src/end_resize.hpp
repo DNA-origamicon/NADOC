@@ -17,7 +17,6 @@ class EndResize {
     glm::vec3 start{};
     glm::mat4 startModel{1};
     bool nearby=false;
-    float expansion=0, startExpansion=0;
 
     void poll(const std::string& path, glm::vec3 center, float scale, glm::vec3 origin) {
         if(path.empty())return;
@@ -39,7 +38,7 @@ class EndResize {
         if(waitingVersion!=version)waitingVersion=0;
     }
     glm::vec3 point(const Arrow& a,const glm::mat4& model,float scale,float offset) const {
-        return glm::vec3(model*glm::vec4(a.position+a.offset*expansion+a.direction*(float(delta)*.334F*scale+offset),1));
+        return glm::vec3(model*glm::vec4(a.position+a.direction*(float(delta)*.334F*scale+offset),1));
     }
     float arrowLength(const glm::mat4& model,float scale) const {
         return std::max(1.8F*scale,.04F/glm::length(glm::vec3(model[0])));
@@ -50,7 +49,7 @@ class EndResize {
         nearby=false;
         if(hand) {
             const auto h=*hand;blocked[h]=true;
-            if(!enabled || !hands[h].valid || model!=startModel || expansion!=startExpansion) {hand.reset();delta=0;return;}
+            if(!enabled || !hands[h].valid || model!=startModel) {hand.reset();delta=0;return;}
             const auto local=glm::vec3(glm::inverse(startModel)*glm::vec4(hands[h].position,1));
             delta=std::clamp(int(std::round(glm::dot(local-start,arrows[grabbed].direction)/(.334F*scale))),minimum,maximum);
             if(!pressed[h]) {
@@ -71,7 +70,7 @@ class EndResize {
         }
         nearby=found;
         if(found && clicked[bestHand]) {
-            hand=bestHand;grabbed=bestArrow;startModel=model;startExpansion=expansion;
+            hand=bestHand;grabbed=bestArrow;startModel=model;
             start=glm::vec3(glm::inverse(model)*glm::vec4(hands[bestHand].position,1));
             blocked[bestHand]=true;
         }

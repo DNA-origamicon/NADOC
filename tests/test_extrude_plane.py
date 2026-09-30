@@ -34,16 +34,15 @@ def test_mixed_and_oblique_are_explicit_fallbacks():
     assert resolve_extrude_plane(Design(), "invalid") == ("XY", "empty")
 
 
-def test_scene_metadata_survives_expanded_bundle_and_validates():
-    from backend.api.routes_vr import _bundle_expanded_scene, _parse_tool_config
+def test_natural_scene_metadata_and_tool_config_validate():
+    from backend.api.routes_vr import _parse_tool_config
 
     scene = (
         "NADOCVR 13 full strand\n"
         + extrude_plane_record(Design(helices=[helix("x", (0, 7, 0))]))
         + "\nR full\n"
     )
-    merged = _bundle_expanded_scene(scene, scene)
-    assert merged.count("F XZ HONEYCOMB geometry") == 1
+    assert scene.count("F XZ HONEYCOMB geometry") == 1
     from pathlib import Path
 
     fixture = Path("native/vr_viewer/examples/tool_scope_v12.nadocvr").read_text()

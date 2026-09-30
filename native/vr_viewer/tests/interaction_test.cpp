@@ -34,7 +34,6 @@ using nadoc_vr::ScenePlacementOrientation;
 using nadoc_vr::ScenePlacementView;
 using nadoc_vr::SceneViewPlacement;
 using nadoc_vr::SelectionVolumeControl;
-using nadoc_vr::SmoothToggle;
 
 void require(bool condition) {
     if (!condition) std::abort();
@@ -547,26 +546,6 @@ void desktopMenuBoundsDoubleAreaAndMatchAspect() {
     require(std::abs(handInMenu.x + desktopSize.x * 0.5F) < 1e-5F);
 }
 
-void expandedQuickViewEasesAndReversesWithoutSnapping() {
-    SmoothToggle transition(0.20F);
-    require(transition.value() == 0.0F && transition.settled());
-    transition.toggle();
-    require(transition.target() && !transition.settled());
-    require(transition.update(0.05F));
-    const float quarter = transition.value();
-    require(quarter > 0.0F && quarter < 0.25F);
-    require(transition.update(0.05F));
-    const float halfway = transition.value();
-    require(std::abs(halfway - 0.5F) < 1e-5F);
-
-    transition.toggle();
-    require(!transition.target());
-    require(std::abs(transition.value() - halfway) < 1e-5F);
-    require(transition.update(0.05F));
-    require(std::abs(transition.value() - quarter) < 1e-5F);
-    require(transition.update(0.20F));
-    require(transition.value() == 0.0F && transition.settled());
-}
 
 void vrSelectionLevelCycleMatchesDesktopTabOrder() {
     require(nadoc_vr::nextTabSelectionLevel("default") == "strand");
@@ -954,6 +933,11 @@ void canonicalSelectionFeedbackIsStrictAndSequenced() {
 }
 
 void toolContextFeedbackIsExactSequencedAndFinite() {
+    const auto current = nadoc_vr::parseToolContextFeedback(
+        "NADOCVR_TOOL_FEEDBACK 5 7 1 0 0 1 resolved end nuc:end HONEYCOMB 2 3 "
+        "1 2 3 0 0 1 4 5 6\n", 6, 7);
+    require(current && current->resolved && current->footprintResolved && !current->expandedPoseResolved);
+
     const auto resolved = nadoc_vr::parseToolContextFeedback(
         "NADOCVR_TOOL_FEEDBACK 3 7 1 1 0 1 resolved end nuc:end "
         "1 2 3 0 0 2 4 5 6 7 8 9 0 3 0 10 11 12\n",
@@ -1567,7 +1551,6 @@ int main() {
     desktopMenuBoundsDoubleAreaAndMatchAspect();
     menuScalingKeepsRenderingAndHitCoordinatesAligned();
     menuRayPanelHitExistsOnlyInsideTheVisibleTablet();
-    expandedQuickViewEasesAndReversesWithoutSnapping();
     vrSelectionLevelCycleMatchesDesktopTabOrder();
     menuHoverHapticsTickOnlyWhenEnteringOrChangingControls();
     selectionVolumeScrollResizesPreciselyAndStaysBounded();

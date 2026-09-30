@@ -1,4 +1,4 @@
-"""Desktop-derived primitives survive both VR poses and native scene validation."""
+"""Desktop-derived primitives survive the VR scene and native scene validation."""
 
 from pathlib import Path
 import subprocess
@@ -29,10 +29,9 @@ def test_desktop_meshes_previews_and_vdw_round_trip(tmp_path):
         "mrdna-fine",
         "oxdna",
     }
-    assert set(scene) == expected | {"expanded/" + r for r in expected}
+    assert set(scene) == expected
     for rep in expected:
         assert scene[rep]
-        assert scene[rep].keys() == scene["expanded/" + rep].keys()
     # One 14-bp duplex: fine uses one site/bp, coarse groups five bp,
     # and oxDNA displays one backbone and one ellipsoid per nucleotide.
     count = lambda rep, kind: sum(p.record_type == kind for p in scene[rep].values())

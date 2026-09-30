@@ -68,7 +68,7 @@ class StartupLoading {
         rect(-.49F,.19F,.98F,.026F,{.15F,.19F,.24F});
         rect(-.49F,.19F,.98F*percent/100,.026F,{.25F,.8F,.65F});
         text(std::to_string(percent)+"% - COMPLETED PREPARATION STAGES",.165F,{.8F,.85F,.9F});
-        const std::array<std::pair<int,const char*>,10> stages={{{5,"VR runtime and document"},{15,"Nucleotide geometry"},{40,"Full display geometry"},{50,"Selection metadata"},{65,"Full scene export"},{75,"Expanded Quick View geometry"},{82,"Expanded scene export"},{85,"Snapshot validation and compression"},{92,"Native scene parsing and validation"},{100,"GPU buffers, selection and first part frame"}}};
+        const std::array<std::pair<int,const char*>,8> stages={{{5,"VR runtime and document"},{15,"Nucleotide geometry"},{40,"Full display geometry"},{50,"Selection metadata"},{65,"Full scene export"},{85,"Snapshot validation and compression"},{92,"Native scene parsing and validation"},{100,"GPU buffers, selection and first part frame"}}};
         const std::array<std::pair<int,const char*>,4> representationStages={{{75,"Exporting representation"},{96,"Reading and preparing geometry"},{99,"Uploading display buffers"},{100,"Activating completed representation"}}};
         float y=.115F;
         if(representation)for(const auto& [end,label]:representationStages){

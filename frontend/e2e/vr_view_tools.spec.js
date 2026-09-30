@@ -9,7 +9,7 @@ test.afterEach(async ({ request }) => {
   const status = await (await request.get(`${base}/api/vr/status`)).json()
   if (pid && status.pid === pid) await request.post(`${base}/api/vr/stop`)
 })
-test('left quiver tablet exposes all desktop view tools in stereo', async ({ page, request }, info) => {
+test('left quiver tablet exposes supported view tools without Quick Expand in stereo', async ({ page, request }, info) => {
   test.setTimeout(600000)
   await page.goto(`/?doc=__e2e__views-${process.pid}&scrywrite=transactions`)
   await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
@@ -39,29 +39,30 @@ test('left quiver tablet exposes all desktop view tools in stereo', async ({ pag
     if (status.pid) pid = status.pid
     return status.running && !!status.scrywrite_socket
   }, { timeout: 30000 }).toBe(true)
-  const keys=['lengthHeatmap','sequences','undefinedBases','loopSkips','grid','overhangNames','clashes','expanded','deform','unfold','cadnano2d']
+  const keys=['lengthHeatmap','sequences','undefinedBases','loopSkips','grid','overhangNames','clashes','deform','unfold','cadnano2d']
   let step=0
   const probe=async action=>{
     const output=info.outputPath(`${step++}-${action}`)
     execFileSync('uv', ['run','python','-m','tools.vr_workflows.view_tools_probe',status.scrywrite_socket,
       output,String(action)],{cwd:path.resolve(process.cwd(),'..'),env:process.env,timeout:90000,stdio:'inherit'})
     const state=JSON.parse(fs.readFileSync(path.join(output,'result.json'),'utf8'))
-    const flags=await page.evaluate(keys=>keys.reduce((v,k,i)=>v|(document.querySelector(`[data-vt="${k}"]`).classList.contains('active')?1<<i:0),0),keys)
+    expect(state.view_tools.items.map(item=>item.key)).toEqual(keys)
+    const flags=await page.evaluate(keys=>keys.reduce((v,k,i)=>v|(document.querySelector(`[data-vt="${k}"]`).classList.contains('active')?1<<(i<7?i:i+1):0),0),keys)
     expect(state.view_tools.flags).toBe(flags)
     await page.screenshot({path:info.outputPath(`desktop-${step}.png`)})
     return state
   }
   await probe('equip')
-  for(let i=Number(process.env.NADOC_VR_VIEW_START||0);i<9;i++){
+  for(let i=Number(process.env.NADOC_VR_VIEW_START||0);i<8;i++){
     const before=await page.locator(`[data-vt="${keys[i]}"]`).getAttribute('class')
     await probe(i)
     await expect(page.locator(`[data-vt="${keys[i]}"]`)).not.toHaveAttribute('class',before)
     await probe(i)
   }
-  await probe(8) // Straight geometry is the desktop prerequisite for 2D layouts.
+  await probe(7) // Straight geometry is the desktop prerequisite for 2D layouts.
+  await probe(8)
   await probe(9)
-  await probe(10)
-  await probe(10)
   await probe(9)
+  await probe(8)
   await probe('stow')
 })

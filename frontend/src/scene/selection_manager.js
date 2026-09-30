@@ -5043,7 +5043,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (position) pick = nearestVRDeformationPlane(position, scope.clusterIds, scope.helixIds) ?? pick
       if (!pick.resolved) return pick
       const frames = getVRDeformationPlaneFrames(pick.bp, scope.clusterIds, scope.helixIds)
-      return frames ? { ...pick, frame: frames.natural, expandedFrame: frames.expanded }
+      return frames ? { ...pick, frame: frames.natural }
         : { resolved: false, reason: 'plane_frame_unavailable' }
     },
 

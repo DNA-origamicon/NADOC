@@ -16,9 +16,11 @@ The panel uses the desktop's original SVG icons in a two-column grid:
 | Length | Sequence |
 | Undefined | Loop / skip |
 | Grid | Overhang names |
-| Clashes | Expanded |
-| Deform | Unfold |
-| Cadnano 2D | Help / action feedback |
+| Clashes | Deform |
+| Unfold | Cadnano 2D |
+
+Quick Expand is removed from VR. Resize the model and move inside it for close
+inspection. Desktop Expanded remains available, but its geometry is not sent to VR.
 
 Each tile invokes the existing desktop action. Visible meshes, instance colors,
 transparency and text textures are sent to the native renderer and drawn with

@@ -252,9 +252,7 @@ struct SceneData {
     std::array<size_t,kRepresentationCount> cpuBytes{};
     nadoc_vr::ExtrudePlane extrudePlane;
     std::array<RepresentationData, kRepresentationCount> representations;
-    std::array<RepresentationData, kRepresentationCount> expandedRepresentations;
     std::array<bool,kRepresentationCount> available{};
-    bool hasExpanded = false;
     bool emptyAuthoring = false;
     Representation initialRepresentation = Representation::full;
     Coloring initialColoring = Coloring::strand;
@@ -266,8 +264,8 @@ struct SceneData {
     // Prepared records/indexes borrow primitive addresses. A deep scene copy
     // must not retain pointers into the original; ordinary moves keep them valid.
     SceneData(const SceneData& other):cpuBytes(other.cpuBytes),extrudePlane(other.extrudePlane),
-        representations(other.representations),expandedRepresentations(other.expandedRepresentations),
-        available(other.available),hasExpanded(other.hasExpanded),emptyAuthoring(other.emptyAuthoring),
+        representations(other.representations),
+        available(other.available),emptyAuthoring(other.emptyAuthoring),
         initialRepresentation(other.initialRepresentation),initialColoring(other.initialColoring),
         normalizationCenter(other.normalizationCenter),normalizationScale(other.normalizationScale){}
     SceneData& operator=(const SceneData& other){if(this!=&other)*this=SceneData(other);return *this;}
@@ -903,20 +901,19 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
     RepresentationData* active = nullptr;
     size_t activeIndex = 0;
     size_t legacyIdentityIndex = 0;
-    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> identities;
-    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> aliasIdentities;
-    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> handleTokens;
-    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> transformIdentities;
-    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> scopeHandleTokens;
-    std::array<std::array<std::unordered_map<std::string, std::string>, kRepresentationCount>, 2>
+    std::array<std::unordered_set<std::string>, kRepresentationCount> identities;
+    std::array<std::unordered_set<std::string>, kRepresentationCount> aliasIdentities;
+    std::array<std::unordered_set<std::string>, kRepresentationCount> handleTokens;
+    std::array<std::unordered_set<std::string>, kRepresentationCount> transformIdentities;
+    std::array<std::unordered_set<std::string>, kRepresentationCount> scopeHandleTokens;
+    std::array<std::unordered_map<std::string, std::string>, kRepresentationCount>
         scopeHandleIds;
-    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2>
+    std::array<std::unordered_set<std::string>, kRepresentationCount>
         declaredOwnerTokens;
-    std::array<std::array<std::unordered_set<std::string>, kRepresentationCount>, 2> scopeIdentities;
-    std::array<std::array<
-        std::vector<std::tuple<std::string, std::string, std::string>>, kRepresentationCount>, 2>
+    std::array<std::unordered_set<std::string>, kRepresentationCount> scopeIdentities;
+    std::array<
+        std::vector<std::tuple<std::string, std::string, std::string>>, kRepresentationCount>
         toolHandleKeys;
-    size_t poseIndex = 0;
     size_t recordsRead = 0;
     auto readIdentity = [&](char recordType) {
         std::string identity;
@@ -925,7 +922,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             if (identity.empty()) {
                 throw std::runtime_error("VR primitive has an empty identity");
             }
-            if (!identities[poseIndex][activeIndex].insert(identity).second) {
+            if (!identities[activeIndex].insert(identity).second) {
                 throw std::runtime_error(
                     "Duplicate VR primitive identity: " + identity);
             }
@@ -964,15 +961,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             std::string name;
             input >> name;
             activeIndex = static_cast<size_t>(representationFromName(name));
-            poseIndex = 0;
             active = &scene.representations[activeIndex];
-        } else if (type == 'E' && version >= 7) {
-            std::string name;
-            input >> name;
-            activeIndex = static_cast<size_t>(representationFromName(name));
-            poseIndex = 1;
-            scene.hasExpanded = true;
-            active = &scene.expandedRepresentations[activeIndex];
         } else if (type == 'A' && version >= 8) {
             if (!active) {
                 throw std::runtime_error(
@@ -982,8 +971,8 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             size_t count = 0;
             input >> aliases.identity >> count;
             if (aliases.identity.empty() || count == 0 || count > 8 ||
-                !identities[poseIndex][activeIndex].contains(aliases.identity) ||
-                !aliasIdentities[poseIndex][activeIndex]
+                !identities[activeIndex].contains(aliases.identity) ||
+                !aliasIdentities[activeIndex]
                      .insert(aliases.identity).second) {
                 throw std::runtime_error("Invalid VR primitive owner aliases");
             }
@@ -993,9 +982,9 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
                 std::string wireToken;
                 input >> wireToken;
                 if (version >= 12) {
-                    const auto mapped = scopeHandleIds[poseIndex][activeIndex].find(
+                    const auto mapped = scopeHandleIds[activeIndex].find(
                         wireToken);
-                    token = mapped == scopeHandleIds[poseIndex][activeIndex].end()
+                    token = mapped == scopeHandleIds[activeIndex].end()
                         ? "" : mapped->second;
                 } else {
                     token = std::move(wireToken);
@@ -1014,8 +1003,8 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             OwnerHandle handle;
             input >> handle.token >> handle.center.x >> handle.center.y >> handle.center.z;
             if (handle.token.empty() || handle.token.size() > 2048 ||
-                !handleTokens[poseIndex][activeIndex].insert(handle.token).second ||
-                !scopeHandleTokens[poseIndex][activeIndex]
+                !handleTokens[activeIndex].insert(handle.token).second ||
+                !scopeHandleTokens[activeIndex]
                      .insert(handle.token).second ||
                 !std::isfinite(handle.center.x) || !std::isfinite(handle.center.y) ||
                 !std::isfinite(handle.center.z)) {
@@ -1035,17 +1024,17 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
                 || handle.kind == "crossover" || handle.kind == "atom" || handle.kind == "overhang";
             if (handle.id.empty() || handle.id.size() > 64 ||
                 handle.token.empty() || handle.token.size() > 2048 || !validKind ||
-                !scopeHandleIds[poseIndex][activeIndex]
+                !scopeHandleIds[activeIndex]
                      .emplace(handle.id, handle.token).second ||
-                !declaredOwnerTokens[poseIndex][activeIndex]
+                !declaredOwnerTokens[activeIndex]
                      .insert(handle.token).second ||
-                !scopeHandleTokens[poseIndex][activeIndex]
+                !scopeHandleTokens[activeIndex]
                      .insert(handle.token).second ||
                 !std::isfinite(handle.center.x) || !std::isfinite(handle.center.y) ||
                 !std::isfinite(handle.center.z)) {
                 throw std::runtime_error("Invalid VR tool handle");
             }
-            toolHandleKeys[poseIndex][activeIndex].emplace_back(
+            toolHandleKeys[activeIndex].emplace_back(
                 handle.id, handle.token, handle.kind);
             active->toolHandles.push_back(std::move(handle));
         } else if (type == 'D' && version >= 12) {
@@ -1058,9 +1047,9 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             input >> ownerId >> token;
             if (ownerId.empty() || ownerId.size() > 64 || token.empty() ||
                 token.size() > 2048 ||
-                !scopeHandleIds[poseIndex][activeIndex]
+                !scopeHandleIds[activeIndex]
                      .emplace(ownerId, token).second ||
-                !declaredOwnerTokens[poseIndex][activeIndex]
+                !declaredOwnerTokens[activeIndex]
                      .insert(token).second) {
                 throw std::runtime_error("Invalid VR owner dictionary");
             }
@@ -1073,8 +1062,8 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             size_t count = 0;
             input >> ownership.identity >> count;
             if (ownership.identity.empty() || count == 0 || count > 8 ||
-                !identities[poseIndex][activeIndex].contains(ownership.identity) ||
-                !transformIdentities[poseIndex][activeIndex]
+                !identities[activeIndex].contains(ownership.identity) ||
+                !transformIdentities[activeIndex]
                      .insert(ownership.identity).second) {
                 throw std::runtime_error("Invalid VR transform ownership");
             }
@@ -1084,15 +1073,15 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
                 std::string wireOwner;
                 input >> wireOwner >> owner.startWeight >> owner.endWeight;
                 if (version >= 12) {
-                    const auto mapped = scopeHandleIds[poseIndex][activeIndex].find(
+                    const auto mapped = scopeHandleIds[activeIndex].find(
                         wireOwner);
-                    owner.token = mapped == scopeHandleIds[poseIndex][activeIndex].end()
+                    owner.token = mapped == scopeHandleIds[activeIndex].end()
                         ? "" : mapped->second;
                 } else {
                     owner.token = std::move(wireOwner);
                 }
                 if (owner.token.empty() || owner.token.size() > 2048 ||
-                    !handleTokens[poseIndex][activeIndex].contains(owner.token) ||
+                    !handleTokens[activeIndex].contains(owner.token) ||
                     !uniqueTokens.insert(owner.token).second ||
                     !std::isfinite(owner.startWeight) ||
                     !std::isfinite(owner.endWeight) ||
@@ -1111,8 +1100,8 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             size_t count = 0;
             input >> ownership.identity >> count;
             if (ownership.identity.empty() || count == 0 || count > 32 ||
-                !identities[poseIndex][activeIndex].contains(ownership.identity) ||
-                !scopeIdentities[poseIndex][activeIndex]
+                !identities[activeIndex].contains(ownership.identity) ||
+                !scopeIdentities[activeIndex]
                      .insert(ownership.identity).second) {
                 throw std::runtime_error("Invalid VR tool-scope ownership");
             }
@@ -1121,12 +1110,12 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             for (TransformOwner& owner : ownership.owners) {
                 std::string wireOwner;
                 input >> wireOwner >> owner.startWeight >> owner.endWeight;
-                const auto mapped = scopeHandleIds[poseIndex][activeIndex].find(
+                const auto mapped = scopeHandleIds[activeIndex].find(
                     wireOwner);
-                owner.token = mapped == scopeHandleIds[poseIndex][activeIndex].end()
+                owner.token = mapped == scopeHandleIds[activeIndex].end()
                     ? wireOwner : mapped->second;
                 if (owner.token.empty() || owner.token.size() > 2048 ||
-                    !scopeHandleTokens[poseIndex][activeIndex]
+                    !scopeHandleTokens[activeIndex]
                          .contains(owner.token) ||
                     !uniqueTokens.insert(owner.token).second ||
                     !std::isfinite(owner.startWeight) ||
@@ -1201,7 +1190,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
     const bool empty = std::all_of(scene.representations.begin(), scene.representations.end(), noPrimitives);
     if (scene.emptyAuthoring) {
         scene.available.fill(true);
-        if (!empty || scene.hasExpanded) throw std::runtime_error("Empty authoring scene contains geometry");
+        if (!empty) throw std::runtime_error("Empty authoring scene contains geometry");
         scene.normalizationCenter = fixedNormalization ? fixedNormalization->first : glm::vec3(0.0F);
         scene.normalizationScale = fixedNormalization ? fixedNormalization->second : kViewSizeMeters / 100.0F; // 100 nm initial working extent.
         std::cout << "VR_METRIC event=process_progress phase=scene_load_end"
@@ -1220,41 +1209,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             source.points.begin(),source.points.end(),[](const auto& point){return point.vdwSize>0;});
     }
 
-    if (scene.hasExpanded) {
-        for (size_t index = 0; index < scene.representations.size(); ++index) {
-            if (identities[0][index] != identities[1][index]) {
-                throw std::runtime_error(
-                    "Expanded VR pose does not match natural primitive identities");
-            }
-            if (scene.representations[index].ownerAliases !=
-                scene.expandedRepresentations[index].ownerAliases) {
-                throw std::runtime_error(
-                    "Expanded VR pose does not match natural owner aliases");
-            }
-            if (handleTokens[0][index] != handleTokens[1][index]) {
-                throw std::runtime_error(
-                    "Expanded VR pose does not match natural cluster handles");
-            }
-            if (scene.representations[index].transformOwnership !=
-                scene.expandedRepresentations[index].transformOwnership) {
-                throw std::runtime_error(
-                    "Expanded VR pose does not match natural transform ownership");
-            }
-            if (toolHandleKeys[0][index] != toolHandleKeys[1][index]) {
-                throw std::runtime_error(
-                    "Expanded VR pose does not match natural tool handles");
-            }
-            if (scopeHandleIds[0][index] != scopeHandleIds[1][index]) {
-                throw std::runtime_error(
-                    "Expanded VR pose does not match natural owner dictionary");
-            }
-            if (scene.representations[index].toolScopeOwnership !=
-                scene.expandedRepresentations[index].toolScopeOwnership) {
-                throw std::runtime_error(
-                    "Expanded VR pose does not match natural tool-scope ownership");
-            }
-        }
-    }
+
 
     glm::vec3 lo(std::numeric_limits<float>::max());
     glm::vec3 hi(std::numeric_limits<float>::lowest());
@@ -1335,12 +1290,10 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
     };
     for (size_t index = 0; index < scene.representations.size(); ++index) {
         normalize(scene.representations[index], true);
-        if (scene.hasExpanded) {
-            normalize(scene.expandedRepresentations[index], true);
-        }
+
     }
     for(size_t i=0;i<kRepresentationCount;++i)if(representationSourceIndex(static_cast<Representation>(i))==i)
-        scene.cpuBytes[i]=representationCpuBytes(scene.representations[i])+representationCpuBytes(scene.expandedRepresentations[i]);
+        scene.cpuBytes[i]=representationCpuBytes(scene.representations[i]);
     std::array<std::shared_ptr<SourceIndex>,kRepresentationCount> indices{};
     for(size_t i=0;i<kRepresentationCount;++i)if(scene.available[i]) {
         const auto source=representationSourceIndex(static_cast<Representation>(i));
@@ -1682,7 +1635,7 @@ class GlScene {
         if (toolCommittedToken_.empty()) return false;
         toolCommittedToken_.clear();
         toolCommittedTransform_ = glm::mat4(1.0F);
-        for(auto& offsets:committedHandleOffsets_)offsets.clear();
+        committedHandleOffsets_.clear();
         setStyle(representation_, coloring_);
         return true;
     }
@@ -1732,16 +1685,13 @@ class GlScene {
             if(source.points.empty() && source.cylinders.empty() && source.halfCylinders.empty() && source.boxes.empty())continue;
             scene_.cpuBytes[i]=incoming.cpuBytes[i];
             scene_.representations[i]=std::move(source);
-            scene_.expandedRepresentations[i]=std::move(incoming.expandedRepresentations[i]);
         }
         for(size_t i=0;i<kRepresentationCount;++i)scene_.available[i]=scene_.available[i]||incoming.available[i];
-        scene_.hasExpanded=scene_.hasExpanded||incoming.hasExpanded;
         for(size_t i=0;i<kRepresentationCount;++i)if(incoming.available[i]) {
             representationBuffers_.invalidate(i);
             residentStyles_[i].reset();
             scene_.prepared[i]=std::move(incoming.prepared[i]);
             staticSourceIndices_.erase(&scene_.representations[i]);
-            staticSourceIndices_.erase(&scene_.expandedRepresentations[i]);
         }
         displayedSourceValid_=sourceIndexValid_=false;visualizationDeltasValid_=false;
         atomisticBuffersResident_=false;
@@ -1762,7 +1712,7 @@ class GlScene {
             representation = Representation::full;
         }
         const bool cacheable = visualizationPositions_.empty() && visualizationColors_.empty() &&
-            visualizationSlabFrames_.empty() && expansion_.value() == 0.0F &&
+            visualizationSlabFrames_.empty() &&
             toolPreviewToken_.empty() && toolCommittedToken_.empty() &&
             snapHighlightOwnerTokens_.empty() && snapHighlightIdentities_.empty() &&
             selectedHighlightOwnerTokens_.empty() && selectedHighlightIdentities_.empty();
@@ -2195,20 +2145,6 @@ class GlScene {
 
     [[nodiscard]] Representation representation() const { return representation_; }
     [[nodiscard]] Coloring coloring() const { return coloring_; }
-    [[nodiscard]] bool expanded() const { return expansion_.target(); }
-    [[nodiscard]] float expansionAmount() const { return expansion_.value(); }
-    [[nodiscard]] bool toggleExpanded() {
-        if (!scene_.hasExpanded) return false;
-        expansion_.toggle();
-        return true;
-    }
-    void updateExpanded(float elapsedSeconds) {
-        if (!scene_.hasExpanded || !expansion_.update(elapsedSeconds)) return;
-        prepareDisplayedSource();
-        updateDisplayedGeometry();
-        setStyle(representation_, coloring_);
-    }
-
     [[nodiscard]] std::optional<nadoc_vr::PickHit> pick(
         const nadoc_vr::Ray& worldRay, const glm::mat4& modelTransform) const {
         const glm::mat4 worldToModel = glm::inverse(modelTransform);
@@ -2982,57 +2918,17 @@ class GlScene {
         return true;
     }
 
-    struct ExpandedPairing {
-        std::vector<size_t> points;
-        std::vector<size_t> cylinders;
-        std::vector<size_t> halfCylinders;
-        std::vector<size_t> boxes;
-        std::vector<size_t> ownerHandles;
-        std::vector<size_t> toolHandles;
-    };
-
-    template <typename Value, typename Key>
-    [[nodiscard]] static std::vector<size_t> matchExpandedIndices(
-        const std::vector<Value>& natural, const std::vector<Value>& expanded,
-        Key key, const char* kind) {
-        std::unordered_map<std::string, size_t> expandedByKey;
-        expandedByKey.reserve(expanded.size());
-        for (size_t index = 0; index < expanded.size(); ++index) {
-            expandedByKey.emplace(key(expanded[index]), index);
-        }
-        std::vector<size_t> result;
-        result.reserve(natural.size());
-        for (const Value& value : natural) {
-            const auto found = expandedByKey.find(key(value));
-            if (found == expandedByKey.end()) {
-                throw std::runtime_error(
-                    std::string("Expanded VR pose changes primitive type: ") + kind);
-            }
-            result.push_back(found->second);
-        }
-        if (result.size() != expanded.size()) {
-            throw std::runtime_error(
-                std::string("Expanded VR pose changes primitive count: ") + kind);
-        }
-        return result;
-    }
-
     void prepareDisplayedSource() {
         if (displayedSourceValid_ && displayedRepresentation_ == representation_) return;
         displayedRepresentation_ = representation_;
         displayedSource_ = nullptr;
         sourceIndexValid_ = false;
-        expandedPairing_ = {};
         displayedSourceValid_ = true;
         updateDisplayedGeometry();
     }
 
     void ensureSourceIndex(const RepresentationData& source) {
         if (!sourceIndexValid_) {
-            if (&source == &interpolatedSource_) {
-                interpolatedIndex_.rebuild(source);
-                sourceIndex_ = &interpolatedIndex_;
-            } else {
                 const auto prepared=scene_.prepared[static_cast<size_t>(representation_)];
                 if(prepared && &source==&scene_.representations[representationSourceIndex(representation_)]) sourceIndex_=prepared->index.get();
                 else {
@@ -3040,7 +2936,6 @@ class GlScene {
                     if (inserted) index->second.rebuild(source);
                     sourceIndex_ = &index->second;
                 }
-            }
             sourceIndexValid_ = true;
             visualizationDeltasValid_ = false;
         }
@@ -3062,79 +2957,8 @@ class GlScene {
         if (!displayedSourceValid_) return;
         const size_t index = representationSourceIndex(representation_);
         const RepresentationData& natural = scene_.representations[index];
-        if (!scene_.hasExpanded || expansion_.value() <= 0.0F) {
-            if (displayedSource_ != &natural) sourceIndexValid_ = false;
-            displayedSource_ = &natural;
-            return;
-        }
-        const RepresentationData& expanded = scene_.expandedRepresentations[index];
-        const float amount = expansion_.value();
-        if (amount >= 1.0F) {
-            if (displayedSource_ != &expanded) sourceIndexValid_ = false;
-            displayedSource_ = &expanded;
-            return;
-        }
-        if (displayedSource_ != &interpolatedSource_) {
-            interpolatedSource_ = natural;
-            auto identity = [](const auto& value) { return value.identity; };
-            expandedPairing_.points = matchExpandedIndices(
-                natural.points, expanded.points, identity, "point");
-            expandedPairing_.cylinders = matchExpandedIndices(
-                natural.cylinders, expanded.cylinders, identity, "cylinder");
-            expandedPairing_.halfCylinders = matchExpandedIndices(
-                natural.halfCylinders, expanded.halfCylinders, identity, "half cylinder");
-            expandedPairing_.boxes = matchExpandedIndices(
-                natural.boxes, expanded.boxes, identity, "box");
-            expandedPairing_.ownerHandles = matchExpandedIndices(
-                natural.ownerHandles, expanded.ownerHandles,
-                [](const OwnerHandle& value) { return value.token; }, "owner handle");
-            expandedPairing_.toolHandles = matchExpandedIndices(
-                natural.toolHandles, expanded.toolHandles,
-                [](const ToolHandle& value) { return value.id; }, "tool handle");
-            displayedSource_ = &interpolatedSource_;
-            sourceIndexValid_ = false;
-        }
-        for (size_t i = 0; i < interpolatedSource_.points.size(); ++i) {
-            const StyledPoint& a = natural.points[i];
-            const StyledPoint& b = expanded.points[expandedPairing_.points[i]];
-            interpolatedSource_.points[i].position = glm::mix(a.position, b.position, amount);
-            interpolatedSource_.points[i].size = glm::mix(a.size, b.size, amount);
-        }
-        auto blendCylinders = [&](std::vector<StyledCylinder>& output,
-                                  const std::vector<StyledCylinder>& a,
-                                  const std::vector<StyledCylinder>& b,
-                                  const std::vector<size_t>& pairing) {
-            for (size_t i = 0; i < output.size(); ++i) {
-                const StyledCylinder& target = b[pairing[i]];
-                output[i].start = glm::mix(a[i].start, target.start, amount);
-                output[i].end = glm::mix(a[i].end, target.end, amount);
-                output[i].radius = glm::mix(a[i].radius, target.radius, amount);
-            }
-        };
-        blendCylinders(
-            interpolatedSource_.cylinders, natural.cylinders, expanded.cylinders,
-            expandedPairing_.cylinders);
-        blendCylinders(
-            interpolatedSource_.halfCylinders, natural.halfCylinders,
-            expanded.halfCylinders, expandedPairing_.halfCylinders);
-        for (size_t i = 0; i < interpolatedSource_.boxes.size(); ++i) {
-            const StyledBox& a = natural.boxes[i];
-            const StyledBox& b = expanded.boxes[expandedPairing_.boxes[i]];
-            interpolatedSource_.boxes[i].center = glm::mix(a.center, b.center, amount);
-            interpolatedSource_.boxes[i].axisX = glm::mix(a.axisX, b.axisX, amount);
-            interpolatedSource_.boxes[i].axisY = glm::mix(a.axisY, b.axisY, amount);
-            interpolatedSource_.boxes[i].axisZ = glm::mix(a.axisZ, b.axisZ, amount);
-        }
-        for (size_t i = 0; i < interpolatedSource_.ownerHandles.size(); ++i) {
-            interpolatedSource_.ownerHandles[i].center = glm::mix(
-                natural.ownerHandles[i].center,
-                expanded.ownerHandles[expandedPairing_.ownerHandles[i]].center, amount);
-        }
-        for (size_t i = 0; i < interpolatedSource_.toolHandles.size(); ++i) {
-            interpolatedSource_.toolHandles[i].center = glm::mix(
-                natural.toolHandles[i].center,
-                expanded.toolHandles[expandedPairing_.toolHandles[i]].center, amount);
-        }
+        if (displayedSource_ != &natural) sourceIndexValid_ = false;
+        displayedSource_ = &natural;
     }
 
     [[nodiscard]] const RepresentationData& currentSource() const {
@@ -3172,10 +2996,9 @@ class GlScene {
     // complete scene: moving a cluster moves its Base/Overhang handles; moving
     // one base shifts its parent's centroid by that base's contribution.
     void updateCommittedHandleOffsets() {
-        for(size_t pose=0;pose<2;++pose) {
-            auto& offsets=committedHandleOffsets_[pose];offsets.clear();
-            if(pose && !scene_.hasExpanded)continue;
-            const auto& full=(pose?scene_.expandedRepresentations:scene_.representations)
+        {
+            auto& offsets=committedHandleOffsets_;offsets.clear();
+            const auto& full=scene_.representations
                 [static_cast<size_t>(Representation::full)];
             SourceIndex index;index.rebuild(full);
             std::unordered_map<std::string,size_t> counts;
@@ -3194,19 +3017,14 @@ class GlScene {
         }
     }
 
-    glm::vec3 committedHandleCenter(const std::string& token,const glm::vec3& center,
-                                    float amount=-1.F) const {
+    glm::vec3 committedHandleCenter(const std::string& token,const glm::vec3& center) const {
         if(token==toolCommittedToken_)
             return glm::vec3(toolCommittedTransform_*glm::vec4(center,1));
-        auto offset=[&](size_t pose) {
-            const auto found=committedHandleOffsets_[pose].find(token);
-            return found==committedHandleOffsets_[pose].end()?glm::vec3(0):found->second;
-        };
-        if(amount<0)amount=scene_.hasExpanded?expansion_.value():0.F;
-        return center+glm::mix(offset(0),offset(1),amount);
+        const auto found=committedHandleOffsets_.find(token);
+        return center+(found==committedHandleOffsets_.end()?glm::vec3(0):found->second);
     }
 
-    void bakeCommittedLayer(RepresentationData& source,size_t pose) {
+    void bakeCommittedLayer(RepresentationData& source) {
         if (toolCommittedToken_.empty()) return;
         SourceIndex index;
         index.rebuild(source);
@@ -3243,10 +3061,10 @@ class GlScene {
                 normal = nadoc_vr::weightedTransformVector(normal, toolCommittedTransform_, weight);
         }
         for (OwnerHandle& handle : source.ownerHandles) {
-            handle.center=committedHandleCenter(handle.token,handle.center,float(pose));
+            handle.center=committedHandleCenter(handle.token,handle.center);
         }
         for (ToolHandle& handle : source.toolHandles) {
-            handle.center=committedHandleCenter(handle.token,handle.center,float(pose));
+            handle.center=committedHandleCenter(handle.token,handle.center);
         }
     }
 
@@ -3257,14 +3075,10 @@ class GlScene {
         representationBuffers_.clear();
         staticSourceIndices_.clear();
         for (RepresentationData& source : scene_.representations) {
-            bakeCommittedLayer(source,0);
+            bakeCommittedLayer(source);
         }
-        if (scene_.hasExpanded) {
-            for (RepresentationData& source : scene_.expandedRepresentations) {
-                bakeCommittedLayer(source,1);
-            }
-        }
-        for(auto& offsets:committedHandleOffsets_)offsets.clear();
+
+        committedHandleOffsets_.clear();
         toolCommittedToken_.clear();
         toolCommittedTransform_ = glm::mat4(1.0F);
         displayedSourceValid_ = false;
@@ -3996,20 +3810,16 @@ class GlScene {
         return id;
     }
 
-    RepresentationData interpolatedSource_;
     const RepresentationData* displayedSource_ = nullptr;
-    SourceIndex interpolatedIndex_;
     std::unordered_map<const RepresentationData*, SourceIndex> staticSourceIndices_;
     SourceIndex* sourceIndex_ = nullptr;
     bool sourceIndexValid_ = false;
-    ExpandedPairing expandedPairing_;
     Representation displayedRepresentation_ = Representation::full;
     bool displayedSourceValid_ = false;
     Representation representation_ = Representation::full;
     Coloring coloring_ = Coloring::strand;
-    nadoc_vr::SmoothToggle expansion_;
     std::string toolCommittedToken_;
-    std::array<std::unordered_map<std::string,glm::vec3>,2> committedHandleOffsets_;
+    std::unordered_map<std::string,glm::vec3> committedHandleOffsets_;
     glm::mat4 toolCommittedTransform_{1.0F};
     std::string toolPreviewToken_;
     glm::mat4 toolPreviewTransform_{1.0F};
@@ -4133,7 +3943,6 @@ struct DeformationPlanePose {
 
 struct DeformationPlaneGuide {
     DeformationPlanePose natural;
-    std::optional<DeformationPlanePose> expanded;
 };
 
 struct DesktopVertex {
@@ -6458,12 +6267,8 @@ class Viewer {
             const bool orderedPlanes = hasBothPlanes &&
                 *toolConfig_.planeABp() < *toolConfig_.planeBBp();
             const std::string geometryStatus = deformationTool
-                ? orderedPlanes && planeGuides_[0] && planeGuides_[1] &&
-                    (!glScene_->expanded() ||
-                     (planeGuides_[0]->expanded && planeGuides_[1]->expanded))
-                    ? glScene_->expanded()
-                        ? "PLANES A/B EXPANDED READ ONLY"
-                        : "PLANES A/B FRAMED READ ONLY"
+                ? orderedPlanes && planeGuides_[0] && planeGuides_[1]
+                    ? "PLANES A/B FRAMED READ ONLY"
                   : orderedPlanes ? "PLANE FRAME MISSING"
                   : hasBothPlanes ? "PLANES MUST BE A < B"
                   : "PICK PLANES IN FULL / BALL+STICK"
@@ -6474,9 +6279,7 @@ class Viewer {
                             : " CELLS - SET LENGTH")
                 : singleCellFootprint
                     ? toolConfig_.lengthBp() > 0
-                        ? glScene_->expanded()
-                            ? "1 CELL EXPANDED READ ONLY"
-                            : "1 CELL FOOTPRINT READ ONLY"
+                        ? "1 CELL FOOTPRINT READ ONLY"
                         : "1 CELL - SET LENGTH"
                     : "MISSING " + std::string(toolConfig_.unresolvedGeometry());
             appendMenuText(
@@ -6494,7 +6297,6 @@ class Viewer {
             } else if (feedback) {
                 const std::string locatorStatus = feedback->resolved
                     ? feedback->occupied ? "FACE LOCATED - OCCUPIED"
-                      : glScene_->expanded() ? "FACE LOCATED - EXPANDED"
                       : "FACE LOCATED"
                     : "FACE NOT LOCATED";
                 appendMenuText(locatorStatus, -0.305F, -0.125F, 0.0032F,
@@ -7600,7 +7402,6 @@ class Viewer {
             if (hand == 1U && pendingToolTransform_.dragging()) {
                 color = {1.0F, 0.72F, 0.18F};
             }
-            if (hand == 1U && glScene_->expanded()) color = {0.35F, 0.95F, 1.0F};
             if (manipulator_.mode() == nadoc_vr::ManipulationMode::two_hand) {
                 color = {0.95F, 0.35F, 1.0F};
             }
@@ -7704,14 +7505,9 @@ class Viewer {
         {
             if (const auto* feedback = currentToolContextFeedback();
                 feedback && feedback->resolved) {
-                const float amount = feedback->expandedPoseResolved
-                    ? glScene_->expansionAmount() : 0.0F;
-                const glm::vec3 facePosition = glm::mix(
-                    feedback->facePosition, feedback->expandedFacePosition, amount);
-                const glm::vec3 faceNormal = glm::normalize(glm::mix(
-                    feedback->faceNormal, feedback->expandedFaceNormal, amount));
-                const glm::vec3 previewOrigin = glm::mix(
-                    feedback->previewOrigin, feedback->expandedPreviewOrigin, amount);
+                const glm::vec3 facePosition = feedback->facePosition;
+                const glm::vec3 faceNormal = feedback->faceNormal;
+                const glm::vec3 previewOrigin = feedback->previewOrigin;
                 const glm::vec3 localNormal = glm::normalize(faceNormal);
                 const glm::vec3 reference = std::abs(localNormal.z) < 0.90F
                     ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
@@ -8378,8 +8174,7 @@ class Viewer {
             toolContextFeedback_->sequence != toolConfigSequence_ ||
             toolConfig_.targetSelectionKind() != "end" ||
             toolContextFeedback_->selectionKind != toolConfig_.targetSelectionKind() ||
-            toolContextFeedback_->identity != toolConfig_.targetIdentity() ||
-            (glScene_->expanded() && !toolContextFeedback_->expandedPoseResolved)) {
+            toolContextFeedback_->identity != toolConfig_.targetIdentity()) {
             return nullptr;
         }
         return &*toolContextFeedback_;
@@ -8441,16 +8236,7 @@ class Viewer {
                     feedback->previewOrigin, normalizationCenter_, normalizationScale_,
                     {0.0F, 0.0F, -kViewDistanceMeters});
             }
-            if (feedback->expandedPoseResolved) {
-                feedback->expandedFacePosition = nadoc_vr::sourceToNormalizedPoint(
-                    feedback->expandedFacePosition, normalizationCenter_,
-                    normalizationScale_, {0.0F, 0.0F, -kViewDistanceMeters});
-                if (feedback->footprintResolved) {
-                    feedback->expandedPreviewOrigin = nadoc_vr::sourceToNormalizedPoint(
-                        feedback->expandedPreviewOrigin, normalizationCenter_,
-                        normalizationScale_, {0.0F, 0.0F, -kViewDistanceMeters});
-                }
-            }
+
         }
         toolContextFeedback_ = std::move(feedback);
     }
@@ -8517,8 +8303,7 @@ class Viewer {
         const std::string slot = feedback->slot;
         const size_t slotIndex = slot == "a" ? 0U : 1U;
         const bool retainedGuide = planeGuides_[slotIndex].has_value();
-        const bool accepted = feedback->resolved && feedback->frameResolved &&
-            feedback->expandedFrameResolved;
+        const bool accepted = feedback->resolved && feedback->frameResolved;
         bool changed = false;
         if (accepted) {
             DeformationPlaneGuide guide;
@@ -8528,16 +8313,7 @@ class Viewer {
             guide.natural.normal = glm::normalize(feedback->planeNormal);
             guide.natural.halfExtent = feedback->planeHalfExtentNanometers
                                      * normalizationScale_;
-            if (feedback->expandedFrameResolved) {
-                DeformationPlanePose expanded;
-                expanded.center = nadoc_vr::sourceToNormalizedPoint(
-                    feedback->expandedPlaneCenter, normalizationCenter_,
-                    normalizationScale_, {0.0F, 0.0F, -kViewDistanceMeters});
-                expanded.normal = glm::normalize(feedback->expandedPlaneNormal);
-                expanded.halfExtent = feedback->expandedPlaneHalfExtentNanometers
-                                    * normalizationScale_;
-                guide.expanded = expanded;
-            }
+
             planeGuides_[slotIndex] = guide;
             if(bendPanel_.active) {
                 bendPanel_.posed=false;bendPanel_.grabbed=1;
@@ -8772,7 +8548,7 @@ class Viewer {
         out << "],\"qr_calibration\":" << qrCalibration_.json() << ",\"room_floor\":" << roomFloor_.json() << ",\"menu_glass\":{\"enabled\":true,\"gray_opacity\":0.10,\"blur_radius_px\":15},\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
             << ",\"sequence\":" << viewTools_.sequence << ",\"ack_sequence\":" << viewTools_.acknowledged << ",\"version\":" << viewTools_.version << ",\"flags\":" << viewTools_.flags << ",\"triangles\":" << viewTools_.triangles.size()/3
             << ",\"parse_ms\":" << viewTools_.parseMs << ",\"upload_ms\":" << viewTools_.uploadMs << ",\"instances\":" << viewTools_.instanceCount() << ",\"lines\":" << viewTools_.lines.size()/2 << ",\"sprites\":" << viewTools_.sprites.size() << ",\"hover\":[" << viewTools_.hover[0] << ',' << viewTools_.hover[1] << "],\"items\":[";
-        for(size_t i=0;i<11;++i){if(i)out<<',';out<<"{\"key\":"<<quote(VRViewTools::keys[i])<<",\"active\":"<<((viewTools_.flags&(1<<i))?"true":"false")<<",\"center\":"<<point(viewTools_.world(VRViewTools::cell(i)))<<'}';}
+        for(size_t i=0;i<VRViewTools::keys.size();++i){if(i)out<<',';out<<"{\"key\":"<<quote(VRViewTools::keys[i])<<",\"active\":"<<((viewTools_.flags&(1<<(i<7?i:i+1)))?"true":"false")<<",\"center\":"<<point(viewTools_.world(VRViewTools::cell(i)))<<'}';}
         out << "]}";
         out << ",\"radial_edit\":{\"open\":" << (radialToolMenu_.open()?"true":"false")
             << ",\"hovered\":" << (radialToolMenu_.hovered()?std::to_string(*radialToolMenu_.hovered()):"null") << ",\"items\":[";
@@ -9465,14 +9241,11 @@ class Viewer {
             if(share>>active>>perspective>>busy>>ack>>failed) {shareActive_=active;sharePerspective_=perspective;shareBusy_=busy;shareAck_=ack;shareFailed_=failed;} }
         }
         if(viewTools_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})) {
-            const bool expanded=(viewTools_.flags&(1<<7))!=0;
-            if(expanded!=glScene_->expanded())(void)glScene_->toggleExpanded();
         }
         viewTools_.input(hands_,triggerClicked_,menuControlTargeted,[&](size_t hand){publishEventState();pulse(hand,.3F);});
         // Alternate layouts have different positions from canonical edit targets.
         // Keep tablet input and world manipulation, but never cut an unseen bond.
         if(viewTools_.inspectionLayout()) menuControlTargeted.fill(true);
-        ligation_.expansion=glScene_->expansionAmount();
         ligation_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
         ligation_.input(hands_,{selectionVolumeCenter(0),selectionVolumeCenter(1)},
             {selectionVolumes_[0].radius(),selectionVolumes_[1].radius()},triggerClicked_,triggerPressed_,
@@ -9488,7 +9261,6 @@ class Viewer {
             !menuGripActive && !radialToolMenu_.open() && !dimensionPanel_.tool.active && !volumePanel_.active,
             [&]{publishEventState();});
         if(ligation_.nickActive)for(size_t h=0;h<2;++h)if(menuControlTargeted[h])liveInputOwner_[h]="nick";
-        endResize_.expansion=glScene_->expansionAmount();
         endResize_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
         endResize_.input(hands_,triggerClicked_,triggerPressed_,menuControlTargeted,
             manipulator_.transform(),normalizationScale_,
@@ -9540,7 +9312,6 @@ class Viewer {
             candidate->setStyle(glScene_->representation(), glScene_->coloring());
             candidate->setVisualization(visualizationSnapshot_);
             candidate->setSelectionHighlights({}, {}, committedSelectionOwnerTokens_, committedSelectionIdentities_);
-            if (glScene_->expanded()) (void)candidate->toggleExpanded();
             glScene_.swap(candidate);
         });
         updateControllerGuides();
@@ -9553,15 +9324,7 @@ class Viewer {
             pose.center=slot==0?bendPanel_.arc.a:bendPanel_.arc.b;
             pose.normal=bendPanel_.arc.endTangent(float(slot));
         }
-        else if (guide.expanded) {
-            const float amount = glScene_->expansionAmount();
-            pose.center = glm::mix(
-                guide.natural.center, guide.expanded->center, amount);
-            pose.normal = glm::normalize(glm::mix(
-                guide.natural.normal, guide.expanded->normal, amount));
-            pose.halfExtent = glm::mix(
-                guide.natural.halfExtent, guide.expanded->halfExtent, amount);
-        }
+
         return pose;
     }
     void prepareBendArc() {
@@ -9633,7 +9396,7 @@ class Viewer {
     }
     void processTwistHandle(std::array<bool,2>& blocked,bool sceneMoving) {
         prepareBendArc();
-        if(sceneMoving || toolShell_.executionPending() || glScene_->expanded() || viewTools_.inspectionLayout()) {
+        if(sceneMoving || toolShell_.executionPending() || viewTools_.inspectionLayout()) {
             if(bendPanel_.hand){bendPanel_.hand.reset();publishToolConfiguration();}return;
         }
         const auto model=manipulator_.transform();
@@ -9666,7 +9429,7 @@ class Viewer {
     void processBendHandles(std::array<bool,2>& blocked,bool sceneMoving) {
         if(bendPanel_.active && bendPanel_.twist){processTwistHandle(blocked,sceneMoving);return;}
         if(!bendPanel_.active)return;
-        if(sceneMoving || toolShell_.executionPending() || glScene_->expanded() || viewTools_.inspectionLayout()) {
+        if(sceneMoving || toolShell_.executionPending() || viewTools_.inspectionLayout()) {
             if(bendPanel_.hand) {bendPanel_.hand.reset();publishToolConfiguration();}
             return;
         }
@@ -9767,7 +9530,7 @@ class Viewer {
                 line(menu.placement.worldPoint({x-.023F,y+offset,.007F}),menu.placement.worldPoint({x,y+offset,.007F}),glm::vec3(.4F,.9F,1));
             }
         }
-        if(!planeGuides_[0] || !planeGuides_[1] || bendPanel_.arc.length<=0 || glScene_->expanded())return;
+        if(!planeGuides_[0] || !planeGuides_[1] || bendPanel_.arc.length<=0)return;
         const auto model=manipulator_.transform();
         auto world=[&](glm::vec3 p){return glm::vec3(model*glm::vec4(p,1));};
         const glm::vec3 color(.25F,1,.8F);
@@ -10705,8 +10468,6 @@ class Viewer {
         traceRender("input");
         const auto inputFinished = std::chrono::steady_clock::now();
         desktopSurface_.update(menuOpen_ && menuPage_ == MenuPage::desktop);
-        glScene_->updateExpanded(
-            static_cast<float>(frameState.predictedDisplayPeriod) / 1.0e9F);
 
         std::vector<XrCompositionLayerProjectionView> layerViews(views_.size());
         XrCompositionLayerProjection layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};

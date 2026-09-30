@@ -1,6 +1,5 @@
 /** Browser-owned wheel catalogs and serialized desktop-authoritative edits. */
 import { endRole, isValidPair, ligationArgs } from './force_ligation.js'
-import { expandedHelixOffsetFrame } from './expanded_helix_offsets.js'
 
 export function createVRLigation({ getState, api, clearSelection = () => {}, onOutcome = () => {} }) {
   let design, geometry, snapshot, version = 0, dirty = true, busy = false
@@ -11,7 +10,6 @@ export function createVRLigation({ getState, api, clearSelection = () => {}, onO
     if (!dirty && design === state.currentDesign && geometry === state.currentGeometry &&
         snapshot.assembly === !!state.assemblyActive) return snapshot
     design = state.currentDesign; geometry = state.currentGeometry; dirty = false
-    const offsets = expandedHelixOffsetFrame(design)?.offsets
     const strands = new Map((design?.strands ?? []).map((s, i) => [s.id, { strand: s, index: i }]))
     const ends = [], nucleotides = []
     if (!state.assemblyActive) for (const n of geometry ?? []) {
@@ -23,8 +21,7 @@ export function createVRLigation({ getState, api, clearSelection = () => {}, onO
       if (!Array.isArray(n.backbone_position) || !n.backbone_position.every(Number.isFinite)) continue
       const identity = encodeURIComponent(['nuc', n.strand_id, n.domain_index ?? 0, n.helix_id, n.bp_index, n.direction, 0, 'backbone'].join(':'))
       ends.push({ role: role === '3p' ? 3 : 5, strand: source.index, identity,
-        position: [...n.backbone_position], tangent: n.axis_tangent ?? [0,0,1],
-        expanded_offset: offsets?.get(n.helix_id) ?? [0,0,0] })
+        position: [...n.backbone_position], tangent: n.axis_tangent ?? [0,0,1] })
       nucleotides.push(n)
     }
     // Match the renderer's 5′→3′ domain ordering. Never promote a loop copy
@@ -46,8 +43,7 @@ export function createVRLigation({ getState, api, clearSelection = () => {}, onO
         if (a.is_three_prime || b.is_five_prime || a.helix_id?.startsWith('__') || b.helix_id?.startsWith('__') ||
             (a.copy_k ?? 0) !== 0 || (b.copy_k ?? 0) !== 0 || coordinateOwners.get(key(a)) !== 1 ||
             ![a,b].every(n => Array.isArray(n.backbone_position) && n.backbone_position.length === 3 && n.backbone_position.every(Number.isFinite))) continue
-        bonds.push({ a: a.backbone_position, b: b.backbone_position,
-          offset_a: offsets?.get(a.helix_id) ?? [0,0,0], offset_b: offsets?.get(b.helix_id) ?? [0,0,0] })
+        bonds.push({ a: a.backbone_position, b: b.backbone_position })
         nickArgs.push({ helixId:a.helix_id, bpIndex:a.bp_index, direction:a.direction })
       }
     }

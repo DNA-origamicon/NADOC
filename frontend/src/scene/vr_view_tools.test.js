@@ -1,9 +1,9 @@
 import {it,expect} from 'vitest'
 import {VR_VIEW_KEYS,encodeVRView} from './vr_view_tools.js'
-it('covers every desktop top-row view toggle in order',async()=>{
+it('retains desktop view toggles except Quick Expand',async()=>{
   const fs=await import('node:fs')
   const html=fs.readFileSync('index.html','utf8')
-  expect([...new Set([...html.matchAll(/data-vt="([^"]+)"/g)].map(m=>m[1]))]).toEqual(VR_VIEW_KEYS)
+  expect([...new Set([...html.matchAll(/data-vt="([^"]+)"/g)].map(m=>m[1]).filter(k=>k!=='expanded'))]).toEqual(VR_VIEW_KEYS)
 })
 it('encodes a bounded binary scene with separate geometry and sprite counts',()=>{
   const blob=encodeVRView({flags:256,triangles:new Float32Array(27),lines:new Float32Array(18),sprites:new Float32Array(15),pixels:new Uint8Array(16),width:2,height:2},9)

@@ -58,6 +58,8 @@ def main():
                     time.sleep(.2)
                     continue
             live.frame()
+            keys = [item['key'] for item in live.state['view_tools']['items']]
+            assert len(keys) == 10 and 'expanded' not in keys, keys
             status = live.state['startup']
             sample = dict(seconds=time.monotonic()-started, frame=live.state['frame'], **status)
             samples.append(sample)

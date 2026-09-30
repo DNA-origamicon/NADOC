@@ -43,7 +43,7 @@ def catalog():
     add('representation-loading', 'interaction', 'Full startup, loading visibility and representation progress',
         'Start with Full, select other representations with real controller inputs, and verify loading progress plus retained model pixels in both eyes, including the point fallback. Validation uses all four motion profiles and covers Surface to Stick.', ['--representations'], module='startup_tour')
     add('startup', 'interaction', 'Cold startup and headset loading progress',
-        'Launch a read-only private copy of 24HB through the normal launch route. Capture loading and first model stereo frames and verify advancing headset frames during export.', module='startup_tour')
+        'Launch a read-only private copy of 24HB through the normal launch route. Capture loading and first model stereo frames and verify advancing headset frames during natural-only export (no Quick Expand).', module='startup_tour')
     add('menu-depth', 'interaction', 'Menu blur and controller depth',
         'Move the controller stick and sphere in front of and behind a menu. Check sharp foreground pixels and behind-menu occlusion in both eyes, across all four motion profiles.', ['--depth-checks'])
     add('room-ui', 'interaction', 'Frosted menus & SteamVR floor',
@@ -69,7 +69,7 @@ def catalog():
     add('share', 'left', 'Share presenter controls',
         'Control a desktop-started presentation from the left menu. Isolated simulated hosting; creates no public link. All four controller profiles in validation.', module='share_tour')
     add('view-tools', 'right', 'Left-hand view tools',
-        'Equip the two-column desktop-icon panel with the left quiver gesture and exercise every view toggle in native stereo.', module='view_tools_tour')
+        'Equip the two-column desktop-icon panel with the left quiver gesture and exercise the ten supported view toggles in native stereo; Quick Expand is excluded.', module='view_tools_tour')
     add('nick', 'authoring', 'Nick with scissors, Undo and Redo',
         'Equip/stow scissors with a behind-head reach, close them with analog trigger pressure, preview the glowing bond, click to nick, then use radial Undo and Redo. Validation uses all four motion profiles.', module='nick_tour')
     add('ligate', 'authoring', 'Ligate ends with the radius wheel',

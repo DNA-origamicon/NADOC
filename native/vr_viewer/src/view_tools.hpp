@@ -19,7 +19,7 @@ class VRViewTools {
     std::array<int,2> hover{-1,-1};
     glm::vec3 position{};glm::quat orientation{1,0,0,0};
     std::vector<V> triangles,lines;std::vector<Sprite> sprites;
-    static constexpr std::array<const char*,11> keys{"lengthHeatmap","sequences","undefinedBases","loopSkips","grid","overhangNames","clashes","expanded","deform","unfold","cadnano2d"};
+    static constexpr std::array<const char*,10> keys{"lengthHeatmap","sequences","undefinedBases","loopSkips","grid","overhangNames","clashes","deform","unfold","cadnano2d"};
     GLuint program=0,vao=0,vbo=0,triangleVbo=0,lineVbo=0,texture=0;unsigned frames=0;
     size_t instanceCount() const {size_t n=0;for(const auto& b:batches)n+=b.instances.size();return n;}
     std::optional<nadoc_vr::BoundsSummary> sceneBounds() const {
@@ -77,7 +77,7 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
             if(blocked[h])continue;
             blocked[h]=true;
             const float px=uv->x*768,py=uv->y*768;
-            for(int i=0;i<11;++i){const auto c=cell(i)*768.F;if(std::abs(px-c.x)<180 && std::abs(py-c.y)<50){hover[h]=i;break;}}
+            for(int i=0;i<int(keys.size());++i){const auto c=cell(i)*768.F;if(std::abs(px-c.x)<180 && std::abs(py-c.y)<50){hover[h]=i;break;}}
             if(clicked[h]&&hover[h]>=0&&!waiting&&version){requested=hover[h];waiting=true;++sequence;commit(h);}
         }
     }
@@ -85,8 +85,8 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
         if(path.empty()||++frames%15)return false;
         const double started=glfwGetTime();
         std::ifstream in(path+".viewtools",std::ios::binary);char magic[8];std::array<uint32_t,10> h{};
-        if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||h[0]!=3||h[1]==version)return false;
-        if(h[2]>=4096||h[3]+uint64_t(h[4])>4000000||h[3]%3||h[4]%2||h[5]>100000||h[6]!=2048||h[7]!=2048||h[8]>10000)return false;
+        if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||h[0]!=4||h[1]==version)return false;
+        if((h[2]>=4096 || (h[2]&128))||h[3]+uint64_t(h[4])>4000000||h[3]%3||h[4]%2||h[5]>100000||h[6]!=2048||h[7]!=2048||h[8]>10000)return false;
         std::vector<V> t(h[3]),l(h[4]);std::vector<Sprite> s(h[5]);std::vector<unsigned char> rgba(2048*2048*4);
         static_assert(sizeof(V)==36 && sizeof(Sprite)==60 && sizeof(Instance)==80);
         if(!in.read((char*)t.data(),t.size()*sizeof(V))||!in.read((char*)l.data(),l.size()*sizeof(V))||!in.read((char*)s.data(),s.size()*sizeof(Sprite)))return false;

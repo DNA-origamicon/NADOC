@@ -25,7 +25,7 @@ between controls, including the paired step buttons. Grips move the scene; trigg
    to undo an intervening desktop edit. **Cancel** clears the draft.
 
 Plane picking projects onto the scoped helix axes, including coarse scene
-representations. Handle editing uses natural geometry; expanded/alternate
+representations. Handle editing uses natural geometry; alternate
 inspection layouts retain navigation but do not accept bend-handle grabs.
 
 The desktop controls were reviewed: plane bp/nm readouts, cluster scope with

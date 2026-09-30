@@ -43,7 +43,6 @@ describe('VR End tool context', () => {
       { kind: 'end', key: 'h1:9:FORWARD' },
       { geometry: [nucleotide()], design: design(), domainEnds: [face()] },
     )
-    const delta = 5 / 2.25 - 1
     expect(result).toEqual({
       accepted: true,
       reason: 'resolved',
@@ -52,9 +51,6 @@ describe('VR End tool context', () => {
         continuationBp: 10, openSide: 1, plane: 'XY', offsetNm: 3.34,
         facePosition: [1, 2, 3], faceNormal: [0, 0, 1],
         continuationPosition: [1, 2, 3],
-        expandedFacePosition: [1 - delta, 2, 3],
-        expandedFaceNormal: [0, 0, 1],
-        expandedContinuationPosition: [1 - delta, 2, 3],
         strandId: 's1', domainIndex: 0, direction: 'FORWARD',
         endRole: 'three_prime', overhangId: null, connections: [], deformed: false,
         footprint: {
@@ -176,8 +172,6 @@ describe('VR End tool context', () => {
       toolContext: {
         facePosition: [1, 2, 3], faceNormal: [0, 0, 2],
         continuationPosition: [1, 2, 2.666],
-        expandedFacePosition: [4, 5, 6], expandedFaceNormal: [0, 2, 0],
-        expandedContinuationPosition: [4, 5, 5.666],
         connections: [{ type: 'crossover', id: 'xo1' }], deformed: true,
         footprint: { kind: 'single_end_cell', latticeType: 'HONEYCOMB', cells: [[2, 3]] },
       },
@@ -191,9 +185,6 @@ describe('VR End tool context', () => {
       face_position: [1, 2, 3],
       face_normal: [0, 0, 2],
       preview_origin: [1, 2, 2.666],
-      expanded_face_position: [4, 5, 6],
-      expanded_face_normal: [0, 2, 0],
-      expanded_preview_origin: [4, 5, 5.666],
       occupied: true,
       deformed: true,
       footprint_resolved: true,
@@ -206,8 +197,6 @@ describe('VR End tool context', () => {
       tool_config_sequence: 8, resolved: false,
       reason: 'no_continuation_face', face_position: null, face_normal: null,
       preview_origin: null, occupied: false, deformed: false,
-      expanded_face_position: null, expanded_face_normal: null,
-      expanded_preview_origin: null,
       footprint_resolved: false,
     })
     expect(vrToolFeedbackPayload(9, draft, {
@@ -219,8 +208,6 @@ describe('VR End tool context', () => {
     expect(vrToolFeedbackPayload(11, draft, {
       toolContext: {
         facePosition: [1, 2, 3], faceNormal: [0, 0, 1], connections: [],
-        expandedFacePosition: [4, 5, 6], expandedFaceNormal: [0, 0, 1],
-        expandedContinuationPosition: [4, 5, 5.666],
         footprint: { kind: 'single_end_cell', latticeType: 'HONEYCOMB', cells: [[]] },
       },
     }).footprint_resolved).toBe(false)

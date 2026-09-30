@@ -1,6 +1,6 @@
 """Desktop-derived additional VR geometry, immutable and display-only.
 
-Mesh topology is built once in the natural pose. Expanded display moves its
+Mesh topology is built once in the natural pose. Display transforms move its
 vertices using canonical nucleotide displacements, keeping stable face identities.
 """
 

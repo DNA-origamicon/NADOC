@@ -8,7 +8,7 @@ The panel stays anchored in the room as the user looks around.
 The progress bar reports completed preparation stages, not an estimated fraction
 of elapsed time. The current task and the complete stage list remain visible:
 nucleotide geometry, Full display geometry and selection metadata, natural export,
-Expanded Quick View geometry and export, validation/compression, native parsing,
+validation/compression, native parsing,
 GPU preparation and first part frame. Startup loads **Full only**, even when the
 desktop previously displayed another representation. The existing
 first-frame-ready signal still means the part is ready, rather than an empty
@@ -42,10 +42,11 @@ Full. A completed native load waits for this real desktop acknowledgement.
 Controller rays extend to an open sidebar as soon as the controller aims at it,
 without requiring a trigger press or changing molecular point selection.
 
-The expanded pose is the existing **Expanded Quick View**: a display-only spread
-of the part, not a simulation or design change. Each loaded representation
-includes its normal and expanded geometry, so Full's expanded toggle is ready
-at startup.
+VR exports only the natural pose. Expanded Quick View has been removed from VR,
+including duplicate geometry, interpolation and tool-placement dependencies.
+Use model scaling and physical movement for close inspection. Desktop Quick View
+remains available; its expanded geometry is not transferred into VR.
+
 
 Menus use same-eye color and depth snapshots. World-space controller sticks,
 selection spheres and other guides now participate in depth testing and depth

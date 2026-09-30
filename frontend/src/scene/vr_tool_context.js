@@ -1,6 +1,5 @@
 import { canonicalVREndSource } from './vr_continuation_source.js'
 import { parseBaseKey } from './base_ref.js'
-import { expandedHelixOffsetFrame } from './expanded_helix_offsets.js'
 
 const VR_TOOL_CONTEXT_REASONS = new Set([
   'resolved', 'end_selection_required', 'invalid_end_ref',
@@ -140,12 +139,7 @@ export function resolveVREndToolContext(
       Math.hypot(...face.faceNormal3d) < 1e-9) {
     return { accepted: false, reason: 'invalid_continuation_face', context: null }
   }
-  const expansion = expandedHelixOffsetFrame(design)
-  const expandedOffset = expansion?.offsets.get(parsed.helix_id)
-  if (!expandedOffset) {
-    return { accepted: false, reason: 'invalid_continuation_face', context: null }
-  }
-  const expand = point => point.map((value, axis) => value + expandedOffset[axis])
+
   const continuationBp = face.bp + Math.max(0, face.openSide)
   const source = helix.lattice_frame_id ? canonicalVREndSource(helix, continuationBp, design) : null
   if (helix.lattice_frame_id && !source) {
@@ -168,9 +162,6 @@ export function resolveVREndToolContext(
       facePosition: [...face.ringPos3d],
       faceNormal: [...face.faceNormal3d],
       continuationPosition: [...continuationPosition],
-      expandedFacePosition: expand(face.ringPos3d),
-      expandedFaceNormal: [...face.faceNormal3d],
-      expandedContinuationPosition: expand(continuationPosition),
       strandId: nucleotide.strand_id,
       domainIndex: nucleotide.domain_index ?? 0,
       direction: parsed.direction,
@@ -197,14 +188,10 @@ export function vrToolFeedbackPayload(sequence, draft, state) {
     value.every(Number.isFinite)
   if (context) {
     if (!validVector(context.facePosition) || !validVector(context.faceNormal) ||
-        Math.hypot(...context.faceNormal) < 1e-9 ||
-        !validVector(context.expandedFacePosition) ||
-        !validVector(context.expandedFaceNormal) ||
-        Math.hypot(...context.expandedFaceNormal) < 1e-9) return null
+        Math.hypot(...context.faceNormal) < 1e-9) return null
   }
   const footprintResolved = _validSingleEndFootprint(context?.footprint) &&
-    validVector(context?.continuationPosition) &&
-    validVector(context?.expandedContinuationPosition)
+    validVector(context?.continuationPosition)
   return {
     tool_config_sequence: sequence,
     target_identity: draft.target_identity,
@@ -214,10 +201,6 @@ export function vrToolFeedbackPayload(sequence, draft, state) {
     face_position: context ? [...context.facePosition] : null,
     face_normal: context ? [...context.faceNormal] : null,
     preview_origin: footprintResolved ? [...context.continuationPosition] : null,
-    expanded_face_position: context ? [...context.expandedFacePosition] : null,
-    expanded_face_normal: context ? [...context.expandedFaceNormal] : null,
-    expanded_preview_origin: footprintResolved
-      ? [...context.expandedContinuationPosition] : null,
     occupied: !!context?.connections?.length,
     deformed: context?.deformed === true,
     footprint_resolved: footprintResolved,

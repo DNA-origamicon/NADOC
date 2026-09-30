@@ -24,7 +24,6 @@ import { resizeStrandEnds } from '../api/client.js'
 import { adjacentBpFree, oneNtResizableEnd } from '../shared/strand_end_resize.js'
 import { parseBaseKey } from './base_ref.js'
 import { canonicalSelection } from './selection_model.js'
-import { expandedHelixOffsetFrame } from './expanded_helix_offsets.js'
 
 // ── Arrow dimensions (nm) ─────────────────────────────────────────────────────
 
@@ -624,10 +623,8 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     const state = store.getState()
     const metas = _arrowGroups.map(ag => ag.userData.dragMeta)
     const limits = _computeDragLimits(metas, state.currentDesign)
-    const offsets = expandedHelixOffsetFrame(state.currentDesign)?.offsets
     const handles = !_group.visible || state.cadnanoActive || vrBusy ? [] : _arrowGroups.map(ag => ({
       position: ag.userData.dragMeta.bead.nuc.backbone_position ?? ag.position.toArray(),
-      expanded_offset: offsets?.get(ag.userData.dragMeta.bead.nuc.helix_id) ?? [0, 0, 0],
       direction: new THREE.Vector3(0, 1, 0).applyQuaternion(ag.quaternion).toArray(),
     }))
     const signature = JSON.stringify([handles, limits, metas.map(m => [m.bead.nuc.strand_id, m.bead.nuc.bp_index, m.endRole])])

@@ -24,11 +24,8 @@ from backend.api.routes_vr import (
     VRToolExecutionFeedbackRequest,
     VRToolFeedbackRequest,
     VRCamera,
-    _bundle_expanded_scene,
     _coordinate_record,
     _event_payload,
-    _expanded_helix_offsets,
-    _expanded_scene_inputs,
     _cluster_gizmo_handle_centers,
     _require_local,
     _publish_job_feedback,
@@ -38,7 +35,6 @@ from backend.api.routes_vr import (
     _selection_cluster,
     _selection_clusters,
     _serialize_scene,
-    _validate_streamed_scene_manifests,
     _view_rotation,
     _viewer_command,
     _write_feedback,
@@ -200,26 +196,6 @@ def test_native_vr_routes_ignore_non_tailnet_client_setting(monkeypatch) -> None
         _require_local(_request("192.0.2.4", public_url))
 
 
-def test_expanded_quick_view_matches_desktop_centroid_spacing() -> None:
-    point = lambda x, y, z: SimpleNamespace(x=x, y=y, z=z)
-    design = SimpleNamespace(
-        helices=[
-            SimpleNamespace(
-                id="left", axis_start=point(-1, 0, 0), axis_end=point(-1, 0, 10)
-            ),
-            SimpleNamespace(
-                id="right", axis_start=point(1, 0, 0), axis_end=point(1, 0, 10)
-            ),
-        ],
-        strands=[],
-        extensions=[],
-    )
-
-    offsets = _expanded_helix_offsets(design)
-
-    expected = 5.0 / 2.25 - 1.0
-    np.testing.assert_allclose(offsets["left"], [-expected, 0, 0])
-    np.testing.assert_allclose(offsets["right"], [expected, 0, 0])
 
 
 def test_vr_owner_aliases_use_desktop_smallest_selectable_cluster_rule() -> None:
@@ -289,114 +265,10 @@ def test_v9_cluster_handle_matches_desktop_mixed_cluster_visual_centroid() -> No
     np.testing.assert_allclose(records[0][1], [4, 3, -2])
 
 
-def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> None:
-    point = lambda x, y, z: SimpleNamespace(x=x, y=y, z=z)
-    design = SimpleNamespace(
-        helices=[
-            SimpleNamespace(
-                id="a", axis_start=point(-1, 0, 0), axis_end=point(-1, 0, 10)
-            ),
-            SimpleNamespace(
-                id="b", axis_start=point(1, 0, 0), axis_end=point(1, 0, 10)
-            ),
-        ],
-        strands=[],
-        extensions=[],
-    )
-    nucleotides = [
-        {
-            "helix_id": "a",
-            "backbone_position": [-1, 2, 3],
-            "base_position": [-0.8, 2, 3],
-        }
-    ]
-    axes = [{"helix_id": "b", "start": [1, 0, 0], "end": [1, 0, 10]}]
-    atom = SimpleNamespace(
-        helix_id="a", aux_helix_id="b", aux_t=0.25, x=0.0, y=0.0, z=0.0
-    )
-
-    expanded_nucleotides, expanded_axes, expanded_model = _expanded_scene_inputs(
-        design, nucleotides, axes, SimpleNamespace(atoms=[atom], bonds=[])
-    )
-
-    delta = 5.0 / 2.25 - 1.0
-    np.testing.assert_allclose(
-        expanded_nucleotides[0]["backbone_position"], [-1 - delta, 2, 3]
-    )
-    np.testing.assert_allclose(expanded_axes[0]["start"], [1 + delta, 0, 0])
-    assert expanded_model.atoms[0].x == pytest.approx(-0.5 * delta)
-    assert atom.x == 0.0  # source inputs remain immutable
 
 
-def test_expanded_offsets_match_desktop_axis_tie_priority() -> None:
-    point = lambda x, y, z: SimpleNamespace(x=x, y=y, z=z)
-    design = SimpleNamespace(helices=[
-        SimpleNamespace(
-            id="a", axis_start=point(0, 0, 0), axis_end=point(1, 1, 1)
-        ),
-        SimpleNamespace(
-            id="b", axis_start=point(2, 0, 0), axis_end=point(3, 1, 1)
-        ),
-    ])
-
-    offsets = _expanded_helix_offsets(design)
-
-    assert offsets["a"][0] < 0
-    assert offsets["b"][0] > 0
-    assert offsets["a"][2] == offsets["b"][2] == 0
 
 
-def test_v12_bundle_pairs_primitives_owners_handles_and_endpoint_scopes() -> None:
-    natural = """NADOCVR 12 full strand
-R full
-K cluster-owner 0 0 0
-J b base-owner base 0 0 0
-D c cluster-owner
-P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
-A owner 1 b
-T owner 1 c 1 1
-W owner 2 c 1 1 b 1 1
-"""
-    expanded = natural.replace("P owner 0 0 0", "P owner 2 0 0").replace(
-        "K cluster-owner 0 0 0", "K cluster-owner 1 0 0"
-    )
-
-    bundled = _bundle_expanded_scene(natural, expanded)
-
-    assert bundled.startswith("NADOCVR 12 full strand\n")
-    assert "R full\nK cluster-owner 0 0 0" in bundled
-    assert "E full\nK cluster-owner 1 0 0" in bundled
-
-    mismatched = expanded.replace("owner", "different")
-    with pytest.raises(HTTPException, match="identities differ"):
-        _bundle_expanded_scene(natural, mismatched)
-
-    mismatched_alias = expanded.replace("A owner 1 b", "A owner 1 c")
-    with pytest.raises(HTTPException, match="owner aliases differ"):
-        _bundle_expanded_scene(natural, mismatched_alias)
-
-    mismatched_handle = expanded.replace("cluster-owner", "different-handle", 1)
-    with pytest.raises(HTTPException, match="cluster handles differ"):
-        _bundle_expanded_scene(natural, mismatched_handle)
-
-    mismatched_transform = expanded.replace(
-        "T owner 1 c 1 1", "T owner 1 c 1 0"
-    )
-    with pytest.raises(HTTPException, match="transform owners differ"):
-        _bundle_expanded_scene(natural, mismatched_transform)
-
-    mismatched_tool_handle = expanded.replace(
-        "J b base-owner base", "J b base-owner atom"
-    )
-    with pytest.raises(HTTPException, match="tool handles differ"):
-        _bundle_expanded_scene(natural, mismatched_tool_handle)
-
-    mismatched_scope_owner = expanded.replace(
-        "W owner 2 c 1 1 b 1 1",
-        "W owner 2 c 1 1 b 1 0",
-    )
-    with pytest.raises(HTTPException, match="tool-scope owners differ"):
-        _bundle_expanded_scene(natural, mismatched_scope_owner)
 
 
 def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -> None:
@@ -836,9 +708,6 @@ def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -
             face_position=[1, 2, 3],
             face_normal=[1, 0, 0],
             preview_origin=[2, 3, 4],
-            expanded_face_position=[5, 6, 7],
-            expanded_face_normal=[0, 1, 0],
-            expanded_preview_origin=[6, 7, 8],
             occupied=True,
             deformed=False,
             footprint_resolved=True,
@@ -848,16 +717,14 @@ def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -
     )
     fields = tool_feedback_path.read_text().split()
     assert fields[:10] == [
-        "NADOCVR_TOOL_FEEDBACK", "4", "7", "1", "1", "0", "1", "resolved",
+        "NADOCVR_TOOL_FEEDBACK", "5", "7", "1", "1", "0", "1", "resolved",
         "end", "nuc:s1:0:h1:3:FORWARD:0",
     ]
     assert fields[10:13] == ["HONEYCOMB", "2", "3"]
     np.testing.assert_allclose([float(value) for value in fields[13:16]], [3, 2, -1])
     np.testing.assert_allclose([float(value) for value in fields[16:19]], [0, 0, -1])
     np.testing.assert_allclose([float(value) for value in fields[19:22]], [4, 3, -2])
-    np.testing.assert_allclose([float(value) for value in fields[22:25]], [7, 6, -5])
-    np.testing.assert_allclose([float(value) for value in fields[25:28]], [0, 1, 0])
-    np.testing.assert_allclose([float(value) for value in fields[28:]], [8, 7, -6])
+    assert len(fields) == 22
     assert tool_feedback_path.stat().st_mode & 0o777 == 0o600
 
     _write_tool_feedback(
@@ -871,7 +738,7 @@ def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -
         ),
     )
     assert tool_feedback_path.read_text() == (
-        "NADOCVR_TOOL_FEEDBACK 4 8 0 0 0 0 no_continuation_face end "
+        "NADOCVR_TOOL_FEEDBACK 5 8 0 0 0 0 no_continuation_face end "
         "nuc:s1:0:h1:3:FORWARD:0\n"
     )
 
@@ -934,15 +801,11 @@ def test_native_plane_feedback_is_private_target_bound_and_fail_closed(tmp_path)
             plane_center=[1, 2, 3],
             plane_normal=[0, 0, 2],
             plane_half_extent_nm=8,
-            expanded_plane_center=[4, 5, 6],
-            expanded_plane_normal=[0, 2, 0],
-            expanded_plane_half_extent_nm=8,
         ),
     )
     assert tool_feedback_path.read_text() == (
-        "NADOCVR_PLANE_FEEDBACK 3 5 7 1 resolved a cluster cluster:c1 "
-        "nuc:s1:0:h1:12:FORWARD:0 12 -2 1 3 0 0 1 8 "
-        "-5 4 6 -1 0 0 8\n"
+        "NADOCVR_PLANE_FEEDBACK 2 5 7 1 resolved a cluster cluster:c1 "
+        "nuc:s1:0:h1:12:FORWARD:0 12 -2 1 3 0 0 1 8\n"
     )
     assert tool_feedback_path.stat().st_mode & 0o777 == 0o600
     assert not tool_feedback_path.with_name(f"{tool_feedback_path.name}.next").exists()
@@ -955,22 +818,16 @@ def test_native_plane_feedback_is_private_target_bound_and_fail_closed(tmp_path)
             resolved=True, reason="resolved", plane_bp=12,
             plane_center=[0, 0, 0], plane_normal=[0, 0, 0],
             plane_half_extent_nm=8,
-            expanded_plane_center=[1, 0, 0], expanded_plane_normal=[0, 0, 1],
-            expanded_plane_half_extent_nm=8,
         ),
         dict(
             resolved=True, reason="resolved", plane_bp=12,
             plane_center=[float("nan"), 0, 0], plane_normal=[0, 0, 1],
             plane_half_extent_nm=8,
-            expanded_plane_center=[1, 0, 0], expanded_plane_normal=[0, 0, 1],
-            expanded_plane_half_extent_nm=8,
         ),
         dict(
             resolved=True, reason="resolved", plane_bp=12,
-            plane_center=[0, 0, 0], plane_normal=[0, 0, 1],
+            plane_center=[0, 0, 0], plane_normal=[0, 0, 1e-12],
             plane_half_extent_nm=8,
-            expanded_plane_center=[1, 0, 0], expanded_plane_normal=[0, 0, 0],
-            expanded_plane_half_extent_nm=8,
         ),
     ]
     for values in invalid:
@@ -1456,14 +1313,6 @@ def test_scene_snapshot_writer_is_private_gzip_and_round_trips() -> None:
         streamed.unlink(missing_ok=True)
 
 
-def test_streamed_manifest_detects_pose_contract_drift() -> None:
-    natural = {"full": {"primitive": (2, "same"), "A": (1, "owners")}}
-    _validate_streamed_scene_manifests(natural, natural)
-    with pytest.raises(HTTPException, match="primitive identities differ in full"):
-        _validate_streamed_scene_manifests(
-            natural,
-            {"full": {"primitive": (3, "different"), "A": (1, "owners")}},
-        )
 
 
 def test_runtime_status_reports_dashboard_helpers_and_native_desktop(monkeypatch) -> None:
@@ -1757,7 +1606,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
         line_writer=streamed_lines.append,
     )
     assert "\n".join(streamed_lines) + "\n" == text
-    assert set(manifest) == {"full", "cylinders", "ballstick", "stick"}
+    assert manifest is None
 
 
 def test_v11_atom_identity_rejects_missing_or_duplicate_chemical_names() -> None:
@@ -2167,21 +2016,16 @@ def test_reverse_loop_insertions_thread_backbone_in_desktop_copy_order() -> None
         nucleotide(5, 1.84),
         nucleotide(4, 1.34),
     ]
-    expanded_nucleotides = [
-        {**item, "backbone_position": [5, 0, item["backbone_position"][2]]}
-        for item in natural_nucleotides
-    ]
     kwargs = {"atomistic_model": SimpleNamespace(atoms=[], bonds=[])}
     natural = _serialize_scene(design, natural_nucleotides, [], **kwargs)
-    expanded = _serialize_scene(design, expanded_nucleotides, [], **kwargs)
-    scene = parse_scene_contract(_bundle_expanded_scene(natural, expanded))
+    scene = parse_scene_contract(natural)
 
     expected = [
         "backbone:nuc:reverse:0:h0:6:REVERSE:0~nuc:reverse:0:h0:5:REVERSE:1",
         "backbone:nuc:reverse:0:h0:5:REVERSE:1~nuc:reverse:0:h0:5:REVERSE:0",
         "backbone:nuc:reverse:0:h0:5:REVERSE:0~nuc:reverse:0:h0:4:REVERSE:0",
     ]
-    for pose in ("full", "expanded/full"):
+    for pose in ("full",):
         connectors = [
             primitive
             for primitive in scene[pose].values()
@@ -2287,23 +2131,7 @@ def test_base_coloring_keeps_extensions_and_overhang_fallback_semantic() -> None
         coloring="base",
         atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
     )
-    expanded = _serialize_scene(
-        design,
-        [
-            {
-                **nucleotide,
-                "backbone_position": [
-                    nucleotide["backbone_position"][0] + 5,
-                    *nucleotide["backbone_position"][1:],
-                ],
-            }
-            for nucleotide in nucleotides
-        ],
-        [],
-        coloring="base",
-        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
-    )
-    scene = parse_scene_contract(_bundle_expanded_scene(natural, expanded))
+    scene = parse_scene_contract(natural)
     expected = {
         "nuc:core:0:h:0:FORWARD:0:backbone": pytest.approx(
             _BASE_COLORS_FOR_TEST["C"]
@@ -2324,7 +2152,7 @@ def test_base_coloring_keeps_extensions_and_overhang_fallback_semantic() -> None
             _BASE_COLORS_FOR_TEST["C"]
         ),
     }
-    for pose in ("full", "expanded/full"):
+    for pose in ("full",):
         points = {
             primitive.identity: primitive.values[7:10]
             for primitive in scene[pose].values()

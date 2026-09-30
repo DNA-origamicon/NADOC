@@ -4,8 +4,10 @@ import { docHeaders } from '../shared/doc_id.js'
 import { broadcastFingerprint } from '../viewer/broadcast_fingerprint.js'
 import { preparedImpostorSpec } from './impostor_material.js'
 
-export const VR_VIEW_KEYS = ['lengthHeatmap','sequences','undefinedBases','loopSkips','grid','overhangNames','clashes','expanded','deform','unfold','cadnano2d']
-export const VR_VIEW_LABELS = ['Length','Sequence','Undefined','Loop / skip','Grid','Overhang names','Clashes','Expanded','Deform','Unfold','Cadnano 2D']
+export const VR_VIEW_KEYS = ['lengthHeatmap','sequences','undefinedBases','loopSkips','grid','overhangNames','clashes','deform','unfold','cadnano2d']
+export const VR_VIEW_LABELS = ['Length','Sequence','Undefined','Loop / skip','Grid','Overhang names','Clashes','Deform','Unfold','Cadnano 2D']
+// Retain wire flag positions for the remaining view tools. Bit 7 is retired.
+const viewBit = i => 1 << (i < 7 ? i : i + 1)
 const MAX_VERTICES = 4000000
 const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve))
 
@@ -26,7 +28,8 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
   const panel=doc.createElement('canvas');panel.width=768;panel.height=768
   const c=panel.getContext('2d');c.fillStyle='#111111';c.fillRect(0,0,768,768)
   c.fillStyle='#e0eaff';c.font='bold 28px sans-serif';c.fillText('VIEW TOOLS',24,40)
-  const flags=VR_VIEW_KEYS.reduce((v,k,i)=>v|(doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?1<<i:0),0) | (simulationViewActive(doc)?2048:0)
+  const desktopExpanded=doc.querySelector('[data-vt="expanded"]')?.classList.contains('active')
+  const flags=desktopExpanded ? 256 : VR_VIEW_KEYS.reduce((v,k,i)=>v|(doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?viewBit(i):0),0) | (simulationViewActive(doc)?2048:0)
   for(let i=0;i<VR_VIEW_KEYS.length;i++) {
     const b=doc.querySelector(`[data-vt="${VR_VIEW_KEYS[i]}"]`),px=16+(i%2)*376,py=62+Math.floor(i/2)*112
     // Read the desktop's actual computed colors, including its active tint.
@@ -42,7 +45,7 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
       await im.decode();c.drawImage(im,px+18,py+16,64,40)
     }
     c.fillStyle='#e0eaff';c.font='21px sans-serif';c.fillText(VR_VIEW_LABELS[i],px+18,py+82)
-    c.fillStyle=flags&(1<<i)?'#e0eaff':'#8592a5';c.font='bold 17px sans-serif';c.fillText(flags&(1<<i)?'ON':'OFF',px+304,py+35)
+    c.fillStyle=flags&viewBit(i)?'#e0eaff':'#8592a5';c.font='bold 17px sans-serif';c.fillText(flags&viewBit(i)?'ON':'OFF',px+304,py+35)
   }
   c.fillStyle='#b6c7dc';c.font='18px sans-serif'
   const words=(message || (!(flags&256)||(flags&1536)?'Layout inspection. Restore Deform and exit 2D layouts to edit.':'Left quiver: show / hide. Right quiver: scissors.')).split(' ')
@@ -131,13 +134,13 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
     }
     for(const child of o.children)visit(child)
   }
-  if(!panelOnly&&flags!==256)visit(scene);sphere.dispose()
+  if(!panelOnly&&!desktopExpanded&&flags!==256)visit(scene);sphere.dispose()
   return {flags,menu,batches,triangles:new Float32Array(triangles),lines:new Float32Array(lines),sprites:new Float32Array(sprites),pixels:ctx.getImageData(0,0,2048,2048).data,width:2048,height:2048}
 }
 
 export function encodeVRView(view,version,requestSequence=0) {
   const batches=view.batches??[]
-  const header=new Uint32Array([3,version,view.flags,view.triangles.length/9,view.lines.length/9,view.sprites.length/15,view.width,view.height,batches.length,requestSequence])
+  const header=new Uint32Array([4,version,view.flags,view.triangles.length/9,view.lines.length/9,view.sprites.length/15,view.width,view.height,batches.length,requestSequence])
   const parts=[new TextEncoder().encode('NADOCVT1'),header,view.triangles,view.lines,view.sprites]
   for(const b of batches)parts.push(new Uint32Array([b.vertices.length/9,b.instances.length/20]),b.vertices,b.instances)
   return new Blob([...parts,view.pixels])

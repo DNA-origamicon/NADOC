@@ -24,11 +24,7 @@ import { store }          from '../state/store.js'
 import * as api           from '../api/client.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
 import { showPersistentToast, dismissToast } from '../ui/toast.js'
-import {
-  deformationPlaneFrame,
-  deformationPlaneFramePair,
-} from './deformation_plane_frame.js'
-import { expandedHelixOffsetFrame } from './expanded_helix_offsets.js'
+import { deformationPlaneFrame } from './deformation_plane_frame.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -879,12 +875,11 @@ export function nearestVRDeformationPlane(position, clusterIds, helixIds = null)
   return best ? { ...best, resolved: true, reason: 'resolved' } : null
 }
 
-/** Natural and 5 nm Expanded frames for the immutable native scene pair. */
+/** Natural display frame for native VR editing. */
 export function getVRDeformationPlaneFrames(globalBp, clusterIdsOverride = null, helixIds = null) {
   const axes = _numericHelixAxes(clusterIdsOverride).filter(a => !helixIds?.length || helixIds.includes(a.id))
-  const expansion = expandedHelixOffsetFrame(store.getState().currentDesign)
-  return expansion
-    ? deformationPlaneFramePair(globalBp, axes, expansion.offsets) : null
+  const natural = deformationPlaneFrame(globalBp, axes)
+  return natural ? { natural } : null
 }
 
 // ── Ghost planes ──────────────────────────────────────────────────────────────
