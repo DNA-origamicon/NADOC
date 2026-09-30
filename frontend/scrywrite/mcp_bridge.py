@@ -166,7 +166,7 @@ class Bridge:
                 output.write(json.dumps({"time_ns": time.monotonic_ns(), "command": command, "state": result}) + "\n")
         return result
 
-    def wait(self, session, predicate, timeout_ms=5000):
+    def wait(self, session, predicate, timeout_ms=5000, poll_interval=.02):
         deadline = time.monotonic() + timeout_ms / 1000
         while True:
             state = self.request("observe")
@@ -176,7 +176,7 @@ class Bridge:
                 return state
             if time.monotonic() >= deadline:
                 raise TimeoutError("state predicate timed out; last state: " + json.dumps(state))
-            time.sleep(0.02)
+            time.sleep(poll_interval)
 
     def call(self, name, args):
         if name not in BY_NAME:
@@ -195,7 +195,11 @@ class Bridge:
                         raise ValueError("at_least requires numeric values")
                     return value >= args["value"]
                 return value == args["value"]
-            return self.wait(args["session"], matches, args.get("timeout_ms", 5000))
+            # A 20 ms polling sleep consumes almost half a 20 Hz motion sample.
+            # Observe the next real frame promptly; do not alter its predicate,
+            # input sequence, motion schedule, or timeout.
+            return self.wait(args["session"], matches, args.get("timeout_ms", 5000),
+                             poll_interval=.001 if args["field"] == "frame" else .02)
         session = args["session"]
         if not session or any(c not in "0123456789-" for c in session):
             raise ValueError("invalid session token")

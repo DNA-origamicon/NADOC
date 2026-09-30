@@ -31,6 +31,7 @@ class RepresentationBuffers {
     RepresentationBuffers(const RepresentationBuffers&)=delete;
     RepresentationBuffers& operator=(const RepresentationBuffers&)=delete;
     ~RepresentationBuffers(){clear();}
+    void invalidate(size_t index) {auto& slot=slots_.at(index);glDeleteBuffers(4,slot.buffers.data());slot=Slot{};}
     void clear() {
         for(auto& slot:slots_) {
             glDeleteBuffers(4,slot.buffers.data());

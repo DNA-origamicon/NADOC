@@ -1171,3 +1171,34 @@ geometry. See [audit](docs/audits/vr_representation_parity_20260929.md).
 - [x] Indent category descendants from catalog ancestry rather than label guesses.
 
 Verification and retained failed attempts: [audit](docs/audits/vr_shadow_scroll_20260929.md).
+
+## ISSUE-50 — Representation loading blocks VR frame delivery (2026-09-29, OPEN)
+
+- [x] Reproduce with real browser launches and controller-selected Stick,
+  Ball & Stick and Surface; retain end-to-end CPU phase traces.
+- [x] Locate 226–806 ms style-application blocks outside the old frame timer.
+- [x] Reproduce a separate 112 ms Surface frame gap at 49.198%.
+- [x] Attribute the earlier gap: synchronous avatar-state publication (335 ms).
+- [x] Move CPU preparation off the XR loop; stage GPU uploads within a budget.
+- [x] Preserve bounded resident caches, add loading guards and frame-time gates.
+- [ ] Resolve residual XR submission/presentation waiting: final 73.87 ms gap
+  with nearby SteamVR wait-for-present 62.13 ms (GPU <5.87 ms).
+- [ ] Complete all four controller profiles without replay deadline failure
+  (three completed; variable_deliberate failed at 162 ms) and headset comfort review.
+
+Diagnosis and primary-source research: [audit](docs/audits/vr_loading_stalls_20260929.md).
+Implementation and finer profile: [follow-up audit](docs/audits/vr_loading_frame_delivery_20260929.md).
+Reaching 100% is functional success, not evidence of comfortable frame delivery.
+
+## ISSUE-51 — Detailed VR representations trail during motion (2026-09-29, OPEN)
+
+- [x] Record the user's baseline: loaded-model motion was satisfactory before
+  the loading-freeze changes; treat new blur/lag as a regression.
+- [x] Remove speculative lighting/shadow optimizations and restore original
+  head-relative lighting and shadow rendering, including removal of shadow reuse.
+- [x] Compare legacy/staged GPU uploads with the same saved Stick scene: identical
+  final pixels and approximately equal 5.5 ms median GPU time.
+- [ ] Isolate remaining post-load frame-delivery regression in the real runtime.
+- [ ] Complete all four motion profiles and physical-headset review.
+
+[Investigation and retained unsuccessful experiments](docs/audits/vr_motion_regression_20260929.md).

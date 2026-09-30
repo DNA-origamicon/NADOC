@@ -686,3 +686,26 @@ scrolling in the headset. Submitted stereo images and controller-state samples
 verify the rendered path; they do not establish physical through-lens comfort.
 Large atomistic scenes exceeded the existing human-motion transport timing limit
 in one retained matrix attempt. [Evidence](docs/audits/vr_shadow_scroll_20260929.md).
+
+## MV-VR-LOADING-COMFORT — representation load freezes (2026-09-29)
+
+OPEN for physical-headset review. The 226–806 ms synchronous style blocks and
+335 ms avatar-publication stall now have staged/worker fixes. A complete eleven-
+representation pass stayed below 25 ms maximum measured loading gap, but Surface
+still failed its p99 target with intermittent two-frame delays. The nominal-period guard improved final Surface p99 to 11.80 ms and activation
+to ≤14.01 ms, but a residual 73.87 ms runtime/presentation gap and 12/5,963
+compositor drops still fail the gate. Three motion profiles completed; the fourth
+failed its replay deadline. Review
+physical head-motion comfort during cold loading, activation, continuous motion,
+expanded poses and active trajectories. Submitted stereo evidence cannot clear
+this debt. See [implementation/evidence](docs/audits/vr_loading_frame_delivery_20260929.md).
+
+## MV-VR-POST-LOAD-MOTION — regression after loading changes (2026-09-29)
+
+OPEN. The user confirms steady-state motion/shadows were satisfactory before
+loading-freeze work. Experimental lighting/shadow changes were reverted; original
+head-relative lighting and shadows restored. An isolated legacy/staged upload
+comparison produces identical Stick pixels and comparable GPU time, but does not
+clear head/grip motion comfort. Review original framing, Stick and Ball & Stick,
+head turns and grip translation/rotation without changing detail or motion
+settings. [Evidence](docs/audits/vr_motion_regression_20260929.md).

@@ -287,3 +287,34 @@ advance at each frame and persistence boundary. See the thermal optimization aud
   and uses shared easing/clipping; descendants indent by ancestry. A real GL
   removed-occluder control distinguishes cast shadows from diffuse shading.
   main.js Δ 0 for this change. [Audit](docs/audits/vr_shadow_scroll_20260929.md).
+
+- 2026-09-29 · ISSUE-50 · Diagnosis only; OPEN. Real browser/ScryWrite loads
+  measured 226/393/806 ms synchronous style application and a separate 112 ms
+  Surface gap at 49.198%. Root cause of final stalls: geometry preparation and
+  GL staging run on the XR thread before the existing frame timer starts.
+  GPU priority alone cannot fix this path; the earlier gap remains unattributed.
+  Added local phase/log diagnostics; no scheduling fix, main.js Δ 0.
+  Three functional tours and native build passed; frame-comfort acceptance fails.
+  [Research and evidence](docs/audits/vr_loading_stalls_20260929.md).
+
+- 2026-09-29 · ISSUE-50 · Static CPU geometry/index preparation now runs on the
+  parser worker; separate GL buffers upload in 1 ms / 256 KiB slices and activate
+  after a zero-timeout fence poll. CPU/GPU caches have inactive budgets, with CPU
+  retirement off the XR thread. Finer tracing isolated the earlier gap to avatar
+  publication (335 ms); a coalescing writer removes that disk wait from XR.
+  Object-ID table growth and redundant static shadow draws were additional costs,
+  addressed with bucketed IDs and shared shadow reuse. Clustered slow frames
+  select a lightweight loading scene. Native traces and SteamVR compositor timing
+  now gate the registered loading-performance tour. Retained failed trials caught
+  startup availability, memory pressure and frame-observation transport problems;
+  none are erased or relabeled as passes. main.js Δ 0.
+  [Implementation and measured limits](docs/audits/vr_loading_frame_delivery_20260929.md).
+
+### ISSUE-51 — post-load motion regression investigation (2026-09-29, unresolved)
+
+Reverted speculative shadow/lighting changes and the loading patch's shadow cache
+following the user's confirmation that the earlier renderer performed well.
+Kept staged loading/async publication; isolated legacy/staged upload comparison
+has identical pixels and comparable GPU timing. Stick motion passes the final
+initial profile; Ball & Stick still fails. Do not describe this as a completed
+performance fix. [Evidence and testing limits](docs/audits/vr_motion_regression_20260929.md).

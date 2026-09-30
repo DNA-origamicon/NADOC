@@ -1,6 +1,6 @@
 // Read-only copied-document check. Browser owns launch and style acknowledgements.
 import { chromium } from 'playwright'
-import { mkdir, writeFile, readFile, rmdir } from 'node:fs/promises'
+import { mkdir, writeFile, readFile, rmdir, copyFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
@@ -14,10 +14,10 @@ const headers = { 'X-NADOC-Doc': doc }
 const status = async () => (await fetch(api+'/api/vr/status', { headers })).json()
 if ((await status()).running) throw new Error('Close the active viewer before this browser-owned check')
 await writeFile(output+'/browser-inventory.txt', 'Isolated copied document; source and session-cache cleanup owned by Python wrapper. No design edits or saves. Temporary Playwright profile removed by browser.close(). Native viewer stopped by matching PID in finally; backend owns its IPC cleanup. Captures/logs stay in this evidence directory.\n')
-let browser, page, pid, probe, owned
+let browser, page, pid, probe, owned, nativeLog
 const requests = [], errors = [], diagnostics = []
 try {
-  browser = await chromium.launch({ headless: false })
+  browser = await chromium.launch({ headless: false, args: ['--disable-features=WebXR'] })
   page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   page.on('console', message => {
     if(message.type()==='error') diagnostics.push(message.text())
@@ -56,6 +56,7 @@ try {
   await writeFile(output+'/launch-attempt.json',JSON.stringify(current,null,2))
   if (!pid || !current.scrywrite_socket) throw new Error('Browser launch did not expose ScryWrite')
   await writeFile(output+'/launch.json', JSON.stringify(current,null,2))
+  nativeLog=current.log_path
   owned=JSON.parse(await readFile(path.join(tmpdir(), 'nadoc-vr-'+process.getuid()+'.json'), 'utf8'))
   if(owned.pid!==pid) throw new Error('Viewer ownership changed')
   await writeFile(output+'/owned-state.json',JSON.stringify(owned,null,2))
@@ -89,6 +90,8 @@ try {
     for(let i=0;pid && (await status()).pid===pid && i<100;i++) await new Promise(resolve=>setTimeout(resolve,100))
     if(pid && (await status()).pid===pid) throw new Error('Owned viewer did not stop')
   } finally {
+    if(nativeLog) await copyFile(nativeLog,output+'/native-viewer.log').catch(error=>diagnostics.push('Could not retain native log: '+error))
+    await writeFile(output+'/browser-diagnostics.json',JSON.stringify(diagnostics,null,2))
     await browser?.close()
     if(owned?.scrywrite_socket) {
       try { await rmdir(path.dirname(owned.scrywrite_socket)) }

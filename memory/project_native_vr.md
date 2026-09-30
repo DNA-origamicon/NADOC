@@ -7,6 +7,31 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Motion regression (2026-09-29)
+
+The user confirms loaded-model motion was satisfactory before the loading-freeze
+changes. Isolate that regression rather than changing shadow quality or lighting.
+Rendering experiments did not clear the timing gate and were reverted.
+See [investigation](../docs/audits/vr_motion_regression_20260929.md).
+
+## Loading frame delivery (2026-09-29)
+
+Static natural representations prepare geometry/indexes on the parsing worker,
+upload in 1 ms / 256 KiB slices, and activate after a nonblocking GL fence. GPU
+inactive cache is 256 MiB; CPU inactive sources are budgeted at 512 MiB (Full,
+active and view-volume sources protected). CPU disposal and latest avatar-file
+publication run off the XR thread. The earlier loading hitch was avatar I/O,
+not merely GPU draw time. Shadow reuse was removed during investigation of the subsequent motion regression;
+the original head-relative lighting and shadow pass are restored.
+Debug → VR Tours & Tests → Representation loading frame delivery retains outer
+loop/subphase timing and actual SteamVR compositor samples. Logs are asynchronous;
+trace overflow fails acceptance. Use the fastest observed runtime period for
+the guard/gate: SteamVR may lengthen predicted periods during reprojection.
+Existing draw-only green metrics are insufficient. Full-state RPC progress polling
+uses 100 ms spacing; motion profiles and their 150 ms deadline are unchanged.
+Dynamic deformation/expansion paths and physical comfort remain distinct checks.
+See [implementation audit](../docs/audits/vr_loading_frame_delivery_20260929.md).
+
 ## Browser/native verification and backend lifetime (2026-09-29)
 
 Use the registered `browser-representations` tour for real browser launch/style
@@ -26,7 +51,7 @@ copy of the document; native parsing is asynchronous, and GPU preparation submit
 loading frames during preparation. First-frame readiness continues to mean the part.
 Startup loads Full only (including Expanded Quick View). Other styles export and
 parse on demand, with a counted-work percentage/bar inside the selected button;
-previous geometry stays visible. Cached CPU geometry is reused until scene refresh.
+previous geometry stays visible. Cached CPU geometry is reused until scene refresh or budgeted eviction.
 Menu blur uses same-eye depth rejection; controller sticks, spheres and other
 world-space guides write depth so foreground elements remain sharp.
 See [startup and depth behavior](../docs/vr_startup.md). Debug Controls & layout

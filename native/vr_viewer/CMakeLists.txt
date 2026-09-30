@@ -312,3 +312,26 @@ if(BUILD_TESTING)
   add_test(NAME nadoc-vr-twist-viewer COMMAND nadoc-vr-twist-viewer-test ${CMAKE_CURRENT_BINARY_DIR}/twist-evidence)
   set_tests_properties(nadoc-vr-twist-viewer PROPERTIES SKIP_RETURN_CODE 77)
 endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-staged-representation-test tests/staged_representation_test.cpp)
+  target_link_libraries(nadoc-vr-staged-representation-test PRIVATE
+    PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
+  target_compile_options(nadoc-vr-staged-representation-test PRIVATE -UNDEBUG)
+  add_test(NAME nadoc-vr-staged-representation COMMAND nadoc-vr-staged-representation-test)
+  set_tests_properties(nadoc-vr-staged-representation PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-latest-atomic-file-test tests/latest_atomic_file_test.cpp)
+  target_include_directories(nadoc-vr-latest-atomic-file-test PRIVATE src)
+  target_compile_options(nadoc-vr-latest-atomic-file-test PRIVATE -UNDEBUG)
+  add_test(NAME nadoc-vr-latest-atomic-file COMMAND nadoc-vr-latest-atomic-file-test)
+endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-resident-render-test tests/resident_render_test.cpp)
+  target_link_libraries(nadoc-vr-resident-render-test PRIVATE
+    PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
+  target_compile_options(nadoc-vr-resident-render-test PRIVATE -UNDEBUG)
+endif()

@@ -1,5 +1,6 @@
 """Real browser launch/acknowledgements plus ScryWrite representation checks."""
 import argparse
+import os
 import subprocess
 import json
 import urllib.request
@@ -14,7 +15,17 @@ def main():
     parser.add_argument('--doc', required=True, help='Existing read-only document ID')
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--validate', action='store_true')
+    parser.add_argument('--profile', action='store_true', help='Require loading/compositor frame-delivery gates')
+    parser.add_argument('--motion', action='store_true', help='Check detailed representations during real grip motion')
     args = parser.parse_args()
+    if args.motion:
+        os.environ['NADOC_VR_MOTION_CHECK']='1'
+        os.environ.setdefault('NADOC_VR_TEST_REPS','stick,ballstick')
+        os.environ.setdefault('NADOC_VR_TEST_MATRIX_REPS','stick,ballstick')
+    if args.profile:
+        from tools.vr_workflows.loading_performance_tour import main as profile
+        profile(['--doc', args.doc, '--output', str(args.output)] + (['--validate'] if args.validate else []))
+        return
     root = Path(__file__).resolve().parents[2]
     # Import an isolated copy through the ordinary browser Open action. A fresh
     # tab intentionally starts at Welcome; backend metadata alone is not readiness.

@@ -36,13 +36,27 @@ def main():
     parser.add_argument('--validate', action='store_true')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
-    live = LiveSession(Bridge(args.socket), physical=True, allow_transactions=True)
+    bridge = Bridge(args.socket)
+    readiness = []
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        observed = bridge.call('scrywrite_observe', {})
+        readiness.append(dict(wall_time_ms=time.time()*1000, focused=observed.get('focused'), session_state=observed.get('session_state')))
+        if observed.get('focused'):
+            break
+        time.sleep(.1)
+    (args.output/'readiness.json').write_text(json.dumps(readiness, indent=2))
+    live = LiveSession(bridge, physical=True, allow_transactions=True)
     trials, results = [], []
+    motion_failures = []
     try:
+        startup_samples = []
         deadline = time.monotonic()+90
         while live.state['startup']['active'] and time.monotonic()<deadline:
             live.frame()
+            startup_samples.append(dict(wall_time_ms=time.time()*1000, frame=live.state['frame'], startup=live.state['startup']))
             time.sleep(.05)
+        (args.output/'startup.json').write_text(json.dumps(startup_samples, indent=2))
         assert not live.state['startup']['active']
         head = live.state['head_position']
         live.send('pose', hand=1, position=[head[0]+.3, head[1]-.3, head[2]-.3], orientation=[0,0,0,1])
@@ -70,15 +84,29 @@ def main():
                 samples = []
                 deadline = time.monotonic()+180
                 while time.monotonic()<deadline:
+                    sample_started=time.monotonic()
                     live.frame()
-                    samples.append({key: live.state[key] for key in ('frame','representation','representation_loading','visualization_sequence')})
+                    sample={key: live.state[key] for key in ('frame','representation','representation_loading','visualization_sequence')}
+                    sample.update(loading_diagnostics=live.state.get("loading_diagnostics"),wall_time_ms=time.time()*1000,observe_ms=(time.monotonic()-sample_started)*1000)
+                    samples.append(sample)
                     if live.state['representation']==rep and not live.state['representation_loading']['pending']:
                         break
-                    time.sleep(.04)
+                    # Native tracing samples every XR frame. Full semantic RPC
+                    # snapshots are more expensive; keep their progress polling
+                    # separate from the unchanged 20 Hz controller motion.
+                    time.sleep(float(os.environ.get('NADOC_VR_LOADING_POLL_SECONDS', '.1')))
                 results.append(dict(preset=preset, target=rep, control=REPS[rep], samples=samples))
                 print(json.dumps(samples[-1]),flush=True)
                 assert live.state['representation']==rep, samples[-1]
                 assert already_active or live.state['representation_loading']['percent']==100, samples[-1]
+                settle=[]
+                until=time.monotonic()+float(os.environ.get('NADOC_VR_POST_READY_SECONDS','0'))
+                while time.monotonic()<until:
+                    sample_started=time.monotonic()
+                    live.frame()
+                    settle.append(dict(wall_time_ms=time.time()*1000,observe_ms=(time.monotonic()-sample_started)*1000,frame=live.state['frame'],visualization_sequence=live.state['visualization_sequence']))
+                    time.sleep(.04)
+                results[-1]['post_ready_samples']=settle
                 destination=args.output/(preset+'-'+rep+'-'+str(len(results)))
                 live.capture_to(destination, files=['left.png','right.png','mirror.png','left.classes.u8','right.classes.u8','left.ids.u32','right.ids.u32','objects.json','evidence.json'], discard_source=True)
                 import numpy as np
@@ -86,12 +114,21 @@ def main():
                     classes=np.fromfile(destination/(eye+'.classes.u8'),np.uint8)
                     ids=np.fromfile(destination/(eye+'.ids.u32'),np.uint32)
                     assert ((classes==1)&(ids>0)).sum()>100, 'No visible '+rep+' geometry in '+eye
+                if os.environ.get('NADOC_VR_MOTION_CHECK'):
+                    from tools.vr_workflows.representation_motion import check as check_motion
+                    try:
+                        check_motion(live,args.output/(preset+'-'+rep+'-motion'),preset)
+                    except TimeoutError as error:
+                        motion_failures.append(dict(preset=preset,representation=rep,error=str(error)))
+                        print('Grip timing failure (retained): '+str(error),flush=True)
             live.capture_to(args.output/preset, files=['left.png','right.png','mirror.png','left.classes.u8','right.classes.u8','left.ids.u32','right.ids.u32','objects.json','evidence.json'], discard_source=True)
             import numpy as np
             for eye in ('left', 'right'):
                 classes=np.fromfile(args.output/preset/(eye+'.classes.u8'), dtype=np.uint8)
                 ids=np.fromfile(args.output/preset/(eye+'.ids.u32'), dtype=np.uint32)
                 assert ((classes==1) & (ids>0)).sum()>100, 'No identifiable model pixels in '+eye
+        if motion_failures:
+            raise AssertionError('Grip timing failures: '+json.dumps(motion_failures))
         print(json.dumps({'passed': True, 'profiles': len(results), 'representation': live.state['representation']}))
     finally:
         (args.output/'results.json').write_text(json.dumps(results, indent=2))

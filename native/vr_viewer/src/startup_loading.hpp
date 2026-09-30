@@ -34,7 +34,7 @@ class StartupLoading {
             parsed=std::async(std::launch::async,[path=scenePath]{return loadScene(path);});
         }
     }
-    void render(const glm::mat4& vp,const XrPosef& head) {
+    void render(const glm::mat4& vp,const XrPosef& head,bool representation=false) {
         if(!active)return;
         if(!anchored) {
             const glm::quat q(head.orientation.w,head.orientation.x,head.orientation.y,head.orientation.z);
@@ -63,13 +63,18 @@ class StartupLoading {
                 fills.push_back({{p.x,p.y,0},color,1});
         };
         rect(-.53F,-.38F,1.06F,.76F,{.025F,.04F,.065F});
-        text(phase=="error"?"NADOC VR - LOADING FAILED":"NADOC VR - LOADING PART",.33F,{1,1,1},.004F);
+        text(phase=="error"?"NADOC VR - LOADING FAILED":(representation?"NADOC VR - LOADING VIEW":"NADOC VR - LOADING PART"),.33F,{1,1,1},.004F);
         text(detail,.265F,phase=="error"?glm::vec3(1,.5F,.4F):glm::vec3(.7F,.85F,1));
         rect(-.49F,.19F,.98F,.026F,{.15F,.19F,.24F});
         rect(-.49F,.19F,.98F*percent/100,.026F,{.25F,.8F,.65F});
         text(std::to_string(percent)+"% - COMPLETED PREPARATION STAGES",.165F,{.8F,.85F,.9F});
         const std::array<std::pair<int,const char*>,10> stages={{{5,"VR runtime and document"},{15,"Nucleotide geometry"},{40,"Full display geometry"},{50,"Selection metadata"},{65,"Full scene export"},{75,"Expanded Quick View geometry"},{82,"Expanded scene export"},{85,"Snapshot validation and compression"},{92,"Native scene parsing and validation"},{100,"GPU buffers, selection and first part frame"}}};
+        const std::array<std::pair<int,const char*>,4> representationStages={{{75,"Exporting representation"},{96,"Reading and preparing geometry"},{99,"Uploading display buffers"},{100,"Activating completed representation"}}};
         float y=.115F;
+        if(representation)for(const auto& [end,label]:representationStages){
+            text(std::string(percent>=end?"DONE  ":"WAIT  ")+label,y,percent>=end?glm::vec3(.4F,.85F,.65F):glm::vec3(.7F));y-=.055F;
+        }
+        else
         for(const auto& [end,label]:stages) {
             text(std::string(percent>=end?"DONE  ":"WAIT  ")+label,y,percent>=end?glm::vec3(.4F,.85F,.65F):glm::vec3(.7F));y-=.041F;
         }
