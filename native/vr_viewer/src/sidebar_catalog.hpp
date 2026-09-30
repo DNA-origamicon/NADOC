@@ -372,11 +372,11 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
     {"md-box-view-details", "View details", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
     {"md-box-view-periodic", "View periodic images", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
     {"md-box-sizing", "Box sizing", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
-    {"md-box-sizing:option:auto", "Box sizing: Recommended  2 nm per face", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
+    {"md-box-sizing:option:auto", "Box sizing: Recommended  6 nm per face", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
     {"md-box-sizing:option:rotation", "Box sizing: Allow any orientation", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
     {"md-box-sizing:option:bbox", "Box sizing: Current orientation  custom padding", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
     {"md-box-sizing:option:explicit", "Box sizing: Custom dimensions", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
-    {"md-box-padding", "Requested padding (nm per side)", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
+    {"md-box-padding", "Initial solvent padding (nm per face)", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
     {"md-box-x", "Cell X (nm)", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
     {"md-box-y", "Cell Y (nm)", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
     {"md-box-z", "Cell Z (nm)", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:md-box-solvent-toggle"}},
@@ -976,6 +976,8 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
   }},
   {0, "vr", "VR", {
     {"vr-desktop", "View desktop", "VR", "desktop", {}},
+    {"qr-cube-calibrate", "Calibrate cube", "VR", "qr:cube", {}},
+    {"qr-cube-status", "Keep cube fixed; scan all five faces", "VR", "qr:cube-status", {}},
     {"vr-exit", "Exit VR", "VR", "vr:exit", {}},
   }},
   {0, "share", "Share", {

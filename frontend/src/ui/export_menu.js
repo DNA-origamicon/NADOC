@@ -81,7 +81,7 @@ export function initExportMenu({ store, api, getPdbVisualization = () => null })
     onError: error => showToast('Export failed: ' + (error?.message || exportErrorMessage(store.getState())), { severity: 'error' }),
   })
   let pdbExportBusy = false
-  // Shared guard: every export needs a design loaded. Returns true if OK.
+  // Shared guard for exports of the current design. Returns true if OK.
   const haveDesign = () => {
     if (!store.getState().currentDesign) {
       showToast('No design loaded.', { severity: 'error' })
@@ -159,6 +159,26 @@ export function initExportMenu({ store, api, getPdbVisualization = () => null })
     if (!haveDesign()) return
     const ok = await api.exportPsf()
     if (!ok) showToast('PSF export failed: ' + exportErrorMessage(store.getState()), { severity: 'error' })
+  })
+
+  // The calibration cube is independent of the current design.
+  const qrCubeButton = document.getElementById('menu-file-export-qr-cube')
+  let qrCubeBusy = false
+  qrCubeButton?.addEventListener('click', async () => {
+    if (qrCubeBusy) return
+    qrCubeBusy = true
+    qrCubeButton.disabled = true
+    showToast('Building QR cube STL files…', { severity: 'info' })
+    try {
+      const { exportQrCube } = await import('./qr_cube_export.js')
+      await exportQrCube()
+      showToast('QR cube exported: core, five QR plates, and assembly instructions.', { severity: 'success' })
+    } catch (error) {
+      showToast('QR cube export failed: ' + error.message, { severity: 'error' })
+    } finally {
+      qrCubeBusy = false
+      qrCubeButton.disabled = false
+    }
   })
 
   // ── Export Surface STL (3D print) ──────────────────────────────────────────────

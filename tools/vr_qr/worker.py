@@ -13,6 +13,7 @@ import numpy as np
 import openvr
 
 from tools.vr_qr.geometry import marker_spec, solve_marker, StableAnchor
+from tools.vr_qr.cube import CubeMapping, cube_spec, load_mapping, mapped_marker_spec
 
 
 def camera_config(serial):
@@ -33,11 +34,15 @@ def camera_device():
     raise RuntimeError('Vive USB camera unavailable')
 
 
-def packet(folder, seq, message, image=None, pose=None):
+def packet(folder, seq, message, image=None, pose=None, cube=None):
     h, w = image.shape[:2] if image is not None else (0, 0)
     matrix = np.eye(4) if pose is None else pose
-    header = f'NADOCQR1\n{seq} {w} {h} {int(pose is not None)} {time.monotonic():.6f}\n'
+    magic = 'NADOCQR2' if cube is not None else 'NADOCQR1'
+    valid = (2 if cube is not None else 1) if pose is not None else 0
+    header = f'{magic}\n{seq} {w} {h} {valid} {time.monotonic():.6f}\n'
     header += ' '.join(str(v) for v in matrix.ravel()) + '\n' + message.replace('\n', ' ')[:160] + '\n'
+    if cube is not None:
+        header += ' '.join(map(str, [cube['edge'], *cube['states']])) + '\n'
     temp = folder / 'frame.tmp'
     with temp.open('wb') as out:
         out.write(header.encode('ascii', errors='replace'))
@@ -46,10 +51,12 @@ def packet(folder, seq, message, image=None, pose=None):
     os.replace(temp, folder / 'frame.bin')
 
 
-def run(folder, duration=90):
+def run(folder, duration=90, calibrate_cube=False):
     cv.setNumThreads(1)
     camera = None
     initialized = False
+    mapping = CubeMapping() if calibrate_cube else None
+    saved_mapping = load_mapping() if not calibrate_cube else None
     try:
         system = openvr.init(openvr.VRApplication_Background); initialized = True
         serial = system.getStringTrackedDeviceProperty(0, openvr.Prop_SerialNumber_String)
@@ -80,7 +87,9 @@ def run(folder, duration=90):
             overlay = np.zeros((height, width, 4), np.uint8)
             overlay[:, :, :3] = [40, 220, 255]; overlay[:, :, 3] = edges
             data, corners, straight = detector.detectAndDecode(image)
-            spec = marker_spec(data) if data else None
+            spec = (marker_spec(data) if calibrate_cube else mapped_marker_spec(data, saved_mapping)) if data else None
+            if calibrate_cube and (cube_spec(data) is None or cube_spec(data)[0] >= 5):
+                spec = None
             found = None; head = None
             message = 'Camera warming up / needs more light' if gray.max() < 16 else 'Aim at QR; hold headset and target still'
             if spec and corners is not None and straight is not None:
@@ -88,19 +97,49 @@ def run(folder, duration=90):
                 tracked = system.getDeviceToAbsoluteTrackingPose(openvr.TrackingUniverseStanding, 0, 1)[0]
                 if tracked.bPoseIsValid and tracked.bDeviceIsConnected and tracked.eTrackingResult == openvr.TrackingResult_Running_OK and camera_from_marker is not None:
                     head = np.eye(4); head[:3] = np.array(tracked.mDeviceToAbsoluteTracking.m)
-                    found = head @ head_from_camera @ camera_from_marker @ spec[1]
-                    cv.polylines(overlay, [corners.astype(np.int32).reshape(4, 2)], True, (30, 255, 60, 255), 3)
+                    found = head @ head_from_camera @ camera_from_marker
+                    if not calibrate_cube:
+                        found = found @ spec[1]
+                    color = (255, 50, 40, 255) if calibrate_cube else (30, 255, 60, 255)
+                    cv.polylines(overlay, [corners.astype(np.int32).reshape(4, 2)], True, color, 3)
                     message = f'Hold still: {min(len(stable.samples) + 1, 12)}/12'
                 else:
                     message = 'Tracking or QR pose uncertain; keep still'
             elif data:
-                message = 'Use a NADOC meeting QR or NADOC cube face'
+                message = 'Use one of the five exported cube QR plates' if calibrate_cube else 'Use a NADOC meeting QR or NADOC cube face'
             accepted = stable.update(hashlib.sha256(data.encode()).hexdigest(), found, head)
             seq += 1
-            packet(folder, seq, 'QR registered' if accepted is not None else message, overlay, accepted)
-            if accepted is not None:
-                return
-        packet(folder, seq + 1, 'Timed out; retry with a larger, well-lit QR')
+            if calibrate_cube:
+                if accepted is not None:
+                    mapping.accept(data, accepted)
+                pose = mapping.stage_from_cube
+                if pose is None and found is not None:
+                    pose = mapping.preview_pose(data, found)
+                dimensions = mapping.dimensions or (cube_spec(data)[1] if cube_spec(data) else (.15, .15, .0036))
+                if mapping.complete:
+                    mapping.save()
+                    mapping.message = 'Cube calibrated: 5/5 saved; use Calibrate QR code to place scene'
+                # A compact unfolded face map keeps hidden faces visible in the
+                # mono preview; the native renderer also draws a room-space cube.
+                states = mapping.states()
+                current = cube_spec(data)
+                if found is not None and current and current[0] in mapping.faces:
+                    cv.polylines(overlay, [corners.astype(np.int32).reshape(4, 2)], True, (30, 255, 60, 255), 3)
+                for slot, (x, y) in enumerate([(1, 1), (3, 1), (2, 1), (0, 1), (1, 0), (1, 2)]):
+                    a = (12 + x * 48, 12 + y * 48)
+                    color = (25, 210, 55, 255) if states[slot] == 1 else ((100, 100, 100, 255) if states[slot] == -1 else (240, 40, 35, 255))
+                    cv.rectangle(overlay, a, (a[0] + 43, a[1] + 43), color, -1)
+                    face = next((str(i) for i, entry in mapping.faces.items() if entry['slot'] == slot), '-' if states[slot] == -1 else '?')
+                    cv.putText(overlay, face, (a[0]+12, a[1]+29), cv.FONT_HERSHEY_SIMPLEX, .65, (255, 255, 255, 255), 2)
+                detail = mapping.message if accepted is not None or mapping.complete else f'{mapping.message}. {message}'
+                packet(folder, seq, detail, overlay, pose, {'edge': dimensions[0], 'states': states})
+                if mapping.complete:
+                    return
+            else:
+                packet(folder, seq, 'QR registered' if accepted is not None else message, overlay, accepted)
+                if accepted is not None:
+                    return
+        packet(folder, seq + 1, 'Cube mapping incomplete; not saved. Retry with cube fixed and well lit' if calibrate_cube else 'Timed out; retry with a larger, well-lit QR')
     except Exception as error:
         packet(folder, 0, str(error))
     finally:
@@ -113,7 +152,8 @@ def run(folder, duration=90):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True, type=Path)
-    parser.add_argument('--seconds', type=float, default=90)
+    parser.add_argument('--seconds', type=float, default=None)
+    parser.add_argument('--calibrate-cube', action='store_true')
     args = parser.parse_args()
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
-    run(args.output, args.seconds)
+    run(args.output, args.seconds or (300 if args.calibrate_cube else 90), args.calibrate_cube)

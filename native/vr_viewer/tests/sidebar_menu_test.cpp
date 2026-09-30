@@ -20,6 +20,7 @@ int main() {
     }
     const auto vrTab=std::find_if(nadoc_vr::kSidebarTabs.begin(),nadoc_vr::kSidebarTabs.end(),[](const auto& tab){return tab.key=="vr";});
     require(vrTab!=nadoc_vr::kSidebarTabs.end(),"VR tab missing");
+    require(std::any_of(vrTab->rows.begin(),vrTab->rows.end(),[](const auto& row){return row.id=="qr-cube-calibrate" && row.action=="qr:cube";}),"Cube calibration must be available in VR tab");
     nadoc_vr::SidebarMenu part(1);
     require(std::none_of(part.tabs.begin(),part.tabs.end(),[](auto i){return nadoc_vr::kSidebarTabs[i].key=="assembly";}),"Part session exposed Assembly navigation");
     nadoc_vr::MenuFocus focus;

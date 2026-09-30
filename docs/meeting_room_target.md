@@ -1,6 +1,6 @@
 # QR meeting entry and mobile tracking prototype
 
-Open **File → Sharing**, enable a link, then **Print large tracking QR** for
+Open **Presentation → Sharing**, enable a link, then **Print large tracking QR** for
 phone-camera testing. Print at **100% / actual size** on A4 or US Letter, measure
 the 100 mm ruler, and mount the sheet flat and stationary. The QR square including
 its white quiet zone is 150 mm. Scan it with the phone’s normal camera to open the

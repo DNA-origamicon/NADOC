@@ -8,7 +8,7 @@ VR room coordinates and the camera stops. A small RGB axis marker remains at the
 registered origin. The same button cancels acquisition; unsuccessful acquisition
 times out after 90 seconds. Calibration does not require an active presentation.
 
-For a flat target, use **File → Sharing → Print large tracking QR**, printed at
+For a flat target, use **Presentation → Sharing → Print large tracking QR**, printed at
 100% actual size. The QR's entire square including the white quiet zone is 150 mm.
 Small meeting-sheet QR codes default to 40 mm. Do not resize a print without
 updating its encoded `qrmm` width. Arbitrary QR codes are rejected. Any NADOC
@@ -23,6 +23,44 @@ coordinates or topology. An empty scene can still register an anchor. Loading
 another scene does not automatically snap it: calibrate again. Gripping/moving
 the model afterward is allowed. Recalibrate after moving the physical target,
 restarting VR or changing SteamVR room calibration.
+
+## Learn a different cube plate arrangement
+
+The conventional **Calibrate QR code** path assumes the named plate arrangement
+unless a learned cube mapping exists. To learn a permutation or quarter-turn
+rotation of the five plates, center one plate on each of the five closed faces,
+leave the support opening uncovered, and choose **VR → Calibrate cube** in the
+left controller sidebar. Keep the cube fixed on its stand and move around it;
+hold your head still while each face is acquired. Do not rotate the cube in your
+hand between scans. The first accepted face defines an arbitrary cube coordinate
+orientation; all five recover the same physical center.
+
+Each face requires 12 consistent observations over at least 0.8 seconds. The
+room-space cube overlay updates live: red means more scanning is needed, green
+means the face has passed acquisition. An unfolded map in the smaller camera
+panel shows hidden faces too, labeled with their learned QR IDs. After all five
+faces pass, the unmarked support face becomes gray, the mapping is saved, and
+the camera stops. The world-space colored cube remains for review; it is a
+calibration snapshot, not continuous tracking after the camera stops. Starting
+another QR operation replaces the preview. The same button cancels scanning.
+Incomplete sessions time out after five minutes and do not overwrite the last
+complete mapping.
+
+Face centers must agree within 12 mm and normals within 8 degrees of a cube
+axis. A detected cube movement or repeated face rotation resets progress; wrong
+sizes and duplicate face locations are rejected. These checks cannot detect
+every symmetric rotation before a known face is revisited: keeping the physical
+cube fixed throughout acquisition is required.
+
+The mapping is saved locally in
+`$XDG_DATA_HOME/nadoc/qr-cube-calibration.json` (by default
+`~/.local/share/nadoc/qr-cube-calibration.json`). Only relative plate transforms
+are saved, not room poses. **Share → Calibrate QR code** then uses the learned
+arrangement to place the scene from any of the five faces, including after the
+cube is moved or the viewer restarted. Mapping alone does not move the scene.
+Recalibrate the arrangement after swapping plates. One physical cube is supported
+at a time because the printed IDs are shared between print kits. With no saved
+mapping, registration continues to use the conventional named arrangement.
 
 ## Camera implementation and requirements
 
@@ -68,25 +106,39 @@ source checkout recorded when building the viewer. `uv` must be on PATH or in
 
 ## Printable QR cube
 
-Generate a fresh output directory with:
+**Presentation → QR Cube (STL ZIP)** downloads the complete print kit,
+including the support socket core, five QR plates, and assembly instructions.
+No design needs to be loaded.
+
+To generate the same kit from the command line, use a fresh output directory:
 
 ```sh
 node frontend/scripts/generate-qr-cube.mjs OUTPUT_DIRECTORY
 ```
 
-The output contains a **150 mm core** and **six flat face-plate STLs**. Each plate
+The output contains a **150 mm core** and **five flat face-plate STLs**. Each plate
 has a 3 mm white base and 0.6 mm raised QR modules. Print flat, changing to black
 at Z=3 mm, or paint the raised modules matte black. STL does not encode colors.
 Unpainted single-color relief is not a reliable camera marker. Tiny white
 channels separate diagonal relief contacts so the meshes remain manifold.
 
-Glue each plate centered on its named core face, with minimal adhesive thickness.
+The core has a centered blind support socket opening on its bottom (-Z in the
+STL). For the 150 mm core, it tapers from a **90 mm bottom diameter (60%)** to a
+**45 mm flat-end diameter (30%)** over 138 mm of depth. The end leaves **15 mm
+(10%)** to the lower white surface of the top QR pattern: 12 mm of core plus the
+3 mm top plate. The circular walls use 128 segments. The bottom QR plate is
+omitted so the stand/rod opening stays accessible; the five other face IDs and
+marker offsets are unchanged. For a paper-label core, use
+`cubeMesh(150, { topPlateBase: 0 })` to retain the 15 mm clearance without a plate.
+
+For registration without arrangement calibration, glue each plate centered on
+its named core face, with minimal adhesive thickness. Alternatively, use any
+plate order and quarter-turn orientation, then run **VR → Calibrate cube**.
 On vertical faces, QR top points toward cube top. On the top face it points toward
-cube back; on the bottom face it points toward cube front. Top/bottom QR right
-points toward cube right. The encoded marker plane is 78.6 mm from cube center.
+cube back. Top QR right points toward cube right. The encoded marker plane is 78.6 mm from cube center.
 Measure finished print dimensions and verify recognition before calibration.
 
-The six permanent `NADOC-CUBE:1:...` codes identify face geometry. They are not
+The five permanent `NADOC-CUBE:1:...` codes identify face geometry. They are not
 expiring invitation links; keep the meeting's scan-to-join QR separate. Native
 calibration accounts for each face's rotation/offset to find the same cube center.
 Mobile cube registration is not implemented yet. Use only one such cube within
@@ -102,9 +154,9 @@ QR lock when no printed target is present.
 
 ```sh
 uv run python -m tools.vr_workflows.menu_tour --qr-checks --validate --hold 0 --exit
-uv run --offline --no-project --python 3.12 --with openvr==2.12.1401 --with opencv-python-headless==4.12.0.88 python -m unittest tools.vr_qr.test_geometry
+uv run --offline --no-project --python 3.12 --with openvr==2.12.1401 --with opencv-python-headless==4.12.0.88 python -m unittest tools.vr_qr.test_geometry tools.vr_qr.test_cube
 node --test frontend/scripts/qr-cube.test.mjs
-ctest --test-dir native/vr_viewer/build -R nadoc-vr-interaction --output-on-failure
+ctest --test-dir native/vr_viewer/build -R 'nadoc-vr-(interaction|sidebar-unit|qr-cube-render)' --output-on-failure
 ```
 
 The geometry tests cover camera pose, face transforms, instability/loss rejection

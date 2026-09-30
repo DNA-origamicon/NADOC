@@ -25,6 +25,9 @@ import {
   initExportMenu,
 } from './export_menu.js'
 
+vi.mock('./qr_cube_export.js', () => ({ exportQrCube: vi.fn() }))
+import { exportQrCube } from './qr_cube_export.js'
+
 const tick = () => new Promise(r => setTimeout(r, 0))
 
 // ── exportErrorMessage (pure) ────────────────────────────────────────────────
@@ -82,6 +85,7 @@ const DOM = {
   'menu-file-export-pdb': 'div',
   'menu-file-export-psf': 'div',
   'menu-file-export-stl': 'div',
+  'menu-file-export-qr-cube': 'button',
   'menu-file-export-3mf': 'div',
 }
 
@@ -110,6 +114,31 @@ describe('initExportMenu', () => {
   it('returns its api and no-ops gracefully when the menu DOM is absent', () => {
     const out = initExportMenu(makeDeps())
     expect(out).toEqual({})
+  })
+
+  it('exports the QR print kit without a loaded design and prevents duplicate downloads', async () => {
+    mountIds(DOM)
+    let finish
+    exportQrCube.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    initExportMenu(makeDeps({ currentDesign: null }))
+    click('menu-file-export-qr-cube')
+    click('menu-file-export-qr-cube')
+    await vi.waitFor(() => expect(exportQrCube).toHaveBeenCalledTimes(1))
+    expect(document.getElementById('menu-file-export-qr-cube').disabled).toBe(true)
+    finish()
+    await vi.waitFor(() => expect(document.getElementById('menu-file-export-qr-cube').disabled).toBe(false))
+    expect(showToast).toHaveBeenCalledWith(
+      'QR cube exported: core, five QR plates, and assembly instructions.', { severity: 'success' })
+  })
+
+  it('reports QR cube download failures and re-enables the menu item', async () => {
+    mountIds(DOM)
+    exportQrCube.mockRejectedValueOnce(new Error('download unavailable'))
+    initExportMenu(makeDeps())
+    click('menu-file-export-qr-cube')
+    await vi.waitFor(() => expect(showToast).toHaveBeenCalledWith(
+      'QR cube export failed: download unavailable', { severity: 'error' }))
+    expect(document.getElementById('menu-file-export-qr-cube').disabled).toBe(false)
   })
 
   it('CSV export calls api.exportSequenceCsv when a design is loaded', async () => {

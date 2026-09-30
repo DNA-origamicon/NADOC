@@ -12,7 +12,7 @@ see the [sharing audit](audits/sharing_security_hygiene_20260923.md).
 
 ## Share one invitation throughout a meeting
 
-1. Open the view you want to publish and choose **File → Sharing**.
+1. Open the view you want to publish and choose **Presentation → Sharing**.
 2. Press **Enable link**. The link and password appear in visible read-only fields;
    double-click either to select its full value, or use the copy icon to its right.
    Send both to guests. Guests enter their name and password once. Create is disabled while sharing;
@@ -63,7 +63,7 @@ only on the local machine. For meeting links, use the separate Help-menu flow be
 
 ## Present from the standard editor
 
-Create a link with **File → Sharing**, then choose **Help → Broadcast to
+Create a link with **Presentation → Sharing**, then choose **Help → Broadcast to
 presentation…**. Select the meeting and independently enable **Share my
 perspective** and **Share current visualizations**. Broadcasting starts off.
 The visible broadcast badge and the Help toggle both stop it immediately locally;
@@ -168,7 +168,7 @@ The package viewer's real-GPU performance gate remains open.
 
 ## Share the current part over the internet
 
-On the hosting PC, use **File → Sharing… → Enable link**.
+On the hosting PC, use **Presentation → Sharing… → Enable link**.
 The default host now prepares an HTTPS invitation for guests on any network.
 **Copy link** copies the URL. Send the generated password displayed separately in
 the popup as well. Guests enter their display name and password; they need no
@@ -244,7 +244,7 @@ existing sign-in, even after the usual two-minute guest inactivity interval.
 Guest reloads also reuse an existing valid sign-in. A different browser still
 requires the presenter invitation and password; it can reclaim the presenter's
 place after explicit Leave or two minutes disconnected, without affecting guests. The existing snapshot remains listed
-under **File → Sharing**, regardless of which file is open in the editor.
+under **Presentation → Sharing**, regardless of which file is open in the editor.
 Leaving the presentation does not stop the background host. The host PC must stay
 awake, and the existing meeting expiry still applies; **Stop sharing**, **End presentation**, host shutdown and expiry end availability. This does not make
 links permanent. The public gateway remains running between presentations.
@@ -349,7 +349,7 @@ covers the actual copy/share/open flow and native Windows control transport.
 
 ## Job sharing through one invitation (2026-09-23)
 
-Create the presentation with **File → Sharing**. Guests use the same invitation,
+Create the presentation with **Presentation → Sharing**. Guests use the same invitation,
 display name and meeting password throughout; they need no account or installation.
 The editor reuses the existing invitation instead of offering a second link.
 
@@ -546,3 +546,9 @@ revokes all rooms. A managed gateway also stops after 90 seconds without the
 editor heartbeat. The dialog displays connection readiness before activation.
 Automatic preparation is disabled for isolated browser tests with
 `NADOC_SHARE_AUTOSTART=0`; no per-file tunnels or uploads are created on file open.
+
+The **Presentation** menu groups **Sharing…**, **QR Cube (STL ZIP)**,
+**Passwordless Link QR Code…**, and **Stop sharing**. The QR display uses the
+current passwordless guest invitation and is available only while that invitation
+is active. **Stop sharing** ends the presentation through the same control used
+by the floating presentation bar.

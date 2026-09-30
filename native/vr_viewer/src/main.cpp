@@ -5271,13 +5271,15 @@ class Viewer {
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.label=[this](const std::string& action,const std::string& fallback) {
                 if(action=="qr:calibrate")return std::string(qrCalibration_.running()?"Cancel QR calibration":"Calibrate QR code");
-                if(action=="qr:status")return qrCalibration_.status;
+                if(action=="qr:cube")return std::string(qrCalibration_.running()&&qrCalibration_.cubeMode()?"Cancel cube calibration":"Calibrate cube");
+                if(action=="qr:status" || action=="qr:cube-status")return qrCalibration_.status;
                 if(action!="share:status")return fallback;
                 return std::string(shareFailed_?"Action failed - check desktop":!shareActive_?"Start presentation on desktop":shareBusy_ || shareAck_<shareSequence_?"Updating presentation...":sharePerspective_?"Sharing desktop perspective":"Perspective paused");
             };
             sidebar.available=[this](const std::string& action) {
-                if(action=="qr:status")return false;
-                if(action=="qr:calibrate")return true;
+                if(action=="qr:status" || action=="qr:cube-status")return false;
+                if(action=="qr:cube")return !qrCalibration_.running() || qrCalibration_.cubeMode();
+                if(action=="qr:calibrate")return !qrCalibration_.running() || !qrCalibration_.cubeMode();
                 if(action.starts_with("share:")) return shareAvailable(action);
                 if(action=="tool:bend" || action=="tool:twist")return !toolShell_.executionPending();
                 if(action.starts_with("twist:")) {
@@ -5819,6 +5821,7 @@ class Viewer {
         }
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
         if(action=="qr:calibrate") {qrCalibration_.start();return;}
+        if(action=="qr:cube") {qrCalibration_.start(true);return;}
         if(action=="share:avatar") {showVRAvatar_=!showVRAvatar_;return;}
         if(action.starts_with("share:")) {
             if(shareAvailable(action)) {shareAction_=action.substr(6);++shareSequence_;publishEventState();}
