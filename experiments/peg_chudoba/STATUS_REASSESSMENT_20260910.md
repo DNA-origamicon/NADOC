@@ -1,7 +1,7 @@
 # Bounded PEG validation reassessment
 
 Read-only scientific/process assessment at approximately 20:51 MDT, 2026-09-10.
-Evidence: `workspace/peg_chudoba/scheduling_294_20260910/validation.json`,
+Evidence: `.development-artifacts/peg_chudoba/scheduling_294_20260910/validation.json`,
 `REPORT.md`, `bounded_driver.json`, `cpu12_driver.log`, `lease.json`, native
 run metadata and live `/proc` inspection. No simulations or controller state changed.
 

@@ -5,12 +5,12 @@
 In **Simulations → NAMD → Box and solvent**, select:
 
 - **Recommended · 6 nm per face**: fits the current structure's axis-aligned
-  bounding box and resets requested padding to 6 nm on each face. Padding remains
+  bounding box and resets selected padding to 6 nm on each face. Padding remains
   editable. Selecting Recommended again resets it to 6 nm.
 - **Current orientation · custom padding**: uses that bounding box with the
-  requested padding.
+  selected padding.
 - **Allow any orientation**: fits a cube around the structure's rotational
-  envelope, then adds the requested padding on each side. This is a geometric
+  envelope, then adds the selected padding on each side. This is a geometric
   envelope, not a rotational-diffusion estimate.
 - **Custom dimensions**: uses explicit X/Y/Z lengths; preparation validates fit.
 
@@ -21,7 +21,7 @@ It does not guarantee clearance throughout NPT contraction, deformation or rotat
 Existing production/submission clearance guards and explicit overrides remain active.
 Saved presets can explicitly select a different mode or padding.
 
-Preview and preparation preserve requested padding, sizing mode and explicit axes.
+Preview and preparation preserve selected padding, sizing mode and explicit axes.
 They do not trim padding to a hardware atom cap, replace rotation sizing with a
 bounding box to fit memory, or substitute a smaller box based on free-run duration.
 Their former automatic-trimming/fallback warning is removed. Hardware capacity
@@ -29,9 +29,9 @@ checks may reject a run, but do not authorize changing its solvent geometry.
 Existing packages retain their original dimensions and audit metadata.
 Surface-control and two-electrode boundary rules remain unchanged.
 
-## Requested padding versus measured clearance
+## Initial padding versus measured clearance
 
-Requested padding is added to the selected envelope. The six displayed **water
+The initial padding is added to the selected envelope. The six displayed **water
 clearances** instead measure the distance between actual solute bounds and each
 box face. For axis i:
 

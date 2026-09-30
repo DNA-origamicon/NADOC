@@ -22,7 +22,7 @@ from experiments.peg_chudoba.serialize_existing import alive, process, tree
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
-DEFAULT = ROOT / 'workspace/peg_chudoba/scheduling_294_20260910'
+DEFAULT = ROOT / '.development-artifacts/peg_chudoba/scheduling_294_20260910'
 PYTHON = ROOT / '.venv/bin/python'
 BINARY = Path.home() / '.local/share/nadoc/engines/oxdna-chudoba/build/bin/oxDNA'
 LIBRARY = BINARY.parent.parent / 'src/liboxdna_common.so'

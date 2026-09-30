@@ -38,3 +38,10 @@ Cleanup inventory: `docs/audits/development_artifact_relocation_20260915.json`.
 Mobile-gold validation evidence is retained in `experiments/mobile_gold/ws/` to
 investigate pairing loss. Compact results live in `docs/validation/`; the cleanup
 manifest in the isolated workspace records moved and deleted paths.
+
+## Explicit VR workspace exception — 2026-09-22
+
+User requested persistent, user-editable test parts in `workspace/VR Testing/`.
+Retesting deletes old .nadoc parts there even if edited; parts are not validation
+fixtures. This authorization is limited to that marked folder. Preserve other
+workspace files. See [campaign policy](../docs/vr_authoring_workflows.md).

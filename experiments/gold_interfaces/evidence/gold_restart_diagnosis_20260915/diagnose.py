@@ -10,7 +10,7 @@ from backend.core.namd_gold_package import config, sha
 from backend.core.md_charge import parse_psf_atoms
 from experiments.gold_interfaces.native import read_binary, checkpoint_step
 
-ROOT = Path(__file__).resolve().parents[4]/'workspace/gold_restart_diagnosis_20260915'
+ROOT = Path(__file__).resolve().parents[4]/'.development-artifacts/gold_restart_diagnosis_20260915'
 REPO = Path(__file__).resolve().parents[4]
 BINARY = Path('/home/jojo/Applications/NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3')
 
@@ -74,7 +74,7 @@ def compare(p, a, b):
 def main():
     summary = {}
     for geometry, folder in [('particle', 'particle'), ('slab', 'slab_loading_1_18')]:
-        source = REPO/'workspace/gold_validation_20260914'/folder
+        source = REPO/'.development-artifacts/gold_validation_20260914'/folder
         variants = [('rigid', ()), ('flexible', (('rigidBonds water', 'rigidBonds none'),))]
         if geometry == 'particle':
             variants += [('offload', (('GPUresident on', 'GPUresident off'),)),

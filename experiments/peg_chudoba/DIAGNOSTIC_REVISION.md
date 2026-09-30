@@ -30,6 +30,6 @@ remain diagnostic questions. Existing numerical verification hashes and endpoint
 energy checks must pass before launch. No force-field refitting is authorized
 by an unresolved sampling result.
 
-Outputs: workspace/peg_chudoba/scheduling_294_20260910/diagnostics_revision.
+Outputs: .development-artifacts/peg_chudoba/scheduling_294_20260910/diagnostics_revision.
 The lease parks historical work during diagnostics and restores it afterward
 or upon driver failure. Neither NAMD production nor paid GPU rental is launched.

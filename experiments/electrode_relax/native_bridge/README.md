@@ -15,12 +15,12 @@ NAMD source or binary is committed here.
 ```bash
 uv run python experiments/electrode_relax/native_bridge/build.py \
   --source /home/jojo/Applications/NAMD_Git-2025-12-04_Source \
-  --output workspace/electrode_native_bridge_v2
+  --output .development-artifacts/electrode_native_bridge_v2
 
 PYTHONPATH=. uv run python experiments/electrode_relax/native_bridge/validate.py \
   --package workspace/md_jobs/222963230bfc/package/system_namd_solvated \
-  --binary workspace/electrode_native_bridge_v2/namd3 \
-  --output workspace/electrode_native_bridge_validation_v2
+  --binary .development-artifacts/electrode_native_bridge_v2/namd3 \
+  --output .development-artifacts/electrode_native_bridge_validation_v2
 ```
 
 These commands are for explicitly user-authorized native experiments. Automated
@@ -60,7 +60,7 @@ This is about 6.6x faster than the existing resident callback. It remains a shor
 experimental qualification, not long-run or DNA/PEG validation. The reference GPU
 path itself is not trajectory-identical across identical-seed repeats; endpoint
 coordinate equality was therefore not used as the force-equivalence criterion.
-Detailed logs/results: `workspace/electrode_native_bridge_validation_v2/README.md`.
+Detailed logs/results: `.development-artifacts/electrode_native_bridge_validation_v2/README.md`.
 
 New electrode packages now resolve GPU mode `auto` to `on`; explicit `off` remains
 available for comparisons. The user-authorized experimental driver uses one worker

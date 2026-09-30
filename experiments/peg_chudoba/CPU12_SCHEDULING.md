@@ -35,7 +35,7 @@ when twelve workers are selected. No extra replicas or simulation lengths are
 added to fill idle slots. GPU validation remains one job at a time in its
 separate phase.
 
-`workspace/peg_chudoba/scheduling_294_20260910/cpu12/` holds the frozen plan,
+`.development-artifacts/peg_chudoba/scheduling_294_20260910/cpu12/` holds the frozen plan,
 results, selection and code snapshot. `active_selection.json` records the
 adopted standard without overwriting the original 1/2/4-worker benchmark.
 The ordinary benchmark/validation entry point honors this measured override

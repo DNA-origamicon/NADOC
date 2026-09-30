@@ -1,0 +1,14 @@
+[
+  {
+    "seed": 317,
+    "neutral_subtracted_central_field_mV_nm": -2.345552895203153,
+    "neutral_subtracted_halfcell_compensation": 0.7203116403094896,
+    "note": "Paired exploratory difference; nonlinear response, no independent-block confidence interval"
+  },
+  {
+    "seed": 719,
+    "neutral_subtracted_central_field_mV_nm": -34.77592831116683,
+    "neutral_subtracted_halfcell_compensation": 0.4627475382883253,
+    "note": "Paired exploratory difference; nonlinear response, no independent-block confidence interval"
+  }
+]

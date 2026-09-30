@@ -3,7 +3,7 @@
 2026-09-14. **The user selected the neutral INTERFACE baseline. Shared preparation,
 native execution and managed qualification jobs are implemented; physical
 qualification remains incomplete.** Numerical results and retained failures are in
-[the validation report](../workspace/gold_validation_20260914/RESULTS.md).
+[the validation report](../.development-artifacts/gold_validation_20260914/RESULTS.md).
 Existing screening evidence and DNA topology are preserved. No frontend code changed.
 
 ## Recommendation and decision
@@ -186,7 +186,7 @@ general validated bonding model. See the dedicated
 
 ## Provenance, redistribution and barriers
 
-Author assets are cached locally in `workspace/gold_model_review_20260914`, with
+Author assets are cached locally in `.development-artifacts/gold_model_review_20260914`, with
 exact URLs, retrieval date, immutable GitHub commit and SHA256 in `sources.json`.
 The GitHub tree has no explicit LICENSE file. Public availability must not be
 reported as an unrestricted redistribution license. The Geada article states
@@ -220,13 +220,13 @@ basis of a stable bare-gold trajectory.
 
 ```
 uv run python -m experiments.gold_interfaces.audit_parameters \
-  --sources workspace/gold_model_review_20260914 \
-  --output workspace/gold_model_review_20260914/pair_audit_repeat
+  --sources .development-artifacts/gold_model_review_20260914 \
+  --output .development-artifacts/gold_model_review_20260914/pair_audit_repeat
 ```
 
 The command refuses an existing output directory, verifies cached source hashes,
 reads actual repository water/ion parameters, and writes JSON, CSV and a PNG.
-Initial results: `workspace/gold_model_review_20260914/pair_audit/`.
+Initial results: `.development-artifacts/gold_model_review_20260914/pair_audit/`.
 No managed job or simulation evidence was modified. No backend/frontend behavior
 changed; `main.js` LOC delta for this task is 0.
 

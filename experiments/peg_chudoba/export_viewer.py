@@ -13,7 +13,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 OUT = ROOT/'frontend/public/peg-trajectories'
-REPORT = ROOT/'workspace/peg_chudoba/scheduling_294_20260910/validation.json'
+REPORT = ROOT/'.development-artifacts/peg_chudoba/scheduling_294_20260910/validation.json'
 
 
 def read(path):

@@ -1,0 +1,66 @@
+[
+  {
+    "case": "charged_317",
+    "input_hashes_verified": true,
+    "psf_and_slab_charges_identical": true,
+    "net_charge_e": 1.6653345369377348e-15,
+    "positive_negative_gold_charge_e": [
+      16.131906470399997,
+      -16.131906470399997
+    ],
+    "paired_coordinates_identical": true,
+    "completed_stages": [
+      "minimize",
+      "pilot"
+    ],
+    "physical_validation": false
+  },
+  {
+    "case": "charged_719",
+    "input_hashes_verified": true,
+    "psf_and_slab_charges_identical": true,
+    "net_charge_e": 1.6653345369377348e-15,
+    "positive_negative_gold_charge_e": [
+      16.131906470399997,
+      -16.131906470399997
+    ],
+    "paired_coordinates_identical": true,
+    "completed_stages": [
+      "minimize",
+      "pilot"
+    ],
+    "physical_validation": false
+  },
+  {
+    "case": "neutral_317",
+    "input_hashes_verified": true,
+    "psf_and_slab_charges_identical": true,
+    "net_charge_e": 1.6653345369377348e-15,
+    "positive_negative_gold_charge_e": [
+      0.0,
+      0.0
+    ],
+    "paired_coordinates_identical": true,
+    "completed_stages": [
+      "minimize",
+      "pilot"
+    ],
+    "physical_validation": false
+  },
+  {
+    "case": "neutral_719",
+    "input_hashes_verified": true,
+    "psf_and_slab_charges_identical": true,
+    "net_charge_e": 1.6653345369377348e-15,
+    "positive_negative_gold_charge_e": [
+      0.0,
+      0.0
+    ],
+    "paired_coordinates_identical": true,
+    "completed_stages": [
+      "minimize",
+      "pilot"
+    ],
+    "physical_validation": false
+  }
+]

@@ -5,6 +5,9 @@ current GPU correction plugin.** This is an implementation proposal following
 local source inspection, not a claim of native constant-potential validation.
 The installed engine and existing simulation defaults were not modified.
 
+See the [literature benchmark and approval plan](namd_constant_potential_validation_plan.md)
+for reference fixtures, acceptance criteria and the proposed first implementation scope.
+
 ## Scientific scope
 
 First implementation: two fixed, explicit Au slabs, an electroneutral complete

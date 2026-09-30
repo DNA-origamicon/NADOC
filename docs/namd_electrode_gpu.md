@@ -9,7 +9,7 @@ Explicit offload remains available with the same force model.
 The canonical CUDA source is `backend/core/native/electrode_gpu.cu`; package
 conversion, validation and fallback live in `backend/core/namd_electrode_gpu.py`.
 The registered local build is `workspace/runtime/electrode_gpu/`. Its binary is a
-copy of the audited `workspace/electrode_gpu_plugin_final` library; no installed
+copy of the audited `.development-artifacts/electrode_gpu_plugin_final` library; no installed
 NAMD executable was replaced. Build for a different engine/host before registering
 it; copying the current library to an arbitrary NAMD build is not supported.
 
@@ -55,7 +55,7 @@ DNA/PEG qualification and remote-host installation remain separate work.
 
 ## Managed 4 fs screening validation
 
-The campaign in `workspace/electrode_gpu_screening_4fs_20260914/` starts each job
+The campaign in `.development-artifacts/electrode_gpu_screening_4fs_20260914/` starts each job
 through `/api/md/jobs/{id}/start`, rather than launching an unmanaged NAMD process.
 Jobs are retained against `2electrode_solvent_only.nadoc` and visible through the
 ordinary jobs API. The 38,644-atom 6 nm gap checkpoint has unchanged coordinates,
@@ -130,9 +130,9 @@ at 4 fs and 300.25/298.93 K at 2 fs; velocity-derived kinetic energies agree wit
 NAMD logs to 1.02e-8 relative error. This timestep diagnostic does not quantify the
 screening bias. Extend the 2 fs control before claiming quantitative equivalence.
 
-Final evidence: `workspace/electrode_gpu_screening_4fs_20260914/README.md`,
+Final evidence: `.development-artifacts/electrode_gpu_screening_4fs_20260914/README.md`,
 `comparison.{json,png,pdf}`, `native_summary.json`; restart evidence:
-`workspace/electrode_gpu_managed_resume_validation/result.json`.
+`.development-artifacts/electrode_gpu_managed_resume_validation/result.json`.
 
 ## Remote hardware validation (2026-09-14)
 
@@ -156,7 +156,7 @@ Extraction now uses `--no-same-owner`, and a retry obtained an RTX 4090 at $0.74
 It passed force/energy (1.42e-15/0 error) and restart-to-step-20020 probes, then started
 the 40 ns run at ~750 ns/day. The earlier spend is deducted from its $5 deadline.
 Qualification/running status lives
-in `workspace/electrode_remote_40ns_20260914/`. The provider deadline and independent
+in `.development-artifacts/electrode_remote_40ns_20260914/`. The provider deadline and independent
 watchdog bound this single rental, and terminal detection reaps it without waiting
 for a full DCD transfer. Results remain on the existing persistent volume.
 
@@ -197,7 +197,7 @@ microscopic potential, water-model dielectric, or the known 4 fs water-mode bias
 Alpine's trajectory is fully downloaded and SHA256-verified (47 files, 9.344 GB).
 Its separate-window analysis and job/report publication are complete. Current
 report, plots and detailed limitations:
-[40 ns screening results](../workspace/electrode_remote_40ns_20260914/RESULTS.md).
+[40 ns screening results](../.development-artifacts/electrode_remote_40ns_20260914/RESULTS.md).
 The report updates automatically after Alpine processing. The private cached
 analysis was checked against the original calculation and cached replay: all
 scientific JSON values matched exactly on a 2,500-frame reference window.

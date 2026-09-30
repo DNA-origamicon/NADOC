@@ -21,7 +21,7 @@ def append_peg(psf, pdb, spec, layout):
     if not 1<=count<=64:raise ValueError('Initial electrode PEG builder supports 1–64 chains per patch.')
     axis=layout['axis'];lateral=[i for i in range(3) if i!=axis]
     if size>min(layout['cell_nm'][i] for i in lateral):raise ValueError('PEG patch exceeds electrode dimensions.')
-    assets=Path(os.environ.get('NADOC_PEG_ETHER_ASSETS','workspace/peg_wall_validation/assets/toppar_ether')).resolve()
+    assets=Path(os.environ.get('NADOC_PEG_ETHER_ASSETS','.development-artifacts/peg_wall_validation/assets/toppar_ether')).resolve()
     for name,digest in ASSET_HASHES.items():
         if not (assets/name).is_file() or sha256(assets/name)!=digest:raise ValueError(f'Missing pinned CHARMM ether asset {name}; set NADOC_PEG_ETHER_ASSETS.')
     with tempfile.TemporaryDirectory(prefix='nadoc_electrode_peg_') as temp:

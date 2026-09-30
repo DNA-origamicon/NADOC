@@ -48,14 +48,14 @@ uv run python experiments/electrode_relax/gpu_correction/build.py \
 PYTHONPATH=. uv run python experiments/electrode_relax/gpu_correction/validate.py \
   --package workspace/md_jobs/2fb3c67ae5d9/package/system_namd_solvated \
   --plugin workspace/my_electrode_gpu_plugin/electrode.so \
-  --binary workspace/electrode_native_bridge_v2/namd3 \
+  --binary .development-artifacts/electrode_native_bridge_v2/namd3 \
   --output workspace/my_electrode_gpu_validation
 
 PYTHONPATH=. uv run python experiments/electrode_relax/gpu_correction/benchmark.py \
   --package workspace/md_jobs/2fb3c67ae5d9/package/system_namd_solvated \
   --plugin workspace/my_electrode_gpu_plugin/electrode.so \
   --binary /home/jojo/Applications/NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3 \
-  --cpu-binary workspace/electrode_native_bridge_v2/namd3 \
+  --cpu-binary .development-artifacts/electrode_native_bridge_v2/namd3 \
   --output workspace/my_electrode_gpu_benchmark
 ```
 
@@ -77,18 +77,18 @@ parameters, topologies, reference callback and engine checksums.
 
 ## Validation evidence
 
-- `workspace/electrode_gpu_validation_final/results.json`: all three axes with
+- `.development-artifacts/electrode_gpu_validation_final/results.json`: all three axes with
   deliberately active walls, a perturbed electrode anchor, a generic mobile
   tether, plus the normal system; GPU/NumPy and GPU/direct-CPU force and energy
   audits. Maximum force differences are below 1e-8 kcal/mol/Å. Deliberately huge
   stress energies use absolute + relative tolerance (1e-8 + 1e-12 |U|), since
   different reduction orders differ by a few micro-kcal/mol at ~4e8 kcal/mol.
-- `workspace/electrode_gpu_validation_v4/sanitizer_{race,mem}100.log`: 100-step
+- `.development-artifacts/electrode_gpu_validation_v4/sanitizer_{race,mem}100.log`: 100-step
   fused/warp candidate, correction/dipole/reduce kernels only; zero reported
   race hazards or memory errors. This is not a whole-engine sanitizer claim.
-- `workspace/electrode_gpu_tuning_v1/results.json`: 20,000-step individual-option
+- `.development-artifacts/electrode_gpu_tuning_v1/results.json`: 20,000-step individual-option
   screen, median timing from the second half of each run.
-- `workspace/electrode_gpu_benchmark_final/results.json`: longer matched CPU/GPU
+- `.development-artifacts/electrode_gpu_benchmark_final/results.json`: longer matched CPU/GPU
   timings and independent force/energy audits after dynamics/atom migration.
   `qualification.json` records zero restart-position discrepancies, passing
   final-library 100-step kernel memcheck/racecheck and nonneutral-cell rejection.

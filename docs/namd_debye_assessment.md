@@ -142,8 +142,23 @@ Prioritize controlled validation over another larger or longer 4 fs box:
    force–compression curves then require their own tests; none are measured by
    these solvent-only runs.
 
-[All hardware comparison plots and per-window results](../workspace/electrode_remote_40ns_20260914/RESULTS.md)
+[All hardware comparison plots and per-window results](../.development-artifacts/electrode_remote_40ns_20260914/RESULTS.md)
 
 Historical failed and completed jobs remain under the documented Archive location;
 see [archive inventory](namd_electrode_archive.md). No new simulation was launched
 for this assessment.
+
+## Explicit-gold comparison, 2026-09-15
+
+The [gold screening pilot report](../experiments/gold_interfaces/screening/results/RESULTS.md)
+applies the existing finite-gap ion-ratio and canonical-PB diagnostics to separate
+neutral and prescribed-charge Au(111) controls. It uses a 6 nm slit, 64 pairs,
+commensurate 64.53 nm² area and 1 fs integration. The charged control is an isolated
+experiment with neutral-IFF LJ contact and imposed inner-layer charges; it does not
+change the registered neutral model or implement a conducting electrode.
+
+Both early and late historical windows are retained. The new 200 ps analysis window
+is shorter than one historical 300 ps bootstrap block, and optimizer convergence
+is explicitly separated from physical screening validation. Direct near-surface
+charge inventories, neutral backgrounds and microscopic potential components are
+reported so that neither an arbitrary cutoff nor a fitted length becomes a pass score.

@@ -10,6 +10,8 @@ review_after: 2026-10-01
 
 New explicit-solvent jobs, the Recommended box control, hardware estimates, and
 all built-in explicit-solvent relaxation presets now default to 6 nm per face.
+The field is labeled “Initial solvent padding (nm per face)”; preparation preserves
+the selected value, while subsequent pressure equilibration can change cell dimensions.
 This is NADOC's safety margin, deliberately larger than the literature's initial
 4 nm inter-image gap; it is not a claim that the reference used 6 nm per face.
 Explicit user values, saved setup choices and existing production cells retain
@@ -35,8 +37,8 @@ qualification is incomplete. Native resident execution uses GPU atom migration o
 after observed patch-limit/exclusion failures. Gold–S, polarization and constant
 potential are unsupported. See [selection and capabilities](../docs/namd_gold_model_selection.md)
 and the [restart diagnosis](../experiments/gold_interfaces/evidence/gold_restart_diagnosis_20260915/RESULTS.md).
-The earlier workspace native report is unavailable in this checkout; density and
-statistical qualification remain separate from restart precision.
+Local retained [native results](../.development-artifacts/gold_validation_20260914/RESULTS.md)
+include the strict split-run precision residual; density and statistical qualification remain unresolved.
 
 ## Box and solvent sidebar (2026-09-13)
 
@@ -65,7 +67,7 @@ narratives are in [the archive](project_md_job_system_archive.md).
   exist, with a prepared 95,208-atom control and guarded native qualification
   harness. The electrode wizard preset now routes managed preparation through
   shared ENM/HMR/chunks, with separate bulk NPT and fixed-cell NVT. User-requested native validation is authorized independently of the heavy-test-session gate. Four current DNA/PEG cases are prepared under
-  `workspace/electrode_relax_validation_20260913_v2`. Native solvent-only job `89af63c3abb7` (6,232 atoms, bounded 4 nm liquid control) finished 7.2 ns with normal engine exits after a passing matched bulk reference. Final density/confinement pass, but Na/Cl cumulative drift 0.1367/0.1167 exceeds 0.10: job remains unqualified and production is blocked. A 6 ns passing checkpoint does not override the final failure. Full-size 10 nm relaxation remains unvalidated. Solvent-only playback supports an empty DNA selection. Electrode completion, including worker recovery, requires the same health gate; Fix can extend a convergence-only failure from the final checkpoint without rebuilding. See `docs/namd_electrode_protocol.md` and `workspace/2electrode_solvent_only_validation/README.md` for the current campaign.
+  `.development-artifacts/electrode_relax_validation_20260913_v2`. Native solvent-only job `89af63c3abb7` (6,232 atoms, bounded 4 nm liquid control) finished 7.2 ns with normal engine exits after a passing matched bulk reference. Final density/confinement pass, but Na/Cl cumulative drift 0.1367/0.1167 exceeds 0.10: job remains unqualified and production is blocked. A 6 ns passing checkpoint does not override the final failure. Full-size 10 nm relaxation remains unvalidated. Solvent-only playback supports an empty DNA selection. Electrode completion, including worker recovery, requires the same health gate; Fix can extend a convergence-only failure from the final checkpoint without rebuilding. See `docs/namd_electrode_protocol.md` and `.development-artifacts/2electrode_solvent_only_validation/README.md` for the current campaign.
   Older protocols trigger a cancellable warning and continue unchanged only on confirmation.
   See `docs/namd_electrode_protocol.md` for limits and convergence thresholds. Gold and
   constant-potential controls are not represented as supported options. Toggling
@@ -245,7 +247,7 @@ remain explicit blockers. See [direct PEG surface setup](../docs/namd_peg_surfac
 
 - 2026-09-14 short electrode volume screen: 4/6/8 nm lateral sides at fixed 4 nm
   gap, 240 ps each, 10/22/39 ions. Larger counts lower short-window drift, but both
-  larger jobs fail density; see `workspace/electrode_volume_screen_20260914/README.md`.
+  larger jobs fail density; see `.development-artifacts/electrode_volume_screen_20260914/README.md`.
   GPU-resident one-worker timing is ~1.46x faster than offload at 24,677 atoms;
   CPU/Tcl coordinate and force handling remains ~70% of step time. Long resident
   qualification and physical-time/correlation-aware profile windows remain open.
@@ -255,13 +257,13 @@ remain explicit blockers. See [direct PEG surface setup](../docs/namd_peg_surfac
   Explicit offload is reserved for requested comparisons or documented engine
   compatibility issues. Electrode preparation now maps `auto` to `on`, preserving
   explicit `off`; minimization retains its established offload startup path.
-- Isolated direct-array NAMD prototype built at `workspace/electrode_native_bridge_v2/namd3`:
+- Isolated direct-array NAMD prototype built at `.development-artifacts/electrode_native_bridge_v2/namd3`:
   bypasses per-atom Tcl conversion, ~6.6x faster than the compiled Tcl callback in
   resident mode at 24,677 atoms. Three-axis force/energy audits match exactly; 40 ps
   finite/confined dynamics passed. Still experimental: no long/DNA/PEG qualification,
   no installed engine replacement, matching bridge callback required. See
   `experiments/electrode_relax/native_bridge/README.md` and
-  `workspace/electrode_native_bridge_validation_v2/README.md`.
+  `.development-artifacts/electrode_native_bridge_validation_v2/README.md`.
 
 - Completed resident Debye diagnostic (2026-09-14): 2.64 ns, 8 × 4 × 8 nm liquid,
   25,839 atoms/41 Na-Cl pairs. Jobs c6d0bcfc861d/e04b05b6df8a/df270bd5872a retained
@@ -271,7 +273,7 @@ remain explicit blockers. See [direct PEG surface setup](../docs/namd_peg_surfac
   classical 0.536–0.605 nm looks promising but chunk fits 0.405/1.745 nm disagree:
   not quantitative Debye convergence, despite passing profile gates. Full ladder,
   DNA/PEG, dielectric, salt scaling and finite-gap checks remain open. Details:
-  `workspace/electrode_debye_validation_20260914_v2/README.md`.
+  `.development-artifacts/electrode_debye_validation_20260914_v2/README.md`.
 - Explicit experimental engine path/hash now survives adoption and restart, verified
   against package provenance (`namd_experimental_engine.py`). Callback remains an
   explicit experimental package choice. Installed NAMD remains unchanged.
@@ -282,7 +284,7 @@ remain explicit blockers. See [direct PEG surface setup](../docs/namd_peg_surfac
   confinement/profile gates pass. λ fits 0.580/0.819 nm across chunks, pooled
   0.685 vs classical 0.551–0.623: better constrained than 4 nm but central salt
   still changes 343→269 mM and microscopic field remains noisy. Not Debye convergence.
-  `workspace/electrode_gap6_validation_20260914/README.md` and `PERFORMANCE.md`.
+  `.development-artifacts/electrode_gap6_validation_20260914/README.md` and `PERFORMANCE.md`.
   Runtime 86.3 min; sustained ~44–45 ns/day and sampled GPU util ~28%. Remaining
   CPU gather/correction/scatter + padded PME limit speed, despite native-array
   bridge. Archived local DNA reference ~392 ns/day at 4 fs is not a matched benchmark.
@@ -293,15 +295,15 @@ remain explicit blockers. See [direct PEG surface setup](../docs/namd_peg_surfac
   atomic position/force host transfers; scalar energy and server synchronization
   remain. Three-axis stressed and normal force/energy audits match CPU/NumPy;
   isolated configuration tests guard ordering and double application. Final build
-  and source hashes: `workspace/electrode_gpu_plugin_final/provenance.json`.
-  Longer performance/post-migration audits: `workspace/electrode_gpu_benchmark_final/`.
+  and source hashes: `.development-artifacts/electrode_gpu_plugin_final/provenance.json`.
+  Longer performance/post-migration audits: `.development-artifacts/electrode_gpu_benchmark_final/`.
   Explicit experimental fixed-cell path only; managed plugin restart provenance,
   full ladder/minimization, DNA/PEG, virials, multi-GPU and long screening are open.
 
 Final matched GPU benchmark: 254 ns/day without tuning, 291–297 ns/day with
 GPU atom migration + twoAwayZ, versus 43.1 ns/day CPU at the same 2 fs (6.8–6.9×).
 Four 120 ps GPU endpoints pass force/energy audits; these do not establish Debye
-convergence. Details: `workspace/electrode_gpu_benchmark_final/README.md`.
+convergence. Details: `.development-artifacts/electrode_gpu_benchmark_final/README.md`.
 
 
 - Managed GPU electrodes (2026-09-14): the local runner now auto-selects the
@@ -313,7 +315,7 @@ convergence. Details: `workspace/electrode_gpu_benchmark_final/README.md`.
   `backend/core/native/electrode_gpu.cu`; no installed NAMD replacement.
 - Real Start-API 4 fs solvent pilot passed, followed by longer retained sampling
   against `2electrode_solvent_only.nadoc`; campaign
-  `workspace/electrode_gpu_screening_4fs_20260914/`. It uses unchanged rigid-water
+  `.development-artifacts/electrode_gpu_screening_4fs_20260914/`. It uses unchanged rigid-water
   masses, 2 ps frames and a fixed 4 fs PME-update interval across 2/4 fs comparisons.
   Native stability does not establish timestep-independent dielectric/screening.
   Separate physical-time blocks and water-mode diagnostics are retained.
@@ -333,7 +335,7 @@ convergence. Details: `workspace/electrode_gpu_benchmark_final/README.md`.
 - User-requested 40 ns 4 fs continuation launched 2026-09-14: job `4eb7176339e4`
   under `2electrode_solvent_only.nadoc`, source `548581d231f7`, unchanged 6 nm gap,
   salt/charges/masses, 2 ps output. Native GPU-resident/GPU plugin launch verified.
-  Campaign `workspace/electrode_gpu_screening_40ns_20260914/`; persistent standalone
+  Campaign `.development-artifacts/electrode_gpu_screening_40ns_20260914/`; persistent standalone
   `monitor.py` writes live progress, cumulative 5/10/20/30/40 ns analyses and final
   separate 10 ns windows. Check progress/completion files before reporting outcome.
   Initial throughput ~425–440 ns/day (~2.2 hours). This tests time averaging only;

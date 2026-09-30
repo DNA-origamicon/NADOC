@@ -31,7 +31,7 @@ def impulses():
     (d.ROOT/'impulses.json').write_text(json.dumps(result,indent=2))
 
 def solvent():
-    p = d.prepare('solvent_only_v2', d.REPO/'workspace/gold_validation_20260914/particle')
+    p = d.prepare('solvent_only_v2', d.REPO/'.development-artifacts/gold_validation_20260914/particle')
     # Diagnostic deletion preserves the solvent state/atom order, leaving the old
     # particle cavity. This is a mechanism control, not equilibrated bulk water.
     psf = parmed.load_file(str(p/'system.psf'))

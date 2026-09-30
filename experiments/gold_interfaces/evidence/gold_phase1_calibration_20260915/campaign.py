@@ -13,7 +13,7 @@ from backend.core import namd_gold_package as gp, namd_solvate as sv, gold_model
 from backend.core.md_charge import parse_psf_atoms, audit_psf
 from experiments.gold_interfaces.native import read_binary, checkpoint_step
 
-ROOT=Path(__file__).resolve().parents[4]/'workspace/gold_phase1_calibration_20260915'
+ROOT=Path(__file__).resolve().parents[4]/'.development-artifacts/gold_phase1_calibration_20260915'
 BIN=Path('/home/jojo/Applications/NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3')
 SEEDS=(317,719)
 

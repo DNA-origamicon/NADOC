@@ -11,7 +11,7 @@ Read-only inspection found NAMD, VMD/psfgen, VMD solvate/autoionize, GROMACS, Ps
 probe also reports its pinned distributed response/Hessian dependencies present.
 This is an installation inventory, not a new execution qualification on H200/B200.
 The installed `/usr/bin/orca` is the screen reader, not a QM executable; Psi4 is
-available instead. Runtime snapshot: `workspace/peg_namd/toolchain_20260910.json`.
+available instead. Runtime snapshot: `.development-artifacts/peg_namd/toolchain_20260910.json`.
 
 Reusable code/infrastructure:
 

@@ -18,6 +18,7 @@ automatic promotion based on a short trajectory finishing.
 | Are concentrations and accessible volumes defined? | Exact water/ion counts, local Na/Cl profiles, geometric volumes, and explicit preparation-based exclusion volumes with Monte Carlo errors. | Definitions are reproducible. Small ion inventories do not qualify adsorption or salt partitioning. |
 | Does the gold interface match published hydration or adsorption data? | No matched published solvent/facet/model reproduction in this phase. | Unqualified; create a matched reference package and compare uncertainty before interpreting adsorption. |
 | Are size/boundary effects converged? | Prior exploratory controls and current fixed geometry; EW3DC remains fixed-cell. | Unqualified; vary lateral size, gap, padding and mesh independently at controlled inventory. |
+| Does explicit gold reproduce the historical Debye screening test? | Isolated neutral/prescribed-charge Au(111) controls and the unchanged finite-gap analysis; two preparations, 6 nm gap, 64 pairs, 1 fs. | Screening remains unqualified: 300 ps pilots give a 5 nm optimizer boundary and a 0.434 nm fit across charged seeds; ionic compensation is 82%/64%. See the screening report; fixed charge does not supply metal response. |
 | Are the gold electrodes voltage-controlled? | Local source audit and concrete charge-solver/PME design. | Not implemented. Neutral Au and abstract fixed-charge walls do not supply constant potential. |
 | Is functionalized gold ready? | Authored linker/display structures exist separately from bare-gold qualification. | Au–S and Au/PEG/DNA cross-interactions require explicit chemistry and validation. |
 | Are mobile gold and production workflows ready? | Short prior mobile controls; current inventory work restrains Au. | Long morphology, partial-stage recovery, remote runtime and gold-specific UI integration remain separate work. |
@@ -46,11 +47,12 @@ automatic promotion based on a short trajectory finishing.
 
 ## Review artifacts
 
-- [Native gold baseline and historical failures](../workspace/gold_validation_20260914/RESULTS.md)
+- [Native gold baseline and historical failures](../.development-artifacts/gold_validation_20260914/RESULTS.md)
 - [Restart diagnosis and correction](../experiments/gold_interfaces/evidence/gold_restart_diagnosis_20260915/RESULTS.md)
 - [Solvent calibration methods and retained files](../experiments/gold_interfaces/evidence/gold_phase1_calibration_20260915/README.md)
 - [Completed Phase 1 results](../experiments/gold_interfaces/evidence/gold_phase1_calibration_20260915/RESULTS.md)
 - [Calibration measurements](../experiments/gold_interfaces/evidence/gold_phase1_calibration_20260915/measurements.md)
+- [Explicit-gold screening comparison](../experiments/gold_interfaces/screening/results/RESULTS.md)
 - [Constant-potential implementation design and source audit](namd_constant_potential_design.md)
 - [Abstract-wall 40 ns screening assessment](namd_debye_assessment.md)
 

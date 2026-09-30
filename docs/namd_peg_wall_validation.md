@@ -75,7 +75,7 @@ PEG–water interactions and cap sensitivity remain qualification requirements.
 
 ## Prepared case and commands
 
-The prepared case is `workspace/peg_wall_validation/peg8_g2_v1`:
+The prepared case is `.development-artifacts/peg_wall_validation/peg8_g2_v1`:
 four chains, eight EO repeats each, **260 PEG atoms + 2,944 TIP3P waters = 9,092
 atoms**. The 4.8 nm cubic cell gives 0.1736 chains/nm². Graft references are 0.2 nm
 above the lower wall. Initial chains are extended, equivalent conformations;
@@ -94,14 +94,14 @@ just test-session
 
 # From the repository root, with downloaded official assets:
 .venv/bin/python -m experiments.peg_wall.build \
-  --assets workspace/peg_wall_validation/assets/toppar_ether \
-  --output workspace/peg_wall_validation/peg8_g2_new
+  --assets .development-artifacts/peg_wall_validation/assets/toppar_ether \
+  --output .development-artifacts/peg_wall_validation/peg8_g2_new
 
 .venv/bin/python -m experiments.peg_wall.validate \
-  workspace/peg_wall_validation/peg8_g2_new --stage minimize \
+  .development-artifacts/peg_wall_validation/peg8_g2_new --stage minimize \
   --namd "$HOME/Applications/NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3"
 .venv/bin/python -m experiments.peg_wall.validate \
-  workspace/peg_wall_validation/peg8_g2_new --stage resident \
+  .development-artifacts/peg_wall_validation/peg8_g2_new --stage resident \
   --namd "$HOME/Applications/NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3"
 ```
 
@@ -192,7 +192,7 @@ production timestep suitability or wall throughput. Minimization frame numbers
 represent iterations, not physical time.
 
 The prepared case has **9,092 atoms**, not 90,920. Original package evidence remains
-in `workspace/peg_wall_validation/peg8_g2_v1/validation.json` and stage receipts.
+in `.development-artifacts/peg_wall_validation/peg8_g2_v1/validation.json` and stage receipts.
 
 Verification results for persistent review work:
 

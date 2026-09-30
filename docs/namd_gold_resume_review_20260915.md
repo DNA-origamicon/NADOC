@@ -13,7 +13,7 @@ Neutral INTERFACE remains the starting model; physical and voltage-control quali
   nanoparticles. This is real atomistic gold geometry, with neutral Au interactions.
 - Gold preparation, local Start, completed-stage continuation, input hashes and
   export exist. Gold setup remains separate from the abstract two-electrode UI.
-- The retained [native report](../workspace/gold_validation_20260914/RESULTS.md)
+- The retained [native report](../.development-artifacts/gold_validation_20260914/RESULTS.md)
   records five native LJ pair probes, 100 ps reference trajectories, short mobility
   and timestep controls, and managed execution. These results were reviewed here,
   not rerun. Native pair forces agree within 6.12e-6 kcal/mol/Å.

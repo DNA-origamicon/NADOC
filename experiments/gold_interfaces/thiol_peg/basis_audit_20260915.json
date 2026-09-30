@@ -1,0 +1,131 @@
+{
+  "schema": "nadoc.gold_peg_thiol_basis_audit.v1",
+  "ready_for_explicit_peg_thiolate_gold_simulation": false,
+  "gold_basis": {
+    "id": "iff-au-12-6-neutral-v1",
+    "schema": "nadoc.gold_model.v1",
+    "atom_type": "NAUI",
+    "atom_name": "AU",
+    "residue": "AUI",
+    "mass_Da": 196.96657,
+    "charge_e": 0.0,
+    "epsilon_kcal_mol": 5.29,
+    "rmin_half_A": 1.4755,
+    "lattice_parameter_nm": 0.40782,
+    "lattice_note": "Reference fcc starting cell; relax before interpreting mobile structure.",
+    "combination_rules": "geometric epsilon; additive Rmin/2; NBFIX takes precedence",
+    "capabilities": {
+      "cohesive_gold": true,
+      "native_lj": true,
+      "electronic_polarization": false,
+      "constant_potential": false,
+      "gold_sulfur_bonds": false,
+      "validated_specific_ion_adsorption": false
+    },
+    "mobility": [
+      "fixed",
+      "restrained",
+      "mobile"
+    ],
+    "electrolyte": "CHARMM-modified TIP3P / NADOC CUFIX NaCl",
+    "provenance": {
+      "doi": "10.1021/jp801931d",
+      "distribution": "INTERFACE 1.5 CHARMM",
+      "url": "https://raw.githubusercontent.com/hendrikheinz/INTERFACE-force-field-and-surface-models/584179265906d93aa40f7d5b275143985871b654/charmm27_interface_v1_5.prm",
+      "sha256": "5edab5e93a422cd5dab389c34c19fd5e7f2a33e240f1a9cdf09017baea177557",
+      "entry": "AU 0.0 -5.29 1.4755",
+      "adaptation": "Numerical metal entry only, namespaced NAUI; no CHARMM27 bulk parameter import.",
+      "redistribution": "Author GitHub has no LICENSE file; no blanket redistribution grant asserted. Numerical facts transcribed with attribution; full upstream file is not packaged."
+    }
+  },
+  "ether_assets": {
+    "top_all35_ethers.rtf": {
+      "expected_sha256": "cce86e705c2cf9e0339f7123b4470b48525d7539393b4778f8641b412c4b6761",
+      "actual_sha256": "cce86e705c2cf9e0339f7123b4470b48525d7539393b4778f8641b412c4b6761",
+      "matches": true
+    },
+    "par_all35_ethers.prm": {
+      "expected_sha256": "f5da0b0b1c24160ae5a6a38003132956ec27b1438f664b5feffc078b6f4b701d",
+      "actual_sha256": "f5da0b0b1c24160ae5a6a38003132956ec27b1438f664b5feffc078b6f4b701d",
+      "matches": true
+    }
+  },
+  "parameter_observations": {
+    "explicit_gold_bonds": [],
+    "organic_sulfur_carbon_bonds": [
+      {
+        "types": [
+          "S",
+          "CT2"
+        ],
+        "values": [
+          "198.000",
+          "1.8180"
+        ],
+        "source": "backend/data/forcefield/par_all36m_prot.prm"
+      }
+    ],
+    "note": "S-CT2 is organic S-C; it cannot be reused as an Au-S bond."
+  },
+  "existing_paths": {
+    "nanoparticle_direct_thiol": {
+      "organic_graph": "DNA-O-P(O2)-O-(CH2)3-S",
+      "gold_representation": "implicit_fixed_sphere",
+      "attachment": "positional sulfur restraint",
+      "contains_peg": false,
+      "contains_explicit_gold": false
+    },
+    "electrode_peg": {
+      "organic_graph": "CH3-O-(CH2-CH2-O)n-CH3",
+      "attachment": "mechanical graft",
+      "contains_sulfur": false
+    },
+    "explicit_gold": {
+      "geometries": [
+        "slab",
+        "nanoparticle"
+      ],
+      "shared_model_id": "iff-au-12-6-neutral-v1",
+      "gold_sulfur_bonds": false
+    }
+  },
+  "required_shared_contract": {
+    "geometry_independent": [
+      "ligand_atom_graph",
+      "repeat_count_convention",
+      "end_groups",
+      "precursor_and_bound_charge_models",
+      "au_s_model_id",
+      "parameter_hashes",
+      "nonbonded_exclusions"
+    ],
+    "geometry_specific": [
+      "binding_motif",
+      "surface_atom_ids",
+      "facet_or_local_coordination",
+      "coverage",
+      "surface_normal",
+      "boundary_conditions"
+    ],
+    "electrical_condition": "no imposed voltage or excess electrode charge; interfacial partial charges must come from the selected model"
+  },
+  "missing_before_native_run": [
+    "Exact PEG-thiol precursor and bound product atom graphs, including end groups/spacers.",
+    "Source-backed Au-S interface model compatible with the chosen gold basis and motif.",
+    "Complete junction charges and bonded/nonbonded parameters with provenance.",
+    "Final bonded graph, exclusions, complete-cell charge balance and parameter coverage.",
+    "Native reference-energy/force and short integration/restart checks.",
+    "Physical interface validation: binding geometry, hydration and PEG conformations."
+  ],
+  "source_sha256": {
+    "backend/data/forcefield/top_np_thiol.rtf": "faa8d0a251f821e46e5f915a259da5c0ae66f849d1ccfb8a71378cb0797a13d1",
+    "backend/data/forcefield/par_np_thiol.prm": "4b5dd4823bbab28db0252e7745f9c82060f5bfc4e3aa16c5842a9acbb0850796",
+    "backend/data/forcefield/par_all36m_prot.prm": "b1d1c70b5f350a2d5758bf3ce7ec86e50cdc3f69d8cc3097f98f279cdaeb5aaa",
+    "backend/data/forcefield/toppar_water_ions_cufix.str": "45bbca02dabdffa30559c3b29c3954f710cbf9da4a679de9452a72784a909e9d",
+    "backend/core/nanoparticle_atomistic.py": "a288f95189f2d0830e8a49490543cebf6ab72a53b95338d0e418ecffd91b0a71",
+    "backend/core/namd_electrode_peg.py": "dbec9b537caab1186dfeb2b210ef13bb0a7750e7bd030277d12e92b2736e6eb5",
+    "backend/core/gold_model.py": "00ba19ca6ff5398d780f12300ec18b7d65583326f65c51fd84e98b34c4ebf878",
+    "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_wall_validation/assets/toppar_ether/top_all35_ethers.rtf": "cce86e705c2cf9e0339f7123b4470b48525d7539393b4778f8641b412c4b6761",
+    "/media/jojo/Archive/NADOC_archive/runtime/workspace/peg_wall_validation/assets/toppar_ether/par_all35_ethers.prm": "f5da0b0b1c24160ae5a6a38003132956ec27b1438f664b5feffc078b6f4b701d"
+  }
+}

@@ -34,7 +34,7 @@ these notes. Runtime scheduler PID snapshots should not be staged as source chan
 ## Revised diagnostics launched
 
 User authorized the revised next steps. `run_diagnostics.py` is running as PID
-3684311; inspect `workspace/peg_chudoba/scheduling_294_20260910/diagnostics_revision/driver.json`
+3684311; inspect `.development-artifacts/peg_chudoba/scheduling_294_20260910/diagnostics_revision/driver.json`
 and `driver.log` for current state. The lease is parked with this driver as owner;
 historical N455 work is suspended and will restore on completion/failure.
 N36/1 fs round 1 is active, with 12 CPU EOS workers in parallel. See
@@ -67,7 +67,7 @@ mixing over expanding surface simulations or spending the H200 pilot allocation.
 User authorized setting up NAMD PEG-brush infrastructure while bounded oxDNA
 validation continues. See [../peg_namd/README.md](../peg_namd/README.md) and
 [../peg_namd/GAPS.md](../peg_namd/GAPS.md). The planner produced 27 cases in
-`workspace/peg_namd/brush_plan_v1`: N36/N45/N76, three densities, three replicas.
+`.development-artifacts/peg_namd/brush_plan_v1`: N36/N45/N76, three densities, three replicas.
 The isolated builder consumes parameterized chain/slab assets and writes VMD
 solvation plus staged NAMD inputs. Physical PEG/gold assets are still missing;
 no physical NAMD brush or force-field fit has been launched. The first protocol
@@ -138,7 +138,7 @@ a gate for these explicitly requested experiments. No guard or marker was change
 Runner: `python -m experiments.peg_chudoba.benchmark_scheduling --execute`.
 Preparation is `--prepare`; `--benchmark-only` stops after matched timing.
 Runtime evidence and the frozen plan are under
-`workspace/peg_chudoba/scheduling_294_20260910`; `REPORT.md` is the readable report.
+`.development-artifacts/peg_chudoba/scheduling_294_20260910`; `REPORT.md` is the readable report.
 This work is incomplete until `validation.json` records all required verdicts.
 Timing runs are deliberately outside the legacy `runs` discovery path.
 
@@ -148,7 +148,7 @@ the old schedule if the owner dies, freezing any surviving new task trees.
 Do not resume the historical controller manually while the lease owner is live.
 Read-only inspect `lease.json` and `/proc`. For recovery after owner exit, use
 `/usr/bin/python3 -m experiments.peg_chudoba.scheduling_lease restore --state
-workspace/peg_chudoba/scheduling_294_20260910/lease.json` only after inspecting
+.development-artifacts/peg_chudoba/scheduling_294_20260910/lease.json` only after inspecting
 the surviving task trees. Suspended processes are not durable checkpoints.
 
 The remainder is the earlier checkpoint, preserved as history.
@@ -234,7 +234,7 @@ python -m experiments.peg_chudoba.write_status
 
 ## Storage, verification and remaining work
 
-Run inputs, trajectories and per-run manifests persist under `workspace/peg_chudoba/runs`, physically on `/media/jojo/Archive/NADOC_archive/runtime/workspace`. `experiments/peg_chudoba/runs` points there and is ignored by Git. **The commit is not a trajectory backup.** Recreate run storage through `storage.py`; do not move active working directories.
+Run inputs, trajectories and per-run manifests persist under `.development-artifacts/peg_chudoba/runs`, physically on `/media/jojo/Archive/NADOC_archive/runtime/workspace`. `experiments/peg_chudoba/runs` points there and is ignored by Git. **The commit is not a trajectory backup.** Recreate run storage through `storage.py`; do not move active working directories.
 
 Chemical engine: `~/.local/share/nadoc/engines/oxdna-chudoba/build/bin/oxDNA`; runtime shared library `build/src/liboxdna_common.so`. Recorded library SHA256: `374d2dbbe0990256cfabc3049adf4ef9be9e6d8849a282a9212c14dff3f4ee5d`. Current library matches the saved 91-check validation manifest. Do not rebuild the live shared engine casually. The original surface engine lives separately in `oxdna-peg/current`.
 

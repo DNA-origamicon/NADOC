@@ -101,7 +101,7 @@ wall LJ model, not gold. The continuous confinement is a separate soft barrier.
 No existing DNA, PEG or production placement has changed.
 
 A real GROMACS solvation/preparation run produced:
-`workspace/two_electrode_qualification_20260913/`:
+`.development-artifacts/two_electrode_qualification_20260913/`:
 
 - 10 × 10 nm walls, Y normal, 10 nm liquid gap; 10 × 30 × 10 nm padded cell.
 - 2,500 sites per wall; −26e/+26e, realized ±0.041656592484 C/m².
@@ -119,7 +119,7 @@ Failure cannot set the qualified flag. It does not establish Debye convergence,
 After the user opens `just test-session`, run from the repository root:
 
 ```bash
-scripts/test_guard.sh two-electrode-qualification 0 1 -- uv run python -m experiments.two_electrodes.qualify --output workspace/two_electrode_qualification_20260913 --existing
+scripts/test_guard.sh two-electrode-qualification 0 1 -- uv run python -m experiments.two_electrodes.qualify --output .development-artifacts/two_electrode_qualification_20260913 --existing
 ```
 
 Native execution remains pending: the test-session marker was expired during

@@ -7,7 +7,7 @@ brush or atomistic pilot is running. Consult HANDOFF.md for current results.
 **2026-09-10 historical update:** the user authorized matched serial/parallel experiments
 and production using the best measured strategy. The new
 [narrow validation runner](NARROW_VALIDATION.md) temporarily owns scheduling
-through `workspace/peg_chudoba/scheduling_294_20260910/lease.json`. If its owner
+through `.development-artifacts/peg_chudoba/scheduling_294_20260910/lease.json`. If its owner
 is live and the lease is parked, leave the historical controller suspended.
 The serial-only policy below describes the previous allocation set.
 

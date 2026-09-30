@@ -56,7 +56,7 @@ uv run python experiments/exp56_namd_mig_benchmark/prepare.py
 The ignored staging tree is written to:
 
 ```text
-workspace/mig_benchmarks/exp56_2hb_1-0xT_rtx_2g48/
+.development-artifacts/mig_benchmarks/exp56_2hb_1-0xT_rtx_2g48/
 ```
 
 After copying that directory to Alpine, submit from inside it with:

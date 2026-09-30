@@ -5,8 +5,8 @@ Recommended (current bounding box + 6 nm per face), custom bounding-box padding,
 Allow any orientation (rotation envelope), or explicit X/Y/Z dimensions in nm.
 Selecting Recommended resets padding to 6 nm. Explicit dimensions work on a blank
 part without first estimating DNA geometry. Fit modes recalculate when geometry,
-requested padding or surface settings change. Actual six-face water clearances are
-shown separately from requested envelope padding. Preparation does not automatically
+selected padding or surface settings change. Actual six-face water clearances are
+shown separately from selected envelope padding. Preparation does not automatically
 trim padding or switch sizing modes to fit hardware; see [box sizing](namd_box_sizing.md).
 
 Select **Custom** ionic conditions to enter NaCl and MgCl₂ concentrations in mM.
@@ -72,5 +72,5 @@ the green liquid outline distinguishes the solvent volume.
 
 The user-provided `2electrode_solvent_only.nadoc` workflow was checked in Playwright
 at 300 mM NaCl and 300 K. Persistent prepared job `8395d215579b` and its qualification
-record are described in `workspace/2electrode_solvent_only_validation/README.md`.
+record are described in `.development-artifacts/2electrode_solvent_only_validation/README.md`.
 Native dynamics remain pending a user-opened test session.

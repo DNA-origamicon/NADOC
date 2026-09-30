@@ -125,7 +125,7 @@ For a fresh diagnostic using retained copied inputs:
 
 ```bash
 uv run python -m experiments.gold_interfaces.restart_probe \
-  workspace/gold_restart_diagnosis_20260915/particle_fixed_generator \
+  .development-artifacts/gold_restart_diagnosis_20260915/particle_fixed_generator \
   --binary /home/jojo/Applications/NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3 \
   --source seed --tag review_repeat --dt 1
 ```

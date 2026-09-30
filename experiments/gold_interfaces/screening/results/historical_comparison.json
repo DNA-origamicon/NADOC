@@ -1,0 +1,93 @@
+{
+  "source": "/home/jojo/Work/NADOC/workspace/electrode_remote_40ns_20260914/runpod/through_40ns/debye_analysis.json",
+  "source_sha256": "577b03ec99dc4361148d04bdd6979aca85db9d882b8821c102569c22fde65290",
+  "area_nm2": 64.0,
+  "gap_nm": 6.0,
+  "ions_per_species": 64,
+  "center_ionic_strength_mM": 319.7940405767763,
+  "ratio_fits": [
+    {
+      "valid": true,
+      "lambda_nm": 0.540330266328679,
+      "amplitude": 0.0239954206444123,
+      "offset": -0.0029995315713427922,
+      "rmse_dimensionless": 0.06443118999439386,
+      "at_bound": false,
+      "exclude_nm": 0.5,
+      "interior_bins": 50
+    },
+    {
+      "valid": true,
+      "lambda_nm": 0.551101287796038,
+      "amplitude": 0.025671333346623214,
+      "offset": -0.0028503886677458284,
+      "rmse_dimensionless": 0.06539147820855845,
+      "at_bound": false,
+      "exclude_nm": 0.6,
+      "interior_bins": 48
+    },
+    {
+      "valid": true,
+      "lambda_nm": 0.5422741063878446,
+      "amplitude": 0.02442820571731974,
+      "offset": -0.007504298789312301,
+      "rmse_dimensionless": 0.02658991233884577,
+      "at_bound": false,
+      "exclude_nm": 0.8,
+      "interior_bins": 44
+    }
+  ],
+  "bootstrap_lambda_quantiles_nm": [
+    0.5280267763122113,
+    0.5507231773893757,
+    0.5795254823214707
+  ],
+  "negative_wall_halfcell_ionic_compensation": 0.9707875,
+  "matched_windows": [
+    {
+      "label": "matched early 200 ps",
+      "window_ns": [
+        0.1,
+        0.3
+      ],
+      "frames": 100,
+      "fit": {
+        "lambda_nm": 0.6545658899951098,
+        "amplitude": 0.03858122995189074,
+        "offset": 0.023133609483554248,
+        "rmse_dimensionless": 0.1835758112339999,
+        "at_bound": false,
+        "exclude_nm": 0.6,
+        "interior_bins": 48,
+        "optimizer_converged": true,
+        "screening_validated": false,
+        "interpretation": "Exploratory charged-wall fit; requires stationarity, identifiable response and uncertainty"
+      },
+      "center_ionic_strength_mM": 276.1619171286193,
+      "compensation": 0.90125
+    },
+    {
+      "label": "late 20 ns",
+      "window_ns": [
+        20.0,
+        40.0
+      ],
+      "frames": 10000,
+      "fit": {
+        "lambda_nm": 0.5556931595583264,
+        "amplitude": 0.026620700001737337,
+        "offset": -0.00022619525480564699,
+        "rmse_dimensionless": 0.07372843713839615,
+        "at_bound": false,
+        "exclude_nm": 0.6,
+        "interior_bins": 48,
+        "optimizer_converged": true,
+        "screening_validated": false,
+        "interpretation": "Exploratory charged-wall fit; requires stationarity, identifiable response and uncertainty"
+      },
+      "center_ionic_strength_mM": 320.2618779995106,
+      "compensation": 0.97321875
+    }
+  ],
+  "cache_sha256": "977d90bc780967f009202530c38d909e55d242a0f0da7cc5299cfd72dc4736f1"
+}

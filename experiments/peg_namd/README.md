@@ -64,10 +64,10 @@ From repository root, create a new plan (existing output directories are refused
 
 ```bash
 .venv/bin/python -m experiments.peg_namd.campaign \
-  --output workspace/peg_namd/brush_plan_v1
+  --output .development-artifacts/peg_namd/brush_plan_v1
 
 .venv/bin/python -m experiments.peg_namd.build \
-  --campaign workspace/peg_namd/brush_plan_v1 \
+  --campaign .development-artifacts/peg_namd/brush_plan_v1 \
   --assets experiments/peg_namd/assets.example.json \
   --case n36_s0p1_r1 --check-assets
 ```
@@ -84,9 +84,9 @@ coordinates in the declared frame, and no P*, WT* or ION segment names.
 
 ```bash
 .venv/bin/python -m experiments.peg_namd.build \
-  --campaign workspace/peg_namd/brush_plan_v1 \
+  --campaign .development-artifacts/peg_namd/brush_plan_v1 \
   --assets /absolute/path/to/assets.json \
-  --case n36_s0p1_r1 --output workspace/peg_namd/packages/n36_s0p1_r1
+  --case n36_s0p1_r1 --output .development-artifacts/peg_namd/packages/n36_s0p1_r1
 ```
 
 Within the staged package:

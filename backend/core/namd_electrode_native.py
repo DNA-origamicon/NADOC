@@ -24,7 +24,7 @@ if {[catch {load [file join [file dirname [info script]] electrode_native.so] El
 def install_native(folder):
     """Compile against Tcl stubs if an SDK is installed; never require it for setup."""
     compiler=shutil.which('g++')
-    roots=[Path(os.environ.get('NADOC_TCL_SDK','/usr')),Path('workspace/electrode_native_build/sdk/usr').resolve()]
+    roots=[Path(os.environ.get('NADOC_TCL_SDK','/usr')),Path('.development-artifacts/electrode_native_build/sdk/usr').resolve()]
     tclsh = shutil.which('tclsh')
     if tclsh:
         roots.append(Path(tclsh).resolve().parent.parent)

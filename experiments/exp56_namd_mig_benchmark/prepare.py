@@ -12,7 +12,7 @@ SOURCE = (
     REPO
     / "workspace/md_jobs/802f80ec405c/package/2hb_1-0xT_namd_solvated"
 )
-DEST = REPO / "workspace/mig_benchmarks/exp56_2hb_1-0xT_rtx_2g48"
+DEST = REPO / ".development-artifacts/mig_benchmarks/exp56_2hb_1-0xT_rtx_2g48"
 NAMD = (
     "/projects/jojo6687/nadoc_jobs/nadoc_builds/namd-git/"
     "NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3"

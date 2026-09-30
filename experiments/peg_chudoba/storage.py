@@ -7,7 +7,7 @@ def create_run_directory(requested):
     root=Path(__file__).resolve().parents[2]
     local=root/'experiments/peg_chudoba/runs'
     if requested.is_relative_to(local):
-        actual=root/'workspace/peg_chudoba/runs'/requested.relative_to(local)
+        actual=root/'.development-artifacts/peg_chudoba/runs'/requested.relative_to(local)
         if requested.exists() or requested.is_symlink():
             raise FileExistsError(requested)
         actual.mkdir(parents=True,exist_ok=False)

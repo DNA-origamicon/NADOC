@@ -2,7 +2,7 @@
 
 Run from the repository root:
   uv run python -m experiments.gold_interfaces.audit_parameters \
-    --sources workspace/gold_model_review_20260914 --output NEW_DIRECTORY
+    --sources .development-artifacts/gold_model_review_20260914 --output NEW_DIRECTORY
 """
 
 import argparse

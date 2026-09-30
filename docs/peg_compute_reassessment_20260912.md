@@ -47,7 +47,7 @@ The same CPU ancestry also makes post-discard loss of initialization dependence
 an assumption of the sampler comparison.
 
 Reassessment data and source-directory inventory:
-`workspace/peg_wall_validation/oxdna_reassessment_20260912.json`.
+`.development-artifacts/peg_wall_validation/oxdna_reassessment_20260912.json`.
 Historical `serial_schedule.json` and raw trajectories were left unchanged.
 
 ## What remains unresolved

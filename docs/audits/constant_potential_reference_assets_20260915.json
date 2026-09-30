@@ -1,0 +1,122 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/README",
+    "sha256": "a6eeef8780b09d1b709e75dcdbdb47f3d9a9274820659567f8021df2013efe51",
+    "file": "root_README"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/au-aq/in.au-aq-ffield",
+    "sha256": "63952aecbdd8c65da4f4ed1abe62dc2aa04e58151c1a700db1ce5072ab6f441e",
+    "file": "au-aq_in.au-aq-ffield"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/au-aq/in.au-aq-tf",
+    "sha256": "1111341b23a8c6c8b75af7f9da3f6f93c0d84e9cd62e9ba25126d9aeafa13e58",
+    "file": "au-aq_in.au-aq-tf"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/in.madelung-cg",
+    "sha256": "bf5bcbf9ab3ef77950252b3629b9dc9670d556d6b78fc4847d041de928c23e23",
+    "file": "madelung_in.madelung-cg"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/in.madelung-eta",
+    "sha256": "cd9dc8926fd5b2c09e29e69552ef11f3211c1aa8c82a284711f930ed9b55c73a",
+    "file": "madelung_in.madelung-eta"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/in.madelung-eta_cg",
+    "sha256": "133764892d09ad773b63551767a5d50db53ab2773f64831a8c4d35a22e9e42bc",
+    "file": "madelung_in.madelung-eta_cg"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/in.madelung-eta_mix",
+    "sha256": "b06503c168d0151da8dc4c7bf30b8691d624a8f0a46aa29561e7591bb19f940f",
+    "file": "madelung_in.madelung-eta_mix"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/in.madelung-ewald-ew2d",
+    "sha256": "6499d79a3ba7f7971442b7b52f0941fac14822f8dc2b3c9e61f11d073f913f85",
+    "file": "madelung_in.madelung-ewald-ew2d"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/in.madelung-ewald-ew3dc",
+    "sha256": "ce1bfb809d77f8a838aa2e22a913857914751934e6e169ab2e258868ed58e301",
+    "file": "madelung_in.madelung-ewald-ew3dc"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/in.madelung-ewald-ffield",
+    "sha256": "410432388c88d792f4dc19a251d7d09194d4eb8b6e47f8eb53c186163d62b8e5",
+    "file": "madelung_in.madelung-ewald-ffield"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/in.madelung-pppm-ew3dc",
+    "sha256": "271dea2886524e8020391ff160b0cec63ebea13fef42237ceefc4774247c0e67",
+    "file": "madelung_in.madelung-pppm-ew3dc"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/in.madelung-pppm-ffield",
+    "sha256": "5f0ba0a9081ccf725f23a1e29461c7d9bba628a03108c11bacf6aebb7fa8e6ce",
+    "file": "madelung_in.madelung-pppm-ffield"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/planar/in.planar-ewald-ew2d",
+    "sha256": "012ed52e61183457da437c40bf7ad2696a75d07188966b9beddca83e6fdcf9e0",
+    "file": "planar_in.planar-ewald-ew2d"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/planar/in.planar-ewald-ew3dc",
+    "sha256": "47f9011e623641d0cb268d0217d7881d1e2a7b15cb0c5eff49a888a66fb80550",
+    "file": "planar_in.planar-ewald-ew3dc"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/planar/in.planar-ewald-ffield",
+    "sha256": "d91efda4853ae77a36dbfa5f0ab336c330502c646ea76a40d43e99b6c10fc051",
+    "file": "planar_in.planar-ewald-ffield"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/planar/in.planar-pppm-ew3dc",
+    "sha256": "9163d5ea8cd10d9b1bca95c2a7ada5a2a50e8b77a4068a40328570f8124d3871",
+    "file": "planar_in.planar-pppm-ew3dc"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/planar/in.planar-pppm-ffield",
+    "sha256": "971f10870a6008766c2ab4dcb5b20a44907733b3937a1b5212e6b3ff83e6b939",
+    "file": "planar_in.planar-pppm-ffield"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/au-aq/settings.mod",
+    "sha256": "b476043b9e63a704e4083dd1caf54b49fb9d4dec75210e413d4671f55d82e1bd",
+    "file": "au-aq_settings.mod"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/settings.mod",
+    "sha256": "71c075610ac2b2c6d91e83abc7edde5f790354aa36fd3ee704b41deb335e00ef",
+    "file": "madelung_settings.mod"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/eval.py",
+    "sha256": "9313858827c6646f59dfc0960c6b68fa655f9154f5fbad2a6ef221f85ad8af97",
+    "file": "madelung_eval.py"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/plate_cap.py",
+    "sha256": "0bda9831fa26ab22a4867e4af22beafb76122995be97ad88247cc416b8995096",
+    "file": "madelung_plate_cap.py"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/madelung/test.sh",
+    "sha256": "cde4bd42dfd0494c0cf263a288180ad9c56e100d88ba567204eae7635e7c614b",
+    "file": "madelung_test.sh"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/planar/settings.mod",
+    "sha256": "93ab5f0009c79b36b68c7fb21936fd9069c950c87c76c30e80773a8dc10aa267",
+    "file": "planar_settings.mod"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/lammps/lammps/c8bd2ae5927ee236a8892dbd51c18a92cc9c33cf/examples/PACKAGES/electrode/planar/test.sh",
+    "sha256": "c95b96a1bc58f69a0766d01a4b28531826f6ad2fc4f37a656830746b4557e185",
+    "file": "planar_test.sh"
+  }
+]

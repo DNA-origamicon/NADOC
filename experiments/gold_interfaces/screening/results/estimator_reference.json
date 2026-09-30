@@ -1,0 +1,138 @@
+[
+  {
+    "area_nm2": 64.0,
+    "stern_nm": 0.3,
+    "assumed_dielectric": 78.3,
+    "pb_debye_nm": 0.5707546511840011,
+    "fit": {
+      "valid": true,
+      "lambda_nm": 0.5678786818548337,
+      "amplitude": 0.02025645550970711,
+      "offset": 5.977281542161368e-17,
+      "rmse_dimensionless": 0.0002958344105517204,
+      "at_bound": false,
+      "exclude_nm": 0.6,
+      "interior_bins": 48
+    },
+    "interpretation": "Deterministic canonical PB profile, not MD; expected counts scaled to 200 frames"
+  },
+  {
+    "area_nm2": 64.0,
+    "stern_nm": 0.3,
+    "assumed_dielectric": 100.0,
+    "pb_debye_nm": 0.6423722511816997,
+    "fit": {
+      "valid": true,
+      "lambda_nm": 0.63926967912969,
+      "amplitude": 0.030875546696142717,
+      "offset": 3.324345600047165e-17,
+      "rmse_dimensionless": 0.000257769356784943,
+      "at_bound": false,
+      "exclude_nm": 0.6,
+      "interior_bins": 48
+    },
+    "interpretation": "Deterministic canonical PB profile, not MD; expected counts scaled to 200 frames"
+  },
+  {
+    "area_nm2": 64.0,
+    "stern_nm": 0.6,
+    "assumed_dielectric": 78.3,
+    "pb_debye_nm": 0.5370311892623617,
+    "fit": {
+      "valid": true,
+      "lambda_nm": 0.5303678126396839,
+      "amplitude": 0.024409384434848254,
+      "offset": -4.582497230279993e-16,
+      "rmse_dimensionless": 0.0012610362271033263,
+      "at_bound": false,
+      "exclude_nm": 0.6,
+      "interior_bins": 48
+    },
+    "interpretation": "Deterministic canonical PB profile, not MD; expected counts scaled to 200 frames"
+  },
+  {
+    "area_nm2": 64.0,
+    "stern_nm": 0.6,
+    "assumed_dielectric": 100.0,
+    "pb_debye_nm": 0.6045000558298194,
+    "fit": {
+      "valid": true,
+      "lambda_nm": 0.5981296024342035,
+      "amplitude": 0.036381401141277206,
+      "offset": 7.363688111367342e-16,
+      "rmse_dimensionless": 0.0009175625087955806,
+      "at_bound": false,
+      "exclude_nm": 0.6,
+      "interior_bins": 48
+    },
+    "interpretation": "Deterministic canonical PB profile, not MD; expected counts scaled to 200 frames"
+  },
+  {
+    "area_nm2": 64.52762582044262,
+    "stern_nm": 0.3,
+    "assumed_dielectric": 78.3,
+    "pb_debye_nm": 0.5733747484488992,
+    "fit": {
+      "valid": true,
+      "lambda_nm": 0.5704442655051487,
+      "amplitude": 0.020776760484601343,
+      "offset": 1.1497620616031346e-16,
+      "rmse_dimensionless": 0.0003018194272095982,
+      "at_bound": false,
+      "exclude_nm": 0.6,
+      "interior_bins": 48
+    },
+    "interpretation": "Deterministic canonical PB profile, not MD; expected counts scaled to 200 frames"
+  },
+  {
+    "area_nm2": 64.52762582044262,
+    "stern_nm": 0.3,
+    "assumed_dielectric": 100.0,
+    "pb_debye_nm": 0.6452870134057322,
+    "fit": {
+      "valid": true,
+      "lambda_nm": 0.6421255031008011,
+      "amplitude": 0.03158861053217978,
+      "offset": 8.398569575019927e-17,
+      "rmse_dimensionless": 0.0002625823039544902,
+      "at_bound": false,
+      "exclude_nm": 0.6,
+      "interior_bins": 48
+    },
+    "interpretation": "Deterministic canonical PB profile, not MD; expected counts scaled to 200 frames"
+  },
+  {
+    "area_nm2": 64.52762582044262,
+    "stern_nm": 0.6,
+    "assumed_dielectric": 78.3,
+    "pb_debye_nm": 0.5394826504471706,
+    "fit": {
+      "valid": true,
+      "lambda_nm": 0.5327275465531217,
+      "amplitude": 0.02500474925807549,
+      "offset": 3.4104775952654294e-15,
+      "rmse_dimensionless": 0.0012783438241259334,
+      "at_bound": false,
+      "exclude_nm": 0.6,
+      "interior_bins": 48
+    },
+    "interpretation": "Deterministic canonical PB profile, not MD; expected counts scaled to 200 frames"
+  },
+  {
+    "area_nm2": 64.52762582044262,
+    "stern_nm": 0.6,
+    "assumed_dielectric": 100.0,
+    "pb_debye_nm": 0.6072278196457306,
+    "fit": {
+      "valid": true,
+      "lambda_nm": 0.6007654688048074,
+      "amplitude": 0.03717969438384601,
+      "offset": 3.744035393781515e-16,
+      "rmse_dimensionless": 0.0009294798904783334,
+      "at_bound": false,
+      "exclude_nm": 0.6,
+      "interior_bins": 48
+    },
+    "interpretation": "Deterministic canonical PB profile, not MD; expected counts scaled to 200 frames"
+  }
+]

@@ -111,7 +111,7 @@ Launchers: `run_chain.py`, `run_chain_campaign.py`, `run_solution.py`.
 Analyzers: `analyze_chain.py`, `compare_chain.py`, `analyze_solution.py`,
 `analyze_npt.py`. Completed-run status does not imply equilibrium. Runs retain
 inputs, topology, coordinates, trajectories, logs and manifests. New large runs
-live in `workspace/peg_chudoba/runs`, with experiment-tree symlinks.
+live in `.development-artifacts/peg_chudoba/runs`, with experiment-tree symlinks.
 
 NPT uses translations, pivots and symmetric log-volume proposals. Molecular
 centers and box scale together; internal coordinates stay fixed. The acceptance

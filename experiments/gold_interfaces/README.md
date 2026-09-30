@@ -2,7 +2,7 @@
 
 Selected model: neutral INTERFACE 12–6 Au, `iff-au-12-6-neutral-v1`.
 [Selection/provenance](../../docs/namd_gold_model_selection.md).
-[Measured results and barriers](../../workspace/gold_validation_20260914/RESULTS.md).
+[Measured results and barriers](../../.development-artifacts/gold_validation_20260914/RESULTS.md).
 
 ## Prepare and run locally
 
@@ -89,7 +89,7 @@ the historical 1e-4 comparison without using that unvalidated threshold as a
 physical pass/fail gate. Native failures and invalid checkpoints still raise errors.
 New restart configurations use `COMmotion yes` to preserve saved momentum;
 previously saved configurations are not rewritten. See the
-[restart diagnosis](../../workspace/gold_restart_diagnosis_20260915/RESULTS.md)
+[restart diagnosis](../../.development-artifacts/gold_restart_diagnosis_20260915/RESULTS.md)
 for causal controls, repeated-run variability and literature-based NVE checks.
 The pair probe neutralizes the partner only to isolate LJ; real packages retain the
 reviewed TIP3P/CUFIX charges. Raw NAMD forces are compared against an independent

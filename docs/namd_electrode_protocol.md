@@ -49,7 +49,7 @@ Ion-profile stationarity is not itself a fitted Debye length or proof of correct
   methyl-capped CHARMM ether chemistry. It grafts to the lower/working electrode.
   Other shapes, chemistry notes/references and coarse-grained PEG are rejected.
 - Set `NADOC_PEG_ETHER_ASSETS` to the pinned ether asset directory if the local
-  `workspace/peg_wall_validation/assets/toppar_ether` installation is absent.
+  `.development-artifacts/peg_wall_validation/assets/toppar_ether` installation is absent.
 - An extended PEG seed that does not fit must be shortened or given more space;
   randomized/MC seeding is not implemented.
 - Vacuum/BLADE coordinate seeds are explicitly rejected by this adapter.
@@ -61,13 +61,13 @@ Ion-profile stationarity is not itself a fitted Debye length or proof of correct
 
 `experiments/electrode_relax/validate.py` prepares four matched cases: no solute,
 a 12-bp duplex, PEG only, and DNA plus PEG. Current prepared artifacts are under
-`workspace/electrode_relax_validation_20260913_v2`. This duplex is a bounded DNA
+`.development-artifacts/electrode_relax_validation_20260913_v2`. This duplex is a bounded DNA
 integration check; it does not establish convergence for a full origami.
 
 After a user opens `just test-session`, native execution goes through:
 
 ```
-scripts/test_guard.sh electrode-relax-validation 0 1 -- uv run python -m experiments.electrode_relax.validate --output workspace/electrode_relax_validation_20260913_v2 --run
+scripts/test_guard.sh electrode-relax-validation 0 1 -- uv run python -m experiments.electrode_relax.validate --output .development-artifacts/electrode_relax_validation_20260913_v2 --run
 ```
 
 The campaign uses the managed runner with skip acceleration enabled, records native
@@ -140,7 +140,7 @@ because the full per-atom callback is expensive. Bounded 4 nm liquid controls us
 identical salt, temperature, timestep and convergence tolerances. Underfilled case
 `7cadeb7e6724` is stopped and retained as diagnostic evidence; corrected case
 `89af63c3abb7` is the active completion validation. See the persistent record at
-`workspace/2electrode_solvent_only_validation/README.md` for final status.
+`.development-artifacts/2electrode_solvent_only_validation/README.md` for final status.
 
 Solvent-only Display MD now handles an empty DNA selection by centering the periodic
 cell rather than attempting a DNA pose fit. Real-job Playwright playback passed:
@@ -245,7 +245,7 @@ validation remains open; larger speedups require reducing this callback overhead
 or an engine-native/GPU force implementation, preserving EW3DC and wall forces.
 
 Detailed profiles, count-subset diagnostics, timings, logs and reproducible scripts:
-`workspace/electrode_volume_screen_20260914/README.md`.
+`.development-artifacts/electrode_volume_screen_20260914/README.md`.
 
 ### Resident default and direct-array prototype
 
@@ -287,7 +287,7 @@ separately authorized under the clarified test-session rule.
 
 ## Longer resident Debye diagnostic (2026-09-14)
 
-`workspace/electrode_debye_validation_20260914_v2/README.md` records the completed
+`.development-artifacts/electrode_debye_validation_20260914_v2/README.md` records the completed
 2.64 ns solvent-only campaign: 8 × 4 × 8 nm liquid, 25,839 atoms, 41 Na/Cl pairs,
 ±16 e electrodes, 300 K, 2 fs, direct-array experimental NAMD and one resident worker.
 All three retained jobs (`c6d0bcfc861d`, `e04b05b6df8a`, `df270bd5872a`) complete with
@@ -328,7 +328,7 @@ Fit identifiability improves, not full convergence: chunk λ=0.580/0.819 nm vers
 measured central concentration and assumed εr 78.3–100. Central concentration
 falls 343→269 mM between chunks. The all-charge central field remains too noisy
 to establish negligible overlap; ionic compensation above 100% is not yet an
-overscreening claim. See `workspace/electrode_gap6_validation_20260914/README.md`
+overscreening claim. See `.development-artifacts/electrode_gap6_validation_20260914/README.md`
 for graphs, physical-time diagnostics, remaining controls and performance limits.
 
 Dynamics took 86.3 minutes (~44–45 ns/day sustained). GPU utilization sampled
@@ -350,7 +350,7 @@ Three-axis active-wall/tether and normal-system audits agree with independent
 NumPy and direct CPU calculations. Configuration tests prevent duplicate CPU/GPU
 corrections and enforce initialization ordering. Native benchmarks retain the
 38,644-atom 6 nm gap checkpoint, 2 fs timestep, PME grid spacing and vacuum padding.
-See the module README and `workspace/electrode_gpu_benchmark_final/results.json`
+See the module README and `.development-artifacts/electrode_gpu_benchmark_final/results.json`
 for longer matched timings and post-migration force audits. GPU atom migration and
 patch splitting are explicit experimental tuning choices; more CPU workers and
 fused kernels did not provide a consistent gain in the first screen.
@@ -363,7 +363,7 @@ transport remain separate barriers. No ordinary production default is changed.
 Final matched GPU benchmark: 254 ns/day without tuning, 291–297 ns/day with
 GPU atom migration + twoAwayZ, versus 43.1 ns/day CPU at the same 2 fs (6.8–6.9×).
 Four 120 ps GPU endpoints pass force/energy audits; these do not establish Debye
-convergence. Details: `workspace/electrode_gpu_benchmark_final/README.md`.
+convergence. Details: `.development-artifacts/electrode_gpu_benchmark_final/README.md`.
 
 ## Managed GPU adoption and denser 4 fs validation
 
