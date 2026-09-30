@@ -28,10 +28,9 @@ Production retains the prepared source job's box, solvent and protocol behavior.
 
 **View periodic images**, on its own row below View details, shows six faint,
 non-interactive backbone copies at ± one box length on each axis. It works
-independently of View details and follows displayed positions/colors in Full
-representation. Switching to another representation unchecks and disables it;
-returning to Full leaves it unchecked. These are setup-box neighbors, not a live
-trajectory-cell contact analysis. See [periodic-image preview](namd_box_sizing.md#display-controls).
+independently of View details in every representation and follows design-backbone
+positions/colors. Switching representation preserves the toggle and copies. These
+are setup-box neighbors, not a live trajectory-cell contact analysis. See [periodic-image preview](namd_box_sizing.md#display-controls).
 
 The two-electrode card owns its gap and lateral dimensions; Box and solvent shows
 its derived simulation cell with 3× normal padding. Salt counts exclude this

@@ -26,14 +26,6 @@ export function initBoxSolvent({api,store,root=document}={}) {
   const inputs=Object.fromEntries(Object.keys(DEFAULTS).map(k=>[k,host.querySelector(`#md-box-${k}`)]))
   const view=host.querySelector('#md-box-view-details'),status=host.querySelector('[role=status]'),boundary=host.querySelector('output')
   const periodic=host.querySelector('#md-box-view-periodic')
-  let fullRepresentation=!root.querySelector('#menu-view-detail-full') || root.querySelector('#menu-view-detail-full').classList.contains('is-checked')
-  function representationChanged(event){
-    fullRepresentation=event.detail?.representation==='full'
-    if(periodic){periodic.disabled=!fullRepresentation;if(!fullRepresentation)periodic.checked=false}
-    emit()
-  }
-  if(periodic)periodic.disabled=!fullRepresentation
-  window.addEventListener('nadoc:representation-change',representationChanged)
   const spinner=root.querySelector('#md-box-loading'),warningIcon=root.querySelector('#md-box-warning'),warningPanel=host.querySelector('#md-box-warnings')
   let loading=false,calculationWarning='',jobWarnings=[]
   const dismissed=new Set()
@@ -87,7 +79,7 @@ export function initBoxSolvent({api,store,root=document}={}) {
       if(preview){
         const dims=preview.selected_nm || preview.calculated_nm
         const solvent=preview.solvent_nm || dims
-        detail={enabled:view.checked,periodicImages:fullRepresentation && !!periodic?.checked,dimensions: dims,solvent,center:preview.center_nm || [0,0,0],solute:preview.solute_bounds_nm || null,
+        detail={enabled:view.checked,periodicImages:!!periodic?.checked,dimensions: dims,solvent,center:preview.center_nm || [0,0,0],solute:preview.solute_bounds_nm || null,
           padding:preview.padding_nm ?? p.padding_nm,boundary:preview.boundary || 'periodic',normal_axis:preview.normal_axis,
           na:p.ion_conc_mM,mg:p.mg_conc_mM,numbers:solventNumbers(solvent,p.ion_conc_mM,p.mg_conc_mM),
           temperature:isCharged() || isPair()?Number(inputs.temperature.value):300,
@@ -178,5 +170,5 @@ export function initBoxSolvent({api,store,root=document}={}) {
     setJobWarnings(warnings){jobWarnings=warnings || [];paintFeedback()},
     restore,refresh:schedule,summary:()=>isPair()?'Box and solvent: dimensions linked to Two-electrode settings.':`Box and solvent: ${inputs.sizing.value==='explicit'?['x','y','z'].map(k=>inputs[k].value).join(' × ')+' nm':`automatic ${settings().box_mode==='rotation'?'rotation-safe':'bounding-box'} fit; final dimensions set during preparation`}; NaCl ${settings().ion_conc_mM} mM; MgCl₂ ${settings().mg_conc_mM} mM. Edit in the sidebar.`,
     acceptPreview(value){if(value && inputs.sizing.value!=='explicit' && !isPair()){preview={...preview,...value,center_nm:preview?.center_nm || value.center_nm,solute_bounds_nm:preview?.solute_bounds_nm || value.solute_bounds_nm};paint()}},
-    dispose(){window.removeEventListener('nadoc:representation-change',representationChanged);disposed=true;loading=false;paintFeedback();warningIcon?.removeEventListener('click',openWarnings);version++;clearTimeout(timer);clearTimeout(saveTimer);unsub?.();root.removeEventListener('input',change);root.removeEventListener('change',change);window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{enabled:false}}))}}
+    dispose(){disposed=true;loading=false;paintFeedback();warningIcon?.removeEventListener('click',openWarnings);version++;clearTimeout(timer);clearTimeout(saveTimer);unsub?.();root.removeEventListener('input',change);root.removeEventListener('change',change);window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{enabled:false}}))}}
 }

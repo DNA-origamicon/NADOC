@@ -65,8 +65,6 @@ export function initPeriodicImages({scene,getEntries=()=>[]}={}) {
     })
     group.visible=true
   }
-  const representationChanged=event=>{if(event.detail?.representation!=='full')clear()}
-  window.addEventListener('nadoc:representation-change',representationChanged)
   window.addEventListener('nadoc:box-solvent-details',update)
-  return {dispose(){window.removeEventListener('nadoc:representation-change',representationChanged);window.removeEventListener('nadoc:box-solvent-details',update);clear();scene.remove(group)}}
+  return {dispose(){window.removeEventListener('nadoc:box-solvent-details',update);clear();scene.remove(group)}}
 }

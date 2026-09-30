@@ -9,7 +9,8 @@ it('estimates bulk salt counts from liquid volume, not a slab vacuum cell',()=>{
 })
 it('persists explicit preparation, renders live details and restores without salt overrides',async()=>{
  const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
- document.body.append(source.querySelector('#md-box-solvent-body'),source.querySelector('#md-surface-body'))
+ document.body.append(source.querySelector('#md-box-solvent-body'),source.querySelector('#md-surface-body'),source.querySelector('#menu-view-detail-full'))
+ document.getElementById('menu-view-detail-full').classList.remove('is-checked')
  const api={fetchProtocolBoxPreview:vi.fn(async p=>({box_preview:{calculated_nm:p.box_size_nm || [12,13,14],selected_nm:p.box_size_nm || [12,13,14]}})),updateMetadata:vi.fn(async()=>({}))}
  const store={getState:()=>({currentDesign:{id:'one',metadata:{}}}),subscribe:()=>()=>{}}
  const events=[],listen=e=>events.push(e.detail);window.addEventListener('nadoc:box-solvent-details',listen)
@@ -22,12 +23,12 @@ it('persists explicit preparation, renders live details and restores without sal
  document.getElementById('md-box-view-periodic').click()
  expect(events.at(-1)).toMatchObject({enabled:false,periodicImages:true})
  window.dispatchEvent(new CustomEvent('nadoc:representation-change',{detail:{representation:'beads'}}))
- expect(document.getElementById('md-box-view-periodic').checked).toBe(false)
- expect(document.getElementById('md-box-view-periodic').disabled).toBe(true)
- expect(events.at(-1).periodicImages).toBe(false)
+ expect(document.getElementById('md-box-view-periodic').checked).toBe(true)
+ expect(document.getElementById('md-box-view-periodic').disabled).toBe(false)
+ expect(events.at(-1).periodicImages).toBe(true)
  window.dispatchEvent(new CustomEvent('nadoc:representation-change',{detail:{representation:'full'}}))
  expect(document.getElementById('md-box-view-periodic').disabled).toBe(false)
- expect(document.getElementById('md-box-view-periodic').checked).toBe(false)
+ expect(document.getElementById('md-box-view-periodic').checked).toBe(true)
  expect(ui.payload()).toMatchObject({box_size_nm:[10,15,20],salt_mode:'custom',ion_conc_mM:175,mg_conc_mM:0})
  await vi.waitFor(()=>expect(api.updateMetadata).toHaveBeenCalled(),{timeout:2000})
  ui.restore({box_size_nm:[8,9,10],salt_mode:'custom',ion_conc_mM:100,mg_conc_mM:2})

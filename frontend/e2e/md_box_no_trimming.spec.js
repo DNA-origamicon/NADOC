@@ -59,13 +59,26 @@ test('View details preserves rotation sizing and padding without a trim warning'
     const r=document.getElementById(id).parentElement.getBoundingClientRect();return {top:r.top,bottom:r.bottom}
   }))
   expect(rows[1].top).toBeGreaterThanOrEqual(rows[0].bottom)
-  await page.locator('#menu-view-detail-beads').evaluate(el=>el.click())
-  await expect(page.locator('#md-box-view-periodic')).not.toBeChecked()
-  await expect(page.locator('#md-box-view-periodic')).toBeDisabled()
-  await page.locator('#menu-view-detail-full').evaluate(el=>el.click())
-  await expect(page.locator('#md-box-view-periodic')).toBeEnabled()
-  await expect(page.locator('#md-box-view-periodic')).not.toBeChecked()
-  await page.check('#md-box-view-periodic')
+  // Fit all neighbors so the pixel check can observe the copies, including ±Z.
+  await page.evaluate(async () => {
+    const THREE=await import('/node_modules/three/build/three.module.js'),t=window.__nadocTest
+    const bounds=new THREE.Box3().setFromObject(t.scene.getObjectByName('NAMD periodic images'))
+    const center=bounds.getCenter(new THREE.Vector3()),radius=bounds.getSize(new THREE.Vector3()).length()/2
+    t.applyCameraPoseForTest({target:center.toArray(),position:center.clone().add(new THREE.Vector3(1,.7,1).normalize().multiplyScalar(radius*3)).toArray()})
+  })
+  for (const representation of ['beads','cylinders','full']) {
+    await page.locator(`#menu-view-detail-${representation}`).evaluate(el=>el.click())
+    await expect(page.locator(`#menu-view-detail-${representation}`)).toHaveClass(/is-checked/)
+    await expect(page.locator('#md-box-view-periodic')).toBeEnabled()
+    await expect(page.locator('#md-box-view-periodic')).toBeChecked()
+    const shown=await page.evaluate(()=>window.__nadocTest.renderedPixelCensus())
+    await page.uncheck('#md-box-view-periodic')
+    const hidden=await page.evaluate(()=>window.__nadocTest.renderedPixelCensus())
+    expect(shown.visible).toBeGreaterThan(hidden.visible)
+    expect(shown.pixelHash).not.toBe(hidden.pixelHash)
+    await page.check('#md-box-view-periodic')
+    await expect.poll(()=>page.evaluate(()=>window.__nadocScene.getObjectByName('NAMD periodic images').children.length)).toBe(6)
+  }
   await page.uncheck('#md-box-view-periodic')
   await expect.poll(()=>page.evaluate(()=>window.__nadocScene.getObjectByName('NAMD periodic images').children.length)).toBe(0)
   expect(errors).toEqual([])

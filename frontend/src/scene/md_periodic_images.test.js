@@ -29,8 +29,11 @@ it('shares bounded geometry, cannot be picked, updates offsets and cleans up',()
   emit({periodicImages:true,dimensions:[15,25,35]})
   expect(dispose).toHaveBeenCalledTimes(1)
   expect(group.children[5].position.toArray()).toEqual([0,0,35])
-  window.dispatchEvent(new CustomEvent('nadoc:representation-change',{detail:{representation:'beads'}}))
-  expect(group.visible).toBe(false)
+  for(const representation of ['beads','cylinders','vdw','ballstick','stick','surface','hull-prism','mrdna-coarse','mrdna-fine','oxdna','full']){
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change',{detail:{representation}}))
+    expect(group.visible).toBe(true)
+    expect(group.children).toHaveLength(6)
+  }
   emit({enabled:true,periodicImages:false,dimensions:[15,25,35]})
   expect(group.visible).toBe(false);expect(group.children).toHaveLength(0)
   ui.dispose();expect(scene.children).toHaveLength(0)

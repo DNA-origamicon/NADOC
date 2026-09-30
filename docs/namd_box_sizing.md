@@ -48,7 +48,7 @@ clearances use the liquid compartment, excluding vacuum padding.
 
 **View details** shows the cell, dimension labels, water-region highlights and
 solvent conditions. **View periodic images** occupies a separate row below it and
-works independently, but only in **Full** representation.
+works independently in every representation.
 
 Periodic images are six non-interactive backbone point copies translated by ±Lx,
 ±Ly and ±Lz. They share one geometry/material, with at most 12,000 sampled points
@@ -57,13 +57,13 @@ to inspect farther neighbors. For slab setups, normal-axis translation uses the
 full vacuum-padded cell.
 
 The copies follow displayed backbone positions and instance colors once per
-rendered frame, supporting Full-mode trajectory, deformation and scalar-color
-visualizations. Their translations still use the preparation cell, not a changing
+rendered frame, following updates to the design backbone during trajectory,
+deformation and scalar-color visualizations. They remain sparse design-backbone
+previews in every representation, rather than copies of atomistic or surface meshes. Their translations still use the preparation cell, not a changing
 trajectory cell. This is a visual shape/spacing aid, not an atomistic contact test.
 
-Switching away from Full unchecks the toggle and removes the copies. Returning to
-Full re-enables the control without checking it. A new document resets both display
-toggles. Invalidating the preview hides the copies until recalculation completes;
+Switching representation preserves the toggle and copies. A new document resets
+both display toggles. Invalidating the preview hides the copies until recalculation completes;
 disabling the toggle or disposing the controller releases rendering resources.
 
 ## Implementation and verification — 2026-09-22
