@@ -565,6 +565,8 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Full desktop representation export and native scene validation (8.6 s isolated).
+    "test_desktop_meshes_previews_and_vdw_round_trip",
     # Executes the real upstream oxDNA engine (8.10 s), not the mock runner.
     "test_prepared_hybrid_job_runs_on_upstream",
     # CPD conversion performs a real 24-start nonlinear atomistic relaxation
@@ -931,7 +933,9 @@ _SLOW_TESTS = {
 # in the fast suite and keep guarding the invariant.  Use this instead of _SLOW_TESTS
 # whenever only one param of a parametrized test is heavy — relegating the whole test
 # would throw away a fast gate that costs almost nothing.
-_SLOW_PARAMS = {}
+_SLOW_PARAMS = {
+    # Real molecular surface extraction plus fixture setup exceeds 5 s isolated.
+    "test_composite_trajectory_surface_shape[chimerax]",}
 
 
 # ---------------------------------------------------------------------------
