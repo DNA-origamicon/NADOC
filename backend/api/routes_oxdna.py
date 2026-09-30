@@ -3297,6 +3297,7 @@ class OxdnaFramesAtomisticBody(BaseModel):
 
 
 class OxdnaFramesSurfaceBody(BaseModel):
+    detail: str = "coarse"
     frame_indices: list[int]
     color_mode: str = "strand"
     probe_radius: float = 0.06
@@ -3367,6 +3368,7 @@ async def oxdna_frames_surface(
         body.smooth,
         max_frames=(0 if scope == "job" else _SPARSE_FRAME_CAP),
         align=align,
+        detail=body.detail,
         n_trailing_extra=_capture_bead_count(job),
         trailing_extra_strand_length=_capture_strand_length(job),
     )

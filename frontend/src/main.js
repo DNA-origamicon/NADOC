@@ -371,7 +371,7 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
-  const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, getAssemblyRenderer: () => assemblyRenderer, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView() ?? _multiOverlay?.getBroadcastView(), getRepresentation: () => _currentRepr, getDetailLevel: () => designRenderer.getDetailLevel(), getVisualization: () => captureSharedVisualization(document, simulateJobs?.getSelectedDetails?.()) })
+  const preparedExport = initPreparedExport({ scene, camera, renderer, controls, canvas, store, getAssemblyRenderer: () => assemblyRenderer, captureCurrentCamera, isStandardRender, getPresentationView: () => _multiView?.getBroadcastView() ?? _multiOverlay?.getBroadcastView(), getRepresentation: () => _currentRepr === 'surface' && _atomSurface.getSurfaceParams().detail === 'chimerax' ? 'surface-detail' : _currentRepr, getDetailLevel: () => designRenderer.getDetailLevel(), getVisualization: () => captureSharedVisualization(document, simulateJobs?.getSelectedDetails?.()) })
   const sharing = initShareLink({ exportView: preparedExport.exportView, broadcast: { prepared: preparedExport, store } })
   initViewerPerformance({ renderer, camera, controls, store, addFrameCallback, removeFrameCallback, captureCurrentCamera, getDetailLevel: () => designRenderer.getDetailLevel(), getFileOpen: () => _fileOpen })
 
@@ -1437,6 +1437,7 @@ async function main() {
     onOccupancyClear:     () => occupancyOverlay.clear(),
     getAtomisticRenderer: () => atomisticRenderer,
     getSurfaceRenderer:   () => surfaceRenderer,
+    getSurfaceParams: () => _atomSurface?.getSurfaceParams?.() ?? {},
     getCurrentRepr:       () => _currentRepr,
     onRestoreDesignHeavy: _restoreDesignHeavy,
     onHeavyStatus: (d) => window.dispatchEvent(
@@ -2021,7 +2022,11 @@ async function main() {
   let _surfRegenTimer = null
   const _regenOverlaySurfaceDebounced = () => {
     if (_surfRegenTimer) clearTimeout(_surfRegenTimer)
-    _surfRegenTimer = setTimeout(() => { _surfRegenTimer = null; oxdnaDisplay.reapplyForRepr() }, 250)
+    _surfRegenTimer = setTimeout(() => {
+      _surfRegenTimer = null
+      if (oxdnaDisplay.drivesHeavy?.('surface')) oxdnaDisplay.reapplyForRepr()
+      if (mdViz.drivesHeavy?.('surface')) mdViz.reapplyForRepr()
+    }, 250)
   }
   _atomSurface = initAtomSurfaceDisplay({
     scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
@@ -6124,6 +6129,9 @@ async function main() {
     getJointRenderer: () => jointRenderer,
     getSurfaceMode: () => _atomSurface.getSurfaceMode(),
     applySurfaceMode: _applySurfaceMode,
+    getSurfaceDetail: () => _atomSurface.getSurfaceParams().detail,
+    selectSurfaceDetail: detail => _atomSurface.selectSurfaceDetail(detail),
+    refreshSurfaceRegions: () => _atomSurface.refreshSurfaceRegions(),
     applyAtomisticMode: _applyAtomisticMode,
     setCGVisible: _setCGVisible,
     setColoringMode: _setColoringMode,
@@ -6416,7 +6424,7 @@ async function main() {
       ['vdw', 'ballstick', 'stick'].includes(renderedAtomisticMode)
         ? renderedAtomisticMode : _currentRepr
     )
-    const representation = nativeRepresentation(renderedRepr)
+    const representation = nativeRepresentation(renderedRepr === 'surface' && _atomSurface.getSurfaceParams().detail === 'chimerax' ? 'surface-detail' : renderedRepr)
     const visualizationAtoms = []
     if (activeVisualization && ['vdw', 'ballstick', 'stick'].includes(representation)) {
       atomisticRenderer.visitAtoms?.((atom, position) => {

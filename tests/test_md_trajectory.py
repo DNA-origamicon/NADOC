@@ -69,7 +69,8 @@ def test_md_composite_meta_matches_full(generated_md):
     assert meta7["total_raw"] >= meta7["n_frames"]
 
 
-def test_md_frames_atomistic_and_surface(generated_md):
+@pytest.mark.parametrize("detail", ["coarse", "chimerax"])
+def test_md_frames_atomistic_and_surface(generated_md, detail):
     """Phase 2b: per-frame NAMD heavy atoms + surface for trajectory frame indices,
     in the same wire shapes the player's atomistic/surface paths consume."""
     from backend.core.md_trajectory import md_frames_atomistic, md_frames_surface
@@ -89,7 +90,7 @@ def test_md_frames_atomistic_and_surface(generated_md):
     n_p = sum(1 for a in frame["atoms"] if a["element"] == "P")
     assert n_p > 0
 
-    surf = md_frames_surface(generated_md.psf, segments, generated_md.ref, design, [0], smooth=3)
+    surf = md_frames_surface(generated_md.psf, segments, generated_md.ref, design, [0], smooth=3, detail=detail)
     assert list(surf.keys()) == ["0"]
     v = surf["0"]
     assert len(v["vertices"]) > 0 and len(v["vertices"]) % 3 == 0

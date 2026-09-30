@@ -60,6 +60,8 @@ class SidebarMenu {
     std::vector<const SidebarRow*> visibleRows() const {
         std::vector<const SidebarRow*> rows;
         for(const auto& row:tab().rows) {
+            // Both surface presets share the final representation row.
+            if(row.id=="menu-view-surface-detail") continue;
             if(std::none_of(row.parents.begin(),row.parents.end(),[&](const auto& id){return collapsed.contains(id);})) rows.push_back(&row);
         }
         return rows;
@@ -143,7 +145,7 @@ class SidebarMenu {
         }
         if(!horizontal && total()>pageRows()) {
             const auto rows=visibleRows();
-            const auto row=std::find_if(rows.begin(),rows.end(),[&](const auto* r){return r->id==focus.id;});
+            const auto row=std::find_if(rows.begin(),rows.end(),[&](const auto* r){return r->id==(focus.id=="menu-view-surface-detail"?"menu-view-surface":focus.id);});
             if(row!=rows.end()) {
                 const auto index=std::ptrdiff_t(row-rows.begin())+(axis.y>0?-1:1);
                 const size_t fixed=customTab?3:0;
@@ -256,6 +258,19 @@ class SidebarMenu {
             if(i>=fixed) {
                 const MenuPanelBounds viewport{{-.5F,.463F-float(fixed+pageRows()-1)*.12F-.054F},{.5F,.463F-float(fixed)*.12F+.054F}};
                 control.viewport=viewport;
+            }
+        }
+        const auto quick=std::find_if(out.begin(),out.end(),[](const auto& c){return c.id=="menu-view-surface";});
+        if(quick!=out.end()) {
+            const auto row=std::find_if(tab().rows.begin(),tab().rows.end(),[](const auto& r){return r.id=="menu-view-surface-detail";});
+            if(row!=tab().rows.end()) {
+                auto detail=*quick;
+                const float middle=(quick->bounds.minimum.x+quick->bounds.maximum.x)*.5F;
+                quick->bounds.maximum.x=middle-.006F;
+                detail.bounds.minimum.x=middle+.006F;
+                detail.id=row->id;detail.label=label(row->action,row->label);detail.action=row->action;
+                detail.enabled=available(row->action);detail.active=detail.enabled&&isActive(row->action);
+                out.push_back(detail);
             }
         }
         if(customTab) {

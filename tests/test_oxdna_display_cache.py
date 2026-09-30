@@ -82,3 +82,18 @@ def test_clear_empties_the_store():
     H._display_out_put(("cta", "k", 0), [0.0])
     H.display_out_cache_clear()
     assert H._display_out_get(("cta", "k", 0)) is None
+
+
+def test_trajectory_surface_cache_separates_quality(monkeypatch):
+    _reset()
+    calls = []
+    monkeypatch.setattr(H, "_aligned_downsampled_frames", lambda *a, **kw: (None, [{}], None, None))
+    monkeypatch.setattr(H, "_aligned_cache_key", lambda *a, **kw: "fixture")
+    def build(*a, detail="coarse", **kw):
+        calls.append(detail)
+        return {"vertices": [1 if detail == "coarse" else 2], "faces": []}
+    monkeypatch.setattr(H, "frame_surface_json", build)
+    for detail in ["coarse", "chimerax", "coarse", "chimerax"]:
+        result = H.composite_trajectory_surface(None, [], None, [0], detail=detail)
+        assert result["0"]["vertices"] == [1 if detail == "coarse" else 2]
+    assert calls == ["coarse", "chimerax"]

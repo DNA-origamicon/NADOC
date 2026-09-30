@@ -104,13 +104,15 @@ export function initSurfaceRenderer(scene) {
       const tblR  = new Float32Array(tbl.length)
       const tblG  = new Float32Array(tbl.length)
       const tblB  = new Float32Array(tbl.length)
+      const known = new Uint8Array(tbl.length)
       for (let i = 0; i < tbl.length; i++) {
         const hex = strandHexMap.get(tbl[i])
         if (hex == null) {
-          // Fallback: try the backend-baked colour for this vertex's first appearance.
+          // Missing live identities retain their baked per-vertex colour below.
           tblR[i] = 0.6; tblG[i] = 0.6; tblB[i] = 0.6
           continue
         }
+        known[i] = 1
         tblR[i] = ((hex >> 16) & 0xFF) / 255
         tblG[i] = ((hex >>  8) & 0xFF) / 255
         tblB[i] = ( hex        & 0xFF) / 255
@@ -118,6 +120,12 @@ export function initSurfaceRenderer(scene) {
       const out = new Float32Array(idx.length * 3)
       for (let v = 0; v < idx.length; v++) {
         const k = idx[v]
+        if (!known[k] && data.vertex_colors?.length === idx.length * 3) {
+          out[v*3] = data.vertex_colors[v*3]
+          out[v*3+1] = data.vertex_colors[v*3+1]
+          out[v*3+2] = data.vertex_colors[v*3+2]
+          continue
+        }
         out[v*3    ] = tblR[k]
         out[v*3 + 1] = tblG[k]
         out[v*3 + 2] = tblB[k]
@@ -533,9 +541,9 @@ export function initSurfaceRenderer(scene) {
     // opacity resolved against the wrong identity table — or against none at all.
     const _identityChanged = _cachedData !== toData
     _cachedData = toData
-    // Scalar overlays must refresh baked colours even at the same vertex count.
-    // The topology updater reuses buffers and normals when their contents match.
-    if (toData.scalar) { _rebuildTopology(toData); return }
+    // Saved surface frames can change connectivity even at the same vertex count.
+    // Scalar overlays also refresh colours; the updater reuses matching buffers.
+    if (toData.scalar || fromData === toData) { _rebuildTopology(toData); return }
     const fromV = fromData.vertices
     const toV   = toData.vertices
 
@@ -563,6 +571,24 @@ export function initSurfaceRenderer(scene) {
     }
   }
 
+  // Explicit stable-topology playback path. Saved meshes remain immutable.
+  let _deformedSource = null
+  function applyDeformedFrame(source, vertices) {
+    if (!_mesh || vertices.length !== source.vertices.length) return
+    if (_deformedSource !== source || _cachedData !== source) {
+      _cachedData = source
+      _rebuildTopology(source)
+      _deformedSource = source
+    }
+    _liveVerts.set(vertices)
+    const geo = _mesh.geometry
+    geo.attributes.position.needsUpdate = true
+    geo.computeVertexNormals()
+    geo.boundingBox = null
+    geo.boundingSphere = null
+    _normalState = null
+  }
+
   /**
    * Re-apply per-cluster colour + fade for a frame that reused the existing buffers
    * (the in-place lerp path, which never goes through _rebuildTopology).
@@ -584,9 +610,8 @@ export function initSurfaceRenderer(scene) {
 
   /**
    * Refresh vertex + face data, reusing compatible buffers and unchanged normals.
-   * Preserves the existing material AND its strand colouring when the baked
-   * data carries `vertex_colors` (surface-batch in `color_mode='strand'`
-   * mode does). Falls back to uniform grey only when colour data is absent.
+   * Resolves strand identity against the live palette, just like static surfaces.
+   * Baked colours are a fallback; scalar overlays keep their measurement colours.
    * Changed geometry has its normals recomputed immediately.
    *
    * This is what keeps surface coloring through topology changes during
@@ -606,13 +631,14 @@ export function initSurfaceRenderer(scene) {
     // against the wrong identity table.
     _cachedData    = data
     const oldGeo = _mesh.geometry
-    const bakedColors = (data.scalar || _colorMode === 'strand') && data.vertex_colors
+    const frameColors = data.scalar ? data.vertex_colors
+      : _colorMode === 'strand' ? _buildVertexColorArray(data, _strandHexMap) : null
     const oldColors = oldGeo.getAttribute('color')
     const reuse = oldGeo.index && oldGeo.index.array.length === data.faces.length
       && oldGeo.attributes.position.array.length === data.vertices.length
       // Removing/replacing an uploaded attribute must dispose its owning geometry
       // so Three.js releases the old GPU buffer as well.
-      && (!oldColors || bakedColors?.length === oldColors.array.length)
+      && (!oldColors || frameColors?.length === oldColors.array.length)
     const newGeo = reuse ? oldGeo : new THREE.BufferGeometry()
     // Payloads may mutate in place. Compare at rendered precision, including
     // connectivity: equal vertex counts alone do not establish equal topology.
@@ -648,8 +674,8 @@ export function initSurfaceRenderer(scene) {
 
     // `scalar` (flexibility map) shows its baked viridis colours regardless of the
     // user's strand/uniform colour mode; otherwise strand colours need strand mode.
-    if (bakedColors) {
-      writeAttribute('color', data.vertex_colors, 3, Float32Array)
+    if (frameColors) {
+      writeAttribute('color', frameColors, 3, Float32Array)
       if (!_mesh.material.vertexColors) {
         _mesh.material.vertexColors = true
         _mesh.material.color.setHex(0xFFFFFF)
@@ -658,7 +684,7 @@ export function initSurfaceRenderer(scene) {
     } else {
       newGeo.deleteAttribute('color')
       if (_mesh.material.vertexColors) {
-        // No baked colours: the shader must not read a missing attribute.
+        // No colour source: the shader must not read a missing attribute.
         _mesh.material.vertexColors = false
         _mesh.material.color.setHex(UNIFORM_COLOR)
         _mesh.material.needsUpdate = true
@@ -744,7 +770,7 @@ export function initSurfaceRenderer(scene) {
     return tbl[idx[face.a]] ?? null
   }
 
-  return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode,
+  return { update, setColorMode, setOpacity, dispose, applyPositionLerp, applyDeformedFrame, getMode,
            applyStrandColors, applyClusterDisplay, applyScalarVertexColors,
            applyNucleotideScalarColors, getMesh, strandIdAt, setCrispZones }
 }

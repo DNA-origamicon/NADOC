@@ -21,7 +21,7 @@ function fkey(key) {
 // the six Coloring submenu items (whose `.disabled` the availability matrix sets).
 const REPR_IDS = [
   'menu-view-hull-prism', 'menu-view-detail-cylinders', 'menu-view-detail-beads',
-  'menu-view-detail-full', 'menu-view-surface', 'menu-view-atomistic-vdw',
+  'menu-view-detail-full', 'menu-view-surface', 'menu-view-surface-detail', 'menu-view-atomistic-vdw',
   'menu-view-atomistic-ballstick',
   'menu-view-atomistic-stick',
   'menu-view-mrdna-coarse', 'menu-view-mrdna-fine',
@@ -476,4 +476,24 @@ describe('F-key handler', () => {
     await dispatchKeyEvent(fkey('F6'))
     expect(clickSpy).not.toHaveBeenCalled()
   })
+})
+
+it('selects detail before computing and switches back to quick without a redundant build', async () => {
+  mountIds(DOM)
+  const deps = makeDeps({ currentDesign: { id: 'design' } })
+  let detail = 'coarse'
+  deps.getSurfaceDetail = () => detail
+  deps.selectSurfaceDetail = vi.fn(value => { detail = value })
+  const builds = []
+  deps.applySurfaceMode = vi.fn(async mode => { if (mode === 'on') builds.push(detail) })
+  initRepresentationSwitcher(deps)
+  document.getElementById('menu-view-surface-detail').click()
+  await vi.waitFor(() => expect(builds).toEqual(['chimerax']))
+  expect(document.getElementById('menu-view-surface-detail').classList.contains('is-checked')).toBe(true)
+  expect(document.getElementById('menu-view-surface').classList.contains('is-checked')).toBe(false)
+  document.getElementById('menu-view-surface-detail').click()
+  await Promise.resolve()
+  expect(builds).toEqual(['chimerax'])
+  document.getElementById('menu-view-surface').click()
+  await vi.waitFor(() => expect(builds).toEqual(['chimerax', 'coarse']))
 })

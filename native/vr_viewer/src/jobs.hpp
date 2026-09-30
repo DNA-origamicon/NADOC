@@ -165,7 +165,7 @@ inline JobSnapshot loadJobSnapshot(const std::string& path) {
         coloring = decodeJobField(coloringToken, 16);
         static const std::unordered_set<std::string> representations = {
             "cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism",
-            "surface", "mrdna-coarse", "mrdna-fine", "oxdna",
+            "surface", "mrdna-coarse", "mrdna-fine", "oxdna", "surface-detail",
         };
         static const std::unordered_set<std::string> colorings = {
             "strand", "base", "cluster", "cpk",

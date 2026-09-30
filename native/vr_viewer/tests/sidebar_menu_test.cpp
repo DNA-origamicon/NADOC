@@ -29,6 +29,16 @@ int main() {
             menu.selected=tab;std::set<std::string> seen;
             do {
                 menu.draw([](glm::vec3,glm::vec3,glm::vec3){},[](nadoc_vr::MenuPanelBounds,glm::vec3){});
+                const auto controls=menu.controls();
+                const auto quick=std::find_if(controls.begin(),controls.end(),[](const auto& c){return c.id=="menu-view-surface";});
+                const auto detail=std::find_if(controls.begin(),controls.end(),[](const auto& c){return c.id=="menu-view-surface-detail";});
+                if(quick!=controls.end()) {
+                    require(detail!=controls.end(),"Surface presets must be on the same page");
+                    require(quick->bounds.minimum.y==detail->bounds.minimum.y,"Surface presets must share a row");
+                    require(quick->bounds.maximum.x<detail->bounds.minimum.x,"Surface presets must not overlap");
+                    require(quick->action=="repr:7" && detail->action=="repr:11","Surface presets must select distinct geometry");
+                }
+
                 if(!menu.audit.valid()) {std::cerr<<menu.tab().key<<"/"<<menu.offset()<<": "<<menu.audit.summary()<<'\n';++failures;}
                 const auto track=menu.scrollBounds(),thumb=menu.scrollThumb();
                 require(nadoc_vr::menuLayoutContains(track,thumb),"Scrollbar thumb outside track");
@@ -61,14 +71,16 @@ int main() {
             for(size_t index=0;index<menu.tab().rows.size();++index) {
                 const auto& header=menu.tab().rows[index];
                 if(!header.action.starts_with("section:") || (header.id=="section:properties:dimensions-heading" || header.id=="section:visualization:template:view-volumes")) continue;
-                menu.offsets[tab]=index/nadoc_vr::kSidebarPageRows*nadoc_vr::kSidebarPageRows;
+                const auto rows=menu.visibleRows();
+                const auto logical=std::find_if(rows.begin(),rows.end(),[&](const auto* row){return row->id==header.id;})-rows.begin();
+                menu.offsets[tab]=size_t(logical)/nadoc_vr::kSidebarPageRows*nadoc_vr::kSidebarPageRows;
                 auto controls=menu.controls();
                 auto title=std::find_if(controls.begin(),controls.end(),[&](const auto& c){return c.id==header.id;});
                 require(title!=controls.end() && title->enabled,"Card title unavailable with disabled contents");
                 menu.focus.begin(header.id,"");
                 require(menu.activate(*title).empty(),"Card dispatched an external action");
                 size_t hidden=0;
-                for(const auto& row:menu.tab().rows) if(std::find(row.parents.begin(),row.parents.end(),header.id)!=row.parents.end()) ++hidden;
+                for(const auto& row:menu.tab().rows) if(row.id!="menu-view-surface-detail" && std::find(row.parents.begin(),row.parents.end(),header.id)!=row.parents.end()) ++hidden;
                 require(menu.total()==full-hidden,"Card hid unrelated controls or retained descendants");
                 require(menu.focus.id==header.id,"Collapse lost title focus");
                 controls=menu.controls();

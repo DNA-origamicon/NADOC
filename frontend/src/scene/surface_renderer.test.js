@@ -21,6 +21,46 @@ const DATA = {
 }
 const MAP = new Map([['sA', 0xff0000], ['sB', 0x00ff00]])
 
+describe('trajectory strand colours', () => {
+  it('uses the live palette for identity-only and stale baked frames, through motion and pause', () => {
+    const sr = initSurfaceRenderer(makeScene())
+    sr.update(DATA, 'strand')
+    sr.applyStrandColors(MAP)
+    const frame = {...DATA, vertices:[...DATA.vertices], vertex_strand_index:[1,0,1,0]}
+    const colors = () => Array.from(sr.getMesh().geometry.attributes.color.array)
+    const expected = [0,1,0, 1,0,0, 0,1,0, 1,0,0]
+    sr.applyPositionLerp(frame,frame,0)
+    expect(sr.getMesh().material.vertexColors).toBe(true)
+    expect(colors()).toEqual(expected)
+    const baked = {...frame, vertex_colors:Array(12).fill(.5)}
+    sr.applyPositionLerp(baked,baked,0)
+    expect(colors()).toEqual(expected)
+    const moved=Float32Array.from(frame.vertices,v=>v+1)
+    sr.applyDeformedFrame(baked,moved)
+    expect(colors()).toEqual(expected)
+    const palette=new Map([['sA',0x0000ff],['sB',0xffff00]])
+    sr.applyStrandColors(palette)
+    sr.applyDeformedFrame(baked,moved)
+    const edited = [1,1,0, 0,0,1, 1,1,0, 0,0,1]
+    expect(colors()).toEqual(edited)
+    sr.applyPositionLerp(baked,baked,0)
+    expect(colors()).toEqual(edited)
+    sr.setColorMode('uniform')
+    sr.applyPositionLerp(baked,baked,0)
+    expect(sr.getMesh().material.vertexColors).toBe(false)
+    sr.setColorMode('strand')
+    sr.applyPositionLerp(baked,baked,0)
+    expect(colors()).toEqual(edited)
+  })
+  it('retains measurement colours instead of replacing them with strand colours', () => {
+    const sr=initSurfaceRenderer(makeScene())
+    sr.update(DATA,'strand');sr.applyStrandColors(MAP)
+    const scalar={...DATA,scalar:true,vertex_colors:Array(12).fill(.25)}
+    sr.applyPositionLerp(scalar,scalar,0)
+    expect([...sr.getMesh().geometry.attributes.color.array]).toEqual(scalar.vertex_colors)
+  })
+})
+
 describe('simulation surface buffer reuse', () => {
   function setup() {
     const sr = initSurfaceRenderer(makeScene())
@@ -39,6 +79,20 @@ describe('simulation surface buffer reuse', () => {
     expect(geo.attributes.normal.array).toEqual(reference.attributes.normal.array)
     reference.dispose()
   }
+
+  it('deforms a fixed mesh with fresh normals and restores the immutable exact frame', () => {
+    const {sr,data,geo} = setup()
+    const original = [...data.vertices]
+    const moved = Float32Array.from(original)
+    moved[5] += 2
+    sr.applyDeformedFrame(data,moved)
+    expect(sr.getMesh().geometry).toBe(geo)
+    expectFreshNormals(geo,{...data,vertices:moved})
+    expect(data.vertices).toEqual(original)
+    sr.applyPositionLerp(data,data,0)
+    expect([...geo.attributes.position.array]).toEqual(original)
+    expectFreshNormals(geo,data)
+  })
 
   it('reuses buffers and normals for repeated scalar frames while refreshing baked colours', () => {
     const { sr, data, geo } = setup()
@@ -65,6 +119,17 @@ describe('simulation surface buffer reuse', () => {
       expect(Array.from(geo.index.array)).toEqual(data.faces)
       expectFreshNormals(geo, data)
     }
+    sr.dispose()
+  })
+
+  it('replaces ordinary saved-frame connectivity and normals even at equal vertex counts', () => {
+    const sr = initSurfaceRenderer(makeScene())
+    sr.update(DATA)
+    const next = { ...DATA, vertices: [...DATA.vertices], faces: [2, 1, 0, 2, 3, 1] }
+    next.vertices[2] = 2
+    sr.applyPositionLerp(next, next, 0)
+    expect(Array.from(sr.getMesh().geometry.index.array)).toEqual(next.faces)
+    expectFreshNormals(sr.getMesh().geometry, next)
     sr.dispose()
   })
 

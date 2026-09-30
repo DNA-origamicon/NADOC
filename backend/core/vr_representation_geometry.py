@@ -24,6 +24,7 @@ REPRESENTATIONS = (
     "mrdna-coarse",
     "mrdna-fine",
     "oxdna",
+    "surface-detail",
 )
 
 
@@ -49,24 +50,25 @@ def build(design, nucleotides, axes, representations=None):
         check=True,
     )
     desktop = json.loads(result.stdout)
-    desktop["surface"] = {"vertices": np.empty((0, 3)), "normals": np.empty((0, 3))}
-    if representations is None or "surface" in representations:
-        surface = _build_design_surface_mesh(design, 0.20, 0.06, 1.30, 15, "coarse")
-        vertices = np.asarray(surface.vertices)
-        normals = np.zeros_like(vertices)
-        faces = np.asarray(surface.faces)
-        if len(faces):
-            triangles = vertices[faces]
-            face_normals = np.cross(
-                triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]
-            )
-            for column in range(3):
-                np.add.at(normals, faces[:, column], face_normals)
-            normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12)
-        desktop["surface"] = {
-            "vertices": vertices[faces].reshape(-1, 3),
-            "normals": normals[faces].reshape(-1, 3),
-        }
+    for rep, detail in [("surface", "coarse"), ("surface-detail", "chimerax")]:
+        desktop[rep] = {"vertices": np.empty((0, 3)), "normals": np.empty((0, 3))}
+        if representations is None or rep in representations:
+            surface = _build_design_surface_mesh(design, 0.20, 0.06, 1.30, 15, detail)
+            vertices = np.asarray(surface.vertices)
+            normals = np.zeros_like(vertices)
+            faces = np.asarray(surface.faces)
+            if len(faces):
+                triangles = vertices[faces]
+                face_normals = np.cross(
+                    triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]
+                )
+                for column in range(3):
+                    np.add.at(normals, faces[:, column], face_normals)
+                normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12)
+            desktop[rep] = {
+                "vertices": vertices[faces].reshape(-1, 3),
+                "normals": normals[faces].reshape(-1, 3),
+            }
     desktop["source"] = source
     desktop["anchors"] = np.asarray([n["backbone_position"] for n in source])
     desktop["tree"] = cKDTree(desktop["anchors"])
@@ -105,7 +107,12 @@ def records(data, nucleotides):
         owners = tree.query(points)[1]
         return points + offsets[owners], owners
 
-    for rep, meshes in [("cylinders", data.get("cylinders", [])), ("hull-prism", data["hull"]), ("surface", [data["surface"]])]:
+    for rep, meshes in [
+        ("cylinders", data.get("cylinders", [])),
+        ("hull-prism", data["hull"]),
+        ("surface", [data["surface"]]),
+        ("surface-detail", [data["surface-detail"]] if "surface-detail" in data else []),
+    ]:
         face_id = 0
         for mesh in meshes:
             points, owners = moved(mesh["vertices"])
@@ -248,6 +255,7 @@ def append_records(
     total = (sum(len(m["vertices"]) // 9 for m in data.get("cylinders", []))
              + sum(len(m["vertices"]) // 9 for m in data["hull"])
              + len(data["surface"]["vertices"]) // 3
+             + len(data.get("surface-detail", {}).get("vertices", [])) // 3
              + sum(len(p["points"]) + len(p["edges"]) for p in data["mrdna"].values())
              + sum(len(g["entries"]) for g in data["oxdna"]))
     active = None

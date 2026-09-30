@@ -3412,7 +3412,8 @@ def test_composite_trajectory_atomistic_matches_design_atoms(
         assert len(v) == ref_floats  # atom order matches design
 
 
-def test_composite_trajectory_surface_shape(design, geometry, tmp_path):
+@pytest.mark.parametrize("detail", ["coarse", "chimerax"])
+def test_composite_trajectory_surface_shape(design, geometry, tmp_path, detail):
     """Per-frame surface for trajectory keyframes returns surface-batch-shaped
     entries (flat verts + int faces, optional strand colours)."""
     from backend.core.oxdna_health import (
@@ -3426,7 +3427,7 @@ def test_composite_trajectory_surface_shape(design, geometry, tmp_path):
     _write_traj(design, geometry, e, 3)
     stages = [("3_equil", "equil", e)]
     n = composite_trajectory(design, stages, ref)["n_frames"]
-    out = composite_trajectory_surface(design, stages, ref, [0, n - 1], smooth=3)
+    out = composite_trajectory_surface(design, stages, ref, [0, n - 1], smooth=3, detail=detail)
     assert sorted(out.keys()) == ["0", str(n - 1)]
     for v in out.values():
         assert len(v["vertices"]) > 0 and len(v["vertices"]) % 3 == 0

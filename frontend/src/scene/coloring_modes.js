@@ -13,6 +13,7 @@ export const COLORING_SUPPORT = {
   'ballstick':  new Set(['strand', 'base', 'cluster', 'cpk']),
   'stick':      new Set(['strand', 'base', 'cluster', 'cpk']),
   'surface':    new Set(['strand', 'cluster']),
+  'surface-detail': new Set(['strand', 'cluster']),
   'hull-prism': new Set(),
   'mrdna-coarse': new Set(),
   'mrdna-fine': new Set(),
@@ -59,7 +60,7 @@ export function supportedColoringSet(repr, assemblyActive = false) {
   const isAtom = repr === 'vdw' || repr === 'ballstick' || repr === 'stick'
   if (assemblyActive) {
     if (isAtom)             return new Set(['cpk', 'strand', 'cluster', 'source'])
-    if (repr === 'surface') return new Set(['strand', 'cluster', 'source'])
+    if (repr === 'surface' || repr === 'surface-detail') return new Set(['strand', 'cluster', 'source'])
   }
   return COLORING_SUPPORT[repr] ?? new Set(['strand', 'base', 'cluster'])
 }

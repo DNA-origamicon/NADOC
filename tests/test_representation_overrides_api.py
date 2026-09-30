@@ -126,8 +126,9 @@ def test_put_overrides_atomistic_rep_persists(client):
 # ── POST /design/surface/region ───────────────────────────────────────────────
 
 
-def test_region_surface_returns_mesh(client):
-    body = {"segments": [{"helix_id": HELIX, "bp_start": 0, "bp_end": 41}]}
+@pytest.mark.parametrize("detail", ["coarse", "chimerax"])
+def test_region_surface_returns_mesh(client, detail):
+    body = {"detail": detail, "segments": [{"helix_id": HELIX, "bp_start": 0, "bp_end": 41}]}
     r = client.post("/api/design/surface/region", json=body)
     assert r.status_code == 200
     data = r.json()

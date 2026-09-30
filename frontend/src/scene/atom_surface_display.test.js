@@ -55,7 +55,7 @@ import { surfaceSegments } from './design_queries.js'
 const DOM = [
   'surface-options-panel',
   'sl-surface-opacity', 'sv-surface-opacity',
-  'sl-surface-probe', 'sv-surface-probe', 'cb-surface-figure-quality',
+  'sl-surface-probe', 'sv-surface-probe',
   'surface-color-strand', 'surface-color-uniform',
   'sl-atom-vdw-scale', 'sv-atom-vdw-scale',
   'repr-atom-radius-row',
@@ -275,9 +275,8 @@ describe('initAtomSurfaceDisplay', () => {
   it('keeps an adjustable probe for each preset and rebuilds figure quality on release', async () => {
     mountIds(DOM)
     const deps = makeDeps(), display = initAtomSurfaceDisplay(deps)
-    const preset = document.getElementById('cb-surface-figure-quality')
     const probe = document.getElementById('sl-surface-probe')
-    preset.checked = true; preset.dispatchEvent(new Event('change'))
+    display.selectSurfaceDetail('chimerax')
     expect(probe.disabled).toBe(false)
     expect(display.getSurfaceParams()).toMatchObject({ detail: 'chimerax', probe_radius: .06 })
     await display.applySurfaceMode('on')
@@ -287,10 +286,11 @@ describe('initAtomSurfaceDisplay', () => {
     probe.dispatchEvent(new Event('change'))
     expect(fetch.mock.calls[0][0]).toContain('probe_radius=0.22&detail=chimerax')
     await vi.runOnlyPendingTimersAsync()
-    preset.checked = false; preset.dispatchEvent(new Event('change'))
+    display.selectSurfaceDetail('coarse')
+    await display.applySurfaceMode('on')
     expect(display.getSurfaceParams().probe_radius).toBe(.06)
     await vi.runOnlyPendingTimersAsync()
-    preset.checked = true; preset.dispatchEvent(new Event('change'))
+    display.selectSurfaceDetail('chimerax')
     expect(display.getSurfaceParams().probe_radius).toBe(.22)
   })
 
@@ -460,6 +460,7 @@ describe('initAtomSurfaceDisplay', () => {
     // Renderer activated with an empty mesh (mode 'on' + a mesh) so the overlay's push
     // can populate it — without this _pushSurface bails and nothing renders.
     expect(deps.surfaceRenderer.update).toHaveBeenCalledWith({ vertices: [], faces: [] }, expect.anything())
+    expect(deps.surfaceRenderer.applyStrandColors).toHaveBeenCalledWith(expect.any(Map))
   })
 
   it('changing probe radius while a sim overlay owns the surface re-generates the OVERLAY (not a design fetch, no revert)', async () => {

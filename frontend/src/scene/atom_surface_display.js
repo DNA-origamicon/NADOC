@@ -221,6 +221,8 @@ export function initAtomSurfaceDisplay({
       // sets atomisticRenderer.setMode() up front.
       surfaceRenderer.update({ vertices: [], faces: [] },
                              store.getState().surfaceColorMode ?? 'strand')
+      // The job supplies geometry/identity; the live design still owns its palette.
+      surfaceRenderer.applyStrandColors(_getAtomStrandColors())
       return
     }
     if (!_surfaceDataCache) {
@@ -328,18 +330,16 @@ export function initAtomSurfaceDisplay({
   })
 
   // Figure quality remembers its probe independently of the standard preset.
-  const _cbFigureQuality = document.getElementById('cb-surface-figure-quality')
   function _selectSurfaceDetail(detail) {
+    if (_surfaceDetail === detail) return
+    _surfaceDataCache = null
+    ++_surfaceRequestId
     _surfaceDetail = detail
-    if (_cbFigureQuality) _cbFigureQuality.checked = detail === 'chimerax'
+    _regionSurfaceSig = null
     _surfaceProbeRadius = detail === 'coarse' ? _standardProbeRadius : _figureProbeRadius
     if (_slSurfaceProbe) { _slSurfaceProbe.disabled = false; _slSurfaceProbe.value = String(_surfaceProbeRadius) }
     if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
-    _regenSurfaceForParamChange()
   }
-  _cbFigureQuality?.addEventListener('change', () => {
-    _selectSurfaceDetail(_cbFigureQuality.checked ? 'chimerax' : 'coarse')
-  })
 
   // Re-generate the active surface after a param change: if a sim overlay owns it,
   // re-run the overlay's surface fetch (with the new params) — _applySurfaceMode would
@@ -774,7 +774,7 @@ export function initAtomSurfaceDisplay({
     showPersistentToast('Computing region surface…')
     try {
       const colorMode = store.getState().surfaceColorMode
-      const mesh = await api.getRegionSurface(segs, { colorMode, signal, suppressBusy: true })
+      const mesh = await api.getRegionSurface(segs, { colorMode, detail: _surfaceDetail, probeRadius: _surfaceProbeRadius, signal, suppressBusy: true })
       if (signal.aborted || revision !== _regionSurfaceRevision) return
       regionSurfaceRenderer.update(mesh, colorMode, 'dna-surface-region')
       regionSurfaceRenderer.applyStrandColors(_getAtomStrandColors())
@@ -830,6 +830,8 @@ export function initAtomSurfaceDisplay({
 
   return {
     applySurfaceMode: _applySurfaceMode,
+    selectSurfaceDetail: _selectSurfaceDetail,
+    refreshSurfaceRegions: () => _applyRegionSurfaceOverlay(store.getState().currentDesign, true),
     applyAtomisticMode: _applyAtomisticMode,
     setCGVisible: _setCGVisible,
     setOverlayMode: _setOverlayMode,

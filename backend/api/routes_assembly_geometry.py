@@ -212,6 +212,7 @@ def get_instance_surface_geometry(
     probe_radius: float = 0.06,
     radius_inflate: float = 1.30,
     smooth: int = 15,
+    detail: str = "coarse",
 ) -> dict:
     """
     Compute and return a triangulated molecular surface for a PartInstance's design.
@@ -226,21 +227,16 @@ def get_instance_surface_geometry(
     GET /api/design/surface.
     """
     import time
-    from backend.core.atomistic import build_atomistic_model
-    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
+    from backend.api.routes_display_geometry import _build_design_surface_mesh
+    from backend.core.surface import surface_to_json
 
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     design = _display_design(_design_with_instance_overrides(inst, _assembly_source_path(assembly)))
-    model = build_atomistic_model(design, include_proteins=True)
     t0 = time.perf_counter()
-    mesh = compute_surface(
-        model.atoms,
-        grid_spacing=grid_spacing,
-        probe_radius=probe_radius,
-        radius_scale=1.2 * radius_inflate,
+    mesh = _build_design_surface_mesh(
+        design, grid_spacing, probe_radius, radius_inflate, smooth, detail
     )
-    mesh = smooth_mesh(mesh, iterations=smooth)
     t_ms = (time.perf_counter() - t0) * 1000.0
     return surface_to_json(mesh, design, color_mode=color_mode, t_ms=t_ms)
 

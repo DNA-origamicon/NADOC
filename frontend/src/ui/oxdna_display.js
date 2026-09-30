@@ -23,6 +23,7 @@
  */
 
 import { expandMdAtomFrame } from '../scene/md_atom_frames_bin.js'
+import { bindSurfaceMotion } from '../scene/surface_motion.js'
 import { cubicCoordinates } from '../scene/trajectory_interpolation.js'
 import { loadProgressiveTrajectory } from '../scene/progressive_trajectory.js'
 import { initTrajectoryPreparationCache } from '../scene/trajectory_preparation_cache.js'
@@ -368,7 +369,7 @@ export function proteinTransformMap(displayResponse) {
  */
 export function repKind(repr) {
   if (repr === 'vdw' || repr === 'ballstick' || repr === 'stick') return 'atomistic'
-  if (repr === 'surface') return 'surface'
+  if (repr === 'surface' || repr === 'surface-detail') return 'surface'
   return 'cg'
 }
 
@@ -494,6 +495,7 @@ export function initOxdnaDisplay({
     const handledByOxdna = getCurrentRepr?.() === 'oxdna' && applyOxdnaFrame?.(updates) === true
     if (!handledByOxdna) designRenderer?.applyFemPositions(updates)
     onFrame?.(updates)
+    if (updates && _heavyActive && _repKind() !== 'cg') onHeavyApplied()
   }
   let _active = false
   let _jobId = null
@@ -618,6 +620,23 @@ export function initOxdnaDisplay({
   let _lastSurfRmsf = null  // number[] | null
 
   function _repKind() { return repKind(getCurrentRepr?.()) }
+
+  let _surfaceSettings = JSON.stringify(getSurfaceParams() || {})
+  const surfaceSettingsKey = () => JSON.stringify(getSurfaceParams() || {})
+  function _syncSurfaceSettings() {
+    const key = surfaceSettingsKey()
+    if (key !== _surfaceSettings) {
+      _surfaceSettings = key
+      _bakedSurf = null
+      _surfaceMotion = null
+      _surfFrameBytes = 0
+      ++_heavyToken
+      ++_prebuildToken
+      for (const memo of _heavyMemo.keys()) if (memo.endsWith('|surface')) _heavyMemo.delete(memo)
+    }
+    return key
+  }
+
 
   /** Active RMSF colour scale: the user's widget range, else the design's full range. */
   function _activeBounds() {
@@ -756,9 +775,10 @@ export function initOxdnaDisplay({
   async function _memoHeavy(kind, produce) {
     if (_heavyMemoJob !== _jobId) { _heavyMemo.clear(); _heavyMemoJob = _jobId }
     const key = `${_align}|${_mode}|${kind}`
+    const surfaceKey = kind === 'surface' ? surfaceSettingsKey() : null
     if (_heavyMemo.has(key)) return _heavyMemo.get(key)
     const v = await produce()
-    if (v) _heavyMemo.set(key, v)   // never cache a null/superseded result
+    if (v && (kind !== 'surface' || surfaceKey === surfaceSettingsKey())) _heavyMemo.set(key, v)   // never cache a null/superseded result
     return v
   }
 
@@ -786,6 +806,7 @@ export function initOxdnaDisplay({
   const _interpolationAtoms = new Map()
   let _interpolationRequest = 0
   let _interpolationPair = null, _interpolationCg = null
+  let _surfaceMotion = null
   async function _pushAtomistic(arr, epoch, live, colorByKey = null) {
     const ar = getAtomisticRenderer?.()
     // arr may be a plain Array (legacy flat route) OR a Float32Array (fast stamp
@@ -891,6 +912,7 @@ export function initOxdnaDisplay({
    *  (cheap — just the index list; frames are fetched lazily on visit). Returns the
    *  bake object {grid:[idx…], byIdx:Map<idx,data>} or null. */
   function _ensureGrid(kind) {
+    if (kind === 'surface') _syncSurfaceSettings()
     const n = _traj?.n_frames || _traj?.frames?.length || 0
     if (n <= 0) return null
     if (kind === 'atomistic') {
@@ -1002,6 +1024,7 @@ export function initOxdnaDisplay({
   const _bakeFor = (kind) => (kind === 'atomistic' ? _bakedAtom : _bakedSurf)
 
   async function _coarseFrames(kind, gridIdxs, epoch) {
+    const surfaceKey = kind === 'surface' ? _syncSurfaceSettings() : null
     if (!gridIdxs.some((g) => !_bakeFor(kind)?.byIdx.has(g))) return
     return _queueFrameFetch(async () => {
       // Re-read the bake and re-filter INSIDE the queue. Both can move while we wait: the
@@ -1009,15 +1032,15 @@ export function initOxdnaDisplay({
       // round trip), and a re-grid may have REPLACED the bake object entirely — writing
       // results into the one captured on entry would drop them into an orphan.
       const bake = _bakeFor(kind)
-      if (!bake || epoch !== _epoch) return
+      if (!bake || epoch !== _epoch || (kind === 'surface' && surfaceKey !== surfaceSettingsKey())) return
       const want = gridIdxs.filter((g) => !bake.byIdx.has(g))
       if (!want.length) return
       // _trajStride is repeated on every heavy fetch for the same reason _trajScope is:
       // a composite frame index only addresses the same frame within one interval.
       const resp = kind === 'atomistic'
         ? await api.getOxdnaFramesAtomistic(_jobId, want.map(sourceFrame), _align, _trajScope, _trajStride)
-        : await api.getOxdnaFramesSurface(_jobId, want.map(sourceFrame), { stride: _trajStride }, _align, _trajScope)
-      if (epoch !== _epoch) return
+        : await api.getOxdnaFramesSurface(_jobId, want.map(sourceFrame), { ...getSurfaceParams(), stride: _trajStride }, _align, _trajScope)
+      if (epoch !== _epoch || (kind === 'surface' && surfaceKey !== surfaceSettingsKey())) return
       let first = null
       for (const g of want) {
         const data = resp?.[String(sourceFrame(g))]
@@ -1047,7 +1070,13 @@ export function initOxdnaDisplay({
    *  must hit a cached grid cell), and turning it off cancels an in-flight prebuild. */
   function setPlaying(on) {
     _playing = !!on
-    if (!on) _prebuildToken++   // stop prebuildHeavy if it's still grinding
+    if (!on) {
+      ++_interpolationRequest
+      _prebuildToken++
+      const hadMotion = !!_surfaceMotion
+      _surfaceMotion = null
+      if (hadMotion && _active && _mode === 'trajectory') void _applyHeavy({exact:true})
+    }
   }
 
   /** Pre-build EVERY coarse playback frame for the active heavy rep so the play loop
@@ -1055,8 +1084,18 @@ export function initOxdnaDisplay({
    *  are instant). Reports progress via onProgress(done, total). The first cell is built
    *  alone (warms the server-side alignment cache), then the rest a few at a time so a
    *  dozen all-atom rebuilds overlap. Returns {ok, n}; ok=false if cancelled. */
-  async function prebuildHeavy(onProgress, { budgetBytes = null } = {}) {
+  async function prebuildHeavy(onProgress, { budgetBytes = null, smoothSurface = false } = {}) {
     if (_mode !== 'trajectory') return { ok: true, n: 0 }
+    if (smoothSurface && _repKind() === 'surface') {
+      const start = _frameIdx + (_traj?.frame_start ?? 0)
+      const end = Math.min(start + 1, (_traj?.frame_start ?? 0) + (_traj?.n_frames ?? 1) - 1)
+      onProgress?.(0, 1)
+      const ok = await ensureInterpolationFrames(start, end)
+      onProgress?.(ok ? 1 : 0, 1)
+      return {ok, n: ok ? 1 : 0}
+    }
+    _surfaceMotion = null // Ordinary saved-frame playback must not reuse a smooth binding.
+    if (_repKind() === 'surface') _syncSurfaceSettings()
     // The caller may narrow the budget to what THIS machine can spare (it is the one
     // that talks to the user about it); the built-in constant is the fallback ceiling.
     //
@@ -1174,6 +1213,13 @@ export function initOxdnaDisplay({
     if (!_active || !_jobId) return
     const kind = _repKind()
     if (kind === 'cg') return
+    if (kind === 'surface') {
+      _syncSurfaceSettings()
+      if (_playing && _surfaceMotion && !exact) {
+        _paintSurfaceMotion(_traj?.frames[_frameIdx])
+        return
+      }
+    }
     // Keep the capability guard explicit: an engine/mode added without its matching
     // heavy endpoint must never silently leave the design's equilibrium atoms on screen.
     if (!_canDeliverHeavy(kind)) {
@@ -1186,7 +1232,7 @@ export function initOxdnaDisplay({
     const live = () => epoch === _epoch && token === _heavyToken
     // During playback, force coarse even if the dropdown says fine — a fine rebuild per
     // tick (~seconds each) would stall the loop; play steps the pre-built coarse frames.
-    const useFine = !!_stream || (_granularity === 'fine' && !_playing)
+    const useFine = exact || !!_stream || (_granularity === 'fine' && !_playing)
     // Skip the spinner only when the payload is already in hand (instant): a cached
     // trajectory grid cell, or a memoised relaxed/RMSF payload.
     let busy = true
@@ -1246,7 +1292,7 @@ export function initOxdnaDisplay({
           }
         } else {
           const r = await _memoHeavy(kind,
-            () => api.getOxdnaRmsfSurface(_jobId, {}, { align: _align, signal, onProgress }))
+            () => api.getOxdnaRmsfSurface(_jobId, getSurfaceParams(), { align: _align, signal, onProgress }))
           if (live() && strict && !r?.ready) throw new Error(r?.reason || 'Could not load average surface')
           if (live() && r?.ready) {
             onProgress({ phase: 'display', done: 0, total: 1 })
@@ -1280,7 +1326,7 @@ export function initOxdnaDisplay({
             if (live()) await _pushAtomistic(r?.[String(sourceFrame(idx))], epoch, live)
           } else {
             const r = await _queueFrameFetch(() => live()
-              ? api.getOxdnaFramesSurface(_jobId, [sourceFrame(idx)], { stride: _trajStride }, _align, _trajScope) : null)
+              ? api.getOxdnaFramesSurface(_jobId, [sourceFrame(idx)], { ...getSurfaceParams(), stride: _trajStride }, _align, _trajScope) : null)
             if (live()) _pushSurface(r?.[String(sourceFrame(idx))])
           }
         } else {
@@ -1866,7 +1912,7 @@ export function initOxdnaDisplay({
     return { atom: _bakedAtom, surface: _bakedSurf, topology: _pendingTopoModel,
       topologyJob: _pendingTopoJob, bonds: _atomTopoBonds, stamp: _stampDesc,
       stampJob: _stampDescJob, serials: _atomSerials, surfaceBytes: _surfFrameBytes,
-      budget: _atomBudget }
+      budget: _atomBudget, surfaceSettings: _surfaceSettings }
   }
 
   function adoptTrajectoryPreparation(jobId, spec) {
@@ -1878,6 +1924,7 @@ export function initOxdnaDisplay({
       _stampDesc = prepared.stamp; _stampDescJob = prepared.stampJob
       _atomSerials = prepared.serials; _surfFrameBytes = prepared.surfaceBytes
       _atomBudget = prepared.budget
+      _surfaceSettings = prepared.surfaceSettings
     }
   }
 
@@ -1885,7 +1932,7 @@ export function initOxdnaDisplay({
     jobId, align = true, scope = 'lineage', stride = undefined, onProgress = null, range = {},
   ) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
-    _interpolationAtoms.clear(); _interpolationPair = null; _interpolationCg = null
+    _interpolationAtoms.clear(); _interpolationPair = null; _interpolationCg = null; _surfaceMotion = null
     const epoch = ++_epoch
     const signal = _beginLoad()
     _stream = null
@@ -1967,12 +2014,12 @@ export function initOxdnaDisplay({
     if (heavy) _applyHeavy()   // atomistic/surface follow the scrub (coarse=snap, fine=exact)
   }
 
-  async function ensureTrajectoryFrame(index, { latest = false } = {}) {
+  async function ensureTrajectoryFrame(index, { latest = false, heavy = true } = {}) {
     if (!_stream) return true
     const stream = _stream
     if (!await (latest ? stream.seek(index) : stream.ensure(index)) || stream !== _stream) return false
     const kind = _repKind()
-    if (kind !== 'cg' && !_bakeFor(kind)?.byIdx.has(index)) {
+    if (heavy && kind !== 'cg' && !(kind === 'surface' && _surfaceMotion) && !_bakeFor(kind)?.byIdx.has(index)) {
       if (kind === 'atomistic') await _ensureJobAtomistic(getAtomisticRenderer?.(), _epoch)
       _ensureGrid(kind)
       await _coarseFrames(kind, [index], _epoch)
@@ -1989,7 +2036,19 @@ export function initOxdnaDisplay({
     const frames = [...new Set([from, to, before == null ? null : before - offset,
       after == null ? null : after - offset].filter(i => i != null))]
     for (const index of frames) {
-      if (!await ensureTrajectoryFrame(index) || !live()) return false
+      if (!await ensureTrajectoryFrame(index, {heavy: _repKind() !== 'surface'}) || !live()) return false
+    }
+    if (_repKind() === 'surface') {
+      const settings = _syncSurfaceSettings()
+      if (!_surfaceMotion) {
+        _ensureGrid('surface')
+        await _coarseFrames('surface', [from], epoch)
+        if (!live() || _repKind() !== 'surface' || settings !== surfaceSettingsKey()) return false
+        const mesh = _bakedSurf?.byIdx.get(from)
+        if (!mesh) return false
+        _surfaceMotion = bindSurfaceMotion(mesh, _traj.keys, _traj.frames[from])
+      }
+      return !!_surfaceMotion
     }
     if (_repKind() !== 'atomistic') return true
     if (!await _ensureJobAtomistic(getAtomisticRenderer?.(), epoch)) {
@@ -2024,6 +2083,18 @@ export function initOxdnaDisplay({
     return true
   }
 
+  function _paintSurfaceMotion(frame) {
+    if (!frame || !_surfaceMotion) return
+    const sr = getSurfaceRenderer?.()
+    if (!sr || sr.getMode?.() === 'off') return
+    const vertices = _surfaceMotion.deform(frame)
+    if (!vertices) return
+    ++_heavyToken
+    sr.applyDeformedFrame?.(_surfaceMotion.mesh, vertices)
+    _heavyActive = true
+    onHeavyApplied()
+  }
+
   function showInterpolatedFrame(from, to, t, { before = null, after = null } = {}) {
     if (!_playing || _mode !== 'trajectory' || !_traj) return
     const offset = _traj.frame_start ?? 0
@@ -2035,7 +2106,10 @@ export function initOxdnaDisplay({
     _interpolationCg = cubicCoordinates(_traj.frames[before], a, b, _traj.frames[after], t, _interpolationCg)
     nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, _interpolationCg)
     _applyFem(framesToUpdates(_traj.keys, _interpolationCg))
-    // Surfaces have changing mesh topology and stay on the saved frame.
+    if (_repKind() === 'surface') {
+      _paintSurfaceMotion(_interpolationCg)
+      return
+    }
     if (_repKind() !== 'atomistic') return
     const aa = _interpolationAtoms.get(from), bb = _interpolationAtoms.get(to)
     if (aa?.epoch !== _epoch || bb?.epoch !== _epoch) return
@@ -2074,6 +2148,7 @@ export function initOxdnaDisplay({
    *  changed (the new atomistic/surface mesh is built from the design — overlay it
    *  with the active oxDNA frame). No-op when nothing is displayed. */
   function reapplyForRepr(options = {}) {
+    if (_repKind() !== 'surface') _surfaceMotion = null
     if (!_active) return
     if (_mode === 'photoproduct') {
       const map = photoproductColorMap(_photoproductResp, 0, 1, _photoproductCmap)
@@ -2116,7 +2191,7 @@ export function initOxdnaDisplay({
 
   /** Clear the overlay (positions + colours) and restore the design. */
   function stopAndRestore() {
-    _interpolationAtoms.clear(); _interpolationPair = null; _interpolationCg = null
+    _interpolationAtoms.clear(); _interpolationPair = null; _interpolationCg = null; _surfaceMotion = null
     trajectoryDownloads.clear()
     _stream = null
     _traj = null
@@ -2184,7 +2259,7 @@ export function initOxdnaDisplay({
     retainTrajectoryDownloads: requests => trajectoryDownloads.retain(requests),
     showFrame: i => showFrame(i - (_traj?.frame_start ?? 0)),
     ensureInterpolationFrames, showInterpolatedFrame,
-    trajectoryPreparationKey: () => `${_epoch}|${getCurrentRepr?.()}`,
+    trajectoryPreparationKey: () => `${_epoch}|${getCurrentRepr?.()}|${surfaceSettingsKey()}`,
     async showFrameForExport(i) {
       if (_mode !== 'trajectory' || !_traj) throw new Error('Load a trajectory before preparing a clip')
       const index = i - (_traj.frame_start ?? 0)

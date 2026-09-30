@@ -992,6 +992,7 @@ class MdFramesAtomisticBody(BaseModel):
 
 
 class MdFramesSurfaceBody(BaseModel):
+    detail: str = "coarse"
     frame_indices: list[int]
     probe_radius: float = 0.06
     grid_spacing: float = 0.20
@@ -1214,6 +1215,7 @@ async def md_frames_surface_route(
             body.smooth,
             200,
             _traj_stride(body.stride),
+            body.detail,
         ),
     )
 

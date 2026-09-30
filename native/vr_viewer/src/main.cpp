@@ -3661,12 +3661,12 @@ class GlScene {
     }
 
     GLsizei boxDrawCount() const {
-        if (representation_ == Representation::surface || representation_ == Representation::hull || representation_ == Representation::cylinders) return 3;
+        if (representation_ == Representation::surface || representation_ == Representation::surfaceDetail || representation_ == Representation::hull || representation_ == Representation::cylinders) return 3;
         if (representation_ == Representation::oxdna) return nadoc_vr::ellipsoidIndexCount;
         return boxIndexCount_;
     }
     const void* boxDrawOffset() const {
-        const size_t offset = representation_ == Representation::surface || representation_ == Representation::hull || representation_ == Representation::cylinders
+        const size_t offset = representation_ == Representation::surface || representation_ == Representation::surfaceDetail || representation_ == Representation::hull || representation_ == Representation::cylinders
             ? nadoc_vr::triangleIndexOffset : representation_ == Representation::oxdna ? nadoc_vr::ellipsoidIndexOffset : 0;
         return reinterpret_cast<void*>(offset*sizeof(GLushort));
     }

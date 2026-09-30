@@ -13,13 +13,14 @@ const REPRESENTATIONS = [
   ['Cylinders', 'menu-view-detail-cylinders'],
   ['Beads', 'menu-view-detail-beads'],
   ['Full', 'menu-view-detail-full'],
-  ['Surface', 'menu-view-surface'],
   ['VDW / Space-fill', 'menu-view-atomistic-vdw'],
   ['Ball & Stick', 'menu-view-atomistic-ballstick'],
   ['Stick', 'menu-view-atomistic-stick'],
   ['mrDNA Coarse', 'menu-view-mrdna-coarse'],
   ['mrDNA Fine', 'menu-view-mrdna-fine'],
   ['oxDNA', 'menu-view-oxdna'],
+  ['Quick Surface', 'menu-view-surface'],
+  ['Detail Surface', 'menu-view-surface-detail'],
 ]
 
 function makeSection(document, id, title, body) {

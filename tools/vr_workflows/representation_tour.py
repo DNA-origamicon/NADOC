@@ -33,6 +33,7 @@ REPS = {
     "vdw": "menu-view-atomistic-vdw",
     "hull-prism": "menu-view-hull-prism",
     "surface": "menu-view-surface",
+    "surface-detail": "menu-view-surface-detail",
     "mrdna-coarse": "menu-view-mrdna-coarse",
     "mrdna-fine": "menu-view-mrdna-fine",
     "oxdna": "menu-view-oxdna",

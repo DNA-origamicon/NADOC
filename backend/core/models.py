@@ -3690,6 +3690,7 @@ class PartInstance(BaseModel):
         "stick",
         "hull-prism",
         "surface",
+        "surface-detail",
     ] = "full"
     fixed: bool = False  # anchored in assembly; not moved by joint constraint solving
     allow_part_joints: bool = (
@@ -4145,6 +4146,7 @@ class Assembly(BaseModel):
         "stick",
         "hull-prism",
         "surface",
+        "surface-detail",
     ] = "full"
 
     def to_dict(self) -> dict:

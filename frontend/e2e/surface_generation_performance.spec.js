@@ -58,9 +58,7 @@ test('standard and beautiful surfaces preserve every binary byte through the rea
     const response = page.waitForResponse(r => r.url().includes('/api/design/surface-bin?') && r.url().includes(`detail=${detail}`) && r.status() === 200)
     if (!results.length) await page.evaluate(() => window.__nadocTest.setRepresentation('surface'))
     else await page.evaluate(detail => {
-      const cb = document.getElementById('cb-surface-figure-quality')
-      cb.checked = detail === 'chimerax'
-      cb.dispatchEvent(new Event('change', { bubbles: true }))
+      document.getElementById(detail === 'chimerax' ? 'menu-view-surface-detail' : 'menu-view-surface').click()
     }, detail)
     const bytes = await (await response).body()
     expect(bytes.equals(Buffer.from(fixture.surfaces[detail], 'base64'))).toBe(true)

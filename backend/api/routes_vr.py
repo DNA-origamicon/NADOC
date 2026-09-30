@@ -130,7 +130,7 @@ class VRLaunchRequest(BaseModel):
     camera: Optional[VRCamera] = None
     measured_positioning: bool = True
     assembly_active: bool = False
-    representation: Literal["cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"] = "full"
+    representation: Literal["cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     show_periodic_seam_arcs: bool = False
     # Developer-only opt-in. Paths are server-generated, never client supplied.
@@ -175,7 +175,7 @@ class VRJobsFeedbackRequest(BaseModel):
     active_job_engine: Optional[str] = Field(
         default=None, max_length=24, pattern=r"^[a-z0-9_-]+$"
     )
-    representation: Literal["cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"] = "full"
+    representation: Literal["cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     visualization_mode: str = Field(
         default="none", min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$"
@@ -186,7 +186,7 @@ class VRJobsFeedbackRequest(BaseModel):
 
 
 class VRVisualizationFeedbackRequest(BaseModel):
-    representation: Literal["cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"] = "full"
+    representation: Literal["cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     visualization_mode: str = Field(
         default="none", min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$"
@@ -767,7 +767,7 @@ def _serialize_scene(
         return color * 4
 
     primitive_ids: dict[str, set[str]] = {
-        name: set() for name in ("full", "cylinders", "ballstick", "stick", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna")
+        name: set() for name in ("full", "cylinders", "ballstick", "stick", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna")
     }
     active_representation = "full"
 
@@ -2613,7 +2613,7 @@ def _snapshot(
 
     from backend.core.vr_representation_geometry import build as build_extra_geometry
     progress(40, "Building display geometry")
-    extras = {"cylinders", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"}
+    extras = {"cylinders", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna"}
     extra_geometry = (build_extra_geometry(design, nucleotides, axes) if representations is None
                       else build_extra_geometry(design, nucleotides, axes, representations=set(representations))
                       if set(representations) & extras else None)
@@ -3312,7 +3312,7 @@ def _event_payload(state: dict | None) -> dict:
             )
             or selection_level
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
-            or representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"}
+            or representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna"}
             or coloring not in {"strand", "base", "cluster", "cpk"}
             or tool_mode not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
             or tool_action not in {"activate", "preview", "confirm", "cancel", "undo"}
@@ -4019,7 +4019,7 @@ def _visualization_snapshot_record(
     rotation = np.asarray(view_rotation, dtype=float)
     if rotation.shape != (3, 3) or not np.all(np.isfinite(rotation)):
         raise ValueError("Invalid VR visualization view rotation.")
-    if representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"} or coloring not in {
+    if representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna"} or coloring not in {
         "strand", "base", "cluster", "cpk",
     }:
         raise ValueError("Invalid VR visualization style.")
@@ -4289,7 +4289,7 @@ def _job_snapshot_record(
             row.engine == active_job_engine and row.job_id == active_job_id
             for row in rows
         ))
-        or representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "mrdna-coarse", "mrdna-fine", "oxdna"}
+        or representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna"}
         or coloring not in {"strand", "base", "cluster", "cpk"}
     ):
         raise ValueError("Invalid VR job feed availability or total.")

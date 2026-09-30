@@ -639,7 +639,7 @@ export function initAssemblyRenderer(scene, store, api) {
       entry.atomisticRenderer.dispose()
       entry.atomisticRenderer = null
     }
-    if (repr !== 'surface' && entry.surfaceRenderer) {
+    if (!['surface', 'surface-detail'].includes(repr) && entry.surfaceRenderer) {
       entry.surfaceRenderer.dispose()
       entry.surfaceRenderer = null
     }
@@ -685,10 +685,10 @@ export function initAssemblyRenderer(scene, store, api) {
       _disposeHullGroups(entry)
       entry.hullGroups = _buildHullGroupsForDesign(entry.design, entry.helixAxes, entry.group)
 
-    } else if (repr === 'surface') {
+    } else if (repr === 'surface' || repr === 'surface-detail') {
       let surfaceData
       try {
-        surfaceData = await api.getInstanceSurfaceGeometry(instId)
+        surfaceData = await api.getInstanceSurfaceGeometry(instId, 'strand', 0.06, 0.20, repr === 'surface-detail' ? 'chimerax' : 'coarse')
       } catch (err) {
         console.warn(`[assembly_renderer] surface geometry fetch failed for ${instId}:`, err)
         return

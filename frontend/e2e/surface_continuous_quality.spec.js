@@ -36,6 +36,7 @@ test('figure quality uses measured progress and opaque defaults', async ({ page 
   test.setTimeout(180000)
   const errors = [], snapshots = [], pendingSnapshots = []
   let bytes = null, progressId = null
+  const requestedDetails = []
   page.on('pageerror', e => errors.push(e.message))
   page.on('console', m => { if (m.type() === 'error' && /WebGL|shader/i.test(m.text())) errors.push(m.text()) })
   page.on('response', response => {
@@ -44,6 +45,7 @@ test('figure quality uses measured progress and opaque defaults', async ({ page 
     }
   })
   await page.route('**/api/design/surface-bin?*', async route => {
+    requestedDetails.push(new URL(route.request().url()).searchParams.get('detail'))
     progressId = route.request().headers()['x-nadoc-surface-progress']
     const response = await route.fetch({ timeout: 120000 })
     bytes = await response.body()
@@ -57,18 +59,25 @@ test('figure quality uses measured progress and opaque defaults', async ({ page 
     const api = await import('/src/api/client.js')
     await api.importDesign(content)
     document.getElementById('welcome-screen')?.classList.add('hidden')
-    const cb = document.getElementById('cb-surface-figure-quality')
-    cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true }))
+    document.getElementById('right-tab-strip')?.classList.remove('locked-inactive')
+    document.getElementById('right-panel')?.classList.remove('locked-inactive', 'hidden')
   }, fixture)
   await expect(page.locator('#sl-surface-probe')).toHaveValue('0.06')
   await expect(page.locator('#sl-surface-opacity')).toHaveJSProperty('valueAsNumber', 1)
   await expect(page.locator('#cb-surface-remesh')).toHaveCount(0)
   const response = page.waitForResponse(r => r.url().includes('/api/design/surface-bin?') && r.status() === 200)
-  await page.evaluate(() => { void window.__nadocTest.setRepresentation('surface') })
+  await page.locator('.right-tab-btn[data-tab="visualization"]').click()
+  const surfaces = page.locator('#right-representation-modes .right-repr-btn').filter({ hasText: /^(Quick|Detail) Surface$/ })
+  await expect(surfaces).toHaveCount(2)
+  const boxes = await surfaces.evaluateAll(buttons => buttons.map(b => b.getBoundingClientRect().toJSON()))
+  expect(boxes[0].y).toBe(boxes[1].y)
+  await page.locator('#right-representation-modes [data-target="menu-view-surface-detail"]').click()
   await expect(page.locator('#op-progress')).toHaveClass(/visible/)
   await expect(page.locator('#op-progress-header')).toHaveText('Computing surface…')
   await response
   expect(progressId).toBeTruthy()
+  expect(requestedDetails).toEqual(['chimerax'])
+  await expect(page.locator('#cb-surface-figure-quality')).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => {
     const m = window.__nadocTest.scene.getObjectByName('dna-surface')
     return m?.visible ? (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3 : 0

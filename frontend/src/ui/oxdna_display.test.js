@@ -786,7 +786,8 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     const atom = { getMode: () => (state.repr === 'vdw' ? 'vdw' : 'ballstick'), applyPositionLerp: vi.fn(), update: vi.fn(),
                    applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     const surf = { getMode: () => (state.repr === 'surface' ? 'on' : 'off'), applyPositionLerp: vi.fn(),
-                   applyScalarVertexColors: vi.fn() }
+                   applyScalarVertexColors: vi.fn(), applyDeformedFrame: vi.fn() }
+    const onHeavyApplied = vi.fn(), setDesignVisible = vi.fn()
     const onRestoreDesignHeavy = vi.fn()
     const onHeavyStatus = vi.fn()
     const onRmsfProgress = vi.fn()
@@ -809,12 +810,54 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
         Promise.resolve(Object.fromEntries(idxs.map((i) => [String(i), { vertices: [i, i, i], faces: [0, 1, 2] }])))),
     }
     const ctrl = initOxdnaDisplay({
-      designRenderer, api, atom, surf, onRestoreDesignHeavy, onHeavyStatus, onRmsfProgress,
+      designRenderer, api, atom, surf, onHeavyApplied, setDesignVisible, onRestoreDesignHeavy, onHeavyStatus, onRmsfProgress,
       getAtomisticRenderer: () => atom, getSurfaceRenderer: () => surf,
       getCurrentRepr: () => state.repr,
+      getSurfaceParams: () => state.surface ?? {},
     })
-    return { ctrl, api, atom, surf, designRenderer, onRestoreDesignHeavy, onHeavyStatus, onRmsfProgress, state }
+    return { ctrl, api, atom, surf, designRenderer, onHeavyApplied, setDesignVisible, onRestoreDesignHeavy, onHeavyStatus, onRmsfProgress, state }
   }
+
+  it('prepares only one surface for smooth playback instead of the entire mesh trajectory', async () => {
+    const {ctrl,api} = makeHeavyDeps('surface')
+    await ctrl.loadTrajectory('job')
+    await ctrl.reapplyForRepr({exact:true})
+    api.getOxdnaFramesSurface.mockClear()
+    const prepared=await ctrl.prebuildHeavy(null,{smoothSurface:true})
+    expect(prepared).toEqual({ok:true,n:1})
+    expect(api.getOxdnaFramesSurface).not.toHaveBeenCalled()
+    await ctrl.prebuildHeavy(null,{smoothSurface:false})
+    ctrl.setPlaying(true)
+    ctrl.showFrame(2)
+    await ctrl.reapplyForRepr()
+    ctrl.setPlaying(false)
+    expect(api.getOxdnaFramesSurface).toHaveBeenCalled()
+  })
+
+  it('animates only the selected surface, retains its topology, and restores exact paused frames', async () => {
+    const {ctrl,surf,api,onHeavyApplied,setDesignVisible,state} = makeHeavyDeps('surface')
+    await ctrl.loadTrajectory('job')
+    await ctrl.reapplyForRepr({exact:true})
+    expect(await ctrl.ensureInterpolationFrames(0,1)).toBe(true)
+    ctrl.setPlaying(true)
+    const requests = api.getOxdnaFramesSurface.mock.calls.length
+    ctrl.showInterpolatedFrame(0,1,.5)
+    expect(surf.applyDeformedFrame).toHaveBeenCalled()
+    expect(surf.applyDeformedFrame.mock.lastCall[1][0]).toBeCloseTo(.5)
+    expect(onHeavyApplied.mock.invocationCallOrder.at(-1)).toBeGreaterThan(setDesignVisible.mock.invocationCallOrder.at(-1))
+    ctrl.showFrame(1)
+    await ctrl.ensureInterpolationFrames(1,2)
+    ctrl.showInterpolatedFrame(1,2,.5)
+    expect(surf.applyDeformedFrame.mock.lastCall[1][0]).toBeCloseTo(1.5)
+    expect(api.getOxdnaFramesSurface.mock.calls.length).toBe(requests)
+    ctrl.setPlaying(false)
+    await ctrl.reapplyForRepr({exact:true})
+    expect(surf.applyPositionLerp.mock.lastCall[0].vertices).toEqual([1,1,1])
+    state.surface = {detail:'chimerax'}
+    await ctrl.reapplyForRepr({exact:true})
+    expect(await ctrl.ensureInterpolationFrames(1,2)).toBe(true)
+    expect(api.getOxdnaFramesSurface.mock.lastCall[2].detail).toBe('chimerax')
+  })
 
   it('uses the averaged atom model without a second topology request and finishes after drawing', async () => {
     const { ctrl, api, atom, onRmsfProgress } = makeHeavyDeps('vdw')
@@ -1166,6 +1209,27 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(flags).toContain(true)                        // announced while rebuilding the avg structure
     expect(flags[flags.length - 1]).toBe(false)          // cleared when done (no frozen panel)
     expect(onHeavyStatus.mock.calls.some((c) => c[0].mode === 'rmsf')).toBe(true)
+  })
+
+  it('keys trajectory meshes and preparation by surface quality, including exact seeks', async () => {
+    const { ctrl, api, surf, state } = makeHeavyDeps('surface')
+    state.surface = { detail: 'coarse', probe_radius: .06 }
+    await ctrl.loadTrajectory('jobT'); await tick()
+    expect(api.getOxdnaFramesSurface.mock.calls.at(-1)[2]).toMatchObject(state.surface)
+    const quickKey = ctrl.trajectoryPreparationKey()
+    api.getOxdnaFramesSurface.mockClear()
+    state.surface = { detail: 'chimerax', probe_radius: .12 }
+    await ctrl.reapplyForRepr()
+    expect(ctrl.trajectoryPreparationKey()).not.toBe(quickKey)
+    expect(api.getOxdnaFramesSurface).toHaveBeenCalledTimes(1)
+    expect(api.getOxdnaFramesSurface.mock.calls[0][2]).toMatchObject(state.surface)
+    api.getOxdnaFramesSurface.mockClear()
+    await ctrl.reapplyForRepr()
+    expect(api.getOxdnaFramesSurface).not.toHaveBeenCalled()
+    state.surface = { detail: 'coarse', probe_radius: .06 }
+    await ctrl.reapplyForRepr({ exact: true })
+    expect(api.getOxdnaFramesSurface.mock.calls[0][2]).toMatchObject(state.surface)
+    expect(surf.applyPositionLerp).toHaveBeenCalled()
   })
 
   it('coarse trajectory fetches grid cells LAZILY (one frame per visit), never a big upfront batch, and caches revisits', async () => {

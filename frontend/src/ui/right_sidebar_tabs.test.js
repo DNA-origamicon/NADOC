@@ -158,4 +158,13 @@ describe('right sidebar tabs', () => {
     expect(document.querySelectorAll('#right-representation-modes')).toHaveLength(1)
   })
 
+  it('puts quick and detail surfaces together on the final representation row', () => {
+    initRightSidebarTabs({ document, storage: null })
+    const buttons = [...document.querySelectorAll('#right-representation-modes button')]
+    expect(buttons).toHaveLength(12)
+    expect(buttons.slice(-2).map(button => [button.textContent, button.dataset.target])).toEqual([
+      ['Quick Surface', 'menu-view-surface'], ['Detail Surface', 'menu-view-surface-detail'],
+    ])
+  })
+
 })

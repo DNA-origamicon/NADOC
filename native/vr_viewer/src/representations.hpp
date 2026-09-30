@@ -4,11 +4,11 @@
 
 enum class Representation : size_t {
     cylinders, full, ballstick, stick, beads, vdw, hull, surface,
-    mrdnaCoarse, mrdnaFine, oxdna
+    mrdnaCoarse, mrdnaFine, oxdna, surfaceDetail
 };
-inline constexpr std::array<std::string_view, 11> kRepresentationNames{
+inline constexpr std::array<std::string_view, 12> kRepresentationNames{
     "cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism",
-    "surface", "mrdna-coarse", "mrdna-fine", "oxdna"};
+    "surface", "mrdna-coarse", "mrdna-fine", "oxdna", "surface-detail"};
 inline constexpr size_t kRepresentationCount = kRepresentationNames.size();
 // Display variants share immutable semantic geometry and ownership indexes.
 inline size_t representationSourceIndex(Representation rep) {

@@ -28,7 +28,7 @@ const ascii = s => clean(s).replace(/σ/g,'sigma').replace(/η/g,'eta').replace(
 const supported = {
   'dimensions-record': 'dimension:new', 'dimensions-clear': 'dimension:clear',
   'menu-view-detail-beads': 'repr:4', 'menu-view-atomistic-vdw': 'repr:5',
-  'menu-view-hull-prism': 'repr:6', 'menu-view-surface': 'repr:7',
+  'menu-view-hull-prism': 'repr:6', 'menu-view-surface': 'repr:7', 'menu-view-surface-detail': 'repr:11',
   'menu-view-mrdna-coarse': 'repr:8', 'menu-view-mrdna-fine': 'repr:9', 'menu-view-oxdna': 'repr:10',
   'menu-view-detail-cylinders': 'repr:0', 'menu-view-detail-full': 'repr:1',
   'menu-view-atomistic-ballstick': 'repr:2', 'menu-view-atomistic-stick': 'repr:3',

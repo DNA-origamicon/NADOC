@@ -2866,7 +2866,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     loadProgressEl: trajLoadProgress,
     prevBtn: trajPrev, nextBtn: trajNext,
     interpolationToggle: document.getElementById('md-jobs-traj-interpolate'),
-    preparationKey: () => `${getCurrentRepr?.()}|${solvent?.preparationKey()}`,
+    preparationKey: () => `${getMdViz?.()?.trajectoryPreparationKey?.() ?? getCurrentRepr?.()}|${solvent?.preparationKey()}`,
     onBeforeInterpolate: async (from, to, neighbors) => {
       if (await getMdViz?.()?.ensureInterpolationFrames?.(from, to, neighbors) === false) return false
       for (const i of [from, to, neighbors?.before, neighbors?.after].filter(i => i != null)) {
@@ -3319,7 +3319,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _setTrajStatus(`${baseStatus} · preparing atoms ${done}/${total}…`, _C.accent)
       trajPlayer.setPreparing({ done, total })   // same count, on the button's tooltip
       _showTrajLoadProgress({ phase: 'atoms', done, total, label: 'Prepare visible trajectory frames' })
-    }, { budgetBytes: plan?.budgetBytes ?? null }).catch(() => null)
+    }, { budgetBytes: plan?.budgetBytes ?? null,
+      smoothSurface: !!document.getElementById('md-jobs-traj-interpolate')?.checked }).catch(() => null)
     if (!r || r.ok === false) { _setTrajStatus(`${baseStatus} · playback preparation failed`, _C.warn); return false }
     if (!r.n) { _setTrajStatus(`${baseStatus} · ready to play`, _C.ok); return true }
     // Say plainly when memory forced a coarser set than the slider has — and WHICH limit

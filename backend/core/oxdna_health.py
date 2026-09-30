@@ -4142,26 +4142,11 @@ def frame_surface_json(
         # skip the phosphate-linker closure (close_backbone=False) to shave the build.
         model = build_display_model(design, frame, close_backbone=False)
         if detail in {"chimerax", "continuous", "remeshed"}:
-            # Figure-quality SES: fine 0.5 Å grid + adjustable probe + true VdW.
-            from backend.core.surface import (
-                CHIMERAX_GRID_SPACING,
-                CHIMERAX_RADIUS_SCALE,
-                CHIMERAX_SMOOTH,
-            )
+            from backend.core.surface import figure_surface_from_atoms
 
-            gs = CHIMERAX_GRID_SPACING
-            mesh = compute_surface(
-                model.atoms,
-                grid_spacing=gs,
-                probe_radius=probe_radius,
-                radius_scale=CHIMERAX_RADIUS_SCALE,
-                continuous_field=True,
+            mesh = figure_surface_from_atoms(
+                model.atoms, probe_radius, local_remesh=detail != "continuous"
             )
-            mesh = smooth_mesh(mesh, iterations=CHIMERAX_SMOOTH)
-            if detail != "continuous":
-                from backend.core.surface_remesh import remesh_sharp_patches
-
-                mesh = remesh_sharp_patches(mesh)
         else:
             gs = adaptive_grid_spacing(model.atoms, grid_spacing)
             mesh = compute_surface(
@@ -4386,6 +4371,7 @@ def composite_trajectory_surface(
     align: bool = True,
     n_trailing_extra: int = 0,
     trailing_extra_strand_length: int = 0,
+    detail: str = "coarse",
 ) -> dict:
     """Per-frame molecular surface for the requested composite-frame indices.
     Returns ``{ "<idx>": {vertices, faces, vertex_colors?} }`` — the SAME wire
@@ -4417,6 +4403,7 @@ def composite_trajectory_surface(
         round(grid_spacing, 4),
         round(radius_inflate, 4),
         int(smooth),
+        detail,
     )
     out: dict[str, dict] = {}
     for idx in wanted:
@@ -4433,6 +4420,7 @@ def composite_trajectory_surface(
                 grid_spacing,
                 radius_inflate,
                 smooth,
+                detail=detail,
             )
             _display_out_put(ck, payload)
         out[str(idx)] = payload

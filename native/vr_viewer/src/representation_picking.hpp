@@ -6,7 +6,7 @@
 namespace nadoc_vr {
 inline std::optional<float> rayRepresentationMesh(Representation rep, const Ray& ray,
     const glm::vec3& center, const glm::vec3& x, const glm::vec3& y, const glm::vec3& z) {
-    if (rep == Representation::surface || rep == Representation::hull) {
+    if (rep == Representation::surface || rep == Representation::surfaceDetail || rep == Representation::hull) {
         const glm::vec3 p = glm::cross(ray.direction, y);
         const float det = glm::dot(x,p);
         if (std::abs(det) < 1e-12F) return std::nullopt;

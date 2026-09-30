@@ -1567,6 +1567,7 @@ def md_frames_surface(
     smooth: int = 15,
     max_frames: int = 200,
     stride: int | None = None,
+    detail: str = "coarse",
     **_ignore,
 ) -> dict:
     """Per-frame molecular surface from the NAMD DNA heavy atoms → surface-batch
@@ -1600,13 +1601,17 @@ def md_frames_surface(
             )
             for a in _extract_md_atoms_frame(ctx, gidx)
         ]
-        mesh = compute_surface(
-            atoms,
-            grid_spacing=grid_spacing,
-            probe_radius=probe_radius,
-            radius_scale=1.2 * radius_inflate,
-        )
-        mesh = smooth_mesh(mesh, iterations=smooth)
+        if detail in {"chimerax", "continuous", "remeshed"}:
+            from backend.core.surface import figure_surface_from_atoms
+            mesh = figure_surface_from_atoms(atoms, probe_radius, local_remesh=detail != "continuous")
+        else:
+            mesh = compute_surface(
+                atoms,
+                grid_spacing=grid_spacing,
+                probe_radius=probe_radius,
+                radius_scale=1.2 * radius_inflate,
+            )
+            mesh = smooth_mesh(mesh, iterations=smooth)
         entry = {
             "vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
             "faces": [int(f) for f in mesh.faces.ravel()],

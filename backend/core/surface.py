@@ -926,3 +926,18 @@ def surface_to_json(
         out["vertex_nuc_index_table"] = tables["vertex_nuc_index_table"]
         out["vertex_nuc_index"] = tables["vertex_nuc_index"]
     return out
+
+
+def figure_surface_from_atoms(atoms, probe_radius=0.06, *, local_remesh=True):
+    """Figure-quality strand shells from actual simulated atom coordinates."""
+    from backend.core.atomistic import VDW_RADIUS
+
+    return compute_split_surfaces_from_cloud(
+        np.asarray([[a.x, a.y, a.z] for a in atoms], dtype=float).reshape(-1, 3),
+        np.asarray([VDW_RADIUS.get(a.element, VDW_RADIUS["C"]) for a in atoms]),
+        [a.strand_id or "" for a in atoms],
+        nuc_ids=[_nuc_key(a) for a in atoms],
+        probe_radius=probe_radius,
+        continuous_field=True,
+        local_remesh=local_remesh,
+    )

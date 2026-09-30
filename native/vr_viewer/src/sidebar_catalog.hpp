@@ -859,13 +859,14 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
     {"menu-view-detail-cylinders", "Cylinders", "Representations", "repr:0", {"section:visualization:representation-modes-section"}},
     {"menu-view-detail-beads", "Beads", "Representations", "repr:4", {"section:visualization:representation-modes-section"}},
     {"menu-view-detail-full", "Full", "Representations", "repr:1", {"section:visualization:representation-modes-section"}},
-    {"menu-view-surface", "Surface", "Representations", "repr:7", {"section:visualization:representation-modes-section"}},
     {"menu-view-atomistic-vdw", "VDW / Space-fill", "Representations", "repr:5", {"section:visualization:representation-modes-section"}},
     {"menu-view-atomistic-ballstick", "Ball & Stick", "Representations", "repr:2", {"section:visualization:representation-modes-section"}},
     {"menu-view-atomistic-stick", "Stick", "Representations", "repr:3", {"section:visualization:representation-modes-section"}},
     {"menu-view-mrdna-coarse", "mrDNA Coarse", "Representations", "repr:8", {"section:visualization:representation-modes-section"}},
     {"menu-view-mrdna-fine", "mrDNA Fine", "Representations", "repr:9", {"section:visualization:representation-modes-section"}},
     {"menu-view-oxdna", "oxDNA", "Representations", "repr:10", {"section:visualization:representation-modes-section"}},
+    {"menu-view-surface", "Quick Surface", "Representations", "repr:7", {"section:visualization:representation-modes-section"}},
+    {"menu-view-surface-detail", "Detail Surface", "Representations", "repr:11", {"section:visualization:representation-modes-section"}},
     {"section:visualization:coloring-options-section", "Coloring", "", "section:visualization:coloring-options-section", {}},
     {"repr-color-strand", "Strand color", "Coloring", "color:0", {"section:visualization:coloring-options-section"}},
     {"repr-color-base", "Base color", "Coloring", "color:1", {"section:visualization:coloring-options-section"}},
@@ -884,7 +885,6 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
     {"surface-color-uniform", "Uniform", "Representation Options", "", {"section:visualization:slab-heading"}},
     {"sl-surface-probe", "Probe radius (nm)", "Representation Options", "", {"section:visualization:slab-heading"}},
     {"sl-surface-opacity", "Opacity", "Representation Options", "", {"section:visualization:slab-heading"}},
-    {"cb-surface-figure-quality", "Figure quality (slow but beautiful)", "Representation Options", "", {"section:visualization:slab-heading"}},
     {"section:visualization:right-view-actions", "View Actions", "", "section:visualization:right-view-actions", {}},
     {"reset-btn", "Reset Camera", "View Actions", "recenter", {"section:visualization:right-view-actions"}},
     {"unhide-all-btn", "Unhide All", "View Actions", "", {"section:visualization:right-view-actions"}},
@@ -987,5 +987,5 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
     {"share-end", "End presentation (all links)", "Share", "share:end", {}},
   }},
 };
-inline const std::vector<unsigned> kSidebarColoringMasks = {5,7,15,15,7,15,0,5,0,0,7};
+inline const std::vector<unsigned> kSidebarColoringMasks = {5,7,15,15,7,15,0,5,0,0,7,5};
 }

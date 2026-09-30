@@ -58,9 +58,9 @@ test('figure quality permits probe changes and restores each preset radius', asy
     const response = page.waitForResponse(r => r.url().includes('/api/design/surface-bin?') && r.url().includes(`detail=${detail}`) && r.status() === 200)
     if (!results.length) await page.evaluate(() => window.__nadocTest.setRepresentation('surface'))
     else await page.evaluate(({detail,radius}) => {
-      const cb = document.getElementById('cb-surface-figure-quality')
-      if(cb.checked !== (detail === 'chimerax')) {
-        cb.checked = detail === 'chimerax'; cb.dispatchEvent(new Event('change', {bubbles:true}))
+      const selected = document.getElementById('menu-view-surface-detail').classList.contains('is-checked')
+      if(selected !== (detail === 'chimerax')) {
+        document.getElementById(detail === 'chimerax' ? 'menu-view-surface-detail' : 'menu-view-surface').click()
       } else {
         const probe = document.getElementById('sl-surface-probe')
         probe.value=String(radius); probe.dispatchEvent(new Event('input',{bubbles:true}));probe.dispatchEvent(new Event('change',{bubbles:true}))

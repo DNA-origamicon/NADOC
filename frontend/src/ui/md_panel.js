@@ -92,6 +92,7 @@ function _activeSceneRepresentation() {
     'menu-view-detail-beads': 'beads',
     'menu-view-detail-full': 'full',
     'menu-view-surface': 'surface',
+    'menu-view-surface-detail': 'surface',
     'menu-view-atomistic-vdw': 'vdw',
     'menu-view-atomistic-ballstick': 'ballstick',
     'menu-view-atomistic-stick': 'stick',

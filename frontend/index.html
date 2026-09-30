@@ -4127,13 +4127,11 @@
             <span id="menu-view-repr-mixed-dot" style="display:none;color:#3fb950;font-size:9px;margin-left:6px" title="Parts have a mix of representations">●</span>
             <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
-              <!-- Ordered least → most compute-intensive; F1…F7 bind in this same order. -->
+              <!-- Surface presets are last; existing F-key bindings are preserved. -->
               <button class="dropdown-item" id="menu-view-hull-prism">Hull Prism<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F1</span></button>
               <button class="dropdown-item" id="menu-view-detail-cylinders">Cylinders<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F2</span></button>
               <button class="dropdown-item" id="menu-view-detail-beads">Beads<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F3</span></button>
               <button class="dropdown-item is-checked" id="menu-view-detail-full">Full<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F4</span></button>
-              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-              <button class="dropdown-item" id="menu-view-surface">Surface<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F5</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
               <button class="dropdown-item" id="menu-view-atomistic-vdw">VDW / Space-fill<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F6</span></button>
               <button class="dropdown-item" id="menu-view-atomistic-ballstick">Ball &amp; Stick<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F7</span></button>
@@ -4142,6 +4140,9 @@
               <button class="dropdown-item" id="menu-view-mrdna-coarse">mrDNA Coarse<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-mrdna-fine">mrDNA Fine<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-oxdna">oxDNA<span class="routing-check-mark">●</span></button>
+              <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+              <button class="dropdown-item" id="menu-view-surface">Quick Surface<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F5</span></button>
+              <button class="dropdown-item" id="menu-view-surface-detail">Detail Surface<span class="routing-check-mark">●</span></button>
             </div>
           </div>
           <div class="submenu-item">Coloring <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
@@ -4995,7 +4996,7 @@
                       <button id="oxdna-jobs-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
                     </div>
                     <div id="oxdna-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
-                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px" title="Use a cubic curve through nearby saved frames for smoother motion. Pause returns to the last saved frame. Surfaces stay on saved frames; curves may overshoot or pass through obstacles.">
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px" title="Use a cubic curve through nearby saved frames for smoother motion. Pause returns to the last saved frame. Surfaces deform approximately with nucleotide motion during playback; pause restores the exact saved-frame surface. Curves may overshoot or pass through obstacles.">
                       <input id="oxdna-jobs-traj-interpolate" type="checkbox" checked> Smooth playback
                     </label>
                   </div>
@@ -6452,7 +6453,7 @@
                       <button id="md-jobs-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
                     </div>
                     <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
-                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px" title="Use a cubic curve through nearby saved frames for smoother beads, atoms and ions. Pause returns to the last saved frame. Surfaces stay on saved frames; curves may overshoot or pass through obstacles.">
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px" title="Use a cubic curve through nearby saved frames for smoother beads, atoms and ions. Pause returns to the last saved frame. Surfaces deform approximately with nucleotide motion during playback; pause restores the exact saved-frame surface. Curves may overshoot or pass through obstacles.">
                       <input id="md-jobs-traj-interpolate" type="checkbox" checked> Smooth playback
                     </label>
                   </div>
@@ -8401,11 +8402,6 @@
                 <span class="val" id="sv-surface-opacity">1.00</span>
                 <input type="range" id="sl-surface-opacity" min="0.05" max="1.00" step="0.05" value="1.00">
               </div>
-              <div class="slider-row">
-                <label title="Per-strand continuous-field surfaces with local remeshing of sharp patches, a shared 0.5 Å grid, true VdW radii, and an adjustable probe (default 0.6 Å).">Figure quality (slow but beautiful)</label>
-                <input type="checkbox" id="cb-surface-figure-quality">
-              </div>
-
             </div>
           </div>
         </div>

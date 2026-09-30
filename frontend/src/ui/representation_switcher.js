@@ -1,6 +1,6 @@
 // Unified representation switcher — the core of the View → Representation menu.
 //
-// Owns the ten mutually-exclusive representations (hull-prism / cylinders /
+// Owns the mutually-exclusive representation presets (hull-prism / cylinders /
 // beads / full / surface / vdw / ballstick / stick / mrDNA coarse / mrDNA fine), the radio menu state, the View →
 // Coloring submenu availability matrix, and the F1…F8 hotkey bindings. Exactly
 // one representation is active at a time; switching deactivates the others.
@@ -23,9 +23,8 @@ import { registerShortcut } from '../input/shortcuts.js'
 // All representations are mutually exclusive. Exactly one is active at
 // a time; switching to any one deactivates all others.
 //
-// Ordered least → most compute-intensive.  This is also the order shown in the
-// View → Representation menu and the order the F1…F8 hotkeys bind to (the
-// F-key registration loop below iterates this array, so the two stay in sync).
+// Preserve the established F1…F8 bindings independently of the visual menu order.
+// Surface presets appear together at the bottom of the desktop and VR lists.
 //
 //  'hull-prism' — per-part grey boxes, aggressive culling (F1, cheapest)
 //  'cylinders'  — domain cylinders (LOD 2)            (F2)
@@ -40,13 +39,14 @@ const _ALL_REPRS = [
   { id: 'menu-view-detail-cylinders',   repr: 'cylinders' },
   { id: 'menu-view-detail-beads',       repr: 'beads'     },
   { id: 'menu-view-detail-full',        repr: 'full'      },
-  { id: 'menu-view-surface',            repr: 'surface'    },
+  { id: 'menu-view-surface',            repr: 'surface', detail: 'coarse' },
   { id: 'menu-view-atomistic-vdw',      repr: 'vdw'       },
   { id: 'menu-view-atomistic-ballstick',repr: 'ballstick' },
   { id: 'menu-view-atomistic-stick',    repr: 'stick'     },
   { id: 'menu-view-mrdna-coarse',       repr: 'mrdna-coarse', external: true },
   { id: 'menu-view-mrdna-fine',         repr: 'mrdna-fine', external: true },
   { id: 'menu-view-oxdna',              repr: 'oxdna', external: true },
+  { id: 'menu-view-surface-detail', repr: 'surface', detail: 'chimerax' },
 ]
 
 // Friendly labels for the F-key shortcut descriptions (command palette / help).
@@ -55,7 +55,7 @@ const _REPR_LABELS = {
   cylinders:    'Cylinders',
   beads:        'Beads',
   full:         'Full',
-  surface:      'Surface',
+  surface:      'Quick Surface',
   vdw:          'VDW / Space-fill',
   ballstick:    'Ball & Stick',
   stick:        'Stick',
@@ -87,6 +87,9 @@ export function initRepresentationSwitcher({
   getJointRenderer,
   getSurfaceMode,
   applySurfaceMode,
+  getSurfaceDetail = () => 'coarse',
+  selectSurfaceDetail = () => {},
+  refreshSurfaceRegions = () => {},
   applyAtomisticMode,
   setCGVisible,
   setColoringMode,
@@ -100,8 +103,10 @@ export function initRepresentationSwitcher({
   applyExternalRepresentation = async () => false,
 }) {
   function _updateReprRadio(activeRepr) {
-    for (const { id, repr } of _ALL_REPRS) {
-      document.getElementById(id)?.classList.toggle('is-checked', repr === activeRepr)
+    const activeDetail = activeRepr === 'surface-detail' ? 'chimerax' : getSurfaceDetail()
+    if (activeRepr === 'surface-detail') activeRepr = 'surface'
+    for (const { id, repr, detail } of _ALL_REPRS) {
+      document.getElementById(id)?.classList.toggle('is-checked', repr === activeRepr && (!detail || detail === activeDetail))
     }
     _updateColoringMenuAvailability(activeRepr)
   }
@@ -123,6 +128,7 @@ export function initRepresentationSwitcher({
       return
     }
     if (st.kind === 'single') {
+      if (st.repr === 'surface' || st.repr === 'surface-detail') selectSurfaceDetail(st.repr === 'surface' ? 'coarse' : 'chimerax')
       _updateReprRadio(st.repr)
       if (dotEl) dotEl.style.display = 'none'
     } else {
@@ -179,7 +185,9 @@ export function initRepresentationSwitcher({
   // Null until the first apply, so the very first click always goes through.
   let _appliedRepr = null
 
-  async function _setRepresentation(repr) {
+  async function _setRepresentation(repr, detail) {
+    if (repr === 'surface-detail') { repr = 'surface'; detail = 'chimerax' }
+    if (repr === 'surface') selectSurfaceDetail(detail ?? 'coarse')
     await beforeRepresentationChange(repr)
     // ── Deactivate any currently active exclusive mode ────────────────────────
     if (!['vdw', 'ballstick', 'stick'].includes(repr) && atomisticRenderer.getMode() !== 'off') {
@@ -235,7 +243,7 @@ export function initRepresentationSwitcher({
     }))
   }
 
-  for (const { id, repr, external } of _ALL_REPRS) {
+  for (const { id, repr, external, detail } of _ALL_REPRS) {
     document.getElementById(id)?.addEventListener('click', async () => {
       const { currentDesign, assemblyActive, currentAssembly } = store.getState()
 
@@ -252,8 +260,9 @@ export function initRepresentationSwitcher({
         // each one to the value it already holds and the renderer would rebuild for
         // nothing. (Mixed state still goes through: there the click means "make them
         // all agree", which is real work.)
+        const assemblyRepr = detail === 'chimerax' ? 'surface-detail' : repr
         const st = reprMenuState(instances)
-        if (st.kind === 'single' && st.repr === repr) { _updateReprRadio(repr); return }
+        if (st.kind === 'single' && st.repr === assemblyRepr) { _updateReprRadio(assemblyRepr); return }
 
         if (repr === 'vdw' || repr === 'ballstick' || repr === 'stick' || repr === 'surface') {
           const ok = await showConfirm({
@@ -267,7 +276,8 @@ export function initRepresentationSwitcher({
           if (!ok) return
         }
 
-        _updateReprRadio(repr)
+        if (detail) selectSurfaceDetail(detail)
+        _updateReprRadio(assemblyRepr)
         _updateColoringMenuAvailability(repr)   // atomistic-in-assembly → cpk/strand/cluster/source
         // Batch into a single PATCH so the renderer rebuilds once instead
         // of once per instance. With 20 heavy origamis at 'cylinders' →
@@ -278,7 +288,7 @@ export function initRepresentationSwitcher({
         // (no fetch, no labels/arcs/xovers rebuild — see
         // assembly_renderer._inPlaceHelixLodRebuild).
         await api.batchPatchInstances(
-          instances.map(inst => ({ id: inst.id, representation: repr })),
+          instances.map(inst => ({ id: inst.id, representation: assemblyRepr })),
         )
         return
       }
@@ -298,10 +308,12 @@ export function initRepresentationSwitcher({
         ...domainsToSegments(currentDesign, domainRefs),
       ]
       if (!external && (proteinIds.length || segs.length)) {
+        if (detail) selectSurfaceDetail(detail)
         let next = currentDesign.representation_overrides ?? []
         if (segs.length) next = editOverridesForSegments(next, segs, repr)
         if (proteinIds.length) next = editOverridesForProteins(next, proteinIds, repr)
         await api.saveRepresentationOverrides(next)
+        if (detail) refreshSurfaceRegions()
         return
       }
       // Choosing a global representation (View → Representation menu or an F-key) is
@@ -316,14 +328,13 @@ export function initRepresentationSwitcher({
       // apply + the 'nadoc:representation-change' fan-out. EXCEPT when this click just
       // cleared per-region overrides: the displayed structure genuinely diverged from
       // the nominal global rep, so it has to be re-applied even though the name matches.
-      if (!hadOverrides && repr === _appliedRepr) return
-      await _setRepresentation(repr)
+      if (!hadOverrides && repr === _appliedRepr && (!detail || detail === getSurfaceDetail())) return
+      await _setRepresentation(repr, detail)
     })
   }
 
   // ── Function-key bindings: F1…F8 → representations ────────────────────────────
-  // Bound in the same least→most compute-intensive order as _ALL_REPRS / the
-  // View → Representation menu.  First press switches to the representation;
+  // Bound in the established order in _ALL_REPRS.  First press switches to the representation;
   // pressing the SAME key again (while that representation is already active)
   // cycles through its available coloring modes (_COLORING_SUPPORT[repr]).
   // The switch delegates to the menu button's click handler so the

@@ -45,6 +45,7 @@ class SurfaceRegionRequest(BaseModel):
     (the surface-rep regions). Stateless; same knobs as GET /design/surface."""
 
     segments: List[RepresentationSegment]
+    detail: str = "coarse"
     color_mode: str = "strand"
     grid_spacing: float = 0.20
     probe_radius: float = 0.06
@@ -556,13 +557,28 @@ def build_region_surface(design, body: SurfaceRegionRequest) -> dict:
     atoms = [a for a in model.atoms if (a.helix_id, a.bp_index) in colset]
 
     t0 = time.perf_counter()
-    mesh = compute_surface(
-        atoms,
-        grid_spacing=body.grid_spacing,
-        probe_radius=body.probe_radius,
-        radius_scale=1.2 * body.radius_inflate,
-    )
-    mesh = smooth_mesh(mesh, iterations=body.smooth)
+    if body.detail == "chimerax":
+        import numpy as np
+        from backend.core.atomistic import VDW_RADIUS
+        from backend.core.surface import _nuc_key, compute_split_surfaces_from_cloud
+
+        mesh = compute_split_surfaces_from_cloud(
+            np.asarray([[a.x, a.y, a.z] for a in atoms], dtype=float).reshape(-1, 3),
+            np.asarray([VDW_RADIUS.get(a.element, VDW_RADIUS["C"]) for a in atoms]),
+            [a.strand_id or "" for a in atoms],
+            nuc_ids=[_nuc_key(a) for a in atoms],
+            probe_radius=body.probe_radius,
+            continuous_field=True,
+            local_remesh=True,
+        )
+    else:
+        mesh = compute_surface(
+            atoms,
+            grid_spacing=body.grid_spacing,
+            probe_radius=body.probe_radius,
+            radius_scale=1.2 * body.radius_inflate,
+        )
+        mesh = smooth_mesh(mesh, iterations=body.smooth)
     t_ms = (time.perf_counter() - t0) * 1000.0
 
     return surface_to_json(mesh, design, color_mode=body.color_mode, t_ms=t_ms)

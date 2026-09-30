@@ -25,6 +25,7 @@ def test_desktop_meshes_previews_and_vdw_round_trip(tmp_path):
         "stick",
         "hull-prism",
         "surface",
+        "surface-detail",
         "mrdna-coarse",
         "mrdna-fine",
         "oxdna",
@@ -38,7 +39,7 @@ def test_desktop_meshes_previews_and_vdw_round_trip(tmp_path):
     assert count("mrdna-fine", "P") == 14
     assert count("mrdna-coarse", "P") == 3
     assert count("oxdna", "P") == count("oxdna", "B") == 28
-    for rep in ("hull-prism", "surface"):
+    for rep in ("hull-prism", "surface", "surface-detail"):
         faces = [p for p in scene[rep].values() if p.record_type == "B"]
         assert faces
         for face in faces:

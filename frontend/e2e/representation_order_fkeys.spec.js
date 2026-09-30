@@ -1,23 +1,23 @@
 /**
- * View → Representation menu: compute-intensity ordering + F1…F8 hotkeys.
+ * View → Representation menu: surface-last ordering + F1…F8 hotkeys.
  *
- * Verifies (1) the menu lists representations least→most compute-intensive
+ * Verifies (1) the menu lists representations with surface presets last
  * with matching F-key hint labels, and (2) pressing F1…F4 switches the active
  * representation (the `is-checked` radio mark moves to the right item).
  */
 
 import { test, expect } from '@playwright/test'
 
-// Expected order, top → bottom in the menu and F1 → F8 on the keyboard.
+// Expected order, top → bottom in the menu; existing keyboard bindings are preserved.
 const ORDER = [
   { id: 'menu-view-hull-prism',          label: 'Hull Prism',       hint: 'F1' },
   { id: 'menu-view-detail-cylinders',    label: 'Cylinders',        hint: 'F2' },
   { id: 'menu-view-detail-beads',        label: 'Beads',            hint: 'F3' },
   { id: 'menu-view-detail-full',         label: 'Full',             hint: 'F4' },
-  { id: 'menu-view-surface',             label: 'Surface',          hint: 'F5' },
   { id: 'menu-view-atomistic-vdw',       label: 'VDW / Space-fill', hint: 'F6' },
   { id: 'menu-view-atomistic-ballstick', label: 'Ball & Stick',     hint: 'F7' },
   { id: 'menu-view-atomistic-stick',     label: 'Stick',            hint: 'F8' },
+  { id: 'menu-view-surface',             label: 'Quick Surface',          hint: 'F5' },
 ]
 
 const API = 'http://localhost:8000/api'
@@ -46,7 +46,7 @@ async function loadDesign(page) {
 }
 
 test.describe('Representation menu order + F-key bindings', () => {
-  test('menu lists reprs least→most compute with matching F-key hints', async ({ page }) => {
+  test('menu puts surfaces last with matching F-key hints', async ({ page }) => {
     await loadDesign(page)
 
     // DOM order of the representation buttons must match ORDER.

@@ -24,7 +24,7 @@ def test_full_only_does_not_construct_atoms_or_extra_representations(monkeypatch
     subprocess.run(['native/vr_viewer/build/nadoc-vr-viewer', '--validate', str(path)], check=True, capture_output=True)
 
 
-@pytest.mark.parametrize('representation', ['full', 'cylinders', 'ballstick', 'stick', 'surface', 'hull-prism', 'mrdna-coarse', 'mrdna-fine', 'oxdna'])
+@pytest.mark.parametrize('representation', ['full', 'cylinders', 'ballstick', 'stick', 'surface', 'surface-detail', 'hull-prism', 'mrdna-coarse', 'mrdna-fine', 'oxdna'])
 def test_selective_export_matches_same_blocks_in_complete_snapshot(representation, tmp_path):
     design = make_minimal_design(helix_length_bp=5)
     body = vr.VRLaunchRequest(representation=representation)

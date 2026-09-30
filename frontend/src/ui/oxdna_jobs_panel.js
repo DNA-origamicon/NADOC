@@ -1285,7 +1285,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         _trajPrep = total > 1 ? { done, total } : null   // total≤1 = CG (instant) → no notice
         trajPlayer.setLoading({ phase: 'atoms', done, total, label: 'Prepare visible trajectory frames' })
         _renderTrajStatus()
-      })
+      }, {smoothSurface: !!document.getElementById('oxdna-jobs-traj-interpolate')?.checked})
       _trajPrep = null
       _renderTrajStatus()
       return r?.ok !== false

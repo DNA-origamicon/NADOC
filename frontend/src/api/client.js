@@ -4147,10 +4147,11 @@ export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadi
  * `segments` = [{helix_id, bp_start, bp_end}]. Returns the raw mesh JSON
  * ({vertices, faces, vertex_strand_index*, stats}); NOT a design response.
  */
-export async function getRegionSurface(segments, { colorMode = 'strand', probeRadius = 0.06,
+export async function getRegionSurface(segments, { colorMode = 'strand', probeRadius = 0.06, detail = 'coarse',
                                                    signal, suppressBusy = false } = {}) {
   return _request('POST', '/design/surface/region', {
     segments,
+    detail,
     color_mode:   colorMode,
     probe_radius: probeRadius,
   }, { signal, suppressBusy })
@@ -4742,8 +4743,8 @@ export async function getInstanceGeometry(id) {
   return json
 }
 
-export async function getInstanceSurfaceGeometry(id, colorMode = 'strand', probeRadius = 0.06, gridSpacing = 0.20) {
-  const q = `color_mode=${encodeURIComponent(colorMode)}&probe_radius=${probeRadius}&grid_spacing=${gridSpacing}`
+export async function getInstanceSurfaceGeometry(id, colorMode = 'strand', probeRadius = 0.06, gridSpacing = 0.20, detail = 'coarse') {
+  const q = `color_mode=${encodeURIComponent(colorMode)}&probe_radius=${probeRadius}&grid_spacing=${gridSpacing}&detail=${encodeURIComponent(detail)}`
   return _request('GET', `/assembly/instances/${id}/surface-geometry?${q}`)
 }
 
