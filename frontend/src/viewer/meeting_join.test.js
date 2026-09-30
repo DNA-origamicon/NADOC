@@ -74,6 +74,7 @@ it('asks for the meeting password and transmits it only in the join request body
   const dispose = mountMeetingJoin({ viewer: {}, fetch: request, location: { hash: '#invite=token&password=required' } })
   expect(document.querySelector('#meeting-password-row').hidden).toBe(false)
   expect(document.querySelector('#meeting-password').required).toBe(true)
+  expect(document.querySelector('#meeting-password').disabled).toBe(false)
   document.querySelector('#meeting-password').value = 'test-password'
   await vi.waitFor(() => expect(document.querySelector('#join-submit').disabled).toBe(false))
   request.mockClear()

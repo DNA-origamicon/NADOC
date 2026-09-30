@@ -13,7 +13,7 @@ import { createEditorBroadcast } from './prepared_editor_broadcast.mjs'
 import { unpackTrajectory, updateTrajectory, initialTrajectory } from './prepared_trajectory.mjs'
 
 const same = (a, b) => typeof a === 'string' && /^[a-f0-9]{64}$/.test(a) && timingSafeEqual(Buffer.from(a), Buffer.from(b))
-const mime = name => name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.html') ? 'text/html' : name.endsWith('.png') ? 'image/png' : name.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream'
+const mime = name => name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.html') ? 'text/html' : name.endsWith('.gif') ? 'image/gif' : name.endsWith('.png') ? 'image/png' : name.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream'
 
 export async function createPreparedHost({ dist, packagePath, publicOrigin = '', lifetimeMs = 2 * 60 * 60 * 1000, maxGuests = 4, now = Date.now, getPublicAccess = null, persistent = false, ownerLeaseMs = 0, linksFile = null }) {
   if (publicOrigin && (!publicOrigin.startsWith('https://') || new URL(publicOrigin).origin !== publicOrigin)) throw new Error('Public sharing requires an exact HTTPS origin')
@@ -24,7 +24,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const initial = packagePath ? await readFile(packagePath) : null
   const assets = new Map([['/viewer.html', await readFile(join(dist, 'viewer.html'))]])
   for (const name of await readdir(join(dist, 'assets'))) {
-    if (/^[\w.-]+\.(js|css|png|svg|woff2?)$/.test(name)) assets.set(`/assets/${name}`, await readFile(join(dist, 'assets', name)))
+    if (/^[\w.-]+\.(js|css|png|gif|svg|woff2?)$/.test(name)) assets.set(`/assets/${name}`, await readFile(join(dist, 'assets', name)))
   }
   const invite = randomBytes(32).toString('hex'), expiresAt = persistent ? null : now() + lifetimeMs
   const rooms = new Map(), controlToken = randomBytes(32).toString('hex'), probeId = randomBytes(16).toString('hex')

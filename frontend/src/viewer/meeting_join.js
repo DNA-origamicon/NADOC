@@ -34,7 +34,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   const qrEntry = params.get('entry') === 'qr' && params.get('role') !== 'presenter'
   const needsPassword = !qrEntry && params.get('password') === 'required'
   if (passwordRow) passwordRow.hidden = !needsPassword
-  if (passwordField) { passwordField.required = needsPassword; passwordField.value = '' }
+  if (passwordField) { passwordField.disabled = !needsPassword; passwordField.required = needsPassword; passwordField.value = '' }
   const abort = new AbortController()
   const sharedViews = new WeakSet()
   let disposed = false, ended = false, timer = null, promptTimer = null, polling = false, busy = false, disconnectPresentation = () => {}

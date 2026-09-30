@@ -36,6 +36,14 @@ available by default. Geographic reach does not mean unlimited simultaneous gues
    (plus Playwright's documented Linux libraries). This test dependency is not
    required for normal hosting or guest access.
 
+Guest entry focuses the dialog heading first, so the name field activates only
+when selected by touch or keyboard. The field requests no autocomplete, spelling
+correction, or capitalization, with opt-out hints for common password managers.
+Hidden meeting-password fields are disabled for passwordless invitations. These
+are page-level requests; browsers, extensions, and mobile keyboards can override
+them. See [browser autofill limitations](https://developer.mozilla.org/en-US/docs/Web/Security/Practical_implementation_guides/Turning_off_form_autocompletion)
+and [1Password field opt-outs](https://www.1password.dev/web/compatible-website-design).
+
 The editor may be opened on localhost or this host's exact private Tailscale URL
 configured by `start.sh --tailscale` (`NADOC_PUBLIC_URL`). Arbitrary Tailscale hosts
 are not trusted to manage this host. Public guests cannot reach the editor or its
@@ -105,3 +113,7 @@ is used. Stable links are keyed by part/assembly identity in the private
 The host must remain online to display the waiting screen. A powered-off host
 produces the browser’s normal connection error. Moving to another host or changing
 its public hostname/port requires handing out the new address.
+
+The inactive invitation screen loops the NADOC DNA background animation while it
+waits for Start, including reconnecting to the host. Starting the presentation
+removes the waiting screen and its animation. The sharing host serves this asset locally.

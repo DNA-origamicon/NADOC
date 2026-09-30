@@ -9,5 +9,25 @@ header{display:flex;align-items:center;gap:16px;padding:12px 18px;background:#0d
 <main><canvas id="canvas" aria-label="3D design viewer"></canvas></main><footer id="status" role="status">Open or drop a .nadocview file. Files stay in this browser. Prepared static views and shared Full trajectory clips.</footer>
 <dialog id="performance"><button id="close-metrics">Close</button></dialog>
 <span id="guest" style="padding:0 18px 8px;color:#b1bac4"></span>
-<dialog id="join"><form id="join-form"><h2>Join shared design</h2><p>Enter your name to join. You can rotate and explore the design independently.</p><label for="guest-name">Display name</label><input id="guest-name" name="name" required maxlength="40" autocomplete="nickname" style="width:100%;padding:10px;opacity:1"><div id="meeting-password-row" hidden><label for="meeting-password">Meeting password</label><input id="meeting-password" name="password" type="password" maxlength="128" autocomplete="off" spellcheck="false" style="width:100%;padding:10px;opacity:1"></div><p id="join-error" role="alert"></p><button id="join-submit" type="submit">Join view</button></form></dialog>
+<dialog id="join" aria-labelledby="join-title">
+  <form id="join-form" autocomplete="off" data-form-type="other">
+    <h2 id="join-title" tabindex="-1" autofocus>Join shared design</h2>
+    <p>Enter your name to join. You can rotate and explore the design independently.</p>
+    <label for="guest-name">Display name</label>
+    <!-- A meeting label, not an account username. Keep opt-outs in the initial HTML. -->
+    <input id="guest-name" name="presentation-label" type="text" required maxlength="40"
+      autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+      inputmode="text" enterkeyhint="go" data-1p-ignore data-lpignore="true"
+      data-bwignore="true" data-form-type="other" style="width:100%;padding:10px;opacity:1">
+    <div id="meeting-password-row" hidden>
+      <label for="meeting-password">Meeting password</label>
+      <input id="meeting-password" name="meeting-access-code" type="password" maxlength="128" disabled
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+        data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other"
+        style="width:100%;padding:10px;opacity:1">
+    </div>
+    <p id="join-error" role="alert"></p>
+    <button id="join-submit" type="submit">Join view</button>
+  </form>
+</dialog>
 <script type="module" src="/src/viewer/entry.js"></script></body></html>

@@ -39,7 +39,13 @@ test('invite opens a production browser viewer, prompts for name, and loads with
   }
   await expect(page.locator('#join')).toBeVisible()
   await expect(page.locator('#reset')).toBeDisabled()
-  await page.locator('#guest-name').fill('Laptop tester')
+  await expect(page.locator('#join-title')).toBeFocused()
+  const name = page.locator('#guest-name')
+  await expect(name).toHaveAttribute('autocomplete', 'off')
+  await expect(page.locator('#meeting-password')).toBeDisabled()
+  await page.keyboard.press('Tab')
+  await expect(name).toBeFocused()
+  await name.fill('Laptop tester')
   await page.locator('#join-submit').click()
   await expect(page.locator('#join')).not.toBeVisible()
   await expect(page.locator('#title')).toHaveText('Private test design')
@@ -136,4 +142,37 @@ test('QR guest joins by name and tracks a synthetic camera target in the product
   await expect(panel).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => window.__qrCameraStopped)).toBe(true)
   expect(failures).toEqual([])
+})
+
+
+test.describe('Mobile guest entry', () => {
+  test.use({ viewport: { width: 393, height: 851 }, isMobile: true, hasTouch: true })
+  test('opens without focusing a field, then accepts touch typing and Enter to join', async ({ page }) => {
+    const failures = []
+    page.on('pageerror', error => failures.push(error.message))
+    await page.goto(`${base}/viewer.html#invite=${host.invite}`)
+    await expect(page.locator('#join-title')).toBeFocused()
+    const name = page.locator('#guest-name')
+    await expect(name).toHaveValue('')
+    await expect(name).toBeEditable()
+    await expect(name).toHaveAttribute('inputmode', 'text')
+    await expect(name).toHaveAttribute('autocorrect', 'off')
+    await expect(name).toHaveAttribute('autocapitalize', 'off')
+    await expect(name).toHaveAttribute('spellcheck', 'false')
+    for (const attribute of ['data-1p-ignore', 'data-lpignore', 'data-bwignore', 'data-form-type']) {
+      expect(await name.getAttribute(attribute)).not.toBeNull()
+    }
+    await name.tap()
+    await expect(name).toBeFocused()
+    await page.keyboard.insertText('Zoë 李')
+    await page.locator('#join-title').tap()
+    await name.tap()
+    await expect(name).toHaveValue('Zoë 李')
+    await expect(page.locator('#join-submit')).toBeEnabled()
+    await page.keyboard.press('Enter')
+    await expect(page.locator('#join')).not.toBeVisible()
+    await expect(page.locator('#guest')).toContainText('Zoë 李')
+    await expect(page.locator('#title')).toHaveText('Private test design')
+    expect(failures).toEqual([])
+  })
 })

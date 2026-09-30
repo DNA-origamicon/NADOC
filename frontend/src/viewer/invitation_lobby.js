@@ -2,8 +2,8 @@
 export function mountInvitationLobby({ base, onActive, document: doc = document, fetch: request = fetch, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   const panel = doc.createElement('section')
   panel.id = 'presentation-waiting'
-  panel.style.cssText = 'position:fixed;inset:0;z-index:1000;background:#0d1117;color:#e6edf3;align-content:center;text-align:center;font:16px system-ui'
-  panel.innerHTML = '<h1>Presentation not active</h1><p role="status" aria-live="polite">Waiting for the presenter to start. This page will update automatically.</p>'
+  panel.style.cssText = 'position:fixed;inset:0;z-index:1000;background:#0d1117;color:#e6edf3;display:grid;place-content:center;text-align:center;font:16px system-ui;padding:24px;box-sizing:border-box;overflow:hidden;isolation:isolate'
+  panel.innerHTML = '<img src="/assets/welcome-background.gif" alt="" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2;pointer-events:none"><div aria-hidden="true" style="position:absolute;inset:0;background:rgba(13,17,23,.68);z-index:-1;pointer-events:none"></div><h1>Presentation not active</h1><p role="status" aria-live="polite">Waiting for the presenter to start. This page will update automatically.</p>'
   const heading = panel.querySelector('h1'), status = panel.querySelector('p'), main = doc.querySelector('main')
   if (main) main.inert = true
   doc.body.append(panel)
