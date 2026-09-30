@@ -5,6 +5,12 @@
 int main() {
     int failures=0;size_t count=0;
     auto require=[](bool valid,const char* reason){if(!valid)throw std::runtime_error(reason);};
+    // Removing a named accent must not leave a zero-filled entry whose empty
+    // name matches every control and bypasses all fallback colors.
+    require(nadoc_vr::ui_style::buttonAccent("close")==nadoc_vr::ui_style::danger,"Close lost its danger accent");
+    require(nadoc_vr::ui_style::buttonAccent("tab:visualization")==nadoc_vr::ui_style::accent,"Tab lost its blue accent");
+    const auto fallback=nadoc_vr::ui_style::buttonAccent("menu-view-cylinders");
+    require(std::max({fallback.r,fallback.g,fallback.b})>.5F,"Unmapped button accent became black");
     nadoc_vr::MenuFocus focus;
     focus.begin("a","resting");
     require(!focus.pointer("resting",10,false),"Resting pointer stole focus");

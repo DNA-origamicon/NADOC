@@ -22,12 +22,12 @@ inline const glm::vec3 danger=glm::vec3(248,81,73)/255.F;
 // Desktop visualization hues (frontend/index.html .vt-btn/.sf-btn), plus
 // shared success/danger tokens. Unmapped controls get a stable fallback hue.
 inline glm::vec3 buttonAccent(std::string_view id) {
-    constexpr std::array<std::pair<std::string_view,unsigned>,15> desktop{{
+    constexpr auto desktop=std::to_array<std::pair<std::string_view,unsigned>>({
         {"lengthHeatmap",0xc084fc},{"sequences",0x4ade80},{"undefinedBases",0xfbbf24},
         {"loopSkips",0xff9944},{"grid",0x94a3b8},{"overhangNames",0xfb923c},
         {"clashes",0xff4d4d},{"deform",0xf97316},
         {"unfold",0x86efac},{"cadnano2d",0x818cf8},{"scaf",0x29b6f6},
-        {"stap",0xef5350},{"xover",0x78d5f5},{"base",0xff7ad9}}};
+        {"stap",0xef5350},{"xover",0x78d5f5},{"base",0xff7ad9}});
     auto rgb=[](unsigned c){return glm::vec3((c>>16)&255,(c>>8)&255,c&255)/255.F;};
     for(auto [key,value]:desktop)if(id.find(key)!=id.npos)return rgb(value);
     if(id.find("delete")!=id.npos||id.find("remove")!=id.npos||id=="close")return danger;
