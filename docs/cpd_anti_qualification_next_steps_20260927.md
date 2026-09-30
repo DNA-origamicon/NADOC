@@ -1,13 +1,21 @@
 # Cis-anti qualification: remaining work
 
 Current result: an earlier parameter bundle passed the100ps full-DNA NAMD
-engineering tests. The latest development trial, model61, passes energy and
-representative geometry checks but fails three exposed shape tests. It has not
-received prospective validation or engine checks with its changed parameters.
-See the [audited closeout](cpd_anti_shape_fit_closeout_20260927.md).
+engineering tests. The [shape evidence review and new bounded attempt](cpd_anti_shape_evidence_review_20260927.md)
+reduces the worst exposed RMSD from model61's 0.3213 Å to trial7's 0.2589 Å,
+but trades against energy and a representative angle; neither candidate passes
+all development gates. The review distinguishes QM correspondence from an assumed
+physical shape and resolves misleading inherited metadata in four Sella targets.
+Changed parameters have no prospective validation or engine qualification.
+The [original closeout](cpd_anti_shape_fit_closeout_20260927.md) remains unchanged.
 
 This roadmap does not authorize calculations, reopen a fit round, change a gate,
 or redefine an old failure. The completed two-round contract remains closed.
+The separately versioned 12-vector attempt also ended at its declared cap. Its
+abrupt relaxed-coordinate changes make targeted Sella QM comparison of competing
+conformations the next evidence priority. Recheck older reference geometries when
+decisive; preserve historical verdicts without treating those references as
+infallible. The parameter-model alternatives below remain unresolved.
 
 ## First resolve the parameter-model question
 

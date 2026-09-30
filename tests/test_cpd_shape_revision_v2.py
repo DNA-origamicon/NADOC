@@ -1,6 +1,5 @@
 """A closed candidate cannot erase exposure or reset the final fit allowance."""
 import json
-from pathlib import Path
 import pytest
 from experiments.cpd_anti_additive import shape_fit_protocol_v2 as revision
 from experiments.cpd_anti_additive import preliminary_protocol as old

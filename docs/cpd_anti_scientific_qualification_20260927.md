@@ -1,5 +1,14 @@
 # Cis-anti scientific qualification continuation
 
+**Latest review — 2026-09-27 17:20 UTC:** the
+[shape evidence audit and separate bounded Sella refinement](cpd_anti_shape_evidence_review_20260927.md)
+completed 12 additional development vectors. Worst RMSD improves to 0.2589 Å,
+but selected trial7 still fails three shape, one maximum-energy and one
+representative-angle criterion. Native replay verifies all 11,074 evaluations.
+No candidate is qualified. The older closed runs below remain historical evidence;
+no further calculation is active. Current evidence supports checking competing
+QM conformations before interpreting an operational shape cutoff as physical truth.
+
 The user selected Sella as the main optimizer and requested continuation toward
 scientific quality on 2026-09-26 America/Denver. The durable
 [optimizer preference](../memory/feedback_sella_default.md) now applies to new QM

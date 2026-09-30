@@ -1,5 +1,17 @@
 # Cis-anti-I additive parity campaign
 
+**Shape evidence review and bounded Sella refinement — 2026-09-27 17:20 UTC.**
+The [new review](cpd_anti_shape_evidence_review_20260927.md) distinguishes local
+MM–QM correspondence gates from an experimentally established CPD shape. It
+resolves inherited metadata for four Sella targets and reconstructs all three
+saved Jacobians. A separate 12-vector / 600-second attempt completed in 280 seconds;
+selected trial7 reduces worst RMSD from 0.3213 to 0.2589 Å but still fails three
+RMSDs, maximum energy (2.0158 kcal/mol) and one representative angle (3.1118°).
+All 11,074 native evaluations replay correctly. No development pass or model
+inadequacy is established. Original contracts/ledgers remain closed and unchanged.
+No calculation is active; targeted Sella QM comparison of competing conformations
+is the next evidence priority before further forcing correspondence or adding terms.
+
 **Resumed by user — 2026-09-25.** The instruction “Begin next steps. Then resume the campaign to get to NAMD testable cis-anti CPDs” activates the bounded [preliminary protocol v2](cpd_preliminary_protocol_v2.md). The earlier [closeout](cpd_anti_closeout_20260925.md), failed results and v1 gates remain historical evidence.
 
 **Second fit closed at original deadline — 2026-09-27 04:29:42 UTC.** The

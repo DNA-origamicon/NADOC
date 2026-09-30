@@ -36,7 +36,29 @@ trajectory and display readiness verified through the running app API. No new si
 The docs example remains a reusable regression fixture.
 
 
-Cis-anti scientific continuation 2026-09-27 UTC: user chose Sella as default for
+Latest cis-anti review, 2026-09-27 17:20 UTC:
+`docs/cpd_anti_shape_evidence_review_20260927.md`. User cautions against inherited
+shape expectations; Sella remains preferred. Local 0.25 Å / 20° correspondence
+gates are not experimentally calibrated shape tolerances. The −22.5° failure
+already uses independently stationary Sella QM, so older optimizers alone cannot
+explain all failures. Four prospective records inherited misleading parent
+provenance/gradient fields (endpoint1 also `constrained:false`); actual coordinates
+and energies match native Sella targets exactly, and runtime constraints were
+correct. Resolved evidence is in sidecars, historical inputs unchanged.
+Reconstructed all3 Jacobians /69 residuals /1587 coordinate comparisons. Local
+minimax predicts feasible original bounds, but native response is nonlinear.
+Separate `cpd-anti-shape-gate-refinement-v1` completed12 vectors in280.2s under
+12-vector/600s cap; stopped at model cap. Trial7 worstRMSD.258881Å vs old.321259;
+old −15/−30 now pass, but ep1+30, ep2lower-reference, ep1−22.5 still fail.
+EnergyRMS.997450 passes, max2.015809 fails; representativeangle3.111811° fails.
+No development pass or promotion; original model61 remains its old contract's
+selected trial. Native audit replays11074 evaluations/312 fragments, five export
+fixtures, four QM final-gradient checks; 3 numerical tests passed. No active
+calculation. Next evidence priority: targeted Sella QM comparison of competing
+conformations and older references when decisive, before imposing shape or adding
+bond/angle terms. Model inadequacy is not established. Old ledgers/locks unchanged.
+
+Historical cis-anti continuation 2026-09-27 UTC: user chose Sella as default for
 new molecular geometry work; memory/feedback_sella_default.md and CPD rule record
 it without modifying frozen inputs. docs/cpd_anti_scientific_qualification_20260927.md
 and docs/cpd_anti_shape_correction_review_20260927.md record the first-candidate result.
