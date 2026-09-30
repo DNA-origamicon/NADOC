@@ -63,30 +63,37 @@ def run(live, session, output, validate=False):
         tab=next(t for t in catalog['tabs'] if t['side']=='right' and t['key']=='visualization')
         indices={r['id']:i for i,r in enumerate(tab['rows'])}
         # Every profile has a distinct initially-unloaded representation.
-        cases=list(zip(PRESETS,['cylinders','ballstick','mrdna-fine','oxdna'])) if validate else [('steady_fast','cylinders')]
+        cases=list(zip(PRESETS,['cylinders','surface','stick','vdw'])) if validate else [('steady_fast','cylinders')]
         for preset,rep in cases:
             identifier=REPS[rep]
             for _ in range(30):
                 if any(c.get('id')==identifier for c in live.state['controls']):break
                 scroll_page(live,1,-1 if indices[identifier]<live.state['sidebars'][1]['offset'] else 1)
-            before=live.state['representation'];start=time.monotonic();samples=[];capture=None
+            before=live.state['representation'];start=time.monotonic();samples=[];capture=None;fallback_capture=None
             click(live,1,identifier,preset,trials)
             deadline=time.monotonic()+180
             while time.monotonic()<deadline:
                 live.frame();p=live.state['representation_loading']
-                samples.append(dict(seconds=time.monotonic()-start,frame=live.state['frame'],**p))
+                samples.append(dict(seconds=time.monotonic()-start,frame=live.state['frame'],lightweight=live.state['loading_diagnostics']['lightweight_guard'],**p))
                 assert p['phase']!='error',p
                 if p['pending'] and p['percent']<99:
-                    assert live.state['representation']==before,'Previous model must remain visible while loading'
+                    assert live.state['representation']==before,'Previous model must remain active while loading'
                 if capture is None and p['pending'] and 10<p['percent']<95:
                     capture=output/(preset+'-'+rep+'-loading')
-                    evidence,_=live.capture_to(capture,files=['left.png','right.png','mirror.png','evidence.json'],discard_source=True)
+                    evidence,_=live.capture_to(capture,files=['left.png','right.png','mirror.png','left.classes.u8','right.classes.u8','evidence.json'],discard_source=True)
+                    for eye in ('left','right'):
+                        assert (np.fromfile(capture/(eye+'.classes.u8'),np.uint8)==1).sum()>100, 'Loading must retain visible model pixels'
                     pixels=progress_pixels(capture,evidence,identifier)
                     assert all(row['bar_samples']>20 for row in pixels),pixels
                     # A blank button must fail this color/position check.
                     from unittest.mock import patch
                     with patch('tools.vr_workflows.lazy_representation_check.Image.open',return_value=Image.new('RGB',(evidence['eyes'][0]['width'],evidence['eyes'][0]['height']))):
                         assert not any(row['bar_samples'] for row in progress_pixels(capture,evidence,identifier))
+                if fallback_capture is None and p['pending'] and live.state['loading_diagnostics']['lightweight_guard']:
+                    fallback_capture=output/(preset+'-'+rep+'-point-fallback')
+                    evidence,_=live.capture_to(fallback_capture,files=['left.png','right.png','mirror.png','left.classes.u8','right.classes.u8','evidence.json'],discard_source=True)
+                    for eye in ('left','right'):
+                        assert (np.fromfile(fallback_capture/(eye+'.classes.u8'),np.uint8)==1).sum()>100, 'Frame guard must retain model pixels'
                 if live.state['representation']==rep and not p['pending']:break
                 time.sleep(.04)
             assert live.state['representation']==rep and not live.state['representation_loading']['pending'],samples[-1]

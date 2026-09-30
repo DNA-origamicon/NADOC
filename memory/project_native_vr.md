@@ -14,6 +14,16 @@ changes. Isolate that regression rather than changing shadow quality or lighting
 Rendering experiments did not clear the timing gate and were reverted.
 See [investigation](../docs/audits/vr_motion_regression_20260929.md).
 
+## Visible model during representation loading (2026-09-29)
+
+The frame-gap guard now draws an unlit point cloud from the displayed GPU
+buffers instead of suppressing the model. Atoms, bond endpoints and surface/box
+centres retain colors, object IDs, depth and model transforms; CPU picking remains
+on the displayed representation. No extra export or geometry upload is needed.
+Normal rendering resumes on completion, cancellation or failure. The existing
+on-demand representation tour checks both-eye model pixels during loading and
+covers Surface → Stick. See [visibility audit](../docs/audits/vr_loading_visibility_20260929.md).
+
 ## Loading frame delivery (2026-09-29)
 
 Static natural representations prepare geometry/indexes on the parsing worker,

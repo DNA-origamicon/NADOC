@@ -342,7 +342,7 @@ int objectIdGlChecks() {
         scene.installRepresentation(std::move(partial));
         scene.setStyle(Representation::full,Coloring::strand);
         std::vector<nadoc_vr::ViewVolumeRecord> volumes;
-        bool volumeMode=false;
+        bool volumeMode=false,lightweight=false;
         auto render = [&]() {
             glBindFramebuffer(GL_FRAMEBUFFER,fbo); glViewport(0,0,128,128);
             const GLenum buffers[]={GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT1};
@@ -351,8 +351,8 @@ int objectIdGlChecks() {
             glClearStencil(1); glStencilMask(0xff);
             glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
             glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LESS);
-            if(volumeMode) scene.renderVolumes(glm::perspective(glm::radians(90.0F),1.0F,.05F,10.0F),glm::mat4(1),{},true,volumes);
-            else scene.render(glm::perspective(glm::radians(90.0F),1.0F,.05F,10.0F),glm::mat4(1),{},true);
+            if(volumeMode) scene.renderVolumes(glm::perspective(glm::radians(90.0F),1.0F,.05F,10.0F),glm::mat4(1),{},true,volumes,lightweight);
+            else scene.render(glm::perspective(glm::radians(90.0F),1.0F,.05F,10.0F),glm::mat4(1),{},true,lightweight);
             std::vector<uint32_t> pixels(128*128);
             glReadBuffer(GL_COLOR_ATTACHMENT1);
             glReadPixels(0,0,128,128,GL_RED_INTEGER,GL_UNSIGNED_INT,pixels.data());
@@ -370,6 +370,16 @@ int objectIdGlChecks() {
         auto table=scene.objectTable(unique);
         for (const char* name : {"front","cylinder","half","box"}) requireLive(table.find(name)!=std::string::npos,"primitive ID missing");
         requireLive(table.find("rear")==std::string::npos,"occluded rear object leaked");
+        lightweight=true;
+        auto points=render();
+        requireLive(points[64*128+64]==front,"loading point lost visible identity");
+        auto pointIds=points;std::sort(pointIds.begin(),pointIds.end());pointIds.erase(std::unique(pointIds.begin(),pointIds.end()),pointIds.end());
+        const auto pointTable=scene.objectTable(pointIds);
+        for(const char* name:{"front","cylinder","half","box"})
+            requireLive(pointTable.find(name)!=std::string::npos,"loading fallback omitted primitive family");
+        requireLive(pointTable.find("rear")==std::string::npos,"loading fallback lost depth occlusion");
+        requireLive(scene.pick({{0,0,0},{0,0,-1}},glm::mat4(1)).has_value(),"loading fallback lost picking");
+        lightweight=false;requireLive(render()==pixels,"loading fallback changed resident geometry");
         // The right half of the sphere changes style; the left half stays red.
         nadoc_vr::ViewVolumeRecord volume;volume.enabled=true;volume.editable=true;
         volume.center={.5F,0,kViewDistanceMeters-1};volume.half={.5F,1,1};

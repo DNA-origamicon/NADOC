@@ -1398,8 +1398,10 @@ nadoc_vr::HandPose handPoseFromXr(const XrPosef& pose) {
 
 #include "scene_retirement.hpp"
 #include "staged_representation.hpp"
+#include "loading_points.hpp"
 
 class GlScene {
+    LoadingPoints loadingPoints_;
   public:
 #include "prepared_style_controller.inc"
     explicit GlScene(SceneData scene, bool objectIds = false, const std::deque<std::string>& priorIdentities = {},
@@ -2723,7 +2725,7 @@ class GlScene {
     }
 
     void renderVolumes(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,
-            bool ids,const std::vector<nadoc_vr::ViewVolumeRecord>& entries) {
+            bool ids,const std::vector<nadoc_vr::ViewVolumeRecord>& entries,bool lightweight=false) {
         pinnedSources_.fill(false);
         for(const auto& entry:entries)if(entry.enabled && entry.opacity>0)
             pinnedSources_[representationSourceIndex(representationFromName(entry.representation))]=true;
@@ -2743,7 +2745,7 @@ class GlScene {
         glActiveTexture(GL_TEXTURE7);glBindTexture(GL_TEXTURE_BUFFER,volumeTexture_);
         glTexBuffer(GL_TEXTURE_BUFFER,GL_RGBA32F,volumeBuffer_);glActiveTexture(GL_TEXTURE0);
         auto clip=[&](int layer,float opacity) {
-            for(GLuint program:{program_,sphereProgram_,cylinderProgram_,boxProgram_,atomisticBondProgram_}) {
+            for(GLuint program:{program_,sphereProgram_,cylinderProgram_,boxProgram_,atomisticBondProgram_,loadingPoints_.program()}) {
                 glUseProgram(program);
                 glUniform1i(glGetUniformLocation(program,"uVolumes"),7);
                 glUniform1i(glGetUniformLocation(program,"uVolumeCount"),int(active.size()));
@@ -2753,13 +2755,13 @@ class GlScene {
         };
         const auto original=representation_;const auto color=coloring_;
         renderingVolumes_=!active.empty();
-        clip(-1,1);render(vp,model,{},ids);
+        clip(-1,1);render(vp,model,{},ids,lightweight);
         for(size_t i=0;i<active.size();++i) {
             const auto& e=*active[i];
             setStyle(representationFromName(e.representation),coloringFromName(e.coloring=="overhang-only"?"strand":e.coloring));
             clip(int(i),e.opacity);
             glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-            render(vp,model,{},ids);glDisable(GL_BLEND);
+            render(vp,model,{},ids,lightweight);glDisable(GL_BLEND);
         }
         if(!active.empty())setStyle(original,color);
         renderingVolumes_=false;active.clear();clip(-1,1);
@@ -2767,7 +2769,19 @@ class GlScene {
     }
 
     void render(const glm::mat4& viewProjection, const glm::mat4& modelTransform,
-                const std::vector<Vertex>& guides, bool captureIds = false) const {
+                const std::vector<Vertex>& guides, bool captureIds = false, bool lightweight = false) const {
+        if(lightweight){
+            loadingPoints_.begin(viewProjection,modelTransform,captureIds);
+            loadingPoints_.draw<Vertex>(sphereInstanceVbo_,sphereCount_,offsetof(Vertex,position));
+            for(auto [buffer,count]:{std::pair{cylinderInstanceVbo_,cylinderCount_},std::pair{halfCylinderInstanceVbo_,halfCylinderCount_}}){
+                loadingPoints_.draw<Cylinder>(buffer,count,offsetof(Cylinder,start));
+                loadingPoints_.draw<Cylinder>(buffer,count,offsetof(Cylinder,end));
+            }
+            loadingPoints_.draw<Box>(boxInstanceVbo_,boxCount_,offsetof(Box,center));
+            loadingPoints_.end(captureIds);
+            renderGuides(viewProjection,guides);
+            return;
+        }
         glUseProgram(program_);
         const glm::mat4 modelViewProjection = viewProjection * modelTransform;
         glUniformMatrix4fv(glGetUniformLocation(program_,"uVolumeModel"),1,GL_FALSE,&modelTransform[0][0]);
@@ -10078,7 +10092,7 @@ class Viewer {
 
     void renderVolumeScene(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,bool ids=false) {
         if(viewTools_.overrideScene()) {viewTools_.renderScene(vp,model,witnessObserverOrientation_);if(!guides.empty())glScene_->renderGuides(vp,guides);}
-        else glScene_->renderVolumes(vp,model,guides,ids,volumePanel_.entries);
+        else glScene_->renderVolumes(vp,model,guides,ids,volumePanel_.entries,representationLoading_.pending && representationLoading_.lightweight);
     }
 
     bool renderView(uint32_t index, const XrView& view,
@@ -10139,7 +10153,7 @@ class Viewer {
         roomFloor_.render(viewProjection);
         qrCalibration_.render(viewProjection,witnessObserverPosition_,witnessObserverOrientation_);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
-        if (!liveSceneHidden_ && !representationLoading_.lightweight) renderVolumeScene(
+        if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(),
             spectatorClassificationEnabled()
                 ? std::vector<Vertex>{} : controllerGuides_, captureIds);
@@ -10560,7 +10574,7 @@ class Viewer {
         roomFloor_.render(viewProjection);
         qrCalibration_.render(viewProjection,witnessObserverPosition_,witnessObserverOrientation_);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
-        if (!liveSceneHidden_ && !representationLoading_.lightweight) renderVolumeScene(
+        if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(), {});
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
         glScene_->renderGuides(viewProjection, controllerGuides_, &controllerHandEnds_);
@@ -10610,7 +10624,7 @@ class Viewer {
                 std::min(witnessActorGuideCount_, controllerGuides_.size())));
         roomFloor_.render(viewProjection);
         qrCalibration_.render(viewProjection,witnessObserverPosition_,witnessObserverOrientation_);
-        if (!liveSceneHidden_ && !representationLoading_.lightweight) renderVolumeScene(
+        if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(),
             actorGuides);
         if (referenceGrid_) {

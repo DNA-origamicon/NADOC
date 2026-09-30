@@ -40,8 +40,8 @@ def catalog():
         'Real browser/controller loads with native CPU phases and read-only SteamVR compositor timing. Checks p99 cadence, long frame gaps and dropped-frame rate; validation covers all four motion presets. Uses the optional openvr Python binding through uv. Private test documents are cleaned up.', ['--profile'], module='browser_representation_tour')
     add('browser-representations', 'interaction', 'Browser-to-headset representation loading',
         'Open the current part in an automated browser, launch VR through its UI, select all eleven representations with ScryWrite, and require 100% plus visible model pixels in both eyes. Validation repeats Full/Surface/Cylinders under all four motion presets. Also checks one-row touchpad scrolling and captures nested menu indentation. Stick and Ball & Stick use the shared shadow renderer. Retains native CPU phase timings and loading samples for loading_profile; checks actual activation after budgeted GPU uploads. No mocked desktop responder.', module='browser_representation_tour')
-    add('representation-loading', 'interaction', 'Full startup and on-demand representation progress',
-        'Start with Full, select other representations with real controller inputs, and verify the percentage bar below the button text in both eyes. Validation uses all four motion profiles.', ['--representations'], module='startup_tour')
+    add('representation-loading', 'interaction', 'Full startup, loading visibility and representation progress',
+        'Start with Full, select other representations with real controller inputs, and verify loading progress plus retained model pixels in both eyes, including the point fallback. Validation uses all four motion profiles and covers Surface to Stick.', ['--representations'], module='startup_tour')
     add('startup', 'interaction', 'Cold startup and headset loading progress',
         'Launch a read-only private copy of 24HB through the normal launch route. Capture loading and first model stereo frames and verify advancing headset frames during export.', module='startup_tour')
     add('menu-depth', 'interaction', 'Menu blur and controller depth',
