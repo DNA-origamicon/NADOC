@@ -417,6 +417,86 @@ def test_timeout_records_timeout_kind():
     assert c.is_connected()
 
 
+@pytest.mark.parametrize("closed", [False, True])
+def test_channel_refusal_only_expires_closed_transport(closed):
+    import asyncssh
+
+    fake = _FakeConn()
+    fake.closed = closed
+    fake.raise_on_run = asyncssh.ChannelOpenError(1, "open failed")
+    c = ClusterConnection()
+    _run(c.connect("h", "u", "pw", connector=_connector_returning(fake)))
+    with pytest.raises(ClusterSSHError, match="open failed"):
+        _run(c.run("true"))
+    assert c.is_connected() is (not closed)
+
+
+def test_repeated_timeouts_release_real_ssh_channels():
+    """A server with one session slot must remain usable after every timeout."""
+    import asyncssh
+
+    async def scenario():
+        active = set()
+        released = asyncio.Event()
+        started = asyncio.Event()
+
+        class Session(asyncssh.SSHServerSession):
+            def connection_made(self, channel):
+                self.channel = channel
+                active.add(self)
+
+            def exec_requested(self, command):
+                self.command = command
+                return True
+
+            def session_started(self):
+                started.set()
+                if self.command == "true":
+                    self.channel.exit(0)
+
+            def connection_lost(self, exc):
+                active.discard(self)
+                released.set()
+
+        class Server(asyncssh.SSHServer):
+            def begin_auth(self, username):
+                return False
+
+            def session_requested(self):
+                if active:
+                    raise asyncssh.ChannelOpenError(1, "open failed")
+                return Session()
+
+        async with asyncssh.listen('127.0.0.1', 0, server_factory=Server,
+                                   server_host_keys=[asyncssh.generate_private_key('ssh-ed25519')]) as server:
+            async with asyncssh.connect('127.0.0.1', port=server.get_port(),
+                                        username='test', known_hosts=None) as transport:
+                c = ClusterConnection()
+                await c.connect('local', 'test', '', connector=_connector_returning(transport))
+                for _ in range(12):
+                    released.clear()
+                    with pytest.raises(ClusterSSHError, match="timed out"):
+                        await c.run('stall', timeout=0.03)
+                    await asyncio.wait_for(released.wait(), 1)
+                    assert not active
+                released.clear()
+                assert (await c.run('true')).rc == 0
+                await asyncio.wait_for(released.wait(), 1)
+                assert c.is_connected()
+                released.clear()
+                started.clear()
+                # A caller cancellation must release its channel as well.
+                task = asyncio.create_task(c.run('stall'))
+                await asyncio.wait_for(started.wait(), 1)
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+                await asyncio.wait_for(released.wait(), 1)
+                assert not active
+
+    _run(scenario())
+
+
 def test_command_timeout_does_not_interrupt_download_queue(tmp_path):
     async def scenario():
         started = asyncio.Event()

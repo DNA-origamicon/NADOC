@@ -404,6 +404,30 @@ def test_poll_status_absent_everywhere_is_completed(tmp_path):
     assert bucket == "completed"
 
 
+@pytest.mark.parametrize("failure", ["timeout", "exit"])
+@pytest.mark.parametrize("accounting", ["42|RUNNING", "", "error"])
+def test_poll_status_controller_failure_uses_accounting_safely(failure, accounting):
+    from backend.core.cluster_ssh import ClusterSSHError
+
+    class Conn(FakeConn):
+        async def run(self, cmd, timeout=60):
+            if "squeue" in cmd:
+                if failure == "timeout":
+                    raise ClusterSSHError("command timed out", kind="timeout")
+                return RunResult(1, "", "controller unavailable")
+            return await super().run(cmd, timeout=timeout)
+
+    conn = Conn(canned={"sacct": RunResult(1 if accounting == "error" else 0,
+                                         accounting, "accounting unavailable")})
+    job = new_job("d", "p", name_stem="d", package_subdir="pkg")
+    job.slurm_job_id = "42"
+    if accounting == "42|RUNNING":
+        assert _run(ex.poll_status(job, conn=conn)) == ("RUNNING", "running")
+    else:
+        with pytest.raises(RuntimeError):
+            _run(ex.poll_status(job, conn=conn))
+
+
 # ── reconcile_remote_job ──────────────────────────────────────────────────────
 
 
@@ -1010,12 +1034,35 @@ def test_reconcile_completed_records_learned_throughput(tmp_path):
 # ── cancel_job + poll_remote_jobs ─────────────────────────────────────────────
 
 
+def test_remote_inventory_shell_includes_top_level_logs(tmp_path):
+    """Run the actual inventory shell: stat -c emits literal backslash-t, not a tab."""
+    import subprocess
+
+    scratch = tmp_path / 'scratch with spaces'
+    (scratch / 'output').mkdir(parents=True)
+    (scratch / 'output' / 'run.xsc').write_bytes(b'cell')
+    (scratch / 'run.log').write_bytes(b'energy')
+    (scratch / 'run.out').write_bytes(b'batch')
+    (scratch / 'run.err').write_bytes(b'')
+    job = new_job('d', 'p', name_stem='d', package_subdir='pkg')
+    job.remote_scratch_dir = str(scratch)
+
+    class Shell:
+        async def run(self, cmd):
+            result = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True, timeout=5)
+            return RunResult(result.returncode, result.stdout, result.stderr)
+
+    assert _run(ex.remote_output_inventory(job, conn=Shell())) == {
+        'output/run.xsc': 4, 'run.log': 6, 'run.out': 5, 'run.err': 0,
+    }
+
+
 def test_cancel_job_issues_scancel(tmp_path):
     job = new_job("d", "p", name_stem="d", package_subdir="pkg")
     job.slurm_job_id = "42"
     conn = FakeConn()
     assert _run(ex.cancel_job(job, conn=conn)) is True
-    assert any("scancel 42" in c for c in conn.runs)
+    assert any("scancel --ctld --quiet 42" in c for c in conn.runs)
 
 
 def test_cancel_job_noop_without_id(tmp_path):
@@ -1119,7 +1166,7 @@ def test_poll_remote_jobs_drains_pending_scancel(tmp_path):
     conn = FakeConn()
     touched = _run(ex.poll_remote_jobs(tmp_path, conn=conn))
     assert job.job_id in touched
-    assert any("scancel 77" in c for c in conn.runs)
+    assert any("scancel --ctld --quiet 77" in c for c in conn.runs)
     assert MdJob.load(job.job_id, tmp_path).pending_scancel is False
 
 

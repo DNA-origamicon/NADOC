@@ -38,6 +38,7 @@ from pathlib import Path, PurePosixPath
 from backend.core.cluster_config import ClusterProfile, resolve_paths
 from backend.core.md_job import MdJob, MdStatus
 from backend.core import md_protocols, resume_transfer
+from backend.core.alpine_cancel import SchedulerCancellationError as SchedulerCancellationError
 from backend.core.md_protocols import strip_gpu_resident
 from backend.core.slurm_script import (
     EARLY_STOP_EVAL_NAME,
@@ -696,19 +697,35 @@ async def poll_status(job: MdJob, *, conn=None) -> tuple[str, str]:
     if not jid:
         return ("", "running")
 
-    sq = await conn.run(f"squeue -j {jid} --format='%i|%T' --noheader")
-    states = parse_state_lines(sq.stdout)
-    raw = states.get(jid)
+    from backend.core.cluster_ssh import ClusterSSHError
+
+    queue_failed = False
+    raw = None
+    try:
+        sq = await conn.run(f"squeue -j {jid} --format='%i|%T' --noheader", timeout=10)
+        queue_failed = sq.rc != 0
+        if not queue_failed:
+            raw = parse_state_lines(sq.stdout).get(jid)
+    except ClusterSSHError:
+        if not conn.is_connected():
+            raise
+        queue_failed = True
+    # Accounting can remain available while the live Slurm controller stalls.
+    # A failed query is not evidence that a job disappeared or completed.
     if raw is None:
         sa = await conn.run(
             f"sacct -j {jid} --format=JobIDRaw,State,ExitCode,DerivedExitCode,Elapsed,NodeList "
-            "--parsable2 --noheader"
+            "--parsable2 --noheader", timeout=10,
         )
+        if sa.rc:
+            raise RuntimeError(f"Alpine accounting query failed: {sa.stderr[-1000:]}")
         diagnostics = parse_sacct_diagnostics(sa.stdout, jid)
         if diagnostics:
             job.slurm_diagnostics = diagnostics
         raw = parse_state_lines(sa.stdout).get(jid)
     if raw is None:
+        if queue_failed:
+            raise RuntimeError("Alpine queue unavailable and accounting has no job state; retrying later")
         return ("", "completed")
     return (raw, map_slurm_state(raw))
 
@@ -1337,7 +1354,7 @@ async def remote_output_inventory(job: MdJob, *, conn=None) -> dict[str, int]:
     listing = await conn.run(
         f"cd {_shq(scratch)} && "
         "find output -type f -printf '%s\\t%p\\n' 2>/dev/null; "
-        "for f in *.log *.out *.err; do [ -f \"$f\" ] && stat -c '%s\\t%n' \"$f\"; done"
+        "for f in *.log *.out *.err; do [ -f \"$f\" ] && stat --printf='%s\\t%n\\n' \"$f\"; done"
     )
     out: dict[str, int] = {}
     for line in (listing.stdout or "").splitlines():
@@ -1353,12 +1370,10 @@ async def remote_output_inventory(job: MdJob, *, conn=None) -> dict[str, int]:
 
 
 async def cancel_job(job: MdJob, *, conn=None) -> bool:
-    """``scancel`` the remote job.  Returns True if a cancel was issued."""
-    conn = conn or _default_conn()
-    if not job.slurm_job_id:
-        return False
-    res = await conn.run(f"scancel {job.slurm_job_id}")
-    return res.rc == 0
+    """Cancel the allocation, or verify a scoped compute-node stop on scheduler failure."""
+    from backend.core.alpine_cancel import cancel_job as cancel
+
+    return await cancel(job, conn=conn or _default_conn())
 
 
 class _SkipHealth(Exception):

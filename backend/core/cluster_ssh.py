@@ -356,8 +356,32 @@ class ClusterConnection:
                 "command", op_id, started, outcome="error", command=cmd, error=str(exc)
             )
             raise
+        async def execute():
+            # Own the process channel: cancelling AsyncSSH.run() only cancels
+            # the output waiter, leaving a stalled remote command/channel open.
+            # Keep the minimal run-only interface for injected connectors.
+            if not hasattr(conn, "create_session"):
+                return await conn.run(cmd, check=False)
+            import asyncssh
+
+            process = None
+
+            def process_factory():
+                nonlocal process
+                process = asyncssh.SSHClientProcess()
+                return process
+
+            try:
+                # Capture ownership before the exec acknowledgment, which can
+                # itself stall. create_process() returns too late for that case.
+                await conn.create_session(process_factory, cmd)
+                return await process.wait(check=False)
+            finally:
+                if process is not None:
+                    process.close()
+
         try:
-            result = await asyncio.wait_for(conn.run(cmd, check=False), timeout=timeout)
+            result = await asyncio.wait_for(execute(), timeout=timeout)
         except asyncio.CancelledError:
             alpine_operations.finish(
                 "command", op_id, started, outcome="cancelled", command=cmd
@@ -379,9 +403,19 @@ class ClusterConnection:
             self._record_error(message)
             raise ClusterSSHError(message, kind="timeout") from exc
         except Exception as exc:  # noqa: BLE001 — broken pipe / channel loss
+            import asyncssh
+
+            closed = getattr(conn, "is_closed", lambda: False)()
+            channel_refused = isinstance(exc, asyncssh.ChannelOpenError) and not closed
             alpine_operations.finish(
-                "command", op_id, started, outcome="error", command=cmd, error=str(exc)
+                "command", op_id, started, outcome="error", command=cmd, error=str(exc),
+                error_type=type(exc).__name__, error_code=getattr(exc, "code", None),
+                transport_closed=closed, session_preserved=channel_refused,
             )
+            if channel_refused:
+                message = f"SSH command channel refused: {exc}"
+                self._record_error(message)
+                raise ClusterSSHError(message, kind=self.last_error_kind) from exc
             raise self._fail_transport(f"command failed on transport: {exc}") from exc
         rc = getattr(result, "exit_status", getattr(result, "returncode", 0)) or 0
         run_result = RunResult(

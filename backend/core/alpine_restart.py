@@ -193,8 +193,8 @@ async def observe(job, workspace, conn):
         return
     scratch = shlex.quote(job.remote_scratch_dir)
     result = await conn.run(
-        'scontrol show job -o %s; echo "---NADOC-ATTEMPTS---"; cat %s/output/nadoc_attempts.json 2>/dev/null'
-        % (shlex.quote(job.slurm_job_id), scratch)
+        'timeout 8s scontrol show job -o %s; echo "---NADOC-ATTEMPTS---"; cat %s/output/nadoc_attempts.json 2>/dev/null'
+        % (shlex.quote(job.slurm_job_id), scratch), timeout=15,
     )
     sched_text, _, journal_text = (result.stdout or "").partition(
         "---NADOC-ATTEMPTS---"

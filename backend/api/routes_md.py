@@ -7967,6 +7967,8 @@ async def _stop_md_job_impl(job_id: str, *, fetch_remote_output: bool = True) ->
             }
         try:
             issued = await md_executor.cancel_job(job, conn=mgr)
+        except md_executor.SchedulerCancellationError as exc:
+            raise HTTPException(503, str(exc)) from exc
         except cluster_ssh.ClusterSSHError as exc:
             raise HTTPException(502, f"Cluster transport error: {exc}") from exc
         job.pending_scancel = False
@@ -7987,7 +7989,9 @@ async def _stop_md_job_impl(job_id: str, *, fetch_remote_output: bool = True) ->
         return {
             "ok": True,
             "job_id": job_id,
-            "status": "cancelled" if issued else "stopped",
+            "status": "stopped" if (job.slurm_diagnostics or {}).get("direct_stop", {}).get(
+                "job_id"
+            ) == str(job.slurm_job_id) else ("cancelled" if issued else "stopped"),
             "slurm_job_id": job.slurm_job_id,
         }
 

@@ -37,6 +37,45 @@ lives in `alpine_transfer.json` and overrides stale job records. Explicit Discon
 stops transfers; worker/workstation/transport loss requires reconnecting, with partial
 file validation/resume preserved. See the restart-recovery document above.
 
+**2026-09-30 finish/download cancellation:** Job `983f5c8e66bc` (SLURM
+`33128431`) remained active while scheduler cancellation timed out from both
+login and compute nodes. Verified node-local SIGTERM stopped its batch shell,
+NAMD and metrics process group at checkpoint 28.18 ns; repeated process inspection
+confirmed no survivors. Slurm accounting remained RUNNING, so allocation release
+was not confirmed. The detached transfer completed: all 18 output files (24.05 GB) match remote sizes;
+1,409 DCD frames passed sampled structural checks. NADOC reports completed/verified.
+`alpine_cancel.py` now falls back from bounded `scancel --ctld --quiet` to a
+single-node SSH stop using `alpine_node_stop.py`. It verifies UID, numeric job ID,
+batch-shell command, cgroup, scratch directory, one process group, and PID start
+identity before SIGTERM, then verifies exit. The observer SSH group in the allocation
+extern step is excluded; other job process groups are refused. Ambiguous/mismatched/unconfirmed
+stops still return HTTP 503 and never download/archive. Host keys are pinned with
+accept-new in a job-scoped file; changed keys are rejected. Direct-stop evidence
+records allocation-release uncertainty in `slurm_diagnostics`. Helper is Python
+3.6-compatible for Alpine nodes. Regression: 24 cancellation/finish tests and 97 executor tests pass; FAST suite
+9,480 passed with six existing unrelated geometry/surface/VR failures.
+Top-level log inventory now uses `stat --printf`, because `stat -c` emitted a
+literal backslash-t which the tab-delimited parser dropped. This run's four logs
+were fetched and verified separately while the existing worker finished its DCD.
+Evidence: `.development-artifacts/alpine-finish-20260930/`.
+
+**2026-09-30 scheduler fallback:** Live shell/SFTP and per-user `sacct` worked
+while `squeue`/`scontrol` stalled. Job polling now falls back to accounting after a
+10-second queue timeout or nonzero exit; failed queries plus missing accounting
+cannot imply completion. Restart inspection bounds `scontrol` remotely to 8 seconds
+so the attempt journal remains readable. Live job 33128431 resumed persisted metrics
+updates through the fallback; the authenticated worker stayed connected.
+
+**2026-09-29 command channel cleanup:** Repeated stalled Slurm queries left SSH
+channels open after timeout, followed by `open failed` and session expiry around
+80–103 seconds after login. Commands now own their process before the exec
+acknowledgment and close their channel on completion, timeout, or cancellation.
+A channel-open refusal preserves an open transport and logs its exception type/code.
+Local real-SSH regression covers twelve consecutive timeouts and startup cancellation;
+Fresh Duo login confirmed working SFTP and a sustained session; scheduler fallback
+above resolved the remaining progress-poll blocker. Passive incident capture
+is running as user service `nadoc-alpine-diagnostics` for 24 hours.
+
 **2026-09-28 scheduler timeout isolation:** A command timeout preserves an open SSH
 transport, so slow availability/history queries do not interrupt result downloads.
 Closed transports still expire. Timeout logs include transport/session state;
