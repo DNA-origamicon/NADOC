@@ -68,7 +68,7 @@ it('reopens the join flow when a different part invite changes the fragment', as
   dispose(); host.dispatchEvent(new Event('hashchange')); expect(dialog.showModal).toHaveBeenCalledTimes(2)
 })
 it('asks for the meeting password and transmits it only in the join request body', async () => {
-  document.body.innerHTML = '<label class="open"></label><dialog id="join"><form id="join-form"><input id="guest-name" value="Alice"><div id="meeting-password-row" hidden><input id="meeting-password"></div><p id="join-error"></p><button id="join-submit"></button></form></dialog><p id="status"></p><span id="guest"></span>'
+  document.body.innerHTML = '<label class="open"></label><dialog id="join"><form id="join-form"><input id="guest-name" value="Alice"><p id="join-error"></p><button id="join-submit"></button></form></dialog><p id="status"></p><span id="guest"></span>'
   document.querySelector('dialog').showModal = vi.fn()
   const request = vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: 'Incorrect meeting password.' }) })
   const dispose = mountMeetingJoin({ viewer: {}, fetch: request, location: { hash: '#invite=token&password=required' } })

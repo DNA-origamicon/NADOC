@@ -1,3 +1,4 @@
+import { mountMeetingPassword } from './meeting_password.js'
 import { mountInvitationLobby } from './invitation_lobby.js'
 import { mountViewerHealth } from './viewer_health.js'
 import { createMeetingPing } from './meeting_ping.js'
@@ -29,11 +30,9 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   const dialog = doc.getElementById('join'), form = doc.getElementById('join-form')
   const error = doc.getElementById('join-error'), button = doc.getElementById('join-submit')
   const status = doc.getElementById('status'), identity = doc.getElementById('guest')
-  const passwordField = doc.getElementById('meeting-password'), passwordRow = doc.getElementById('meeting-password-row')
   const qrEntry = params.get('entry') === 'qr' && params.get('role') !== 'presenter'
   const needsPassword = !qrEntry && params.get('password') === 'required'
-  if (passwordRow) passwordRow.hidden = !needsPassword
-  if (passwordField) { passwordField.disabled = !needsPassword; passwordField.required = needsPassword; passwordField.value = '' }
+  const password = mountMeetingPassword({ document: doc, required: needsPassword }), passwordField = password.field
   const abort = new AbortController()
   const sharedViews = new WeakSet()
   let disposed = false, ended = false, timer = null, promptTimer = null, polling = false, busy = false, disconnectPresentation = () => {}
@@ -137,7 +136,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
     finally { polling = false }
   }, 3000)
   void enter(true)
-  return () => { disposed = true; abort.abort(); disconnectPresentation(); health.dispose(); presence?.dispose(); ping.dispose(); display.dispose(); if (timer) cancel(timer); if (promptTimer) cancel(promptTimer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
+  return () => { disposed = true; password.dispose(); abort.abort(); disconnectPresentation(); health.dispose(); presence?.dispose(); ping.dispose(); display.dispose(); if (timer) cancel(timer); if (promptTimer) cancel(promptTimer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
 }
 
 /** A second invite can change only the fragment in an already-open viewer tab. */

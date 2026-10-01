@@ -39,8 +39,9 @@ available by default. Geographic reach does not mean unlimited simultaneous gues
 Guest entry focuses the dialog heading first, so the name field activates only
 when selected by touch or keyboard. The field requests no autocomplete, spelling
 correction, or capitalization, with opt-out hints for common password managers.
-Hidden meeting-password fields are disabled for passwordless invitations. These
-are page-level requests; browsers, extensions, and mobile keyboards can override
+Passwordless invitations contain no password input, including in the initial HTML.
+A masked password field is created only for invitations requiring a password and
+removed when that invitation is disposed. Autofill hints remain page-level requests; browsers, extensions, and mobile keyboards can override
 them. See [browser autofill limitations](https://developer.mozilla.org/en-US/docs/Web/Security/Practical_implementation_guides/Turning_off_form_autocompletion)
 and [1Password field opt-outs](https://www.1password.dev/web/compatible-website-design).
 

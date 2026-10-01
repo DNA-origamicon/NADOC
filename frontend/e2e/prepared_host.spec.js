@@ -42,7 +42,7 @@ test('invite opens a production browser viewer, prompts for name, and loads with
   await expect(page.locator('#join-title')).toBeFocused()
   const name = page.locator('#guest-name')
   await expect(name).toHaveAttribute('autocomplete', 'off')
-  await expect(page.locator('#meeting-password')).toBeDisabled()
+  await expect(page.locator('input[type=password]')).toHaveCount(0)
   await page.keyboard.press('Tab')
   await expect(name).toBeFocused()
   await name.fill('Laptop tester')
@@ -92,8 +92,19 @@ test('QR guest joins by name without a tracking panel or camera request', async 
       throw new Error('Guest entry should not request a camera')
     }
   })
+  // Password fields must never be connected, even briefly during initial parsing.
+  await page.addInitScript(() => {
+    window.__passwordInputsSeen = false
+    new MutationObserver(records => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.nodeType === 1 && (node.matches('input[type=password]') || node.querySelector('input[type=password]'))) window.__passwordInputsSeen = true
+      }
+    }).observe(document, { childList: true, subtree: true })
+  })
   await page.goto(share.qrUrl + '&qrmm=150')
-  await expect(page.locator('#meeting-password-row')).toBeHidden()
+  await expect(page.locator('input[type=password]')).toHaveCount(0)
+  await page.locator('#guest-name').click()
+  expect(await page.evaluate(() => window.__passwordInputsSeen)).toBe(false)
   await page.locator('#guest-name').fill('Phone guest')
   await page.locator('#join-submit').click()
   await expect(page.locator('#join')).not.toBeVisible()

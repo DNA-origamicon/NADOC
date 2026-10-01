@@ -7,14 +7,18 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import * as THREE from 'three'
-import { prepareScene } from '../src/viewer/prepared_scene.js'
+import { build } from 'esbuild'
+import { pathToFileURL } from 'node:url'
 import { createPreparedHost } from '../../scripts/prepared_view_host.mjs'
 
 // Test-only TLS terminator models the provider. Certificates live in mkdtemp and
 // afterEach removes them even after assertion failure. No workspace/editor writes.
-let root, host, proxy, share, upstreamPort
+let root, host, proxy, share, upstreamPort, prepareScene
 test.beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'nadoc-internet-e2e-'))
+  const bundle = join(root, 'prepared-scene.mjs')
+  await build({ entryPoints: [resolve('src/viewer/prepared_scene.js')], outfile: bundle, bundle: true, platform: 'node', format: 'esm', loader: { '.css': 'empty' }, plugins: [{ name: 'shared-three', setup(build) { build.onResolve({ filter: /^three$/ }, () => ({ path: resolve('node_modules/three/build/three.module.js'), external: true })) } }] })
+  ;({ prepareScene } = await import(pathToFileURL(bundle).href))
   const key = join(root, 'key.pem'), cert = join(root, 'cert.pem')
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=127.0.0.1'])
   proxy = https.createServer({ key: await readFile(key), cert: await readFile(cert) }, (req, res) => {
@@ -58,7 +62,8 @@ test('ordinary HTTPS browser joins by name and password, then navigates independ
   expect((await canvas.screenshot()).equals(before)).toBe(false)
   expect(errors).toEqual([]); expect(downloads).toEqual([])
   host.stop()
-  await expect(page.locator('#guest')).toContainText('Host disconnected', { timeout: 15000 })
+  await expect(page.locator('#guest')).toContainText('Session ended', { timeout: 15000 })
+  await expect(page.locator('#presentation-ended')).toBeVisible()
 })
 
 test('presenter camera changes leave guests free until Jump or Follow; input and disconnect restore independence', async ({ browser }) => {
