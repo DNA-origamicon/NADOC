@@ -137,6 +137,8 @@ export function preparedSharePlugin({ controlFile, launch = launchPreparedShare,
           for await (const chunk of req) { size += chunk.length; if (size > 512 * 1024 * 1024) return send(413, { error: 'Package exceeds 512 MiB' }); chunks.push(chunk) }
           return send(200, await hostRequest(`/host/shares/${content[1]}/content`, { method: 'POST', headers: { 'X-NADOC-Title': req.headers['x-nadoc-title'] ?? 'Shared design' }, body: Buffer.concat(chunks) }))
         }
+        const drawing = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/drawings$/)
+        if (req.method === 'GET' && drawing) return send(200, await hostRequest(`/host/shares/${drawing[1]}/drawings`))
         const avatar = path.match(/^\/__nadoc_share\/shares\/([a-f0-9]{32})\/avatar$/)
         if (req.method === 'POST' && avatar) {
           const chunks=[];let size=0

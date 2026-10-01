@@ -342,7 +342,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false }
     pushControls, popControls,
     addFrameCallback, removeFrameCallback,
     setNativeVRActive,
-    setRenderFn, resetRenderFn,
+    setRenderFn, resetRenderFn, renderNow: () => _renderFn(),
     isStandardRender: () => _renderFn === _defaultRenderFn && _renderCamera === camera,
   }
 }

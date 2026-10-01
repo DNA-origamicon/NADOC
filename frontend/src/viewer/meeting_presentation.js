@@ -1,3 +1,5 @@
+import { mountMeetingDrawing } from './meeting_drawing.js'
+import { mountViewerScreenshot } from './viewer_screenshot.js'
 import { applyAnimationTextOverlay } from '../scene/animation_text_overlay.js'
 import { decodeVRUIState } from './vr_ui_stream.js'
 import { createVRAvatar } from './vr_avatar.js'
@@ -7,7 +9,7 @@ import { mountGuestSharedViews } from './guest_shared_views.js'
 import { mountMeetingTrajectory } from './meeting_trajectory.js'
 import { loadMeetingRevision } from './meeting_scene_updates.js'
 import { mountMeetingLiveFrame } from './meeting_live_frame.js'
-export function mountMeetingPresentation({ viewer, base, role, revision, room, document: doc = document, fetch: request = fetch,
+export function mountMeetingPresentation({ viewer, base, role, revision, room, selfId = '', document: doc = document, fetch: request = fetch,
   eventSource = url => new EventSource(url), loadRevision = loadMeetingRevision, mountTrajectory = mountMeetingTrajectory, onSharedView = () => {}, onEnded = () => {}, onLoading = () => {}, onPresence = () => {}, onViewReady = () => {}, onViewShared = () => {}, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   const createTrajectory = () => mountTrajectory({ viewer, base, role, document: doc, fetch: request })
   const vrTextures = new Map()
@@ -43,6 +45,9 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   const guestViews = role === 'guest' ? mountGuestSharedViews({ parent: bar, viewer, base, document: doc, fetch: request,
     onPublished: onViewShared, getRevision: () => revision, ready: () => !locked && connected && compatible() && !updating && !viewer.performanceApi.busy,
     beforeMove: () => { if (locked) throw new Error('The presenter has locked the perspective'); follow(false) } }) : null
+  const drawing = role === 'guest' ? mountMeetingDrawing({ parent: bar, canvas, viewer, base, selfId, getRevision: () => revision,
+    ready: () => connected && compatible() && !updating && !viewer.performanceApi.busy, document: doc, fetch: request }) : null
+  const screenshot = mountViewerScreenshot({ parent: bar, viewer, canvas, document: doc })
   onViewReady(view => guestViews?.move(view))
   function update() {
     const nextLock = role === 'guest' && connected && compatible() && latest?.viewLocked === true
@@ -53,7 +58,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     }
     viewer.setViewLocked?.(locked)
     for (const id of ['reset', 'mode']) { const input = doc.getElementById(id); if (input) input.disabled = locked || !compatible() }
-    guestViews?.update()
+    guestViews?.update(); drawing?.update()
     onLoading(latest?.loading ?? null, updating)
     status.textContent = !compatible() ? 'Different snapshot opened. Reopen the invitation to present.' : !connected ? 'Presentation connection lost; you can still explore.' : role === 'presenter' ? (broadcasting ? 'Your perspective is shared. Guests choose whether to follow.' : 'Your perspective is not being shared.') : following ? 'Following presenter. Drag or scroll to explore independently.' : latest?.presenting ? 'Explore independently or follow the presenter.' : 'Presenter is not sharing a perspective.'
     if (updating) status.textContent = 'Receiving updated visualizations; your camera stays independent.'
@@ -121,6 +126,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     onPresence(value.participants ?? [], { serverTime: value.serverTime })
     if (value.revision === revision && compatible()) avatar.receive(value); else avatar.clear()
     sequence = value.sequence; latest = value; latestAt = performance.now(); pendingRevision = value.revision
+    drawing?.receive(value)
     trajectory.receive(value)
     live.receive(value)
     if (!value.animationActive) { const caption = doc.getElementById('anim-text-overlay'); if (caption) applyAnimationTextOverlay(canvas.parentElement, null) }
@@ -165,7 +171,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   update()
   return () => {
     if (disposed) return
-    disposed = true; viewer.setViewLocked?.(false); if (doc.getElementById('anim-text-overlay')) applyAnimationTextOverlay(canvas.parentElement, null); vrTextures.clear(); avatar.dispose(); guestViews?.dispose(); onViewReady(() => {}); trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
+    disposed = true; drawing?.dispose(); screenshot.dispose(); viewer.setViewLocked?.(false); if (doc.getElementById('anim-text-overlay')) applyAnimationTextOverlay(canvas.parentElement, null); vrTextures.clear(); avatar.dispose(); guestViews?.dispose(); onViewReady(() => {}); trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
     if (timer !== null) cancel(timer)
     viewer.runtime.removeFrameCallback(frame)
     doc.removeEventListener('visibilitychange', visibility)

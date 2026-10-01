@@ -8,6 +8,7 @@ import { resolve, join, basename } from 'node:path'
 import { randomBytes, timingSafeEqual, createHash } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { createPresentationState } from './prepared_room_state.mjs'
+import { createRoomDrawings } from './prepared_drawings.mjs'
 import { createRoomPresence } from './prepared_presence.mjs'
 import { createEditorBroadcast } from './prepared_editor_broadcast.mjs'
 import { unpackTrajectory, updateTrajectory, initialTrajectory } from './prepared_trajectory.mjs'
@@ -60,6 +61,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (trajectory) room.presentation.setTrajectory(initialTrajectory(trajectory, now))
     rooms.set(id, room)
     room.presence = createRoomPresence({ ...room, now })
+    room.drawings = createRoomDrawings({ ...room, now })
     room.editorBroadcast = createEditorBroadcast({ room, rooms, maxGuests, now })
     return summary(room)
   }
@@ -90,7 +92,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['design-links-v1', 'persistent-sharing-v1', 'editor-broadcast-v1', 'animation-stream-v1', 'view-lock-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'vr-avatar-v1', 'vr-ui-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['design-links-v1', 'persistent-sharing-v1', 'editor-broadcast-v1', 'animation-stream-v1', 'view-lock-v1', 'guest-drawing-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'vr-avatar-v1', 'vr-ui-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
       if (req.method === 'POST' && route === '/host/heartbeat') { ownerSeenAt = now(); return send(200, { ok: true }) }
       if (req.method === 'DELETE' && route === '/host/shares') {
         for (const id of rooms.keys()) endShare(id)
@@ -122,6 +124,11 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           for await (const chunk of req) { size += chunk.length; if (size > 512 * 1024 * 1024) return send(413, { error: 'Package too large' }); chunks.push(chunk) }
           return send(200, replaceShare(content[1], Buffer.concat(chunks), decodeURIComponent(req.headers['x-nadoc-title'] ?? 'Shared design')))
         } catch (error) { return send(409, { error: error.message }) }
+      }
+      const drawing = route.match(/^\/host\/shares\/([a-f0-9]{32})\/drawings$/)
+      if (req.method === 'GET' && drawing) {
+        const room = rooms.get(drawing[1]); if (!room) return send(410, { error: 'This share has ended.' })
+        return send(200, room.drawings.snapshot())
       }
       const avatar = route.match(/^\/host\/shares\/([a-f0-9]{32})\/avatar$/)
       if (req.method === 'POST' && avatar) {
@@ -177,7 +184,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       if (!designLinks.find(availability[1])) return send(404, { error: 'This invitation is no longer available. Ask the presenter for a new link.' })
       return send(200, { state: rooms.has(availability[1]) ? 'active' : preparing.get(availability[1]) > now() ? 'preparing' : 'inactive' })
     }
-    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|share-view|health|pause|leave|trajectory|frame|live-frame)$/)
+    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|share-view|drawings|health|pause|leave|trajectory|frame|live-frame)$/)
     const room = rooms.get(match ? match[1] : 'default')
     if (match) route = `/meeting/${match[2]}`
     if (route?.startsWith('/meeting/') && !room) return send(410, { error: 'This share has ended.' })
@@ -232,12 +239,13 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     }
     const sessionId = req.headers.cookie?.match(cookiePattern)?.[1], session = sessions?.get(sessionId)
     if (session) session.seenAt = now()
-    if (req.method === 'POST' && ['/meeting/share-view', '/meeting/health'].includes(route)) {
+    if (req.method === 'POST' && ['/meeting/share-view', '/meeting/health', '/meeting/drawings'].includes(route)) {
       if (req.headers.origin !== (publicOrigin || `http://${req.headers.host}`) || session?.role !== 'guest') return send(403, { error: 'Guest access required' })
       try {
         const chunks = []; let size = 0
-        for await (const chunk of req) { size += chunk.length; if (size > 2048) return send(413, { error: 'Camera message too large' }); chunks.push(chunk) }
+        for await (const chunk of req) { size += chunk.length; if (size > (route === '/meeting/drawings' ? 8192 : 2048)) return send(413, { error: 'Guest message too large' }); chunks.push(chunk) }
         if (sessions.get(sessionId) !== session) return send(403, { error: 'Sign in again before sharing' })
+        if (route === '/meeting/drawings') return send(200, room.drawings.publish(session, JSON.parse(Buffer.concat(chunks))))
         return send(200, room.presence[route === '/meeting/health' ? 'health' : 'share'](session, JSON.parse(Buffer.concat(chunks))))
       } catch (error) { return send(409, { error: error.message }) }
     }
@@ -286,7 +294,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         res.writeHead(200, { ...headers, 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' })
         if (!room.presentation.subscribe(res, { presenter: session.role === 'presenter' })) return
         session.streams.add(res)
-        res.once('close', () => session.streams.delete(res))
+        res.once('close', () => { session.streams.delete(res); if (!session.streams.size) room.drawings.leave(session.participantId) })
         room.presence.connect(session, res)
         const heartbeat = setInterval(() => {
           if (sessions.get(sessionId) !== session) { res.end(); return }
@@ -310,7 +318,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const controlServer = publicOrigin ? http.createServer(handler(true)) : null
   server.requestTimeout = 15000; server.headersTimeout = 10000
   if (controlServer) { controlServer.requestTimeout = 15000; controlServer.headersTimeout = 10000 }
-  const leases = setInterval(() => { if ((expiresAt !== null && now() >= expiresAt) || (ownerLeaseMs && now() - ownerSeenAt >= ownerLeaseMs)) { stop(); return }; expireShares(); for (const room of rooms.values()) { room.presentation.expireAvatar(); room.editorBroadcast.expire(); room.presence.expireHealth() } }, 1000); leases.unref()
+  const leases = setInterval(() => { if ((expiresAt !== null && now() >= expiresAt) || (ownerLeaseMs && now() - ownerSeenAt >= ownerLeaseMs)) { stop(); return }; expireShares(); for (const room of rooms.values()) { room.drawings.expire(); room.presentation.expireAvatar(); room.editorBroadcast.expire(); room.presence.expireHealth() } }, 1000); leases.unref()
   const stop = () => { closed = true; clearInterval(leases); for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); if (listener) setTimeout(() => listener.closeAllConnections(), 250).unref() } }
   return { probeId, server, controlServer, invite, expiresAt, stop, controlToken, createShare, setPublicBase: value => { if (publicOrigin && value !== publicOrigin) throw new Error('Public origin is fixed'); publicBase = value } }
 }

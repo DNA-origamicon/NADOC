@@ -6,10 +6,10 @@ export function createPresentationState({ id, revision, now = Date.now }) {
   let sequence = 0, camera = null, presenting = false, windowStart = now(), updates = 0, closed = false
   const listeners = new Set()
   const presenters = new Set()
-  let trajectory = null, liveFrame = null, loading = null, participants = []
+  let trajectory = null, liveFrame = null, loading = null, participants = [], drawings = []
   let manualViewLock = false, animationViewLock = false
   let avatar = null, avatarWindow = now(), avatarUpdates = 0
-  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, viewLocked: manualViewLock || animationViewLock, animationActive: animationViewLock, avatar, trajectory, liveFrame, loading, participants, ended: closed, serverTime: now() })
+  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, viewLocked: manualViewLock || animationViewLock, animationActive: animationViewLock, avatar, trajectory, liveFrame, loading, participants, drawings, ended: closed, serverTime: now() })
   const textureCaches = new WeakMap()
   const encode = (state, response) => {
     if (!textureCaches.has(response)) textureCaches.set(response, new Map())
@@ -49,6 +49,7 @@ export function createPresentationState({ id, revision, now = Date.now }) {
     return snapshot()
   }
   return { snapshot, publish, pause,
+    setDrawings(value) { drawings = value; sequence++; broadcast() },
     setViewLock(value, animation = false) {
       if (typeof value !== 'boolean') throw new Error('Invalid perspective lock')
       if (animation) animationViewLock = value; else manualViewLock = value

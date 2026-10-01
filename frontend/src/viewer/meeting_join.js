@@ -96,7 +96,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
       presence?.dispose()
       presence = mountMeetingPresence({ parent: doc.querySelector('main') ?? doc.body, selfId: details.participantId, onView: view => moveView(view), ping, document: doc })
       if (details.role && details.revision) {
-        const mount = ({ onSharedView } = {}) => mountMeetingPresentation({ onEnded: finish, onLoading: display.progress, onPresence: (participants, context) => { presence.update(participants, context); if (details.role === 'guest') health.start() }, onViewShared: ping.play, onViewReady: move => { moveView = move }, onSharedView, viewer, base, role: details.role, revision: details.revision, room: room || 'default', document: doc, fetch: measuredRequest })
+        const mount = ({ onSharedView } = {}) => mountMeetingPresentation({ onEnded: finish, onLoading: display.progress, onPresence: (participants, context) => { presence.update(participants, context); if (details.role === 'guest') health.start() }, onViewShared: ping.play, onViewReady: move => { moveView = move }, onSharedView, viewer, base, selfId: details.participantId, role: details.role, revision: details.revision, room: room || 'default', document: doc, fetch: measuredRequest })
         disconnectPresentation = details.role === 'presenter' ? mountPresenterAttendance({ viewer, base, document: doc, fetch: request, mount, resume: async () => {
           const resumed = await join({ ...credential, resume: true })
           if (!resumed.response.ok) throw new Error(resumed.details.error || 'Could not return to the presentation')

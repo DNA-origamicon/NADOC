@@ -24,7 +24,7 @@ export function initPreparedExport({ scene, camera, renderer, controls, canvas, 
     if ((!alternate && !isStandardRender()) || (camera.layers && camera.layers.mask !== 1)) throw new Error('Return to the normal 3D view before exporting a prepared snapshot')
     const state = store.getState()
     if (state.cadnanoActive || state.unfoldActive) throw new Error('Return to the 3D view before exporting')
-    return { controls: alternate?.controls ?? controls, scene: alternate?.scene ?? scene, camera: alternate?.camera ?? camera, pose: alternate?.pose ?? captureCurrentCamera(), view: { representation: getRepresentation(), ...alternate?.view, viewTools: captureViewTools(doc), visualization: alternate ? null : getVisualization(), annotations: captureSceneAnnotations(alternate?.scene ?? scene), selection: capturePresentationSelection(alternate?.scene ?? scene) }, pane: alternate?.pane }
+    return { canvas, controls: alternate?.controls ?? controls, scene: alternate?.scene ?? scene, camera: alternate?.camera ?? camera, pose: alternate?.pose ?? captureCurrentCamera(), view: { representation: getRepresentation(), ...alternate?.view, viewTools: captureViewTools(doc), visualization: alternate ? null : getVisualization(), annotations: captureSceneAnnotations(alternate?.scene ?? scene), selection: capturePresentationSelection(alternate?.scene ?? scene) }, pane: alternate?.pane }
   }
   async function exportView({ presentation = false } = {}) {
     if (busy) return

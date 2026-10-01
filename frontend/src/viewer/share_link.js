@@ -1,3 +1,4 @@
+import { initEditorDrawings } from './editor_drawings.js'
 import { initAnimationSharing } from './animation_sharing.js'
 import { initMeetingTarget } from './meeting_target_ui.js'
 import { initVRAvatarPublisher } from './vr_avatar_publisher.js'
@@ -61,6 +62,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     void ensureInvitation(false, true).catch(() => { /* Start or opening Sharing reports actionable setup errors. */ })
   }
   const currentRoom = () => shares.find(s => s.id === selectedId) ?? shares[0]
+  const drawings = broadcast?.prepared ? initEditorDrawings({ prepared: broadcast.prepared, getRoom: () => capabilities.includes('guest-drawing-v1') ? currentRoom() : null, document: doc, fetch: request }) : null
   const currentInvitation = () => invitation ?? currentRoom()
   const meetingTarget = initMeetingTarget({ parent: dialog, document: doc, onError: reportError })
   async function stopNative() {
@@ -370,5 +372,5 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
       finally { polling = false }
     }, 5000)
     return jobs
-  }, dispose() { animation?.dispose(); meetingTarget.dispose(); vrAvatar.dispose(); documentClosed(); unsubscribeDocument?.(); hostWindow?.removeEventListener('nadoc:document-reset', documentClosed); hostWindow?.removeEventListener('pagehide', documentClosed); nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; startTrigger?.removeEventListener('click', startFromMenu); trigger?.removeEventListener('click', show); qrTrigger?.removeEventListener('click', showQR); stopTrigger?.removeEventListener('click', stopFromMenu); dialog.remove() } }
+  }, dispose() { drawings?.dispose(); animation?.dispose(); meetingTarget.dispose(); vrAvatar.dispose(); documentClosed(); unsubscribeDocument?.(); hostWindow?.removeEventListener('nadoc:document-reset', documentClosed); hostWindow?.removeEventListener('pagehide', documentClosed); nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; startTrigger?.removeEventListener('click', startFromMenu); trigger?.removeEventListener('click', show); qrTrigger?.removeEventListener('click', showQR); stopTrigger?.removeEventListener('click', stopFromMenu); dialog.remove() } }
 }
