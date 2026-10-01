@@ -409,8 +409,12 @@ independent. Controller sidebars initially use scale 0.45 at 0.60 m forward
 (previously 0.65 at 0.95 m), with centers 0.24 m either side and 0.10 m below
 the eye. A user-selected size survives reopening.
 
-Aim at any interactive window border and hold Trigger to move it around the
-head at its current radius. Release fixes it in space. Quickly trigger twice
+Aim at any interactive window border and hold Trigger to attach it to the controller
+with a fixed ray distance and angle. Translation and rotation follow the controller,
+independent of head movement. Hold the other controller’s Trigger on the same
+window border and spread the ray endpoints to resize; release either trigger to
+continue moving with the remaining hand. Release both to fix it in space.
+Alternatively, quickly trigger twice
 and hold the second pull to resize by sweeping outward/inward from the window
 center. The shared handler covers both sidebars, desktop, View tools, legacy
 tool/trajectory/job panels and the lattice window; ordinary nearby grips remain
@@ -419,13 +423,28 @@ dashboard focus loss and panel closure release the gesture. Scale range is
 0.25–8.0 and panel ray reach is 30 m, allowing large distant windows to remain
 accessible. Frame feedback uses blue hover, amber movement and green resize.
 
+The **Menu controls · distant trigger grab & resize** tour is available under
+Controls & layout. Run `just vr-menu-tour --remote-checks --validate --exit`
+to check all four motion presets, controller-relative movement, two-trigger
+resizing, one-hand release continuation, double-trigger resizing, stereo frame
+feedback and final desktop delivery.
+
 Remote border targets include an outside-only margin of at least 5 cm, so
 smaller nearby windows tolerate hand tremor without expanding into their
 buttons. Overlapping margins defer to actual foreground content, then the
 nearest rail. External desktop chrome, including Close, is excluded from the
 margin. A ray endpoint and colored frame show which border will receive a click.
 
-Remote-border validation is retained in
+Fixed-ray and two-trigger validation: `.development-artifacts/vr-fixed-ray-20260930/attempt-3/`
+passed all four presets on both sidebars, stereo frame checks and actual desktop
+visibility. `result.json` records the gesture results; each preset retains moving
+and resizing stereo/mirror captures. Attempt 1 exposed accumulated enlargement
+clipping the later resize capture; the tour now restores size between gestures.
+Attempt 2 retained a tour restoration variable-order error, corrected in attempt 3.
+Four focused native tests and 32 Python tour/grip tests passed. These captures
+verify rendered output and monitor delivery, not through-headset comfort.
+
+Earlier validation of the superseded head-radius movement is retained in
 `.development-artifacts/vr-remote-borders-20260930/final-pass/`: all four motion
 profiles passed both hands, fixed-radius movement, center-fixed resize, unchanged
 scene/tab, stereo frame-color checks and final monitor delivery. Five focused

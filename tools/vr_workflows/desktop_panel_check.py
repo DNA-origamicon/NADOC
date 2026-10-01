@@ -87,14 +87,18 @@ def run(live, output, preset, owner, trials):
         if live.state['remote_border']['active']:break
         trigger(False)
     assert live.state['remote_border']['active']
-    before=np.asarray(state()['position']);radius=np.linalg.norm(before-head)
+    before=np.asarray(state()['position'])
+    def local_center():
+        pose=live.state['hands'][1];q=pose['orientation_xyzw']
+        return np.asarray(rotate([-q[0],-q[1],-q[2],q[3]],np.asarray(state()['position'])-pose['position']))
+    anchor=local_center()
     target=np.asarray(border_control(live.state)['position'])
     sweep=np.asarray(rotate(evidence['eyes'][0]['orientation_xyzw'],[.1,.03,0]))
     for factor in (1,1.4,1.8):
         aim_remote(target+sweep*factor,lambda s:math.dist(s['desktop_capture']['position'],before)>.05)
         if math.dist(before,state()['position'])>.025:break
     assert math.dist(before,state()['position'])>.025
-    assert abs(np.linalg.norm(np.asarray(state()['position'])-head)-radius)<.04
+    assert np.linalg.norm(local_center()-anchor)<.005
     capture('desktop-remote-moving');trigger(False)
     offset=np.zeros(3)
     for attempt in range(6):

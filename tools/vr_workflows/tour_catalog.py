@@ -50,6 +50,8 @@ def catalog():
         'Barely visible white glass, subtle button tints and stereo background blur, a calibrated floor grid and SteamVR play-area outline. Checks native pixels and all four motion profiles.', ['--room-checks'])
     add('focus', 'interaction', 'Trackpad, pointer, cards & scrollbars',
         'Check bounded columns and lateral navigation, focus gray controls, activate triggers, collapse cards, scroll, and return to pointing.', ['--focus-checks'])
+    add('remote-borders', 'interaction', 'Menu controls · distant trigger grab & resize',
+        'Hold a border with a fixed controller-to-border ray; move and rotate, then hold the other trigger on the border to resize. Also checks double-trigger resize and stereo feedback.', ['--remote-checks'])
     add('grips', 'interaction', 'Move & resize menu borders',
         'Acquire both menu frames, reposition them and resize with two controllers.', ['--grip-checks'])
     add('dimensions', 'dimensions', 'Place & manage dimensions',

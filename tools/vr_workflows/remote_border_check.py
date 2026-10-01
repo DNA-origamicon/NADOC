@@ -65,7 +65,12 @@ def run(live, catalog, output, preset):
             trigger(hand,False)
         assert live.state['remote_border']['active'] and not live.state['remote_border']['resizing']
         original_tab=menu()['tab']
-        initial=np.asarray(menu()['position']);radius=np.linalg.norm(initial-head)
+        initial=np.asarray(menu()['position'])
+        def local_center():
+            pose=live.state['hands'][hand]
+            q=pose['orientation_xyzw']
+            return np.asarray(rotate([-q[0],-q[1],-q[2],q[3]],np.asarray(menu()['position'])-pose['position']))
+        anchor=local_center()
         # Sweep sideways by a modest angle while maintaining the original depth.
         start_target=target()
         sweep=np.asarray(rotate(eye['orientation_xyzw'],[(-.08 if panel==0 else .08),.03,0]))
@@ -73,9 +78,39 @@ def run(live, catalog, output, preset):
             aim(start_target+sweep*factor,lambda s:math.dist(s['sidebars'][panel]['position'],initial)>.05)
             if math.dist(menu()['position'],initial)>.025:break
         assert np.linalg.norm(np.asarray(menu()['position'])-initial)>.025
-        assert abs(np.linalg.norm(np.asarray(menu()['position'])-head)-radius)<.035
+        assert np.linalg.norm(local_center()-anchor)<.005
         assert math.dist(live.state['hands'][hand]['position'],origin)<.05
         capture(live,output,f'{panel}-remote-moving',panel,'moving')
+        # Translation in depth must follow the controller, preserving its local anchor.
+        origin=origin+rotate(eye['orientation_xyzw'],[0,0,-.10])
+        aim(target())
+        assert np.linalg.norm(local_center()-anchor)<.005
+        # Join the held panel with the opposite controller's trigger from afar.
+        other=1-hand
+        other_origin=head+rotate(eye['orientation_xyzw'],[(-.16 if other==0 else .16),-.22,-.22])
+        def other_target():return np.asarray(menu()['grip_targets'][1-panel])
+        for attempt in range(3):
+            trial=reach_target(live,other_target().tolist(),preset,24000+len(trials),
+                target_position=other_origin.tolist(),hand=other)
+            trials.append(trial)
+            trigger(other,True)
+            if live.state['remote_border']['resizing']:break
+            trigger(other,False)
+        assert live.state['remote_border']['resizing'],'Second controller trigger failed to join'
+        scale=menu()['scale'];start_other=other_target();center=np.asarray(menu()['position'])
+        for factor in (1.5,1.8,2.1):
+            trials.append(reach_target(live,(center+(start_other-center)*factor).tolist(),preset,
+                25000+len(trials),target_position=other_origin.tolist(),hand=other,
+                acquired=lambda s:s['sidebars'][panel]['scale']>scale*1.20))
+            if menu()['scale']>scale*1.12:break
+        assert menu()['scale']>scale*1.12
+        capture(live,output,f'{panel}-two-trigger-resizing',panel,'resizing')
+        # Restore size before the separate double-trigger trial and later presets.
+        trials.append(reach_target(live,start_other.tolist(),preset,26000+len(trials),
+            target_position=other_origin.tolist(),hand=other,
+            acquired=lambda s:abs(s['sidebars'][panel]['scale']-scale)<scale*.08))
+        trigger(other,False)
+        assert live.state['remote_border']['active'] and not live.state['remote_border']['resizing']
         trigger(hand,False);assert not live.state['remote_border']['active']
         # Acquire once, then tap/release and immediately hold the second click.
         offset=np.zeros(3)
@@ -106,4 +141,4 @@ def run(live, catalog, output, preset):
         assert menu()['tab']==original_tab,'Border gesture activated a neighboring tab'
         assert scene==live.state['presentation']['model_to_tracking_rows'],'Border gesture manipulated scene'
     (output/'remote-trials.json').write_text(json.dumps(trials,indent=2)+'\n')
-    return {'remote_borders':True,'both_hands':True,'scene_unchanged':True}
+    return {'remote_borders':True,'both_hands':True,'fixed_controller_anchor':True,'two_trigger_resize':True,'scene_unchanged':True}

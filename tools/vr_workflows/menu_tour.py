@@ -330,7 +330,7 @@ def main():
     mode.add_argument("--qr-checks", action="store_true", help="Check Share-tab Vive camera preview and cancellation")
     mode.add_argument("--room-checks", action="store_true", help="Check frosted menus and the calibrated SteamVR floor")
     mode.add_argument("--dimension-checks", action="store_true", help="Check live dimensions, pinning, entry controls and model transforms")
-    mode.add_argument("--remote-checks", action="store_true", help="Check trigger border movement and double-trigger resize")
+    mode.add_argument("--remote-checks", action="store_true", help="Check fixed-ray trigger movement, two-controller and double-trigger resize")
     mode.add_argument("--grip-checks", action="store_true", help="Check border grabbing, movement and two-hand resize")
     mode.add_argument(
         "--focus-checks",

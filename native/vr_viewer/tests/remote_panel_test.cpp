@@ -17,10 +17,14 @@ int main(){try {
     auto update=[&](bool click,bool held,double t){return control.update(targets,hands,{false,click},{false,held},{0,0,0},t);};
     check(update(true,true,1)[1]&&control.active==&p&&!control.resizing,"Distant border did not acquire move");
     const auto initial=p.position();
+    const auto anchor=glm::inverse(hands[1].orientation)*(p.worldPoint({.99F,0,0})-hands[1].position);
     hands[1].orientation=glm::angleAxis(.25F,glm::vec3(0,1,0))*hands[1].orientation;
     update(false,true,1.2);
     check(glm::distance(initial,p.position())>.5F,"Ray sweep did not move distant panel");
-    check(std::abs(glm::length(p.position())-3)<1e-4F,"Move changed panel radius");
+    hands[1].position+=glm::vec3(.2F,.1F,-.4F);update(false,true,1.25);
+    check(glm::distance(glm::inverse(hands[1].orientation)*(p.worldPoint({.99F,0,0})-hands[1].position),anchor)<1e-4F,"Grab did not preserve controller-local ray anchor");
+    const auto beforeHead=p.position();control.update(targets,hands,{false,false},{false,true},{1,2,3},1.26);
+    check(glm::distance(beforeHead,p.position())<1e-5F,"Head movement moved grabbed menu");
     check(p.remoteMode()==1,"Remote movement state missing");
     update(false,false,1.3);check(!control.active&&p.remoteMode()==0,"Release retained remote owner");
     hands[1]=aim(p.worldPoint({1.015F,0,0}));update(true,true,1.5);
@@ -31,6 +35,35 @@ int main(){try {
     const auto center=p.position();hands[1]=aim(p.worldPoint({2,0,0}));update(false,true,2.3);
     check(p.scale()>1.9F&&glm::distance(center,p.position())<1e-5F,"Resize moved center or did not enlarge");
     update(false,false,2.4);
+    // The other controller can join a distant grab, then either hand can release.
+    for(size_t first=0;first<2;++first) {
+        control.cancel();p.openDocked({0,0,-3},glm::quat(1,0,0,0));p.setScale(1);
+        hands[0]=aim({-.99F,0,-3});hands[1]=aim({.99F,0,-3});
+        std::array<bool,2> held{},click{};held[first]=click[first]=true;
+        control.update(targets,hands,click,held,{},10);
+        click[first]=false;held[1-first]=click[1-first]=true;
+        auto blocked=control.update(targets,hands,click,held,{},10.1);
+        check(blocked[0]&&blocked[1]&&control.resizing,"Second controller did not acquire remote resize");
+        hands[0].position.x-=.3F;hands[1].position.x+=.3F;click.fill(false);
+        control.update(targets,hands,click,held,{},10.2);
+        check(p.scale()>1.25F&&glm::distance(p.position(),glm::vec3(0,0,-3))<1e-4F,"Two-ray resize failed");
+        held[first]=false;const auto before=p.position();
+        control.update(targets,hands,click,held,{},10.3);
+        check(control.active==&p&&!control.resizing&&glm::distance(before,p.position())<1e-4F,"Resize release jumped or lost remaining grab");
+        hands[1-first].position.z-=.2F;control.update(targets,hands,click,held,{},10.4);
+        check(std::abs(p.position().z-before.z+.2F)<1e-4F,"Remaining hand did not move panel");
+        held.fill(false);control.update(targets,hands,click,held,{},10.5);
+        check(!control.active,"Two-hand release retained ownership");
+    }
+    control.cancel();p.openDocked({0,0,-3},glm::quat(1,0,0,0));p.setScale(1);
+    hands[0]=aim({-.99F,0,-3});hands[1]=aim({.99F,0,-3});
+    control.update(targets,hands,{true,true},{true,true},{},11);
+    check(control.resizing,"Simultaneous triggers did not resize");
+    targets.clear();control.update(targets,hands,{false,false},{true,true},{},11.1);
+    check(!control.active&&p.remoteMode()==0,"Closing two-hand panel retained gesture");
+    targets={{&p,b,b}};update(true,true,11.2);
+    check(control.active==&p&&!control.resizing,"Closed two-hand gesture contaminated next grab");
+    control.cancel();
     // Border ownership cannot leak through a nearer panel interior.
     p.openDocked({0,0,-3},glm::quat(1,0,0,0));p.setScale(1);
     front.openDocked({0,0,-1},glm::quat(1,0,0,0));front.setScale(1);
@@ -51,6 +84,6 @@ int main(){try {
     check(desktop.hit(h).has_value()&&!desktop.uv(h),"External Close is clipped or maps to desktop");
     targets={{&desktop.placement,desktop.bounds(),desktop.chromeBounds()}};hands[1]=h;
     update(true,true,8);check(!control.active,"External Close was swallowed by border margin");
-    std::cout<<"Remote border movement, radius, resize, occlusion, cancellation and external Close passed\n";
+    std::cout<<"Remote border movement, fixed ray anchor, two-hand resize, occlusion, cancellation and external Close passed\n";
     return 0;
 } catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
