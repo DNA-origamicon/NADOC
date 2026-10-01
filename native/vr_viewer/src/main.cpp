@@ -2276,6 +2276,47 @@ class GlScene {
         return nearest;
     }
 
+    // Use the selected packed instances; a base grab never scans the full
+    // atomistic scene or rebuilds semantic ownership on each controller frame.
+    [[nodiscard]] std::optional<glm::vec3> pickSelected(
+            const nadoc_vr::Ray& worldRay,const glm::mat4& model,const std::vector<std::string>& owners) const {
+        // Remaining tokens are parent-domain/strand aliases, not extra selections.
+        if(owners.empty())return std::nullopt;
+        if(!previewGeometry_.active() || previewGeometry_.token!=owners.front()) {
+            const auto hit=pick(worldRay,model);
+            if(!hit)return std::nullopt;
+            const auto weights=layerWeights(currentSource(),hit->identity,owners.front(),*sourceIndex_);
+            return weights.first!=0 || weights.second!=0?std::optional(hit->position):std::nullopt;
+        }
+        const auto inverse=glm::inverse(model);
+        const nadoc_vr::Ray ray{glm::vec3(inverse*glm::vec4(worldRay.origin,1)),
+            glm::normalize(glm::vec3(inverse*glm::vec4(worldRay.direction,0)))};
+        const float modelScale=std::max(glm::length(glm::vec3(model[0])),1e-6F);
+        // One degree of pointing tolerance, bounded to 2–12 mm in tracking
+        // space. Tiny selected bases remain acquirable with controller jitter.
+        auto padding=[&](glm::vec3 p){return glm::clamp(glm::distance(p,ray.origin)*modelScale*.017455F,.002F,.012F)/modelScale;};
+        std::optional<float> nearest;
+        auto include=[&](std::optional<float> t){if(t && *t>=0 && (!nearest || *t<*nearest))nearest=t;};
+        for(const auto& e:previewGeometry_.points.edits) {
+            const auto& p=previewGeometry_.points.current[e.index];include(nadoc_vr::raySphere(ray,p.position,p.size+padding(p.position)));
+        }
+        for(const auto* channel:{&previewGeometry_.cylinders,&previewGeometry_.halves})for(const auto& e:channel->edits) {
+            const auto& c=channel->current[e.index];
+            const float radius=c.radius+padding((c.start+c.end)*.5F);
+            if(!nadoc_vr::raySphere(ray,(c.start+c.end)*.5F,glm::distance(c.start,c.end)*.5F+radius))continue;
+            include(channel==&previewGeometry_.halves?nadoc_vr::rayHalfCylinder(ray,c.start,c.end,radius):nadoc_vr::rayCapsule(ray,c.start,c.end,radius));
+        }
+        for(const auto& e:previewGeometry_.boxes.edits) {
+            const auto& b=previewGeometry_.boxes.current[e.index];
+            const float extra=padding(b.center);
+            auto expand=[&](glm::vec3 v){return v*(1+extra/std::max(glm::length(v),1e-6F));};
+            include(nadoc_vr::rayRepresentationMesh(representation_,ray,b.center,expand(b.axisX),expand(b.axisY),expand(b.axisZ)));
+        }
+        if(!nearest)return std::nullopt;
+        const auto point=glm::vec3(model*glm::vec4(ray.origin+ray.direction* *nearest,1));
+        return glm::distance(point,worldRay.origin)<=10.F?std::optional(point):std::nullopt;
+    }
+
     [[nodiscard]] std::vector<nadoc_vr::PickHit> selectVolume(
         const glm::vec3& worldCenter, float worldRadius,
         const glm::mat4& modelTransform) const {
@@ -5423,6 +5464,7 @@ class Viewer {
             };
             sidebar.loadingProgress=[this](const std::string& action){return representationLoading_.button(action);};
             sidebar.isActive=[this](const std::string& action) {
+                if(action=="move:base" || action=="move:domain" || action=="move:cluster")return selectionLevel_==action.substr(5);
                 if(action=="vr:head-light")return shadowLight_.headFollowing();
                 if(action=="share:avatar")return showVRAvatar_;
                 if(action=="share:status")return shareActive_;
@@ -7638,7 +7680,7 @@ class Viewer {
                 ? glm::mix(color, glm::vec3(1.0F), 0.35F) : color * 0.52F;
             const float radius = selectionVolumes_[hand].radius();
             if(ligation_.nickActive && hand==1) ligation_.scissors(sphereCenter,hands_[hand].orientation,triggerValues_[hand],line);
-            else {
+            else if(movePanel_.selectionEnabled(hand)) {
             circle(sphereCenter, radius, 0, 1, sphereColor);
             circle(sphereCenter, radius, 0, 2, sphereColor);
             circle(sphereCenter, radius, 1, 2, sphereColor);
@@ -7776,44 +7818,10 @@ class Viewer {
                     }
                 }
             }
-            const auto anchor = glScene_->anchor(
-                selectedIdentity_, selectedOwnerTokens_, manipulator_.transform());
-            if (anchor) {
-                const float markerRadius = anchor->distance + 0.006F;
-                const glm::vec3 center = anchor->position;
-                const glm::vec3 color(0.30F, 1.0F, 0.48F);
-                line(center - glm::vec3(markerRadius, 0, 0),
-                     center + glm::vec3(markerRadius, 0, 0), color);
-                line(center - glm::vec3(0, markerRadius, 0),
-                     center + glm::vec3(0, markerRadius, 0), color);
-                line(center - glm::vec3(0, 0, markerRadius),
-                     center + glm::vec3(0, 0, markerRadius), color);
-            }
-            if (toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
-                (movePanel_.active || toolShell_.previewRequested())) {
-                const glm::mat4 previewTransform = manipulator_.transform();
-                const auto bounds = glScene_->ownerBounds(
-                    selectedOwnerTokens_, previewTransform);
-                if (bounds) {
-                    const glm::vec3 center = glScene_->ownerHandle(
-                        selectedOwnerTokens_, previewTransform)
-                        .value_or(bounds->center);
-                    const bool nearby=movePanel_.nearby[0] || movePanel_.nearby[1] || movePanel_.hand.has_value();
-                    const float handleRadius = nearby ? .06F : .04F;
-                    if(nearby) {
-                        const glm::vec3 r(.025F);
-                        line(center-r,center+r,{1,1,0});
-                        line(center+glm::vec3(-r.x,r.y,0),center+glm::vec3(r.x,-r.y,0),{1,1,0});
-                    }
-                    line(center - glm::vec3(handleRadius, 0, 0),
-                         center + glm::vec3(handleRadius, 0, 0), {1.0F, 0.25F, 0.20F});
-                    line(center - glm::vec3(0, handleRadius, 0),
-                         center + glm::vec3(0, handleRadius, 0), {0.25F, 1.0F, 0.35F});
-                    line(center - glm::vec3(0, 0, handleRadius),
-                         center + glm::vec3(0, 0, handleRadius), {0.25F, 0.55F, 1.0F});
-                }
-            }
+            if(movePanel_.active && movePanel_.beamEnd && hands_[1].valid)
+                line(hands_[1].position,*movePanel_.beamEnd,{.35F,1.F,.7F});
         }
+
         freeformDraft_.preview(extrudeLatticeDraft_.cells(), latticeSquare_, extrudePlane_.plane,
             toolConfig_.lengthBp()*toolConfig_.directionSign(), manipulator_.transform(),
             normalizationCenter_, normalizationScale_, {0,0,-kViewDistanceMeters}, line);
@@ -7886,7 +7894,7 @@ class Viewer {
             snapSelectionHits_[hand].clear();
             snapSelectionOwnerTokens_[hand].clear();
             snapSelectionDirectIdentities_[hand].clear();
-            if (menuControlTargeted[hand] || !hands_[hand].valid ||
+            if (!movePanel_.selectionEnabled(hand) || menuControlTargeted[hand] || !hands_[hand].valid ||
                 !triggerPartial_[hand] || gripPressed_[hand]) {
                 continue;
             }
@@ -8865,6 +8873,7 @@ class Viewer {
         out << "]}";
         out << ",\"move_targets\":" << (glScene_ && movePanel_.active?glScene_->movePickPoints(manipulator_.transform()):"[]")
             << ",\"move_handle\":" << (moveCenter?point(*moveCenter):"null")
+            << ",\"move_beam_end\":" << (movePanel_.beamEnd?point(*movePanel_.beamEnd):"null")
             << ",\"move_grabbing\":" << (movePanel_.hand?"true":"false")
             << ",\"move_nearby\":" << ((movePanel_.nearby[0]||movePanel_.nearby[1])?"true":"false")
             << ",\"tool_sequence\":" << toolSequence_
@@ -9317,7 +9326,7 @@ class Viewer {
                     }
                 }
                 selectionVolumes_[hand].endScroll();
-            } else if (touching && !navigationMenuOpen && !(hand == 1U && trackpadPressed)) {
+            } else if (touching && movePanel_.selectionEnabled(hand) && !navigationMenuOpen && !(hand == 1U && trackpadPressed)) {
                 desktopTrackpadTouching_[hand] = false;
                 if (!selectionVolumes_[hand].scrolling()) {
                     selectionVolumes_[hand].beginScroll(trackpadAxis.currentState.y);
@@ -9561,7 +9570,7 @@ class Viewer {
         processBendPlanePick(menuControlTargeted);
         if(bendPanel_.active)menuControlTargeted.fill(true);
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
-            if (menuControlTargeted[hand] || !triggerClicked_[hand] ||
+            if (!movePanel_.selectionEnabled(hand) || menuControlTargeted[hand] || !triggerClicked_[hand] ||
                 !hands_[hand].valid) {
                 continue;
             }
@@ -9859,17 +9868,18 @@ class Viewer {
         if(moveAwaitRefresh_ && !toolShell_.executionPending() &&
            (sceneRefresh_.revision()>moveStartRevision_ || toolShell_.status()=="COMMIT FAILED" || toolShell_.status()=="COMMIT REFUSED"))moveAwaitRefresh_=false;
         movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
-        movePanel_.nearby.fill(false);
+        movePanel_.nearby.fill(false);movePanel_.beamEnd.reset();
         const auto center=glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform());
         const bool available=center && !toolShell_.executionPending() && !moveAwaitRefresh_ &&
             nadoc_vr::ToolShell::selectionCapability(nadoc_vr::ToolMode::move_rotate,selectedSelectionKind_)==nadoc_vr::ToolCapability::direct_preview;
         if(movePanel_.hand) {
             const size_t h=*movePanel_.hand;blocked[h]=true;liveInputOwner_[h]="move-rotate";
-            if(!hands_[h].valid || sessionState_!=XR_SESSION_STATE_FOCUSED || sceneMoving || !available || sceneRefresh_.revision()!=moveStartRevision_) {cancelMove();return;}
+            if(h!=nadoc_vr::MovePanel::moveHand || !hands_[h].valid || sessionState_!=XR_SESSION_STATE_FOCUSED || sceneMoving || !available || sceneRefresh_.revision()!=moveStartRevision_) {cancelMove();return;}
             const auto delta=movePanel_.delta(hands_[h]);
             if(delta!=pendingToolTransform_.transform()) {
                 pendingToolTransform_.setTransform(delta);publishToolTransform();
             }
+            movePanel_.beamEnd=glm::vec3(movePanel_.startModel*delta*glm::inverse(movePanel_.startModel)*glm::vec4(movePanel_.grabPoint,1));
             if(!triggerPressed_[h]) {
                 const auto delta=poseMatrix(hands_[h])*glm::inverse(movePanel_.startHand);
                 const float angle=glm::angle(glm::quat_cast(glm::mat3(delta)));
@@ -9877,16 +9887,17 @@ class Viewer {
                 else confirmMove();
             }
         } else if(available && !sceneMoving) {
-            for(size_t h=0;h<2;++h) {
-                movePanel_.nearby[h]=hands_[h].valid && !blocked[h] &&
-                    glm::distance(hands_[h].position,*center)<=nadoc_vr::MovePanel::grabRadius;
-                if(movePanel_.nearby[h] && triggerClicked_[h]) {
-                    pendingToolTransform_.activate();moveStartRevision_=sceneRefresh_.revision();
-                    toolShell_.apply(nadoc_vr::ToolAction::preview,selectedSelectionKind_);
-                    publishToolIntent(nadoc_vr::ToolAction::preview);
-                    movePanel_.begin(h,hands_[h],manipulator_.transform(),*center);
-                    blocked[h]=true;liveInputOwner_[h]="move-rotate";pulse(h,.35F);break;
-                }
+            constexpr size_t h=nadoc_vr::MovePanel::moveHand;
+            if(hands_[h].valid && !blocked[h])
+                movePanel_.beamEnd=glScene_->pickSelected({hands_[h].position,hands_[h].orientation*glm::vec3(0,0,-1)},manipulator_.transform(),selectedOwnerTokens_);
+            movePanel_.nearby[h]=movePanel_.beamEnd.has_value();
+            if(movePanel_.nearby[h] && triggerClicked_[h]) {
+                pendingToolTransform_.activate();moveStartRevision_=sceneRefresh_.revision();
+                toolShell_.apply(nadoc_vr::ToolAction::preview,selectedSelectionKind_);
+                publishToolIntent(nadoc_vr::ToolAction::preview);
+                movePanel_.grabPoint=*movePanel_.beamEnd;
+                movePanel_.begin(h,hands_[h],manipulator_.transform(),*center);
+                blocked[h]=true;liveInputOwner_[h]="move-rotate";pulse(h,.35F);
             }
         }
         const bool preview=toolShell_.previewRequested() &&

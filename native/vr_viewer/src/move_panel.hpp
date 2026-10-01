@@ -3,20 +3,22 @@
 namespace nadoc_vr {
 class MovePanel {
  public:
+    static constexpr size_t selectHand=0, moveHand=1;
     bool active=false;
+    bool selectionEnabled(size_t h) const { return !active || (h==selectHand && !hand); }
     size_t savedOffset=0;
     std::optional<size_t> hand;
     std::array<bool,2> nearby{};
     glm::mat4 startHand{1},startModel{1};
-    glm::vec3 pivot{};
-    static constexpr float grabRadius=.09F;
+    glm::vec3 pivot{},grabPoint{};
+    std::optional<glm::vec3> beamEnd;
     void enter(std::array<SidebarMenu,2>& menus) {
         if(!active)savedOffset=menus[1].offset();
         active=true;menus[1].open=true;menus[1].offsets[menus[1].selected]=0;
         menus[1].focus.reset();
     }
     void exit(std::array<SidebarMenu,2>& menus) {
-        active=false;hand.reset();nearby.fill(false);
+        active=false;hand.reset();nearby.fill(false);beamEnd.reset();
         auto& m=menus[1];m.customTab.reset();m.offsets[m.selected]=savedOffset;m.focus.reset();
     }
     void refresh(std::array<SidebarMenu,2>& menus,const std::string& kind,const std::string& status) const {
@@ -26,14 +28,15 @@ class MovePanel {
             tab.rows.push_back({"move:"+id,label,detail,"move:"+id,{}});
         };
         row("back","Move / Rotate - Return",status);
-        row("apply","APPLY",kind=="none"?"SELECT A TARGET":"TRIGGER GRAB CENTER / RELEASE SAVES");
-        row("cancel","CANCEL","GRIPS MOVE THE SCENE");
-        row("cluster","Select clusters");row("overhang","Select overhangs / domains");
-        row("base","Select individual bases");row("undo","UNDO");
+        row("apply","APPLY",kind=="none"?"LEFT TRIGGER SELECTS":"POINT RIGHT / TRIGGER GRABS");
+        row("cancel","CANCEL","LEFT SELECTS / RIGHT MOVES / GRIPS MOVE SCENE");
+        row("selection","Selection options");
+        row("base","Base");row("domain","Domain");row("cluster","Cluster");row("undo","UNDO");
         row("recenter","Frame model");
         menus[1].customTab=std::move(tab);
     }
     void begin(size_t h,const HandPose& pose,const glm::mat4& model,const glm::vec3& center) {
+        if(h!=moveHand)return;
         hand=h;startHand=poseMatrix(pose);startModel=model;pivot=center;
     }
     glm::mat4 delta(const HandPose& pose) const {

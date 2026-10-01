@@ -3260,3 +3260,56 @@ def test_twist_execution_acknowledgement(tmp_path):
         feature_log_entry_id='feature:twist')
     assert _write_tool_execution_feedback({'tool_execution_feedback_path': str(path)}, body) == (True, 1)
     assert path.read_text() == 'NADOCVR_TOOL_EXECUTION 1 1 2 twist confirm cluster cluster:1 succeeded committed feature:twist\n'
+
+@pytest.mark.parametrize('angle', [0.0, 0.7])
+@pytest.mark.parametrize('copy_k', [0, 1])
+def test_full_domain_move_preserves_bead_slab_registration(angle, copy_k) -> None:
+    """A moved domain must not re-seat its own OR its stationary mate's slabs."""
+    from copy import deepcopy
+    from scipy.spatial.transform import Rotation
+    from backend.core.models import NucleotideTransform
+    from backend.core.design_geometry import apply_nucleotide_transforms_to_geometry
+
+    design = SimpleNamespace(
+        strands=[SimpleNamespace(id=s, is_scaffold=s == 'forward', color=None,
+                                 sequence='AT') for s in ('forward', 'reverse')],
+        cluster_transforms=[], nucleotide_transforms=[],
+    )
+    nucs = [dict(strand_id=s, domain_index=0, helix_id='h1', bp_index=bp,
+                 direction=d, is_five_prime=bp == 0, backbone_position=[x, 0, bp * .34 + z],
+                 base_position=[x * .2, 0, bp * .34 + z],
+                 base_normal=[1, 0, 0], axis_tangent=[0, 0, 1])
+            for bp in range(2)
+            for s, d, x, z in [('forward', 'FORWARD', -1, 0),
+                                ('reverse', 'REVERSE', 1, .2)]]
+    def export(nucleotides):
+        return parse_scene_contract(_serialize_scene(
+            design, nucleotides, [], representations={'full'},
+            atomistic_model=SimpleNamespace(atoms=[], bonds=[])))['full']
+    # Repeated sites exercise the loop-copy identity independently of the mate.
+    nucs = [{**n, 'copy': k,
+             'backbone_position': (np.array(n['backbone_position']) + [0, 0, k*.1]).tolist(),
+             'base_position': (np.array(n['base_position']) + [0, 0, k*.1]).tolist()}
+            for n in nucs for k in range(2)]
+    before = export(nucs)
+    rotation = Rotation.from_rotvec(np.array([.2, .7, -.3]) * angle)
+    pivot, shift = np.array([.3, -.4, .2]), np.array([.2, -.3, 2.0])
+    design.nucleotide_transforms = [NucleotideTransform(
+        kind='base', helix_id='h1', bp_index=bp, direction='FORWARD', copy_k=copy_k,
+        pivot=pivot.tolist(), translation=shift.tolist(), rotation=rotation.as_quat().tolist())
+        for bp in range(2)]
+    posed = deepcopy(nucs)
+    apply_nucleotide_transforms_to_geometry(posed, design)
+    after = export(posed)
+    for identity, primitive in before.items():
+        if not identity.endswith((':backbone', ':slab', ':slab-connector')):
+            continue
+        expected = np.array(primitive.values)
+        if 'forward' in identity and identity.split(':')[-2] == str(copy_k):
+            expected[:3] = pivot + rotation.apply(expected[:3] - pivot) + shift
+            if primitive.record_type == 'B':
+                expected[3:12] = rotation.apply(expected[3:12].reshape(3, 3)).ravel()
+            elif primitive.record_type == 'C':
+                expected[3:6] = pivot + rotation.apply(expected[3:6] - pivot) + shift
+        np.testing.assert_allclose(after[identity].values, expected, atol=2e-6,
+                                   err_msg=identity)

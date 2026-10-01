@@ -45,6 +45,7 @@ from backend.core.constants import STAPLE_PALETTE
 from backend.core.models import MODIFICATION_COLORS
 from backend.core.vr_scene_projection import (
     normalize_geometry_copy_indices,
+    full_slab_reference_geometry,
     strand_nucleotide_order_key,
 )
 
@@ -1487,6 +1488,9 @@ def _serialize_scene(
             transform_owners=transform_owners,
         )
 
+    slab_reference, slab_poses = full_slab_reference_geometry(
+        nucleotides, getattr(design, "nucleotide_transforms", ())
+    )
     for index, nucleotide in assigned:
         backbone = point(nucleotide.get("backbone_position"))
         if backbone is None:
@@ -1511,6 +1515,8 @@ def _serialize_scene(
         aliases = nucleotide_owner_tokens(nucleotide)
         if nucleotide.get("is_five_prime"):
             size = np.identity(3) * 0.18
+            if slab_poses[index] is not None:
+                size = slab_poses[index][0] @ size
             box(
                 f"{primitive_owner}:backbone",
                 backbone,
@@ -1557,8 +1563,9 @@ def _serialize_scene(
     # nucleotide. Paired slabs share their mean axial plane and are shifted
     # radially until their rectangle reaches the backbone bead, exactly matching
     # helix_renderer.pairedSlabCenter().
+    slab_assigned = [(index, slab_reference[index]) for index, _ in assigned]
     pair_groups: dict[tuple, dict[str, list[tuple[int, dict]]]] = {}
-    for index, nucleotide in assigned:
+    for index, nucleotide in slab_assigned:
         helix_id = str(nucleotide.get("helix_id") or "")
         if helix_id.startswith("__ext_"):
             continue
@@ -1573,7 +1580,7 @@ def _serialize_scene(
             mates[id(forward)] = reverse
             mates[id(reverse)] = forward
 
-    for index, nucleotide in assigned:
+    for index, nucleotide in slab_assigned:
         if str(nucleotide.get("helix_id") or "").startswith("__ext_"):
             continue
         try:
@@ -1617,6 +1624,18 @@ def _serialize_scene(
             )
             center += radial * max(0.0, bead_distance - support + 0.02)
 
+        # Carry the solved native slab, including its bead contact corner, by
+        # this residue's pose. Never re-pair it with an independently moved mate.
+        z_sign = -1.0 if float(np.dot(raw_bead - center, normal)) < 0 else 1.0
+        corner = center + tangential * 0.15 + normal * (z_sign * 0.35)
+        pose = slab_poses[index]
+        if pose is not None:
+            rigid, offset = pose
+            center = rigid @ center + offset
+            corner = rigid @ corner + offset
+            raw_bead = rigid @ raw_bead + offset
+            tangential, tangent, normal = (rigid @ v for v in (tangential, tangent, normal))
+
         palette = palette_variant(palette_for_index(index), nucleotide, "#0277bd")
         box(
             f"{nucleotide_identity(nucleotide)}:slab",
@@ -1627,8 +1646,6 @@ def _serialize_scene(
             palette,
             aliases=nucleotide_owner_tokens(nucleotide),
         )
-        z_sign = -1.0 if float(np.dot(raw_bead - center, normal)) < 0 else 1.0
-        corner = center + tangential * 0.15 + normal * (z_sign * 0.35)
         emit(
             "C",
             f"{nucleotide_identity(nucleotide)}:slab-connector",

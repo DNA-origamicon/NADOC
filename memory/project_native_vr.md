@@ -807,3 +807,49 @@ invalidation and volume journal retry/ack tests pass. This is not new live 24HB
 Bend/Twist deformation timing. Different-style volume transitions and synchronous
 View Tools scene/atlas refreshes can still hitch; large highlighted Stick/Ball &
 Stick with a volume remain over 11.1 ms. No geometry or lighting quality reduced.
+
+## Move/Rotate hand-role trial (2026-10-01)
+
+While Move/Rotate is active, only the left trigger/selection sphere acquires
+molecular targets. Only the right trigger can grab by pointing at selected geometry;
+release still commits. The right selection sphere and radius scrolling are
+suppressed, and right clicks away from selected geometry cannot clear selection. Selection
+is frozen while the right hand drags. Exiting Move/Rotate restores normal selection
+for both hands; scene grips and menu controls retain their existing behavior.
+The native viewer binary is rebuilt for trying this mapping. Performance work was
+pushed separately as `eb637ca5`; this hand-role trial remains a local change.
+
+Move/Rotate pointing trial: removed selected-element axis/cross overlays. A green
+beam connects the right hand to selected geometry when aimed, and follows the
+grabbed point during manipulation. Picking uses cached selected packed instances;
+owner-token parent aliases must not be mistaken for multiple selections. Pointing
+padding is one degree, bounded to 2–12 mm in tracking space. The Move menu has a
+Selection options card with three inline icon buttons: Base, Domain, Cluster.
+Native panel/hand tests pass, including remote acquisition and pointing away.
+Live generated-6HB Base, Domain, and Cluster workflows each passed. Across four
+motion profiles, high-jitter acquisition can miss a tiny base. Observer-side beam
+captures pass both stereo-eye pixel checks; an earlier behind-model cluster beam
+capture was occluded in one eye. One observer-side steady-fast reopen assertion
+failed on quaternion roundoff (~1e-16), after manipulation passed. Failed attempts
+are retained in `.development-artifacts/vr-move-ray-card-20261001/report.json`.
+These are rendered/injected-controller checks, not physical through-lens validation.
+
+## Full slab registration after residue moves (2026-10-01)
+
+VR Full export previously solved paired slab placement after persisted nucleotide
+transforms. Moving a domain therefore re-seated its slabs against stationary
+mates and also moved those mates' slabs. Desktop live edits keep the native
+bead/slab offset. `full_slab_reference_geometry` now undoes saved residue poses
+for the contact solver, then the exporter carries each solved slab/connector by
+its own pose. Five-prime cube orientation follows the saved residue rotation too.
+Simulation slab-frame delivery remains separate. This does not change underlying
+saved geometry or the general cluster/deformation placement pipeline.
+
+Read-only reproduction on the current `workspace/24hb_0xT.nadoc` (7 saved residue
+poses): old moved primitive error up to 0.62956 nm; stationary partner error up to
+1.13316 nm. Fixed: all 20,160 bead/slab/connector primitives agree with rigid
+reference within 6.7e-6 nm (text export precision), stationary primitives exact.
+77 backend checks and native packed-preview parity pass. Native close-up renders
+show the corrected bead contacts. Evidence, failed framing attempt, scripts and
+scope: `.development-artifacts/vr-slab-rigid-20261001/report.json`. No new physical
+headset/motion-profile validation was run for this snapshot-only correction.

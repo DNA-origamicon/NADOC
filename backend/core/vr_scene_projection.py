@@ -56,6 +56,47 @@ def strand_nucleotide_order_key(nucleotide: dict) -> tuple[int, int, int]:
     )
 
 
+def full_slab_reference_geometry(nucleotides: list[dict], transforms):
+    """Undo authored residue poses before solving the native bead/slab contact.
+
+    Domains are persisted as per-residue poses. Solving against the *posed* mate
+    re-seats both slabs when only one domain moves. Return the native geometry
+    and each residue's forward pose so the exporter can carry the entire solved
+    slab and connector rigidly, just like the desktop's localCenterOffset.
+    Simulation slab frames are delivered separately and do not use this solver.
+    """
+    from backend.core.deformation import _rot_from_quaternion
+
+    poses = {}
+    for transform in transforms:
+        if transform.kind != "base":
+            continue
+        rotation = _rot_from_quaternion(*transform.rotation)
+        pivot = np.asarray(transform.pivot)
+        offset = pivot - rotation @ pivot + np.asarray(transform.translation)
+        poses[transform.target_key()] = rotation, offset
+    if not poses:
+        return nucleotides, [None] * len(nucleotides)
+    reference, forward = [], []
+    for nucleotide in nucleotides:
+        pose = poses.get(("base", nucleotide.get("helix_id"),
+                          nucleotide.get("bp_index"), nucleotide.get("direction"),
+                          int(nucleotide.get("copy_k", 0))))
+        native = nucleotide
+        if pose is not None:
+            rotation, offset = pose
+            native = dict(nucleotide)
+            for field in ("backbone_position", "base_position"):
+                if native.get(field) is not None:
+                    native[field] = (rotation.T @ (np.asarray(native[field]) - offset)).tolist()
+            for field in ("base_normal", "axis_tangent"):
+                if native.get(field) is not None:
+                    native[field] = (rotation.T @ np.asarray(native[field])).tolist()
+        reference.append(native)
+        forward.append(pose)
+    return reference, forward
+
+
 @dataclass(frozen=True, slots=True)
 class CrossoverExtraBaseFullProjection:
     """One crossover-insert bead, slab, and bead-to-slab attachment pose."""

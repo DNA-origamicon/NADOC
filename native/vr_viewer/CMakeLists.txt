@@ -356,3 +356,12 @@ if(BUILD_TESTING)
   add_test(NAME nadoc-vr-rigid-preview COMMAND nadoc-vr-rigid-preview-test)
   set_tests_properties(nadoc-vr-rigid-preview PROPERTIES SKIP_RETURN_CODE 77)
 endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-move-hands-test tests/move_hands_test.cpp)
+  target_link_libraries(nadoc-vr-move-hands-test PRIVATE
+    PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
+  target_compile_options(nadoc-vr-move-hands-test PRIVATE -UNDEBUG)
+  add_test(NAME nadoc-vr-move-hands COMMAND nadoc-vr-move-hands-test ${CMAKE_CURRENT_BINARY_DIR}/move-hands-evidence)
+  set_tests_properties(nadoc-vr-move-hands PROPERTIES SKIP_RETURN_CODE 77)
+endif()

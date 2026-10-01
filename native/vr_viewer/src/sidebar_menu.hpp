@@ -77,11 +77,12 @@ class SidebarMenu {
         return rows;
     }
     size_t total() const { if(dynamicActive())return dynamicTotal();return visibleRows().size()-(customTab?3:0); }
-    size_t pageRows() const { if(customTab && (tab().key=="bend" || tab().key=="twist"))return total();return dynamicActive()?7:customTab?5:kSidebarPageRows; }
+    size_t pageRows() const { if(customTab && (tab().key=="move" || tab().key=="bend" || tab().key=="twist"))return total();return dynamicActive()?7:customTab?5:kSidebarPageRows; }
     MenuPanelBounds bounds() const {
         if(dynamicActive()) return dynamicBounds();
         auto b=kSidebarBounds;
         if(customTab && (tab().key=="bend" || tab().key=="twist")) {b.minimum.y=-.60F;return b;}
+        if(customTab && tab().key=="move") {b.minimum.y=-.15F;return b;}
         if(customTab) b.minimum.y=.463F-float((customTab?3:0)+std::min(pageRows(),total())-1)*.12F-.11F;
         return b;
     }
@@ -223,6 +224,21 @@ class SidebarMenu {
             const auto extra=dynamicControls(animated);out.insert(out.end(),extra.begin(),extra.end());
             out.push_back({"close","Close","","close",{{-.269F,-.657F},{.046F,-.585F}}});
             out.push_back({"dock","Dock / Follow","","dock",{{.07F,-.657F},{.385F,-.585F}}});
+            return out;
+        }
+        if(customTab && tab().key=="move") {
+            auto add=[&](const char* id,float y,float left,float right,float height=.09F,const char* icon="") {
+                const auto r=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& row){return row.id==std::string("move:")+id;});
+                if(r==tab().rows.end())return;
+                const bool heading=std::string_view(id)=="selection";
+                out.push_back({r->id,r->label,r->section,heading?"":r->action,{{left,y-height*.5F},{right,y+height*.5F}},!heading&&available(r->action),isActive(r->action),false,icon});
+            };
+            const float left=cx-.327F,right=cx+.327F;
+            add("back",.463F,left,right);add("apply",.35F,left,cx-.006F);add("cancel",.35F,cx+.006F,right);
+            add("selection",.215F,left,right,.065F);
+            const char* ids[]={"base","domain","cluster"};
+            for(int i=0;i<3;++i)add(ids[i],.105F,left+i*.222F,left+i*.222F+.210F,.13F,ids[i]);
+            add("undo",-.065F,left,cx-.006F);add("recenter",-.065F,cx+.006F,right);
             return out;
         }
         if(customTab && (tab().key=="bend" || tab().key=="twist")) {
@@ -392,6 +408,10 @@ class SidebarMenu {
         text("page",std::to_string(total()?offset()+1:0)+"-"+std::to_string(std::min(offset()+pageRows(),total()))+" / "+std::to_string(total())+(customTab && tab().key=="dimensions"?"   TRIGGER: PIN / RECALL":"   GRAY = UNAVAILABLE"),{cx-.31F,.584F},.0023F,{.71F,.76F,.81F},title);
         if(focus.active) text("input-mode",focus.id=="scrollbar"?"PAD UP/DOWN: SCROLL  LEFT/RIGHT: EXIT":"PAD: MOVE / TRIGGER: SELECT",{cx-.31F,.560F},.002F,ui_style::focus,title);
         }
+        if(customTab && tab().key=="move") {
+            const MenuPanelBounds card{{cx-.338F,.027F},{cx+.338F,.26F}};
+            ui_style::rounded(card,ui_style::surface,ui_style::disabledText,line,fill,.018F,.001F);
+        }
         for(const auto& c:controls()) {
             clip=c.viewport;
             const bool hover=c.id==hovered;
@@ -403,7 +423,8 @@ class SidebarMenu {
             const glm::vec3 accent=ui_style::buttonAccent(c.id);
             if(!scrollbar) bg=glm::mix(glm::vec3(.075F),accent,c.active?.10F:c.enabled?(hover?.075F:.045F):.02F);
             const glm::vec3 border=c.active?ui_style::selectedBorder:c.enabled?glm::mix(ui_style::border,accent,.25F):ui_style::disabledBorder;
-            ui_style::rounded(b,bg,border,line,fill);
+            if(c.id=="move:selection")fg=ui_style::text;
+            else ui_style::rounded(b,bg,border,line,fill);
             if((focus.active && c.id==focus.id) || (hover && c.enabled)) {
                 const glm::vec2 lo=b.minimum+glm::vec2(ui_style::focusInset);
                 const glm::vec2 hi=b.maximum-glm::vec2(ui_style::focusInset);
@@ -418,9 +439,18 @@ class SidebarMenu {
                 continue;
             }
             if(!c.icon.empty()) {
-                const auto center=(b.minimum+b.maximum)*.5F;
+                auto center=(b.minimum+b.maximum)*.5F;
                 auto stroke=[&](glm::vec2 a,glm::vec2 d){line(glm::vec3(center+a*.003F,.004F),glm::vec3(center+d*.003F,.004F),fg);};
-                if(c.icon=="x") {stroke({-6,-6},{6,6});stroke({-6,6},{6,-6});}
+                if(c.icon=="base" || c.icon=="domain" || c.icon=="cluster") {
+                    center.y+=.018F;
+                    auto bead=[&](glm::vec2 p){for(int j=0;j<12;++j){float a=j*6.2831853F/12,b=(j+1)*6.2831853F/12;stroke(p+glm::vec2(std::cos(a),std::sin(a))*2.8F,p+glm::vec2(std::cos(b),std::sin(b))*2.8F);}};
+                    if(c.icon=="base")bead({0,0});
+                    else if(c.icon=="domain") {stroke({-8,-2},{0,3});stroke({0,3},{8,-2});bead({-8,-2});bead({0,3});bead({8,-2});}
+                    else for(int x=-1;x<=1;++x){stroke({x*8.F,-6},{x*8.F,6});bead({x*8.F,-6});bead({x*8.F,6});}
+                    const float scale=.0028F;
+                    text(c.id+":label",c.label,{center.x-strokeTextWidth(c.label.size(),scale)*.5F,b.minimum.y+.028F},scale,fg,b);
+                }
+                else if(c.icon=="x") {stroke({-6,-6},{6,6});stroke({-6,6},{6,-6});}
                 else {
                     // Desktop eye silhouette and pupil, with slash when hidden.
                     for(int i=0;i<24;++i) {

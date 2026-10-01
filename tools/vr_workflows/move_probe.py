@@ -7,7 +7,7 @@ from frontend.scrywrite.mcp_bridge import Bridge
 from tools.vr_motion.session import LiveSession
 from tools.vr_motion.model import multiply
 from tools.vr_workflows.extrude_sidebar import SidebarControls
-from tools.vr_workflows.profile_input import reach_target
+from tools.vr_workflows.profile_input import reach_target, aim_orientation
 from tools.vr_workflows.demo_view import reveal,hold
 socket,output,kind,before_path,mode=sys.argv[1:6]
 out=Path(output);out.mkdir(parents=True,exist_ok=True)
@@ -31,8 +31,8 @@ def wait(predicate):
   try:live.frame()
   except TimeoutError:continue # read-only observation during authoritative snapshot upload
   time.sleep(.05)
-def reach(position,orientation=None,acquired=None):
- trials.append(reach_target(live,position,preset,3000+len(trials),target_position=position,target_orientation=orientation or [0,0,0,1],acquired=acquired))
+def reach(position,orientation=None,acquired=None,hand=1):
+ trials.append(reach_target(live,position,preset,3000+len(trials),target_position=position,target_orientation=orientation or [0,0,0,1],acquired=acquired,hand=hand))
  (out/'reaches.json').write_text(json.dumps(trials,indent=2))
 def park():
  p=np.array(live.state['head_position'])+[0,-1,0]
@@ -69,7 +69,8 @@ try:
   assert live.state['presentation']['model_to_tracking_rows']!=presentation
   assert live.state['tool_sequence']==sequence and not live.state['move_grabbing']
   controls.click('move:recenter');live.frame()
-  controls.click('move:'+kind)
+  controls.click('move:'+('domain' if kind=='overhang' else kind))
+  live.capture_to(out/'selection-options',discard_source=True)
   before=json.loads(Path(before_path).read_text())
   cluster=next((c for c in before['design']['cluster_transforms'] if c['name']=='Movable helix'),None)
   geom=before['geometry']
@@ -101,20 +102,32 @@ try:
   candidates=sorted(matches,key=lambda p:np.linalg.norm(np.array(p['world'])-live.state['head_position']))
   acquisitions=[]
   for target in candidates[:24]:
-   reach((np.array(target['world'])+[0,0,.12]).tolist())
-   live.send('trigger_value',hand=1,value=.5);live.frame()
+   reach((np.array(target['world'])+[0,0,.12]).tolist(),hand=0)
+   live.send('trigger_value',hand=0,value=.5);live.frame()
    acquisitions.append({'target':target,'hover':live.state.get('scene_hover')})
    (out/'acquisition.json').write_text(json.dumps(acquisitions,indent=2))
    if (live.state.get('scene_hover') or '').startswith('nuc:') and (kind!='base' or owners.get(live.state['scene_hover'],set())&exposed):break
-   live.send('trigger_value',hand=1,value=0);live.frame()
+   live.send('trigger_value',hand=0,value=0);live.frame()
   else:raise RuntimeError('No nucleotide hover acquired without selecting a crossover')
-  live.button('trigger',hand=1)
-  live.send('trigger_value',hand=1,value=0);live.frame()
+  live.button('trigger',hand=0)
+  live.send('trigger_value',hand=0,value=0);live.frame()
   wait(lambda s:s['selection_kind']==kind and s['move_handle'] is not None)
   park();live.capture_to(out/'selected',discard_source=True);hold(live,'Selected '+kind)
   center=live.state['move_handle']
-  reach(center,acquired=lambda s:s['move_nearby'])
-  assert live.state['move_nearby'],'centroid not highlighted'
+  # Point at a selected molecular point, not the potentially empty group centroid.
+  aim=next((p['world'] for p in live.state['move_targets'] if p['identity']==acquisitions[-1]['hover']),center)
+  # Put the pointing hand on the observer's side of the model, with a
+  # lateral offset so the beam is visible rather than hidden behind geometry.
+  from tools.vr_motion.metrics import rotate
+  eye=json.loads((out/'selected/evidence.json').read_text())['eyes'][0]
+  toward=np.array(live.state['head_position'])-np.array(aim);toward/=np.linalg.norm(toward)
+  toward+=np.array(rotate(eye['orientation_xyzw'],[.4,-.15,0]));toward/=np.linalg.norm(toward)
+  pointing=(np.array(aim)+toward*.45).tolist()
+  (out/'pointing-approach.json').write_text(json.dumps({'target':aim,'position':pointing,'distance_m':.45,'reason':'Observer-side hand with lateral beam visibility'}))
+  reach(pointing,aim_orientation(pointing,aim),acquired=lambda s:s['move_nearby'])
+  assert live.state['move_nearby'] and live.state['move_beam_end'] is not None,'selected geometry was not pointed at'
+  assert np.linalg.norm(np.array(live.state['hands'][1]['position'])-live.state['move_beam_end'])>.15,'grab was not remote'
+  live.capture_to(out/'pointed',discard_source=True)
   live.send('button',hand=1,button='trigger',pressed=True);live.frame()
   assert live.state['move_grabbing'],'trigger did not acquire target'
   start=np.array(live.state['hands'][1]['position']);q=live.state['hands'][1]['orientation_xyzw']

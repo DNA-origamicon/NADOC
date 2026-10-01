@@ -16,18 +16,20 @@ from tools.vr_workflows.tour_catalog import ROOT
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--validate',action='store_true')
+    parser.add_argument('--profile',choices=['steady_fast','steady_deliberate','variable_fast','variable_deliberate'],help='Run one motion profile without repeating a completed matrix.')
     parser.add_argument('--direct-activation',action='store_true',help='Performance setup: activate Move/Rotate directly; subsequent interactions remain profile-driven.')
     parser.add_argument('--keep-going',action='store_true',help='Retain independent profile results after a failure; still exit nonzero.')
     parser.add_argument('--target',choices=['cluster','overhang','base'])
     parser.add_argument('--output',type=Path)
     parser.add_argument('--design',type=Path,help='Copy an existing design into the private test workspace (base target only).')
     args=parser.parse_args()
+    if args.profile and args.validate: parser.error('--profile and --validate are mutually exclusive')
     if args.design and args.target!='base': parser.error('--design currently requires --target base')
     from backend.api.routes_vr_tours import _viewer_active
     if _viewer_active(): raise RuntimeError('Close the active viewer before starting an isolated move/rotate tour.')
     output=(args.output or ROOT/'.development-artifacts/vr-move'/uuid.uuid4().hex[:10]).resolve()
     output.mkdir(parents=True,exist_ok=True)
-    profiles=['steady_fast','steady_deliberate','variable_fast','variable_deliberate'] if args.validate else ['steady_fast']
+    profiles=['steady_fast','steady_deliberate','variable_fast','variable_deliberate'] if args.validate else [args.profile or 'steady_fast']
     targets=[args.target] if args.target else ['cluster','overhang','base']
     results=[]
     with tempfile.TemporaryDirectory(prefix='nadoc-move-tour-') as temporary:
