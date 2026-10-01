@@ -9,6 +9,17 @@ User requirement: guests on any network use an ordinary browser plus the invitat
 and meeting password, or scan a guest-only QR and enter a name (2026-09-28); never require guest Tailscale/VPN installation or accounts.
 The hosting computer needs Node, signed-in Tailscale, HTTPS and Funnel permission.
 
+Desktop sharing on WSL/non-native-VR hosts treats the optional presenter-pose
+feed as unavailable (`avatar: null`), rather than returning repeated 503 errors.
+The pose endpoint still enforces local-client and trusted-origin checks; native
+VR launch remains restricted to supported Linux desktops.
+Ending a presentation, resetting its invitation, or closing its document cancels
+the editor's in-flight drawing read before revocation, preventing stale-room errors.
+The WSL Windows request helper must allow `broadcast/view-lock` and `drawings`,
+as well as the server routes. The public browser check exercises this transport,
+lock/unlock and late joining, and loading-overlay stacking above all roster rows.
+Guest loading sits above participant lists and below the terminal overlay.
+
 The previous Windows success and full public-relay check are recorded in
 `docs/audits/internet_viewer_20260920/README.md`. On Compy5000, local/private DNS
 initially hid authoritative public NXDOMAIN. Public DNS subsequently appeared;
@@ -67,16 +78,21 @@ print, phone compatibility, calibration and headset testing.
 
 ## Guest pointing and screenshots (2026-09-30)
 
-Guest viewers have a **Draw** toggle: hold Shift and the primary mouse button to
-draw temporary screen marks. Ordinary navigation remains available unless the
-presenter locks perspective. Marks hold for two seconds and fade over 500 ms;
+Guest viewers have a **Draw** toggle. Desktop users hold Shift and the primary
+mouse button; mobile users draw with one finger without a modifier. Mobile Draw
+leaves Follow and holds the camera steady, blocking rotation, zoom, and recentering
+until toggled off. A presenter lock cancels mobile Draw and takes camera control;
+mobile Draw remains disabled until the host unlocks. Desktop drawing remains
+available while locked. Both locked and voluntary Follow use the same interpolated
+camera path without reconstructing controls each frame; authored animation frames
+remain synchronized exactly. Marks hold for two seconds and fade over 500 ms;
 camera or scene changes clear them. Authenticated guest updates use bounded
 point batches and server expiry, never design storage. `guest-drawing-v1` hosts
 relay marks through meeting state; the editor reads a small authenticated channel
 every 200 ms while presenting. Matching camera poses see each other's marks,
 including the presenter after selecting a guest's shared perspective. Different
 perspectives do not. Coordinates use viewport heights so differing aspect ratios
-remain aligned. Drawing works while perspective is locked without changing it.
+remain aligned. Desktop drawing works while perspective is locked without changing it.
 
 **Screenshot** downloads a PNG of the current rendered 3D canvas, composited onto
 its background, excluding DOM controls, view cube, captions and drawing overlays.

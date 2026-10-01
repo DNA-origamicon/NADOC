@@ -1,9 +1,10 @@
 import { mountDrawingOverlay } from './meeting_drawing_overlay.js'
 
-/** Shift + primary pointer draws; all other gestures retain normal navigation. */
-export function mountMeetingDrawing({ parent, canvas, viewer, base, selfId, getRevision, ready, document: doc = document, fetch: request = fetch }) {
+/** Touch Draw mode owns gestures; desktop drawing retains Shift + primary drag. */
+export function mountMeetingDrawing({ parent, canvas, viewer, base, selfId, getRevision, ready, onActive = () => {}, document: doc = document, fetch: request = fetch }) {
+  const mobile = !!viewer.mobile
   const button = doc.createElement('button'); button.type = 'button'; button.dataset.draw = ''; button.textContent = 'Draw'
-  button.title = 'Hold Shift and drag with the left mouse button to point or circle. Marks fade after two seconds.'
+  button.title = mobile ? 'Draw with one finger. Tap Draw again to rotate the view. Marks fade after two seconds.' : 'Hold Shift and drag with the left mouse button to point or circle. Marks fade after two seconds.'
   button.setAttribute('aria-pressed', 'false')
   const status = doc.createElement('span'); status.setAttribute('role', 'status'); status.dataset.drawingStatus = ''
   parent.append(button, status)
@@ -27,14 +28,17 @@ export function mountMeetingDrawing({ parent, canvas, viewer, base, selfId, getR
   function point(event) { const r = canvas.getBoundingClientRect(); return [(event.clientX - r.left - r.width / 2) / r.height, (event.clientY - r.top - r.height / 2) / r.height] }
   function consume(event) { event.preventDefault(); event.stopImmediatePropagation() }
   function down(event) {
-    if (!enabled || !ready() || !event.shiftKey || event.button !== 0 || event.target !== canvas) return
+    if (!enabled || !ready() || event.target !== canvas || (!mobile && !event.shiftKey)) return
+    if (mobile) consume(event)
+    if (event.button !== 0 || pointer !== null) return
     consume(event); pointer = event.pointerId; last = point(event)
     draft = make(last); overlay.local(draft); canvas.setPointerCapture?.(pointer)
   }
   function move(event) {
+    if (mobile && enabled && event.target === canvas) consume(event)
     if (pointer === null || event.pointerId !== pointer) return
     consume(event)
-    if (!event.shiftKey || !(event.buttons & 1)) { end(event); return }
+    if ((!mobile && !event.shiftKey) || !(event.buttons & 1)) { end(event); return }
     const next = point(event)
     draft ??= make(last)
     if (draft.points.length < 32) draft.points.push(next)
@@ -45,13 +49,26 @@ export function mountMeetingDrawing({ parent, canvas, viewer, base, selfId, getR
     if (pointer === null || event.pointerId !== pointer) return
     consume(event); canvas.releasePointerCapture?.(pointer); pointer = null; last = null; void flush()
   }
-  function click(event) { if (enabled && event.shiftKey && event.button === 0 && event.target === canvas) consume(event) }
+  function click(event) { if (enabled && (mobile || event.shiftKey) && event.button === 0 && event.target === canvas) consume(event) }
   const container = canvas.parentElement
   const listeners = [['pointerdown', down], ['pointermove', move], ['pointerup', end], ['pointercancel', end], ['click', click], ['dblclick', click]]
   for (const [type, handler] of listeners) container.addEventListener(type, handler, true)
   const timer = setInterval(flush, 80)
-  button.onclick = () => { enabled = !enabled; button.setAttribute('aria-pressed', String(enabled)); button.style.background = enabled ? '#238636' : ''; status.textContent = enabled ? 'Shift + left drag to draw' : ''; if (!enabled) { pointer = null; draft = null; overlay.clear(); pendingClear = true; void flush() } }
-  return { update() { button.disabled = !ready() }, receive(value) { color = value.participants?.find(p => p.id === selfId)?.color ?? color; overlay.receive(value) },
-    dispose() { disposed = true; clearInterval(timer); abort.abort(); overlay.dispose(); button.remove(); status.remove(); for (const [type, handler] of listeners) container.removeEventListener(type, handler, true) },
+  function setEnabled(value) {
+    if (enabled === value) return
+    enabled = value; button.setAttribute('aria-pressed', String(enabled)); button.style.background = enabled ? '#238636' : ''
+    status.textContent = enabled ? (mobile ? 'Drag to draw · Tap Draw again to rotate' : 'Shift + left drag to draw') : ''
+    if (!enabled) {
+      if (pointer !== null && canvas.hasPointerCapture?.(pointer)) canvas.releasePointerCapture(pointer)
+      pointer = null; draft = null; last = null; overlay.clear(); pendingClear = true; void flush()
+    }
+    if (mobile) onActive(enabled)
+  }
+  button.onclick = () => setEnabled(!enabled)
+  return { cancel() { setEnabled(false) }, update({ locked = false } = {}) {
+    button.disabled = !ready() || (mobile && locked)
+    if (mobile && button.disabled) setEnabled(false)
+  }, receive(value) { color = value.participants?.find(p => p.id === selfId)?.color ?? color; overlay.receive(value) },
+    dispose() { disposed = true; setEnabled(false); clearInterval(timer); abort.abort(); overlay.dispose(); button.remove(); status.remove(); for (const [type, handler] of listeners) container.removeEventListener(type, handler, true) },
   }
 }

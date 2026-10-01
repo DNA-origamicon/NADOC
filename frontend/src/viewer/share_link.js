@@ -62,7 +62,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     void ensureInvitation(false, true).catch(() => { /* Start or opening Sharing reports actionable setup errors. */ })
   }
   const currentRoom = () => shares.find(s => s.id === selectedId) ?? shares[0]
-  const drawings = broadcast?.prepared ? initEditorDrawings({ prepared: broadcast.prepared, getRoom: () => capabilities.includes('guest-drawing-v1') ? currentRoom() : null, document: doc, fetch: request }) : null
+  const drawings = broadcast?.prepared ? initEditorDrawings({ prepared: broadcast.prepared, getRoom: () => !busy && !disposed && capabilities.includes('guest-drawing-v1') ? currentRoom() : null, document: doc, fetch: request }) : null
   const currentInvitation = () => invitation ?? currentRoom()
   const meetingTarget = initMeetingTarget({ parent: dialog, document: doc, onError: reportError })
   async function stopNative() {
@@ -173,6 +173,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
   async function stopHosting() {
     if (busy) return
     revision++; busy = true; clearError(); syncButtons()
+    drawings?.clear()
     dialog.setAttribute('aria-busy', 'true')
     status.textContent = 'Stopping…'
     try {
@@ -296,6 +297,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     }
   }
   function documentClosed() {
+    drawings?.clear()
     void animation?.stop().catch(() => {})
     documentEpoch++; revision++; refreshing = false
     hostingAbort.abort(new DOMException('Part session closed', 'AbortError'))
@@ -324,6 +326,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
   const resetLink = async () => {
     if (busy || refreshing) return
     busy = true; revision++; clearError(); syncButtons()
+    drawings?.clear()
     try {
       await ensureInvitation(true)
       shares = []; selectedId = null; renderShares()

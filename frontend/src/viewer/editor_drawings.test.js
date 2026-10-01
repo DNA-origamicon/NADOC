@@ -16,3 +16,25 @@ it('reads marks only while presenting and removes the overlay when the room ends
     expect(document.querySelector('[data-meeting-drawing]')).toBeNull()
   } finally { api.dispose(); vi.useRealTimers() }
 })
+
+it('cancels a pending drawing read before revocation and resumes for a new room', async () => {
+  vi.useFakeTimers()
+  let room = { id: 'old' }, signal
+  const fetch = vi.fn((_url, options) => new Promise((_resolve, reject) => {
+    signal = options.signal
+    signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+  }))
+  const api = initEditorDrawings({ prepared: {}, getRoom: () => room, fetch })
+  try {
+    await vi.advanceTimersByTimeAsync(200)
+    const oldSignal = signal
+    room = null; api.clear()
+    expect(oldSignal.aborted).toBe(true)
+    await vi.advanceTimersByTimeAsync(200)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    room = { id: 'new' }
+    await vi.advanceTimersByTimeAsync(200)
+    expect(fetch.mock.calls[1][0]).toContain('/new/drawings')
+    expect(signal.aborted).toBe(false)
+  } finally { api.dispose(); vi.useRealTimers() }
+})

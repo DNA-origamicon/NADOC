@@ -29,7 +29,7 @@ test('Start waits for public access while its persistent invitation remains copy
     if (action === 'stop') { started = false; shared = null; return route.fulfill({ json: {} }) }
     if (action === 'create') {
       expect(polls).toBeGreaterThan(1); publications++
-      shared = { key: 'part:__e2e__auto-sharing', id: 'a'.repeat(32), title: 'Setup test', url: 'https://example.invalid/viewer#invite=guest&password=required', qrUrl: 'https://example.invalid/viewer#invite=qr-guest&entry=qr', password: 'test-password', expiresAt: Date.now() + 60000 }
+      shared = { key: 'part:__e2e__auto-sharing', id: 'a'.repeat(32), title: 'Setup test', url: 'https://example.invalid/viewer#invite=guest&password=required', qrUrl: 'https://example.invalid/viewer#invite=qr-guest&entry=qr', password: 'test-password', expiresAt: Date.now() + 7200000 }
       return route.fulfill({ json: shared })
     }
     return route.fulfill({ json: { running: started, shares: shared ? [shared] : [], ...(started ? { publicAccess: ++polls > 1 ? ready : pending } : {}) } })

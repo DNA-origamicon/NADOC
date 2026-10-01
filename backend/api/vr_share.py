@@ -66,7 +66,11 @@ def read_presenter_pose(request: Request):
     import numpy as np
     from backend.api import routes_vr as vr
     from backend.api.doc_context import get_current_doc
-    vr._require_local(request)
+    # Desktop sharing polls this optional feed even on hosts without native VR.
+    # Keep local access enforcement, but absence of VR is a normal empty pose.
+    vr._require_local(request, check_platform=False)
+    if vr._native_platform_reason():
+        return {'avatar': None}
     state = vr._read_state()
     if not state or state.get('doc_id') != get_current_doc():
         return {'avatar': None}

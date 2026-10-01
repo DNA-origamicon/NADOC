@@ -45,6 +45,7 @@ test('guest ink follows matching perspectives, expires and clears; screenshots e
   await page.locator('#share-link-dialog [data-close]').click()
   async function join(name, width) {
     const guest = await browser.newPage({ viewport: { width, height: 800 } }); guests.push(guest)
+    await guest.clock.install()
     await guest.goto(url); await guest.locator('#guest-name').fill(name); await guest.locator('#join-submit').click()
     await expect(guest.locator('#status')).toContainText('Static snapshot', { timeout: 30000 })
     return guest
@@ -75,13 +76,16 @@ test('guest ink follows matching perspectives, expires and clears; screenshots e
   const bounds = await a.locator('#canvas').boundingBox()
   const clip = { x: bounds.x + bounds.width * .45, y: bounds.y + bounds.height * .3, width: bounds.width * .25, height: bounds.height * .3 }
   const beforeInk = await a.screenshot({ clip })
+  // Freeze the drawing clock before the gesture so slow screenshots cannot expire ink.
+  await a.clock.pauseAt(new Date())
   await draw()
-  await a.screenshot({ path: path.join(evidence, 'drawing-visible.png') })
-  const inkPixels = await a.screenshot({ clip })
   await expect(marks(a).first()).toBeVisible()
   await expect(marks(b).first()).toBeVisible()
   await expect(marks(page).first()).toBeVisible()
   expect(await marks(c).count()).toBe(0)
+  const inkPixels = await a.screenshot({ clip })
+  await a.clock.resume()
+  await writeFile(path.join(evidence, 'drawing-visible.png'), inkPixels)
   expect(inkPixels.equals(beforeInk)).toBe(false)
   await expect(marks(a)).toHaveCount(0, { timeout: 4000 })
   await expect(marks(b)).toHaveCount(0)

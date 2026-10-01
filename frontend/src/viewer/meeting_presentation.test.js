@@ -7,6 +7,8 @@ function setup(role = 'guest', options = {}) {
   const events = new EventTarget(); events.close = vi.fn()
   const frames = new Set(), viewer = { current: {}, performanceApi: { busy: false }, runtime: { controls: { enabled: true }, addFrameCallback: fn => frames.add(fn), removeFrameCallback: fn => frames.delete(fn) }, captureCamera: vi.fn(() => ({ ...cameraDefaults, position: [2, 3, 4] })), applyCamera: vi.fn() }
   let tick
+  viewer.mobile = options.mobile ?? false
+  viewer.setViewLocked = vi.fn()
   const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
   const dispose = mountMeetingPresentation({ viewer, base: '/meeting/room', role, revision: 'rev', room: 'room', document, fetch: request, eventSource: () => events, setInterval: fn => { tick = fn; return 1 }, clearInterval: vi.fn(), ...options })
   const state = (sequence, camera = { position: [10, 0, 30] }, extra = {}) => events.dispatchEvent(new MessageEvent('state', { data: JSON.stringify({ room: 'room', revision: 'rev', sequence, camera: camera && { ...cameraDefaults, ...camera }, presenting: true, ...extra }) }))
@@ -172,5 +174,52 @@ it('forces late joiners to follow while locked and restores their choice after a
   expect(v.viewer.runtime.controls.enabled).toBe(true)
   expect(document.querySelector('#reset').disabled).toBe(false)
   expect(document.querySelector('[data-follow]').getAttribute('aria-pressed')).toBe('false')
+  v.dispose()
+})
+
+it('uses identical interpolated camera updates for locked and voluntary following', () => {
+  let time = 0
+  vi.spyOn(performance, 'now').mockImplementation(() => time)
+  const runs = []
+  for (const locked of [false, true]) {
+    time = 0
+    const v = setup(); v.state(1, undefined, { viewLocked: locked })
+    if (!locked) document.querySelector('[data-follow]').click()
+    time = 450; v.frame()
+    time = 1000; v.frame()
+    time = 1016; v.state(2, { position: [20, 5, 25] }, { viewLocked: locked }); v.frame()
+    runs.push(v.viewer.applyCamera.mock.calls)
+    expect(v.viewer.applyCamera.mock.calls[0][2]).toEqual({ resetControls: false })
+    expect(v.viewer.applyCamera.mock.calls[2][1]).toBeGreaterThan(0)
+    expect(v.viewer.applyCamera.mock.calls[2][1]).toBeLessThan(1)
+    expect(v.viewer.runtime.controls.enabled).toBe(false)
+    v.dispose()
+  }
+  expect(runs[1]).toEqual(runs[0])
+})
+
+it('holds the mobile drawing pose, restores navigation, and gives host locks priority', () => {
+  const v = setup('guest', { mobile: true }); v.state(1)
+  const draw = document.querySelector('[data-draw]'), follow = document.querySelector('[data-follow]')
+  follow.click(); v.frame()
+  draw.click()
+  expect(follow.getAttribute('aria-pressed')).toBe('false')
+  expect(follow.disabled).toBe(true)
+  expect(v.viewer.runtime.controls.enabled).toBe(false)
+  expect(v.viewer.setViewLocked).toHaveBeenLastCalledWith(true)
+  const calls = v.viewer.applyCamera.mock.calls.length
+  v.state(2, { position: [40, 0, 20] }); v.frame()
+  expect(v.viewer.applyCamera).toHaveBeenCalledTimes(calls)
+  draw.click()
+  expect(v.viewer.runtime.controls.enabled).toBe(true)
+  expect(document.querySelector('#reset').disabled).toBe(false)
+  draw.click(); v.state(3, undefined, { viewLocked: true })
+  expect(draw.getAttribute('aria-pressed')).toBe('false')
+  expect(draw.disabled).toBe(true)
+  expect(v.viewer.runtime.controls.enabled).toBe(false)
+  expect(follow.getAttribute('aria-pressed')).toBe('true')
+  v.state(4, undefined, { viewLocked: false })
+  expect(v.viewer.runtime.controls.enabled).toBe(true)
+  expect(draw.disabled).toBe(false)
   v.dispose()
 })

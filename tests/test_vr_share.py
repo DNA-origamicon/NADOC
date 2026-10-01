@@ -56,7 +56,8 @@ def test_pose_feed_is_fresh_local_and_document_bound(tmp_path, monkeypatch):
     from backend.api import routes_vr as vr, doc_context
     from backend.api.vr_share import router
     event=tmp_path/'events';path=tmp_path/'events.avatar'
-    monkeypatch.setattr(vr,'_require_local',lambda request:None)
+    monkeypatch.setattr(vr,'_require_local',lambda request, **kwargs:None)
+    monkeypatch.setattr(vr,'_native_platform_reason',lambda:None)
     monkeypatch.setattr(vr,'_read_state',lambda:{'doc_id':'one','event_path':str(event),'view_rotation':[[1,0,0],[0,1,0],[0,0,1]]})
     monkeypatch.setattr(doc_context,'get_current_doc',lambda:'one')
     payload=dict(enabled=True,tracked=True,presentation=dict(model_to_tracking_rows=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]],source_center_nm=[0,0,0],normalization_model_per_nm=1,normalized_offset_model=[0,0,0]),head={'position':[0,1,0],'orientation':[0,0,0,1]},hands=[None,None])
@@ -73,3 +74,17 @@ def test_pose_feed_is_fresh_local_and_document_bound(tmp_path, monkeypatch):
         assert client.get('/vr/presenter-pose').json()['avatar'] is None
         path.write_text(json.dumps(payload));monkeypatch.setattr(doc_context,'get_current_doc',lambda:'other')
         assert client.get('/vr/presenter-pose').json()['avatar'] is None
+
+
+def test_desktop_pose_feed_without_native_vr_keeps_local_access_checks(monkeypatch):
+    from backend.api import routes_vr as vr
+    monkeypatch.setattr(vr, '_native_platform_reason', lambda: 'Native VR unavailable')
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app, client=('127.0.0.1', 50000)) as client:
+        response = client.get('/vr/presenter-pose')
+        assert response.status_code == 200
+        assert response.json() == {'avatar': None}
+        assert client.get('/vr/presenter-pose', headers={'Origin': 'https://untrusted.example'}).status_code == 403
+    with TestClient(app, client=('192.0.2.1', 50000)) as client:
+        assert client.get('/vr/presenter-pose').status_code == 403

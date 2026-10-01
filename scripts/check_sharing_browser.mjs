@@ -12,7 +12,8 @@ const { chromium } = require('@playwright/test'), { build } = require('esbuild')
 const root = fileURLToPath(new URL('../frontend', import.meta.url)), controlFile = shareControlFile(root)
 const config = JSON.parse(await readFile(controlFile, 'utf8'))
 const api = (path, options = {}) => hostTransport({ root, controlFile, config, path, options })
-let browser, share
+let browser, share, heartbeat
+let heartbeatFlight = Promise.resolve()
 try {
   const hostname = new URL(config.publicOrigin).hostname
   const answers = await Promise.all(['https://dns.google/resolve', 'https://cloudflare-dns.com/dns-query'].map(async endpoint => {
@@ -58,6 +59,74 @@ try {
   await page.mouse.move(box.x + box.width * .7, box.y + box.height * .6, { steps: 10 }); await page.mouse.up()
   await page.waitForTimeout(300)
   assert.equal((await canvas.screenshot()).equals(before), false, 'Guest orbit must change the rendered view')
+  // Exercise the actual host transport too: a Linux-only fixture misses WSL's
+  // Windows helper allowlist, which previously rejected view-lock and drawings.
+  const session = await api(`/host/shares/${share.id}/broadcast/start`, { method: 'POST' })
+  const broadcast = (action, value) => api(`/host/shares/${share.id}/broadcast/${action}`, {
+    method: 'POST', headers: { 'X-NADOC-Broadcast': session.lease },
+    ...(value !== undefined ? { body: Buffer.from(JSON.stringify(value)) } : {}),
+  })
+  heartbeat = setInterval(() => { heartbeatFlight = broadcast('heartbeat').catch(error => errors.push(error.message)) }, 4000)
+  await broadcast('camera', { revision: session.revision, camera: { position: [12, 10, 15], target: [0, 0, 0], up: [0, 1, 0], fov: 55, near: .1, far: 1000, orbitMode: 'orbit' } })
+  await broadcast('view-lock', { locked: true })
+  await page.waitForFunction(() => document.querySelector('#reset')?.disabled && document.querySelector('[data-follow]')?.textContent === 'Perspective locked')
+  assert.equal(await page.locator('#mode').isDisabled(), true)
+  // Lock uses the same 0.9-second arrival and smooth tracking as voluntary Follow.
+  // Wait for visual settling before testing navigation; relay timing and render
+  // rate can leave a few interpolation frames after the lock label appears.
+  await page.waitForTimeout(1000)
+  let lockedImage = await canvas.screenshot(), stable = 0
+  const settleDeadline = performance.now() + 10000
+  while (stable < 3 && performance.now() < settleDeadline) {
+    await page.waitForTimeout(150)
+    const next = await canvas.screenshot()
+    stable = next.equals(lockedImage) ? stable + 1 : 0
+    lockedImage = next
+  }
+  assert.equal(stable, 3, 'Locked camera settles at the stationary presenter pose')
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down()
+  await page.mouse.move(box.x + box.width * .7, box.y + box.height * .6, { steps: 10 }); await page.mouse.up()
+  await page.mouse.wheel(0, 300)
+  await page.waitForTimeout(200)
+  assert.equal((await canvas.screenshot()).equals(lockedImage), true, 'Locked guests cannot orbit or zoom')
+  const late = await browser.newPage()
+  await late.goto(share.url)
+  await late.locator('#guest-name').fill('Other guest')
+  await late.locator('#meeting-password').fill(share.password)
+  await late.locator('#join-submit').click()
+  await late.locator('#join').waitFor({ state: 'hidden', timeout: 30000 })
+  await late.waitForFunction(() => document.querySelector('#reset')?.disabled && document.querySelector('[data-follow]')?.textContent === 'Perspective locked')
+  await page.waitForFunction(() => document.querySelectorAll('.meeting-presence-person').length === 3)
+  await broadcast('progress', { fraction: .5 })
+  await page.locator('#meeting-loading').waitFor({ state: 'visible' })
+  const layers = await page.evaluate(() => {
+    const loading = document.querySelector('#meeting-loading'), original = loading.getAttribute('style')
+    try {
+      return [...document.querySelectorAll('.meeting-presence-person')].map(person => {
+        const rect = person.getBoundingClientRect()
+        // Force overlap for each real roster row without altering either z-index.
+        Object.assign(loading.style, { top: `${rect.top}px`, left: `${rect.left}px`, transform: 'none', pointerEvents: 'auto' })
+        return { label: person.textContent, above: loading.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)) }
+      })
+    } finally { loading.setAttribute('style', original) }
+  })
+  assert.deepEqual(layers.map(row => row.label).sort(), ['Me', 'Other guest', 'Presenter'].sort())
+  assert.ok(layers.every(row => row.above), 'Loading visualization must cover every participant row')
+  await api(`/host/shares/${share.id}/drawings`)
+  await broadcast('progress', null)
+  await page.locator('#meeting-loading').waitFor({ state: 'hidden' })
+  await broadcast('view-lock', { locked: false })
+  await page.waitForFunction(() => !document.querySelector('#reset')?.disabled)
+  await late.waitForFunction(() => !document.querySelector('#reset')?.disabled)
+  const unlockedImage = await canvas.screenshot()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down()
+  await page.mouse.move(box.x + box.width * .6, box.y + box.height * .7, { steps: 10 }); await page.mouse.up()
+  await page.waitForTimeout(300)
+  assert.equal((await canvas.screenshot()).equals(unlockedImage), false, 'Unlock restores guest navigation')
+  clearInterval(heartbeat); heartbeat = null; await heartbeatFlight
+  await broadcast('pause')
+  await late.close()
+  console.log('PASS: host-transport perspective lock/unlock, locked late joining, drawing reads, and loading overlay above Presenter/Me/other guests.')
   assert.deepEqual(errors, [])
   const beforeEnd = await api('/host/shares')
   await api(`/host/shares/${share.id}`, { method: 'DELETE' })
@@ -82,6 +151,7 @@ try {
   assert.deepEqual(errors, [])
   console.log('PASS: public DNS, public-relay browser HTTPS, wrong-password rejection, correct-password scene load, navigation, immediate revocation, warm re-enabling, and editor/management isolation. No private DNS or certificate override used.')
 } finally {
+  clearInterval(heartbeat); await heartbeatFlight
   await browser?.close()
   if (share) await api(`/host/shares/${share.id}`, { method: 'DELETE' })
 }
