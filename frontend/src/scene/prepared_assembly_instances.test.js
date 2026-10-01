@@ -54,3 +54,17 @@ it('does not authorize a subsequently replaced custom shader', () => {
   expect(bakePreparedAssemblyInstances(mesh)).toBe(mesh)
   expect(() => prepareScene({ scene })).toThrow('Custom shader')
 })
+it('streams texture-backed assembly motion and detects a changed visible instance count', async () => {
+  const { createLiveFrameCapture } = await import('../viewer/live_frame_capture.js')
+  const { createClipApplier } = await import('../viewer/trajectory_clip.js')
+  const { decodeContainer } = await import('../viewer/package_container.js')
+  const { scene, spec } = fixture()
+  const buffer = prepareScene({ scene, camera: { position: [0,0,100], target: [0,0,0], up: [0,1,0], fov: 55, orbitMode: 'orbit' } })
+  const guest = await loadPreparedScene(buffer), capture = createLiveFrameCapture(decodeContainer(buffer), { scene })
+  spec.xform.value.image.data[12] = 20; spec.xform.value.needsUpdate = true
+  createClipApplier(guest).apply(capture.frame({ scene }))
+  expect([...guest.scene.children[0].instanceMatrix.array]).toEqual([...matrix(22), ...matrix(24)])
+  spec.visibility.value.image.data[16] = 1; spec.visibility.value.needsUpdate = true
+  expect(capture.frame({ scene })).toBeNull()
+  guest.dispose()
+})

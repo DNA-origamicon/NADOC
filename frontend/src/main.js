@@ -1078,7 +1078,9 @@ async function main() {
     onTextOverlayUpdate: (state) => {
       applyAnimationTextOverlay(document.getElementById('canvas-area'), state)
     },
+    onPlaybackFrame: state => sharing.animationFrame(state),
     onEvent: (evt) => {
+      sharing.animationEvent(evt)
       animPanel?.onPlayerEvent(evt)
       // Restore heavy geometry only when the player owned it. Camera-only and
       // idle stops must leave simulation atoms/surfaces in place: re-entering the

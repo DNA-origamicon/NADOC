@@ -194,7 +194,12 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
   }
   const timer = repeat(tick, 125)
   paint()
-  return { tick, toggle, async setPerspective(value) {
+  return { tick, toggle, async suspend() {
+    epoch++; switching = true
+    await flight
+    try { if (lease) await api('pause') }
+    finally { lease = ''; shared = null; capture = null; switching = false; paint() }
+  }, async setPerspective(value) {
     perspective = value; sentCamera = ''
     await flight
     if (!value && lease) await api('hold')

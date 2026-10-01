@@ -50,10 +50,11 @@ function _ease(t, curve) {
  * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
  * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry, onFetchGeometryBatch, trajectoryKeyframes, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry, onFetchGeometryBatch, trajectoryKeyframes, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate, onPlaybackFrame }) {
   let _raf          = null
   let _playGeneration = 0
   let _loopEpoch = 0
+  let _pendingTime = null
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
   let _bounce       = false   // ping-pong: flip direction at each boundary
@@ -1111,8 +1112,12 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     const loopEpoch = _loopEpoch
     _applyAt(atBound ? (_direction === 1 ? _totalDur : 0) : elapsed)
     const waitStart = performance.now()
+    _pendingTime = { epoch: loopEpoch, time: Math.max(0, Math.min(elapsed, _totalDur)) }
     try {
       await trajectoryKeyframes?.settle?.()
+      if (_playing && _animation === animation && loopEpoch === _loopEpoch) {
+        await onPlaybackFrame?.({ time: Math.max(0, Math.min(elapsed, _totalDur)), duration: _totalDur, text: _textOverlayAt(Math.max(0, Math.min(elapsed, _totalDur))), isCurrent: () => loopEpoch === _loopEpoch })
+      }
     } catch (error) {
       if (loopEpoch !== _loopEpoch) return
       stop()
@@ -1122,6 +1127,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     if (!_playing || _animation !== animation || loopEpoch !== _loopEpoch) return
     const waited = performance.now() - waitStart
     _startTime += waited
+    _pendingTime = null
     now += waited
 
     if (atBound) {
@@ -1138,6 +1144,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         _lastSeekKfId = null
         _raf = requestAnimationFrame(_loop)
       } else {
+        _seekOffset = boundTime
         _playing = false
         _raf     = null
         onEvent?.({ type: 'tick', currentTime: boundTime, totalDuration: _totalDur })
@@ -1239,11 +1246,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   /** Pause (saves current position; direction preserved for resume). */
   function pause() {
     if (!_playing) return
+    _seekOffset = getCurrentTime()
     _loopEpoch++
-    _seekOffset = Math.max(0, Math.min(
-      _seekOffset + _direction * (performance.now() - _startTime) / 1000,
-      _totalDur,
-    ))
+    _pendingTime = null
     _playing = false
     if (_raf) { cancelAnimationFrame(_raf); _raf = null }
     onEvent?.({ type: 'paused', currentTime: _seekOffset })
@@ -1366,6 +1371,12 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _seekOffset = Math.max(0, Math.min(seconds, _totalDur))
     _applyAt(_seekOffset)
     onEvent?.({ type: 'tick', currentTime: _seekOffset, totalDuration: _totalDur })
+    if (!wasPlaying && onPlaybackFrame) {
+      const epoch = _loopEpoch, time = _seekOffset
+      Promise.resolve(trajectoryKeyframes?.settle?.()).then(() => {
+        if (epoch === _loopEpoch) return onPlaybackFrame({ time, duration: _totalDur, text: _textOverlayAt(time), seek: true, isCurrent: () => epoch === _loopEpoch })
+      }).catch(error => onEvent?.({ type: 'baking_error', message: error.message }))
+    }
     if (wasPlaying) {
       _startTime = performance.now()
       _playing   = true
@@ -1377,6 +1388,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   function getDirection()     { return _direction }
   function getCurrentTime()   {
     if (!_playing) return _seekOffset
+    if (_pendingTime?.epoch === _loopEpoch) return _pendingTime.time
     return Math.max(0, Math.min(
       _seekOffset + _direction * (performance.now() - _startTime) / 1000,
       _totalDur,

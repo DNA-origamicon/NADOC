@@ -26,3 +26,18 @@ test('editor presenter counts toward the four participant limit', () => {
   const api = createEditorBroadcast({ room, rooms: new Map([['room', room]]), maxGuests: 4, now: Date.now })
   assert.throws(() => api.start(), /full/)
 })
+test('animation leases release their automatic lock on expiry while retaining a manual lock', () => {
+  let time = 0
+  const room = { id: 'r', revision: 'rev', sessions: new Map(), presentation: createPresentationState({ id: 'r', revision: 'rev' }) }
+  const api = createEditorBroadcast({ room, rooms: new Map([['r', room]]), maxGuests: 4, now: () => time })
+  api.start({ jobStream: true, animation: true })
+  assert.equal(room.presentation.snapshot().animationActive, true)
+  assert.equal(room.presentation.snapshot().viewLocked, true)
+  time = 15001; api.expire()
+  assert.equal(room.presentation.snapshot().viewLocked, false)
+  room.presentation.setViewLock(true)
+  const { lease } = api.start({ jobStream: true, animation: true })
+  api.apply('pause', lease)
+  assert.equal(room.presentation.snapshot().animationActive, false)
+  assert.equal(room.presentation.snapshot().viewLocked, true)
+})

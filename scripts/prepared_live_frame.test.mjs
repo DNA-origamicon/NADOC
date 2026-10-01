@@ -92,3 +92,20 @@ test('live packets can exceed the old compressed-size limit', async () => {
   const published = acceptLiveFrame(room, Buffer.concat([Buffer.from(room.revision), bytes]))
   assert.equal(published.bytes, bytes.length)
 })
+
+test('animation geometry and caption/camera metadata are accepted atomically and validated', async () => {
+  const { acceptLiveFrame } = await import('./prepared_live_frame.mjs')
+  let published
+  const room = { revision: 'a'.repeat(64), liveLayout: 0, presentation: { setLiveFrame: value => { published = value } } }
+  const camera = { position: [0, 0, 30], target: [0, 0, 0], up: [0, 1, 0], fov: 55, near: .1, far: 2000, orbitMode: 'orbit' }
+  const frame = gzipSync(Buffer.alloc(8))
+  function packet(animation) {
+    const metadata = Buffer.from(JSON.stringify({ animation })), length = Buffer.alloc(4); length.writeUInt32BE(metadata.length)
+    return Buffer.concat([Buffer.from(room.revision), length, metadata, frame])
+  }
+  acceptLiveFrame(room, packet({ time: 1, duration: 2, camera, text: null }))
+  assert.deepEqual(published.animation.camera, camera); assert.equal(published.animation.time, 1)
+  assert.throws(() => acceptLiveFrame(room, packet({ time: 1, duration: 2, camera: { ...camera, fov: -1 } })), /camera/i)
+  assert.throws(() => acceptLiveFrame(room, packet({ time: 3, duration: 2, camera })), /animation/)
+  assert.equal(published.sequence, 1)
+})

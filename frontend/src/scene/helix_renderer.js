@@ -2235,6 +2235,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const slab = slabEntries[i]
       const bead = _nucToEntry.get(slab.nuc)?.pos ?? slab.bbPos
       iSlabs.getMatrixAt(slab.id, _tMatrix)
+      _connectorScale.setFromMatrixScale(_tMatrix)
+      // Animation hides a slab with zero scale. Its rotation is undefined, and
+      // decomposition would poison the connector matrix with NaNs.
+      if (Math.min(_connectorScale.x, _connectorScale.y, _connectorScale.z) <= 1e-12) {
+        iSlabConnectors.setMatrixAt(i, _tMatrix.makeScale(0, 0, 0).setPosition(bead))
+        continue
+      }
       _tMatrix.decompose(_connectorCenter, _connectorQuat, _connectorScale)
       slabConnectionCorner(
         _connectorCenter, _connectorQuat, bead,

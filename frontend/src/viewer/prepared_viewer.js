@@ -18,7 +18,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
   const sharedSelection = mountSharedSelection({ container: canvas.parentElement, runtime })
   runtime.scene.clear()
   let annotations = null
-  let current = null, disposed = false, generation = 0
+  let current = null, disposed = false, generation = 0, viewLocked = false
   let state = { currentDesign: null, currentGeometry: null, assemblyActive: false }
   const performanceApi = initViewerPerformance({ ...runtime, store: { getState: () => state },
     getDetailLevel: () => current?.data.view?.detail_level ?? null,
@@ -28,7 +28,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
   const viewCube = initViewCube(canvas.parentElement, runtime.camera, runtime.controls,
     () => current ? new THREE.Box3().setFromObject(current.scene) : null, {
       beforeNavigate: () => {
-        if (!current || performanceApi.busy) return false
+        if (!current || performanceApi.busy || viewLocked) return false
         canvas.dispatchEvent(new Event('nadoc:view-navigation'))
         runtime.switchOrbitMode(navigationMode(modeInput.value))
         return true
@@ -36,7 +36,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     })
   viewCube.hide()
   function resetCamera() {
-    if (!current || performanceApi.busy) return
+    if (!current || performanceApi.busy || viewLocked) return
     viewCube.cancel()
     const pose = current.data.camera
     runtime.switchOrbitMode(navigationMode(pose.orbitMode))
@@ -115,13 +115,13 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
       return false
     }
   }
-  const choose = () => { loadFile(fileInput.files[0]); fileInput.value = '' }
-  const changeMode = () => { if (!performanceApi.busy) runtime.switchOrbitMode(navigationMode(modeInput.value)) }
+  const choose = () => { if (viewLocked) return; loadFile(fileInput.files[0]); fileInput.value = '' }
+  const changeMode = () => { if (!performanceApi.busy && !viewLocked) runtime.switchOrbitMode(navigationMode(modeInput.value)) }
   const drag = event => event.preventDefault()
-  const drop = event => { event.preventDefault(); loadFile(event.dataTransfer.files[0]) }
+  const drop = event => { event.preventDefault(); if (viewLocked) return; loadFile(event.dataTransfer.files[0]) }
   const ray = new THREE.Raycaster(), pointer = new THREE.Vector2()
   function center(event) {
-    if (!current || performanceApi.busy) return
+    if (!current || performanceApi.busy || viewLocked) return
     const rect = canvas.getBoundingClientRect()
     pointer.set(2 * (event.clientX - rect.left) / rect.width - 1, 1 - 2 * (event.clientY - rect.top) / rect.height)
     ray.setFromCamera(pointer, runtime.camera)
@@ -145,7 +145,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     runtime.setNavScaleProvider(() => new Float64Array()); runtime.controls.enabled = false
     resetButton.disabled = true; modeInput.disabled = true; fileInput.disabled = true
   }
-  return { mobile, centerAt: center, clear, loadFile, runtime, performanceApi, applyCamera, captureCamera: () => ({ ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far }), get current() { return current }, dispose() {
+  return { setViewLocked(value) { viewLocked = value; if (value) { viewCube.cancel(); runtime.controls.enabled = false; if (performanceApi.busy) performanceApi.stop() }; fileInput.disabled = value }, mobile, centerAt: center, clear, loadFile, runtime, performanceApi, applyCamera, captureCamera: () => ({ ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far }), get current() { return current }, dispose() {
     if (disposed) return
     disposed = true; generation++
     annotations?.dispose(); annotations = null

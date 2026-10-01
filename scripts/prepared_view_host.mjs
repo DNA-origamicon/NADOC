@@ -90,7 +90,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['design-links-v1', 'persistent-sharing-v1', 'editor-broadcast-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'vr-avatar-v1', 'vr-ui-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['design-links-v1', 'persistent-sharing-v1', 'editor-broadcast-v1', 'animation-stream-v1', 'view-lock-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'vr-avatar-v1', 'vr-ui-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
       if (req.method === 'POST' && route === '/host/heartbeat') { ownerSeenAt = now(); return send(200, { ok: true }) }
       if (req.method === 'DELETE' && route === '/host/shares') {
         for (const id of rooms.keys()) endShare(id)
@@ -142,7 +142,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           return send(200, updateTrajectory(room, JSON.parse(Buffer.concat(chunks)), now))
         } catch (error) { return send(400, { error: error.message }) }
       }
-      const broadcast = route.match(/^\/host\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat|progress)$/)
+      const broadcast = route.match(/^\/host\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat|progress|view-lock)$/)
       if (req.method === 'POST' && broadcast) {
         const room = rooms.get(broadcast[1]); if (!room) return send(410, { error: 'This share has ended.' })
         try {
@@ -150,6 +150,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           const chunks = []; let size = 0
           for await (const chunk of req) { size += chunk.length; if (size > limit) return send(413, { error: 'Broadcast update too large' }); chunks.push(chunk) }
           const body = Buffer.concat(chunks)
+          if (action === 'view-lock') return send(200, room.presentation.setViewLock(JSON.parse(body).locked))
           return send(200, action === 'start' ? room.editorBroadcast.start(body.length ? JSON.parse(body) : {}) : room.editorBroadcast.apply(action, req.headers['x-nadoc-broadcast'], body))
         } catch (error) { return send(409, { error: error.message }) }
       }
@@ -263,7 +264,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       if ((session.frameRequests ?? 0) >= 2) return send(429, { error: 'Wait for the pending frame' })
       session.frameRequests = (session.frameRequests ?? 0) + 1
       res.once('close', () => { session.frameRequests-- })
-      return send(200, frame.buffer, 'application/octet-stream', { 'Content-Length': frame.bytes, 'X-NADOC-Sequence': frame.sequence, 'X-NADOC-Timeline': JSON.stringify(frame.timeline ?? null), 'X-NADOC-SHA256': frame.sha256 })
+      return send(200, frame.buffer, 'application/octet-stream', { 'Content-Length': frame.bytes, 'X-NADOC-Sequence': frame.sequence, 'X-NADOC-Timeline': JSON.stringify(frame.timeline ?? null), 'X-NADOC-Animation': encodeURIComponent(JSON.stringify(frame.animation ?? null)), 'X-NADOC-SHA256': frame.sha256 })
     }
     if (route === '/meeting/frame') {
       if (!session) return send(401, { error: 'Join with the invite link first.' })

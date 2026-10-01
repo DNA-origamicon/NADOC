@@ -22,9 +22,24 @@ test('camera state is bounded, snapshot-bound, ordered and sent to late joiners'
   assert.deepEqual(room.snapshot().camera, pose)
   room.close()
 })
-test('slow event consumers are disconnected instead of buffering camera history', () => {
+test('stalled event consumers time out without buffering camera history', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
   const room = createPresentationState({ id: 'r', revision: 'v' }), response = new EventEmitter()
   let destroyed = false
   response.write = () => false; response.destroy = () => { destroyed = true; response.emit('close') }
-  room.subscribe(response); assert.equal(destroyed, true); room.close()
+  room.subscribe(response); assert.equal(destroyed, false)
+  t.mock.timers.tick(5000); assert.equal(destroyed, true); room.close()
+})
+test('animation lock is independent of the manual lock and survives scene replacements', () => {
+  const room = createPresentationState({ id: 'room', revision: 'first' })
+  room.setViewLock(true); room.setViewLock(true, true)
+  room.replaceContent('next', null)
+  assert.equal(room.snapshot().viewLocked, true)
+  assert.equal(room.snapshot().animationActive, true)
+  room.setViewLock(false, true)
+  assert.equal(room.snapshot().viewLocked, true)
+  room.setViewLock(false)
+  assert.equal(room.snapshot().viewLocked, false)
+  assert.throws(() => room.setViewLock('true'), /Invalid/)
+  room.close()
 })

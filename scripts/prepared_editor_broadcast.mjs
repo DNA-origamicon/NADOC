@@ -13,7 +13,7 @@ function sourceHash(scene) {
 /** Local management authority; guests never receive this short-lived lease. */
 export function createEditorBroadcast({ room, rooms, maxGuests, now }) {
   let lease = null, seenAt = 0, jobStream = false
-  function pause() { lease = null; room.presentation.setLoading(null); room.presentation.pause() }
+  function pause() { lease = null; room.presentation.setViewLock(false, true); room.presentation.setLoading(null); room.presentation.pause() }
   function expire() { if (lease && now() - seenAt > 15000) pause() }
   function start(options = {}) {
     expire()
@@ -26,6 +26,7 @@ export function createEditorBroadcast({ room, rooms, maxGuests, now }) {
     for (const session of room.sessions.values()) if (session.role === 'presenter') { session.away = true; session.generation++ }
     room.presentation.leavePresenter()
     lease = randomBytes(32).toString('hex'); seenAt = now(); jobStream = options.jobStream === true
+    room.presentation.setViewLock(options.animation === true, true)
     return { lease, revision: room.revision }
   }
   function apply(action, token, body) {

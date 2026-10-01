@@ -1,3 +1,4 @@
+import { bakePreparedAssemblyInstances } from '../scene/prepared_assembly_instances.js'
 export const LIVE_FRAME_LIMITS = { maxBytes: Infinity, maxValues: Infinity }
 import { sceneChannels, encodeFrame } from './trajectory_clip.js'
 import { broadcastFingerprint } from './broadcast_fingerprint.js'
@@ -20,20 +21,30 @@ export function createLiveFrameCapture(data, source, limits = {}) {
   })
   return { signature, frame(next) {
     if (liveSceneSignature(next) !== signature) return null
-    const values = new Float64Array(base.values.length)
-    for (const c of channels) {
-      const o = c.object
-      if (c.kind === 'matrix') {
-        if (o.matrixAutoUpdate) o.updateMatrix()
-        values.set(o.matrix.elements, c.offset)
-      } else {
-        const a = c.kind === 'attribute' ? o.geometry.attributes[c.name] : o[c.kind]
-        if (!a || a.count * a.itemSize !== c.array.length) return null
-        if (a.isInterleavedBufferAttribute) {
-          for (let i = 0; i < a.count; i++) for (let k = 0; k < a.itemSize; k++) values[c.offset + i * a.itemSize + k] = a.data.array[i * a.data.stride + a.offset + k]
-        } else values.set(a.array, c.offset)
+    const values = new Float64Array(base.values.length), baked = new Map()
+    const frozen = object => {
+      if (!baked.has(object)) baked.set(object, bakePreparedAssemblyInstances(object))
+      return baked.get(object)
+    }
+    try {
+      for (const c of channels) {
+        const o = frozen(c.object)
+        if (c.kind === 'matrix') {
+          if (o.matrixAutoUpdate) o.updateMatrix()
+          values.set(o.matrix.elements, c.offset)
+        } else {
+          const a = c.kind === 'attribute' ? o.geometry.attributes[c.name] : o[c.kind]
+          if (!a || a.count * a.itemSize !== c.array.length) return null
+          if (a.isInterleavedBufferAttribute) {
+            for (let i = 0; i < a.count; i++) for (let k = 0; k < a.itemSize; k++) values[c.offset + i * a.itemSize + k] = a.data.array[i * a.data.stride + a.offset + k]
+          } else values.set(a.array, c.offset)
+        }
+      }
+      return encodeFrame(base, { values, signature: base.signature }, limits)
+    } finally {
+      for (const [original, object] of baked) if (original !== object) {
+        for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose()
       }
     }
-    return encodeFrame(base, { values, signature: base.signature }, limits)
   } }
 }

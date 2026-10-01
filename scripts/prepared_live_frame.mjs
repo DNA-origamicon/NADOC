@@ -1,3 +1,5 @@
+import { validateSharedCamera } from './prepared_camera.mjs'
+import { animationFrame } from '../frontend/src/viewer/animation_frame.js'
 import { LIVE_FRAME_LIMITS } from '../frontend/src/viewer/live_frame_capture.js'
 import { liveTimeline } from '../frontend/src/viewer/live_timeline.js'
 import { createHash } from 'node:crypto'
@@ -14,19 +16,21 @@ export function liveFrameLayout(scene) {
 export function acceptLiveFrame(room, body) {
   if (!Number.isSafeInteger(room.liveLayout)) throw new Error('Publish the job visualization before streaming frames')
   if (body.length <= 64 || body.subarray(0, 64).toString() !== room.revision) throw new Error('Frame belongs to a different visualization')
-  let offset = 64, timeline = null
+  let offset = 64, timeline = null, animation = null
   if (body[64] !== 0x1f || body[65] !== 0x8b) {
     if (body.length < 68) throw new Error('Invalid live frame metadata')
     const length = body.readUInt32BE(64)
-    if (length > 512 || length < 1 || 68 + length >= body.length) throw new Error('Invalid live frame metadata')
-    timeline = liveTimeline(JSON.parse(body.subarray(68, 68 + length).toString('utf8')))
+    if (length > 16384 || length < 1 || 68 + length >= body.length) throw new Error('Invalid live frame metadata')
+    const metadata = JSON.parse(body.subarray(68, 68 + length).toString('utf8'))
+    if (metadata?.animation) { animation = animationFrame(metadata.animation); animation.camera = validateSharedCamera(animation.camera) }
+    else timeline = liveTimeline(metadata)
     offset = 68 + length
   }
   const bytes = body.subarray(offset)
   const raw = gunzipSync(bytes)
   decodeFrame(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength), room.liveLayout, LIVE_FRAME_LIMITS)
   const sequence = (room.liveSequence ?? 0) + 1
-  const descriptor = { timeline, revision: room.revision, sequence, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
+  const descriptor = { timeline, ...(animation ? { animation } : {}), revision: room.revision, sequence, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
   room.liveSequence = sequence; room.liveFrame = { ...descriptor, buffer: bytes }
   room.presentation.setLiveFrame(descriptor)
   return descriptor

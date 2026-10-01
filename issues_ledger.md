@@ -1202,3 +1202,12 @@ Reaching 100% is functional success, not evidence of comfortable frame delivery.
 - [ ] Complete all four motion profiles and physical-headset review.
 
 [Investigation and retained unsuccessful experiments](docs/audits/vr_motion_regression_20260929.md).
+
+## ISSUE-52 — Hidden animation slab connectors contain NaNs (2026-09-30, FIXED)
+
+- [x] Reproduce by fading a slab to zero scale; its connector matrix becomes
+  nonfinite and the shared-presentation host rejects the frame.
+- [x] Skip rotation decomposition for collapsed slabs and hide their connectors
+  with a finite zero-scale matrix. Visible slab placement is unchanged.
+- [x] Regression test covers the hidden endpoint and restoration to visible geometry
+  in `helix_renderer.simulation_visibility.test.js`.

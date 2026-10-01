@@ -31,7 +31,7 @@ function geoAt(pos) {
   return { nucleotides_compact: compact, helix_axes }
 }
 
-function makeHarness({ design, clusterTransforms = [], cameraPoses = [] } = {}) {
+function makeHarness({ design, clusterTransforms = [], cameraPoses = [], onPlaybackFrame } = {}) {
   const calls = { arc: [], extArc: [], xover: [], lerp: [], order: [], events: [] }
 
   const helixCtrl = {
@@ -83,6 +83,7 @@ function makeHarness({ design, clusterTransforms = [], cameraPoses = [] } = {}) 
     getAtomisticRenderer:  () => ({ getMode: () => 'off' }),
     onFetchSurfaceBatch:   null,
     getSurfaceRenderer:    () => ({ getMode: () => 'off' }),
+    onPlaybackFrame,
     onEvent: event => calls.events.push(event),
     onTextOverlayUpdate: () => {},
   })
@@ -303,5 +304,39 @@ describe('trajectory ownership — stop() releases only what it took', () => {
     h.player.stop()
     expect(h.calls.order.indexOf('trajRelease')).toBeGreaterThanOrEqual(0)
     expect(h.calls.order.indexOf('trajRelease')).toBeLessThan(h.calls.order.indexOf('lerp'))
+  })
+})
+
+describe('shared playback frame boundaries', () => {
+  it('holds the clock during publication and pauses at the displayed time', async () => {
+    let next, time = 1000, release
+    vi.stubGlobal('requestAnimationFrame', callback => { next = callback; return 1 })
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => time)
+    const onPlaybackFrame = vi.fn(() => new Promise(resolve => { release = resolve }))
+    const h = makeHarness({ design: design(3), onPlaybackFrame })
+    try {
+      await h.player.play({ keyframes: [kf({ hold_duration_s: 2, transition_duration_s: 0 })] })
+      time = 1250; const pending = next(time)
+      await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+      time = 2250
+      expect(h.player.getCurrentTime()).toBe(.25)
+      h.player.pause(); release(); await pending
+      expect(h.player.getCurrentTime()).toBe(.25)
+      expect(onPlaybackFrame.mock.calls[0][0].isCurrent()).toBe(false)
+    } finally { h.player.stop(); clock.mockRestore(); vi.unstubAllGlobals() }
+  })
+  it('publishes the final frame before reporting completion and retains its time', async () => {
+    let next, time = 1000
+    vi.stubGlobal('requestAnimationFrame', callback => { next = callback; return 1 })
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => time)
+    const published = [], h = makeHarness({ design: design(3), onPlaybackFrame: async frame => published.push(frame.time) })
+    try {
+      await h.player.play({ keyframes: [kf({ hold_duration_s: 2, transition_duration_s: 0 })] })
+      time = 4000; await next(time)
+      expect(published).toEqual([2]); expect(h.player.getCurrentTime()).toBe(2)
+      expect(h.calls.events.at(-1).type).toBe('finished')
+    } finally { h.player.stop(); clock.mockRestore(); vi.unstubAllGlobals() }
   })
 })

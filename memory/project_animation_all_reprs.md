@@ -13,6 +13,35 @@ All three representations are animated via the same pre-bake pipeline in `animat
 > "Trajectory keyframes". The player's private trajectory pipeline (`_bakedTrajectories`,
 > `_bakedTrajAtom`, `_bakedTrajSurf`, the fixed 40/20-frame caps) is **deleted**.
 
+## Shared presentation playback (2026-09-30)
+
+The editor player now publishes settled animation frames through
+`viewer/animation_sharing.js` whenever a presentation link is active. Camera and
+styled text metadata travel with each geometry patch. Scene/material/layout
+changes replace the prepared scene; texture-backed assembly placements are baked
+before patch capture. Paused seeks also publish. Export/upload waits hold the
+player clock, so preparation does not consume animation time. Normal sampling is
+15 Hz; large scenes and slow connections can reduce delivery speed.
+
+The presenter controls include a guest-perspective lock icon. The manual lock and
+animation lock are independent server state: an animation forces the lock on,
+including while paused, and completion/Stop restores the manual choice. Guest
+orbit, zoom, reset, view-cube navigation and saved-view jumps respect the lock.
+Animation lease expiry clears its automatic lock. Stop republishes the restored
+native model on the same invitation. Requires `animation-stream-v1` and
+`view-lock-v1` hosting capabilities; existing host processes need restarting.
+
+Verification: the two-guest browser test covers changing geometry/camera, styled
+captions, late join, pause/seek/resume, completion, locked drag/zoom and manual
+lock preservation. Frontend: 583 files / 7,321 passed, one skipped; sharing host
+and proxy: 27 passed; smoke: 23 passed; production build and lint passed.
+The guarded backend FAST run had 9,485 passed, 93 skipped and six failures in
+unchanged scalar geometry, surface extraction and VR color-control tests. Its
+FULL sweep remains deferred in `.nadoc-slow-pending`. Concurrent verification
+triggered workstation memory pressure; recovery checks ran sequentially with
+limited workers. Task-created designs, histories, credentials and browser
+reports were removed; older unrelated test stores were preserved.
+
 ## Pre-bake endpoints (called once before playback starts)
 
 | Representation | Endpoint | Storage |

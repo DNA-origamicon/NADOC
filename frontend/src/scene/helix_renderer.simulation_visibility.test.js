@@ -52,3 +52,22 @@ it('renders measured trajectory slab centers instead of rotating the native offs
   expect(ctrl.residueTransformInfo(target).slabMatrix.elements).toEqual(initial.elements)
   expect(nuc.base_position).toEqual([.5,0,0])
 })
+
+it('keeps slab connectors finite and hidden at an animation fade endpoint, then restores them', () => {
+  const nuc = { helix_id: 'h', bp_index: 0, direction: 'FORWARD', strand_id: 's', strand_type: 'staple', domain_index: 0,
+    backbone_position: [1, 0, 0], base_position: [.5, 0, 0], base_normal: [-1, 0, 0], axis_tangent: [0, 0, 1] }
+  const scene = new THREE.Scene(), design = { helices: [], strands: [{ id: 's', strand_type: 'staple', domains: [] }] }
+  const ctrl = buildHelixObjects([nuc], design, scene)
+  const full = { posMap: new Map([['h:0:FORWARD', new THREE.Vector3(1, 0, 0)]]), bnMap: new Map([['h:0:FORWARD', new THREE.Vector3(-1, 0, 0)]]), axesMap: new Map() }
+  const empty = { posMap: new Map(), bnMap: new Map(), axesMap: new Map() }
+  ctrl.applyPositionLerp(full, empty, 1)
+  const connectors = scene.getObjectByName('slabBackboneConnectors'), matrix = new THREE.Matrix4()
+  connectors.getMatrixAt(0, matrix)
+  expect(matrix.elements.every(Number.isFinite)).toBe(true)
+  expect(new THREE.Vector3().setFromMatrixScale(matrix).lengthSq()).toBe(0)
+  ctrl.applyPositionLerp(empty, full, 1)
+  connectors.getMatrixAt(0, matrix)
+  expect(matrix.elements.every(Number.isFinite)).toBe(true)
+  expect(new THREE.Vector3().setFromMatrixScale(matrix).lengthSq()).toBeGreaterThan(0)
+  expect(nuc.base_position).toEqual([.5, 0, 0])
+})

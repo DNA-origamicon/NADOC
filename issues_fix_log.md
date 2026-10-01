@@ -318,3 +318,9 @@ Kept staged loading/async publication; isolated legacy/staged upload comparison
 has identical pixels and comparable GPU timing. Stick motion passes the final
 initial profile; Ball & Stick still fails. Do not describe this as a completed
 performance fix. [Evidence and testing limits](docs/audits/vr_motion_regression_20260929.md).
+
+2026-09-30 — ISSUE-52: animation sharing exposed a pre-existing NaN in
+`_refreshSlabConnectors` when decomposing a zero-scale slab matrix. Pinned with a
+failing renderer test, then kept collapsed connectors finite and hidden. Visible
+molecular coordinates and topology are unchanged. Shared-animation browser
+coverage exercises the construction-stage transition that exposed the defect.

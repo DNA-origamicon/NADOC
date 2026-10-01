@@ -7,8 +7,9 @@ export function createPresentationState({ id, revision, now = Date.now }) {
   const listeners = new Set()
   const presenters = new Set()
   let trajectory = null, liveFrame = null, loading = null, participants = []
+  let manualViewLock = false, animationViewLock = false
   let avatar = null, avatarWindow = now(), avatarUpdates = 0
-  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, avatar, trajectory, liveFrame, loading, participants, ended: closed, serverTime: now() })
+  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, viewLocked: manualViewLock || animationViewLock, animationActive: animationViewLock, avatar, trajectory, liveFrame, loading, participants, ended: closed, serverTime: now() })
   const textureCaches = new WeakMap()
   const encode = (state, response) => {
     if (!textureCaches.has(response)) textureCaches.set(response, new Map())
@@ -48,6 +49,11 @@ export function createPresentationState({ id, revision, now = Date.now }) {
     return snapshot()
   }
   return { snapshot, publish, pause,
+    setViewLock(value, animation = false) {
+      if (typeof value !== 'boolean') throw new Error('Invalid perspective lock')
+      if (animation) animationViewLock = value; else manualViewLock = value
+      sequence++; broadcast(); return snapshot()
+    },
     publishAvatar(value) {
       if (closed || value?.revision !== revision) throw Error('VR presenter belongs to a different snapshot')
       if (now()-avatarWindow >= 1000) {avatarWindow=now();avatarUpdates=0}
@@ -63,7 +69,7 @@ export function createPresentationState({ id, revision, now = Date.now }) {
       loading = value === null ? null : { fraction: value.fraction }; sequence++; broadcast(); return snapshot()
     },
     setTrajectory(value) { trajectory = value; sequence++; broadcast(); return snapshot() },
-    setLiveFrame(value) { liveFrame = value; sequence++; broadcast(); return snapshot() },
+    setLiveFrame(value) { liveFrame = value; if (value?.animation) { camera = value.animation.camera; presenting = true }; sequence++; broadcast(); return snapshot() },
     replaceContent(next, clip) { avatar=null; revision = next; trajectory = clip; liveFrame = null; camera = null; presenting = false; sequence++; broadcast(); return snapshot() },
     replaceRevision(next) { avatar=null; revision = next; sequence++; broadcast() },
     leavePresenter() { pause(); for (const response of presenters) response.end() },

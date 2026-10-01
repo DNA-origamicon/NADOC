@@ -1,3 +1,4 @@
+import { applyAnimationTextOverlay } from '../scene/animation_text_overlay.js'
 import { decodeVRUIState } from './vr_ui_stream.js'
 import { createVRAvatar } from './vr_avatar.js'
 import { createPresenterFollow } from './presenter_follow.js'
@@ -12,7 +13,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   const vrTextures = new Map()
   const avatar = createVRAvatar({ scene: viewer.runtime.scene })
   let trajectory = createTrajectory()
-  const createLive = () => mountMeetingLiveFrame({ viewer, base, revision, document: doc, fetch: request })
+  const createLive = () => mountMeetingLiveFrame({ viewer, base, revision, document: doc, fetch: request, animationEnabled: () => !!latest?.animationActive })
   let live = createLive()
   const bar = doc.createElement('div'); bar.dataset.presentation = ''; bar.style.cssText = 'display:flex;align-items:center;gap:12px;padding:8px 18px;flex-wrap:wrap'
   bar.innerHTML = role === 'presenter'
@@ -24,7 +25,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   const abort = new AbortController(), host = doc.defaultView
   let source
   let disposed = false, connected = false, following = false, savedEnabled = true, broadcasting = false, inFlight = false, latest = null, latestAt = 0, sequence = -1, sent = ''
-  let writes = Promise.resolve(), publicationEpoch = 0
+  let writes = Promise.resolve(), publicationEpoch = 0, locked = false, priorFollowing = false
   const compatible = () => viewer.current === frozen
   const followMotion = createPresenterFollow({ viewer })
   function follow(value) {
@@ -40,22 +41,31 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     if (el('follow')) el('follow').textContent = value ? 'Stop following' : 'Follow presenter'
   }
   const guestViews = role === 'guest' ? mountGuestSharedViews({ parent: bar, viewer, base, document: doc, fetch: request,
-    onPublished: onViewShared, getRevision: () => revision, ready: () => connected && compatible() && !updating && !viewer.performanceApi.busy,
-    beforeMove: () => follow(false) }) : null
+    onPublished: onViewShared, getRevision: () => revision, ready: () => !locked && connected && compatible() && !updating && !viewer.performanceApi.busy,
+    beforeMove: () => { if (locked) throw new Error('The presenter has locked the perspective'); follow(false) } }) : null
   onViewReady(view => guestViews?.move(view))
   function update() {
+    const nextLock = role === 'guest' && connected && compatible() && latest?.viewLocked === true
+    if (nextLock !== locked) {
+      if (nextLock) { priorFollowing = following; guestViews?.cancel(); follow(true) }
+      else follow(priorFollowing)
+      locked = nextLock
+    }
+    viewer.setViewLocked?.(locked)
+    for (const id of ['reset', 'mode']) { const input = doc.getElementById(id); if (input) input.disabled = locked || !compatible() }
     guestViews?.update()
     onLoading(latest?.loading ?? null, updating)
     status.textContent = !compatible() ? 'Different snapshot opened. Reopen the invitation to present.' : !connected ? 'Presentation connection lost; you can still explore.' : role === 'presenter' ? (broadcasting ? 'Your perspective is shared. Guests choose whether to follow.' : 'Your perspective is not being shared.') : following ? 'Following presenter. Drag or scroll to explore independently.' : latest?.presenting ? 'Explore independently or follow the presenter.' : 'Presenter is not sharing a perspective.'
     if (updating) status.textContent = 'Receiving updated visualizations; your camera stays independent.'
     const canFollow = !updating && latest?.revision === revision && connected && latest?.camera && latest?.presenting && compatible() && !viewer.performanceApi.busy
     if (el('follow')) {
-      el('follow').disabled = !following && !canFollow
+      el('follow').disabled = locked || (!following && !canFollow)
       if (following) {
-        viewer.runtime.controls.enabled = canFollow ? false : savedEnabled
+        viewer.runtime.controls.enabled = locked || canFollow ? false : savedEnabled
         if (!canFollow) status.textContent = 'Following presenter · Waiting for the shared view…'
       }
     }
+    if (locked) { status.textContent = latest?.animationActive ? 'Shared animation · Perspective locked by presenter' : 'Perspective locked by presenter'; el('follow').textContent = 'Perspective locked' }
     if (el('broadcast')) { el('broadcast').disabled = !connected || !compatible() || viewer.performanceApi.busy; el('broadcast').textContent = broadcasting ? 'Pause perspective sharing' : 'Share my perspective'; el('broadcast').setAttribute('aria-pressed', String(broadcasting)) }
   }
   function post(action, body) {
@@ -113,6 +123,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
     sequence = value.sequence; latest = value; latestAt = performance.now(); pendingRevision = value.revision
     trajectory.receive(value)
     live.receive(value)
+    if (!value.animationActive) { const caption = doc.getElementById('anim-text-overlay'); if (caption) applyAnimationTextOverlay(canvas.parentElement, null) }
     if (value.revision !== revision) { broadcasting = false; publicationEpoch++; sent = ''; pendingRevision = value.revision; void refreshScene() }
     if (role === 'presenter' && !value.presenting) sent = ''
     // Keep the guest’s follow preference through scene/lease handoffs.
@@ -132,18 +143,19 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   const visibility = () => { if (!doc.hidden) online() }
   doc.addEventListener('visibilitychange', visibility)
   connect(); host?.addEventListener('offline', offline); host?.addEventListener('online', online)
-  const ownCamera = () => { guestViews?.cancel(); follow(false); update() }
+  const ownCamera = () => { if (locked) return; guestViews?.cancel(); follow(false); update() }
   for (const type of ['pointerdown', 'wheel', 'dblclick', 'nadoc:view-navigation']) canvas.addEventListener(type, ownCamera, { capture: true, passive: true })
   doc.getElementById('reset')?.addEventListener('click', ownCamera, true)
   doc.getElementById('mode')?.addEventListener('change', ownCamera, true)
-  if (el('follow')) el('follow').onclick = () => { guestViews?.cancel(); follow(!following); update() }
+  if (el('follow')) el('follow').onclick = () => { if (locked) return; guestViews?.cancel(); follow(!following); update() }
   if (el('broadcast')) el('broadcast').onclick = () => { if (broadcasting) pause(); else { broadcasting = true; publicationEpoch++; sent = ''; update(); void publish() } }
   function frame() {
     if (compatible() && !updating) avatar.frame(); else avatar.clear()
     if (updating) return
     if (!compatible()) { follow(false); broadcasting = false; source.close(); update(); return }
     if (following && connected && latest?.presenting && latest?.revision === revision && !viewer.performanceApi.busy && latest?.camera) {
-      followMotion.frame(latest.camera); viewer.runtime.controls.enabled = false
+      if (!latest.animationActive) { if (locked) viewer.applyCamera(latest.camera, 1); else followMotion.frame(latest.camera) }
+      viewer.runtime.controls.enabled = false
     }
   }
   // Benchmark orbit owns its camera; do not combine it with follow interpolation.
@@ -153,7 +165,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, d
   update()
   return () => {
     if (disposed) return
-    disposed = true; vrTextures.clear(); avatar.dispose(); guestViews?.dispose(); onViewReady(() => {}); trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
+    disposed = true; viewer.setViewLocked?.(false); if (doc.getElementById('anim-text-overlay')) applyAnimationTextOverlay(canvas.parentElement, null); vrTextures.clear(); avatar.dispose(); guestViews?.dispose(); onViewReady(() => {}); trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
     if (timer !== null) cancel(timer)
     viewer.runtime.removeFrameCallback(frame)
     doc.removeEventListener('visibilitychange', visibility)

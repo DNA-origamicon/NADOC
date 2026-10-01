@@ -127,10 +127,11 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
   host?.addEventListener('nadoc:workspace-path-change', changed); host?.addEventListener('nadoc:document-reset', changed)
   host?.addEventListener('offline', offline); host?.addEventListener('pagehide', offline)
   const timer = repeat(tick, 250); paint()
-  return { show, start, stop, tick, async present(share) {
+  return { show, start, stop, tick, async present(share, { refreshScene = false } = {}) {
     const option = doc.createElement('option'); option.value = share.id; option.textContent = share.title
-    el('room').replaceChildren(option); el('camera').checked = true; el('visuals').checked = false
+    el('room').replaceChildren(option); el('camera').checked = true; el('visuals').checked = refreshScene
     await start()
+    visualsOn = false // Native view-tool sharing owns subsequent scene changes.
     if (!active) throw new Error(el('status').textContent || 'Could not share perspective')
   }, get active() { return active }, dispose() {
     if (disposed) return
