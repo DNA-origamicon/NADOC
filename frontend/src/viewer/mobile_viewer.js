@@ -36,21 +36,19 @@ export function mountMobileViewer({ viewer, document: doc = document }) {
   canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', move)
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', cancel)
   doc.querySelector('header').append(center, help)
-  const notice = doc.createElement('aside')
-  notice.className = 'mobile-landscape'; notice.hidden = true
-  notice.innerHTML = '<strong>Rotate your phone for a wider view</strong><p>One finger rotates. Pinch to zoom; drag with two fingers to pan.</p><button data-fullscreen>Open landscape view</button> <button data-dismiss>Continue in portrait</button><p data-orientation-status role="status"></p>'
-  doc.querySelector('main').append(notice)
-  let dismissed = false, disposed = false
-  const update = () => { notice.hidden = dismissed || !viewer.current || !!doc.querySelector('#join[open]') || host.innerWidth >= host.innerHeight }
-  notice.querySelector('[data-dismiss]').onclick = () => { dismissed = true; update() }
-  notice.querySelector('[data-fullscreen]').onclick = async () => {
-    try {
-      if (!doc.fullscreenElement) await doc.documentElement.requestFullscreen?.()
-      await host.screen.orientation?.lock?.('landscape')
-    } catch { /* Safari and embedded browsers may require physical rotation. */ }
-    if (!disposed) {
-      update()
-      notice.querySelector('[data-orientation-status]').textContent = 'If your screen stays upright, rotate your phone and turn off its rotation lock.'
+  const orientation = doc.createElement('div')
+  orientation.className = 'mobile-orientation'
+  orientation.setAttribute('role', 'img')
+  orientation.innerHTML = '<svg viewBox="0 0 72 40" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect data-current rx="2"/><path d="M29 20h14m-5-5 5 5-5 5"/><rect data-next rx="2" opacity=".35"/></svg>'
+  doc.querySelector('main').append(orientation)
+  const update = () => {
+    orientation.hidden = !viewer.current || !!doc.querySelector('#join[open]')
+    const portrait = host.innerWidth < host.innerHeight
+    orientation.dataset.orientation = portrait ? 'portrait' : 'landscape'
+    orientation.setAttribute('aria-label', portrait ? 'Rotate phone from portrait to landscape' : 'Rotate phone from landscape to portrait')
+    for (const [selector, upright, x] of [['[data-current]', portrait, 15], ['[data-next]', !portrait, 57]]) {
+      const rect = orientation.querySelector(selector), width = upright ? 12 : 24, height = upright ? 24 : 12
+      for (const [key, value] of Object.entries({ x: x - width / 2, y: 20 - height / 2, width, height })) rect.setAttribute(key, String(value))
     }
   }
   const recovery = doc.createElement('div')
@@ -67,10 +65,10 @@ export function mountMobileViewer({ viewer, document: doc = document }) {
   host.addEventListener('resize', update)
   update()
   return () => {
-    disposed = true; observer.disconnect(); host.removeEventListener('resize', update)
+    observer.disconnect(); host.removeEventListener('resize', update)
     canvas.removeEventListener('webglcontextlost', lost); canvas.removeEventListener('webglcontextrestored', restored)
     canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move)
     canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', cancel)
-    center.remove(); help.remove(); notice.remove(); recovery.remove(); body.classList.remove('mobile-viewer', 'mobile-details')
+    center.remove(); help.remove(); orientation.remove(); recovery.remove(); body.classList.remove('mobile-viewer', 'mobile-details')
   }
 }

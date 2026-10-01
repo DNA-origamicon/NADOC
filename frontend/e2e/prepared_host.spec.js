@@ -80,68 +80,26 @@ test('invite opens a production browser viewer, prompts for name, and loads with
   await expect(page.locator('#presentation-ended')).toBeVisible() // explicit room end clears the shared view
 })
 
-test('QR guest joins by name and tracks a synthetic camera target in the production viewer', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'chromium', 'Camera access requires a secure context')
-  const { createGuestQR } = await import('../src/viewer/meeting_target.js')
+test('QR guest joins by name without a tracking panel or camera request', async ({ page }) => {
   const scene = new THREE.Scene()
   scene.add(new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10), new THREE.MeshBasicMaterial()))
   host.setPublicBase(base)
-  const share = host.createShare(Buffer.from(prepareScene({ scene, title: 'QR tracking test', camera: { position: [20, 15, 25], target: [0, 0, 0], up: [0, 1, 0], fov: 55, orbitMode: 'orbit' } })))
-  const invitation = share.qrUrl + '&qrmm=150'
-  const svg = createGuestQR(invitation)
-  // A real MediaStream from canvas exercises video playback and the bundled QR
-  // decoder. No files, devices, public gateway or workspace designs are created.
-  await page.addInitScript(svg => {
-    navigator.mediaDevices.getUserMedia = async () => {
-      const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 480
-      const ctx = canvas.getContext('2d'), image = new Image()
-      const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
-      image.src = url
-      try { await image.decode() } finally { URL.revokeObjectURL(url) }
-      window.__qrCameraStopped = false
-      window.__qrCamera = { size: 400, visible: true }
-      const draw = () => {
-        ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 640, 480)
-        const { size, visible } = window.__qrCamera
-        if (visible) ctx.drawImage(image, (640 - size) / 2, (480 - size) / 2, size, size)
-      }
-      draw()
-      const stream = canvas.captureStream(15), interval = setInterval(draw, 60)
-      const track = stream.getVideoTracks()[0], stop = track.stop.bind(track)
-      track.stop = () => { clearInterval(interval); stop(); window.__qrCameraStopped = true }
-      return stream
+  const share = host.createShare(Buffer.from(prepareScene({ scene, title: 'QR guest test', camera: { position: [20, 15, 25], target: [0, 0, 0], up: [0, 1, 0], fov: 55, orbitMode: 'orbit' } })))
+  await page.addInitScript(() => {
+    window.__cameraRequests = 0
+    if (navigator.mediaDevices) navigator.mediaDevices.getUserMedia = async () => {
+      window.__cameraRequests++
+      throw new Error('Guest entry should not request a camera')
     }
-  }, svg)
-  const failures = []; page.on('pageerror', e => failures.push(e.message))
-  await page.goto(invitation)
+  })
+  await page.goto(share.qrUrl + '&qrmm=150')
   await expect(page.locator('#meeting-password-row')).toBeHidden()
   await page.locator('#guest-name').fill('Phone guest')
   await page.locator('#join-submit').click()
   await expect(page.locator('#join')).not.toBeVisible()
-  const panel = page.locator('.mobile-qr-tracking')
-  await panel.locator('summary').click()
-  await expect(panel.locator('[data-size]')).toBeVisible()
-  await expect(panel.locator('[data-size]')).toHaveValue('150')
-  await panel.locator('[data-start]').click()
-  await expect(panel.locator('[data-state]')).toContainText('Tracking ·', { timeout: 15000 })
-  const initial = JSON.parse(await panel.getAttribute('data-position'))
-  expect(initial[2]).toBeGreaterThan(0)
-  await page.evaluate(() => { window.__qrCamera.size = 300 })
-  await expect.poll(async () => JSON.parse(await panel.getAttribute('data-position') || '[0,0,0]')[2]).toBeGreaterThan(initial[2] * 1.2)
-  await page.evaluate(() => { window.__qrCamera.visible = false })
-  await expect(panel.locator('[data-state]')).toContainText('Position unavailable')
-  await expect(panel).not.toHaveAttribute('data-position')
-  await page.evaluate(() => { window.__qrCamera.visible = true })
-  await expect(panel.locator('[data-state]')).toContainText('Tracking ·')
-  await panel.locator('[data-stop]').click()
-  await expect.poll(() => page.evaluate(() => window.__qrCameraStopped)).toBe(true)
-  await expect(panel.locator('canvas')).toBeHidden()
-  await panel.locator('[data-start]').click()
-  await expect(panel.locator('[data-state]')).toContainText('Tracking ·')
-  host.stop()
-  await expect(panel).toHaveCount(0)
-  await expect.poll(() => page.evaluate(() => window.__qrCameraStopped)).toBe(true)
-  expect(failures).toEqual([])
+  await expect(page.locator('#title')).toHaveText('QR guest test')
+  await expect(page.locator('.mobile-qr-tracking')).toHaveCount(0)
+  expect(await page.evaluate(() => window.__cameraRequests)).toBe(0)
 })
 
 

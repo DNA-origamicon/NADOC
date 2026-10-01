@@ -1,19 +1,14 @@
 # QR meeting entry and mobile tracking prototype
 
-Open **Presentation → Sharing**, enable a link, then **Print large tracking QR** for
-phone-camera testing. Print at **100% / actual size** on A4 or US Letter, measure
-the 100 mm ruler, and mount the sheet flat and stationary. The QR square including
-its white quiet zone is 150 mm. Scan it with the phone’s normal camera to open the
-invitation, enter a guest name, then open **Phone tracking · prototype → Start
-camera tracking** and allow camera access. Use the HTTPS public invitation on phones.
+Guests scan the invitation QR and enter their name. Guest entry no longer mounts
+**Phone tracking · prototype**, requests camera access, or exposes camera settings.
+The camera diagnostic module remains covered by its unit tests but is not part of
+the guest interface. Printed QR invitations continue to work normally.
 
-The phone shows its camera feed, highlights the matching QR and estimates its
-position relative to the paper: right, up, and out toward the viewer, in cm.
-The large printed QR configures the 150 mm size automatically. The combined
-**Print meeting target** sheet retains a 150 mm AprilTag `tag36h11` ID 0 and a
-40 mm guest QR; its phone default is 40 mm. Enlarged or reduced prints require
-entering the measured QR width, including the white border. A screen QR has no
-fixed physical size: measure and enter it if using a screen for a bench test.
+On touch devices, a small passive orientation icon replaces the previous rotation
+prompt. A solid rectangle shows the current viewport orientation, an arrow points
+to the opposite orientation in a fainter outline, and the icon updates on rotation.
+It appears after sign-in and does not request fullscreen or lock orientation.
 
 ## Authentication
 
@@ -28,7 +23,7 @@ Starting a new presentation requires a new printed QR. Existing running hosts
 must be upgraded through the normal sharing flow; older hosts retain password
 prompts and do not expose the large-tracking print button.
 
-## Tracking limits
+## Retained diagnostic module (not mounted in guest UI)
 
 This is a local mobile tracking diagnostic, not yet a registered VR portal or
 an attendee-position feed to the Vive. Frames and poses stay in the browser.
@@ -55,7 +50,7 @@ validation. Repeated identical target sheets would be ambiguous spatial anchors.
 ## Implementation and validation
 
 - `meeting_target*.js`: local SVG QR printing, previews and invitation lifecycle.
-- `mobile_qr_tracking.js`: opt-in browser camera lifecycle, decoding and status.
+- `mobile_qr_tracking.js`: retained camera diagnostic module and unit tests; not mounted during guest entry.
 - `qr_pose.js`: independently tested planar camera-pose math.
 - `prepared_view_host.mjs`: separate guest QR credential and password bypass only
   after server-side validation of that credential.
@@ -71,3 +66,13 @@ and dimensions, and synthetic-video tracking/loss/reacquisition in the productio
 browser viewer. Physical print scale, iOS/Android cameras, acquisition distance,
 camera calibration, motion jitter, headset alignment and VR attendee markers
 remain on-site validation work. No physical phone/headset result is claimed.
+
+### Guest UI simplification — 2026-09-30
+
+The orientation hint sits at the upper right, clear of the view cube, and passes
+pointer gestures through to the canvas. Verified both orientations in the running
+production viewer, QR name-only entry without a camera request, and touch orbit,
+pinch, pan, and recentering. Validation: 7,308 frontend tests passed (one skipped),
+seven browser checks, 23 smoke tests, build and lint passed. Screenshots and logs:
+`.development-artifacts/mobile-orientation-20260930/`. Test artifacts were cleaned.
+`main.js` LOC delta: 0.
