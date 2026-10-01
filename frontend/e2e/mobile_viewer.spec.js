@@ -36,9 +36,25 @@ test('mobile login, landscape layout, pinch and presenter navigation', async ({ 
   await expect(page.locator('.mobile-orientation')).toBeVisible()
   await expect(page.locator('.mobile-orientation')).toHaveAttribute('data-orientation', 'portrait')
   await expect(page.locator('.mobile-qr-tracking')).toHaveCount(0)
+  const rotate = page.locator('header button.mobile-orientation')
+  await expect(rotate).toBeEnabled()
+  const rotateBox = await rotate.boundingBox(), headerBox = await page.locator('header').boundingBox()
+  expect(rotateBox.y + rotateBox.height).toBeLessThanOrEqual(headerBox.y + headerBox.height)
+  expect(rotateBox.height).toBeGreaterThanOrEqual(44)
+  expect(await rotate.evaluate(el => getComputedStyle(el).border)).toBe(await page.locator('#reset').evaluate(el => getComputedStyle(el).border))
+  await page.evaluate(() => {
+    window.__rotationCalls = []
+    document.documentElement.requestFullscreen = async () => { window.__rotationCalls.push('fullscreen') }
+    screen.orientation.lock = async value => { window.__rotationCalls.push(value) }
+  })
+  await rotate.tap()
+  expect(await page.evaluate(() => window.__rotationCalls)).toEqual(['fullscreen', 'landscape'])
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.setViewportSize({ width: 844, height: 390 })
   await expect(page.locator('.mobile-orientation')).toBeVisible()
   await expect(page.locator('.mobile-orientation')).toHaveAttribute('data-orientation', 'landscape')
+  await rotate.tap()
+  expect(await page.evaluate(() => window.__rotationCalls.slice(-2))).toEqual(['fullscreen', 'portrait'])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   const state = () => page.evaluate(() => ({ camera: window.__preparedViewer.captureCamera(), ratio: window.__preparedViewer.runtime.renderer.getPixelRatio() }))
   const before = await state(); expect(before.ratio).toBe(1); expect(before.camera.orbitMode).toBe('orbit')

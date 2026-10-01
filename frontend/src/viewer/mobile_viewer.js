@@ -36,16 +36,41 @@ export function mountMobileViewer({ viewer, document: doc = document }) {
   canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', move)
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', cancel)
   doc.querySelector('header').append(center, help)
-  const orientation = doc.createElement('div')
+  const orientation = doc.createElement('button')
   orientation.className = 'mobile-orientation'
-  orientation.setAttribute('role', 'img')
+  orientation.type = 'button'
   orientation.innerHTML = '<svg viewBox="0 0 72 40" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect data-current rx="2"/><path d="M29 20h14m-5-5 5 5-5 5"/><rect data-next rx="2" opacity=".35"/></svg>'
-  doc.querySelector('main').append(orientation)
+  doc.querySelector('header').append(orientation)
+  const rotationStatus = doc.createElement('p')
+  rotationStatus.className = 'mobile-orientation-status'; rotationStatus.hidden = true
+  rotationStatus.setAttribute('role', 'status')
+  doc.querySelector('header').after(rotationStatus)
+  let disposed = false
+  orientation.onclick = async () => {
+    if (orientation.disabled) return
+    const target = host.innerWidth < host.innerHeight ? 'landscape' : 'portrait'
+    orientation.disabled = true
+    rotationStatus.hidden = true
+    try {
+      if (!host.screen.orientation?.lock) throw new Error('Orientation unavailable')
+      if (!doc.fullscreenElement && doc.documentElement.requestFullscreen) await doc.documentElement.requestFullscreen()
+      if (disposed) return
+      await host.screen.orientation.lock(target)
+    } catch {
+      if (!disposed) {
+        rotationStatus.textContent = 'Rotate your phone to change the view. If needed, enable Auto-rotate in your phone settings.'
+        rotationStatus.hidden = false
+      }
+    } finally {
+      if (!disposed) { orientation.disabled = false; update() }
+    }
+  }
   const update = () => {
     orientation.hidden = !viewer.current || !!doc.querySelector('#join[open]')
     const portrait = host.innerWidth < host.innerHeight
     orientation.dataset.orientation = portrait ? 'portrait' : 'landscape'
     orientation.setAttribute('aria-label', portrait ? 'Rotate phone from portrait to landscape' : 'Rotate phone from landscape to portrait')
+    orientation.title = orientation.getAttribute('aria-label')
     for (const [selector, upright, x] of [['[data-current]', portrait, 15], ['[data-next]', !portrait, 57]]) {
       const rect = orientation.querySelector(selector), width = upright ? 12 : 24, height = upright ? 24 : 12
       for (const [key, value] of Object.entries({ x: x - width / 2, y: 20 - height / 2, width, height })) rect.setAttribute(key, String(value))
@@ -65,10 +90,10 @@ export function mountMobileViewer({ viewer, document: doc = document }) {
   host.addEventListener('resize', update)
   update()
   return () => {
-    observer.disconnect(); host.removeEventListener('resize', update)
+    disposed = true; orientation.onclick = null; observer.disconnect(); host.removeEventListener('resize', update)
     canvas.removeEventListener('webglcontextlost', lost); canvas.removeEventListener('webglcontextrestored', restored)
     canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move)
     canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', cancel)
-    center.remove(); help.remove(); orientation.remove(); recovery.remove(); body.classList.remove('mobile-viewer', 'mobile-details')
+    center.remove(); help.remove(); orientation.remove(); rotationStatus.remove(); recovery.remove(); body.classList.remove('mobile-viewer', 'mobile-details')
   }
 }

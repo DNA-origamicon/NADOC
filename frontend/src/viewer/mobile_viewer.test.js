@@ -1,7 +1,7 @@
 import { it, expect, vi, afterEach } from 'vitest'
 import { mountMobileViewer } from './mobile_viewer.js'
-afterEach(() => { vi.restoreAllMocks(); document.body.innerHTML = ''; document.body.className = '' })
-it('shows a passive orientation hint after sign-in, updates both directions, and exposes graphics recovery', async () => {
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); delete document.documentElement.requestFullscreen; document.body.innerHTML = ''; document.body.className = '' })
+it('shows a header orientation button after sign-in, updates both directions, and exposes graphics recovery', async () => {
   document.body.innerHTML = '<header></header><h1 id="title"></h1><main><canvas></canvas></main><dialog id="join" open></dialog>'
   const width = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(390)
   vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(844)
@@ -13,7 +13,8 @@ it('shows a passive orientation hint after sign-in, updates both directions, and
   expect(notice.getAttribute('aria-label')).toBe('Rotate phone from portrait to landscape')
   expect(notice.querySelector('[data-current]').getAttribute('width')).toBe('12')
   expect(notice.querySelector('[data-next]').getAttribute('width')).toBe('24')
-  expect(notice.querySelector('button')).toBeNull()
+  expect(notice.tagName).toBe('BUTTON')
+  expect(notice.parentElement.tagName).toBe('HEADER')
   width.mockReturnValue(1000); window.dispatchEvent(new Event('resize'))
   expect(notice.hidden).toBe(false)
   expect(notice.getAttribute('aria-label')).toBe('Rotate phone from landscape to portrait')
@@ -25,4 +26,27 @@ it('shows a passive orientation hint after sign-in, updates both directions, and
   expect(document.querySelector('.mobile-recovery').hidden).toBe(true)
   dispose(); expect(document.querySelector('.mobile-orientation')).toBeNull()
   expect(document.body.classList.contains('mobile-viewer')).toBe(false)
+})
+
+it('requests fullscreen then the opposite orientation, and reports unsupported rotation without a popup', async () => {
+  document.body.innerHTML = '<header></header><h1 id="title"></h1><main><canvas></canvas></main><dialog id="join"></dialog>'
+  const width = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(390)
+  vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(844)
+  const fullscreen = vi.fn().mockResolvedValue(), lock = vi.fn().mockResolvedValue()
+  vi.stubGlobal('screen', { orientation: { lock } })
+  document.documentElement.requestFullscreen = fullscreen
+  const dispose = mountMobileViewer({ viewer: { mobile: true, current: {} } })
+  const button = document.querySelector('.mobile-orientation')
+  button.click()
+  await vi.waitFor(() => expect(lock).toHaveBeenCalledWith('landscape'))
+  expect(fullscreen).toHaveBeenCalledOnce()
+  expect(fullscreen.mock.invocationCallOrder[0]).toBeLessThan(lock.mock.invocationCallOrder[0])
+  width.mockReturnValue(1000)
+  lock.mockRejectedValueOnce(new Error('Not supported'))
+  button.click()
+  await vi.waitFor(() => expect(document.querySelector('.mobile-orientation-status').hidden).toBe(false))
+  expect(lock).toHaveBeenLastCalledWith('portrait')
+  expect(button.disabled).toBe(false)
+  dispose()
+  expect(document.querySelector('.mobile-orientation-status')).toBeNull()
 })

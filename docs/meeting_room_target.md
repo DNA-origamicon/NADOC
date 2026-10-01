@@ -5,10 +5,12 @@ Guests scan the invitation QR and enter their name. Guest entry no longer mounts
 The camera diagnostic module remains covered by its unit tests but is not part of
 the guest interface. Printed QR invitations continue to work normally.
 
-On touch devices, a small passive orientation icon replaces the previous rotation
-prompt. A solid rectangle shows the current viewport orientation, an arrow points
+On touch devices, a bordered rotation button in the header replaces the previous
+rotation prompt. A solid rectangle shows the current viewport orientation, an arrow points
 to the opposite orientation in a fainter outline, and the icon updates on rotation.
-It appears after sign-in and does not request fullscreen or lock orientation.
+It appears after sign-in. Tapping requests fullscreen when needed, then locks to
+the opposite orientation. Unsupported requests show an inline Auto-rotate hint.
+Browser requirements: [ScreenOrientation.lock](https://developer.mozilla.org/en-US/docs/Web/API/ScreenOrientation/lock).
 
 ## Authentication
 
@@ -69,10 +71,18 @@ remain on-site validation work. No physical phone/headset result is claimed.
 
 ### Guest UI simplification — 2026-09-30
 
-The orientation hint sits at the upper right, clear of the view cube, and passes
-pointer gestures through to the canvas. Verified both orientations in the running
+The rotation button sits alongside the header controls, with the same border and
+a 44 px touch target. On narrow phones the title occupies its own row, keeping
+the buttons visible and outside the canvas. Verified both orientations in the running
 production viewer, QR name-only entry without a camera request, and touch orbit,
 pinch, pan, and recentering. Validation: 7,308 frontend tests passed (one skipped),
 seven browser checks, 23 smoke tests, build and lint passed. Screenshots and logs:
 `.development-artifacts/mobile-orientation-20260930/`. Test artifacts were cleaned.
 `main.js` LOC delta: 0.
+
+Header-button follow-up: 7,309 frontend tests passed (one skipped). The mobile
+browser test verifies header containment, the matching border, a 44 px target,
+and touch-triggered fullscreen/orientation calls in both directions. Platform
+orientation APIs are mocked in that browser test; physical Android rotation is
+not verified here. Production screenshots in both orientations were inspected:
+`.development-artifacts/mobile-rotate-button-20260930/`. Main.js LOC delta: 0.
