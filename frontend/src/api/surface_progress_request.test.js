@@ -59,3 +59,18 @@ it('releases the popup after failure and leaves unrelated requests untracked', a
   expect(await progress.withSurfaceProgress('/jobs',{},run)).toBe(4)
   expect(run).toHaveBeenCalledWith({})
 })
+
+it('Cancel aborts transport and sends a document-scoped server cancellation', async () => {
+  const fetchImpl = vi.fn().mockResolvedValue({ ok: true })
+  let requestSignal
+  const pending = progress.withSurfaceProgress('/design/surface-bin', { 'X-NADOC-Doc': 'a' }, (_, signal) => {
+    requestSignal = signal
+    return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason)))
+  }, { fetchImpl })
+  const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  document.getElementById('op-progress-cancel').click()
+  await rejected
+  expect(requestSignal.aborted).toBe(true)
+  expect(fetchImpl).toHaveBeenCalledWith(expect.stringMatching(/surface-progress\/.+\/cancel$/), expect.objectContaining({ method: 'POST', headers: { 'X-NADOC-Doc': 'a' } }))
+  expect(document.getElementById('op-progress').classList.contains('visible')).toBe(false)
+})

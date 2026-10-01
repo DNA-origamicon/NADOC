@@ -6,21 +6,27 @@ import { shareControlFile } from '../../scripts/prepared_share_control.mjs'
 import { loadScaffoldedPart } from './helpers/scene_harness.js'
 
 // Only persisted artifacts: __e2e__ model/history (global teardown), :5174 share
-// credential (afterAll). Jobs are HTTP fixtures; no simulation is created/run.
-const root = path.resolve(import.meta.dirname, '..'), controlFile = shareControlFile(root, 5174)
-const evidence = path.resolve(root, '../docs/audits/job_sharing_20260923')
+// credential/status sidecar (afterAll). Jobs are HTTP fixtures; no simulation is created/run.
+// Review PNGs stay under .development-artifacts/job-sharing/. Browser pages belong to the test context.
+const root = path.resolve(import.meta.dirname, '..'), controlFile = shareControlFile(root, Number(process.env.NADOC_E2E_FRONTEND_PORT || 5175))
+const evidence = path.resolve(root, '../.development-artifacts/job-sharing')
 let host, ownsControl = false
+const extraGuests = []
 test.beforeAll(async () => {
   try { await access(controlFile); throw new Error('Test sharing credential already exists') } catch (error) { if (error.code !== 'ENOENT') throw error }
+  await mkdir(evidence, { recursive: true })
   host = await createPreparedHost({ dist: path.join(root, 'dist') })
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   const url = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(url)
   await writeFile(controlFile, JSON.stringify({ url, token: host.controlToken }), { mode: 0o600, flag: 'wx' }); ownsControl = true
 })
-test.afterAll(async () => { host?.stop(); if (ownsControl) await unlink(controlFile).catch(() => {}) })
-test.afterEach(async ({ page }) => { console.log('Job sharing status:', await page.locator('.sharing-job-status').textContent().catch(() => 'page closed')) })
+test.afterAll(async () => { host?.stop(); if (ownsControl) for (const file of [controlFile, controlFile + '.status.json']) await unlink(file).catch(() => {}) })
+test.afterEach(async ({ page }) => {
+  for (const guest of extraGuests.splice(0)) await guest.close()
+  console.log('Job sharing status:', await page.locator('.sharing-job-status').textContent().catch(() => 'page closed'))
+})
 
-test('one guest link follows explicit job sharing, freezes private selection, and returns to native', async ({ page, context }) => {
+test('one guest link follows explicit job sharing, freezes private selection, and returns to native', async ({ page, context, browser }) => {
   test.setTimeout(180000)
   const jobs = ['a', 'b'].map((id, i) => ({ engine: i === 0 ? 'oxdna' : 'namd', job_id: `__e2e__share_${id}`, status: 'completed', kind: 'relax', parent_job_id: null, created_at: 100 + i, production_state: 'none', run_config: {} }))
   await page.route('**/api/simulate/jobs**', route => route.fulfill({ json: jobs }))
@@ -63,6 +69,14 @@ test('one guest link follows explicit job sharing, freezes private selection, an
   await guest.goto(url); await expect(guest.locator('#join-submit')).toBeEnabled()
   await guest.locator('#guest-name').fill('Presentation guest'); await guest.locator('#join-submit').click()
   await expect(guest.locator('#status')).toContainText('Static snapshot', { timeout: 30000 })
+  // Independent browser contexts occupy all four guest slots.
+  for (let i = 0; i < 3; i++) {
+    const attendee = await browser.newPage(); extraGuests.push(attendee)
+    await attendee.goto(url)
+    await attendee.locator('#guest-name').fill(`Guest ${i + 2}`)
+    await attendee.locator('#join-submit').click()
+    await expect(attendee.locator('#status')).toContainText('Static snapshot', { timeout: 30000 })
+  }
   const pageCount = context.pages().length
   await expect(guest.locator('[data-follow]')).toBeDisabled()
   await glasses.click(); await expect(glasses).toHaveAttribute('aria-pressed', 'true')
@@ -75,11 +89,22 @@ test('one guest link follows explicit job sharing, freezes private selection, an
   expect(context.pages()).toHaveLength(pageCount)
   const before = joins, cookies = (await context.cookies()).filter(c => c.name.startsWith('nadoc_view_'))
   await expect(button).toHaveCSS('background-color', 'rgb(35, 134, 54)')
+  // Failed starts must be visible next to Share and on the presentation bar.
+  const startRoute = '**/__nadoc_share/shares/*/broadcast/start'
+  await page.route(startRoute, route => route.fulfill({ status: 409, json: { error: 'Test transfer failure' } }))
+  await button.click()
+  await expect(page.locator('.sharing-job-status')).toHaveText('Test transfer failure')
+  await expect(bar.locator('.presentation-error')).toHaveText('Test transfer failure')
+  expect(await button.evaluate(el => el.parentElement.nextElementSibling.classList.contains('sharing-job-status'))).toBe(true)
+  await expect(button).toBeEnabled()
+  await page.unroute(startRoute)
+  await glasses.click(); await expect(glasses).toHaveAttribute('aria-pressed', 'true')
   await button.click(); await expect(button).toHaveText('Stop sharing', { timeout: 30000 })
   await expect(button).toHaveCSS('background-color', 'rgb(182, 35, 36)')
+  await expect(bar.locator('.presentation-error')).toHaveText('')
   await expect(guest.locator('[data-follow]')).toHaveAttribute('aria-pressed', 'true')
   await expect(guest.locator('[data-follow]')).toBeEnabled()
-  await glasses.click(); await expect(glasses).toHaveAttribute('aria-pressed', 'true')
+  await expect(glasses).toHaveAttribute('aria-pressed', 'true')
   await expect(guest.locator('[data-follow]')).toBeEnabled()
   await expect(row('a').locator('[data-job-sharing-dot]')).toHaveAttribute('title', 'currently sharing this job for presentation')
   await expect.poll(() => frames).toBeGreaterThan(0).catch(async error => {

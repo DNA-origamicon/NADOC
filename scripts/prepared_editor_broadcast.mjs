@@ -11,7 +11,7 @@ function sourceHash(scene) {
 }
 
 /** Local management authority; guests never receive this short-lived lease. */
-export function createEditorBroadcast({ room, rooms, maxGuests, now }) {
+export function createEditorBroadcast({ room, rooms, now }) {
   let lease = null, seenAt = 0, jobStream = false
   function pause() { lease = null; room.presentation.setViewLock(false, true); room.presentation.setLoading(null); room.presentation.pause() }
   function expire() { if (lease && now() - seenAt > 15000) pause() }
@@ -20,9 +20,6 @@ export function createEditorBroadcast({ room, rooms, maxGuests, now }) {
     if (room.trajectory && !options.jobStream) throw new Error('Use the trajectory controls in Share link for this prepared clip. Update this same link with a static view before broadcasting visualizations.')
     if (options.cameraOnly && (!/^[a-f0-9]{64}$/.test(options.sourceHash ?? '') || options.sourceHash !== sourceHash(room.scene))) throw new Error('The editor design differs from this shared view. Enable Share current visualizations to publish it first.')
     if (lease) throw new Error('Another editor is broadcasting to this presentation. Stop it first or wait 15 seconds after it disconnects.')
-    const occupied = [...rooms.values()].reduce((n, r) => n + [...r.sessions.values()].filter(s => s.role !== 'presenter').length +
-      Number(!!([...r.sessions.values()].some(s => s.role === 'presenter') || r.editorBroadcast?.active)), 0)
-    if (![...room.sessions.values()].some(s => s.role === 'presenter') && occupied >= maxGuests) throw new Error('This presentation is full (four participants including the presenter).')
     for (const session of room.sessions.values()) if (session.role === 'presenter') { session.away = true; session.generation++ }
     room.presentation.leavePresenter()
     lease = randomBytes(32).toString('hex'); seenAt = now(); jobStream = options.jobStream === true

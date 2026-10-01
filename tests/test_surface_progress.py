@@ -100,3 +100,66 @@ def test_error_and_expiry_are_not_reported_as_success(monkeypatch):
         now = p.monotonic()
         monkeypatch.setattr(p, "monotonic", lambda: now + p._TTL + 1)
         assert client.get("/surface-progress/failure-12345678").status_code == 404
+
+
+def test_cancel_stops_worker_at_next_checkpoint_and_cannot_cancel_another_doc():
+    app = FastAPI()
+    app.add_middleware(SurfaceProgressMiddleware)
+    app.add_middleware(DocContextMiddleware)
+    app.include_router(router)
+    started, release = Event(), Event()
+    completed = []
+
+    @app.get("/cancel-surface")
+    def build():
+        report("first tile", 0, 2)
+        started.set()
+        assert release.wait(3)
+        report("second tile", 1, 2)
+        completed.append(True)
+        return {"ok": True}
+
+    headers = {
+        "X-NADOC-Doc": "cancel-test",
+        "X-NADOC-Surface-Progress": "cancel-request-123",
+    }
+    with TestClient(app) as client, ThreadPoolExecutor() as pool:
+        pending = pool.submit(client.get, "/cancel-surface", headers=headers)
+        try:
+            assert started.wait(3)
+            client.post(
+                "/surface-progress/cancel-request-123/cancel",
+                headers={"X-NADOC-Doc": "other"},
+            )
+            assert (
+                client.get(
+                    "/surface-progress/cancel-request-123",
+                    headers={"X-NADOC-Doc": "cancel-test"},
+                ).json()["state"]
+                == "running"
+            )
+            assert (
+                client.post(
+                    "/surface-progress/cancel-request-123/cancel",
+                    headers={"X-NADOC-Doc": "cancel-test"},
+                ).status_code
+                == 200
+            )
+        finally:
+            release.set()
+        assert pending.result().status_code == 499
+        assert not completed
+        assert (
+            client.get(
+                "/surface-progress/cancel-request-123",
+                headers={"X-NADOC-Doc": "cancel-test"},
+            ).json()["state"]
+            == "cancelled"
+        )
+        # An early cancel tombstone prevents work starting on a late request.
+        assert (
+            client.get(
+                "/cancel-surface", headers={**headers, "X-NADOC-Doc": "other"}
+            ).status_code
+            == 499
+        )

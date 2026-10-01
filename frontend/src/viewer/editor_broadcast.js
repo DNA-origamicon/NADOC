@@ -127,7 +127,8 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
   host?.addEventListener('nadoc:workspace-path-change', changed); host?.addEventListener('nadoc:document-reset', changed)
   host?.addEventListener('offline', offline); host?.addEventListener('pagehide', offline)
   const timer = repeat(tick, 250); paint()
-  return { show, start, stop, tick, async present(share, { refreshScene = false } = {}) {
+  return { show, start, stop, tick, async present(share, { refreshScene = false, capabilities: hostCapabilities = [] } = {}) {
+    capabilities = hostCapabilities
     const option = doc.createElement('option'); option.value = share.id; option.textContent = share.title
     el('room').replaceChildren(option); el('camera').checked = true; el('visuals').checked = refreshScene
     await start()

@@ -62,7 +62,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     rooms.set(id, room)
     room.presence = createRoomPresence({ ...room, now })
     room.drawings = createRoomDrawings({ ...room, now })
-    room.editorBroadcast = createEditorBroadcast({ room, rooms, maxGuests, now })
+    room.editorBroadcast = createEditorBroadcast({ room, rooms, now })
     return summary(room)
   }
   if (initial) createShare(initial, basename(packagePath), 'default')
@@ -206,7 +206,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         const qrEntry = role === 'guest' && value.entry === 'qr'
         if (!same(value.token, role === 'presenter' ? room.presenterToken : qrEntry ? room.qrToken : room.invite)) return send(403, { error: 'Invalid or expired invite.' })
         const previous = req.headers.cookie?.match(cookiePattern)?.[1]
-        // Keep presenter credentials and their occupied slot until the meeting
+        // Keep presenter credentials until the meeting
         // ends. Leaving the viewer does not revoke the meeting or its guests.
         for (const r of rooms.values()) for (const [key, s] of r.sessions) if (s.role !== 'presenter' && now() - s.seenAt > 120000) revokeSession(r, key)
         if (value.resume === true) {
@@ -225,7 +225,11 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           if (key !== previous && s.role === 'presenter' && (s.away || now() - s.seenAt > 120000)) revokeSession(room, key)
         }
         if (role === 'presenter' && [...sessions].some(([key, session]) => session.role === 'presenter' && key !== previous)) return send(409, { error: 'A presenter is already connected to this view.' })
-        if (!sessions.has(previous) && [...rooms.values()].reduce((n, r) => n + r.sessions.size + Number(r.editorBroadcast.active && ![...r.sessions.values()].some(s => s.role === 'presenter')), 0) >= maxGuests) return send(409, { error: 'This presentation is full (four participants including the presenter).' })
+        // Guest capacity must never prevent the host from presenting a full room.
+        // Rejoining a guest reuses its slot; switching from presenter needs one.
+        if (role === 'guest' && sessions.get(previous)?.role !== 'guest' &&
+          [...rooms.values()].reduce((n, r) => n + [...r.sessions.values()].filter(s => s.role === 'guest').length, 0) >= maxGuests)
+          return send(409, { error: `This host is full (${maxGuests} guest sessions). Close an unused guest session and wait two minutes before retrying.` })
         // Reauthentication (especially a role change) must invalidate the old cookie
         // and its event streams. Preserve display identity only within the same role.
         const previousSession = sessions.get(previous)

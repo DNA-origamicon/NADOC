@@ -21,10 +21,13 @@ test('editor lease replaces revisions without touching invitations or guests and
   assert.throws(() => api.apply('camera', lease, JSON.stringify({ revision: updated.revision, camera })), /stopped/)
   time += 15001; api.expire(); assert.equal(api.active, false); assert.equal(room.presentation.snapshot().presenting, false)
 })
-test('editor presenter counts toward the four participant limit', () => {
+test('a full guest room does not block the editor presenter', () => {
   const room = { sessions: new Map(Array.from({ length: 4 }, (_, i) => [i, { role: 'guest' }])), presentation: createPresentationState({}) }
   const api = createEditorBroadcast({ room, rooms: new Map([['room', room]]), maxGuests: 4, now: Date.now })
-  assert.throws(() => api.start(), /full/)
+  const { lease } = api.start()
+  assert.ok(lease)
+  api.apply('pause', lease)
+  assert.ok(api.start().lease)
 })
 test('animation leases release their automatic lock on expiry while retaining a manual lock', () => {
   let time = 0

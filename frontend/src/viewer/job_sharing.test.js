@@ -13,7 +13,7 @@ import { loadPreparedScene } from './prepared_scene.js'
 
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks(); vi.unstubAllGlobals() })
 const camera = { position: [0, 0, 10], target: [0, 0, 0], up: [0, 1, 0], fov: 55, near: .1, far: 1000, orbitMode: 'orbit' }
-function setup(controller) {
+function setup(controller, options = {}) {
   vi.stubGlobal('Blob', Blob)
   document.body.innerHTML = '<button id="menu-help-broadcast"></button>' + ['oxdna', 'md'].map(p => `<div><div id="${p}-jobs-viz-toggle"></div><input type="radio" id="${p}-jobs-viz-off"></div>`).join('') + '<div data-job-id="a"></div><div data-job-id="b"></div>'
   let selected = { engine: 'oxdna', id: 'a' }, room = null, fail = false
@@ -24,7 +24,7 @@ function setup(controller) {
   const request = vi.fn(async (path, options) => ({ ok: !fail, json: async () => fail ? { error: 'Transfer failed' } : { lease: 'token', revision: 'a'.repeat(64) } }))
   const showNative = vi.fn(async () => { mesh.position.set(0, 0, 0) })
   const ui = initJobSharing({ prepared, store: { getState: () => ({ currentDesign: { id: 'design' } }) }, getSelection: () => selected,
-    getSource: () => ({ controller }), showNative, getRoom: () => room, fetch: request, setInterval: () => null, clearInterval: () => {} })
+    getSource: () => ({ controller }), showNative, getRoom: () => room, fetch: request, setInterval: () => null, clearInterval: () => {}, ...options })
   return { ui, request, mesh, prepared, showNative, select: job => { selected = job }, host: capabilities => { room = { id: 'room', capabilities: capabilities ?? ['live-unlimited-frames-v1', 'job-stream-v1', 'guest-visualizations-v1', ...(controller ? ['live-timeline-v1'] : [])] }; ui.refresh() }, fail: () => { fail = true } }
 }
 it('shows job controls only with an invitation and preserves publication across private selection and list rerender', async () => {
@@ -199,5 +199,24 @@ it('refuses a stale sharing host before acquiring a lease or exporting a traject
   expect(v.request).not.toHaveBeenCalled()
   expect(v.ui.active).toBe(false)
   expect(document.querySelector('.sharing-job-status').textContent).toContain('sharing host is out of date')
+  v.ui.dispose()
+})
+
+it.each(['oxdna', 'namd'])('shows %s sharing progress immediately and keeps errors beside its button', async engine => {
+  let finish
+  const onError = vi.fn(), v = setup(undefined, { beforeStart: () => new Promise(resolve => { finish = resolve }), onError })
+  v.select({ engine, id: 'a' }); v.host()
+  const button = document.querySelector(`[data-share-job="${engine}"]`)
+  const operation = v.ui.toggle(engine)
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  expect(button.textContent).toBe('Sharing…')
+  expect(button.disabled).toBe(true)
+  expect(button.getAttribute('aria-busy')).toBe('true')
+  expect(button.parentElement.nextElementSibling.textContent).toBe('Preparing simulation sharing…')
+  v.fail(); finish(); await operation
+  expect(button.textContent).toBe('Share')
+  expect(button.disabled).toBe(false)
+  expect(button.parentElement.nextElementSibling.textContent).toBe('Transfer failed')
+  expect(onError).toHaveBeenCalledWith('Transfer failed')
   v.ui.dispose()
 })

@@ -3,6 +3,11 @@
 from contextvars import ContextVar
 from contextlib import contextmanager
 
+
+class SurfaceCancelled(Exception):
+    """The owner cancelled this request at a computation checkpoint."""
+
+
 _sink = ContextVar("surface_progress_sink", default=None)
 _group = ContextVar("surface_progress_group", default=None)
 

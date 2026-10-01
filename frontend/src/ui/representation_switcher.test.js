@@ -233,7 +233,7 @@ describe('setRepresentation — design-mode activation', () => {
     deps.atomisticRenderer.getMode = vi.fn(() => 'vdw')  // currently atomistic
     const api = initRepresentationSwitcher(deps)
     await api.setRepresentation('full')
-    expect(deps.atomisticRenderer.setMode).toHaveBeenCalledWith('off')
+    expect(deps.applyAtomisticMode).toHaveBeenCalledWith('off')
     expect(deps.store.getState().atomisticMode).toBe('off')
   })
 
@@ -496,4 +496,32 @@ it('selects detail before computing and switches back to quick without a redunda
   expect(builds).toEqual(['chimerax'])
   document.getElementById('menu-view-surface').click()
   await vi.waitFor(() => expect(builds).toEqual(['chimerax', 'coarse']))
+})
+
+
+it('blocks detailed surfaces during a presentation and restores availability afterwards', async () => {
+  mountIds([...Object.keys(DOM), 'menu-view-surface-detail'])
+  const deps = makeDeps({ presentationActive: true, currentDesign: {} })
+  const ui = initRepresentationSwitcher(deps)
+  expect(document.getElementById('menu-view-surface-detail').disabled).toBe(true)
+  expect(await ui.setRepresentation('surface-detail')).toBe(false)
+  expect(deps.applySurfaceMode).not.toHaveBeenCalled()
+  await ui.setRepresentation('surface', 'coarse')
+  expect(deps.applySurfaceMode).toHaveBeenCalledWith('on')
+  deps.store.setState({ presentationActive: false })
+  expect(document.getElementById('menu-view-surface-detail').disabled).toBe(false)
+})
+
+it('a late heavy result cannot replace a newer lightweight representation', async () => {
+  mountIds(DOM)
+  const deps = makeDeps()
+  let finish
+  deps.applySurfaceMode.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+  const ui = initRepresentationSwitcher(deps)
+  const heavy = ui.setRepresentation('surface', 'coarse')
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  await ui.setRepresentation('full')
+  finish(); await heavy
+  expect(deps.setCurrentRepr).toHaveBeenLastCalledWith('full')
+  expect(deps.store.getState().surfaceMode).not.toBe('on')
 })

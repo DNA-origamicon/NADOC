@@ -75,7 +75,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     if (!enabled) return stopNative()
     const share = currentRoom()
     if (!share || !presenter) throw new Error('Create a presentation link in an open design first.')
-    nativeFlight = presenter.present(share, { refreshScene })
+    nativeFlight = presenter.present(share, { refreshScene, capabilities })
     try { await nativeFlight } finally { nativeFlight = null }
   }
   const controls = initPresentationControls({ document: doc, onPerspective: sharePerspective, onEnd: stopHosting, onViewLock: async locked => {
@@ -136,6 +136,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     onError: message => controls.error(message),
   })
   function syncControls() {
+    if (broadcast?.store?.getState().presentationActive !== (shares.length > 0)) broadcast?.store?.setState?.({ presentationActive: shares.length > 0 })
     controls.setActive(shares.length > 0)
     controls.setParticipants(currentRoom()?.participants ?? [], { serverTime: currentRoom()?.serverTime })
     if (!shares.length) void stopNative()
@@ -351,6 +352,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     jobOptions = options
     jobs = initJobSharing({ ...options, ...broadcast, document: doc, fetch: request,
       perspective: controls.perspective,
+      onError: message => controls.error(message),
       getRoom: () => { const share = currentRoom(); return share ? { ...share, capabilities } : null },
       beforeStart: async () => { if (animationActive) throw new Error('Stop the animation before sharing a job.'); nativeTools?.clear(); await nativeTools?.settle(); await stopNative(); await jobs.setPerspective(controls.perspective) },
       onSharedChange: async shared => {

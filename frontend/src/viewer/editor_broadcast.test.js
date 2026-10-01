@@ -78,3 +78,15 @@ it('refreshes the scene before locking a newly edited design, then leaves later 
   expect(v.prepared.exportView).toHaveBeenCalledOnce()
   v.ui.dispose()
 })
+
+it('embedded scene refresh uses the host capabilities without opening the broadcast dialog', async () => {
+  const v = setup({ embedded: true })
+  v.prepared.exportView.mockResolvedValue({ buffer: new ArrayBuffer(24), requiresViewToolsViewer: true })
+  await v.ui.present({ id: 'a'.repeat(32), title: 'Part' }, { refreshScene: true, capabilities: ['view-tools-v1'] })
+  expect(v.ui.active).toBe(true)
+  expect(v.fetch.mock.calls.some(([path]) => path.endsWith('/scene'))).toBe(true)
+  await v.ui.stop()
+  await expect(v.ui.present({ id: 'a'.repeat(32), title: 'Part' }, { refreshScene: true, capabilities: [] })).rejects.toThrow('Restart presentation hosting')
+  expect(v.ui.active).toBe(false)
+  v.ui.dispose()
+})

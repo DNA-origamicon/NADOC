@@ -16,6 +16,7 @@
 
 import { supportedColoringSet, nextColoringMode, reprMenuState, coloringFallbackMode, COLORING_LABELS as _COLORING_LABELS } from '../scene/coloring_modes.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, editOverridesForProteins } from '../scene/representation_overrides.js'
+import { cancelSurfaceComputations } from '../api/surface_progress_request.js'
 import { showToast } from './toast.js'
 import { showConfirm } from './primitives/confirm.js'
 import { registerShortcut } from '../input/shortcuts.js'
@@ -183,15 +184,32 @@ export function initRepresentationSwitcher({
   // free — six listeners fan out of it and several do real network work (oxDNA/NAMD
   // heavy-frame reconstruction, the solvent refetch, the NAMD trajectory prebuild).
   // Null until the first apply, so the very first click always goes through.
-  let _appliedRepr = null
+  let _appliedRepr = null, generation = 0, pendingRepr = null
+  const detailedBlocked = (repr, detail) => store.getState().presentationActive && (repr === 'surface-detail' || repr === 'surface' && detail && detail !== 'coarse')
+  function syncPresentation() {
+    const active = !!store.getState().presentationActive
+    const button = document.getElementById('menu-view-surface-detail')
+    if (button) { button.disabled = active; button.title = active ? 'Detail Surface is unavailable during presentations. Use Quick Surface.' : '' }
+    if (active) {
+      cancelSurfaceComputations()
+      if (getSurfaceMode() !== 'off' && getSurfaceDetail() !== 'coarse') void _setRepresentation('surface', 'coarse')
+    }
+  }
+  store.subscribe((next, previous) => { if (next.presentationActive !== previous.presentationActive) syncPresentation() })
+  syncPresentation()
 
   async function _setRepresentation(repr, detail) {
+    if (detailedBlocked(repr, detail)) { showToast('Detail Surface is unavailable during presentations. Use Quick Surface.', { severity: 'warn' }); return false }
+    const ticket = ++generation
+    pendingRepr = repr
+    cancelSurfaceComputations()
     if (repr === 'surface-detail') { repr = 'surface'; detail = 'chimerax' }
     if (repr === 'surface') selectSurfaceDetail(detail ?? 'coarse')
     await beforeRepresentationChange(repr)
+    if (ticket !== generation) return false
     // ── Deactivate any currently active exclusive mode ────────────────────────
     if (!['vdw', 'ballstick', 'stick'].includes(repr) && atomisticRenderer.getMode() !== 'off') {
-      atomisticRenderer.setMode('off')
+      applyAtomisticMode('off')
       store.setState({ atomisticMode: 'off' })
     }
     if (repr !== 'surface' && getSurfaceMode() !== 'off') {
@@ -215,9 +233,12 @@ export function initRepresentationSwitcher({
       }
     } else if (repr === 'vdw' || repr === 'ballstick' || repr === 'stick') {
       await applyAtomisticMode(repr)
+      if (ticket !== generation) return false
       store.setState({ atomisticMode: repr })
     } else if (repr === 'surface') {
-      await applySurfaceMode('on')
+      const applied = await applySurfaceMode('on')
+      if (ticket !== generation) return false
+      if (applied === false) { await _setRepresentation('full'); return false }
       store.setState({ surfaceMode: 'on' })
     } else if (repr === 'hull-prism') {
       setCGVisible(false)
@@ -230,12 +251,13 @@ export function initRepresentationSwitcher({
     } else if (repr === 'mrdna-coarse' || repr === 'mrdna-fine' || repr === 'oxdna') {
       if (repr === 'oxdna' && _appliedRepr !== 'oxdna') setColoringMode('base')
       const available = await applyExternalRepresentation(repr)
-      if (available === false) return false
+      if (ticket !== generation || available === false) return false
     }
 
     setCurrentRepr(repr)
     flexibleArcs?.setRepresentation?.(repr)
     _appliedRepr = repr
+    pendingRepr = null
     _updateReprRadio(repr)
     reprOptionSliders(repr)
     window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
@@ -245,6 +267,8 @@ export function initRepresentationSwitcher({
 
   for (const { id, repr, external, detail } of _ALL_REPRS) {
     document.getElementById(id)?.addEventListener('click', async () => {
+      if (detailedBlocked(repr, detail)) return
+      cancelSurfaceComputations()
       const { currentDesign, assemblyActive, currentAssembly } = store.getState()
 
       // ── Assembly mode: apply repr to all instances ───────────────────────────
@@ -328,7 +352,7 @@ export function initRepresentationSwitcher({
       // apply + the 'nadoc:representation-change' fan-out. EXCEPT when this click just
       // cleared per-region overrides: the displayed structure genuinely diverged from
       // the nominal global rep, so it has to be re-applied even though the name matches.
-      if (!hadOverrides && repr === _appliedRepr && (!detail || detail === getSurfaceDetail())) return
+      if (!pendingRepr && !hadOverrides && repr === _appliedRepr && (!detail || detail === getSurfaceDetail())) return
       await _setRepresentation(repr, detail)
     })
   }
@@ -357,7 +381,7 @@ export function initRepresentationSwitcher({
         // (btn.click() clears overrides) rather than cycle coloring.
         const _hasRepOverrides =
           (store.getState().currentDesign?.representation_overrides?.length ?? 0) > 0
-        if (btn.classList.contains('is-checked') && !_hasRepOverrides) _cycleColoringForRepr(repr)
+        if (!pendingRepr && btn.classList.contains('is-checked') && !_hasRepOverrides) _cycleColoringForRepr(repr)
         else                                                           btn.click()
       },
     })

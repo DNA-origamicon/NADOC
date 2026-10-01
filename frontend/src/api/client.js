@@ -1,5 +1,5 @@
 import { nativeRepresentation } from '../scene/vr_representations.js'
-import { withSurfaceProgress } from './surface_progress_request.js'
+import { withSurfaceProgress, isSurfaceComputation } from './surface_progress_request.js'
 import { expandCompactNucleotides as _expandCompactNucleotides, decodeAssemblyGeometry } from '../viewer/geometry_codec.js'
 import { recordPanelRequest } from '../ui/panel_loading.js'
 import { recordRequestDiagnostic } from '../perf/process_log.js'
@@ -2733,7 +2733,8 @@ async function _oxdnaJSON(method, path, body = undefined, { signal } = {}) {
 }
 
 async function _oxdnaJSONRequest(method, path, body = undefined, options = {}) {
-  return withSurfaceProgress(path, docHeaders(), headers => _oxdnaJSONTransport(method, path, body, { ...options, headers }))
+  if (isSurfaceComputation(path) && store.getState().presentationActive && (body?.detail ?? new URLSearchParams(path.split('?')[1]).get('detail') ?? 'coarse') !== 'coarse') throw new Error('Detail Surface is unavailable during presentations. Use Quick Surface.')
+  return withSurfaceProgress(path, docHeaders(), (headers, signal) => _oxdnaJSONTransport(method, path, body, { ...options, headers, signal: signal ?? options.signal }), { signal: options.signal })
 }
 
 async function _oxdnaJSONTransport(method, path, body = undefined, { signal, headers } = {}) {
@@ -2809,7 +2810,8 @@ async function _backgroundJobList(path, { waitForIdle = true } = {}) {
  *  When `onProgress` is supplied, stream into one pre-sized buffer (Content-Length)
  *  and report downloaded bytes so multi-megabyte visualization loads stay determinate. */
 async function _oxdnaBin(method, path, body = undefined, options = {}) {
-  return withSurfaceProgress(path, docHeaders(), headers => _oxdnaBinRequest(method, path, body, { ...options, headers }))
+  if (isSurfaceComputation(path) && store.getState().presentationActive && (body?.detail ?? new URLSearchParams(path.split('?')[1]).get('detail') ?? 'coarse') !== 'coarse') throw new Error('Detail Surface is unavailable during presentations. Use Quick Surface.')
+  return withSurfaceProgress(path, docHeaders(), (headers, signal) => _oxdnaBinRequest(method, path, body, { ...options, headers, signal: signal ?? options.signal }), { signal: options.signal })
 }
 
 async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProgress, headers, maxBytes = Infinity } = {}) {
@@ -3213,9 +3215,9 @@ export const getOxdnaDisplaySurfaceBin = (id, align = true, params = {}) =>
  *  /design/surface JSON (~2× smaller, no million-number parse; carries the strand-index table
  *  so the surface still recolours client-side). Decode with scene/surface_bin.js. Null on error. */
 export const getDesignSurfaceBin = ({ color_mode = 'strand', probe_radius,
-                                      detail = 'coarse' } = {}) =>
+                                      detail = 'coarse' } = {}, options = {}) =>
   _oxdnaBin('GET', `/design/surface-bin?color_mode=${color_mode}`
-                   + `&probe_radius=${probe_radius ?? 0.06}&detail=${detail}`)
+                   + `&probe_radius=${probe_radius ?? 0.06}&detail=${detail}`, undefined, options)
 /** All-atom flat-XYZ for the flexibility-map AVERAGE structure ({ready, atomistic:[…]}). */
 export const getOxdnaRmsfAtomistic = (id, opts) => {
   const { align } = _vizOpts(opts, 'getOxdnaRmsfAtomistic')
@@ -4134,7 +4136,7 @@ export async function getAtomisticBatch(positions, { signal, suppressBusy = fals
  */
 export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadius = 0.06, gridSpacing = 0.20,
                                       { signal, suppressBusy = false } = {}) {
-  return _request('POST', '/design/features/surface-batch', {
+  return _oxdnaJSON('POST', '/design/features/surface-batch', {
     positions,
     color_mode:   colorMode,
     probe_radius: probeRadius,
@@ -4149,7 +4151,7 @@ export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadi
  */
 export async function getRegionSurface(segments, { colorMode = 'strand', probeRadius = 0.06, detail = 'coarse',
                                                    signal, suppressBusy = false } = {}) {
-  return _request('POST', '/design/surface/region', {
+  return _oxdnaJSON('POST', '/design/surface/region', {
     segments,
     detail,
     color_mode:   colorMode,
@@ -4745,7 +4747,7 @@ export async function getInstanceGeometry(id) {
 
 export async function getInstanceSurfaceGeometry(id, colorMode = 'strand', probeRadius = 0.06, gridSpacing = 0.20, detail = 'coarse') {
   const q = `color_mode=${encodeURIComponent(colorMode)}&probe_radius=${probeRadius}&grid_spacing=${gridSpacing}&detail=${encodeURIComponent(detail)}`
-  return _request('GET', `/assembly/instances/${id}/surface-geometry?${q}`)
+  return _oxdnaJSON('GET', `/assembly/instances/${id}/surface-geometry?${q}`)
 }
 
 export async function getInstanceAtomisticGeometry(id) {
@@ -5447,7 +5449,7 @@ export async function saveAssemblyViewVolumes(volumes) {
   return _request('PUT', '/assembly/view-volumes', { volumes }, { suppressBusy: true })
 }
 export async function getInstanceRegionSurface(id, segments, { colorMode = 'strand', probeRadius = .06, signal } = {}) {
-  return _request('POST', `/assembly/instances/${encodeURIComponent(id)}/surface/region`,
+  return _oxdnaJSON('POST', `/assembly/instances/${encodeURIComponent(id)}/surface/region`,
     { segments, color_mode: colorMode, probe_radius: probeRadius }, { signal, suppressBusy: true })
 }
 

@@ -12,12 +12,12 @@ const prefix = engine => engine === 'namd' ? 'md' : 'oxdna'
 const equal = (a, b) => a && a.length === b.length && a.every((v, i) => v === b[i])
 
 /** A publication belongs to a job, independently of the editor's selection. */
-export function initJobSharing({ prepared, store, getSelection, getSource, showNative, getRoom, beforeStart = async () => {}, onSharedChange = async () => {}, perspective = true,
+export function initJobSharing({ prepared, store, getSelection, getSource, showNative, getRoom, beforeStart = async () => {}, onSharedChange = async () => {}, onError = () => {}, perspective = true,
   document: doc = document, fetch: request = fetch, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
   let shared = null, lease = '', room = null, revision = '', capture = null, busy = false, disposed = false
   let lastFrame = null, sentCamera = '', held = false, heartbeat = 0, epoch = 0, identity = null, switching = false, flight = null
   let pendingJob = null, progressFlight = null, sentProgress = 'null', sentTimeline = ''
-  const status = doc.createElement('p'); status.className = 'sharing-job-status'; status.setAttribute('role', 'status')
+  const status = doc.createElement('p'); status.className = 'sharing-job-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite')
   const buttons = new Map()
   for (const engine of ['oxdna', 'namd']) {
     const header = doc.getElementById(`${prefix(engine)}-jobs-viz-toggle`)
@@ -34,13 +34,14 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
     for (const [engine, button] of buttons) {
       const active = shared?.engine === engine && sameJob(shared, selected)
       button.hidden = !available
-      button.textContent = active ? 'Stop sharing' : 'Share'
+      button.textContent = switching && selected.engine === engine ? (active ? 'Stopping…' : 'Sharing…') : active ? 'Stop sharing' : 'Share'
+      button.setAttribute('aria-busy', String(switching && selected.engine === engine))
       button.dataset.sharing = String(active); button.setAttribute('aria-pressed', String(active))
       button.disabled = switching || !selected.id || selected.engine !== engine
       button.title = active ? 'Return guests to the native NADOC model' : 'Share this job using the current presentation link'
     }
-    const parent = buttons.get(selected.engine)?.parentElement?.parentElement
-    if (parent && status.parentElement !== parent) parent.append(status)
+    const header = buttons.get(selected.engine)?.parentElement
+    if (header && header.nextElementSibling !== status) header.after(status)
     for (const row of doc.querySelectorAll('[data-job-id]')) {
       const active = !!shared && row.dataset.jobId === shared.id
       const dot = row.querySelector('[data-job-sharing-dot]')
@@ -109,10 +110,11 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
     if (switching || disposed) return
     const job = { ...selection() }
     if (!job.id || job.engine !== engine || !getRoom()) return
-    switching = true; const ticket = ++epoch; paint()
-    await flight
+    switching = true; const ticket = ++epoch; paint(); onError('')
+    message(sameJob(shared, job) ? 'Returning guests to the native model…' : 'Preparing simulation sharing…')
     busy = true
     try {
+      await flight
       if (sameJob(shared, job)) {
         // Use the existing native-position action, including each engine's overlay cleanup.
         doc.getElementById(`${prefix(engine)}-jobs-viz-off`)?.click()
@@ -140,7 +142,7 @@ export function initJobSharing({ prepared, store, getSelection, getSource, showN
           message(`Sharing ${engine === 'namd' ? 'NAMD' : 'oxDNA'} job ${job.id}. Visualization changes and playback are live.`)
         }
       }
-    } catch (error) { message(error.message) }
+    } catch (error) { message(error.message); onError(error.message) }
     finally {
       if (!shared && lease) { await api('pause').catch(() => {}); lease = '' }
       pendingJob = null; busy = false; switching = false; paint()

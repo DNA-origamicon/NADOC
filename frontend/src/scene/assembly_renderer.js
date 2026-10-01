@@ -627,11 +627,13 @@ export function initAssemblyRenderer(scene, store, api) {
 
     entry.helixCtrl = newHelixCtrl
     entry.reprKey   = repr
+    entry.representationGeneration = (entry.representationGeneration ?? 0) + 1
     _applyColoringToEntry(entry)
     return true
   }
 
   async function _applyRepresentation(entry, instId, repr) {
+    const ticket = entry.representationGeneration = (entry.representationGeneration ?? 0) + 1
     const lod = CG_LOD[repr]
 
     // Always dispose previous non-CG renderers when switching away from them.
@@ -693,6 +695,7 @@ export function initAssemblyRenderer(scene, store, api) {
         console.warn(`[assembly_renderer] surface geometry fetch failed for ${instId}:`, err)
         return
       }
+      if (ticket !== entry.representationGeneration || !surfaceData) return
       entry.surfaceRenderer?.dispose()
       if (entry.helixCtrl?.root) entry.helixCtrl.root.visible = false
       const sr = initSurfaceRenderer(entry.group)
@@ -708,6 +711,7 @@ export function initAssemblyRenderer(scene, store, api) {
         return
       }
 
+      if (ticket !== entry.representationGeneration) return
       if (entry.atomisticRenderer) {
         entry.atomisticRenderer.dispose()
         entry.atomisticRenderer = null

@@ -1,8 +1,11 @@
 // Progress is measured backend work, not an estimate of remaining wall time.
+const active = new Set()
+export function cancelSurfaceComputations() { for (const cancel of [...active]) cancel() }
+
 import { showOpProgress, hideOpProgress, updateOpProgress } from '../ui/op_progress.js'
 
 export function isSurfaceComputation(path) {
-  return /\/(?:surface(?:-bin|-region)?|(?:display|rmsf)-surface(?:-bin)?)$/.test(path.split('?')[0])
+  return /\/(?:surface(?:-bin|-region|-geometry|-batch|\/region)?|(?:display|rmsf)-surface(?:-bin)?)$/.test(path.split('?')[0])
 }
 
 export function surfaceProgressView(value) {
@@ -17,10 +20,19 @@ export function surfaceProgressView(value) {
 
 /** Frozen document headers isolate requests across tab switches. No overlapping polls.
  * The operation owns its token, so an older completion cannot hide a newer popup. */
-export async function withSurfaceProgress(path, headers, run, { fetchImpl = fetch, pollMs = 250 } = {}) {
+export async function withSurfaceProgress(path, headers, run, { fetchImpl = fetch, pollMs = 250, signal } = {}) {
   if (!isSurfaceComputation(path)) return run(headers)
   const requestId = crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('')
-  const token = showOpProgress('Computing surface…', 'Preparing atoms', { indeterminate: true, detail: 'Progress counts completed work in the current stage' })
+  const controller = new AbortController()
+  const cancel = () => {
+    if (controller.signal.aborted) return
+    controller.abort(new DOMException('Surface computation cancelled', 'AbortError'))
+    void fetchImpl(`/api/surface-progress/${requestId}/cancel`, { method: 'POST', headers, keepalive: true }).catch(() => {})
+  }
+  active.add(cancel)
+  signal?.addEventListener('abort', cancel, { once: true })
+  if (signal?.aborted) cancel()
+  const token = showOpProgress('Computing surface…', 'Preparing atoms', { indeterminate: true, onCancel: cancelSurfaceComputations, detail: 'Progress counts completed work in the current stage' })
   const pollAbort = new AbortController()
   let stopped = false
   let timer = null
@@ -36,8 +48,13 @@ export async function withSurfaceProgress(path, headers, run, { fetchImpl = fetc
   }
   timer = setTimeout(poll, pollMs)
   try {
-    return await run({ ...headers, 'X-NADOC-Surface-Progress': requestId })
+    controller.signal.throwIfAborted()
+    const result = await run({ ...headers, 'X-NADOC-Surface-Progress': requestId }, controller.signal)
+    controller.signal.throwIfAborted()
+    return result
   } finally {
+    active.delete(cancel)
+    signal?.removeEventListener('abort', cancel)
     stopped = true
     clearTimeout(timer)
     pollAbort.abort()

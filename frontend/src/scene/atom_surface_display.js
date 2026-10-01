@@ -152,6 +152,7 @@ export function initAtomSurfaceDisplay({
   let _surfaceDataCache   = null   // cached API response; null = needs re-fetch
   let _surfaceProbeRadius = 0.06   // current probe radius for SES (nm)
   let _surfaceRequestId = 0
+  let surfaceAbort = null
   let _standardProbeRadius = 0.06
   let _figureProbeRadius = 0.06
   let _surfaceDetail      = 'coarse'  // 'coarse' = fast CG-bead envelope | 'fine' = full all-atom
@@ -165,6 +166,7 @@ export function initAtomSurfaceDisplay({
   // committed post-transform model and start an apparent old/new position loop.
   let _atomLoadGeneration = 0
   let _atomLoadPromise = null
+  let atomLoadAbort = null
   let _atomToastToken = 0
   let _regionSurfaceSig   = null
   let _regionSurfaceTimer = null
@@ -191,6 +193,9 @@ export function initAtomSurfaceDisplay({
   }
 
   async function _applySurfaceMode(mode) {
+    surfaceAbort?.abort()
+    surfaceAbort = new AbortController()
+    const signal = surfaceAbort.signal
     const requestId = ++_surfaceRequestId
     _surfaceMode = mode
     if (mode === 'off') {
@@ -236,23 +241,23 @@ export function initAtomSurfaceDisplay({
         // recolour still works. Fall back to the JSON route if the binary path yields nothing.
         let data = null
         if (typeof api.getDesignSurfaceBin === 'function') {
-          const buf = await api.getDesignSurfaceBin(params)
-          if (requestId !== _surfaceRequestId) return
+          const buf = await api.getDesignSurfaceBin(params, { signal })
+          if (signal.aborted || requestId !== _surfaceRequestId) return
           if (buf) data = parseSurfaceBin(buf)
         }
         if (!data) {
           const url = `/api/design/surface?color_mode=${surfaceColorMode}&probe_radius=${_surfaceProbeRadius}&detail=${_surfaceDetail}`
-          data = await withSurfaceProgress('/design/surface', docHeaders(), async headers => {
-            const resp = await fetch(url, { headers })
+          data = await withSurfaceProgress('/design/surface', docHeaders(), async (headers, requestSignal) => {
+            const resp = await fetch(url, { headers, signal: requestSignal })
             if (!resp.ok) throw new Error(`Surface fetch failed: ${resp.status}`)
             return resp.json()
-          })
+          }, { signal })
         }
         if (requestId !== _surfaceRequestId) return
         _surfaceDataCache = data
         console.debug(`Surface computed: ${_surfaceDataCache.stats?.n_verts ?? _surfaceDataCache.vertices?.length / 3} verts`)
       } catch (e) {
-        if (requestId !== _surfaceRequestId) return
+        if (signal.aborted || e?.name === 'AbortError' || requestId !== _surfaceRequestId) return false
         dismissToast()
         console.error('Surface fetch error:', e)
         return
@@ -372,6 +377,7 @@ export function initAtomSurfaceDisplay({
   })
 
   function _invalidateAtomData() {
+    atomLoadAbort?.abort()
     _atomDataCache = null
     _atomLoadGeneration++
     _atomLoadPromise = null
@@ -593,9 +599,11 @@ export function initAtomSurfaceDisplay({
     if (_atomDataCache) return _atomDataCache
     if (_atomLoadPromise) return _atomLoadPromise
     const generation = _atomLoadGeneration
+    atomLoadAbort = new AbortController()
+    const signal = atomLoadAbort.signal
     let loadPromise
     loadPromise = (async () => {
-      const resp = await fetch(_atomisticUrl(), { headers: docHeaders() })
+      const resp = await fetch(_atomisticUrl(), { headers: docHeaders(), signal })
       if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return null }
       const data = await resp.json()
       // A newer design/positioning mode invalidated this request while it was in flight.
@@ -603,7 +611,10 @@ export function initAtomSurfaceDisplay({
       if (generation !== _atomLoadGeneration) return null
       _atomDataCache = data
       return data
-    })().finally(() => {
+    })().catch(error => {
+      if (error?.name === 'AbortError') return null
+      throw error
+    }).finally(() => {
       if (_atomLoadPromise === loadPromise) _atomLoadPromise = null
     })
     _atomLoadPromise = loadPromise
@@ -611,6 +622,11 @@ export function initAtomSurfaceDisplay({
   }
 
   async function _applyAtomisticMode(mode) {
+    if (mode === 'off') {
+      _atomToastToken++; dismissToast()
+      const design = store.getState().currentDesign
+      if (_atomLoadPromise && !design?.representation_overrides?.length && !design?.view_volumes?.length) _invalidateAtomData()
+    }
     // A sim overlay (oxDNA relaxed/rmsf/trajectory) will rebuild the atomistic renderer
     // from the JOB's atoms + relaxed frame — so DON'T build+show the DESIGN atoms first
     // (the multi-second "native flash").  Keep the relaxed CG visible; the overlay hides
@@ -650,13 +666,13 @@ export function initAtomSurfaceDisplay({
       })
       try {
         const data = await _ensureAtomData()
-        if (data) {
+        if (data && atomisticRenderer.getMode() === mode) {
           atomisticRenderer.update(data)
           _refreshAtomColors()
           atomisticRenderer.highlight(atomSelectionForState(store.getState()))
         }
       } catch (e) {
-        console.error('Atomistic fetch error:', e)
+        if (e?.name !== 'AbortError') console.error('Atomistic fetch error:', e)
       } finally {
         // An invalidation may have started a newer load with its own toast. The older
         // request must not dismiss that newer owner's progress indicator.

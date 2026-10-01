@@ -123,12 +123,14 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
     for (const button of document.querySelectorAll('.right-repr-btn')) {
       const target = document.getElementById(button.dataset.target)
       button.classList.toggle('active', target?.classList.contains('is-checked'))
+      button.disabled = !!target?.disabled
+      button.title = target?.title ?? ''
     }
   }
   const observer = new MutationObserver(updateRepresentation)
   for (const [, targetId] of REPRESENTATIONS) {
     const target = document.getElementById(targetId)
-    if (target) observer.observe(target, { attributes: true, attributeFilter: ['class'] })
+    if (target) observer.observe(target, { attributes: true, attributeFilter: ['class', 'disabled', 'title'] })
   }
   updateRepresentation()
 

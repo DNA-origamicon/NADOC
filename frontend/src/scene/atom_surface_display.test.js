@@ -298,7 +298,7 @@ describe('initAtomSurfaceDisplay', () => {
     mountIds(DOM)
     const deps = makeDeps(), display = initAtomSurfaceDisplay(deps)
     const pending = []
-    global.fetch = vi.fn(() => new Promise(resolve => pending.push(resolve)))
+    global.fetch = vi.fn(url => url.endsWith('/cancel') ? Promise.resolve({ ok: true }) : new Promise(resolve => pending.push(resolve)))
     const first = display.applySurfaceMode('on')
     const latest = display.applySurfaceMode('on')
     const chosen = { vertices: [8, 0, 0], faces: [], stats: {} }
@@ -565,7 +565,7 @@ describe('initAtomSurfaceDisplay', () => {
   it('discards a pre-edit atom response that finishes after the post-edit model', async () => {
     mountIds(DOM)
     const pending = []
-    global.fetch = vi.fn(() => new Promise(resolve => pending.push(resolve)))
+    global.fetch = vi.fn(url => url.endsWith('/cancel') ? Promise.resolve({ ok: true }) : new Promise(resolve => pending.push(resolve)))
     const store = createMockStore({ currentDesign: { revision: 1 }, currentGeometry: null })
     const deps = makeDeps({ store })
     const api = initAtomSurfaceDisplay(deps)
@@ -620,4 +620,19 @@ describe('authoring metadata preserves simulation representations', () => {
       })
     }
   }
+})
+
+it('switching atomistic off aborts its unneeded load and ignores a late model', async () => {
+  mountIds(DOM)
+  const deps = makeDeps(), display = initAtomSurfaceDisplay(deps)
+  let finish, signal
+  global.fetch = vi.fn((url, options) => { signal = options.signal; return new Promise(resolve => { finish = resolve }) })
+  const loading = display.applyAtomisticMode('vdw')
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  await display.applyAtomisticMode('off')
+  expect(signal.aborted).toBe(true)
+  const model = { atoms: [] }
+  finish({ ok: true, json: async () => model }); await loading
+  expect(deps.atomisticRenderer.getMode()).toBe('off')
+  expect(deps.atomisticRenderer.update).not.toHaveBeenCalledWith(model)
 })

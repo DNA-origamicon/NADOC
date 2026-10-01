@@ -16,10 +16,18 @@ test('local editor broadcasts update the existing invitation and guest cookie, w
   const auth = { Authorization: `Bearer ${host.controlToken}` }
   const joinResponse = await fetch(endpoint + '/join', { method: 'POST', headers: { Origin: base }, body: JSON.stringify({ name: 'Guest', token: new URLSearchParams(new URL(share.url).hash.slice(1)).get('invite') }) })
   const cookie = joinResponse.headers.get('set-cookie').split(';')[0]
+  const joinGuest = () => fetch(endpoint + '/join', { method: 'POST', headers: { Origin: base }, body: JSON.stringify({ name: 'Guest', token: new URLSearchParams(new URL(share.url).hash.slice(1)).get('invite') }) })
+  for (let i = 0; i < 3; i++) assert.equal((await joinGuest()).status, 200)
+  assert.equal((await joinGuest()).status, 409)
   const route = `${base}/host/shares/${share.id}/broadcast/`
   assert.equal((await fetch(route + 'start', { method: 'POST', headers: { Cookie: cookie } })).status, 403)
   const started = await (await fetch(route + 'start', { method: 'POST', headers: auth })).json()
   const headers = { ...auth, 'X-NADOC-Broadcast': started.lease }
+  assert.ok(started.lease)
+  assert.equal((await joinGuest()).status, 409)
+  assert.equal((await fetch(route + 'view-lock', { method: 'POST', headers: auth, body: JSON.stringify({ locked: true }) })).status, 200)
+  assert.equal((await (await fetch(endpoint + '/status', { headers: { Cookie: cookie } })).json()).presentation.viewLocked, true)
+
   const updated = await (await fetch(route + 'scene', { method: 'POST', headers, body: 'NADOCVW1after' })).json()
   assert.notEqual(updated.revision, share.revision)
   assert.equal((await fetch(endpoint + `/scene?revision=${share.revision}`, { headers: { Cookie: cookie } })).status, 409)
@@ -59,7 +67,7 @@ test('only the presenter can publish; late guests receive the latest snapshot-bo
   await fetch(endpoint + '/pause', { method: 'POST', headers: { Origin: base, Cookie: pc } })
   assert.match(new TextDecoder().decode((await reader.read()).value), /"presenting":false/)
   await reader.cancel()
-  await joinRoom(share.url); await joinRoom(share.url)
+  await joinRoom(share.url); await joinRoom(share.url); await joinRoom(share.url)
   assert.equal((await joinRoom(share.url)).status, 409)
   const second = host.createShare(Buffer.from('NADOCVW1second'))
   const joinOther = () => fetch(base + `/meeting/${second.id}/join`, { method: 'POST', headers: { Origin: base }, body: JSON.stringify({ token: new URLSearchParams(new URL(second.url).hash.slice(1)).get('invite'), name: 'Other room' }) })
@@ -72,7 +80,7 @@ test('only the presenter can publish; late guests receive the latest snapshot-bo
   assert.equal((await resume(freshCookie, share.presenterUrl, 'presenter')).status, 401)
   assert.equal((await resume(pc, share.url, 'guest')).status, 401)
   assert.equal((await post(pc)).status, 200)
-  await joinRoom(share.url) // four slots occupied, including the retained presenter
+  await joinRoom(share.url); await joinRoom(share.url) // four guest slots occupied
   assert.equal((await fetch(endpoint + '/leave', { method: 'POST', headers: { Origin: base, Cookie: freshCookie } })).status, 403)
   assert.equal((await fetch(endpoint + '/leave', { method: 'POST', headers: { Origin: base, Cookie: pc } })).status, 200)
   assert.equal((await joinRoom(share.url)).status, 409) // the host can still return to a full room

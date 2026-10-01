@@ -9,7 +9,7 @@ import re
 from fastapi import APIRouter, HTTPException
 from starlette.responses import JSONResponse
 from backend.api.doc_context import get_current_doc
-from backend.core.surface_progress import reporting
+from backend.core.surface_progress import reporting, SurfaceCancelled
 
 router = APIRouter()
 _records = OrderedDict()
@@ -44,6 +44,25 @@ async def get_surface_progress(request_id: str):
     return JSONResponse(value, headers={"Cache-Control": "no-store"})
 
 
+@router.post("/surface-progress/{request_id}/cancel")
+async def cancel_surface_progress(request_id: str):
+    if not _ID.fullmatch(request_id):
+        raise HTTPException(422, "Invalid surface request")
+    key = (get_current_doc(), request_id)
+    with _lock:
+        _prune()
+        entry = _records.get(key)
+        if entry is None:
+            # Cancellation can overtake the mesh request on another connection.
+            if len(_records) >= _CAP:
+                raise HTTPException(429, "Too many surface requests")
+            entry = {"updated": monotonic(), "value": {"state": "cancelled"}}
+            _records[key] = entry
+        entry["cancelled"] = True
+        entry["updated"] = monotonic()
+    return {"cancelled": True}
+
+
 class SurfaceProgressMiddleware:
     """Pure ASGI preserves the reporter across Starlette's worker-thread boundary."""
 
@@ -70,6 +89,7 @@ class SurfaceProgressMiddleware:
         key = (doc, request_id)
         with _lock:
             _prune()
+            cancelled = _records.get(key, {}).get("cancelled", False)
             duplicate = key in _records and _records[key]["value"]["state"] == "running"
             if len(_records) >= _CAP:
                 finished = next(
@@ -83,7 +103,7 @@ class SurfaceProgressMiddleware:
                 if finished is not None:
                     del _records[finished]
             full = len(_records) >= _CAP
-            if not duplicate and not full:
+            if not cancelled and not duplicate and not full:
                 _records[key] = {
                     "updated": monotonic(),
                     "value": {
@@ -94,6 +114,10 @@ class SurfaceProgressMiddleware:
                         "strand": None,
                     },
                 }
+        if cancelled:
+            return await JSONResponse(
+                {"detail": "Surface computation cancelled"}, status_code=499
+            )(scope, receive, send)
         if duplicate or full:
             return await JSONResponse(
                 {
@@ -111,6 +135,13 @@ class SurfaceProgressMiddleware:
                     entry["updated"] = monotonic()
                     entry["value"].update(value)
 
+        def checkpoint(value):
+            with _lock:
+                cancelled = _records.get(key, {}).get("cancelled", False)
+            if cancelled:
+                raise SurfaceCancelled()
+            update(value)
+
         status = 500
 
         async def forward(message):
@@ -120,17 +151,29 @@ class SurfaceProgressMiddleware:
             await send(message)
 
         failed = False
+        cancelled = False
         try:
-            with reporting(update):
+            with reporting(checkpoint):
                 await self.app(scope, receive, forward)
+        except SurfaceCancelled:
+            cancelled = True
+            await JSONResponse(
+                {"detail": "Surface computation cancelled"}, status_code=499
+            )(scope, receive, send)
         except BaseException:
             failed = True
             raise
         finally:
             update(
                 {
-                    "state": "complete" if not failed and status < 400 else "error",
-                    "stage": "Surface ready"
+                    "state": "cancelled"
+                    if cancelled
+                    else "complete"
+                    if not failed and status < 400
+                    else "error",
+                    "stage": "Surface computation cancelled"
+                    if cancelled
+                    else "Surface ready"
                     if not failed and status < 400
                     else "Surface computation failed",
                     "done": None,

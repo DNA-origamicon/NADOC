@@ -38,6 +38,18 @@ instancing; enabled volumes also carry into comparison scenes. Native geometry
 and authored representations are preserved when comparison tools close.
 See `docs/audits/assembly_visualization_20260927.md` for scope and validation.
 
+## Presentation surface policy and cancellation (2026-10-01)
+
+Detail Surface is unavailable while the editor presents; Quick Surface remains
+available. The menu/sidebar and surface transports enforce the ephemeral sharing
+state. Leaving a heavy representation cancels outstanding surface transports and
+cooperatively cancels backend work at a surface checkpoint. Cancel is exposed in
+the surface progress popup and cancels the pending surface batch. Generation checks
+prevent old heavy responses from restoring an obsolete selection, including
+assembly instance responses; unneeded global atom downloads abort on switch-off.
+Pinned region/volume atom consumers retain their shared load. See
+`project_public_sharing.md` for validation and the native-call cancellation limit.
+
 ## Sharing display state (2026-09-24)
 
 Native sharing also watches design/geometry identities. After an edit, it waits
