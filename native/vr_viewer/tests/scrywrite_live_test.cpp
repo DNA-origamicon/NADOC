@@ -23,6 +23,14 @@ struct LiveViewerTest {
             requireLive(c!=controls.end()&&c->enabled,"VR control unavailable");
             v.activateSidebarAction(left.activate(*c),0);
         };
+        requireLive(!v.shadowLight_.headFollowing() && !v.witnessShadowLight_.headFollowing(),
+                    "Head-following lighting must default off");
+        activate("vr-head-light");
+        requireLive(v.shadowLight_.headFollowing() && v.witnessShadowLight_.headFollowing(),
+                    "VR lighting toggle did not enable both views");
+        activate("vr-head-light");
+        requireLive(!v.shadowLight_.headFollowing() && !v.witnessShadowLight_.headFollowing() && left.open,
+                    "VR lighting toggle did not disable or closed sidebar");
         activate("vr-desktop");
         requireLive(left.open&&v.desktopPanel_.open&&!v.menuOpenRequested_,"Desktop must pop out independently of sidebar");
         const auto b=v.desktopPanel_.content(),c=v.desktopPanel_.closeBounds();
@@ -405,6 +413,7 @@ int objectIdGlChecks() {
     glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_STENCIL_ATTACHMENT,GL_RENDERBUFFER,depth);
     requireLive(glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE,"ID test framebuffer");
     verifyRepresentationShadows(fbo);
+    verifySphereProjectionLighting(fbo);
     LiveViewerTest::verifyFirstStyleAcknowledgement();
     LiveViewerTest::verifySidebarHoverRay();
     SceneData data;

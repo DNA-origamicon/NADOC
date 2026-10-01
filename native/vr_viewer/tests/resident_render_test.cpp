@@ -21,7 +21,7 @@ int main(int argc,char** argv){
                 auto start=std::chrono::steady_clock::now();
                 glBeginQuery(GL_TIME_ELAPSED,query);
                 const auto model=glm::rotate(glm::mat4(1),float(i)*.002F,glm::vec3(0,1,0));
-                scene.renderShadowMap(model,glm::normalize(glm::vec3(.577F,.577F,.577F)));
+                scene.renderShadowMap(model,{{.577F,.577F,.577F},{0,1,0}});
                 glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(0,0,1024,1024);glDrawBuffer(GL_BACK);
                 for(int eye=0;eye<2;++eye){glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);scene.render(vp,model,{},false);}
                 glEndQuery(GL_TIME_ELAPSED);auto finish=std::chrono::steady_clock::now();

@@ -1,8 +1,8 @@
 {
   "version": 2,
   "sourceHashes": {
-    "frontend/index.html": "4e4cda29df558566d93c4ecb9fb5c24bec8013d13b7326bfa5fcebe07b66278b",
-    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "583792439c230529b55047a93c53be7937c37662a7300d68724a7edb7f9506f8",
+    "frontend/index.html": "f3b95d1a46e36f7f5f49b8dabf2216db16111f2a100ef2c5c36e21891e43ed02",
+    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "8f851b65d1453addcb03ea1973281dddb4a340ab426945d3895ce2688303a538",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/scene/coloring_modes.js": "38b8f278e205a935a63413a0aa0d32d89762759d0b77c7da7eaba28c7d802bae",
     "frontend/src/scene/view_volumes.js": "8cb5f50859a2394fa47cf78b1d60ffd6aaf3e6319dc8cae4585ee452f3f24c9b",
@@ -13400,6 +13400,16 @@
           "id": "vr-desktop",
           "label": "View desktop",
           "action": "desktop",
+          "section": "VR",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "vr-head-light",
+          "label": "Head-following lighting: Off",
+          "action": "vr:head-light",
           "section": "VR",
           "kind": "button",
           "options": [],

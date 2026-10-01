@@ -22,6 +22,7 @@
 #include <zlib.h>
 
 #include "interaction.hpp"
+#include "shadow_light.hpp"
 #include "desktop_panel.hpp"
 #include "remote_panel.hpp"
 #include "representation_buffers.hpp"
@@ -561,6 +562,13 @@ GLuint makeSphereProgram() {
             vec3 projectionRowY = vec3(
                 uViewProjection[0][1], uViewProjection[1][1],
                 uViewProjection[2][1]);
+            vec3 cameraBack = -normalize(vec3(
+                uViewProjection[0][2], uViewProjection[1][2],
+                uViewProjection[2][2]));
+            // Asymmetric eye projections add a forward component to X/Y.
+            // Remove it before using these rows as billboard axes/scales.
+            projectionRowX -= cameraBack * dot(projectionRowX, cameraBack);
+            projectionRowY -= cameraBack * dot(projectionRowY, cameraBack);
             vWorldRadius = aRadius * modelScale;
             vWorldCenter = worldCenter.xyz;
             vCenterClip = uViewProjection * worldCenter;
@@ -626,6 +634,9 @@ GLuint makeSphereProgram() {
             vec3 projectionRowZ = vec3(
                 uViewProjection[0][2], uViewProjection[1][2],
                 uViewProjection[2][2]);
+            vec3 cameraBack = -normalize(projectionRowZ);
+            projectionRowX -= cameraBack * dot(projectionRowX, cameraBack);
+            projectionRowY -= cameraBack * dot(projectionRowY, cameraBack);
             vec3 normal = normalize(
                 normalize(projectionRowX) * vCorner.x +
                 normalize(projectionRowY) * vCorner.y -
@@ -2519,8 +2530,9 @@ class GlScene {
         return std::nullopt;
     }
 
-    void renderShadowMap(const glm::mat4& modelTransform, glm::vec3 lightDirection) {
-        lightDirection_ = glm::normalize(lightDirection);
+    void renderShadowMap(const glm::mat4& modelTransform, const nadoc_vr::ShadowLightFrame& light,
+                         const nadoc_vr::ShadowLightFrame* stabilized = nullptr) {
+        lightDirection_ = glm::normalize(light.direction);
         const glm::vec3 worldCenter = glm::vec3(
             modelTransform * glm::vec4(localCenter_, 1.0F));
         const float modelScale = std::max({
@@ -2529,12 +2541,11 @@ class GlScene {
             glm::length(glm::vec3(modelTransform[2])),
         });
         const float radius = std::max(localRadius_ * modelScale * 1.08F, 0.02F);
-        const glm::vec3 eye = worldCenter + lightDirection_ * (2.0F * radius);
-        glm::vec3 up(0, 1, 0);
-        if (std::abs(glm::dot(up, lightDirection_)) > 0.95F) up = {1, 0, 0};
+        const auto& projectionLight = stabilized ? *stabilized : light;
+        const glm::vec3 eye = worldCenter + glm::normalize(projectionLight.direction) * (2.0F * radius);
         lightViewProjection_ = glm::ortho(
             -radius, radius, -radius, radius, radius * 0.05F, radius * 4.0F)
-            * glm::lookAt(eye, worldCenter, up);
+            * glm::lookAt(eye, worldCenter, projectionLight.up);
 
         // Every representation, including atomistic views, casts into the same
         // soft self-shadow map shared by both eyes.
@@ -3941,7 +3952,7 @@ class GlScene {
     float localRadius_ = 0.5F;
     glm::mat4 lightViewProjection_{1.0F};
     glm::vec3 lightDirection_{-0.577F, 0.577F, 0.577F};
-    static constexpr GLsizei kShadowMapSize = 2048;
+    static constexpr GLsizei kShadowMapSize = nadoc_vr::kShadowMapResolution;
 };
 
 struct DeformationPlanePose {
@@ -5270,6 +5281,7 @@ class Viewer {
         simulationPanel_.bind(sidebarMenus_.menus[0], &sidebarMenus_.menus[1]);
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.label=[this](const std::string& action,const std::string& fallback) {
+                if(action=="vr:head-light")return std::string(shadowLight_.headFollowing()?"Head-following lighting: On":"Head-following lighting: Off");
                 if(action=="qr:calibrate")return std::string(qrCalibration_.running()?"Cancel QR calibration":"Calibrate QR code");
                 if(action=="qr:cube")return std::string(qrCalibration_.running()&&qrCalibration_.cubeMode()?"Cancel cube calibration":"Calibrate cube");
                 if(action=="qr:status" || action=="qr:cube-status")return qrCalibration_.status;
@@ -5327,6 +5339,7 @@ class Viewer {
             };
             sidebar.loadingProgress=[this](const std::string& action){return representationLoading_.button(action);};
             sidebar.isActive=[this](const std::string& action) {
+                if(action=="vr:head-light")return shadowLight_.headFollowing();
                 if(action=="share:avatar")return showVRAvatar_;
                 if(action=="share:status")return shareActive_;
                 return (action.starts_with("repr:") && std::stoi(action.substr(5))==static_cast<int>(glScene_->representation()))
@@ -5734,6 +5747,12 @@ class Viewer {
         return action=="share:end" || (action=="share:pause" && sharePerspective_) || (action=="share:resume" && !sharePerspective_);
     }
     void activateSidebarAction(const std::string& requestedAction, size_t hand) {
+        if(requestedAction=="vr:head-light") {
+            const bool enabled = !shadowLight_.headFollowing();
+            shadowLight_.setHeadFollowing(enabled);
+            witnessShadowLight_.setHeadFollowing(enabled);
+            return;
+        }
         if(requestedAction=="vr:exit") {
             exitRequested_=true;
             return;
@@ -9828,6 +9847,8 @@ class Viewer {
         manipulator_.fitInView(
             headPosition, {orientation.w, orientation.x, orientation.y, orientation.z},
             (viewTools_.flags&2048)?viewTools_.sceneBounds():glScene_->ownerBounds({}, glm::mat4(1.0F), true));
+        shadowLight_.anchor({orientation.w, orientation.x, orientation.y, orientation.z});
+        if (witness_) witnessShadowLight_.anchor(witness_->input().head.orientation);
         pulse(recenterHand_, 0.55F);
         recenterRequested_ = false;
         updateControllerGuides();
@@ -9974,6 +9995,8 @@ class Viewer {
         if (!stable) return;
         manipulator_.placeInView(
             headPosition, headOrientation, sceneViewPlacement_);
+        shadowLight_.anchor(headOrientation);
+        if (witness_) witnessShadowLight_.anchor(witness_->input().head.orientation);
         initialScenePlacementApplied_ = true;
         initialScenePlacementRequested_ = false;
         updateControllerGuides();
@@ -10719,22 +10742,22 @@ class Viewer {
                 }
                 const XrQuaternionf& head = views_[0].pose.orientation;
                 const glm::quat headOrientation(head.w, head.x, head.y, head.z);
-                const glm::vec3 keyDirection = headOrientation * glm::normalize(
-                    glm::vec3(-0.577F, 0.577F, 0.577F));
                 if (frameState.shouldRender && validViewSet) {
                     applyPendingMenu(viewCount);
                     applyPendingRecenter(viewCount);
+                }
+                const auto keyLight = shadowLight_.update(
+                    headOrientation, validViewSet && orientationTracked);
+                if (frameState.shouldRender && validViewSet) {
                     updateMenuComfortTelemetry(viewCount);
                     gpuFrameTimer_.begin(menuOpen_);
                     if (witness_) {
-                        const glm::vec3 actorKeyDirection =
-                            witness_->input().head.orientation * glm::normalize(
-                                glm::vec3(-0.577F, 0.577F, 0.577F));
-                        glScene_->renderShadowMap(
-                            manipulator_.transform(), actorKeyDirection);
+                        const auto actorKeyLight = witnessShadowLight_.update(
+                            witness_->input().head.orientation);
+                        glScene_->renderShadowMap(manipulator_.transform(), actorKeyLight);
                         captureWitnessView();
                     }
-                    if(!representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyDirection);
+                    if(!representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyLight);
                     traceRender("shadow");
                     for (uint32_t i = 0; i < viewCount; ++i) {
                         renderView(i, views_[i], layerViews[i]);
@@ -10751,14 +10774,12 @@ class Viewer {
                     // straight to the desktop and label it as a fallback so this
                     // is never confused with the actual submitted-eye image.
                     if (witness_) {
-                        const glm::vec3 actorKeyDirection =
-                            witness_->input().head.orientation * glm::normalize(
-                                glm::vec3(-0.577F, 0.577F, 0.577F));
-                        glScene_->renderShadowMap(
-                            manipulator_.transform(), actorKeyDirection);
+                        const auto actorKeyLight = witnessShadowLight_.update(
+                            witness_->input().head.orientation);
+                        glScene_->renderShadowMap(manipulator_.transform(), actorKeyLight);
                         captureWitnessView();
                     }
-                    if(!representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyDirection);
+                    if(!representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyLight);
                     const auto selected = nadoc_vr::spectatorMirrorViewIndex(
                         mirrorEye_, viewCount);
                     if (selected) {
@@ -11344,6 +11365,7 @@ class Viewer {
     XrSpace space_ = XR_NULL_HANDLE;
     XrActionSet actionSet_ = XR_NULL_HANDLE;
     XrAction poseAction_ = XR_NULL_HANDLE;
+    nadoc_vr::AnchoredShadowLight shadowLight_, witnessShadowLight_;
     XrAction triggerAction_ = XR_NULL_HANDLE;
     XrAction menuAction_ = XR_NULL_HANDLE;
     XrAction gripAction_ = XR_NULL_HANDLE;

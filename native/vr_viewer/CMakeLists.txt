@@ -39,6 +39,9 @@ install(TARGETS nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export
 
 include(CTest)
 if(BUILD_TESTING)
+  add_executable(nadoc-vr-shadow-light-test tests/shadow_light_test.cpp)
+  target_include_directories(nadoc-vr-shadow-light-test PRIVATE src)
+  add_test(NAME nadoc-vr-shadow-light COMMAND nadoc-vr-shadow-light-test)
   add_executable(nadoc-vr-remote-panel-test tests/remote_panel_test.cpp)
   target_include_directories(nadoc-vr-remote-panel-test PRIVATE src)
   target_compile_options(nadoc-vr-remote-panel-test PRIVATE -Wall -Wextra -Wpedantic)

@@ -976,6 +976,7 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
   }},
   {0, "vr", "VR", {
     {"vr-desktop", "View desktop", "VR", "desktop", {}},
+    {"vr-head-light", "Head-following lighting: Off", "VR", "vr:head-light", {}},
     {"qr-cube-calibrate", "Calibrate cube", "VR", "qr:cube", {}},
     {"qr-cube-status", "Keep cube fixed; scan all five faces", "VR", "qr:cube-status", {}},
     {"vr-exit", "Exit VR", "VR", "vr:exit", {}},

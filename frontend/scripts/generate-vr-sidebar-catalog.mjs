@@ -142,6 +142,7 @@ tabs.push({side:'right',key:'tools',label:'Tools',rows:[
 ].map(([id,label,action])=>({id,label,action,section:'Tools',kind:'button',options:[],source:'native/vr_viewer/src/menu_items.hpp',reason:''}))})
 tabs.push({side:'left',key:'vr',label:'VR',rows:[
   ['vr-desktop','View desktop','desktop'],
+  ['vr-head-light','Head-following lighting: Off','vr:head-light'],
   ['qr-cube-calibrate','Calibrate cube','qr:cube'],
   ['qr-cube-status','Keep cube fixed; scan all five faces','qr:cube-status'],
   ['vr-exit','Exit VR','vr:exit'],
