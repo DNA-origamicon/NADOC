@@ -3,6 +3,7 @@ import argparse
 import os
 import json
 import time
+import copy
 from pathlib import Path
 
 from frontend.scrywrite.mcp_bridge import Bridge
@@ -47,6 +48,7 @@ def main():
         time.sleep(.1)
     (args.output/'readiness.json').write_text(json.dumps(readiness, indent=2))
     live = LiveSession(bridge, physical=True, allow_transactions=True)
+    motion_reference = None
     trials, results = [], []
     motion_failures = []
     try:
@@ -58,6 +60,7 @@ def main():
             time.sleep(.05)
         (args.output/'startup.json').write_text(json.dumps(startup_samples, indent=2))
         assert not live.state['startup']['active']
+        motion_reference = copy.deepcopy(live.state)
         head = live.state['head_position']
         live.send('pose', hand=1, position=[head[0]+.3, head[1]-.3, head[2]-.3], orientation=[0,0,0,1])
         live.frame()
@@ -69,7 +72,8 @@ def main():
         indices={r['id']:i for i,r in enumerate(tab['rows'])}
         for index, preset in enumerate(PRESETS if args.validate else ['steady_fast']):
             from tools.vr_workflows.sidebar_scroll_probe import check
-            check(live,args.output,preset,trials)
+            if not os.environ.get('NADOC_VR_MOTION_CHECK') or index == 0:
+                check(live,args.output,preset,trials)
             for rep in (os.environ.get('NADOC_VR_TEST_REPS','surface,hull-prism,cylinders,beads,ballstick,vdw,stick,mrdna-coarse,mrdna-fine,oxdna,full,cylinders').split(',') if index == 0 else os.environ.get('NADOC_VR_TEST_MATRIX_REPS','full,surface,cylinders').split(',')):
                 for _ in range(25):
                     if any(c.get('id')==REPS[rep] for c in live.state['controls']):break
@@ -80,7 +84,8 @@ def main():
                 live.frame()
                 print('Selecting '+rep,flush=True)
                 already_active=live.state['representation']==rep and not live.state['representation_loading']['pending']
-                click(live, 1, REPS[rep], preset, trials)
+                if not already_active or not os.environ.get('NADOC_VR_MOTION_CHECK'):
+                    click(live, 1, REPS[rep], preset, trials)
                 samples = []
                 deadline = time.monotonic()+180
                 while time.monotonic()<deadline:
@@ -116,11 +121,26 @@ def main():
                     assert ((classes==1)&(ids>0)).sum()>100, 'No visible '+rep+' geometry in '+eye
                 if os.environ.get('NADOC_VR_MOTION_CHECK'):
                     from tools.vr_workflows.representation_motion import check as check_motion
+                    from tools.vr_workflows.motion_delivery import frame_broadside, sweep
                     try:
+                        framing = frame_broadside(live, motion_reference)
+                        (args.output/(preset+'-'+rep+'-framing.json')).write_text(json.dumps(framing, indent=2))
+                        # Captures stall the GPU. Keep them out of the measured
+                        # steady-state delivery interval and let pacing recover.
+                        time.sleep(15)
                         check_motion(live,args.output/(preset+'-'+rep+'-motion'),preset)
+                        if index == 0:
+                            time.sleep(15)
+                            sweep(live,args.output/(preset+'-'+rep+'-speeds'))
                     except TimeoutError as error:
                         motion_failures.append(dict(preset=preset,representation=rep,error=str(error)))
                         print('Grip timing failure (retained): '+str(error),flush=True)
+                    # Restore the menu for the next style selection.
+                    if not live.state['sidebars'][1]['open']:
+                        head = live.state['head_position']
+                        live.send('pose',hand=1,position=[head[0]+.3,head[1]-.3,head[2]-.3],orientation=[0,0,0,1])
+                        live.frame()
+                        live.button('menu', hand=1)
             live.capture_to(args.output/preset, files=['left.png','right.png','mirror.png','left.classes.u8','right.classes.u8','left.ids.u32','right.ids.u32','objects.json','evidence.json'], discard_source=True)
             import numpy as np
             for eye in ('left', 'right'):

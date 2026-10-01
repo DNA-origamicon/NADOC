@@ -35,7 +35,7 @@ def catalog():
     add('backend-lifetime', 'interaction', 'Backend shutdown closes VR',
         'Launch an isolated backend and empty VR viewer; terminate only that backend and require viewer exit and sidecar cleanup.', module='backend_lifecycle_check')
     add('representation-motion', 'interaction', 'Detailed representations · grip motion',
-        'Real Stick and Ball & Stick loads, then grip translation/rotation with retained motion windows and submitted stereo geometry. Validation uses all four unchanged controller profiles. Head tracking is never overridden.', ['--motion'], module='browser_representation_tour')
+        'Real Stick and Ball & Stick loads, then whole-model broadside inspection at 10x scale, grip translation/rotation, and 30/60/120 degree-per-second yaw sweeps. Retains input cadence and submitted stereo geometry; speed sweeps are separate from the four unchanged validation profiles. Verifies background desktop rendering yields to native VR while synchronization continues. Head tracking is never overridden.', ['--motion'], module='browser_representation_tour')
     add('loading-performance', 'interaction', 'Representation loading frame delivery',
         'Real browser/controller loads with native CPU phases and read-only SteamVR compositor timing. Checks p99 cadence, long frame gaps and dropped-frame rate; validation covers all four motion presets. Uses the optional openvr Python binding through uv. Private test documents are cleaned up.', ['--profile'], module='browser_representation_tour')
     add('browser-representations', 'interaction', 'Browser-to-headset representation loading',

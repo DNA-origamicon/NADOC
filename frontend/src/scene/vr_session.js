@@ -52,6 +52,7 @@ export function initVRSession({
   publishNativeTrajectory = null,
   onNativeEvent = null,
   onNativePoll = null,
+  onNativeActiveChange = () => {},
 } = {}) {
   let session = null
   let nativeUnsupportedReason = null
@@ -402,6 +403,7 @@ export function initVRSession({
 
   function _setNativeActive(active) {
     nativeActive = active
+    onNativeActiveChange(active)
     if (!active) {
       _clearNativePoll()
       _clearNativeEventPoll()

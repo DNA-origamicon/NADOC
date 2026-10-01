@@ -269,6 +269,13 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false }
   function addFrameCallback(fn) { _frameCallbacks.add(fn) }
   function removeFrameCallback(fn) { _frameCallbacks.delete(fn) }
 
+  // The native companion renders its own stereo scene on the same GPU. Keep
+  // synchronization/animation callbacks alive, but don't redraw an unfocused
+  // desktop viewport while the headset owns the interaction. Focusing the
+  // browser or ending native VR immediately renders the latest scene again.
+  let nativeVRActive = false
+  function setNativeVRActive(active) { nativeVRActive = Boolean(active) }
+
   // Render loop — setAnimationLoop works in both normal and WebXR modes.
   // _cnFrame is a global frame counter used by the cadnano debug logger.
   let _cnFrame = 0
@@ -281,6 +288,8 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false }
     window._cnFrame = _cnFrame
     if (!renderer.xr.isPresenting) _inner.update()
     _frameCallbacks.forEach(fn => fn())
+    if (nativeVRActive && !renderer.xr.isPresenting &&
+        (canvas.ownerDocument.hidden || !canvas.ownerDocument.hasFocus())) return
     _renderFn()
   })
 
@@ -332,6 +341,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false }
     setResizeCallback, clearResizeCallback,
     pushControls, popControls,
     addFrameCallback, removeFrameCallback,
+    setNativeVRActive,
     setRenderFn, resetRenderFn,
     isStandardRender: () => _renderFn === _defaultRenderFn && _renderCamera === camera,
   }

@@ -1,6 +1,6 @@
 // Read-only copied-document check. Browser owns launch and style acknowledgements.
 import { chromium } from 'playwright'
-import { mkdir, writeFile, readFile, rmdir, copyFile } from 'node:fs/promises'
+import { mkdir, writeFile, readFile, rmdir, copyFile, unlink } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
@@ -19,6 +19,12 @@ const requests = [], errors = [], diagnostics = []
 try {
   browser = await chromium.launch({ headless: false, args: ['--disable-features=WebXR'] })
   page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  if (process.env.NADOC_VR_MOTION_CHECK) {
+    // Playwright normally forces document.hasFocus() true even after the
+    // native window takes focus. Exercise the real desktop focus policy.
+    const cdp = await page.context().newCDPSession(page)
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false })
+  }
   page.on('console', message => {
     if(message.type()==='error') diagnostics.push(message.text())
   })
@@ -60,6 +66,19 @@ try {
   owned=JSON.parse(await readFile(path.join(tmpdir(), 'nadoc-vr-'+process.getuid()+'.json'), 'utf8'))
   if(owned.pid!==pid) throw new Error('Viewer ownership changed')
   await writeFile(output+'/owned-state.json',JSON.stringify(owned,null,2))
+  if (process.env.NADOC_VR_MOTION_CHECK) {
+    // The physical companion owns focus. Keep the page visible and its normal
+    // event/scene synchronization alive while checking that GPU draws stop.
+    await page.waitForFunction(() => window.__nadocTest?.viewerFrameState &&
+      !document.hasFocus() && document.querySelector('#menu-help-view-vr')?.getAttribute('aria-pressed') === 'true')
+    await page.waitForTimeout(500)
+    const before = await page.evaluate(() => window.__nadocTest.viewerFrameState())
+    await page.waitForTimeout(500)
+    const after = await page.evaluate(() => window.__nadocTest.viewerFrameState())
+    await writeFile(output+'/background-rendering.json',JSON.stringify({before,after},null,2))
+    if (after.rendered !== before.rendered || after.callbacks <= before.callbacks || after.focused)
+      throw new Error('Native VR did not suppress background GPU draws while keeping callbacks alive')
+  }
   const args = ['run','python','-m','tools.vr_workflows.browser_representation_probe','--socket',current.scrywrite_socket,'--output',output+'/native']
   if (validation==='--validate') args.push('--validate')
   let log=''
@@ -94,6 +113,22 @@ try {
     await writeFile(output+'/browser-diagnostics.json',JSON.stringify(diagnostics,null,2))
     await browser?.close()
     if(owned?.scrywrite_socket) {
+      // The backend can forget a stopped viewer before its large scene finishes
+      // tearing down. Only terminate a process still owning our exact socket.
+      const ownedProcessAlive = async () => {
+        try {
+          const command = await readFile(`/proc/${owned.pid}/cmdline`, 'utf8')
+          return command.split('\0').includes(owned.scrywrite_socket)
+        } catch(error) { if(error.code==='ENOENT') return false; throw error }
+      }
+      if(await ownedProcessAlive()) {
+        try { process.kill(owned.pid, 'SIGTERM') }
+        catch(error) { if(error.code!=='ESRCH') throw error }
+        for(let i=0; i<100 && await ownedProcessAlive(); i++)
+          await new Promise(resolve=>setTimeout(resolve,100))
+        if(await ownedProcessAlive()) throw new Error('Owned native process is still alive')
+      }
+      await unlink(owned.scrywrite_socket).catch(error=>{if(error.code!=='ENOENT') throw error})
       try { await rmdir(path.dirname(owned.scrywrite_socket)) }
       catch(error) { if(error.code!=='ENOENT') throw error }
     }

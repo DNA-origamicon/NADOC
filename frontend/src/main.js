@@ -339,6 +339,7 @@ async function main() {
     pushControls, popControls,
     addFrameCallback, removeFrameCallback,
     setRenderFn, resetRenderFn, isStandardRender,
+    setNativeVRActive,
   } = initScene(canvas)
   initNamdPegCoatingPreview({ scene })
   initTwoElectrodePreview({ scene, camera, controls })
@@ -6507,6 +6508,7 @@ async function main() {
     finally { vrEndPublishing = false }
   }
   const vrSession = initVRSession({
+    onNativeActiveChange: setNativeVRActive,
     onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish() },
     renderer,
     scene,

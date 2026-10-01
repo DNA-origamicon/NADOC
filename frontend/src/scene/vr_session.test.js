@@ -16,6 +16,7 @@ function makeHarness({
   publishNativeJobs = vi.fn(),
   publishNativeTrajectory = vi.fn(),
   onNativeEvent = null,
+  onNativeActiveChange = vi.fn(),
 } = {}) {
   document.body.innerHTML = `
     <button id="menu-help-view-vr" aria-pressed="false">
@@ -52,12 +53,14 @@ function makeHarness({
     nativeEventPollIntervalMs, nativeJobPollIntervalMs, publishNativeJobs,
     publishNativeTrajectory,
     onNativeEvent,
+    onNativeActiveChange,
     setMenuToggle, showToast,
   })
 
   return {
     button, session, xr, renderer, scene, camera, light, model, controller,
     setMenuToggle, showToast,
+    onNativeActiveChange,
   }
 }
 
@@ -164,11 +167,13 @@ describe('initVRSession', () => {
     expect(h.renderer.xr.setSession).not.toHaveBeenCalled()
     expect(h.controller.isActive()).toBe(true)
     expect(h.button.querySelector('.vr-menu-label').textContent).toBe('Exit VR')
+    expect(h.onNativeActiveChange).toHaveBeenLastCalledWith(true)
 
     await expect(h.controller.exit()).resolves.toBe(true)
     expect(native.stop).toHaveBeenCalledOnce()
     expect(h.controller.isActive()).toBe(false)
     expect(h.button.querySelector('.vr-menu-label').textContent).toBe('View in VR')
+    expect(h.onNativeActiveChange).toHaveBeenLastCalledWith(false)
   })
 
   it('reports native first-frame timing once per launch', async () => {

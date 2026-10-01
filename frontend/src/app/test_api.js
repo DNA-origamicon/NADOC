@@ -44,6 +44,8 @@ export function installTestApi({
   multiView,
 }) {
   window.__nadocTest = {
+    viewerFrameState: () => ({ rendered: renderer.info.render.frame, callbacks: window._cnFrame,
+      focused: document.hasFocus(), hidden: document.hidden }),
     pauseViewerRenderingForTest: () => renderer.setAnimationLoop(null),
     scrywrite,
     scene,
