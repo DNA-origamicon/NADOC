@@ -249,6 +249,7 @@ struct RepresentationData {
 };
 
 #include "prepared_representation.hpp"
+#include "rigid_preview.hpp"
 
 struct SceneData {
     std::array<std::shared_ptr<PreparedRepresentation>,kRepresentationCount> prepared{};
@@ -1519,7 +1520,7 @@ class GlScene {
             atomisticSphereCoordinateIndices_.size() != atomisticSphereInstances_.size() ||
             atomisticCylinderCoordinateIndices_.size() !=
                 atomisticCylinderInstances_.size() ||
-            !toolCommittedToken_.empty() || !toolPreviewToken_.empty()) {
+            !toolCommittedToken_.empty() || !toolPreviewToken_.empty() || previewGeometry_.active()) {
             return false;
         }
         normalizedCoordinateScratch_.resize(coordinates.size());
@@ -1590,6 +1591,10 @@ class GlScene {
         std::string token;
         const RepresentationData& source = currentSource();
         for (const std::string& candidate : ownerTokens) {
+            if (previewGeometry_.active() && candidate == previewGeometry_.token) {
+                token = candidate;
+                break;
+            }
             const auto& ownershipRecords = source.toolScopeOwnership.empty()
                 ? source.transformOwnership : source.toolScopeOwnership;
             const bool explicitOwner = std::any_of(
@@ -1624,7 +1629,12 @@ class GlScene {
         toolPreviewToken_ = std::move(token);
         toolPreviewTransform_ = transform;
         const auto started = std::chrono::steady_clock::now();
-        setStyle(representation_, coloring_);
+        if (previewGeometry_.active() &&
+            (toolPreviewToken_.empty() || toolPreviewToken_ == previewGeometry_.token)) {
+            applyPackedPreview(toolPreviewToken_.empty() ? glm::mat4(1) : transform);
+        } else {
+            setStyle(representation_, coloring_);
+        }
         const double milliseconds = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - started).count();
         if (!toolPreviewToken_.empty() && previewTiming_.add(milliseconds)) {
@@ -1694,6 +1704,7 @@ class GlScene {
     }
 
     void installRepresentation(SceneData incoming) {
+        previewGeometry_.clear();
         // Full remains the normalization/presentation anchor. Replace only blocks
         // delivered in this request; retain previously loaded representations.
         for(size_t i=0;i<kRepresentationCount;++i) {
@@ -1721,7 +1732,29 @@ class GlScene {
     bool supportsRepresentation(Representation representation) const {
         return scene_.available.at(static_cast<size_t>(representation));
     }
+    void applyPackedPreview(const glm::mat4& transform) {
+        previewGeometry_.apply(transform);
+        previewGeometry_.points.upload(sphereInstanceVbo_);
+        previewGeometry_.glowPoints.upload(sphereGlowInstanceVbo_);
+        previewGeometry_.cylinders.upload(cylinderInstanceVbo_);
+        previewGeometry_.glowCylinders.upload(cylinderGlowInstanceVbo_);
+        previewGeometry_.halves.upload(halfCylinderInstanceVbo_);
+        previewGeometry_.glowHalves.upload(halfCylinderGlowInstanceVbo_);
+        previewGeometry_.boxes.upload(boxInstanceVbo_);
+        previewGeometry_.glowBoxes.upload(boxGlowInstanceVbo_);
+        previewGeometry_.bounds(localCenter_, localRadius_);
+    }
+#ifdef NADOC_SCRYWRITE_TESTING
+    void disablePackedPreviewForTest() { packedPreviewEnabled_ = false; previewGeometry_.clear(); }
+    bool hasPackedPreviewForTest() const { return previewGeometry_.active(); }
+    bool volumeGuardsEnabledForTest = true;
+    size_t styleApplicationsForTest=0,volumeUploadsForTest=0;
+#endif
     void setStyle(Representation representation, Coloring coloring) {
+#ifdef NADOC_SCRYWRITE_TESTING
+        ++styleApplicationsForTest;
+#endif
+        previewGeometry_.clear();
         if (!supportsRepresentation(representation)) throw std::runtime_error("Representation missing from scene snapshot: " + std::string(representationName(representation)));
         const auto styleStarted = std::chrono::steady_clock::now();
         // Coarse helix cylinders have domain-level ownership and cannot represent
@@ -1760,7 +1793,8 @@ class GlScene {
              representation == Representation::stick) ||
             (representation_ == Representation::stick &&
              representation == Representation::ballstick);
-        if (!cacheable && atomisticPair && coloring == coloring_ && atomisticSharedGeometry_ &&
+        if (!cacheable && toolPreviewToken_.empty() && toolCommittedToken_.empty() &&
+            atomisticPair && coloring == coloring_ && atomisticSharedGeometry_ &&
             atomisticBuffersResident_ &&
             uploadedVisualizationRevision_ == visualizationRevision_) {
             representation_ = representation;
@@ -1783,7 +1817,7 @@ class GlScene {
                       << " rss_mib=" << currentResidentMiB() << std::endl;
             return;
         }
-        const bool restoringAtomistic =
+        const bool restoringAtomistic = toolPreviewToken_.empty() && toolCommittedToken_.empty() &&
             (representation == Representation::ballstick || representation == Representation::stick) &&
             representation_ != Representation::ballstick &&
             representation_ != Representation::stick &&
@@ -1889,7 +1923,21 @@ class GlScene {
             return result;
         };
         const auto committedWeights = collectWeights(toolCommittedToken_);
+        // Prepare on selection, before the first drag. Visualized slab frames
+        // have a separate deformation path and retain the general rebuild path.
+        const bool packedRepresentation = representation_ == Representation::full ||
+            representation_ == Representation::stick || representation_ == Representation::ballstick ||
+            representation_ == Representation::vdw;
+        if (packedPreviewEnabled_ && packedRepresentation && visualizationSlabFrames_.empty()) {
+            if (!toolPreviewToken_.empty()) previewGeometry_.token = toolPreviewToken_;
+            else if (selectedHighlightOwnerTokens_.size() == 1)
+                previewGeometry_.token = *selectedHighlightOwnerTokens_.begin();
+        }
         const auto pendingWeights = collectWeights(toolPreviewToken_);
+        const auto packedWeights = collectWeights(previewGeometry_.token);
+        // A selected token can become stale after a scene replacement. Do not
+        // let a cache entry make an otherwise invalid preview owner valid.
+        if (packedWeights.empty()) previewGeometry_.clear();
         auto weights = [](const auto& values, const std::string& identity) {
             const auto found = values.find(identity);
             return found == values.end()
@@ -1903,6 +1951,7 @@ class GlScene {
             glm::vec3 result = nadoc_vr::weightedTransformPoint(
                 point + (end ? visualization.second : visualization.first),
                 toolCommittedTransform_, end ? committed.second : committed.first);
+            if (previewGeometry_.active()) return result;
             return nadoc_vr::weightedTransformPoint(
                 result, toolPreviewTransform_, end ? pending.second : pending.first);
         };
@@ -1911,6 +1960,7 @@ class GlScene {
             const float pending = weights(pendingWeights, identity).first;
             glm::vec3 result = nadoc_vr::weightedTransformVector(
                 vector, toolCommittedTransform_, committed);
+            if (previewGeometry_.active()) return result;
             return nadoc_vr::weightedTransformVector(
                 result, toolPreviewTransform_, pending);
         };
@@ -1961,9 +2011,11 @@ class GlScene {
                 visualizationColor(source, point.identity)
                     .value_or(point.colors.get(coloring)),
                 representationPointRadius(representation_, point), objectId(point.identity)});
+            if (previewGeometry_.active()) previewGeometry_.points.add(points.back(), weights(packedWeights, point.identity));
             sphereCoordinateIndices.push_back(coordinateIndexFor(point.identity, false));
             if (const auto color = glowColor(point.identity)) {
                 glowPoints.push_back(Vertex{position, *color, representationPointRadius(representation_, point) * 1.55F});
+                if (previewGeometry_.active()) previewGeometry_.glowPoints.add(glowPoints.back(), weights(packedWeights, point.identity));
             }
         }
         glBindBuffer(GL_ARRAY_BUFFER, sphereInstanceVbo_);
@@ -2004,6 +2056,7 @@ class GlScene {
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
                     .value_or(cylinder.colors.get(coloring)), objectId(cylinder.identity), cylinder.endRadius});
+            if (previewGeometry_.active()) previewGeometry_.cylinders.add(cylinders.back(), weights(packedWeights, cylinder.identity));
             cylinderCoordinateIndices.push_back({
                 coordinateIndexFor(cylinder.identity, false),
                 coordinateIndexFor(cylinder.identity, true),
@@ -2012,6 +2065,7 @@ class GlScene {
                 glowCylinders.push_back(Cylinder{
                     start, end, cylinder.radius * 1.55F, *color, 0,
                     cylinder.endRadius < 0 ? -1.0F : cylinder.endRadius * 1.55F});
+                if (previewGeometry_.active()) previewGeometry_.glowCylinders.add(glowCylinders.back(), weights(packedWeights, cylinder.identity));
             }
         }
         glBindBuffer(GL_ARRAY_BUFFER, cylinderInstanceVbo_);
@@ -2052,10 +2106,12 @@ class GlScene {
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
                     .value_or(cylinder.colors.get(coloring)), objectId(cylinder.identity), cylinder.endRadius});
+            if (previewGeometry_.active()) previewGeometry_.halves.add(halfCylinders.back(), weights(packedWeights, cylinder.identity));
             if (const auto color = glowColor(cylinder.identity)) {
                 glowHalfCylinders.push_back(Cylinder{
                     start, end, cylinder.radius * 1.55F, *color, 0,
                     cylinder.endRadius < 0 ? -1.0F : cylinder.endRadius * 1.55F});
+                if (previewGeometry_.active()) previewGeometry_.glowHalves.add(glowHalfCylinders.back(), weights(packedWeights, cylinder.identity));
             }
         }
         glBindBuffer(GL_ARRAY_BUFFER, halfCylinderInstanceVbo_);
@@ -2098,9 +2154,11 @@ class GlScene {
                 visualizationColor(source, box.identity)
                     .value_or(box.colors.get(coloring)), objectId(box.identity),
                 {transformVector(box.normals[0], box.identity), transformVector(box.normals[1], box.identity), transformVector(box.normals[2], box.identity)}});
+            if (previewGeometry_.active()) previewGeometry_.boxes.add(boxes.back(), weights(packedWeights, box.identity));
             if (const auto color = glowColor(box.identity)) {
                 glowBoxes.push_back(Box{
                     center, axisX * 1.18F, axisY * 1.18F, axisZ * 1.18F, *color});
+                if (previewGeometry_.active()) previewGeometry_.glowBoxes.add(glowBoxes.back(), weights(packedWeights, box.identity));
             }
         }
         glBindBuffer(GL_ARRAY_BUFFER, boxInstanceVbo_);
@@ -2139,6 +2197,10 @@ class GlScene {
         } else {
             localCenter_ = (lo + hi) * 0.5F;
             localRadius_ = std::max(glm::length(hi - lo) * 0.5F, 0.01F);
+        }
+        if (previewGeometry_.active()) {
+            previewGeometry_.finish();
+            if (!toolPreviewToken_.empty()) applyPackedPreview(toolPreviewTransform_);
         }
         const auto completedAt = std::chrono::steady_clock::now();
         const double prepareMilliseconds = std::chrono::duration<double, std::milli>(
@@ -2682,6 +2744,11 @@ class GlScene {
 
     void renderVolumes(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,
             bool ids,const std::vector<nadoc_vr::ViewVolumeRecord>& entries,bool lightweight=false) {
+#ifdef NADOC_SCRYWRITE_TESTING
+        const bool guard=volumeGuardsEnabledForTest;
+#else
+        constexpr bool guard=true;
+#endif
         pinnedSources_.fill(false);
         for(const auto& entry:entries)if(entry.enabled && entry.opacity>0)
             pinnedSources_[representationSourceIndex(representationFromName(entry.representation))]=true;
@@ -2695,9 +2762,19 @@ class GlScene {
             for(int i=0;i<4;++i)data.push_back(inverse[i]);
             data.push_back({float(e.sides),0,0,0});
         }
+        // Clip uniforms are reset after each volume pass. With no active
+        // volumes there is no texture upload or shader state to change.
+        if(guard && active.empty()) {render(vp,model,guides,ids,lightweight);return;}
         if(!volumeBuffer_) {glGenBuffers(1,&volumeBuffer_);glGenTextures(1,&volumeTexture_);}
         glBindBuffer(GL_TEXTURE_BUFFER,volumeBuffer_);
-        glBufferData(GL_TEXTURE_BUFFER,std::max(size_t(1),data.size())*sizeof(glm::vec4),data.empty()?nullptr:data.data(),GL_STREAM_DRAW);
+        // Both eyes use the same clipping geometry, independent of view.
+        if(!guard || data!=uploadedVolumeData_) {
+#ifdef NADOC_SCRYWRITE_TESTING
+            ++volumeUploadsForTest;
+#endif
+            glBufferData(GL_TEXTURE_BUFFER,std::max(size_t(1),data.size())*sizeof(glm::vec4),data.empty()?nullptr:data.data(),GL_STREAM_DRAW);
+            uploadedVolumeData_=std::move(data);
+        }
         glActiveTexture(GL_TEXTURE7);glBindTexture(GL_TEXTURE_BUFFER,volumeTexture_);
         glTexBuffer(GL_TEXTURE_BUFFER,GL_RGBA32F,volumeBuffer_);glActiveTexture(GL_TEXTURE0);
         auto clip=[&](int layer,float opacity) {
@@ -2714,12 +2791,16 @@ class GlScene {
         clip(-1,1);render(vp,model,{},ids,lightweight);
         for(size_t i=0;i<active.size();++i) {
             const auto& e=*active[i];
-            setStyle(representationFromName(e.representation),coloringFromName(e.coloring=="overhang-only"?"strand":e.coloring));
+            const auto rep=representationFromName(e.representation);
+            const auto volumeColor=coloringFromName(e.coloring=="overhang-only"?"strand":e.coloring);
+            // setStyle also rebuilds selection/preview geometry. Calling it for
+            // the style already on screen discards the drag cache every eye.
+            if(!guard || rep!=representation_ || volumeColor!=coloring_)setStyle(rep,volumeColor);
             clip(int(i),e.opacity);
             glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
             render(vp,model,{},ids,lightweight);glDisable(GL_BLEND);
         }
-        if(!active.empty())setStyle(original,color);
+        if((!guard && !active.empty()) || representation_!=original || coloring_!=color)setStyle(original,color);
         renderingVolumes_=false;active.clear();clip(-1,1);
         renderGuides(vp,guides);
     }
@@ -3810,6 +3891,7 @@ class GlScene {
     GLuint program_ = 0;
     bool renderingVolumes_=false;
     GLuint volumeBuffer_=0,volumeTexture_=0;
+    std::vector<glm::vec4> uploadedVolumeData_;
     SceneData scene_;
     bool objectIdsEnabled_ = false;
     std::array<std::unordered_map<std::string,uint32_t>,256> objectIds_;
@@ -3841,6 +3923,8 @@ class GlScene {
     std::string toolCommittedToken_;
     std::unordered_map<std::string,glm::vec3> committedHandleOffsets_;
     glm::mat4 toolCommittedTransform_{1.0F};
+    RigidPreviewGeometry previewGeometry_;
+    bool packedPreviewEnabled_ = true;
     std::string toolPreviewToken_;
     glm::mat4 toolPreviewTransform_{1.0F};
     std::string visualizationMode_ = "none";
@@ -8682,6 +8766,7 @@ class Viewer {
             << ",\"moving\":" << (desktopPanel_.placement.dragHand()?"true":"false")
             << ",\"resizing\":" << (desktopPanel_.placement.resizeActive()?"true":"false") << "}"
             << ",\"hover\":" << quote(witnessHoverName())
+            << ",\"scene_hover\":" << (sceneHover_?quote(sceneHover_->identity):"null")
             << ",\"tool\":" << quote(nadoc_vr::toolModeName(toolShell_.mode()))
             << ",\"status\":" << quote(toolShell_.status())
             << ",\"selection_identity\":" << quote(selectedIdentity_)
@@ -8728,8 +8813,11 @@ class Viewer {
             << ",\"nick_active\":" << (ligation_.nickActive?"true":"false") << ",\"nick_hover\":[";
         for(size_t h=0;h<2;++h){if(h)out<<',';out<<(ligation_.nickHover[h]?std::to_string(*ligation_.nickHover[h]):"null");}
         out << "],\"scissor_angles\":[" << nadoc_vr::Ligation::scissorAngle(triggerValues_[0]) << ',' << nadoc_vr::Ligation::scissorAngle(triggerValues_[1]) << "],\"bonds\":[";
-        for(size_t i=0;i<ligation_.bonds.size();++i){if(i)out<<',';out<<"{\"a\":"<<point(ligation_.bondPoint(i,false,manipulator_.transform()))<<",\"b\":"<<point(ligation_.bondPoint(i,true,manipulator_.transform()))<<'}';}
-        out << "]}";
+        // Inactive Nick geometry can dominate live replies on origami-sized parts.
+        // Preserve its full observation contract outside Move/Rotate and Bend.
+        const bool omitNickBonds = (movePanel_.active || bendPanel_.active) && !ligation_.nickActive;
+        for(size_t i=0;!omitNickBonds && i<ligation_.bonds.size();++i){if(i)out<<',';out<<"{\"a\":"<<point(ligation_.bondPoint(i,false,manipulator_.transform()))<<",\"b\":"<<point(ligation_.bondPoint(i,true,manipulator_.transform()))<<'}';}
+        out << "],\"bonds_omitted\":" << (omitNickBonds?"true":"false") << "}";
         out << ",\"end_resize\":{\"version\":" << endResize_.version
             << ",\"grabbing\":" << (endResize_.hand?"true":"false")
             << ",\"nearby\":" << (endResize_.nearby?"true":"false")

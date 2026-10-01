@@ -82,6 +82,8 @@ def catalog():
         'Isolated part: trigger-held plane picking, both end handles, angle/direction/radius wheels, Confirm, desktop feature log, save/reopen and Undo. Validation runs all four motion profiles in one viewer session.', module='bend_tour')
     add('end-resize', 'authoring', 'Resize selected ends',
         'Trigger grab the selected end arrow, pull to resize, release to save, and verify one-step desktop Undo. Validation uses all four controller profiles.', module='end_resize_tour')
+    add('move-preview-renderer', 'authoring', 'Move / Rotate · renderer regression',
+        'No headset required: compare packed previews with the original rebuild, including boundary bonds, highlights, Cancel, commit, Undo and style changes. Saved-scene timing is available through --scene-dir on the command line.', module='move_preview_check')
     for target in ('cluster','overhang','base'):
         add('move-'+target, 'authoring', 'Move / Rotate '+target,
             'Generated isolated part: trigger translate/rotate, exact target persistence and Undo. Validation uses all four controller profiles.',

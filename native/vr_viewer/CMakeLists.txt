@@ -347,3 +347,12 @@ if(BUILD_TESTING)
     PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
   target_compile_options(nadoc-vr-resident-render-test PRIVATE -UNDEBUG)
 endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-rigid-preview-test tests/rigid_preview_test.cpp)
+  target_link_libraries(nadoc-vr-rigid-preview-test PRIVATE
+    PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
+  target_compile_options(nadoc-vr-rigid-preview-test PRIVATE -UNDEBUG)
+  add_test(NAME nadoc-vr-rigid-preview COMMAND nadoc-vr-rigid-preview-test)
+  set_tests_properties(nadoc-vr-rigid-preview PROPERTIES SKIP_RETURN_CODE 77)
+endif()

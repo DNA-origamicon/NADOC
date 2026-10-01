@@ -14,6 +14,21 @@ int main(int argc,char** argv) {
     int lines=0;panel.draw(glm::mat4(1),{0,0,0},1,{0,0,0},[&](auto,auto,auto){++lines;});assert(lines==12);
     panel.action("volume:enabled:desktop",menus,{2,3,4},.01);
     assert(panel.pending.size()==1);assert(panel.pending[0].second.find("\"value\":true")!=std::string::npos);
+    // An unchanged queue keeps its file stable. A subsequent operation and
+    // an acknowledged prefix both publish the new queue.
+    const auto pendingPath=path+".volumes-pending";
+    const auto sentinel=std::filesystem::file_time_type::clock::now()-std::chrono::hours(1);
+    std::filesystem::last_write_time(pendingPath,sentinel);
+    panel.flush();assert(std::filesystem::last_write_time(pendingPath)==sentinel);
+    panel.pending.push_back({++panel.sequence,"\"action\":\"delete\",\"id\":\"other\""});panel.flush();
+    assert(std::filesystem::last_write_time(pendingPath)!=sentinel);
+    panel.pending.erase(panel.pending.begin());panel.flush();
+    {std::ifstream in(pendingPath);std::string value((std::istreambuf_iterator<char>(in)),{});assert(value.find("enabled")==std::string::npos);}
+    // Failed output must remain retryable without creating another operation.
+    const auto retryPath=path+"-retry";std::filesystem::remove_all(retryPath);
+    ViewVolumePanel retry;retry.initialize(retryPath+"/events");retry.pending=panel.pending;
+    retry.flush();std::filesystem::create_directory(retryPath);retry.flush();
+    assert(std::filesystem::exists(retryPath+"/events.volumes-pending"));std::filesystem::remove_all(retryPath);
     panel.pending.clear();
     panel.action("volume:new:hexagonal",menus,{2,3,4},.01);
     assert(panel.pending[0].second.find("hexagonal")!=std::string::npos);

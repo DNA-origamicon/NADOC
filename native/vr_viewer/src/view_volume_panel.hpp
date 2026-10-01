@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <filesystem>
 #include <chrono>
+#include <tuple>
 
 namespace nadoc_vr {
 class ViewVolumePanel {
@@ -24,17 +25,21 @@ class ViewVolumePanel {
     uint64_t sequence=0;
     std::vector<std::pair<uint64_t,std::string>> pending;
     std::chrono::steady_clock::time_point lastPoll{};
-    void initialize(const std::string& eventPath) {path=eventPath;}
+    void initialize(const std::string& eventPath) {path=eventPath;flushedRange_.reset();}
     void exit(std::array<SidebarMenu,2>& menus) {
         active=false;menus[1].customTab.reset();menus[1].offsets[menus[1].selected]=savedOffset;
         for(size_t h=0;h<2;++h){menus[h].open=savedOpen[h];menus[h].focus.reset();menus[h].hovered.clear();}
     }
     void flush() {
         if(path.empty() || pending.empty())return;
+        // Pending operations are immutable and sequences increase monotonically.
+        // Retry failed writes, but do not rewrite the same queue every input frame.
+        const auto range=std::tuple{pending.front().first,pending.back().first,pending.size()};
+        if(flushedRange_==range)return;
         std::ofstream out(path+".volumes-pending.tmp");out<<'[';
         bool first=true;for(const auto& [seq,op]:pending){if(!first)out<<',';first=false;out<<"{\"sequence\":"<<seq<<','<<op<<'}';}
         out<<']';out.close();
-        if(out){std::error_code error;std::filesystem::rename(path+".volumes-pending.tmp",path+".volumes-pending",error);}
+        if(out){std::error_code error;std::filesystem::rename(path+".volumes-pending.tmp",path+".volumes-pending",error);if(!error)flushedRange_=range;}
     }
     void update(std::array<SidebarMenu,2>& menus) {
         auto now=std::chrono::steady_clock::now();
@@ -153,5 +158,7 @@ class ViewVolumePanel {
             }
         }
     }
+ private:
+    std::optional<std::tuple<uint64_t,uint64_t,size_t>> flushedRange_;
 };
 }

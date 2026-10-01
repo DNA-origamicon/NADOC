@@ -73,4 +73,32 @@ int main() {
         const auto a=twist[i].bounds,b=twist[j].bounds;
         assert(a.maximum.x<=b.minimum.x || b.maximum.x<=a.minimum.x || a.maximum.y<=b.minimum.y || b.maximum.y<=a.minimum.y);
     }
+    // A cached menu must track every displayed input and recover after another
+    // panel replaces it, without disturbing the focused control.
+    auto checkRefresh=[&](const std::string& status) {
+        const auto focus=menus[1].focus.id;
+        panel.refresh(menus,config,status);
+        assert(menus[1].focus.id==focus);
+        BendPanel fresh;fresh.twist=panel.twist;fresh.elements=panel.elements;
+        std::array<SidebarMenu,2> expected{SidebarMenu(0),SidebarMenu(1)};
+        fresh.enter(expected);fresh.refresh(expected,config,status);
+        const auto& a=menus[1].tab();const auto& b=expected[1].tab();
+        assert(a.key==b.key && a.rows.size()==b.rows.size());
+        for(size_t i=0;i<a.rows.size();++i) {
+            assert(a.rows[i].id==b.rows[i].id && a.rows[i].label==b.rows[i].label);
+            assert(a.rows[i].section==b.rows[i].section && a.rows[i].action==b.rows[i].action);
+        }
+    };
+    checkRefresh("READY");checkRefresh("HOLDING");
+    (void)config.setTwist(120);checkRefresh("HOLDING");
+    (void)config.toggleTwistUnits();checkRefresh("HOLDING");
+    (void)config.setPlaneBp("b",120);checkRefresh("HOLDING");
+    panel.elements=true;checkRefresh("HOLDING");
+    panel.twist=false;checkRefresh("HOLDING");
+    (void)config.bind(ToolMode::bend,"cluster:1","cluster",{"owner:1"});
+    (void)config.setPlaneBp("a",10);(void)config.setPlaneBp("b",110);
+    (void)config.adjustPrimary(45);checkRefresh("READY");
+    (void)config.adjustSecondary(90);checkRefresh("READY");
+    menus[1].customTab.reset();checkRefresh("READY");
+    panel.exit(menus);panel.enter(menus);checkRefresh("READY");
 }

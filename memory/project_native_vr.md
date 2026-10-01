@@ -7,6 +7,23 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Selected-part Move/Rotate slowdown (2026-10-01)
+
+User clarified the FPS drop concerns the selected-part Move/Rotate tool. A
+controlled production-GlScene diagnostic reproduces full representation rebuilds
+on every changed preview: single-base translation medians are Full 18.5 ms,
+Stick 161 ms, Ball & Stick 294 ms, VDW 130 ms on the saved 24-helix part.
+This is separate from whole-model grip/browser contention investigations below.
+Packed preview caching is now implemented for Full/Stick/Ball & Stick/VDW.
+Full update+draw p95 is 2.4 ms in the controlled 24-helix test; VDW and single-base
+atomistic selections also fit 11.1 ms. Large Stick/Ball & Stick cluster draws
+remain above budget (14.1/16.5 ms total p95). All 32 renders exactly match baseline.
+Four live Full base-edit profiles pass with 520 compositor samples and no
+repeats/drops during measured edits (GPU p95 1.73–2.51 ms). The 24-helix numbers
+remain isolated renderer timings, not live atomistic FPS. See the
+[optimization audit](../docs/audits/vr_move_rotate_optimization_20261001.md) for
+correctness, live validation, remaining setup hitches and reproduction.
+
 ## Motion regression (2026-09-29)
 
 The user confirms loaded-model motion was satisfactory before the loading-freeze
@@ -750,3 +767,43 @@ are separate from expiring meeting invitations. Mobile cube registration is pend
   acknowledged style. Let delayed display uploads settle outside measured reaches;
   do not run broad parallel suites during timing-sensitive controller playback.
   Details and retained attempts: `docs/audits/vr_representation_parity_20260929.md`.
+
+## 24HB live follow-up (2026-10-01)
+
+See `docs/audits/vr_move_rotate_24hb_live_20261001.md`. Full single-base drags on
+24HB (6,720 nt versus generated 6HB 511 nt) complete all four profiles at GPU
+p95 3.27–4.26 ms. Fresh 6HB p95 is 1.41–2.26 ms. Rare hitches occur on both
+(24HB max 24.50 ms, 6HB max 66.01 ms); do not claim a strict 90 Hz guarantee.
+Mixed desktop focus/rendering and additional 24HB presentation zoom are recorded.
+24HB stereo/scope/commit/save pass, but Undo after save returns 404 Nothing to
+undo; full authoring matrix stays failed. Fresh 6HB complete matrix passes.
+Use complete `workspace/24hb_0xT.nadoc` via private `move_tour --design` copies,
+not API summaries missing snapshot payloads. `--direct-activation` isolates drag
+from known large-response menu replay delays; it does not validate menu acquisition.
+Inactive Nick bond arrays are omitted while Move/Rotate or Bend is active in
+ScryWrite; `scene_hover` exposes the actual molecular hover separately from menus.
+
+## Feature performance guards (2026-10-01)
+
+View Volumes now skip same-style `setStyle` calls (including restoration), skip
+clipping work when no volume is active, and retain unchanged clipping-buffer
+contents between eyes/frames. Do not add a general early return inside `setStyle`:
+callers also use it to invalidate geometry after selection/configuration changes.
+Bend/Twist cache sidebar rows by all displayed inputs/status; opening and panel
+replacement invalidate the cache. Pending volume journals are rewritten only when
+the immutable sequence range changes, with failed writes remaining retryable.
+
+Evidence and reproducible benchmark script:
+`.development-artifacts/vr-feature-guards-20261001/report.json` and `benchmark.py`.
+24HB whole-cluster Move/Rotate with one same-style opaque volume, production
+shadows and two 1852x2056 draws: worse motion p95 wall time before → after is
+Full 296.80 → 7.30 ms, Stick 2261.79 → 29.18 ms, Ball & Stick 3988.16 → 25.50 ms,
+VDW 2889.04 → 5.19 ms. Five warmups plus 20 samples per mode; all 16 before/after
+images byte-identical. Timings exclude XR/UI/commit work. Old-path GPU query times
+include CPU submission gaps and must not be called pure GPU execution time.
+Generated-fixture live volume movement/resizing passed all four motion profiles
+for square and hexagonal volumes. Native Bend/Twist guide rendering, menu cache
+invalidation and volume journal retry/ack tests pass. This is not new live 24HB
+Bend/Twist deformation timing. Different-style volume transitions and synchronous
+View Tools scene/atlas refreshes can still hitch; large highlighted Stick/Ball &
+Stick with a volume remain over 11.1 ms. No geometry or lighting quality reduced.

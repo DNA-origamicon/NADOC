@@ -2,6 +2,7 @@
 #include "sidebar_menu.hpp"
 #include <glm/gtx/quaternion.hpp>
 #include <iomanip>
+#include <tuple>
 
 namespace nadoc_vr {
 // Circular arc with a fixed contour and a fixed surface-normal tangent.
@@ -64,6 +65,7 @@ class BendPanel {
     ThumbwheelControl wheel;
     void enter(std::array<SidebarMenu,2>& menus) {
         if(!active)savedOffset=menus[1].offset();
+        renderedState_.reset();
         active=true;menus[1].open=true;menus[1].offsets[menus[1].selected]=0;menus[1].focus.reset();
     }
     void reset() {posed=false;grabbed=1;hand.reset();planeHand.reset();wheelHand.reset();wheel.reset();lastPick.clear();}
@@ -75,6 +77,12 @@ class BendPanel {
         if(!active)return;
         menus[1].open=true;menus[1].offsets[menus[1].selected]=0;
         const std::string key=twist?"twist":"bend";
+        const RenderState state{twist,elements,config.planeABp(),config.planeBBp(),
+            config.bendAngleDegrees(),config.bendDirectionDegrees(),config.twistAmount(),config.twistAmountMode()};
+        // Refresh runs every frame (and again while dragging). Retain the menu
+        // rows until their inputs change; opening and scrolling still work.
+        if(renderedState_==state && renderedStatus_==status && menus[1].customTab && menus[1].customTab->key==key)return;
+        renderedState_=state;renderedStatus_=status;
         SidebarTab tab{1,key,twist?"Twist":"Bend",{}};
         auto row=[&](std::string id,std::string label,std::string detail="") {
             tab.rows.push_back({key+":"+id,label,detail,key+":"+id,{}});
@@ -107,5 +115,9 @@ class BendPanel {
         row("undo","UNDO");row("recenter","Frame model");
         menus[1].customTab=std::move(tab);
     }
+ private:
+    using RenderState=std::tuple<bool,bool,std::optional<int32_t>,std::optional<int32_t>,double,double,double,TwistAmountMode>;
+    mutable std::optional<RenderState> renderedState_;
+    mutable std::string renderedStatus_;
 };
 }

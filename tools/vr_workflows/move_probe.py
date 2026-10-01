@@ -16,9 +16,9 @@ deadline=time.monotonic()+30
 while True:
  try:
   state=bridge.call('scrywrite_observe',{})
-  if state.get('focused'):break
+  if state.get('focused') and not state.get('startup',{}).get('active',False):break
  except OSError:pass
- if time.monotonic()>deadline:raise RuntimeError('Viewer did not become focused')
+ if time.monotonic()>deadline:raise RuntimeError('Viewer did not become focused with initial geometry ready')
  time.sleep(.1)
 live=LiveSession(bridge,physical=True,allow_transactions=True)
 preset=os.environ.get('NADOC_VR_PROFILE','steady_fast')
@@ -26,6 +26,7 @@ controls=SidebarControls(live,out,preset);trials=[]
 def wait(predicate):
  deadline=time.monotonic()+90
  while not predicate(live.state):
+  if live.state.get('status','').endswith(('FAILED','REFUSED')):raise RuntimeError('Authoring operation failed: '+live.state['status'])
   if time.monotonic()>deadline:raise RuntimeError('Timed out: '+str(live.state))
   try:live.frame()
   except TimeoutError:continue # read-only observation during authoritative snapshot upload
@@ -39,13 +40,22 @@ def park():
  live.frame()
 try:
  reveal(live)
+ # Physical controllers can be asleep at launch. Establish the owned synthetic
+ # poses before the first menu button; invalid hands cannot open a sidebar.
+ for hand,offset in ((0,-.3),(1,.3)):
+  live.send('pose',hand=hand,position=(np.array(live.state['head_position'])+[offset,-.25,-.4]).tolist(),orientation=[0,0,0,1])
+ live.frame()
+ assert all(h['valid'] for h in live.state['hands']), 'Synthetic hand poses were not applied'
  if mode=='undo':
   if not live.state['sidebars'][1]['open']:live.button('menu',hand=1);live.frame()
   controls.click('move:undo');wait(lambda s:s['status']=='UNDONE')
   park();live.capture_to(out/'undone',discard_source=True)
  else:
   if not live.state['sidebars'][1]['open']:live.button('menu',hand=1);live.frame()
-  controls.click('tab:tools');controls.click('tool-move')
+  if os.environ.get('NADOC_VR_MOVE_DIRECT_ACTIVATION')=='1':
+   live.send('activate',tool='move_rotate');live.frame()
+   (out/'activation.json').write_text(json.dumps({'method':'semantic setup','menu_acquisition_validated':False}))
+  else:controls.click('tab:tools');controls.click('tool-move')
   controls.click('move:recenter')
   live.frame()
   # With Move / Rotate open, grips still move the part rather than editing it.
@@ -61,21 +71,45 @@ try:
   controls.click('move:recenter');live.frame()
   controls.click('move:'+kind)
   before=json.loads(Path(before_path).read_text())
-  cluster=next(c for c in before['design']['cluster_transforms'] if c['name']=='Movable helix')
+  cluster=next((c for c in before['design']['cluster_transforms'] if c['name']=='Movable helix'),None)
   geom=before['geometry']
   allowed=[n for n in geom if (n.get('overhang_id') if kind=='overhang' else n['helix_id'] in cluster['helix_ids'] if kind=='cluster' else not n.get('overhang_id'))]
   live.button('menu',hand=1);live.frame()
   park();live.capture_to(out/'before-framing',discard_source=True)
   from tools.vr_workflows.review_view import improve_review
-  improve_review(live,out/'before-framing',out/'review-view')
-  park()
+  review=improve_review(live,out/'before-framing',out/'review-view')
+  if os.environ.get('NADOC_VR_MOVE_DESIGN'):
+   from tools.vr_workflows.profile_input import zoom_scene
+   center=review['orientation']['target']
+   zoom_scene(live,[center[0],center[1]+.25,center[2]],2)
+   (out/'selection-view.json').write_text(json.dumps({'additional_zoom':2,'reason':'Expose individual bases in the dense origami'}))
+  park();live.capture_to(out/'acquisition-view',discard_source=True)
+  objects=json.loads((out/'acquisition-view/objects.json').read_text())
+  counts=[np.bincount(np.fromfile(out/f'acquisition-view/{eye}.ids.u32',dtype=np.uint32)) for eye in ('left','right')]
+  visible_owners=[]
+  for count in counts:
+   visible_owners.append({t for o in objects if o['id']<len(count) and count[o['id']]>=4 for t in o['owner_tokens'] if unquote(t).startswith('["base",')})
+  exposed=visible_owners[0]&visible_owners[1]
+  owners={o['identity']:set(o['owner_tokens']) for o in objects}
+
   targets=live.state['move_targets']
   matches=[p for p in targets if any(f":{n['helix_id']}:{n['bp_index']}:{n['direction']}:" in unquote(p['identity']) for n in allowed)]
   assert matches,'no rendered target candidates'
   # Approach actual backbone points, then click. Selection is browser-authoritative.
-  target=min(matches,key=lambda p:np.linalg.norm(np.array(p['world'])-live.state['head_position']))
-  reach((np.array(target['world'])+[0,0,.12]).tolist())
+  if kind=='base':matches=[p for p in matches if owners.get(p['identity'],set())&exposed]
+  assert matches,'No candidate base visible in both eyes'
+  candidates=sorted(matches,key=lambda p:np.linalg.norm(np.array(p['world'])-live.state['head_position']))
+  acquisitions=[]
+  for target in candidates[:24]:
+   reach((np.array(target['world'])+[0,0,.12]).tolist())
+   live.send('trigger_value',hand=1,value=.5);live.frame()
+   acquisitions.append({'target':target,'hover':live.state.get('scene_hover')})
+   (out/'acquisition.json').write_text(json.dumps(acquisitions,indent=2))
+   if (live.state.get('scene_hover') or '').startswith('nuc:') and (kind!='base' or owners.get(live.state['scene_hover'],set())&exposed):break
+   live.send('trigger_value',hand=1,value=0);live.frame()
+  else:raise RuntimeError('No nucleotide hover acquired without selecting a crossover')
   live.button('trigger',hand=1)
+  live.send('trigger_value',hand=1,value=0);live.frame()
   wait(lambda s:s['selection_kind']==kind and s['move_handle'] is not None)
   park();live.capture_to(out/'selected',discard_source=True);hold(live,'Selected '+kind)
   center=live.state['move_handle']
@@ -87,7 +121,16 @@ try:
   rotation=[0,0,np.sin(np.pi/12),np.cos(np.pi/12)]
   from tools.vr_motion.metrics import rotate
   shift=rotate(json.loads((out/'selected/evidence.json').read_text())['eyes'][0]['orientation_xyzw'],[.10,.055,.04])
-  reach((start+shift).tolist(),multiply(rotation,q))
+  preview_start=time.time()*1000
+  preview_first_frame=live.state['frame']
+  preview_completed=False
+  try:
+   reach((start+shift).tolist(),multiply(rotation,q))
+   preview_completed=True
+  finally:
+   (out/'preview-interval.json').write_text(json.dumps({'start_ms':preview_start,'end_ms':time.time()*1000,
+    'first_frame':preview_first_frame,'last_frame':live.state['frame'],'preset':preset,'representation':live.state['representation'],
+    'completed':preview_completed}))
   end=np.array(live.state['hands'][1]['position'])
   expected_center=np.array(center)+end-start
   live.capture_to(out/'preview',discard_source=True)

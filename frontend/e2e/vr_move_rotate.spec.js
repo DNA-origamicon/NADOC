@@ -14,7 +14,17 @@ test.afterEach(async({request})=>{
 })
 test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,request},info)=>{
  test.setTimeout(300000)
- await page.goto('/?doc=__e2e__move-tour&scrywrite=transactions')
+ // Request real desktop focus, then record actual render counters below;
+ // Chromium focus emulation can persist through navigation.
+ const cdp=await page.context().newCDPSession(page)
+ await cdp.send('Emulation.setFocusEmulationEnabled',{enabled:false})
+ await page.goto('/?doc=__e2e__move-tour&scrywrite=transactions'+(process.env.NADOC_VR_MOVE_DESIGN?'&open=move-fixture.nadoc':''))
+ if(process.env.NADOC_VR_MOVE_DESIGN){
+  await expect.poll(()=>page.evaluate(async()=>(await import('/src/state/store.js')).store.getState().currentDesign?.metadata?.name),{timeout:60000}).toBe('move-fixture')
+  await expect(page.locator('#welcome-screen')).toBeHidden()
+  // File-open boot removes query options; retain this owned test's live bridge.
+  await page.evaluate(()=>{const url=new URL(location.href);url.searchParams.set('scrywrite','transactions');history.replaceState(null,'',url)})
+ }else{
  await page.locator('.menu-item').filter({hasText:'File'}).first().hover()
  await page.click('#menu-file-new');await page.fill('#new-design-name','__e2e__VR Move '+kind)
  await page.getByRole('button',{name:'Create',exact:true}).click()
@@ -26,19 +36,29 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
   await api.createCluster({name:'Movable helix',helix_ids:[h.id],log:true})
   await api.extrudeOverhang({helixId:h.id,bpIndex:0,direction:'FORWARD',isFivePrime:true,neighborRow:0,neighborCol:8,lengthBp:7})
  },seed.helices.find(h=>h.grid_pos[0]===0&&h.grid_pos[1]===7))
+ }
  const read=()=>page.evaluate(async()=>{
   const s=(await import('/src/state/store.js')).store.getState()
   return {design:s.currentDesign,geometry:s.currentGeometry}
  })
+ await expect.poll(async()=>(await read()).geometry?.length||0,{timeout:60000}).toBeGreaterThan(0)
  const before=await read()
  const cluster=before.design.cluster_transforms.find(c=>c.name==='Movable helix')
- expect(before.geometry.some(n=>n.overhang_id)).toBe(true)
+ if(!process.env.NADOC_VR_MOVE_DESIGN)expect(before.geometry.some(n=>n.overhang_id)).toBe(true)
  fs.writeFileSync(info.outputPath('before.json'),JSON.stringify(before))
  await page.locator('#canvas').click({position:{x:30,y:30}});await page.keyboard.press('f')
  await page.locator('.menu-item').filter({hasText:'Help'}).first().hover();await page.click('#menu-help-view-vr')
  let status
  await expect.poll(async()=>{status=await(await request.get(`${base}/api/vr/status`)).json();if(status.pid)pid=status.pid;return status.running&&!!status.scrywrite_socket},{timeout:30000}).toBe(true)
  const probe=(mode)=>execFileSync('uv',['run','python','-m','tools.vr_workflows.move_probe',status.scrywrite_socket,info.outputPath(mode),kind,info.outputPath('before.json'),mode],{cwd:path.resolve(process.cwd(),'..'),env:process.env,stdio:'inherit',timeout:180000})
+ await page.waitForTimeout(1500)
+ fs.writeFileSync(info.outputPath('focus-diagnostic.json'),JSON.stringify(await page.evaluate(()=>({testApi:!!window.__nadocTest,focused:document.hasFocus(),active:document.querySelector('#menu-help-view-vr')?.getAttribute('aria-pressed')}))))
+ await page.waitForTimeout(500)
+ const framesBefore=await page.evaluate(()=>window.__nadocTest.viewerFrameState())
+ await page.waitForTimeout(500)
+ const framesAfter=await page.evaluate(()=>window.__nadocTest.viewerFrameState())
+ fs.writeFileSync(info.outputPath('background-rendering.json'),JSON.stringify({before:framesBefore,after:framesAfter}))
+
  probe('edit')
  const saved=(await read()).design
  expect(saved.feature_log.length).toBe(before.design.feature_log.length+1)
