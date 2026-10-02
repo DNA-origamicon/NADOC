@@ -1431,7 +1431,9 @@ def _serialize_scene(
     lines = _SceneLineEmitter(line_writer, representations)
     from backend.core.extrude_plane import extrude_plane_record
 
-    lines.append(f"NADOCVR 15 {representation} {coloring}")
+    lines.append(f"NADOCVR 16 {representation} {coloring}")
+    # Source axes must follow the same desktop-camera rotation as the molecule.
+    lines.append("O " + nums(*rotation.T.ravel()))
     lines.append(extrude_plane_record(design))
     lines.append("# stable identities, owner aliases, and endpoint-aware tool scopes")
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]] = {}

@@ -246,3 +246,12 @@ P added 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
         ("added", "unexpected"),
         ("retained", "type"),
     ]
+
+
+def test_v16_source_frame_requires_a_finite_right_handed_rotation():
+    scene = "NADOCVR 16 full strand\nO 0 1 0 -1 0 0 0 0 1\nR full\nP p 0 0 0 .1 1 0 0 1 0 0 1 0 0 1 0 0\n"
+    assert "p" in parse_scene_contract(scene)["full"]
+    for invalid in ("0 1 0 1 0 0 0 0 1", "0 2 0 -1 0 0 0 0 1",
+                    "nan 1 0 -1 0 0 0 0 1"):
+        with pytest.raises(ValueError, match="source coordinate frame"):
+            parse_scene_contract(scene.replace("0 1 0 -1 0 0 0 0 1", invalid))

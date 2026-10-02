@@ -1,4 +1,4 @@
-"""Stable-identity parser and numeric comparator for native VR scene v6-v15.
+"""Stable-identity parser and numeric comparator for native VR scene v6-v16.
 
 This module deliberately knows nothing about OpenXR or rendering. It compares the
 model-space scene contract before the native viewer normalizes it into metres, making
@@ -81,9 +81,9 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     if (
         len(header) != 4
         or header[0] != "NADOCVR"
-        or header[1] not in {"6", "7", "8", "9", "10", "11", "12", "13", "14", "15"}
+        or header[1] not in {"6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"}
     ):
-        raise ValueError("stable comparison requires NADOCVR v6 through v15")
+        raise ValueError("stable comparison requires NADOCVR v6 through v16")
     version = int(header[1])
     result: dict[str, dict[str, ScenePrimitive]] = {}
     handle_tokens: dict[str, set[str]] = {}
@@ -92,6 +92,15 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     for line_number, line in enumerate(lines[1:], start=2):
         fields = line.split()
         if not fields or fields[0].startswith("#"):
+            continue
+        if fields[0] == "O":
+            if version < 16 or active is not None or len(fields) != 10:
+                raise ValueError("invalid source coordinate frame")
+            basis = np.asarray([float(v) for v in fields[1:]]).reshape(3, 3)
+            if (not np.all(np.isfinite(basis))
+                    or not np.allclose(basis @ basis.T, np.eye(3), atol=1e-5)
+                    or not np.isclose(np.linalg.det(basis), 1, atol=1e-5)):
+                raise ValueError("invalid source coordinate frame")
             continue
         if fields[0] == "F" and version >= 13:
             if (len(fields) != 4 or active is not None

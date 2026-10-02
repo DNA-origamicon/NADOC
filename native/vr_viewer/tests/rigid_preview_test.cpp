@@ -164,7 +164,41 @@ int parity() {
     }
     glfwDestroyWindow(window);glfwTerminate();return 0;
 }
+int originContract() {
+    const auto path=std::filesystem::temp_directory_path()/("nadoc-origin-"+std::to_string(getpid())+".nadocvr");
+    {
+        std::ofstream out(path);
+        out << "NADOCVR 16 full strand\nO 0 1 0 -1 0 0 0 0 1\nR full\n"
+            << "P origin 0 0 0 .1 1 0 0 1 0 0 1 0 0 1 0 0\n"
+            << "P offset 3 7 11 .1 1 0 0 1 0 0 1 0 0 1 0 0\n";
+    }
+    auto scene=loadScene(path.string(),std::pair(glm::vec3(10,-20,30),.07F));
+    std::filesystem::remove(path);
+    const auto origin=-scene.normalizationCenter*scene.normalizationScale+glm::vec3(0,0,-kViewDistanceMeters);
+    const auto& rep=scene.representations[representationSourceIndex(Representation::full)];
+    assert(glm::distance(rep.points[0].position,origin)<1e-6F);
+    assert(rep.cylinders.size()==3);
+    const std::array<glm::vec3,3> axes{{{0,1,0},{-1,0,0},{0,0,1}}};
+    for(size_t i=0;i<3;++i){
+        assert(glm::distance(rep.cylinders[i].start,origin)<1e-6F);
+        assert(glm::distance(rep.cylinders[i].end-origin,axes[i]*(4*.07F))<1e-6F);
+    }
+    const auto stage=glm::translate(glm::mat4(1),glm::vec3(1.2F,-.3F,-.8F))
+        *glm::toMat4(glm::angleAxis(.5F,glm::vec3(0,1,0)));
+    const auto expected=glm::vec3(stage*glm::vec4(0,1.1F,0,1));
+    for(auto head:{glm::vec3(2,1.7F,3),glm::vec3(-1,1.2F,-2)}){
+        nadoc_vr::SceneManipulator model;
+        model.placeAtRoomOrigin(head,glm::quat(glm::vec3(.3F,.8F,-.2F)),stage,origin);
+        assert(glm::distance(glm::vec3(model.transform()*glm::vec4(origin,1)),expected)<1e-5F);
+        assert(std::abs(model.scale()-2)<1e-6F);
+        model.placeAtRoomOrigin(head,glm::quat(1,0,0,0),std::nullopt,origin);
+        assert(glm::distance(glm::vec3(model.transform()*glm::vec4(origin,1)),glm::vec3(0,head.y-.35F,0))<1e-5F);
+    }
+    std::cout << "ORIGIN_CONTRACT desktop frame, normalized origin, room center and fallback passed\n";
+    return 0;
+}
 int main(int argc,char** argv) {
+    if(argc==2 && std::string(argv[1])=="--origin")return originContract();
     if(argc==5)return benchmark(argc,argv);
     if(argc!=1)return 2;
     return parity();

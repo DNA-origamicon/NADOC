@@ -261,6 +261,7 @@ struct SceneData {
     bool emptyAuthoring = false;
     Representation initialRepresentation = Representation::full;
     Coloring initialColoring = Coloring::strand;
+    glm::mat3 sourceAxes{1.0F};
     glm::vec3 normalizationCenter{};
     float normalizationScale = 1.0F;
     SceneData()=default;
@@ -272,7 +273,7 @@ struct SceneData {
         representations(other.representations),
         available(other.available),emptyAuthoring(other.emptyAuthoring),
         initialRepresentation(other.initialRepresentation),initialColoring(other.initialColoring),
-        normalizationCenter(other.normalizationCenter),normalizationScale(other.normalizationScale){}
+        sourceAxes(other.sourceAxes),normalizationCenter(other.normalizationCenter),normalizationScale(other.normalizationScale){}
     SceneData& operator=(const SceneData& other){if(this!=&other)*this=SceneData(other);return *this;}
 };
 
@@ -913,7 +914,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" || (version < 4 || version > 15)) {
+    if (magic != "NADOCVR" || (version < 4 || version > 16)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -970,7 +971,16 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
             input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             continue;
         }
-        if (type == 'F' && version >= 13) {
+        if (type == 'O' && version >= 16) {
+            if(active)throw std::runtime_error("Source frame must precede representations");
+            for(int col=0;col<3;++col)for(int row=0;row<3;++row)input >> scene.sourceAxes[col][row];
+            const auto gram=glm::transpose(scene.sourceAxes)*scene.sourceAxes;
+            for(int col=0;col<3;++col)for(int row=0;row<3;++row)
+                if(!std::isfinite(gram[col][row]) || std::abs(gram[col][row]-(col==row?1.F:0.F))>1e-5F)
+                    throw std::runtime_error("Invalid source coordinate frame");
+            if(std::abs(glm::determinant(scene.sourceAxes)-1.F)>1e-5F)
+                throw std::runtime_error("Invalid source frame handedness");
+        } else if (type == 'F' && version >= 13) {
             if (active) throw std::runtime_error("Extrude metadata must precede geometry");
             scene.extrudePlane.read(input);
         } else if (type == 'Q' && version >= 14) {
@@ -1299,16 +1309,18 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
         }
 
         if (!appendViewerAxes) return;
-        const glm::vec3 origin(-0.28F, -0.28F, -kViewDistanceMeters);
+        // Desktop AxesHelper(4): model origin and four-nanometre source axes,
+        // carried through exactly the same rotation/normalization as the part.
+        const glm::vec3 origin = -center * scale + glm::vec3(0,0,-kViewDistanceMeters);
         auto addAxis = [&](const char* name, glm::vec3 delta, glm::vec3 color) {
             ColorSet colors;
             colors.values.fill(color);
             rep.cylinders.push_back(
-                StyledCylinder{name, origin, origin + delta, 0.003F, colors});
+                StyledCylinder{name, origin, origin + scene.sourceAxes * delta * (4.F * scale), 0.04F * scale, colors});
         };
-        addAxis("viewer:axis:x", {0.10F, 0, 0}, {1.0F, 0.25F, 0.25F});
-        addAxis("viewer:axis:y", {0, 0.10F, 0}, {0.25F, 1.0F, 0.35F});
-        addAxis("viewer:axis:z", {0, 0, 0.10F}, {0.3F, 0.55F, 1.0F});
+        addAxis("viewer:axis:x", {1, 0, 0}, {1.0F, 0.25F, 0.25F});
+        addAxis("viewer:axis:y", {0, 1, 0}, {0.25F, 1.0F, 0.35F});
+        addAxis("viewer:axis:z", {0, 0, 1}, {0.3F, 0.55F, 1.0F});
     };
     for (size_t index = 0; index < scene.representations.size(); ++index) {
         normalize(scene.representations[index], true);
@@ -10237,14 +10249,16 @@ class Viewer {
     }
 
     void applyInitialScenePlacement(uint32_t viewCount, bool fullyTracked) {
-        if (!initialScenePlacementRequested_ || viewCount == 0) return;
+        if ((!initialScenePlacementRequested_ && !initialRoomPlacementRequested_) || viewCount == 0) return;
+        if(startup_.active && startup_.completedAt<0)return;
         if (!fullyTracked) {
             initialPlacementGate_.observe(false, false, 0.0F, 0.0F);
             initialPlacementCandidateInitialized_ = false;
             return;
         }
         glm::vec3 headPosition{};
-        nadoc_vr::ScenePlacementView targetView = sceneViewPlacement_.view;
+        nadoc_vr::ScenePlacementView targetView = initialScenePlacementRequested_
+            ? sceneViewPlacement_.view : nadoc_vr::ScenePlacementView::head;
         if (targetView == nadoc_vr::ScenePlacementView::mirror) {
             targetView = mirrorEye_ == nadoc_vr::SpectatorMirrorEye::right
                 ? nadoc_vr::ScenePlacementView::right
@@ -10290,8 +10304,15 @@ class Viewer {
         initialPlacementCandidateOrientation_ = headOrientation;
         initialPlacementCandidateInitialized_ = true;
         if (!stable) return;
-        manipulator_.placeInView(
-            headPosition, headOrientation, sceneViewPlacement_);
+        if(initialScenePlacementRequested_) {
+            // Explicit inspector/capture placement remains an opt-in override.
+            manipulator_.placeInView(headPosition, headOrientation, sceneViewPlacement_);
+        } else {
+            manipulator_.placeAtRoomOrigin(headPosition, headOrientation,
+                roomFloor_.located?std::optional(roomFloor_.stageToLocal):std::nullopt,
+                -normalizationCenter_*normalizationScale_+glm::vec3(0,0,-kViewDistanceMeters));
+        }
+        initialRoomPlacementRequested_=false;
         shadowLight_.anchor(headOrientation);
         if (witness_) witnessShadowLight_.anchor(witness_->input().head.orientation);
         initialScenePlacementApplied_ = true;
@@ -10967,6 +10988,7 @@ class Viewer {
         if(const auto position=qrCalibration_.takePosition()) {
             manipulator_.anchorOrigin(*position, -normalizationCenter_*normalizationScale_+glm::vec3(0,0,-kViewDistanceMeters));
             initialScenePlacementRequested_=false;
+            initialRoomPlacementRequested_=false;
             recenterRequested_=false;
         }
         const auto frameStarted = std::chrono::steady_clock::now();
@@ -11553,6 +11575,7 @@ class Viewer {
     std::string desktopColoring_;
     nadoc_vr::SpectatorMirrorEye mirrorEye_ = nadoc_vr::SpectatorMirrorEye::off;
     bool referenceGrid_ = false;
+    bool initialRoomPlacementRequested_ = true;
     bool initialScenePlacementEnabled_ = false;
     bool initialScenePlacementRequested_ = false;
     bool initialScenePlacementApplied_ = false;

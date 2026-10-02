@@ -361,6 +361,7 @@ if(BUILD_TESTING)
     PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
   target_compile_options(nadoc-vr-rigid-preview-test PRIVATE -UNDEBUG)
   add_test(NAME nadoc-vr-rigid-preview COMMAND nadoc-vr-rigid-preview-test)
+  add_test(NAME nadoc-vr-origin COMMAND nadoc-vr-rigid-preview-test --origin)
   set_tests_properties(nadoc-vr-rigid-preview PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 

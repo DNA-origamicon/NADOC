@@ -2001,6 +2001,22 @@ class SceneManipulator {
         mode_ = ManipulationMode::none;
     }
 
+    // Start over the calibrated play-area center, not the headset's position or
+    // the molecular bounding-box center. Keep the desktop view upright.
+    void placeAtRoomOrigin(const glm::vec3& head, const glm::quat& orientation,
+                          const std::optional<glm::mat4>& stageToLocal,
+                          const glm::vec3& normalizedOrigin) {
+        const auto forward=orientation*glm::vec3(0,0,-1);
+        const float yaw=std::atan2(-forward.x,-forward.z);
+        transform_=glm::toMat4(glm::angleAxis(yaw,glm::vec3(0,1,0)))
+                  * glm::scale(glm::mat4(1),glm::vec3(kInitialViewScale));
+        scale_=kInitialViewScale;
+        const auto target=stageToLocal
+            ? glm::vec3(*stageToLocal*glm::vec4(0,1.1F,0,1))
+            : glm::vec3(0,head.y-.35F,0);
+        anchorOrigin(target,normalizedOrigin);
+    }
+
     // Presentation-only fit; canonical normalization and coordinates stay fixed.
     void fitInView(const glm::vec3& headPosition, const glm::quat& headOrientation,
                    const std::optional<BoundsSummary>& bounds) {

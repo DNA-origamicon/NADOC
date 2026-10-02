@@ -872,3 +872,22 @@ reference within 6.7e-6 nm (text export precision), stationary primitives exact.
 show the corrected bead contacts. Evidence, failed framing attempt, scripts and
 scope: `.development-artifacts/vr-slab-rigid-20261001/report.json`. No new physical
 headset/motion-profile validation was run for this snapshot-only correction.
+
+## Part origin and room-centered startup (2026-10-01)
+
+Previous move controls and slab fixes pushed as `a360c112`. The following origin
+correction remains local: native axes previously started at hard-coded normalized
+(-.28,-.28,-1.3), independent of the part. NADOCVR v16 now carries O metadata
+(source X/Y/Z directions after desktop-camera rotation); native axes use source
+zero and 4 nm lengths matching desktop AxesHelper(4). Geometry normalization and
+coordinate conversions stay fixed. Legacy snapshots assume identity source axes.
+Normal startup anchors source zero 1.1 m above the calibrated OpenXR STAGE center,
+with horizontal head yaw and existing 2x presentation scale. Stable tracked poses
+and completed initial geometry are required. Without STAGE, LOCAL X/Z zero is
+used at head Y minus .35 m. Explicit inspector in-view placement and QR anchors
+still override this default; manual Fit/Recenter remains head-relative.
+76 backend tests and native origin/preview checks pass. Read-only live 24HB launch
+placed the origin within .004 mm of the expected stage target. First capture was
+out of view with headset set aside; user repositioned it toward center and the
+second submitted stereo capture shows the model. Diagnostic viewer was left open
+for inspection. Evidence: `.development-artifacts/vr-origin-20261001/report.json`.
