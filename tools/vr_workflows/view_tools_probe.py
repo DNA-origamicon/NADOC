@@ -31,6 +31,8 @@ def run(socket, output, action):
         time.sleep(.1)
     (out/'startup.json').write_text(json.dumps(readiness,indent=2))
     live=LiveSession(bridge,physical=True,allow_transactions=True)
+    from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+    prepare_audit_representation(live)
     trials=[];preset=os.environ.get('NADOC_VR_PROFILE','steady_fast')
     def wait(predicate):
         deadline=time.monotonic()+60

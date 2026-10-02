@@ -4266,6 +4266,7 @@
           <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
           <button class="dropdown-item" id="menu-help-open-steamvr" title="Start SteamVR. In a NADOC VR session, choose Desktop in the controller menu for the live interactive workstation view.">Open SteamVR / Desktop…</button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-view-vr" aria-pressed="false" title="View the current 3D scene in an immersive VR headset."><span class="vr-menu-label">View in VR</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-help-vr-desktop-3d" aria-pressed="true" title="Turn off desktop 3D drawing during native VR to leave more GPU time for the headset. Editing and synchronization continue.">Desktop 3D during VR<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item" id="menu-help-fjc-sim">FJC sim…</button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-peg-testing" aria-pressed="false">PEG testing<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item" id="menu-create-seam">Create Seam</button>
@@ -7608,6 +7609,9 @@
         <!-- Canvas area — actual 3D render target and its overlays -->
         <div id="canvas-area">
           <canvas id="canvas">Interactive 3D molecular design workspace. Use the menus and panels to inspect and edit the current design.</canvas>
+          <div id="vr-desktop-paused" hidden role="status" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:20;max-width:calc(100vw - 32px);padding:8px 12px;border-radius:6px;background:var(--bg-panel,#20242c);color:var(--text-primary,#eee);box-shadow:0 2px 10px #0006">
+            Desktop 3D paused during VR. <button id="vr-desktop-resume" type="button">Resume desktop 3D</button>
+          </div>
           <div id="mode-indicator">NADOC · WORKSPACE</div>
           <!-- Extrude lattice polarity legend (shown by slice_plane.js while the extrude grid is up) -->
           <div id="extrude-legend" style="

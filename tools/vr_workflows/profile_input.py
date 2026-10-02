@@ -1,6 +1,7 @@
 """Measured profile-driven reaches to live exported targets; no endpoint snapping."""
 import math
 import time
+from tools.vr_workflows.audit_intervals import record_reach
 from tools.vr_motion.model import Profile, reach, vector
 from tools.vr_motion.metrics import pose_error
 from tools.vr_motion.presets import PRESETS
@@ -49,6 +50,7 @@ class AcquisitionWindow:
         return t-self.since+1e-9 >= self.reaction
 
 
+@record_reach
 def reach_target(live, target, preset, seed, acquired=None, target_position=None,
                  target_orientation=None, hand=1):
     """Aim at a point, or reach an explicit pose retaining its requested wrist roll."""

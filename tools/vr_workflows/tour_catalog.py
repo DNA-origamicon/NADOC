@@ -41,6 +41,10 @@ def catalog():
         'Desktop engine tabs, touchpad job/result navigation and existing static visualizations for 2hb_1xT. Copies job metadata/caches into a temporary workspace; trajectories are excluded. Validation runs all four motion profiles.', module='simulation_tour')
     add('backend-lifetime', 'interaction', 'Backend shutdown closes VR',
         'Launch an isolated backend and empty VR viewer; terminate only that backend and require viewer exit and sidecar cleanup.', module='backend_lifecycle_check')
+    add('tool-frame-audit', 'authoring', 'Tools across representations · frame audit',
+        'Long isolated campaign: existing authoring fixtures in Full, Stick, Ball & Stick and Quick Surface. Records failed cases, CPU calculation counts and compositor timing. Validation uses all four motion profiles. Desktop drawing defaults off with browser trace evidence (--desktop-rendering on overrides it); Move workflows also check the Desktop 3D during VR toggle and automatic desktop restoration.', module='tool_frame_audit')
+    add('frame-audit', 'interaction', 'VR frame calculation audit',
+        'Private 24HB: Full, Stick, Ball & Stick and Quick Surface idle/grip CPU phases, submission cadence and compositor timing. Validation uses all four motion profiles; authoring tools are separate.', module='frame_audit_tour')
     add('representation-motion', 'interaction', 'Detailed representations · grip motion',
         'Real Stick and Ball & Stick loads, then whole-model broadside inspection at 10x scale, grip translation/rotation, and 30/60/120 degree-per-second yaw sweeps. Retains input cadence and submitted stereo geometry; speed sweeps are separate from the four unchanged validation profiles. Verifies background desktop rendering yields to native VR while synchronization continues. Head tracking is never overridden.', ['--motion'], module='browser_representation_tour')
     add('loading-performance', 'interaction', 'Representation loading frame delivery',
@@ -109,7 +113,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

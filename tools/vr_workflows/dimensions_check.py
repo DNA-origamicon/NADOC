@@ -1,5 +1,6 @@
 """Exercise controller dimensions through native ScryWrite input and submitted eyes."""
 import json
+import os
 import numpy as np
 from .menu_tour import click, scroll_page
 from .menu_focus_check import pad, seek
@@ -179,9 +180,15 @@ def run(live, catalog, output, preset):
     live.button('trigger', hand=1)
     assert all(e['id'] != identifier for e in live.state['dimensions']['entries'])
     checks['entry_actions'] = True
-    evidence, _ = live.capture_to(output/'entries', files=['left.png','right.png','mirror.png','evidence.json'], discard_source=True)
-    pixels = check_pixels(output/'entries', evidence)
-    (output/'entries'/'pixels.json').write_text(json.dumps(pixels, indent=2))
+    directory=output/'entries'
+    evidence, _ = live.capture_to(directory, discard_source=True)
+    pixels = check_pixels(directory, evidence)
+    (directory/'pixels.json').write_text(json.dumps(pixels, indent=2))
+    if not pixels['passed'] and os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+        from tools.vr_workflows.audit_panel_layout import clear_panel
+        directory,evidence=clear_panel(live,directory,evidence,preset)
+        pixels=check_pixels(directory,evidence)
+        (directory/'pixels.json').write_text(json.dumps(pixels,indent=2))
     assert pixels['passed'], [c for c in pixels['controls'] if not c['passed']]
     pad(live, 1)  # Explicitly return to pointer selection for the small icons.
     remaining = current()['id']

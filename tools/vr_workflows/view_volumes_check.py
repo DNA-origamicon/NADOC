@@ -1,5 +1,6 @@
 """Isolated physical-runtime trigger-grab, face-resize, grip and persistence check."""
 import argparse
+import os
 import json
 import time
 import uuid
@@ -11,6 +12,7 @@ from backend.api import state, routes_vr
 from backend.api.doc_context import set_current_doc, reset_current_doc
 from backend.api.main import app
 from backend.api.routes import _demo_design
+from tools.vr_workflows.audit_design import load as audit_design
 from backend.core.models import Design, ViewVolume
 from frontend.scrywrite.mcp_bridge import Bridge
 from tools.vr_motion.session import LiveSession
@@ -141,8 +143,15 @@ def main():
         raise RuntimeError('Another native viewer is active; refusing to replace it.')
     doc = '__test_vr_volumes_'+uuid.uuid4().hex[:12]
     token = set_current_doc(doc)
-    design = _demo_design()
+    design = audit_design(_demo_design)
     design.view_volumes = [ViewVolume(id='volume', name='Trigger grab test', min_corner=(-3,-3,0), max_corner=(3,3,10))]
+    if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+        # Fit the inspection volume to the full origami, not the small demo's
+        # six-nanometre box. Retain the source geometry and ordinary controls.
+        axes=np.array([[p.x,p.y,p.z] for h in design.helices for p in (h.axis_start,h.axis_end)])
+        design.view_volumes[0].min_corner=tuple(axes.min(axis=0)-5)
+        design.view_volumes[0].max_corner=tuple(axes.max(axis=0)+5)
+        (args.output/'volume-setup.json').write_text(json.dumps({'policy':'all helix axes plus 5 nm margin','volume':design.view_volumes[0].model_dump(mode='json')},indent=2))
     state.set_design(design)
     client = TestClient(app, client=('127.0.0.1',50000), headers={'X-NADOC-Doc':doc})
     live = None; launched = False
@@ -160,6 +169,20 @@ def main():
                 break
             except (RuntimeError,OSError,ValueError):time.sleep(.2)
         assert live is not None
+        expected=os.environ.get('NADOC_VR_AUDIT_REPRESENTATION')
+        if expected:
+            deadline=time.monotonic()+180
+            while live.state.get('startup',{}).get('active'):
+                if time.monotonic()>deadline:raise RuntimeError('Audit startup timed out')
+                live.frame();time.sleep(.05)
+            # Production launches intentionally start in Full. Use the normal
+            # display-feedback route to request the audit representation.
+            response=client.post('/api/vr/visualization-feedback',json={'representation':expected})
+            assert response.status_code==200,response.text
+            deadline=time.monotonic()+180
+            while live.state['representation']!=expected or live.state['representation_loading']['pending'] or live.state.get('startup',{}).get('active'):
+                if time.monotonic()>deadline:raise RuntimeError('Audit launch representation not ready: '+expected)
+                live.frame();time.sleep(.05)
         enlarge_mirror(live)
         initial,_=live.capture_to(args.output/'initial-view',files=('left.png','right.png','mirror.png','evidence.json'),discard_source=True)
         eye_rotation=Rotation.from_quat(initial['eyes'][0]['orientation_xyzw'])
@@ -176,7 +199,7 @@ def main():
             (directory/'highlight-checks.json').write_text(json.dumps(checks,indent=2))
             if highlighted:assert highlight_passed(checks),checks
             return checks
-        for preset in PRESETS if args.validate else ['steady_fast']:
+        for preset in ([os.environ['NADOC_VR_AUDIT_PROFILE']] if os.environ.get('NADOC_VR_AUDIT_PROFILE') else PRESETS if args.validate else ['steady_fast']):
             for shape in ('box','hexagonal'):
                 # Restore fixture geometry between profiles, outside measured motion.
                 presentation=live.state['presentation'];model=np.asarray(presentation['model_to_tracking_rows'])

@@ -1,5 +1,6 @@
 """Exercise the selected arrow through the ordinary trigger path and human profiles."""
 import json
+from tools.vr_workflows.audit_intervals import operation
 import os
 import sys
 import time
@@ -17,8 +18,12 @@ def check_pixels(directory, color, *, points_override=None):
     from PIL import Image
     from tools.vr_motion.visual_checks import project
     evidence = json.loads((directory/'evidence.json').read_text())
-    arrow = evidence['state']['end_resize']['arrows'][0]
-    points = points_override or [arrow['origin'], arrow['tip']]
+    # A committed edit may clear the selection. Geometry visibility does not
+    # require an arrow; colored preview checks still require the actual arrow.
+    points = points_override
+    if color and points is None:
+        arrow = evidence['state']['end_resize']['arrows'][0]
+        points = [arrow['origin'], arrow['tip']]
     checks = {}
     for name in ('left', 'right', 'mirror'):
         rgb = np.asarray(Image.open(directory / (name + '.png')).convert('RGB')).astype(float)
@@ -60,6 +65,8 @@ def run(socket, output, amount="12", frame="1"):
             raise RuntimeError('Viewer did not focus')
         time.sleep(.1)
     live = LiveSession(bridge, physical=True, allow_transactions=True)
+    from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+    prepare_audit_representation(live)
     preset = os.environ.get('NADOC_VR_PROFILE', 'steady_fast')
     trials = []
     def wait(predicate):
@@ -67,7 +74,8 @@ def run(socket, output, amount="12", frame="1"):
         while not predicate(live.state):
             if time.monotonic() > deadline:
                 raise RuntimeError('Resize state timed out')
-            live.frame()
+            try:live.frame()
+            except TimeoutError:continue
             time.sleep(.05)
     def reach(point, acquired=None):
         trials.append(reach_target(live, point, preset, 7300 + len(trials),
@@ -126,8 +134,9 @@ def run(socket, output, amount="12", frame="1"):
         check_pixels(out/'preview', 'yellow' if delta > 0 else 'orange')
         version = live.state['end_resize']['version']
         revision = live.state['scene_revision']
-        live.send('button', hand=1, button='trigger', pressed=False)
-        wait(lambda s: s['scene_revision'] > revision and s['end_resize']['version'] > version)
+        with operation(live,'end_resize-commit'):
+            live.send('button', hand=1, button='trigger', pressed=False)
+            wait(lambda s: s['scene_revision'] > revision and s['end_resize']['version'] > version)
         live.capture_to(out/'committed', discard_source=True)
         check_pixels(out/'committed', None)
         hold(live, 'End resized by trigger pull')

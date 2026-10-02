@@ -34,7 +34,7 @@ def main():
             'NADOC_VR_DEMO': '0' if args.validate else '1', 'NADOC_VR_DEMO_HOLD': '3'}
         command = ['npx', 'playwright', 'test', '--config', 'playwright.vr-bend.config.js',
             'vr_twist.spec.js', '--workers=1', '--global-timeout=900000', '--output', str(output/'playwright')]
-        if not args.validate:
+        if not args.validate or os.environ.get('NADOC_VR_FRAME_AUDIT') == '1':
             command.append('--headed')
         # Vite's bridge credential lives outside the temporary design workspace.
         # Its per-port filename is owned by this isolated run even after failure.

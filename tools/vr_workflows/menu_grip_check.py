@@ -9,6 +9,10 @@ from tools.vr_motion.presets import PRESETS
 from tools.vr_motion.visual_checks import project
 
 
+from tools.vr_workflows.audit_intervals import record_reach
+
+
+@record_reach
 def move(live, targets, preset, trials):
     duration, profile = PRESETS[preset]
     paths = {}

@@ -27,3 +27,19 @@ def test_visible_scope_must_move_and_other_geometry_stay(tmp_path):
     assert compare(a,b,'target')['passed']
     assert not compare(a,a,'target')['passed']
     assert not compare(blank,blank,'target')['passed']
+
+
+def test_whole_scene_motion_has_no_unselected_witnesses(tmp_path):
+    a,b=[tmp_path/name for name in ('before','after')]
+    capture(a);capture(b,shift=3)
+    # A subset cannot opt out of stationary-witness checks by calling itself
+    # the whole scene: the other visible owners disqualify that claim.
+    assert not compare(a,b,'target',entire_scene=True)['passed']
+    for directory in (a,b):
+        for eye in ('left','right'):
+            path=directory/f'{eye}.ids.u32'
+            ids=np.fromfile(path,dtype=np.uint32)
+            ids[ids!=1]=0
+            ids.tofile(path)
+    assert compare(a,b,'target',entire_scene=True)['passed']
+    assert not compare(a,a,'target',entire_scene=True)['passed']

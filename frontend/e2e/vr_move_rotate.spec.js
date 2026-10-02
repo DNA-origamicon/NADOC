@@ -1,3 +1,4 @@
+import {installAuditBrowserTrace, saveAuditBrowserTrace, importAuditDesign} from './helpers/vr_audit_design.js'
 import {test,expect} from '@playwright/test'
 import * as THREE from 'three'
 import {execFileSync} from 'node:child_process'
@@ -28,6 +29,7 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
  await page.locator('.menu-item').filter({hasText:'File'}).first().hover()
  await page.click('#menu-file-new');await page.fill('#new-design-name','__e2e__VR Move '+kind)
  await page.getByRole('button',{name:'Create',exact:true}).click()
+ if (!await importAuditDesign(page,info)) {
  const seed=await paintDesktopVRSeed(page,info)
  // Generated setup through the same public APIs as the desktop. No fixture or
  // existing workspace is opened. The measured operation below uses VR inputs.
@@ -37,19 +39,45 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
   await api.extrudeOverhang({helixId:h.id,bpIndex:0,direction:'FORWARD',isFivePrime:true,neighborRow:0,neighborCol:8,lengthBp:7})
  },seed.helices.find(h=>h.grid_pos[0]===0&&h.grid_pos[1]===7))
  }
+ }
  const read=()=>page.evaluate(async()=>{
   const s=(await import('/src/state/store.js')).store.getState()
-  return {design:s.currentDesign,geometry:s.currentGeometry}
+  const api=await import('/src/api/client.js')
+  return {design:{...s.currentDesign,feature_log:(await api._request('GET','/design/feature-log/full')).feature_log},geometry:(await api._request('GET','/design/geometry')).nucleotides}
  })
  await expect.poll(async()=>(await read()).geometry?.length||0,{timeout:60000}).toBeGreaterThan(0)
  const before=await read()
- const cluster=before.design.cluster_transforms.find(c=>c.name==='Movable helix')
- if(!process.env.NADOC_VR_MOVE_DESIGN)expect(before.geometry.some(n=>n.overhang_id)).toBe(true)
+ const cluster=process.env.NADOC_VR_AUDIT_DESIGN?[...before.design.cluster_transforms].sort((a,b)=>b.helix_ids.length-a.helix_ids.length)[0]:before.design.cluster_transforms.find(c=>c.name==='Movable helix')
+ if(!process.env.NADOC_VR_MOVE_DESIGN&&!process.env.NADOC_VR_AUDIT_DESIGN)expect(before.geometry.some(n=>n.overhang_id)).toBe(true)
  fs.writeFileSync(info.outputPath('before.json'),JSON.stringify(before))
  await page.locator('#canvas').click({position:{x:30,y:30}});await page.keyboard.press('f')
  await page.locator('.menu-item').filter({hasText:'Help'}).first().hover();await page.click('#menu-help-view-vr')
  let status
  await expect.poll(async()=>{status=await(await request.get(`${base}/api/vr/status`)).json();if(status.pid)pid=status.pid;return status.running&&!!status.scrywrite_socket},{timeout:30000}).toBe(true)
+ if(process.env.NADOC_VR_AUDIT_DESKTOP_DRAW==='preference-off') {
+  await expect(page.locator('#vr-desktop-paused')).toBeVisible()
+  await page.click('#vr-desktop-resume')
+  await expect(page.locator('#vr-desktop-paused')).toBeHidden()
+  const rendered=await page.evaluate(()=>window.__nadocTest.viewerFrameState().rendered)
+  await expect.poll(()=>page.evaluate(()=>window.__nadocTest.viewerFrameState().rendered)).toBeGreaterThan(rendered)
+  await page.locator('.menu-item').filter({hasText:'Help'}).first().hover()
+  await page.click('#menu-help-vr-desktop-3d')
+  await expect(page.locator('#vr-desktop-paused')).toBeVisible()
+  await expect(page.locator('#menu-help-vr-desktop-3d')).toHaveAttribute('aria-pressed','false')
+  await page.locator('#menu-bar .menu-title').click()
+  await expect(page.locator('#menu-help-vr-desktop-3d')).toBeHidden()
+  expect(await page.evaluate(()=>{
+   const e=document.getElementById('vr-desktop-paused'),r=e.getBoundingClientRect()
+   return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&
+     [r.left+12,r.left+r.width/2,r.right-12].every(x=>
+       document.elementFromPoint(x,r.top+r.height/2)?.closest('#vr-desktop-paused')===e)
+  })).toBe(true)
+  fs.writeFileSync(info.outputPath('desktop-paused-layout.json'),JSON.stringify(await page.evaluate(()=>{
+   const box=id=>{const e=document.getElementById(id);return {rect:e.getBoundingClientRect().toJSON(),text:e.textContent,style:e.getAttribute('style')}}
+   return {notice:box('vr-desktop-paused'),canvas:box('canvas-area')}
+  })))
+  await page.screenshot({path:info.outputPath('desktop-paused.png')})
+ }
  const probe=(mode)=>execFileSync('uv',['run','python','-m','tools.vr_workflows.move_probe',status.scrywrite_socket,info.outputPath(mode),kind,info.outputPath('before.json'),mode],{cwd:path.resolve(process.cwd(),'..'),env:process.env,stdio:'inherit',timeout:180000})
  await page.waitForTimeout(1500)
  fs.writeFileSync(info.outputPath('focus-diagnostic.json'),JSON.stringify(await page.evaluate(()=>({testApi:!!window.__nadocTest,focused:document.hasFocus(),active:document.querySelector('#menu-help-view-vr')?.getAttribute('aria-pressed')}))))
@@ -58,9 +86,17 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
  await page.waitForTimeout(500)
  const framesAfter=await page.evaluate(()=>window.__nadocTest.viewerFrameState())
  fs.writeFileSync(info.outputPath('background-rendering.json'),JSON.stringify({before:framesBefore,after:framesAfter}))
+ if(process.env.NADOC_VR_AUDIT_DESKTOP_DRAW==='preference-off') {
+  expect(framesAfter.rendered).toBe(framesBefore.rendered)
+  expect(framesAfter.callbacks).toBeGreaterThan(framesBefore.callbacks)
+ }
 
  probe('edit')
  const saved=(await read()).design
+ const poseKey=t=>JSON.stringify([t.helix_id,t.bp_index,t.direction,t.copy_k??0])
+ const priorPoses=new Map((before.design.nucleotide_transforms||[]).map(t=>[poseKey(t),t]))
+ const newPoses=(saved.nucleotide_transforms||[]).filter(t=>!priorPoses.has(poseKey(t)))
+ for(const t of saved.nucleotide_transforms||[])if(priorPoses.has(poseKey(t)))expect(t).toEqual(priorPoses.get(poseKey(t)))
  expect(saved.feature_log.length).toBe(before.design.feature_log.length+1)
  const entry=saved.feature_log.at(-1)
  expect(saved.feature_log.slice(0,-1)).toEqual(before.design.feature_log)
@@ -74,11 +110,11 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
   expect(entry).toMatchObject({feature_type:'snapshot',op_kind:'nucleotide-transform-batch',
    label:`Move/rotate ${kind==='base'?'1 nucleotide':'7 nucleotides'}`,params:{count:kind==='base'?1:7}})
   expect(entry.design_snapshot_gz_b64).toBeTruthy();expect(entry.post_state_gz_b64).toBeTruthy()
-  expect(saved.nucleotide_transforms).toHaveLength(kind==='base'?1:7)
-  for(const t of saved.nucleotide_transforms){expect(Math.hypot(...t.translation)).toBeGreaterThan(.01);expect(Math.hypot(...t.rotation.slice(0,3))).toBeGreaterThan(.01)}
+  expect(newPoses).toHaveLength(kind==='base'?1:7)
+  for(const t of newPoses){expect(Math.hypot(...t.translation)).toBeGreaterThan(.01);expect(Math.hypot(...t.rotation.slice(0,3))).toBeGreaterThan(.01)}
   const selected=JSON.parse(fs.readFileSync(info.outputPath('edit/result.json')))
   if(kind==='base') {
-   const t=saved.nucleotide_transforms[0]
+   const t=newPoses[0]
    expect(JSON.parse(decodeURIComponent(selected.owner_tokens[0]))).toEqual(['base',`${t.helix_id}:${t.bp_index}:${t.direction}`])
   }
   if(kind==='overhang') {
@@ -95,7 +131,7 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
  const afterGeometry=await page.evaluate(async()=>(await (await import('/src/api/client.js'))._request('GET','/design/geometry')).nucleotides)
  const key=n=>JSON.stringify([n.helix_id,n.bp_index,n.direction,n.copy??0])
  const afterByKey=new Map(afterGeometry.map(n=>[key(n),n]))
- const poseByKey=new Map((saved.nucleotide_transforms||[]).map(t=>[JSON.stringify([t.helix_id,t.bp_index,t.direction,t.copy_k??0]),t]))
+ const poseByKey=new Map(newPoses.map(t=>[JSON.stringify([t.helix_id,t.bp_index,t.direction,t.copy_k??0]),t]))
  let moved=0,unchanged=0
  for(const n of before.geometry){
   const after=afterByKey.get(key(n));expect(after).toBeTruthy()
@@ -112,7 +148,9 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
   }else if(inCluster){expect(delta).toBeGreaterThan(.01);moved++}
   else if(!n.overhang_id || kind!=='cluster'){expect(delta).toBeLessThan(1e-5);unchanged++}
  }
- expect(moved).toBeGreaterThan(0);expect(unchanged).toBeGreaterThan(100)
+ expect(moved).toBeGreaterThan(0)
+ if(kind==='cluster'&&process.env.NADOC_VR_AUDIT_DESIGN)expect(unchanged).toBe(before.geometry.filter(n=>!cluster.helix_ids.includes(n.helix_id)).length)
+ else expect(unchanged).toBeGreaterThan(100)
  fs.writeFileSync(info.outputPath('scope-check.json'),JSON.stringify({moved,unchanged}))
  fs.writeFileSync(info.outputPath('after.json'),JSON.stringify(await read()))
  const filename=saved.metadata.identity_last_known_path
@@ -128,10 +166,19 @@ test(`trigger move and rotate ${kind}, undo, save and reopen`,async({page,reques
  expect((await read()).design.feature_log).toEqual(before.design.feature_log)
  expect((await read()).design.cluster_transforms).toEqual(before.design.cluster_transforms)
  await request.post(`${base}/api/vr/stop`)
+ if(process.env.NADOC_VR_AUDIT_DESKTOP_DRAW==='preference-off') {
+  await expect(page.locator('#vr-desktop-paused')).toBeHidden()
+  const rendered=await page.evaluate(()=>window.__nadocTest.viewerFrameState().rendered)
+  await expect.poll(()=>page.evaluate(()=>window.__nadocTest.viewerFrameState().rendered)).toBeGreaterThan(rendered)
+ }
  const reload=await page.context().newPage();await reload.goto('/?doc=__e2e__move-reloaded')
  await reload.evaluate(async file=>(await import('/src/api/client.js')).loadDesign(file),info.outputPath('transformed.nadoc'))
- const restored=await reload.evaluate(async()=>(await import('/src/state/store.js')).store.getState().currentDesign)
+ const restored=await reload.evaluate(async()=>({...(await import('/src/state/store.js')).store.getState().currentDesign,feature_log:(await (await import('/src/api/client.js'))._request('GET','/design/feature-log/full')).feature_log}))
  expect(restored.nucleotide_transforms).toEqual(saved.nucleotide_transforms);expect(restored.cluster_transforms).toEqual(saved.cluster_transforms)
  expect(restored.feature_log).toEqual(saved.feature_log)
  await reload.close()
 })
+
+// Optional read-only resource-condition evidence for full-size VR audits.
+test.beforeEach(async ({page}) => { await installAuditBrowserTrace(page) })
+test.afterEach(async ({page}, info) => { await saveAuditBrowserTrace(page, info) })

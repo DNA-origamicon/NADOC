@@ -389,7 +389,9 @@ environment issue without a source change.
 - Native atomistic rendering uses sphere impostors, line-bond LOD, and no dense-scene
   shadow pass. Exact physical-HMD scene work measured about 0.22 ms p50 / 1.6 ms p95.
   OpenXR loop duration is not render duration: runtime synchronization may block.
-  Judge `scene_p95_within_budget` and active-headset SteamVR compositor statistics.
+  `scene_p95_within_budget` is scene-only, not a complete budget gate. Include
+  input/tool and pre-frame feed work with the opt-in frame calculation audit,
+  plus active-headset SteamVR compositor statistics.
 - Browser MD frames now use `atomisticRenderer.updateFrame`: stable topology updates
   matrices in place and emits `geometryPath: coordinates`; topology changes fail back
   to `rebuild`. Browser Ball+Stick/Stick changes reuse sphere and bond instances.

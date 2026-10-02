@@ -1,5 +1,6 @@
 """Ordinary radius-wheel selection and trigger-stretched forced ligation."""
 import json
+from tools.vr_workflows.audit_intervals import operation
 import os
 import sys
 import time
@@ -20,17 +21,30 @@ def run(socket, output, role):
     out = Path(output); out.mkdir(parents=True, exist_ok=True)
     bridge = Bridge(socket)
     deadline = time.monotonic() + 30
-    while not bridge.call('scrywrite_observe', {}).get('focused'):
+    readiness=[]
+    while True:
+        try:
+            observed=bridge.call('scrywrite_observe', {})
+            readiness.append({'focused':bool(observed.get('focused'))})
+            if observed.get('focused'):break
+        except OSError as error:
+            readiness.append({'startup_transport':type(error).__name__})
+        (out/'startup.json').write_text(json.dumps(readiness,indent=2))
         if time.monotonic() > deadline: raise RuntimeError('Viewer did not focus')
         time.sleep(.1)
+    (out/'startup.json').write_text(json.dumps(readiness,indent=2))
     live = LiveSession(bridge, physical=True, allow_transactions=True)
+    from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+    prepare_audit_representation(live)
     preset = os.environ.get('NADOC_VR_PROFILE', 'steady_fast')
     trials = []
     def wait(predicate):
         deadline = time.monotonic() + 90
         while not predicate(live.state):
             if time.monotonic() > deadline: raise RuntimeError('Ligation state timed out')
-            live.frame(); time.sleep(.05)
+            try:live.frame()
+            except TimeoutError:continue
+            time.sleep(.05)
     def reach(point, q=None, acquired=None):
         for attempt in range(3 if acquired else 1):
             trial = reach_target(live, point, preset, 9200 + len(trials),
@@ -78,6 +92,19 @@ def run(socket, output, role):
         source=next(i for i,e in enumerate(ends) if e['role']==role)
         target=next(i for i,e in enumerate(ends) if e['role']!=role and e['strand']!=ends[source]['strand'])
         invalid=next(i for i,e in enumerate(ends) if i!=source and e['role']==role)
+        if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+            # Dense origami can put a compatible end inside the selection sphere
+            # around the old fixture's first same-polarity end. Choose the most
+            # isolated same-polarity end from live geometry; retain the original
+            # no-target/no-edit assertions and normal controller motion.
+            compatible=[e for e in ends if e['role']!=role and e['strand']!=ends[source]['strand']]
+            def clearance(index):
+                return min(float(np.linalg.norm(np.array(ends[index]['world'])-e['world'])) for e in compatible)
+            original=invalid
+            invalid=max((i for i,e in enumerate(ends) if i!=source and e['role']==role),key=clearance)
+            (out/'negative-target-setup.json').write_text(json.dumps({'source':source,'original_invalid':original,
+                'chosen_invalid':invalid,'original_clearance_m':clearance(original),'chosen_clearance_m':clearance(invalid),
+                'policy':'Most isolated same-polarity live endpoint; unchanged selection radius, geometry and no-edit assertions'},indent=2))
         # A same-polarity release must not create an edit or leave a held source.
         revision=live.state['scene_revision']
         endpoint(source,lambda s:s['ligation']['hover'][1]==source)
@@ -101,8 +128,9 @@ def run(socket, output, role):
         live.capture_to(out/'compatible-preview',discard_source=True)
         assert preview(out/'compatible-preview')['passed'], 'Compatible bond pixels missing'
         version=live.state['ligation']['version']
-        live.send('button',hand=1,button='trigger',pressed=False)
-        wait(lambda s:s['scene_revision']>revision and s['ligation']['version']>version)
+        with operation(live,'ligation-commit'):
+            live.send('button',hand=1,button='trigger',pressed=False)
+            wait(lambda s:s['scene_revision']>revision and s['ligation']['version']>version)
         assert live.state['ligation']['status']=='created'
         live.capture_to(out/'committed',discard_source=True)
         assert committed(out/'committed',ends[source]['identity'],ends[target]['identity'])['passed'], 'Saved bond is not visible'

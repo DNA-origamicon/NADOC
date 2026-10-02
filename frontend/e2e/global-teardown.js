@@ -29,8 +29,8 @@ const E2E_PREFIX = '__e2e__'
 export default async function globalTeardown() {
   // Playwright may terminate Vite by signal, without httpServer's close event.
   // These are exclusively the isolated test ports; never remove the live key.
-  const frontendRoot = path.resolve(WORKSPACE, '../frontend')
-  const frontendPort = process.env.NADOC_E2E_FRONTEND_PORT || (process.env.NADOC_E2E_API_BASE?.endsWith(':8001') ? '5174' : '5175')
+  const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+  const frontendPort = process.env.NADOC_SMOKE_FRONTEND_PORT || process.env.NADOC_E2E_FRONTEND_PORT || (process.env.NADOC_E2E_API_BASE?.endsWith(':8001') ? '5174' : '5175')
   if (Number(frontendPort) !== 5173) await rm(bridgeCredentialsPath(frontendRoot, Number(frontendPort)), { force: true })
   let files
   try { files = await readdir(WORKSPACE) } catch { return } // no workspace → nothing to clean

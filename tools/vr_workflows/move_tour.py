@@ -30,6 +30,7 @@ def main():
     output=(args.output or ROOT/'.development-artifacts/vr-move'/uuid.uuid4().hex[:10]).resolve()
     output.mkdir(parents=True,exist_ok=True)
     profiles=['steady_fast','steady_deliberate','variable_fast','variable_deliberate'] if args.validate else [args.profile or 'steady_fast']
+    if os.environ.get('NADOC_VR_AUDIT_PROFILE'): profiles=[os.environ['NADOC_VR_AUDIT_PROFILE']]
     targets=[args.target] if args.target else ['cluster','overhang','base']
     results=[]
     with tempfile.TemporaryDirectory(prefix='nadoc-move-tour-') as temporary:

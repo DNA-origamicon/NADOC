@@ -1,6 +1,7 @@
 """Bend via production controller input; exported geometry is read-only targeting."""
 import argparse
 import json
+from tools.vr_workflows.audit_intervals import operation
 import os
 import time
 from pathlib import Path
@@ -29,6 +30,11 @@ def run(socket, output, preset, mode):
             raise RuntimeError('Viewer did not become focused')
         time.sleep(.1)
     live = LiveSession(bridge, physical=True, allow_transactions=True)
+    from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+    if os.environ.get('NADOC_VR_AUDIT_DESIGN') and mode=='edit':
+        from tools.vr_workflows.audit_representation import wait_startup
+        wait_startup(live)
+    else:prepare_audit_representation(live)
     controls = SidebarControls(live, out, preset)
     trials = []
 
@@ -37,7 +43,9 @@ def run(socket, output, preset, mode):
         while not predicate(live.state):
             if time.monotonic() > deadline:
                 raise RuntimeError('Bend feedback timed out')
-            live.frame(); time.sleep(.05)
+            try:live.frame()
+            except TimeoutError:continue
+            time.sleep(.05)
 
     def reach(position, hand=1, **kwargs):
         trial = reach_target(live, list(position), preset, 7100+len(trials), hand=hand,
@@ -151,6 +159,8 @@ def run(socket, output, preset, mode):
             pad(live,1)
             pick(1, 12); pick(2, 80)
             wait(lambda s: s['bend']['ready'])
+            if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+                prepare_audit_representation(live,via_feedback=True)
             controls.click('bend:manual'); assert live.state['bend']['manual']
             capture('planes-and-handles')
             starting_endpoints = np.array(live.state['bend']['endpoints'])
@@ -198,14 +208,20 @@ def run(socket, output, preset, mode):
             menu()
             for name, field in (('angle','angle'), ('direction','direction'), ('radius','angle')):
                 identifier = 'bend:'+name+'-wheel'
-                controls.click(identifier)
-                c = next(c for c in live.state['controls'] if c['id'] == identifier)
-                destination = control_approach(c, live.state['hands'][1]['position'])
-                trials.append(reach_target(live,c['position'],preset,8100+len(trials),
-                    target_position=destination, acquired=lambda s: acquired(s,1,identifier)))
-                assert acquired(live.state,1,identifier)
+                # Raised wheels own input independently of flat sidebar hover.
+                # Require the actual trigger-held wheel state, not a row hover ID.
+                from tools.vr_workflows.menu_tour import scroll_page
+                for _ in range(30):
+                    if any(c['id']==identifier for c in live.state['controls']):break
+                    scroll_page(live,1,1)
                 before = live.state['bend'][field]
-                live.send('button', hand=1, button='trigger', pressed=True); live.frame()
+                for attempt in range(3):
+                    c = next(c for c in live.state['controls'] if c['id'] == identifier)
+                    destination = control_approach(c, live.state['hands'][1]['position'])
+                    trials.append(reach_target(live,c['position'],preset,8100+len(trials),target_position=destination))
+                    live.send('button', hand=1, button='trigger', pressed=True); live.frame()
+                    if live.state['bend']['wheel_hand']==1:break
+                    live.send('button', hand=1, button='trigger', pressed=False);live.frame()
                 assert live.state['bend']['wheel_hand'] == 1
                 assert live.state['bend']['hand'] == 0
                 up = np.array(c['hit_half_up']); up /= np.linalg.norm(up)
@@ -237,7 +253,8 @@ def run(socket, output, preset, mode):
             live.send('button', hand=0, button='trigger', pressed=False); live.frame()
             wait(lambda s: s['bend']['ready'])
             (out/'draft.json').write_text(json.dumps(live.state['bend'], indent=2))
-            controls.click('bend:confirm'); wait(lambda s: s['status'] == 'COMMITTED')
+            with operation(live,'bend-commit'):
+                controls.click('bend:confirm'); wait(lambda s: s['status'] == 'COMMITTED')
             park(); capture('committed')
         (out/'result.json').write_text(json.dumps(live.state, indent=2))
     except Exception:

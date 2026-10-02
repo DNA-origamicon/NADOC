@@ -25,11 +25,13 @@ def main(kind="ligation", prepare_workspace=None):
     output = (args.output or ROOT/f'.development-artifacts/vr-{kind}'/uuid.uuid4().hex[:10]).resolve()
     output.mkdir(parents=True, exist_ok=True)
     profiles = ['steady_fast', 'steady_deliberate', 'variable_fast', 'variable_deliberate'] if args.validate else ['steady_fast']
+    if os.environ.get('NADOC_VR_AUDIT_PROFILE'): profiles=[os.environ['NADOC_VR_AUDIT_PROFILE']]
     if args.profile: profiles = [args.profile]
     results = []
     with tempfile.TemporaryDirectory(prefix='nadoc-ligation-tour-') as temporary:
         if prepare_workspace:
-            prepare_workspace(Path(temporary))
+            fixtures=prepare_workspace(Path(temporary))
+            (output/'fixtures.json').write_text(json.dumps(fixtures,indent=2))
         for profile in profiles:
             with socket.socket() as backend, socket.socket() as frontend:
                 backend.bind(('127.0.0.1', 0))
@@ -44,7 +46,7 @@ def main(kind="ligation", prepare_workspace=None):
                 'NADOC_VR_DEMO_HOLD': '3'}
             command = ['npx', 'playwright', 'test', '--config', 'playwright.vr-simulations.config.js' if kind == 'simulations' else 'playwright.smoke.config.js',
                 f'vr_{kind}.spec.js', '--workers=1', '--output', str(output/'end'/profile)]
-            if not args.validate:
+            if not args.validate or os.environ.get('NADOC_VR_FRAME_AUDIT') == '1':
                 command.append('--headed')
             result = subprocess.run(command, cwd=ROOT/'frontend', env=env)
             results.append({'profile': profile, 'passed': result.returncode == 0})

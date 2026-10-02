@@ -9,6 +9,7 @@ from tools.vr_motion.model import multiply
 from tools.vr_workflows.extrude_sidebar import SidebarControls
 from tools.vr_workflows.profile_input import reach_target, aim_orientation
 from tools.vr_workflows.demo_view import reveal,hold
+from tools.vr_workflows.audit_intervals import operation
 socket,output,kind,before_path,mode=sys.argv[1:6]
 out=Path(output);out.mkdir(parents=True,exist_ok=True)
 bridge=Bridge(socket)
@@ -21,6 +22,8 @@ while True:
  if time.monotonic()>deadline:raise RuntimeError('Viewer did not become focused with initial geometry ready')
  time.sleep(.1)
 live=LiveSession(bridge,physical=True,allow_transactions=True)
+from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+if mode != 'edit': prepare_audit_representation(live)
 preset=os.environ.get('NADOC_VR_PROFILE','steady_fast')
 controls=SidebarControls(live,out,preset);trials=[]
 def wait(predicate):
@@ -72,14 +75,16 @@ try:
   controls.click('move:'+('domain' if kind=='overhang' else kind))
   live.capture_to(out/'selection-options',discard_source=True)
   before=json.loads(Path(before_path).read_text())
-  cluster=next((c for c in before['design']['cluster_transforms'] if c['name']=='Movable helix'),None)
+  cluster=(max(before['design']['cluster_transforms'],key=lambda c:len(c['helix_ids'])) if os.environ.get('NADOC_VR_AUDIT_DESIGN') else next((c for c in before['design']['cluster_transforms'] if c['name']=='Movable helix'),None))
   geom=before['geometry']
   allowed=[n for n in geom if (n.get('overhang_id') if kind=='overhang' else n['helix_id'] in cluster['helix_ids'] if kind=='cluster' else not n.get('overhang_id'))]
+  prior={(t['helix_id'],t['bp_index'],t['direction']) for t in before['design'].get('nucleotide_transforms',[])}
+  if kind=='base':allowed=[n for n in allowed if (n['helix_id'],n['bp_index'],n['direction']) not in prior]
   live.button('menu',hand=1);live.frame()
   park();live.capture_to(out/'before-framing',discard_source=True)
   from tools.vr_workflows.review_view import improve_review
   review=improve_review(live,out/'before-framing',out/'review-view')
-  if os.environ.get('NADOC_VR_MOVE_DESIGN'):
+  if os.environ.get('NADOC_VR_MOVE_DESIGN') or os.environ.get('NADOC_VR_AUDIT_DESIGN'):
    from tools.vr_workflows.profile_input import zoom_scene
    center=review['orientation']['target']
    zoom_scene(live,[center[0],center[1]+.25,center[2]],2)
@@ -112,10 +117,20 @@ try:
   live.button('trigger',hand=0)
   live.send('trigger_value',hand=0,value=0);live.frame()
   wait(lambda s:s['selection_kind']==kind and s['move_handle'] is not None)
+  if os.environ.get('NADOC_VR_AUDIT_REPRESENTATION'):
+   prepare_audit_representation(live)
+   (out/'representation-setup.json').write_text(json.dumps({'selection_representation':'full','edit_representation':live.state['representation'],'native_atomistic_selection_validated':False}))
   park();live.capture_to(out/'selected',discard_source=True);hold(live,'Selected '+kind)
   center=live.state['move_handle']
   # Point at a selected molecular point, not the potentially empty group centroid.
   aim=next((p['world'] for p in live.state['move_targets'] if p['identity']==acquisitions[-1]['hover']),center)
+  if live.state['representation'] != 'full':
+   from tools.vr_workflows.move_pixels import centers
+   a,selected=centers(out/'selected','left',live.state['owner_tokens'][0])
+   b,_=centers(out/'selected','right',live.state['owner_tokens'][0])
+   common=a.keys() & b.keys() & selected
+   assert common,'Selected molecular geometry is not visible in both eyes'
+   aim=a[min(common,key=lambda i:np.linalg.norm(a[i]-center))].tolist()
   # Put the pointing hand on the observer's side of the model, with a
   # lateral offset so the beam is visible rather than hidden behind geometry.
   from tools.vr_motion.metrics import rotate
@@ -149,8 +164,9 @@ try:
   live.capture_to(out/'preview',discard_source=True)
   commit_revision=live.state['scene_revision']
   commit_started=time.monotonic()
-  live.send('button',hand=1,button='trigger',pressed=False)
-  wait(lambda s:s['status']=='COMMITTED')
+  with operation(live,'move-commit'):
+   live.send('button',hand=1,button='trigger',pressed=False)
+   wait(lambda s:s['status']=='COMMITTED')
   commit_seconds=time.monotonic()-commit_started
   (out/'commit-timing.json').write_text(json.dumps({'release_to_ack_seconds':commit_seconds,'scene_rebuilt':live.state['scene_revision']!=commit_revision,'maximum_seconds':5}))
   assert live.state['scene_revision']==commit_revision,'rigid edit rebuilt all representations'
@@ -161,7 +177,8 @@ try:
   park();live.capture_to(out/'committed',discard_source=True);hold(live,'Saved '+kind+' move and rotation')
   (out/'result.json').write_text(json.dumps(live.state,indent=2))
   from tools.vr_workflows.move_pixels import compare
-  pixels=compare(out/'selected',out/'committed',live.state['owner_tokens'][0])
+  pixels=compare(out/'selected',out/'committed',live.state['owner_tokens'][0],
+      entire_scene=kind=='cluster' and all(n['helix_id'] in cluster['helix_ids'] for n in geom))
   (out/'pixels.json').write_text(json.dumps(pixels,indent=2))
   assert pixels['passed'],pixels
 except Exception:

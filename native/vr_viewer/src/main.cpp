@@ -23,12 +23,14 @@
 #include <zlib.h>
 
 #include "interaction.hpp"
+#include "selection_owner_index.hpp"
 #include "shadow_light.hpp"
 #include "desktop_panel.hpp"
 #include "remote_panel.hpp"
 #include "representation_buffers.hpp"
 #include "async_trace.hpp"
 #include "loading_frame_trace.hpp"
+#include "frame_audit.hpp"
 #include "latest_atomic_file.hpp"
 #include "representation_meshes.hpp"
 #include "painted_commit_gate.hpp"
@@ -157,6 +159,7 @@ struct Cylinder {
     uint32_t objectId = 0;
     float endRadius = -1.0F;
 };
+
 
 struct Box {
     glm::vec3 center{};
@@ -1333,7 +1336,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
         const auto source=representationSourceIndex(static_cast<Representation>(i));
         if(!indices[source]){indices[source]=std::make_shared<SourceIndex>();indices[source]->rebuild(scene.representations[source]);}
         scene.prepared[i]=prepareStaticRepresentation(scene.representations[source],static_cast<Representation>(i),indices[source]);
-        scene.cpuBytes[source]+=scene.prepared[i]->bytes()+16*(scene.prepared[i]->records[0].size()+scene.prepared[i]->records[1].size()+scene.prepared[i]->records[2].size()+scene.prepared[i]->records[3].size());
+        scene.cpuBytes[source]+=scene.prepared[i]->bytes()+scene.prepared[i]->highlightIndexBytes()+16*(scene.prepared[i]->records[0].size()+scene.prepared[i]->records[1].size()+scene.prepared[i]->records[2].size()+scene.prepared[i]->records[3].size());
     }
     const double milliseconds = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - started).count();
@@ -1392,7 +1395,7 @@ class GlScene {
   public:
 #include "prepared_style_controller.inc"
     explicit GlScene(SceneData scene, bool objectIds = false, const std::deque<std::string>& priorIdentities = {},
-                     const std::function<void(size_t)>& preparing = {}, bool prewarm = true)
+                     const std::function<void(size_t)>& preparing = {}, bool prewarm = true, bool initializeStyle = true)
         : scene_(std::move(scene)), objectIdsEnabled_(objectIds) {
         if (!priorIdentities.empty()) {
             objectIdentities_ = priorIdentities;
@@ -1435,12 +1438,16 @@ class GlScene {
             if (preparing) preparing(i);
             if (scene_.available[i]) setStyle(static_cast<Representation>(i), scene_.initialColoring);
         }
-        setStyle(scene_.initialRepresentation, scene_.initialColoring);
+        if (initializeStyle) setStyle(scene_.initialRepresentation, scene_.initialColoring);
+        else { representation_=scene_.initialRepresentation; coloring_=scene_.initialColoring; }
     }
+
+    void retireSource(SceneRetirement& retired) { retired.retire(std::move(scene_)); }
 
     const std::deque<std::string>& objectIdentities() const { return objectIdentities_; }
 
     void setVisualization(const nadoc_vr::VisualizationSnapshot& snapshot) {
+        nadoc_vr::CalculationScope auditScope("setVisualization");
         bool samePositions = visualizationPositions_.size() == snapshot.points.size();
         bool snapshotHasColors = false;
         bool snapshotHasSlabs = false;
@@ -1525,6 +1532,7 @@ class GlScene {
     bool updateAtomCoordinates(
         const std::vector<std::array<float, 3>>& coordinates,
         double* cpuMilliseconds = nullptr, double* uploadMilliseconds = nullptr) {
+        nadoc_vr::CalculationScope auditScope("updateAtomCoordinates");
         const auto started = std::chrono::steady_clock::now();
         if ((representation_ != Representation::ballstick &&
              representation_ != Representation::stick && representation_ != Representation::vdw) ||
@@ -1601,6 +1609,7 @@ class GlScene {
 
     void setToolPreview(
         const std::vector<std::string>& ownerTokens, const glm::mat4& transform) {
+        nadoc_vr::CalculationScope auditScope("setToolPreview");
         std::string token;
         const RepresentationData& source = currentSource();
         for (const std::string& candidate : ownerTokens) {
@@ -1664,22 +1673,33 @@ class GlScene {
 
     [[nodiscard]] bool acceptToolCommit() {
         if (toolPreviewToken_.empty()) return false;
+        const bool retainPacked = toolCommittedToken_.empty() && previewGeometry_.active() &&
+            previewGeometry_.token == toolPreviewToken_;
         if (!toolCommittedToken_.empty()) bakeCommittedLayer();
         toolCommittedToken_ = std::move(toolPreviewToken_);
         toolCommittedTransform_ = toolPreviewTransform_;
         updateCommittedHandleOffsets();
         toolPreviewToken_.clear();
         toolPreviewTransform_ = glm::mat4(1.0F);
-        setStyle(representation_, coloring_);
+        // The displayed packed instances already are the accepted pose. Retain
+        // their identity, colors and GPU buffers, plus exact pre-commit values
+        // for Undo (fractional endpoint weights are not generally invertible).
+        if (retainPacked) previewGeometry_.commit();
+        else setStyle(representation_, coloring_);
         return true;
     }
 
     [[nodiscard]] bool acceptToolUndo() {
         if (toolCommittedToken_.empty()) return false;
+        const bool retainPacked = previewGeometry_.hasCommittedBaseline &&
+            previewGeometry_.token == toolCommittedToken_;
         toolCommittedToken_.clear();
         toolCommittedTransform_ = glm::mat4(1.0F);
         committedHandleOffsets_.clear();
-        setStyle(representation_, coloring_);
+        if (retainPacked) {
+            previewGeometry_.undoCommit();
+            applyPackedPreview(toolPreviewToken_.empty() ? glm::mat4(1.0F) : toolPreviewTransform_);
+        } else setStyle(representation_, coloring_);
         return true;
     }
 
@@ -1690,11 +1710,14 @@ class GlScene {
             scene_.normalizationScale, {0.0F, 0.0F, -kViewDistanceMeters});
     }
 
+#include "static_snap_highlights.inc"
+
     void setSelectionHighlights(
         const std::vector<std::string>& snapOwnerTokens,
         const std::vector<std::string>& snapDirectIdentities,
         const std::vector<std::string>& selectedOwnerTokens,
-        const std::vector<std::string>& selectedDirectIdentities) {
+        const std::vector<std::string>& selectedDirectIdentities, bool applyStyle = true) {
+        nadoc_vr::CalculationScope auditScope("setSelectionHighlights");
         const std::unordered_set<std::string> nextSnapTokens(
             snapOwnerTokens.begin(), snapOwnerTokens.end());
         const std::unordered_set<std::string> nextSnapIdentities(
@@ -1709,11 +1732,15 @@ class GlScene {
             nextSelectedIdentities == selectedHighlightIdentities_) {
             return;
         }
+        const bool selectionUnchanged = nextSelectedTokens == selectedHighlightOwnerTokens_ &&
+            nextSelectedIdentities == selectedHighlightIdentities_;
+        const auto priorSnapTokens=std::move(snapHighlightOwnerTokens_);
+        const auto priorSnapIdentities=std::move(snapHighlightIdentities_);
         snapHighlightOwnerTokens_ = nextSnapTokens;
         snapHighlightIdentities_ = nextSnapIdentities;
         selectedHighlightOwnerTokens_ = nextSelectedTokens;
         selectedHighlightIdentities_ = nextSelectedIdentities;
-        setStyle(representation_, coloring_);
+        if (applyStyle && !updateStaticSnapHighlights(selectionUnchanged, priorSnapTokens, priorSnapIdentities)) setStyle(representation_, coloring_);
     }
 
     void installRepresentation(SceneData incoming) {
@@ -1746,6 +1773,7 @@ class GlScene {
         return scene_.available.at(static_cast<size_t>(representation));
     }
     void applyPackedPreview(const glm::mat4& transform) {
+        nadoc_vr::CalculationScope auditScope("applyPackedPreview");
         previewGeometry_.apply(transform);
         previewGeometry_.points.upload(sphereInstanceVbo_);
         previewGeometry_.glowPoints.upload(sphereGlowInstanceVbo_);
@@ -1764,6 +1792,7 @@ class GlScene {
     size_t styleApplicationsForTest=0,volumeUploadsForTest=0;
 #endif
     void setStyle(Representation representation, Coloring coloring) {
+        nadoc_vr::CalculationScope auditScope("setStyle");
 #ifdef NADOC_SCRYWRITE_TESTING
         ++styleApplicationsForTest;
 #endif
@@ -2242,6 +2271,7 @@ class GlScene {
     [[nodiscard]] Coloring coloring() const { return coloring_; }
     [[nodiscard]] std::optional<nadoc_vr::PickHit> pick(
         const nadoc_vr::Ray& worldRay, const glm::mat4& modelTransform) const {
+        nadoc_vr::CalculationScope auditScope("pick");
         const glm::mat4 worldToModel = glm::inverse(modelTransform);
         nadoc_vr::Ray ray;
         ray.origin = glm::vec3(worldToModel * glm::vec4(worldRay.origin, 1.0F));
@@ -2293,6 +2323,7 @@ class GlScene {
     // atomistic scene or rebuilds semantic ownership on each controller frame.
     [[nodiscard]] std::optional<glm::vec3> pickSelected(
             const nadoc_vr::Ray& worldRay,const glm::mat4& model,const std::vector<std::string>& owners) const {
+        nadoc_vr::CalculationScope auditScope("pickSelected");
         // Remaining tokens are parent-domain/strand aliases, not extra selections.
         if(owners.empty())return std::nullopt;
         if(!previewGeometry_.active() || previewGeometry_.token!=owners.front()) {
@@ -2333,6 +2364,7 @@ class GlScene {
     [[nodiscard]] std::vector<nadoc_vr::PickHit> selectVolume(
         const glm::vec3& worldCenter, float worldRadius,
         const glm::mat4& modelTransform) const {
+        nadoc_vr::CalculationScope auditScope("selectVolume");
         const glm::mat4 worldToModel = glm::inverse(modelTransform);
         const glm::vec3 center = glm::vec3(
             worldToModel * glm::vec4(worldCenter, 1.0F));
@@ -2403,15 +2435,8 @@ class GlScene {
         const std::string& selectionLevel,
         const std::string& selectedSelectionKind,
         const std::vector<std::string>& selectedOwnerTokens) const {
-        const RepresentationData& source = currentSource();
-        std::vector<std::pair<std::string, std::string>> tokenKinds;
-        tokenKinds.reserve(source.toolHandles.size() + source.ownerHandles.size());
-        for (const ToolHandle& handle : source.toolHandles) {
-            tokenKinds.emplace_back(handle.token, handle.kind);
-        }
-        for (const OwnerHandle& handle : source.ownerHandles) {
-            tokenKinds.emplace_back(handle.token, "cluster");
-        }
+        nadoc_vr::CalculationScope auditScope("resolveSelectionVolumeHits");
+        const auto& owners = sourceIndex_->selectionOwners;
 
         SelectionVolumeHits result;
         result.representatives.reserve(std::min<size_t>(hits.size(), 16U));
@@ -2424,11 +2449,9 @@ class GlScene {
             // suppress the valid bead through canonical-token deduplication.
             if((selectionLevel=="base" || selectionLevel=="end" || selectionLevel=="domain") &&
                (hit.identity.starts_with("backbone:") || hit.identity.starts_with("atom-bond-ref:")))continue;
-            auto token = nadoc_vr::selectionVolumeOwnerToken(
-                source.ownerAliases, tokenKinds, hit.identity, selectionLevel);
+            auto token = owners.resolve(hit.identity, selectionLevel);
             if (selectionLevel == "default") {
-                const auto strandToken = nadoc_vr::selectionVolumeOwnerToken(
-                    source.ownerAliases, tokenKinds, hit.identity, "strand");
+                const auto strandToken = owners.resolve(hit.identity, "strand");
                 const bool drillingSameStrand = strandToken &&
                     (selectedSelectionKind == "strand" ||
                      selectedSelectionKind == "base") &&
@@ -2436,11 +2459,9 @@ class GlScene {
                         selectedOwnerTokens.begin(), selectedOwnerTokens.end(),
                         *strandToken) != selectedOwnerTokens.end();
                 if (drillingSameStrand) {
-                    token = nadoc_vr::selectionVolumeOwnerToken(
-                        source.ownerAliases, tokenKinds, hit.identity, "base");
+                    token = owners.resolve(hit.identity, "base");
                     if (!token) {
-                        token = nadoc_vr::selectionVolumeOwnerToken(
-                            source.ownerAliases, tokenKinds, hit.identity, "domain");
+                        token = owners.resolve(hit.identity, "domain");
                     }
                 } else {
                     token = strandToken;
@@ -2464,6 +2485,7 @@ class GlScene {
         const std::string& identity,
         const std::vector<std::string>& ownerTokens,
         const glm::mat4& modelTransform) const {
+        nadoc_vr::CalculationScope auditScope("anchor");
         if (identity.empty()) return std::nullopt;
         const RepresentationData& source = currentSource();
         auto containsIdentity = [&](const std::string& candidate) {
@@ -2548,6 +2570,7 @@ class GlScene {
     [[nodiscard]] std::optional<nadoc_vr::BoundsSummary> ownerBounds(
         const std::vector<std::string>& ownerTokens,
         const glm::mat4& modelTransform, bool allAuthored = false) const {
+        nadoc_vr::CalculationScope auditScope("ownerBounds");
         const RepresentationData& source = currentSource();
         std::unordered_set<std::string> identities;
         for (const std::string& token : ownerTokens) {
@@ -2647,6 +2670,7 @@ class GlScene {
     [[nodiscard]] std::optional<glm::vec3> ownerHandle(
         const std::vector<std::string>& ownerTokens,
         const glm::mat4& modelTransform) const {
+        nadoc_vr::CalculationScope auditScope("ownerHandle");
         const RepresentationData& source = currentSource();
         for (const std::string& token : ownerTokens) {
             const auto toolHandle = std::find_if(
@@ -2676,6 +2700,7 @@ class GlScene {
 
     void renderShadowMap(const glm::mat4& modelTransform, const nadoc_vr::ShadowLightFrame& light,
                          const nadoc_vr::ShadowLightFrame* stabilized = nullptr) {
+        nadoc_vr::CalculationScope auditScope("renderShadowMap");
         lightDirection_ = glm::normalize(light.direction);
         const glm::vec3 worldCenter = glm::vec3(
             modelTransform * glm::vec4(localCenter_, 1.0F));
@@ -2826,6 +2851,7 @@ class GlScene {
 
     void renderVolumes(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,
             bool ids,const std::vector<nadoc_vr::ViewVolumeRecord>& entries,bool lightweight=false) {
+        nadoc_vr::CalculationScope auditScope("renderVolumes");
 #ifdef NADOC_SCRYWRITE_TESTING
         const bool guard=volumeGuardsEnabledForTest;
 #else
@@ -2889,6 +2915,7 @@ class GlScene {
 
     void render(const glm::mat4& viewProjection, const glm::mat4& modelTransform,
                 const std::vector<Vertex>& guides, bool captureIds = false, bool lightweight = false) const {
+        nadoc_vr::CalculationScope auditScope("render");
         if(lightweight){
             loadingPoints_.begin(viewProjection,modelTransform,captureIds);
             loadingPoints_.draw<Vertex>(sphereInstanceVbo_,sphereCount_,offsetof(Vertex,position));
@@ -3052,6 +3079,7 @@ class GlScene {
     void renderGuides(
         const glm::mat4& viewProjection, const std::vector<Vertex>& guides,
         const std::array<size_t, 2>* handEnds = nullptr, float lineWidth = 3.0F) const {
+        nadoc_vr::CalculationScope auditScope("renderGuides");
         if (!guides.empty()) {
             glEnable(GL_DEPTH_TEST);
             glDepthMask(GL_TRUE);
@@ -3102,6 +3130,7 @@ class GlScene {
     }
 
     void prepareDisplayedSource() {
+        nadoc_vr::CalculationScope auditScope("prepareDisplayedSource");
         if (displayedSourceValid_ && displayedRepresentation_ == representation_) return;
         displayedRepresentation_ = representation_;
         displayedSource_ = nullptr;
@@ -3111,6 +3140,7 @@ class GlScene {
     }
 
     void ensureSourceIndex(const RepresentationData& source) {
+        nadoc_vr::CalculationScope auditScope("ensureSourceIndex");
         if (!sourceIndexValid_) {
                 const auto prepared=scene_.prepared[static_cast<size_t>(representation_)];
                 if(prepared && &source==&scene_.representations[representationSourceIndex(representation_)]) sourceIndex_=prepared->index.get();
@@ -5053,7 +5083,9 @@ class Viewer {
 
     void pollRepresentationLoading() {
         auto& loading=representationLoading_;
-        if(!loading.enabled || startup_.active)return;
+        if(startup_.active)return;
+        // Standalone snapshots also queue prepared styles, without lazy loading.
+        if(!loading.enabled){glScene_->pollPreparedStyle();return;}
         if(loading.pending && loading.generation!=sceneRefresh_.revision()){loading.cancel();glScene_->cancelPreparedStyle();}
         if(loading.candidate) {
             try {
@@ -7639,6 +7671,7 @@ class Viewer {
     }
 
     void updateControllerGuides() {
+        nadoc_vr::CalculationScope auditScope("updateControllerGuides");
         controllerGuides_.clear();
         solidWheels_.vertices.clear();
         controllerHandEnds_ = {};
@@ -8124,6 +8157,7 @@ class Viewer {
     }
 
     void publishPresenterPose() {
+        nadoc_vr::CalculationScope auditScope("publishPresenterPose");
         const double now=glfwGetTime();
         if(eventPath_.empty() || now-avatarPublishedAt_<.05)return;
         avatarPublishedAt_=now;
@@ -8147,6 +8181,7 @@ class Viewer {
     }
 
     void publishEventState() {
+        nadoc_vr::CalculationScope auditScope("publishEventState");
         if (eventPath_.empty()) return;
         std::ofstream output(eventPath_, std::ios::out | std::ios::trunc);
         if (!output) return;
@@ -9214,7 +9249,9 @@ class Viewer {
         XrActionsSyncInfo syncInfo{XR_TYPE_ACTIONS_SYNC_INFO};
         syncInfo.countActiveActionSets = 1;
         syncInfo.activeActionSets = &active;
+        frameAudit_.mark("input_prepare");
         checkXr(instance_, xrSyncActions(session_, &syncInfo), "xrSyncActions");
+        frameAudit_.mark("xr_sync");
 
         if (witness_) {
             witness_->advance({
@@ -9434,6 +9471,7 @@ class Viewer {
             componentGallery_.update(hands_,triggerClicked_,triggerPressed_,frameDeltaSeconds_,witnessObserverPosition_,witnessObserverOrientation_);
             updateControllerGuides();return;
         }
+        frameAudit_.mark("poses_buttons");
         const auto remoteBlocked=remotePanels_.update(remotePanelTargets(),hands_,triggerClicked_,triggerPressed_,witnessObserverPosition_,glfwGetTime());
         viewTools_.syncPose();
         const bool latticeOwnsGrip=latticeOpen_ && (latticePlacement_.dragHand() ||
@@ -9586,11 +9624,13 @@ class Viewer {
                                         latticeTargeted[hand];
         }
         if (radialToolMenu_.open()) menuControlTargeted[1] = true;
+        frameAudit_.mark("menus_manipulation");
         dimensionPanel_.input(hands_,manipulator_.transform(),next!=nadoc_vr::ManipulationMode::none,
             triggerClicked_,menuControlTargeted,liveInputOwner_,sidebarMenus_.menus,normalizationScale_,
             [&](size_t hand){pulse(hand,.3F);});
         dimensionSync_.update(dimensionPanel_.tool,normalizationCenter_,normalizationScale_);
         if(volumePanel_.active) menuControlTargeted.fill(true);
+        frameAudit_.mark("dimensions");
         simulationPanel_.poll(eventPath_);
         { std::error_code error; const auto path=eventPath_+".share";
           const auto changed=std::filesystem::last_write_time(path,error);
@@ -9605,6 +9645,7 @@ class Viewer {
         // Alternate layouts have different positions from canonical edit targets.
         // Keep tablet input and world manipulation, but never cut an unseen bond.
         if(viewTools_.inspectionLayout()) menuControlTargeted.fill(true);
+        frameAudit_.mark("feeds_view_tools");
         ligation_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
         ligation_.input(hands_,{selectionVolumeCenter(0),selectionVolumeCenter(1)},
             {selectionVolumes_[0].radius(),selectionVolumes_[1].radius()},triggerClicked_,triggerPressed_,
@@ -9620,6 +9661,7 @@ class Viewer {
             !menuGripActive && !radialToolMenu_.open() && !dimensionPanel_.tool.active && !volumePanel_.active,
             [&]{publishEventState();});
         if(ligation_.nickActive)for(size_t h=0;h<2;++h)if(menuControlTargeted[h])liveInputOwner_[h]="nick";
+        frameAudit_.mark("nick_ligate");
         endResize_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
         endResize_.input(hands_,triggerClicked_,triggerPressed_,menuControlTargeted,
             manipulator_.transform(),normalizationScale_,
@@ -9628,10 +9670,14 @@ class Viewer {
             !ligation_.active && !ligation_.nickActive && !ligation_.waiting && !movePanel_.active && !bendPanel_.active && !toolShell_.executionPending() && !radialToolMenu_.open(),
             [&]{ publishEventState(); });
         if(endResize_.hand)liveInputOwner_[*endResize_.hand]="end-resize";
+        frameAudit_.mark("end_resize");
         processMoveInput(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
+        frameAudit_.mark("move_preview");
         processBendPlanes(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
         processBendHandles(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
+        frameAudit_.mark("bend");
         updateSelectionVolumeCandidates(menuControlTargeted);
+        frameAudit_.mark("selection_candidates");
         processBendPlanePick(menuControlTargeted);
         if(bendPanel_.active)menuControlTargeted.fill(true);
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
@@ -9667,12 +9713,18 @@ class Viewer {
         pollPlanePickFeedback();
         pollToolPreflightFeedback();
         pollToolExecutionFeedback();
-        sceneRefresh_.poll(eventPath_, [&](const std::string& path) {
-            auto candidate = std::make_unique<GlScene>(loadScene(path, std::make_pair(normalizationCenter_, normalizationScale_)), liveSocket_.enabled(), glScene_->objectIdentities());
-            candidate->setStyle(glScene_->representation(), glScene_->coloring());
+        frameAudit_.mark("selection_feedback");
+        sceneRefresh_.poll(eventPath_, [normalization=std::make_pair(normalizationCenter_, normalizationScale_)](const std::string& path) {
+            return loadScene(path, normalization);
+        }, [&](SceneData scene) {
+            nadoc_vr::CalculationScope refreshScope("activateSceneRefresh");
+            scene.initialRepresentation = glScene_->representation();
+            scene.initialColoring = glScene_->coloring();
+            auto candidate = std::make_unique<GlScene>(std::move(scene), liveSocket_.enabled(), glScene_->objectIdentities(), std::function<void(size_t)>{}, false, false);
+            candidate->setSelectionHighlights({}, {}, committedSelectionOwnerTokens_, committedSelectionIdentities_, false);
             candidate->setVisualization(visualizationSnapshot_);
-            candidate->setSelectionHighlights({}, {}, committedSelectionOwnerTokens_, committedSelectionIdentities_);
             glScene_.swap(candidate);
+            if (!representationLoading_.retired.full()) candidate->retireSource(representationLoading_.retired);
         });
         updateControllerGuides();
     }
@@ -9742,6 +9794,7 @@ class Viewer {
         return hit;
     }
     void processBendPlanes(std::array<bool,2>& blocked,bool sceneMoving) {
+        nadoc_vr::CalculationScope auditScope("processBendPlanes");
         bendPanel_.planeHover.fill(std::nullopt);bendPanel_.beamEnd.fill(std::nullopt);
         if(!bendPanel_.active || bendPanel_.twist)return;
         if(sceneMoving || viewTools_.inspectionLayout() || toolShell_.executionPending()) {
@@ -9793,6 +9846,7 @@ class Viewer {
         return pose;
     }
     void prepareBendArc() {
+        nadoc_vr::CalculationScope auditScope("prepareBendArc");
         if(bendPanel_.posed || !planeGuides_[0] || !planeGuides_[1] || !toolConfig_.planeABp() || !toolConfig_.planeBBp())return;
         auto& arc=bendPanel_.arc;
         arc.fixedEnd=1-bendPanel_.grabbed;
@@ -9921,6 +9975,7 @@ class Viewer {
         }
     }
     void processBendHandles(std::array<bool,2>& blocked,bool sceneMoving) {
+        nadoc_vr::CalculationScope auditScope("processBendHandles");
         if(bendPanel_.active && bendPanel_.twist){processTwistHandle(blocked,sceneMoving);return;}
         if(!bendPanel_.active || !bendPanel_.manual)return;
         if(sceneMoving || toolShell_.executionPending() || viewTools_.inspectionLayout()) {
@@ -10074,6 +10129,7 @@ class Viewer {
     }
 
     void processMoveInput(std::array<bool,2>& blocked,bool sceneMoving) {
+        nadoc_vr::CalculationScope auditScope("processMoveInput");
         if(!movePanel_.active)return;
         if(moveAwaitRefresh_ && !toolShell_.executionPending() &&
            (sceneRefresh_.revision()>moveStartRevision_ || toolShell_.status()=="COMMIT FAILED" || toolShell_.status()=="COMMIT REFUSED"))moveAwaitRefresh_=false;
@@ -10392,6 +10448,7 @@ class Viewer {
         Swapchain& swapchain = swapchains_[index];
         uint32_t imageIndex = 0;
         XrSwapchainImageAcquireInfo acquireInfo{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+        frameAudit_.mark("eye_setup");
         checkXr(instance_, xrAcquireSwapchainImage(
             swapchain.handle, &acquireInfo, &imageIndex), "xrAcquireSwapchainImage");
         XrSwapchainImageWaitInfo waitInfo{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
@@ -10977,6 +11034,7 @@ class Viewer {
 
     void renderFrame() {
         renderTrace_.begin(liveSocket_.enabled());
+        frameAudit_.mark("render_setup");
         XrFrameWaitInfo waitInfo{XR_TYPE_FRAME_WAIT_INFO};
         XrFrameState frameState{XR_TYPE_FRAME_STATE};
         checkXr(instance_, xrWaitFrame(session_, &waitInfo, &frameState), "xrWaitFrame");
@@ -11071,6 +11129,7 @@ class Viewer {
                     headOrientation, validViewSet && orientationTracked);
                 if (frameState.shouldRender && validViewSet) {
                     updateMenuComfortTelemetry(viewCount);
+                    frameAudit_.mark("tracking_ui");
                     gpuFrameTimer_.begin(menuOpen_);
                     if (witness_) {
                         const auto actorKeyLight = witnessShadowLight_.update(
@@ -11116,6 +11175,8 @@ class Viewer {
         endInfo.layerCount = layerCount;
         endInfo.layers = layerCount ? layers : nullptr;
         const auto sceneFinished = std::chrono::steady_clock::now();
+        auditSubmitted_=layerCount>0; auditPeriod_=double(frameState.predictedDisplayPeriod)/1e6;
+        frameAudit_.mark("submit_prepare");
         checkXr(instance_, xrEndFrame(session_, &endInfo), "xrEndFrame");
         traceRender("xr_end");
         const auto endFinished = std::chrono::steady_clock::now();
@@ -11187,8 +11248,9 @@ class Viewer {
                               << " xr_end_p95_ms=" << endSummary->p95Milliseconds
                               // xrSyncActions/xrEndFrame are runtime scheduling points and
                               // may deliberately block until the compositor wants the next
-                              // frame.  Only the scene interval is application work; treating
-                              // the whole loop as render time incorrectly reported a healthy
+                              // frame. Input also contains application/tool work; this scene-only
+                              // flag is not a complete budget gate. Treating the paced loop
+                              // as render time incorrectly reported a healthy
                               // 90 Hz SteamVR session as over budget.
                               << " scene_p95_within_budget="
                               << (sceneSummary->p95Milliseconds <= runtimePeriod ? "true" : "false")
@@ -11472,8 +11534,9 @@ class Viewer {
                          "cannot publish design events.\n";
         }
         nadoc_vr::LoadingFrameTrace loadTrace;
-        auto trace=[&](const char* phase){loadTrace.mark(phase,representationLoading_.percent,representationName(representationLoading_.target));};
+        auto trace=[&](const char* phase){frameAudit_.mark(phase);loadTrace.mark(phase,representationLoading_.percent,representationName(representationLoading_.target));};
         while (!exitLoop_) {
+            frameAudit_.begin();
             loadTrace.begin(liveSocket_.enabled());
             glfwPollEvents();trace("events_glfw");
             pollXrEvents();trace("events_xr");
@@ -11509,6 +11572,7 @@ class Viewer {
                 } else coordinatePlayback_.clear();
                 trace("coordinates");
                 renderFrame();trace("frame");
+                frameAudit_.finish(liveFrame_, representationName(glScene_->representation()), nadoc_vr::toolModeName(toolShell_.mode()), auditPeriod_, auditSubmitted_, sessionState_==XR_SESSION_STATE_FOCUSED);
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
             }
@@ -11535,7 +11599,7 @@ class Viewer {
     std::vector<std::string> startupOwners_;
     std::string startupKind_;
     SceneData sceneData_;
-    nadoc_vr::SceneRefreshInbox sceneRefresh_;
+    nadoc_vr::SceneRefreshInbox<SceneData> sceneRefresh_;
     nadoc_vr::Ligation ligation_;
     nadoc_vr::QuiverGesture quiver_;
     std::string ligationPreviousLevel_="default";
@@ -11789,8 +11853,11 @@ class Viewer {
     nadoc_vr::DimensionSync dimensionSync_;
     nadoc_vr::MenuFocusList legacyMenuFocus_;
     nadoc_vr::LatestAtomicFile avatarWriter_;
+    nadoc_vr::FrameAudit frameAudit_;
+    bool auditSubmitted_=false;
+    double auditPeriod_=0;
     nadoc_vr::LoadingFrameTrace renderTrace_{"VR_RENDER_TRACE"};
-    void traceRender(const char* phase){renderTrace_.mark(phase,representationLoading_.percent,representationName(representationLoading_.target));}
+    void traceRender(const char* phase){frameAudit_.mark(phase);renderTrace_.mark(phase,representationLoading_.percent,representationName(representationLoading_.target));}
     GpuFrameTimer gpuFrameTimer_;
     nadoc_vr::MenuComfortTracker menuComfortTracker_;
     nadoc_vr::TimingWindow menuNearestEyeTiming_{120};

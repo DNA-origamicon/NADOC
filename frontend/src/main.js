@@ -39,6 +39,7 @@ import { initNamdPegReview } from './ui/namd_peg_review.js'
 import { initSectionView } from './scene/section_view.js'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
+import { initVRDesktopDisplay }      from './ui/vr_desktop_display.js'
 import { buildVRVisualizationSnapshot } from './scene/vr_visualization_snapshot.js'
 import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
 import { createVRBend } from './scene/vr_bend.js'
@@ -339,8 +340,9 @@ async function main() {
     pushControls, popControls,
     addFrameCallback, removeFrameCallback,
     setRenderFn, resetRenderFn, isStandardRender,
-    setNativeVRActive,
+    setNativeVRActive, setNativeVRDesktopEnabled,
   } = initScene(canvas)
+  const vrDesktopDisplay = initVRDesktopDisplay({ document, setNativeVRActive, setNativeVRDesktopEnabled })
   initNamdPegCoatingPreview({ scene })
   initTwoElectrodePreview({ scene, camera, controls })
   initNamdPegReview({ scene, camera, controls, store, api })
@@ -6510,7 +6512,7 @@ async function main() {
     finally { vrEndPublishing = false }
   }
   const vrSession = initVRSession({
-    onNativeActiveChange: setNativeVRActive,
+    onNativeActiveChange: vrDesktopDisplay.setActive,
     onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish() },
     renderer,
     scene,

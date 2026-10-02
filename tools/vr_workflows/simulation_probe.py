@@ -62,6 +62,8 @@ def run(socket, output, identifier):
         if time.monotonic() > until: raise RuntimeError('VR did not focus')
         time.sleep(.1)
     live = LiveSession(bridge, physical=True, allow_transactions=True)
+    from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+    prepare_audit_representation(live)
     trials = []; preset = os.environ.get('NADOC_VR_PROFILE', 'steady_fast')
     try:
         reveal(live)
@@ -104,8 +106,11 @@ def run(socket, output, identifier):
             live.capture_to(out/'positioned', files=['left.png','right.png','mirror.png','evidence.json'], discard_source=True)
             return
         if identifier == 'capture':
-            focus_result(live, 'sim:frame')
-            live.button('trigger', hand=0);live.frame()
+            # Frame result is a footer action, outside the list navigation path.
+            # Use the ordinary profile-driven ray click; keep prior touchpad
+            # failures as separate evidence, without changing native focus rules.
+            if live.state['sidebars'][0]['input_mode']=='trackpad':pad(live,0)
+            click(live,0,'sim:frame',preset,trials)
             anchor,_=live.capture_to(out/'fit',files=['evidence.json'],discard_source=True)
             head=np.mean([e['position'] for e in anchor['eyes']],axis=0);q=anchor['eyes'][0]['orientation_xyzw']
             center=head+rotate(q,[0,0,-1.3]);target=head+rotate(q,[.63,.22,-1.3])

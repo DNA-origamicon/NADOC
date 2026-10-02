@@ -24,7 +24,7 @@ def centers(directory,eye_name,token):
     result[int(identity)]=np.array(eye['position'])+rotate(eye['orientation_xyzw'],center.tolist())
  return result,selected
 
-def compare(before,after,token):
+def compare(before,after,token,*,entire_scene=False):
  report={}
  for eye in ('left','right'):
   a,selected=centers(before,eye,token);b,_=centers(after,eye,token)
@@ -33,5 +33,6 @@ def compare(before,after,token):
   fixed=[float(np.linalg.norm(b[i]-a[i])) for i in common if i not in selected]
   report[eye]={'selected_visible':len(moved),'selected_shift_m':float(np.median(moved)) if moved else None,
                'other_visible':len(fixed),'other_shift_m':float(np.median(fixed)) if fixed else None}
- report['passed']=all(r['selected_visible']>0 and r['selected_shift_m']>.03 and r['other_visible']>20 and r['other_shift_m']<.015 for r in report.values())
+ report['passed']=all(r['selected_visible']>0 and r['selected_shift_m']>.03 and (r['other_visible']==0 if entire_scene else r['other_visible']>20 and r['other_shift_m']<.015) for r in report.values())
+ report['scope']='entire molecular scene' if entire_scene else 'selected subset with stationary witnesses'
  return report

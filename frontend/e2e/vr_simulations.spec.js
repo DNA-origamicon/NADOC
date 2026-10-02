@@ -1,7 +1,9 @@
+import {installAuditBrowserTrace, saveAuditBrowserTrace} from './helpers/vr_audit_design.js'
 import { test, expect } from '@playwright/test'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 import path from 'node:path'
 const execute = promisify(execFile)
 const base = process.env.NADOC_E2E_API_BASE
@@ -17,7 +19,7 @@ test.afterEach(async ({ request }) => {
   if (status.pid === pid) await request.post(`${base}/api/vr/stop`)
   pid = null
 })
-test('2hb_1xT simulation jobs activate static results through VR controls', async ({ page, request }, info) => {
+test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_AUDIT_DESIGN, '.nadoc') : '2hb_1xT'} simulation jobs activate static results through VR controls`, async ({ page, request }, info) => {
   test.skip(!physical, 'Launch using Debug → VR Tours & Tests → Simulation results')
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
@@ -31,11 +33,21 @@ test('2hb_1xT simulation jobs activate static results through VR controls', asyn
     if (request.url().endsWith('/api/vr/simulations')) snapshot = request.postDataJSON()
   })
   const doc = `__e2e__simulations-${process.pid}`
+  if (process.env.NADOC_VR_FRAME_AUDIT === '1') { const cdp = await page.context().newCDPSession(page); await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false }) }
   await page.goto(`/?doc=${doc}&scrywrite=transactions`)
   await page.waitForFunction(() => !!window.__nadocTest)
-  await page.locator('[data-library-path="2hb_1xT.nadoc"]').click()
+  await page.locator(`[data-library-path="${process.env.NADOC_VR_AUDIT_DESIGN?path.basename(process.env.NADOC_VR_AUDIT_DESIGN):'2hb_1xT.nadoc'}"]`).click()
   await expect(page.locator('#welcome-screen')).not.toBeVisible({ timeout: 30000 })
+  if(process.env.NADOC_VR_AUDIT_DESIGN) {
+    const sourceBytes=fs.readFileSync(process.env.NADOC_VR_AUDIT_DESIGN)
+    const source=JSON.parse(sourceBytes)
+    const loaded=await page.evaluate(async()=>{const s=(await import('/src/state/store.js')).store.getState();return {helices:s.currentDesign.helices.length,strands:s.currentDesign.strands.length,nucleotides:s.currentGeometry.length}})
+    expect(loaded.helices).toBe(source.helices.length)
+    expect(loaded.strands).toBe(source.strands.length)
+    fs.writeFileSync(info.outputPath('audit-design.json'),JSON.stringify({source:process.env.NADOC_VR_AUDIT_DESIGN,sha256:crypto.createHash('sha256').update(sourceBytes).digest('hex'),...loaded}))
+  }
   await page.locator('.left-tab-btn[data-tab="dynamics"]').click()
+  if(process.env.NADOC_VR_AUDIT_DESIGN)await page.locator('.engine-selector-btn[data-engine="namd"]').click()
   await expect(page.locator('#simulate-jobs-list [data-job-id]').first()).toBeVisible()
   await page.evaluate(() => document.getElementById('menu-help-view-vr').click())
   let status
@@ -98,3 +110,7 @@ test('2hb_1xT simulation jobs activate static results through VR controls', asyn
   expect(errors).toEqual([])
   expect(deliveryFailures, 'Desktop delivery checks failed; stereo and per-mode evidence retained').toEqual([])
 })
+
+// Optional read-only resource-condition evidence for full-size VR audits.
+test.beforeEach(async ({page}) => { await installAuditBrowserTrace(page) })
+test.afterEach(async ({page}, info) => { await saveAuditBrowserTrace(page, info) })

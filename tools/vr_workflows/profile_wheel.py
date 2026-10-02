@@ -7,6 +7,7 @@ from tools.vr_motion.model import Profile, reach
 from tools.vr_motion.presets import PRESETS
 from tools.vr_motion.extrude_probe import drag
 from tools.vr_workflows.profile_input import reach_target
+from tools.vr_workflows.control_approach import control_approach
 
 
 def wheel_travel(current, target, period, notch):
@@ -59,7 +60,9 @@ def set_wheel_length(live, output, target, preset, seed=0, fine_click=None, fine
         trials.append(trial)
         acquired = False
         for attempt in range(3):
-            motion = reach_target(live,control['position'],preset,seed+correction*100+attempt)
+            motion = reach_target(live,control['position'],preset,seed+correction*100+attempt,
+                target_position=control_approach(control,live.state['hands'][1]['position']),
+                acquired=lambda state:state['extrude']['wheel_hovered'])
             metrics = target_metrics(control,live.state['hands'][1])
             hit = metrics['predicted_hit'] and live.state['extrude']['wheel_hovered']
             motion.update(metrics=metrics,hit=hit)

@@ -71,8 +71,11 @@ fails safely to `geometryPath: "rebuild"`.
 Do not treat the whole OpenXR loop duration as render time. OpenXR intentionally
 throttles the application at frame synchronization points; the Khronos specification
 states that `xrWaitFrame` blocks according to runtime scheduling. The viewer therefore
-reports `loop_*`, `input_*`, `scene_*`, and `xr_end_*` separately and judges only
-`scene_p95_within_budget`. Use SteamVR compositor statistics for authoritative CPU,
+reports `loop_*`, `input_*`, `scene_*`, and `xr_end_*` separately.
+`scene_p95_within_budget` covers scene work only; it excludes tool/input and
+pre-frame feed work and cannot establish a full budget. Use the
+[frame calculation audit](audits/vr_frame_calculations_20261001.md) for complete
+outer-frame phase recording. Use SteamVR compositor statistics for CPU,
 GPU, drop, and reprojection results. See the
 [OpenXR frame-rate contract](https://registry.khronos.org/OpenXR/specs/1.1-khr/html/xrspec.html#frame-rate)
 and Valve's

@@ -24,6 +24,8 @@ while True:
     if time.monotonic()>deadline:raise RuntimeError('viewer not focused')
     time.sleep(.1)
 live=LiveSession(b,physical=True,allow_transactions=True)
+from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+prepare_audit_representation(live)
 reveal_demo(live)
 profile_controls = (ProfileControls(live,out/'control-profile.json',
     os.environ.get('NADOC_VR_PROFILE','steady_fast'),int(os.environ.get('NADOC_VR_SEED','0'))+10000,

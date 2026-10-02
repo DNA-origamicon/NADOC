@@ -7,6 +7,111 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Researched CPU fixes and desktop-off validation (2026-10-02)
+
+Retained: indexed owner lookup, selection-aware hover, cached preview bounds,
+async parsing and one-pass style activation/CPU-source retirement. Audit drawing
+now defaults off; production preference and native mirror unchanged. Full-24HB
+Bend lookup <1 ms, hover ~0.31 ms, highlights ~39 ms (first candidate ~392 ms).
+End Resize activation ~423 ms (first candidate ~1,282 ms); +6/−6 failure remains.
+Both GPU candidates rejected: conservative depth ineffective; cached cylinder
+frames regressed live rotation ~45→36 FPS despite isolated GPU improvement.
+Original renderer restored. Final 28 attempts, 9 workflow/audit passes; no 90 Hz
+certification or hardware ceiling proven. Native 4/4 and focused Python 62 pass.
+See [research and feature table](../docs/audits/vr_research_fixes_20261002.md), with
+remaining style/activation/GPU/pacing limits and evidence links.
+
+## Desktop contention isolation (2026-10-02)
+
+Fresh full-24HB Ball & Stick draw-only controls confirm desktop GPU contention:
+selected nucleotide idle 47.46→89.53 FPS, compositor GPU p95 12.71→7.51 ms.
+Cluster idle remains 44.76 FPS although GPU p95 falls 18.21→12.69 ms. Device-wide
+utilization is only ~56% for desktop-off cluster: half-rate pacing leaves idle
+GPU time; do not require 100% utilization to diagnose missed 11.111 ms deadlines.
+Both corrected draw-only edit/save/reopen/Undo controls pass. Selection lookup
+scans, full style rebuilds on changed highlights, synchronous scene refresh and
+model-sized preview uploads were separate software targets at that point. The End Resize
+4.19 s input stall coincides with VR_SCENE_APPLIED; not all of it is pure CPU.
+
+Help → Desktop 3D during VR now provides a persisted draw preference (default
+on), paused notice/resume control, and automatic normal desktop drawing after
+VR exits. Callbacks and scene updates continue; WebXR is unaffected. This does
+not fix hidden-tab requestAnimationFrame suspension or disable native mirroring.
+Four-profile preference validation passes all four steady workflows; all four
+variable workflows retain prior target-acquisition failures. Final UI/edit/Undo
+verification passes. See [bottleneck report](../docs/audits/vr_bottleneck_isolation_20261002.md)
+for controlled conditions and remaining limits. A diagnostic Playwright route
+must be removed before synchronous native probes, otherwise browser network
+feedback stalls; failed setup traces are retained. Test teardown now resolves
+the actual frontend root and random smoke port for bridge-credential cleanup.
+
+## Ball & Stick 90 Hz follow-up (2026-10-02)
+
+User time box ends 18:00:40 UTC; two optimization candidates maximum per workflow,
+Surface performance excluded. Shader experiment was pixel-identical but ineffective
+and reverted. Retained candidate avoids first eligible Move commit/Undo rebuilds.
+A PBO/fence readback experiment was also reverted after only a ~0.19 ms median
+sample-cost change with no cadence gain. Final native parity/diagnostic checks pass. Comparable full-size Move/cluster edit/save/reopen/Undo pass; longest measured
+frames fell ~307→34 ms and ~715→34 ms, but sustained cadence still misses 90 Hz.
+Desktop Playwright focus emulation can retain ~60 FPS desktop draws during VR.
+Minimizing stops draws but pauses callbacks and can block cluster commits; that
+experiment was archived and its dependency/harness focus changes restored. Do not
+use it as a production remedy or attribute all GPU cost to native rendering.
+Completed 48 second-candidate cases across all four profiles (8 workflow passes),
+then both final retained-code Move checks passed. All 12 feature categories remain
+unresolved for consistent 90 Hz; Bend selection reached 838 ms and End Resize
+commit 4.21 s. Browser-free idle/grip baseline passed 12 intervals / 4,612 frames.
+See [campaign report](../docs/audits/vr_ballstick_90hz_20261002.md) and its compact
+review ZIP. No fundamental hardware limit proven; original 24HB preserved and
+audit viewers closed.
+
+## Full-size 24HB audit (2026-10-02)
+
+Full-size follow-up uses private copies of `workspace/24hb_0xT.nadoc` (24 helices,
+76 strands, 6,720 nucleotides; original SHA unchanged). Fresh physical OpenXR
+baseline: 48 idle/grip intervals, 18,450 frames, roughly 89.36–89.64 FPS across
+Full/Stick/Ball & Stick/Quick Surface. Synthetic controller profiles, not wearer
+validation. Controlled 12-tool × 4-style × 4-profile matrix completes 192 attempts;
+31 complete workflow/audit passes (14/6/7/4), plus four separately failed Full
+Nick observation retries. Latest requested-style measured coverage is 48/45/44/43
+of 48 respectively; valid traces alone do not imply tool-stage success.
+
+Confirmed full-size candidates: selected Surface Move `pick` p95 ~32.74 ms,
+~21 FPS without repeated `setStyle` calls; Ball & Stick cluster commit includes
+~654 ms inclusive `setStyle`; End Resize native +6 can save -6 at an interior
+forward 3′ end because non-singleton outward sign follows nearest helix endpoint.
+The initial dataset collection did not implement these fixes; the later 90 Hz
+follow-up above addresses eligible Move commits. Preserve failures, selection
+semantics and invalidation correctness.
+
+An earlier long multi-launch campaign exhausted Steam shared memory; graceful
+Steam/SteamVR reset reclaimed it. Controlled batches reset between styles and
+record host resource counters; this does not establish a NADOC leak or growth
+in one uninterrupted session. Fixed benchmark budget is 11.111 ms at 90 Hz,
+independent of adaptive OpenXR pacing. Compositor GPU spans overlap CPU wall
+time and are not isolated shader cost. Dataset retains 409 attempts and 4,592
+interval rows, with an offline browser, CSVs and compact provenance ZIP; complete
+raw logs/capture trees stay in the archive. See the
+[full-size audit](../docs/audits/vr_24hb_tool_performance_20261002.md).
+
+## Frame calculation audit (2026-10-01)
+
+Opt-in native `NADOC_VR_FRAME_AUDIT=1` records exclusive outer-frame phases and
+inclusive calculation counts/times. Live audit entry points are
+`tools.vr_workflows.frame_audit_tour` (private 24HB idle/grip, four representations)
+and `tool_frame_audit` (isolated tool fixtures). Raw compositor delivery and GPU
+timing are separate from application wall time; scene-only p95 is not a full
+budget check. Findings, reproduction, failed attempts and coverage boundaries:
+[frame calculation audit](../docs/audits/vr_frame_calculations_20261001.md).
+
+Confirmed: standalone deferred representation activation needed polling even
+without lazy startup (fixed). Quick Surface selected Move still rebuilds style
+(~45 ms per changed preview on a small 6HB fixture); Full/Stick/Ball & Stick use
+packed updates. Spectator diagnostics synchronously read pixels every 30 mirror
+frames, causing recurring p99 wall costs invisible to p95. Neither candidate
+optimization has been implemented by this audit. Preserve readback provenance
+and slab geometry authority when optimizing; do not lower render quality.
+
 ## Component gallery (2026-10-01)
 
 Debug → VR Component Gallery now offers native VR and headset-free desktop

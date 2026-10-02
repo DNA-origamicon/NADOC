@@ -33,7 +33,7 @@ def main():
             'NADOC_VR_DEMO': '0' if args.validate else '1', 'NADOC_VR_DEMO_HOLD': '3'}
         command = ['npx', 'playwright', 'test', '--config', 'playwright.vr-bend.config.js',
             'vr_bend.spec.js', '--workers=1', '--global-timeout=900000', '--output', str(output/'playwright')]
-        if not args.validate:
+        if not args.validate or os.environ.get('NADOC_VR_FRAME_AUDIT') == '1':
             command.append('--headed')
         result = subprocess.run(command, cwd=ROOT/'frontend', env=env)
         (output/'result.json').write_text(json.dumps({'passed': result.returncode == 0,

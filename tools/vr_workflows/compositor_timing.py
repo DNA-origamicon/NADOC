@@ -27,6 +27,11 @@ def main():
     signal.signal(signal.SIGINT, stop)
     openvr.init(openvr.VRApplication_Background)
     try:
+        try:
+            display_hz=openvr.VRSystem().getFloatTrackedDeviceProperty(
+                openvr.k_unTrackedDeviceIndex_Hmd,openvr.Prop_DisplayFrequency_Float)
+        except openvr.OpenVRError:
+            display_hz=None
         compositor = openvr.VRCompositor()
         frames = (openvr.Compositor_FrameTiming * 128)()
         frames[0].m_nSize = ctypes.sizeof(openvr.Compositor_FrameTiming)
@@ -42,6 +47,7 @@ def main():
                     previous = frame.m_nFrameIndex
                     data = {key: getattr(frame, key) for key, _ in frame._fields_ if key != 'm_HmdPose'}
                     data['sample_wall_time_ms'] = now
+                    data['hmd_display_hz'] = display_hz
                     output.write(json.dumps(data) + '\n')
                 output.flush()
                 time.sleep(.1)

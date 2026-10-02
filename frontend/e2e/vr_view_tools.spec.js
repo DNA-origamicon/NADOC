@@ -1,3 +1,4 @@
+import {installAuditBrowserTrace, saveAuditBrowserTrace, importAuditDesign} from './helpers/vr_audit_design.js'
 import { test, expect } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -11,11 +12,13 @@ test.afterEach(async ({ request }) => {
 })
 test('left quiver tablet exposes supported view tools without Quick Expand in stereo', async ({ page, request }, info) => {
   test.setTimeout(600000)
+  if (process.env.NADOC_VR_FRAME_AUDIT === '1') { const cdp = await page.context().newCDPSession(page); await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false }) }
   await page.goto(`/?doc=__e2e__views-${process.pid}&scrywrite=transactions`)
   await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
   await page.click('#menu-file-new')
   await page.fill('#new-design-name', '__e2e__VR Views')
   await page.getByRole('button', { name: 'Create', exact: true }).click()
+  if (!await importAuditDesign(page, info)) {
   await page.evaluate(async () => (await import('/src/api/client.js')).createBundle({
     cells: [[0,0],[0,1],[0,2]], lengthBp: 42, plane: 'XY', name: '__e2e__Views',
   }))
@@ -32,6 +35,7 @@ test('left quiver tablet exposes supported view tools without Quick Expand in st
     await api.patchCluster(cluster.id,{translation:[-2.5,0,0],commit:true})
     await api.getDesign()
   })
+  }
   await page.evaluate(() => document.querySelector('#menu-help-view-vr').click())
   let status
   await expect.poll(async () => {
@@ -61,3 +65,7 @@ test('left quiver tablet exposes supported view tools without Quick Expand in st
   }
   await probe('stow')
 })
+
+// Optional read-only resource-condition evidence for full-size VR audits.
+test.beforeEach(async ({page}) => { await installAuditBrowserTrace(page) })
+test.afterEach(async ({page}, info) => { await saveAuditBrowserTrace(page, info) })

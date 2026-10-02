@@ -1,9 +1,11 @@
+import {installAuditBrowserTrace, saveAuditBrowserTrace, importAuditDesign} from './helpers/vr_audit_design.js'
 import {test, expect} from '@playwright/test'
 import {execFileSync} from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
 
-// No fixture import: the only topology creation is trigger painting + Confirm.
+// Audit mode imports the complete source before adding a part through painting.
+// The default small fixture starts empty and creates topology only through VR.
 test.skip(!process.env.NADOC_PHYSICAL_VR_TEST, 'explicit physical runtime opt-in')
 const doc='__e2e__extrude-volume-tour'
 const base=process.env.NADOC_E2E_API_BASE
@@ -19,17 +21,19 @@ test.afterEach(async ({request}) => {
   }
 })
 
-test(`new part → right Tools Extrude → ${square?'square 2×3':'canonical 6HB'} → subsection volume`, async ({page,request},info) => {
+test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_AUDIT_DESIGN,'.nadoc')+' + new part' : 'new part'} → right Tools Extrude → ${square?'square 2×3':'canonical 6HB'} → subsection volume`, async ({page,request},info) => {
   test.setTimeout(340000)
+  if (process.env.NADOC_VR_FRAME_AUDIT === '1') { const cdp = await page.context().newCDPSession(page); await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false }) }
   await page.goto(`/?doc=${doc}&scrywrite=transactions`)
   await page.locator('.menu-item').filter({hasText:'File'}).first().hover()
   await page.click('#menu-file-new')
   await page.fill('#new-design-name',square?'__e2e__Fresh VR Square':'__e2e__Fresh VR 6HB')
   if(square)await page.locator('input[name="new-lattice-type"][value="SQUARE"]').check()
   await page.getByRole('button',{name:'Create',exact:true}).click()
-  const read=()=>page.evaluate(async ()=>(await import('/src/state/store.js')).store.getState().currentDesign)
+  const read=()=>page.evaluate(async ()=>({...(await import('/src/state/store.js')).store.getState().currentDesign,feature_log:(await (await import('/src/api/client.js'))._request('GET','/design/feature-log/full')).feature_log}))
+  const imported=await importAuditDesign(page,info)
   const before=await read()
-  expect(before.helices).toHaveLength(0)
+  if(!imported)expect(before.helices).toHaveLength(0)
   await page.locator('.menu-item').filter({hasText:'Help'}).first().hover()
   await page.click('#menu-help-view-vr')
   let status
@@ -56,15 +60,18 @@ test(`new part → right Tools Extrude → ${square?'square 2×3':'canonical 6HB
   await expect(featureRow).toBeVisible()
   await expect(featureRow).toContainText(entry.label)
   await page.screenshot({path:info.outputPath('desktop-feature-log.png')})
-  expect(design.helices).toHaveLength(6)
+  const priorIds=new Set(before.helices.map(h=>h.id))
+  expect(design.helices.filter(h=>priorIds.has(h.id))).toEqual(before.helices)
+  const created=design.helices.filter(h=>!priorIds.has(h.id))
+  expect(created).toHaveLength(6)
   expect(design.lattice_type).toBe(square?'SQUARE':'HONEYCOMB')
-  expect(design.helices.map(h=>h.grid_pos).sort()).toEqual(square?
+  expect(created.map(h=>h.grid_pos).sort()).toEqual(square?
     [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]]:[[0,1],[0,2],[0,3],[1,1],[1,2],[1,3]])
-  expect(design.helices.every(h=>h.length_bp===length)).toBe(true)
-  expect(design.lattice_frames).toHaveLength(1)
+  expect(created.every(h=>h.length_bp===length)).toBe(true)
+  expect(design.lattice_frames).toHaveLength(before.lattice_frames.length+1)
   if(square) {
     // Independent square-grid oracle: equal 2.25 nm perpendicular pitches.
-    for(const h of design.helices) {
+    for(const h of created) {
       const [row,col]=h.grid_pos
       expect(h.axis_start.x).toBeCloseTo(col*2.25,5)
       expect(h.axis_start.y).toBeCloseTo(row*2.25,5)
@@ -72,7 +79,7 @@ test(`new part → right Tools Extrude → ${square?'square 2×3':'canonical 6HB
     }
   } else {
   // Independent geometry oracle: a regular six-sided ring, not a six-cell rectangle.
-  const points=design.helices.map(h=>[h.axis_start.x,h.axis_start.y])
+  const points=created.map(h=>[h.axis_start.x,h.axis_start.y])
   const center=[0,1].map(a=>points.reduce((sum,p)=>sum+p[a],0)/6)
   const radii=points.map(p=>Math.hypot(p[0]-center[0],p[1]-center[1]))
   expect(Math.min(...radii)).toBeGreaterThan(1)
@@ -94,7 +101,9 @@ test(`new part → right Tools Extrude → ${square?'square 2×3':'canonical 6HB
   const layers=await page.evaluate(()=>window.__NADOC_VIEW_VOLUMES__.layers().map(l=>({id:l.volume.id,count:l.keys.size})))
   expect(layers).toHaveLength(1)
   expect(layers[0].count).toBeGreaterThan(0)
-  expect(layers[0].count).toBeLessThan(6*length*2)
+  const totalNucleotides=await page.evaluate(async()=>(await (await import('/src/api/client.js'))._request('GET','/design/geometry')).nucleotides.length)
+  // The volume must cover a strict subset of the complete loaded design.
+  expect(layers[0].count).toBeLessThan(totalNucleotides)
   await page.screenshot({path:info.outputPath('desktop-subsection.png')})
   await expect.poll(async()=> (await read()).view_volumes[0]?.enabled).toBe(true)
   const saved=await read()
@@ -115,10 +124,14 @@ test(`new part → right Tools Extrude → ${square?'square 2×3':'canonical 6HB
   const reloaded=await page.context().newPage()
   await reloaded.goto('/?doc=__e2e__extrude-volume-reloaded')
   await reloaded.evaluate(async file=>(await import('/src/api/client.js')).loadDesign(file),file)
-  const restored=await reloaded.evaluate(async ()=>(await import('/src/state/store.js')).store.getState().currentDesign)
+  const restored=await reloaded.evaluate(async ()=>({...(await import('/src/state/store.js')).store.getState().currentDesign,feature_log:(await (await import('/src/api/client.js'))._request('GET','/design/feature-log/full')).feature_log}))
   expect(restored.lattice_type).toBe(design.lattice_type)
   expect(restored.helices).toEqual(saved.helices)
   expect(restored.view_volumes).toEqual(saved.view_volumes)
   expect(restored.feature_log).toEqual(saved.feature_log)
   await reloaded.close()
 })
+
+// Optional read-only resource-condition evidence for full-size VR audits.
+test.beforeEach(async ({page}) => { await installAuditBrowserTrace(page) })
+test.afterEach(async ({page}, info) => { await saveAuditBrowserTrace(page, info) })

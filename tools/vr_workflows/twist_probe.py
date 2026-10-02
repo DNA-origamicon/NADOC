@@ -1,6 +1,7 @@
 """Twist via production controller input; exported geometry is read-only targeting."""
 import argparse
 import json
+from tools.vr_workflows.audit_intervals import operation
 import os
 import time
 from pathlib import Path
@@ -29,6 +30,11 @@ def run(socket, output, preset, mode):
             raise RuntimeError('Viewer did not become focused')
         time.sleep(.1)
     live = LiveSession(bridge, physical=True, allow_transactions=True)
+    from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+    if os.environ.get('NADOC_VR_AUDIT_DESIGN') and mode=='edit':
+        from tools.vr_workflows.audit_representation import wait_startup
+        wait_startup(live)
+    else:prepare_audit_representation(live)
     controls = SidebarControls(live, out, preset)
     trials = []
 
@@ -37,7 +43,9 @@ def run(socket, output, preset, mode):
         while not predicate(live.state):
             if time.monotonic() > deadline:
                 raise RuntimeError('Twist feedback timed out')
-            live.frame(); time.sleep(.05)
+            try:live.frame()
+            except TimeoutError:continue
+            time.sleep(.05)
 
     def reach(position, hand=1, **kwargs):
         trial = reach_target(live, list(position), preset, 7100+len(trials), hand=hand,
@@ -143,6 +151,8 @@ def run(socket, output, preset, mode):
             pad(live,1)
             pick(1, 12); pick(2, 80)
             wait(lambda s: s['twist']['ready'])
+            if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+                prepare_audit_representation(live,via_feedback=True)
             capture('planes-and-handles')
             starting_planes = live.state['twist']['planes']
             # Turn the Plane 2 radial handle through a quarter circle; Plane 1 stays fixed.
@@ -201,7 +211,8 @@ def run(socket, output, preset, mode):
             click('twist:less');click('twist:less')
             wait(lambda s: s['twist']['ready'])
             (out/'draft.json').write_text(json.dumps(live.state['twist'], indent=2))
-            click('twist:confirm'); wait(lambda s: s['status'] == 'COMMITTED')
+            with operation(live,'twist-commit'):
+                click('twist:confirm'); wait(lambda s: s['status'] == 'COMMITTED')
             park(); capture('committed')
         (out/'result.json').write_text(json.dumps(live.state, indent=2))
     except Exception:

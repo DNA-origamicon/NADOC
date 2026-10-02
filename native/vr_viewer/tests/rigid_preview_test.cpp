@@ -74,7 +74,11 @@ SceneData previewFixture() {
         {"point",{{"moving",1,1}}}, {"fixed",{{"other",1,1}}},
         {"boundary",{{"moving",1,0},{"other",0,1}}},
         {"half",{{"moving",.25F,.75F}}}, {"box",{{"moving",1,1}}}};
-    for (size_t i=0;i<kRepresentationCount;++i) data.representations[i]=source;
+    for (size_t i=0;i<kRepresentationCount;++i) {
+        data.representations[i]=source;
+        auto index=std::make_shared<SourceIndex>();index->rebuild(data.representations[i]);
+        data.prepared[i]=prepareStaticRepresentation(data.representations[i],static_cast<Representation>(i),index);
+    }
     return data;
 }
 int parity() {
@@ -84,7 +88,9 @@ int parity() {
     if(!window){glfwTerminate();return 77;}
     glfwMakeContextCurrent(window);glEnable(GL_DEPTH_TEST);
     {
-    GlScene fast(previewFixture(),true,{}, {},false), reference(previewFixture(),true,{}, {},false);
+    GlScene fast(previewFixture(),true,{}, {},false);
+    GlScene reference(previewFixture(),true,{}, {},false);
+    reference.staticSnapHighlightsForTest=false;
     reference.disablePackedPreviewForTest();
     reference.volumeGuardsEnabledForTest=false;
     std::vector<nadoc_vr::ViewVolumeRecord> volumes;
@@ -116,8 +122,28 @@ int parity() {
         assert(glGetError()==GL_NO_ERROR);
         std::cout<<"PREVIEW_PARITY stage="<<stage<<" differing_bytes_gt1="<<changed<<" max_delta="<<maxDelta<<std::endl;
     };
+    const auto beforeHover=fast.styleApplicationsForTest;
+    for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({"moving"}, {},{},{});
+    compare("hover-owner");
+    for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {"fixed"},{},{});
+    compare("hover-identity");
+    for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {},{},{});
+    compare("hover-cleared");
+    assert(fast.styleApplicationsForTest==beforeHover);
     for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {},{"moving"},{});
     assert(fast.hasPackedPreviewForTest());compare("selection");
+    const auto beforeSelectedHover=fast.styleApplicationsForTest;
+    for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({"moving"}, {},{"moving"},{});
+    compare("hover-subsumed-by-selection");
+    assert(fast.styleApplicationsForTest==beforeSelectedHover);
+    for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({"other"}, {"half"},{"moving"},{});
+    compare("hover-with-selection");
+    assert(fast.styleApplicationsForTest==beforeSelectedHover);
+    for(auto* scene:{&fast,&reference})scene->setToolPreview({"moving"},glm::translate(glm::mat4(1),glm::vec3(.02F,.03F,0)));
+    compare("hover-weighted-preview");
+    for(auto* scene:{&fast,&reference})scene->setToolPreview({},glm::mat4(1));
+    for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {},{"moving"},{});
+    compare("hover-with-selection-cleared");
     for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {},{"missing-owner"},{});
     assert(!fast.hasPackedPreviewForTest());
     for(auto* scene:{&fast,&reference})scene->setToolPreview({"missing-owner"},glm::translate(glm::mat4(1),glm::vec3(.2F,0,0)));
@@ -131,8 +157,19 @@ int parity() {
     }
     for(auto* scene:{&fast,&reference})scene->setToolPreview({},glm::mat4(1));compare("cancel");
     for(auto* scene:{&fast,&reference})scene->setToolPreview({"moving"},glm::translate(glm::mat4(1),glm::vec3(.04F,0,0)));
+    const auto stylesBeforeCommit = fast.styleApplicationsForTest;
     for(auto* scene:{&fast,&reference})assert(scene->acceptToolCommit());compare("commit");
+    assert(fast.styleApplicationsForTest == stylesBeforeCommit);
+    for(auto* scene:{&fast,&reference})assert(scene->acceptToolUndo());compare("packed-undo");
+    assert(fast.styleApplicationsForTest == stylesBeforeCommit);
+    for(auto* scene:{&fast,&reference})scene->setToolPreview({"moving"},glm::translate(glm::mat4(1),glm::vec3(.04F,0,0)));
+    for(auto* scene:{&fast,&reference})assert(scene->acceptToolCommit());compare("recommit-after-undo");
     for(auto* scene:{&fast,&reference})scene->setToolPreview({"moving"},glm::translate(glm::mat4(1),glm::vec3(0,.03F,0)));compare("after-commit");
+    for(auto* scene:{&fast,&reference})assert(scene->acceptToolUndo());compare("packed-undo-with-preview");
+    assert(fast.styleApplicationsForTest == stylesBeforeCommit);
+    for(auto* scene:{&fast,&reference})assert(scene->acceptToolCommit());compare("commit-pending-after-undo");
+    for(auto* scene:{&fast,&reference})scene->setToolPreview({"moving"},glm::translate(glm::mat4(1),glm::vec3(.02F,0,0)));
+    for(auto* scene:{&fast,&reference})assert(scene->acceptToolCommit());compare("second-commit-bakes-previous-layer");
     for(auto* scene:{&fast,&reference})scene->setStyle(Representation::vdw,Coloring::strand);compare("style-change");
     for(auto* scene:{&fast,&reference})scene->setToolPreview({"other"},glm::translate(glm::mat4(1),glm::vec3(0,-.03F,0)));compare("owner-change");
     for(auto* scene:{&fast,&reference})scene->setToolPreview({},glm::mat4(1));

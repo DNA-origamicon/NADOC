@@ -4,12 +4,27 @@
 #include <sstream>
 #include <string>
 #include <iostream>
+#include <future>
+#include <chrono>
 
 namespace nadoc_vr {
-class SceneRefreshInbox {
+template<class Scene> class SceneRefreshInbox {
  public:
     uint64_t revision() const { return revision_; }
-    template<class Apply> void poll(const std::string& eventPath, Apply apply) {
+    // Parsing is CPU-only. GL activation and the revision publication remain on
+    // the caller's context thread, and the old scene keeps rendering while busy.
+    template<class Load, class Apply> void poll(const std::string& eventPath, Load load, Apply apply) {
+        if (pending_.valid()) {
+            if (pending_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+            try {
+                apply(pending_.get());
+                revision_ = pendingRevision_;
+                std::cout << "VR_SCENE_APPLIED revision=" << revision_ << std::endl;
+            } catch (const std::exception& error) {
+                std::cerr << "VR scene refresh retained previous scene: " << error.what() << std::endl;
+            }
+            return;
+        }
         if (eventPath.empty() || (++frames_ % 15) != 0) return;
         std::ifstream input(eventPath + ".scene");
         std::string record; std::getline(input, record);
@@ -19,16 +34,15 @@ class SceneRefreshInbox {
         if (!(fields >> magic >> version >> revision >> path) || fields >> trailing ||
             magic != "NADOCVR_SCENE" || version != 1 || revision <= revision_ ||
             path != eventPath + ".scene-" + std::to_string(revision)) return;
-        try {
-            apply(path);
-            revision_ = revision;
-            std::cout << "VR_SCENE_APPLIED revision=" << revision << std::endl;
-        } catch (const std::exception& error) {
-            // Old scene stays live; a transient rename/read race is retried.
+        pendingRevision_ = revision;
+        try { pending_ = std::async(std::launch::async, [load, path] { return load(path); }); }
+        catch (const std::exception& error) {
             std::cerr << "VR scene refresh retained previous scene: " << error.what() << std::endl;
         }
     }
  private:
+    std::future<Scene> pending_;
+    uint64_t pendingRevision_ = 0;
     uint64_t revision_ = 0;
     uint32_t frames_ = 0;
 };

@@ -6,7 +6,7 @@ struct RigidPreviewGeometry {
     using Weights = std::pair<float, float>;
     template<class T> struct Channel {
         struct Edit { size_t index; Weights weights; };
-        std::vector<T> original, current;
+        std::vector<T> original, current, beforeCommit;
         std::vector<Edit> edits;
         void add(const T& value, Weights weights) {
             if (weights.first != 0 || weights.second != 0)
@@ -14,6 +14,28 @@ struct RigidPreviewGeometry {
             original.push_back(value);
         }
         void finish() { current = original; }
+        template<class Include> void includeFixed(Include include) const {
+            size_t edit=0;
+            for(size_t i=0;i<current.size();++i) {
+                if(edit<edits.size() && edits[edit].index==i) {++edit;continue;}
+                include(current[i]);
+            }
+        }
+        template<class Include> void includeEdited(Include include) const {
+            for(const auto& edit:edits) include(current[edit.index]);
+        }
+        void commit() {
+            beforeCommit.clear(); beforeCommit.reserve(edits.size());
+            for (const auto& edit : edits) {
+                beforeCommit.push_back(original[edit.index]);
+                original[edit.index] = current[edit.index];
+            }
+        }
+        void undoCommit() {
+            for (size_t i = 0; i < edits.size(); ++i)
+                original[edits[i].index] = beforeCommit[i];
+            beforeCommit.clear();
+        }
         template<class Transform> void apply(Transform transform) {
             for (const auto& edit : edits) {
                 current[edit.index] = original[edit.index];
@@ -31,6 +53,9 @@ struct RigidPreviewGeometry {
         }
     };
     std::string token;
+    bool hasCommittedBaseline = false;
+    glm::vec3 fixedLo{std::numeric_limits<float>::max()};
+    glm::vec3 fixedHi{std::numeric_limits<float>::lowest()};
     Channel<Vertex> points, glowPoints;
     Channel<Cylinder> cylinders, glowCylinders, halves, glowHalves;
     Channel<Box> boxes, glowBoxes;
@@ -39,6 +64,23 @@ struct RigidPreviewGeometry {
     void finish() {
         points.finish(); glowPoints.finish(); cylinders.finish(); glowCylinders.finish();
         halves.finish(); glowHalves.finish(); boxes.finish(); glowBoxes.finish();
+        fixedLo=glm::vec3(std::numeric_limits<float>::max());
+        fixedHi=glm::vec3(std::numeric_limits<float>::lowest());
+        auto include=[&](glm::vec3 p,float r=0){fixedLo=glm::min(fixedLo,p-glm::vec3(r));fixedHi=glm::max(fixedHi,p+glm::vec3(r));};
+        points.includeFixed([&](const auto& v){include(v.position,v.size);});
+        for(const auto* channel:{&cylinders,&halves})
+            channel->includeFixed([&](const auto& v){include(v.start,v.radius);include(v.end,v.radius);});
+        boxes.includeFixed([&](const auto& v){nadoc_vr::includeMeshBounds(v,include);});
+    }
+    void commit() {
+        points.commit(); glowPoints.commit(); cylinders.commit(); glowCylinders.commit();
+        halves.commit(); glowHalves.commit(); boxes.commit(); glowBoxes.commit();
+        hasCommittedBaseline = true;
+    }
+    void undoCommit() {
+        points.undoCommit(); glowPoints.undoCommit(); cylinders.undoCommit(); glowCylinders.undoCommit();
+        halves.undoCommit(); glowHalves.undoCommit(); boxes.undoCommit(); glowBoxes.undoCommit();
+        hasCommittedBaseline = false;
     }
     void apply(const glm::mat4& transform) {
         auto point = [&](Vertex& v, Weights w) {
@@ -61,14 +103,14 @@ struct RigidPreviewGeometry {
         boxes.apply(box); glowBoxes.apply(box);
     }
     void bounds(glm::vec3& center, float& radius) const {
-        glm::vec3 lo(std::numeric_limits<float>::max()), hi(std::numeric_limits<float>::lowest());
+        glm::vec3 lo=fixedLo, hi=fixedHi;
         auto include = [&](glm::vec3 p, float r = 0) {
             lo = glm::min(lo, p - glm::vec3(r)); hi = glm::max(hi, p + glm::vec3(r));
         };
-        for (const auto& v : points.current) include(v.position, v.size);
+        points.includeEdited([&](const auto& v){include(v.position,v.size);});
         for (const auto* channel : {&cylinders, &halves})
-            for (const auto& v : channel->current) { include(v.start, v.radius); include(v.end, v.radius); }
-        for (const auto& v : boxes.current) nadoc_vr::includeMeshBounds(v, include);
+            channel->includeEdited([&](const auto& v){include(v.start,v.radius);include(v.end,v.radius);});
+        boxes.includeEdited([&](const auto& v){nadoc_vr::includeMeshBounds(v,include);});
         if (points.current.empty() && cylinders.current.empty() && halves.current.empty() && boxes.current.empty()) return;
         center = (lo + hi) * .5F;
         radius = std::max(glm::length(hi - lo) * .5F, .01F);

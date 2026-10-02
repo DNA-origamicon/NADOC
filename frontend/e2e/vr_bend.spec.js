@@ -1,3 +1,4 @@
+import {installAuditBrowserTrace, saveAuditBrowserTrace, importAuditDesign, startAuditRepresentationBridge} from './helpers/vr_audit_design.js'
 import { test, expect } from '@playwright/test'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -8,14 +9,18 @@ const execute = promisify(execFile)
 test.skip(!process.env.NADOC_PHYSICAL_VR_TEST, 'physical runtime opt-in')
 const base = process.env.NADOC_E2E_API_BASE
 let pid
+let auditStyleBridge
 
 test.afterEach(async ({ request }) => {
+  await auditStyleBridge?.close(); auditStyleBridge=null
+  delete process.env.NADOC_VR_AUDIT_STYLE_URL
   const status = await (await request.get(`${base}/api/vr/status`)).json()
   if (pid && status.pid === pid) await request.post(`${base}/api/vr/stop`)
 })
 
 test('ScryWrite bend planes, handles, wheels, desktop commit, save and Undo', async ({ page, request }, info) => {
   test.setTimeout(840000)
+  if (process.env.NADOC_VR_FRAME_AUDIT === '1') { const cdp = await page.context().newCDPSession(page); await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false }) }
   await page.goto('/?doc=__e2e__bend-tour&scrywrite=transactions')
   await page.getByRole('button', { name: 'New Part', exact: true }).click()
   await page.getByRole('textbox', { name: 'filename', exact: true }).fill('__e2e__VR Bend')
@@ -23,12 +28,15 @@ test('ScryWrite bend planes, handles, wheels, desktop commit, save and Undo', as
   await page.getByRole('button', { name: 'Create', exact: true }).click()
   await expect(page.locator('#welcome-screen')).toBeHidden()
   // Only fixture creation uses the public API. All measured edits use controllers.
+  if (!await importAuditDesign(page, info)) {
   await page.evaluate(async () => {
     await (await import('/src/api/client.js')).addBundleSegment({ cells: [[0,0]], lengthBp: 101 })
   })
+  }
   const read = () => page.evaluate(async () => {
     const s = (await import('/src/state/store.js')).store.getState()
-    return { design: s.currentDesign, geometry: s.currentGeometry }
+    const api=await import('/src/api/client.js')
+    return { design: {...s.currentDesign,feature_log:(await api._request('GET','/design/feature-log/full')).feature_log}, geometry: (await api._request('GET','/design/geometry')).nucleotides }
   })
   const before = await read()
   fs.writeFileSync(info.outputPath('before.json'), JSON.stringify(before))
@@ -41,7 +49,9 @@ test('ScryWrite bend planes, handles, wheels, desktop commit, save and Undo', as
     if (status.pid) pid = status.pid
     return status.running && !!status.scrywrite_socket
   }, { timeout: 30000 }).toBe(true)
-  const profiles = process.env.NADOC_VR_BEND_VALIDATE === '1'
+  auditStyleBridge=await startAuditRepresentationBridge(page)
+  if(auditStyleBridge)process.env.NADOC_VR_AUDIT_STYLE_URL=auditStyleBridge.url
+  const profiles = process.env.NADOC_VR_AUDIT_PROFILE ? [process.env.NADOC_VR_AUDIT_PROFILE] : process.env.NADOC_VR_BEND_VALIDATE === '1'
     ? ['steady_fast','steady_deliberate','variable_fast','variable_deliberate'] : ['steady_fast']
   const reloadChecks = []
   for (const preset of profiles) {
@@ -102,9 +112,13 @@ test('ScryWrite bend planes, handles, wheels, desktop commit, save and Undo', as
     const reload = await page.context().newPage()
     await reload.goto('/?doc=__e2e__bend-reload-'+preset)
     await reload.evaluate(async file => (await import('/src/api/client.js')).loadDesign(file), artifact)
-    const restored = await reload.evaluate(async () => (await import('/src/state/store.js')).store.getState().currentDesign)
+    const restored = await reload.evaluate(async () => ({...(await import('/src/state/store.js')).store.getState().currentDesign,feature_log:(await (await import('/src/api/client.js'))._request('GET','/design/feature-log/full')).feature_log}))
     expect(restored.deformations).toEqual(saved.design.deformations)
     expect(restored.feature_log).toEqual(saved.design.feature_log)
     await reload.close()
   }
 })
+
+// Optional read-only resource-condition evidence for full-size VR audits.
+test.beforeEach(async ({page}) => { await installAuditBrowserTrace(page) })
+test.afterEach(async ({page}, info) => { await saveAuditBrowserTrace(page, info) })

@@ -24,6 +24,7 @@ def main():
     output=(args.output or ROOT/'.development-artifacts/vr-extrude'/uuid.uuid4().hex[:10]).resolve()
     output.mkdir(parents=True,exist_ok=True)
     profiles=['steady_fast','steady_deliberate','variable_fast','variable_deliberate'] if args.validate else ['steady_fast']
+    if os.environ.get('NADOC_VR_AUDIT_PROFILE'): profiles=[os.environ['NADOC_VR_AUDIT_PROFILE']]
     lattices=[args.lattice] if args.lattice else ['honeycomb','square'] if args.validate else ['honeycomb']
     results=[]
     with tempfile.TemporaryDirectory(prefix='nadoc-extrude-tour-') as temporary:
@@ -41,7 +42,7 @@ def main():
                  'NADOC_VR_DEMO':'0' if args.validate else '1','NADOC_VR_DEMO_HOLD':'3'}
             command=['npx','playwright','test','--config','playwright.smoke.config.js',
                      'vr_extrude_volume.spec.js','--workers=1','--output',str(output/lattice/profile)]
-            if not args.validate: command.append('--headed')
+            if not args.validate or os.environ.get('NADOC_VR_FRAME_AUDIT') == '1': command.append('--headed')
             result=subprocess.run(command,cwd=ROOT/'frontend',env=env)
             results.append({'lattice':lattice,'profile':profile,'passed':result.returncode==0})
             (output/'result.json').write_text(json.dumps({'results':results,'workspace':'temporary, removed on exit'},indent=2))

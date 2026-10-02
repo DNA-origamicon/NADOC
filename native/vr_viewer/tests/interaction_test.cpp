@@ -1,3 +1,4 @@
+#include "selection_owner_index.hpp"
 #include "painted_commit_gate.hpp"
 #include "selection_level_guard.hpp"
 #include "freeform_placement.hpp"
@@ -675,6 +676,33 @@ void selectionVolumeUsesDesktopFilterOwner() {
         aliases, kinds, "primitive:a", "xover") == "xover:a");
     require(!nadoc_vr::selectionVolumeOwnerToken(
         aliases, kinds, "missing", "strand"));
+}
+
+void indexedSelectionMatchesReference() {
+    std::vector<nadoc_vr::OwnerAliasEntry> aliases = {
+        {"axis", {"end:near", "end:far"}}, {"terminal", {"end:far", "end:far"}},
+        {"segment:one-end", {"end:far"}}, {"duplicate", {"multi", "base"}},
+        {"duplicate", {"end:near"}}, {"unknown", {"missing"}}
+    };
+    std::vector<std::pair<std::string,std::string>> kinds = {
+        {"end:near","end"},{"end:far","end"},{"multi","strand"},
+        {"multi","base"},{"multi","crossover"},{"base","base"},{"multi","cluster"}
+    };
+    for (int i=0;i<6720;++i) aliases.push_back({"primitive:"+std::to_string(i), {"multi", "base"}});
+    nadoc_vr::SelectionOwnerIndex index;
+    index.reset(aliases);
+    for (const auto& [token,kind]:kinds) index.addKind(token,kind);
+    for (const auto& entry:aliases)
+        for (const auto& level:{"default","base","domain","strand","xover","cluster","end","unknown"})
+            require(index.resolve(entry.identity,level)==nadoc_vr::selectionVolumeOwnerToken(aliases,kinds,entry.identity,level));
+    require(!index.resolve("missing","base"));
+    // Source replacement must remove both aliases and typed-token records.
+    const std::vector<nadoc_vr::OwnerAliasEntry> replacement{{"replacement",{"multi"}}};
+    index.reset(replacement);
+    require(!index.resolve("duplicate","base"));
+    require(!index.resolve("replacement","base"));
+    index.addKind("multi","end");
+    require(index.resolve("replacement","end")=="multi");
 }
 
 void menuScalingKeepsRenderingAndHitCoordinatesAligned() {
@@ -1556,6 +1584,7 @@ int main() {
     selectionVolumeScrollResizesPreciselyAndStaysBounded();
     selectionVolumeOverlapMatchesRenderedPrimitiveVolumes();
     selectionVolumeUsesDesktopFilterOwner();
+    indexedSelectionMatchesReference();
     freeformPlacementUndoesPresentationWithoutScalingTopology();
     pendingToolDragAccumulatesInModelSpaceAndCancelsExactly();
     pendingToolDragRotatesRigidlyWithTheController();

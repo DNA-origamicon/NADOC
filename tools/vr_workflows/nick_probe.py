@@ -1,5 +1,6 @@
 """Physical wheel Nick / Undo / Redo, including analog squeeze and visible glow."""
 import json
+from tools.vr_workflows.audit_intervals import operation
 import os
 import sys
 import time
@@ -32,12 +33,16 @@ def run(socket, output, action):
         time.sleep(.1)
     (out/'startup.json').write_text(json.dumps(readiness,indent=2))
     live=LiveSession(bridge,physical=True,allow_transactions=True)
+    from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+    prepare_audit_representation(live)
     trials=[];preset=os.environ.get('NADOC_VR_PROFILE','steady_fast')
     def wait(predicate):
         deadline=time.monotonic()+60
         while not predicate(live.state):
             if time.monotonic()>deadline:raise RuntimeError('Wheel edit timed out')
-            live.frame();time.sleep(.05)
+            try:live.frame()
+            except TimeoutError:continue
+            time.sleep(.05)
     def reach(p,q=None,acquired=None):
         for attempt in range(3 if acquired else 1):
             trial=reach_target(live,p,preset,9600+len(trials),target_position=p,target_orientation=q or [0,0,0,1],acquired=acquired)
@@ -98,8 +103,16 @@ def run(socket, output, action):
                 assert live.state['scene_revision']==revision
                 live.capture_to(out/label,discard_source=True)
                 from tools.vr_workflows.quiver_pixels import check as quiver_pixels
-                assert quiver_pixels(out/label)['passed'], 'Scissors did not visibly equip/stow'
-                assert not quiver_pixels(out/label,offscreen=True)['passed']
+                checked=out/label
+                if not quiver_pixels(checked)['passed'] and os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+                    from tools.vr_workflows.audit_observation import clear_wrist
+                    observation_position=clear_wrist(checked)
+                    reach(observation_position,q)
+                    checked=out/(label+'-clear')
+                    live.capture_to(checked,discard_source=True)
+                    (checked/'placement.json').write_text(json.dumps({'position':observation_position,'reason':'controller cleared from captured molecular pixels in both eyes; unchanged model, quiver gesture endpoints and pixel oracle'},indent=2))
+                assert quiver_pixels(checked)['passed'], 'Scissors did not visibly equip/stow'
+                assert not quiver_pixels(checked,offscreen=True)['passed']
             # The left quiver independently opens/stows the tablet while the
             # right scissors remain equipped throughout.
             left_front=head-right*.28+forward*.4+[0,-.1,0]
@@ -121,6 +134,16 @@ def run(socket, output, action):
             live.button('trigger',hand=1);live.frame()
             assert live.state['scene_revision']==revision
             bonds=live.state['ligation']['bonds'];index=len(bonds)//4
+            if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+                from tools.vr_workflows.audit_observation import front_bond
+                target_evidence,_=live.capture_to(out/'bond-target-setup',discard_source=True)
+                bonds=live.state['ligation']['bonds']
+                masks=[np.fromfile(out/'bond-target-setup'/(eye['eye']+'.ids.u32'),dtype=np.uint32)
+                       .reshape(eye['height'],eye['width'])!=0 for eye in target_evidence['eyes']]
+                index=front_bond(target_evidence,bonds,masks)
+                (out/'bond-target-setup'/'target.json').write_text(json.dumps({
+                    'original_index':len(bonds)//4,'index':index,'bond':bonds[index],
+                    'reason':'nearest bond with stereo framing and captured molecular-pixel clearance for blades; unchanged motion and pixel oracle'},indent=2))
             b=bonds[index];mid=(np.array(b['a'])+b['b'])/2
             left_trial=reach_target(live,mid.tolist(),preset,9699,target_position=(mid+rotate(q,[0,0,.12])).tolist(),target_orientation=q,hand=0)
             trials.append(left_trial);(out/'reaches.json').write_text(json.dumps(trials,indent=2))
@@ -138,7 +161,8 @@ def run(socket, output, action):
                 assert check(out/label)['passed'],f'{label}: scissors or bond glow missing'
                 assert not check(out/label,offscreen=True)['passed']
             live.send('trigger_value',hand=1,value=1);live.frame()
-        wait(lambda s:s['scene_revision']>revision and s['ligation']['version']>version and not s['ligation']['waiting'])
+        with operation(live,'nick-feedback'):
+            wait(lambda s:s['scene_revision']>revision and s['ligation']['version']>version and not s['ligation']['waiting'])
         assert live.state['ligation']['status']=='created'
         # A held trigger across topology refresh must not cut another bond.
         settled=live.state['scene_revision']

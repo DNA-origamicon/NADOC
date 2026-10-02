@@ -1,3 +1,4 @@
+import {installAuditBrowserTrace, saveAuditBrowserTrace, importAuditDesign} from './helpers/vr_audit_design.js'
 import { test, expect } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -11,21 +12,23 @@ test.afterEach(async ({ request }) => {
 })
 test('selected end arrow trigger pull commits once and desktop Undo restores it', async ({ page, request }, info) => {
   test.setTimeout(240000)
+  if (process.env.NADOC_VR_FRAME_AUDIT === '1') { const cdp = await page.context().newCDPSession(page); await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false }) }
   await page.goto('/?doc=__e2e__end-resize&scrywrite=transactions')
   await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
   await page.click('#menu-file-new')
   await page.fill('#new-design-name', '__e2e__End Resize')
   await page.getByRole('button', { name: 'Create', exact: true }).click()
-  const before = await page.evaluate(async () => {
+  const auditImported = await importAuditDesign(page, info)
+  const before = await page.evaluate(async auditImported => {
     const api = await import('/src/api/client.js')
     const { store } = await import('/src/state/store.js')
-    await api.createBundle({ cells: [[0,0]], lengthBp: 42, plane: 'XY', name: '__e2e__Resize' })
+    if (!auditImported) await api.createBundle({ cells: [[0,0]], lengthBp: 42, plane: 'XY', name: '__e2e__Resize' })
     const state = store.getState()
-    const nuc = state.currentGeometry.find(n => n.is_three_prime && n.bp_index === 41)
+    const nuc = state.currentGeometry.find(n => n.is_three_prime && (auditImported || n.bp_index === 41))
     const ref = { kind: 'end', key: `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}` }
     store.setState({ selection: { context: 'design', level: 'end', items: [ref], primary: ref } })
     return { design: state.currentDesign, strandId: nuc.strand_id, helixId: nuc.helix_id }
-  })
+  }, auditImported)
   await page.evaluate(() => document.querySelector('#menu-help-view-vr').click())
   let status
   await expect.poll(async () => {
@@ -61,3 +64,7 @@ test('selected end arrow trigger pull commits once and desktop Undo restores it'
   await page.evaluate(async () => (await import('/src/api/client.js')).undo())
   expect((await read()).strands).toEqual(before.design.strands)
 })
+
+// Optional read-only resource-condition evidence for full-size VR audits.
+test.beforeEach(async ({page}) => { await installAuditBrowserTrace(page) })
+test.afterEach(async ({page}, info) => { await saveAuditBrowserTrace(page, info) })

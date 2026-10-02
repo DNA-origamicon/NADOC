@@ -76,3 +76,31 @@ it('yields background desktop draws to native VR while keeping synchronization a
   frame(); expect(customDraw).toHaveBeenCalledTimes(3)
   runtime.dispose(); focused.mockRestore(); hidden.mockRestore()
 })
+
+it('can suppress focused desktop drawing without stopping transactions or trajectory updates, and resumes after VR', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  document.body.innerHTML = '<div><canvas></canvas></div>'
+  const focused = vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+  const runtime = initScene(document.querySelector('canvas'))
+  const frame = runtime.renderer.setAnimationLoop.mock.calls[0][0]
+  const synchronize = vi.fn(), trajectory = vi.fn(), draw = vi.fn()
+  runtime.addFrameCallback(synchronize)
+  runtime.setRenderFn(draw)
+  runtime.setNativeVRDesktopEnabled(false)
+  frame(); expect(draw).toHaveBeenCalledOnce()
+  runtime.setNativeVRActive(true)
+  requestTrajectoryFrame(trajectory)
+  frame()
+  expect(trajectory).toHaveBeenCalledOnce()
+  expect(synchronize).toHaveBeenCalledTimes(2)
+  expect(draw).toHaveBeenCalledOnce()
+  runtime.setNativeVRDesktopEnabled(true)
+  frame(); expect(draw).toHaveBeenCalledTimes(2)
+  runtime.setNativeVRDesktopEnabled(false)
+  runtime.renderer.xr.isPresenting = true
+  frame(); expect(draw).toHaveBeenCalledTimes(3)
+  runtime.renderer.xr.isPresenting = false
+  runtime.setNativeVRActive(false)
+  frame(); expect(draw).toHaveBeenCalledTimes(4)
+  runtime.dispose(); focused.mockRestore()
+})

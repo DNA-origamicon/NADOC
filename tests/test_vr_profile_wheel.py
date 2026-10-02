@@ -30,7 +30,7 @@ def test_drag_failure_releases_trigger_and_retains_acquisition(monkeypatch, tmp_
         def frame(self):
             pass
     live = Live()
-    monkeypatch.setattr('tools.vr_workflows.profile_wheel.reach_target', lambda *args: {'samples':[]})
+    monkeypatch.setattr('tools.vr_workflows.profile_wheel.reach_target', lambda *args, **kwargs: {'samples':[]})
     def fail(*args):
         raise TimeoutError('late playback')
     monkeypatch.setattr('tools.vr_workflows.profile_wheel.drag',fail)
@@ -81,7 +81,7 @@ def test_final_wheel_drag_can_use_fine_correction_without_fourth_drag(monkeypatc
     def drag(*args):
         state['extrude']['length_bp'] = next(outcomes)
         return []
-    monkeypatch.setattr('tools.vr_workflows.profile_wheel.reach_target',lambda *args:{'samples':[]})
+    monkeypatch.setattr('tools.vr_workflows.profile_wheel.reach_target',lambda *args, **kwargs:{'samples':[]})
     monkeypatch.setattr('tools.vr_workflows.profile_wheel.drag',drag)
     clicks=[]
     def click(label):

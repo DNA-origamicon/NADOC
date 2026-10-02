@@ -13,6 +13,8 @@ import os
 socket,output,mode=sys.argv[1:4]
 out=Path(output);out.mkdir(parents=True,exist_ok=True)
 live=LiveSession(Bridge(socket),physical=True,allow_transactions=True)
+from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+prepare_audit_representation(live)
 controls=SidebarControls(live,out,os.environ.get('NADOC_VR_PROFILE','steady_fast'))
 def wait(predicate):
     deadline=time.monotonic()+15
