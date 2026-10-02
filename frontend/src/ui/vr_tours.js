@@ -2,15 +2,15 @@ import { el } from './primitives/dom.js'
 import './vr_tours.css'
 
 /** Direct-launch flyouts use the same menu behavior as the other Debug entries. */
-export function initVrTours({ headers = () => ({}), request = fetch, store = {}, showToast = () => {} } = {}) {
-  const entry = document.getElementById('menu-debug-vr-tours')
+export function initVrTours({ headers = () => ({}), request = fetch, store = {}, showToast = () => {}, entryId = 'menu-debug-vr-tours', title = 'VR Tours & Tests', groupFilter = null, modes = ['demo', 'validate'] } = {}) {
+  const entry = document.getElementById(entryId)
   if (!entry) return null
   let run = null, busy = false, loaded = false, timer = null, disposed = false
   const menu = el('div', { className: 'submenu vr-tours-menu', attrs: { role: 'menu' } })
   const status = el('span', { className: 'vr-tours-status', attrs: { role: 'status' } })
   const stop = el('button', { className: 'dropdown-item', text: 'Stop tour', on: { click: () => action('/stop/'+run.id) } })
   entry.className = 'submenu-item'
-  entry.replaceChildren(document.createTextNode('VR Tours & Tests'), el('span', { text: '›', attrs: { 'aria-hidden': 'true' } }), menu)
+  entry.replaceChildren(document.createTextNode(title), el('span', { text: '›', attrs: { 'aria-hidden': 'true' } }), menu)
   entry.tabIndex = 0
   entry.setAttribute('aria-haspopup', 'menu')
   menu.append(status)
@@ -58,12 +58,12 @@ export function initVrTours({ headers = () => ({}), request = fetch, store = {},
       const catalog = await api()
       if (disposed) return
       run = catalog.run
-      for (const group of catalog.groups) {
+      for (const group of catalog.groups.filter(g => !groupFilter || g.id === groupFilter)) {
         const children = el('div', { className: 'submenu vr-tours-menu vr-tours-leaves', attrs: { role: 'menu' } })
         for (const tour of catalog.tours.filter(t => t.group === group.id)) {
-          for (const mode of ['demo', 'validate']) {
+          for (const mode of modes) {
             children.append(el('button', {
-              className: 'dropdown-item', text: `${tour.title} ${mode === 'demo' ? 'demo' : 'validation'}`,
+              className: 'dropdown-item', text: `${tour.title} ${mode === 'desktop' ? 'desktop demo' : mode === 'demo' ? (groupFilter ? 'VR demo' : 'demo') : 'validation'}`,
               dataset: { start: tour.id, mode, runnable: String(tour.runnable) },
               attrs: { title: tour.description },
               on: { click: () => action('/start', { tour: tour.id, mode,

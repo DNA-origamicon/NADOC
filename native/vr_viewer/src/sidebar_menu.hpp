@@ -247,22 +247,47 @@ class SidebarMenu {
                 const auto& rows=tab().rows;
                 const auto r=std::find_if(rows.begin(),rows.end(),[&](const auto& row){return row.id==tab().key+":"+id;});
                 if(r==rows.end())return;
-                const float left=cx-.327F,right=cx+.327F,middle=(left+right)*.5F;
+                const float extent=tab().key=="bend"?.375F:.327F;
+                const float left=cx-extent,right=cx+extent,middle=(left+right)*.5F;
                 const MenuPanelBounds box{{column==2?middle+.006F:left,y-height*.5F},
                                           {column==1?middle-.006F:right,y+height*.5F}};
                 out.push_back({r->id,label(r->action,r->label),column?"":r->section,r->action,box,available(r->action),isActive(r->action)});
             };
             add("back",.463F);add("confirm",.36F,1,.08F);add("cancel",.36F,2,.08F);
             add("plane1",.26F,1);add("plane2",.26F,2);
+            if(tab().key=="bend")for(auto& c:out)if(c.id=="bend:plane1" || c.id=="bend:plane2") {
+                c.action="";c.enabled=false;
+            }
             if(tab().key=="twist") {
                 add("amount",.15F);add("less",.055F,1,.07F);add("more",.055F,2,.07F);
                 add("units",-.05F);add("reverse",-.15F,1);add("zero",-.15F,2);
                 add("target",-.26F);add("undo",-.37F,1);add("recenter",-.37F,2);return out;
             }
-            add("angle",.15F);add("direction",.04F);
-            add("direction-less",-.055F,1,.07F);add("direction-more",-.055F,2,.07F);
-            add("radius",-.15F);add("radius-less",-.245F,1,.07F);add("radius-more",-.245F,2,.07F);
-            add("target",-.35F);add("undo",-.46F,1,.08F);add("recenter",-.46F,2,.08F);
+            const bool dropdown=std::any_of(tab().rows.begin(),tab().rows.end(),[](const auto& r){return r.id.starts_with("bend:cluster-");});
+            add("cluster",.15F,dropdown?0:1);
+            if(dropdown) {
+                int i=0;
+                for(const auto& r:tab().rows)if(r.id.starts_with("bend:cluster-"))add(r.id.substr(5),.04F-.11F*i++);
+                add("clusters-prev",-.42F,1);add("clusters-next",-.42F,2);
+                return out;
+            }
+            add("manual",.15F,2);
+            // Dedicated wheel hit areas to the LEFT of readouts. Angle and
+            // curvature share a row; number fields never initiate a drag.
+            auto wheelField=[&](const std::string& id,float y,int column) {
+                add(id,y,column,.17F);
+                auto& field=out.back();const float left=field.bounds.minimum.x;
+                field.bounds.minimum.x+=.112F;
+                auto wheel=field;
+                wheel.id="bend:"+id+"-wheel";wheel.action=wheel.id;wheel.label="";wheel.section="";
+                wheel.bounds.minimum.x=left;wheel.bounds.maximum.x=left+.102F;
+                out.push_back(wheel);
+            };
+            wheelField("angle",-.005F,1);wheelField("radius",-.005F,2);
+            wheelField("direction",-.195F,0);
+            add("direction-less",-.325F,1,.07F);add("direction-more",-.325F,2,.07F);
+            add("radius-less",-.40F,1,.07F);add("radius-more",-.40F,2,.07F);
+            add("undo",-.485F,1,.07F);add("recenter",-.485F,2,.07F);
             return out;
         }
         const auto rows=visibleRows();
@@ -423,7 +448,7 @@ class SidebarMenu {
             const glm::vec3 accent=ui_style::buttonAccent(c.id);
             if(!scrollbar) bg=glm::mix(glm::vec3(.075F),accent,c.active?.10F:c.enabled?(hover?.075F:.045F):.02F);
             const glm::vec3 border=c.active?ui_style::selectedBorder:c.enabled?glm::mix(ui_style::border,accent,.25F):ui_style::disabledBorder;
-            if(c.id=="move:selection")fg=ui_style::text;
+            if(c.id=="move:selection" || c.id=="bend:plane1" || c.id=="bend:plane2")fg=ui_style::text;
             else ui_style::rounded(b,bg,border,line,fill);
             if((focus.active && c.id==focus.id) || (hover && c.enabled)) {
                 const glm::vec2 lo=b.minimum+glm::vec2(ui_style::focusInset);
@@ -431,7 +456,7 @@ class SidebarMenu {
                 const auto color=focus.active && c.id==focus.id?ui_style::focus:ui_style::selectedBorder;
                 ui_style::rounded({lo,hi},bg,color,line,[](MenuPanelBounds,glm::vec3){},ui_style::cornerRadius-.004F,.003F);
             }
-            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,!c.icon.empty()?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,.15F):glm::vec2(.15F,.065F));
+            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,c.id.ends_with("-wheel")?glm::vec2(.05F,.065F):!c.icon.empty()?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,.15F):glm::vec2(.15F,.065F));
             if(scrollbar) {
                 const auto thumb=dynamicActive()?dynamicThumb(c.id):scrollThumb();
                 const auto color=c.enabled?ui_style::disabledText:glm::vec3(.55F);
@@ -474,7 +499,7 @@ class SidebarMenu {
                     fill({{b.minimum.x+.012F,b.minimum.y+.009F},{b.minimum.x+.012F+(b.maximum.x-b.minimum.x-.024F)*progress->first,b.minimum.y+.017F}},{.25F,.8F,.6F});
                     continue;
                 }
-                auto lines=wrap(c.label,32);
+                auto lines=wrap(c.label,c.id=="bend:radius"?16:32);
                 // Fit long desktop descriptions without silently truncating them.
                 size_t longest=1;for(const auto& value:lines) longest=std::max(longest,value.size());
                 float s=std::min({.0032F,(b.maximum.x-b.minimum.x-.024F)/float(longest*6-1),.056F/std::max(7.F,static_cast<float>(lines.size()*9))});

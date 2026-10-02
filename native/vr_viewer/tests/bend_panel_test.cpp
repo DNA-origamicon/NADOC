@@ -1,5 +1,6 @@
 #include "bend_panel.hpp"
 #include <cassert>
+#include <iostream>
 int main() {
     using namespace nadoc_vr;
     BendArc arc;arc.a={0,0,0};arc.b={0,0,1};arc.length=1;
@@ -45,14 +46,24 @@ int main() {
     for(const auto* name:{"plane1","plane2","angle","direction","radius","undo","direction-less","direction-more","radius-less","radius-more"})assert(found.contains(std::string("bend:")+name));
     assert(!menus[1].canScroll(1));
     menus[1].open=false;panel.refresh(menus,config,"READY");assert(menus[1].open);
+    menus[1].draw([](auto,auto,auto){},[](auto,auto){});
+    std::cerr<<menus[1].audit.summary()<<std::endl;
+    assert(menus[1].audit.valid());
     const auto buttons=menus[1].controls();
     for(size_t i=0;i<buttons.size();++i)for(size_t j=i+1;j<buttons.size();++j) {
         const auto a=buttons[i].bounds,b=buttons[j].bounds;
         assert(a.maximum.x<=b.minimum.x || b.maximum.x<=a.minimum.x || a.maximum.y<=b.minimum.y || b.maximum.y<=a.minimum.y);
     }
     menus[1].offsets[menus[1].selected]=0;
-    menus[1].focus.id="bend:plane1";menus[1].navigate({1,0});
-    assert(menus[1].focus.id=="bend:plane2");
+    auto find=[&](const std::string& id){return *std::find_if(buttons.begin(),buttons.end(),[&](const auto& c){return c.id==id;});};
+    assert(!find("bend:plane1").enabled && find("bend:plane1").action.empty());
+    assert(!find("bend:plane2").enabled && find("bend:plane2").action.empty());
+    assert(find("bend:angle").bounds.minimum.y==find("bend:radius").bounds.minimum.y);
+    for(const auto* field:{"angle","direction","radius"}) {
+        assert(find(std::string("bend:")+field+"-wheel").bounds.maximum.x<find(std::string("bend:")+field).bounds.minimum.x);
+    }
+    menus[1].focus.id="bend:direction-less";menus[1].navigate({1,0});
+    assert(menus[1].focus.id=="bend:direction-more");
     assert(!found.contains("tab:tools"));panel.exit(menus);assert(!menus[1].customTab);
     const auto feedback=parseToolExecutionFeedback("NADOCVR_TOOL_EXECUTION 1 1 2 twist confirm cluster cluster:1 succeeded committed feature:twist\n",0,2);
     assert(feedback && feedback->mode=="twist");

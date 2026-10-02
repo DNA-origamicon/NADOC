@@ -3286,6 +3286,9 @@ def _event_payload(state: dict | None) -> dict:
         plane_pick_config_sequence = raw_plane_pick_config_sequence
         plane_pick_slot = event.get("plane_pick_slot")
         plane_pick_identity = event.get("plane_pick_identity")
+        plane_pick_extent = event.get("plane_pick_extent")
+        if plane_pick_extent is not None and plane_pick_extent not in ("a", "b"):
+            raise ValueError("invalid plane pick extent")
         plane_pick_position = event.get("plane_pick_position")
         if plane_pick_position is not None and (
             not isinstance(plane_pick_position, list) or len(plane_pick_position) != 3 or
@@ -3437,6 +3440,19 @@ def _event_payload(state: dict | None) -> dict:
         basis = np.identity(4, dtype=float)
         basis[:3, :3] = view_rotation
         nadoc_transform = np.linalg.inv(basis) @ view_transform @ basis
+        # Native plane/endpoint coordinates use the launch camera basis, just
+        # like scene vertices. Browser deformation axes use design coordinates.
+        inverse_rotation = np.linalg.inv(view_rotation)
+        if plane_pick_position is not None:
+            plane_pick_position = (inverse_rotation @ plane_pick_position).tolist()
+        if tool_config is not None and tool_config.get("mode") == "bend":
+            if "bend_endpoints" in tool_config:
+                tool_config["bend_endpoints"] = [
+                    (inverse_rotation @ point).tolist()
+                    for point in tool_config["bend_endpoints"]
+                ]
+            if "bend_midpoint" in tool_config:
+                tool_config["bend_midpoint"] = (inverse_rotation @ tool_config["bend_midpoint"]).tolist()
         return {
             "sequence": sequence,
             **({"share_control": value} if (value := parse_share_event(event.get("share_control"))) else {}),
@@ -3470,6 +3486,7 @@ def _event_payload(state: dict | None) -> dict:
             "plane_pick_slot": plane_pick_slot,
             "plane_pick_identity": plane_pick_identity,
             **({"plane_pick_position": plane_pick_position} if plane_pick_position is not None else {}),
+            **({"plane_pick_extent": plane_pick_extent} if plane_pick_extent is not None else {}),
             "transform_sequence": transform_sequence,
             "transform_matrix": nadoc_transform.flatten(order="F").tolist(),
             "ready_sequence": ready_sequence,

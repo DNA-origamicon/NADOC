@@ -381,6 +381,7 @@ export function initVRSession({
             slot: event.plane_pick_slot,
             identity: event.plane_pick_identity,
             ...(event.plane_pick_position ? { position: event.plane_pick_position } : {}),
+            ...(event.plane_pick_extent ? { extent: event.plane_pick_extent } : {}),
           })
         }
         const transformSequence = Number(event?.transform_sequence ?? 0)

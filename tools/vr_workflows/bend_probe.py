@@ -84,8 +84,13 @@ def run(socket, output, preset, mode):
         settle()  # Capture/readback is outside the next measured controller reach.
 
     def menu():
-        if not live.state['sidebars'][1]['open']:
+        # A legacy menu may consume the first click by closing. Only start
+        # sidebar navigation after its actual open state has been observed.
+        for _ in range(2):
+            if live.state['sidebars'][1]['open']:
+                return
             live.button('menu', hand=1)
+            live.frame()
 
     def approach_point(point):
         point = np.array(point)
@@ -94,25 +99,28 @@ def run(socket, output, preset, mode):
         reach(body,target_orientation=aim_orientation(body.tolist(),point.tolist()))
 
     def pick(slot, bp):
-        menu(); controls.click('bend:plane'+str(slot))
-        assert live.state['sidebars'][1]['open']
-        settle()
-        candidates = [p for p in live.state['bend']['targets'] if int(unquote(p['identity']).split(':')[4]) == bp]
-        assert candidates, f'No rendered bp {bp}'
-        target = candidates[0]
-        approach_point(target['world'])
+        wait(lambda s: s['bend']['ready'])
+        plane = np.array(live.state['bend']['planes'][slot-1]['center'])
+        approach_point(plane)
+        wait(lambda s: s['bend']['plane_hover'][1] == slot-1)
         live.send('button', hand=1, button='trigger', pressed=True); live.frame()
-        wait(lambda s: s['bend']['plane'+str(slot)] is not None)
-        # Continue holding and move along the element: bp must follow the hand.
+        assert live.state['bend']['plane_hand'] == 1 and not live.state['bend']['grabbing']
         initial = live.state['bend']['plane'+str(slot)]
-        adjacent = [p for p in live.state['bend']['targets'] if int(unquote(p['identity']).split(':')[4]) == bp+8]
-        approach_point(adjacent[0]['world'])
+        target = next(p for p in live.state['bend']['targets'] if int(unquote(p['identity']).split(':')[4]) == bp)
+        # Translate the held controller along the cluster, retaining its aim.
+        delta = np.array(target['world'])-plane
+        reach(np.array(live.state['hands'][1]['position'])+delta,
+              target_orientation=live.state['hands'][1]['orientation_xyzw'])
         wait(lambda s: s['bend']['plane'+str(slot)] != initial)
         live.send('button', hand=1, button='trigger', pressed=False); live.frame()
         park(); settle()
 
     try:
-        reveal(live); menu()
+        reveal(live)
+        # Physical controllers may be asleep; seed a valid wrist pose before
+        # asking the normal menu action to place the panel.
+        live.send('pose',hand=1,position=(np.array(live.state['head_position'])+[.2,-.25,-.35]).tolist(),orientation=[0,0,0,1])
+        live.frame(); menu();wait(lambda s: s['sidebars'][1]['open'])
         if mode == 'undo':
             controls.click('bend:undo'); wait(lambda s: s['status'] == 'UNDONE')
             park(); capture('undone')
@@ -127,7 +135,8 @@ def run(socket, output, preset, mode):
             settle(); menu()
             controls.click('tab:tools'); controls.click('tool-bend')
             controls.click('bend:cancel')
-            assert live.state['bend']['plane1'] is None and live.state['bend']['plane2'] is None
+            wait(lambda s: s['bend']['ready'])
+            assert live.state['bend']['plane1'] < live.state['bend']['plane2']
             assert live.state['sidebars'][1]['tab'] == 'bend'
             assert not any(c['id'].startswith('tool-') for c in live.state['controls'])
             capture('bend-menu')
@@ -142,6 +151,7 @@ def run(socket, output, preset, mode):
             pad(live,1)
             pick(1, 12); pick(2, 80)
             wait(lambda s: s['bend']['ready'])
+            controls.click('bend:manual'); assert live.state['bend']['manual']
             capture('planes-and-handles')
             starting_endpoints = np.array(live.state['bend']['endpoints'])
             starting_normals = np.array([p['normal'] for p in live.state['bend']['planes']])
@@ -187,7 +197,7 @@ def run(socket, output, preset, mode):
                     park(1)  # Keep Plane 1 held while the free hand operates the wheels.
             menu()
             for name, field in (('angle','angle'), ('direction','direction'), ('radius','angle')):
-                identifier = 'bend:'+name
+                identifier = 'bend:'+name+'-wheel'
                 controls.click(identifier)
                 c = next(c for c in live.state['controls'] if c['id'] == identifier)
                 destination = control_approach(c, live.state['hands'][1]['position'])
@@ -202,6 +212,7 @@ def run(socket, output, preset, mode):
                 reach(np.array(live.state['hands'][1]['position'])+up*.16,
                     target_orientation=live.state['hands'][1]['orientation_xyzw'])
                 live.send('button', hand=1, button='trigger', pressed=False); live.frame()
+                settle()
                 after = live.state['bend'][field]
                 assert np.linalg.norm(np.array(live.state['bend']['endpoints'][1])-starting_endpoints[1]) < 2e-5
                 assert np.linalg.norm(np.array(live.state['bend']['tangents'][1])-starting_normals[1]) < 2e-5

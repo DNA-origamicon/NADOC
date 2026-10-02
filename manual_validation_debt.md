@@ -709,3 +709,5 @@ comparison produces identical Stick pixels and comparable GPU time, but does not
 clear head/grip motion comfort. Review original framing, Stick and Ball & Stick,
 head turns and grip translation/rotation without changing detail or motion
 settings. [Evidence](docs/audits/vr_motion_regression_20260929.md).
+
+- **MV-VR-GALLERY — PENDING — Component gallery in-headset comparison (2026-10-01).** Open Debug → VR Component Gallery → Component evaluations → VR demo. User selected 0–1000 / 35% for Extrude and 0–100 / 35% for Bend; those presets are applied. Compare the six Button styles and six Cards and lists styles for through-lens readability, press feedback, target comfort and aesthetic preference. Desktop render/input checks do not establish headset comfort. Reproduction: `docs/vr_component_gallery.md`.

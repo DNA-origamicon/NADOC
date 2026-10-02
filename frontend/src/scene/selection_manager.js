@@ -55,7 +55,7 @@ import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
 import { resolveVREndToolContext } from './vr_tool_context.js'
 import { resolveVRDeformationScope } from './vr_tool_execution_plan.js'
-import { getVRDeformationPlaneFrames, nearestVRDeformationPlane } from './deformation_editor.js'
+import { getVRDeformationPlaneFrames, nearestVRDeformationPlane, extremeVRDeformationPlane } from './deformation_editor.js'
 import { selectedEndLigationArgs, selectedEndsIncludeNuc } from './force_ligation.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
@@ -5025,13 +5025,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     resolveVRToolTargetSnapshot(snapshot) { return _resolveVRToolTargetSnapshot(snapshot) },
 
     /** Resolve a model hit to one exact global bp without changing selection. */
-    resolveVRDeformationPlanePick(identity, position = null) {
+    resolveVRDeformationPlanePick(identity, position = null, extent = null, limits = null) {
       const state = store.getState()
       let pick = vrDeformationPlanePick(identity, {
         geometry: state.currentGeometry,
         design: state.currentDesign,
       })
-      if (!pick.resolved && !position) return pick
+      if (!pick.resolved && !position && !extent) return pick
       const selectedRef = selectionController.getState().primary ?? null
       const scope = resolveVRDeformationScope(selectedRef, {
         design: state.currentDesign,
@@ -5040,7 +5040,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (!scope.resolved) {
         return { resolved: false, reason: 'plane_frame_unavailable' }
       }
-      if (position) pick = nearestVRDeformationPlane(position, scope.clusterIds, scope.helixIds) ?? pick
+      if (extent) pick = extremeVRDeformationPlane(extent, scope.clusterIds, scope.helixIds) ?? pick
+      else if (position) pick = nearestVRDeformationPlane(position, scope.clusterIds, scope.helixIds, limits) ?? pick
       if (!pick.resolved) return pick
       const frames = getVRDeformationPlaneFrames(pick.bp, scope.clusterIds, scope.helixIds)
       return frames ? { ...pick, frame: frames.natural }

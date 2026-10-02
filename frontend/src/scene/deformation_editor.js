@@ -854,7 +854,7 @@ function _numericHelixAxes(clusterIdsOverride = null) {
 }
 
 /** Closest integer bp on the scoped contour, including coarse representations. */
-export function nearestVRDeformationPlane(position, clusterIds, helixIds = null) {
+export function nearestVRDeformationPlane(position, clusterIds, helixIds = null, limits = null) {
   if (!Array.isArray(position) || position.length !== 3 || !position.every(Number.isFinite)) return null
   const point = new THREE.Vector3(...position)
   let best = null
@@ -871,6 +871,19 @@ export function nearestVRDeformationPlane(position, clusterIds, helixIds = null)
         bp: axis.bpStart + Math.round(lo + t * (hi - lo)), helixId: axis.id, distance,
       }
     }
+  }
+  if (best && limits) best.bp = Math.max(limits.min ?? -2147483647, Math.min(limits.max ?? 2147483647, best.bp))
+  return best ? { ...best, resolved: true, reason: 'resolved' } : null
+}
+
+/** Outermost occupied bp positions in the selected cluster, never the whole design. */
+export function extremeVRDeformationPlane(slot, clusterIds, helixIds = null) {
+  if (!['a', 'b'].includes(slot) || (!clusterIds?.length && !helixIds?.length)) return null
+  const axes = _numericHelixAxes(clusterIds).filter(a => !helixIds?.length || helixIds.includes(a.id))
+  let best = null
+  for (const axis of axes) {
+    const bp = axis.bpStart + (slot === 'a' ? 0 : axis.lengthBp - 1)
+    if (!best || (slot === 'a' ? bp < best.bp : bp > best.bp)) best = { bp, helixId: axis.id }
   }
   return best ? { ...best, resolved: true, reason: 'resolved' } : null
 }

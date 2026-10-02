@@ -545,6 +545,11 @@ def test_native_deformation_plane_pick_events_are_bounded_and_config_bound(
     assert payload["plane_pick_config_sequence"] == 4
     assert payload["plane_pick_slot"] == "a"
     assert payload["plane_pick_identity"] == event["plane_pick_identity"]
+    for extent in ("a", "b"):
+        event_path.write_text(json.dumps({**event, "plane_pick_extent": extent}))
+        assert _event_payload({"event_path": str(event_path)})["plane_pick_extent"] == extent
+    event_path.write_text(json.dumps({**event, "plane_pick_extent": "outside"}))
+    assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
 
     for update in (
         {"plane_pick_config_sequence": 3},
@@ -554,6 +559,25 @@ def test_native_deformation_plane_pick_events_are_bounded_and_config_bound(
     ):
         event_path.write_text(json.dumps({**event, **update}))
         assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
+
+
+def test_bend_controller_positions_return_to_design_basis(tmp_path):
+    path = tmp_path / "bend-view-basis.json"
+    rotation = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+    path.write_text(json.dumps({
+        "sequence": 1, "tool_config_sequence": 1,
+        "tool_config": {"mode": "bend", "target_kind": "cluster",
+            "target_identity": "cluster:c1", "target_owner_tokens": ["owner"],
+            "plane_a_bp": 0, "plane_b_bp": 100, "angle_deg": 90, "direction_deg": 0,
+            "bend_endpoints": [[-2, 1, 0], [-4, 3, 10]], "bend_midpoint": [-3, 2, 5]},
+        "plane_pick_sequence": 1, "plane_pick_config_sequence": 1,
+        "plane_pick_slot": "a", "plane_pick_identity": "cluster:c1",
+        "plane_pick_position": [-2, 1, 0],
+    }))
+    payload = _event_payload({"event_path": str(path), "view_rotation": rotation.tolist()})
+    assert payload["plane_pick_position"] == [1, 2, 0]
+    assert payload["tool_config"]["bend_endpoints"] == [[1, 2, 0], [3, 4, 10]]
+    assert payload["tool_config"]["bend_midpoint"] == [2, 3, 5]
 
 
 def test_native_first_frame_timing_is_bounded_and_uses_backend_milestones(

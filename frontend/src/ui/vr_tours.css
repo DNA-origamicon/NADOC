@@ -1,6 +1,6 @@
 .vr-tours-menu { min-width: 240px; }
 .vr-tours-menu .dropdown-item { white-space: nowrap; }
-#menu-debug-vr-tours > span, .vr-tours-menu .submenu-item > span { margin-left: auto; }
+#menu-debug-vr-gallery > span, #menu-debug-vr-tours > span, .vr-tours-menu .submenu-item > span { margin-left: auto; }
 .vr-tours-status { display: block; padding: 8px 16px; max-width: 300px; color: var(--color-text-muted); font-size: 11px; }
 
 .vr-tours-leaves { max-height: calc(100vh - 16px); overflow-y: auto; }

@@ -303,6 +303,7 @@ describe('initVRSession', () => {
           plane_pick_config_sequence: 1,
           plane_pick_slot: 'a',
           plane_pick_identity: 'nuc:s1:0:h1:12:FORWARD:0',
+          plane_pick_extent: 'a',
           transform_sequence: 1,
           transform_matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 3, 4, 1],
         })
@@ -344,6 +345,7 @@ describe('initVRSession', () => {
           plane_pick_config_sequence: 1,
           plane_pick_slot: 'a',
           plane_pick_identity: 'nuc:s1:0:h1:12:FORWARD:0',
+          plane_pick_extent: 'a',
           transform_sequence: 1,
           transform_matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 3, 4, 1],
         }),
@@ -397,6 +399,7 @@ describe('initVRSession', () => {
       [{
         sequence: 1,
         type: 'plane_pick',
+        extent: 'a',
         toolConfigSequence: 1,
         slot: 'a',
         identity: 'nuc:s1:0:h1:12:FORWARD:0',

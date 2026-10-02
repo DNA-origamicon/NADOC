@@ -32,3 +32,19 @@ it('reports errors and re-enables launch without opening a popup', async () => {
   expect(toast).toHaveBeenCalledWith('Open a design',{severity:'error'})
   expect(document.querySelector('[data-start]').disabled).toBe(false)
 })
+
+it('opens the component gallery with VR and headset-free desktop launchers', async () => {
+  document.body.innerHTML='<div id="menu-debug-vr-gallery"></div>'
+  const request=vi.fn(async url=>({ok:true,json:async()=>url.endsWith('/start')
+    ? {run:{id:'gallery-owned',status:'running',output:'evidence'}}
+    : {...catalog,groups:[...catalog.groups,{id:'components',label:'Thumbwheel evaluations'}],
+      tours:[...catalog.tours,{id:'thumbwheel-gallery',group:'components',title:'Ridged thumbwheels',runnable:true}]}}))
+  ui=initVrTours({request,entryId:'menu-debug-vr-gallery',title:'VR Component Gallery',groupFilter:'components',modes:['demo','desktop','validate']})
+  await ui.open()
+  expect(document.querySelector('[data-category=right]')).toBeNull()
+  expect(document.querySelector('[data-mode=demo]').textContent).toBe('Ridged thumbwheels VR demo')
+  const desktop=document.querySelector('[data-mode=desktop]')
+  expect(desktop.textContent).toBe('Ridged thumbwheels desktop demo')
+  desktop.click();await flush()
+  expect(JSON.parse(request.mock.calls.find(([url])=>url.endsWith('/start'))[1].body)).toEqual({tour:'thumbwheel-gallery',mode:'desktop'})
+})

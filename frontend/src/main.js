@@ -6672,7 +6672,9 @@ async function main() {
             }) ?? null
           : null
         const pick = toolTarget
-          ? selectionManager.resolveVRDeformationPlanePick?.(event.identity, event.position) ?? null
+          ? selectionManager.resolveVRDeformationPlanePick?.(event.identity, event.position, event.extent,
+              draft?.mode !== 'bend' ? null : event.slot === 'a' ? { max: draft?.plane_b_bp == null ? null : draft.plane_b_bp - 1 }
+                : { min: draft?.plane_a_bp == null ? null : draft.plane_a_bp + 1 }) ?? null
           : null
         const feedback = vrPlaneFeedbackPayload(event, _vrToolConfigState, {
           toolTarget, planePick: pick,

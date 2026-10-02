@@ -16,6 +16,9 @@ export function initDebugMenu({
 }) {
   initTextToIntentModal()
   initVrTours({ headers: docHeaders, store, showToast })
+  initVrTours({ headers: docHeaders, store, showToast,
+    entryId: 'menu-debug-vr-gallery', title: 'VR Component Gallery',
+    groupFilter: 'components', modes: ['demo', 'desktop', 'validate'] })
 
   document.getElementById('menu-debug-lod-hud')?.addEventListener('click', function () {
     if (!window.__NADOC_DBG__?.toggleLodHud) {

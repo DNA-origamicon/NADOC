@@ -21,7 +21,7 @@ _run = None
 
 class StartTour(BaseModel):
     tour: str
-    mode: Literal['demo', 'validate'] = 'demo'
+    mode: Literal['demo', 'validate', 'desktop'] = 'demo'
     assembly_active: bool = False
 
 
@@ -81,10 +81,12 @@ def start(body: StartTour, request: Request):
     tour = next((t for t in catalog()['tours'] if t['id'] == body.tour), None)
     if not tour or not tour['runnable']:
         raise HTTPException(400, 'Choose a supported direct-launch tour.')
+    if body.mode == 'desktop' and tour['module'] != 'component_gallery_tour':
+        raise HTTPException(400, 'Desktop mode is only available for component galleries.')
     with _lock:
         if _run and _run['process'].poll() is None:
             raise HTTPException(409, 'A tour is already running. Stop it before starting another.')
-        if _viewer_active():
+        if body.mode != 'desktop' and _viewer_active():
             raise HTTPException(409, 'Close the active VR viewer before starting an isolated tour.')
         design = None
         if tour['module'] == 'representation_tour':
@@ -99,6 +101,8 @@ def start(body: StartTour, request: Request):
         directory = ROOT/'.development-artifacts/vr-debug-tours'/identifier
         directory.mkdir(parents=True)
         argv = [sys.executable, *arguments(tour, body.mode == 'validate'), '--output', str(directory/'evidence')]
+        if body.mode == 'desktop':
+            argv += ['--desktop']
         if design is not None:
             source = directory/'open-design.nadoc'
             source.write_text(design.to_json())

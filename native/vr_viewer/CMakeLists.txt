@@ -39,6 +39,13 @@ install(TARGETS nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export
 
 include(CTest)
 if(BUILD_TESTING)
+  add_executable(nadoc-vr-component-gallery-test tests/component_gallery_test.cpp)
+  target_link_libraries(nadoc-vr-component-gallery-test PRIVATE PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
+  add_test(NAME nadoc-vr-component-gallery COMMAND nadoc-vr-component-gallery-test ${CMAKE_CURRENT_BINARY_DIR}/gallery-evidence)
+  set_tests_properties(nadoc-vr-component-gallery PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(nadoc-vr-thumbwheel-mesh-test tests/thumbwheel_mesh_test.cpp)
+  target_include_directories(nadoc-vr-thumbwheel-mesh-test PRIVATE src)
+  add_test(NAME nadoc-vr-thumbwheel-mesh COMMAND nadoc-vr-thumbwheel-mesh-test)
   add_executable(nadoc-vr-shadow-light-test tests/shadow_light_test.cpp)
   target_include_directories(nadoc-vr-shadow-light-test PRIVATE src)
   add_test(NAME nadoc-vr-shadow-light COMMAND nadoc-vr-shadow-light-test)

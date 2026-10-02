@@ -55,6 +55,15 @@ struct BendArc {
 class BendPanel {
  public:
     bool active=false, posed=false, elements=false, twist=false;
+    bool manual=false, clustersOpen=false, defaultPlanes=false;
+    size_t clusterPage=0;
+    std::vector<std::string> clusters;
+    std::string clusterLabel="None";
+    std::array<std::optional<size_t>,2> planeHover{};
+    std::array<std::optional<glm::vec3>,2> beamEnd{};
+    std::array<bool,3> wheelHover{};
+    std::array<ThumbwheelControl,3> wheels;
+    float grabRayDistance=0;
     size_t savedOffset=0, grabbed=1, wheelIndex=0;
     std::optional<size_t> hand, planeHand, wheelHand;
     std::optional<std::string> pickSlot;
@@ -68,7 +77,7 @@ class BendPanel {
         renderedState_.reset();
         active=true;menus[1].open=true;menus[1].offsets[menus[1].selected]=0;menus[1].focus.reset();
     }
-    void reset() {posed=false;grabbed=1;hand.reset();planeHand.reset();wheelHand.reset();wheel.reset();lastPick.clear();}
+    void reset() {for(auto& w:wheels)w.reset();manual=false;defaultPlanes=false;clustersOpen=false;planeHover.fill(std::nullopt);beamEnd.fill(std::nullopt);posed=false;grabbed=1;hand.reset();planeHand.reset();wheelHand.reset();wheel.reset();lastPick.clear();}
     void exit(std::array<SidebarMenu,2>& menus) {
         active=false;reset();pickSlot.reset();
         auto& m=menus[1];m.customTab.reset();m.offsets[m.selected]=savedOffset;m.focus.reset();
@@ -77,7 +86,7 @@ class BendPanel {
         if(!active)return;
         menus[1].open=true;menus[1].offsets[menus[1].selected]=0;
         const std::string key=twist?"twist":"bend";
-        const RenderState state{twist,elements,config.planeABp(),config.planeBBp(),
+        const RenderState state{twist,elements,manual,clustersOpen,clusterPage,clusterLabel,clusters,config.planeABp(),config.planeBBp(),
             config.bendAngleDegrees(),config.bendDirectionDegrees(),config.twistAmount(),config.twistAmountMode()};
         // Refresh runs every frame (and again while dragging). Retain the menu
         // rows until their inputs change; opening and scrolling still work.
@@ -89,8 +98,8 @@ class BendPanel {
         };
         row("back",(twist?"Twist":"Bend")+std::string(" - Return to tools"),status);row("confirm","CONFIRM");row("cancel","CANCEL");
         auto bp=[](auto v){return v?std::to_string(*v):std::string("--");};
-        row("plane1","Plane 1: "+bp(config.planeABp()),"TRIGGER HOLD NEAREST ELEMENT / BP");
-        row("plane2","Plane 2: "+bp(config.planeBBp()),"TRIGGER HOLD NEAREST ELEMENT / BP");
+        row("plane1","Plane 1: "+bp(config.planeABp()),twist?"TRIGGER HOLD NEAREST ELEMENT / BP":"BP INDEX / GRAB PLANE TO MOVE");
+        row("plane2","Plane 2: "+bp(config.planeBBp()),twist?"TRIGGER HOLD NEAREST ELEMENT / BP":"BP INDEX / GRAB PLANE TO MOVE");
         if(twist) {
             const bool total=config.twistAmountMode()==TwistAmountMode::total_degrees;
             std::ostringstream amount;amount<<std::fixed<<std::setprecision(total?1:3)<<config.twistAmount();
@@ -102,6 +111,14 @@ class BendPanel {
             row("undo","UNDO");row("recenter","Frame model");
             menus[1].customTab=std::move(tab);return;
         }
+        row("cluster","Cluster: "+clusterLabel+"  v","CHOOSE CLUSTER");
+        if(clustersOpen) {
+            for(size_t i=clusterPage;i<std::min(clusterPage+4,clusters.size());++i)
+                row("cluster-"+std::to_string(i),clusters[i]);
+            row("clusters-prev","Previous");row("clusters-next","Next");
+        }
+        row("manual",manual?"Manual bend: ON":"Manual bend","KEEP BP INDICES / MOVE PLANE");
+        row("angle-wheel", "");row("direction-wheel", "");row("radius-wheel", "");
         row("angle","Angle: "+std::to_string(int(std::round(config.bendAngleDegrees())))+" deg","DRAG THUMBWHEEL / 1 DEG");
         row("direction","Direction: "+std::to_string(int(std::round(config.bendDirectionDegrees())))+" deg","DRAG THUMBWHEEL / 1 DEG");
         row("direction-less","-5 deg");row("direction-more","+5 deg");
@@ -109,14 +126,14 @@ class BendPanel {
         if(config.bendAngleDegrees()>0 && config.planeABp() && config.planeBBp())
             radius<<std::fixed<<std::setprecision(2)<<(*config.planeBBp()-*config.planeABp())*.334/(glm::radians(config.bendAngleDegrees()));
         else radius<<"infinite";
-        row("radius","Radius: "+radius.str()+" nm","DRAG THUMBWHEEL / 1 DEG ARC STEPS");
+        row("radius","Curvature R: "+radius.str()+" nm","DRAG THUMBWHEEL / 1 DEG ARC STEPS");
         row("radius-less","-10 nm");row("radius-more","+10 nm");
         row("target",elements?"Targets: element ends":"Targets: clusters","TRIGGER TO SWITCH TARGET TYPE");
         row("undo","UNDO");row("recenter","Frame model");
         menus[1].customTab=std::move(tab);
     }
  private:
-    using RenderState=std::tuple<bool,bool,std::optional<int32_t>,std::optional<int32_t>,double,double,double,TwistAmountMode>;
+    using RenderState=std::tuple<bool,bool,bool,bool,size_t,std::string,std::vector<std::string>,std::optional<int32_t>,std::optional<int32_t>,double,double,double,TwistAmountMode>;
     mutable std::optional<RenderState> renderedState_;
     mutable std::string renderedStatus_;
 };

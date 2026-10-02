@@ -7,6 +7,25 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Component gallery (2026-10-01)
+
+Debug → VR Component Gallery now offers native VR and headset-free desktop
+thumbwheel evaluation demos. Both share solid ridged meshes and inertia, with
+20/35/50% exposure columns and 0–10/100/1000 range rows. Extrude and Bend share
+the new clipped solid rendering. Launch, controls and validation:
+[component gallery](../docs/vr_component_gallery.md). Range-dependent sizing is
+approved by the user: Extrude uses 0–1000 / 35%, and Bend uses 0–100 / 35% with expanded layout and raised-surface hit testing. The gallery also offers six button styles inspired by MRTK, visionOS, Material and Blender, with VR/desktop demos and all-four-profile validation. Cards and lists adds six expandable studies with selectable children and the same launch modes.
+
+## Resource limits after the October 1 UI evaluation crash
+
+The workstation exhausted RAM while native C++ builds, the auto-parallel backend
+suite and unrestricted Vitest ran together. The user requested cautious resumption.
+For subsequent local VR UI work, run these jobs sequentially: native builds with
+`-j1` and reduced priority; Vitest with `--maxWorkers=2`; focused backend checks.
+Check available RAM and memory pressure before launching the next job. Preserve
+suite guards and report interrupted broad checks as incomplete. Do not stop user
+applications to make room for validation.
+
 ## Selected-part Move/Rotate slowdown (2026-10-01)
 
 User clarified the FPS drop concerns the selected-part Move/Rotate tool. A

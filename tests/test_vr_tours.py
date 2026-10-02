@@ -161,3 +161,40 @@ def test_ligation_tour_launches_isolated_workflow(client, monkeypatch, mode, too
     assert 'tools.vr_workflows.' + module in command
     assert ('--validate' in command) == (mode == 'validate')
     assert '--output' in command
+
+
+def test_gallery_desktop_launch_needs_no_idle_headset(client, monkeypatch):
+    monkeypatch.setattr(tours, '_viewer_active', lambda: True)
+    process=Mock(pid=987654);process.poll.return_value=None
+    popen=Mock(return_value=process);monkeypatch.setattr(tours.subprocess,'Popen',popen)
+    response=client.post('/api/vr/tours/start',json={'tour':'thumbwheel-gallery','mode':'desktop'})
+    assert response.status_code==200,response.text
+    argv=popen.call_args.args[0]
+    assert argv[1:3]==['-m','tools.vr_workflows.component_gallery_tour']
+    assert '--desktop' in argv and '--validate' not in argv
+
+
+def test_gallery_modes_are_scoped_and_validation_is_registered(client):
+    assert client.post('/api/vr/tours/start',json={'tour':'all','mode':'desktop'}).status_code==400
+    tour=next(t for t in catalog()['tours'] if t['id']=='thumbwheel-gallery')
+    assert arguments(tour,True)==['-m','tools.vr_workflows.component_gallery_tour','--validate']
+
+
+def test_button_gallery_has_both_native_modes_and_validation(client, monkeypatch):
+    tour=next(t for t in catalog()['tours'] if t['id']=='button-gallery')
+    assert arguments(tour,True)==['-m','tools.vr_workflows.component_gallery_tour','--component','buttons','--validate']
+    process=Mock(pid=987654);process.poll.return_value=None
+    popen=Mock(return_value=process);monkeypatch.setattr(tours.subprocess,'Popen',popen)
+    response=client.post('/api/vr/tours/start',json={'tour':'button-gallery','mode':'desktop'})
+    assert response.status_code==200,response.text
+    argv=popen.call_args.args[0]
+    assert argv[argv.index('--component')+1]=='buttons'
+    assert '--desktop' in argv
+
+
+def test_card_gallery_registers_desktop_and_vr():
+    from tools.vr_workflows.tour_catalog import catalog
+    tour = next(t for t in catalog()['tours'] if t['id'] == 'card-gallery')
+    assert tour['group'] == 'components'
+    assert tour['module'] == 'component_gallery_tour'
+    assert tour['args'] == ['--component', 'cards']

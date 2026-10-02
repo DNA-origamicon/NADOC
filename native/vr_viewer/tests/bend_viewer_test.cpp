@@ -6,7 +6,41 @@
 #include <cassert>
 namespace {
 struct LiveViewerTest {
+    static void clusters(const std::string& directory) {
+        Viewer v(SceneData{},directory+"/cluster-events.json");
+        v.liveSocket_.open(directory+"/clusters.sock");
+        SceneData data;data.available.fill(true);RepresentationData source;ColorSet colors;
+        for(auto& c:colors.values)c={.3F,.7F,1};
+        source.points={{"nuc:near",{0,0,-.5F},colors,.01F},{"nuc:far",{1,0,-2},colors,.01F}};
+        source.ownerHandles={{"near",{0,0,-.5F}},{"far",{1,0,-2}}};
+        source.ownerAliases={{"nuc:near",{"near"}},{"nuc:far",{"far"}}};
+        for(auto& rep:data.representations)rep=source;
+        v.glScene_=std::make_unique<GlScene>(std::move(data));
+        v.witnessObserverPosition_={0,0,0};v.selectedIdentity_="nuc:near";
+        v.selectedSelectionKind_="cluster";v.selectedOwnerTokens_={"near"};
+        v.activateSidebarAction("tool:bend",1);
+        assert(v.bendPanel_.clusterLabel=="Cluster 1" && v.bendPanel_.defaultPlanes);
+        assert(v.bendPickExtent_=="a" && !v.bendPickPosition_ && v.activePlanePickSequence_);
+        assert(v.nearestBendCluster({1,0,0},glm::vec3(0,0,-1))==1);
+        assert(v.nearestBendCluster({1.06F,0,0},glm::vec3(0,0,-1))==1);
+        assert(!v.nearestBendCluster({2,0,0},glm::vec3(0,0,-1)));
+        v.planeFeedbackPath_=directory+"/plane-feedback.txt";
+        auto acknowledge=[&](const std::string& slot,int bp) {
+            {std::ofstream f(v.planeFeedbackPath_);f<<"NADOCVR_PLANE_FEEDBACK 2 "<<v.activePlanePickSequence_<<' '<<v.toolConfigSequence_
+                <<" 1 resolved "<<slot<<" cluster nuc:near nuc:near "<<bp<<" 0 0 "<<bp*.334<<" 0 0 1 2\n";}
+            v.planeFeedbackPollFrame_=2;v.pollPlanePickFeedback();
+        };
+        acknowledge("a",-12);assert(v.bendPickExtent_=="b" && v.toolConfig_.planeABp()==-12);
+        acknowledge("b",104);assert(v.bendReady() && !v.bendPanel_.defaultPlanes && v.toolConfig_.planeBBp()==104);
+        v.activateSidebarAction("bend:cluster",1);assert(v.bendPanel_.clustersOpen);
+        const auto entries=v.sidebarMenus_.menus[1].controls();
+        assert(std::any_of(entries.begin(),entries.end(),[](const auto& c){return c.id=="bend:cluster-1";}));
+        v.activateSidebarAction("bend:cluster-1",1);
+        assert(v.bendPanel_.pendingSelection=="nuc:far" && !v.planeGuides_[0] && !v.planeGuides_[1]);
+        assert(!v.bendReady() && v.lastSelectIdentity_=="nuc:far");
+    }
     static void run(const std::string& directory) {
+        clusters(directory);
         Viewer v(SceneData{},directory+"/events.json");
         v.liveSocket_.open(directory+"/test.sock"); // Suppress physical haptics.
         SceneData data;data.available.fill(true);
@@ -15,9 +49,8 @@ struct LiveViewerTest {
         v.activateSidebarAction("tool:bend",1);
         assert(v.bendPanel_.active && !v.menuOpen_ && !v.latticeOpen_);
         assert(v.sidebarMenus_.menus[1].customTab->key=="bend");
-        v.activePlanePickSequence_=17;v.planePickSlot_="b";
         v.activateSidebarAction("bend:plane1",1);
-        assert(v.activePlanePickSequence_==0 && v.bendPanel_.pickSlot=="a");
+        assert(v.activePlanePickSequence_==0 && !v.bendPanel_.pickSlot);
         v.normalizationScale_=.6F/(100*.334F);
         (void)v.toolConfig_.setPlaneBp("a",0);(void)v.toolConfig_.setPlaneBp("b",100);
         DeformationPlaneGuide a,b;
@@ -31,6 +64,19 @@ struct LiveViewerTest {
         assert(glm::distance(v.bendPanel_.arc.tangent,v.planeGuides_[1]->natural.normal)<1e-6F);
         v.planeGuides_[1]=b;v.bendPanel_.grabbed=1;
         v.prepareBendArc();
+        // Default mode grabs the plane surface with a remote ray; it never bends.
+        v.hands_[1].valid=true;v.hands_[1].position={0,0,1};v.hands_[1].orientation=glm::quat(1,0,0,0);
+        std::array<bool,2> sliding{};v.processBendPlanes(sliding,false);
+        assert(v.bendPanel_.planeHover[1]==1 && v.bendPanel_.beamEnd[1]);
+        v.triggerClicked_[1]=true;v.triggerPressed_[1]=true;v.processBendPlanes(sliding,false);
+        assert(v.bendPanel_.planeHand==1 && !v.bendPanel_.hand);
+        v.triggerClicked_[1]=false;v.hands_[1].position.z-=.1F;sliding.fill(false);v.processBendPlanes(sliding,false);
+        assert(v.activePlanePickSequence_ && v.bendPickPosition_ && v.planePickSlot_=="b");
+        assert(v.toolConfig_.planeBBp()==100 && !v.bendPanel_.posed);
+        v.triggerPressed_[1]=false;v.processBendPlanes(sliding,false);v.clearPlanePick();
+        v.hands_[1].position={2,0,1};sliding.fill(false);v.processBendPlanes(sliding,false);
+        assert(!v.bendPanel_.planeHover[1] && !v.bendPanel_.beamEnd[1]);
+        v.activateSidebarAction("bend:manual",1);assert(v.bendPanel_.manual);
         v.hands_[1].valid=true;v.hands_[1].position=v.bendHandle(1);
         v.triggerClicked_[1]=true;v.triggerPressed_[1]=true;
         std::array<bool,2> blocked{};
@@ -73,7 +119,17 @@ struct LiveViewerTest {
         // The free hand can adjust direction while the first still holds the end.
         v.triggerPressed_[1]=true;
         const auto beforeDirection=v.bendPanel_.arc.b-v.bendPanel_.arc.a;
-        v.activateSidebarAction("bend:direction",1);
+        auto aimWheel=[&](const std::string& field) {
+            const auto& menu=v.sidebarMenus_.menus[1];const auto controls=menu.controls();
+            const auto c=std::find_if(controls.begin(),controls.end(),[&](const auto& c){return c.id=="bend:"+field+"-wheel";});
+            const auto xy=(c->bounds.minimum+c->bounds.maximum)*.5F;
+            v.hands_[1].position=menu.placement.worldPoint({xy.x,xy.y,.2F});
+            const auto normal=glm::normalize(menu.placement.worldPoint({0,0,1})-menu.placement.worldPoint({0,0,0}));
+            v.hands_[1].orientation=glm::rotation(glm::vec3(0,0,-1),-normal);
+        };
+        aimWheel("direction");
+        v.activateSidebarAction("bend:direction",1);assert(!v.bendPanel_.wheelHand);
+        v.activateSidebarAction("bend:direction-wheel",1);
         assert(v.bendPanel_.wheelHand==1);
         auto wheelLocal=v.sidebarMenus_.menus[1].placement.localPoint(v.hands_[1].position);
         wheelLocal.y+=.045F;
@@ -86,6 +142,8 @@ struct LiveViewerTest {
         assert(glm::distance(v.bendPanel_.arc.b-v.bendPanel_.arc.a,expected)<1e-6F);
         v.processBendHandles(blocked,false);
         assert(std::abs(v.toolConfig_.bendDirectionDegrees()-46)<.01);
+        // Pause before release so this precision check has no flick momentum.
+        for(int i=0;i<30;++i)v.processBendWheel(blocked);
         v.triggerPressed_[1]=false;v.processBendWheel(blocked);
         v.processBendHandles(blocked,false);
         assert(glm::distance(v.bendPanel_.arc.b-v.bendPanel_.arc.a,expected)<1e-6F);
@@ -98,16 +156,18 @@ struct LiveViewerTest {
         assert(v.bendPanel_.arc.a==retained && v.bendPanel_.arc.b==fixedB);
         v.triggerPressed_[0]=false;v.triggerClicked_[0]=false;v.processBendHandles(blocked,false);
         v.refreshExtrudePanel();
-        v.sidebarMenus_.menus[1].focus.id="bend:plane1";
+        v.sidebarMenus_.menus[1].focus.id="bend:direction-less";
         v.sidebarMenus_.menus[1].navigate({1,0});
-        assert(v.sidebarMenus_.menus[1].focus.id=="bend:plane2");
+        assert(v.sidebarMenus_.menus[1].focus.id=="bend:direction-more");
         const auto oldAngle=v.toolConfig_.bendAngleDegrees();
         v.triggerPressed_[1]=true;
-        v.activateSidebarAction("bend:angle",1);
+        aimWheel("angle");v.activateSidebarAction("bend:angle-wheel",1);
         const auto& placement=v.sidebarMenus_.menus[1].placement;
         auto local=placement.localPoint(v.hands_[1].position);local.y+=.045F;
         v.hands_[1].position=placement.worldPoint(local);blocked.fill(false);v.processBendWheel(blocked);
         assert(blocked[1] && v.toolConfig_.bendAngleDegrees()==std::round(oldAngle)+1);
+        // Pause before release so this precision check has no flick momentum.
+        for(int i=0;i<30;++i)v.processBendWheel(blocked);
         v.triggerPressed_[1]=false;v.processBendWheel(blocked);
         v.toggleMenu(1);assert(v.sidebarMenus_.menus[1].open);
         const auto stepDirection=v.toolConfig_.bendDirectionDegrees();
@@ -127,6 +187,46 @@ struct LiveViewerTest {
             assert(glm::distance(plane.center,slot==0?v.bendPanel_.arc.a:v.bendPanel_.arc.b)<1e-6F);
             assert(glm::distance(plane.normal,v.bendPanel_.arc.endTangent(float(slot)))<1e-6F);
         }
+        // Flicks coast after trigger release and eventually settle; confirm waits.
+        aimWheel("direction");v.triggerPressed_[1]=true;
+        v.activateSidebarAction("bend:direction-wheel",1);
+        local=placement.localPoint(v.hands_[1].position);local.y+=.12F;
+        v.hands_[1].position=placement.worldPoint(local);blocked.fill(false);v.processBendWheel(blocked);
+        const auto flickDirection=v.toolConfig_.bendDirectionDegrees();
+        v.triggerPressed_[1]=false;v.processBendWheel(blocked);assert(!v.bendReady());
+        for(int i=0;i<1000;++i)v.processBendWheel(blocked);
+        assert(v.toolConfig_.bendDirectionDegrees()!=flickDirection && v.bendReady());
+        assert(v.toolConfig_.planeABp()==0 && v.toolConfig_.planeBBp()==100);
+        // Focus loss stops a spinning wheel without discarding the draft.
+        v.bendPanel_.wheels[1].begin(0);(void)v.bendPanel_.wheels[1].drag(.1F,.01F);
+        v.bendPanel_.wheelHand=1;const auto savedAngle=v.toolConfig_.bendAngleDegrees();
+        v.suspendControllerInput();assert(!v.bendPanel_.wheelHand && !v.bendPanel_.wheels[1].moving());
+        assert(v.bendReady() && v.toolConfig_.bendAngleDegrees()==savedAngle);
+        // Render the real panel and raised wheels from an unobstructed view.
+        GLuint panelFbo=0,panelTexture=0;
+        glGenFramebuffers(1,&panelFbo);glBindFramebuffer(GL_FRAMEBUFFER,panelFbo);
+        glGenTextures(1,&panelTexture);glBindTexture(GL_TEXTURE_2D,panelTexture);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGB8,800,1000,0,GL_RGB,GL_UNSIGNED_BYTE,nullptr);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,panelTexture,0);
+        assert(glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE);glDisable(GL_DEPTH_TEST);
+        std::vector<Vertex> panelLines;
+        auto panelLine=[&](auto a,auto b,auto c){panelLines.push_back({a,c,1});panelLines.push_back({b,c,1});};
+        auto& panel=v.sidebarMenus_.menus[1];
+        panel.draw([&](auto a,auto b,auto c){panelLine(panel.placement.worldPoint(a),panel.placement.worldPoint(b),c);},[](auto,auto){});
+        const auto savedPlanes=v.planeGuides_;v.planeGuides_.fill(std::nullopt);
+        v.drawBend(panelLine);v.planeGuides_=savedPlanes;
+        const auto centerPanel=panel.placement.worldPoint({0,0,0});
+        const auto eyePanel=panel.placement.worldPoint({.10F,0,2});
+        const auto upPanel=glm::normalize(panel.placement.worldPoint({0,1,0})-centerPanel);
+        const auto panelVP=glm::ortho(-.36F,.36F,-.45F,.45F,.01F,10.F)*glm::lookAt(eyePanel,centerPanel,upPanel);
+        glViewport(0,0,800,1000);glClearColor(.025F,.03F,.04F,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+        v.glScene_->renderGuides(panelVP,panelLines);
+        v.solidWheels_.render(panelVP);
+        std::vector<unsigned char> panelPixels(800*1000*3);glReadPixels(0,0,800,1000,GL_RGB,GL_UNSIGNED_BYTE,panelPixels.data());
+        std::ofstream panelPPM(directory+"/bend-panel.ppm",std::ios::binary);panelPPM<<"P6\n800 1000\n255\n";
+        for(int y=999;y>=0;--y)panelPPM.write(reinterpret_cast<const char*>(panelPixels.data()+y*800*3),800*3);
+        std::cerr<<panel.audit.summary()<<std::endl;assert(panel.audit.valid());
+        glBindFramebuffer(GL_FRAMEBUFFER,0);glDeleteFramebuffers(1,&panelFbo);glDeleteTextures(1,&panelTexture);
         // Frame the curve from the side so the actual preview has measurable pixels.
         v.sidebarMenus_.menus[1].open=false;
         std::vector<Vertex> guides;

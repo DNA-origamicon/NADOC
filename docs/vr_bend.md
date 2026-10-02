@@ -4,25 +4,30 @@ Choose **Tools → Bend**. It replaces the tool list with the Bend panel, follow
 Extrude's pinned Return / Confirm / Cancel layout. All Bend controls stay visible on one page. Touchpad directions move
 between controls, including the paired step buttons. Grips move the scene; triggers edit the bend.
 
-1. Choose **Plane 1**, then hold a trigger near a cluster. The nearest scoped
-   contour determines an integer bp index. Moving while holding changes the bp;
-   crossing to another cluster changes the target and clears the old planes.
-   **Targets: element ends** also allows choosing an element through its end;
-   unclustered elements are scoped to their helix.
-2. Choose **Plane 2** and repeat. Both bp indices must be valid, with Plane 1 below
-   Plane 2. The desktop fields use the same names and accept signed bp indices.
-3. Grab either cyan end just outside a plane. Only one end can be held at once.
-   The other endpoint stays fixed at its starting plane, with its tangent locked to
-   that plane’s original normal. The moved plane follows the endpoint and stays
-   perpendicular to the curve. Switching ends resets
-   the previous bend first; regrabbing the same end continues it. The centerline preserves the
-   contour length, limiting endpoint separation to `(Plane 2 − Plane 1) × 0.334 nm`.
-4. Trigger-drag the Angle, Direction or Radius thumbwheel. Angle and Direction
-   snap to 1°. Radius is shown in nm and changes through 1° arc-angle detents;
-   increasing radius reduces angle. Release before confirming.
+1. Opening Bend selects the cluster nearest the tracked user. Use the **Cluster**
+   dropdown (paged for larger designs), or click a trigger while pointing at or
+   within 8 cm of another cluster, to change targets. Selection is acknowledged by
+   the browser before its planes are initialized.
+2. Both planes start at the selected cluster's lowest and highest occupied bp
+   indices. **Plane 1 / Plane 2** are readouts, not buttons. Aim at a plane to
+   highlight it and show a pointer beam. Hold the trigger and move to slide that
+   plane along the selected cluster. Motion projects onto its contour, rounds to
+   integer bp, and keeps Plane 1 below Plane 2.
+3. Enable **Manual bend** to grab either plane and move the bend endpoint without
+   changing either bp index. Both nearby grabs and remote ray grabs work. Only one
+   plane can be held at once. The other endpoint remains fixed, with its tangent
+   locked to its starting plane normal. Switching ends resets the previous bend;
+   regrabbing the same end continues it. Contour length remains
+   `(Plane 2 − Plane 1) × 0.334 nm`.
+4. Trigger-drag the inset, solid-ridged 3D thumbwheels to the **left** of the readouts. Angle
+   and Curvature R (radius in nm) share a row; Direction has its own wheel below.
+   The wheels use the Extrude wheel's ray-contact travel, degree detents, and
+   damped flick inertia. Increasing radius reduces angle. Number fields do not
+   initiate drags. Confirm becomes available after the wheels settle.
 5. **Confirm** writes a normal desktop Bend deformation and one feature-log entry,
    then refreshes the native scene. **Undo** targets that exact entry and refuses
-   to undo an intervening desktop edit. **Cancel** clears the draft.
+   to undo an intervening desktop edit. **Cancel** clears the bend and restores
+   the selected cluster's default planes.
 
 Plane picking projects onto the scoped helix axes, including coarse scene
 representations. Handle editing uses natural geometry; alternate
@@ -31,8 +36,8 @@ inspection layouts retain navigation but do not accept bend-handle grabs.
 The desktop controls were reviewed: plane bp/nm readouts, cluster scope with
 All/None, bend direction/compass, linked angle/radius, polymer-circle count,
 live preview, feasibility, Apply and Cancel. Polymer-circle automation and
-multi-cluster checkbox editing remain desktop controls. VR uses one proximity
-selected target, a live centerline preview, and backend feasibility on Confirm.
+multi-cluster checkbox editing remain desktop controls. VR uses one cluster
+selected by proximity, dropdown, or controller ray, a live centerline preview, and backend feasibility on Confirm.
 
 Implementation uses canonical curvature (degrees per bp), with optional world
 endpoint and midpoint constraints recording the controller pose. Both scalar and
@@ -71,8 +76,8 @@ part with Undo between profiles. SteamVR must have a tracked, focused headset;
 close any existing NADOC viewer before launching. This is synthetic controller
 input through ScryWrite, not a claim of through-lens comfort or legibility.
 
-`tools/vr_workflows/bend_probe.py` uses production menu clicks, trigger-held plane
-picking with bp movement, both endpoint handles, exclusive grab ownership, contour
+`tools/vr_workflows/bend_probe.py` uses production menu clicks, default planes and trigger-held plane
+sliding with bp movement, both endpoint handles, exclusive grab ownership, contour
 length and fixed-end checks, touchpad navigation, and angle/direction/radius wheels.
 It never writes tool configuration directly. Stereo handle checks project the
 observed world locations into both captured eyes and require actual colored

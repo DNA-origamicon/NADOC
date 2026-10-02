@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def catalog():
     groups = [
+        {'id': 'components', 'label': 'Component evaluations', 'description': 'Shared desktop and native VR component gallery.'},
         {'id': 'overview', 'label': 'Overview', 'description': 'Both controllers and every sidebar tab.'},
         {'id': 'left', 'label': 'Left sidebar', 'description': 'One complete scrolling tour per desktop tab.'},
         {'id': 'right', 'label': 'Right sidebar', 'description': 'One complete scrolling tour per desktop tab.'},
@@ -20,6 +21,12 @@ def catalog():
     def add(identifier, group, title, description, args=(), module='menu_tour', runnable=True):
         tours.append(dict(id=identifier, group=group, title=title, description=description,
                           module=module, args=list(args), runnable=runnable))
+    add('card-gallery', 'components', 'Cards and lists',
+        'Six expandable card and list styles with selectable children.', ['--component', 'cards'], module='component_gallery_tour')
+    add('button-gallery', 'components', 'Button styles',
+        'Six button surfaces inspired by MRTK, visionOS, Material and Blender. Compare hover, press travel, selected and disabled states in the same desktop/VR gallery.', ['--component','buttons'], module='component_gallery_tour')
+    add('thumbwheel-gallery', 'components', 'Ridged thumbwheels',
+        'Compare 20%, 35% and 50% exposed wheels for ranges 0-10, 0-100 and 0-1000. Interactive desktop needs no headset; VR uses the same mesh and inertia. Play demo, reset, or grab any wheel.', module='component_gallery_tour')
     add('all', 'overview', 'Complete sidebar tour', 'Open every tab, scroll every page, and check controls and rendered pixels.')
     add('quick', 'overview', 'Quick tab overview', 'Show the first page of every tab. A short demo, not full coverage.', ['--quick'])
     for tab in json.loads((ROOT/'native/vr_viewer/sidebar_catalog.json').read_text())['tabs']:
@@ -102,7 +109,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args
