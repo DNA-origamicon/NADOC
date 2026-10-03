@@ -54,13 +54,16 @@ def test_simulation_field_selects_continuous_extraction(monkeypatch, detail):
 
     calls = []
     remeshed = []
-    mesh = surface.SurfaceMesh(np.empty((0, 3)), np.empty((0, 3), int), [])
+    mesh = surface.SurfaceMesh(np.array([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]),
+                               np.array([[0, 1, 2]]), ["s"] * 3)
+    atoms = [SimpleNamespace(x=float(i), y=0., z=0., element="C", strand_id="s",
+                             helix_id="h", bp_index=i, direction="FORWARD") for i in range(4)]
     monkeypatch.setattr(
-        oxdna_health, "build_display_model", lambda *a, **k: SimpleNamespace(atoms=[])
+        oxdna_health, "build_display_model", lambda *a, **k: SimpleNamespace(atoms=atoms)
     )
     monkeypatch.setattr(surface, "adaptive_grid_spacing", lambda *a, **k: 0.12)
     monkeypatch.setattr(
-        surface, "compute_surface", lambda *a, **k: calls.append(k) or mesh
+        surface, "compute_surface_from_cloud", lambda *a, **k: calls.append(k) or mesh
     )
     monkeypatch.setattr(surface, "smooth_mesh", lambda m, **k: m)
     monkeypatch.setattr(

@@ -12,6 +12,11 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 
 ## Current state
 
+- The local upstream physics-v3 builder adapts thermostat rigidity masks to upstream's
+  packed particle IDs (2026-10-02); adaptive-memory builds retain their explicit ID buffer.
+  The managed CUDA engine and project oxpy were rebuilt. Native John/Langevin checks
+  preserve point-versus-rigid identity through sorting; lifecycle, fixed-gold force-response
+  and live-steering checks pass. This is software validation, not convergence qualification.
 - Managed jobs persist their topology, initial configuration, design snapshot, stage plan,
   progress, health, and final display state.
 - Relaxation uses staged minimization/MD with base-pair retention, backbone stretch, and energy

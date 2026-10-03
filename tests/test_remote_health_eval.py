@@ -1,60 +1,28 @@
 """Offline pins for the node WC health step (remote_health_eval.py).
 
-The node python needs numpy/scipy/MDAnalysis.  MDAnalysis IS installed in the dev
-env, and there are real relaxation packages under workspace/md_jobs, so we can run the
-ACTUAL node path here (minus the cluster) end-to-end: produce output/<seg>.wc.json from
-a real chunk DCD, confirm it matches md_health.run_health_check, and feed it to the
-stdlib cutoff evaluator's --wc gate.  Skips cleanly if MDAnalysis or a package is absent.
+Run the actual node path (minus the cluster) with a generated CHARMM topology and
+deterministic DCD frames: write WC JSON, compare with md_health.run_health_check,
+and feed it to the stdlib cutoff evaluator. No user workspace jobs are required.
 """
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
 from backend.core import remote_cutoff_eval, remote_health_eval
 
-_REPO = Path(__file__).resolve().parents[1]
-
 pytest.importorskip("MDAnalysis")
 
 
-def _find_nondeclash_chunk():
-    """(package_dir, stem, seg) for the smallest non-declash relaxation chunk with a
-    DCD + log, or None.  Non-declash = no ``{stem}_build.pdb`` declash marker."""
-    ws = _REPO / "workspace" / "md_jobs"
-    if not ws.is_dir():
-        return None
-    best = None
-    for dcd in ws.glob("*/package/*/output/*_p*.dcd"):
-        name = dcd.stem  # <seg>
-        if any(k in name.lower() for k in ("production", "cont", "qualification")):
-            continue
-        pkg = dcd.parent.parent
-        if not (pkg / f"{name}.log").exists():  # seg log lives at package root
-            continue
-        # infer stem from a non-hmr psf present in the package
-        psfs = [p for p in pkg.glob("*.psf") if "hmr" not in p.name]
-        if not psfs:
-            continue
-        stem = psfs[0].stem
-        if (pkg / f"{stem}_build.pdb").exists():  # declash design — skip
-            continue
-        if not (pkg / f"{stem}.pdb").exists():
-            continue
-        size = dcd.stat().st_size
-        if best is None or size < best[0]:
-            best = (size, pkg, stem, name)
-    return None if best is None else (best[1], best[2], best[3])
+# Generated CHARMM topology and deterministic DCD frames isolate the transport
+# contract from incomplete/running trajectories in the user's workspace.
+pytest_plugins = ["tests.md_trajectory_fixture"]
 
 
-def test_health_eval_writes_wc_json_matching_run_health_check(tmp_path):
-    found = _find_nondeclash_chunk()
-    if not found:
-        pytest.skip("no real non-declash relaxation chunk in workspace/md_jobs")
-    pkg, stem, seg = found
+def test_health_eval_writes_wc_json_matching_run_health_check(tmp_path, generated_md):
+    pkg, stem, seg = generated_md.folder, generated_md.psf.stem, generated_md.dcd.stem
     from backend.core import md_health
 
     out = tmp_path / "wc.json"
@@ -70,7 +38,9 @@ def test_health_eval_writes_wc_json_matching_run_health_check(tmp_path):
     assert wc == [float(x) for x in (ref.wc_per_frame or [])]
 
     # the stdlib cutoff evaluator must accept the produced wc.json
-    log = (pkg / f"{seg}.log").read_text(errors="replace")
+    log = "ETITLE: TS POTENTIAL VOLUME\n" + "\n".join(
+        f"ENERGY: {i} -1000.0 500000.0" for i in range(len(wc))
+    )
     code, diag = remote_cutoff_eval.decide(log, wc)
     assert code in (0, 1, 2)
     assert "wc_plateaued" in diag or diag.get("reason") == "insufficient_frames"

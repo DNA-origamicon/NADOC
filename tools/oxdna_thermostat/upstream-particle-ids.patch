@@ -1,0 +1,75 @@
+--- a/src/CUDA/Backends/MD_CUDABackend.cu
++++ b/src/CUDA/Backends/MD_CUDABackend.cu
+@@ -737,7 +737,6 @@
+ 		OX_LOG(Logger::LOG_INFO, "CUDA Bussi CPU-matched RNG v1");
+ 	}
+ 	else _cuda_thermostat->set_seed(lrand48());
+-	_cuda_thermostat->set_particle_ids(_d_particle_ids);
+ 	_cuda_thermostat->init();
+ 
+ 	if(_use_barostat) {
+--- a/src/CUDA/Thermostats/CUDABaseThermostat.cu
++++ b/src/CUDA/Thermostats/CUDABaseThermostat.cu
+@@ -51,7 +51,7 @@
+     }
+     _rigidity_mode = (n_rigid == 0) ? 0 : ((n_rigid == CONFIG_INFO->N()) ? 1 : 2);
+     if(_rigidity_mode == 2) {
+-        if(!_thermostat_particle_ids) throw oxDNAException("Rigid mask requires stable CUDA particle IDs");
++        // Upstream packs stable particle IDs into positions.w, including after sorting.
+         CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<int>(&_d_rigid_flags, flags.size()*sizeof(int)));
+         CUDA_SAFE_CALL(cudaMemcpy(_d_rigid_flags, flags.data(), flags.size()*sizeof(int), cudaMemcpyHostToDevice));
+     }
+--- a/src/CUDA/Thermostats/CUDABrownianThermostat.cu
++++ b/src/CUDA/Thermostats/CUDABrownianThermostat.cu
+@@ -12,7 +12,7 @@
+ 
+ #include <curand_kernel.h>
+ 
+-__global__ void brownian_thermostat(curandState *rand_state, c_number4 *vels, c_number4 *Ls, c_number rescale_factor, c_number pt, c_number pr, int N, int rigidity_mode, const int *rigid_flags, const int *particle_ids) {
++__global__ void brownian_thermostat(curandState *rand_state, c_number4 *vels, c_number4 *Ls, c_number rescale_factor, c_number pt, c_number pr, int N, int rigidity_mode, const int *rigid_flags, const c_number4 *positions) {
+ 	if(IND < N) {
+ 		curandState state = rand_state[IND];
+ 
+@@ -46,7 +46,7 @@
+ 			Ls[IND] = L;
+ 		}
+ 
+-		if(rigidity_mode == 0 || (rigidity_mode == 2 && !rigid_flags[particle_ids[IND]])) Ls[IND] = make_c_number4(0, 0, 0, 0);
++		if(rigidity_mode == 0 || (rigidity_mode == 2 && !rigid_flags[get_particle_index(positions[IND])])) Ls[IND] = make_c_number4(0, 0, 0, 0);
+ 		rand_state[IND] = state;
+ 	}
+ }
+@@ -82,5 +82,5 @@
+ 
+ 	brownian_thermostat
+ 		<<<this->_launch_cfg.blocks, this->_launch_cfg.threads_per_block>>>
+-		(this->_d_rand_state, d_vels, d_Ls, this->_rescale_factor, this->_pt, this->_pr, CONFIG_INFO->N(), _rigidity_mode, _d_rigid_flags, _thermostat_particle_ids);
++		(this->_d_rand_state, d_vels, d_Ls, this->_rescale_factor, this->_pt, this->_pr, CONFIG_INFO->N(), _rigidity_mode, _d_rigid_flags, d_poss);
+ }
+--- a/src/CUDA/Thermostats/CUDALangevinThermostat.cu
++++ b/src/CUDA/Thermostats/CUDALangevinThermostat.cu
+@@ -11,7 +11,7 @@
+ 
+ #include <curand_kernel.h>
+ 
+-__global__ void langevin_thermostat(curandState *rand_state, c_number4 *vels, c_number4 *Ls, c_number _dt, c_number gamma_trans, c_number rescale_factor_trans, c_number gamma_rot, c_number rescale_factor_rot, int N, int rigidity_mode, const int *rigid_flags, const int *particle_ids) {
++__global__ void langevin_thermostat(curandState *rand_state, c_number4 *vels, c_number4 *Ls, c_number _dt, c_number gamma_trans, c_number rescale_factor_trans, c_number gamma_rot, c_number rescale_factor_rot, int N, int rigidity_mode, const int *rigid_flags, const c_number4 *positions) {
+ 	if(IND < N) {
+ 		curandState state = rand_state[IND];
+ 		c_number f_vx, f_vy, f_vz;
+@@ -34,7 +34,7 @@
+ 
+ 		//if (IND==5) printf("Diff is: %f %f %f \n",L.x-Ls[IND].x, L.y-Ls[IND].y, L.z-Ls[IND].z);
+ 
+-		if(rigidity_mode == 0 || (rigidity_mode == 2 && !rigid_flags[particle_ids[IND]])) L = make_c_number4(0, 0, 0, 0);
++		if(rigidity_mode == 0 || (rigidity_mode == 2 && !rigid_flags[get_particle_index(positions[IND])])) L = make_c_number4(0, 0, 0, 0);
+ 		vels[IND] = v;
+ 		Ls[IND] = L;
+ 	}
+@@ -71,5 +71,5 @@
+ 
+ 	langevin_thermostat
+ 		<<<this->_launch_cfg.blocks, this->_launch_cfg.threads_per_block>>>
+-		(this->_d_rand_state, d_vels, d_Ls, this->_dt, this->_gamma_trans, this-> _rescale_factor_trans, this->_gamma_rot, this->_rescale_factor_rot, CONFIG_INFO->N(), _rigidity_mode, _d_rigid_flags, _thermostat_particle_ids);
++		(this->_d_rand_state, d_vels, d_Ls, this->_dt, this->_gamma_trans, this-> _rescale_factor_trans, this->_gamma_rot, this->_rescale_factor_rot, CONFIG_INFO->N(), _rigidity_mode, _d_rigid_flags, d_poss);
+ }

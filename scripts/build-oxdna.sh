@@ -32,6 +32,12 @@ git -C "$SOURCE_DIR" remote set-url origin "$OXDNA_URL"
 git -C "$SOURCE_DIR" fetch --depth 1 origin "$OXDNA_REV"
 git -C "$SOURCE_DIR" checkout --detach "$OXDNA_REV"
 
+# Undo the upstream ID adapter first: it depends on the physics patch below.
+UPSTREAM_IDS_PATCH="$PROJECT_ROOT/tools/oxdna_thermostat/upstream-particle-ids.patch"
+if git -C "$SOURCE_DIR" apply --reverse --check "$UPSTREAM_IDS_PATCH" >/dev/null 2>&1; then
+  git -C "$SOURCE_DIR" apply --reverse "$UPSTREAM_IDS_PATCH"
+fi
+
 # Remove only our dependent patch before checking/reapplying its prerequisites.
 # Their original context changes under v3, so reverse-checking v1/v2 directly fails.
 PHYSICS_PATCH="$PROJECT_ROOT/tools/oxdna_thermostat/physics-corrections.patch"
@@ -90,6 +96,14 @@ else
   git -C "$SOURCE_DIR" apply --check "$PHYSICS_PATCH"
   git -C "$SOURCE_DIR" apply "$PHYSICS_PATCH"
   echo "==> applied current-energy, point-rotation and zero-vector corrections"
+fi
+
+# Adaptive builds have an explicit stable-ID buffer. Pinned upstream instead
+# packs IDs into positions.w; its thermostats must read that representation.
+if [ "$BUILD_FLAVOR" = "upstream" ]; then
+  git -C "$SOURCE_DIR" apply --check "$UPSTREAM_IDS_PATCH"
+  git -C "$SOURCE_DIR" apply "$UPSTREAM_IDS_PATCH"
+  echo "==> adapted rigid masks to upstream packed particle IDs"
 fi
 
 if [ ! -x "$OXPY_PYTHON" ]; then

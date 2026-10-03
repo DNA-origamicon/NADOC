@@ -6,6 +6,13 @@ review_after: 2026-10-01
 ---
 # MD job system
 
+## Unattended oxDNA chains (2026-10-02)
+
+Local production children auto-start inside `unattended_chain_spawn`; ordinary
+interactive production creation still queues for Run. The prior queue-only
+production endpoint stranded chains after their first completed stage. The real
+three-stage orchestration regression (mock engine only) now completes all stages.
+
 ## Solvent padding default (2026-09-30)
 
 New explicit-solvent jobs, the Recommended box control, hardware estimates, and

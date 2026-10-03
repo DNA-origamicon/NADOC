@@ -108,3 +108,78 @@ def test_old_engine_cannot_start_even_a_DNA_only_job(tmp_path, monkeypatch):
     assert (
         job.status == OxdnaStatus.failed and "current physics corrections" in job.error
     )
+
+
+@pytest.mark.slow
+@pytest.mark.oxdna
+@pytest.mark.parametrize("thermostat", ["john", "langevin"])
+def test_cuda_rigid_masks_survive_particle_sorting(tmp_path, thermostat):
+    """Ten force-free steps check particle identity, not physical convergence."""
+    import numpy as np
+    from backend.core.oxdna_runner import find_oxdna, oxdna_supports_cuda
+
+    binary = find_oxdna()
+    if not binary or not oxdna_supports_cuda(binary):
+        pytest.skip("CUDA oxDNA is not installed")
+    assert oxdna_supports_physics_v3(binary), "Rebuild the current physics engine"
+    protein, dna = 16, 16
+    n = protein + dna
+    (tmp_path / "topology.top").write_text(
+        f"{n} {dna + 1} {dna} {protein} {dna}\n"
+        + "-1 A -1 -1\n" * protein
+        + "".join(f"{i + 1} A -1 -1\n" for i in range(dna))
+    )
+    (tmp_path / "anm.par").write_text(f"{protein}\n")
+    rows = np.zeros((n, 15))
+    # Deliberately scramble spatial order relative to topology order.
+    sites = np.random.default_rng(17).permutation(n)
+    rows[:, 0] = sites % 4 * 10 + 100
+    rows[:, 1] = sites // 4 * 10 + 100
+    rows[:, 3] = rows[:, 8] = 1
+    rows[:, 9:15] = 1e-8
+    with (tmp_path / "conf.dat").open("w") as stream:
+        stream.write("t = 0\nb = 300 300 300\nE = 0 0 0\n")
+        np.savetxt(stream, rows)
+    (tmp_path / "input").write_text(f"""backend = CUDA
+backend_precision = mixed
+sim_type = MD
+seed = 202
+steps = 10
+restart_step_counter = true
+verlet_skin = .000001
+CUDA_list = verlet
+CUDA_sort_every = 1
+use_edge = true
+T = 296K
+dt = .0001
+thermostat = {thermostat}
+diff_coeff = .1
+newtonian_steps = 1
+refresh_vel = true
+interaction_type = DNANM
+parfile = anm.par
+salt_concentration = .5
+external_forces = false
+fix_diffusion = false
+topology = topology.top
+conf_file = conf.dat
+trajectory_file = trajectory.dat
+energy_file = energy.dat
+lastconf_file = last_conf.dat
+time_scale = linear
+print_conf_interval = 1
+print_energy_every = 1
+max_io = 1000
+""")
+    result = subprocess.run(
+        [binary, "input"], cwd=tmp_path, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = (tmp_path / "trajectory.dat").read_text().splitlines()
+    frames = np.array([
+        [[float(value) for value in line.split()] for line in lines[start + 3:start + n + 3]]
+        for start in range(0, len(lines), n + 3)
+    ])
+    assert len(frames) >= 10 and np.isfinite(frames).all()
+    assert np.count_nonzero(frames[:, :protein, 12:15]) == 0
+    assert np.all(np.linalg.norm(frames[:, protein:, 12:15], axis=2) > 0)

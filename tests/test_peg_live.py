@@ -151,11 +151,24 @@ def test_resolve_physical_field_and_refuse_legacy_update(monkeypatch):
 @pytest.mark.slow
 @pytest.mark.parametrize('backend', ['CPU', 'CUDA'])
 def test_real_peg_worker_bursts_and_stops(prepared, tmp_path, backend):
-    """Opt-in integration: run only in a user-opened test session."""
+    """Persistent uncapped worker lifecycle from a FENE-safe prepared seed."""
     from backend.physics.oxdna_peg_live import peg_live_available
     if not peg_live_available()['available']:
         pytest.skip('Build PEG Live bindings first')
     design, setup, _, _ = prepared
+    # The design's unrelaxed oxDNA seed exceeds standard FENE's upper bound.
+    # Prepare it with a bounded softened run before testing uncapped Live. Apply
+    # DNA anchors afterwards so they do not pin the initially stretched seed.
+    # This is fixture preparation, not a physical-equilibration assertion.
+    preparation_setup = deepcopy(setup)
+    preparation_setup['anchors'] = []
+    prep, _, _ = stage((design, preparation_setup, *prepared[2:]), tmp_path / 'seed')
+    for name in ('input', 'input_cpu'):
+        path = prep / name
+        path.write_text(path.read_text() + '\nseed = 1729\nmax_backbone_force = 5\nmax_backbone_force_far = 10\n')
+    with PegLiveStepper(prep, backend='CPU', spec=setup['surface_strands']) as worker:
+        worker.run(2000)
+    shutil.copyfile(prep / 'last_conf.dat', prepared[3])
     rd, _, _ = stage(prepared, tmp_path)
     if backend == 'CUDA':
         text = (rd / 'input').read_text().replace('backend = CPU', 'backend = CUDA')

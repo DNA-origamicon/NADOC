@@ -2102,9 +2102,13 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
     child.status = OxdnaStatus.queued
     child.save(ws)
-    # Deliberately does NOT auto-start: the child waits queued, same as a freshly-
-    # created local relaxation, so the panel's one Run button starts it (NAMD-parity
-    # job creation flow — see oxdna_job_wizard.js's production mode).
+    # Interactive creation waits for the panel's Run button. An unattended chain
+    # already owns launch authorization and must start its local child, otherwise
+    # the supervisor waits forever for a queued stage to finish.
+    from backend.core.md_chain_executor import in_unattended_chain_spawn
+
+    if in_unattended_chain_spawn() and child.execution_target == "local":
+        start_job(child, ws, [stage])
     return child.to_dict()
 
 

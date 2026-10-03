@@ -305,16 +305,16 @@ def test_fem_preparation_yields_api_event_loop(assembly_sim_client, monkeypatch,
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test', headers=headers) as client:
             creation = asyncio.create_task(client.post(f'/api/{engine}/jobs', json={'autostart': False, 'with_rmsf': False}))
             try:
-                for _ in range(100):
-                    if entered.is_set():
-                        break
-                    await asyncio.sleep(0.005)
-                assert entered.is_set()
+                # Wait for preparation to enter before measuring responsiveness.
+                # Parallel suites can delay worker dispatch/provenance beyond
+                # 500 ms; that is separate from blocking the API event loop.
+                assert await asyncio.to_thread(entered.wait, 5), 'Preparation never entered'
                 response = await asyncio.wait_for(client.get(f'/api/{engine}/available'), 0.5)
                 assert response.status_code == 200
             finally:
                 release.set()
-            response = await creation
+                # Drain even on assertion failure before fixture state is reset.
+                response = await creation
             assert response.status_code == 200
             assert response.json()['status'] == 'queued'
             assert response.json()['doc_id'] == headers['X-NADOC-Doc']

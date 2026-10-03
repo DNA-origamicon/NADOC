@@ -238,12 +238,14 @@ def test_simulated_figure_surface_honors_probe(monkeypatch):
         faces=np.empty((0, 3), dtype=int),
         vertex_strand_ids=[],
     )
+    atoms = [SimpleNamespace(x=float(i), y=0., z=0., element="C", strand_id="s",
+                             helix_id="h", bp_index=i, direction="FORWARD") for i in range(4)]
     monkeypatch.setattr(
-        oxdna_health, "build_display_model", lambda *a, **k: SimpleNamespace(atoms=[])
+        oxdna_health, "build_display_model", lambda *a, **k: SimpleNamespace(atoms=atoms)
     )
     monkeypatch.setattr(surface, "adaptive_grid_spacing", lambda *a, **k: 0.05)
     monkeypatch.setattr(
-        surface, "compute_surface", lambda *a, **k: calls.append(k) or mesh
+        surface, "compute_surface_from_cloud", lambda *a, **k: calls.append(k) or mesh
     )
     monkeypatch.setattr(surface, "smooth_mesh", lambda m, **k: m)
     for radius in [None, 0.0, 0.24]:

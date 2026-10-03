@@ -59,3 +59,10 @@ system also requires NAMD validation (TD-STREP-NAMD).
 Ordinary DNA2 uses the pinned upstream equal-strength sequence parameter file.
 This restores the average model across backends without changing a force kernel;
 DNANM initializes those tables correctly and keeps its existing input path.
+
+The default local upstream build additionally applies `upstream-particle-ids.patch`.
+The v3 patch originally assumed the adaptive-memory build's explicit ID buffer,
+which does not exist upstream. This adapter reads the same stable IDs from
+upstream's packed `positions.w`, including after Hilbert sorting. Adaptive builds
+retain their explicit buffer. The build script removes the adapter before
+reapplying prerequisites, so rebuilding or switching flavors remains supported.

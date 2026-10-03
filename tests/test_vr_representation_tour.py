@@ -9,6 +9,13 @@ def test_every_supported_directed_transition_is_covered_once():
     assert set(REPS) == set(
         get_args(VRLaunchRequest.model_fields["representation"].annotation)
     )
+    # Color masks use the native enum order; the API Literal only pins membership.
+    from pathlib import Path
+    import re
+
+    header = (Path(__file__).resolve().parents[1] / "native/vr_viewer/src/representations.hpp").read_text()
+    names = header.split("kRepresentationNames{", 1)[1].split("};", 1)[0]
+    assert list(REPS) == re.findall(r'"([a-z-]+)"', names)
     pairs = transitions()
     assert len(pairs) == len(REPS)*(len(REPS)-1) and len(set(pairs)) == len(pairs)
     assert all(first[1] == second[0] for first, second in zip(pairs, pairs[1:]))
