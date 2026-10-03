@@ -1,3 +1,4 @@
+import { gateStorageVisualization, storageUnavailable } from './job_storage.js'
 import {confirmElectrodeProtocol} from './namd_electrode_protocol.js'
 import { initBoxSolvent } from './md_box_solvent.js'
 import { initNamdSurfaceCard } from './namd_surface_card.js'
@@ -1186,7 +1187,7 @@ export function mdHasMetrics(job, persisted = null) {
  *  short-circuit and the unified renderer key off the exact same fields. */
 export function mdJobRowSig(j) {
   return `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}`
-    + `:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}:${j.dcd_size_bytes ?? ''}`
+    + `:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.storage_available}:${j.size_bytes ?? ''}:${j.dcd_size_bytes ?? ''}`
     + `:${j.execution_target ?? ''}:${j.slurm_job_id ?? ''}:${j.ensemble_seed ?? ''}`
     + `:${j.decision ? 1 : 0}`   // GPU-decision pending → ⚠ appears/clears with it
 }
@@ -1889,6 +1890,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _renderList()
       _selectBestJob()
       const selected = _jobs.find(j => j.job_id === _selectedId)
+      _updateVizToggles(selected)
       if (selected) surfaceCard.select(selected, mdInheritedPrepParams(selected, _jobs))
       _notifyIfJobsChanged()
       _renderReconnectPrompt()   // in-flight Alpine runs + a down session → nudge to reconnect
@@ -2471,6 +2473,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   async function _refreshMdDisplay({ forceReloadRemote = false } = {}) {
+    if (storageUnavailable(_selectedJob())) return
     if (isPegJob(_selectedJob())) return
     if (!displayToggle?.checked) return
     if (!_isDynamicsTabVisible()) {
@@ -2620,6 +2623,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   async function _refreshMdPrewarm(force = false, { allowAlpine = false } = {}) {
+    if (storageUnavailable(_selectedJob())) return
     if (isPegJob(_selectedJob())) return false
     if (displayToggle?.checked || _trajJobId || _trajLoadJobId) return false
     // NB: intentionally NOT gated on the Dynamics tab being visible.  Prewarm now
@@ -3351,6 +3355,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   async function _refreshTraj() {
+    if (storageUnavailable(_selectedJob())) return
     if (_trajLoading || !_selectedId) return
     const jobId = _selectedId
     const interval = _trajInterval()
@@ -3488,7 +3493,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // additionally need a written trajectory). A loaded trajectory retains ownership
   // across selections, even when the selected job has no frames of its own.
   function _updateVizToggles(job = _selectedJob()) {
-    if (updatePegVisualization(job)) return
+    const peg = updatePegVisualization(job)
+    if (gateStorageVisualization(job, [displayToggle, flexToggle, trajToggle, photoproductToggle, occupancyToggle])) {
+      ionPaths?.setEnabled(false)
+      solvent?.setEnabled(false)
+      return
+    }
+    if (peg) return
     const hasJob  = !!job
     const hasTraj = _mdHasTrajectory(job)
     ionPaths?.setEnabled(hasTraj && !!mdInheritedPrepParams(job, _jobs).graphene_nanopore)
@@ -4771,6 +4782,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   async function _applyVisualizationJobSwitch(action, job) {
+    if (storageUnavailable(job)) return
     if (isPegJob(job)) {
       _stopMdDisplay(); _setFlexOff(); _setPhotoproductOff(); _setTrajOff()
       if (_occupancyReady) _setOccupancyOff()

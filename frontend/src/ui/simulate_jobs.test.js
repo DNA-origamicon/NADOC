@@ -1078,3 +1078,20 @@ describe('estimated progress (a cluster job is only observable while signed in)'
       .toBe(_pct({ ...base, progress_fraction: 0.57 }))
   })
 })
+
+describe('external simulation storage availability', () => {
+  it('keeps an offline job visible and refreshes its controls on reconnect', async () => {
+    mount()
+    const offline = mdNode({ archived: true, archive_path: '/mnt/e/run', storage_available: false })
+    const { sim, api, mdPanel } = make([offline])
+    mdPanel.refresh = vi.fn()
+    sim.setActiveEngine('namd')
+    await sim.refresh()
+    sim.selectJob(offline.job_id)
+    expect(document.querySelector('[data-storage-unavailable]').title).toContain('/mnt/e/run')
+    api.listSimJobs.mockResolvedValue([{ ...offline, storage_available: true }])
+    await sim.refresh()
+    expect(document.querySelector('[data-storage-unavailable]')).toBeNull()
+    expect(mdPanel.refresh).toHaveBeenCalledTimes(1)
+  })
+})

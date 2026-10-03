@@ -8,7 +8,7 @@
  * an explicitly loaded trajectory and bypasses this dispatch while browsing jobs.
  */
 export function selectionUpdatesVisualization(job) {
-  return !!job
+  return !!job && job.storage_available !== false
 }
 
 /** Snapshot the active MD view before a job switch changes radio availability. */

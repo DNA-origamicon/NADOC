@@ -1211,3 +1211,17 @@ Reaching 100% is functional success, not evidence of comfortable frame delivery.
   with a finite zero-scale matrix. Visible slab placement is unchanged.
 - [x] Regression test covers the hidden endpoint and restoration to visible geometry
   in `helix_renderer.simulation_visibility.test.js`.
+
+## Archive transfer progress appears stalled during a large file — 2026-10-03
+
+- **Status:** Fixed 2026-10-03 after the original transfer finished; user explicitly authorized the fix and recovery of a later interrupted cube_pore move. Copy progress now advances every 8 MiB; frontend reports a lost/idle task after restart instead of polling forever. Regression reproduced red before implementation; 22 archive tests and the frontend interrupted-task test pass.
+- **Observed:** Change directory for `small_plate` production job `a5e2cf157a76` to `/mnt/f/NADOC/a5e2cf157a76` shows roughly 1.2 GiB (1%) and appears stopped.
+- **Read-only evidence:** `/api/md/jobs/a5e2cf157a76/archive-status` reports `state=running`, `error=null`, `moved_bytes=1318619828`, `total_bytes=201664351423`. Meanwhile the destination `package/small_plate_namd_solvated/output/small_plate_01_production_200ns_k0.dcd` grew across checks from 643,497,984 to 2,162,028,544 to 3,809,603,584 and now 23,384,252,416 bytes. The transfer is progressing; the displayed count excludes the current file.
+- **Confirmed cause:** `backend/core/job_archive.py::_copy_tree_with_progress` calls `shutil.copy2(s, d)` for an entire file, then increments `progress['moved_bytes']` only after it returns. Frontend polling displays the stale backend counter correctly. This is transfer-progress reporting granularity, not evidence of a stopped copy.
+- **Follow-up after completion:** Add progress within a single large file (bounded chunk copying or another low-overhead mechanism), preserving metadata, copy-then-delete safety, rollback behavior, and throughput. Pin a regression test proving progress advances before the first large file finishes; verify monotonic totals and failure handling.
+- **Operational constraint:** Do not edit backend/scripts, restart/reload NADOC, cancel, remount, or modify source/destination files during this transfer. The move task runs in a background thread and would be interrupted by a backend reload. Verify terminal transfer status and destination/index consistency before starting the fix.
+
+**cube_pore recovery completed (2026-10-03):** Interrupted Alpine production job
+`a4cb52583c26` resumed and verified against its original using SHA-256 for all
+37 files. Archive index updated, original removed only after verification; archived
+job loads successfully. Audit: `.development-artifacts/archive-recovery-cube-pore-20261003/`.

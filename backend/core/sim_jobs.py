@@ -69,7 +69,7 @@ def normalize_oxdna_job(d: dict) -> dict:
         "is_child": bool(parent),
         "production_state": _production_state(stages),
         "n_units": d.get("n_nucleotides", 0),
-        "viewable": _oxdna_viewable(stages),
+        "viewable": d.get("storage_available") is not False and _oxdna_viewable(stages),
     }
 
 
@@ -162,7 +162,7 @@ def normalize_md_job(d: dict) -> dict:
         "is_child": bool(parent),
         "production_state": None,
         "n_units": d.get("n_nucleotides", 0),
-        "viewable": d.get("status") == "completed",
+        "viewable": d.get("storage_available") is not False and d.get("status") == "completed",
     }
 
 

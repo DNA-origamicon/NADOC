@@ -2342,6 +2342,10 @@ async def delete_oxdna_job(job_id: str) -> dict:
 
     from backend.core.job_archive import purge_index_entry
 
+    for j in (*descendants, job):
+        if j.archived and not (j.job_dir(ws) / "job.json").is_file():
+            raise HTTPException(409, f"Storage is unavailable at {j.archive_path}; connect the drive before deleting this job.")
+
     deleted: list[str] = []
     for j in (*descendants, job):
         jd = j.job_dir(ws)

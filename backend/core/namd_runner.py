@@ -789,6 +789,8 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
       states are picked up and relaunched by ``resume_interrupted_jobs`` (startup
       + periodic supervisor); ``run_job`` then resumes mid-segment if needed.
     """
+    if job.archived and not (job.job_dir(workspace_dir) / "job.json").is_file():
+        return job
     # A completed package is stronger evidence than a transient stale-heartbeat
     # verdict.  Older workers could stop heartbeating at 100% while still writing
     # final assets, then finish by setting QUEUED without clearing the false error.

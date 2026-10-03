@@ -432,6 +432,8 @@ class MdJob:
 
     def save(self, workspace_dir: Path) -> None:
         jd = self.job_dir(workspace_dir)
+        if self.archived and not jd.is_dir():
+            raise FileNotFoundError(f"Storage drive disconnected: {jd}")
         jd.mkdir(parents=True, exist_ok=True)
         data = asdict(self)
         data["status"] = self.status.value
@@ -441,6 +443,10 @@ class MdJob:
         tmp = jd / "job.json.tmp"
         tmp.write_text(json.dumps(data, indent=2))
         tmp.replace(jd / "job.json")
+        if self.archived:
+            from backend.core.job_archive import cache_job_metadata
+
+            cache_job_metadata(workspace_dir, "md_jobs", self.job_id, data)
 
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "MdJob":
@@ -559,6 +565,9 @@ class MdJob:
     def to_dict(self) -> dict:
         data = asdict(self)
         data["status"] = self.status.value
+        data["storage_available"] = not self.archived or bool(
+            self.archive_path and (Path(self.archive_path) / "job.json").is_file()
+        )
         return data
 
 

@@ -96,6 +96,7 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
       : (sizeBytes && ctx.formatSize ? ctx.formatSize(sizeBytes) : ''),
     archived,
     archivePath,
+    storageUnavailable: job?.storage_available === false,
     stale: ctx.isStale ? !!ctx.isStale(job) : false,
     staleClass: ctx.staleClass || null,
     // staleTitle may be a static string (shared by all rows) or a per-job function

@@ -4603,6 +4603,9 @@ def _md_job_list_rows(jobs, ws, runpod_connected, runpod_ids):
     out: list[dict] = []
     to_warm: list = []
     for j in jobs:
+        if j.archived and not (j.job_dir(ws) / "job.json").is_file():
+            out.append(j.to_dict())
+            continue
         _backfill_failure_kind(j)
         if (
             j.execution_target in {"alpine", "runpod"}

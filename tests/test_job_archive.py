@@ -332,3 +332,127 @@ class TestDeleteAnArchivedJob:
         r = c.delete(f"/api/md/jobs/{job.job_id}")
         assert r.status_code == 200, r.text
         assert not dest.exists()
+
+
+@pytest.mark.parametrize("kind", ["md_jobs", "oxdna_jobs"])
+def test_disconnected_archive_stays_listed_and_recovers(tmp_path, kind):
+    from backend.core.md_job import MdJob
+    cls = MdJob if kind == "md_jobs" else OxdnaJob
+    job = (new_md_job("demo", "mgh_slow_release", "A", "pkg")
+           if kind == "md_jobs" else new_oxdna_job("demo", []))
+    ws, drive = tmp_path / "ws", tmp_path / "drive"
+    job.save(ws)
+    (job.job_dir(ws) / "trajectory.dat").write_bytes(b"trajectory")
+    ja.archive_job(job, ws, kind, drive)
+    assert cls.load(job.job_id, ws).to_dict()["storage_available"] is True
+    drive.rename(tmp_path / "unplugged")
+    offline = cls.list_jobs(ws)
+    assert len(offline) == 1
+    assert offline[0].archive_path == str(drive / job.job_id)
+    assert offline[0].to_dict()["storage_available"] is False
+    with pytest.raises(FileNotFoundError, match="disconnected"):
+        offline[0].save(ws)
+    assert not drive.exists()
+    # A server restart loads the same cached record, without an in-memory registry.
+    assert cls.load(job.job_id, ws).design_name == "demo"
+    (tmp_path / "unplugged").rename(drive)
+    assert cls.load(job.job_id, ws).to_dict()["storage_available"] is True
+    assert (job.job_dir(ws) / "trajectory.dat").read_bytes() == b"trajectory"
+    ja.start_unarchive(cls.load(job.job_id, ws), ws, kind)
+    assert _wait(kind, job.job_id)["state"] == "done"
+    assert not (ws / kind / ".archive_metadata" / f"{job.job_id}.json").exists()
+
+
+def test_legacy_archive_metadata_is_cached_when_connected(tmp_path):
+    job = new_oxdna_job("legacy", [])
+    ws, drive = tmp_path / "ws", tmp_path / "drive"
+    job.save(ws)
+    ja.archive_job(job, ws, "oxdna_jobs", drive)
+    cached = ws / "oxdna_jobs" / ".archive_metadata" / f"{job.job_id}.json"
+    cached.unlink()
+    OxdnaJob.list_jobs(ws)
+    assert cached.exists()
+    drive.rename(tmp_path / "unplugged")
+    assert OxdnaJob.list_jobs(ws)[0].to_dict()["storage_available"] is False
+
+
+@pytest.mark.parametrize("engine,kind", [("md", "md_jobs"), ("oxdna", "oxdna_jobs")])
+def test_api_lists_disconnected_jobs_and_refuses_deletion(tmp_path, monkeypatch, engine, kind):
+    from fastapi.testclient import TestClient
+    from backend.api import routes_md, routes_oxdna, state
+    from backend.api.main import app
+    from tests.conftest import make_minimal_design
+    ws, drive = tmp_path / "ws", tmp_path / "drive"
+    routes = routes_md if engine == "md" else routes_oxdna
+    monkeypatch.setattr(routes, "_workspace", lambda: ws)
+    state.set_design(make_minimal_design())
+    job = (new_md_job("demo", "mgh_slow_release", "A", "pkg")
+           if engine == "md" else new_oxdna_job("demo", []))
+    job.save(ws)
+    ja.archive_job(job, ws, kind, drive)
+    drive.rename(tmp_path / "unplugged")
+    client = TestClient(app)
+    result = client.get(f"/api/{engine}/jobs")
+    assert result.status_code == 200, result.text
+    row = next(j for j in result.json() if j["job_id"] == job.job_id)
+    assert row["storage_available"] is False
+    assert row["archive_path"] == str(drive / job.job_id)
+    assert client.delete(f"/api/{engine}/jobs/{job.job_id}").status_code == 409
+    assert job.job_id in ja.archived_job_ids(ws, kind)
+
+
+def test_large_file_progress_advances_before_file_finishes(tmp_path):
+    src, dst = tmp_path / 'source', tmp_path / 'dest'
+    src.mkdir()
+    payload = b'progress-test' * (2 * 1024 * 1024)
+    original = src / 'trajectory.dcd'
+    original.write_bytes(payload)
+    original.chmod(0o640)
+    updates = []
+
+    class Progress(dict):
+        def __setitem__(self, key, value):
+            super().__setitem__(key, value)
+            if key == 'moved_bytes':
+                updates.append(value)
+
+    progress = Progress(moved_bytes=0, total_bytes=0)
+    ja._copy_tree_with_progress(src, dst, progress)
+    assert any(0 < value < len(payload) for value in updates)
+    assert updates == sorted(updates)
+    assert progress['moved_bytes'] == progress['total_bytes'] == len(payload)
+    assert (dst / original.name).read_bytes() == payload
+    assert (dst / original.name).stat().st_mtime_ns == original.stat().st_mtime_ns
+    assert (dst / original.name).stat().st_mode == original.stat().st_mode
+
+
+def test_copy_failure_preserves_source_and_does_not_archive(tmp_path, monkeypatch):
+    ws = tmp_path / 'ws'
+    job = new_oxdna_job('copy failure', [])
+    job.save(ws)
+    source = job.job_dir(ws)
+    (source / 'trajectory.dcd').write_bytes(b'original trajectory')
+
+    def fail(*args, **kwargs):
+        raise OSError('simulated drive disconnect')
+
+    monkeypatch.setattr(ja.shutil, 'copystat', fail)
+    with pytest.raises(RuntimeError, match='simulated drive disconnect'):
+        ja.archive_job(job, ws, 'oxdna_jobs', tmp_path / 'drive')
+    assert (source / 'trajectory.dcd').read_bytes() == b'original trajectory'
+    assert not (tmp_path / 'drive' / job.job_id).exists()
+    assert job.job_id not in ja.archived_job_ids(ws, 'oxdna_jobs')
+
+
+def test_task_is_visible_before_worker_is_scheduled(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    job = new_oxdna_job('pending worker', [])
+    job.save(tmp_path)
+    monkeypatch.setattr(ja.threading, 'Thread', lambda **kwargs: SimpleNamespace(start=lambda: None))
+    ja.start_archive(job, tmp_path, 'oxdna_jobs', tmp_path / 'drive')
+    try:
+        assert ja.task_status('oxdna_jobs', job.job_id)['state'] == 'running'
+        with pytest.raises(ValueError, match='already in progress'):
+            ja.start_archive(job, tmp_path, 'oxdna_jobs', tmp_path / 'other')
+    finally:
+        ja._TASKS.pop(ja._task_key('oxdna_jobs', job.job_id), None)

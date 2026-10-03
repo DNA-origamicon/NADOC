@@ -1,3 +1,4 @@
+import { disconnectedStorageIcon } from './job_storage.js'
 /**
  * jobs_panel_render.js — the CANONICAL job-list DOM renderer (U3). Turns the
  * pure row models from jobs_panel_model.js into the exact DOM the oxDNA jobs
@@ -111,7 +112,8 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onWarning, 
   // Archive and status are stable columns: every row reserves the same space even
   // when it is not archived or active. This stops the important state glyphs from
   // wandering as variable-width job information changes.
-  if (!m.compactColumns && m.archived) {
+  if (m.storageUnavailable) row.append(disconnectedStorageIcon(m.archivePath, doc))
+  if (!m.compactColumns && m.archived && !m.storageUnavailable) {
     const box = Object.assign(doc.createElement('span'), { textContent: '📦' })
     box.style.cssText = 'flex-shrink:0;font-size:10px'
     box.title = `Stored outside the main server directory → ${m.archivePath}`
@@ -145,7 +147,7 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onWarning, 
     box.style.cssText = 'flex:0 0 10px;width:10px;text-align:center;font-size:10px'
     box.setAttribute('aria-label', m.archived ? 'Stored on another drive' : 'Stored on main server drive')
     if (m.archived) box.title = `Stored outside the main server directory → ${m.archivePath}`
-    row.append(box)
+    if (!m.storageUnavailable) row.append(box)
 
     const statusCol = doc.createElement('span')
     statusCol.style.cssText = 'display:flex;align-items:center;justify-content:center;flex:0 0 14px;width:14px'

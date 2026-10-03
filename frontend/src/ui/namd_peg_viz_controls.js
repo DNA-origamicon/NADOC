@@ -1,3 +1,4 @@
+import { gateStorageVisualization, storageUnavailable } from './job_storage.js'
 import { isPegJob } from './namd_peg_visualization.js'
 
 const id = suffix => document.getElementById(`md-jobs-${suffix}`)
@@ -20,6 +21,7 @@ export function initPegVizControls({ onMode, onAction }) {
   function sync(next = view) {
     view = next
     if (!isPegJob(job)) return
+    if (gateStorageVisualization(job, ['display-toggle', 'flex-toggle', 'traj-toggle', 'photoproduct-toggle', 'occupancy-toggle', 'water-toggle', 'box-toggle'].map(id))) return
     const hasFrames = !!view?.frames?.length, canFlex = hasFrames && view.stage !== 'minimize' && (view.raw_frames ?? view.frames.length) >= 2
     for (const [key, suffix] of Object.entries(modes)) {
       const el = id(suffix)
@@ -90,6 +92,7 @@ export function initPegVizControls({ onMode, onAction }) {
     const actions = ['traj-play', 'traj-prev', 'traj-next', 'traj-slider', 'water-toggle', 'water-shell', 'water-scope-shell', 'water-scope-box', 'box-toggle']
     if (!selected && !actions.includes(suffix)) return
     event.stopImmediatePropagation()
+    if (storageUnavailable(job) && selected !== 'off') return
     if (selected && (event.type === 'change' || selected === 'off' && event.type === 'click')) {
       if (target.disabled) return
       mode = selected; onMode(mode); sync()

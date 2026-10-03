@@ -30,6 +30,10 @@ export function initJobArchive({ api, kind }) {
       const tick = async () => {
         const st = await status(jobId)
         if (st) {
+          if (st.state === 'idle') {
+            resolve({ state: 'error', error: 'The server no longer has this transfer task, possibly after a restart. Check the source and destination before retrying; the destination may be incomplete.' })
+            return
+          }
           if (st.state === 'running') onProgress?.(st)
           if (st.state === 'done' || st.state === 'error') { resolve(st); return }
         }

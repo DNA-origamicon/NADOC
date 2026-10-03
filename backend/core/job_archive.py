@@ -30,6 +30,7 @@ import json
 import os
 import shutil
 import threading
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -66,16 +67,41 @@ def archived_job_ids(workspace_dir: Path, kind: str) -> list[str]:
     return list(read_index(workspace_dir, kind).keys())
 
 
+def cache_job_metadata(workspace_dir: Path, kind: str, job_id: str, data: dict) -> None:
+    """Keep lightweight metadata locally for disconnected drives."""
+    folder = workspace_dir / kind / ".archive_metadata"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{job_id}.json"
+    payload = json.dumps(data, indent=2)
+    if target.exists() and target.read_text() == payload:
+        return
+    with tempfile.NamedTemporaryFile(mode="w", dir=folder, delete=False) as f:
+        tmp = Path(f.name)
+        f.write(payload)
+    try:
+        tmp.replace(target)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def resolve_job_json(workspace_dir: Path, kind: str, job_id: str) -> Path:
-    """Where this job's ``job.json`` currently lives (archive folder if archived)."""
+    """Prefer live metadata; retain a local snapshot for disconnected drives."""
     idx = read_index(workspace_dir, kind)
     if job_id in idx:
-        return Path(idx[job_id]) / "job.json"
+        live = Path(idx[job_id]) / "job.json"
+        cached = workspace_dir / kind / ".archive_metadata" / f"{job_id}.json"
+        try:
+            data = json.loads(live.read_text())
+        except OSError:
+            return cached if cached.exists() else live
+        cache_job_metadata(workspace_dir, kind, job_id, data)
+        return live
     return workspace_dir / kind / job_id / "job.json"
 
 
 def purge_index_entry(workspace_dir: Path, kind: str, job_id: str) -> None:
     """Drop a job from the archive index (used when a job is deleted)."""
+    (workspace_dir / kind / ".archive_metadata" / f"{job_id}.json").unlink(missing_ok=True)
     idx = read_index(workspace_dir, kind)
     if job_id in idx:
         idx.pop(job_id, None)
@@ -107,12 +133,16 @@ def _copy_tree_with_progress(src: Path, dst: Path, progress: dict) -> None:
         for fname in files:
             s = Path(root) / fname
             d = target / fname
-            shutil.copy2(s, d)
-            try:
-                moved += d.stat().st_size
-            except OSError:
-                pass
-            progress["moved_bytes"] = moved
+            # Bound memory and report progress while a single multi-GB trajectory
+            # is copying. copy2 only returned control after the entire file.
+            with s.open("rb") as source, d.open("wb") as destination:
+                while chunk := source.read(8 * 1024 * 1024):
+                    destination.write(chunk)
+                    moved += len(chunk)
+                    progress["moved_bytes"] = moved
+                destination.flush()
+                os.fsync(destination.fileno())
+            shutil.copystat(s, d)
 
 
 # ── Task registry ─────────────────────────────────────────────────────────────
@@ -266,14 +296,24 @@ def _check_archive_preconditions(
         raise ValueError("invalid archive destination")
 
 
+def _start_move_thread(job, kind: str, dest: Path, action: str, target, args) -> None:
+    # Publish before returning to the caller: its first poll must not see idle
+    # merely because the worker thread has not been scheduled yet.
+    _set_task(kind, job.job_id, action=action, state="running", dest=str(dest),
+              moved_bytes=0, total_bytes=0, error=None, _progress=None)
+    try:
+        threading.Thread(target=target, args=args, daemon=True).start()
+    except Exception as exc:
+        _set_task(kind, job.job_id, state="error", error=str(exc))
+        raise
+
+
 def start_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
     """Spawn a background directory move (legacy name retained for API compatibility)."""
     dest_root = Path(dest_root).expanduser()
     _check_archive_preconditions(job, workspace_dir, kind, dest_root)
-    t = threading.Thread(
-        target=_run_archive, args=(job, workspace_dir, kind, dest_root), daemon=True
-    )
-    t.start()
+    _start_move_thread(job, kind, dest_root / job.job_id, "move", _run_archive,
+                       (job, workspace_dir, kind, dest_root))
 
 
 def archive_job(job, workspace_dir: Path, kind: str, dest_root: Path) -> str:
@@ -304,10 +344,8 @@ def start_unarchive(job, workspace_dir: Path, kind: str) -> None:
     dest = workspace_dir / kind / job.job_id
     if dest.exists():
         raise FileExistsError(f"workspace folder already exists: {dest}")
-    t = threading.Thread(
-        target=_run_unarchive, args=(job, workspace_dir, kind), daemon=True
-    )
-    t.start()
+    _start_move_thread(job, kind, dest, "unarchive", _run_unarchive,
+                       (job, workspace_dir, kind))
 
 
 def _within(child: Path, parent: Path) -> bool:

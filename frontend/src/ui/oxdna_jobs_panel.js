@@ -1,3 +1,4 @@
+import { gateStorageVisualization, storageUnavailable } from './job_storage.js'
 /**
  * oxDNA relaxation jobs panel (Dynamics tab).
  *
@@ -1700,7 +1701,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       sizeBytes: (job) => job.size_bytes ?? null,
       formatTime: formatJobTime,
       formatSize: formatBytes,
-      rowSig: (j) => `${j.job_id}:${j.status}:${productionState(j)}:${runIndicatorTags(j)}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`,
+      rowSig: (j) => `${j.job_id}:${j.status}:${productionState(j)}:${runIndicatorTags(j)}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.storage_available}:${j.size_bytes ?? ''}`,
       colors: { dim: _C.dim, warn: _C.warn },
     }
   }
@@ -2104,6 +2105,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // run's own viewability) — skip the oxDNA sampling/trajectory gates below so a poll
     // can't re-disable them.
     if (_lammpsMode) return
+    if (gateStorageVisualization(job, [displayToggle, flexToggle, occupancyToggle, autorefineDevToggle, strainToggle, strainMetricSel, trajToggle, trajFullToggle])) return
 
     // Flexibility map (RMSF) — unlocks as soon as a production run has STARTED
     // (done OR running).  A mid-run map is preliminary; the confidence readout
@@ -2545,6 +2547,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // scope: 'lineage' = sparse (whole ancestor chain, strided to ~200 frames — the fast
   // view) | 'job' = full (this job's own stages only, every frame written, no stride).
   async function _refreshTraj(scope = 'lineage') {
+    if (storageUnavailable(_selectedJob())) return
     if (!_selectedId || !oxdnaDisplay) return
     const full = scope === 'job'
     _trajBusy = true
@@ -2739,6 +2742,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
   // ── OxDNA display toggle ───────────────────────────────────────────────────
   async function _refreshDisplay() {
+    if (storageUnavailable(_selectedJob())) return
     if (!_selectedId || !oxdnaDisplay) return
     const align = alignToggle ? alignToggle.checked : true
     const r = await oxdnaDisplay.displayJob(_selectedId, align)

@@ -657,7 +657,7 @@ export function initSimulateJobs({
       sizeLabel: (n, total) => n.engine === 'namd' && n.dcd_size_bytes != null && total != null
         ? `${formatBytes(n.dcd_size_bytes)} DCD / ${formatBytes(total)} total`
         : (total ? formatBytes(total) : ''),
-      rowSig: (n) => `${n.engine}:${n.job_id}:${n.status}:${n.production_state}:${n.engine === 'oxdna' ? runIndicatorTags(n) : ''}:${n.out_of_date ? 1 : 0}:${n.archived ? 1 : 0}:${n.size_bytes ?? ''}:${n.dcd_size_bytes ?? ''}`,
+      rowSig: (n) => `${n.engine}:${n.job_id}:${n.status}:${n.production_state}:${n.engine === 'oxdna' ? runIndicatorTags(n) : ''}:${n.out_of_date ? 1 : 0}:${n.archived ? 1 : 0}:${n.storage_available}:${n.size_bytes ?? ''}:${n.dcd_size_bytes ?? ''}`,
       colors: { dim: _C.dim, warn: _C.warn },
     }
   }
@@ -1183,7 +1183,12 @@ export function initSimulateJobs({
           _schedulePoll({ retryFailedFetch: true })
           return
         }
+        const previousAvailability = _selectedNode()?.storage_available
         _nodes = nodes
+        if (_sel.id && previousAvailability !== _selectedNode()?.storage_available) {
+          const panel = _sel.engine === 'namd' ? mdPanel : _sel.engine === 'oxdna' ? oxdnaPanel : null
+          void panel?.refresh?.()
+        }
         _loadedPath = path
         _listReady = true
         listEl.inert = false
@@ -1205,7 +1210,7 @@ export function initSimulateJobs({
     // remote-result transfers can briefly delay this request while the independent
     // /jobs/active poll continues to report the run; retry even if this was the first
     // fetch and there are therefore no cached nodes from which to infer activity.
-    if (_dynamicsActive && bodyVisible && (retryFailedFetch || _nodes.some(nodeNeedsPolling))) {
+    if (_dynamicsActive && bodyVisible && (retryFailedFetch || _nodes.some(n => nodeNeedsPolling(n) || n.archived))) {
       _pollTimer = setTimeout(_fetch, POLL_MS)
     }
   }

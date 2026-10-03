@@ -2380,6 +2380,8 @@ def reconcile_oxdna_status(
     job is reconsidered because a detached process can finish after an earlier
     reconciliation classified it. Idempotent.
     """
+    if job.archived and not (job.job_dir(workspace_dir) / "job.json").is_file():
+        return job
     if job.status not in (OxdnaStatus.running, OxdnaStatus.stopped):
         return job
     was_running = job.status == OxdnaStatus.running
