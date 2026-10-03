@@ -31,7 +31,9 @@
 #include "async_trace.hpp"
 #include "loading_frame_trace.hpp"
 #include "frame_audit.hpp"
+#include "motion_detail.hpp"
 #include "latest_atomic_file.hpp"
+#include "ordered_atomic_file.hpp"
 #include "representation_meshes.hpp"
 #include "painted_commit_gate.hpp"
 #include "selection_level_guard.hpp"
@@ -1705,9 +1707,11 @@ class GlScene {
             }
         }
         if (token == toolPreviewToken_ && sameTransform) return;
+        if (!token.empty()) motionDetail_.changed();
         toolPreviewToken_ = std::move(token);
         toolPreviewTransform_ = transform;
         const auto started = std::chrono::steady_clock::now();
+        if (!previewGeometry_.active()) prepareResidentPreview();
         if (previewGeometry_.active() &&
             (toolPreviewToken_.empty() || toolPreviewToken_ == previewGeometry_.token)) {
             applyPackedPreview(toolPreviewToken_.empty() ? glm::mat4(1) : transform);
@@ -1769,6 +1773,7 @@ class GlScene {
 
 #include "static_snap_highlights.inc"
 #include "selection_tint.inc"
+#include "prepared_preview.inc"
 
     void setSelectionHighlights(
         const std::vector<std::string>& snapOwnerTokens,
@@ -1839,7 +1844,9 @@ class GlScene {
     }
     void applyPackedPreview(const glm::mat4& transform) {
         nadoc_vr::CalculationScope auditScope("applyPackedPreview");
-        previewGeometry_.apply(transform);
+        { nadoc_vr::CalculationScope scope("previewTransform");
+          previewGeometry_.apply(transform); }
+        { nadoc_vr::CalculationScope scope("previewUpload");
         previewGeometry_.points.upload(sphereInstanceVbo_);
         previewGeometry_.glowPoints.upload(sphereGlowInstanceVbo_);
         previewGeometry_.cylinders.upload(cylinderInstanceVbo_);
@@ -1847,10 +1854,12 @@ class GlScene {
         previewGeometry_.halves.upload(halfCylinderInstanceVbo_);
         previewGeometry_.glowHalves.upload(halfCylinderGlowInstanceVbo_);
         previewGeometry_.boxes.upload(boxInstanceVbo_);
-        previewGeometry_.glowBoxes.upload(boxGlowInstanceVbo_);
-        previewGeometry_.bounds(localCenter_, localRadius_);
+        previewGeometry_.glowBoxes.upload(boxGlowInstanceVbo_); }
+        { nadoc_vr::CalculationScope scope("previewBounds");
+          previewGeometry_.bounds(localCenter_, localRadius_); }
     }
 #ifdef NADOC_SCRYWRITE_TESTING
+    bool residentPreviewForTest = true;
     void disablePackedPreviewForTest() { packedPreviewEnabled_ = false; previewGeometry_.clear(); }
     bool hasPackedPreviewForTest() const { return previewGeometry_.active(); }
     bool volumeGuardsEnabledForTest = true;
@@ -2772,10 +2781,16 @@ class GlScene {
         return std::nullopt;
     }
 
+    GLsizei motionCylinderCount() const { return motionDetail_.coarse()?48:cylinderIndexCount_; }
+    const void* motionCylinderOffset() const { return reinterpret_cast<const void*>(motionDetail_.coarse()?cylinderIndexCount_*sizeof(GLushort):0); }
+    bool motionDetailReduced() const { return motionDetail_.reduced; }
+
     void renderShadowMap(const glm::mat4& modelTransform, const nadoc_vr::ShadowLightFrame& light,
                          const nadoc_vr::ShadowLightFrame* stabilized = nullptr) {
         nadoc_vr::CalculationScope auditScope("renderShadowMap");
         lightDirection_ = glm::normalize(light.direction);
+        motionDetail_.beginFrame(!toolPreviewToken_.empty());
+        if (motionDetail_.reduced) { nadoc_vr::CalculationScope reduced("motionDetail"); return; }
         const glm::vec3 worldCenter = glm::vec3(
             modelTransform * glm::vec4(localCenter_, 1.0F));
         const float modelScale = std::max({
@@ -2825,7 +2840,7 @@ class GlScene {
                            cylinderLightViewProjection_, cylinderLightDirection_);
             glBindVertexArray(cylinderVao_);
             glDrawElementsInstanced(
-                GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr, cylinderCount_);
+                GL_TRIANGLES, motionCylinderCount(), GL_UNSIGNED_SHORT, motionCylinderOffset(), cylinderCount_);
         }
         if (halfCylinderCount_ > 0) {
             shadowUniforms(cylinderProgram_, cylinderViewProjection_, cylinderModel_,
@@ -3045,8 +3060,8 @@ class GlScene {
                                   cylinderShadowMap_, cylinderShadowsEnabled_);
             bindSelectionTint(cylinderProgram_, 1);
             glBindVertexArray(cylinderVao_);
-            glDrawElementsInstanced(GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT,
-                                    nullptr, cylinderCount_);
+            glDrawElementsInstanced(GL_TRIANGLES, motionCylinderCount(), GL_UNSIGNED_SHORT,
+                                    motionCylinderOffset(), cylinderCount_);
         }
 
         if (halfCylinderCount_ > 0) {
@@ -3116,7 +3131,7 @@ class GlScene {
                     cylinderShadowMap_, cylinderShadowsEnabled_);
                 glBindVertexArray(cylinderGlowVao_);
                 glDrawElementsInstanced(
-                    GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
+                    GL_TRIANGLES, motionCylinderCount(), GL_UNSIGNED_SHORT, motionCylinderOffset(),
                     cylinderGlowCount_);
             }
             if (halfCylinderGlowCount_ > 0) {
@@ -3550,7 +3565,7 @@ class GlScene {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, shadowTexture_);
         glUniform1i(shadowMap, 0);
-        glUniform1i(shadowsEnabled, 1);
+        glUniform1i(shadowsEnabled, motionDetail_.reduced ? 0 : 1);
     }
 
     void initializeShadowMap() {
@@ -3720,6 +3735,7 @@ class GlScene {
             });
         }
         cylinderIndexCount_ = static_cast<GLsizei>(indices.size());
+        nadoc_vr::MotionDetail::appendCoarseCylinder(indices);
 
         glGenVertexArrays(1, &cylinderVao_);
         glBindVertexArray(cylinderVao_);
@@ -4194,6 +4210,7 @@ class GlScene {
     GLint boxAlpha_ = -1;
     GLint boxEmissive_ = -1;
     GLsizei lineCount_ = 0;
+    nadoc_vr::MotionDetail motionDetail_;
     GLsizei sphereIndexCount_ = 0;
     GLsizei sphereCount_ = 0;
     GLsizei sphereGlowCount_ = 0;
@@ -8245,8 +8262,7 @@ class Viewer {
     void publishEventState() {
         nadoc_vr::CalculationScope auditScope("publishEventState");
         if (eventPath_.empty()) return;
-        std::ofstream output(eventPath_, std::ios::out | std::ios::trunc);
-        if (!output) return;
+        std::ostringstream output;
         auto identity = [&](const std::string& value) {
             if (value.empty()) output << "null";
             else output << '\"' << value << '\"';
@@ -8407,6 +8423,7 @@ class Viewer {
                    << ",\"display_period_ms\":" << displayPeriodMilliseconds_;
         }
         output << '}';
+        eventWriter_.publish(eventPath_, output.str());
     }
 
     void pollSelectionFeedback() {
@@ -8889,6 +8906,7 @@ class Viewer {
             << ",\"mode\":" << quote(liveMode_)
             << ",\"frame\":" << liveFrame_
             << ",\"scene_visibility\":" << quote(liveSceneHidden_ ? "hidden" : "normal")
+            << ",\"motion_detail_reduced\":" << (glScene_ && glScene_->motionDetailReduced()?"true":"false")
             << ",\"controller_path_generation\":" << controllerPaths_.generation()
             << ",\"command_sequence\":" << liveCommandSequence_
             << ",\"predicted_display_time\":" << currentPredictedDisplayTime_
@@ -8902,6 +8920,7 @@ class Viewer {
             << ",\"detail\":" << quote(representationLoading_.detail) << "}"
             << ",\"loading_diagnostics\":{\"avatar_write_max_ms\":" << avatarWriter_.maxWriteMs()
             << ",\"avatar_write_failures\":" << avatarWriter_.failures()
+            << ",\"event_write_failures\":" << eventWriter_.failures()
             << ",\"lightweight_guard\":" << (representationLoading_.lightweight?"true":"false") << "}"
             << ",\"component_gallery\":" << componentGallery_.observation()
             << ",\"startup\":{\"active\":" << (startup_.active?"true":"false")
@@ -11215,7 +11234,8 @@ class Viewer {
                     }
                     if(!representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyLight);
                     traceRender("shadow");
-                    for (uint32_t i = 0; i < viewCount; ++i) {
+                    for (uint32_t offset = 0; offset < viewCount; ++offset) {
+                        const auto i=nadoc_vr::spectatorRenderViewIndex(mirrorEye_,offset,viewCount);
                         renderView(i, views_[i], layerViews[i]);
                     }
                     gpuFrameTimer_.end();
@@ -11929,6 +11949,7 @@ class Viewer {
     nadoc_vr::DimensionSync dimensionSync_;
     nadoc_vr::MenuFocusList legacyMenuFocus_;
     nadoc_vr::LatestAtomicFile avatarWriter_;
+    nadoc_vr::OrderedAtomicFile eventWriter_;
     nadoc_vr::FrameAudit frameAudit_;
     bool auditSubmitted_=false;
     double auditPeriod_=0;

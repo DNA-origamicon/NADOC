@@ -45,6 +45,7 @@ def main():
     parser.add_argument('--representations',nargs='+',choices=['full','stick','ballstick','surface'],default=['full','stick','ballstick','surface'])
     parser.add_argument('--design',type=Path,help='Full-size authored design imported into private tool fixtures')
     parser.add_argument('--validate',action='store_true')
+    parser.add_argument('--settled-drag',action='store_true',help='Measure a long settled Move/Rotate drag and stationary control.')
     parser.add_argument('--profiles',nargs='+',choices=['steady_fast','steady_deliberate','variable_fast','variable_deliberate'],
                         help='Explicit subset for a documented retry; use --validate for profile-named case directories')
     parser.add_argument('--desktop-rendering',choices=['off','on'],default='off',
@@ -55,6 +56,7 @@ def main():
     parser.add_argument('--min-available-gib',type=float,default=0,help='Stop before a case when host MemAvailable is below this floor')
     parser.add_argument('--output',type=Path,default=ROOT/'.development-artifacts/vr-tool-frame-audit'/uuid.uuid4().hex[:10])
     args=parser.parse_args()
+    if args.settled_drag and any(t not in ('move','move_cluster') for t in args.tools):parser.error('--settled-drag requires Move/Rotate tools only')
     if args.profiles and not args.validate:parser.error('--profiles requires --validate')
     if not math.isfinite(args.target_hz) or args.target_hz<=0:parser.error('Target Hz must be finite and positive')
     if not math.isfinite(args.min_available_gib) or args.min_available_gib<0:parser.error('Memory floor must be finite and nonnegative')
@@ -73,7 +75,7 @@ def main():
         source={'path':str(args.design),'sha256':hashlib.sha256(args.design.read_bytes()).hexdigest()}
     profiles=args.profiles or (['steady_fast','steady_deliberate','variable_fast','variable_deliberate'] if args.validate else ['steady_fast'])
     (args.output/'campaign.json').write_text(json.dumps({'source':source,'tools':args.tools,'representations':args.representations,'validation':args.validate,'profiles':profiles,'target_hz':args.target_hz,'desktop_rendering':args.desktop_rendering,
-        'restart_runtime_between_representations':args.restart_runtime_between_representations,'min_available_gib':args.min_available_gib},indent=2))
+        'restart_runtime_between_representations':args.restart_runtime_between_representations,'min_available_gib':args.min_available_gib,'settled_drag':args.settled_drag},indent=2))
     uv=shutil.which('uv') or 'uv'
     from tools.vr_workflows.audit_runtime import resources,pressure,restart
     current_rep=None
@@ -94,6 +96,7 @@ def main():
         if args.design:env['NADOC_VR_AUDIT_DESIGN']=str(args.design)
         module,*options=TOOLS[tool]
         command=[uv,'run','python','-m','tools.vr_workflows.'+module,*options,'--output',str(case/'tour')]
+        if args.settled_drag:command.append('--settled-drag')
         if args.validate: command.append('--validate')
         sampler=process=None
         code=None;error=None;started=time.time()*1000

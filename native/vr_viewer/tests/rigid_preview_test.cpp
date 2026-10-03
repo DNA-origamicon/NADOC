@@ -25,6 +25,7 @@ int benchmark(int argc,char** argv) {
  nadoc_vr::ViewVolumeRecord volume;volume.center=data.normalizationCenter;
  volume.half=glm::vec3(.4F,.6F,.5F)/data.normalizationScale;volume.representation=argv[2];
  GlScene scene(std::move(data),true,{}, {},false);
+ scene.residentPreviewForTest=std::getenv("NADOC_TEST_LEGACY_PREVIEW_SETUP")==nullptr;
  scene.volumeGuardsEnabledForTest=std::getenv("NADOC_TEST_LEGACY_VOLUMES")==nullptr;
  std::cout<<"VOLUMES enabled="<<volumes<<" guards="<<scene.volumeGuardsEnabledForTest<<std::endl;scene.enablePreparedStyles();scene.setStyle(rep,Coloring::strand);while(scene.stylePending())scene.pollPreparedStyle();
  GLuint query;glGenQueries(1,&query);
@@ -36,7 +37,10 @@ int benchmark(int argc,char** argv) {
   scene.setToolPreview({},glm::mat4(1));
   bool selected=mode!="idle";if(selected)scene.setSelectionHighlights({}, {},{owner},{});
   const auto fixed=glm::translate(glm::mat4(1),glm::vec3(.003F,0,0));
+  const auto firstStarted=Clock::now();
   if(selected)scene.setToolPreview({owner},fixed);
+  std::cout<<"FIRST_PREVIEW rep="<<argv[2]<<" owner="<<argv[3]<<" mode="<<mode
+      <<" elapsed_ms="<<ms(firstStarted,Clock::now())<<std::endl;
   glFinish();std::vector<double> update,draw,gpu,total;
   for(int i=0;i<samples+5;++i) {
    float t=float(i)*.13F;auto transform=fixed;
@@ -62,9 +66,10 @@ int benchmark(int argc,char** argv) {
 SceneData previewFixture() {
     SceneData data; data.available.fill(true);
     RepresentationData source;
-    ColorSet colors; for (auto& c : colors.values) c = {.35F,.65F,.9F};
+    ColorSet colors; for (size_t i=0;i<colors.values.size();++i) colors.values[i] = {.35F+.03F*i,.65F,.9F};
     source.points.push_back({"point",{-.18F,.1F,-1.3F},colors,.045F});
     source.points.push_back({"fixed",{.25F,.1F,-1.3F},colors,.035F});
+    source.points.push_back({"zero",{.1F,-.25F,-1.3F},colors,.025F});
     source.cylinders.push_back({"boundary",{-.18F,.1F,-1.3F},{.25F,.1F,-1.3F},.025F,colors});
     source.halfCylinders.push_back({"half",{-.2F,-.15F,-1.3F},{.2F,-.15F,-1.3F},.035F,colors});
     source.boxes.push_back({"box",{0,0,-1.3F},{.15F,0,0},{0,.08F,0},{0,0,.08F},colors});
@@ -72,8 +77,11 @@ SceneData previewFixture() {
     source.ownerHandles.push_back({"other",{.25F,.1F,-1.3F}});
     source.toolScopeOwnership = {
         {"point",{{"moving",1,1}}}, {"fixed",{{"other",1,1}}},
+        {"zero",{{"moving",0,0}}},
         {"boundary",{{"moving",1,0},{"other",0,1}}},
         {"half",{{"moving",.25F,.75F}}}, {"box",{{"moving",1,1}}}};
+    source.ownerAliases={{"point",{"moving"}},{"boundary",{"moving"}},
+        {"half",{"moving"}},{"zero",{"moving"}}};
     for (size_t i=0;i<kRepresentationCount;++i) {
         data.representations[i]=source;
         auto index=std::make_shared<SourceIndex>();index->rebuild(data.representations[i]);
@@ -81,6 +89,8 @@ SceneData previewFixture() {
     }
     return data;
 }
+#include "motion_detail_render.inc"
+
 int parity() {
     if(!glfwInit())return 77;
     glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,4);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
@@ -89,6 +99,9 @@ int parity() {
     glfwMakeContextCurrent(window);glEnable(GL_DEPTH_TEST);
     {
     GlScene fast(previewFixture(),true,{}, {},false);
+    fast.enablePreparedStyles();
+    fast.setStyle(Representation::full,Coloring::strand);
+    while(fast.stylePending())fast.pollPreparedStyle();
     GlScene reference(previewFixture(),true,{}, {},false);
     reference.staticSnapHighlightsForTest=false;
     reference.disablePackedPreviewForTest();
@@ -105,6 +118,7 @@ int parity() {
         glReadPixels(0,0,512,512,GL_DEPTH_COMPONENT,GL_FLOAT,depth.data());
     };
     auto compare=[&](const char* stage){
+        while(fast.stylePending())fast.pollPreparedStyle();
         capture(reference,expected,expectedDepth);capture(fast,actual,actualDepth);
         size_t changed=0,visible=0;int maxDelta=0;
         for(size_t i=0;i<actual.size();++i)if(i%4!=3){int delta=std::abs(int(actual[i])-int(expected[i]));changed+=delta>1;maxDelta=std::max(maxDelta,delta);visible+=actual[i]>0;}
@@ -122,6 +136,34 @@ int parity() {
         assert(glGetError()==GL_NO_ERROR);
         std::cout<<"PREVIEW_PARITY stage="<<stage<<" differing_bytes_gt1="<<changed<<" max_delta="<<maxDelta<<std::endl;
     };
+    // The prepared first-grab path must match the general renderer for each
+    // supported style, including duplicate aliases and explicit zero weights.
+    for(auto rep:{Representation::full,Representation::stick,Representation::ballstick,Representation::vdw}) {
+        for(auto color:{Coloring::strand,Coloring::cpk}) {
+            for(auto* scene:{&fast,&reference})scene->setStyle(rep,color);
+            compare("resident-before-grab");
+            const auto initialPixels=actual;
+            const auto styles=fast.styleApplicationsForTest;
+            for(auto* scene:{&fast,&reference})scene->setToolPreview({"moving"},
+                glm::translate(glm::mat4(1),glm::vec3(.03F,.02F,0)));
+            assert(fast.hasPackedPreviewForTest() && fast.styleApplicationsForTest==styles);
+            compare("resident-first-grab");assert(actual!=initialPixels);
+            for(auto* scene:{&fast,&reference})scene->setToolPreview({},glm::mat4(1));
+            compare("resident-cancel");assert(actual==initialPixels);
+            // Restoring a resident must not restore preview-modified buffers.
+            for(auto* scene:{&fast,&reference})scene->setStyle(rep,color);
+            compare("resident-cache-restored");assert(actual==initialPixels);
+            for(auto* scene:{&fast,&reference})scene->setToolPreview({"other"},
+                glm::translate(glm::mat4(1),glm::vec3(-.03F,0,0)));
+            compare("resident-other-owner");
+            for(auto* scene:{&fast,&reference})assert(scene->acceptToolCommit());
+            compare("resident-commit");
+            for(auto* scene:{&fast,&reference})assert(scene->acceptToolUndo());
+            compare("resident-undo");assert(actual==initialPixels);
+        }
+    }
+    for(auto* scene:{&fast,&reference})scene->setStyle(Representation::full,Coloring::strand);
+    compare("resident-tests-restored");
     const auto beforeHover=fast.styleApplicationsForTest;
     for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({"moving"}, {},{},{});
     compare("hover-owner");
@@ -148,7 +190,9 @@ int parity() {
     for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({"other"}, {"half"},{"moving"},{});
     compare("hover-with-selection");
     assert(fast.styleApplicationsForTest==beforeSelectedHover);
+    const auto beforeFirstPreview=fast.styleApplicationsForTest;
     for(auto* scene:{&fast,&reference})scene->setToolPreview({"moving"},glm::translate(glm::mat4(1),glm::vec3(.02F,.03F,0)));
+    assert(fast.styleApplicationsForTest==beforeFirstPreview);
     compare("hover-weighted-preview");
     for(auto* scene:{&fast,&reference})scene->setToolPreview({},glm::mat4(1));
     for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {},{"moving"},{});
@@ -244,6 +288,7 @@ int originContract() {
     return 0;
 }
 int main(int argc,char** argv) {
+    if(argc==2 && std::string(argv[1])=="--motion-detail")return motionDetailRender() || motionDetailRender(true);
     if(argc==2 && std::string(argv[1])=="--origin")return originContract();
     if(argc==5)return benchmark(argc,argv);
     if(argc!=1)return 2;

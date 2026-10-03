@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--validate',action='store_true')
     parser.add_argument('--profile',choices=['steady_fast','steady_deliberate','variable_fast','variable_deliberate'],help='Run one motion profile without repeating a completed matrix.')
     parser.add_argument('--direct-activation',action='store_true',help='Performance setup: activate Move/Rotate directly; subsequent interactions remain profile-driven.')
+    parser.add_argument('--settled-drag',action='store_true',help='Add a 5-second warmup, 30-second held-trigger drag and settled stationary control.')
     parser.add_argument('--keep-going',action='store_true',help='Retain independent profile results after a failure; still exit nonzero.')
     parser.add_argument('--target',choices=['cluster','overhang','base'])
     parser.add_argument('--output',type=Path)
@@ -63,6 +64,7 @@ def main():
                  'NADOC_VR_DEMO':'0' if args.validate else '1','NADOC_VR_DEMO_HOLD':'3'}
             if fixture: env['NADOC_VR_MOVE_DESIGN']=str(fixture)
             if args.direct_activation: env['NADOC_VR_MOVE_DIRECT_ACTIVATION']='1'
+            if args.settled_drag: env['NADOC_VR_SETTLED_DRAG']='1'
             command=['npx','playwright','test','--config','playwright.smoke.config.js',
                      'vr_move_rotate.spec.js','--workers=1','--output',str(output/target/profile)]
             # Physical VR validation needs real window focus so the desktop

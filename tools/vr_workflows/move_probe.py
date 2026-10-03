@@ -139,7 +139,8 @@ try:
   toward+=np.array(rotate(eye['orientation_xyzw'],[.4,-.15,0]));toward/=np.linalg.norm(toward)
   pointing=(np.array(aim)+toward*.45).tolist()
   (out/'pointing-approach.json').write_text(json.dumps({'target':aim,'position':pointing,'distance_m':.45,'reason':'Observer-side hand with lateral beam visibility'}))
-  reach(pointing,aim_orientation(pointing,aim),acquired=lambda s:s['move_nearby'])
+  from tools.vr_workflows.move_acquisition import remote_target
+  reach(pointing,aim_orientation(pointing,aim),acquired=remote_target)
   assert live.state['move_nearby'] and live.state['move_beam_end'] is not None,'selected geometry was not pointed at'
   assert np.linalg.norm(np.array(live.state['hands'][1]['position'])-live.state['move_beam_end'])>.15,'grab was not remote'
   live.capture_to(out/'pointed',discard_source=True)
@@ -159,6 +160,9 @@ try:
    (out/'preview-interval.json').write_text(json.dumps({'start_ms':preview_start,'end_ms':time.time()*1000,
     'first_frame':preview_first_frame,'last_frame':live.state['frame'],'preset':preset,'representation':live.state['representation'],
     'completed':preview_completed}))
+  if os.environ.get('NADOC_VR_SETTLED_DRAG')=='1':
+   from tools.vr_workflows.settled_drag import run as settled_drag
+   settled_drag(live,out,preset,start,q,shift,rotation)
   end=np.array(live.state['hands'][1]['position'])
   expected_center=np.array(center)+end-start
   live.capture_to(out/'preview',discard_source=True)

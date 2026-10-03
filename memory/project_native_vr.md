@@ -7,6 +7,66 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Continuous Move/Rotate at nominal 90 Hz (2026-10-03)
+
+Final full-24HB Ball & Stick cluster drags sustain 89.50–89.53 measured FPS across
+all four profiles (the workstation's nominal 90 Hz cadence), zero repeats and
+0/1/0/0 drops. All four pass stereo, save/reopen and Undo. Retained changes:
+self-shadows off + eight-to-four-sided ordinary bonds during changing previews;
+restore full detail after 180 ms settled or preview cleared; ordered atomic event
+publication on a worker; mirrored eye rendered last. Full-detail final-binary
+control remains 86.37 FPS with 93 repeats / 3 drops, so temporary reduction is
+still needed. Motion GPU span p95 is now 5.91–6.12 ms. A fused transform/bounds
+experiment showed no clear gain and was reverted. Event publication previously
+blocked for 3.1 s; its worker preserves snapshot order and drains at shutdown.
+
+Remote acquisition feedback now includes the original >15 cm condition, fixing
+early near-hover termination without changing profiles or thresholds. The settled
+tour retains motion/settled stereo captures outside measurement. Six native
+checks, full-quality parity, 39 focused Python tests and scoped lint pass.
+This is sustained-drag evidence, not a universal no-hitch claim: first-grab setup
+is separate; one stationary control shows a 134 ms grouped feed-polling stall.
+Through-lens transition comfort remains MV-VR-MOTION-QUALITY. See
+[audit](../docs/audits/vr_motion_optimization_20261003.md) and
+`.development-artifacts/vr-motion-20261003/`. `NADOC_VR_MOTION_DETAIL=0` provides
+full-quality A/B mode; default enables temporary reduction.
+
+## Settled Move/Rotate drag (2026-10-02)
+
+Long held-trigger Ball & Stick cluster tests exclude initial preview and >=5 s
+warm-up. Steady-fast/deliberate sustain 77.27/78.39 FPS over 30.38/31.90 s;
+last ten seconds remain 77.01/74.59 FPS. Subsequent 10 s stationary holds reach
+89.53 FPS with zero compositor repeats/drops. Motion GPU-span p95 ~10.0 ms
+versus hold ~7.64 ms; active packed-preview p95 3.00–3.11 ms. Prioritize recurring
+transform/upload/presentation costs for continuous motion; this is not merely
+startup recovery. Rare event-publication stalls of 62–76 ms are a separate
+worst-case-latency issue. Exact upload vs shader vs synchronization attribution
+still needs isolation. Both steady profiles pass persistence/Undo; both variable
+profiles fail remote-grab acquisition before measurement, so no all-four pass.
+Reusable Debug authoring tour `move-settled-drag`; frame audit accepts
+`--settled-drag`. 38 focused tooling tests pass. See
+[audit](../docs/audits/vr_settled_drag_20261002.md) and
+`.development-artifacts/vr-settled-drag-20261002/` for retained evidence and limits.
+
+## Move/Rotate first-grab cache reuse (2026-10-02)
+
+Current-code baseline identified first-grab setup, not continuous transforms, as
+the dominant preview stall. Static Full/Stick/Ball & Stick/VDW now construct the
+packed preview from the displayed prepared representation, preserving explicit
+endpoint weights, aliases, colors, IDs and resident-cache isolation. Visualized
+and committed-pose cases retain the general path. Full-24HB Ball & Stick cluster
+first-preview work: 560.5 ms baseline → 116.5 ms final steady-fast (79% reduction);
+all four final cluster profiles pass edit, stereo, save/reopen and Undo, with
+113–123 ms first previews. This is still above the 11.111 ms budget. Continuous
+motion/uploads are unchanged; no sustained-90-Hz claim. Eight isolated setup
+cases improve; all 32 paired images match exactly. Five native checks pass.
+Live nucleotide acquisition fails before preview, also reproduced in the baseline;
+do not claim full live nucleotide coverage from the isolated renderer results.
+The existing Debug authoring renderer regression now covers prepared first grabs
+and accepts `--compare-setup` with `--scene-dir` for reproducible A/B measurements.
+See [audit](../docs/audits/vr_preview_preparation_20261002.md) and
+`.development-artifacts/vr-preview-20261002/` for results and failed attempts.
+
 ## Staged static scene activation (2026-10-02)
 
 Static refresh now reuses the live renderer and stable object IDs, uploads prepared

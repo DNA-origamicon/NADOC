@@ -31,6 +31,17 @@ int main() {
     require(!nadoc_vr::spectatorMirrorViewIndex(SpectatorMirrorEye::off, 2),
             "disabled mirror should select no view");
 
+    for(auto eye:{SpectatorMirrorEye::off,SpectatorMirrorEye::left,SpectatorMirrorEye::right}) {
+        for(uint32_t count:{1U,2U}) {
+            const auto mirror=nadoc_vr::spectatorMirrorViewIndex(eye,count);
+            unsigned seen=0;
+            for(uint32_t offset=0;offset<count;++offset) {
+                const auto view=nadoc_vr::spectatorRenderViewIndex(eye,offset,count);
+                require(view<count && !(seen&(1U<<view)),"Every eye renders exactly once");seen|=1U<<view;
+                if(mirror && offset==count-1)require(view==*mirror,"Mirrored eye must render last");
+            }
+        }
+    }
     const auto pillarbox = nadoc_vr::fitSpectatorMirrorViewport(1000, 1000, 1600, 900);
     require(pillarbox.x == 350 && pillarbox.y == 0 &&
                 pillarbox.width == 900 && pillarbox.height == 900,
