@@ -134,7 +134,7 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
     await start()
     visualsOn = false // Native view-tool sharing owns subsequent scene changes.
     if (!active) throw new Error(el('status').textContent || 'Could not share perspective')
-  }, get active() { return active }, dispose() {
+  }, get revision() { return revision }, get active() { return active }, dispose() {
     if (disposed) return
     stop(); disposed = true; cancel(timer); unsubscribe?.(); trigger?.removeEventListener('click', show)
     doc.removeEventListener('pointerdown', pointerDown, true); doc.removeEventListener('pointerup', pointerUp, true); doc.removeEventListener('wheel', wheel, true)

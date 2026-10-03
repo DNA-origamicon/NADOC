@@ -76,7 +76,10 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     const share = currentRoom()
     if (!share || !presenter) throw new Error('Create a presentation link in an open design first.')
     nativeFlight = presenter.present(share, { refreshScene, capabilities })
-    try { await nativeFlight } finally { nativeFlight = null }
+    try {
+      await nativeFlight
+      if (presenter.revision) shares = shares.map(value => value.id === share.id ? { ...value, revision: presenter.revision } : value)
+    } finally { nativeFlight = null }
   }
   const controls = initPresentationControls({ document: doc, onPerspective: sharePerspective, onEnd: stopHosting, onViewLock: async locked => {
     if (!capabilities.includes('view-lock-v1')) throw new Error('Restart presentation hosting to lock guest perspectives.')
@@ -98,6 +101,19 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
       modes: [...doc.querySelectorAll('input[id^="oxdna-jobs-viz-"], input[id^="md-jobs-viz-"]')].filter(input => input.checked).map(input => input.id) }),
     isBusy: () => busy || animationActive || !!jobs?.active,
     onError: message => controls.error(message),
+    canStreamSelection: () => capabilities.includes('selection-update-v1'),
+    publishSelection: async (selection, current) => {
+      if (!current()) return false
+      const room = currentRoom()
+      await api(`shares/${room.id}/broadcast/selection`, { method: 'POST', body: JSON.stringify({ ...selection, revision: room.revision, id: crypto.randomUUID() }) })
+      return current()
+    },
+    publishPing: async (selection, current) => {
+      if (!capabilities.includes('selection-ping-stream-v1')) return false
+      if (!current()) return
+      const room = currentRoom()
+      await api(`shares/${room.id}/broadcast/selection-ping`, { method: 'POST', body: JSON.stringify({ revision: room.revision, target: selection.target, selectionRevision: selection.revision, ping: selection.ping }) })
+    },
     publish: async (result, current) => {
       if (!capabilities.includes('share-content-v1')) throw new Error('Restart presentation hosting after the current meeting to share view tool changes.')
       requireSharingCapabilities(result, capabilities)

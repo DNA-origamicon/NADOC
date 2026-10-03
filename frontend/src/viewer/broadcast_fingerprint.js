@@ -22,14 +22,15 @@ function bufferSignature(attribute) {
 }
 
 /** Observe visible content and settings, excluding redundant GPU upload work. */
-export function broadcastFingerprint({ scene, view, pane }, { coordinates = true } = {}) {
-  const rows = [view, pane], materials = new Set()
+export function broadcastFingerprint({ scene, view, pane }, { coordinates = true, transientPing = false, transientSelection = false } = {}) {
+  const contentView = transientSelection ? { ...view, selection: null } : transientPing && view?.selection ? { ...view, selection: { ...view.selection, ping: null } } : view
+  const rows = [contentView, pane], materials = new Set()
   function visit(o) {
-    if (!o.visible || o.isTransformControlsRoot) return
+    if (!o.visible || o.isTransformControlsRoot || (transientSelection && o.userData?.presentationSelection)) return
     rows.push([o.uuid, o.layers?.mask, coordinates ? o.position?.toArray() : null, coordinates ? o.quaternion?.toArray() : null, coordinates ? o.scale?.toArray() : null,
       coordinates && o.matrixAutoUpdate === false ? o.matrix?.toArray() : null, o.renderOrder, o.count,
       coordinates ? bufferSignature(o.instanceMatrix) : o.instanceMatrix?.array.length, coordinates ? bufferSignature(o.instanceColor) : o.instanceColor?.array.length, o.geometry?.uuid,
-      o.geometry && Object.entries(o.geometry.attributes).map(([k, a]) => [k, coordinates ? [a.count, a.itemSize, a.normalized, a.offset, bufferSignature(a)] : [a.count, a.itemSize, a.normalized]]),
+      o.geometry && Object.entries(o.geometry.attributes).filter(([k]) => !transientSelection || k !== 'instanceSelection').map(([k, a]) => [k, coordinates ? [a.count, a.itemSize, a.normalized, a.offset, bufferSignature(a)] : [a.count, a.itemSize, a.normalized]]),
       o.geometry?.instanceCount, bufferSignature(o.geometry?.index), o.geometry?.drawRange, o.color?.getHex(), o.intensity])
     for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
       const assembly = preparedAssemblyMaterial(m)

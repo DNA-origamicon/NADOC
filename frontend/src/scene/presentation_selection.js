@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { matchTargetEntries, unresolvedBaseKeys, describeTarget } from './annotation_targets.js'
+import { matchTargetEntries, createTargetEntryMatcher, unresolvedBaseKeys, describeTarget } from './annotation_targets.js'
 import { createExternalTargets } from './annotation_external.js'
 import { mountSelectionPing } from '../viewer/selection_ping.js'
 
@@ -7,10 +7,10 @@ const sources = new WeakMap()
 export const capturePresentationSelection = scene => sources.get(scene)?.capture() ?? null
 
 /** Canonical part refs and assembly selections resolved against current displayed coordinates. */
-export function resolvePresentationSelection({ state, entries, resolveBasePosition, resolveExternal, assemblyRenderer, assemblyCluster, extras = [] }) {
+export function resolvePresentationSelection({ state, entries, resolveBasePosition, resolveExternal, assemblyRenderer, assemblyCluster, extras = [], matchEntries = matchTargetEntries }) {
   if (!state.assemblyActive) {
     const refs = state.selection?.items?.length ? state.selection.items : state.activeClusterId ? [{ kind: 'cluster', id: state.activeClusterId }] : []
-    const matched = matchTargetEntries(refs, state.currentDesign, entries)
+    const matched = matchEntries(refs, state.currentDesign, entries)
     const points = matched.map(e => e.pos)
     const unresolved = unresolvedBaseKeys(refs, matched)
     for (const key of unresolved) { const p = resolveBasePosition(key); if (p) points.push(p) }
@@ -36,7 +36,7 @@ export function resolvePresentationSelection({ state, entries, resolveBasePositi
   const points = []
   for (const t of targets) {
     const data = assemblyRenderer?.getInstanceBackboneEntries?.(t.id)
-    const matched = t.refs ? matchTargetEntries(t.refs, assemblyRenderer?.getInstanceDesign?.(t.id), data?.entries ?? []) : data?.entries ?? []
+    const matched = t.refs ? matchEntries(t.refs, assemblyRenderer?.getInstanceDesign?.(t.id), data?.entries ?? []) : data?.entries ?? []
     for (const e of matched) points.push(e.pos.clone().applyMatrix4(data.matrixWorld))
     if (!matched.length && !t.refs) {
       const center = assemblyRenderer?.getInstanceCenters?.().find(c => c.id === t.id)
@@ -49,10 +49,11 @@ export function resolvePresentationSelection({ state, entries, resolveBasePositi
 export function initPresentationSelection({ scene, store, container, getCamera, addFrameCallback, removeFrameCallback,
   getEntries, resolveBasePosition, getProteinRenderer, getNanoparticleSubsystem, assemblyRenderer, getAssemblyCluster = () => null, getExtras = () => [],
   document: doc = document, now = Date.now }) {
+  const matchEntries = createTargetEntryMatcher()
   const external = createExternalTargets({ getDesign: () => store.getState().currentDesign, getProteinRenderer, getNanoparticleSubsystem })
   let geometry = new THREE.BufferGeometry()
   const material = new THREE.PointsMaterial({ color: 0xffd166, size: .65, transparent: true, opacity: .65, depthTest: false, depthWrite: false })
-  const cloud = new THREE.Points(geometry, material); cloud.name = 'Presenter selection'; cloud.raycast = () => {}; cloud.userData.setupOnly = true; cloud.renderOrder = 1250; cloud.frustumCulled = false; cloud.visible = false; scene.add(cloud)
+  const cloud = new THREE.Points(geometry, material); cloud.name = 'Presenter selection'; cloud.userData.presentationSelection = 'points'; cloud.raycast = () => {}; cloud.userData.setupOnly = true; cloud.renderOrder = 1250; cloud.frustumCulled = false; cloud.visible = false; scene.add(cloud)
   let cache = null
   let key = '', revision = 0, selection = null, ping = null, disposed = false
   const effect = mountSelectionPing({ container, getCamera, getTarget: () => cloud, now })
@@ -65,7 +66,7 @@ export function initPresentationSelection({ scene, store, container, getCamera, 
     // Matched backbone entries hold live position vectors; reuse membership between
     // selection/topology changes instead of scanning an entire design every frame.
     const cached = !state.assemblyActive && !extras.length && cache?.value.cacheable && cache.design === state.currentDesign && cache.selection === state.selection && cache.cluster === state.activeClusterId && cache.entries === entries
-    const value = cached ? cache.value : resolvePresentationSelection({ state, entries, resolveBasePosition, resolveExternal: external.resolve, assemblyRenderer, assemblyCluster: getAssemblyCluster(), extras })
+    const value = cached ? cache.value : resolvePresentationSelection({ state, entries, resolveBasePosition, resolveExternal: external.resolve, assemblyRenderer, assemblyCluster: getAssemblyCluster(), extras, matchEntries })
     cache = { value, design: state.currentDesign, selection: state.selection, cluster: state.activeClusterId, entries }
     if (value.key !== key) { key = value.key; revision++; ping = null; effect.clear() }
     const points = value.points.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z))

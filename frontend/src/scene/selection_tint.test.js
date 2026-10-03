@@ -81,3 +81,35 @@ describe('cluster selection tint', () => {
     layer.clear(); expect(corners.visible).toBe(false)
   })
 })
+
+it('does not upload or rebuild unchanged selection and limits changed tint ranges', () => {
+  const scene = new THREE.Scene(), m = mesh(); scene.add(m)
+  const layer = createClusterSelection(scene), groups = [[{ instMesh: m, id: 0 }]]
+  layer.setGroups(groups)
+  const attr = m.geometry.attributes.instanceSelection, corners = scene.getObjectByName('clusterSelectionCorners')
+  const position = corners.geometry.attributes.position, version = attr.version
+  attr.clearUpdateRanges()
+  layer.setGroups([[{ instMesh: m, id: 0 }]])
+  expect(attr.version).toBe(version)
+  expect(corners.geometry.attributes.position).toBe(position)
+  layer.setGroups([[{ instMesh: m, id: 0 }, { instMesh: m, id: 1 }]])
+  expect(attr.updateRanges).toEqual([{ start: 1, count: 1 }])
+  expect([...attr.array]).toEqual([1, 1])
+  layer.clear() // pending edits must stay included until the renderer consumes them
+  expect(attr.updateRanges).toEqual([{ start: 0, count: 2 }])
+  layer.dispose()
+})
+it('invalidates corner bounds for parent transforms, visibility and edited geometry', () => {
+  const scene = new THREE.Scene(), parent = new THREE.Group(), m = mesh(); scene.add(parent); parent.add(m)
+  const layer = createClusterSelection(scene); layer.setGroups([[{ instMesh: m, id: 0 }]])
+  const corners = scene.getObjectByName('clusterSelectionCorners'), before = corners.geometry.attributes.position.getX(0)
+  parent.position.x = 3; layer.refresh()
+  expect(corners.geometry.attributes.position.getX(0) - before).toBeCloseTo(3)
+  parent.visible = false; layer.refresh(); expect(corners.visible).toBe(false)
+  parent.visible = true; layer.refresh(); expect(corners.visible).toBe(true)
+  const position = m.geometry.attributes.position
+  for (let i = 0; i < position.count; i++) position.setX(i, position.getX(i) + 4)
+  position.needsUpdate = true; layer.refresh()
+  expect(corners.geometry.attributes.position.getX(0) - before).toBeCloseTo(7)
+  layer.dispose()
+})

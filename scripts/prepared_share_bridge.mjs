@@ -7,8 +7,8 @@ for await (const line of createInterface({ input: process.stdin, crlfDelay: Infi
   let id
   try {
     const value = JSON.parse(line); id = value.id
-    if (!/^\/host\/shares\/[a-f0-9]{32}\/(?:broadcast\/(?:frame|camera|heartbeat|hold|pause|progress)|avatar)$/.test(value.path) ||
-      typeof value.body !== 'string' || (!value.path.endsWith('/frame') && value.body.length > (value.path.endsWith('/avatar') ? 6*1024*1024 : 8192))) throw new Error('Invalid streaming action')
+    if (!/^\/host\/shares\/[a-f0-9]{32}\/(?:broadcast\/(?:frame|camera|heartbeat|hold|pause|progress|selection-ping|selection)|avatar)$/.test(value.path) ||
+      typeof value.body !== 'string' || (!value.path.endsWith('/frame') && value.body.length > ((value.path.endsWith('/avatar') || value.path.endsWith('/selection')) ? 6*1024*1024 : 8192))) throw new Error('Invalid streaming action')
     const response = await fetch(config.url + value.path, { method: 'POST', headers: { Authorization: `Bearer ${config.token}`, 'X-NADOC-Broadcast': value.lease },
       body: value.body ? Buffer.from(value.body, 'base64') : undefined, signal: value.path.endsWith('/frame') ? undefined : AbortSignal.timeout(15000) })
     process.stdout.write(JSON.stringify({ id, status: response.status, value: await response.json() }) + '\n')

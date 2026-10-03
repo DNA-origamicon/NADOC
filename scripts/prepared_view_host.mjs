@@ -92,7 +92,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['design-links-v1', 'persistent-sharing-v1', 'editor-broadcast-v1', 'animation-stream-v1', 'view-lock-v1', 'guest-drawing-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'vr-avatar-v1', 'vr-ui-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['design-links-v1', 'persistent-sharing-v1', 'editor-broadcast-v1', 'animation-stream-v1', 'view-lock-v1', 'guest-drawing-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'selection-ping-stream-v1', 'selection-update-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'vr-avatar-v1', 'vr-ui-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
       if (req.method === 'POST' && route === '/host/heartbeat') { ownerSeenAt = now(); return send(200, { ok: true }) }
       if (req.method === 'DELETE' && route === '/host/shares') {
         for (const id of rooms.keys()) endShare(id)
@@ -149,14 +149,16 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           return send(200, updateTrajectory(room, JSON.parse(Buffer.concat(chunks)), now))
         } catch (error) { return send(400, { error: error.message }) }
       }
-      const broadcast = route.match(/^\/host\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat|progress|view-lock)$/)
+      const broadcast = route.match(/^\/host\/shares\/([a-f0-9]{32})\/broadcast\/(start|camera|scene|frame|hold|pause|heartbeat|progress|view-lock|selection-ping|selection)$/)
       if (req.method === 'POST' && broadcast) {
         const room = rooms.get(broadcast[1]); if (!room) return send(410, { error: 'This share has ended.' })
         try {
-          const action = broadcast[2], limit = action === 'scene' ? 512 * 1024 * 1024 : action === 'frame' ? Infinity : 4096
+          const action = broadcast[2], limit = action === 'scene' ? 512 * 1024 * 1024 : action === 'frame' ? Infinity : action === 'selection' ? 4 * 1024 * 1024 : 4096
           const chunks = []; let size = 0
           for await (const chunk of req) { size += chunk.length; if (size > limit) return send(413, { error: 'Broadcast update too large' }); chunks.push(chunk) }
           const body = Buffer.concat(chunks)
+          if (action === 'selection') return send(200, room.presentation.publishSelectionUpdate(JSON.parse(body)))
+          if (action === 'selection-ping') return send(200, room.presentation.publishSelectionPing(JSON.parse(body)))
           if (action === 'view-lock') return send(200, room.presentation.setViewLock(JSON.parse(body).locked))
           return send(200, action === 'start' ? room.editorBroadcast.start(body.length ? JSON.parse(body) : {}) : room.editorBroadcast.apply(action, req.headers['x-nadoc-broadcast'], body))
         } catch (error) { return send(409, { error: error.message }) }

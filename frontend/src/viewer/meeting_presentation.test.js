@@ -223,3 +223,17 @@ it('holds the mobile drawing pose, restores navigation, and gives host locks pri
   expect(draw.disabled).toBe(false)
   v.dispose()
 })
+
+it('delivers same-scene selection pings without reloading or interrupting Follow', () => {
+  const loadRevision = vi.fn(), v = setup('guest', { loadRevision })
+  v.viewer.receiveSelectionPing = vi.fn()
+  v.state(1); document.querySelector('[data-follow]').click()
+  const selectionPing = { revision: 'rev', target: 'cloud', selectionRevision: 1, ping: { id: 'one', createdAt: Date.now() } }
+  v.state(2, undefined, { selectionPing })
+  expect(v.viewer.receiveSelectionPing).toHaveBeenCalledWith(selectionPing)
+  expect(loadRevision).not.toHaveBeenCalled()
+  expect(document.querySelector('[data-follow]').getAttribute('aria-pressed')).toBe('true')
+  v.state(3, undefined, { selectionPing: { ...selectionPing, revision: 'stale' } })
+  expect(v.viewer.receiveSelectionPing).toHaveBeenCalledOnce()
+  v.dispose()
+})

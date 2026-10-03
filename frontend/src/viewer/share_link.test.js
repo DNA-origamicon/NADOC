@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import { it, expect, vi, afterEach } from 'vitest'
 import { initShareLink } from './share_link.js'
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks() })
@@ -140,15 +141,16 @@ it('ends hosting from the persistent canvas controls and keeps them on a failed 
 it('mirrors native view tools on the same invitation while camera sharing is off', async () => {
   vi.useFakeTimers()
   const share = { id: 'a'.repeat(32), key: 'part:part', title: 'Part', url: 'https://example.test/part', expiresAt: Date.now() + 60000 }
-  const caps = ['share-content-v1', 'editor-broadcast-v1']
+  const caps = ['share-content-v1', 'editor-broadcast-v1', 'selection-ping-stream-v1', 'selection-update-v1']
   let hosted = false
   const request = vi.fn(async path => ({ ok: true, json: async () => {
     if (path.endsWith('/create')) { hosted = true; return share }
     if (path.endsWith('/content') || path.endsWith('/links')) return share
     return { capabilities: caps, shares: hosted ? [share] : [] }
   } }))
-  const view = { viewTools: { sequences: false } }
-  const prepared = { captureView: () => ({ scene: { uuid: 'native' }, view }), exportView: vi.fn(async () => ({ title: 'Part', buffer: new ArrayBuffer(16) })) }
+  const view = { viewTools: { sequences: false }, selection: { target: 'cloud', revision: 1, label: 'Base', ping: null } }
+  const scene = new THREE.Scene()
+  const prepared = { captureView: () => ({ scene, view }), exportView: vi.fn(async () => ({ title: 'Part', buffer: new ArrayBuffer(16) })) }
   const state = { currentDesign: { id: 'part' } }
   const store = { getState: () => state, subscribe: () => () => {} }
   const ui = initShareLink({ exportView: prepared.exportView, broadcast: { prepared, store }, fetch: request })
@@ -164,6 +166,20 @@ it('mirrors native view tools on the same invitation while camera sharing is off
     expect(document.querySelector('.presentation-perspective').getAttribute('aria-pressed')).toBe('false')
     view.viewTools.sequences = false
     await vi.advanceTimersByTimeAsync(1100)
+    expect(request.mock.calls.filter(([p]) => p.endsWith('/content'))).toHaveLength(2)
+    const exports = prepared.exportView.mock.calls.length
+    view.selection.ping = { id: 'ping-one', createdAt: Date.now() }
+    await vi.advanceTimersByTimeAsync(1100)
+    const pingCalls = request.mock.calls.filter(([p]) => p.endsWith('/broadcast/selection-ping'))
+    expect(pingCalls).toHaveLength(1)
+    expect(JSON.parse(pingCalls[0][1].body)).toMatchObject({ target: 'cloud', selectionRevision: 1, ping: view.selection.ping })
+    expect(prepared.exportView).toHaveBeenCalledTimes(exports)
+    view.selection = { ...view.selection, revision: 2, label: 'Next base', ping: null }
+    await vi.advanceTimersByTimeAsync(1100)
+    const selections = request.mock.calls.filter(([p]) => p.endsWith('/broadcast/selection'))
+    expect(selections).toHaveLength(1)
+    expect(JSON.parse(selections[0][1].body).selection.label).toBe('Next base')
+    expect(prepared.exportView).toHaveBeenCalledTimes(exports)
     expect(request.mock.calls.filter(([p]) => p.endsWith('/content'))).toHaveLength(2)
     expect(document.querySelector('[data-copy-link]')).not.toBeNull()
   } finally { ui.dispose(); vi.useRealTimers() }

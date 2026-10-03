@@ -76,6 +76,35 @@ export function matchTargetEntries(refs, design, entries) {
   return out
 }
 
+/** Index immutable rendered membership; position vectors remain live. The caller's
+ * topology revision and the entries array define the cache lifetime. */
+export function createTargetEntryMatcher() {
+  const sources = new WeakMap()
+  return (refs, design, entries) => {
+    if (!entries?.length || !refs?.length) return []
+    let cached = sources.get(entries)
+    if (!cached || cached.design !== design || cached.length !== entries.length) {
+      const strands = new Map(), domains = new Map(), helices = new Map(), bases = new Map()
+      const add = (map, key, i) => { let ids = map.get(key); if (!ids) map.set(key, ids = []); ids.push(i) }
+      entries.forEach((e, i) => {
+        if (!e?.nuc || !e.pos) return
+        const n = e.nuc
+        add(strands, n.strand_id, i); add(helices, n.helix_id, i)
+        if (n.domain_index != null) add(domains, domainKey(n.strand_id, n.domain_index), i)
+        add(bases, baseKey(n, n.copy_k ?? 0), i)
+      })
+      cached = { design, length: entries.length, strands, domains, helices, bases }; sources.set(entries, cached)
+    }
+    const m = buildTargetMatcher(refs, design), ids = new Set()
+    for (const [keys, index] of [[m.strands, cached.strands], [m.domains, cached.domains],
+      [m.helices, cached.helices], [m.extHelices, cached.helices], [m.bases, cached.bases]])
+      for (const key of keys) for (const id of index.get(key) ?? []) ids.add(id)
+    // Preserve source order and duplicate source entries while removing overlap
+    // between refs, just as the reference linear scan does.
+    return [...ids].sort((a, b) => a - b).map(i => entries[i])
+  }
+}
+
 /** Base/end/bond keys the backbone entries could not supply (e.g. extra crossover bases). */
 export function unresolvedBaseKeys(refs, matched) {
   const found = new Set(matched.map(e => baseKey(e.nuc, e.nuc.copy_k ?? 0)))

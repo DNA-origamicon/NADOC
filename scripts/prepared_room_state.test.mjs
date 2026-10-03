@@ -43,3 +43,39 @@ test('animation lock is independent of the manual lock and survives scene replac
   assert.throws(() => room.setViewLock('true'), /Invalid/)
   room.close()
 })
+
+test('selection pings preserve scene and perspective and are cleared on replacement', () => {
+  const revision = 'a'.repeat(64), room = createPresentationState({ id: 'room', revision })
+  room.publish({ revision, camera: pose })
+  const value = { revision, target: 'cloud', selectionRevision: 2, ping: { id: 'ping-1', createdAt: Date.now() } }
+  room.publishSelectionPing(value)
+  assert.equal(room.snapshot().revision, revision)
+  assert.equal(room.snapshot().presenting, true)
+  assert.deepEqual(room.snapshot().camera, pose)
+  assert.deepEqual(room.snapshot().selectionPing, value)
+  const sequence = room.snapshot().sequence
+  room.publishSelectionPing(value); assert.equal(room.snapshot().sequence, sequence)
+  assert.throws(() => room.publishSelectionPing({ ...value, revision: 'b'.repeat(64) }), /snapshot/)
+  assert.throws(() => room.publishSelectionPing({ ...value, ping: { id: 'x', createdAt: -1 } }), /Invalid/)
+  room.replaceRevision('b'.repeat(64)); assert.equal(room.snapshot().selectionPing, null)
+  room.close()
+})
+
+test('selection state reaches late guests once, without repeating geometry in camera events', () => {
+  const revision = 'a'.repeat(64), room = createPresentationState({ id: 'room', revision })
+  const selection = { revision, id: 'update-one', selection: { target: 'cloud', revision: 1, label: 'Base', ping: null }, points: [1,2,3], corners: [], tints: [] }
+  room.publishSelectionUpdate(selection)
+  const response = new EventEmitter(); response.write = value => { response.last = value; return true }; response.end = () => response.emit('close')
+  room.subscribe(response)
+  assert.match(response.last, /"selectionUpdate":/)
+  room.publish({ revision, camera: pose })
+  assert.doesNotMatch(response.last, /"selectionUpdate":/)
+  assert.equal(room.snapshot().revision, revision)
+  assert.deepEqual(room.snapshot().selectionUpdate, selection)
+  const late = new EventEmitter(); late.write = value => { late.last = value; return true }; late.end = () => late.emit('close')
+  room.subscribe(late); assert.match(late.last, /"selectionUpdate":/)
+  assert.throws(() => room.publishSelectionUpdate({ ...selection, revision: 'b'.repeat(64) }), /snapshot/)
+  room.replaceRevision('b'.repeat(64)); assert.equal(room.snapshot().selectionUpdate, null)
+  assert.match(late.last, /"selectionUpdate":null/)
+  room.close()
+})

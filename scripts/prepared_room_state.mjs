@@ -1,3 +1,5 @@
+import { validateSelectionUpdate } from '../frontend/src/viewer/selection_update.js'
+import { validateSelectionPing } from '../frontend/src/viewer/selection_ping_protocol.js'
 import { encodeVRUIState } from '../frontend/src/viewer/vr_ui_stream.js'
 import { validateVRAvatar } from '../frontend/src/viewer/vr_avatar_protocol.js'
 import { validateSharedCamera } from './prepared_camera.mjs'
@@ -7,13 +9,19 @@ export function createPresentationState({ id, revision, now = Date.now }) {
   const listeners = new Set()
   const presenters = new Set()
   let trajectory = null, liveFrame = null, loading = null, participants = [], drawings = []
+  let selectionPing = null, selectionUpdate = null
   let manualViewLock = false, animationViewLock = false
   let avatar = null, avatarWindow = now(), avatarUpdates = 0
-  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, viewLocked: manualViewLock || animationViewLock, animationActive: animationViewLock, avatar, trajectory, liveFrame, loading, participants, drawings, ended: closed, serverTime: now() })
+  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, viewLocked: manualViewLock || animationViewLock, animationActive: animationViewLock, avatar, trajectory, liveFrame, loading, participants, drawings, selectionPing, selectionUpdate, ended: closed, serverTime: now() })
   const textureCaches = new WeakMap()
+  const selectionCaches = new WeakMap()
   const encode = (state, response) => {
     if (!textureCaches.has(response)) textureCaches.set(response, new Map())
-    return `event: state\ndata: ${JSON.stringify(encodeVRUIState(state, textureCaches.get(response)))}\n\n`
+    const selectionId = state.selectionUpdate?.id ?? null
+    const packet = { ...state }
+    if (selectionCaches.has(response) && selectionCaches.get(response) === selectionId) delete packet.selectionUpdate
+    else selectionCaches.set(response, selectionId)
+    return `event: state\ndata: ${JSON.stringify(encodeVRUIState(packet, textureCaches.get(response)))}\n\n`
   }
   // A complete menu packet can exceed Node's writable high-water mark even
   // on localhost. Backpressure means wait, not a failed connection. Keep only
@@ -49,6 +57,17 @@ export function createPresentationState({ id, revision, now = Date.now }) {
     return snapshot()
   }
   return { snapshot, publish, pause,
+    publishSelectionUpdate(value) {
+      const validated = validateSelectionUpdate(value)
+      if (closed || validated.revision !== revision) throw new Error('Selection belongs to a different snapshot')
+      selectionUpdate = validated; selectionPing = null; sequence++; broadcast(); return { ok: true }
+    },
+    publishSelectionPing(value) {
+      const validated = validateSelectionPing(value)
+      if (closed || validated.revision !== revision) throw new Error('Selection ping belongs to a different snapshot')
+      if (selectionPing?.ping.id === validated.ping.id) return { ok: true }
+      selectionPing = validated; sequence++; broadcast(); return { ok: true }
+    },
     setDrawings(value) { drawings = value; sequence++; broadcast() },
     setViewLock(value, animation = false) {
       if (typeof value !== 'boolean') throw new Error('Invalid perspective lock')
@@ -71,8 +90,8 @@ export function createPresentationState({ id, revision, now = Date.now }) {
     },
     setTrajectory(value) { trajectory = value; sequence++; broadcast(); return snapshot() },
     setLiveFrame(value) { liveFrame = value; if (value?.animation) { camera = value.animation.camera; presenting = true }; sequence++; broadcast(); return snapshot() },
-    replaceContent(next, clip) { avatar=null; revision = next; trajectory = clip; liveFrame = null; camera = null; presenting = false; sequence++; broadcast(); return snapshot() },
-    replaceRevision(next) { avatar=null; revision = next; sequence++; broadcast() },
+    replaceContent(next, clip) { selectionUpdate=null; selectionPing=null; avatar=null; revision = next; trajectory = clip; liveFrame = null; camera = null; presenting = false; sequence++; broadcast(); return snapshot() },
+    replaceRevision(next) { selectionUpdate=null; selectionPing=null; avatar=null; revision = next; sequence++; broadcast() },
     leavePresenter() { pause(); for (const response of presenters) response.end() },
     subscribe(response, { presenter = false } = {}) {
       if (closed) { response.end(); return false }

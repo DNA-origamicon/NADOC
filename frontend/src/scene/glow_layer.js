@@ -8,13 +8,13 @@
  */
 
 import * as THREE        from 'three'
+import { markAttributeRange } from './attribute_updates.js'
 import { BEAD_RADIUS }   from './helix_renderer.js'
 
 const GLOW_SCALE   = 2.8        // glow sphere radius relative to BEAD_RADIUS
 const GLOW_OPACITY = 0.45
 
 const _geo   = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6)
-const _dummy = new THREE.Object3D()
 
 /**
  * Multi-color glow layer for fluorescence visualisation.
@@ -125,6 +125,7 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, nam
     depthWrite:  false,
   })
   let mesh = new THREE.InstancedMesh(_geo, mat, 1)
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
   mesh.count       = 0
   mesh.name        = name   // optional tag so gesture e2e can find a specific glow layer
   mesh.renderOrder = 1   // draw after the main geometry so additive blending composites correctly
@@ -136,7 +137,9 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, nam
   function _ensureCapacity(needed) {
     if (needed <= mesh.instanceMatrix.count) return
     scene.remove(mesh)
-    mesh = new THREE.InstancedMesh(_geo, mat, needed)
+    mesh.dispose()
+    mesh = new THREE.InstancedMesh(_geo, mat, Math.max(needed, mesh.instanceMatrix.count * 2))
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     mesh.count       = 0
     mesh.name        = name
     mesh.renderOrder = 1
@@ -147,17 +150,19 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, nam
   function _writeEntries(entries) {
     const count = entries.length
     _ensureCapacity(count)
+    const attribute = mesh.instanceMatrix, values = attribute.array
+    let first = Infinity, last = -1
     for (let i = 0; i < count; i++) {
-      _dummy.position.copy(entries[i].pos)
-      // Per-entry scale (same opt-in createMultiColorGlowLayer has): the anchor halo
-      // mixes coarse-grained beads with individual ATOMS, which are an order of
-      // magnitude smaller, in ONE layer and one draw call.
-      _dummy.scale.setScalar(entries[i].scale ?? scale)
-      _dummy.updateMatrix()
-      mesh.setMatrixAt(i, _dummy.matrix)
+      const p = entries[i].pos, size = Math.fround(entries[i].scale ?? scale), offset = i * 16
+      const x = Math.fround(p.x), y = Math.fround(p.y), z = Math.fround(p.z)
+      if (values[offset] === size && values[offset + 5] === size && values[offset + 10] === size &&
+          values[offset + 12] === x && values[offset + 13] === y && values[offset + 14] === z) continue
+      values[offset] = values[offset + 5] = values[offset + 10] = size
+      values[offset + 12] = x; values[offset + 13] = y; values[offset + 14] = z
+      first = Math.min(first, offset); last = offset + 16
     }
     mesh.count = count
-    mesh.instanceMatrix.needsUpdate = true
+    if (last >= 0) markAttributeRange(attribute, first, last - first)
   }
 
   return {
@@ -177,14 +182,13 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, nam
       _entries = []
       if (mesh.count === 0) return
       mesh.count = 0
-      mesh.instanceMatrix.needsUpdate = true
     },
 
     /** Number of active glow spheres (used by gesture e2e to detect the preview). */
     count() { return mesh.count },
 
     dispose() {
-      scene.remove(mesh)
+      scene.remove(mesh); mesh.dispose(); mat.dispose(); _entries = []
     },
   }
 }
