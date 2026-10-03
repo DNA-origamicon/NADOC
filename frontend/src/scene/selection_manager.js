@@ -1741,11 +1741,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     return clusterIdForNucleotide(nuc, design)
   }
 
+  const _clusterMembershipCache = new WeakMap()
   function _clusterEntries(clusterId, design, backboneEntries) {
-    const cluster = design?.cluster_transforms?.find(c => c.id === clusterId)
-    const f = cluster ? clusterMemberFilter(cluster, design) : null
-    if (!f) return []
-    return backboneEntries.filter(e => f(e.nuc))
+    let cached = _clusterMembershipCache.get(backboneEntries)
+    if (!cached || cached.design !== design || cached.length !== backboneEntries.length) {
+      cached = { design, length: backboneEntries.length, clusters: new Map() }
+      _clusterMembershipCache.set(backboneEntries, cached)
+    }
+    if (!cached.clusters.has(clusterId)) {
+      const cluster = design?.cluster_transforms?.find(c => c.id === clusterId)
+      const f = cluster ? clusterMemberFilter(cluster, design) : null
+      cached.clusters.set(clusterId, f ? backboneEntries.filter(e => f(e.nuc)) : [])
+    }
+    return cached.clusters.get(clusterId)
   }
 
   // Strand ids of a cluster's members. Beads are the primary source; at cylinder LOD
@@ -3120,8 +3128,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     designRenderer.glowCylinderDomains([...cylRefs.values()])
   }
 
+  let _projectingClusters = false
   function _clearSelectionGlow() {
-    designRenderer.clearClusterSelection?.()
+    if (!_projectingClusters) designRenderer.clearClusterSelection?.()
     _selectionGlowEntries = []
     designRenderer.clearCylinderDomainGlow?.()
     if (_ctrlBeads.length || _endBeads.length || _baseGlowEntries.length) _composeGlow([])
@@ -3395,68 +3404,74 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
    */
   function _syncCanonicalHighlights(state, { geometryChanged = false } = {}) {
     const highlight = selectionHighlightDescriptor(state)
+    // Replace cluster membership atomically. Clearing it first rewrites unchanged
+    // masks and needlessly toggles the merged-cylinder representation twice.
+    const previousProjection = _projectingClusters
+    _projectingClusters = !geometryChanged && highlight.clusterIds.length > 0
+    try {
 
-    // Geometry rebuilds invalidate cached entry adapters. They are painter output,
-    // never identity; dropping them cannot affect the canonical selected set.
-    if (geometryChanged) {
-      _strandEntries = []; _strandConeEntries = []; _strandArcEntries = []
-      _multiEntries = []; _multiConeEntries = []; _multiDomainEntries = []
-      _multiOverhangEntries = []; _multiExtensionEntries = []; _endBeads = []
-    }
-    _restoreStrand()
-    _clearMultiSelection({ commit: false })
-    _clearMultiDomainSelection({ commit: false })
-    _clearMultiOverhangSelection({ commit: false })
-    _clearMultiExtensionSelection({ commit: false })
-    _clearMultiCrossoverArcs()
-    _mode = 'none'; _strandId = null; _domainIndex = null; _drillClusterId = null
+      // Geometry rebuilds invalidate cached entry adapters. They are painter output,
+      // never identity; dropping them cannot affect the canonical selected set.
+      if (geometryChanged) {
+        _strandEntries = []; _strandConeEntries = []; _strandArcEntries = []
+        _multiEntries = []; _multiConeEntries = []; _multiDomainEntries = []
+        _multiOverhangEntries = []; _multiExtensionEntries = []; _endBeads = []
+      }
+      _restoreStrand()
+      _clearMultiSelection({ commit: false })
+      _clearMultiDomainSelection({ commit: false })
+      _clearMultiOverhangSelection({ commit: false })
+      _clearMultiExtensionSelection({ commit: false })
+      _clearMultiCrossoverArcs()
+      _mode = 'none'; _strandId = null; _domainIndex = null; _drillClusterId = null
 
-    if (highlight.overhangIds.length) _applyMultiOverhangHighlight(highlight.overhangIds)
-    if (highlight.extensionIds.length) _applyMultiExtensionHighlight(highlight.extensionIds)
+      if (highlight.overhangIds.length) _applyMultiOverhangHighlight(highlight.overhangIds)
+      if (highlight.extensionIds.length) _applyMultiExtensionHighlight(highlight.extensionIds)
 
-    const backboneEntries = designRenderer.getBackboneEntries()
-    const coneEntries = designRenderer.getConeEntries()
-    if (highlight.strandIds.length === 1) {
-      _mode = 'strand'; _strandId = highlight.strandIds[0]
-      _highlightStrand(backboneEntries, coneEntries, _strandId)
-    } else if (highlight.strandIds.length > 1) {
-      _applyMultiHighlight(highlight.strandIds)
-    } else if (highlight.domains.length === 1) {
-      const domain = highlight.domains[0]
-      _mode = 'domain'; _strandId = domain.strandId
-      _highlightStrand(backboneEntries, coneEntries, domain.strandId)
-      _highlightDomain(domain.domainIndex)
-    } else if (highlight.domains.length > 1) {
-      _applyMultiDomainHighlight(highlight.domains)
-    }
+      const backboneEntries = designRenderer.getBackboneEntries()
+      const coneEntries = designRenderer.getConeEntries()
+      if (highlight.strandIds.length === 1) {
+        _mode = 'strand'; _strandId = highlight.strandIds[0]
+        _highlightStrand(backboneEntries, coneEntries, _strandId)
+      } else if (highlight.strandIds.length > 1) {
+        _applyMultiHighlight(highlight.strandIds)
+      } else if (highlight.domains.length === 1) {
+        const domain = highlight.domains[0]
+        _mode = 'domain'; _strandId = domain.strandId
+        _highlightStrand(backboneEntries, coneEntries, domain.strandId)
+        _highlightDomain(domain.domainIndex)
+      } else if (highlight.domains.length > 1) {
+        _applyMultiDomainHighlight(highlight.domains)
+      }
 
-    if (highlight.clusterIds.length === 1) {
-      _mode = 'cluster'; _strandId = null
-      _highlightCluster(highlight.clusterIds[0], backboneEntries)
-    } else if (highlight.clusterIds.length > 1) {
-      const design = store.getState().currentDesign
-      _mode = 'none'; _strandId = null; _drillClusterId = null
-      _highlightClusters(highlight.clusterIds, backboneEntries)
-    }
+      if (highlight.clusterIds.length === 1) {
+        _mode = 'cluster'; _strandId = null
+        _highlightCluster(highlight.clusterIds[0], backboneEntries)
+      } else if (highlight.clusterIds.length > 1) {
+        const design = store.getState().currentDesign
+        _mode = 'none'; _strandId = null; _drillClusterId = null
+        _highlightClusters(highlight.clusterIds, backboneEntries)
+      }
 
-    const bondRef = highlight.primary?.kind === 'bond'
-      ? highlight.primary
-      : (highlight.bonds.length ? { kind: 'bond', ...highlight.bonds.at(-1) } : null)
-    const cone = _coneForBond(bondRef)
-    if (cone) {
-      const strandId = bondRef.strandId ?? cone.strandId
-      _highlightStrand(backboneEntries, coneEntries, strandId)
-      _mode = 'cone'; _strandId = strandId
-      _highlightCone(cone)
-    }
+      const bondRef = highlight.primary?.kind === 'bond'
+        ? highlight.primary
+        : (highlight.bonds.length ? { kind: 'bond', ...highlight.bonds.at(-1) } : null)
+      const cone = _coneForBond(bondRef)
+      if (cone) {
+        const strandId = bondRef.strandId ?? cone.strandId
+        _highlightStrand(backboneEntries, coneEntries, strandId)
+        _mode = 'cone'; _strandId = strandId
+        _highlightCone(cone)
+      }
 
-    _applyMultiCrossoverHighlight(_arcsForCrossoverRefs(highlight.crossovers))
+      _applyMultiCrossoverHighlight(_arcsForCrossoverRefs(highlight.crossovers))
 
-    _applyEndSelection(highlight.endKeys.map(key => ({ kind: 'end', key })))
-    const baseChanged = !_sameKeys(_baseKeys, highlight.baseKeys)
-    _baseKeys = [...highlight.baseKeys]
-    _repaintBaseGlow()
-    if (baseChanged) _notifyBaseChange()
+      _applyEndSelection(highlight.endKeys.map(key => ({ kind: 'end', key })))
+      const baseChanged = !_sameKeys(_baseKeys, highlight.baseKeys)
+      _baseKeys = [...highlight.baseKeys]
+      _repaintBaseGlow()
+      if (baseChanged) _notifyBaseChange()
+    } finally { _projectingClusters = previousProjection }
   }
 
   function _handleCtrlClickNuc(e) {

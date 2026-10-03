@@ -65,3 +65,19 @@ describe('describeTarget', () => {
       .toBe('3 items · 2 strands, 1 base')
   })
 })
+
+it('indexed matching preserves reference order, overlaps, duplicate identities and live positions', async () => {
+  const { createTargetEntryMatcher } = await import('./annotation_targets.js')
+  const match = createTargetEntryMatcher(), source = [...entries, entries[0], entry({ ...entries[0].nuc, copy_k: 1 }, 20)]
+  const cases = [[{ kind: 'base', key: 'h0:0:FORWARD' }], [{ kind: 'base', key: 'h0:0:FORWARD:1' }],
+    [{ kind: 'strand', id: 's1' }, { kind: 'cluster', id: 'c1' }], [{ kind: 'domain', strandId: 's1', domainIndex: 1 }],
+    [{ kind: 'extension', id: 'e1' }], [{ kind: 'crossover', id: 'x1' }]]
+  for (const refs of cases) expect(match(refs, design, source)).toEqual(matchTargetEntries(refs, design, source))
+  const refs = [{ kind: 'strand', id: 's1' }], result = match(refs, design, source)
+  source[0].pos.x = 42; expect(result[0].pos.x).toBe(42)
+  source.push(entry(nuc('s1', 'new', 3)))
+  expect(match(refs, design, source)).toEqual(matchTargetEntries(refs, design, source))
+  source[0] = entry(nuc('s2', 'h0', 0))
+  const revision = { ...design }
+  expect(match(refs, revision, source)).toEqual(matchTargetEntries(refs, revision, source))
+})

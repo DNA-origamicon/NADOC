@@ -1,13 +1,13 @@
 import * as THREE from 'three'
 import { it, expect, vi } from 'vitest'
 import { initNativeViewToolSharing } from './native_view_tool_sharing.js'
-function setup() {
+function setup(options = {}) {
   let context = 'native', room = 'room', busy = false
   const state = { currentDesign: { id: 'part' } }, view = { viewTools: { sequences: false } }
   const sourceScene = new THREE.Scene(), pose = { position: [0, 0, 10] }
   const prepared = { captureView: () => ({ scene: sourceScene, view, pose }), exportView: vi.fn(async () => ({ buffer: new ArrayBuffer(1) })) }
   const publish = vi.fn(async () => true)
-  const ui = initNativeViewToolSharing({ prepared, store: { getState: () => state }, getContext: () => context, getRoom: () => ({ id: room }), isBusy: () => busy, publish, onError: vi.fn(), setInterval: () => 1, clearInterval: () => {} })
+  const ui = initNativeViewToolSharing({ prepared, store: { getState: () => state }, getContext: () => context, getRoom: () => ({ id: room }), isBusy: () => busy, publish, onError: vi.fn(), ...options, setInterval: () => 1, clearInterval: () => {} })
   return { ui, sourceScene, pose, prepared, publish, view, state, context: v => { context = v }, room: v => { room = v }, busy: v => { busy = v } }
 }
 it('mirrors toggles after explicit publication, without requiring camera sharing', async () => {
@@ -161,4 +161,47 @@ it('coalesces assembly revisions and never publishes the inactive part or anothe
   v.state.assemblyActive = true; v.state.currentAssembly = { id: 'private-assembly' }
   await v.ui.tick(); await v.ui.tick(); expect(v.publish).toHaveBeenCalledOnce()
   v.ui.dispose()
+})
+
+it('streams repeated pings without exporting geometry and ignores ping expiry', async () => {
+  const publishPing = vi.fn(async () => true), v = setup({ publishPing })
+  v.view.selection = { label: 'Base', revision: 1, target: 'cloud', ping: null }
+  v.ui.remember()
+  for (const id of ['one', 'two']) {
+    v.view.selection.ping = { id, createdAt: 10 }
+    await v.ui.tick()
+  }
+  expect(publishPing).toHaveBeenCalledTimes(2)
+  expect(v.prepared.exportView).not.toHaveBeenCalled()
+  v.view.selection.ping = null; await v.ui.tick()
+  expect(v.prepared.exportView).not.toHaveBeenCalled()
+  v.view.selection.revision++; await v.ui.tick()
+  expect(v.publish).toHaveBeenCalledOnce()
+  v.ui.dispose()
+})
+it('falls back for older hosts and never streams a private context', async () => {
+  const publishPing = vi.fn(async () => false), v = setup({ publishPing })
+  v.view.selection = { label: 'Base', revision: 1, target: 'cloud', ping: null }; v.ui.remember()
+  v.view.selection.ping = { id: 'one', createdAt: 10 }; v.context('private-job')
+  await v.ui.tick(); expect(publishPing).not.toHaveBeenCalled()
+  v.context('native'); await v.ui.tick()
+  expect(v.publish).toHaveBeenCalledOnce(); v.ui.dispose()
+})
+
+it('streams cluster selection changes and deselection while real display edits still export', async () => {
+  const { installSelectionTint, createClusterSelection } = await import('../scene/selection_tint.js')
+  const publishSelection = vi.fn(async () => true)
+  const v = setup({ publishSelection, canStreamSelection: () => true })
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 2)
+  mesh.setMatrixAt(0, new THREE.Matrix4()); mesh.setMatrixAt(1, new THREE.Matrix4())
+  installSelectionTint(mesh); v.sourceScene.add(mesh)
+  const layer = createClusterSelection(v.sourceScene)
+  v.ui.remember(); layer.setGroups([[{ instMesh: mesh, id: 0 }]])
+  await v.ui.tick(); expect(publishSelection).toHaveBeenCalledOnce()
+  expect(v.prepared.exportView).not.toHaveBeenCalled()
+  await v.ui.tick(); expect(publishSelection).toHaveBeenCalledOnce()
+  layer.clear(); await v.ui.tick(); expect(publishSelection).toHaveBeenCalledTimes(2)
+  mesh.material.color.setHex(0xff0000)
+  await v.ui.tick(); expect(v.prepared.exportView).toHaveBeenCalledOnce()
+  v.ui.dispose(); layer.dispose()
 })

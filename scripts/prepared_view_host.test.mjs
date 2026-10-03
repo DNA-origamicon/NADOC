@@ -28,6 +28,14 @@ test('local editor broadcasts update the existing invitation and guest cookie, w
   assert.equal((await fetch(route + 'view-lock', { method: 'POST', headers: auth, body: JSON.stringify({ locked: true }) })).status, 200)
   assert.equal((await (await fetch(endpoint + '/status', { headers: { Cookie: cookie } })).json()).presentation.viewLocked, true)
 
+  const ping = { revision: share.revision, target: 'cloud', selectionRevision: 1, ping: { id: 'ping-one', createdAt: Date.now() } }
+  assert.equal((await fetch(route + 'selection-ping', { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify(ping) })).status, 403)
+  assert.equal((await fetch(route + 'selection-ping', { method: 'POST', headers: auth, body: JSON.stringify(ping) })).status, 200)
+  const pingState = (await (await fetch(endpoint + '/status', { headers: { Cookie: cookie } })).json()).presentation
+  assert.deepEqual(pingState.selectionPing, ping)
+  assert.equal(pingState.revision, share.revision)
+  assert.equal(await (await fetch(endpoint + '/scene', { headers: { Cookie: cookie } })).text(), 'NADOCVW1before')
+  assert.equal((await fetch(route + 'selection-ping', { method: 'POST', headers: auth, body: JSON.stringify({ ...ping, revision: 'f'.repeat(64) }) })).status, 409)
   const updated = await (await fetch(route + 'scene', { method: 'POST', headers, body: 'NADOCVW1after' })).json()
   assert.notEqual(updated.revision, share.revision)
   assert.equal((await fetch(endpoint + `/scene?revision=${share.revision}`, { headers: { Cookie: cookie } })).status, 409)

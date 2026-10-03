@@ -1,4 +1,4 @@
-import { selectionBaseCompiler } from '../scene/selection_tint.js'
+import { installSelectionTint, selectionBaseCompiler } from '../scene/selection_tint.js'
 import { bakePreparedAssemblyInstances } from '../scene/prepared_assembly_instances.js'
 import { hullCutoutShader, applyHullCutouts, validateHullCutouts } from '../scene/hull_volume_cutouts.js'
 import { validateSharedOverlay } from './shared_overlay.js'
@@ -275,6 +275,7 @@ export async function loadPreparedScene(buffer) {
         o.instanceMatrix = attribute(spec.instanceMatrix)
         if (spec.instanceColor) o.instanceColor = attribute(spec.instanceColor)
       }
+      if (o.isMesh && o.geometry?.attributes.instanceSelection) installSelectionTint(o)
       o.children = o.children.map((child, i) => { const next = restore(child, spec.children[i]); next.parent = o; return next })
       return o
     }

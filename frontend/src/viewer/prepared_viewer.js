@@ -145,7 +145,7 @@ export function mountPreparedViewer({ canvas, status, title, fileInput, resetBut
     runtime.setNavScaleProvider(() => new Float64Array()); runtime.controls.enabled = false
     resetButton.disabled = true; modeInput.disabled = true; fileInput.disabled = true
   }
-  return { setViewLocked(value) { viewLocked = value; if (value) { viewCube.cancel(); runtime.controls.enabled = false; if (performanceApi.busy) performanceApi.stop() }; fileInput.disabled = value }, mobile, centerAt: center, clear, loadFile, runtime, performanceApi, applyCamera, captureCamera: () => ({ ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far }), get current() { return current }, dispose() {
+  return { receiveSelectionUpdate: sharedSelection.receiveSelection, receiveSelectionPing: sharedSelection.receivePing, setViewLocked(value) { viewLocked = value; if (value) { viewCube.cancel(); runtime.controls.enabled = false; if (performanceApi.busy) performanceApi.stop() }; fileInput.disabled = value }, mobile, centerAt: center, clear, loadFile, runtime, performanceApi, applyCamera, captureCamera: () => ({ ...runtime.captureCurrentCamera(), near: runtime.camera.near, far: runtime.camera.far }), get current() { return current }, dispose() {
     if (disposed) return
     disposed = true; generation++
     annotations?.dispose(); annotations = null

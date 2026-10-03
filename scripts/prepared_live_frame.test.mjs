@@ -52,6 +52,14 @@ test('stream packets use the same guest session, reject obsolete frames, survive
   const obsolete = Buffer.concat([Buffer.from('f'.repeat(64)), frame])
   assert.equal((await host('frame', obsolete, lease)).status, 409)
   const progress = await bridge.request(`/host/shares/${share.id}/broadcast/progress`, { body: JSON.stringify({ fraction: .35 }), headers: { 'X-NADOC-Broadcast': lease } })
+  const selection = { revision, id: 'selection-bridge', selection: { target: 'cloud', label: 'Cluster', revision: 1, ping: null }, points: Array(60000).fill(1), corners: [], tints: [] }
+  const selectionResult = await bridge.request(`/host/shares/${share.id}/broadcast/selection`, { body: JSON.stringify(selection) })
+  assert.equal(selectionResult.status, 200)
+  assert.deepEqual((await (await fetch(`${url}/meeting/${share.id}/status`, { headers: { Cookie: cookie } })).json()).presentation.selectionUpdate, selection)
+  const ping = { revision, target: 'cloud', selectionRevision: 1, ping: { id: 'ping-bridge', createdAt: Date.now() } }
+  const pingResult = await bridge.request(`/host/shares/${share.id}/broadcast/selection-ping`, { body: JSON.stringify(ping) })
+  assert.equal(pingResult.status, 200)
+  assert.deepEqual((await (await fetch(`${url}/meeting/${share.id}/status`, { headers: { Cookie: cookie } })).json()).presentation.selectionPing, ping)
   assert.equal(progress.status, 200); assert.deepEqual(progress.value.loading, { fraction: .35 })
   assert.equal((await host('progress', JSON.stringify({ fraction: 9 }), lease)).status, 409)
   await host('pause', undefined, lease)

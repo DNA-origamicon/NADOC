@@ -122,6 +122,8 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, s
         if (disposed) return
         if (loaded) {
           revision = next; frozen = viewer.current; onSharedView(frozen)
+          if (latest?.revision === revision && latest.selectionUpdate?.revision === revision) viewer.receiveSelectionUpdate?.(latest.selectionUpdate)
+          if (latest?.revision === revision && latest.selectionPing?.revision === revision) viewer.receiveSelectionPing?.(latest.selectionPing)
           if (latest?.revision === revision) avatar.receive(latest)
           trajectory.dispose(); trajectory = createTrajectory()
           live.dispose(); live = createLive(); if (latest?.revision === revision) live.receive(latest)
@@ -136,11 +138,14 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, s
     let value; try { value = JSON.parse(event.data) } catch { return }
     if (value.room !== room || !Number.isSafeInteger(value.sequence) || value.sequence <= sequence) return
     if (value.revision !== revision && !/^[a-f0-9]{64}$/.test(value.revision)) return
+    if (!Object.hasOwn(value, 'selectionUpdate') && value.revision === latest?.revision) value.selectionUpdate = latest.selectionUpdate
     try { value = decodeVRUIState(value, vrTextures) } catch { avatar.clear(); return }
     if (value.ended) { avatar.clear(); onEnded(); return }
     onPresence(value.participants ?? [], { serverTime: value.serverTime })
     if (value.revision === revision && compatible()) avatar.receive(value); else avatar.clear()
     sequence = value.sequence; latest = value; latestAt = performance.now(); pendingRevision = value.revision
+    if (value.revision === revision && compatible() && value.selectionUpdate?.revision === revision) viewer.receiveSelectionUpdate?.(value.selectionUpdate)
+    if (value.revision === revision && compatible() && value.selectionPing?.revision === revision) viewer.receiveSelectionPing?.(value.selectionPing)
     drawing?.receive(value)
     trajectory.receive(value)
     live.receive(value)
