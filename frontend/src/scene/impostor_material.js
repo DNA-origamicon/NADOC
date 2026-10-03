@@ -1,3 +1,4 @@
+import { patchSelectionTint } from './selection_tint.js'
 /**
  * Sphere impostors — vertex-load reduction for backbone beads & atoms.
  *
@@ -160,6 +161,7 @@ export function makeImpostorPhongMaterial({ radius, color = 0xffffff }) {
     // than assigned by applyInstanceAlphaMaterial: that assigns onBeforeCompile,
     // which would wipe the billboard + depth patches above and leave flat quads.
     if (mat.userData.instanceAlphaPatch) patchShaderForInstanceAlpha(shader)
+    if (mat.userData.selectionTint) patchSelectionTint(shader)
     mat.userData.shader = shader
   }
   // Unique cache key per material so onBeforeCompile runs for each (otherwise

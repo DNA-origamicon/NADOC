@@ -1,3 +1,4 @@
+import { createClusterSelection } from './selection_tint.js'
 /**
  * Design renderer — reactive Three.js scene builder.
  *
@@ -81,6 +82,7 @@ export function initDesignRenderer(scene, storeRef) {
   // model.  Purely a display swap — the active design in the store is never mutated.
   let _externalActive   = false
   // Selection halo: 2.1 is 25% smaller than the original 2.8× bead radius.
+  const _clusterSelection = createClusterSelection(scene)
   const _glowLayer         = createGlowLayer(scene, 0x3fb950, 2.1, 'selectionGlow')
   // Undefined-bases highlight: red, ~2× the selection glow size
   const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
@@ -574,6 +576,7 @@ export function initDesignRenderer(scene, storeRef) {
     }
     markOperationTiming('old-scene-disposed')
 
+    _clusterSelection.clear()
     _glowLayer.clear()          // stale entries after rebuild; selection_manager re-applies if needed
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
     _anchorGlowLayer.clear()    // caller (anchor_glow) re-applies after a rebuild
@@ -1258,6 +1261,11 @@ export function initDesignRenderer(scene, storeRef) {
      * survives scene rebuilds.
      */
     /** Show green additive-blend glow spheres over the given backbone entries. */
+    setClusterSelectionGroups(groups) { _clusterSelection.setGroups(groups) },
+    refreshClusterSelection() { _clusterSelection.refresh() },
+    beginClusterSelection() { _helixCtrl?.setClusterSelectionActive(true) },
+    clearClusterSelection() { _clusterSelection.clear(); _helixCtrl?.setClusterSelectionActive(false) },
+    selectionCylinderEntries(refs) { return _helixCtrl?.selectionCylinderEntries(refs) ?? [] },
     setGlowEntries(entries) { _glowLayer.setEntries(entries) },
     clearGlow()              { _glowLayer.clear() },
 
@@ -1402,6 +1410,7 @@ export function initDesignRenderer(scene, storeRef) {
      * the next full rebuild.  (_captureGlowLayer was missing until 2026-08-01.)
      */
     refreshAllGlow() {
+      _clusterSelection.refresh()
       _glowLayer.refresh()
       _undefinedGlowLayer.refresh()
       _anchorGlowLayer.refresh()
@@ -2143,6 +2152,7 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     dispose() {
+      _clusterSelection.dispose()
       if (_frozenRoot) { scene.remove(_frozenRoot); _frozenRoot = null }
       if (_helixCtrl?.root) scene.remove(_helixCtrl.root)
       _helixCtrl = null

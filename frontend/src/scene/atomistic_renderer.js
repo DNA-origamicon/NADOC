@@ -134,6 +134,8 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
   function _atomGlowEntry(el, idx, scale) {
     return {
       scale,
+      get instMesh() { return _state.elementMeshes[el] },
+      id: idx,
       get pos() {
         const mesh = _state.elementMeshes[el]
         if (!mesh || idx >= mesh.count) return _glowPos.set(0, 0, 0)
@@ -715,7 +717,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
     },
 
     /** Build live glow entries for all atoms belonging to the supplied nucleotides. */
-    selectionAtomEntries(nucs, { scale = 1.35 } = {}) {
+    selectionAtomEntries(nucs, { scale = 1.35, includeBonds = false } = {}) {
       if (_state.mode === 'off' || !nucs?.length) return []
       const keys = new Set()
       const xbaseKeys = new Set()
@@ -724,13 +726,21 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         else keys.add(`${n.helix_id}:${n.bp_index}:${n.direction}:${Number(n.copy_k ?? n.copy ?? 0)}`)
       }
       const out = []
+      const selectedRows = new Set()
       const table = _state.atoms
       for (const [el, group] of Object.entries(_state.elementAtoms)) {
         for (let i = 0; i < group.length; i++) {
           const a = table.get(group[i])
           const key = `${a.helix_id}:${a.bp_index}:${a.direction}:${Number(a.copy_k ?? 0)}`
           const xbKey = `${a.crossover_id}:${a.extra_base_k}`
-          if (keys.has(key) || xbaseKeys.has(xbKey)) out.push(_atomGlowEntry(el, i, scale))
+          if (keys.has(key) || xbaseKeys.has(xbKey)) { out.push(_atomGlowEntry(el, i, scale)); selectedRows.add(group[i]) }
+        }
+      }
+      if (includeBonds && _state.bondMesh) {
+        const indices = _state.bondAtomIdx
+        for (let i = 0; i < (indices?.length ?? 0) / 2; i++) {
+          if (selectedRows.has(indices[i * 2]) || selectedRows.has(indices[i * 2 + 1]))
+            out.push({ instMesh: _state.bondMesh, id: i })
         }
       }
       return out

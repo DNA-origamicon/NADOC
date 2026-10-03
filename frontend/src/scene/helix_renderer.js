@@ -1414,6 +1414,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   // Override-only cylinders clipped to contiguous bp runs. The regular mesh is
   // retained as the whole-domain fast path.
+  let _clusterSelectionActive = false
+  let _clippedCylinderDomains = []
   let _clippedCylCapacity = 1
   let iClippedHelixCylinders = new THREE.InstancedMesh(
     GEO_UNIT_CYL, new THREE.MeshLambertMaterial({ color: 0xffffff }), _clippedCylCapacity,
@@ -3085,6 +3087,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _setCylAlpha(iClippedHelixCylinders, index,
         _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom))
     }
+    _clippedCylinderDomains = clipped.map(row => row.dom)
     iClippedHelixCylinders.count = clipped.length
     iClippedHelixCylinders.visible = _repActive && clipped.length > 0
     iClippedHelixCylinders.instanceMatrix.needsUpdate = true
@@ -3121,7 +3124,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     iHelixCylinders.material.visible = true
   }
   function _refreshMergedCylinderRuns() {
-    if (_anyAlpha() || !_domainCylData.length) { _disableMergedCylinders(); return }
+    if (_clusterSelectionActive || _anyAlpha() || !_domainCylData.length) { _disableMergedCylinders(); return }
     const runs = coalesceCylinderRuns(_domainCylData)
     // Do not substitute an equivalent one-instance-per-domain mesh.
     if (!runs.some(run => run.domains.length > 1)) { _disableMergedCylinders(); return }
@@ -3816,6 +3819,28 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     /** Additive glow outline on the cylinders of the given domains (selection feedback).
      *  domainRefs: [{strandId, domainIndex}]. Straight + overhang cylinders only. */
+    setClusterSelectionActive(active) {
+      if (_clusterSelectionActive === active) return
+      _clusterSelectionActive = active
+      _refreshMergedCylinderRuns()
+    },
+    selectionCylinderEntries(domainRefs) {
+      const { straight, overhang, overhangFull } = _refsToCylinderEntries(domainRefs)
+      const keys = new Set(domainRefs.map(r => `${r.strandId}:${r.domainIndex}`))
+      const selected = e => keys.has(`${e.strandId}:${e.domainIndex}`)
+      return [
+        ...straight.map(e => ({ instMesh: iHelixCylinders, id: e.cylIdx })),
+        ...overhang.map(e => ({ instMesh: iOverhangCylinders, id: e.cylIdx })),
+        ...overhangFull.map(e => ({ instMesh: iOverhangFullCylinders, id: e.cylIdx })),
+        ..._clippedCylinderDomains.flatMap((e, id) => selected(e) ? [{ instMesh: iClippedHelixCylinders, id }] : []),
+        ..._curvedDomainCylData.filter(selected).map(e => ({ instMesh: iCurvedHelixCylinders, id: e.cylIdx })),
+        ..._curvedOvhgCylData.filter(selected).map(e => ({
+          instMesh: e.fullCylinder ? iCurvedOverhangFullCylinders : iCurvedOverhangCylinders, id: e.cylIdx,
+        })),
+        ...[..._curvedCylGroup.children, ..._curvedOvhgGroup.children, ..._clippedCurvedCylGroup.children]
+          .filter(mesh => selected(mesh.userData)).map(mesh => ({ instMesh: mesh, id: 0 })),
+      ]
+    },
     glowCylinderDomains(domainRefs) {
       // Only glow domains that are ACTUALLY cylinder-rendered (skip bead-rendered
       // ones — they have a cyl record but the solid cylinder is hidden).

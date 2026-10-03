@@ -1777,14 +1777,34 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   }
 
+  function _highlightClusters(clusterIds, backboneEntries) {
+    designRenderer.beginClusterSelection?.()
+    const design = store.getState().currentDesign
+    const atoms = [getAtomisticRenderer?.(), getRegionVdwRenderer?.(), getRegionBallstickRenderer?.(), getRegionStickRenderer?.()]
+      .filter((r, i, all) => r && r.getMode?.() !== 'off' && all.indexOf(r) === i)
+    const groups = clusterIds.map(clusterId => {
+      const entries = _clusterEntries(clusterId, design, backboneEntries)
+      const slabs = _clusterEntries(clusterId, design, designRenderer.getSlabEntries?.() ?? [])
+      const cluster = design?.cluster_transforms?.find(c => c.id === clusterId)
+      const matches = (cluster && clusterMemberFilter(cluster, design)) || (() => false)
+      const cones = designRenderer.getConeEntries().filter(e =>
+        (e.fromNuc && matches(e.fromNuc)) || (e.toNuc && matches(e.toNuc)))
+      const refs = [...(designRenderer.getCylinderDomainData?.() ?? []),
+        ...entries.map(e => ({ helixId: e.nuc.helix_id, strandId: e.nuc.strand_id, domainIndex: e.nuc.domain_index }))]
+        .filter(d => matches({ helix_id: d.helixId, strand_id: d.strandId, domain_index: d.domainIndex }))
+        .map(d => ({ strandId: d.strandId, domainIndex: d.domainIndex }))
+      return [...entries, ...slabs, ...cones,
+        ...slabs.filter(e => e.connectorMesh).map(e => ({ instMesh: e.connectorMesh, id: e.connectorId })),
+        ...(designRenderer.selectionCylinderEntries?.(refs) ?? []),
+        ...atoms.flatMap(r => r.selectionAtomEntries?.(entries.map(e => ({ ...e.nuc, copy_k: e._copy ?? e.nuc.copy_k ?? 0 })), { includeBonds: true }) ?? []),
+      ]
+    })
+    designRenderer.setClusterSelectionGroups?.(groups)
+  }
+
   function _highlightCluster(clusterId, backboneEntries) {
     _restoreStrand()
-    const design  = store.getState().currentDesign
-    const entries = _clusterEntries(clusterId, design, backboneEntries)
-    // Reuse the strand-entry slot so _restoreStrand cleans up the cluster glow.
-    _strandEntries = entries
-    for (const e of entries) designRenderer.setBeadScale(e, 1.3)
-    _setSelectionGlow(entries)
+    _highlightClusters([clusterId], backboneEntries)
     _drillClusterId = clusterId
   }
 
@@ -1801,7 +1821,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // Shared cluster-selection commit — used by the 3D cluster-filter click
   // (_selectClusterV2) AND the sidebar "Movable clusters" row (exported
-  // selectCluster), so both produce the identical green-glow + 1.3× bead-scale +
+  // selectCluster), so both produce the identical tint + corner markers +
   // canonical cluster ref. Re-selecting the active cluster toggles it off.
   function _applyClusterSelection(cid, { toggle = false } = {}) {
     // A plain (non-additive) cluster pick replaces any multi-cluster selection. The 3D
@@ -3101,6 +3121,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   function _clearSelectionGlow() {
+    designRenderer.clearClusterSelection?.()
     _selectionGlowEntries = []
     designRenderer.clearCylinderDomainGlow?.()
     if (_ctrlBeads.length || _endBeads.length || _baseGlowEntries.length) _composeGlow([])
@@ -3414,9 +3435,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _highlightCluster(highlight.clusterIds[0], backboneEntries)
     } else if (highlight.clusterIds.length > 1) {
       const design = store.getState().currentDesign
-      const members = [...new Set(highlight.clusterIds.flatMap(id => _clusterMemberStrandIds(id, design)))]
       _mode = 'none'; _strandId = null; _drillClusterId = null
-      _applyMultiHighlight(members)
+      _highlightClusters(highlight.clusterIds, backboneEntries)
     }
 
     const bondRef = highlight.primary?.kind === 'bond'
@@ -4936,6 +4956,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // the same references without touching the store, so the subscription above never
   // fires and the selection halo would vanish on every surface-strand edit.
   window.addEventListener('nadoc:display-rebuilt', () => _reresolveAfterRebuild(store.getState()))
+  window.addEventListener('nadoc:representation-change', () => _reresolveAfterRebuild(store.getState()))
 
   // Canonical refs are the source of truth. Keep renderer adapters synchronized for
   // programmatic/controller mutations as well as pointer gestures.

@@ -1,3 +1,4 @@
+import { selectionBaseCompiler } from '../scene/selection_tint.js'
 import { bakePreparedAssemblyInstances } from '../scene/prepared_assembly_instances.js'
 import { hullCutoutShader, applyHullCutouts, validateHullCutouts } from '../scene/hull_volume_cutouts.js'
 import { validateSharedOverlay } from './shared_overlay.js'
@@ -48,10 +49,11 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
     if (m.colors && Object.entries(m.colors).some(([k, v]) => !COLOR_KEYS.includes(k) || !finiteVector(v, 3))) fail('Invalid material colors')
     if (!MATERIALS.has(m.type) && !m.isLineMaterial) fail(`Unsupported material ${m.type}; this view cannot yet be packaged`)
     const impostor = preparedImpostorSpec(m)
-    const alpha = m.onBeforeCompile === instanceAlphaOnBeforeCompile
-    const hullCutouts = m.onBeforeCompile === hullCutoutShader ? m.userData.hullCutouts : null
-    const sectionCap = m.onBeforeCompile === sectionCapShader
-    if (!hullCutouts && !impostor && !alpha && !sectionCap && m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
+    const compile = selectionBaseCompiler(m)
+    const alpha = compile === instanceAlphaOnBeforeCompile
+    const hullCutouts = compile === hullCutoutShader ? m.userData.hullCutouts : null
+    const sectionCap = compile === sectionCapShader
+    if (!hullCutouts && !impostor && !alpha && !sectionCap && compile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
     const data = m.isLineMaterial ? encodeWideLineMaterial(m) : m.toJSON(meta)
     delete data.userData
     materials.set(m.uuid, { ...data, instanceAlpha: alpha, sectionCap, ...(hullCutouts ? { hullCutouts } : {}), ...(impostor ? { impostor } : {}),

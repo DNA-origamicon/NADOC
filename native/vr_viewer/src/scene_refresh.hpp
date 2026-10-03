@@ -14,12 +14,29 @@ template<class Scene> class SceneRefreshInbox {
     // Parsing is CPU-only. GL activation and the revision publication remain on
     // the caller's context thread, and the old scene keeps rendering while busy.
     template<class Load, class Apply> void poll(const std::string& eventPath, Load load, Apply apply) {
+        pollStaged(eventPath, load, [&](Scene scene) { apply(std::move(scene)); }, [] { return true; });
+    }
+    // Begin owns the parsed scene; advance performs bounded context-thread work.
+    // A revision is acknowledged only after the fully uploaded scene is visible.
+    template<class Load, class Begin, class Advance>
+    void pollStaged(const std::string& eventPath, Load load, Begin begin, Advance advance) {
+        auto progress = [&] {
+            try {
+                if (!advance()) return;
+                revision_ = pendingRevision_;
+                std::cout << "VR_SCENE_APPLIED revision=" << revision_ << std::endl;
+            } catch (const std::exception& error) {
+                std::cerr << "VR scene refresh retained previous scene: " << error.what() << std::endl;
+            }
+            applying_ = false;
+        };
+        if (applying_) { progress(); return; }
         if (pending_.valid()) {
             if (pending_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
             try {
-                apply(pending_.get());
-                revision_ = pendingRevision_;
-                std::cout << "VR_SCENE_APPLIED revision=" << revision_ << std::endl;
+                begin(pending_.get());
+                applying_ = true;
+                progress();
             } catch (const std::exception& error) {
                 std::cerr << "VR scene refresh retained previous scene: " << error.what() << std::endl;
             }
@@ -42,6 +59,7 @@ template<class Scene> class SceneRefreshInbox {
     }
  private:
     std::future<Scene> pending_;
+    bool applying_ = false;
     uint64_t pendingRevision_ = 0;
     uint64_t revision_ = 0;
     uint32_t frames_ = 0;

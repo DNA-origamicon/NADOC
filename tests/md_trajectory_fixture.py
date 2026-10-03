@@ -175,7 +175,8 @@ def generated_gromacs(tmp_path_factory, generated_md):
             "-o",
             "em.tpr",
         ],
-        [gmx, "mdrun", "-deffnm", "em", "-nt", "1"],
+        # GPU-enabled GROMACS also needs an explicit thread-MPI rank count.
+        [gmx, "mdrun", "-deffnm", "em", "-nt", "1", "-ntmpi", "1"],
     ):
         result = subprocess.run(
             args, cwd=package, capture_output=True, text=True, timeout=120

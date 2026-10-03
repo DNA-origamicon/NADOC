@@ -95,6 +95,8 @@ def catalog():
         'Trigger grab the selected end arrow, pull to resize, release to save, and verify one-step desktop Undo. Validation uses all four controller profiles.', module='end_resize_tour')
     add('move-preview-renderer', 'authoring', 'Move / Rotate · renderer regression',
         'No headset required: compare packed previews with the original rebuild, including boundary bonds, highlights, Cancel, commit, Undo and style changes. Saved-scene timing is available through --scene-dir on the command line.', module='move_preview_check')
+    add('scene-activation', 'authoring', 'Scene activation · renderer regression',
+        'No headset required: verify bounded uploads, atomic revision acknowledgement, old-scene visibility, selection, stable object IDs, depth and picking across repeated scene replacements. Saved-origami timing is available through --scene.', module='scene_activation_check')
     for target in ('cluster','overhang','base'):
         add('move-'+target, 'authoring', 'Move / Rotate '+target,
             'Generated isolated part: trigger translate/rotate, exact target persistence and Undo. Validation uses all four controller profiles.',

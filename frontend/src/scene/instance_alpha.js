@@ -1,3 +1,4 @@
+import { patchSelectionTint } from './selection_tint.js'
 /**
  * Per-instance alpha for InstancedMeshes — the shader patch and the material half
  * of installing it.
@@ -33,6 +34,7 @@ import * as THREE from 'three'
  */
 export function instanceAlphaOnBeforeCompile(shader) {
   patchShaderForInstanceAlpha(shader)
+  if (this?.userData?.selectionTint) patchSelectionTint(shader)
 }
 
 /**

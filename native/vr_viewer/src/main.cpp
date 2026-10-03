@@ -262,6 +262,7 @@ struct SceneData {
     std::array<RepresentationData, kRepresentationCount> representations;
     std::array<bool,kRepresentationCount> available{};
     bool emptyAuthoring = false;
+    std::optional<bool> preparedAtomisticSharedGeometry;
     Representation initialRepresentation = Representation::full;
     Coloring initialColoring = Coloring::strand;
     glm::mat3 sourceAxes{1.0F};
@@ -279,6 +280,31 @@ struct SceneData {
         sourceAxes(other.sourceAxes),normalizationCenter(other.normalizationCenter),normalizationScale(other.normalizationScale){}
     SceneData& operator=(const SceneData& other){if(this!=&other)*this=SceneData(other);return *this;}
 };
+
+[[nodiscard]] inline bool atomisticCylindersEquivalent(const SceneData& scene) {
+        const auto& ballstick = scene.representations[
+            static_cast<size_t>(Representation::ballstick)];
+        const auto& stick = scene.representations[
+            static_cast<size_t>(Representation::stick)];
+        if (ballstick.cylinders.size() != stick.cylinders.size() ||
+            !ballstick.halfCylinders.empty() || !stick.halfCylinders.empty() ||
+            !ballstick.boxes.empty() || !stick.boxes.empty()) {
+            return false;
+        }
+        for (size_t index = 0; index < ballstick.cylinders.size(); ++index) {
+            const StyledCylinder& first = ballstick.cylinders[index];
+            const StyledCylinder& second = stick.cylinders[index];
+            if (first.identity != second.identity || first.start != second.start ||
+                first.end != second.end || first.radius != second.radius) {
+                return false;
+            }
+            for (size_t color = 0; color < first.colors.values.size(); ++color) {
+                if (first.colors.values[color] != second.colors.values[color]) return false;
+            }
+        }
+        return true;
+    }
+
 
 struct SelectionVolumeHits {
     std::vector<nadoc_vr::PickHit> representatives;
@@ -506,6 +532,7 @@ constexpr const char* kLitFragmentSource = R"GLSL(
     uniform int uShadowsEnabled;
     uniform float uAlpha;
     uniform float uEmissive;
+    flat in uint vSelection;
     layout(location = 0) out vec4 outColor;
     layout(location = 1) out uint outObjectId;
     flat in uint vObjectId;
@@ -538,7 +565,9 @@ constexpr const char* kLitFragmentSource = R"GLSL(
         float lighting = 0.20 + 0.90 * diffuse * shadowVisibility(normal);
         lighting = mix(lighting, 1.0, uEmissive);
         outObjectId = vObjectId;
-        outColor = vec4(vColor * lighting, uAlpha);
+        vec3 shaded = vColor * lighting;
+        vec3 selectionColor = vSelection == 2u ? vec3(0.22, 1.0, 0.42) : vec3(1.0, 0.68, 0.12);
+        outColor = vec4(mix(shaded, selectionColor, vSelection == 0u ? 0.0 : 0.48), uAlpha);
     }
 )GLSL";
 
@@ -553,6 +582,9 @@ GLuint makeSphereProgram() {
         uniform mat4 uModel;
         layout(location = 7) in uint aObjectId;
         flat out uint vObjectId;
+        uniform usamplerBuffer uSelectionState;
+        uniform int uSelectionCount;
+        flat out uint vSelection;
         out vec3 vColor;
         out vec2 vCorner;
         flat out vec3 vWorldCenter;
@@ -584,6 +616,8 @@ GLuint makeSphereProgram() {
             vCorner = aUnitPosition.xy;
             vColor = aColor;
             vObjectId = aObjectId;
+            vSelection = gl_InstanceID < uSelectionCount
+                ? texelFetch(uSelectionState, gl_InstanceID).r : 0u;
         }
     )GLSL";
 
@@ -601,6 +635,7 @@ GLuint makeSphereProgram() {
         uniform int uShadowsEnabled;
         uniform float uAlpha;
         uniform float uEmissive;
+    flat in uint vSelection;
         layout(location = 0) out vec4 outColor;
         layout(location = 1) out uint outObjectId;
         flat in uint vObjectId;
@@ -655,7 +690,9 @@ GLuint makeSphereProgram() {
                 shadowVisibility(worldPosition, normal);
             lighting = mix(lighting, 1.0, uEmissive);
             outObjectId = vObjectId;
-            outColor = vec4(vColor * lighting, uAlpha);
+            vec3 shaded = vColor * lighting;
+        vec3 selectionColor = vSelection == 2u ? vec3(0.22, 1.0, 0.42) : vec3(1.0, 0.68, 0.12);
+        outColor = vec4(mix(shaded, selectionColor, vSelection == 0u ? 0.0 : 0.48), uAlpha);
         }
     )GLSL";
 
@@ -692,6 +729,9 @@ GLuint makeCylinderProgram() {
         uniform mat4 uModel;
         layout(location = 7) in uint aObjectId;
         flat out uint vObjectId;
+        uniform usamplerBuffer uSelectionState;
+        uniform int uSelectionCount;
+        flat out uint vSelection;
         out vec3 vColor;
         out vec3 vNormal;
         flat out int vTwoSided;
@@ -720,6 +760,8 @@ GLuint makeCylinderProgram() {
             vWorldPosition = worldPosition.xyz;
             vColor = aColor;
             vObjectId = aObjectId;
+            vSelection = gl_InstanceID < uSelectionCount
+                ? texelFetch(uSelectionState, gl_InstanceID).r : 0u;
         }
     )GLSL";
 
@@ -752,6 +794,9 @@ GLuint makeAtomisticBondProgram() {
         uniform mat4 uModel;
         layout(location = 7) in uint aObjectId;
         flat out uint vObjectId;
+        uniform usamplerBuffer uSelectionState;
+        uniform int uSelectionCount;
+        flat out uint vSelection;
         out vec3 vColor;
         out vec3 vWorldPosition;
         void main() {
@@ -760,6 +805,8 @@ GLuint makeAtomisticBondProgram() {
             vWorldPosition = (uModel * vec4(position,1)).xyz;
             vColor = aColor;
             vObjectId = aObjectId;
+            vSelection = gl_InstanceID < uSelectionCount
+                ? texelFetch(uSelectionState, gl_InstanceID).r : 0u;
         }
     )GLSL";
     static constexpr const char* fragmentSource = R"GLSL(
@@ -810,6 +857,9 @@ GLuint makeBoxProgram() {
         uniform mat4 uModel;
         layout(location = 7) in uint aObjectId;
         flat out uint vObjectId;
+        uniform usamplerBuffer uSelectionState;
+        uniform int uSelectionCount;
+        flat out uint vSelection;
         out vec3 vColor;
         out vec3 vNormal;
         flat out int vTwoSided;
@@ -830,6 +880,8 @@ GLuint makeBoxProgram() {
             vWorldPosition = worldPosition.xyz;
             vColor = aColor;
             vObjectId = aObjectId;
+            vSelection = gl_InstanceID < uSelectionCount
+                ? texelFetch(uSelectionState, gl_InstanceID).r : 0u;
         }
     )GLSL";
 
@@ -1338,6 +1390,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
         scene.prepared[i]=prepareStaticRepresentation(scene.representations[source],static_cast<Representation>(i),indices[source]);
         scene.cpuBytes[source]+=scene.prepared[i]->bytes()+scene.prepared[i]->highlightIndexBytes()+16*(scene.prepared[i]->records[0].size()+scene.prepared[i]->records[1].size()+scene.prepared[i]->records[2].size()+scene.prepared[i]->records[3].size());
     }
+    scene.preparedAtomisticSharedGeometry = atomisticCylindersEquivalent(scene);
     const double milliseconds = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - started).count();
     std::cout << "VR_METRIC event=process_progress phase=scene_load_end"
@@ -1394,6 +1447,7 @@ class GlScene {
     LoadingPoints loadingPoints_;
   public:
 #include "prepared_style_controller.inc"
+#include "staged_scene_refresh.inc"
     explicit GlScene(SceneData scene, bool objectIds = false, const std::deque<std::string>& priorIdentities = {},
                      const std::function<void(size_t)>& preparing = {}, bool prewarm = true, bool initializeStyle = true)
         : scene_(std::move(scene)), objectIdsEnabled_(objectIds) {
@@ -1401,7 +1455,8 @@ class GlScene {
             objectIdentities_ = priorIdentities;
             for (size_t i = 1; i < objectIdentities_.size(); ++i) objectIdBucket(objectIdentities_[i]).emplace(objectIdentities_[i], static_cast<uint32_t>(i));
         }
-        atomisticSharedGeometry_ = atomisticCylindersEquivalent(scene_);
+        atomisticSharedGeometry_ = scene_.preparedAtomisticSharedGeometry
+            ? *scene_.preparedAtomisticSharedGeometry : atomisticCylindersEquivalent(scene_);
         program_ = makeProgram();
         viewProjection_ = glGetUniformLocation(program_, "uViewProjection");
         upload({}, lineVao_, lineVbo_);
@@ -1471,6 +1526,7 @@ class GlScene {
         if (!samePositions || snapshotHasColors || snapshotHasSlabs ||
             !visualizationColors_.empty() || !visualizationSlabFrames_.empty()) {
             ++visualizationRevision_;
+            selectionCornersDirty_ = true;
         }
         visualizationMode_ = snapshot.mode;
         visualizationPositions_.clear();
@@ -1544,6 +1600,7 @@ class GlScene {
             !toolCommittedToken_.empty() || !toolPreviewToken_.empty() || previewGeometry_.active()) {
             return false;
         }
+        selectionCornersDirty_ = true;
         normalizedCoordinateScratch_.resize(coordinates.size());
         for (size_t index = 0; index < coordinates.size(); ++index) {
             const auto& source = coordinates[index];
@@ -1711,6 +1768,7 @@ class GlScene {
     }
 
 #include "static_snap_highlights.inc"
+#include "selection_tint.inc"
 
     void setSelectionHighlights(
         const std::vector<std::string>& snapOwnerTokens,
@@ -1740,6 +1798,13 @@ class GlScene {
         snapHighlightIdentities_ = nextSnapIdentities;
         selectedHighlightOwnerTokens_ = nextSelectedTokens;
         selectedHighlightIdentities_ = nextSelectedIdentities;
+        selectionTintDirty_ = true;
+        selectionCornersDirty_ = selectionCornersDirty_ || !selectionUnchanged;
+        if (selectionTintEnabled()) {
+            if (!selectionUnchanged && toolPreviewToken_.empty() && toolCommittedToken_.empty())
+                previewGeometry_.clear();
+            return;
+        }
         if (applyStyle && !updateStaticSnapHighlights(selectionUnchanged, priorSnapTokens, priorSnapIdentities)) setStyle(representation_, coloring_);
     }
 
@@ -1797,6 +1862,9 @@ class GlScene {
         ++styleApplicationsForTest;
 #endif
         previewGeometry_.clear();
+        selectionTintDirty_ = selectionCornersDirty_ = true;
+        dynamicSelectionRows_ = false;
+        for (auto& rows : selectionRows_) rows.clear();
         if (!supportsRepresentation(representation)) throw std::runtime_error("Representation missing from scene snapshot: " + std::string(representationName(representation)));
         const auto styleStarted = std::chrono::steady_clock::now();
         // Coarse helix cylinders have domain-level ownership and cannot represent
@@ -1809,8 +1877,8 @@ class GlScene {
         const bool cacheable = visualizationPositions_.empty() && visualizationColors_.empty() &&
             visualizationSlabFrames_.empty() &&
             toolPreviewToken_.empty() && toolCommittedToken_.empty() &&
-            snapHighlightOwnerTokens_.empty() && snapHighlightIdentities_.empty() &&
-            selectedHighlightOwnerTokens_.empty() && selectedHighlightIdentities_.empty();
+            (selectionTintEnabled() || (snapHighlightOwnerTokens_.empty() && snapHighlightIdentities_.empty() &&
+            selectedHighlightOwnerTokens_.empty() && selectedHighlightIdentities_.empty()));
         if(deferStyles_ && cacheable && !renderingVolumes_ && scene_.prepared[static_cast<size_t>(representation)]) {
             requestPreparedStyle(representation,coloring);return;
         }
@@ -1866,8 +1934,8 @@ class GlScene {
             cachedAtomisticVisualizationRevision_ == visualizationRevision_ &&
             cachedAtomisticColoring_ == coloring &&
             !atomisticCylinderInstances_.empty() &&
-            snapHighlightOwnerTokens_.empty() && snapHighlightIdentities_.empty() &&
-            selectedHighlightOwnerTokens_.empty() && selectedHighlightIdentities_.empty();
+            (selectionTintEnabled() || (snapHighlightOwnerTokens_.empty() && snapHighlightIdentities_.empty() &&
+            selectedHighlightOwnerTokens_.empty() && selectedHighlightIdentities_.empty()));
         if (restoringAtomistic) {
             representation_ = representation;
             coloring_ = coloring;
@@ -2023,7 +2091,9 @@ class GlScene {
                         tokens.contains(owner.token);
                 });
         };
+        dynamicSelectionRows_ = true;
         auto glowColor = [&](const std::string& identity) -> std::optional<glm::vec3> {
+            if (selectionTintEnabled()) return std::nullopt;
             if (selectedHighlightIdentities_.contains(identity) ||
                 matchesOwner(identity, selectedHighlightOwnerTokens_)) {
                 return glm::vec3(0.22F, 1.0F, 0.42F);
@@ -2048,6 +2118,7 @@ class GlScene {
             const auto visualization = visualizationOffsets(source, point.identity);
             const glm::vec3 position = transformPoint(
                 point.position, point.identity, false, visualization);
+            selectionRows_[0].push_back(&point.identity);
             points.push_back(Vertex{
                 position,
                 visualizationColor(source, point.identity)
@@ -2094,6 +2165,7 @@ class GlScene {
                         frame->center, frame->axisX, frame->axisZ, start);
                 }
             }
+            selectionRows_[1].push_back(&cylinder.identity);
             cylinders.push_back(Cylinder{
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
@@ -2144,6 +2216,7 @@ class GlScene {
                 cylinder.start, cylinder.identity, false, visualization);
             const glm::vec3 end = transformPoint(
                 cylinder.end, cylinder.identity, true, visualization);
+            selectionRows_[2].push_back(&cylinder.identity);
             halfCylinders.push_back(Cylinder{
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
@@ -2191,6 +2264,7 @@ class GlScene {
                 axisY = transformVector(box.axisY, box.identity);
                 axisZ = transformVector(box.axisZ, box.identity);
             }
+            selectionRows_[3].push_back(&box.identity);
             boxes.push_back(Box{
                 center, axisX, axisY, axisZ,
                 visualizationColor(source, box.identity)
@@ -2731,6 +2805,8 @@ class GlScene {
         auto shadowUniforms = [&](GLuint program, GLint projection, GLint model,
                                   GLint lightProjection, GLint lightDirectionUniform) {
             glUseProgram(program);
+            glUniform1i(glGetUniformLocation(program,"uSelectionState"),6);
+            glUniform1i(glGetUniformLocation(program,"uSelectionCount"),0);
             glUniformMatrix4fv(projection, 1, GL_FALSE, &lightViewProjection_[0][0]);
             glUniformMatrix4fv(model, 1, GL_FALSE, &modelTransform[0][0]);
             glUniformMatrix4fv(
@@ -2773,6 +2849,8 @@ class GlScene {
     }
 
     ~GlScene() {
+        glDeleteBuffers(4, selectionBuffers_.data());
+        glDeleteTextures(4, selectionTextures_.data());
         if(activeResident_)sphereInstanceVbo_=cylinderInstanceVbo_=halfCylinderInstanceVbo_=boxInstanceVbo_=0;
         glDeleteBuffers(1,&volumeBuffer_);glDeleteTextures(1,&volumeTexture_);
         if (lineVbo_) glDeleteBuffers(1, &lineVbo_);
@@ -2916,6 +2994,7 @@ class GlScene {
     void render(const glm::mat4& viewProjection, const glm::mat4& modelTransform,
                 const std::vector<Vertex>& guides, bool captureIds = false, bool lightweight = false) const {
         nadoc_vr::CalculationScope auditScope("render");
+        updateSelectionTint();
         if(lightweight){
             loadingPoints_.begin(viewProjection,modelTransform,captureIds);
             loadingPoints_.draw<Vertex>(sphereInstanceVbo_,sphereCount_,offsetof(Vertex,position));
@@ -2949,6 +3028,7 @@ class GlScene {
             applyLightingUniforms(
                 sphereLightViewProjection_, sphereLightDirection_, sphereShadowMap_,
                 sphereShadowsEnabled_);
+            bindSelectionTint(sphereProgram_, 0);
             glBindVertexArray(sphereVao_);
             glDrawElementsInstanced(
                 GL_TRIANGLES, sphereIndexCount_, GL_UNSIGNED_SHORT, nullptr, sphereCount_);
@@ -2963,6 +3043,7 @@ class GlScene {
             glUniform1f(cylinderEmissive_, 0.0F);
             applyLightingUniforms(cylinderLightViewProjection_, cylinderLightDirection_,
                                   cylinderShadowMap_, cylinderShadowsEnabled_);
+            bindSelectionTint(cylinderProgram_, 1);
             glBindVertexArray(cylinderVao_);
             glDrawElementsInstanced(GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT,
                                     nullptr, cylinderCount_);
@@ -2977,6 +3058,7 @@ class GlScene {
             applyLightingUniforms(
                 cylinderLightViewProjection_, cylinderLightDirection_, cylinderShadowMap_,
                 cylinderShadowsEnabled_);
+            bindSelectionTint(cylinderProgram_, 2);
             glBindVertexArray(halfCylinderVao_);
             glDrawElementsInstanced(
                 GL_TRIANGLES, halfCylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
@@ -2992,6 +3074,7 @@ class GlScene {
             applyLightingUniforms(
                 boxLightViewProjection_, boxLightDirection_, boxShadowMap_,
                 boxShadowsEnabled_);
+            bindSelectionTint(boxProgram_, 3);
             glBindVertexArray(boxVao_);
             glDrawElementsInstanced(
                 GL_TRIANGLES, boxDrawCount(), GL_UNSIGNED_SHORT, boxDrawOffset(), boxCount_);
@@ -3071,6 +3154,7 @@ class GlScene {
             glDepthMask(GL_TRUE);
         }
 
+        renderSelectionCorners(viewProjection, modelTransform);
         renderGuides(viewProjection, guides);
         glBindVertexArray(0);
         glUseProgram(0);
@@ -3078,11 +3162,11 @@ class GlScene {
 
     void renderGuides(
         const glm::mat4& viewProjection, const std::vector<Vertex>& guides,
-        const std::array<size_t, 2>* handEnds = nullptr, float lineWidth = 3.0F) const {
+        const std::array<size_t, 2>* handEnds = nullptr, float lineWidth = 3.0F, bool writeDepth = true) const {
         nadoc_vr::CalculationScope auditScope("renderGuides");
         if (!guides.empty()) {
             glEnable(GL_DEPTH_TEST);
-            glDepthMask(GL_TRUE);
+            glDepthMask(writeDepth ? GL_TRUE : GL_FALSE);
             glUseProgram(program_);
             glUniform1i(glGetUniformLocation(program_,"uVolumeCount"),0);
             glUniform1f(glGetUniformLocation(program_,"uVolumeOpacity"),1);
@@ -3100,34 +3184,12 @@ class GlScene {
             }
             glEnable(GL_DEPTH_TEST);
         }
+        glDepthMask(GL_TRUE);
         glBindVertexArray(0);
         glUseProgram(0);
     }
 
   private:
-    [[nodiscard]] static bool atomisticCylindersEquivalent(const SceneData& scene) {
-        const auto& ballstick = scene.representations[
-            static_cast<size_t>(Representation::ballstick)];
-        const auto& stick = scene.representations[
-            static_cast<size_t>(Representation::stick)];
-        if (ballstick.cylinders.size() != stick.cylinders.size() ||
-            !ballstick.halfCylinders.empty() || !stick.halfCylinders.empty() ||
-            !ballstick.boxes.empty() || !stick.boxes.empty()) {
-            return false;
-        }
-        for (size_t index = 0; index < ballstick.cylinders.size(); ++index) {
-            const StyledCylinder& first = ballstick.cylinders[index];
-            const StyledCylinder& second = stick.cylinders[index];
-            if (first.identity != second.identity || first.start != second.start ||
-                first.end != second.end || first.radius != second.radius) {
-                return false;
-            }
-            for (size_t color = 0; color < first.colors.values.size(); ++color) {
-                if (first.colors.values[color] != second.colors.values[color]) return false;
-            }
-        }
-        return true;
-    }
 
     void prepareDisplayedSource() {
         nadoc_vr::CalculationScope auditScope("prepareDisplayedSource");
@@ -9714,10 +9776,23 @@ class Viewer {
         pollToolPreflightFeedback();
         pollToolExecutionFeedback();
         frameAudit_.mark("selection_feedback");
-        sceneRefresh_.poll(eventPath_, [normalization=std::make_pair(normalizationCenter_, normalizationScale_)](const std::string& path) {
+        sceneRefresh_.pollStaged(eventPath_, [normalization=std::make_pair(normalizationCenter_, normalizationScale_)](const std::string& path) {
             return loadScene(path, normalization);
         }, [&](SceneData scene) {
+            glScene_->beginSceneRefresh(std::move(scene));
+        }, [&] {
+            if(glScene_->canStageSceneRefresh(visualizationSnapshot_)) {
+                try {
+                    if(!glScene_->advanceSceneRefresh(visualizationSnapshot_,representationLoading_.retired))return false;
+                    glScene_->setSelectionHighlights({}, {}, committedSelectionOwnerTokens_, committedSelectionIdentities_, false);
+                    return true;
+                }
+                catch(...) { representationLoading_.retired.retire(glScene_->takeSceneRefresh());throw; }
+            }
+            // Deformed/colored visualization snapshots retain the established
+            // activation path until their CPU preparation has a staged equivalent.
             nadoc_vr::CalculationScope refreshScope("activateSceneRefresh");
+            auto scene=glScene_->takeSceneRefresh();
             scene.initialRepresentation = glScene_->representation();
             scene.initialColoring = glScene_->coloring();
             auto candidate = std::make_unique<GlScene>(std::move(scene), liveSocket_.enabled(), glScene_->objectIdentities(), std::function<void(size_t)>{}, false, false);
@@ -9725,6 +9800,7 @@ class Viewer {
             candidate->setVisualization(visualizationSnapshot_);
             glScene_.swap(candidate);
             if (!representationLoading_.retired.full()) candidate->retireSource(representationLoading_.retired);
+            return true;
         });
         updateControllerGuides();
     }

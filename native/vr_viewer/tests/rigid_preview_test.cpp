@@ -130,8 +130,17 @@ int parity() {
     for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {},{},{});
     compare("hover-cleared");
     assert(fast.styleApplicationsForTest==beforeHover);
+    const auto unselectedPixels=actual;
+    const auto unselectedDepth=actualDepth;
     for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {},{"moving"},{});
-    assert(fast.hasPackedPreviewForTest());compare("selection");
+    assert(fast.styleApplicationsForTest==beforeHover);compare("selection");
+    size_t tinted=0;
+    for(size_t i=0;i<actual.size();++i) tinted+=actual[i]!=unselectedPixels[i];
+    assert(tinted>100); // A matching pair of unhighlighted scenes must not pass.
+    assert(actualDepth==unselectedDepth); // Selection must not alter design depth/picking.
+    for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {},{},{});
+    compare("deselection-restores-pixels");assert(actual==unselectedPixels);
+    for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {},{"moving"},{});
     const auto beforeSelectedHover=fast.styleApplicationsForTest;
     for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({"moving"}, {},{"moving"},{});
     compare("hover-subsumed-by-selection");

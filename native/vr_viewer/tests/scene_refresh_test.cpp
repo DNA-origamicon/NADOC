@@ -39,4 +39,21 @@ int main() {
         for(int i=0;i<30;++i)inbox.poll(path,retryLoad,retryApply);
     }
     assert(attempts==2);
+    // Multi-frame GPU staging never acknowledges a partially visible revision.
+    publish(3);
+    int begins=0, advances=0;
+    auto begin=[&](int scene){assert(scene==44);++begins;};
+    auto advance=[&]{assert(inbox.revision()==2);return ++advances==4;};
+    while(inbox.revision()!=3 && std::chrono::steady_clock::now()<deadline){
+        inbox.pollStaged(path,[](const std::string&){return 44;},begin,advance);
+        std::this_thread::yield();
+    }
+    assert(inbox.revision()==3 && begins==1 && advances==4);
+    publish(4);begins=0;advances=0;
+    auto failOnce=[&]{assert(inbox.revision()==3);if(++advances==1)throw std::runtime_error("upload failure");return true;};
+    while(inbox.revision()!=4 && std::chrono::steady_clock::now()<deadline){
+        inbox.pollStaged(path,[](const std::string&){return 44;},begin,failOnce);
+        std::this_thread::yield();
+    }
+    assert(inbox.revision()==4 && begins==2 && advances==2);
 }

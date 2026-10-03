@@ -7,6 +7,29 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Staged static scene activation (2026-10-02)
+
+Static refresh now reuses the live renderer and stable object IDs, uploads prepared
+buffers with a 1 ms/256 KiB per-poll target, then atomically swaps after a nonblocking
+fence check. Old geometry/picking remain active until ready; CPU caches retire on
+the worker. Nonempty visualization snapshots retain the synchronous fallback.
+Full-24HB Ball & Stick isolated blocking activation 976 ms becomes <=1.15 ms
+staging polls. Two physical OpenXR reloads: staging/swap at nominal 90 Hz with no
+long submission gaps, max stage 1.30 ms / swap 0.062 ms. The broader parse-to-ready
+interval still had three gaps in the first reload; no universal 90 Hz claim.
+Six native checks and 35 tour tests pass; FAST suite has 9525 passes, 93 skips,
+and six failures in unchanged geometry/surface/representation-control code.
+Subsequent user-authorized FULL validation ran 10,130 tests: 10,002 passed,
+94 skipped, 18 failed and 18 setup errors. Explicit GROMACS thread-MPI rank
+selection repaired all 18 setup errors (18/18 focused reruns pass); the 18 other
+failures remain and FULL debt is retained. See
+`.development-artifacts/deferred-validation-20261002/findings.txt`.
+Debug > VR Tours & Tests > Authoring includes scene-activation regression.
+Evidence: `.development-artifacts/scene-activation-20261002/findings.txt`.
+This supersedes the static activation stall below, not active visualization or
+End Resize correctness limitations. Before this round, cluster tint removed the
+duplicate glow and selection-triggered rebuild; older glow timings are historical.
+
 ## Researched CPU fixes and desktop-off validation (2026-10-02)
 
 Retained: indexed owner lookup, selection-aware hover, cached preview bounds,

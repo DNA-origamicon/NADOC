@@ -37,6 +37,7 @@ private:
     }
     void activateResident(std::shared_ptr<ResidentRepresentation> resident,Representation rep,Coloring color) {
         if(!activeResident_){const std::array<GLuint,4> old{sphereInstanceVbo_,cylinderInstanceVbo_,halfCylinderInstanceVbo_,boxInstanceVbo_};glDeleteBuffers(4,old.data());}
+        selectionTintDirty_=selectionCornersDirty_=true; dynamicSelectionRows_=false;
         activeResident_=std::move(resident);
         const auto& b=activeResident_->buffers;const auto& n=activeResident_->counts;
         sphereInstanceVbo_=b[0];cylinderInstanceVbo_=b[1];halfCylinderInstanceVbo_=b[2];boxInstanceVbo_=b[3];

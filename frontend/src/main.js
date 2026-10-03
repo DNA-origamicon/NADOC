@@ -4431,6 +4431,7 @@ async function main() {
       selectionManager.refreshBaseGlow()   // flexibleArcs just rebuilt its meshes; re-resolve base-pool glow (no-op when empty)
       // Extra-base beads now live in crossoverConnections group — rebuilt on full scene rebuild.
       // DEBUG — log once per frame so you can see cone state during a drag
+      designRenderer.refreshClusterSelection()
       helixCtrl?.logConeDebug('LIVE-FRAME')
     },
     (helixIds, domainIds, append = false) => {
