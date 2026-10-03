@@ -711,3 +711,16 @@ head turns and grip translation/rotation without changing detail or motion
 settings. [Evidence](docs/audits/vr_motion_regression_20260929.md).
 
 - **MV-VR-GALLERY — PENDING — Component gallery in-headset comparison (2026-10-01).** Open Debug → VR Component Gallery → Component evaluations → VR demo. User selected 0–1000 / 35% for Extrude and 0–100 / 35% for Bend; those presets are applied. Compare the six Button styles and six Cards and lists styles for through-lens readability, press feedback, target comfort and aesthetic preference. Desktop render/input checks do not establish headset comfort. Reproduction: `docs/vr_component_gallery.md`.
+
+## MV-VR-MOTION-QUALITY — through-lens transition review (2026-10-03)
+
+PENDING. With a private copy of `workspace/24hb_0xT.nadoc`, use Ball & Stick and
+Move / Rotate a selected cluster. While moving, bonds use four rather than eight
+sides and self-shadows are omitted. After about 180 ms without pose changes, or
+after commit/cancel, full tessellation and shadows return. Check through-lens
+comfort, selection readability and whether the lighting/detail transition is
+acceptable during slow movement and pauses. Debug → VR Tours & Tests → Authoring
+→ Move / Rotate cluster · settled drag retains stereo motion/settled captures.
+Automated picking, depth (shadow-only mode), full-quality restoration and edit
+persistence checks pass; these do not establish wearer comfort. Results and
+limits: `docs/audits/vr_motion_optimization_20261003.md`.

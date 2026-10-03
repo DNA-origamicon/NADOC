@@ -63,6 +63,13 @@ inline std::optional<uint32_t> spectatorMirrorViewIndex(
     return viewCount >= 2U ? std::optional<uint32_t>(1U) : std::nullopt;
 }
 
+// Queue both eye draws before desktop presentation can stall the GL thread.
+// Projection views retain their original indices; only rendering order changes.
+inline uint32_t spectatorRenderViewIndex(SpectatorMirrorEye eye, uint32_t offset, uint32_t count) {
+    const auto mirrored=spectatorMirrorViewIndex(eye,count);
+    return count && mirrored ? (offset+*mirrored+1)%count : offset;
+}
+
 inline SpectatorMirrorViewport fitSpectatorMirrorViewport(
     int32_t sourceWidth, int32_t sourceHeight,
     int32_t destinationWidth, int32_t destinationHeight) {
