@@ -2,7 +2,7 @@ import { initSidebarStack } from './sidebar_stack.js'
 
 const TAB_SECTIONS = {
   assembly: ['assembly-panel'],
-  properties: ['properties-section', 'dimensions-section', 'reverse-complement-section', 'primitives-panel', 'overhang-orient-panel', 'move-rotate-panel', 'extrude-panel', 'deform-panel', 'strand-hist-section', 'groups-panel'],
+  properties: ['properties-section', 'dimensions-section', 'reverse-complement-section', 'primitives-panel', 'overhang-orient-panel', 'move-rotate-panel', 'strand-hist-section', 'groups-panel'],
   visualization: ['representation-modes-section', 'view-volumes-section', 'coloring-options-section', 'repr-options-section', 'right-view-actions', 'right-multi-view', 'right-multi-overlay'],
   clustering: ['cluster-panel', 'joints-panel'],
   overhangs: ['overhang-panel', 'overhang-connections-section', 'assembly-overhang-panel', 'assembly-oconn-panel', 'strand-anim-panel'],

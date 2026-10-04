@@ -1163,7 +1163,7 @@ def _build_extrude_segment(d: Design, body: "BundleSegmentRequest"):
         new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
-    return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated))
+    return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated), cluster_disconnected=True)
 
 
 @router.post("/design/bundle-segment", status_code=201)
@@ -1182,7 +1182,7 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
         holder["mreport"] = mreport
-        return updated
+        return updated, mreport
 
     trace = _TimingTrace()
     with trace.step("mutation"):
@@ -1224,7 +1224,7 @@ def _build_circle_segment(d: Design, body: "CircleSegmentRequest"):
         new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
-    return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated))
+    return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated), cluster_disconnected=True)
 
 
 @router.post("/design/circle-segment", status_code=201)
@@ -1243,7 +1243,7 @@ def add_circle_segment(body: CircleSegmentRequest) -> dict:
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
         holder["mreport"] = mreport
-        return updated
+        return updated, mreport
 
     holder: dict = {}
     updated, report, _entry = design_state.mutate_with_feature_log(
@@ -1288,7 +1288,7 @@ def _build_extrude_continuation(d: Design, body: "BundleContinuationRequest"):
         new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
-    return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated))
+    return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated), cluster_disconnected=True)
 
 
 def _continuation_validation_summary(before: Design, after: Design) -> dict:
@@ -1361,7 +1361,7 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
         holder["mreport"] = mreport
-        return updated
+        return updated, mreport
 
     trace = _TimingTrace()
     with trace.step("mutation"):
@@ -1462,10 +1462,10 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
     def _fn(d: Design) -> Design:
         holder["before_occ"] = _strand_occupancy(d)
         try:
-            updated, _mreport = _build_extrude_deformed_continuation(d, body)
+            updated, mreport = _build_extrude_deformed_continuation(d, body)
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
-        return updated
+        return updated, mreport
 
     trace = _TimingTrace()
     with trace.step("mutation"):
@@ -7865,7 +7865,7 @@ def _filter_removed_ids_from_design(design: Design, removed_ids: set) -> Design:
             and f.five_prime_helix_id not in removed_helices
         )
 
-    return design.copy_with(
+    filtered = design.copy_with(
         helices=[h for h in design.helices if h.id not in removed_ids],
         strands=[s for s in design.strands if strand_survives(s)],
         crossovers=[x for x in design.crossovers if xover_survives(x)],
@@ -7893,6 +7893,11 @@ def _filter_removed_ids_from_design(design: Design, removed_ids: set) -> Design:
         ],
         forced_ligations=[f for f in design.forced_ligations if fl_survives(f)],
         cluster_transforms=new_cts,
+        lattice_frames=[
+            frame for frame in design.lattice_frames
+            if frame.id not in removed_ids
+            and frame.placement_cluster_id not in removed_clusters
+        ],
         cluster_joints=[
             j
             for j in design.cluster_joints
@@ -7921,6 +7926,9 @@ def _filter_removed_ids_from_design(design: Design, removed_ids: set) -> Design:
             if a.id not in removed_ids and a.asset_id not in removed_protein_assets
         ],
     )
+
+    from backend.core.cluster_components import repair_removed_auto_cluster_membership
+    return repair_removed_auto_cluster_membership(design, filtered, removed_ids)
 
 
 def _strip_removed_ids_from_snapshot(
@@ -8277,16 +8285,19 @@ def _edit_dispatch_run(op_kind: str, pre_state: Design, params: dict) -> Design:
         return _build_bundle(cells, body)
     if op_kind == "extrude-segment":
         body = BundleSegmentRequest.model_validate(params)
-        updated, _ = _build_extrude_segment(pre_state, body)
-        return updated
+        updated, report = _build_extrude_segment(pre_state, body)
+        from backend.core.cluster_reconcile import reconcile_cluster_membership
+        return reconcile_cluster_membership(pre_state, updated, report)
     if op_kind == "extrude-continuation":
         body = BundleContinuationRequest.model_validate(params)
-        updated, _ = _build_extrude_continuation(pre_state, body)
-        return updated
+        updated, report = _build_extrude_continuation(pre_state, body)
+        from backend.core.cluster_reconcile import reconcile_cluster_membership
+        return reconcile_cluster_membership(pre_state, updated, report)
     if op_kind == "extrude-deformed-continuation":
         body = BundleDeformedContinuationRequest.model_validate(params)
-        updated, _ = _build_extrude_deformed_continuation(pre_state, body)
-        return updated
+        updated, report = _build_extrude_deformed_continuation(pre_state, body)
+        from backend.core.cluster_reconcile import reconcile_cluster_membership
+        return reconcile_cluster_membership(pre_state, updated, report)
     if op_kind == "overhang-extrude":
         body = OverhangExtrudeRequest.model_validate(params)
         updated, _ = _build_overhang_extrude(pre_state, body)
@@ -8888,6 +8899,7 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
     """
     return design.copy_with(
         helices=snap_design.helices,
+        lattice_frames=snap_design.lattice_frames,
         strands=snap_design.strands,
         crossovers=snap_design.crossovers,
         overhangs=snap_design.overhangs,
@@ -9172,6 +9184,11 @@ def _seek_feature_log(
     # rebuild-from-log logic Just Works for snapshot-bearing histories.
     design = _seek_snapshot_base(design, position, sub_position, optimized=optimized)
     log = list(design.feature_log)
+    from backend.core.circular_pattern import pattern_history_overlays
+    pattern_clusters, pattern_ops = pattern_history_overlays(
+        design, design_state.decode_design_snapshot
+    )
+    design = design.copy_with(cluster_transforms=pattern_clusters)
 
     if position == -2:
         # Seeking to empty state — no features active.
@@ -9373,7 +9390,7 @@ def _seek_feature_log(
         new_overhangs.append(ovhg)
 
     return design.copy_with(
-        deformations=new_deformations,
+        deformations=new_deformations + pattern_ops,
         cluster_transforms=new_cts,
         cluster_joints=new_joints,
         overhangs=new_overhangs,

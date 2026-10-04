@@ -842,12 +842,11 @@
     .right-tab-content > .panel-section.ox-card { border-bottom:1px solid transparent; }
     /* Active editing tools use a shared high-contrast treatment so their
        transient state is unmistakable among persistent property cards. */
-    #right-tab-content-properties > :is(#extrude-panel, #deform-panel, #move-rotate-panel).ox-card {
+    #right-tab-content-properties > #move-rotate-panel.ox-card {
       border: 1px solid #d29922;
       background: #000;
       box-shadow: none;
     }
-    #right-tab-content-properties > :is(#extrude-panel, #deform-panel).ox-card > h2,
     #right-tab-content-properties > #move-rotate-panel.ox-card > .mr-title {
       color: #e3b341;
       text-shadow: none;
@@ -3963,7 +3962,7 @@
     </div>
   </div>
 
-  <!-- (Extrude controls moved to the right-sidebar #extrude-panel.) -->
+  <!-- Extrude controls are mounted in a floating tool window at startup. -->
 
   <!-- (Scaffold right-click menu removed — now the unified `_showScaffoldMenu`
        built in selection_manager.js.) -->
@@ -4093,6 +4092,7 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-extrude">Extrude…</button>
           <button class="dropdown-item" id="menu-tools-translate-rotate">Move/Rotate</button>
+          <button class="dropdown-item" id="menu-tools-circular-pattern">Circular Pattern…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-twist">Twist…</button>
           <button class="dropdown-item" id="menu-tools-bend">Bend…</button>
@@ -7905,6 +7905,8 @@
           </div>
         </div>
 
+        <section class="panel-section ox-card" id="circular-pattern-panel" aria-label="Circular Pattern" style="display:none"></section>
+
         <div class="panel-section mr-panel" id="move-rotate-panel" style="display:none">
           <div class="mr-title">Move / Rotate <span class="dim" style="font-weight:400">M</span></div>
 
@@ -7965,10 +7967,10 @@
 
         <!-- Extrude tool (sidebar panel; replaces the old floating #slice-ctx-menu) -->
         <div class="panel-section" id="extrude-panel" style="display:none">
-          <h2>Extrude <span class="ctx-count" style="font-weight:400;color:#8b949e;font-size:var(--text-xs)">0 helices</span></h2>
+          <h2>Extrude <span class="ctx-count">0 helices</span></h2>
           <div class="def-row" style="margin-bottom:8px">
             <label>From</label>
-            <select id="extrude-from" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+            <select id="extrude-from" style="flex:1;min-width:0;padding:2px 4px">
               <option value="XY">XY plane</option>
               <option value="XZ">XZ plane</option>
               <option value="YZ">YZ plane</option>
@@ -7981,16 +7983,16 @@
               <option value="nm">nm</option>
             </select>
           </div>
-          <div id="slice-total-bp" style="font-size:11px;color:#8b949e;padding:1px 0 2px;min-height:15px"></div>
+          <div id="slice-total-bp" style="padding:1px 0 2px;min-height:15px"></div>
           <div id="slice-scaffold-rec" style="padding:0 0 6px"></div>
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-            <span style="font-size:11px;color:#8b949e">Direction</span>
+            <span>Direction</span>
             <div style="display:flex">
-              <button id="slice-dir-fwd" class="ctx-dir-btn ctx-dir-active" title="Extrude in +axis direction">＋</button>
-              <button id="slice-dir-bwd" class="ctx-dir-btn" title="Extrude in −axis direction">－</button>
+              <button id="slice-dir-fwd" class="btn btn--sm ctx-dir-btn ctx-dir-active" title="Extrude in +axis direction">+</button>
+              <button id="slice-dir-bwd" class="btn btn--sm ctx-dir-btn" title="Extrude in −axis direction">−</button>
             </div>
           </div>
-          <div style="display:flex;gap:8px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
+          <div style="display:flex;gap:8px;margin-bottom:8px">
             <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
               <input type="radio" name="slice-strand-filter" value="both" checked style="cursor:pointer"> Both
             </label>
@@ -8001,14 +8003,14 @@
               <input type="radio" name="slice-strand-filter" value="staples" style="cursor:pointer"> Staples
             </label>
           </div>
-          <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
+          <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px">
             <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
               <input type="checkbox" id="slice-ligate-adjacent" checked style="cursor:pointer"> Ligate adjacent
             </label>
           </div>
           <div class="def-btn-row">
-            <button id="slice-cancel-btn" class="def-btn">Cancel</button>
-            <button id="slice-extrude-btn" class="def-btn primary">Extrude</button>
+            <button id="slice-cancel-btn" class="def-btn btn btn--sm">Cancel</button>
+            <button id="slice-extrude-btn" class="def-btn btn btn--sm btn--primary primary">Extrude</button>
           </div>
         </div>
 
@@ -8071,15 +8073,13 @@
             <div class="def-row" style="margin-bottom:4px">
               <label style="flex:1">Apply to clusters:</label>
               <button type="button" id="def-cluster-all-btn"
-                      class="def-btn" style="padding:1px 6px;font-size:11px">All</button>
+                      class="def-btn btn btn--sm" style="padding:1px 6px">All</button>
               <button type="button" id="def-cluster-none-btn"
-                      class="def-btn" style="padding:1px 6px;font-size:11px;margin-left:4px">None</button>
+                      class="def-btn btn btn--sm" style="padding:1px 6px;margin-left:4px">None</button>
             </div>
-            <div id="def-cluster-list" style="max-height:120px;overflow-y:auto;
-                 border:1px solid var(--color-border);padding:4px;border-radius:3px;
-                 font-size:12px"></div>
+            <div id="def-cluster-list" style="max-height:120px;overflow-y:auto;padding:4px"></div>
             <div id="def-cluster-empty-msg"
-                 style="display:none;font-size:11px;color:var(--color-text-dim);
+                 style="display:none;
                         padding:4px">No clusters defined — applies to all helices.</div>
           </div>
 
@@ -8144,7 +8144,7 @@
                   <input type="number" id="def-polymer-count" value="3" min="2" step="1" inputmode="numeric">
                   <span class="unit">units</span>
                 </div>
-                <div id="def-bend-hint" style="font-size:var(--text-xs);color:#6e7681;margin-top:4px;line-height:1.4;">
+                <div id="def-bend-hint" style="margin-top:4px;line-height:1.4">
                   κ = 0.000°/bp
                 </div>
               </div>
@@ -8156,11 +8156,11 @@
             Preview (live)
           </label>
 
-          <div id="def-feasibility" style="display:none;font-size:var(--text-xs);margin:4px 0;line-height:1.4;"></div>
+          <div id="def-feasibility" style="display:none;margin:4px 0;line-height:1.4"></div>
 
           <div class="def-btn-row">
-            <button class="def-btn" id="def-cancel-btn">Cancel</button>
-            <button class="def-btn primary" id="def-apply-btn">Apply</button>
+            <button class="def-btn btn btn--sm" id="def-cancel-btn">Cancel</button>
+            <button class="def-btn btn btn--sm btn--primary primary" id="def-apply-btn">Apply</button>
           </div>
         </div>
 
@@ -8200,6 +8200,10 @@
           </h2>
           <div id="cluster-panel-body" style="margin-top:8px">
             <div id="cluster-list"></div>
+            <button id="cluster-repair-btn" class="panel-action-btn" style="width:100%;margin-top:6px"
+                    title="Create clusters for unassigned lattice components without changing existing clusters. Undo restores the previous membership.">
+              Cluster Unassigned Components
+            </button>
             <button id="cluster-new-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
               + New Cluster from Selection
             </button>

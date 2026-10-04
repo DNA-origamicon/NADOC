@@ -137,6 +137,26 @@ def add_cluster(body: AddClusterBody) -> dict:
     return _design_response(updated, report)
 
 
+@router.post("/design/cluster-unassigned", status_code=200)
+def repair_unassigned_clusters() -> dict:
+    """Undoable additive repair; existing cluster identities and poses survive."""
+    from backend.core.cluster_components import cluster_unassigned_components
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    updated = cluster_unassigned_components(design)
+    if updated is not design:
+        log = list(design.feature_log)
+        if design.feature_log_cursor >= 0:
+            log = log[:design.feature_log_cursor + 1]
+        entries = [ClusterCreateLogEntry(cluster_id=c.id, name=c.name,
+                   helix_ids=list(c.helix_ids), domain_ids=list(c.domain_ids))
+                   for c in updated.cluster_transforms[len(design.cluster_transforms):]]
+        updated = updated.copy_with(feature_log=log + entries, feature_log_cursor=-1)
+        design_state.set_design(updated)
+    return _design_response(updated, validate_design(updated))
+
+
 @router.patch("/design/cluster/{cluster_id}", status_code=200)
 def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     """Update a cluster; previews are silent and every committed update is logged."""
@@ -392,3 +412,33 @@ def cluster_paste(body: ClusterPasteBody) -> dict:
         "dropped_boundary_fls": copy_report.dropped_boundary_fls,
     }
     return resp
+
+
+class CircularPatternBody(BaseModel):
+    cluster_id: str
+    instances: int = Field(ge=1, le=128, strict=True)
+    total_angle: float = Field(gt=0, le=360, allow_inf_nan=False)
+    axis_point: List[float] = Field(min_length=3, max_length=3)
+    axis_direction: List[float] = Field(min_length=3, max_length=3)
+    expected_revision: int | None = None
+
+
+@router.post("/design/circular-pattern", status_code=200)
+def circular_pattern(body: CircularPatternBody) -> dict:
+    from backend.core.circular_pattern import create_circular_pattern
+    holder = {}
+    def build(design):
+        try:
+            candidate, ids, copy_report = create_circular_pattern(design, body.cluster_id,
+                body.instances, body.total_angle, body.axis_point, body.axis_direction)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        holder['copy_report'] = copy_report
+        return candidate, MutationReport(new_helix_origins={hid: None for hid in ids})
+    updated, report, _ = design_state.mutate_with_feature_log(
+        op_kind='circular-pattern', label=f'Circular pattern: {body.instances} instances',
+        params=body.model_dump(exclude={'expected_revision'}), fn=build,
+        expected_revision=body.expected_revision)
+    response = _design_response(updated, report)
+    response['pattern_report'] = vars(holder['copy_report'])
+    return response

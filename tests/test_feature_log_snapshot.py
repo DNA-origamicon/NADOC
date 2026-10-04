@@ -422,6 +422,12 @@ def test_delete_independent_parallel_extrusion_survives():
     assert not j.get("needs_cascade_decision")
     after = design_state.get_or_404()
     assert len(after.helices) == 2  # seg1 removed, seg2 survived
+    claimed = {hid for c in after.cluster_transforms for hid in c.helix_ids}
+    assert claimed == {h.id for h in after.helices}
+    # Scrubbed snapshots preserve the surviving grouping on seek/reload, too.
+    from backend.api.crud import _seek_feature_log
+    rebuilt = _seek_feature_log(after, -1)
+    assert {hid for c in rebuilt.cluster_transforms for hid in c.helix_ids} == claimed
 
 
 def test_delete_workspace_independent_strutted_corner_extrude_scrubs_survivors():

@@ -134,3 +134,16 @@ Consequences, all real:
   former proves nothing, per the two-mechanism split above).
 
 Related: [[cluster-copy-paste]] (id remap on paste) · [[cluster-joints]] · [[cluster-reconcile]]
+
+Menu entry update (2026-10-03): Bend and Twist first request a fresh cluster pick
+in a floating popup, then restore Default selection and start plane selection
+scoped to that cluster. The shared picker clears canonical selection after capturing
+the target, removing cluster tint/corners before the preview; tool scope is retained
+independently. Circular Pattern similarly retains its captured target. Cancel/Escape, document replacement and tool switching
+clean up the pending pick. Existing blunt-end and history-edit entry points are unchanged.
+Shared picker: ui/tool_cluster_selection.js; menu lifecycle: ui/deformation_tool_launcher.js.
+
+Desktop popup appearance is shared in `ui/tool_popup.css`: translucent backdrop
+blur with opaque fallback/reduced-transparency support, neutral rounded rim,
+and tokenized NADOC controls. Extrude/Bend/Twist markup retains only inline layout
+and visibility styles; button styling uses shared `btn` classes.

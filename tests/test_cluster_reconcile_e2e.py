@@ -205,3 +205,45 @@ def test_undo_after_painted_domain_restores_cluster(client):
     clusters = design["cluster_transforms"]
     refs = {(r["strand_id"], r["domain_index"]) for r in clusters[0]["domain_ids"]}
     assert refs == {("s_seed", 0)}  # only the original ref
+
+
+def test_disconnected_extrude_clusters_undo_redo_and_repair(client):
+    """Two separated hexagons reproduce smallO without relying on a user file."""
+    from backend.core.lattice import make_bundle_segment
+    cells = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
+    initial = make_bundle_segment(Design(), cells, 35, 'XY', 0, 'both')
+    original = ClusterRigidTransform(id='original', name='Cluster 1', helix_ids=[h.id for h in initial.helices])
+    initial = initial.copy_with(cluster_transforms=[original])
+    design_state.set_design(initial)
+    response = client.post('/api/design/bundle-segment', json={
+        'cells': [[r, c + 6] for r, c in cells], 'length_bp': 35,
+        'plane': 'XY', 'offset_nm': 0, 'strand_filter': 'both', 'ligate_adjacent': True,
+    })
+    assert response.status_code == 201, response.text
+    after = design_state.get_or_404()
+    assert len(after.cluster_transforms) == 2
+    assert after.cluster_transforms[0] == original
+    added = after.cluster_transforms[1]
+    assert len(added.helix_ids) == 6
+    assert set(added.helix_ids).isdisjoint(original.helix_ids)
+    assert client.post('/api/design/undo').status_code == 200
+    assert design_state.get_or_404().cluster_transforms == [original]
+    assert client.post('/api/design/redo').status_code == 200
+    assert design_state.get_or_404().cluster_transforms[1] == added
+    # Replay the same feature keeps the newly referenced cluster ID stable.
+    from backend.api.crud import _edit_dispatch_run
+    entry = after.feature_log[-1]
+    replayed = _edit_dispatch_run(entry.op_kind, initial, entry.params)
+    assert replayed.cluster_transforms[1].id == added.id
+    # Legacy orphan repair has one undo step and logs the new cluster for replay.
+    legacy = after.copy_with(cluster_transforms=[original])
+    design_state.set_design(legacy)
+    assert client.post('/api/design/cluster-unassigned').status_code == 200
+    repaired = design_state.get_or_404()
+    assert repaired.cluster_transforms[0] == original
+    assert repaired.cluster_transforms[1] == added
+    assert repaired.helices == legacy.helices and repaired.strands == legacy.strands
+    assert repaired.feature_log[-1].cluster_id == added.id
+    assert client.post('/api/design/cluster-unassigned').status_code == 200
+    assert client.post('/api/design/undo').status_code == 200
+    assert design_state.get_or_404().cluster_transforms == [original]

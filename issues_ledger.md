@@ -1225,3 +1225,17 @@ Reaching 100% is functional success, not evidence of comfortable frame delivery.
 `a4cb52583c26` resumed and verified against its original using SHA-256 for all
 37 files. Archive index updated, original removed only after verification; archived
 job loads successfully. Audit: `.development-artifacts/archive-recovery-cube-pore-20261003/`.
+
+## ISSUE-53 — Backend FAST environment failures during tool validation (2026-10-04, OPEN)
+
+Reproduced with `just test-smart`: 9,633 passed, 19 failed, 17 skipped. Ten VR
+representation tests require missing `native/vr_viewer/build/nadoc-vr-viewer`;
+seven photoproduct review tests require an unavailable external definition-review
+packet; VR startup rejects this WSL host; CPD snapshot-refresh preservation fails
+its coordinate comparison. These failures are outside the design-tool changes.
+Evidence: `.development-artifacts/tool-selection-clear-20261004/backend.log`.
+Next: reproduce in the relevant environment/fixtures; investigate the CPD
+comparison without updating locked scientific geometry or its reference data.
+The 186 s aggregate runtime warning has no per-test violators (maximum 4.06 s);
+the run overlapped the frontend suite. Slow-test triage made no classifications
+or budget changes because no individual heavy test was identified.
