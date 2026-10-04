@@ -37,6 +37,17 @@ inline glm::vec3 buttonAccent(std::string_view id) {
     unsigned hash=2166136261u;for(unsigned char c:id)hash=(hash^c)*16777619u;
     return rgb(palette[hash%palette.size()]);
 }
+// Local metres; applied before MenuPlacement scale. See docs/vr_ui_style.md.
+inline constexpr float gripRail=.040F;
+inline constexpr float contentPadding=.024F;
+inline constexpr float controlGap=.012F;
+inline constexpr float raisedColumnGap=.036F; // includes rim and shadow overhang
+inline constexpr float toolHalfWidth=.375F;
+inline constexpr float footerHalfHeight=.054F;
+inline constexpr float raisedBottomOverhang=.008F;
+inline MenuPanelBounds raisedEnvelope(MenuPanelBounds b) {
+    return {b.minimum-glm::vec2(.004F,raisedBottomOverhang),b.maximum+glm::vec2(.015F,.004F)};
+}
 inline constexpr float cornerRadius=.012F;
 // Rounded silhouettes using the same local geometry for fills and outlines.
 template<class Line,class Fill> void rounded(MenuPanelBounds b,glm::vec3 bg,

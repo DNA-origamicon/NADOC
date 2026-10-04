@@ -29,7 +29,7 @@ int main() {
     for(int i=0;i<10;++i)panel.action("dimension:new",menus,.01F);
     menus[1].offsets[menus[1].selected]=0;
     menus[1].focus.begin("scrollbar","");menus[1].navigate({0,-1});
-    require(menus[1].offset()==5,"Dimension list did not scroll with pad");
+    require(menus[1].offset()==1,"Dimension list did not scroll one row with pad");
     menus[1].draw([](glm::vec3,glm::vec3,glm::vec3){},[](MenuPanelBounds,glm::vec3){});
     require(menus[1].audit.valid(),menus[1].audit.summary().c_str());
     menus[1].navigate({0,1});require(menus[1].offset()==0,"Dimension scrollbar could not scroll back");

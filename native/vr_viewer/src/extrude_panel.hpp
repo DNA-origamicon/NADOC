@@ -2,7 +2,7 @@
 #include "sidebar_menu.hpp"
 namespace nadoc_vr {
 inline int extrudeLengthStep(bool square,bool coarse) { return latticeBasePairPeriod(square)*(coarse?3:1); }
-// The pinned rows keep Return, Confirm and Cancel reachable while scrolling settings.
+// Shared sidebar layout pins Confirm and Back below the scrolling settings.
 class ExtrudePanel {
  public:
     bool active=false;

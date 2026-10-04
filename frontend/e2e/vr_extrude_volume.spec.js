@@ -10,6 +10,7 @@ test.skip(!process.env.NADOC_PHYSICAL_VR_TEST, 'explicit physical runtime opt-in
 const doc='__e2e__extrude-volume-tour'
 const base=process.env.NADOC_E2E_API_BASE
 const square=process.env.NADOC_VR_LATTICE==='SQUARE'
+const legacy=process.env.NADOC_VR_LEGACY_SOURCE==='1'
 const length=square?48:42
 let pid
 
@@ -31,9 +32,12 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
   if(square)await page.locator('input[name="new-lattice-type"][value="SQUARE"]').check()
   await page.getByRole('button',{name:'Create',exact:true}).click()
   const read=()=>page.evaluate(async ()=>({...(await import('/src/state/store.js')).store.getState().currentDesign,feature_log:(await (await import('/src/api/client.js'))._request('GET','/design/feature-log/full')).feature_log}))
+  if (legacy) await page.evaluate(async square => {
+    await (await import('/src/api/client.js')).addBundleSegment({cells:[[4,4],[4,5]],lengthBp:square?24:21})
+  },square)
   const imported=await importAuditDesign(page,info)
   const before=await read()
-  if(!imported)expect(before.helices).toHaveLength(0)
+  if(!imported)expect(before.helices).toHaveLength(legacy?2:0)
   await page.locator('.menu-item').filter({hasText:'Help'}).first().hover()
   await page.click('#menu-help-view-vr')
   let status
@@ -68,7 +72,7 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
   expect(created.map(h=>h.grid_pos).sort()).toEqual(square?
     [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]]:[[0,1],[0,2],[0,3],[1,1],[1,2],[1,3]])
   expect(created.every(h=>h.length_bp===length)).toBe(true)
-  expect(design.lattice_frames).toHaveLength(before.lattice_frames.length+1)
+  expect(design.lattice_frames).toHaveLength(before.lattice_frames.length+(legacy?0:1))
   if(square) {
     // Independent square-grid oracle: equal 2.25 nm perpendicular pitches.
     for(const h of created) {
@@ -87,6 +91,7 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
   const angles=points.map(p=>Math.atan2(p[1]-center[1],p[0]-center[0])).sort((a,b)=>a-b)
   for(let i=0;i<6;i++)expect((angles[(i+1)%6]-angles[i]+Math.PI*2)%(Math.PI*2)).toBeCloseTo(Math.PI/3,5)
   }
+  if (process.env.NADOC_VR_CONFIRM_ONLY === '1') return
   await page.locator('#canvas').click({position:{x:30,y:30}})
   await page.keyboard.press('f')
   await page.screenshot({path:info.outputPath('desktop-6hb.png')})

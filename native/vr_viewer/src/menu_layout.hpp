@@ -162,6 +162,7 @@ class MenuLayoutAudit {
         texts_.clear();
         controls_.clear();
         issues_.clear();
+        spacing_.clear();
         if (!validMenuLayoutBounds(panelBounds_)) {
             addIssue("invalid_geometry", "panel", "panel bounds are invalid");
         }
@@ -243,6 +244,24 @@ class MenuLayoutAudit {
         controls_.push_back(layout);
     }
 
+    // Decorative silhouettes are separate from hit bounds (raised rims/shadows
+    // need clearance, but must not become extra interactive target area).
+    void addSpacing(const std::string& owner, const MenuPanelBounds& envelope,
+                    float inset, float gap) {
+        const MenuPanelBounds safe{panelBounds_.minimum+glm::vec2(inset),
+                                   panelBounds_.maximum-glm::vec2(inset)};
+        if (!menuLayoutContains(safe,envelope))
+            addIssue("border_clearance",owner,"control intrudes into frame padding");
+        for (const auto& other:spacing_) {
+            const auto& b=other.second;
+            const float dx=std::max(envelope.minimum.x-b.maximum.x,b.minimum.x-envelope.maximum.x);
+            const float dy=std::max(envelope.minimum.y-b.maximum.y,b.minimum.y-envelope.maximum.y);
+            if (std::max(dx,dy)+kMenuLayoutEpsilon<gap)
+                addIssue("control_spacing",owner,"gap to "+other.first+" is below minimum");
+        }
+        spacing_.push_back({owner,envelope});
+    }
+
     [[nodiscard]] bool valid() const { return issues_.empty(); }
     [[nodiscard]] const MenuPanelBounds& panelBounds() const { return panelBounds_; }
     [[nodiscard]] const std::vector<MenuTextLayout>& texts() const { return texts_; }
@@ -278,6 +297,7 @@ class MenuLayoutAudit {
         issues_.push_back({code, owner, detail});
     }
 
+    std::vector<std::pair<std::string,MenuPanelBounds>> spacing_;
     MenuPanelBounds panelBounds_{};
     std::vector<MenuTextLayout> texts_;
     std::vector<MenuControlLayout> controls_;

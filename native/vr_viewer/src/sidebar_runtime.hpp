@@ -1,13 +1,15 @@
 #pragma once
 #include "sidebar_grips.hpp"
+#include "solid_ui.hpp"
 // Included after the native GL surface types; owns both sidebar panels.
 class SidebarRuntime {
  public:
     std::array<nadoc_vr::SidebarMenu,2> menus{nadoc_vr::SidebarMenu(0),nadoc_vr::SidebarMenu(1)};
     std::array<MenuPanelSurface,2> surfaces;
+    std::array<SolidUi,2> raised;
     std::array<bool,2> openedBefore{};
     void initialize() { for(auto& s:surfaces) s.initialize(); }
-    void shutdown() { for(auto& s:surfaces) s.shutdown(); }
+    void shutdown() { for(auto& s:surfaces) s.shutdown(); for(auto& s:raised)s.shutdown(); }
     bool anyOpen() const {return menus[0].open||menus[1].open;}
     // Pointer feedback shares panel hit testing with input, independently of
     // molecular selection or trigger pressure, including blank panel areas.
@@ -15,8 +17,7 @@ class SidebarRuntime {
         std::optional<glm::vec3> nearest;
         float distance=std::numeric_limits<float>::max();
         for(const auto& menu:menus) if(menu.open) {
-            const auto bounds=menu.bounds();
-            if(const auto hit=menu.placement.rayPanelLocalPoint(pose,bounds.minimum,bounds.maximum)) {
+            if(const auto hit=menu.raySurfacePoint(pose)) {
                 const auto world=menu.placement.worldPoint(*hit);
                 const float d=glm::length(world-pose.position);
                 if(d<distance){nearest=world;distance=d;}
@@ -43,7 +44,7 @@ class SidebarRuntime {
         std::string rayId;
         float nearest=1e9F;
         for(const auto& candidate:menus) if(candidate.open) {
-            auto point=candidate.placement.rayPanelLocalPoint(pose,candidate.bounds().minimum,candidate.bounds().maximum);
+            auto point=candidate.raySurfacePoint(pose);
             if(!point) continue;
             const float distance=glm::length(candidate.placement.worldPoint(*point)-pose.position);
             if(distance>=nearest) continue;
@@ -83,8 +84,7 @@ class SidebarRuntime {
             // Resolve the nearest physical panel, including its blank/disabled areas.
             nadoc_vr::SidebarMenu* target=nullptr; float distance=foreground[h];
             for(auto& m:menus) if(m.open) {
-                const auto b=m.bounds();
-                auto local=m.placement.rayPanelLocalPoint(hands[h],b.minimum,b.maximum);
+                auto local=m.raySurfacePoint(hands[h]);
                 if(local) {float d=glm::length(m.placement.worldPoint(*local)-hands[h].position);if(d<distance){target=&m;distance=d;}}
             }
             auto& owned=menus[h];
@@ -150,7 +150,7 @@ class SidebarRuntime {
             for(const auto& c:m.controls()) {
                 auto center=(c.bounds.minimum+c.bounds.maximum)*.5F;
                 auto half=(c.bounds.maximum-c.bounds.minimum)*.5F;
-                auto position=m.placement.worldPoint(glm::vec3(center,0));
+                auto position=m.placement.worldPoint(glm::vec3(center,m.controlDepth(c)));
                 out.push_back({label(m,c),10000+m.hand*1000+index++,position,
                     m.placement.orientation()*glm::vec3(half.x*m.placement.scale(),0,0),
                     m.placement.orientation()*glm::vec3(0,half.y*m.placement.scale(),0),
@@ -168,11 +168,29 @@ class SidebarRuntime {
                     triangles.push_back({glm::vec3(p,0),color,1});
             };
             menus[i].draw(line,fill);
+            auto& ui=raised[i];ui.vertices.clear();
+            const auto& menu=menus[i];
+            for(const auto& c:menu.controls())if(menu.raisedAction(c)) {
+                const auto b=c.bounds;const auto size=b.maximum-b.minimum;
+                const bool hover=menu.hovered==c.id || (menu.focus.active && menu.focus.id==c.id);
+                const float z=menu.controlDepth(c);
+                const bool back=c.id.ends_with(":back");
+                const auto face=c.enabled?(back?glm::vec3(.64F,.16F,.18F):glm::vec3(.12F,.49F,.37F))+(hover?glm::vec3(.10F):glm::vec3(0)):glm::vec3(.12F,.15F,.19F);
+                const auto border=c.enabled?(hover?glm::vec3(1,.74F,.30F):(back?glm::vec3(1.F,.43F,.43F):glm::vec3(.35F,.90F,.65F))):glm::vec3(.22F,.26F,.31F);
+                ui.raisedSlate(b.minimum.x,b.minimum.y,size.x,size.y,z,face,border);
+                const auto ink=c.enabled?glm::vec3(.89F,.93F,.98F):glm::vec3(.53F,.64F,.75F);
+                ui.text(c.label,(b.minimum.x+b.maximum.x-nadoc_vr::strokeTextWidth(c.label.size(),.0045F))*.5F,(b.minimum.y+b.maximum.y)*.5F+.0135F,.0045F,ink,z+.002F);
+                ui.text(c.section,b.minimum.x+.025F,b.minimum.y+.027F,.0028F,ink,z+.002F);
+            }
             surfaces[i].update(lines,menus[i].bounds(),false,triangles);
         }
     }
     void render(const glm::mat4& projection) {
-        for(size_t i=0;i<2;++i) if(menus[i].open) surfaces[i].render(projection,menus[i].placement,menus[i].bounds(),.002F);
+        for(size_t i=0;i<2;++i) if(menus[i].open) {
+            surfaces[i].render(projection,menus[i].placement,menus[i].bounds(),.002F);
+            const auto& p=menus[i].placement;
+            raised[i].render(projection*glm::translate(glm::mat4(1),p.position())*glm::mat4_cast(p.orientation())*glm::scale(glm::mat4(1),glm::vec3(p.scale())));
+        }
     }
     std::string json() const {
         auto q=[](const std::string& v){return "\""+nadoc_vr::scrywrite::visualJson(v)+"\"";};

@@ -142,3 +142,23 @@ it('does not resurrect a plan when feedback delivery finishes after cancellation
   expect((await pending).reason).toBe('superseded')
   expect(coordinator.takeValidatedPlan(5)).toBeNull()
 })
+
+
+it('makes Confirm executable when the native verdict is visible before its HTTP acknowledgement', async () => {
+  const delivery = deferred()
+  let consumed
+  const coordinator = createVRToolPreflightCoordinator({
+    evaluate: async s => result(s),
+    sendFeedback: () => {
+      consumed = coordinator.takeValidatedPlan(12)
+      return delivery.promise
+    },
+  })
+  const pending = coordinator.request(12, draft())
+  await Promise.resolve()
+  expect(consumed).toEqual({ kind: 'extrude_continuation' })
+  delivery.resolve({ published: true })
+  expect((await pending).sent).toBe(true)
+  // Finishing delivery must not resurrect an already committed plan.
+  expect(coordinator.takeValidatedPlan(12)).toBeNull()
+})

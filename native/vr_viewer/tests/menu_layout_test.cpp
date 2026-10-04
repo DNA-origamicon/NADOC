@@ -1,4 +1,5 @@
 #include "menu_layout.hpp"
+#include "ui_style.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -77,6 +78,20 @@ int main() {
         {{0.20F, 0.10F}, {0.40F, 0.15F}});
     require(hasIssue(outside, "control_overflow"),
             "a drawn control outside the panel should be rejected");
+
+    nadoc_vr::MenuLayoutAudit spacing;
+    spacing.reset({{-1,-1},{1,1}});
+    spacing.addSpacing("first",{{-.4F,0},{0,.1F}},.064F,.012F);
+    spacing.addSpacing("second",{{.012F,0},{.4F,.1F}},.064F,.012F);
+    require(spacing.valid(), "exact minimum gap must pass");
+    spacing.addSpacing("crowded",{{-.4F,.105F},{0,.2F}},.064F,.012F);
+    require(hasIssue(spacing,"control_spacing"), "small non-overlapping gap must fail");
+    spacing.reset({{-1,-1},{1,1}});
+    spacing.addSpacing("raised",nadoc_vr::ui_style::raisedEnvelope({{-.2F,-.936F},{.2F,-.8F}}),.064F,.012F);
+    require(hasIssue(spacing,"border_clearance"), "shadow intruding into padding must fail");
+    spacing.reset({{-1,-1},{1,1}});
+    spacing.addSpacing("clean",{{-.2F,0},{.2F,.1F}},.064F,.012F);
+    require(spacing.valid(), "reset must clear spacing history");
 
     const std::array<glm::vec3, 4> framedCorners{{
         {-0.30F, 0.30F, -1.0F}, {-0.30F, -0.30F, -1.0F},

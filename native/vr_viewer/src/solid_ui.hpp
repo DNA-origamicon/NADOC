@@ -42,6 +42,13 @@ class SolidUi {
         }
         rounded(x+inset,y+inset,w-2*inset,h-2*inset,std::max(0.F,r-inset),color,front);
     }
+    void raisedSlate(float x,float y,float w,float h,float z,glm::vec3 face,glm::vec3 border) {
+        constexpr float r=.014F;
+        // Keep ui_style::raisedEnvelope in sync: spacing audits include this silhouette.
+        rounded(x+.006F,y-.008F,w+.009F,h+.012F,r,{.018F,.026F,.039F},.003F);
+        rounded(x-.004F,y-.004F,w+.008F,h+.008F,r+.004F,border*.6F,.004F);
+        bevel(x,y,w,h,r,.005F,z,.010F,face);
+    }
     template<class Transform> void wheel(const nadoc_vr::ThumbwheelShape& shape,float phase,
             glm::vec3 center,glm::vec3 color,Transform transform) {
         nadoc_vr::thumbwheelMesh(shape,phase,center,[&](auto a,auto b,auto c,auto normal) {

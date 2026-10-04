@@ -5997,6 +5997,22 @@ class Viewer {
             !bendPanel_.hand && !bendPanel_.planeHand && !bendPanel_.wheelHand && !activePlanePickSequence_ && !bendPanel_.defaultPlanes &&
             bendPanel_.pendingSelection.empty() && std::none_of(bendPanel_.wheels.begin(),bendPanel_.wheels.end(),[](const auto& w){return w.moving();});
     }
+    std::string extrudeStatus() const {
+        if(toolShell_.executionPending())return "EXTRUDING";
+        if(paintedExtrusionReady())return "READY TO EXTRUDE";
+        if(extrudeLatticeDraft_.cells().empty() && toolConfig_.targetSelectionKind()=="none")return "PAINT CELLS TO EXTRUDE";
+        if(toolConfig_.lengthBp()==0)return "SET EXTRUDE LENGTH";
+        if(freeformDraft_.armed())return "PLACE EXTRUSION PLANE";
+        if(eventPath_.empty())return "OPEN VR FROM YOUR DESIGN";
+        const auto* feedback=currentToolPreflightFeedback();
+        if(!feedback || feedback->status=="waiting")return "VALIDATING EXTRUSION";
+        if(feedback->reason=="painted_cell_occupied")return "PAINT UNOCCUPIED CELLS";
+        if(feedback->reason=="source_frame_required" || feedback->reason=="source_frame_ambiguous")return "SELECT AN END OR PLACE FREEFORM";
+        if(feedback->reason=="strand_filter_unsupported")return "SELECT BOTH STRANDS";
+        if(feedback->reason=="source_plane_mismatch")return "SELECT THE SOURCE PLANE";
+        if(feedback->status=="error")return "VALIDATION FAILED - ADJUST TO RETRY";
+        return "EXTRUSION BLOCKED - CHECK DESIGN";
+    }
     void refreshExtrudePanel() {
         const std::string bendStatus=toolShell_.executionPending()?toolShell_.status()
             :bendPanel_.hand?"PLANE "+std::to_string(2-bendPanel_.grabbed)+" FIXED / RELEASE TO FINISH"
@@ -6006,7 +6022,7 @@ class Viewer {
         extrudePanel_.refresh(sidebarMenus_.menus,toolConfig_.lengthBp(),toolConfig_.directionSign(),
             extrudePlane_.label(),nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter()),
             toolConfig_.ligateAdjacent(),extrudeLatticeDraft_.cells().size(),latticeSquare_,
-            freeformDraft_.placed(),paintedExtrusionReady()?"READY TO EXTRUDE":toolShell_.executionPending()?"EXTRUDING":extrudeLatticeDraft_.cells().empty()?"PAINT CELLS TO EXTRUDE":toolShell_.status());
+            freeformDraft_.placed(),extrudeStatus());
     }
 
     void cancelMove() {
@@ -9049,6 +9065,8 @@ class Viewer {
             << ",\"move_grabbing\":" << (movePanel_.hand?"true":"false")
             << ",\"move_nearby\":" << ((movePanel_.nearby[0]||movePanel_.nearby[1])?"true":"false")
             << ",\"tool_sequence\":" << toolSequence_
+            << ",\"extrude_status\":" << quote(extrudeStatus())
+            << ",\"extrude_validation_reason\":" << quote(currentToolPreflightFeedback()?currentToolPreflightFeedback()->reason:"")
             << ",\"painted_commit_ready\":" << (paintedExtrusionReady() ? "true" : "false")
             << ",\"config_sequence\":" << toolConfigSequence_
             << ",\"execution_feedback_sequence\":" << toolExecutionFeedbackSequence_

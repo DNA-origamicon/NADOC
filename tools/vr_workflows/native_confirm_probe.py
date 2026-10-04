@@ -238,6 +238,7 @@ try:
     while not live.state.get("painted_commit_ready"):
         if time.monotonic()>deadline:raise RuntimeError("preflight not ready: "+str(live.state))
         live.frame();time.sleep(.1)
+    live.capture_to(out/'confirm-ready',discard_source=True)
     before_revision=live.state.get('scene_revision',0)
     before_feature=live.state.get('committed_feature_id')
     click_control('CONFIRM')

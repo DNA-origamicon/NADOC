@@ -89,7 +89,9 @@ class ButtonGallery {
             if(off)face=disabledColor;
             const auto border=off?glm::vec3(.22F,.26F,.31F):on?glm::vec3(.35F,.90F,.65F):focus?glm::vec3(1,.74F,.30F):blue;
             ui.rounded(x+.006F,y-.008F,w+.009F,h+.012F,r,{.018F,.026F,.039F},.003F);
-            if(i==3) {
+            if(i==0) {
+                ui.raisedSlate(x,y,w,h,z,face,border);
+            } else if(i==3) {
                 ui.rounded(x,y,w,h,r,border,z);
                 ui.rounded(x+.003F,y+.003F,w-.006F,h-.006F,r-.003F,on?face:glm::vec3(.052F,.071F,.096F),z+.001F);
             } else {

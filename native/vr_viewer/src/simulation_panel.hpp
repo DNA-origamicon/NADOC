@@ -59,7 +59,7 @@ class SimulationPanel {
     std::vector<SidebarControl> controls(bool animated=true) const {
         std::vector<SidebarControl> out;
         const bool ready=sequence<=acknowledged;
-        for(size_t i=0;i<engines.size();++i){const auto& r=engines[i];const float x=-.269F+i*.20F;out.push_back({"sim:"+r.id,r.label,"","simulation:"+r.id,{{x,.55F},{x+.19F,.65F}},r.enabled&&ready,r.active});}
+        for(size_t i=0;i<engines.size();++i){const auto& r=engines[i];const float x=-.269F+i*.202F;out.push_back({"sim:"+r.id,r.label,"","simulation:"+r.id,{{x,.55F},{x+.19F,.65F}},r.enabled&&ready,r.active});}
         out.push_back({"sim:jobs",version?"Jobs":"Waiting for desktop...","","",{{-.19F,.39F},{.73F,.49F}},false});
         if(selected)out.push_back({"sim:frame","Frame result","","recenter",{{.81F,-.657F},{1.41F,-.585F}},true});
         if(selected)out.push_back({"sim:views","Visualizations","","",{{.81F,.39F},{1.41F,.49F}},false});

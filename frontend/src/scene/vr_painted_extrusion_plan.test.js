@@ -82,3 +82,12 @@ it('creates an independent freeform frame using canonical cells and a separate r
   expect(placement.translation_nm[0]).toBe(12)
   expect(plan({freeform_placement:{...placement,rotation_xyzw:[0,0,0,0]}}).reason).toBe('invalid_draft')
 })
+
+it('validates painted cells on older desktop lattices without requiring frame metadata', () => {
+  const legacy = {...design, helices:[{id:'h_XY_4_4',grid_pos:[4,4]}]}
+  const result = plan({}, legacy)
+  expect(result.accepted).toBe(true)
+  expect(result.plan.commit.arguments).toMatchObject({source_legacy_plane:true,expected_revision:4})
+  expect(result.plan.preflight.arguments).toEqual(result.plan.commit.arguments)
+  expect(plan({painted_footprint:{lattice_type:'HONEYCOMB',cells:[[4,4]]}},legacy).reason).toBe('painted_cell_occupied')
+})

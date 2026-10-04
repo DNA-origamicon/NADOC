@@ -67,7 +67,7 @@ These are NADOC defaults informed by the references, not a universal VR standard
   family for immersive readability rather than mixing delicate outlines and
   filled symbols. [Meta icon guidance](https://developers.meta.com/horizon/design/styles_icons_images/)
 
-Shared sidebar tokens live in `native/vr_viewer/src/ui_style.hpp`; input arbitration
+Shared sidebar tokens and spacing rules live in `native/vr_viewer/src/ui_style.hpp`; input arbitration
 lives in `menu_focus.hpp`. The new style tokens currently apply to the sidebars.
 Detailed native panels retain their drawing styles with an added focus ring;
 unsupported tool choices are gray and inert there as well.
@@ -121,3 +121,85 @@ retains the complete tab/page tour.
 
 Synthetic input and screenshots do not establish physical headset comfort or
 whether 450 ms feels right for a particular user.
+
+## Menu layout contract (2026-10-03)
+
+Use these rules when adding or reviewing rectangular native sidebar menus. Values
+are **local metres before panel scale**, not screen pixels or headset comfort
+claims. At the default 0.65 scale, multiply by 650 for physical millimetres.
+`ui_style.hpp` owns the spacing tokens; `SidebarMenu::controls()` owns the shared
+rendering, picking and inspector geometry.
+
+| Rule | Local value | Check |
+| --- | --- | --- |
+| Grip rail | 0.040 | Reserved inside the panel perimeter |
+| Clear space after the rail | At least 0.024 | Every visible control silhouette stays 0.064 inside the panel bounds |
+| Neighboring controls | At least 0.012 | Applies horizontally and vertically, including tabs and compound row controls |
+| Raised action columns | 0.036 between nominal faces | Leaves 0.017 between the full rim/shadow envelopes |
+| Tool content rails | x = −0.375 and +0.375 | Full-width rows and paired rows share outer edges; columns are equal width |
+| Tool footer | Two columns, 0.108 high | Green Confirm/Apply left, red Back right; below every field and option |
+| Footer section separation | At least 0.024 | Measured from raised silhouette to the lowest content/scrollbar edge |
+| Text inset | At least 0.012 horizontally | Fit or wrap within the owning field; minimum stroke scale 0.002 |
+| Sidebar body rhythm | 0.108 high / 0.120 pitch | 0.012 clear row gap |
+| Ordinary targets | At least 0.150 × 0.065 | Compact tool adjustments retain 0.070 height |
+| Compact row targets | At least 0.090 × 0.065 | Visibility/delete icons and View Volumes' On/Off chip |
+| Wheel / scrollbar / tab targets | 0.050 × 0.065 / 0.060 × 0.150 / 0.090 × 0.150 | Dedicated interaction types, not ordinary buttons |
+
+Extrude reserves 0.080 of its content width for the scrollbar column; its footer
+still spans both outer tool rails. Nested sidebar rows keep their explicit
+hierarchy indent. Tool heights follow the footer plus its shadow, clear space,
+and grip rail; do not hard-code a panel bottom through the footer shadow.
+
+Raised slate faces have decorative overhang: left 0.004, right 0.015, bottom
+0.008, top 0.004. `ui_style::raisedEnvelope()` describes that silhouette for the
+spacing audit. Keep it synchronized with `SolidUi::raisedSlate()`. Decorative
+rim and shadow pixels do not expand the button's hit target. Disabled controls
+obey the same spacing rules. Scroll animation uses clipped visible rectangles
+for spacing; partially clipped rows are exempt only from the full target-size
+and text-containment check. Frame instructions belong to the grip rail and are
+not body controls.
+
+### Review inventory
+
+| Surface | Review and coverage |
+| --- | --- |
+| All catalog sidebar tabs, both hands, Part and Assembly | Checked on every page; tab gaps increased from 0.003 to 0.012 |
+| Bend, including cluster-picker pages | Centered rails; wheel/readout and adjustment gaps fixed; footer clears frame; compacted the oversized gap below Cancel |
+| Twist | Shared tool rails and footer; Units/Reverse gap corrected |
+| Extrude | Shared centered tool rails, scrolling content and raised footer; footer clears frame |
+| Move/Rotate | Shared centered rails, equal three-column selection row and two-column footer |
+| Dimensions | Empty, single and multi-page lists, including scroll animation; 0.012 gaps and icons clipped with their rows |
+| View Volumes | Empty, single and multi-page lists, including scroll animation; clipped icons, 0.012 gaps and an explicit compact On/Off target rule |
+| Simulations | Empty, single and multi-page jobs/views, collapsed and expanded view pane; engine gaps corrected |
+| Legacy Options, Tools, tool configuration, Jobs, job detail, Trajectory | Source reviewed; **not yet compliant with this sidebar contract**. They use `MenuItem`/`appendMenuGuides`, a 0.025 grip rail and narrower panels. Options has 0.005 row gaps, Jobs/Tools have 0.010 gaps, and controls reach the frame. Existing overlap/text checks remain; migrate geometry and picking together before claiming compliance. |
+| Lattice painter | Spatial grid, exit control and external length wheel are a separate interaction surface. Its 0.018 edge inset is smaller than its 0.025 rail. Needs a dedicated grid/chrome clearance contract rather than applying sidebar row sizing to paint cells. |
+| Detached desktop and legacy desktop display | Captured application pixels are external content. Detached Close sits above the image/frame by 0.025; image aspect and pixel-to-ray mapping must stay coupled. Sidebar row rules do not govern the captured application's controls. |
+| Radial tools and in-scene handles | Polar/spatial controls have no rectangular menu border; use their existing acquisition/geometry checks. |
+| Component gallery | Component/style reference, not a form layout; raised slate geometry is shared with the tool footer. |
+
+This inventory distinguishes verified sidebar compliance from the remaining
+legacy layout debt. A menu migration must update this table and add its cases to
+the spacing suite; passing sidebar tests alone does not certify legacy surfaces.
+
+### Repeatable checks
+
+```sh
+PATH=/usr/bin:/bin cmake --build native/vr_viewer/build --target \
+  nadoc-vr-menu-spacing-test nadoc-vr-menu-layout-test nadoc-vr-sidebar-test
+PATH=/usr/bin:/bin ctest --test-dir native/vr_viewer/build \
+  -R 'nadoc-vr-(menu-spacing|menu-layout-unit|sidebar-unit)$' --output-on-failure
+```
+
+The spacing matrix exercises all catalog pages and the tool/list variants in the
+inventory, including disabled actions. It verifies text fit, target sizes,
+spacing and tool row alignment against actual production geometry. Negative
+audit tests deliberately introduce crowded rows and a shadow inside frame
+padding. The runtime audit also reports `border_clearance` and `control_spacing`
+through existing layout diagnostics.
+
+For visual review, inspect the native renderer with the complete panel in frame,
+including its lowest shadow and all four grip rails. Check enabled, disabled,
+hover/pressed, empty and last-page states; confirm labels remain legible and
+rays acquire the visible control faces. The existing `vr-menu-tour` above checks
+live controller interaction. An offscreen native render establishes appearance,
+not physical through-lens readability or comfort.

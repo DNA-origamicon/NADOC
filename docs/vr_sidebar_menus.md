@@ -46,7 +46,7 @@ extension has its own scrollbar. See [VR simulation results](vr_simulations.md)
 for job-specific options, the `2hb_1xT` demo and validation limits.
 
 Each controller's menu button independently toggles its matching sidebar. Both
-can remain open. Menus have translucent white backgrounds that blur the scene
+can remain open. Menus have opaque dark backgrounds that obscure the scene
 behind them, with sharp text and blue active styling. Tabs preserve desktop order
 and labels; their text runs vertically on the outside edge. Controls are
 larger for ray selection. The wide framed border has textured corner handles and

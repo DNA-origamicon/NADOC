@@ -38,7 +38,7 @@ def main():
                  'NADOC_VR_PROFILE_CONTROLS':'1','NADOC_VR_FEEDBACK_ACQUISITION':'1',
                  'NADOC_VR_APPROACH_CONTROLS':'1','NADOC_VR_APPROACH_CELLS':'1',
                  'NADOC_VR_PAINT_ZOOM':'fit','NADOC_VR_REVIEW_VIEW':'1',
-                 'NADOC_VR_FREEFORM':'0','NADOC_VR_PROFILE_WHEEL':'1',
+                 'NADOC_VR_FREEFORM':'0','NADOC_VR_PROFILE_WHEEL':os.environ.get('NADOC_VR_PROFILE_WHEEL','1'),
                  'NADOC_VR_DEMO':'0' if args.validate else '1','NADOC_VR_DEMO_HOLD':'3'}
             command=['npx','playwright','test','--config','playwright.smoke.config.js',
                      'vr_extrude_volume.spec.js','--workers=1','--output',str(output/lattice/profile)]

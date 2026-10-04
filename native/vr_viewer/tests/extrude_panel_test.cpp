@@ -10,7 +10,7 @@ int main() {
     std::set<std::string> found;
     do {
         auto controls=menus[1].controls();
-        for(const auto& id:{"extrude:back","extrude:confirm","extrude:cancel"})
+        for(const auto& id:{"extrude:back","extrude:confirm"})
             assert(std::any_of(controls.begin(),controls.end(),[&](const auto& c){return c.id==id;}));
         for(const auto& c:controls)found.insert(c.id);
         if(!menus[1].canScroll(1))break;
@@ -34,6 +34,20 @@ int main() {
         assert(get("extrude:less-period").label=="-"+coarse+" BP");
         assert(get("extrude:more-period").label=="+"+coarse+" BP");
     }
+    // A ray aimed obliquely at the raised face must select Confirm, even when
+    // its continuation onto the flat tablet falls outside the button.
+    menus[1].placement.openDocked({0,0,0},glm::quat(1,0,0,0));
+    const auto confirm=get("extrude:confirm");
+    const auto center=(confirm.bounds.minimum+confirm.bounds.maximum)*.5F;
+    const glm::vec3 contact(center.x,confirm.bounds.maximum.y-.005F,.035F);
+    const glm::vec3 origin=contact+glm::vec3(0,-.4F,.4F);
+    HandPose ray{true,false,menus[1].placement.worldPoint(origin),menus[1].placement.orientation()*glm::quatLookAt(glm::normalize(contact-origin),glm::vec3(0,1,0))};
+    assert(menus[1].hit(ray)->id=="extrude:confirm");
+    assert(std::abs(menus[1].raySurfacePoint(ray)->z-.035F)<1e-5F);
+    assert(menus[1].activate(*menus[1].hit(ray))=="extrude:confirm");
+    menus[1].available=[](const auto& action){return action!="extrude:confirm";};
+    assert(menus[1].activate(*menus[1].hit(ray)).empty());
+    menus[1].available=[](const auto&){return true;};
     MenuPlacement placement;placement.openDocked({0,0,0},glm::quat(1,0,0,0));
     LatticeGrip grip;
     std::array<HandPose,2> hands{};

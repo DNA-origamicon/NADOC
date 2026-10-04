@@ -22,6 +22,7 @@ class FrameExtrusionRequest(BaseModel):
     translation_nm: list[float] = Field(default_factory=lambda: [0, 0, 0], min_length=3, max_length=3)
     rotation_xyzw: list[float] = Field(default_factory=lambda: [0, 0, 0, 1], min_length=4, max_length=4)
     source_frame_id: str | None = Field(default=None, min_length=1, max_length=128)
+    source_legacy_plane: bool = False
     name: str = Field(default='Extrude', min_length=1, max_length=128)
 
 
@@ -32,6 +33,11 @@ def _candidate(design, body):
     if len(body.cells) * abs(body.length_bp) > 200_000:
         raise HTTPException(422, detail='Extrusion exceeds 200000 base-pair cells')
     try:
+        if body.source_legacy_plane:
+            from backend.core.legacy_plane_extrusion import append_legacy_plane_bundle
+            if body.source_frame_id or body.translation_nm != [0, 0, 0] or body.rotation_xyzw != [0, 0, 0, 1]:
+                raise ValueError('legacy source plane already supplies placement')
+            return append_legacy_plane_bundle(design, body.cells, body.length_bp, plane=body.plane)
         if body.source_frame_id is not None:
             if body.translation_nm != [0, 0, 0] or body.rotation_xyzw != [0, 0, 0, 1]:
                 raise ValueError('source frame already supplies rigid placement')

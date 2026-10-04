@@ -12,21 +12,27 @@ export function buildPaintedExtrusionPlan(config, design, revision) {
   const placement = config.freeform_placement
   if (placement && !design.helices?.length) return refuse('initial_default_plane_required')
   let sourceFrame = null
+  let legacyPlane = false
   if (!placement && authored.some(field => design[field]?.length)) {
     // The plane control identifies a source only when exactly one matching frame
-    // exists. Legacy/unframed helices require migration before this can be safe.
+    // exists. For older desktop parts, the backend validates a shared rest
+    // lattice and placement before using the desktop segment builder.
     const frames = design.lattice_frames ?? []
-    if (!design.helices?.length || design.helices.some(h =>
-      !h.lattice_frame_id || !frames.some(f => f.id === h.lattice_frame_id))) {
+    legacyPlane = frames.length === 0 && !!design.helices?.length && design.helices.every(h =>
+      !h.lattice_frame_id && Array.isArray(h.grid_pos) && h.grid_pos.length === 2 && h.grid_pos.every(Number.isSafeInteger))
+    if (!legacyPlane && (!design.helices?.length || design.helices.some(h =>
+      !h.lattice_frame_id || !frames.some(f => f.id === h.lattice_frame_id)))) {
       return refuse('source_frame_required')
     }
-    const matches = frames.filter(f => f.plane === config.extrude_from)
-    if (matches.length !== 1) return refuse(matches.length ? 'source_frame_ambiguous' : 'source_plane_mismatch')
-    sourceFrame = matches[0]
-    if ((design.cluster_transforms ?? []).filter(c => c.id === sourceFrame.placement_cluster_id).length !== 1) {
-      return refuse('source_placement_required')
+    if (!legacyPlane) {
+      const matches = frames.filter(f => f.plane === config.extrude_from)
+      if (matches.length !== 1) return refuse(matches.length ? 'source_frame_ambiguous' : 'source_plane_mismatch')
+      sourceFrame = matches[0]
+      if ((design.cluster_transforms ?? []).filter(c => c.id === sourceFrame.placement_cluster_id).length !== 1) {
+        return refuse('source_placement_required')
+      }
     }
-    const occupied = new Set(design.helices.filter(h => h.lattice_frame_id === sourceFrame.id)
+    const occupied = new Set(design.helices.filter(h => legacyPlane || h.lattice_frame_id === sourceFrame.id)
       .map(h => JSON.stringify(h.grid_pos)))
     if (config.painted_footprint?.cells?.some(cell => occupied.has(JSON.stringify(cell)))) {
       return refuse('painted_cell_occupied')
@@ -40,6 +46,7 @@ export function buildPaintedExtrusionPlan(config, design, revision) {
   const args = {
     expected_design_id: design.id, expected_revision: revision,
     ...(sourceFrame ? { source_frame_id: sourceFrame.id } : {}),
+    ...(legacyPlane ? { source_legacy_plane: true } : {}),
     cells: config.painted_footprint.cells.map(cell => [...cell]),
     length_bp: config.direction_sign * config.length_bp,
     plane: config.extrude_from, translation_nm: placement ? [...placement.translation_nm] : [0, 0, 0],
