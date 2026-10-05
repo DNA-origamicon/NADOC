@@ -936,6 +936,9 @@ _SLOW_TESTS = {
 # whenever only one param of a parametrized test is heavy — relegating the whole test
 # would throw away a fast gate that costs almost nothing.
 _SLOW_PARAMS = {
+    # Builds full representations plus a second detailed molecular surface and
+    # invokes the native VR validator: 6.39 s in the isolated FAST run.
+    "test_selective_export_matches_same_blocks_in_complete_snapshot[surface-detail]",
     # Real molecular surface extraction plus fixture setup exceeds 5 s isolated.
     "test_composite_trajectory_surface_shape[chimerax]",}
 
@@ -980,6 +983,7 @@ def _slow_area_for(module: str) -> str:
     if (
         "atomistic" in module
         or module == "test_cpd_design"
+        or module == "test_vr_representation_loading"
         or "pdb_export" in module
         or "ring_piercing" in module
         or "two_base_default" in module
