@@ -324,3 +324,9 @@ performance fix. [Evidence and testing limits](docs/audits/vr_motion_regression_
 failing renderer test, then kept collapsed connectors finite and hidden. Visible
 molecular coordinates and topology are unchanged. Shared-animation browser
 coverage exercises the construction-stage transition that exposed the defect.
+
+
+- 2026-10-04 — ISSUE-54 [x]: pattern API wrappers propagate rejected requests;
+  panels retain their preview and show the error. Regression coverage:
+  `frontend/src/api/pattern_requests.test.js`, `linear_pattern_panel.test.js`.
+  No additional main.js logic (linear-tool feature wiring is +2 LOC).

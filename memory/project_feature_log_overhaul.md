@@ -6,6 +6,14 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
+## Pattern features (2026-10-04)
+
+Tools → Linear Pattern creates a row or a 2D grid of whole-helix clusters. Each direction has X/Y/Z or Custom with XYZ vector fields, signed spacing in nm, and an instance count including the original; the total is capped at 128. Custom vectors are normalized, must be finite and nonzero, and must be nonparallel for a 2D pattern. Additional disjoint clusters can share the pattern. The panel separates Clusters, Direction 1, Direction 2, and Info with borders; the cluster list scrolls. Creation and editing share controls with explicit ±1 nm and ±1 instance steppers. Circular and linear creation reuse `backend/core/pattern_copy.py`, preserving canonical cells, independent frames, and composed source poses/deformations.
+
+Both pattern kinds have feature-log edit dialogs. `backend/api/pattern_features.py` rebuilds the saved pre-state, keeps surviving copy IDs (including older circular patterns), rewrites the existing entry, and rebases independent later snapshots. Creation and edits are each one undo step. Later absolute cluster moves survive edits; seek before the move restores the pattern placement. Edits that invalidate dependent downstream features return a conflict without modifying history. Copying remains scoped to part-owned whole-helix clusters; domain-specific/nucleotide poses retain the copy engine's explicit rejection.
+
+Regression coverage: `tests/test_linear_pattern.py`, `tests/test_circular_pattern.py`, `frontend/src/ui/linear_pattern_panel.test.js`, and `frontend/e2e/linear_pattern.spec.js`.
+
 ## What was built
 
 **Snapshot system.** Added 4th variant `SnapshotLogEntry` to the `FeatureLogEntry` discriminated union ([backend/core/models.py](backend/core/models.py)). Every snapshot stores BOTH `design_snapshot_gz_b64` (pre-state) AND `post_state_gz_b64` (post-state) as gzip+base64 of `design.model_dump_json()` with `feature_log` and `feature_log_cursor` stripped to prevent recursion. 5 MB rolling budget enforced by `_evict_oldest_snapshots_if_over_budget` — newest snapshot is NEVER evicted (revert must always work for the most recent op). Both pre+post are evicted together; entries remain in the log so historical labels stay visible (`evicted=True`, payload cleared).
@@ -29,10 +37,10 @@ The auto-scaffold variants share a `_run_auto_scaffold_with_feature_log` helper 
 
 **Revert + edit endpoints.**
 - `POST /design/features/{i}/revert`: decode pre-state, truncate log to entries before `i`, push prior state to undo. Returns 410 if the snapshot was evicted, 400 if not a snapshot entry.
-- `POST /design/features/{i}/edit`: only for extrusion op_kinds (`bundle-create`, `extrude-*`, `overhang-extrude`). Validates new params against the original Pydantic body class via `_edit_dispatch_run`, replays the op against the entry's pre-state, splices the updated entry (re-encoded pre+post) into the log. Refuses with 409 if any later snapshot entry exists (revert-and-rerun model). Refuses with 400 for auto-op snapshots (those should be reverted and re-run via the original UI).
+- `POST /design/features/{i}/edit`: the original snapshot replay path is for extrusion op_kinds (`bundle-create`, `extrude-*`, `overhang-extrude`). Validates new params against the original Pydantic body class via `_edit_dispatch_run`, replays the op against the entry's pre-state, splices the updated entry (re-encoded pre+post) into the log. Refuses with 409 if any later snapshot entry exists (revert-and-rerun model). Refuses with 400 for auto-op snapshots (those should be reverted and re-run via the original UI).
 
 **Frontend feature log panel** ([frontend/src/ui/feature_log_panel.js](frontend/src/ui/feature_log_panel.js)):
-- Snapshot entries render with ◆ icon, params summary tooltip, amber `↶` revert button, and (for extrusion ops only) `✎` edit button. Clicking edit opens a `prompt()` for `length_bp`; the full updated params dict is sent to the edit endpoint.
+- Snapshot entries render with ◆ icon, params summary tooltip, amber `↶` revert button, and `✎` edit buttons for supported kinds, including circular and linear patterns. Extrusion edits use the schema-driven popover; pattern edits use `pattern_feature_editor.js`. The full updated params dict is sent to the edit endpoint.
 - Broken-delta UI markers: deformation entries with no `op_snapshot` whose `deformation_id` is missing from `design.deformations`, cluster_op entries whose `cluster_id` is missing, and overhang_rotation entries where ALL `overhang_ids` are gone — render with a ⚠ icon + amber muted label + tooltip explaining the cause. Detection is frontend-only (no backend schema field).
 
 **Animation keyframe picker** ([frontend/src/ui/animation_panel.js](frontend/src/ui/animation_panel.js)) now shows descriptive labels for snapshot and overhang_rotation entry types (was just `F${i+1}` for unhandled types). Snapshots show their `entry.label` (e.g. "Auto-scaffold") with `(evicted)` suffix when applicable.
@@ -186,7 +194,7 @@ geometry baked into a later snapshot's POST-state).
 - **Don't use `design_state.snapshot()` + `set_design_silent_reconciled()` for new auto-op endpoints.** Use `mutate_with_feature_log` instead. The two patterns coexist (older non-snapshot routes still use the former) but new endpoints should standardize on the wrapper.
 - **`_DESIGN_PANEL_IDS` at [main.js:3288](frontend/src/main.js#L3288)** still includes the four moved sections (`#physics-section`, etc.). Lookup is by `getElementById`, so the move is transparent — keep them in the list so they remain hidden during assembly mode.
 - **`_recenter_design` is for caDNAno / scadnano imports only.** Native `.nadoc` loads (`/design/load`, `/design/import`) do NOT recenter — see `feedback_native_files_preserve_positions.md`.
-- **`mutate_with_feature_log` pushes to undo on entry**, then runs `fn`. If `fn` raises, the snapshot is in undo but design is unchanged — Ctrl-Z would be a no-op. Acceptable; matches `mutate_with_reconcile` behavior.
+- **`mutate_with_feature_log` pushes to undo on entry**, then runs `fn`. If `fn` raises, it restores the design, undo stack, and redo stack atomically. Invalid pattern requests must preserve redo.
 - **The `body` param in `params` is `body.model_dump(mode='json')`** — must be JSON-serializable. Pydantic Direction enums become strings, etc. Edit endpoint validates by reconstructing `BundleSegmentRequest.model_validate(params)` etc.
 - **Snapshot decode without recursion guarantee:** `encode_design_snapshot` strips `feature_log` and `feature_log_cursor` before encoding. If you ever want to embed the log itself in a snapshot, you'd need a different mechanism — currently the recursion check is enforced by the encode side, not the schema.
 - **Tests must not introduce flakiness.** The `test_seamless_router::test_teeth_closing_zig` is a known pre-existing flake (UUID ordering). Five other tests are pre-existing failures on master, deselected in the standard test command. New tests should NOT depend on UUID ordering.

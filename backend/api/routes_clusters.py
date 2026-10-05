@@ -37,6 +37,12 @@ from backend.api import state as design_state
 # crud.py's auto-clustering path). Both stay in crud.py and are imported back
 # here (same convention as routes_camera_poses.py / routes_deformation.py).
 from backend.api.crud import _design_response, _ensure_default_cluster
+from backend.api.pattern_features import (
+    CircularPatternBody,
+    LinearPatternBody,
+    build_pattern,
+    pattern_label,
+)
 from backend.core.cluster_copy import paste_clusters
 from backend.core.cluster_reconcile import MutationReport
 from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry
@@ -414,31 +420,38 @@ def cluster_paste(body: ClusterPasteBody) -> dict:
     return resp
 
 
-class CircularPatternBody(BaseModel):
-    cluster_id: str
-    instances: int = Field(ge=1, le=128, strict=True)
-    total_angle: float = Field(gt=0, le=360, allow_inf_nan=False)
-    axis_point: List[float] = Field(min_length=3, max_length=3)
-    axis_direction: List[float] = Field(min_length=3, max_length=3)
-    expected_revision: int | None = None
+def _create_pattern(kind, body):
+    holder = {}
+    params = body.model_dump(exclude={"expected_revision"})
+
+    def build(design):
+        try:
+            candidate, ids, copy_report = build_pattern(kind, design, params)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        holder["report"] = copy_report
+        return candidate, MutationReport(new_helix_origins={hid: None for hid in ids})
+
+    updated, report, _ = design_state.mutate_with_feature_log(
+        op_kind=kind,
+        label=pattern_label(kind, params),
+        params=params,
+        fn=build,
+        expected_revision=body.expected_revision,
+    )
+    response = _design_response(updated, report)
+    copies = holder["report"]
+    response["pattern_report"] = (
+        [vars(r) for r in copies] if isinstance(copies, list) else vars(copies)
+    )
+    return response
 
 
 @router.post("/design/circular-pattern", status_code=200)
 def circular_pattern(body: CircularPatternBody) -> dict:
-    from backend.core.circular_pattern import create_circular_pattern
-    holder = {}
-    def build(design):
-        try:
-            candidate, ids, copy_report = create_circular_pattern(design, body.cluster_id,
-                body.instances, body.total_angle, body.axis_point, body.axis_direction)
-        except ValueError as exc:
-            raise HTTPException(400, detail=str(exc)) from exc
-        holder['copy_report'] = copy_report
-        return candidate, MutationReport(new_helix_origins={hid: None for hid in ids})
-    updated, report, _ = design_state.mutate_with_feature_log(
-        op_kind='circular-pattern', label=f'Circular pattern: {body.instances} instances',
-        params=body.model_dump(exclude={'expected_revision'}), fn=build,
-        expected_revision=body.expected_revision)
-    response = _design_response(updated, report)
-    response['pattern_report'] = vars(holder['copy_report'])
-    return response
+    return _create_pattern("circular-pattern", body)
+
+
+@router.post("/design/linear-pattern", status_code=200)
+def linear_pattern(body: LinearPatternBody) -> dict:
+    return _create_pattern("linear-pattern", body)

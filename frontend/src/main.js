@@ -247,6 +247,7 @@ import { initSceneInspector }                  from './scene/scene_inspector.js'
 import { createModal }                         from './ui/primitives/modal.js'
 import { createButton }                        from './ui/primitives/button.js'
 import { initBackgroundModal }                 from './ui/background_modal.js'
+import { initLinearPatternPanel } from './ui/linear_pattern_panel.js'
 import { initCircularPatternPanel } from './ui/circular_pattern_panel.js'
 import { initDebugMenu }                       from './ui/debug_menu.js'
 import { initLeftSidebar }                     from './ui/left_sidebar.js'
@@ -2466,6 +2467,7 @@ async function main() {
   // the tool lifecycle. Replaces the retired workspace.js plane-picker as the entry
   // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
   _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing })
+  initLinearPatternPanel({ store, showToast, selectionManager, scene })
   initCircularPatternPanel({ store, showToast, selectionManager, scene, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
 
   // ── Primitives library (right-sidebar panel) → ui/primitive_library.js ──

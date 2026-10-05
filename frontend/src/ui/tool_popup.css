@@ -43,6 +43,7 @@
 .tool-popup__header > button { font-size: var(--text-lg); line-height: 1; }
 .tool-popup__content { overflow: auto; min-height: 0; overscroll-behavior: contain; }
 .tool-popup__content > .panel-section { margin: 0; padding: var(--space-4); border: 0; border-radius: 0; background: transparent; }
+.tool-popup__content > #linear-pattern-panel,
 .tool-popup__content > #circular-pattern-panel { padding: 0; }
 .tool-popup .cp-panel-body { padding: var(--space-4); background: transparent; }
 .tool-picking-hint { margin: 0 0 var(--space-3); padding: var(--space-2); font-size: var(--text-sm); color: var(--color-text-primary); background: var(--color-accent-soft); border-radius: var(--radius-md); }

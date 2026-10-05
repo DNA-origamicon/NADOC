@@ -7761,6 +7761,12 @@ def _build_entry_info(entry, design):
                 post = design_state.decode_design_snapshot(entry.post_state_gz_b64)
                 added, modified = snapshot_delta(pre, post)
                 targets = structural_reference_targets(pre, post, added, modified)
+                if entry.op_kind in {"circular-pattern", "linear-pattern"}:
+                    sources = set(entry.params.get("cluster_ids", []))
+                    if entry.params.get("cluster_id"):
+                        sources.add(entry.params["cluster_id"])
+                    targets |= sources
+                    targets.update(hid for c in pre.cluster_transforms if c.id in sources for hid in c.helix_ids)
         except Exception:
             added, modified = set(), set()
             targets = None
@@ -8429,6 +8435,13 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
             410,
             detail=f"Snapshot for feature {index} ({entry.label!r}) was evicted; cannot replay.",
         )
+
+    if entry.op_kind in {"circular-pattern", "linear-pattern"}:
+        from backend.api.pattern_features import edit_pattern_feature
+        from backend.core.validator import validate_design
+        updated = edit_pattern_feature(design, index, body.params)
+        design_state.set_design(updated)
+        return _design_replace_response(design, updated, validate_design(updated))
 
     later_snapshots = [
         i
@@ -9185,7 +9198,7 @@ def _seek_feature_log(
     design = _seek_snapshot_base(design, position, sub_position, optimized=optimized)
     log = list(design.feature_log)
     from backend.core.circular_pattern import pattern_history_overlays
-    pattern_clusters, pattern_ops = pattern_history_overlays(
+    pattern_clusters, pattern_ops, pattern_baselines = pattern_history_overlays(
         design, design_state.decode_design_snapshot
     )
     design = design.copy_with(cluster_transforms=pattern_clusters)
@@ -9309,11 +9322,12 @@ def _seek_feature_log(
                 }
             )
         elif ct.id in clusters_with_ops:
-            # Cluster has ops in the log but none in the active window → identity.
+            # Before a later move, generated copies retain their pattern pose.
             ct = ct.model_copy(
                 update={
-                    "translation": [0.0, 0.0, 0.0],
-                    "rotation": [0.0, 0.0, 0.0, 1.0],
+                    "translation": pattern_baselines[ct.id].translation if ct.id in pattern_baselines else [0.0, 0.0, 0.0],
+                    "rotation": pattern_baselines[ct.id].rotation if ct.id in pattern_baselines else [0.0, 0.0, 0.0, 1.0],
+                    "pivot": pattern_baselines[ct.id].pivot if ct.id in pattern_baselines else ct.pivot,
                 }
             )
         new_cts.append(ct)
