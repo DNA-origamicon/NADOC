@@ -1,11 +1,14 @@
 import { el } from './primitives/dom.js'
 import { linearPatternOffsets } from './linear_pattern_math.js'
 import './linear_pattern.css'
+import { toolSection } from './tool_sections.js'
 
 export const linearPatternDefaults = { direction: 'X', vector: [1, 0, 0], spacing: 10, instances: 3, two_dimensional: false, direction2: 'Y', vector2: [0, 1, 0], spacing2: 10, instances2: 2 }
 
 export function linearPatternSection(title, children = []) {
-  return el('fieldset', { className: 'lp-section', children: [el('legend', { text: title }), ...children] })
+  const section = toolSection(title, children)
+  section.classList.add('lp-section')
+  return section
 }
 
 /** Shared by creation and feature editing, including custom vectors and unit steppers. */

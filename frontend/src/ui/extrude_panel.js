@@ -36,8 +36,6 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
   const _select = document.getElementById('extrude-from')
   let _active = false
   let _mode   = null
-  const count = _panel?.querySelector('.ctx-count')
-  if (count) _panel.prepend(count)
   const popup = createToolPopup({ panel: _panel, title: 'Extrude', onClose: hide })
 
   function _modeIndicator() { return document.getElementById('mode-indicator') }

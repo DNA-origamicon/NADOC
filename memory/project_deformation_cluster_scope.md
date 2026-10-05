@@ -168,3 +168,13 @@ Desktop popup appearance is shared in `ui/tool_popup.css`: translucent backdrop
 blur with opaque fallback/reduced-transparency support, neutral rounded rim,
 and tokenized NADOC controls. Extrude/Bend/Twist markup retains only inline layout
 and visibility styles; button styling uses shared `btn` classes.
+
+Desktop tool sections (2026-10-04): `ui/tool_sections.css` supplies the bordered
+fieldset/legend layout shared by Linear/Circular Pattern, Extrude, Bend/Twist,
+Move/Rotate, and pattern feature editing. Cluster/selection lists have bounded
+scrolling. Extrude groups Source, Length, Direction, Strands, and Info; Bend/Twist
+groups Clusters, Planes, tool parameters, and Info. Move/Rotate groups Selection,
+Reference, Translation, Rotation (or joint rotation), and Info. Existing control
+IDs and event handlers stay intact. Regression app exercise:
+`frontend/e2e/floating_design_tools.spec.js`; its review screenshots use the
+Playwright output directory and the cleanup reporter removes them on all outcomes.

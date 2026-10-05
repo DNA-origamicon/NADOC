@@ -3,10 +3,10 @@ import { loadScaffoldedPart } from './helpers/scene_harness.js'
 
 // Only __e2e__floating-tools.nadoc and its project history may persist.
 // Global teardown removes both after success/failure; server session caching is off.
-// Optional NADOC_POPUP_SCREENSHOTS retains review images in .development-artifacts/.
-test('extrude, twist and bend float independently of sidebar tabs', async ({ page }) => {
-  test.setTimeout(90_000)
-  await page.setViewportSize({ width: 1800, height: 1000 })
+// Screenshots stay in testInfo.outputPath and the cleanup reporter removes them.
+test('design tools use grouped controls and preserve their selection and cancel flows', async ({ page }, testInfo) => {
+  test.setTimeout(180_000)
+  await page.setViewportSize({ width: 2400, height: 1200 })
   const errors = []
   page.on('pageerror', error => errors.push(String(error)))
   await loadScaffoldedPart(page, { doc: 'e2e-floating-tools', name: 'floating-tools' })
@@ -18,13 +18,22 @@ test('extrude, twist and bend float independently of sidebar tabs', async ({ pag
   const extrude = page.locator('.tool-popup[data-tool-panel="extrude-panel"]')
   await expect(extrude).toBeVisible()
   await checkPopupSurface(extrude)
-  await capturePopup(page, 'extrude')
+  await checkSections(extrude, ['Source', 'Length', 'Direction', 'Strands', 'Info'])
+  await capturePopup(page, testInfo, 'extrude')
   await expect(extrude.locator('#slice-length')).toBeVisible()
   await page.locator('#right-tab-strip [data-tab=clustering]').click()
   await expect(extrude).toBeVisible()
   await page.getByRole('button', { name: 'Close Extrude', exact: true }).click()
   await expect(extrude).not.toBeVisible()
   expect(await page.evaluate(() => window.__nadocTest.getSliceState().visible)).toBe(false)
+
+  // Multiple named scopes expose the optional cluster picker and its scroll box.
+  await page.evaluate(async () => {
+    const { store } = await import('/src/state/store.js')
+    const api = await import('/src/api/client.js')
+    const helix = store.getState().currentDesign.helices[0].id
+    for (let i = 1; i <= 7; i++) await api.createCluster({ name: `Tool scope ${i}`, helix_ids: [helix] })
+  })
 
   for (const tool of ['twist', 'bend']) {
     await page.evaluate(async () => {
@@ -52,12 +61,14 @@ test('extrude, twist and bend float independently of sidebar tabs', async ({ pag
     await page.locator('#right-tab-strip [data-tab=visualization]').click()
     await expect(popup).toBeVisible()
     // Exercise dragging through the visible title bar, with the viewport left interactive.
+    await popup.locator('.tool-popup__header').hover()
     const before = await popup.boundingBox(), header = await popup.locator('.tool-popup__header').boundingBox()
     await page.mouse.move(header.x + 70, header.y + header.height / 2)
     await page.mouse.down()
     await page.mouse.move(header.x + 105, header.y + header.height / 2 + 20, { steps: 5 })
     await page.mouse.up()
     const after = await popup.boundingBox()
+    if (Math.hypot(after.x - before.x, after.y - before.y) <= 5) console.log('Popup drag bounds', { before, after, header, canvas: await page.locator('#canvas').boundingBox() })
     expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(5)
     // The same real editor entry point used by a blunt-end action places both planes.
     await page.evaluate(async tool => {
@@ -69,11 +80,36 @@ test('extrude, twist and bend float independently of sidebar tabs', async ({ pag
     await expect(popup.locator('#def-plane-b-bp')).toHaveValue('100')
     await expect(popup.locator('#def-apply-btn')).toBeEnabled()
     await checkPopupSurface(popup)
-    await capturePopup(page, tool)
+    await checkSections(popup, ['Clusters', 'Planes', tool === 'bend' ? 'Bend' : 'Twist', 'Info'])
+    await expect(popup.locator('#def-cluster-list')).toHaveCSS('overflow-y', 'auto')
+    expect(await popup.locator('#def-cluster-list').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true)
+    await expect(popup.locator(`#def-${tool === 'bend' ? 'twist' : 'bend'}-controls`)).toBeHidden()
+    await capturePopup(page, testInfo, tool)
     await page.getByRole('button', { name: `Close ${tool === 'twist' ? 'Twist' : 'Bend'}`, exact: true }).click()
     await expect(popup).not.toBeVisible()
     await expect.poll(() => page.evaluate(async () => (await import('/src/state/store.js')).store.getState().deformToolActive)).toBe(false)
   }
+  // The same sections also fit the narrower Move/Rotate sidebar.
+  await page.evaluate(async () => {
+    const { store } = await import('/src/state/store.js')
+    const cluster = store.getState().currentDesign.cluster_transforms.find(c => c.helix_ids.length)
+    const item = { kind: 'cluster', id: cluster.id }
+    store.setState({ selection: { context: 'design', level: 'cluster', items: [item], primary: item } })
+  })
+  await page.getByRole('button', { name: 'Tools', exact: true }).hover()
+  await page.locator('#menu-tools-translate-rotate').click()
+  const move = page.locator('#move-rotate-panel')
+  await expect(move).toBeVisible()
+  await expect(move.locator('#mr-tx')).toBeEnabled()
+  await checkSections(move, ['Selection', 'Reference', 'Translation (nm)', 'Rotation (°)', 'Info'])
+  await expect(move.locator('#mr-joint-angle-section')).toBeHidden()
+  await expect(move.locator('#mr-current-selection')).toHaveCSS('overflow-y', 'auto')
+  expect(await move.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true)
+  await move.locator('#mr-tx').fill('7.5')
+  await move.locator('#mr-tx').press('Tab')
+  await capturePopup(page, testInfo, 'move-rotate')
+  await move.locator('#mr-cancel-btn').click()
+  await expect(move).toBeHidden()
   expect(errors).toEqual([])
 })
 
@@ -89,25 +125,10 @@ async function checkPopupSurface(popup) {
   expect(layout.background).toMatch(/0\.72/)
 }
 
-async function capturePopup(page, name) {
-  if (process.env.NADOC_POPUP_SCREENSHOTS) {
-    // Place real geometry behind the glass to make transparency reviewable.
-    await page.evaluate(async () => {
-      const { store } = await import('/src/state/store.js')
-      const points = store.getState().currentGeometry.map(n => n.backbone_position)
-      const center = points.reduce((sum, p) => sum.map((v, i) => v + p[i] / points.length), [0, 0, 0])
-      window.__nadocTest.applyCameraPoseForTest({ target: center, position: [center[0] + 18, center[1] + 10, center[2] + 3] })
-    })
-    const popup = page.locator('.tool-popup:visible')
-    const box = await popup.boundingBox()
-    const canvas = await page.locator('#canvas').boundingBox()
-    const header = await popup.locator('.tool-popup__header').boundingBox()
-    const x = header.x + 70, y = header.y + header.height / 2
-    await page.mouse.move(x, y)
-    await page.mouse.down()
-    await page.mouse.move(x + canvas.x + canvas.width / 2 - box.x - box.width / 2,
-      y + canvas.y + canvas.height / 2 - box.y - box.height / 2, { steps: 5 })
-    await page.mouse.up()
-    await page.screenshot({ path: `${process.env.NADOC_POPUP_SCREENSHOTS}/${name}.png` })
-  }
+async function checkSections(panel, titles) {
+  for (const name of titles) await expect(panel.getByRole('group', { name, exact: true })).toHaveCSS('border-top-width', '1px')
+}
+
+async function capturePopup(page, testInfo, name) {
+  await page.screenshot({ path: testInfo.outputPath(`${name}.png`) })
 }

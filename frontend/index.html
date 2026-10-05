@@ -7911,52 +7911,59 @@
         <div class="panel-section mr-panel" id="move-rotate-panel" style="display:none">
           <div class="mr-title">Move / Rotate <span class="dim" style="font-weight:400">M</span></div>
 
-          <div class="mr-section-label">Current selection</div>
-          <div id="mr-current-selection" class="mr-selection-box" aria-live="polite"></div>
-          <div id="mr-session-hint" class="dim" style="font-size:11px;margin-top:5px" aria-live="polite"></div>
+          <fieldset class="tool-section"><legend>Selection</legend>
+          <div id="mr-current-selection" class="mr-selection-box tool-scroll-list" tabindex="0" aria-label="Current selection" aria-live="polite"></div>
+          </fieldset>
 
+          <fieldset class="tool-section mr-reference"><legend>Reference</legend>
           <!-- Gizmo orientation. Local follows the selected object's current
                rotation, so (for example) Z follows a rotated helix axis. -->
           <div class="def-row mr-row">
-            <label class="mr-label">Frame</label>
+            <label class="mr-label" for="mr-frame-sel">Frame</label>
             <select id="mr-frame-sel" class="mr-select" title="Choose whether gizmo axes follow the scene or the selected object">
               <option value="world">Global</option>
               <option value="local">Local</option>
             </select>
           </div>
 
+          <!-- Pivot -->
+          <div class="def-row mr-row">
+            <label class="mr-label" for="mr-pivot-sel">Pivot</label>
+            <select id="mr-pivot-sel" class="mr-select">
+              <option value="centroid">Centroid</option>
+            </select>
+          </div>
+
+          </fieldset>
+
           <!-- Translation -->
-          <div class="mr-section-label">Translation (nm)</div>
-          <div class="def-row mr-row"><label class="mr-label">X</label><input type="number" id="mr-tx" class="mr-num" step="0.1"><span class="unit">nm</span></div>
-          <div class="def-row mr-row"><label class="mr-label">Y</label><input type="number" id="mr-ty" class="mr-num" step="0.1"><span class="unit">nm</span></div>
-          <div class="def-row mr-row"><label class="mr-label">Z</label><input type="number" id="mr-tz" class="mr-num" step="0.1"><span class="unit">nm</span></div>
+          <fieldset class="tool-section"><legend>Translation (nm)</legend>
+          <div class="def-row mr-row"><label class="mr-label">X</label><input type="number" id="mr-tx" aria-label="Translation X (nm)" class="mr-num" step="0.1"><span class="unit">nm</span></div>
+          <div class="def-row mr-row"><label class="mr-label">Y</label><input type="number" id="mr-ty" aria-label="Translation Y (nm)" class="mr-num" step="0.1"><span class="unit">nm</span></div>
+          <div class="def-row mr-row"><label class="mr-label">Z</label><input type="number" id="mr-tz" aria-label="Translation Z (nm)" class="mr-num" step="0.1"><span class="unit">nm</span></div>
+
+          </fieldset>
 
           <!-- Rotation section (hidden when joint pivot active) -->
-          <div id="mr-rotation-section">
-            <div class="mr-section-label">Rotation (°)</div>
-            <div class="def-row mr-row"><label class="mr-label">X</label><button class="def-btn mr-step" id="mr-rx-dec" title="Rotate −45° about X">−45</button><input type="number" id="mr-rx" class="mr-num" step="1"><button class="def-btn mr-step" id="mr-rx-inc" title="Rotate +45° about X">+45</button><span class="unit">°</span></div>
-            <div class="def-row mr-row"><label class="mr-label">Y</label><button class="def-btn mr-step" id="mr-ry-dec" title="Rotate −45° about Y">−45</button><input type="number" id="mr-ry" class="mr-num" step="1"><button class="def-btn mr-step" id="mr-ry-inc" title="Rotate +45° about Y">+45</button><span class="unit">°</span></div>
-            <div class="def-row mr-row"><label class="mr-label">Z</label><button class="def-btn mr-step" id="mr-rz-dec" title="Rotate −45° about Z">−45</button><input type="number" id="mr-rz" class="mr-num" step="1"><button class="def-btn mr-step" id="mr-rz-inc" title="Rotate +45° about Z">+45</button><span class="unit">°</span></div>
-          </div>
+          <fieldset id="mr-rotation-section" class="tool-section"><legend>Rotation (°)</legend>
+            <div class="def-row mr-row"><label class="mr-label">X</label><button class="def-btn mr-step" id="mr-rx-dec" title="Rotate −45° about X">−45</button><input type="number" id="mr-rx" aria-label="Rotation X (degrees)" class="mr-num" step="1"><button class="def-btn mr-step" id="mr-rx-inc" title="Rotate +45° about X">+45</button><span class="unit">°</span></div>
+            <div class="def-row mr-row"><label class="mr-label">Y</label><button class="def-btn mr-step" id="mr-ry-dec" title="Rotate −45° about Y">−45</button><input type="number" id="mr-ry" aria-label="Rotation Y (degrees)" class="mr-num" step="1"><button class="def-btn mr-step" id="mr-ry-inc" title="Rotate +45° about Y">+45</button><span class="unit">°</span></div>
+            <div class="def-row mr-row"><label class="mr-label">Z</label><button class="def-btn mr-step" id="mr-rz-dec" title="Rotate −45° about Z">−45</button><input type="number" id="mr-rz" aria-label="Rotation Z (degrees)" class="mr-num" step="1"><button class="def-btn mr-step" id="mr-rz-inc" title="Rotate +45° about Z">+45</button><span class="unit">°</span></div>
+          </fieldset>
 
           <!-- Joint angle section (shown instead of rotation when pivot = joint) -->
-          <div id="mr-joint-angle-section" style="display:none">
-            <div class="mr-section-label" style="color:#ff8800">Joint Rotation (°)</div>
-            <div class="def-row mr-row"><label class="mr-label" style="color:#ff8800">°</label><input type="number" id="mr-ja" class="mr-num" step="1"><span class="unit" style="color:#ff8800">°</span></div>
-          </div>
+          <fieldset id="mr-joint-angle-section" class="tool-section" style="display:none"><legend>Joint rotation (°)</legend>
+            <div class="def-row mr-row"><label class="mr-label" style="color:#ff8800">°</label><input type="number" id="mr-ja" aria-label="Joint rotation (degrees)" class="mr-num" step="1"><span class="unit" style="color:#ff8800">°</span></div>
+          </fieldset>
 
+          <fieldset class="tool-section"><legend>Info</legend>
+          <div id="mr-session-hint" class="dim" style="font-size:11px;margin-top:5px" aria-live="polite"></div>
           <!-- Snap toggle -->
           <label class="def-row mr-row mr-check">
             <input type="checkbox" id="mr-snap-45"><span>Snap rotation to 45°</span>
           </label>
 
-          <!-- Pivot -->
-          <div class="def-row mr-row">
-            <label class="mr-label">Pivot</label>
-            <select id="mr-pivot-sel" class="mr-select">
-              <option value="centroid">Centroid</option>
-            </select>
-          </div>
+          </fieldset>
 
           <!-- Reset / Cancel / Apply -->
           <div class="def-btn-row">
@@ -7966,33 +7973,38 @@
           </div>
         </div>
 
-        <!-- Extrude tool (sidebar panel; replaces the old floating #slice-ctx-menu) -->
+        <!-- Extrude tool -->
         <div class="panel-section" id="extrude-panel" style="display:none">
-          <h2>Extrude <span class="ctx-count">0 helices</span></h2>
+          <h2>Extrude</h2>
+          <fieldset class="tool-section"><legend>Source</legend>
+          <p class="tool-help ctx-count">0 helices</p>
           <div class="def-row" style="margin-bottom:8px">
-            <label>From</label>
+            <label for="extrude-from">From</label>
             <select id="extrude-from" style="flex:1;min-width:0;padding:2px 4px">
               <option value="XY">XY plane</option>
               <option value="XZ">XZ plane</option>
               <option value="YZ">YZ plane</option>
             </select>
           </div>
+          </fieldset>
+          <fieldset class="tool-section"><legend>Length</legend>
           <div class="ctx-row" style="display:flex;gap:6px">
-            <input id="slice-length" type="number" value="0" min="0" step="1" style="flex:1;min-width:0">
-            <select id="slice-unit">
+            <input id="slice-length" aria-label="Extrusion length" type="number" value="0" min="0" step="1" style="flex:1;min-width:0">
+            <select id="slice-unit" aria-label="Length unit">
               <option value="bp">bp</option>
               <option value="nm">nm</option>
             </select>
           </div>
-          <div id="slice-total-bp" style="padding:1px 0 2px;min-height:15px"></div>
-          <div id="slice-scaffold-rec" style="padding:0 0 6px"></div>
+          </fieldset>
+          <fieldset class="tool-section"><legend>Direction</legend>
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-            <span>Direction</span>
             <div style="display:flex">
               <button id="slice-dir-fwd" class="btn btn--sm ctx-dir-btn ctx-dir-active" title="Extrude in +axis direction">+</button>
               <button id="slice-dir-bwd" class="btn btn--sm ctx-dir-btn" title="Extrude in −axis direction">−</button>
             </div>
           </div>
+          </fieldset>
+          <fieldset class="tool-section"><legend>Strands</legend>
           <div style="display:flex;gap:8px;margin-bottom:8px">
             <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
               <input type="radio" name="slice-strand-filter" value="both" checked style="cursor:pointer"> Both
@@ -8009,6 +8021,12 @@
               <input type="checkbox" id="slice-ligate-adjacent" checked style="cursor:pointer"> Ligate adjacent
             </label>
           </div>
+          </fieldset>
+          <fieldset class="tool-section"><legend>Info</legend>
+          <p class="tool-help">Select cells on the plane to define the extrusion footprint.</p>
+          <div id="slice-total-bp" style="padding:1px 0 2px;min-height:15px"></div>
+          <div id="slice-scaffold-rec" style="padding:0 0 6px"></div>
+          </fieldset>
           <div class="def-btn-row">
             <button id="slice-cancel-btn" class="def-btn btn btn--sm">Cancel</button>
             <button id="slice-extrude-btn" class="def-btn btn btn--sm btn--primary primary">Extrude</button>
@@ -8053,8 +8071,23 @@
         <div class="panel-section" id="deform-panel" style="display:none">
           <h2 id="def-panel-title">Twist</h2>
 
+          <!-- Cluster scope (shared for bend and twist) -->
+          <fieldset id="def-cluster-section" class="tool-section" style="display:none"><legend>Clusters</legend>
+            <div class="def-row" style="margin-bottom:4px">
+              <label style="flex:1">Apply to clusters:</label>
+              <button type="button" id="def-cluster-all-btn"
+                      class="def-btn btn btn--sm" style="padding:1px 6px">All</button>
+              <button type="button" id="def-cluster-none-btn"
+                      class="def-btn btn btn--sm" style="padding:1px 6px;margin-left:4px">None</button>
+            </div>
+            <div id="def-cluster-list" class="tool-scroll-list" tabindex="0" aria-label="Available clusters"></div>
+            <div id="def-cluster-empty-msg"
+                 style="display:none;
+                        padding:4px">No clusters defined — applies to all helices.</div>
+          </fieldset>
+
           <!-- Plane positions (shared for bend and twist) -->
-          <div id="def-planes-section">
+          <fieldset id="def-planes-section" class="tool-section"><legend>Planes</legend>
             <div class="def-row">
               <label for="def-plane-a-bp">Plane 1:</label>
               <input type="number" id="def-plane-a-bp" step="1">
@@ -8067,25 +8100,10 @@
               <span class="unit">bp</span>
               <span id="def-plane-b-nm" class="unit"></span>
             </div>
-          </div>
-
-          <!-- Cluster scope (shared for bend and twist) -->
-          <div id="def-cluster-section" style="display:none">
-            <div class="def-row" style="margin-bottom:4px">
-              <label style="flex:1">Apply to clusters:</label>
-              <button type="button" id="def-cluster-all-btn"
-                      class="def-btn btn btn--sm" style="padding:1px 6px">All</button>
-              <button type="button" id="def-cluster-none-btn"
-                      class="def-btn btn btn--sm" style="padding:1px 6px;margin-left:4px">None</button>
-            </div>
-            <div id="def-cluster-list" style="max-height:120px;overflow-y:auto;padding:4px"></div>
-            <div id="def-cluster-empty-msg"
-                 style="display:none;
-                        padding:4px">No clusters defined — applies to all helices.</div>
-          </div>
+          </fieldset>
 
           <!-- Twist controls -->
-          <div id="def-twist-controls">
+          <fieldset id="def-twist-controls" class="tool-section"><legend>Twist</legend>
             <div class="def-row">
               <div class="def-radio-group">
                 <label><input type="radio" name="twist-mode" value="total" id="def-twist-total-radio" checked> Total</label>
@@ -8094,7 +8112,7 @@
             </div>
             <div class="def-row">
               <label id="def-twist-value-label">Degrees:</label>
-              <input type="number" id="def-twist-value" value="90" step="5">
+              <input type="number" id="def-twist-value" aria-label="Twist amount" value="90" step="5">
               <span class="unit" id="def-twist-unit">°</span>
             </div>
             <div class="def-row">
@@ -8102,10 +8120,10 @@
               <label><input type="radio" name="twist-dir" value="1" id="def-twist-rh" checked> RH (+)</label>
               <label><input type="radio" name="twist-dir" value="-1" id="def-twist-lh"> LH (−)</label>
             </div>
-          </div>
+          </fieldset>
 
           <!-- Bend controls -->
-          <div id="def-bend-controls" style="display:none">
+          <fieldset id="def-bend-controls" class="tool-section" style="display:none"><legend>Bend</legend>
             <div id="def-compass-container">
               <svg id="def-compass" viewBox="-34 -34 68 68">
                 <circle r="30" fill="none" stroke="#30363d" stroke-width="1.5"/>
@@ -8120,17 +8138,17 @@
               <div>
                 <div class="def-row" style="margin-bottom:6px">
                   <label>Direction:</label>
-                  <input type="number" id="def-bend-dir" value="0" min="0" max="360" step="5">
+                  <input type="number" id="def-bend-dir" aria-label="Bend direction (degrees)" value="0" min="0" max="360" step="5">
                   <span class="unit">°</span>
                 </div>
                 <div class="def-row">
                   <label>Angle:</label>
-                  <input type="number" id="def-bend-angle" value="0" min="0" step="1">
+                  <input type="number" id="def-bend-angle" aria-label="Bend angle (degrees)" value="0" min="0" step="1">
                   <span class="unit">°</span>
                 </div>
                 <div class="def-row">
                   <label>Radius of curvature:</label>
-                  <input type="number" id="def-bend-radius" min="0" step="0.1"
+                  <input type="number" id="def-bend-radius" aria-label="Bend radius (nm)" min="0" step="0.1"
                          placeholder="∞" aria-describedby="def-bend-hint">
                   <span class="unit">nm</span>
                 </div>
@@ -8142,7 +8160,7 @@
                 </label>
                 <div class="def-row" id="def-polymer-count-row" style="display:none">
                   <label>Polymers in circle:</label>
-                  <input type="number" id="def-polymer-count" value="3" min="2" step="1" inputmode="numeric">
+                  <input type="number" id="def-polymer-count" aria-label="Polymers in circle" value="3" min="2" step="1" inputmode="numeric">
                   <span class="unit">units</span>
                 </div>
                 <div id="def-bend-hint" style="margin-top:4px;line-height:1.4">
@@ -8150,8 +8168,10 @@
                 </div>
               </div>
             </div>
-          </div>
+          </fieldset>
 
+          <fieldset class="tool-section"><legend>Info</legend>
+          <p class="tool-help">Plane 1 stays fixed; the deformation spans the two planes.</p>
           <label class="def-preview-row">
             <input type="checkbox" id="def-preview-check" checked>
             Preview (live)
@@ -8159,6 +8179,7 @@
 
           <div id="def-feasibility" style="display:none;margin:4px 0;line-height:1.4"></div>
 
+          </fieldset>
           <div class="def-btn-row">
             <button class="def-btn btn btn--sm" id="def-cancel-btn">Cancel</button>
             <button class="def-btn btn btn--sm btn--primary primary" id="def-apply-btn">Apply</button>
