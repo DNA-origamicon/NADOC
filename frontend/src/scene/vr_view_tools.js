@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { docHeaders } from '../shared/doc_id.js'
 import { broadcastFingerprint } from '../viewer/broadcast_fingerprint.js'
 import { preparedImpostorSpec } from './impostor_material.js'
+import { drawViewToolMessage } from './vr_view_tools_panel.js'
 
 export const VR_VIEW_KEYS = ['lengthHeatmap','sequences','undefinedBases','loopSkips','grid','overhangNames','clashes','deform']
 export const VR_VIEW_LABELS = ['Length','Sequence','Undefined','Loop / skip','Grid','Overhang names','Clashes','Deform']
@@ -48,10 +49,7 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
     c.fillStyle=flags&viewBit(i)?'#e0eaff':'#8592a5';c.font='bold 17px sans-serif';c.fillText(flags&viewBit(i)?'ON':'OFF',px+304,py+35)
   }
   c.fillStyle='#b6c7dc';c.font='18px sans-serif'
-  const words=(message || (!(flags&256)?'Layout inspection. Restore Deform to edit.':'Left quiver: show / hide. Right quiver: scissors.')).split(' ')
-  let line='',lineY=644
-  for(const word of words){if(c.measureText(line+word).width>326){c.fillText(line,410,lineY);line='';lineY+=23}line+=word+' '}
-  c.fillText(line,410,lineY)
+  drawViewToolMessage(c,message || (!(flags&256)?'Layout inspection. Restore Deform to edit.':'Left quiver: show / hide. Right quiver: scissors.'))
   c.strokeStyle='#6e7681';c.strokeRect(24,620,320,64)
   c.fillStyle='#e0eaff';c.font='bold 22px sans-serif';c.fillText('DOCK / FOLLOW',48,661)
   const menu=allocate(panel)

@@ -6,6 +6,7 @@
 #include "ui_style.hpp"
 #include "menu_grip_frame.hpp"
 #include "sidebar_scroll.hpp"
+#include "extrude_wheels.hpp"
 #include <functional>
 #include <optional>
 #include <set>
@@ -83,18 +84,18 @@ class SidebarMenu {
         return toolFooter() && (c.id==tab().key+":back" || c.id==tab().key+":confirm" || c.id=="move:apply");
     }
     float footerY() const {
-        return tab().key=="extrude"?-.405F:tab().key=="move"?-.205F:tab().key=="bend"?-.54F:-.51F;
+        return tab().key=="extrude"?-.425F:tab().key=="move"?-.205F:tab().key=="bend"?-.54F:-.51F;
     }
     std::vector<const SidebarRow*> contentRows() const {
         auto rows=visibleRows();
         if(customTab && tab().key=="extrude") {
-            std::erase_if(rows,[](const auto* r){return r->id=="extrude:back" || r->id=="extrude:confirm";});
+            std::erase_if(rows,[](const auto* r){return r->id=="extrude:back" || r->id=="extrude:confirm" || r->id=="extrude:length" || extrudeWheelIndex(r->id).has_value();});
             std::rotate(rows.begin(),rows.begin()+1,rows.end());
         }
         return rows;
     }
-    size_t total() const { if(dynamicActive())return dynamicTotal();return visibleRows().size()-(toolFooter()?2:customTab?3:0); }
-    size_t pageRows() const { if(customTab && (tab().key=="move" || tab().key=="bend" || tab().key=="twist"))return total();return dynamicActive() || (customTab && tab().key=="extrude")?7:customTab?5:kSidebarPageRows; }
+    size_t total() const { if(dynamicActive())return dynamicTotal();return visibleRows().size()-(customTab && tab().key=="extrude"?5:toolFooter()?2:customTab?3:0); }
+    size_t pageRows() const { if(customTab && (tab().key=="move" || tab().key=="bend" || tab().key=="twist"))return total();return dynamicActive()?7:customTab?5:kSidebarPageRows; }
     MenuPanelBounds bounds() const {
         if(dynamicActive()) return dynamicBounds();
         auto b=kSidebarBounds;
@@ -123,7 +124,7 @@ class SidebarMenu {
     }
     MenuPanelBounds scrollBounds() const {
         const float cx=toolFooter()?0.F:hand==0?.058F:-.058F;
-        if(customTab && tab().key=="extrude")return {{ui_style::toolHalfWidth-.062F,-.32F},{ui_style::toolHalfWidth,.517F}};
+        if(customTab && tab().key=="extrude")return {{ui_style::toolHalfWidth-.062F,-.339F},{ui_style::toolHalfWidth,.249F}};
         const float top=customTab?.157F:.517F;
         return hand==0 ? MenuPanelBounds{{cx-.327F,-.431F},{cx-.265F,top}}
                        : MenuPanelBounds{{cx+.265F,-.431F},{cx+.327F,top}};
@@ -248,9 +249,9 @@ class SidebarMenu {
         const float tx=hand==0 ? -.397F : .397F;
         const float cx=toolFooter()?0.F:hand==0 ? .058F : -.058F;
         for(size_t i=0;!customTab && i<tabs.size();++i) {
-            float y=.558F-static_cast<float>(i)*.177F;
+            float y=.558F-static_cast<float>(i)*.189F;
             const auto& t=kSidebarTabs[tabs[i]];
-            out.push_back({"tab:"+t.key,t.label,"","tab:"+std::to_string(i),{{tx-.05F,y-.0825F},{tx+.05F,y+.0825F}},true,i==selected,true});
+            out.push_back({"tab:"+t.key,t.label,"","tab:"+std::to_string(i),{{tx-.05F,y-.0885F},{tx+.05F,y+.0885F}},true,i==selected,true});
         }
         if(dynamicActive()) {
             const auto extra=dynamicControls(animated);out.insert(out.end(),extra.begin(),extra.end());
@@ -324,6 +325,14 @@ class SidebarMenu {
         }
         const auto rows=contentRows();
         const bool extrude=customTab && tab().key=="extrude";
+        if(extrude)for(const auto& row:tab().rows) {
+            const auto wheel=extrudeWheelIndex(row.id);
+            if(row.id=="extrude:length")
+                out.push_back({row.id,row.label,row.section,"",{{-ui_style::toolHalfWidth,.261F},{-.025F,.517F}},false});
+            else if(wheel)
+                out.push_back({row.id,row.label,row.section,row.action,kExtrudeWheelBounds[*wheel],available(row.action)});
+        }
+        const float firstRowY=extrude?.195F:.463F;
         std::vector<const SidebarRow*> page;
         if(customTab && !extrude) page.insert(page.end(),rows.begin(),rows.begin()+3);
         const size_t fixed=customTab && tab().key!="extrude"?3:0;
@@ -334,13 +343,13 @@ class SidebarMenu {
         for(size_t i=0;i<page.size();++i) {
             const auto& row=*page[i];
             const bool header=row.action.starts_with("section:");
-            float y=.463F-static_cast<float>(i)*.12F;
+            float y=firstRowY-static_cast<float>(i)*.12F;
             if(i>=fixed)y+=(position-std::floor(position))*.12F;
             out.push_back({row.id,label(row.action,row.id=="section:visualization:template:view-volumes"?"View Volumes":row.id=="section:properties:dimensions-heading"?"Dimensions":header?(collapsed.contains(row.id)?"+ ":"- ")+row.label:row.label),row.id=="section:visualization:template:view-volumes"?"MANAGE SAVED VOLUMES":row.id=="section:properties:dimensions-heading"?"MEASURE WITH CONTROLLERS":header?(collapsed.contains(row.id)?"EXPAND CARD":"COLLAPSE CARD"):row.section,row.action,{{toolFooter()?-ui_style::toolHalfWidth:cx-(hand==0?.247F:.327F),y-.054F},{toolFooter()?ui_style::toolHalfWidth-.080F:cx+(hand==0?.327F:.247F),y+.054F}},(row.id=="dimensions-record" || row.id=="dimensions-clear") || header || (!row.action.empty() && available(row.action)), !header && available(row.action) && isActive(row.action)});
             auto& control=out.back();
             control.bounds.minimum.x+=.022F*float(row.parents.size());
             if(i>=fixed) {
-                const MenuPanelBounds viewport{{-.5F,.463F-float(fixed+pageRows()-1)*.12F-.054F},{.5F,.463F-float(fixed)*.12F+.054F}};
+                const MenuPanelBounds viewport{{-.5F,firstRowY-float(fixed+pageRows()-1)*.12F-.054F},{.5F,firstRowY-float(fixed)*.12F+.054F}};
                 control.viewport=viewport;
             }
         }
@@ -397,13 +406,16 @@ class SidebarMenu {
         return out;
     }
     float controlDepth(const SidebarControl& c) const {
+        if(const auto wheel=extrudeWheelIndex(c.id))return extrudeWheelFront(*wheel).z;
         return raisedAction(c) ? (pressed==c.id?.026F:.035F) : 0.F;
     }
     std::optional<glm::vec3> raySurfacePoint(const HandPose& pose) const {
         if(!open || !pose.valid)return std::nullopt;
         const auto origin=placement.localPoint(pose.position);
         const auto direction=placement.localPoint(pose.position+pose.orientation*glm::vec3(0,0,-1))-origin;
-        if(std::abs(direction.z)>1e-7F)for(const auto& c:controls())if(controlDepth(c)>0) {
+        if(customTab && tab().key=="extrude")for(size_t i=0;i<kExtrudeWheelIds.size();++i)
+            if(const auto hit=thumbwheelHit(extrudeWheelShape(),extrudeWheelCenter(i),placement,pose))return hit;
+        if(std::abs(direction.z)>1e-7F)for(const auto& c:controls())if(raisedAction(c)) {
             const float t=(controlDepth(c)-origin.z)/direction.z;
             const auto p=origin+t*direction;
             if(t>0 && p.x>=c.bounds.minimum.x && p.x<=c.bounds.maximum.x &&
@@ -462,8 +474,7 @@ class SidebarMenu {
                 ? (hand==0 ? MenuPanelBounds{{at.x,at.y},{at.x+6*scale,at.y+width}}
                            : MenuPanelBounds{{at.x-6*scale,at.y-width},{at.x,at.y}})
                 : strokeTextLayoutBounds(label,at.x,at.y,scale);
-            if(!menuLayoutContains(box,bounds)) audit.addControl("overflow:"+id,bounds,bounds);
-            if(!vertical) audit.addText(id,label,at.x,at.y,scale,box);
+            audit.addTextBounds(id,label,bounds,scale,box,kMinimumMenuTextScale,clip);
             for(size_t i=0;i<label.size();++i) {
                 auto shape=nadoc_vr::glyph(label[i]);
                 for(size_t r=0;r<shape.size();++r) for(int col=0;col<5;++col) if(shape[r]&(1U<<(4-col))) {
@@ -473,6 +484,31 @@ class SidebarMenu {
                     line(glm::vec3(a,.002F),glm::vec3(b,.002F),color);
                 }
             }
+        };
+        auto boundedText=[&](const std::string& id,const std::string& value,glm::vec2 at,float scale,
+                             glm::vec3 color,const MenuPanelBounds& box) {
+            const auto fitted=boundedMenuStrokeText(value,box.maximum.x-at.x,scale);
+            text(id,fitted.text,at,fitted.scale,color,box);
+        };
+        auto textBlock=[&](const std::string& id,const std::string& value,const MenuPanelBounds& box,
+                           glm::vec3 color,float maximumScale=.0032F) {
+            const float width=box.maximum.x-box.minimum.x,height=box.maximum.y-box.minimum.y;
+            float scale=maximumScale;
+            std::vector<std::string> lines;
+            for(;;) {
+                const size_t columns=size_t(std::max(1.F,std::floor((width/scale+1.F)/6.F)));
+                lines=wrap(value,columns);
+                if((float(lines.size()*9)-3)*scale<=height+kMenuLayoutEpsilon || scale<=kMinimumMenuTextScale)break;
+                scale=std::max(kMinimumMenuTextScale,scale-.0002F);
+            }
+            const size_t maximumLines=size_t(std::max(0.F,std::floor((height/scale+3.F)/9.F)));
+            if(!maximumLines)return;
+            if(lines.size()>maximumLines) {
+                lines.resize(maximumLines);
+                lines.back()=boundedMenuStrokeText(lines.back()+" ...",width,scale,scale).text;
+            }
+            float y=(box.minimum.y+box.maximum.y+(float(lines.size()*9)-3)*scale)*.5F;
+            for(const auto& value:lines){text(id,value,{box.minimum.x,y},scale,color,box);y-=9*scale;}
         };
         drawGripFrame(bounds(),gripState,line,fill,ui_style::gripRail);
         const std::string gripHint=gripState==GripFrameState::resizing?"RESIZING - RELEASE TO SET":
@@ -486,7 +522,8 @@ class SidebarMenu {
         if(!dynamicActive()) { text("title",tab().label,{cx-titleHalf+.017F,.634F},.004F,{1,1,1},title);
         const auto statusRow=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& r){return r.id==tab().key+":back";});
         if(toolFooter() && statusRow!=tab().rows.end())
-            text("tool-status",statusRow->section,{cx-titleHalf+.017F,.584F},std::min(.0023F,.60F/std::max(1.F,float(statusRow->section.size()*6))),ui_style::text,title);
+            boundedText("tool-status",statusRow->section,{cx-titleHalf+.017F,.584F},.0023F,ui_style::text,
+                {title.minimum+glm::vec2(.012F,0),title.maximum-glm::vec2(.012F,0)});
         else text("page",std::to_string(total()?offset()+1:0)+"-"+std::to_string(std::min(offset()+pageRows(),total()))+" / "+std::to_string(total())+(customTab && tab().key=="dimensions"?"   TRIGGER: PIN / RECALL":"   GRAY = UNAVAILABLE"),{cx-titleHalf+.017F,.584F},.0023F,{.71F,.76F,.81F},title);
         if(focus.active) text("input-mode",focus.id=="scrollbar"?"PAD UP/DOWN: SCROLL  LEFT/RIGHT: EXIT":"PAD: MOVE / TRIGGER: SELECT",{cx-titleHalf+.017F,.560F},.002F,ui_style::focus,title);
         }
@@ -526,6 +563,17 @@ class SidebarMenu {
                 ui_style::rounded(thumb,color,color,line,fill,.018F,.001F);
                 continue;
             }
+            if(extrudeWheelIndex(c.id)) {
+                const float scale=.0028F;
+                text(c.id+":label",c.label,{(b.minimum.x+b.maximum.x-strokeTextWidth(c.label.size(),scale))*.5F,b.maximum.y-.010F},scale,fg,b);
+                continue;
+            }
+            if(c.id=="extrude:length") {
+                text(c.id+":section","LENGTH",{b.minimum.x+.020F,b.maximum.y-.040F},.0028F,ui_style::text,b);
+                const float scale=std::min(.006F,(b.maximum.x-b.minimum.x-.040F)/std::max(1.F,float(c.label.size()*6-1)));
+                text(c.id+":value",c.label,{b.minimum.x+.020F,.383F},scale,ui_style::text,b);
+                continue;
+            }
             if(!c.icon.empty()) {
                 auto center=(b.minimum+b.maximum)*.5F;
                 auto stroke=[&](glm::vec2 a,glm::vec2 d){line(glm::vec3(center+a*.003F,.004F),glm::vec3(center+d*.003F,.004F),fg);};
@@ -551,30 +599,30 @@ class SidebarMenu {
                 continue;
             }
             if(c.vertical) {
-                float s=std::min(.0033F,(b.maximum.y-b.minimum.y-.018F)/std::max(1.F,static_cast<float>(c.label.size()*6-1)));
-                text(c.id,c.label,{(b.minimum.x+b.maximum.x)*.5F+(hand==0?-3:3)*s,(b.minimum.y+b.maximum.y+(hand==0?-1:1)*strokeTextWidth(c.label.size(),s))*.5F},s,fg,b,true);
+                const auto fitted=boundedMenuStrokeText(c.label,b.maximum.y-b.minimum.y-.010F,.0033F);
+                const float s=fitted.scale;
+                text(c.id,fitted.text,{(b.minimum.x+b.maximum.x)*.5F+(hand==0?-3:3)*s,(b.minimum.y+b.maximum.y+(hand==0?-1:1)*strokeTextWidth(fitted.text.size(),s))*.5F},s,fg,
+                    {b.minimum+glm::vec2(.005F),b.maximum-glm::vec2(.005F)},true);
             } else {
+                const MenuPanelBounds content{b.minimum+glm::vec2(.012F),b.maximum-glm::vec2(.012F)};
                 if(const auto progress=loadingProgress(c.action)) {
-                    const float scale=.0028F;
-                    text(c.id+":label",c.label,{b.minimum.x+.012F,b.maximum.y-.020F},scale,fg,b);
-                    text(c.id+":progress",progress->second,{b.minimum.x+.012F,b.minimum.y+.032F},.0022F,{.55F,.85F,.75F},b);
-                    fill({{b.minimum.x+.012F,b.minimum.y+.009F},{b.maximum.x-.012F,b.minimum.y+.017F}},{.12F,.16F,.19F});
-                    fill({{b.minimum.x+.012F,b.minimum.y+.009F},{b.minimum.x+.012F+(b.maximum.x-b.minimum.x-.024F)*progress->first,b.minimum.y+.017F}},{.25F,.8F,.6F});
+                    textBlock(c.id+":label",c.label,{{content.minimum.x,content.minimum.y+.040F},content.maximum},fg,.0028F);
+                    boundedText(c.id+":progress",progress->second,{content.minimum.x,content.minimum.y+.032F},.0022F,{.55F,.85F,.75F},content);
+                    const MenuPanelBounds track{{content.minimum.x,content.minimum.y+.002F},{content.maximum.x,content.minimum.y+.010F}};
+                    if(!clip || menuLayoutContains(*clip,track))audit.addFeature(c.id+":progress-bar",track);
+                    fill(track,{.12F,.16F,.19F});
+                    fill({track.minimum,{track.minimum.x+(track.maximum.x-track.minimum.x)*std::clamp(progress->first,0.F,1.F),track.maximum.y}},{.25F,.8F,.6F});
                     continue;
                 }
-                auto lines=wrap(c.label,c.id=="bend:radius"?16:32);
-                // Fit long desktop descriptions without silently truncating them.
-                size_t longest=1;for(const auto& value:lines) longest=std::max(longest,value.size());
-                float s=std::min({.0032F,(b.maximum.x-b.minimum.x-.024F)/float(longest*6-1),.056F/std::max(7.F,static_cast<float>(lines.size()*9))});
-                float y=(customTab || dynamicActive()) && c.section.empty()?(b.minimum.y+b.maximum.y)*.5F+(float(lines.size()*9)-3)*s*.5F:b.maximum.y-.020F;
+                auto body=content;
                 if(!c.section.empty()) {
-                    auto section=wrap(c.section,39);
-                    text(c.id+":section",section.front(),{b.minimum.x+.012F,y},.0022F,{.55F,.60F,.66F},b);
-                    y-=.024F;
+                    boundedText(c.id+":section",c.section,{content.minimum.x,content.maximum.y},.0022F,{.55F,.60F,.66F},content);
+                    body.maximum.y-=.022F;
                 }
-                for(const auto& value:lines) {text(c.id+":label",value,{b.minimum.x+.012F,y},s,fg,b);y-=9*s;}
+                textBlock(c.id+":label",c.label,body,fg);
             }
         }
+        audit.finish();
     }
 };
 }

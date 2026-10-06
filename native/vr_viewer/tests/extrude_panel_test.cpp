@@ -12,6 +12,11 @@ int main() {
         auto controls=menus[1].controls();
         for(const auto& id:{"extrude:back","extrude:confirm"})
             assert(std::any_of(controls.begin(),controls.end(),[&](const auto& c){return c.id==id;}));
+        // Length and both wheels stay reachable while scrolling other settings.
+        for(const auto& id:{"extrude:length","extrude:coarse-wheel","extrude:fine-wheel"})
+            assert(std::any_of(controls.begin(),controls.end(),[&](const auto& c){return c.id==id && c.bounds.minimum.y==.261F;}));
+        menus[1].draw([](glm::vec3,glm::vec3,glm::vec3){},[](MenuPanelBounds,glm::vec3){});
+        assert(menus[1].audit.valid());
         for(const auto& c:controls)found.insert(c.id);
         if(!menus[1].canScroll(1))break;
         menus[1].scroll(1);
@@ -33,6 +38,25 @@ int main() {
         assert(get("extrude:more").label=="+"+fine+" BP");
         assert(get("extrude:less-period").label=="-"+coarse+" BP");
         assert(get("extrude:more-period").label=="+"+coarse+" BP");
+        assert(get("extrude:coarse-wheel").label=="COARSE");
+        assert(get("extrude:fine-wheel").label=="FINE");
+        assert(extrudeWheelStep(square,0)==(square?8:7));
+        assert(extrudeWheelStep(square,1)==1);
+        ToolConfigurationDraft draft;
+        (void)draft.bind(ToolMode::extrude,"","none",{});
+        const auto before=draft.lengthBp();
+        assert(draft.adjustExtrudeLengthDetents(1,extrudeWheelStep(square,1)));
+        assert(draft.lengthBp()==before+1);
+        assert(draft.adjustExtrudeLengthDetents(-1,extrudeWheelStep(square,1)));
+        assert(draft.lengthBp()==before);
+    }
+    // The physical cylinder and its label fit the pinned sidebar widget.
+    for(size_t i=0;i<kExtrudeWheelIds.size();++i) {
+        const auto b=get(kExtrudeWheelIds[i]).bounds;
+        thumbwheelMesh(extrudeWheelShape(),.37F,extrudeWheelCenter(i),
+            [&](glm::vec3 a,glm::vec3 bVertex,glm::vec3 c,glm::vec3) {
+                for(auto p:{a,bVertex,c})assert(p.x>=b.minimum.x && p.x<=b.maximum.x && p.y>=b.minimum.y && p.y<b.maximum.y-.026F);
+            });
     }
     // A ray aimed obliquely at the raised face must select Confirm, even when
     // its continuation onto the flat tablet falls outside the button.

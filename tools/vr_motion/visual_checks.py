@@ -17,11 +17,15 @@ def project(point, eye):
 
 
 def contact(pose, state, ideal=False):
-    panel=state['extrude'];normal=rotate(panel['panel_orientation_xyzw'],[0,0,1])
+    panel=state['extrude']
+    surface=panel.get('contact_surface')
+    orientation=surface['orientation_xyzw'] if surface else panel['panel_orientation_xyzw']
+    position=surface['position'] if surface else panel['panel_position']
+    normal=rotate(orientation,[0,0,1])
     direction=[-v for v in normal] if ideal else rotate(pose.get('orientation_xyzw',pose.get('orientation')),[0,0,-1])
     denominator=dot(direction,normal)
     if abs(denominator)<1e-8:return None
-    t=dot(sub(panel['panel_position'],pose['position']),normal)/denominator
+    t=dot(sub(position,pose['position']),normal)/denominator
     if t<0:return None
     return [v+t*d for v,d in zip(pose['position'],direction)]
 

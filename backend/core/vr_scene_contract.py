@@ -89,6 +89,7 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     handle_tokens: dict[str, set[str]] = {}
     handle_ids: dict[str, dict[str, str]] = {}
     active: str | None = None
+    lattice_planes: set[str] = set()
     for line_number, line in enumerate(lines[1:], start=2):
         fields = line.split()
         if not fields or fields[0].startswith("#"):
@@ -108,6 +109,21 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
                     or fields[2] not in {"SQUARE", "HONEYCOMB"}
                     or fields[3] not in {"geometry", "mixed", "unknown", "empty"}):
                 raise ValueError("invalid extrusion source-plane metadata")
+            continue
+        if fields[0] == "L":
+            if (version < 16 or active is not None or len(fields) < 15
+                    or fields[1] not in {'XY', 'XZ', 'YZ'} or fields[1] in lattice_planes):
+                raise ValueError('invalid extrusion lattice context')
+            vectors = np.asarray([float(v) for v in fields[2:14]]).reshape(4, 3)
+            count = int(fields[14])
+            if (not np.all(np.isfinite(vectors)) or not 0 <= count <= 1_000_000
+                    or len(fields) != 15+count*2
+                    or not np.allclose(vectors[1:] @ vectors[1:].T, np.eye(3), atol=1e-5)):
+                raise ValueError('invalid extrusion lattice context')
+            cells = [tuple(int(v) for v in fields[i:i+2]) for i in range(15, len(fields), 2)]
+            if len(set(cells)) != count or any(abs(v) > 100_000 for cell in cells for v in cell):
+                raise ValueError('invalid extrusion lattice cells')
+            lattice_planes.add(fields[1])
             continue
         if fields[0] in {"R", "E"}:
             if len(fields) != 2:

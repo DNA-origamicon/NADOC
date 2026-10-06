@@ -17,15 +17,27 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--validate',action='store_true')
     parser.add_argument('--lattice',choices=['honeycomb','square'])
+    parser.add_argument('--slice-reference',action='store_true',
+                        help='Start with a square 1x8 platform and paint adjacent cells')
+    parser.add_argument('--paint-grid-zoom',type=float,default=1,
+                        help='Explicit diagnostic two-grip zoom before painting (default: unchanged auto-fit)')
     parser.add_argument('--output',type=Path)
     args=parser.parse_args()
+    if args.slice_reference and args.lattice == 'honeycomb':
+        parser.error('--slice-reference requires the square lattice')
+    if not .25 <= args.paint_grid_zoom <= 4:
+        parser.error('--paint-grid-zoom must be .25..4')
     from backend.api.routes_vr_tours import _viewer_active
     if _viewer_active(): raise RuntimeError('Close the active viewer before starting an isolated extrusion tour.')
+    # Compilation is preparation, outside the browser's measured launch gate.
+    # A changed main.cpp can otherwise consume that gate before VR even starts.
+    from backend.api.routes_vr import _ensure_viewer_built
+    _ensure_viewer_built()
     output=(args.output or ROOT/'.development-artifacts/vr-extrude'/uuid.uuid4().hex[:10]).resolve()
     output.mkdir(parents=True,exist_ok=True)
     profiles=['steady_fast','steady_deliberate','variable_fast','variable_deliberate'] if args.validate else ['steady_fast']
     if os.environ.get('NADOC_VR_AUDIT_PROFILE'): profiles=[os.environ['NADOC_VR_AUDIT_PROFILE']]
-    lattices=[args.lattice] if args.lattice else ['honeycomb','square'] if args.validate else ['honeycomb']
+    lattices=['square'] if args.slice_reference else [args.lattice] if args.lattice else ['honeycomb','square'] if args.validate else ['honeycomb']
     results=[]
     with tempfile.TemporaryDirectory(prefix='nadoc-extrude-tour-') as temporary:
         for lattice,profile in ((l,p) for l in lattices for p in profiles):
@@ -39,6 +51,8 @@ def main():
                  'NADOC_VR_APPROACH_CONTROLS':'1','NADOC_VR_APPROACH_CELLS':'1',
                  'NADOC_VR_PAINT_ZOOM':'fit','NADOC_VR_REVIEW_VIEW':'1',
                  'NADOC_VR_FREEFORM':'0','NADOC_VR_PROFILE_WHEEL':os.environ.get('NADOC_VR_PROFILE_WHEEL','1'),
+                 'NADOC_VR_SLICE_REFERENCE':'1' if args.slice_reference else '0',
+                 'NADOC_VR_PAINT_GRID_ZOOM':str(args.paint_grid_zoom),
                  'NADOC_VR_DEMO':'0' if args.validate else '1','NADOC_VR_DEMO_HOLD':'3'}
             command=['npx','playwright','test','--config','playwright.smoke.config.js',
                      'vr_extrude_volume.spec.js','--workers=1','--output',str(output/lattice/profile)]

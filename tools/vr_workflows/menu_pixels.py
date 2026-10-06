@@ -28,37 +28,26 @@ def check(directory, evidence):
             origin = np.asarray(rotate(inverse, sub(center, eye["position"])))
             r = np.asarray(rotate(inverse, right))
             u = np.asarray(rotate(inverse, up))
-            xs, ys = np.meshgrid(
+            left, right_fov, up_fov, down = np.tan(eye["fov_left_right_up_down"])
+            def samples(x_values, y_values):
+                xs, ys = np.meshgrid(x_values, y_values)
+                positions = origin + xs.ravel()[:, None] * r + ys.ravel()[:, None] * u
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    x = ((positions[:, 0] / -positions[:, 2] - left)
+                         / (right_fov - left) * eye["width"])
+                    y = ((up_fov - positions[:, 1] / -positions[:, 2])
+                         / (up_fov - down) * eye["height"])
+                in_frame = bool(np.all(
+                    (positions[:, 2] < -0.001) & (x >= 0) & (x < eye["width"])
+                    & (y >= 0) & (y < eye["height"])))
+                pixels = (rgb[y.astype(int), x.astype(int)] if in_frame
+                          else np.zeros((1, 3), dtype=np.uint8))
+                return in_frame, pixels
+
+            valid, pixels = samples(
                 np.linspace(-0.5 if scrollbar else -0.98, 0.5 if scrollbar else 0.9, 180),
                 np.linspace(-0.98 if scrollbar else -0.80, 0.98 if scrollbar else 0.80 if vertical or footer else 0.15, 36),
-            )
-            positions = origin + xs.ravel()[:, None] * r + ys.ravel()[:, None] * u
-            left, right_fov, up_fov, down = np.tan(eye["fov_left_right_up_down"])
-            with np.errstate(divide="ignore", invalid="ignore"):
-                x = (
-                    (positions[:, 0] / -positions[:, 2] - left)
-                    / (right_fov - left)
-                    * eye["width"]
                 )
-                y = (
-                    (up_fov - positions[:, 1] / -positions[:, 2])
-                    / (up_fov - down)
-                    * eye["height"]
-                )
-            valid = bool(
-                np.all(
-                    (positions[:, 2] < -0.001)
-                    & (x >= 0)
-                    & (x < eye["width"])
-                    & (y >= 0)
-                    & (y < eye["height"])
-                )
-            )
-            pixels = (
-                rgb[y.astype(int), x.astype(int)]
-                if valid
-                else np.zeros((1, 3), dtype=np.uint8)
-            )
             # A scrollbar has a thumb rather than a text label. Disabled thumbs
             # use the desktop muted border color; demand visible neutral pixels.
             # Light foreground on nearly transparent glass; blank dark/white
@@ -72,9 +61,13 @@ def check(directory, evidence):
                 gray = bool(text and np.quantile(pixels[neutral].max(axis=1),.98)<230)
             active = True
             if control["active"]:
-                active = bool(
+                # Active cards use a blue outline. Check their whole bounds
+                # separately from the interior text/disabled-color sample.
+                active_visible, active_pixels = samples(
+                    np.linspace(-1, 1, 180), np.linspace(-1, 1, 72))
+                active = active_visible and bool(
                     (
-                        (pixels[:, 2] > pixels[:, 0].astype(int)+18) & (pixels[:, 2] > pixels[:, 1].astype(int)+8)
+                        (active_pixels[:, 2] > active_pixels[:, 0].astype(int)+18) & (active_pixels[:, 2] > active_pixels[:, 1].astype(int)+8)
                     ).sum()
                     > 20
                 )

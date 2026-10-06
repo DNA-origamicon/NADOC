@@ -401,3 +401,28 @@ if(BUILD_TESTING)
   target_include_directories(nadoc-vr-menu-spacing-test PRIVATE src)
   add_test(NAME nadoc-vr-menu-spacing COMMAND nadoc-vr-menu-spacing-test)
 endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-lattice-context-test tests/lattice_context_test.cpp)
+  target_include_directories(nadoc-vr-lattice-context-test PRIVATE src)
+  target_compile_options(nadoc-vr-lattice-context-test PRIVATE -UNDEBUG)
+  add_test(NAME nadoc-vr-lattice-context COMMAND nadoc-vr-lattice-context-test)
+endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-extrude-viewer-test tests/extrude_viewer_test.cpp)
+  target_link_libraries(nadoc-vr-extrude-viewer-test PRIVATE
+    PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
+  target_compile_options(nadoc-vr-extrude-viewer-test PRIVATE -UNDEBUG)
+  add_test(NAME nadoc-vr-extrude-viewer COMMAND nadoc-vr-extrude-viewer-test ${CMAKE_CURRENT_BINARY_DIR}/extrude-evidence)
+  set_tests_properties(nadoc-vr-extrude-viewer PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-menu-render-audit tests/menu_render_audit.cpp)
+  target_link_libraries(nadoc-vr-menu-render-audit PRIVATE
+    PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
+  target_compile_options(nadoc-vr-menu-render-audit PRIVATE -UNDEBUG -O0)
+  add_test(NAME nadoc-vr-menu-render COMMAND nadoc-vr-menu-render-audit ${CMAKE_CURRENT_BINARY_DIR}/menu-render-evidence)
+  set_tests_properties(nadoc-vr-menu-render PROPERTIES SKIP_RETURN_CODE 77)
+endif()

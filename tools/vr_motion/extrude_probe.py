@@ -152,13 +152,17 @@ def trial(probe, path_file, preset, origin_pose, *, preview=None, review_only=Fa
     if review_only:
         result['passed']=all(result['checks'].values())
         return result
-    wheel = next(c for c in probe.state['controls'] if c['label']=='EXTRUDE LENGTH WHEEL')
-    up = wheel['hit_half_up']; length = sum(v*v for v in up)**.5
-    unit_up = [v/length for v in up]
-    center = add(wheel['position'], offset)
-    notch = probe.state['extrude']['wheel_notch_travel_m']
-    travel = 3.5*notch  # mid-bin margin: exactly three intended detents
-    for name, sign in [('wheel-up',1),('wheel-down',-1)]:
+    from tools.vr_workflows.profile_wheel import wheel_target
+    # Every wheel uses its own exported menu plane, rather than the detached
+    # lattice tablet's orientation or scene scale.
+    for wheel_name, sign in [('coarse',1),('coarse',-1),('fine',1),('fine',-1)]:
+        name = wheel_name+('-wheel-up' if sign > 0 else '-wheel-down')
+        wheel, settings = wheel_target(probe.state, wheel_name)
+        up = wheel['hit_half_up']; length = sum(v*v for v in up)**.5
+        unit_up = [v/length for v in up]
+        q = settings['orientation_xyzw']
+        center = add(wheel['position'], rotate(q,[0,0,.18]))
+        travel = 3.5*settings['notch_travel_m']  # mid-bin: three intended detents
         endpoint = add(center, [sign*travel*v for v in unit_up])
         intended = path_trace([center,endpoint], q, preset, ideal=True)
         actual = path_trace([center,endpoint], q, preset)
@@ -166,16 +170,17 @@ def trial(probe, path_file, preset, origin_pose, *, preview=None, review_only=Fa
         install_path(probe, path_file, intended)
         before = probe.state['extrude']['length_bp']; cells_before = cellset(probe.state)
         probe.send('button', hand=1, button='trigger', pressed=True); probe.frame()
-        acquired = probe.state['extrude']['wheel_dragging']
+        acquired = wheel_target(probe.state, wheel_name)[1]['dragging']
         rows = drag(probe, actual, intended)
         probe.send('button', hand=1, button='trigger', pressed=False); probe.frame()
         after = probe.state['extrude']['length_bp']
-        expected = sign*3*probe.state['extrude']['base_pairs_per_detent']
+        expected = sign*3*settings['base_pairs_per_detent']
         result['checks'][name+'_acquired'] = acquired
         result['checks'][name+'_detents'] = after-before == expected
         result['checks'][name+'_no_paint'] = cellset(probe.state) == cells_before
-        result['checks'][name+'_released'] = not probe.state['extrude']['wheel_dragging']
-        result['stages'][name] = {'before_bp':before,'after_bp':after,'expected_delta_bp':expected,
+        result['checks'][name+'_released'] = not any(w['dragging'] for w in probe.state['extrude']['wheels'])
+        result['stages'][name] = {'wheel':wheel_name,'base_pairs_per_detent':settings['base_pairs_per_detent'],
+            'before_bp':before,'after_bp':after,'expected_delta_bp':expected,
             'actual_delta_bp':after-before,'travel_m':travel, 'wheel_width_m':2*sum(v*v for v in wheel['hit_half_right'])**.5,
             'wheel_height_m':2*length,'intended_deviation_mm':distribution([r['intended_deviation_mm'] for r in rows]),'samples':rows}
         visual=capture(probe,preset+'-'+name,rows,name,preview)
@@ -221,7 +226,7 @@ def run(socket, path_file, output, final=False, *, cancel=None, progress=None, e
     if expected_session is not None and probe.session != expected_session:
         raise RuntimeError('viewer session changed before profile run')
     report = {'schema':'nadoc-extrude-probe-1','session':probe.session,'trials':[],
-        'scope':'Live draft paint and controlled wheel drags; semantic Extrude activation bypasses radial acquisition; no browser commit; synthetic profiles.'}
+        'scope':'Live draft paint and both main-menu coarse/fine wheels in both directions; semantic Extrude activation bypasses radial acquisition; no browser commit; synthetic profiles.'}
     try:
         probe.send('release')
         anchor,_ = probe.capture('anchor')

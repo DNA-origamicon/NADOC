@@ -151,6 +151,11 @@ class SidebarRuntime {
                 auto center=(c.bounds.minimum+c.bounds.maximum)*.5F;
                 auto half=(c.bounds.maximum-c.bounds.minimum)*.5F;
                 auto position=m.placement.worldPoint(glm::vec3(center,m.controlDepth(c)));
+                if(const auto wheel=nadoc_vr::extrudeWheelIndex(c.id)) {
+                    const auto shape=nadoc_vr::extrudeWheelShape();
+                    position=m.placement.worldPoint(nadoc_vr::extrudeWheelFront(*wheel));
+                    half={shape.width*.5F,shape.halfOpening()};
+                }
                 out.push_back({label(m,c),10000+m.hand*1000+index++,position,
                     m.placement.orientation()*glm::vec3(half.x*m.placement.scale(),0,0),
                     m.placement.orientation()*glm::vec3(0,half.y*m.placement.scale(),0),

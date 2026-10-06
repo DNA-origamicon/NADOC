@@ -108,3 +108,43 @@ def test_lattice_step_correction(period,direction):
     assert records[0]['after_bp']==target
     with pytest.raises(ValueError):
         fine_length(live,target+1,period,click,records.append,step=period)
+
+
+def test_fine_wheel_uses_its_own_detent_and_hover(monkeypatch, tmp_path):
+    import json
+    from types import SimpleNamespace
+    from tools.vr_workflows.profile_wheel import set_wheel_length
+    coarse = {'id':'extrude:coarse-wheel','label':'coarse','hovered':False,
+              'dragging':False,'base_pairs_per_detent':8,'notch_travel_m':.02}
+    fine = {'id':'extrude:fine-wheel','label':'fine','hovered':True,
+            'dragging':False,'base_pairs_per_detent':1,'notch_travel_m':.01}
+    state = {'extrude':{'length_bp':48,'cells':[[0,0]],'wheels':[coarse,fine]},
+             'hands':[{}, {'position':[0,0,0],'orientation_xyzw':[0,0,0,1]}],
+             'controls':[{'id':'extrude:fine-wheel','position':[0,0,-1],
+                          'hit_half_right':[.05,0,0],'hit_half_up':[0,.1,0]}]}
+    def send(operation, **args):
+        assert operation == 'button'
+        fine['dragging'] = args['pressed']
+    live = SimpleNamespace(state=state,send=send,frame=lambda:None)
+    def acquire(*args, **kwargs):
+        assert kwargs['acquired'](state)
+        return {'samples':[]}
+    def drag(*args):
+        state['extrude']['length_bp'] += 1
+        return []
+    monkeypatch.setattr('tools.vr_workflows.profile_wheel.reach_target',acquire)
+    monkeypatch.setattr('tools.vr_workflows.profile_wheel.drag',drag)
+    path = tmp_path/'fine.json'
+    set_wheel_length(live,path,49,'steady_fast',wheel='fine')
+    trial = json.loads(path.read_text())[0]
+    assert trial['travel_m'] == pytest.approx(.015)
+    assert trial['base_pairs_per_detent'] == 1
+    assert trial['after_bp'] == 49
+    assert state['extrude']['cells'] == [[0,0]]
+    assert not fine['dragging'] and not coarse['dragging']
+
+
+def test_missing_fine_wheel_does_not_fall_back_to_coarse():
+    from tools.vr_workflows.profile_wheel import wheel_target
+    with pytest.raises(RuntimeError,match='fine wheel is not visible'):
+        wheel_target({'controls':[],'extrude':{}},'fine')

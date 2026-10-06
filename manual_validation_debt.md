@@ -161,6 +161,19 @@ MV-RSZ, the 3D overhang-resize-through-boundary fix, was pushed PENDING this ses
 ## PENDING queue — index (ordered; first row = next loop processes this)
 
 - **MV-38 — Human-motion live VR/Witness (2026-09-22), PENDING.**
+  October 5 menu audit follow-up: confirm physical comfort/readability of all
+  sidebar tabs, padded legacy menus and wrapped long labels. Verify Confirm
+  dismisses Extrude and its right-hand menu naturally, including recovery after
+  a rejected commit. The reusable Menu formatting review atlas and submitted-eye
+  controller tests cover software behavior; through-lens readability remains open.
+  A complete initial live menu tour passed; final steady-fast attempts hit the
+  existing replay-lateness guard (153/155 ms against 150 ms), so timing acceptance
+  remains open. [Menu audit and retained attempts](docs/audits/vr_menu_formatting_20261005.md).
+  October 5 Extrude follow-up: review through-lens legibility of the frosted painter,
+  gray existing-cell rings, and coarse/fine wheels beside the main length readout.
+  Verify comfort while watching the model preview and adjusting either wheel.
+  Reproduce from Debug → VR Tours & Tests → Extrude beside an existing 1x8 platform.
+  Native render/input and source-coordinate checks do not establish physical comfort.
   Tools/settings-menu follow-up: larger 60mm adjustment rows at default scale need physical-headset
   legibility/comfort review; verify edge picking and adjacent-row separation.
   Native bounds regression and submitted-eye evidence do not establish through-lens comfort.

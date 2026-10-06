@@ -51,6 +51,7 @@ Format per entry: short title → one-paragraph what-went-wrong → "How to avoi
 - **C11** — E2E: a design loaded via Playwright's `request` fixture is INVISIBLE to the page. Backend design state is **per-document**, keyed by the `X-NADOC-Doc` header that `client.js` stamps on every call; `request.post()` sends none → lands in the `__default__` doc. Symptom: `design/load` returns 200, `GET /api/design` (raw fetch, also headerless) returns 200, yet the panel's own calls 404 with *"No active design."* — an impossible-looking split. Fix: load through the page — `await import('/src/api/client.js'); api.loadDesign(path)`. Also: e2e runs a THROWAWAY backend on `:8002`, not the dev `:8000` (several existing specs hardcode 8000 and only pass because they never need the design). Found building the ⚡ Optimize e2e (2026-07-12).
 
 ## D. Rendering / scene state
+- **D17** — Menu bounds and whole-panel pixel counts can pass while labels overlap or disappear; audit neighboring features and measure actual text regions at final scale. [detail](LESSONS_archive.md#d17)
 - **D1** — Beads flash to 3D after a cadnano/unfold mutation — a late subscriber overwrites cadnano positions for one frame. [detail](LESSONS_archive.md#d1)
 - **D2** — Hiding the design touches all four scene modules — no single visibility toggle; arcs/beads need explicit handling. [detail](LESSONS_archive.md#d2)
 - **D11** — Overlays must emit a loop-`copy` index — loop-insert extra bases strand uncoloured at their native position. [detail](LESSONS_archive.md#d11)

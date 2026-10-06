@@ -7,6 +7,28 @@ metadata:
   originSessionId: 9242672e-6640-4491-bdd3-c5b7f01e77e6
 ---
 
+## Native VR painter and length controls (2026-10-05)
+
+Accepted native Confirm now closes the painter and right-hand Extrude menu
+immediately and stops preview/wheel input. The submitted draft stays frozen while
+the browser commits it. Success clears that draft and retains the feature identity
+for Undo; failure/refusal restores the same draft and settings page for retry.
+Regression coverage lives in `extrude_viewer_test.cpp`, `native_confirm_probe.py`
+and the existing Extrude tours.
+
+The native Extrude sidebar owns two identical pinned thumbwheels beside its length
+readout: coarse uses the lattice period (HC 7 / SQ 8 bp), fine uses 1 bp. The
+painter now uses the shared frosted surface with separately bounded header, grid,
+legend and footer. Gray double rings mark existing cells from the selected source
+plane; Center Paint fits occupied and selected cells without editing addresses.
+Optional `L` scene metadata carries occupied addresses and the source-to-scene nm
+basis/origin. Native model preview and committed cells share imported offsets,
+explicit frame placement and launch camera rotation. Painter pose/zoom is view-only.
+Existing preflight rejects ambiguous independent frames sharing the selected plane.
+Implementation: `lattice_painter.hpp`, `extrude_wheels.hpp`, `lattice_context.hpp`,
+`backend/core/vr_lattice_context.py`. Reusable regression: Debug → VR Tours & Tests
+→ Extrude beside an existing 1x8 platform. Through-headset comfort remains MV-38.
+
 ## Lattice cells colour-coded FORWARD/REVERSE + polarity legend (2026-07-10)
 
 The extrude grid now colours **free selectable cells by caDNAno2 parity** so the user can read a

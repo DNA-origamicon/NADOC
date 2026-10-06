@@ -11,14 +11,22 @@ const doc='__e2e__extrude-volume-tour'
 const base=process.env.NADOC_E2E_API_BASE
 const square=process.env.NADOC_VR_LATTICE==='SQUARE'
 const legacy=process.env.NADOC_VR_LEGACY_SOURCE==='1'
+const sliceReference=process.env.NADOC_VR_SLICE_REFERENCE==='1'
 const length=square?48:42
-let pid
+let pid, liveSocket
 
 test.afterEach(async ({request}) => {
   const status=await (await request.get(`${base}/api/vr/status`)).json()
   if(pid && status.pid===pid) {
     await request.post(`${base}/api/vr/stop`)
     await expect.poll(async()=>(await (await request.get(`${base}/api/vr/status`)).json()).running,{timeout:20000}).toBe(false)
+  }
+  if(liveSocket && !status.running) {
+    const directory=path.dirname(liveSocket)
+    if(path.basename(directory).startsWith('nadoc-scry-')) fs.rmSync(directory,{recursive:true,force:true})
+  } else if(liveSocket && status.pid===pid) {
+    const directory=path.dirname(liveSocket)
+    if(path.basename(directory).startsWith('nadoc-scry-')) fs.rmSync(directory,{recursive:true,force:true})
   }
 })
 
@@ -32,24 +40,33 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
   if(square)await page.locator('input[name="new-lattice-type"][value="SQUARE"]').check()
   await page.getByRole('button',{name:'Create',exact:true}).click()
   const read=()=>page.evaluate(async ()=>({...(await import('/src/state/store.js')).store.getState().currentDesign,feature_log:(await (await import('/src/api/client.js'))._request('GET','/design/feature-log/full')).feature_log}))
-  if (legacy) await page.evaluate(async square => {
-    await (await import('/src/api/client.js')).addBundleSegment({cells:[[4,4],[4,5]],lengthBp:square?24:21})
-  },square)
+  if (legacy || sliceReference) await page.evaluate(async ({square,sliceReference}) => {
+    await (await import('/src/api/client.js')).addBundleSegment({
+      cells:sliceReference?Array.from({length:8},(_,column)=>[0,column]):[[4,4],[4,5]],
+      lengthBp:sliceReference?48:square?24:21})
+  },{square,sliceReference})
   const imported=await importAuditDesign(page,info)
   const before=await read()
-  if(!imported)expect(before.helices).toHaveLength(legacy?2:0)
+  if(!imported)expect(before.helices).toHaveLength(sliceReference?8:legacy?2:0)
   await page.locator('.menu-item').filter({hasText:'Help'}).first().hover()
   await page.click('#menu-help-view-vr')
   let status
   await expect.poll(async()=>{
     status=await (await request.get(`${base}/api/vr/status`)).json()
     if(status.pid)pid=status.pid
+    if(status.scrywrite_socket)liveSocket=status.scrywrite_socket
     return status.running && !!status.scrywrite_socket
   },{timeout:30000}).toBe(true)
   const probe=(script,name,...args)=>execFileSync('uv',['run','python','-m',`tools.vr_workflows.${script}`,
     status.scrywrite_socket,info.outputPath(name),...args],{
     cwd:path.resolve(process.cwd(),'..'),encoding:'utf8',timeout:240000,env:process.env,stdio:['ignore','inherit','inherit']})
   probe('native_confirm_probe','extrude')
+  const confirmed=JSON.parse(fs.readFileSync(info.outputPath('extrude/confirmed-closed-state.json'),'utf8'))
+  expect(confirmed.extrude).toMatchObject({open:false,editor_active:false,configuration_active:false,
+    confirm_pending:false,undo_available:true,cells:[],model_preview:[]})
+  expect(confirmed.sidebars[1].open).toBe(false)
+  expect(confirmed.status).toBe('COMMITTED')
+  expect(confirmed.committed_feature_id).toBeTruthy()
   const design=await read()
   expect(design.feature_log).toHaveLength(before.feature_log.length+1)
   expect(design.feature_log.slice(0,-1)).toEqual(before.feature_log)
@@ -69,10 +86,11 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
   const created=design.helices.filter(h=>!priorIds.has(h.id))
   expect(created).toHaveLength(6)
   expect(design.lattice_type).toBe(square?'SQUARE':'HONEYCOMB')
-  expect(created.map(h=>h.grid_pos).sort()).toEqual(square?
+  expect(created.map(h=>h.grid_pos).sort()).toEqual(sliceReference?
+    [[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]]:square?
     [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]]:[[0,1],[0,2],[0,3],[1,1],[1,2],[1,3]])
   expect(created.every(h=>h.length_bp===length)).toBe(true)
-  expect(design.lattice_frames).toHaveLength(before.lattice_frames.length+(legacy?0:1))
+  expect(design.lattice_frames).toHaveLength(before.lattice_frames.length+(legacy || sliceReference?0:1))
   if(square) {
     // Independent square-grid oracle: equal 2.25 nm perpendicular pitches.
     for(const h of created) {
@@ -80,6 +98,16 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
       expect(h.axis_start.x).toBeCloseTo(col*2.25,5)
       expect(h.axis_start.y).toBeCloseTo(row*2.25,5)
       expect(h.axis_start.z).toBeCloseTo(0,5)
+    }
+    if(sliceReference) {
+      // Independent source-relative oracle: the new rows remain exactly one
+      // and two square pitches from the original 1x8 platform after commit.
+      for(const h of created) {
+        const source=before.helices.find(old=>old.grid_pos[1]===h.grid_pos[1])
+        expect(h.axis_start.x-source.axis_start.x).toBeCloseTo(0,5)
+        expect(h.axis_start.y-source.axis_start.y).toBeCloseTo(h.grid_pos[0]*2.25,5)
+        expect(h.axis_start.z-source.axis_start.z).toBeCloseTo(0,5)
+      }
     }
   } else {
   // Independent geometry oracle: a regular six-sided ring, not a six-cell rectangle.

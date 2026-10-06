@@ -57,6 +57,8 @@ def catalog():
         'Launch a read-only private copy of 24HB through the normal launch route. Capture loading and first model stereo frames and verify advancing headset frames during natural-only export (no Quick Expand).', module='startup_tour')
     add('menu-depth', 'interaction', 'Menu blur and controller depth',
         'Move the controller stick and sphere in front of and behind a menu. Check sharp foreground pixels and behind-menu occlusion in both eyes, across all four motion profiles.', ['--depth-checks'])
+    add('menu-formatting', 'interaction', 'Menu formatting review',
+        'No headset required: render every Part and Assembly sidebar page plus tool panels, legacy settings, long jobs/status, radial hover, desktop chrome, component states and loading states. Retains full images, contact sheets and layout failures in a browsable atlas. An optional production View Tools stream adds its real desktop icons. Use the live sidebar tour for four-profile controller coverage.', module='menu_render_audit')
     add('room-ui', 'interaction', 'Frosted menus & SteamVR floor',
         'Barely visible white glass, subtle button tints and stereo background blur, a calibrated floor grid and SteamVR play-area outline. Checks native pixels and all four motion profiles.', ['--room-checks'])
     add('focus', 'interaction', 'Trackpad, pointer, cards & scrollbars',
@@ -72,7 +74,10 @@ def catalog():
     add('view-volumes', 'view-volumes', 'View volumes',
         'Isolated demo part: create square and hex volumes, show/hide, enable/delete, trigger move/rotate, two-hand resize, and grip the scene. Validation runs all four motion profiles.', module='view_volumes_check')
     add('extrude', 'authoring', 'Extrude a 6HB and inspect a volume',
-        'Creates a new isolated part; paints a honeycomb ring, zooms the lattice with interior grips, moves/resizes its window, and uses the length wheel. Compares local volume representations. Validation covers honeycomb and square parts with all four motion profiles.', module='extrude_tour')
+        'Creates a new isolated part; paints a honeycomb ring, zooms and moves its frosted lattice window, and adjusts coarse (7/8 bp) and fine (1 bp) wheels. Checks that Confirm closes the painter and right menu, removes the draft preview and preserves Undo. Compares local volume representations. Native checks cover failed-commit recovery; motion validation covers all four profiles.', module='extrude_tour')
+    add('extrude-slice', 'authoring', 'Extrude beside an existing 1x8 platform',
+        'Isolated square part: display the existing 1x8 cross-section, paint one and two lattice rows beside it, use coarse/fine wheels, and verify preview, committed 3D spacing, refreshed occupied cells and both menus closing on Confirm. Native checks preserve drafts for retry after failure. Motion validation uses all four profiles.',
+        ['--slice-reference'], module='extrude_tour')
     add('presence-ui', 'left', 'VR menus and tools in guest view',
         'Real guest receives native menu labels, desktop icons, controller guides and scissors; checks closing panels and hiding presence.', module='presence_ui_tour')
     add('avatar', 'left', 'VR presenter model',
@@ -118,7 +123,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

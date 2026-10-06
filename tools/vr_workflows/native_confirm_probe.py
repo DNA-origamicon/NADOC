@@ -24,7 +24,8 @@ while True:
     if time.monotonic()>deadline:raise RuntimeError('viewer not focused')
     time.sleep(.1)
 live=LiveSession(b,physical=True,allow_transactions=True)
-from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
+from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation, wait_startup
+wait_startup(live)
 prepare_audit_representation(live)
 reveal_demo(live)
 profile_controls = (ProfileControls(live,out/'control-profile.json',
@@ -57,13 +58,17 @@ def verify_undo():
     else:
         origin=framed_origin(live,eye['eyes'][0],activate=activate_extrude_menu if os.environ.get('NADOC_VR_MENU_ACTIVATION') == '1' else None)
         put(live,origin['position'],origin['orientation_xyzw'])
-    if live.state['menu'] == 'closed':
-        live.button('menu', hand=1)
-    labels = {c['label'] for c in live.state['controls']}
-    path = ['BACK TO TOOLS', 'UNDO'] if 'BACK TO TOOLS' in labels else ['TOOLS', 'UNDO'] if 'TOOLS' in labels else ['UNDO']
-    for label in path:
-        assert label in {c['label'] for c in live.state['controls']}, live.state['menu']
-        click_control(label)
+    if sidebar_controls:
+        sidebar_controls.activate()
+        sidebar_controls.click('extrude:undo')
+    else:
+        if live.state['menu'] == 'closed':
+            live.button('menu', hand=1)
+        labels = {c['label'] for c in live.state['controls']}
+        path = ['BACK TO TOOLS', 'UNDO'] if 'BACK TO TOOLS' in labels else ['TOOLS', 'UNDO'] if 'TOOLS' in labels else ['UNDO']
+        for label in path:
+            assert label in {c['label'] for c in live.state['controls']}, live.state['menu']
+            click_control(label)
     undo_started=time.monotonic()
     deadline=undo_started+120
     while live.state['status'] != 'UNDONE' or live.state.get('scene_revision',0) <= before:
@@ -72,8 +77,13 @@ def verify_undo():
     (out/'undo-timing.json').write_text(json.dumps({'undo_and_snapshot_seconds':time.monotonic()-undo_started,'diagnostic_timeout_seconds':120}))
     live.capture_to(out/'undone-before-framing',discard_source=True)
     if os.environ.get('NADOC_VR_UNDO_EXPECT_AUTHORED') == '1':
-        for label in ['BACK','RECENTER']:
-            click_control(label)
+        if sidebar_controls:
+            sidebar_controls.click('extrude:recenter')
+            sidebar_controls.click('extrude:back')
+            live.button('menu',hand=1);live.frame()
+        else:
+            for label in ['BACK','RECENTER']:
+                click_control(label)
     live.capture_to(out/'undone',discard_source=True)
     import array
     for eye in ['left','right']:
@@ -146,9 +156,21 @@ try:
         assert square == (os.environ['NADOC_VR_LATTICE'] == 'SQUARE')
     cells = ([[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]] if square else
              [[0,1],[1,1],[1,2],[1,3],[0,3],[0,2]])
+    slice_reference = os.environ.get('NADOC_VR_SLICE_REFERENCE') == '1'
+    if slice_reference:
+        assert square
+        expected_source = [[0,column] for column in range(8)]
+        assert sorted(live.state['extrude']['occupied_cells']) == expected_source
+        assert live.state['extrude']['lattice_context_resolved']
+        cells = [[row,column] for row in (1,2) for column in range(3)]
+        live.capture_to(out/'existing-1x8-slice',discard_source=True)
     paint_trials=[]
     preset=os.environ.get('NADOC_VR_PROFILE','steady_fast')
     seed=int(os.environ.get('NADOC_VR_SEED','0'))
+    grid_zoom=float(os.environ.get('NADOC_VR_PAINT_GRID_ZOOM','1'))
+    if grid_zoom != 1:
+        from tools.vr_workflows.lattice_grip_check import zoom_lattice
+        zoom_lattice(live,out/'diagnostic-grid-zoom',preset,grid_zoom)
     for index,(row,col) in enumerate(cells):
         visible=lambda: next((c['position'] for c in live.state['extrude']['visible_cells']
                               if c['row']==row and c['column']==col),None)
@@ -183,6 +205,8 @@ try:
             if acquired:break
         assert acquired, f'cell acquisition failed after three reaches: {row},{col}'
     assert sorted(live.state['extrude']['cells'])==sorted(cells),live.state['extrude']
+    if slice_reference:
+        live.capture_to(out/'existing-and-painted-slice',discard_source=True)
     hold_demo(live,'painted footprint')
     if sidebar_controls:
         from tools.vr_workflows.lattice_grip_check import run as check_lattice_grips
@@ -210,7 +234,15 @@ try:
             fine_click=click_control if sidebar_controls or (profile_controls and os.environ.get('NADOC_VR_FINE_LENGTH') == '1') else None,
             fine_step=period if sidebar_controls else 1)
         live.capture_to(out/'wheel-after-drag',discard_source=True)
-        hold_demo(live,'Lattice wheel sets extrusion length')
+        if sidebar_controls:
+            # The fine wheel must reach a non-period-aligned value and return by
+            # exactly one bp through real trigger drags, preserving the footprint.
+            for direction, target in [('up',target_length+1),('down',target_length)]:
+                set_wheel_length(live,out/f'fine-wheel-{direction}-profile.json',target,
+                    preset,seed+21000+(direction=='down')*1000,wheel='fine')
+                assert live.state['extrude']['length_bp']==target
+                live.capture_to(out/f'fine-wheel-{direction}',discard_source=True)
+        hold_demo(live,'Coarse and fine menu wheels set extrusion length')
     elif not sidebar_controls:
         for length in range(1,target_length+1):
             click_control('+')
@@ -239,10 +271,24 @@ try:
         if time.monotonic()>deadline:raise RuntimeError("preflight not ready: "+str(live.state))
         live.frame();time.sleep(.1)
     live.capture_to(out/'confirm-ready',discard_source=True)
+    if slice_reference:
+        preview=live.state['extrude']['model_preview']
+        assert sorted(p['cell'] for p in preview)==sorted(cells)
+        import math
+        positions={tuple(p['cell']):p['start_nm'] for p in preview}
+        assert math.isclose(math.dist(positions[1,0],positions[2,0]),2.25,abs_tol=1e-4)
+        assert math.isclose(math.dist(positions[1,0],positions[1,1]),2.25,abs_tol=1e-4)
+        assert all(math.isclose(math.dist(p['start_nm'],p['end_nm']),target_length*.334,abs_tol=1e-4) for p in preview)
     before_revision=live.state.get('scene_revision',0)
     before_feature=live.state.get('committed_feature_id')
     click_control('CONFIRM')
     commit_started=time.monotonic()
+    assert not live.state['extrude']['open'], 'Confirm left the lattice painter open'
+    assert not live.state['extrude']['editor_active'], 'Confirm left Extrude active'
+    assert not live.state['sidebars'][1]['open'], 'Confirm left the right sidebar open'
+    assert not live.state['extrude']['model_preview'], 'Confirm left native draft geometry visible'
+    assert not any(w['dragging'] for w in live.state['extrude']['wheels'])
+    (out/'confirm-dismissed-state.json').write_text(json.dumps(live.state,indent=2))
     observation_timeouts=[]
     def commit_frame():
         # Observe is read-only: a scene import can exceed the socket's 3 s
@@ -261,12 +307,21 @@ try:
         commit_frame();time.sleep(.1)
     (out/'commit-timing.json').write_text(json.dumps({'commit_and_snapshot_seconds':time.monotonic()-commit_started,'diagnostic_timeout_seconds':120,'read_only_observation_timeouts_s':observation_timeouts}))
     live.capture_to(out/'committed',discard_source=True)
-    if sidebar_controls:
-        sidebar_controls.click('extrude:recenter')
-        sidebar_controls.click('extrude:back')
-        live.button('menu',hand=1);live.frame()
-    else:
-        for label in ['LATTICE EXIT','BACK','RECENTER']: click_control(label)
+    assert not live.state['extrude']['open'] and not live.state['sidebars'][1]['open']
+    assert not live.state['extrude']['configuration_active'] and not live.state['extrude']['confirm_pending']
+    assert not live.state['extrude']['cells'] and not live.state['extrude']['model_preview']
+    assert live.state['extrude']['undo_available']
+    (out/'confirmed-closed-state.json').write_text(json.dumps(live.state,indent=2))
+    if slice_reference:
+        assert sorted(live.state['extrude']['occupied_cells'])==sorted(expected_source+cells)
+    # Reframe through the normal Visualization menu, after checking that Confirm
+    # itself dismissed the entire editor. This does not reactivate Extrude.
+    from tools.vr_workflows.extrude_sidebar import SidebarControls
+    framing_controls=sidebar_controls or SidebarControls(live,out,preset)
+    live.button('menu',hand=1);live.frame()
+    framing_controls.click('tab:visualization')
+    framing_controls.click('reset-btn')
+    live.button('menu',hand=1);live.frame()
     live.capture_to(out/'framed',discard_source=True)
     import array
     counts=[]
@@ -277,6 +332,8 @@ try:
     assert min(counts)>=100,counts
     if os.environ.get('NADOC_VR_REVIEW_VIEW') == '1':
         from tools.vr_workflows.review_view import improve_review
+        # Same-frame adjacent extrusion extends the source cluster. Only a
+        # separately placed freeform extrusion expects two rendered clusters.
         improve_review(live,out/'framed',out/'review',expected_groups=2 if os.environ.get('NADOC_VR_FREEFORM') == '1' else 1)
         if os.environ.get('NADOC_VR_DESKTOP_REVIEW') == '1':
             from tools.vr_motion.desktop_check import run as check_desktop

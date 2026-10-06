@@ -324,3 +324,17 @@ performance fix. [Evidence and testing limits](docs/audits/vr_motion_regression_
 failing renderer test, then kept collapsed connectors finite and hidden. Visible
 molecular coordinates and topology are unchanged. Shared-animation browser
 coverage exercises the construction-stage transition that exposed the defect.
+
+2026-10-05 — ISSUE-56: Extrude dismissal now follows acceptance of the Confirm
+intent, retaining the asynchronous submission until matching feedback arrives.
+Retry republishes a consumed validation plan, and Undo uses its saved feature
+instead of the user's later selection. Shared layout auditing now checks text
+against neighboring text/features and reserved columns; the prior bounds-only
+checks missed real overlaps. Transparent MSAA text was attenuated twice, while a
+width-capped cache retained the old height and filtered wide-panel text excessively.
+Corrected alpha handling and cache aspect restore lettering; first allocation also
+preserves the caller's framebuffer. Failed observation hypotheses (window-size
+clamp, framebuffer binding and whole-panel pixel counts masking faint letters)
+are retained in the [audit](docs/audits/vr_menu_formatting_20261005.md).
+425 rendered states and 12,001 layout cases pass; full frontend suite 7,375 passed,
+1 skipped. `main.js` delta 0. Reopen count: 0.

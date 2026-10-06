@@ -4,7 +4,8 @@ from backend.core.lattice import _lattice_position, make_bundle_segment
 from backend.core.vr_extrude_draft import validate_painted_footprint
 
 
-def append_legacy_plane_bundle(design, cells, length_bp, *, plane):
+def legacy_plane_source(design, plane):
+    """Resolve the exact transverse origin and placement used by new cells."""
     # Older desktop parts have grid addresses but no LatticeFrame records.
     # Verify every helix shares one rest lattice rather than guessing from the
     # first helix (the desktop segment builder's origin convention).
@@ -32,6 +33,11 @@ def append_legacy_plane_bundle(design, cells, length_bp, *, plane):
                      clusters[0].parent_cluster_id or
                      set(clusters[0].helix_ids) != {h.id for h in design.helices}):
         raise ValueError('select an end or place freeform for multiple placements')
+    return origin, clusters
+
+
+def append_legacy_plane_bundle(design, cells, length_bp, *, plane):
+    _, clusters = legacy_plane_source(design, plane)
     footprint = validate_painted_footprint({'lattice_type': design.lattice_type.value, 'cells': cells})
     occupied = {tuple(h.grid_pos) for h in design.helices}
     if any(tuple(cell) in occupied for cell in footprint['cells']):

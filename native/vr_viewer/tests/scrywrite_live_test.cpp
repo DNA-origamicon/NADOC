@@ -11,6 +11,68 @@ void requireLive(bool condition, const char* detail) {
 }
 #include "representation_shadow_check.hpp"
 struct LiveViewerTest {
+    static void verifyViewToolsFrameSeam() {
+        Viewer v(SceneData{});
+        auto& tools=v.viewTools_;
+        tools.open=true;tools.version=1;
+        const auto facing=glm::angleAxis(.35F,glm::vec3(0,1,0));
+        tools.placement.openDocked({.2F,.1F,-1.2F},facing);
+        tools.placement.setScale(.8F);tools.syncPose();
+        const auto bounds=VRViewTools::panelBounds();
+        const auto targets=v.remotePanelTargets();
+        const auto remote=std::find_if(targets.begin(),targets.end(),[&](const auto& p){
+            return p.placement==&tools.placement;
+        });
+        requireLive(remote!=targets.end() && remote->border.minimum==bounds.minimum &&
+                    remote->border.maximum==bounds.maximum && remote->surface.minimum==bounds.minimum &&
+                    remote->surface.maximum==bounds.maximum,"Remote ViewTools bounds differ from its local frame");
+        // Golden content coordinates from the original 768px tablet. Enlarging
+        // its separate grip frame must not move any icon or controller hit.
+        constexpr std::array<glm::vec2,8> centers{{
+            {-.16972222F,.24555556F},{.16972222F,.24555556F},
+            {-.16972222F,.14444444F},{.16972222F,.14444444F},
+            {-.16972222F,.04333333F},{.16972222F,.04333333F},
+            {-.16972222F,-.05777778F},{.16972222F,-.05777778F}}};
+        std::array<nadoc_vr::HandPose,2> hands{};
+        hands[1].valid=true;hands[1].orientation=facing;
+        for(size_t i=0;i<centers.size();++i) {
+            const auto world=tools.placement.worldPoint({centers[i],0});
+            requireLive(glm::distance(tools.world(VRViewTools::cell(i)),world)<1e-6F,
+                        "ViewTools icon moved when its grip frame changed");
+            hands[1].position=world+facing*glm::vec3(0,0,.4F);
+            const auto uv=tools.hit(hands[1]);
+            requireLive(uv && glm::distance(*uv,VRViewTools::cell(i))<1e-5F,
+                        "ViewTools icon ray missed its unchanged center");
+            std::array<bool,2> blocked{};size_t commits=0;
+            tools.waiting=false;
+            tools.input(hands,{false,true},blocked,[&](size_t hand){
+                requireLive(hand==1,"ViewTools changed input hand");++commits;
+            });
+            requireLive(blocked[1] && commits==1 && tools.requested==int(i) &&
+                        tools.hover[1]==int(i) && tools.sequence==i+1,
+                        "ViewTools center activated the wrong icon or leaked input");
+        }
+        hands[1].position=tools.placement.worldPoint({bounds.maximum.x,0,.4F});
+        requireLive(!tools.hit(hands[1]),"ViewTools grip rail maps to an icon hit");
+        hands[1].position=tools.placement.worldPoint({bounds.maximum.x,0,0});
+        hands[1].pressed=true;
+        std::array<bool,2> blocked{};
+        tools.grips(hands,{false,true},blocked,[](size_t,float){});
+        requireLive(blocked[1] && tools.placement.dragHand()==1,"ViewTools enlarged local border cannot grab");
+        const auto previous=tools.placement.position();
+        hands[1].position.x+=.1F;blocked={};
+        tools.grips(hands,{},blocked,[](size_t,float){});
+        requireLive(glm::distance(tools.placement.position(),previous+glm::vec3(.1F,0,0))<1e-5F,
+                    "ViewTools border grab did not move the tablet");
+        hands[1].pressed=false;blocked={};
+        tools.grips(hands,{},blocked,[](size_t,float){});
+        requireLive(!tools.placement.dragHand(),"Released ViewTools grip stayed latched");
+        tools.open=false;
+        const auto closedTargets=v.remotePanelTargets();
+        requireLive(std::none_of(closedTargets.begin(),closedTargets.end(),[&](const auto& p){
+            return p.placement==&tools.placement;
+        }),"Closed ViewTools retained a remote grip target");
+    }
     static void verifyVRTabActions() {
         Viewer v(SceneData{});
         auto& left=v.sidebarMenus_.menus[0];
@@ -102,7 +164,7 @@ struct LiveViewerTest {
         v.ligation_.hand=1;
         v.quiver_.armed[1]=true;
         v.viewTools_.placement.openDocked(v.hands_[1].position,glm::quat(1,0,0,0));
-        const auto half=VRViewTools::half;
+        const auto half=VRViewTools::frameHalf;
         v.hands_[1].position=v.viewTools_.placement.worldPoint({half,0,0});
         requireLive(v.viewTools_.placement.beginDrag(1,v.hands_,{-half,-half},{half,half}),"view panel grab setup failed");
         const auto panel=v.viewTools_.placement.position();
@@ -210,7 +272,7 @@ struct LiveViewerTest {
             v.triggerClicked_[h] = !v.triggerPressed_[h] && v.liveInput_.triggerPressed[h];
             v.triggerPressed_[h] = v.liveInput_.triggerPressed[h];
         }
-        auto blocked = v.processThumbwheelInput();
+        auto blocked = v.processThumbwheelInput({});
         if (v.menuOpen_) blocked = v.processMenuInput(blocked);
         v.processLatticeInput(blocked);
     }
@@ -307,8 +369,10 @@ struct LiveViewerTest {
         requireLive(v.thumbwheelAvailable(),"wheel still requires legacy menu");
         auto wheel=v.liveTargets();
         auto wheelEntry=std::find_if(wheel.begin(),wheel.end(),[](const auto& e){return e.label=="EXTRUDE LENGTH WHEEL";});
-        requireLive(wheelEntry!=wheel.end(),"lattice wheel undiscoverable");
-        v.menuOpen_=true;
+        requireLive(wheelEntry!=wheel.end(),"coarse wheel compatibility locator undiscoverable");
+        auto& sidebar=v.sidebarMenus_.menus[1];
+        sidebar.placement.openDocked({0,0,-1},glm::quat(1,0,0,0));
+        v.latticePlacement_.openDocked({.75F,0,-1},glm::quat(1,0,0,0));
         // Put the controller in front of the lattice, then use the live semantic
         // locator. The separate production hit test must find the requested cell.
         const auto cells = v.visibleLatticeCells();
@@ -334,42 +398,59 @@ struct LiveViewerTest {
         command(v, "button 1 trigger 0"); frame(v);
         // Exercise the real thumbwheel ray and detent handler, with lattice input
         // blocked while the wheel owns the trigger.
-        const float wheelX = (Viewer::kThumbwheelBounds.minimum.x + Viewer::kThumbwheelBounds.maximum.x) * 0.5F;
-        const float wheelY = (Viewer::kThumbwheelBounds.minimum.y + Viewer::kThumbwheelBounds.maximum.y) * 0.5F;
-        auto setAt = [&](const glm::vec3& position, const glm::quat& orientation) {
+        auto setAt = [&](const glm::vec3& position, const glm::quat& orientation, size_t hand=1) {
             std::ostringstream text;
-            text << "pose 1 " << position.x << ' ' << position.y << ' ' << position.z << ' '
+            text << "pose " << hand << ' ' << position.x << ' ' << position.y << ' ' << position.z << ' '
                  << orientation.x << ' ' << orientation.y << ' ' << orientation.z << ' ' << orientation.w;
             command(v, text.str());
         };
-        setAt(v.menuPlacement_.worldPoint({wheelX,wheelY,0.4F}), {1,0,0,0});
-        command(v, "aim 1 EXTRUDE LENGTH WHEEL"); frame(v);
-        requireLive(v.thumbwheelHovered_, "wheel locator misses production hit test");
-        const auto targets = v.liveTargets();
-        const auto wheelTarget = std::find_if(targets.begin(),targets.end(),[](const auto& target) { return target.hit == -2; });
-        requireLive(wheelTarget != targets.end() && glm::length(wheelTarget->hitHalfRight) > 0 &&
-                    glm::length(wheelTarget->hitHalfUp) > 0,"wheel hit rectangle telemetry missing");
-        const auto wheelOrientation = v.liveInput_.hands[1].orientation;
-        const int beforeLength = v.toolConfig_.lengthBp();
-        const auto beforeCells = v.extrudeLatticeDraft_.cells();
-        command(v, "button 1 trigger 1"); frame(v);
-        setAt(v.menuPlacement_.worldPoint({wheelX,wheelY + 0.125F,0.4F}), wheelOrientation);
-        frame(v);
-        requireLive(v.toolConfig_.lengthBp() == beforeLength + 21, "wheel did not produce three honeycomb detents");
-        requireLive(v.extrudeLatticeDraft_.cells() == beforeCells, "wheel trigger painted lattice");
-        for (int i = 0; i < 12; ++i) frame(v); // stop motion before release
-        command(v, "button 1 trigger 0"); frame(v);
-        requireLive(!v.thumbwheelControl_.moving(), "slow release retained wheel inertia");
+        sidebar.placement.openDocked({0,0,-1},glm::angleAxis(.25F,glm::vec3(0,1,0)));
+        sidebar.placement.setScale(.6F);
+        for(size_t index=0;index<2;++index) {
+            const auto front=nadoc_vr::extrudeWheelFront(index);
+            setAt(sidebar.placement.worldPoint(front+glm::vec3(0,0,.4F)),sidebar.placement.orientation());
+            command(v,index==0?"aim 1 EXTRUDE LENGTH WHEEL":"aim 1 RIGHT / FINE [extrude:fine-wheel]");frame(v);
+            requireLive(v.thumbwheelHovered_==index,"wheel locator misses production sidebar hit test");
+            const auto targets=v.liveTargets();
+            const auto target=std::find_if(targets.begin(),targets.end(),[&](const auto& entry){
+                return entry.id==nadoc_vr::kExtrudeWheelIds[index];
+            });
+            requireLive(target!=targets.end() && glm::length(target->hitHalfRight)>0 &&
+                        glm::length(target->hitHalfUp)>0 &&
+                        glm::distance(target->worldPosition,sidebar.placement.worldPoint(front))<1e-5F,
+                        "wheel pose or hit rectangle telemetry disagrees with sidebar");
+            const auto wheelOrientation=v.liveInput_.hands[1].orientation;
+            const int beforeLength=v.toolConfig_.lengthBp();
+            const auto beforeCells=v.extrudeLatticeDraft_.cells();
+            command(v,"button 1 trigger 1");frame(v);
+            requireLive(v.thumbwheelHand_==1 && v.thumbwheelControls_[index].dragging(),"wheel did not acquire trigger");
+            const auto telemetry=std::string("\"id\":\"")+nadoc_vr::kExtrudeWheelIds[index]+
+                "\",\"label\":\""+(index==0?"coarse":"fine")+
+                "\",\"available\":true,\"hovered\":true,\"dragging\":true";
+            requireLive(v.liveState().find(telemetry)!=std::string::npos,"active wheel runtime state missing");
+            // The other controller cannot steal the shared wheel gesture.
+            setAt(sidebar.placement.worldPoint(nadoc_vr::extrudeWheelFront(1-index)+glm::vec3(0,0,.4F)),sidebar.placement.orientation(),0);
+            command(v,"button 0 trigger 1");frame(v);
+            requireLive(v.thumbwheelHand_==1 && !v.thumbwheelControls_[1-index].dragging(),"second hand stole wheel ownership");
+            command(v,"button 0 trigger 0");frame(v);
+            setAt(sidebar.placement.worldPoint(front+glm::vec3(0,index==0?.125F:.045F,.4F)),wheelOrientation);
+            frame(v);
+            requireLive(v.toolConfig_.lengthBp()==beforeLength+(index==0?21:1),"coarse/fine wheel detents incorrect");
+            requireLive(v.extrudeLatticeDraft_.cells()==beforeCells,"wheel trigger painted lattice");
+            for(int i=0;i<12;++i)frame(v); // stop motion before release
+            command(v,"button 1 trigger 0");frame(v);
+            requireLive(!v.thumbwheelHand_ && !v.thumbwheelControls_[index].moving(),"slow release retained wheel ownership or inertia");
+        }
         // Grip panel movement uses the same production placement object.
-        const auto bounds = v.menuPanelBounds();
-        const auto border = v.menuPlacement_.worldPoint({bounds.maximum.x, 0, 0});
-        setAt(border, v.menuPlacement_.orientation()); frame(v);
+        const auto bounds = sidebar.bounds();
+        const auto border = sidebar.placement.worldPoint({bounds.maximum.x, 0, 0});
+        setAt(border, sidebar.placement.orientation()); frame(v);
         v.hands_[1].pressed = true;
-        requireLive(v.menuPlacement_.beginDrag(1, v.hands_, bounds.minimum, bounds.maximum), "border grip missed");
-        const auto beforePanel = v.menuPlacement_.position();
+        requireLive(sidebar.placement.beginDrag(1, v.hands_, bounds.minimum, bounds.maximum), "border grip missed");
+        const auto beforePanel = sidebar.placement.position();
         v.hands_[1].position.x += 0.2F;
-        v.menuPlacement_.update(v.hands_, nadoc_vr::MenuPlacement::kMenuHalfWidth);
-        requireLive(std::abs(v.menuPlacement_.position().x - beforePanel.x - 0.2F) < 1e-5F, "panel drag displacement incorrect");
+        sidebar.placement.update(v.hands_, nadoc_vr::MenuPlacement::kMenuHalfWidth);
+        requireLive(std::abs(sidebar.placement.position().x - beforePanel.x - 0.2F) < 1e-5F, "panel drag displacement incorrect");
         command(v, "release"); frame(v);
         requireLive(!v.triggerPressed_[1] && !v.liveInput_.hands[1].valid, "release left held input");
         v.cancelExtrudeInterface();
@@ -589,6 +670,7 @@ int main(int argc, char** argv) {
         if (argc == 2 && std::string(argv[1]) == "--gl-ids") return objectIdGlChecks();
         if (argc < 2) return 2;
         LiveViewerTest::verifyDashboardFocusLoss();
+        LiveViewerTest::verifyViewToolsFrameSeam();
         LiveViewerTest::verifyVRTabActions();
         if (argc == 4 && std::string(argv[2]) == "--serve") {
             Viewer viewer(loadScene(argv[1]));

@@ -148,6 +148,16 @@ never run two input producers against the same session.
 The checks verify catalog coverage, layout, disabled behavior, controller
 acquisition, visible text, gray disabled controls and blue active controls.
 They do not establish through-lens legibility or physical headset comfort.
+
+**Debug → VR Tours & Tests → Controls & layout → Menu formatting review** renders
+all Part/Assembly sidebar pages, tool panels, legacy menus, long status/job names,
+radial hover states, desktop chrome, loading states and component gallery states
+with the production OpenGL renderer. Its atlas contains individual images and
+contact sheets; an optional `--viewtools-stream` adds the real desktop-icon tablet.
+The layout audit also checks text against neighboring text, unrelated controls
+and progress bars. Dynamic labels wrap within their padded control or show an
+ellipsis at the readable font floor. Run it without a headset using
+`uv run python -m tools.vr_workflows.menu_render_audit --validate`.
 For desktop changes, regenerate with
 `node frontend/scripts/generate-vr-sidebar-catalog.mjs`; review the dynamic
 control templates when their source modules change. Source hashes make such changes visible to the drift check.
@@ -331,12 +341,16 @@ coexistence, tracking loss and submitted-eye highlight checks. See
 ### Extrude
 
 Tools → Extrude opens a dedicated right-sidebar panel and an adjacent lattice
-painter. Return, Confirm and Cancel remain visible while scrolling length
-(7/21 bp for honeycomb; 8/24 bp for square), direction, source plane, strand filter, ligation,
+painter. Return, Confirm, the length readout, and coarse/fine wheels remain visible while scrolling
+length buttons (7/21 bp for honeycomb; 8/24 bp for square), direction, source plane, strand filter, ligation,
 painter recall, freeform placement, Frame model and Undo. The displayed lattice
 comes from the part. Confirm is enabled only for the current validated draft;
 Undo follows the existing transaction acknowledgement. Frame model and Return
 work without navigating through the legacy tool menus.
+An accepted Confirm immediately closes the painter and right-hand tool menu and
+stops the draft preview. Successful acknowledgement clears the draft while keeping
+Undo available when Extrude is reopened. A failed or refused commit restores the
+same draft and settings page, with a retry status.
 
 Native view volumes now use their saved representation, color and opacity to
 render a clipped layer inside each enabled box or hexagonal prism. Overlapping
@@ -346,11 +360,30 @@ its clipping transform without editing the design geometry.
 
 The Extrude length controls use paired minus/plus buttons: 7 and 21 bp steps
 for honeycomb, 8 and 24 bp for square. Labels and actions follow the part lattice. The length
-thumb wheel belongs to the lattice window and follows its pose/size. Grip inside
+readout has two identical wheels beside it on the main Extrude panel: **COARSE**
+steps 7 bp for honeycomb / 8 bp for square, and **FINE** steps 1 bp. Both follow
+that panel's pose/size and work while the painter is closed. Grip inside
 the painting grid with both controllers to zoom the lattice; border grips retain
 window movement/resizing. Interior grips acquire within 9 cm in front or behind
 the panel, excluding the border grab zone. Yellow/green contact crosses indicate
 available/held interior grips. See the [control audit](audits/vr_lattice_controls_20260928.md).
+
+The painter uses the shared frosted menu surface. Its header, clipped grid,
+selected/existing counts, polarity legend, Center Paint and Exit occupy separate
+rows inside the border rails. Existing cells in the chosen source plane appear
+as gray double rings and cannot be painted over. Opening the painter or choosing
+Center Paint frames the existing and selected cells without changing their addresses.
+The preview is drawn on the model using the same source frame, imported origin,
+rigid placement and desktop-camera rotation as the committed extrusion; moving
+or zooming the painter changes only its slice view. The existing unique-source
+preflight still rejects multiple independent frames on one plane.
+
+Use **Debug → VR Tours & Tests → Tools · Authoring → Extrude beside an existing
+1x8 platform** to validate existing square cells, adjacent rows, both wheels,
+preview/committed positions, occupancy refresh and save/reload. The original
+fresh-part tour retains both lattices and all four human-motion profiles.
+The [October 5 audit](audits/vr_extrude_window_20261005.md) records rendered evidence,
+verified commits and the remaining synthetic high-jitter acquisition/overshoot limits.
 
 Assembly visibility follows document context: Part sessions omit Assembly from the
 right-hand tabs and controller navigation. The native viewer currently launches

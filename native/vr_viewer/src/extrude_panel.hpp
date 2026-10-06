@@ -27,6 +27,9 @@ class ExtrudePanel {
         row("back","Extrude - Return to tools",status);
         row("confirm","CONFIRM",std::to_string(cells)+" HELICES / "+std::to_string(length)+" BP");
         row("cancel","CANCEL");
+        row("length",std::to_string(length)+" BP","LENGTH");
+        row("coarse-wheel","COARSE");
+        row("fine-wheel","FINE");
         row("less-period","-"+std::to_string(extrudeLengthStep(square,true))+" BP","LENGTH "+std::to_string(length)+" BP");
         row("less","-"+std::to_string(extrudeLengthStep(square,false))+" BP","LENGTH "+std::to_string(length)+" BP");
         row("direction","Direction",direction>0?"FORWARD":"REVERSE");

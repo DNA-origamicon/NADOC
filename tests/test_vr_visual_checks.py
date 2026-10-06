@@ -13,6 +13,14 @@ def test_contact_tracks_ray_direction_not_controller_body():
     assert contact(pose,state) is None
 
 
+def test_sidebar_wheel_contact_uses_retained_surface_instead_of_paint_plane():
+    state={'extrude':{'panel_position':[0,0,-2],'panel_orientation_xyzw':[0,0,0,1],
+        'contact_surface':{'position':[0,0,-.5],'orientation_xyzw':[0,0,0,1]}}}
+    pose={'position':[.2,.1,0],'orientation_xyzw':[0,0,0,1]}
+    assert contact(pose,state)==pytest.approx([.2,.1,-.5])
+    assert contact(pose,state,ideal=True)==pytest.approx([.2,.1,-.5])
+
+
 def test_offscreen_or_blank_trace_cannot_pass_coverage():
     mask=np.zeros((30,30),dtype=bool);mask[15,15]=True
     assert coverage(mask,[(15,15),None,(100,100)],radius=1)==pytest.approx(1/3)

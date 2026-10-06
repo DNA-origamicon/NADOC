@@ -79,6 +79,29 @@ int main() {
     require(hasIssue(outside, "control_overflow"),
             "a drawn control outside the panel should be rejected");
 
+    nadoc_vr::MenuLayoutAudit textCollisions;
+    textCollisions.reset(panel);
+    textCollisions.addControl("tools",visual,hit);
+    textCollisions.addText("tools.label","TOOLS",-.29F,.145F,.003F,visual);
+    textCollisions.addText("stray-caption","TEXT",-.28F,.143F,.003F,panel);
+    textCollisions.addFeature("slider",{{-.30F,.13F},{-.20F,.14F}});
+    textCollisions.finish();
+    require(hasIssue(textCollisions,"text_overlap"),"overlapping labels must be detected even within their bounds");
+    require(hasIssue(textCollisions,"text_control_overlap"),"standalone text must not cover an unrelated button");
+    require(hasIssue(textCollisions,"text_feature_overlap"),"text must not cover a progress track");
+    const auto issueCount=textCollisions.issues().size();textCollisions.finish();
+    require(textCollisions.issues().size()==issueCount,"finish must be idempotent");
+    textCollisions.reset(panel);
+    textCollisions.addControl("tools",visual,hit);
+    textCollisions.addText("tools.label","TOOLS",-.29F,.145F,.003F,visual);
+    textCollisions.finish();require(textCollisions.valid(),"own-control text must remain valid after reset");
+
+    const auto bounded=nadoc_vr::boundedMenuStrokeText(std::string(250,'W'),.25F,.0032F);
+    require(bounded.text.ends_with("..."),"bounded dynamic text must visibly indicate truncation");
+    require(bounded.scale>=nadoc_vr::kMinimumMenuTextScale && nadoc_vr::strokeTextWidth(bounded.text.size(),bounded.scale)<=.25F+1e-6F,
+        "bounded dynamic text must remain readable inside its content width");
+    require(nadoc_vr::boundedMenuStrokeText("Ready",.25F,.0032F).text=="Ready","short labels must remain complete");
+
     nadoc_vr::MenuLayoutAudit spacing;
     spacing.reset({{-1,-1},{1,1}});
     spacing.addSpacing("first",{{-.4F,0},{0,.1F}},.064F,.012F);

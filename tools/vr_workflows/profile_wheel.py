@@ -10,6 +10,27 @@ from tools.vr_workflows.profile_input import reach_target
 from tools.vr_workflows.control_approach import control_approach
 
 
+def wheel_target(state, wheel='coarse'):
+    """Resolve a wheel and its physical detents from the exported live geometry."""
+    if wheel not in ('coarse', 'fine'):
+        raise ValueError('unknown Extrude wheel: '+wheel)
+    identifier = 'extrude:'+wheel+'-wheel'
+    control = next((c for c in state['controls'] if c.get('id') == identifier), None)
+    settings = next((w for w in state['extrude'].get('wheels', [])
+                     if w.get('id') == identifier or w.get('label') == wheel), None)
+    if control is not None and settings is not None:
+        return control, settings
+    # Keep archived control-mode viewers and their probe fixtures usable.
+    if wheel == 'coarse' and 'wheels' not in state['extrude']:
+        control = next(c for c in state['controls'] if c['label'] == 'EXTRUDE LENGTH WHEEL')
+        ex = state['extrude']
+        return control, {'id': identifier, 'label': wheel,
+                         'base_pairs_per_detent': ex['base_pairs_per_detent'],
+                         'notch_travel_m': ex['wheel_notch_travel_m'],
+                         'hovered': ex['wheel_hovered'], 'dragging': ex['wheel_dragging']}
+    raise RuntimeError('Extrude '+wheel+' wheel is not visible in the main menu')
+
+
 def wheel_travel(current, target, period, notch):
     if period <= 0 or notch <= 0 or (target-current) % period:
         raise ValueError('target must be reachable in whole wheel detents')
@@ -33,7 +54,8 @@ def fine_length(live, target, period, click, record, step=1):
             raise RuntimeError('Fine length click changed unexpected state')
 
 
-def set_wheel_length(live, output, target, preset, seed=0, fine_click=None, fine_step=1):
+def set_wheel_length(live, output, target, preset, seed=0, fine_click=None, fine_step=1,
+                     *, wheel='coarse'):
     output = Path(output)
     trials = []
     cells = live.state['extrude']['cells']
@@ -43,33 +65,34 @@ def set_wheel_length(live, output, target, preset, seed=0, fine_click=None, fine
         before = live.state['extrude']['length_bp']
         if before == target:
             return trials
-        state = live.state['extrude']
-        if fine_click and abs(target-before) <= state['base_pairs_per_detent']:
-            trial = {'before_bp':before,'target_bp':target,'fine_clicks':[]}
+        control, settings = wheel_target(live.state, wheel)
+        period = settings['base_pairs_per_detent']
+        if fine_click and abs(target-before) <= period:
+            trial = {'wheel':wheel,'before_bp':before,'target_bp':target,'fine_clicks':[]}
             trials.append(trial)
             def record(step):
                 trial['fine_clicks'].append(step)
                 save()
-            fine_length(live,target,state['base_pairs_per_detent'],fine_click,record,fine_step)
+            fine_length(live,target,period,fine_click,record,fine_step)
             return trials
         if correction == 3:
             break  # Final fine correction is allowed; a fourth wheel drag is not.
-        travel = wheel_travel(before,target,state['base_pairs_per_detent'],state['wheel_notch_travel_m'])
-        control = next(c for c in live.state['controls'] if c['label']=='EXTRUDE LENGTH WHEEL')
-        trial = {'before_bp':before,'target_bp':target,'travel_m':travel,'acquisition':[]}
+        travel = wheel_travel(before,target,period,settings['notch_travel_m'])
+        trial = {'wheel':wheel,'base_pairs_per_detent':period,
+                 'before_bp':before,'target_bp':target,'travel_m':travel,'acquisition':[]}
         trials.append(trial)
         acquired = False
         for attempt in range(3):
             motion = reach_target(live,control['position'],preset,seed+correction*100+attempt,
                 target_position=control_approach(control,live.state['hands'][1]['position']),
-                acquired=lambda state:state['extrude']['wheel_hovered'])
+                acquired=lambda state:wheel_target(state, wheel)[1]['hovered'])
             metrics = target_metrics(control,live.state['hands'][1])
-            hit = metrics['predicted_hit'] and live.state['extrude']['wheel_hovered']
+            hit = metrics['predicted_hit'] and wheel_target(live.state, wheel)[1]['hovered']
             motion.update(metrics=metrics,hit=hit)
             trial['acquisition'].append(motion);save()
             if hit:
                 live.send('button',hand=1,button='trigger',pressed=True);live.frame()
-                acquired = live.state['extrude']['wheel_dragging']
+                acquired = wheel_target(live.state, wheel)[1]['dragging']
                 break
         if not acquired:
             live.send('button',hand=1,button='trigger',pressed=False);live.frame()

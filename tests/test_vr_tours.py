@@ -125,6 +125,13 @@ def test_fresh_extrude_tour_is_runnable_and_validation_has_no_workspace_reset():
     assert arguments(tour, False) == ['-m', 'tools.vr_workflows.extrude_tour']
 
 
+def test_existing_slice_extrude_has_a_discoverable_isolated_validation():
+    tour = next(t for t in catalog()['tours'] if t['id'] == 'extrude-slice')
+    assert tour['runnable'] and tour['group'] == 'authoring'
+    assert arguments(tour, True) == ['-m', 'tools.vr_workflows.extrude_tour',
+                                     '--slice-reference', '--validate']
+
+
 def test_move_rotate_has_a_demo_and_full_validation_for_each_scope():
     entries={tour['id']:tour for tour in catalog()['tours']}
     for target in ('cluster','overhang','base'):
@@ -198,3 +205,21 @@ def test_card_gallery_registers_desktop_and_vr():
     assert tour['group'] == 'components'
     assert tour['module'] == 'component_gallery_tour'
     assert tour['args'] == ['--component', 'cards']
+
+
+def test_live_menu_tour_respects_assembly_context_without_hiding_missing_tabs():
+    from tools.vr_workflows.menu_tour import context_catalog
+    source = {'tabs': [
+        {'side': 'right', 'key': 'assembly'},
+        {'side': 'right', 'key': 'properties'},
+        {'side': 'left', 'key': 'share'},
+    ]}
+    state = {'controls': [{'sidebar': 'right', 'id': 'tab:properties'}]}
+    part, skipped = context_catalog(source, state)
+    assert [t['key'] for t in part['tabs']] == ['properties', 'share']
+    assert skipped == [{'side': 'right', 'tab': 'assembly',
+                        'reason': 'assembly_context_unavailable'}]
+    assert len(source['tabs']) == 3
+    state['controls'].append({'sidebar': 'right', 'id': 'tab:assembly'})
+    assembly, skipped = context_catalog(source, state)
+    assert assembly == source and not skipped

@@ -35,6 +35,9 @@ test('painted Confirm creates visible geometry once and Undo removes that edit',
   expect(committed.helices).toHaveLength(2)
   expect(committed.lattice_frames).toHaveLength(1)
   expect(committed.feature_log.filter(f => f.op_kind === 'extrude-frame')).toHaveLength(1)
+  // Native Confirm closes the editor and clears its draft after acknowledgement;
+  // the saved feature and Undo remain authoritative independently of that draft.
+  await page.evaluate(() => window.__nadocTest.scrywrite.dispatch({ type: 'tool_config', sequence: 8, draft: null }))
   await page.evaluate(event => window.__nadocTest.scrywrite.dispatch(event), event)
   expect(await page.evaluate(() => window.__nadocTest.scrywrite.snapshot().featureLog.length)).toBe(committed.feature_log.length)
   await page.locator('#canvas').click({ position: { x: 30, y: 30 } })

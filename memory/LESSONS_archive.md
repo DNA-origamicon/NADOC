@@ -2016,3 +2016,16 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
   prevent.
 
 > **Detail.** Full entries live in [LESSONS_archive.md](LESSONS_archive.md). Open only the entry that matches your symptom.
+
+
+### D17
+
+**Menu layout assertions missed overlapping and invisible lettering (2026-10-05).**
+Bounds-only checks did not compare labels with neighboring labels, controls or
+progress tracks. Whole-panel pixel counts then passed on frame borders while
+transparent desktop text lost contrast through double alpha attenuation and
+anisotropic cache filtering. How to avoid: reserve actual text regions, check
+neighbor intersections, inspect production renders, and measure title/help/action
+ink independently at default panel scale with an offscreen negative control.
+Preserve framebuffer bindings across first allocation and real resizing.
+[Evidence and failed attempts](../docs/audits/vr_menu_formatting_20261005.md).

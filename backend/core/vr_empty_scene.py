@@ -1,5 +1,6 @@
 """Explicit empty-document VR authoring scene; never substitutes for failed geometry."""
 from backend.core.extrude_plane import extrude_plane_record
+from backend.core.vr_lattice_context import lattice_context_records
 
 
 def empty_authoring_scene(design, representation='full', coloring='strand'):
@@ -13,6 +14,6 @@ def empty_authoring_scene(design, representation='full', coloring='strand'):
         raise ValueError('invalid representation')
     if coloring not in ('strand', 'base', 'cluster', 'cpk'):
         raise ValueError('invalid coloring')
-    return '\n'.join(['NADOCVR 14 '+representation+' '+coloring,
-                      extrude_plane_record(design), 'Q empty_authoring',
+    return '\n'.join(['NADOCVR 16 '+representation+' '+coloring,
+                      extrude_plane_record(design), *lattice_context_records(design), 'Q empty_authoring',
                       *('R '+rep for rep in ('full', 'cylinders', 'ballstick', 'stick', 'beads', 'vdw', 'hull-prism', 'surface', 'surface-detail', 'mrdna-coarse', 'mrdna-fine', 'oxdna'))])+'\n'

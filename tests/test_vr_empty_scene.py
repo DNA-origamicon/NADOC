@@ -7,7 +7,7 @@ from backend.api import routes_vr
 def test_new_document_has_explicit_empty_contract_without_fake_geometry():
     design = Design()
     scene = empty_authoring_scene(design)
-    assert scene.startswith('NADOCVR 14 full strand\n')
+    assert scene.startswith('NADOCVR 16 full strand\n')
     assert 'Q empty_authoring\n' in scene
     assert 'F XY HONEYCOMB' in scene
     assert not any(line.startswith(('P ', 'C ', 'B ', 'H ')) for line in scene.splitlines())

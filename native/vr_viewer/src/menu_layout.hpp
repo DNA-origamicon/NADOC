@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -42,6 +43,24 @@ struct MenuTextPlacement {
     float top = 0.0F;
     float scale = 0.0F;
 };
+
+struct MenuBoundedText {
+    std::string text;
+    float scale=0;
+};
+
+// Keep names/status legible in fixed controls. The control retains its complete
+// label for discovery; an ellipsis explicitly marks a shortened visible value.
+inline MenuBoundedText boundedMenuStrokeText(const std::string& value,float availableWidth,
+    float maximumScale,float minimumScale=kMinimumMenuTextScale) {
+    if(!std::isfinite(availableWidth) || availableWidth<=0 || !std::isfinite(maximumScale) ||
+       !std::isfinite(minimumScale) || minimumScale<=0 || maximumScale<minimumScale)return {};
+    std::string label;std::istringstream words(value);std::string word;
+    while(words>>word){if(!label.empty())label+=' ';label+=word;}
+    const size_t capacity=size_t(std::max(0.F,std::floor((availableWidth/minimumScale+1.F)/6.F)));
+    if(label.size()>capacity)label=capacity>=3?label.substr(0,capacity-3)+"...":std::string(capacity,'.');
+    return {label,std::max(minimumScale,fittedStrokeTextScale(label.size(),maximumScale,availableWidth))};
+}
 
 struct ActorEyePanelFraming {
     glm::vec2 minimumNdc{1.0F};
@@ -163,6 +182,8 @@ class MenuLayoutAudit {
         controls_.clear();
         issues_.clear();
         spacing_.clear();
+        features_.clear();
+        finished_=false;
         if (!validMenuLayoutBounds(panelBounds_)) {
             addIssue("invalid_geometry", "panel", "panel bounds are invalid");
         }
@@ -185,13 +206,22 @@ class MenuLayoutAudit {
         const std::string& owner, const std::string& text,
         float left, float top, float scale,
         const MenuPanelBounds& containment,
-        float minimumScale = kMinimumMenuTextScale) {
+        float minimumScale = kMinimumMenuTextScale,
+        std::optional<MenuPanelBounds> clip=std::nullopt) {
+        addTextBounds(owner,text,strokeTextLayoutBounds(text,left,top,scale),scale,containment,minimumScale,clip);
+    }
+
+    void addTextBounds(const std::string& owner,const std::string& text,
+        MenuPanelBounds bounds,float scale,const MenuPanelBounds& containment,
+        float minimumScale=kMinimumMenuTextScale,std::optional<MenuPanelBounds> clip=std::nullopt) {
         const MenuTextLayout layout{
-            owner, text, strokeTextLayoutBounds(text, left, top, scale),
+            owner, text, bounds,
             containment, scale, minimumScale,
         };
-        texts_.push_back(layout);
         if (text.empty()) return;
+        auto visible=layout;
+        if(clip){visible.bounds.minimum=glm::max(bounds.minimum,clip->minimum);visible.bounds.maximum=glm::min(bounds.maximum,clip->maximum);}
+        if(visible.bounds.minimum.x<visible.bounds.maximum.x && visible.bounds.minimum.y<visible.bounds.maximum.y)texts_.push_back(visible);
         if (!std::isfinite(scale) || scale <= 0.0F ||
             !validMenuLayoutBounds(layout.bounds) ||
             !validMenuLayoutBounds(containment)) {
@@ -205,6 +235,28 @@ class MenuLayoutAudit {
             addIssue("invalid_geometry", owner, "minimum text scale is invalid");
         } else if (scale + kMenuLayoutEpsilon < minimumScale) {
             addIssue("text_undersized", owner, "fitted text is below the scale floor");
+        }
+    }
+
+    void addFeature(const std::string& owner,const MenuPanelBounds& bounds) {
+        features_.push_back({owner,bounds});
+    }
+    // Opt in after all text and non-text features have been collected, so order
+    // does not hide a collision. Clipped scroll-row text uses its visible bounds.
+    void finish() {
+        if(finished_)return;
+        finished_=true;
+        for(size_t i=0;i<texts_.size();++i) {
+            for(size_t j=0;j<i;++j)if(menuLayoutIntersects(texts_[i].bounds,texts_[j].bounds))
+                addIssue("text_overlap",texts_[i].owner,"text overlaps "+texts_[j].owner);
+            for(const auto& feature:features_)if(menuLayoutIntersects(texts_[i].bounds,feature.second))
+                addIssue("text_feature_overlap",texts_[i].owner,"text overlaps "+feature.first);
+            for(const auto& control:controls_) {
+                const auto& owner=texts_[i].owner;
+                const bool owns=owner==control.owner || owner.starts_with(control.owner+":") || owner.starts_with(control.owner+".");
+                if(!owns && menuLayoutIntersects(texts_[i].bounds,control.visualBounds))
+                    addIssue("text_control_overlap",owner,"text overlaps "+control.owner);
+            }
         }
     }
 
@@ -298,6 +350,8 @@ class MenuLayoutAudit {
     }
 
     std::vector<std::pair<std::string,MenuPanelBounds>> spacing_;
+    std::vector<std::pair<std::string,MenuPanelBounds>> features_;
+    bool finished_=false;
     MenuPanelBounds panelBounds_{};
     std::vector<MenuTextLayout> texts_;
     std::vector<MenuControlLayout> controls_;

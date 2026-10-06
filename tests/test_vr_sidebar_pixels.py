@@ -64,6 +64,22 @@ def test_active_tab_needs_blue_fill_and_visible_label(tmp_path):
     assert not check(tmp_path, evidence)["passed"]
 
 
+def test_active_outline_is_observed_separately_from_the_label(tmp_path):
+    evidence = fixture(tmp_path, gray=False)
+    evidence["state"]["controls"][0].update(enabled=True, active=True)
+    image = Image.open(tmp_path / "left.png")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((50, 80, 150, 120), outline=(31, 111, 235), width=1)
+    image.save(tmp_path / "left.png")
+    assert check(tmp_path, evidence)["passed"]
+    draw.rectangle((50, 80, 150, 120), outline=(22, 27, 34), width=1)
+    image.save(tmp_path / "left.png")
+    result = check(tmp_path, evidence)
+    assert not result["passed"]
+    assert result["controls"][0]["text_samples"] >= 8
+    assert not result["controls"][0]["active_blue"]
+
+
 def test_scrollbar_requires_visible_thumb(tmp_path):
     evidence = fixture(tmp_path)
     control = evidence["state"]["controls"][0]

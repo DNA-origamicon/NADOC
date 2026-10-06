@@ -1430,11 +1430,13 @@ def _serialize_scene(
 
     lines = _SceneLineEmitter(line_writer, representations)
     from backend.core.extrude_plane import extrude_plane_record
+    from backend.core.vr_lattice_context import lattice_context_records
 
     lines.append(f"NADOCVR 16 {representation} {coloring}")
     # Source axes must follow the same desktop-camera rotation as the molecule.
     lines.append("O " + nums(*rotation.T.ravel()))
     lines.append(extrude_plane_record(design))
+    lines.extend(lattice_context_records(design, rotation))
     lines.append("# stable identities, owner aliases, and endpoint-aware tool scopes")
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}

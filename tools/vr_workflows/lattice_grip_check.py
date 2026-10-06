@@ -6,10 +6,41 @@ from tools.vr_workflows.menu_grip_check import move
 from tools.vr_workflows.demo_view import hold
 
 
+def zoom_lattice(live, output, preset, factor):
+    """Declared observation condition using the ordinary two-grip zoom gesture."""
+    output.mkdir(parents=True, exist_ok=False)
+    before=json.loads(json.dumps(live.state['extrude']))
+    scene=live.state['presentation']['model_to_tracking_rows']
+    trials=[]
+    def targets(half_width):
+        return {hand:[a+b for a,b in zip(before['panel_position'],
+            rotate(before['panel_orientation_xyzw'],[sign*half_width*before['panel_scale'],0,0]))]
+            for hand,sign in ((0,-1),(1,1))}
+    try:
+        move(live,targets(.12),preset,trials)
+        for hand in (0,1):live.send('button',hand=hand,button='grip',pressed=True)
+        live.frame()
+        assert live.state['extrude']['grid_scaling'], 'lattice zoom grips not acquired'
+        move(live,targets(.12*factor),preset,trials)
+    finally:
+        for hand in (0,1):live.send('button',hand=hand,button='grip',pressed=False)
+        live.frame()
+        after=live.state['extrude']
+        (output/'zoom.json').write_text(json.dumps({'scope':'explicit observation zoom; original auto-fit is a separate condition',
+            'preset':preset,'requested_factor':factor,'actual_factor':after['lattice_zoom']/before['lattice_zoom'],
+            'before':before,'after':after,'trials':trials},indent=2)+'\n')
+    assert after['cells']==before['cells']
+    assert after['panel_position']==before['panel_position'] and after['panel_scale']==before['panel_scale']
+    assert live.state['presentation']['model_to_tracking_rows']==scene
+    live.capture_to(output/'view',discard_source=True)
+
+
 def run(live, output, preset):
     trials, checks = [], []
     output.mkdir(parents=True, exist_ok=True)
     cells = live.state['extrude']['cells']
+    wheels = [(w['position'],w['orientation_xyzw'],w['scale'])
+              for w in live.state['extrude'].get('wheels',[])]
 
     def save():
         (output/'grips.json').write_text(json.dumps({'profile': preset, 'checks': checks, 'trials': trials}, indent=2))
@@ -84,9 +115,11 @@ def run(live, output, preset):
         assert live.state['extrude']['panel_scale'] > scale*1.04
         assert live.state['extrude']['lattice_zoom'] == zoom
         assert live.state['extrude']['cells'] == cells
+        assert [(w['position'],w['orientation_xyzw'],w['scale'])
+                for w in live.state['extrude'].get('wheels',[])] == wheels
         live.capture_to(output/'window-resizing', discard_source=True)
-        hold(live, 'Border grips move and resize the lattice window and its wheel')
-        checks.append({'border_move_resize': True});save()
+        hold(live, 'Border grips move and resize the painter; length wheels stay in the main menu')
+        checks.append({'border_move_resize': True,'main_menu_wheels_stationary':True});save()
     finally:
         buttons(False)
         save()

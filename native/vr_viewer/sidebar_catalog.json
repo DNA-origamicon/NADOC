@@ -1,7 +1,7 @@
 {
   "version": 2,
   "sourceHashes": {
-    "frontend/index.html": "f3b95d1a46e36f7f5f49b8dabf2216db16111f2a100ef2c5c36e21891e43ed02",
+    "frontend/index.html": "a4fe495d5243ac87ea41f04cf4d43fcf333e599284380f53954c1a6c92726888",
     "frontend/scripts/generate-vr-sidebar-catalog.mjs": "8f851b65d1453addcb03ea1973281dddb4a340ab426945d3895ce2688303a538",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/scene/coloring_modes.js": "38b8f278e205a935a63413a0aa0d32d89762759d0b77c7da7eaba28c7d802bae",
@@ -18,7 +18,7 @@
     "frontend/src/ui/multi_view.js": "d897f8b8f2bbe22a6ec27c5fb049e3710a3d5ff86733c6546f52f2461f2c9ab2",
     "frontend/src/ui/overhang_connections_panel.js": "21bc3e08cc2345d013c2bfe87b97c6e3b31ca942a3d9d9e65f519912a16eb304",
     "frontend/src/ui/plate_view.js": "47b0a22b46e0f086005660cf2ef584c15852a78914ee850a778f40d537fa819c",
-    "frontend/src/ui/right_sidebar_tabs.js": "7f3a16415c1d277668e791c50b0412f7a0ddf11ef64513555d1f5ea422d1d5ce",
+    "frontend/src/ui/right_sidebar_tabs.js": "75873fb6c4f4b90549c282db3a1b99fb1243f7410cc0ed5e311845427b11b1d5",
     "frontend/src/ui/simulation_card_order.js": "b6029b02f5d7a852a81ed7491f8fb00e4f3e50608318b0a09cd8b4a105650aff",
     "native/vr_viewer/src/menu_items.hpp": "da665f19dcc21113c1599d37217ef7c68102a85c63fa8785966f26c743cd8c3f"
   },

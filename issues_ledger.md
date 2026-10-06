@@ -1225,3 +1225,10 @@ Reaching 100% is functional success, not evidence of comfortable frame delivery.
 `a4cb52583c26` resumed and verified against its original using SHA-256 for all
 37 files. Archive index updated, original removed only after verification; archived
 job loads successfully. Audit: `.development-artifacts/archive-recovery-cube-pore-20261003/`.
+
+## ISSUE-56 — VR Extrude Confirm leaves editing windows open; menu text collides or fades (2026-10-05, FIXED)
+
+- [x] Accepted Confirm dismisses the painter and right-hand menu immediately, freezes the submitted target/configuration, and clears the successful draft while retaining feature-bound Undo. Failed/refused commits restore the draft with fresh validation.
+- [x] Audit all sidebar tabs, tool pages, legacy menus, desktop chrome, View Tools, loading panels and component galleries. Separate titles/subtitles/value columns, bound dynamic text, retain padding and readable tab labels, and keep text clear of controls, progress bars and borders.
+- [x] Correct transparent-menu alpha handling, framebuffer restoration during cache allocation, and texture aspect preservation after the width cap; wide desktop headers retain visible lettering.
+- **Evidence:** 12,001 layout states, 425 production-rendered states, native lifecycle regressions, the full frontend suite, and an actual browser-backed VR commit. Initial observation failures and human-headset limits remain recorded in the [audit](docs/audits/vr_menu_formatting_20261005.md).

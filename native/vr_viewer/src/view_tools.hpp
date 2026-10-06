@@ -20,6 +20,10 @@ class VRViewTools {
     nadoc_vr::MenuPlacement placement;
     nadoc_vr::GripFrameState gripState=nadoc_vr::GripFrameState::idle;
     static constexpr float half=.34666667F;
+    // The browser texture fills the content square. Keep the native 25 mm grip
+    // rails outside it so they cannot cross its header, icons or status text.
+    static constexpr float frameHalf=half+.045F;
+    static nadoc_vr::MenuPanelBounds panelBounds(){return {{-frameHalf,-frameHalf},{frameHalf,frameHalf}};}
     glm::vec3 position{};glm::quat orientation{1,0,0,0};
     std::vector<V> triangles,lines;std::vector<Sprite> sprites;
     static constexpr std::array<const char*,8> keys{"lengthHeatmap","sequences","undefinedBases","loopSkips","grid","overhangNames","clashes","deform"};
@@ -67,14 +71,15 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
     glm::vec3 world(glm::vec2 uv) const {return placement.worldPoint({(uv.x-.5F)*2*half,(.5F-uv.y)*2*half,0});}
     template<class Feedback> void grips(const std::array<nadoc_vr::HandPose,2>& hands,const std::array<bool,2>& clicked,std::array<bool,2>& blocked,Feedback feedback) {
         if(!open)return;
-        placement.update(hands,half);
-        if(!blocked[0]&&!blocked[1]&&(clicked[0]||clicked[1])&&placement.beginBorderResize(hands,{-half,-half},{half,half})) {feedback(0,.52F);feedback(1,.52F);}
+        const auto bounds=panelBounds();
+        placement.update(hands,frameHalf);
+        if(!blocked[0]&&!blocked[1]&&(clicked[0]||clicked[1])&&placement.beginBorderResize(hands,bounds.minimum,bounds.maximum)) {feedback(0,.52F);feedback(1,.52F);}
         if(!placement.resizeActive()&&!placement.dragHand())for(size_t h=0;h<2;++h)
-            if(!blocked[h]&&clicked[h]&&placement.beginDrag(h,hands,{-half,-half},{half,half})){feedback(h,.48F);break;}
-        placement.update(hands,half);syncPose();
+            if(!blocked[h]&&clicked[h]&&placement.beginDrag(h,hands,bounds.minimum,bounds.maximum)){feedback(h,.48F);break;}
+        placement.update(hands,frameHalf);syncPose();
         if(placement.resizeActive())blocked.fill(true);
         if(placement.dragHand())blocked[*placement.dragHand()]=true;
-        const bool near=placement.nearBorder(hands[0],{-half,-half},{half,half})||placement.nearBorder(hands[1],{-half,-half},{half,half});
+        const bool near=placement.nearBorder(hands[0],bounds.minimum,bounds.maximum)||placement.nearBorder(hands[1],bounds.minimum,bounds.maximum);
         gripState=(placement.resizeActive()||placement.remoteMode()==2)?nadoc_vr::GripFrameState::resizing:(placement.dragHand()||placement.remoteMode()==1)?nadoc_vr::GripFrameState::moving:(near||placement.remoteHovered)?nadoc_vr::GripFrameState::ready:nadoc_vr::GripFrameState::idle;
     }
     static glm::vec2 cell(size_t i){return {(16.F+(i%2)*376+180)/768,(62.F+(i/2)*112+50)/768};}
@@ -91,7 +96,7 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
             if(blocked[h])continue;
             blocked[h]=true;
             const float px=uv->x*768,py=uv->y*768;
-            if(clicked[h] && px>=24 && px<=344 && py>=620 && py<=684) {placement.toggleDock(h,hands,half);syncPose();continue;}
+            if(clicked[h] && px>=24 && px<=344 && py>=620 && py<=684) {placement.toggleDock(h,hands,frameHalf);syncPose();continue;}
             for(int i=0;i<int(keys.size());++i){const auto c=cell(i)*768.F;if(std::abs(px-c.x)<180 && std::abs(py-c.y)<50){hover[h]=i;break;}}
             if(clicked[h]&&hover[h]>=0&&!waiting&&version){requested=hover[h];waiting=true;++sequence;commit(h);}
         }
@@ -154,7 +159,7 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
         for(int i:hover)if(i>=0){const auto c=cell(i);const glm::vec2 d{180.F/768,50.F/768};
             const std::array<glm::vec2,4> corners{{c-d,c+glm::vec2(d.x,-d.y),c+d,c+glm::vec2(-d.x,d.y)}};
             for(int j=0;j<4;++j)for(int k:{j,(j+1)%4})border.push_back({world(corners[k])+orientation*glm::vec3(0,0,.001F),{1,.7F,.1F,1},{-1,-1}});}
-        nadoc_vr::drawGripFrame({{-half,-half},{half,half}},gripState,
+        nadoc_vr::drawGripFrame(panelBounds(),gripState,
             [&](glm::vec3 a,glm::vec3 b,glm::vec3 color){for(auto p:{a,b})border.push_back({placement.worldPoint(p),glm::vec4(color,1),{-1,-1}});},
             [](nadoc_vr::MenuPanelBounds,glm::vec3){});
         draw(vp,border,GL_LINES);

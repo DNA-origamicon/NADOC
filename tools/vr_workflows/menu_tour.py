@@ -22,6 +22,23 @@ from tools.vr_workflows.control_approach import control_approach
 from tools.vr_workflows.menu_pixels import check as check_pixels
 
 
+def context_catalog(catalog, state):
+    """Omit the Assembly-only tab when the native session is a Part workspace.
+
+    Other absent tabs stay in the tour and fail normally; context filtering must
+    not turn a missing production control into passing reduced coverage.
+    """
+    visible = {(c.get("sidebar"), c["id"]) for c in state["controls"]}
+    skipped = [
+        {"side": t["side"], "tab": t["key"], "reason": "assembly_context_unavailable"}
+        for t in catalog["tabs"]
+        if t["key"] == "assembly" and (t["side"], "tab:assembly") not in visible
+    ]
+    excluded = {(t["side"], t["tab"]) for t in skipped}
+    return {**catalog, "tabs": [t for t in catalog["tabs"]
+                               if (t["side"], t["key"]) not in excluded]}, skipped
+
+
 def find_control(live, hand, identifier):
     return next(
         c
@@ -444,6 +461,10 @@ def main():
                     live.button("menu", hand=hand)
             live.frame()
             assert all(s["open"] for s in live.state["sidebars"])
+            catalog, skipped = context_catalog(catalog, live.state)
+            (output / "context-skips.json").write_text(json.dumps(skipped, indent=2) + "\n")
+            if not catalog["tabs"]:
+                raise RuntimeError("Requested tab is unavailable in this document context: " + str(skipped))
             # Independent toggling is checked through real controller input.
             live.button("menu", hand=0)
             assert (
