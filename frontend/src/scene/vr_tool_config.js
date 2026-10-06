@@ -16,7 +16,7 @@ export const VR_TOOL_CONFIG_LIMITS = Object.freeze({
 
 const PARAMETERIZED_MODES = new Set(['extrude', 'twist', 'bend'])
 const TARGET_KINDS = new Set([
-  'none', 'cluster', 'strand', 'domain', 'base', 'end', 'bond', 'crossover',
+  'none', 'selection', 'cluster', 'strand', 'domain', 'base', 'end', 'bond', 'crossover',
   'overhang', 'extension', 'protein',
 ])
 const STRAND_FILTERS = new Set(['both', 'scaffold', 'staples'])
@@ -215,7 +215,7 @@ export function vrPlaneFeedbackPayload(event, state, { toolTarget = null, planeP
       typeof pickedIdentity !== 'string' || !pickedIdentity ||
       pickedIdentity.length > 2048 || /\s/.test(pickedIdentity) ||
       !draft || !['twist', 'bend'].includes(draft.mode) ||
-      !['cluster', 'end'].includes(draft.target_kind)) return null
+      !['cluster', 'strand', 'domain', 'selection', 'end'].includes(draft.target_kind)) return null
 
   const targetMatches = !!toolTarget &&
     toolTarget.identity === draft.target_identity &&

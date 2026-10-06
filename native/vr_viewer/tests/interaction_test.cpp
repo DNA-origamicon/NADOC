@@ -1113,7 +1113,7 @@ void toolShellNeverClaimsACommitAndRequiresPreview() {
         nadoc_vr::ToolCapability::unsupported);
     require(nadoc_vr::ToolShell::selectionCapability(
         nadoc_vr::ToolMode::bend, "domain") ==
-        nadoc_vr::ToolCapability::unsupported);
+        nadoc_vr::ToolCapability::configuration_required);
 
     shell.activate(nadoc_vr::ToolMode::move_rotate, "base");
     require(shell.status() == "READY");

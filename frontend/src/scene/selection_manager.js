@@ -1,3 +1,4 @@
+import { vrDeformationSelection, resolveVRDeformationSelection, vrDeformationRefForOwner } from './vr_deformation_selection.js'
 /**
  * Selection manager — raycaster-based gestures backed by canonical selection refs.
  *
@@ -2456,6 +2457,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       design: state.currentDesign,
     })
     if (!owner) return null
+    const deformationRef = vrDeformationRefForOwner(owner, _selLevel, state.currentDesign, state.currentGeometry)
+    if (deformationRef) {
+      selectionController.replace([deformationRef])
+      return { owner, accepted: true, selected: true, selectionKind: deformationRef.kind,
+        ownerTokens: vrInitialSelectionOwnerTokens(deformationRef) }
+    }
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries = designRenderer.getConeEntries()
     let entry = null
@@ -2616,6 +2623,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const retainedRefs = previousRefs.filter(ref => !selections.has(JSON.stringify(ref)))
     const committed = selectionController.replace([...retainedRefs, ...resolvedRefs])
     const selectedOwnerTokens = committed.items.flatMap(vrInitialSelectionOwnerTokens)
+    const aggregate = vrDeformationSelection(committed.items)
+    if (aggregate) return { ...aggregate, accepted: true, selected: true,
+      selectionCount: committed.items.length, selectedIdentities: [aggregate.identity] }
     if (committed.items.length === 1 && selections.size === 1) {
       const only = selections.values().next().value
       return {
@@ -2646,6 +2656,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
    * owner alias must still name the current canonical ref, preventing a delayed
    * tool event from acting on a newer selection of the same kind. */
   function _resolveVRToolTargetSnapshot({ identity, selectionKind, ownerTokens } = {}) {
+    const items = selectionController.getState().items
+    if (items.length > 1 || selectionKind === 'selection')
+      return resolveVRDeformationSelection({ identity, selectionKind, ownerTokens }, items)
     const selectedRef = selectionController.getState().primary ?? null
     const state = store.getState()
     const target = vrToolTargetSnapshot({
@@ -4092,7 +4105,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return
-    if (moveRotateSelectionLocked(store.getState())) return
+    if (store.getState().deformToolActive || moveRotateSelectionLocked(store.getState())) return
     if (isDisabled?.()) return
 
     // Modifier precedence: Alt > Shift > Ctrl. They never combine meaningfully
@@ -4194,7 +4207,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Once Move/Rotate has a target, canvas selection is frozen. Clear stale
     // gesture bookkeeping without consuming right-click/context-menu behavior;
     // the panel's Clear selection action explicitly re-arms picking.
-    if (moveRotateSelectionLocked(store.getState())) {
+    if (store.getState().deformToolActive || moveRotateSelectionLocked(store.getState())) {
       _downPos = _ctrlDownPos = _altDownPos = _shiftDownPos = null
       _clearHoverPreview()
       return
@@ -4982,6 +4995,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // programmatic/controller mutations as well as pointer gestures.
   store.subscribe((newState, prevState) => {
     if (newState.selection !== prevState.selection) {
+      vrDeformationSelection(selectionController.getState().items)
       _syncCanonicalHighlights(newState)
     }
   })
@@ -5074,17 +5088,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       })
       if (!pick.resolved && !position && !extent) return pick
       const selectedRef = selectionController.getState().primary ?? null
-      const scope = resolveVRDeformationScope(selectedRef, {
+      const scope = resolveVRDeformationScope(selectionController.getState().items.length > 1 ? selectionController.getState().items : selectedRef, {
         design: state.currentDesign,
         geometry: state.currentGeometry,
       })
       if (!scope.resolved) {
         return { resolved: false, reason: 'plane_frame_unavailable' }
       }
-      if (extent) pick = extremeVRDeformationPlane(extent, scope.clusterIds, scope.helixIds) ?? pick
-      else if (position) pick = nearestVRDeformationPlane(position, scope.clusterIds, scope.helixIds, limits) ?? pick
+      if (extent) pick = extremeVRDeformationPlane(extent, scope.clusterIds, scope.helixIds, scope.ranges) ?? { resolved: false, reason: 'out_of_range' }
+      else if (position) pick = nearestVRDeformationPlane(position, scope.clusterIds, scope.helixIds, limits, scope.ranges) ?? { resolved: false, reason: 'out_of_range' }
       if (!pick.resolved) return pick
-      const frames = getVRDeformationPlaneFrames(pick.bp, scope.clusterIds, scope.helixIds)
+      if (scope.ranges && !scope.ranges.some(r => r.helixId === pick.helixId && pick.bp >= r.lo && pick.bp <= r.hi))
+        return { resolved: false, reason: 'out_of_range' }
+      const frames = getVRDeformationPlaneFrames(pick.bp, scope.clusterIds, scope.helixIds, scope.ranges)
       return frames ? { ...pick, frame: frames.natural }
         : { resolved: false, reason: 'plane_frame_unavailable' }
     },
@@ -5092,13 +5108,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Opaque canonical owner aliases used to seed a native viewer launched after
      *  the desktop selection was made. No renderer identity crosses this boundary. */
     getVRInitialSelectionOwnerTokens() {
-      return vrInitialSelectionOwnerTokens(selectionController.getState().primary)
+      const aggregate = vrDeformationSelection(selectionController.getState().items)
+      return aggregate ? [...aggregate.ownerTokens, ...aggregate.selectedOwnerTokens] : vrInitialSelectionOwnerTokens(selectionController.getState().primary)
     },
 
     /** Canonical kind accompanies opaque aliases only so the native tool shell can
      *  enforce capability; it is never sufficient to identify or mutate a target. */
     getVRInitialSelectionKind() {
-      return selectionController.getState().primary?.kind ?? 'none'
+      return vrDeformationSelection(selectionController.getState().items)?.selectionKind ?? selectionController.getState().primary?.kind ?? 'none'
     },
 
     /** Clear committed selection and its projected renderer state. */

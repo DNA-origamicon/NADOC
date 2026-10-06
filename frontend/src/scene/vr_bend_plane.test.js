@@ -31,3 +31,14 @@ describe('VR bend controller projection', () => {
     expect(nearestVRDeformationPlane([NaN,0,0], [])).toBeNull()
   })
 })
+
+it('constrains aggregate plane picking to selected domain intervals, including gaps', () => {
+  store.setState({ currentDesign: { helices: [{ id: 'a', bp_start: 0, length_bp: 101 }], cluster_transforms: [] },
+    currentHelixAxes: { a: { start: [0,0,0], end: [0,0,100] } } })
+  const ranges = [{ helixId: 'a', lo: 10, hi: 20 }, { helixId: 'a', lo: 70, hi: 80 }]
+  expect(extremeVRDeformationPlane('a', [], ['a'], ranges).bp).toBe(10)
+  expect(extremeVRDeformationPlane('b', [], ['a'], ranges).bp).toBe(80)
+  expect(nearestVRDeformationPlane([0,0,50], [], ['a'], null, ranges).bp).toBe(70)
+  expect(nearestVRDeformationPlane([0,0,50], [], ['a'], { max: 65 }, ranges).bp).toBe(20)
+  expect(nearestVRDeformationPlane([0,0,50], [], ['a'], { min: 30, max: 65 }, ranges)).toBeNull()
+})

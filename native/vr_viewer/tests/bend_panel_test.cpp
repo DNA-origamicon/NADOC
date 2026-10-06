@@ -27,6 +27,16 @@ int main() {
             assert(glm::distance(arc.endTangent(float(fixedEnd)),arc.tangent)<1e-6F);
         }
     }
+    for(const auto* kind:{"strand","domain","selection"}) {
+        assert(BendPanel::supports(kind));
+        for(auto mode:{ToolMode::bend,ToolMode::twist})
+            assert(ToolShell::selectionCapability(mode,kind)==ToolCapability::configuration_required);
+        const std::string target="selection:test:2";
+        auto selection=parseSelectionFeedback("NADOCVR_FEEDBACK 5 4 1 1 domain "+std::string(kind)+" "+target+" 1 "+target+" 1 "+target+" 2 owner1 owner2\n",0,4);
+        assert(selection && selection->selected && selection->selectionOwnerTokens.size()==2);
+        auto plane=parsePlanePickFeedback("NADOCVR_PLANE_FEEDBACK 2 1 4 1 resolved a "+std::string(kind)+" "+target+" "+target+" 20 0 0 0 0 0 1 2\n",0,1,4);
+        assert(plane && plane->frameResolved && plane->planeBp==20);
+    }
     ToolConfigurationDraft config;
     (void)config.bind(ToolMode::bend,"cluster:1","cluster",{"owner:1"});
     (void)config.setPlaneBp("a",5);(void)config.setPlaneBp("b",105);

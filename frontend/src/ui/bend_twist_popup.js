@@ -12,14 +12,20 @@ import { createToolPopup } from './tool_popup.js'
 import { el } from './primitives/dom.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
 import { store } from '../state/store.js'
+import { showToast } from './toast.js'
+import { moveRotateSelectionLabels } from '../scene/move_rotate_panel.js'
+import { targetState } from '../scene/deformation_targets.js'
 import { validateDeformation } from '../api/client.js'
 import {
   setDeformSessionClusterIds,
   getDeformDefaultClusterIds,
+  getDeformSessionTargets,
 } from '../scene/deformation_editor.js'
 
 // ── DOM refs (grabbed once on init) ─────────────────────────────────────────
 
+let _selectionUI = null
+let _selectionSection = null
 let _floating = null
 let _pickingHint = null
 const _pickingDisabled = new Map()
@@ -136,9 +142,11 @@ export function initBendTwistPopup(callbacks) {
 
   _popup      = document.getElementById('deform-panel')
   _title      = document.getElementById('def-panel-title')
-  _floating = createToolPopup({ panel: _popup, title: 'Twist', onClose: () => { _hide(); _callbacks?.onCancel() } })
+  _floating = createToolPopup({ panel: _popup, title: 'Twist', onClose: () => { if (_selectionUI) _selectionUI.onCancel(); else { _hide(); _callbacks?.onCancel() } } })
   _pickingHint = el('p', { className: 'tool-picking-hint', attrs: { 'aria-live': 'polite', hidden: true } })
   _popup.prepend(_pickingHint)
+  _selectionSection = el('div', { id: 'def-current-selection' })
+  _popup.prepend(_selectionSection)
   _twistCtrl  = document.getElementById('def-twist-controls')
   _bendCtrl   = document.getElementById('def-bend-controls')
   _twistValue = document.getElementById('def-twist-value')
@@ -257,13 +265,19 @@ export function initBendTwistPopup(callbacks) {
 
   // Buttons
   _cancelBtn.addEventListener('click', () => {
+    if (_selectionUI) { _selectionUI.onCancel(); return }
     _hide()
     _callbacks?.onCancel()
   })
-  _applyBtn.addEventListener('click', () => {
-    const params = _readParams()  // read BEFORE _hide() clears _toolType
-    _hide()
-    _callbacks?.onConfirm(params)
+  _applyBtn.addEventListener('click', async () => {
+    const params = _readParams()
+    _applyBtn.disabled = true
+    try {
+      await _callbacks?.onConfirm(params)
+      _hide()
+    } catch (error) {
+      showToast(error.message ?? 'Could not apply deformation', { severity: 'error' })
+    } finally { _applyBtn.disabled = false }
   })
 }
 
@@ -295,7 +309,19 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
   // Build the cluster picker. Initial selection: explicit list (edit mode), else
   // the editor's default scope (active cluster / single cluster / none).
   const initIds = initialClusterIds ?? getDeformDefaultClusterIds()
-  _rebuildClusterList(initIds)
+  if (getDeformSessionTargets() !== null) {
+    _selectedClusterIds = []
+    if (_clusterSection) _clusterSection.style.display = 'none'
+    if (!_selectionUI && _selectionSection) {
+      _selectionSection.hidden = false
+      _selectionSection.replaceChildren(el('div', { className: 'mr-section-label', text: 'Current selection' }))
+      const labels = moveRotateSelectionLabels(targetState(store.getState().currentDesign, getDeformSessionTargets()))
+      for (const label of labels) _selectionSection.append(el('div', { className: 'mr-selection-item', text: label }))
+    }
+  } else {
+    if (!_selectionUI && _selectionSection) _selectionSection.hidden = true
+    _rebuildClusterList(initIds)
+  }
 
   if (params) {
     // Pre-populate from existing op params
@@ -402,12 +428,42 @@ export function showPickingPopup(toolType, planeA = null) {
   _pickingHint.textContent = planeA == null ? 'Select plane A (fixed) in the 3D view, then plane B.' : 'Plane A selected. Select plane B in the 3D view to enable the parameters.'
   _pickingHint.hidden = false
   for (const control of _popup.querySelectorAll('input, select, button')) {
-    if (control === _cancelBtn) continue
+    if (control === _cancelBtn || _selectionSection?.contains(control)) continue
     _pickingDisabled.set(control, control.disabled)
     control.disabled = true
   }
   for (const node of [_twistCtrl, _bendCtrl, _clusterSection]) if (node) node.inert = true
   _floating?.show()
+}
+
+/** Selection stays in the same floating panel throughout the tool session. */
+export function showSelectionPopup(type) {
+  showPickingPopup(type)
+  if (_pickingHint) _pickingHint.textContent = 'Build a selection, then choose Pick planes.'
+  if (_clusterSection) _clusterSection.style.display = 'none'
+}
+
+export function setDeformationSelectionUI(config) {
+  _selectionUI = config
+  if (!_selectionSection) return
+  _selectionSection.replaceChildren()
+  _selectionSection.hidden = !config
+  if (!config) return
+  _selectionSection.append(el('div', { className: 'mr-section-label', text: 'Current selection' }))
+  const list = el('div', { className: 'mr-selection-box', attrs: { 'aria-live': 'polite' } })
+  for (const label of config.labels.length ? config.labels : ['Nothing selected']) {
+    list.append(el('div', { className: 'mr-selection-item', text: label }))
+  }
+  _selectionSection.append(list)
+  if (config.error) _selectionSection.append(el('p', { className: 'dim', text: config.error }))
+  const button = (id, text, action, disabled = false) => {
+    const node = el('button', { className: 'btn btn--sm', text, attrs: { id, type: 'button' }, on: { click: action } })
+    node.disabled = disabled
+    _selectionSection.append(node)
+  }
+  button('def-clear-selection', 'Clear selection', config.onClear, !config.labels.length)
+  if (config.phase === 'selection') button('def-pick-planes', 'Pick planes', config.onPick, !!config.error)
+  else button('def-change-selection', 'Change selection', config.onChange)
 }
 
 export function closePopup() {
@@ -559,7 +615,8 @@ function _firePreview() {
   // wants to know if a bend/twist is unachievable, even with live preview off.
   _fireValidate()
   if (!_previewChk?.checked) return
-  _callbacks?.onPreview(_readParams())
+  Promise.resolve(_callbacks?.onPreview(_readParams())).catch(error =>
+    showToast(error.message ?? 'Could not preview deformation', { severity: 'error' }))
 }
 
 // ── Feasibility (physically-achievable bend/twist) feedback ──────────────────────
@@ -579,7 +636,7 @@ async function _doValidate() {
   const params = _readParams()
   try {
     const res = await validateDeformation({
-      type, planeA, planeB, params, clusterIds: _selectedClusterIds,
+      type, planeA, planeB, params, clusterIds: _selectedClusterIds, targets: getDeformSessionTargets() ?? undefined,
     })
     // Ignore stale responses if the tool closed or switched mid-flight.
     if (_toolType === type) _renderFeasibility(res)

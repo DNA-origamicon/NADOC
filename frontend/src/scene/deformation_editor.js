@@ -1,3 +1,4 @@
+import { deformationTargets, targetState } from './deformation_targets.js'
 /**
  * Deformation Editor — Bend and Twist tool state machine.
  *
@@ -42,15 +43,12 @@ let _toolType = null      // 'twist' | 'bend'
 let _planeA   = null      // { bp }
 let _planeB   = null      // { bp }
 let _previewOpId       = null
-let _previewPending    = false  // true while an addDeformation network call is in-flight
 let _lastPreviewParams = null   // params from the most recent previewDeformation call
 // Coalesce live-preview PATCHes: a slider drag fires ~40 input events, each of
 // which used to fire its own updateDeformation PATCH + a /design/geometry refetch
 // (40 concurrent ~30s calls → backend saturation). With these, only one PATCH is
 // in flight at a time; intermediate slider positions are dropped and the latest
 // is flushed when the in-flight one finishes (render keeps up at backend speed).
-let _updateInFlight     = false
-let _pendingUpdateParams = null
 let _previewOriginalAxes = null // currentHelixAxes snapshot before preview was applied
 let _editMode          = false  // true when opened via startToolForEdit; Esc exits directly
 // Edit-in-place state. When editing an existing op we do NOT seek to a pre-state
@@ -158,8 +156,12 @@ export function startToolAtBp(toolType, helixId, bp, openSide) {
  * @param {number} globalBpA  - plane A global bp index
  * @param {number} globalBpB  - plane B global bp index
  */
-export function startToolForEdit(toolType, globalBpA, globalBpB, opId = null, origParams = null) {
+export function startToolForEdit(toolType, globalBpA, globalBpB, opId = null, origParams = null, snapshot = null) {
   if (!_scene) return
+  const saved = snapshot ?? store.getState().currentDesign?.deformations?.find(op => op.id === opId)
+  _scopeSourceOpId = saved?.id ?? null
+  _sessionTargets = saved?.targets ?? null
+  _sessionRanges = saved?.target_ranges?.map(r => ({ helixId: r.helix_id, lo: r.start_bp, hi: r.end_bp })) ?? null
   _editMode = true
   _editOpId = opId
   _editOrigParams = origParams
@@ -279,15 +281,10 @@ function _onDocDragUp() {
  * plane drag-end and programmatic plane repositioning.
  */
 function _refreshPreview() {
-  if (_previewOpId && _lastPreviewParams) {
-    const staleOpId = _previewOpId
-    const params    = _lastPreviewParams
-    _previewOpId = null
-    showPersistentToast('Generating preview…')
-    api.deleteDeformation(staleOpId, /*preview=*/true)
-      .then(() => previewDeformation(params))
-      .catch(() => { dismissToast() })
-  }
+  const params = _lastPreviewParams
+  if (!params) return
+  _cancelPreview()
+  previewDeformation(params).catch(() => dismissToast())
 }
 
 export function handlePointerMove(event) {
@@ -332,25 +329,12 @@ export function handleEscape() {
 // Called by popup when confirmed
 export async function confirmDeformation(params) {
   if (_state !== STATE.BOTH || !_planeA || !_planeB) return
-  // Sequentially: await the preview-op DELETE, THEN the non-preview POST.
-  // The previous code used _clearPreviewSession() which fires the DELETE as
-  // a fire-and-forget (api.deleteDeformation(...).catch(...) — no await).
-  // The DELETE then races the awaited POST: if the DELETE response arrives
-  // at the client AFTER the POST response, _syncFromDesignResponse overwrites
-  // the post-POST store (which has the new op) with the post-DELETE store
-  // (which doesn't). User sees "Apply doesn't bend" even though the server
-  // state and feature_log entry are correct.
-  _previewPending      = false
-  _lastPreviewParams   = null
-  _previewOriginalAxes = null
-  dismissToast()
-  if (_previewOpId) {
-    await api.deleteDeformation(_previewOpId, /*preview=*/true)
-    _previewOpId = null
-  }
-  const a = Math.min(_planeA.bp, _planeB.bp)
-  const b = Math.max(_planeA.bp, _planeB.bp)
-  await api.addDeformation(_toolType, a, b, params, [], /*preview=*/false, _effectiveClusterIds())
+  const a = Math.min(_planeA.bp, _planeB.bp), b = Math.max(_planeA.bp, _planeB.bp)
+  const type = _toolType, targets = _sessionTargets, clusters = _effectiveClusterIds(), sourceOperationId = _scopeSourceOpId
+  _cancelPreview()
+  await _queuePreview(async () => {
+    await api.addDeformation(type, a, b, params, [], false, clusters, { targets: targets ?? undefined, sourceOperationId: sourceOperationId ?? undefined })
+  })
   _exitTool()
 }
 
@@ -364,71 +348,40 @@ export function cancelDeformation() {
 }
 
 // Called by popup when preview params change
+let _previewQueue = Promise.resolve()
+let _previewEpoch = 0
+function _queuePreview(task) {
+  const result = _previewQueue.then(task)
+  _previewQueue = result.catch(() => {})
+  return result
+}
+export function waitForDeformationIdle() { return _previewQueue }
+export function discardDeformationPreview() { _cancelPreview(); return _previewQueue }
+
 export async function previewDeformation(params) {
   if (_state !== STATE.BOTH || !_planeA || !_planeB) return
   _lastPreviewParams = params
-  const a = Math.min(_planeA.bp, _planeB.bp)
-  const b = Math.max(_planeA.bp, _planeB.bp)
-  // Once per preview session, BEFORE the first op changes currentGeometry:
-  //   • snapshot the pre-preview axes (keeps plane interaction anchored across
-  //     the drag auto-refresh's delete→rebuild cycle), and
-  //   • freeze the committed design as the SOLID reference so the live deformed
-  //     result renders as a translucent ghost of where it will be.
-  // Runs for BOTH the edit-in-place and new-op paths (the edit path returns
-  // below before the new-op branch, so this must be above the updOpId check).
-  if (!_previewOriginalAxes) {
-    _previewOriginalAxes = store.getState().currentHelixAxes
-    _renderer?.beginDeformPreview?.(PREVIEW_GHOST_OPACITY)
-  }
-  // Update path (edit-in-place OR an existing preview op): PATCH the live op.
-  // Edit-in-place patches the real op (planes apply on confirm via editFeature);
-  // the preview-op path patches the ?preview op. Both COALESCE: if a PATCH is
-  // already in flight, stash the latest params and bail — the in-flight handler
-  // flushes the newest when it finishes, so a fast drag doesn't pile up dozens of
-  // PATCH + /design/geometry round-trips.
-  const updOpId = _editOpId ?? _previewOpId
-  if (updOpId) {
-    if (_editOpId) _editDirty = true
-    if (_updateInFlight) { _pendingUpdateParams = params; return }
-    _updateInFlight = true
+  const epoch = _previewEpoch
+  const a = Math.min(_planeA.bp, _planeB.bp), b = Math.max(_planeA.bp, _planeB.bp)
+  const type = _toolType, targets = _sessionTargets, clusters = _effectiveClusterIds(), sourceOperationId = _scopeSourceOpId
+  return _queuePreview(async () => {
+    if (epoch !== _previewEpoch || params !== _lastPreviewParams) return
+    if (!_previewOriginalAxes) {
+      _previewOriginalAxes = store.getState().currentHelixAxes
+      _renderer?.beginDeformPreview?.(PREVIEW_GHOST_OPACITY)
+    }
     showPersistentToast('Generating preview…')
     try {
-      await api.updateDeformation(updOpId, params)
-      // Flush the newest params that arrived while we were patching (latest wins).
-      while (_pendingUpdateParams != null && _state === STATE.BOTH) {
-        const next = _pendingUpdateParams
-        _pendingUpdateParams = null
-        await api.updateDeformation(updOpId, next)
+      const id = _editOpId ?? _previewOpId
+      if (id) {
+        if (_editOpId) _editDirty = true
+        await api.updateDeformation(id, params)
+      } else {
+        await api.addDeformation(type, a, b, params, [], true, clusters, { targets: targets ?? undefined, sourceOperationId: sourceOperationId ?? undefined })
+        _previewOpId = store.getState().currentDesign?.deformations?.at(-1)?.id ?? null
       }
-    } finally {
-      _updateInFlight = false
-      dismissToast()
-    }
-    return
-  }
-  if (_previewPending) {
-    // An addDeformation is already in-flight. Latest params are stored in
-    // _lastPreviewParams and will be flushed as an update once it resolves.
-    return
-  } else {
-    _previewPending = true
-    showPersistentToast('Generating preview…')
-    await api.addDeformation(_toolType, a, b, params, [], /*preview=*/true, _effectiveClusterIds())
-    _previewPending = false
-    // Only set ID and flush if we're still in an active preview session
-    // (session may have been cancelled or confirmed while the add was in-flight).
-    if (_state === STATE.BOTH) {
-      const deformations = store.getState().currentDesign?.deformations ?? []
-      if (deformations.length > 0) {
-        _previewOpId = deformations[deformations.length - 1].id
-      }
-      // Flush any param updates that arrived while the add was in-flight.
-      if (_previewOpId && _lastPreviewParams !== params) {
-        await api.updateDeformation(_previewOpId, _lastPreviewParams)
-      }
-    }
-    dismissToast()
-  }
+    } finally { dismissToast() }
+  })
 }
 
 // ── State transitions ────────────────────────────────────────────────────────
@@ -477,7 +430,8 @@ function _defaultBpForPlaneB(bpA) {  // bpA is GLOBAL
   // lengths (e.g. teeth: backbone to bp 251, teeth to bp 209 → defaulted to 209).
   // Use the longest helix's end so the bend covers the full span by default;
   // shorter helices bend over the portion they occupy (see helices_crossing_planes).
-  const maxGlobalBp = Math.max(...active.map(h => h.bpStart + h.lengthBp)) - 1
+  const maxGlobalBp = _sessionRanges?.length ? Math.max(..._sessionRanges.map(r => r.hi))
+    : Math.max(...active.map(h => h.bpStart + h.lengthBp)) - 1
   return maxGlobalBp > bpA ? maxGlobalBp : bpA + 1
 }
 
@@ -485,13 +439,16 @@ function _defaultBpForPlaneB(bpA) {  // bpA is GLOBAL
 // the drag auto-refresh path calls this then immediately re-previews, and the
 // snapshot is still valid across that cycle.
 function _cancelPreview() {
-  _previewPending = false
+  ++_previewEpoch
+  _renderer?.endDeformPreview?.()
   dismissToast()
-  _renderer?.endDeformPreview?.()   // dispose the solid reference + drop ghost opacity
-  if (_previewOpId) {
-    api.deleteDeformation(_previewOpId, /*preview=*/true).catch(() => {})
-    _previewOpId = null
-  }
+  _queuePreview(async () => {
+    if (_previewOpId) {
+      const id = _previewOpId
+      _previewOpId = null
+      await api.deleteDeformation(id, true)
+    }
+  })
 }
 
 // Full teardown of the preview session — call when truly leaving BOTH state
@@ -499,7 +456,6 @@ function _cancelPreview() {
 function _clearPreviewSession() {
   _cancelPreview()
   _previewOriginalAxes = null
-  _pendingUpdateParams = null   // drop any coalesced-but-unflushed preview params
 }
 
 function _exitTool() {
@@ -519,6 +475,9 @@ function _exitTool() {
   _lastPreviewParams = null
   _planeA = null
   _planeB = null
+  _scopeSourceOpId = null
+  _sessionTargets = null
+  _sessionRanges = null
   _sessionClusterIds = null   // reset cluster scope; next session uses default
   if (_dragging) _onDocDragUp()   // clean up document listeners + restore controls
   _showHoverBead(null)
@@ -558,6 +517,18 @@ function _defaultClusterIds() {
 // Per-session cluster scope chosen in the popup. Null means "use the default
 // derived from activeClusterId" — relevant during the AWAITING_A/A_PLACED
 // phases before the popup opens.
+let _scopeSourceOpId = null
+let _sessionTargets = null
+let _sessionRanges = null
+export function setDeformSessionTargets(targets) {
+  const resolved = deformationTargets(targetState(store.getState().currentDesign, targets))
+  if (resolved.error) throw new Error(resolved.error)
+  _sessionTargets = resolved.targets
+  _sessionRanges = resolved.ranges
+  _sessionClusterIds = []
+}
+export function getDeformSessionTargets() { return _sessionTargets }
+
 let _sessionClusterIds = null
 
 /**
@@ -566,6 +537,7 @@ let _sessionClusterIds = null
  * params, so a change in cluster scope requires delete+recreate.
  */
 export async function setDeformSessionClusterIds(ids) {
+  if (_sessionTargets !== null) return
   _sessionClusterIds = Array.isArray(ids) ? ids.slice() : []
   if (_state === STATE.BOTH && _previewOpId) {
     await api.deleteDeformation(_previewOpId, /*preview=*/true)
@@ -605,7 +577,8 @@ function _getHelixAxisData(clusterIdsOverride = null) {
   }
 
   return currentDesign.helices
-    .filter(h => !clusterHelixIds || clusterHelixIds.has(h.id))
+    .filter(h => (!clusterHelixIds || clusterHelixIds.has(h.id)) &&
+      (clusterIdsOverride !== null || !_sessionRanges || _sessionRanges.some(r => r.helixId === h.id)))
     .map(h => {
       const axDef = helixAxes?.[h.id]
       return {
@@ -693,6 +666,7 @@ function _pickBpFull(event) {
     }
   }
   if (bestBp === null) return null
+  if (_sessionRanges && !_sessionRanges.some(r => r.helixId === bestHelixId && bestBp >= r.lo && bestBp <= r.hi)) return null
   return { bp: bestBp, helixId: bestHelixId, axisPoint: bestAxisPoint }
 }
 
@@ -854,7 +828,7 @@ function _numericHelixAxes(clusterIdsOverride = null) {
 }
 
 /** Closest integer bp on the scoped contour, including coarse representations. */
-export function nearestVRDeformationPlane(position, clusterIds, helixIds = null, limits = null) {
+export function nearestVRDeformationPlane(position, clusterIds, helixIds = null, limits = null, ranges = null) {
   if (!Array.isArray(position) || position.length !== 3 || !position.every(Number.isFinite)) return null
   const point = new THREE.Vector3(...position)
   let best = null
@@ -863,34 +837,41 @@ export function nearestVRDeformationPlane(position, clusterIds, helixIds = null,
     for (let i = 0; i < samples.length - 1; i++) {
       const a = new THREE.Vector3(...samples[i]), b = new THREE.Vector3(...samples[i + 1])
       const delta = b.clone().sub(a)
-      const t = delta.lengthSq() ? Math.max(0, Math.min(1, point.clone().sub(a).dot(delta) / delta.lengthSq())) : 0
-      const distance = point.distanceToSquared(a.addScaledVector(delta, t))
-      const lo = samples.length === 2 ? 0 : i * _SAMPLE_STEP
-      const hi = i === samples.length - 2 ? axis.lengthBp - 1 : (i + 1) * _SAMPLE_STEP
-      if (!best || distance < best.distance) best = {
-        bp: axis.bpStart + Math.round(lo + t * (hi - lo)), helixId: axis.id, distance,
+      const lo = axis.bpStart + (samples.length === 2 ? 0 : i * _SAMPLE_STEP)
+      const hi = axis.bpStart + (i === samples.length - 2 ? axis.lengthBp - 1 : (i + 1) * _SAMPLE_STEP)
+      for (const range of ranges?.filter(r => r.helixId === axis.id) ?? [{ lo, hi }]) {
+        const lower = Math.max(lo, range.lo, limits?.min ?? -2147483647)
+        const upper = Math.min(hi, range.hi, limits?.max ?? 2147483647)
+        if (lower > upper) continue
+        const projected = delta.lengthSq() ? point.clone().sub(a).dot(delta) / delta.lengthSq() : 0
+        const bp = Math.max(lower, Math.min(upper, Math.round(lo + projected * (hi - lo))))
+        const t = hi > lo ? (bp - lo) / (hi - lo) : 0
+        const distance = point.distanceToSquared(a.clone().addScaledVector(delta, t))
+        if (!best || distance < best.distance) best = { bp, helixId: axis.id, distance }
       }
     }
   }
-  if (best && limits) best.bp = Math.max(limits.min ?? -2147483647, Math.min(limits.max ?? 2147483647, best.bp))
   return best ? { ...best, resolved: true, reason: 'resolved' } : null
 }
 
 /** Outermost occupied bp positions in the selected cluster, never the whole design. */
-export function extremeVRDeformationPlane(slot, clusterIds, helixIds = null) {
+export function extremeVRDeformationPlane(slot, clusterIds, helixIds = null, ranges = null) {
   if (!['a', 'b'].includes(slot) || (!clusterIds?.length && !helixIds?.length)) return null
   const axes = _numericHelixAxes(clusterIds).filter(a => !helixIds?.length || helixIds.includes(a.id))
   let best = null
   for (const axis of axes) {
-    const bp = axis.bpStart + (slot === 'a' ? 0 : axis.lengthBp - 1)
-    if (!best || (slot === 'a' ? bp < best.bp : bp > best.bp)) best = { bp, helixId: axis.id }
+    for (const range of ranges?.filter(r => r.helixId === axis.id) ?? [{ lo: axis.bpStart, hi: axis.bpStart + axis.lengthBp - 1 }]) {
+      const bp = slot === 'a' ? range.lo : range.hi
+      if (!best || (slot === 'a' ? bp < best.bp : bp > best.bp)) best = { bp, helixId: axis.id }
+    }
   }
   return best ? { ...best, resolved: true, reason: 'resolved' } : null
 }
 
 /** Natural display frame for native VR editing. */
-export function getVRDeformationPlaneFrames(globalBp, clusterIdsOverride = null, helixIds = null) {
-  const axes = _numericHelixAxes(clusterIdsOverride).filter(a => !helixIds?.length || helixIds.includes(a.id))
+export function getVRDeformationPlaneFrames(globalBp, clusterIdsOverride = null, helixIds = null, ranges = null) {
+  const axes = _numericHelixAxes(clusterIdsOverride).filter(a => (!helixIds?.length || helixIds.includes(a.id)) &&
+    (!ranges || ranges.some(r => r.helixId === a.id && globalBp >= r.lo && globalBp <= r.hi)))
   const natural = deformationPlaneFrame(globalBp, axes)
   return natural ? { natural } : null
 }

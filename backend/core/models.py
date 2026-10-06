@@ -1405,11 +1405,24 @@ class BendParams(BaseModel):
     )
 
 
+class DeformationRange(BaseModel):
+    """Frozen target membership; domain edits cannot silently retarget a saved op."""
+
+    helix_id: str
+    start_bp: int
+    end_bp: int
+    direction: Direction
+    strand_id: Optional[str] = None
+    domain_index: Optional[int] = None
+
+
 class DeformationOp(BaseModel):
     """One twist or bend applied to a segment of the bundle."""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     type: Literal["twist", "bend"]
+    targets: Optional[List[dict]] = None
+    target_ranges: Optional[List[DeformationRange]] = None
     plane_a_bp: int  # fixed plane (5′ side); must be < plane_b_bp
     plane_b_bp: int  # mobile plane (3′ side)
     affected_helix_ids: List[str] = Field(default_factory=list)

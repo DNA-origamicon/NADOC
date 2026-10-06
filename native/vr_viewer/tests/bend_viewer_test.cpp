@@ -42,28 +42,59 @@ struct LiveViewerTest {
         source.ownerAliases={{"nuc:near",{"near"}},{"nuc:far",{"far"}}};
         for(auto& rep:data.representations)rep=source;
         v.glScene_=std::make_unique<GlScene>(std::move(data));
+        assert(v.glScene_->belongsToSelection("nuc:near",{"near","domain:other"}));
+        assert(v.glScene_->belongsToSelection("nuc:far",{"near","far"}));
+        assert(!v.glScene_->belongsToSelection("nuc:far",{"near"}));
         v.witnessObserverPosition_={0,0,0};v.selectedIdentity_="nuc:near";
         v.selectedSelectionKind_="cluster";v.selectedOwnerTokens_={"near"};
         v.activateSidebarAction("tool:bend",1);
-        assert(v.bendPanel_.clusterLabel=="Cluster 1" && v.bendPanel_.defaultPlanes);
+        assert(v.bendPanel_.clusterLabel=="Selected cluster" && v.bendPanel_.defaultPlanes);
         assert(v.bendPickExtent_=="a" && !v.bendPickPosition_ && v.activePlanePickSequence_);
-        assert(v.nearestBendCluster({1,0,0},glm::vec3(0,0,-1))==1);
-        assert(v.nearestBendCluster({1.06F,0,0},glm::vec3(0,0,-1))==1);
-        assert(!v.nearestBendCluster({2,0,0},glm::vec3(0,0,-1)));
         v.planeFeedbackPath_=directory+"/plane-feedback.txt";
         auto acknowledge=[&](const std::string& slot,int bp) {
             {std::ofstream f(v.planeFeedbackPath_);f<<"NADOCVR_PLANE_FEEDBACK 2 "<<v.activePlanePickSequence_<<' '<<v.toolConfigSequence_
-                <<" 1 resolved "<<slot<<" cluster nuc:near nuc:near "<<bp<<" 0 0 "<<bp*.334<<" 0 0 1 2\n";}
+                <<" 1 resolved "<<slot<<' '<<v.selectedSelectionKind_<<' '<<v.selectedIdentity_<<' '<<v.selectedIdentity_<<' '<<bp<<" 0 0 "<<bp*.334<<" 0 0 1 2\n";}
             v.planeFeedbackPollFrame_=2;v.pollPlanePickFeedback();
         };
         acknowledge("a",-12);assert(v.bendPickExtent_=="b" && v.toolConfig_.planeABp()==-12);
         acknowledge("b",104);assert(v.bendReady() && !v.bendPanel_.defaultPlanes && v.toolConfig_.planeBBp()==104);
-        v.activateSidebarAction("bend:cluster",1);assert(v.bendPanel_.clustersOpen);
-        const auto entries=v.sidebarMenus_.menus[1].controls();
-        assert(std::any_of(entries.begin(),entries.end(),[](const auto& c){return c.id=="bend:cluster-1";}));
-        v.activateSidebarAction("bend:cluster-1",1);
-        assert(v.bendPanel_.pendingSelection=="nuc:far" && !v.planeGuides_[0] && !v.planeGuides_[1]);
-        assert(!v.bendReady() && v.lastSelectIdentity_=="nuc:far");
+        v.activateSidebarAction("bend:cluster",1);assert(v.bendPanel_.selecting);
+        assert(!v.bendReady() && !v.planeGuides_[0]);
+        v.selectedIdentity_="selection:test:2";v.selectedSelectionKind_="selection";
+        v.selectedOwnerTokens_={v.selectedIdentity_};
+        v.committedSelectionOwnerTokens_={"%5B%22cluster%22%2C%22one%22%5D","%5B%22strand%22%2C%22two%22%5D","%5B%22domain%22%2C%22three%22%2C0%5D"};
+        (void)v.toolConfig_.bind(nadoc_vr::ToolMode::bend,v.selectedIdentity_,v.selectedSelectionKind_,v.selectedOwnerTokens_);
+        v.activateSidebarAction("bend:cluster",1);
+        assert(!v.bendPanel_.selecting && v.bendPanel_.defaultPlanes);
+        assert(v.toolConfig_.targetIdentity()=="selection:test:2");
+        // Switching tools preserves the complete set and requests aggregate bounds.
+        v.activateSidebarAction("tool:twist",1);
+        assert(v.selectedIdentity_=="selection:test:2" && v.bendPanel_.defaultPlanes);
+        assert(v.bendPanel_.clusterLabel=="1 clusters / 1 strands / 1 domains");
+        assert(v.toolConfig_.targetSelectionKind()=="selection");
+        acknowledge("a",20);acknowledge("b",80);
+        assert(v.bendReady());
+        v.activateSidebarAction("twist:more",1);
+        assert(v.toolConfig_.twistAmount()==95);
+        v.activateSidebarAction("twist:target",1);assert(v.bendPanel_.selecting);
+        const auto selectSequence=v.selectSequence_;
+        v.activateSidebarAction("twist:zero",1);
+        assert(v.selectSequence_==selectSequence+1 && v.lastSelectIdentities_.empty());
+        v.activateSidebarAction("twist:target",1);assert(!v.bendPanel_.selecting);
+        acknowledge("a",20);acknowledge("b",80);assert(v.bendReady());
+        auto event=publishedEvent(v);
+        assert(event.find("selection:test:2")!=std::string::npos);
+        v.activateSidebarAction("tool:bend",1);
+        acknowledge("a",20);acknowledge("b",80);
+        assert(v.bendReady());
+        v.applyBendAdjustment(60,30);
+        event=publishedEvent(v);
+        assert(event.find("selection:test:2")!=std::string::npos);
+        assert(event.find("bend_endpoints")==std::string::npos);
+        assert(v.toolConfig_.bendAngleDegrees()==60);
+        v.activateSidebarAction("bend:confirm",1);
+        assert(v.toolShell_.executionPending());
+
     }
     static void run(const std::string& directory) {
         TestSocketDirectory sockets;
@@ -77,7 +108,8 @@ struct LiveViewerTest {
         assert(v.bendPanel_.active && !v.latticeOpen_);
         assert(v.sidebarMenus_.menus[1].customTab->key=="bend");
         v.activateSidebarAction("bend:plane1",1);
-        assert(v.activePlanePickSequence_==0 && !v.bendPanel_.pickSlot);
+        assert(v.activePlanePickSequence_>0 && !v.bendPanel_.pickSlot);
+        v.clearPlanePick();v.bendPanel_.defaultPlanes=false;
         v.normalizationScale_=.6F/(100*.334F);
         (void)v.toolConfig_.setPlaneBp("a",0);(void)v.toolConfig_.setPlaneBp("b",100);
         DeformationPlaneGuide a,b;
@@ -231,7 +263,9 @@ struct LiveViewerTest {
         v.bendPanel_.wheelHand=1;const auto savedAngle=v.toolConfig_.bendAngleDegrees();
         v.suspendControllerInput();assert(!v.bendPanel_.wheelHand && !v.bendPanel_.wheels[1].moving());
         assert(v.bendReady() && v.toolConfig_.bendAngleDegrees()==savedAngle);
-        // Render the real panel and raised wheels from an unobstructed view.
+        // Render the real panel with a mixed-selection summary and raised wheels.
+        v.bendPanel_.describeSelection("selection", {"%5B%22cluster%22%2C%22one%22%5D", "%5B%22strand%22%2C%22two%22%5D", "%5B%22domain%22%2C%22three%22%2C0%5D"});
+        v.refreshExtrudePanel();
         GLuint panelFbo=0,panelTexture=0;
         glGenFramebuffers(1,&panelFbo);glBindFramebuffer(GL_FRAMEBUFFER,panelFbo);
         glGenTextures(1,&panelTexture);glBindTexture(GL_TEXTURE_2D,panelTexture);

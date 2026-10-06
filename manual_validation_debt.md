@@ -771,3 +771,15 @@ translucent blurred surface, VR-inspired neutral rim, and NADOC type/control
 colors. Drag over a dense part and compare legibility against bright and dark
 geometry; review at the usual window size. Reduced-transparency preference uses
 an opaque backing. Screenshots: `.development-artifacts/tool-popup-glass-20261004/`.
+
+## MV-VR-DEFORMATION-SET — PENDING (2026-10-06)
+
+In a tracked headset, select multiple clusters, then strands, then domains, and a
+mixed set with the existing filters/selection volume. Open Bend/Twist; verify the
+summary and highlights retain every member. Change/clear selection, resume plane
+picking, drag planes through gaps, adjust shared curvature/twist, Confirm, and
+Undo. Group Bend Shape handle holds Plane 1 fixed. Verify legibility, controller
+acquisition, untouched partners, and persistence after desktop reopen. Automated
+browser and native GL checks are recorded under `.development-artifacts/vr-multiselect*`;
+SteamVR was not running during this implementation, so no physical headset or
+through-lens check is claimed.

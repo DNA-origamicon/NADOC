@@ -1830,6 +1830,8 @@ export async function addDeformation(type, planeA, planeB, params, helixIds = []
     params,
     expected_design_id: guard.expectedDesignId,
     expected_revision: guard.expectedRevision,
+    targets: guard.targets,
+    source_operation_id: guard.sourceOperationId,
     affected_helix_ids: helixIds,
     cluster_ids: Array.isArray(clusterIds) ? clusterIds : (clusterIds ? [clusterIds] : []),
     preview,
@@ -1855,8 +1857,9 @@ function _toastDeformationWarning(w) {
  * Returns { status, local_bp_per_turn, requested_radius_nm, min_bend_radius_nm,
  * requested_twist_deg, max_twist_deg, message } — never throws on warn/block.
  */
-export async function validateDeformation({ type, planeA, planeB, params, helixIds = [], clusterIds = [] }) {
+export async function validateDeformation({ type, planeA, planeB, params, helixIds = [], clusterIds = [], targets = undefined }) {
   return _request('POST', '/design/deformation/validate', {
+    targets,
     type,
     plane_a_bp: planeA,
     plane_b_bp: planeB,

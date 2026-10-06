@@ -27,42 +27,23 @@ test('extrude, twist and bend float independently of sidebar tabs', async ({ pag
   expect(await page.evaluate(() => window.__nadocTest.getSliceState().visible)).toBe(false)
 
   for (const tool of ['twist', 'bend']) {
-    await page.getByRole('button', { name: 'Tools', exact: true }).hover()
-    await page.locator(`#menu-tools-${tool}`).click()
-    const picker = page.locator('#deformation-cluster-picker')
-    await expect(picker).toBeVisible()
-    expect(await page.evaluate(() => window.__nadocTest.getSelectionLevel())).toBe('cluster')
-    await picker.getByRole('button', { name: 'Cancel', exact: true }).click()
-    expect(await page.evaluate(() => window.__nadocTest.getSelectionLevel())).toBe('default')
-    await page.getByRole('button', { name: 'Tools', exact: true }).hover()
-    await page.locator(`#menu-tools-${tool}`).click()
-    // Pick through the actual 3D cluster selector, independent of sidebar visibility.
     await page.evaluate(async () => {
       const { store } = await import('/src/state/store.js')
-      const points = store.getState().currentGeometry.map(n => n.backbone_position)
-      const center = points.reduce((sum, p) => sum.map((v, i) => v + p[i] / points.length), [0, 0, 0])
-      const radius = Math.max(...points.map(p => Math.hypot(...p.map((v, i) => v - center[i]))))
-      window.__nadocTest.applyCameraPoseForTest({ target: center, position: [center[0] + radius * 3, center[1] + radius * .6, center[2] + radius * .3] })
+      const { createSelectionController } = await import('/src/scene/selection_controller.js')
+      createSelectionController({ store }).clear()
     })
-    const candidates = await page.evaluate(() => {
-      const rects = ['.tool-popup', '#left-panel', '#right-panel', '#menu-bar'].flatMap(selector => [...document.querySelectorAll(selector)].map(node => node.getBoundingClientRect()))
-      const canvas = document.getElementById('canvas').getBoundingClientRect()
-      return window.__nadocTest.getClusterBeadScreenPositions().filter(p =>
-        p.x > canvas.left && p.x < canvas.right && p.y > canvas.top && p.y < canvas.bottom &&
-        !rects.some(r => p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom))
-    })
-    expect(candidates.length).toBeGreaterThan(0)
-    for (const point of candidates.slice(0, 12)) {
-      await page.mouse.click(point.x, point.y)
-      if (await picker.count() === 0) break
-    }
-    await expect(picker).toHaveCount(0)
-    await expect.poll(() => page.evaluate(async () => {
+    await page.getByRole('button', { name: 'Tools', exact: true }).hover()
+    await page.locator(`#menu-tools-${tool}`).click()
+    await expect(page.locator('#def-current-selection')).toBeVisible()
+    await expect(page.locator('#def-pick-planes')).toBeDisabled()
+    // Canonical preselection, as when launching from a cluster list selection.
+    await page.evaluate(async () => {
       const { store } = await import('/src/state/store.js')
-      const corners = window.__nadocTest.scene.getObjectByName('clusterSelectionCorners')
-      return { selected: store.getState().selection.items.length, highlighted: corners?.visible ?? false }
-    })).toEqual({ selected: 0, highlighted: false })
-    expect(await page.evaluate(() => window.__nadocTest.getSelectionLevel())).toBe('default')
+      const { createSelectionController } = await import('/src/scene/selection_controller.js')
+      const cluster = store.getState().currentDesign.cluster_transforms[0]
+      createSelectionController({ store }).replace([{ kind: 'cluster', id: cluster.id }])
+    })
+    await page.locator('#def-pick-planes').click()
     const popup = page.locator('.tool-popup[data-tool-panel="deform-panel"]')
     await expect(popup).toBeVisible()
     await expect(popup.locator('.tool-picking-hint')).toContainText('Select plane A')

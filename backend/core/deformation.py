@@ -57,6 +57,8 @@ from backend.core.models import (
 if TYPE_CHECKING:
     from backend.core.models import Design, Domain, Helix, LatticeType
 
+from backend.core import deformation_scope as _scope
+
 
 # ── Grid normalisation ────────────────────────────────────────────────────────
 
@@ -1692,6 +1694,9 @@ def deformed_nucleotide_arrays(
     feeds a simulation, an export or a pose fitter may set it — see
     ``constants.FULL_REP_BALANCE_ROLL_*``.
     """
+    if _scope.scoped(design):
+        return _scope.selected_arrays(helix, design, lambda view: deformed_nucleotide_arrays(
+            helix, view, compact_skips=compact_skips, phase_roll_rad=phase_roll_rad))
     helix = effective_helix_for_geometry(helix, design)
     if phase_roll_rad:
         helix = helix.model_copy(
@@ -1826,6 +1831,9 @@ def deform_extended_arrays(
     left-side extensions or ``helix.bp_start + helix.length_bp - 1`` for
     right-side extensions.
     """
+    if _scope.scoped(design):
+        return _scope.selected_arrays(helix, design, lambda view: deform_extended_arrays(
+            extra_arrs, helix, view, edge_bp))
     helix = effective_helix_for_geometry(helix, design)
     clusters = _clusters_for_helix(design, helix.id)
 
@@ -1919,6 +1927,9 @@ def apply_deformations_to_atoms(atoms: list, design: "Design") -> None:
 
     Atoms with empty helix_id are skipped (no frame available).
     """
+    if _scope.scoped(design):
+        _scope.selected_atoms(atoms, design, apply_deformations_to_atoms)
+        return
     # Overhang rotations/translations are authored geometry too.  In
     # particular, moving a conjugated protein writes the constrained swing to
     # OverhangSpec.rotation without creating a bend or cluster transform.
@@ -2103,6 +2114,14 @@ def deformed_nucleotide_positions(
     Falls back to ``nucleotide_positions(helix)`` unchanged when
     ``design.deformations`` is empty and the helix has no cluster transform.
     """
+    if _scope.scoped(design):
+        arrs = deformed_nucleotide_arrays(helix, design)
+        return [NucleotidePosition(
+            helix_id=helix.id, bp_index=int(bp),
+            direction=Direction.FORWARD if direction == 0 else Direction.REVERSE,
+            position=arrs["positions"][i], base_position=arrs["base_positions"][i],
+            base_normal=arrs["base_normals"][i], axis_tangent=arrs["axis_tangents"][i])
+            for i, (bp, direction) in enumerate(zip(arrs["bp_indices"], arrs["directions"]))]
     helix = effective_helix_for_geometry(helix, design)
     clusters = _clusters_for_helix(design, helix.id)
     cluster = _arm_filter_cluster(clusters)
@@ -2747,7 +2766,8 @@ def _seg_endpoints_curve(
 
 def deformed_helix_axes(design: "Design") -> list[dict]:
     """Project native non-helical paths alongside the ordinary duplex axes."""
-    axes = _lattice_helix_axes(design)
+    axes = (_scope.selected_axes(design, _lattice_helix_axes)
+            if _scope.scoped(design) else _lattice_helix_axes(design))
     native = {h.id: h for h in design.helices if effective_helix_for_geometry(h, design).native_residues}
     for entry in axes:
         helix = native.get(entry["helix_id"])

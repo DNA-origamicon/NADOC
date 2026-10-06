@@ -136,7 +136,8 @@ def run(socket, output, preset, mode):
             settle(); menu()
             click('tab:tools'); click('tool-twist')
             click('twist:cancel')
-            assert live.state['twist']['plane1'] is None and live.state['twist']['plane2'] is None
+            wait(lambda s: s['twist']['ready'])
+            assert live.state['twist']['plane1'] < live.state['twist']['plane2']
             assert live.state['sidebars'][1]['tab'] == 'twist'
             assert not any(c['id'].startswith('tool-') for c in live.state['controls'])
             capture('twist-menu')

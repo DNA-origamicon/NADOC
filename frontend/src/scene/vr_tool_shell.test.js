@@ -138,7 +138,7 @@ describe('native VR transactional tool shell', () => {
     expect(capability('bend', 'cluster')).toBe(configure)
     expect(capability('bend', 'end')).toBe(configure)
     for (const mode of ['extrude', 'twist', 'bend']) {
-      for (const kind of ['base', 'domain', 'strand', 'bond', 'crossover']) {
+      for (const kind of (mode === 'extrude' ? ['base', 'domain', 'strand', 'selection', 'bond', 'crossover'] : ['base', 'bond', 'crossover'])) {
         expect(capability(mode, kind)).toBe(unsupported)
       }
     }
@@ -151,7 +151,7 @@ describe('native VR transactional tool shell', () => {
     const rows = [...definition.matchAll(
       /NADOC_VR_TOOL_CAPABILITY\((\w+),\s*(\w+),\s*(\w+)\)/g,
     )].map(([, mode, kind, capability]) => ({ mode, kind, capability }))
-    expect(rows).toHaveLength(11)
+    expect(rows).toHaveLength(17)
     expect(new Set(rows.map(row => `${row.mode}:${row.kind}`)).size).toBe(rows.length)
     for (const row of rows) {
       expect(vrToolSelectionCapability(row.mode, { kind: row.kind }))

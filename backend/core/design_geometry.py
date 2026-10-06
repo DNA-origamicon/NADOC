@@ -583,17 +583,21 @@ def _geometry_for_helices(
             if _n > 1e-12:
                 _measured_axes[_a["helix_id"]] = (_s, _v / _n)
 
+    # Reuse partition axes across helices; one full axis pass per scope signature.
+    _scope_axis_cache = {}
     for helix in design.helices:
         if helix_ids is not None and helix.id not in helix_ids:
             continue
         if helix.id.startswith("__lnk__") and not include_linker_helices:
             continue  # virtual linker helices have no real geometry (per-design:
             # bridge nucs come from _emit_bridge_nucs below instead)
-        arrs = deformed_nucleotide_arrays(
-            helix, design, compact_skips=compact_skips, phase_roll_rad=roll
-        )
+        from backend.core import deformation_scope
+        scoped_measured = measured_positioning and deformation_scope.scoped(design)
+        arrs = (deformation_scope.measured_arrays(helix, design, compact_skips, roll, _scope_axis_cache)
+                if scoped_measured else deformed_nucleotide_arrays(
+                    helix, design, compact_skips=compact_skips, phase_roll_rad=roll))
         axis_line = _measured_axes.get(helix.id)
-        if measured_positioning and axis_line is not None:
+        if measured_positioning and axis_line is not None and not scoped_measured:
             # Measured placement belongs to the nucleotide's native helix frame.
             # Apply it BEFORE the overhang's rigid transform.  Doing this afterward
             # makes a legitimately rotated overhang appear off its parent axis, so

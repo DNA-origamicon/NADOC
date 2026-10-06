@@ -3,9 +3,12 @@
 Choose **Tools → Twist**. The persistent panel reuses Bend's plane picking,
 paired controls, thumbwheel input, and Confirm / Cancel / Return layout.
 
-1. Choose **Plane 1**, hold a trigger near the target, and move along the element
-   to choose its bp index. Repeat with **Plane 2**, above Plane 1. Targets can be
-   clusters or element ends. Changing target clears the old planes.
+1. The panel retains the full selection of clusters, strands, and domains,
+   including mixed selections, and initializes planes at its outer bp bounds.
+   **Change selection** enables the existing filters and selection volume;
+   **Use selection / Pick planes** resumes editing. **Clear selection** appears
+   in selection mode. Choose **Plane 1** or **Plane 2** and hold a trigger near
+   a selected element to choose its bp index. Picking never adds a new target.
 2. Turn the mint handle on **Plane 2** around its axis. Plane 1 stays fixed;
    the planes keep their positions and normals. Only one controller owns the
    handle at a time. Releasing retains the draft. Grips still move the scene.
@@ -19,7 +22,7 @@ paired controls, thumbwheel input, and Confirm / Cancel / Return layout.
    desktop Twist deformation, records one feature, and refreshes VR geometry.
    Release the handle or wheel before confirming.
 5. **Undo** reverses that exact feature, refusing an intervening desktop edit.
-   **Cancel** clears the draft and planes. **Return to tools** leaves the panel.
+   **Cancel** resets the draft to the selected bounds. **Return to tools** leaves the panel.
 
 Handle editing uses natural geometry. Expanded or inspection layouts disable
 handle grabs. Existing desktop deformation mathematics and molecular constants
@@ -59,3 +62,7 @@ Other checks:
 - `cd frontend && npx vitest run src/scene/vr_bend.test.js`
 - CTest `nadoc-vr-bend-panel`, `nadoc-vr-bend-viewer`, and
   `nadoc-vr-twist-viewer` (production controller methods and GL preview pixels).
+
+Multi-selection uses the same exact scope, stale-selection guards, persistence,
+and registered [Bend / Twist multi-selection regression](vr_bend.md#multi-selection-regression)
+as Bend. One shared signed twist is applied to the selected union.

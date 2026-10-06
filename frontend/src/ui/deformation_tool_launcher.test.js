@@ -2,46 +2,63 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { createSelectionController } from '../scene/selection_controller.js'
 import { initDeformationToolLauncher } from './deformation_tool_launcher.js'
+import { initBendTwistPopup } from './bend_twist_popup.js'
 let launcher
 afterEach(() => { launcher?.cancel(); document.body.innerHTML = '' })
 function setup() {
-  document.body.innerHTML = '<canvas id="canvas"></canvas><div id="mode-indicator"></div>'
-  const filters = { scaffold: false, overhangs: true }
-  const store = createMockStore({ currentDesign: { id: 'part', helices: [{ id: 'h' }], cluster_transforms: [{ id: 'c', helix_ids: ['h'] }] }, selectableTypes: filters })
+  document.body.innerHTML = '<canvas id="canvas"></canvas><div id="mode-indicator"></div><div id="deform-panel"></div>'
+  const panel = document.getElementById('deform-panel')
+  for (const name of ['panel-title', 'twist-controls', 'bend-controls', 'twist-value', 'twist-value-label', 'twist-unit',
+    'twist-rh', 'twist-lh', 'twist-total-radio', 'twist-pernm-radio', 'bend-dir', 'bend-angle', 'bend-radius',
+    'polymer-circle', 'polymer-circle-label', 'polymer-count', 'polymer-count-row', 'compass-arm', 'compass-handle',
+    'preview-check', 'cancel-btn', 'apply-btn', 'plane-a-bp', 'plane-b-bp', 'plane-a-nm', 'plane-b-nm']) {
+    const node = document.createElement(name.endsWith('-btn') ? 'button' : 'input')
+    node.id = `def-${name}`; panel.append(node)
+  }
+  initBendTwistPopup({ onCancel: vi.fn(), onPreview: vi.fn() })
+  const store = createMockStore({ currentDesign: { id: 'part', helices: [{ id: 'h', length_bp: 42 }],
+    strands: [{ id: 's', domains: [{ helix_id: 'h', start_bp: 0, end_bp: 41 }] }],
+    cluster_transforms: [{ id: 'c', helix_ids: ['h'] }] } })
   const controller = createSelectionController({ store })
-  const deps = { store, selectionManager: { clearSelection: controller.clear, setSelectionLevel: controller.setLevel }, showToast: vi.fn(), deformView: { isActive: () => true }, watchDeformState: vi.fn(), start: vi.fn(), exit: vi.fn(), setScope: vi.fn() }
+  const deps = { store, selectionManager: { clearSelection: controller.clear }, showToast: vi.fn(), deformView: { isActive: () => true }, watchDeformState: vi.fn(), start: vi.fn(), exit: vi.fn(), setScope: vi.fn(), waitForIdle: () => Promise.resolve() }
   launcher = initDeformationToolLauncher(deps)
-  return { ...deps, controller, filters }
+  return { ...deps, controller }
 }
-it.each(['bend', 'twist'])('picks a fresh cluster before starting %s and restores Default', async type => {
+it.each(['bend', 'twist'])('retains mixed selection and explicitly enters plane picking for %s', type => {
   const d = setup()
-  d.controller.replace([{ kind: 'cluster', id: 'c' }])
+  const refs = [{ kind: 'cluster', id: 'c' }, { kind: 'domain', strandId: 's', domainIndex: 0 }]
+  d.controller.replace(refs)
   launcher.open(type)
-  expect(document.querySelector('.tool-picking-hint').textContent).toBe('Select a cluster')
+  expect(document.getElementById('def-current-selection').textContent).toContain('Domain · s [0]')
   expect(d.start).not.toHaveBeenCalled()
-  expect(d.store.getState().selection.level).toBe('cluster')
-  d.controller.replace([{ kind: 'cluster', id: 'c' }]); await Promise.resolve()
-  expect(d.store.getState().selection.level).toBe('default')
-  expect(d.store.getState().selectableTypes).toEqual(d.filters)
-  expect(d.store.getState().selection.items).toEqual([])
-  expect(d.store.getState().activeClusterId).toBeNull()
-  expect(d.setScope).toHaveBeenCalledWith(['c'])
+  document.getElementById('def-pick-planes').click()
+  expect(d.setScope).toHaveBeenCalledWith(refs)
   expect(d.start).toHaveBeenCalledExactlyOnceWith(type)
-  expect(d.watchDeformState).toHaveBeenCalledOnce()
-  expect(document.querySelector('#deformation-cluster-picker')).toBeNull()
+  expect(d.store.getState().selection.items).toEqual(refs)
+  expect(document.getElementById('def-change-selection')).not.toBeNull()
 })
-it('cancels a queued pick and cancels on document replacement', async () => {
+it('works without clusters and clear returns to empty selection without exiting the panel', async () => {
   const d = setup()
-  launcher.open('bend'); d.controller.replace([{ kind: 'cluster', id: 'c' }])
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await Promise.resolve()
-  expect(d.start).not.toHaveBeenCalled()
-  expect(d.store.getState().selection.level).toBe('default')
-  launcher.open('twist'); d.store.setState({ currentDesign: { id: 'other' } }); await Promise.resolve()
-  expect(document.querySelector('#deformation-cluster-picker')).toBeNull()
-  expect(d.store.getState().selection.level).toBe('default')
+  d.store.setState({ currentDesign: { ...d.store.getState().currentDesign, cluster_transforms: [] } })
+  launcher.open('bend')
+  expect(document.getElementById('def-pick-planes').disabled).toBe(true)
+  d.controller.replace([{ kind: 'strand', id: 's' }])
+  expect(document.getElementById('def-pick-planes').disabled).toBe(false)
+  document.getElementById('def-pick-planes').click()
+  document.getElementById('def-clear-selection').click()
+  await Promise.resolve()
+  expect(d.store.getState().selection.items).toEqual([])
+  expect(document.getElementById('def-pick-planes').disabled).toBe(true)
 })
-it('replaces a pending tool without leaving a stale callback', async () => {
-  const d = setup(); launcher.open('bend'); launcher.open('twist')
-  d.controller.replace([{ kind: 'cluster', id: 'c' }]); await Promise.resolve()
-  expect(d.start).toHaveBeenCalledExactlyOnceWith('twist')
+it('rejects unsupported targets and cancels on document replacement', () => {
+  const d = setup(); launcher.open('twist')
+  d.controller.replace([{ kind: 'protein', id: 'p' }])
+  expect(document.getElementById('def-pick-planes').disabled).toBe(true)
+  d.store.setState({ currentDesign: { id: 'other' } })
+  expect(document.getElementById('def-current-selection').hidden).toBe(true)
+})
+it('Escape closes the waiting panel', () => {
+  setup(); launcher.open('bend')
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+  expect(document.getElementById('def-current-selection').hidden).toBe(true)
 })

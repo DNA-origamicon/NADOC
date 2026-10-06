@@ -7,6 +7,21 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Bend / Twist exact multi-selection (2026-10-06)
+
+Bend and Twist retain clusters, strands, domains, and mixed canonical sets.
+`vr_deformation_selection.js` supplies a session aggregate token; changing any
+member invalidates native drafts. Exact refs reach desktop deformation target
+resolution and frozen ranges. Startup and live feedback preserve the whole set.
+The panel's Change selection / Use selection flow reuses fixed-level accumulation
+and the selection volume; plane defaults/projection exclude unselected intervals.
+Native cluster/strand/domain picking resolves live topology independently of
+whether desktop LOD has bead meshes. Group bend shape handles control shared
+curvature from Plane 2; only single-cluster/End poses send world endpoints.
+The registered Authoring regression is `deformation_selection_check`; see
+`docs/vr_bend.md`. Browser/native software validation is separate from physical
+headset review (MV-VR-DEFORMATION-SET).
+
 ## End resize pointer and group retention (2026-10-05)
 
 Selected terminal arrows support remote ray hover and trigger-held resizing as

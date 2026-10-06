@@ -2522,6 +2522,14 @@ class GlScene {
         return hits;
     }
 
+    [[nodiscard]] bool belongsToSelection(const std::string& identity,const std::vector<std::string>& tokens) const {
+        const auto aliases=sourceIndex_->aliases.find(identity);
+        if(aliases==sourceIndex_->aliases.end())return false;
+        return std::any_of(aliases->second->tokens.begin(),aliases->second->tokens.end(),[&](const auto& token){
+            return std::find(tokens.begin(),tokens.end(),token)!=tokens.end();
+        });
+    }
+
     /** Collapse primitive overlaps through the same canonical filter as desktop.
      * One representative identity is retained per canonical object for the browser
      * event, while owner tokens drive whole-object native highlighting. */
@@ -5107,7 +5115,10 @@ class Viewer {
             representationSourceIndex(sceneData_.initialRepresentation)];
         const auto identity = nadoc_vr::resolveOwnerIdentity(
             initial.ownerAliases, selectedOwnerTokens);
-        if (identity && selectedSelectionKind != "none") {
+        if(selectedSelectionKind=="selection" && selectedOwnerTokens.size()>2) {
+            selectedIdentity_=selectedOwnerTokens.front();selectedOwnerTokens_={selectedIdentity_};selectedSelectionKind_="selection";
+            committedSelectionOwnerTokens_={selectedOwnerTokens.begin()+1,selectedOwnerTokens.end()};
+        } else if (identity && selectedSelectionKind != "none") {
             selectedIdentity_ = *identity;
             selectedOwnerTokens_ = std::move(selectedOwnerTokens);
             selectedSelectionKind_ = std::move(selectedSelectionKind);
@@ -5136,7 +5147,10 @@ class Viewer {
                 latticeContext_=scene.latticeContext;
                 const auto identity=nadoc_vr::resolveOwnerIdentity(
                     scene.representations[representationSourceIndex(scene.initialRepresentation)].ownerAliases,startupOwners_);
-                if(identity && startupKind_!="none") {
+                if(startupKind_=="selection" && startupOwners_.size()>2) {
+                    selectedIdentity_=startupOwners_.front();selectedOwnerTokens_={selectedIdentity_};selectedSelectionKind_="selection";
+                    committedSelectionOwnerTokens_={startupOwners_.begin()+1,startupOwners_.end()};
+                } else if(identity && startupKind_!="none") {
                     selectedIdentity_=*identity;selectedOwnerTokens_=startupOwners_;selectedSelectionKind_=startupKind_;
                     committedSelectionIdentities_={selectedIdentity_};
                     committedSelectionOwnerTokens_=startupOwners_;
@@ -5855,7 +5869,7 @@ class Viewer {
         return bendPanel_.active && planeGuides_[0] && planeGuides_[1] &&
             toolConfig_.planeABp() && toolConfig_.planeBBp() &&
             *toolConfig_.planeABp()<*toolConfig_.planeBBp() &&
-            (toolConfig_.targetSelectionKind()=="cluster" || toolConfig_.targetSelectionKind()=="end") &&
+            nadoc_vr::BendPanel::supports(toolConfig_.targetSelectionKind()) && !bendPanel_.selecting &&
             !bendPanel_.hand && !bendPanel_.planeHand && !bendPanel_.wheelHand && !activePlanePickSequence_ && !bendPanel_.defaultPlanes &&
             bendPanel_.pendingSelection.empty() && std::none_of(bendPanel_.wheels.begin(),bendPanel_.wheels.end(),[](const auto& w){return w.moving();});
     }
@@ -5966,6 +5980,7 @@ class Viewer {
         if(action.starts_with("twist:")) {
             if(!bendPanel_.active || !bendPanel_.twist || toolShell_.executionPending())return;
             if((bendPanel_.hand || bendPanel_.wheelHand || bendPanel_.planeHand) && action!="twist:cancel")return;
+            if(action=="twist:zero" && bendPanel_.selecting) {publishSelect({});return;}
             if(action=="twist:amount") {
                 clearPlanePick();bendPanel_.pickSlot.reset();bendPanel_.lastPick.clear();
                 bendPanel_.wheelHand=hand;
@@ -5998,12 +6013,19 @@ class Viewer {
                 publishToolConfiguration();
                 toolShell_.apply(nadoc_vr::ToolAction::cancel,selectedSelectionKind_);
                 publishToolIntent(nadoc_vr::ToolAction::cancel);
-                if(!bendPanel_.twist && selectedSelectionKind_=="cluster") {
+                if(!bendPanel_.selecting && nadoc_vr::BendPanel::supports(selectedSelectionKind_)) {
                     bendPanel_.defaultPlanes=true;requestBendDefaultPlane("a");
                 }
                 return;
             }
-            if(action=="bend:cluster") {bendPanel_.clustersOpen=!bendPanel_.clustersOpen;refreshExtrudePanel();return;}
+            if(action=="bend:cluster" || action=="bend:target") {
+                bendPanel_.selecting=!bendPanel_.selecting;
+                bendPanel_.reset();bendPanel_.pickSlot.reset();clearPlanePick();clearPlaneGuides();
+                if(!bendPanel_.selecting && nadoc_vr::BendPanel::supports(selectedSelectionKind_)) {
+                    bendPanel_.defaultPlanes=true;requestBendDefaultPlane("a");
+                } else bendPanel_.selecting=true;
+                refreshExtrudePanel();return;
+            }
             if(action=="bend:clusters-prev" || action=="bend:clusters-next") {
                 if(action=="bend:clusters-prev")bendPanel_.clusterPage=bendPanel_.clusterPage>=4?bendPanel_.clusterPage-4:0;
                 else if(bendPanel_.clusterPage+4<bendClusters_.size())bendPanel_.clusterPage+=4;
@@ -6013,20 +6035,17 @@ class Viewer {
                 const auto index=std::stoul(action.substr(13));if(index<bendClusters_.size())selectBendCluster(index);return;
             }
             if(action=="bend:manual") {
+                if(bendPanel_.selecting) {publishSelect({});return;}
                 if(!bendReady())return;
                 bendPanel_.manual=!bendPanel_.manual;bendPanel_.pickSlot.reset();refreshExtrudePanel();return;
             }
-            if(action=="bend:target") {
-                bendPanel_.elements=!bendPanel_.elements;
-                publishSelectionLevel(bendPanel_.elements?"end":"cluster");return;
-            }
             if(action=="bend:plane1" || action=="bend:plane2") {
                 if(!bendPanel_.twist)return;
+                bendPanel_.defaultPlanes=false;
                 clearPlanePick(); // Discard feedback bound to the previous draft sequence.
                 bendPanel_.pickSlot=action=="bend:plane1"?"a":"b";
                 bendPanel_.lastPick.clear();bendPanel_.posed=false;bendPanel_.grabbed=1;
                 (void)toolConfig_.setBend(0,0);publishToolConfiguration();
-                publishSelectionLevel(bendPanel_.elements?"end":"cluster");
                 planePickStatus_="HOLD TRIGGER CLOSE TO ELEMENT";return;
             }
             if(action=="bend:direction-less" || action=="bend:direction-more" || action=="bend:radius-less" || action=="bend:radius-more") {
@@ -6594,14 +6613,13 @@ class Viewer {
             if(!sidebarMenus_.menus[1].open)toggleSidebar(1);
             radialToolMenu_.close();
             bendPanel_.twist=mode==nadoc_vr::ToolMode::twist;
-            bendPanel_.enter(sidebarMenus_.menus);bendPanel_.pickSlot="a";
-            publishSelectionLevel("cluster");
-            if(!bendPanel_.twist) {
-                bendPanel_.pickSlot.reset();bendPanel_.manual=false;
-                bendClusters_=glScene_?glScene_->bendClusters():std::vector<GlScene::BendCluster>{};
-                bendPanel_.clusters.clear();
-                for(size_t i=0;i<bendClusters_.size();++i)bendPanel_.clusters.push_back("Cluster "+std::to_string(i+1));
-                if(const auto nearest=nearestBendCluster(witnessObserverPosition_))selectBendCluster(*nearest);
+            bendPanel_.enter(sidebarMenus_.menus);bendPanel_.pickSlot.reset();
+            bendPanel_.manual=false;
+            bendPanel_.selecting=!nadoc_vr::BendPanel::supports(selectedSelectionKind_);
+            bendPanel_.describeSelection(selectedSelectionKind_,committedSelectionOwnerTokens_);
+            if(selectionLevel_=="default")publishSelectionLevel("cluster");
+            if(!bendPanel_.selecting) {
+                bendPanel_.defaultPlanes=true;requestBendDefaultPlane("a");
             }
             refreshExtrudePanel();
         }
@@ -7093,9 +7111,11 @@ class Viewer {
                 !triggerPartial_[hand] || gripPressed_[hand]) {
                 continue;
             }
-            const auto overlaps = glScene_->selectVolume(
+            auto overlaps = glScene_->selectVolume(
                 selectionVolumeCenter(hand), selectionVolumes_[hand].radius(),
                 manipulator_.transform());
+            if(bendPanel_.active && !bendPanel_.selecting && bendPanel_.twist && bendPanel_.pickSlot)
+                std::erase_if(overlaps,[&](const auto& hit){return !glScene_->belongsToSelection(hit.identity,committedSelectionOwnerTokens_);});
             SelectionVolumeHits resolved = glScene_->resolveSelectionVolumeHits(
                 overlaps, selectionLevel_, selectedSelectionKind_, selectedOwnerTokens_);
             if(bendPanel_.active && bendPanel_.elements && selectedSelectionKind_=="end" &&
@@ -7105,7 +7125,7 @@ class Viewer {
             }
             // Move/Rotate edits one exact target. A generous acquisition sphere
             // must not turn a nearby base pick into an unusable multi-selection.
-            if((movePanel_.active || bendPanel_.active) && resolved.representatives.size()>1) {
+            if((movePanel_.active || (bendPanel_.active && !bendPanel_.selecting)) && resolved.representatives.size()>1) {
                 resolved.representatives.resize(1);
                 if(resolved.ownerTokens.size()>1)resolved.ownerTokens.resize(1);
                 if(resolved.directIdentities.size()>1)resolved.directIdentities.resize(1);
@@ -7474,7 +7494,7 @@ class Viewer {
                     output << ",\"angle_deg\":" << toolConfig_.bendAngleDegrees()
                            << ",\"direction_deg\":"
                            << toolConfig_.bendDirectionDegrees();
-                    if(bendPanel_.posed) {
+                    if(bendPanel_.posed && (selectedSelectionKind_=="cluster" || selectedSelectionKind_=="end")) {
                         output<<",\"bend_endpoints\":[";
                         for(size_t i=0;i<2;++i) {
                             const auto q=((i==0?bendPanel_.arc.a:bendPanel_.arc.b)-glm::vec3(0,0,-kViewDistanceMeters))/normalizationScale_+normalizationCenter_;
@@ -7564,6 +7584,7 @@ class Viewer {
             ? feedback->selectionKind : "none";
         if(bendPanel_.active) {
             bendPanel_.pendingSelection.clear();
+            bendPanel_.describeSelection(selectedSelectionKind_,committedSelectionOwnerTokens_);
             if(!feedback->accepted || !feedback->selected)bendPanel_.defaultPlanes=false;
         }
         const bool targetChanged = selectedIdentity_ != previousIdentity ||
@@ -7579,8 +7600,8 @@ class Viewer {
             bendPanel_.posed=false;
             publishToolConfiguration();
         }
-        if(bendPanel_.active && !bendPanel_.twist && feedback->accepted && feedback->selected &&
-            selectedSelectionKind_=="cluster" && (targetChanged || bendPanel_.defaultPlanes)) {
+        if(bendPanel_.active && !bendPanel_.selecting && feedback->accepted && feedback->selected &&
+            nadoc_vr::BendPanel::supports(selectedSelectionKind_) && (targetChanged || bendPanel_.defaultPlanes)) {
             bendPanel_.reset();bendPanel_.defaultPlanes=true;bendPanel_.pickSlot.reset();
             clearPlanePick();clearPlaneGuides();bendPickPosition_.reset();
             requestBendDefaultPlane("a");
@@ -8897,7 +8918,7 @@ class Viewer {
         updateSelectionVolumeCandidates(menuControlTargeted);
         frameAudit_.mark("selection_candidates");
         processBendPlanePick(menuControlTargeted);
-        if(bendPanel_.active)menuControlTargeted.fill(true);
+        if(bendPanel_.active && !bendPanel_.selecting)menuControlTargeted.fill(true);
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             if (!movePanel_.selectionEnabled(hand) || menuControlTargeted[hand] || !triggerClicked_[hand] ||
                 !hands_[hand].valid) {
@@ -9033,7 +9054,7 @@ class Viewer {
     void processBendPlanes(std::array<bool,2>& blocked,bool sceneMoving) {
         nadoc_vr::CalculationScope auditScope("processBendPlanes");
         bendPanel_.planeHover.fill(std::nullopt);bendPanel_.beamEnd.fill(std::nullopt);
-        if(!bendPanel_.active || bendPanel_.twist)return;
+        if(!bendPanel_.active || bendPanel_.twist || bendPanel_.selecting)return;
         if(sceneMoving || viewTools_.inspectionLayout() || toolShell_.executionPending()) {
             bendPanel_.planeHand.reset();bendPanel_.pickSlot.reset();return;
         }
@@ -9062,11 +9083,6 @@ class Viewer {
                     bendSlideStart_=glm::vec3(manipulator_.transform()*glm::vec4(planeGuides_[hit->slot]->natural.center,1));
                     bendSlideHand_=hit->point;bendPickPosition_.reset();blocked[h]=true;
                     resetBendToPlanes();pulse(h,.3F);
-                }
-            } else if(triggerClicked_[h]) {
-                if(const auto cluster=nearestBendCluster(hands_[h].position,hands_[h].orientation*glm::vec3(0,0,-1))) {
-                    if(std::find(selectedOwnerTokens_.begin(),selectedOwnerTokens_.end(),bendClusters_[*cluster].token)==selectedOwnerTokens_.end())selectBendCluster(*cluster);
-                    blocked[h]=true;
                 }
             }
         }
@@ -9103,7 +9119,7 @@ class Viewer {
         refreshExtrudePanel();
     }
     void processBendWheel(std::array<bool,2>& blocked) {
-        if(!bendPanel_.active)return;
+        if(!bendPanel_.active || bendPanel_.selecting)return;
         if(bendPanel_.twist) {
             if(!bendPanel_.wheelHand)return;
             const size_t h=*bendPanel_.wheelHand;blocked[h]=true;
@@ -9214,7 +9230,7 @@ class Viewer {
     void processBendHandles(std::array<bool,2>& blocked,bool sceneMoving) {
         nadoc_vr::CalculationScope auditScope("processBendHandles");
         if(bendPanel_.active && bendPanel_.twist){processTwistHandle(blocked,sceneMoving);return;}
-        if(!bendPanel_.active || !bendPanel_.manual)return;
+        if(!bendPanel_.active || bendPanel_.selecting || !bendPanel_.manual)return;
         if(sceneMoving || toolShell_.executionPending() || viewTools_.inspectionLayout()) {
             if(bendPanel_.hand) {bendPanel_.hand.reset();publishToolConfiguration();}
             return;
@@ -9249,6 +9265,7 @@ class Viewer {
         if(!bendReady() || bendPanel_.pickSlot || bendPanel_.arc.length<=0)return;
         float best=10;size_t end=0,h=0;bool found=false;glm::vec3 contact{};
         for(size_t j=0;j<2;++j)if(!blocked[j] && triggerClicked_[j])if(const auto hit=bendPlaneHit(j)) {
+            if(selectedSelectionKind_!="cluster" && selectedSelectionKind_!="end" && hit->slot==0)continue;
             if(hit->distance<best){best=hit->distance;end=hit->slot;h=j;contact=hit->point;found=true;}
         }
         if(found) {
@@ -9269,7 +9286,7 @@ class Viewer {
         }
     }
     void processBendPlanePick(std::array<bool,2>& blocked) {
-        if(!bendPanel_.active || !bendPanel_.twist || toolShell_.executionPending() || bendPanel_.hand)return;
+        if(!bendPanel_.active || bendPanel_.selecting || !bendPanel_.twist || toolShell_.executionPending() || bendPanel_.hand)return;
         if(bendPanel_.planeHand && (!hands_[*bendPanel_.planeHand].valid || !triggerPressed_[*bendPanel_.planeHand])) {
             bendPanel_.planeHand.reset();
             if(!activePlanePickSequence_) {
@@ -9288,15 +9305,7 @@ class Viewer {
         if(snapSelectionHits_[h].empty() || activePlanePickSequence_)return;
         const auto& hit=snapSelectionHits_[h].front();
         // Selection acknowledgement must bind the target before a plane request.
-        const bool sameOwner=std::any_of(snapSelectionOwnerTokens_[h].begin(),snapSelectionOwnerTokens_[h].end(),[&](const auto& token){
-            return std::find(selectedOwnerTokens_.begin(),selectedOwnerTokens_.end(),token)!=selectedOwnerTokens_.end();
-        });
-        if(!sameOwner) {
-            if(bendPanel_.pendingSelection!=hit.identity) {
-                bendPanel_.pendingSelection=hit.identity;publishSelect({hit.identity});
-            }
-            return;
-        }
+        if(!glScene_->belongsToSelection(hit.identity,committedSelectionOwnerTokens_))return;
         bendPanel_.pendingSelection.clear();
         const auto local=glm::vec3(glm::inverse(manipulator_.transform())*glm::vec4(selectionVolumeCenter(h),1));
         const auto source=(local-glm::vec3(0,0,-kViewDistanceMeters))/normalizationScale_+normalizationCenter_;
@@ -11182,7 +11191,7 @@ int main(int argc, char** argv) {
             if (token.empty() || token.size() > 2048 ||
                 std::any_of(token.begin(), token.end(), [](unsigned char character) {
                     return std::isspace(character) != 0;
-                }) || selectedOwnerTokens.size() >= 8) {
+                }) || selectedOwnerTokens.size() >= 4097) {
                 std::cerr << "NADOC VR error: invalid selected owner token\n";
                 return 2;
             }
@@ -11204,8 +11213,8 @@ int main(int argc, char** argv) {
                      "0.05-20, and orientation offsets finite within +/-360 degrees\n";
         return 2;
     }
-    const std::array<std::string, 11> validSelectionKinds = {
-        "none", "cluster", "strand", "domain", "base", "end", "bond",
+    const std::array<std::string, 12> validSelectionKinds = {
+        "none", "selection", "cluster", "strand", "domain", "base", "end", "bond",
         "crossover", "overhang", "extension", "protein",
     };
     if (std::find(validSelectionKinds.begin(), validSelectionKinds.end(),

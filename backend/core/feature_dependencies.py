@@ -249,6 +249,7 @@ def delta_entry_targets(entry, design) -> Optional[set]:
         if op is None:
             return None
         ids = set(op.affected_helix_ids or [])
+        ids.update(r.strand_id for r in (op.target_ranges or []) if r.strand_id)
         for cid in op.cluster_ids or []:
             h = _cluster_helices(design, cid)
             if h is None:

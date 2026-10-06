@@ -3,7 +3,7 @@ import { createVRBend } from './vr_bend.js'
 import { createVRToolTransactionCoordinator } from './vr_tool_transaction.js'
 
 function setup(mode = 'bend') {
-  const state = { currentDesign: { id: 'design', cluster_transforms: [{ id: 'c', helix_ids: ['h'] }], feature_log: [] }, currentGeometry: [] }
+  const state = { currentDesign: { id: 'design', helices: [{ id: 'h', length_bp: 121 }], cluster_transforms: [{ id: 'c', helix_ids: ['h'] }], feature_log: [] }, currentGeometry: [] }
   const config = { sequence: 3, draft: { mode: 'bend', target_identity: 'hit', target_kind: 'cluster', target_owner_tokens: ['owner'], plane_a_bp: 10, plane_b_bp: 110, angle_deg: 90, direction_deg: 30 } }
   if (mode === 'twist') config.draft = { ...config.draft, mode, amount_mode: 'total_degrees', amount: -90 }
   const event = { mode, action: 'confirm', sequence: 1, configSequence: 3, targetIdentity: 'hit', targetKind: 'cluster', targetOwnerTokens: ['owner'] }
@@ -15,17 +15,18 @@ function setup(mode = 'bend') {
   }
   const feedback = vi.fn(async () => ({ published: true }))
   const transaction = createVRToolTransactionCoordinator({ getState: () => state, undoDesign: async () => { state.currentDesign.feature_log.pop(); return {} } })
+  const resolveTarget = vi.fn(() => ({ identity: 'hit', selectionKind: 'cluster', ownerTokens: ['owner'], selectedRef: { kind: 'cluster', id: 'c' } }))
   const bend = createVRBend({ api, getState: () => state, getConfig: () => config, transaction, sendFeedback: feedback,
-    resolveTarget: () => ({ identity: 'hit', selectionKind: 'cluster', ownerTokens: ['owner'], selectedRef: { kind: 'cluster', id: 'c' } }),
+    resolveTarget,
   })
-  return { bend, api, feedback, config, event, state }
+  return { bend, api, feedback, config, event, state, resolveTarget }
 }
 const settled = () => new Promise(resolve => setTimeout(resolve, 0))
 describe('VR bend desktop executor', () => {
   it('commits curvature, mirrors the scene and undoes exactly one feature', async () => {
     const { bend, api, feedback, event, state } = setup()
     expect(bend.handle(event)).toBe(true); await settled()
-    expect(api.addDeformation).toHaveBeenCalledWith('bend', 10, 110, { kind: 'bend', curvature_deg_per_bp: .9, direction_deg: 30 }, [], false, ['c'], { expectedDesignId: 'design', expectedRevision: 4 })
+    expect(api.addDeformation).toHaveBeenCalledWith('bend', 10, 110, { kind: 'bend', curvature_deg_per_bp: .9, direction_deg: 30 }, ['h'], false, [], { expectedDesignId: 'design', expectedRevision: 4, targets: [{ kind: 'cluster', id: 'c' }] })
     expect(api.refreshNativeVRScene).toHaveBeenCalledOnce()
     expect(feedback.mock.calls.at(-1)[1]).toBe('succeeded')
     bend.handle(event); await settled();expect(api.addDeformation).toHaveBeenCalledOnce()
@@ -72,4 +73,19 @@ describe('VR twist desktop executor', () => {
     s.bend.handle({ ...s.event, mode: 'twist' });await settled()
     expect(s.api.addDeformation).not.toHaveBeenCalled()
   })
+})
+
+for (const phase of ['validation', 'acknowledgement']) it(`refuses a changed selection during ${phase}`, async () => {
+  const s = setup()
+  if (phase === 'validation') s.api.validateDeformation.mockImplementation(async () => {
+    s.resolveTarget.mockReturnValue(null)
+    return { status: 'ok' }
+  })
+  else s.feedback.mockImplementation(async () => {
+    s.resolveTarget.mockReturnValue(null)
+    return { published: true }
+  })
+  s.bend.handle(s.event); await settled()
+  expect(s.api.addDeformation).not.toHaveBeenCalled()
+  expect(s.feedback.mock.calls.at(-1)[1]).toBe('refused')
 })

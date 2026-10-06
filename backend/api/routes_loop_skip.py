@@ -249,6 +249,7 @@ def get_loop_skip_limits(
 
 
 class DeformationValidateRequest(BaseModel):
+    targets: list[dict] | None = None
     type: str  # 'twist' | 'bend'
     plane_a_bp: int
     plane_b_bp: int
@@ -284,10 +285,22 @@ def validate_deformation(body: DeformationValidateRequest) -> dict:
     )
     helix_ids = resolve_cluster_scope(design, body.cluster_ids, helix_ids)["helix_ids"]
 
+    ranges = None
+    if body.targets is not None:
+        from backend.core.deformation_scope import resolve_deformation_targets
+        try:
+            ranges = resolve_deformation_targets(design, body.targets)
+        except ValueError as error:
+            raise HTTPException(400, detail=str(error)) from error
+        helix_ids = sorted({r.helix_id for r in ranges})
+        if body.plane_a_bp >= body.plane_b_bp or not any(
+                r.start_bp < body.plane_b_bp and r.end_bp > body.plane_a_bp for r in ranges):
+            raise HTTPException(400, detail="Selection does not intersect an ordered deformation window")
+
     h_map = {h.id: h for h in design.helices}
     segment_helices = [h_map[hid] for hid in helix_ids if hid in h_map]
 
-    return classify_deformation(
+    result = classify_deformation(
         segment_helices,
         body.plane_a_bp,
         body.plane_b_bp,
@@ -295,6 +308,13 @@ def validate_deformation(body: DeformationValidateRequest) -> dict:
         params,
         design=design,
     )
+
+    from backend.core.deformation_scope import selection_boundary_warning
+    boundary = selection_boundary_warning(design, ranges)
+    if boundary:
+        result = {**result, 'status': result['status'] if result['status'] != 'ok' else 'warn',
+                  'message': ' '.join(filter(None, [result.get('message'), boundary['message']]))}
+    return result
 
 
 @router.delete("/design/loop-skip", status_code=200)

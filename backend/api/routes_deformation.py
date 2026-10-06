@@ -55,6 +55,8 @@ class AddDeformationBody(BaseModel):
     # When non-empty, restrict affected helices to the union of these clusters' helix_ids.
     # Empty list = unscoped (apply to all helices crossing the planes).
     cluster_ids: list[str] = []
+    targets: list[dict] | None = None
+    source_operation_id: str | None = None
     params: dict  # raw dict; validated into TwistParams | BendParams below
     preview: bool = False  # when True, use silent update (no undo push)
 
@@ -123,7 +125,31 @@ def add_deformation(body: AddDeformationBody) -> dict:
     if body.expected_revision is not None and (not helix_ids or set(body.cluster_ids) != set(cluster_ids)):
         raise HTTPException(409, detail="Bend target no longer crosses the selected planes")
 
+    target_ranges = None
+    if body.targets is not None and body.source_operation_id is None:
+        from backend.core.deformation_scope import resolve_deformation_targets
+        try:
+            target_ranges = resolve_deformation_targets(design, body.targets)
+        except ValueError as error:
+            raise HTTPException(400, detail=str(error)) from error
+        helix_ids = sorted({r.helix_id for r in target_ranges})
+        cluster_ids = [r['id'] for r in body.targets if r.get('kind') == 'cluster']
+        if not any(r.start_bp < body.plane_b_bp and r.end_bp > body.plane_a_bp for r in target_ranges):
+            raise HTTPException(400, detail="Selection does not intersect the deformation window")
+
+    targets = body.targets
+    if body.source_operation_id is not None:
+        source = next((e.op_snapshot for e in design.feature_log
+                       if getattr(e, 'feature_type', None) == 'deformation'
+                       and e.op_snapshot and e.op_snapshot.id == body.source_operation_id), None)
+        if source is None:
+            raise HTTPException(409, detail="Original deformation no longer exists")
+        targets, target_ranges = source.targets, source.target_ranges
+        helix_ids, cluster_ids = source.affected_helix_ids, source.cluster_ids
+
     op = DeformationOp(
+        targets=targets,
+        target_ranges=target_ranges,
         type=body.type,
         plane_a_bp=body.plane_a_bp,
         plane_b_bp=body.plane_b_bp,
@@ -165,6 +191,12 @@ def add_deformation(body: AddDeformationBody) -> dict:
         body.plane_b_bp,
         params,
     )
+    from backend.core.deformation_scope import selection_boundary_warning
+    boundary = selection_boundary_warning(design, target_ranges)
+    if boundary:
+        existing = response.get('deformation_warning')
+        response['deformation_warning'] = {**boundary, **(existing or {}),
+            'message': ' '.join(filter(None, [(existing or {}).get('message'), boundary['message']]))}
     if not body.preview:
         response["vr_transaction"] = {"feature_log_entry_id": log_entry.id, "target_count": len(helix_ids)}
     return response

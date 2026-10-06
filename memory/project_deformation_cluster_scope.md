@@ -1,6 +1,6 @@
 ---
 name: deformation-cluster-scope
-description: LIVE REFERENCE — bend/twist deformations carry a cluster_ids list scoping them to a subset of clusters. Shipped 2026-05-14, in production. Scope is FROZEN into affected_helix_ids at create time; the geometry never reads cluster_ids.
+description: LIVE REFERENCE — desktop bend/twist uses mixed cluster, strand, and domain targets frozen into target_ranges; legacy operations retain affected_helix_ids scope.
 metadata: 
   node_type: memory
   type: project
@@ -21,7 +21,28 @@ metadata:
 > Architecture map: [.claude/rules/deformation.md](../.claude/rules/deformation.md) (auto-loads).
 > Symptom→diagnosis: `.claude/runbooks/RUNBOOK_DEFORMATION.md` §7.
 
-## The one thing to know
+## Desktop arbitrary selections (2026-10-06)
+
+The desktop launcher now uses canonical mixed cluster/strand/domain selection in
+one persistent panel: Current selection → Pick planes → parameters. Clear selection
+restores the draft and returns to an empty armed panel; Change selection resets
+planes. Cluster creation is no longer a prerequisite. VR also accepts the exact canonical set, using its selection-volume filters and a Change selection / Use selection panel flow.
+
+New operations persist `targets` (selection labels/intent) and `target_ranges`
+(frozen helix, direction, inclusive bp membership, plus original domain ownership).
+An explicit empty target list is invalid. `None` retains the legacy behavior below.
+`backend/core/deformation_scope.py` partitions nucleotide/atom evaluation by the
+ordered operations affecting each site, reusing existing frame mathematics.
+Per-domain axis segments carry separate sample tracks when paired strands diverge.
+Parameter editing and feature replay preserve frozen membership, including when
+original domain indices subsequently change. Preview requests and cleanup are
+serialized so Cancel/Apply cannot leave an in-flight preview behind.
+
+Tests: `tests/test_deformation_selection.py`, `deformation_targets.test.js`,
+`deformation_preview_session.test.js`, `deformation_tool_launcher.test.js`, and
+`frontend/e2e/deformation_selection.spec.js`.
+
+## Legacy cluster operations
 
 **There are two independent scoping mechanisms, and the geometry math reads neither `cluster_ids`
 nor the cluster picker.**

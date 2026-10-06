@@ -38,6 +38,12 @@ test('ScryWrite twist planes, rotation, signed wheel, desktop commit, save and U
     const api=await import('/src/api/client.js')
     return { design: {...s.currentDesign,feature_log:(await api._request('GET','/design/feature-log/full')).feature_log}, geometry: (await api._request('GET','/design/geometry')).nucleotides }
   })
+  await page.evaluate(async () => {
+    const { store } = await import('/src/state/store.js')
+    const { createSelectionController } = await import('/src/scene/selection_controller.js')
+    const cluster = store.getState().currentDesign.cluster_transforms[0]
+    if (cluster) createSelectionController({ store }).replace([{ kind: 'cluster', id: cluster.id }])
+  })
   const before = await read()
   fs.writeFileSync(info.outputPath('before.json'), JSON.stringify(before))
   await page.locator('#canvas').click({ position: { x: 30, y: 30 } }); await page.keyboard.press('f')

@@ -54,7 +54,7 @@ struct BendArc {
 };
 class BendPanel {
  public:
-    bool active=false, posed=false, elements=false, twist=false;
+    bool active=false, posed=false, elements=false, twist=false, selecting=false;
     bool manual=false, clustersOpen=false, defaultPlanes=false;
     size_t clusterPage=0;
     std::vector<std::string> clusters;
@@ -72,6 +72,19 @@ class BendPanel {
     glm::mat4 startModel{1};
     BendArc arc;
     ThumbwheelControl wheel;
+    static bool supports(const std::string& kind) {
+        return kind=="cluster" || kind=="strand" || kind=="domain" || kind=="selection" || kind=="end";
+    }
+    void describeSelection(const std::string& kind,const std::vector<std::string>& owners) {
+        if(kind!="selection") {clusterLabel=kind=="none"?"No selection":"Selected "+kind;return;}
+        size_t clusters=0,strands=0,domains=0;
+        for(const auto& token:owners) {
+            clusters+=token.starts_with("%5B%22cluster%22");
+            strands+=token.starts_with("%5B%22strand%22");
+            domains+=token.starts_with("%5B%22domain%22");
+        }
+        clusterLabel=std::to_string(clusters)+" clusters / "+std::to_string(strands)+" strands / "+std::to_string(domains)+" domains";
+    }
     void enter(std::array<SidebarMenu,2>& menus) {
         if(!active)savedOffset=menus[1].offset();
         renderedState_.reset();
@@ -86,7 +99,7 @@ class BendPanel {
         if(!active)return;
         menus[1].open=true;menus[1].offsets[menus[1].selected]=0;
         const std::string key=twist?"twist":"bend";
-        const RenderState state{twist,elements,manual,clustersOpen,clusterPage,clusterLabel,clusters,config.planeABp(),config.planeBBp(),
+        const RenderState state{twist,elements,manual,clustersOpen,selecting,clusterPage,clusterLabel+config.targetSelectionKind(),clusters,config.planeABp(),config.planeBBp(),
             config.bendAngleDegrees(),config.bendDirectionDegrees(),config.twistAmount(),config.twistAmountMode()};
         // Refresh runs every frame (and again while dragging). Retain the menu
         // rows until their inputs change; opening and scrolling still work.
@@ -96,7 +109,7 @@ class BendPanel {
         auto row=[&](std::string id,std::string label,std::string detail="") {
             tab.rows.push_back({key+":"+id,label,detail,key+":"+id,{}});
         };
-        row("back",(twist?"Twist":"Bend")+std::string(" - Return to tools"),status);row("confirm","CONFIRM");row("cancel","CANCEL");
+        row("back",(twist?"Twist":"Bend")+std::string(" - Return to tools"),clusterLabel+" | "+status);row("confirm","CONFIRM");row("cancel","CANCEL");
         auto bp=[](auto v){return v?std::to_string(*v):std::string("--");};
         row("plane1","Plane 1: "+bp(config.planeABp()),twist?"TRIGGER HOLD NEAREST ELEMENT / BP":"BP INDEX / GRAB PLANE TO MOVE");
         row("plane2","Plane 2: "+bp(config.planeBBp()),twist?"TRIGGER HOLD NEAREST ELEMENT / BP":"BP INDEX / GRAB PLANE TO MOVE");
@@ -106,18 +119,20 @@ class BendPanel {
             row("amount","Amount: "+amount.str()+(total?" deg":" deg/nm"),total?"DRAG THUMBWHEEL / 1 DEG":"DRAG THUMBWHEEL / 0.1 DEG/NM");
             row("less",total?"-5 deg":"-0.5 deg/nm");row("more",total?"+5 deg":"+0.5 deg/nm");
             row("units",total?"Units: total degrees":"Units: degrees / nm","SWITCH UNITS / PRESERVE TOTAL TWIST");
-            row("reverse","Reverse direction");row("zero","Zero twist");
-            row("target",elements?"Targets: element ends":"Targets: clusters");
+            row("reverse","Reverse direction");row("zero",selecting?"Clear selection":"Zero twist");
+            row("target",selecting?"Use selection / Pick planes":"Change selection",clusterLabel);
             row("undo","UNDO");row("recenter","Frame model");
             menus[1].customTab=std::move(tab);return;
         }
-        row("cluster","Cluster: "+clusterLabel+"  v","CHOOSE CLUSTER");
+        row("cluster",selecting?"Use selection / Pick planes":"Change selection",clusterLabel);
         if(clustersOpen) {
             for(size_t i=clusterPage;i<std::min(clusterPage+4,clusters.size());++i)
                 row("cluster-"+std::to_string(i),clusters[i]);
             row("clusters-prev","Previous");row("clusters-next","Next");
         }
-        row("manual",manual?"Manual bend: ON":"Manual bend","KEEP BP INDICES / MOVE PLANE");
+        const bool shared=config.targetSelectionKind()!="cluster" && config.targetSelectionKind()!="end";
+        row("manual",selecting?"Clear selection":manual?"Manual bend: ON":shared?"Shape handle":"Manual bend",
+            selecting?"FILTER: CLUSTER / STRAND / DOMAIN":shared?"PLANE 1 FIXED / SHARED CURVATURE":"KEEP BP INDICES / MOVE PLANE");
         row("angle-wheel", "");row("direction-wheel", "");row("radius-wheel", "");
         row("angle","Angle: "+std::to_string(int(std::round(config.bendAngleDegrees())))+" deg","DRAG THUMBWHEEL / 1 DEG");
         row("direction","Direction: "+std::to_string(int(std::round(config.bendDirectionDegrees())))+" deg","DRAG THUMBWHEEL / 1 DEG");
@@ -133,7 +148,7 @@ class BendPanel {
         menus[1].customTab=std::move(tab);
     }
  private:
-    using RenderState=std::tuple<bool,bool,bool,bool,size_t,std::string,std::vector<std::string>,std::optional<int32_t>,std::optional<int32_t>,double,double,double,TwistAmountMode>;
+    using RenderState=std::tuple<bool,bool,bool,bool,bool,size_t,std::string,std::vector<std::string>,std::optional<int32_t>,std::optional<int32_t>,double,double,double,TwistAmountMode>;
     mutable std::optional<RenderState> renderedState_;
     mutable std::string renderedStatus_;
 };

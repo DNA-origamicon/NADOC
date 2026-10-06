@@ -1,53 +1,74 @@
-import { beginClusterSelection } from './tool_cluster_selection.js'
-import { createToolPopup } from './tool_popup.js'
-import { el } from './primitives/dom.js'
-import { startTool, exitTool, setDeformSessionClusterIds } from '../scene/deformation_editor.js'
+import { canonicalSelection } from '../scene/selection_model.js'
+import { deformationTargets } from '../scene/deformation_targets.js'
+import { moveRotateSelectionLabels } from '../scene/move_rotate_panel.js'
+import { startTool, exitTool, setDeformSessionTargets, waitForDeformationIdle } from '../scene/deformation_editor.js'
+import { showSelectionPopup, setDeformationSelectionUI, closePopup } from './bend_twist_popup.js'
 
-/** Menu entry: select one cluster before enabling the deformation plane picker. */
+/** Persistent selection → planes → parameters workflow, sharing canonical selection. */
 export function initDeformationToolLauncher({
   store, selectionManager, showToast, deformView, watchDeformState,
-  start = startTool, exit = exitTool, setScope = setDeformSessionClusterIds,
+  start = startTool, exit = exitTool, setScope = setDeformSessionTargets,
+  waitForIdle = waitForDeformationIdle,
 }) {
-  let pending = null, popup = null
+  let type = null, phase = 'selection', unsubscribe = null, resetting = false
   const cancel = () => {
-    pending?.cancel(); pending = null
-    popup?.dispose(); popup = null
+    type = null
+    unsubscribe?.(); unsubscribe = null
     document.removeEventListener('keydown', escape, true)
+    setDeformationSelectionUI(null)
+    exit(); closePopup()
   }
   const escape = event => {
-    if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('.modal__overlay')) return
+    if (phase !== 'selection' || event.key !== 'Escape' || event.defaultPrevented) return
     event.preventDefault(); event.stopPropagation(); cancel()
   }
-  function open(type) {
+  async function change(clear = false) {
+    if (!type || resetting) return
+    resetting = true
+    exit()
+    await waitForIdle()
+    if (clear) selectionManager.clearSelection()
+    phase = 'selection'; resetting = false
+    if (type) { showSelectionPopup(type); refresh() }
+  }
+  function refresh() {
+    if (!type || resetting) return
+    const state = store.getState(), resolved = deformationTargets(state)
+    setDeformationSelectionUI({
+      labels: moveRotateSelectionLabels(state),
+      error: resolved.error, phase,
+      onClear: () => change(true), onChange: () => change(), onCancel: cancel,
+      onPick: () => {
+        const current = deformationTargets(store.getState())
+        if (current.error) return
+        setScope(current.targets)
+        phase = 'planes'
+        start(type); watchDeformState(); refresh()
+      },
+    })
+  }
+  function open(nextType) {
     cancel()
     const state = store.getState()
     if (state.assemblyActive) { showToast('Not available in assembly mode.', { severity: 'error' }); return }
     if (!state.currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
     if (!deformView.isActive() && state.currentDesign.deformations?.length) {
-      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' }); return
+      showToast('Switch back to deformed view before adding further deformations.', { severity: 'error' }); return
     }
-    if (!state.currentDesign.cluster_transforms?.length) {
-      showToast('Create a cluster before bending or twisting.', { severity: 'info' }); return
-    }
-    exit()
-    const panel = el('div', { id: 'deformation-cluster-picker', className: 'ox-card__body', children: [
-      el('p', { className: 'tool-picking-hint', text: 'Select a cluster', attrs: { title: 'Pick a cluster in the 3D view or cluster list. Selection returns to Default automatically.' } }),
-      el('button', { className: 'btn btn--sm', text: 'Cancel', attrs: { type: 'button' }, on: { click: cancel } }),
-    ] })
-    popup = createToolPopup({ panel, title: type === 'bend' ? 'Bend' : 'Twist', onClose: cancel })
-    popup.show()
-    pending = beginClusterSelection({ store, selectionManager, onCancelled: cancel, onSelected: cluster => {
-      cancel()
-      // The editor owns its scope independently of Move/Rotate's active marker.
-      // Leaving that marker set makes the cluster row stay lit after deselection.
-      setScope([cluster.id])
-      start(type)
-      watchDeformState()
-      const indicator = document.getElementById('mode-indicator')
-      if (indicator) indicator.textContent = `${type.toUpperCase()} — click plane A (fixed), then plane B · Esc to exit`
-    } })
+    type = nextType; phase = 'selection'
+    showSelectionPopup(type); refresh()
+    const designId = state.currentDesign.id
+    unsubscribe = store.subscribe((next, previous) => {
+      if (next.currentDesign?.id !== designId) { cancel(); return }
+      if (resetting) return
+      if (previous.deformToolActive && !next.deformToolActive && phase === 'planes') { cancel(); return }
+      if (JSON.stringify(canonicalSelection(next).items) !== JSON.stringify(canonicalSelection(previous).items)) {
+        if (phase === 'planes') void change()
+        else refresh()
+      }
+    })
     document.addEventListener('keydown', escape, true)
   }
-  for (const type of ['bend', 'twist']) document.getElementById(`menu-tools-${type}`)?.addEventListener('click', () => open(type))
+  for (const kind of ['bend', 'twist']) document.getElementById(`menu-tools-${kind}`)?.addEventListener('click', () => open(kind))
   return { open, cancel }
 }

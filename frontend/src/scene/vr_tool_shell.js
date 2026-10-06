@@ -28,8 +28,8 @@ const DIRECT_MOVE_ROTATE_KINDS = new Set([
 ])
 const CONFIGURATION_KINDS = Object.freeze({
   extrude: new Set(['end']),
-  twist: new Set(['cluster', 'end']),
-  bend: new Set(['cluster', 'end']),
+  twist: new Set(['cluster', 'strand', 'domain', 'selection', 'end']),
+  bend: new Set(['cluster', 'strand', 'domain', 'selection', 'end']),
 })
 
 /** Honest selection × tool capability. A semantically valid target is not called

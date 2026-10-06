@@ -27,7 +27,7 @@ export function createVRBend({ api, getState, getConfig, resolveTarget, transact
           const plan = described.plan
           const verdict = await api.validateDeformation(plan.preflight.arguments)
           if (!['ok', 'warn'].includes(verdict?.status)) outcome = { accepted: false, reason: 'backend_block' }
-          else if (api.currentRevisionWatermark() !== revision || getConfig().sequence !== config.sequence) {
+          else if (api.currentRevisionWatermark() !== revision || getConfig().sequence !== config.sequence || !resolveTarget({ identity: event.targetIdentity, selectionKind: event.targetKind, ownerTokens: event.targetOwnerTokens })) {
             outcome = { accepted: false, reason: 'document_changed' }
           } else {
             const ack = await sendFeedback(event, 'pending', 'committing')
@@ -35,7 +35,8 @@ export function createVRBend({ api, getState, getConfig, resolveTarget, transact
             outcome = await transaction.commit({ tool: event.mode, targetKey: JSON.stringify([event.targetIdentity, event.targetOwnerTokens]),
               targetIdentity: event.targetIdentity, targetKind: event.targetKind,
               execute: async () => {
-                const result = await api.addDeformation(...plan.commit.arguments, { expectedDesignId: state.currentDesign.id, expectedRevision: revision })
+                if (!resolveTarget({ identity: event.targetIdentity, selectionKind: event.targetKind, ownerTokens: event.targetOwnerTokens }) || getConfig().sequence !== config.sequence) return { accepted: false, reason: 'stale_target' }
+                const result = await api.addDeformation(...plan.commit.arguments, { expectedDesignId: state.currentDesign.id, expectedRevision: revision, ...(plan.targets ? { targets: plan.targets } : {}) })
                 return { accepted: !!result, result }
               },
             })

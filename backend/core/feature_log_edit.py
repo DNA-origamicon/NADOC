@@ -170,9 +170,26 @@ def edit_deformation_entry(
     helix_ids = resolved["helix_ids"]
     cluster_ids = resolved["cluster_ids"]
 
+    # Membership is frozen at creation. Parameter edits must not resolve saved
+    # domain indices against a subsequently edited topology.
+    target_ranges = entry.op_snapshot.target_ranges
+    targets = entry.op_snapshot.targets
+    if "targets" in p and p["targets"] != targets:
+        from backend.core.deformation_scope import resolve_deformation_targets
+        try:
+            target_ranges = resolve_deformation_targets(design, p["targets"])
+        except ValueError as error:
+            raise FeatureEditError(str(error), status=400) from error
+        targets = p["targets"]
+    if target_ranges is not None:
+        helix_ids = sorted({r.helix_id for r in target_ranges})
+        cluster_ids = [r['id'] for r in (targets or []) if r.get('kind') == 'cluster']
+
     # Build the edited op from the entry's stored snapshot (preserves the op id).
     new_op = entry.op_snapshot.model_copy(
         update={
+            "targets": targets,
+            "target_ranges": target_ranges,
             "type": op_type,
             "plane_a_bp": p["plane_a_bp"],
             "plane_b_bp": p["plane_b_bp"],

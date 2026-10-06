@@ -79,6 +79,7 @@ _TAILSCALE_NETWORKS = (
 
 SelectionKind = Literal[
     "none",
+    "selection",
     "cluster",
     "strand",
     "domain",
@@ -143,7 +144,7 @@ class VRLaunchRequest(BaseModel):
     selection_level: Literal[
         "default", "cluster", "strand", "domain", "end", "xover", "base"
     ] = "default"
-    selected_owner_tokens: list[str] = Field(default_factory=list, max_length=8)
+    selected_owner_tokens: list[str] = Field(default_factory=list, max_length=4097)
     selected_selection_kind: SelectionKind = "none"
     jobs_snapshot_available: bool = False
     jobs_snapshot_total: int = Field(default=0, ge=0, le=1_000_000)
@@ -3041,6 +3042,7 @@ def _runtime_timing(state: dict, event: dict) -> dict:
 
 _VR_TOOL_CONFIG_TARGET_KINDS = {
     "none",
+    "selection",
     "cluster",
     "strand",
     "domain",
@@ -3786,7 +3788,7 @@ def _write_plane_feedback(state: dict | None, body: VRPlaneFeedbackRequest) -> N
     if (
         any(character.isspace() for character in body.target_identity)
         or any(character.isspace() for character in body.picked_identity)
-        or body.target_kind not in {"cluster", "end"}
+        or body.target_kind not in {"cluster", "strand", "domain", "selection", "end"}
         or body.resolved != (body.reason == "resolved")
         or body.resolved != (
             body.plane_bp is not None
@@ -3897,7 +3899,7 @@ def _write_preflight_feedback(
                 (body.tool_mode == "extrude" and body.target_kind == "end")
                 or (
                     body.tool_mode in {"twist", "bend"}
-                    and body.target_kind in {"cluster", "end"}
+                    and body.target_kind in {"cluster", "strand", "domain", "selection", "end"}
                 )
             )
         )

@@ -2,6 +2,7 @@ import * as api from '../api/client.js'
 import { store } from '../state/store.js'
 import {
   initDeformationEditor, previewDeformation, confirmDeformation,
+  waitForDeformationIdle, discardDeformationPreview,
   exitTool as deformExitTool, getPlanes as getDeformPlanes,
   repositionPlane as repositionDeformPlane,
   getState as getDeformState, getToolType as getDeformToolType,
@@ -41,7 +42,7 @@ export function initFeatureEditor({
       const ctx = _editContext
       _editContext = null
       if (ctx?.editingFeatureType === 'deformation' && ctx.origOpId) {
-        seekFeaturesWithDelta(ctx.priorCursor ?? -1).catch(() => {})
+        waitForDeformationIdle().then(() => seekFeaturesWithDelta(ctx.priorCursor ?? -1)).catch(() => {})
       }
     },
     () => {
@@ -74,6 +75,7 @@ export function initFeatureEditor({
           cluster_ids: ctx.clusterIds ?? [],
         }
         markDeformEditCommitted()   // so the exit below does NOT revert the op
+        await discardDeformationPreview()
         const resp = await api.editFeature(ctx.featureIndex, editBody)
         if (resp == null) {
           showToast(`Edit failed: ${store.getState().lastError?.message ?? 'unknown error'}`, 4000)
@@ -227,7 +229,7 @@ export function initFeatureEditor({
     // Open editor in NEW-OP (preview) flow — _editOpId stays null so the
     // popup's first previewDeformation goes through addDeformation(preview=true),
     // producing a fresh preview op that owns the bent GHOST layer.
-    startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp, /*opId=*/null, op.params)
+    startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp, /*opId=*/null, op.params, op)
 
     document.getElementById('mode-indicator').textContent =
       `EDIT ${op.type.toUpperCase()} F${featureIndex + 1} — adjust params · Apply to save · Esc to cancel`

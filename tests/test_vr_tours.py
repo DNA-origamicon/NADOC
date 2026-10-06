@@ -231,3 +231,11 @@ def test_current_menu_routes_have_a_focused_four_profile_entry():
     assert arguments(tour, True) == ['-m','tools.vr_workflows.menu_tour',
         '--action-checks','--validate','--hold','0','--exit']
     assert 'all four' in tour['description']
+
+
+def test_deformation_selection_check_is_discoverable_and_headset_independent(client):
+    tour = next(t for t in client.get('/api/vr/tours').json()['tours'] if t['id'] == 'deformation-selection')
+    assert tour['group'] == 'authoring'
+    assert tour['runnable']
+    assert 'No headset required' in tour['description']
+    assert arguments(tour, True) == ['-m', 'tools.vr_workflows.deformation_selection_check', '--validate']

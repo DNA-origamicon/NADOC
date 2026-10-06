@@ -3351,3 +3351,29 @@ def test_full_domain_move_preserves_bead_slab_registration(angle, copy_k) -> Non
                 expected[3:6] = pivot + rotation.apply(expected[3:6] - pivot) + shift
         np.testing.assert_allclose(after[identity].values, expected, atol=2e-6,
                                    err_msg=identity)
+
+
+@pytest.mark.parametrize('kind', ['strand', 'domain', 'selection'])
+def test_deformation_selection_transport_preserves_target_through_all_feedback(tmp_path, kind):
+    from backend.api.routes_vr import _parse_tool_config
+    identity = 'selection:session:4' if kind == 'selection' else 'nuc:part'
+    draft = dict(mode='bend', target_kind=kind, target_identity=identity,
+                 target_owner_tokens=[identity], plane_a_bp=20, plane_b_bp=80,
+                 angle_deg=60, direction_deg=0)
+    assert _parse_tool_config(draft, 4) == draft
+    feedback = tmp_path / 'selection.txt'
+    _write_feedback({'feedback_path': str(feedback)}, VRFeedbackRequest(
+        select_sequence=4, identity=identity, selected=True, accepted=True,
+        selection_kind=kind, owner_tokens=[identity], selected_identities=[identity],
+        selected_owner_tokens=['cluster-a', 'strand-b', 'domain-c']))
+    assert f'{kind} {identity} 1 {identity}' in feedback.read_text()
+    _write_plane_feedback({'plane_feedback_path': str(feedback), 'view_rotation': np.eye(3).tolist()}, VRPlaneFeedbackRequest(
+        plane_pick_sequence=1, tool_config_sequence=4, target_identity=identity,
+        target_kind=kind, picked_identity=identity, plane_slot='a', resolved=True,
+        reason='resolved', plane_bp=20, plane_center=[0, 0, 6.68],
+        plane_normal=[0, 0, 1], plane_half_extent_nm=2))
+    assert f'a {kind} {identity} {identity} 20' in feedback.read_text()
+    _write_preflight_feedback({'preflight_feedback_path': str(feedback)}, VRToolPreflightFeedbackRequest(
+        preflight_sequence=1, tool_config_sequence=4, target_identity=identity,
+        target_kind=kind, tool_mode='bend', status='ok', reason='validated'))
+    assert f'ok bend {kind} {identity} validated' in feedback.read_text()

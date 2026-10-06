@@ -1303,7 +1303,7 @@ class ToolShell {
             const char* selectionKind;
             ToolCapability capability;
         };
-        static constexpr std::array<CapabilityEntry, 11> entries = {{
+        static constexpr std::array<CapabilityEntry, 17> entries = {{
 #define NADOC_VR_TOOL_CAPABILITY(tool, kind, capability) \
             {ToolMode::tool, #kind, ToolCapability::capability},
 #include "../tool_capabilities.def"
@@ -1622,8 +1622,8 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
     if (std::find(levels.begin(), levels.end(), result.level) == levels.end()) {
         return std::nullopt;
     }
-    static constexpr std::array<const char*, 11> selectionKinds = {
-        "none", "cluster", "strand", "domain", "base", "end", "bond",
+    static constexpr std::array<const char*, 12> selectionKinds = {
+        "none", "selection", "cluster", "strand", "domain", "base", "end", "bond",
         "crossover", "overhang", "extension", "protein",
     };
     if (version >= 3 && std::find(
@@ -1667,8 +1667,8 @@ inline std::optional<ToolExecutionFeedback> parseToolExecutionFeedback(
     static constexpr std::array<const char*, 4> statuses = {
         "pending", "succeeded", "failed", "refused",
     };
-    static constexpr std::array<const char*, 11> selectionKinds = {
-        "none", "cluster", "strand", "domain", "base", "end", "bond",
+    static constexpr std::array<const char*, 12> selectionKinds = {
+        "none", "selection", "cluster", "strand", "domain", "base", "end", "bond",
         "crossover", "overhang", "extension", "protein",
     };
     if (std::find(modes.begin(), modes.end(), result.mode) == modes.end() ||
@@ -1824,7 +1824,7 @@ inline std::optional<ToolPreflightFeedback> parseToolPreflightFeedback(
     const bool compatibleTarget = !result.identity.empty() && (
         (result.mode == "extrude" && result.selectionKind == "end") ||
         ((result.mode == "twist" || result.mode == "bend") &&
-         (result.selectionKind == "cluster" || result.selectionKind == "end")));
+         (result.selectionKind == "cluster" || result.selectionKind == "strand" || result.selectionKind == "domain" || result.selectionKind == "selection" || result.selectionKind == "end")));
     if (!noTarget && !compatibleTarget) return std::nullopt;
     return result;
 }
@@ -1849,8 +1849,8 @@ inline std::optional<PlanePickFeedback> parsePlanePickFeedback(
         result.sequence != expectedPickSequence ||
         result.toolConfigSequence != expectedToolConfigSequence ||
         (result.slot != "a" && result.slot != "b") ||
-        (result.targetSelectionKind != "cluster" &&
-         result.targetSelectionKind != "end") ||
+        (result.targetSelectionKind != "cluster" && result.targetSelectionKind != "strand" &&
+         result.targetSelectionKind != "domain" && result.targetSelectionKind != "selection" && result.targetSelectionKind != "end") ||
         result.targetIdentity.empty() || result.targetIdentity == "-" ||
         result.targetIdentity.size() > 2048 || result.pickedIdentity.empty() ||
         result.pickedIdentity == "-" || result.pickedIdentity.size() > 2048) {

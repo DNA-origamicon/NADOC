@@ -878,19 +878,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // the interior samples may not match the endpoint frame exactly — the
         // tube still looks far closer to the truth than a straight chord.
         let tubeMesh = null
-        if (isCurved && tubeSamp && tubeSamp.length > 2) {
+        const segmentSamples = bs?.samples ?? tubeSamp
+        if (segmentSamples && segmentSamples.length > 2) {
           const localLo = ds.bp_lo - helix.bp_start
           const localHi = ds.bp_hi - helix.bp_start
           const pts = [ws.clone()]
-          const lastSampleIdx = tubeSamp.length - 1
-          for (let si = 0; si < tubeSamp.length; si++) {
+          const lastSampleIdx = segmentSamples.length - 1
+          for (let si = 0; si < segmentSamples.length; si++) {
             // Mirror backend _sample_bp_list_for_axis: samples are at local bp
             // 0, AXIS_SAMPLE_STEP, 2*step, …, with length_bp-1 appended last.
             const localBp = (si === lastSampleIdx)
               ? helix.length_bp - 1
               : si * (isNativeFold ? 1 : AXIS_SAMPLE_STEP)
             if (localBp > localLo && localBp <= localHi) {
-              pts.push(new THREE.Vector3(...tubeSamp[si]))
+              pts.push(new THREE.Vector3(...segmentSamples[si]))
             }
           }
           pts.push(we.clone())

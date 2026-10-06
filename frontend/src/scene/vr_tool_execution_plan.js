@@ -1,3 +1,4 @@
+import { deformationTargets, targetState } from './deformation_targets.js'
 /** Pure, non-executing transaction descriptors for parameterized native-VR tools.
  *
  * These descriptors deliberately contain no API calls. They pin the exact desktop
@@ -32,15 +33,16 @@ function _exactEndNucleotide(selectedRef, geometry) {
   return matches.length === 1 ? matches[0] : null
 }
 
-/** Resolve the explicit deformation scope for a Cluster or exact End target. */
+/** Resolve exact selectable sets; legacy End targeting keeps its containing scope. */
 export function resolveVRDeformationScope(selectedRef, { design = null, geometry = [] } = {}) {
-  const clusters = design?.cluster_transforms ?? []
-  if (selectedRef?.kind === 'cluster') {
-    const cluster = clusters.find(candidate => candidate.id === selectedRef.id)
-    return cluster?.helix_ids?.length
-      ? { resolved: true, reason: 'resolved', clusterIds: [cluster.id] }
-      : { resolved: false, reason: 'stale_cluster', clusterIds: [] }
+  if (Array.isArray(selectedRef) || ['strand', 'domain', 'cluster'].includes(selectedRef?.kind)) {
+    const selection = deformationTargets(targetState(design, Array.isArray(selectedRef) ? selectedRef : [selectedRef]))
+    return selection.error ? { resolved: false, reason: 'target_scope_unresolved', clusterIds: [] }
+      : { resolved: true, reason: 'resolved', clusterIds: [],
+          helixIds: [...new Set(selection.ranges.map(r => r.helixId))],
+          targets: selection.targets, ranges: selection.ranges }
   }
+  const clusters = design?.cluster_transforms ?? []
   if (selectedRef?.kind !== 'end') {
     return { resolved: false, reason: 'unsupported_target', clusterIds: [] }
   }
@@ -134,7 +136,7 @@ function _extrusionPlan(config, toolTarget, { design, revision }) {
 }
 
 function _deformationPlan(config, toolTarget, environment) {
-  if (!['cluster', 'end'].includes(config.target_kind)) {
+  if (!['cluster', 'strand', 'domain', 'selection', 'end'].includes(config.target_kind)) {
     return { accepted: false, reason: 'unsupported_target', plan: null }
   }
   if (config.plane_a_bp === null || config.plane_b_bp === null) {
@@ -143,12 +145,13 @@ function _deformationPlan(config, toolTarget, environment) {
   if (config.plane_a_bp >= config.plane_b_bp) {
     return { accepted: false, reason: 'ordered_planes_required', plan: null }
   }
-  const scope = resolveVRDeformationScope(toolTarget.selectedRef, environment)
+  const scope = resolveVRDeformationScope(toolTarget.selectedRefs ?? toolTarget.selectedRef, environment)
   if (!scope.resolved) return { accepted: false, reason: scope.reason, plan: null }
   const params = config.mode === 'twist'
     ? { [config.amount_mode]: config.amount }
     : { kind: 'bend', curvature_deg_per_bp: config.angle_deg / (config.plane_b_bp - config.plane_a_bp), direction_deg: config.direction_deg, ...(config.bend_endpoints ? { endpoints: config.bend_endpoints, ...(config.bend_midpoint ? { midpoint: config.bend_midpoint } : {}) } : {}) }
   const args = {
+    ...(scope.targets ? { targets: scope.targets } : {}),
     type: config.mode,
     planeA: config.plane_a_bp,
     planeB: config.plane_b_bp,
@@ -161,6 +164,7 @@ function _deformationPlan(config, toolTarget, environment) {
     reason: 'ready_read_only',
     plan: {
       kind: 'deformation',
+      ...(scope.targets ? { targets: scope.targets } : {}),
       targetIdentity: config.target_identity,
       preflight: { apiMethod: 'validateDeformation', arguments: { ...args } },
       preview: {
@@ -168,6 +172,7 @@ function _deformationPlan(config, toolTarget, environment) {
         arguments: [
           args.type, args.planeA, args.planeB, { ...args.params },
           [...args.helixIds], true, [...args.clusterIds],
+          ...(scope.targets ? [{ targets: scope.targets }] : []),
         ],
         transient: true,
       },
