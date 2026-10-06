@@ -1,5 +1,19 @@
 # VR Bend
 
+Selections use the shared green geometry tint in Bend, Move / Rotate and Twist;
+the corner-only bounding boxes have been removed. Those boxes were aligned to
+the desktop export basis, rather than authored or room axes, and were only a
+rendering decoration, not the deformation or movement frame.
+
+Bend's reference direction, Twist's radial handle and deformation-plane squares
+now use the exported authored axes. Plane drawing and picking share the same
+frame. Changing the desktop camera therefore does not change those directions.
+Regression checks cover rotated export bases, Bend endpoints and tangents,
+plane hits, Twist handle angles, and Move's world-space rigid delta. The native
+`nadoc-vr-selection-render` test retains selected/unselected images under
+`native/vr_viewer/build/selection-evidence/` and checks that tint adds no outline
+pixels. These are synthetic renderer checks, not through-headset validation.
+
 Choose **Tools → Bend**. It replaces the tool list with the Bend panel, following
 Extrude's pinned Return / Confirm / Cancel layout. All Bend controls stay visible on one page. Touchpad directions move
 between controls, including the paired step buttons. Grips move the scene; triggers edit the bend.

@@ -278,16 +278,136 @@ int originContract() {
     const auto expected=glm::vec3(stage*glm::vec4(0,1.1F,0,1));
     for(auto head:{glm::vec3(2,1.7F,3),glm::vec3(-1,1.2F,-2)}){
         nadoc_vr::SceneManipulator model;
-        model.placeAtRoomOrigin(head,glm::quat(glm::vec3(.3F,.8F,-.2F)),stage,origin);
+        model.placeAtRoomOrigin(head,glm::quat(glm::vec3(.3F,.8F,-.2F)),stage,origin,scene.sourceAxes);
         assert(glm::distance(glm::vec3(model.transform()*glm::vec4(origin,1)),expected)<1e-5F);
         assert(std::abs(model.scale()-2)<1e-6F);
-        model.placeAtRoomOrigin(head,glm::quat(1,0,0,0),std::nullopt,origin);
+        model.placeAtRoomOrigin(head,glm::quat(1,0,0,0),std::nullopt,origin,scene.sourceAxes);
         assert(glm::distance(glm::vec3(model.transform()*glm::vec4(origin,1)),glm::vec3(0,head.y-.35F,0))<1e-5F);
+    }
+    // Desktop orbit (including pitch/roll) must not tilt the authored floor
+    // plane. Check actual loaded source axes as well as arbitrary camera bases.
+    for(const auto basis:{scene.sourceAxes,glm::mat3(1),
+            glm::mat3_cast(glm::quat(glm::vec3(.7F,-1.1F,.4F)))}) {
+        for(const auto angles:{glm::vec3(0),glm::vec3(.3F,.8F,-.2F),
+                glm::vec3(-.6F,-1.4F,.5F)}) {
+            const auto head=glm::quat(angles);
+            const auto forward=head*glm::vec3(0,0,-1);
+            const auto heading=glm::normalize(glm::vec3(forward.x,0,forward.z));
+            for(const auto floor:{std::optional(stage),std::optional<glm::mat4>()}) {
+                nadoc_vr::SceneManipulator model;
+                model.placeAtRoomOrigin({2,1.7F,3},head,floor,origin,basis);
+                const auto world=glm::mat3(model.transform())*basis/model.scale();
+                assert(glm::distance(world[1],glm::vec3(0,1,0))<1e-5F);
+                assert(std::abs(world[0].y)<1e-5F && std::abs(world[2].y)<1e-5F);
+                assert(glm::distance(-world[2],heading)<1e-5F);
+                assert(glm::distance(world[0],glm::cross(heading,glm::vec3(0,1,0)))<1e-5F);
+                const auto target=floor?expected:glm::vec3(0,1.35F,0);
+                assert(glm::distance(glm::vec3(model.transform()*glm::vec4(origin,1)),target)<1e-5F);
+            }
+        }
     }
     std::cout << "ORIGIN_CONTRACT desktop frame, normalized origin, room center and fallback passed\n";
     return 0;
 }
+int orientationRender(const std::filesystem::path& output) {
+    if(!glfwInit())return 77;
+    glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,4);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
+    auto* window=glfwCreateWindow(512,512,"initial orientation",nullptr,nullptr);
+    if(!window){glfwTerminate();return 77;}
+    glfwMakeContextCurrent(window);glEnable(GL_DEPTH_TEST);
+    std::filesystem::create_directories(output);
+    const glm::vec3 origin(0,0,-1.3F),head(0,1.7F,1.5F);
+    const auto tilted=glm::mat3_cast(glm::quat(glm::vec3(.7F,-1.1F,.4F)));
+    const auto vp=glm::perspective(glm::radians(60.F),1.F,.02F,100.F)
+        *glm::lookAt(head,glm::vec3(0,1.1F,0),glm::vec3(0,1,0));
+    auto capture=[&](const char* name,glm::mat3 basis,bool correct) {
+        SceneData data;data.available.fill(true);
+        auto& rep=data.representations[representationSourceIndex(Representation::full)];
+        ColorSet colors;colors.values.fill({.3F,.7F,.9F});
+        // Explicit box axes keep tessellation identical across export bases;
+        // cylinders choose radial facets in export space and change shading.
+        // A flat, asymmetric ladder in authored XZ exposes desktop-camera tilt.
+        for(int i=0;i<7;++i){
+            const float x=-.18F+.06F*i;
+            rep.boxes.push_back({"helix"+std::to_string(i),
+                origin+basis*glm::vec3(x,0,-.05F),basis*glm::vec3(.015F,0,0),
+                basis*glm::vec3(0,.015F,0),basis*glm::vec3(0,0,.2F),colors});
+        }
+        GlScene scene(std::move(data),true,{}, {},false);
+        nadoc_vr::SceneManipulator model;
+        model.placeAtRoomOrigin(head,glm::quat(1,0,0,0),glm::mat4(1),origin,correct?basis:glm::mat3(1));
+        scene.renderShadowMap(model.transform(),{{-.577F,.577F,.577F},{0,1,0}});
+        glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(0,0,512,512);glDrawBuffer(GL_BACK);
+        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+        scene.render(vp,model.transform(),{},false);
+        std::vector<unsigned char> rgb(512*512*3);
+        glReadPixels(0,0,512,512,GL_RGB,GL_UNSIGNED_BYTE,rgb.data());
+        assert(std::count_if(rgb.begin(),rgb.end(),[](auto c){return c>0;})>1000);
+        std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);
+        image<<"P6\n512 512\n255\n";
+        for(int y=511;y>=0;--y)image.write(reinterpret_cast<char*>(rgb.data()+y*512*3),512*3);
+        assert(glGetError()==GL_NO_ERROR);
+        return rgb;
+    };
+    const auto reference=capture("canonical",glm::mat3(1),true);
+    const auto before=capture("before",tilted,false);
+    const auto after=capture("after",tilted,true);
+    size_t corrected=0,uncorrected=0;
+    for(size_t i=0;i<reference.size();++i){
+        corrected+=std::abs(int(reference[i])-int(after[i]))>2;
+        uncorrected+=std::abs(int(reference[i])-int(before[i]))>2;
+    }
+    assert(corrected<reference.size()/1000);
+    assert(uncorrected>reference.size()/100);
+    std::cout<<"ORIENTATION_RENDER corrected_differing_bytes="<<corrected
+        <<" old_differing_bytes="<<uncorrected<<" evidence="<<output<<'\n';
+    glfwDestroyWindow(window);glfwTerminate();return 0;
+}
+int selectionRender(const std::filesystem::path& output) {
+    if(!glfwInit())return 77;
+    glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,4);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
+    auto* window=glfwCreateWindow(512,512,"selection tint",nullptr,nullptr);
+    if(!window){glfwTerminate();return 77;}
+    glfwMakeContextCurrent(window);glEnable(GL_DEPTH_TEST);
+    std::filesystem::create_directories(output);
+    {
+        GlScene scene(previewFixture(),true,{}, {},false);
+        const auto model=glm::translate(glm::mat4(1),glm::vec3(0,0,-1.3F))
+            *glm::mat4_cast(glm::quat(glm::vec3(.3F,.5F,.4F)))
+            *glm::translate(glm::mat4(1),glm::vec3(0,0,1.3F));
+        auto capture=[&](const char* name) {
+            glViewport(0,0,512,512);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+            scene.render(glm::perspective(glm::radians(70.F),1.F,.02F,100.F),model,{},false);
+            std::vector<unsigned char> rgb(512*512*3);
+            glReadPixels(0,0,512,512,GL_RGB,GL_UNSIGNED_BYTE,rgb.data());
+            std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);
+            image<<"P6\n512 512\n255\n";
+            for(int y=511;y>=0;--y)image.write(reinterpret_cast<char*>(rgb.data()+y*512*3),512*3);
+            return rgb;
+        };
+        const auto before=capture("unselected");
+        scene.setSelectionHighlights({}, {}, {"moving"}, {});
+        const auto selected=capture("selected");
+        size_t visible=0,changed=0;
+        for(size_t i=0;i<before.size();i+=3) {
+            const bool a=before[i] || before[i+1] || before[i+2];
+            const bool b=selected[i] || selected[i+1] || selected[i+2];
+            assert(a==b); // No corner brackets or other pixels outside the part.
+            visible+=b;changed+=before[i]!=selected[i] || before[i+1]!=selected[i+1] || before[i+2]!=selected[i+2];
+        }
+        assert(visible>100 && changed>100); // Selection tint must remain visible.
+        scene.setSelectionHighlights({}, {}, {}, {});
+        assert(capture("cleared")==before);
+        assert(glGetError()==GL_NO_ERROR);
+        std::cout<<"SELECTION_RENDER selected_pixels="<<visible<<" tinted_pixels="<<changed<<" no outline pixels\n";
+    }
+    glfwDestroyWindow(window);glfwTerminate();return 0;
+}
 int main(int argc,char** argv) {
+    if(argc==3 && std::string(argv[1])=="--selection-render")return selectionRender(argv[2]);
+    if(argc==3 && std::string(argv[1])=="--orientation-render")return orientationRender(argv[2]);
     if(argc==2 && std::string(argv[1])=="--motion-detail")return motionDetailRender() || motionDetailRender(true);
     if(argc==2 && std::string(argv[1])=="--origin")return originContract();
     if(argc==5)return benchmark(argc,argv);

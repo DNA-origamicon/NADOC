@@ -5,6 +5,19 @@ molecular geometry. A world-space loading panel is placed at the first valid
 tracked head height, facing the user's initial horizontal viewing direction.
 The panel stays anchored in the room as the user looks around.
 
+The origami starts with its authored XZ plane parallel to the floor and +Y up.
+Its rotation around Y follows the initial horizontal headset heading (+X right,
+-Z forward), ignoring headset pitch/roll and the desktop camera's orbit. The
+authored origin retains its placement above the play-area center. This is an
+initial presentation transform; subsequent controller manipulation is unchanged.
+Regression checks are `nadoc-vr-origin` (authored axes across desktop/headset
+rotations and room-calibration availability) and `nadoc-vr-orientation-render`
+(production OpenGL before/after comparison with an unrotated reference). Run
+them with `ctest --test-dir native/vr_viewer/build -R
+'^nadoc-vr-(origin|orientation-render)$' --output-on-failure`. Render evidence is
+written to `native/vr_viewer/build/orientation-evidence/`. This synthetic desktop
+render check does not establish physical headset visibility.
+
 The progress bar reports completed preparation stages, not an estimated fraction
 of elapsed time. The current task and the complete stage list remain visible:
 nucleotide geometry, Full display geometry and selection metadata, natural export,

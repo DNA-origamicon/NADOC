@@ -1540,7 +1540,6 @@ class GlScene {
         if (!samePositions || snapshotHasColors || snapshotHasSlabs ||
             !visualizationColors_.empty() || !visualizationSlabFrames_.empty()) {
             ++visualizationRevision_;
-            selectionCornersDirty_ = true;
         }
         visualizationMode_ = snapshot.mode;
         visualizationPositions_.clear();
@@ -1614,7 +1613,6 @@ class GlScene {
             !toolCommittedToken_.empty() || !toolPreviewToken_.empty() || previewGeometry_.active()) {
             return false;
         }
-        selectionCornersDirty_ = true;
         normalizedCoordinateScratch_.resize(coordinates.size());
         for (size_t index = 0; index < coordinates.size(); ++index) {
             const auto& source = coordinates[index];
@@ -1816,7 +1814,6 @@ class GlScene {
         selectedHighlightOwnerTokens_ = nextSelectedTokens;
         selectedHighlightIdentities_ = nextSelectedIdentities;
         selectionTintDirty_ = true;
-        selectionCornersDirty_ = selectionCornersDirty_ || !selectionUnchanged;
         if (selectionTintEnabled()) {
             if (!selectionUnchanged && toolPreviewToken_.empty() && toolCommittedToken_.empty())
                 previewGeometry_.clear();
@@ -1883,7 +1880,7 @@ class GlScene {
         ++styleApplicationsForTest;
 #endif
         previewGeometry_.clear();
-        selectionTintDirty_ = selectionCornersDirty_ = true;
+        selectionTintDirty_ = true;
         dynamicSelectionRows_ = false;
         for (auto& rows : selectionRows_) rows.clear();
         if (!supportsRepresentation(representation)) throw std::runtime_error("Representation missing from scene snapshot: " + std::string(representationName(representation)));
@@ -3189,7 +3186,6 @@ class GlScene {
             glDepthMask(GL_TRUE);
         }
 
-        renderSelectionCorners(viewProjection, modelTransform);
         renderGuides(viewProjection, guides);
         glBindVertexArray(0);
         glUseProgram(0);
@@ -5108,6 +5104,7 @@ class Viewer {
         latticeContext_ = sceneData_.latticeContext;
         normalizationCenter_ = sceneData_.normalizationCenter;
         normalizationScale_ = sceneData_.normalizationScale;
+        sourceAxes_ = sceneData_.sourceAxes;
         volumePanel_.initialize(eventPath_);
         volumePanel_.update(sidebarMenus_.menus);
         dimensionSync_.initialize(eventPath_,dimensionPanel_.tool,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
@@ -5143,6 +5140,7 @@ class Viewer {
             try {
                 auto scene=std::move(*startup_.candidate);startup_.candidate.reset();
                 normalizationCenter_=scene.normalizationCenter;normalizationScale_=scene.normalizationScale;
+                sourceAxes_=scene.sourceAxes;
                 extrudePlane_=scene.extrudePlane;
                 latticeContext_=scene.latticeContext;
                 const auto identity=nadoc_vr::resolveOwnerIdentity(
@@ -6925,12 +6923,7 @@ class Viewer {
             for (size_t slot = 0; slot < planeGuides_.size(); ++slot) {
                 if (!planeGuides_[slot]) continue;
                 const auto pose = deformationPlanePose(slot);
-                const glm::vec3 reference = std::abs(pose.normal.y) < 0.90F
-                    ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
-                const glm::vec3 axisU = glm::normalize(glm::cross(
-                    pose.normal, reference));
-                const glm::vec3 axisV = glm::normalize(glm::cross(
-                    pose.normal, axisU));
+                const auto [axisU,axisV] = deformationPlaneAxes(pose.normal);
                 const bool hovered=std::find(bendPanel_.planeHover.begin(),bendPanel_.planeHover.end(),slot)!=bendPanel_.planeHover.end();
                 const glm::vec3 color = hovered?glm::vec3(.3F,1.F,1.F):slot == 0U
                     ? glm::vec3(1.0F, 0.95F, 0.35F)
@@ -9030,6 +9023,12 @@ class Viewer {
         return sidebarMenus_.menus[1].placement.rayPanelLocalPoint(hands_[hand],{-10,-10},{10,10});
     }
     struct BendPlaneHit {size_t slot;glm::vec3 point;float distance;};
+    std::pair<glm::vec3,glm::vec3> deformationPlaneAxes(glm::vec3 normal) const {
+        const auto reference=std::abs(glm::dot(normal,sourceAxes_[1]))<.9F
+            ?sourceAxes_[1]:sourceAxes_[0];
+        const auto u=glm::normalize(glm::cross(normal,reference));
+        return {u,glm::normalize(glm::cross(normal,u))};
+    }
     std::optional<BendPlaneHit> bendPlaneHit(size_t hand) const {
         if(!hands_[hand].valid)return std::nullopt;
         const auto model=manipulator_.transform(),inverse=glm::inverse(model);
@@ -9039,8 +9038,7 @@ class Viewer {
         std::optional<BendPlaneHit> hit;
         for(size_t slot=0;slot<2;++slot)if(planeGuides_[slot]) {
             const auto pose=deformationPlanePose(slot);
-            const auto ref=std::abs(pose.normal.y)<.9F?glm::vec3(0,1,0):glm::vec3(1,0,0);
-            const auto u=glm::normalize(glm::cross(pose.normal,ref)),v=glm::normalize(glm::cross(pose.normal,u));
+            const auto [u,v]=deformationPlaneAxes(pose.normal);
             const float denom=glm::dot(direction,pose.normal);
             float t=std::abs(denom)>1e-5F?glm::dot(pose.center-origin,pose.normal)/denom:-1;
             glm::vec3 point=origin+direction*t;
@@ -9103,6 +9101,7 @@ class Viewer {
         nadoc_vr::CalculationScope auditScope("prepareBendArc");
         if(bendPanel_.posed || !planeGuides_[0] || !planeGuides_[1] || !toolConfig_.planeABp() || !toolConfig_.planeBBp())return;
         auto& arc=bendPanel_.arc;
+        arc.sourceAxes=sourceAxes_;
         arc.fixedEnd=1-bendPanel_.grabbed;
         arc.a=planeGuides_[0]->natural.center;
         arc.tangent=glm::normalize(planeGuides_[arc.fixedEnd]->natural.normal);
@@ -9501,7 +9500,8 @@ class Viewer {
         } else {
             manipulator_.placeAtRoomOrigin(headPosition, headOrientation,
                 roomFloor_.located?std::optional(roomFloor_.stageToLocal):std::nullopt,
-                -normalizationCenter_*normalizationScale_+glm::vec3(0,0,-kViewDistanceMeters));
+                -normalizationCenter_*normalizationScale_+glm::vec3(0,0,-kViewDistanceMeters),
+                sourceAxes_);
         }
         initialRoomPlacementRequested_=false;
         shadowLight_.anchor(headOrientation);
@@ -10744,6 +10744,7 @@ class Viewer {
     bool exitOnWitnessComplete_ = false;
     std::ofstream mirrorDiagnosticsOutput_;
     glm::vec3 normalizationCenter_{};
+    glm::mat3 sourceAxes_{1.0F};
     float normalizationScale_ = 1.0F;
     uint64_t eventSequence_ = 0;
     std::string publishedHoverIdentity_;

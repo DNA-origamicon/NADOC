@@ -11,19 +11,12 @@
 #endif
     }
     mutable bool selectionTintDirty_ = true;
-    mutable bool selectionCornersDirty_ = true;
     bool dynamicSelectionRows_ = false;
     std::array<std::vector<const std::string*>,4> selectionRows_;
     mutable std::array<GLuint,4> selectionBuffers_{}, selectionTextures_{};
     mutable std::array<std::vector<unsigned char>,4> selectionMasks_;
-    struct SelectionCorners {
-        std::string token;
-        glm::vec3 low, high;
-    };
-    mutable std::vector<SelectionCorners> selectionCorners_;
-
     void updateSelectionTint() const {
-        if (!selectionTintEnabled() || (!selectionTintDirty_ && !selectionCornersDirty_)) return;
+        if (!selectionTintEnabled() || !selectionTintDirty_) return;
         const auto& prepared = scene_.prepared[static_cast<size_t>(representation_)];
         if (selectionTintDirty_) {
             selectionTintDirty_ = false;
@@ -87,55 +80,10 @@
             }
             glActiveTexture(GL_TEXTURE0);
         }
-        if(!selectionCornersDirty_)return;
-        selectionCornersDirty_=false;
-        selectionCorners_.clear();
-        if(!prepared)return;
-        const auto& source=currentSource();
-        const bool staticPose=visualizationPositions_.empty() && visualizationSlabFrames_.empty();
-        for(const auto& handle:source.ownerHandles) {
-            if(!selectedHighlightOwnerTokens_.contains(handle.token))continue;
-            auto found=prepared->highlightOwners.find(handle.token);
-            if(found==prepared->highlightOwners.end())continue;
-            glm::vec3 low(std::numeric_limits<float>::max()),high(std::numeric_limits<float>::lowest());
-            auto include=[&](glm::vec3 point,float radius){low=glm::min(low,point-glm::vec3(radius));high=glm::max(high,point+glm::vec3(radius));};
-            for(auto [channel,row]:found->second) {
-                const auto& id=*prepared->records[channel][row].identity;
-                auto point=[&](glm::vec3 v,bool end=false){if(staticPose)return v; const auto offsets=visualizationOffsets(source,id); return v+(end?offsets.second:offsets.first);};
-                if(channel==0){const auto& v=prepared->points[row];include(point(v.position),v.size);}
-                else if(channel==1 || channel==2){const auto& v=channel==1?prepared->cylinders[row]:prepared->halves[row];include(point(v.start),v.radius);include(point(v.end,true),std::max(v.radius,v.endRadius));}
-                else {const auto& v=prepared->boxes[row];for(int k=0;k<8;++k)
-                    include(point(v.center+float(k&1?1:-1)*v.axisX+float(k&2?1:-1)*v.axisY+float(k&4?1:-1)*v.axisZ),0);}
-            }
-            if(low.x<=high.x) {
-                const float pad=std::max(glm::length(high-low)*.015F,.002F);
-                selectionCorners_.push_back({handle.token,low-glm::vec3(pad),high+glm::vec3(pad)});
-            }
-        }
     }
     void bindSelectionTint(GLuint program,size_t channel) const {
         glActiveTexture(GL_TEXTURE6);glBindTexture(GL_TEXTURE_BUFFER,selectionTextures_[channel]);
         glUniform1i(glGetUniformLocation(program,"uSelectionState"),6);
         glUniform1i(glGetUniformLocation(program,"uSelectionCount"),selectionTintEnabled()?int(selectionMasks_[channel].size()):0);
         glActiveTexture(GL_TEXTURE0);
-    }
-    void renderSelectionCorners(const glm::mat4& vp,const glm::mat4& model) const {
-        if(!selectionTintEnabled())return;
-        std::vector<Vertex> lines;
-        lines.reserve(selectionCorners_.size()*48);
-        for(const auto& bounds:selectionCorners_) {
-            auto transform=model;
-            if(bounds.token==toolPreviewToken_) transform*=toolPreviewTransform_;
-            if(bounds.token==toolCommittedToken_) transform*=toolCommittedTransform_;
-            const auto extent=(bounds.high-bounds.low)*.16F;
-            for(int k=0;k<8;++k) {
-                glm::vec3 corner(k&1?bounds.high.x:bounds.low.x,k&2?bounds.high.y:bounds.low.y,k&4?bounds.high.z:bounds.low.z);
-                for(int axis=0;axis<3;++axis) {
-                    auto end=corner;end[axis]+=(k&(1<<axis)?-1:1)*extent[axis];
-                    for(auto p:{corner,end})lines.push_back({glm::vec3(transform*glm::vec4(p,1)),{.22F,1.F,.42F},1});
-                }
-            }
-        }
-        // One small batch per eye, independent of the selected atom count.
-        renderGuides(vp,lines,nullptr,2.F,false);
     }

@@ -10,9 +10,12 @@ struct BendArc {
     glm::vec3 a{}, b{}, tangent{0,0,1}, direction{1,0,0};
     float length=0, angle=0;
     size_t fixedEnd=0;
+    glm::mat3 sourceAxes{1};
     glm::vec3 referenceDirection() const {
-        auto x=glm::vec3(1,0,0)-tangent*tangent.x;
-        if(glm::length(x)<.001F)x=glm::vec3(0,1,0)-tangent*tangent.y;
+        // Source axes are exported through the desktop camera rotation too.
+        // Project authored X (or Y at the pole), never an export-space axis.
+        auto x=sourceAxes[0]-tangent*glm::dot(tangent,sourceAxes[0]);
+        if(glm::length(x)<.001F)x=sourceAxes[1]-tangent*glm::dot(tangent,sourceAxes[1]);
         return glm::normalize(x);
     }
     glm::vec3 raw(float t) const {

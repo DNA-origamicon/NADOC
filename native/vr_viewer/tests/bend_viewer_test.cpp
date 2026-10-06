@@ -19,6 +19,50 @@ struct TestSocketDirectory {
     }
 };
 struct LiveViewerTest {
+    static void exportBasisInvariant() {
+        const glm::vec3 offset(0,0,-1.3F);
+        for(const auto basis:{glm::mat3(1),glm::mat3_cast(glm::quat(glm::vec3(.7F,-1.1F,.4F))),
+                glm::mat3_cast(glm::quat(glm::vec3(-.3F,.5F,1.2F)))}) {
+            Viewer v(SceneData{},"");v.sourceAxes_=basis;
+            v.normalizationScale_=.6F/(100*.334F);
+            (void)v.toolConfig_.bind(nadoc_vr::ToolMode::bend,"test","cluster",{"owner"});
+            (void)v.toolConfig_.setPlaneBp("a",0);(void)v.toolConfig_.setPlaneBp("b",100);
+            DeformationPlaneGuide a,b;
+            a.natural.center=offset;a.natural.normal=basis*glm::vec3(0,0,1);a.natural.halfExtent=.3F;
+            b=a;b.natural.center=offset+basis*glm::vec3(0,0,.6F);
+            v.planeGuides_[0]=a;v.planeGuides_[1]=b;
+            for(size_t fixed:{0U,1U})for(float direction:{0.F,35.F,90.F}) {
+                v.bendPanel_.grabbed=1-fixed;
+                (void)v.toolConfig_.setBend(60,direction);v.prepareBendArc();
+                nadoc_vr::BendArc reference;reference.length=.6F;reference.fixedEnd=fixed;
+                reference.b={0,0,.6F};reference.angle=glm::radians(60.F);
+                reference.direction=glm::angleAxis(glm::radians(direction),reference.tangent)*glm::vec3(1,0,0);
+                reference.updateEndpoint();
+                for(float t:{0.F,.5F,1.F}) {
+                    assert(glm::distance(glm::transpose(basis)*(v.bendPanel_.arc.point(t)-offset),reference.point(t))<1e-5F);
+                    assert(glm::distance(glm::transpose(basis)*v.bendPanel_.arc.endTangent(t),reference.endTangent(t))<1e-5F);
+                }
+            }
+            (void)v.toolConfig_.setBend(0,0);v.prepareBendArc();
+            const auto [u,w]=v.deformationPlaneAxes(a.natural.normal);
+            assert(glm::distance(glm::transpose(basis)*u,glm::vec3(-1,0,0))<1e-5F);
+            assert(glm::distance(glm::transpose(basis)*w,glm::vec3(0,-1,0))<1e-5F);
+            v.manipulator_.placeAtRoomOrigin({0,1.7F,1.5F},glm::quat(1,0,0,0),glm::mat4(1),offset,basis);
+            const auto world=[&](glm::vec3 p){return glm::vec3(v.manipulator_.transform()*glm::vec4(p,1));};
+            v.hands_[1].valid=true;v.hands_[1].orientation=glm::quat(1,0,0,0);
+            v.hands_[1].position=world(b.natural.center)+glm::vec3(.2F,.1F,.5F);
+            const auto hit=v.bendPlaneHit(1);assert(hit && hit->slot==1);
+            assert(glm::distance(hit->point,world(b.natural.center)+glm::vec3(.2F,.1F,0))<1e-5F);
+            (void)v.toolConfig_.bind(nadoc_vr::ToolMode::twist,"test","cluster",{"owner"});
+            (void)v.toolConfig_.setPlaneBp("a",0);(void)v.toolConfig_.setPlaneBp("b",100);
+            for(float angle:{-90.F,0.F,65.F}) {
+                (void)v.toolConfig_.setTwist(angle);
+                const auto radial=glm::transpose(basis)*(v.twistHandle(1)-v.bendPanel_.arc.b)/v.twistRadius();
+                assert(glm::distance(radial,glm::vec3(std::cos(glm::radians(angle)),std::sin(glm::radians(angle)),0))<1e-5F);
+            }
+        }
+        std::cout<<"Bend endpoints, tangents, plane hits and Twist handles are invariant under export rotation\n";
+    }
     static std::string publishedEvent(const Viewer& v) {
         const auto prefix="{\"sequence\":"+std::to_string(v.eventSequence_)+",";
         const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
@@ -97,6 +141,7 @@ struct LiveViewerTest {
 
     }
     static void run(const std::string& directory) {
+        exportBasisInvariant();
         TestSocketDirectory sockets;
         clusters(directory,sockets.path);
         Viewer v(SceneData{},directory+"/events.json");

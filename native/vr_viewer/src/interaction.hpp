@@ -1959,13 +1959,16 @@ class SceneManipulator {
     }
 
     // Start over the calibrated play-area center, not the headset's position or
-    // the molecular bounding-box center. Keep the desktop view upright.
+    // the molecular bounding-box center. Undo the export's desktop-camera basis
+    // so authored XZ is level and only the headset's horizontal heading is used.
     void placeAtRoomOrigin(const glm::vec3& head, const glm::quat& orientation,
                           const std::optional<glm::mat4>& stageToLocal,
-                          const glm::vec3& normalizedOrigin) {
+                          const glm::vec3& normalizedOrigin,
+                          const glm::mat3& sourceAxes) {
         const auto forward=orientation*glm::vec3(0,0,-1);
         const float yaw=std::atan2(-forward.x,-forward.z);
         transform_=glm::toMat4(glm::angleAxis(yaw,glm::vec3(0,1,0)))
+                  * glm::mat4(glm::transpose(sourceAxes))
                   * glm::scale(glm::mat4(1),glm::vec3(kInitialViewScale));
         scale_=kInitialViewScale;
         const auto target=stageToLocal

@@ -3,6 +3,14 @@
 #include <iostream>
 int main() {
     using namespace nadoc_vr;
+    for(const auto tangent:{glm::vec3(0,0,1),glm::vec3(1,0,0),glm::normalize(glm::vec3(.2F,.3F,1))}) {
+        BendArc original;original.tangent=tangent;
+        for(const auto angles:{glm::vec3(.7F,-1.1F,.4F),glm::vec3(-.3F,.5F,1.2F)}) {
+            BendArc rotated;rotated.sourceAxes=glm::mat3_cast(glm::quat(angles));
+            rotated.tangent=rotated.sourceAxes*tangent;
+            assert(glm::distance(rotated.referenceDirection(),rotated.sourceAxes*original.referenceDirection())<1e-5F);
+        }
+    }
     BendArc arc;arc.a={0,0,0};arc.b={0,0,1};arc.length=1;
     arc.move(1,{.4F,0,.5F});
     assert(glm::distance(arc.a,glm::vec3(0))<1e-6F);
