@@ -5,10 +5,36 @@
 #undef main
 #include <cassert>
 namespace {
+struct TestSocketDirectory {
+    std::filesystem::path path;
+    TestSocketDirectory() {
+        char pattern[]="/tmp/nadoc-bend-sockets-XXXXXX";
+        const auto* created=::mkdtemp(pattern);
+        if(!created)throw std::runtime_error("Cannot create Bend test socket directory");
+        path=created;
+    }
+    ~TestSocketDirectory() {
+        std::error_code ignored;
+        std::filesystem::remove_all(path,ignored);
+    }
+};
 struct LiveViewerTest {
-    static void clusters(const std::string& directory) {
+    static std::string publishedEvent(const Viewer& v) {
+        const auto prefix="{\"sequence\":"+std::to_string(v.eventSequence_)+",";
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        do {
+            std::ifstream event(v.eventPath_);
+            std::string json((std::istreambuf_iterator<char>(event)),{});
+            if(json.starts_with(prefix))return json;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        } while(std::chrono::steady_clock::now()<deadline);
+        throw std::runtime_error("Bend event publication timed out at sequence "+
+            std::to_string(v.eventSequence_)+" (writer failures "+
+            std::to_string(v.eventWriter_.failures())+")");
+    }
+    static void clusters(const std::string& directory,const std::filesystem::path& sockets) {
         Viewer v(SceneData{},directory+"/cluster-events.json");
-        v.liveSocket_.open(directory+"/clusters.sock");
+        v.liveSocket_.open((sockets/"clusters.sock").string());
         SceneData data;data.available.fill(true);RepresentationData source;ColorSet colors;
         for(auto& c:colors.values)c={.3F,.7F,1};
         source.points={{"nuc:near",{0,0,-.5F},colors,.01F},{"nuc:far",{1,0,-2},colors,.01F}};
@@ -40,14 +66,15 @@ struct LiveViewerTest {
         assert(!v.bendReady() && v.lastSelectIdentity_=="nuc:far");
     }
     static void run(const std::string& directory) {
-        clusters(directory);
+        TestSocketDirectory sockets;
+        clusters(directory,sockets.path);
         Viewer v(SceneData{},directory+"/events.json");
-        v.liveSocket_.open(directory+"/test.sock"); // Suppress physical haptics.
+        v.liveSocket_.open((sockets.path/"test.sock").string()); // Suppress physical haptics.
         SceneData data;data.available.fill(true);
         v.glScene_=std::make_unique<GlScene>(std::move(data));
         v.selectedIdentity_="test";v.selectedSelectionKind_="cluster";v.selectedOwnerTokens_={"owner"};
         v.activateSidebarAction("tool:bend",1);
-        assert(v.bendPanel_.active && !v.menuOpen_ && !v.latticeOpen_);
+        assert(v.bendPanel_.active && !v.latticeOpen_);
         assert(v.sidebarMenus_.menus[1].customTab->key=="bend");
         v.activateSidebarAction("bend:plane1",1);
         assert(v.activePlanePickSequence_==0 && !v.bendPanel_.pickSlot);
@@ -98,7 +125,9 @@ struct LiveViewerTest {
         v.hands_[0].valid=true;v.hands_[0].position=v.bendHandle(0);v.triggerClicked_[0]=true;v.triggerPressed_[0]=true;
         blocked.fill(false);v.processBendHandles(blocked,false);assert(v.bendPanel_.hand==1);
         v.triggerPressed_[1]=false;v.processBendHandles(blocked,false);assert(!v.bendPanel_.hand);
-        std::ifstream event(directory+"/events.json");std::string json((std::istreambuf_iterator<char>(event)),{});
+        // Event snapshots publish asynchronously; inspect the current sequence,
+        // after every queued plane/drag update has reached the atomic writer.
+        const auto json=publishedEvent(v);
         assert(json.find("bend_endpoints")!=std::string::npos && json.find("bend_midpoint")!=std::string::npos);
         // Switching to the unmoved end resets both ends to the original planes.
         blocked.fill(false);v.processBendHandles(blocked,false);assert(v.bendPanel_.hand==0);

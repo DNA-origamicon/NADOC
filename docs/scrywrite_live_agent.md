@@ -199,8 +199,9 @@ unsupported by the existing application contract. The live interface reports
 cancellation without inventing a backend geometry mutation path. Human comfort,
 reach, haptics and stereo legibility gates remain unchanged.
 
-Menu observation includes per-sidebar `input_mode` and `focus_id`, and detailed-menu
-`menu_input_mode` / `menu_focus_hit`. `just vr-menu-tour --focus-checks --validate
+Menu observation includes per-sidebar `input_mode` and `focus_id`; the top-level
+`menu_input_mode` / `menu_focus_hit` describe the current sidebar. Legacy detail
+menus no longer exist. `just vr-menu-tour --focus-checks --validate
 --hold 0 --exit` tests focus, disabled triggers and deliberate pointer handoff.
 
 ## Browser-owned representation verification

@@ -6,7 +6,6 @@
 #include "live_presentation.hpp"
 #include "lattice_view.hpp"
 #include "interaction.hpp"
-#include "menu_items.hpp"
 #include "menu_layout.hpp"
 #include "extrude_plane.hpp"
 #include "stroke_font.hpp"
@@ -46,53 +45,6 @@ glm::vec3 transformedOrigin(const glm::mat4& matrix) {
 
 glm::vec3 transformedPoint(const glm::mat4& matrix, const glm::vec3& point) {
     return glm::vec3(matrix * glm::vec4(point, 1));
-}
-
-void toolMenuTargetsAreVisibleSeparatedAndWithinPanel() {
-    using namespace nadoc_vr;
-    const MenuPanelBounds body{{-0.32F, -0.465F}, {0.32F, 0.225F}};
-    const MenuPanelBounds status{{-0.305F, -0.355F}, {0.305F, -0.240F}};
-    for (size_t i = 0; i < kToolMenuItems.size(); ++i) {
-        const auto& item = kToolMenuItems[i];
-        const auto bounds = item.bounds();
-        require(menuLayoutContains(body, bounds));
-        require(!menuLayoutIntersects(status, bounds));
-        require(item.contains({item.x, item.y}));
-        // Points near the visible edge hit; just outside the border must miss.
-        require(item.contains({item.x, bounds.maximum.y - 0.0001F}));
-        require(!item.contains({item.x, bounds.maximum.y + 0.0001F}));
-        require(!item.contains({bounds.maximum.x + 0.0001F, item.y}));
-        require(2.0F * item.halfHeight * 0.75F >= 0.052F);
-        for (size_t j = 0; j < i; ++j) {
-            require(!menuLayoutIntersects(bounds, kToolMenuItems[j].bounds()));
-        }
-    }
-    // The gap is not a hidden target shared by adjacent rows.
-    require(!kToolMenuItems[0].contains({-0.16F, 0.135F}));
-    require(!kToolMenuItems[1].contains({-0.16F, 0.135F}));
-}
-
-void settingsTargetsLeaveValueLabelsReadable() {
-    using namespace nadoc_vr;
-    const std::array<MenuPanelBounds, 3> values{{
-        strokeTextLayoutBounds("LENGTH 42 BP", -0.305F, 0.200F, 0.0038F),
-        strokeTextLayoutBounds("DIRECTION +", -0.305F, 0.090F, 0.0038F),
-        strokeTextLayoutBounds("STRANDS BOTH", -0.305F, -0.020F, 0.0038F),
-    }};
-    for (size_t i = 0; i < kToolConfigMenuItems.size(); ++i) {
-        const auto& item = kToolConfigMenuItems[i];
-        for (const auto& label : values) {
-            require(!menuLayoutIntersects(item.bounds(), label));
-        }
-        for (size_t j = 0; j < i; ++j) {
-            require(!menuLayoutIntersects(item.bounds(), kToolConfigMenuItems[j].bounds()));
-        }
-        if (i < 4) {
-            require(item.halfHeight == 0.040F);
-            require(item.contains({item.x, item.y + 0.039F}));
-            require(!item.contains({item.x, item.y + 0.041F}));
-        }
-    }
 }
 
 void oneHandGrabFollowsRigidControllerDelta() {
@@ -1556,8 +1508,6 @@ int main() {
     catch (const std::runtime_error&) { rejected = true; }
     require(rejected);
 
-    toolMenuTargetsAreVisibleSeparatedAndWithinPanel();
-    settingsTargetsLeaveValueLabelsReadable();
     oneHandGrabFollowsRigidControllerDelta();
     twoHandGrabScalesAroundMidpointWithoutJumping();
     oneTwoOneTransitionsStayContinuous();

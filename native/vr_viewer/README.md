@@ -55,14 +55,17 @@ design mutation. Check a script without starting OpenXR using
 `nadoc-vr-viewer --validate-witness <script>`.
 
 For the checked menu-debugging timeline, run `just scrywrite-menu-trace`. It opens the
-real Options menu, captures open/hover/navigation/activation states from the
-deterministic 960×540 actor-eye framebuffer, compares tolerant 32×18 luminance
-fingerprints, exits when the witness passes, and has Playwright attach each PNG and
-its semantic JSON state. `expect layout valid` checks renderer-native text/control
+current sidebars, captures open/hover/navigation/activation states from the
+deterministic 960×540 actor-eye framebuffer, exits when the witness passes,
+and has Playwright attach each PNG and
+its semantic JSON state. Each run uses a fresh capture directory; an explicit
+directory must be empty so obsolete snapshots cannot contaminate the timeline.
+Scripted menus spawn relative to the actor head, while the physical headset
+remains the observer. `expect layout valid` checks renderer-native text/control
 bounds; `expect framing valid`, `display submitted`, `tracking tracked`, and
 `overlay visible` keep a clipped panel or spectator fallback from becoming a false
 visual pass. `snapshot <safe_name>` requires `--witness-captures <directory>`;
-`--witness-visual-expect <directory>` enables baseline comparison and
+`--witness-visual-expect <directory>` optionally enables baseline comparison and
 `--witness-exit on` makes live diagnostic jobs bounded.
 
 The GLFW companion window can mirror the physical HMD eye with `--mirror-eye left`
@@ -233,16 +236,14 @@ Controls on the original HTC Vive wands:
 - A full trigger pull with an empty Selection Volume clears the canonical desktop
   selection and its retained native geometry glow. Controller rays are shown only
   while they intersect the tablet panel.
-- The former native Jobs/OBS status page is disabled. It was read-only and could be
-  mistaken for a visualization control even though it did not affect the model. Its
-  rationale and deferred contract are retained in
-  `archive/simulation_jobs_menu.md`; simulation display choices stay on the interactive
-  desktop tablet for now.
-- Select Tools in that panel to open the Phase 5 transaction shell. It exposes
-  Inspect, Move/Rotate, Extrude, Twist, and Bend plus Preview, Confirm, Cancel,
-  Undo, and Back. Move/Rotate is browser-authoritative and transactional; the
-  parameterized Extrude/Twist/Bend workflows remain visibly read-only until their
-  individual mutation gates pass.
+- The left Simulations tab contains the job list, result visualizations and
+  trajectory controls. The old Jobs/OBS status pages have been removed.
+- The right Tools tab offers Inspect, Move/Rotate, Extrude, Twist and Bend.
+  Editing tools open their current sidebar panels with their own settings,
+  Confirm, Undo and Back controls. Inspect activates selection without opening
+  a panel. The radial Edit wheel's Undo/Redo commands vibrate the controller
+  without opening a menu. The old Options, Tools and tool-settings menus have
+  been removed; view and selection controls live in the sidebars.
   Choosing Extrude from the radial menu immediately creates a world-docked settings
   window plus a separate world-docked lattice window centered on the exact
   browser-resolved cell and laid out as the design's Honeycomb or Square lattice.
@@ -342,9 +343,9 @@ these CPU numbers to capture GPU/reprojection behavior.
 The controller tablet is a cached, mipmapped, 4x-MSAA texture on a depth-tested
 world-space quad. Non-Desktop pages have an opaque backing so the molecule cannot
 remain visible through the UI; the Desktop surface and its controls follow the same
-world-depth rules. `menu_state`, `menu_comfort`, and `menu_gpu_timing` metrics expose
-cache behavior, eye distance, pose residuals, angular velocity, and nonblocking GPU
-timings. SteamVR drop/reprojection telemetry is sampled as an interval by
+world-depth rules. Sidebar observations expose placement, scale, focus and layout;
+`menu_gpu_timing` reports nonblocking GPU timings while sidebars are open.
+SteamVR drop/reprojection telemetry is sampled as an interval by
 `just vr-atomistic-steamvr-stats`. The implementation rationale, exact fields, and
 repeatable comfort validation are in
 [`docs/vr_interface_comfort.md`](../../docs/vr_interface_comfort.md).

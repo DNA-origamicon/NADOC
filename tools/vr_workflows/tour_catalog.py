@@ -55,10 +55,12 @@ def catalog():
         'Start with Full, select other representations with real controller inputs, and verify loading progress plus retained model pixels in both eyes, including the point fallback. Validation uses all four motion profiles and covers Surface to Stick.', ['--representations'], module='startup_tour')
     add('startup', 'interaction', 'Cold startup and headset loading progress',
         'Launch a read-only private copy of 24HB through the normal launch route. Capture loading and first model stereo frames and verify advancing headset frames during natural-only export (no Quick Expand).', module='startup_tour')
+    add('menu-actions', 'interaction', 'Current menu routes',
+        'Exercise all five authoring choices, selection scopes and trajectory entry/return through the current sidebars. Isolated empty viewer with deterministic trajectory metadata; verifies requests, no browser playback or document edits. Validation runs all four controller profiles. History feedback and acknowledgements are covered by the Nick, Undo and Redo tour.', ['--action-checks'])
     add('menu-depth', 'interaction', 'Menu blur and controller depth',
         'Move the controller stick and sphere in front of and behind a menu. Check sharp foreground pixels and behind-menu occlusion in both eyes, across all four motion profiles.', ['--depth-checks'])
     add('menu-formatting', 'interaction', 'Menu formatting review',
-        'No headset required: render every Part and Assembly sidebar page plus tool panels, legacy settings, long jobs/status, radial hover, desktop chrome, component states and loading states. Retains full images, contact sheets and layout failures in a browsable atlas. An optional production View Tools stream adds its real desktop icons. Use the live sidebar tour for four-profile controller coverage.', module='menu_render_audit')
+        'No headset required: render every Part and Assembly sidebar page plus tool panels, long jobs/status, radial hover, desktop chrome, component states and loading states. Retains full images, contact sheets and layout failures in a browsable atlas. An optional production View Tools stream adds its real desktop icons. Use the live sidebar tour for four-profile controller coverage.', module='menu_render_audit')
     add('room-ui', 'interaction', 'Frosted menus & SteamVR floor',
         'Barely visible white glass, subtle button tints and stereo background blur, a calibrated floor grid and SteamVR play-area outline. Checks native pixels and all four motion profiles.', ['--room-checks'])
     add('focus', 'interaction', 'Trackpad, pointer, cards & scrollbars',
@@ -89,7 +91,7 @@ def catalog():
     add('view-tools', 'right', 'Left-hand view tools',
         'Equip the two-column desktop-icon panel with the left quiver gesture and exercise the ten supported view toggles in native stereo; Quick Expand is excluded.', module='view_tools_tour')
     add('nick', 'authoring', 'Nick with scissors, Undo and Redo',
-        'Equip/stow scissors with a behind-head reach, close them with analog trigger pressure, preview the glowing bond, click to nick, then use radial Undo and Redo. Validation uses all four motion profiles.', module='nick_tour')
+        'Equip/stow scissors with a behind-head reach, close them with analog trigger pressure, preview the glowing bond, click to nick, then use radial Undo and Redo. Check controller haptic requests and that commands and acknowledgements keep all menus closed. Validation uses all four motion profiles.', module='nick_tour')
     add('ligate', 'authoring', 'Ligate ends with the radius wheel',
         'Select Ligate through the four-volume wheel, stretch a preview from either end polarity, reject incompatible ends, release to create a forced ligation and verify Undo. Validation uses all four motion profiles.', module='ligation_tour')
     add('twist', 'authoring', 'Twist between two planes',

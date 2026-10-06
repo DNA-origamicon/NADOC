@@ -18,15 +18,16 @@ def test_drag_failure_releases_trigger_and_retains_acquisition(monkeypatch, tmp_
     class Live:
         def __init__(self):
             self.state = {'extrude':{'length_bp':0,'base_pairs_per_detent':21,
-                'wheel_notch_travel_m':.01,'cells':[], 'wheel_hovered':True,'wheel_dragging':False},
+                'cells':[], 'wheels':[{'id':'extrude:coarse-wheel','base_pairs_per_detent':21,
+                    'notch_travel_m':.01,'hovered':True,'dragging':False}]},
                 'hands':[{}, {'position':[0,0,0],'orientation_xyzw':[0,0,0,1]}],
-                'controls':[{'label':'EXTRUDE LENGTH WHEEL','position':[0,0,-1],
+                'controls':[{'id':'extrude:coarse-wheel','label':'COARSE','position':[0,0,-1],
                     'hit_half_right':[.1,0,0],'hit_half_up':[0,.1,0]}]}
             self.pressed = False
         def send(self, operation, **args):
             assert operation == 'button'
             self.pressed = args['pressed']
-            self.state['extrude']['wheel_dragging'] = self.pressed
+            self.state['extrude']['wheels'][0]['dragging'] = self.pressed
         def frame(self):
             pass
     live = Live()
@@ -69,13 +70,14 @@ def test_fine_length_rejects_large_correction_and_ineffective_click():
 def test_final_wheel_drag_can_use_fine_correction_without_fourth_drag(monkeypatch,tmp_path):
     from types import SimpleNamespace
     from tools.vr_workflows.profile_wheel import set_wheel_length
-    state = {'extrude':{'length_bp':0,'base_pairs_per_detent':7,'wheel_notch_travel_m':.01,
-        'cells':[],'wheel_hovered':True,'wheel_dragging':False},
+    state = {'extrude':{'length_bp':0,'cells':[],
+        'wheels':[{'id':'extrude:coarse-wheel','base_pairs_per_detent':7,
+            'notch_travel_m':.01,'hovered':True,'dragging':False}]},
         'hands':[{}, {'position':[0,0,0],'orientation_xyzw':[0,0,0,1]}],
-        'controls':[{'label':'EXTRUDE LENGTH WHEEL','position':[0,0,-1],
+        'controls':[{'id':'extrude:coarse-wheel','label':'COARSE','position':[0,0,-1],
             'hit_half_right':[.1,0,0],'hit_half_up':[0,.1,0]}]}
     def send(operation,**args):
-        state['extrude']['wheel_dragging'] = args['pressed']
+        state['extrude']['wheels'][0]['dragging'] = args['pressed']
     live = SimpleNamespace(state=state,send=send,frame=lambda:None)
     outcomes = iter([77,28,49])
     def drag(*args):

@@ -10,7 +10,7 @@ from tools.vr_workflows.tour_catalog import arguments, catalog
 
 def test_atlas_preserves_failed_and_uninstrumented_states(tmp_path):
     rows = [
-        dict(name="legacy-overlap", image="overlap.png", layout="invalid", layout_detail="text-overlap", texts=[]),
+        dict(name="panel-overlap", image="overlap.png", layout="invalid", layout_detail="text-overlap", texts=[]),
         dict(name="radial-hover", image="radial.png", layout="not-instrumented", layout_detail="", texts=[]),
     ]
     (tmp_path / "states.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
@@ -18,7 +18,7 @@ def test_atlas_preserves_failed_and_uninstrumented_states(tmp_path):
         Image.new("RGB", (120, 120), "#6688aa").save(tmp_path / row["image"])
     result = report(tmp_path)
     assert not result["passed"] and result["rendered_states"] == 2
-    assert result["layout_failures"][0]["name"] == "legacy-overlap"
+    assert result["layout_failures"][0]["name"] == "panel-overlap"
     assert result["uninstrumented_states"] == ["radial-hover"]
     assert (tmp_path / result["contact_sheets"][0]).is_file()
     assert 'href="overlap.png"' in (tmp_path / "index.html").read_text()

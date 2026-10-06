@@ -19,6 +19,9 @@ def control_hit(state, label):
     metrics = target_metrics(control,state['hands'][1])
     if label in ('LATTICE EXIT','CENTER PAINT'):
         feedback = state.get('extrude',{}).get('open') and state['hands'][1].get('input_owner') == 'lattice'
+    elif control.get('sidebar') in ('left', 'right'):
+        hand = 0 if control['sidebar'] == 'left' else 1
+        feedback = state['sidebars'][hand]['hover_id'] == control['id']
     else:
         feedback = state['hover'] == hover_label(label)
     return bool(metrics['predicted_hit'] and feedback)

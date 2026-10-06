@@ -92,13 +92,10 @@ def run(socket, output, preset, mode):
         settle()  # Capture/readback is outside the next measured controller reach.
 
     def menu():
-        # A legacy menu may consume the first click by closing. Only start
-        # sidebar navigation after its actual open state has been observed.
-        for _ in range(2):
-            if live.state['sidebars'][1]['open']:
-                return
+        if not live.state['sidebars'][1]['open']:
             live.button('menu', hand=1)
             live.frame()
+        assert live.state['sidebars'][1]['open']
 
     def approach_point(point):
         point = np.array(point)

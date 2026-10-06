@@ -171,7 +171,7 @@ struct LiveViewerTest {
         assert(v.thumbwheelControls_[0].moving());
         v.activateSidebarAction("extrude:confirm",1);
         assert(v.toolShell_.executionPending() && v.extrudeConfirmation_);
-        assert(!v.extrudePanel_.active && !sidebar.open && !v.latticeOpen_ && !v.menuOpen_);
+        assert(!v.extrudePanel_.active && !sidebar.open && !v.latticeOpen_);
         assert(!v.thumbwheelAvailable() && !v.thumbwheelControls_[0].moving() && !v.extrudePreviewVisible());
         assert(v.toolConfig_.active() && v.toolConfig_.lengthBp()==32);
         assert(v.toolConfigSequence_==submittedConfig && v.extrudeLatticeDraft_.cells()==submittedCells);

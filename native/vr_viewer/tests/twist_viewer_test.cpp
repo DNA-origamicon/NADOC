@@ -13,7 +13,7 @@ struct LiveViewerTest {
         v.glScene_=std::make_unique<GlScene>(std::move(data));
         v.selectedIdentity_="test";v.selectedSelectionKind_="cluster";v.selectedOwnerTokens_={"owner"};
         v.activateSidebarAction("tool:twist",1);
-        assert(v.bendPanel_.active && !v.menuOpen_ && !v.latticeOpen_);
+        assert(v.bendPanel_.active && !v.latticeOpen_);
         assert(v.sidebarMenus_.menus[1].customTab->key=="twist");
         v.activePlanePickSequence_=17;v.planePickSlot_="b";
         v.activateSidebarAction("twist:plane1",1);

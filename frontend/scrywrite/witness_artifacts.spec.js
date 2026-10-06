@@ -33,22 +33,22 @@ test('live menu actor-eye snapshots form an inspectable semantic timeline', asyn
   snapshots.sort((first, second) => first.frame - second.frame)
 
   expect(snapshots.map((snapshot) => snapshot.snapshot)).toEqual([
-    'options_open',
-    'options_tools_hover',
+    'sidebar_open',
+    'sidebar_tools_hover',
     'tools_open',
     'tools_move_rotate_hover',
-    'move_rotate_active',
+    'move_rotate_select_target',
   ])
   expect(snapshots.every((snapshot) => snapshot.layout === 'valid')).toBe(true)
   expect(snapshots.map((snapshot) => snapshot.menu)).toEqual([
-    'options',
-    'options',
-    'tools',
-    'tools',
-    'tools',
+    'sidebars',
+    'sidebars',
+    'sidebars',
+    'sidebars',
+    'sidebars',
   ])
-  expect(snapshots[1].hover).toBe('tools')
-  expect(snapshots[3].hover).toBe('move_rotate')
+  expect(snapshots[1].hover).toBe('right_tools_[tab:tools]')
+  expect(snapshots[3].hover).toBe('right_move_rotate_[tool-move]')
   expect(snapshots.at(-1)).toMatchObject({
     tool: 'move_rotate',
     status: 'SELECT TARGET',

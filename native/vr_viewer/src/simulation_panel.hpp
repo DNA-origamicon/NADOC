@@ -61,6 +61,7 @@ class SimulationPanel {
         const bool ready=sequence<=acknowledged;
         for(size_t i=0;i<engines.size();++i){const auto& r=engines[i];const float x=-.269F+i*.202F;out.push_back({"sim:"+r.id,r.label,"","simulation:"+r.id,{{x,.55F},{x+.19F,.65F}},r.enabled&&ready,r.active});}
         out.push_back({"sim:jobs",version?"Jobs":"Waiting for desktop...","","",{{-.19F,.39F},{.73F,.49F}},false});
+        out.push_back({"sim:trajectory","Trajectory","","trajectory",{{-.19F,-.561F},{.385F,-.489F}},true});
         if(selected)out.push_back({"sim:frame","Frame result","","recenter",{{.81F,-.657F},{1.41F,-.585F}},true});
         if(selected)out.push_back({"sim:views","Visualizations","","",{{.81F,.39F},{1.41F,.49F}},false});
         for(bool right:{false,true}) {

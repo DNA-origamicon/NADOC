@@ -598,7 +598,8 @@ class WitnessReplay {
 inline std::optional<WitnessMenuEntry> findWitnessMenuEntry(
     const std::vector<WitnessMenuEntry>& entries, const std::string& canonicalLabel) {
     const auto found = std::find_if(entries.begin(), entries.end(), [&](const auto& entry) {
-        return WitnessReplay::canonical(entry.label) == canonicalLabel;
+        return WitnessReplay::canonical(entry.label) == canonicalLabel ||
+            (!entry.id.empty() && WitnessReplay::canonical(entry.id) == canonicalLabel);
     });
     return found == entries.end() ? std::nullopt
                                   : std::optional<WitnessMenuEntry>(*found);

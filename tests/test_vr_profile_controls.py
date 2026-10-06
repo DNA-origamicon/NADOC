@@ -51,7 +51,7 @@ def test_miss_then_acquire_retains_both_attempts(monkeypatch, tmp_path):
     assert result['after_click']['config_sequence'] == 2
 
 
-@pytest.mark.parametrize('label,expected',[('SIZE +','size_'),('+','_'),('-','-'),('AUTO / DRILL','auto_drill'),('BACK TO TOOLS','back_to_tools')])
+@pytest.mark.parametrize('label,expected',[('SIZE +','size_'),('+','_'),('-','-'),('AUTO / DRILL','auto_drill'),('CENTER PAINT','center_paint')])
 def test_native_hover_label_contract(label,expected):
     assert hover_label(label) == expected
 
@@ -119,3 +119,20 @@ def test_feedback_mode_requires_sustained_acquisition_not_only_final_hit(monkeyp
         ProfileControls(live,tmp_path/'feedback.json','variable_fast',feedback=True).click('+')
     assert callbacks==[True,True,True]
     assert live.clicks==0
+
+
+@pytest.mark.parametrize('hovered,allowed', [('tool-extrude', True), ('tool-inspect', False)])
+def test_sidebar_controls_require_matching_sidebar_hover(monkeypatch,tmp_path,hovered,allowed):
+    live = Live()
+    live.state['controls'][0].update(sidebar='right', id='tool-extrude', label='RIGHT / Extrude')
+    live.state['sidebars'] = [{}, {'hover_id':hovered}]
+    live.state['hover'] = 'unrelated'
+    monkeypatch.setattr('tools.vr_workflows.profile_controls.reach_target',lambda *args:{'samples':[]})
+    driver = ProfileControls(live,tmp_path/'sidebar.json','steady_fast')
+    if allowed:
+        driver.click('RIGHT / Extrude')
+        assert live.clicks == 1
+    else:
+        with pytest.raises(RuntimeError,match='three reaches'):
+            driver.click('RIGHT / Extrude')
+        assert live.clicks == 0

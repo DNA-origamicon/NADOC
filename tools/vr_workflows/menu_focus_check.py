@@ -96,7 +96,11 @@ def run(live, catalog, output, preset):
             hold(live, 0.6)
             assert live.state["sidebars"][hand]["input_mode"] == "trackpad"
             # Explicitly choose a long tab with unavailable rows.
-            seek(live, hand, "tab:" + ("dynamics" if hand == 0 else "assembly"))
+            available_tabs = {c["id"] for c in live.state["controls"]
+                              if c.get("sidebar") == ("left" if hand == 0 else "right")}
+            target_tab = "dynamics" if hand == 0 else (
+                "assembly" if "tab:assembly" in available_tabs else "properties")
+            seek(live, hand, "tab:" + target_tab)
             live.button("trigger", hand=hand)
             tab = next(
                 t
@@ -123,14 +127,24 @@ def run(live, catalog, output, preset):
             assert live.state["sidebars"][hand]["focus_id"] == "scrollbar"
             pad(live, hand, x=inward)
             assert not live.state["sidebars"][hand]["focus_id"].startswith("tab:")
-            for _ in range(12):
+            # Content now scrolls one row at its visible edge. Traverse the
+            # actual full column before testing that its final row is bounded.
+            for _ in range(len(tab["rows"]) + 2):
+                previous = live.state["sidebars"][hand]["focus_id"]
                 pad(live, hand, y=-1)
+                if previous == live.state["sidebars"][hand]["focus_id"]:
+                    break
+            hold(live, 0.25)
             bottom = live.state["sidebars"][hand]["focus_id"]
             pad(live, hand, y=-1)
             assert live.state["sidebars"][hand]["focus_id"] == bottom
             assert bottom != "scrollbar" and not bottom.startswith("tab:")
             capture(live, output, f"{hand}-bounded-content")
             checks[f"{hand}_bounded_columns"] = True
+            seek(live, hand, "scrollbar")
+            while live.state["sidebars"][hand]["offset"]:
+                pad(live, hand, y=1)
+            hold(live, 0.25)
             disabled = next(r for r in tab["rows"][:8] if not r["action"])
             seek(live, hand, disabled["id"])
             capture(live, output, f"{hand}-disabled-focus")
@@ -150,7 +164,7 @@ def run(live, catalog, output, preset):
             seek(live, hand, "scrollbar")
             old = live.state["sidebars"][hand]["offset"]
             pad(live, hand, y=-1)
-            assert live.state["sidebars"][hand]["offset"] == old + 8
+            assert live.state["sidebars"][hand]["offset"] == old + 1
             assert live.state["sidebars"][hand]["focus_id"] == "scrollbar"
             pad(live, hand, y=1)
             assert live.state["sidebars"][hand]["offset"] == old
@@ -193,49 +207,36 @@ def run(live, catalog, output, preset):
         hold(live, 0.7)
         assert live.state["sidebars"][1]["input_mode"] == "trackpad"
         checks["resting_ray_cannot_steal"] = True
-        # Enter Tools and detailed settings entirely through the pad.
+        # Enter Tools and activate actions entirely through sidebar pad focus.
         seek(live, 1, "tab:tools")
         live.button("trigger", hand=1)
-        seek(live, 1, "tool-settings")
-        live.button("trigger", hand=1)
-        assert live.state["menu"] == "tools" and live.state["sidebars"][0]["open"]
-        pad(live, 1)
-        assert live.state["menu_input_mode"] == "trackpad"
+        assert live.state["sidebars"][1]["tab"] == "tools"
+        assert live.state["sidebars"][0]["open"]
+        assert live.state["sidebars"][1]["input_mode"] == "trackpad"
         live.button("menu", hand=0)
         live.button("menu", hand=0)
-        assert live.state["menu_input_mode"] == "trackpad"
+        assert live.state["sidebars"][1]["input_mode"] == "trackpad"
         checks["opposite_menu_toggle_preserves_focus"] = True
-        unsupported = next(
-            c for c in live.state["controls"] if c["label"] == "MOVE ROTATE"
-        )
+        seek(live, 1, "tool-extrude")
+        live.button("trigger", hand=1)
+        seek(live, 1, "extrude:confirm")
+        unsupported = next(c for c in live.state["controls"] if c.get("id") == "extrude:confirm")
         assert not unsupported["enabled"]
-        for _ in range(40):
-            if live.state["menu_focus_hit"] == str(unsupported["hit"]):
-                break
-            pad(live, 1, y=-1)
-        assert live.state["menu_focus_hit"] == str(unsupported["hit"])
         before = (live.state["tool"], live.state["tool_sequence"])
         live.button("trigger", hand=1)
         assert before == (live.state["tool"], live.state["tool_sequence"])
-        checks["detailed_disabled_inert"] = True
-        live.capture_to(
-            output / "detailed-focus",
-            files=["left.png", "right.png", "mirror.png", "evidence.json"],
-            discard_source=True,
-        )
-        target = next(c for c in live.state["controls"] if c["label"] == "INSPECT")
-        for _ in range(40):
-            if live.state["menu_focus_hit"] == str(target["hit"]):
-                break
-            pad(live, 1, y=1)
-        assert live.state["menu_focus_hit"] == str(target["hit"])
+        checks["sidebar_disabled_inert"] = True
+        capture(live, output, "tools-focus")
+        seek(live, 1, "extrude:back")
+        live.button("trigger", hand=1)
+        seek(live, 1, "tool-inspect")
+        before = [(s["open"], s["tab"]) for s in live.state["sidebars"]]
         live.button("trigger", hand=1)
         assert live.state["tool"] == "inspect"
-        checks["detailed_menu_trigger"] = True
+        assert before == [(s["open"], s["tab"]) for s in live.state["sidebars"]]
+        checks["sidebar_tool_trigger_preserves_panels"] = True
         pad(live, 1)
-        assert live.state["menu_input_mode"] == "pointer"
-        live.button("menu", hand=1)
-        live.button("menu", hand=1)
+        assert live.state["sidebars"][1]["input_mode"] == "pointer"
         checks["passed"] = True
         return checks
     finally:

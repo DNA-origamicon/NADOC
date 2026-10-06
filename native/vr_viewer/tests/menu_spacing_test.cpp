@@ -4,6 +4,7 @@
 #include "dimension_panel.hpp"
 #include "view_volume_panel.hpp"
 #include "simulation_panel.hpp"
+#include "trajectory_panel.hpp"
 #include "lattice_painter.hpp"
 #include <iostream>
 #include <map>
@@ -119,6 +120,12 @@ int main() {
             volumes.entries.clear();for(int i=0;i<n;++i){ViewVolumeRecord e;e.id=std::to_string(i);e.name=std::string(250,'W');volumes.entries.push_back(e);}
             volumes.refresh(menus);pages(menus[1]);
         }
+    }
+    for(bool active:{false,true})for(uint32_t count:{0U,1U,4294967295U}) {
+        std::array<SidebarMenu,2> menus{SidebarMenu(0),SidebarMenu(1)};
+        TrajectoryState state;state.active=active;state.frameCount=count;state.frameIndex=count?count-1:0;
+        state.speed=8;state.stride=100000;state.playing=state.live=state.loop=true;
+        TrajectoryPanel trajectory;trajectory.enter(menus,state);pages(menus[0]);trajectory.exit(menus);
     }
     SidebarMenu menu(0);menu.selected=1;SimulationPanel sim;sim.bind(menu);sim.version=1;
     sim.engines={{"e:cando","CanDo","",true,true},{"e:snupi","SNUPI","",true,false},{"e:mrdna","mrDNA","",false,false},{"e:oxdna","oxDNA","",true,false},{"e:namd","NAMD","",true,false}};

@@ -10,20 +10,17 @@ button right menu down
 step 2
 button right menu up
 step 45
-# Desktop-mapped right sidebar -> Tools -> detailed VR controls.
-aim_menu left right_tools_[tab:tools]
-step 20
-button left trigger down
+# Keep the spawned sidebar fixed; center its full frame in the actor camera.
+head 0 1.50 0.08 1 0 0 0
 step 2
-button left trigger up
-step 20
-aim_menu left right_view_selection_controls_[vr-options]
+# Select the current Visualization sidebar tab.
+aim_menu left right_visualization_[tab:visualization]
 step 20
 button left trigger down
 step 2
 button left trigger up
 step 30
-expect menu options
+expect menu sidebars
 expect representation ballstick
 expect layout valid
 expect display submitted
@@ -32,37 +29,51 @@ expect overlay visible
 expect framing valid
 snapshot trajectory_ballstick_start
 
-# Exercise the native timeline submenu semantically. Witness Mode records the
-# request without opening a browser mutation channel; desktop-sync behavior is
-# covered by the sequenced bridge and desktop-controller tests.
-aim_menu left trajectory
-step 20
-expect hover trajectory
-button left trigger down
+# Open playback through the current left Simulations sidebar. Stable control IDs
+# keep aiming valid while frame counters and the Play/Pause label change.
+# Spawn both sidebars from the same head pose, and aim from in front of them.
+head 0 1.60 0 1 0 0 0
+pose right 0.28 1.28 -0.24 1 0 0 0
+button left menu down
 step 2
-button left trigger up
+button left menu up
 step 20
-expect menu trajectory
+head 0 1.50 0.08 1 0 0 0
+step 2
+aim_menu right tab:dynamics
+step 20
+button right trigger down
+step 2
+button right trigger up
+step 20
+aim_menu right sim:trajectory
+step 20
+button right trigger down
+step 2
+button right trigger up
+step 20
+expect menu sidebars
 expect layout valid
-aim_menu left play_pause
+aim_menu right trajectory:play
 step 12
-expect hover play_pause
-button left trigger down
+button right trigger down
 step 2
-button left trigger up
-aim_menu left timeline
+button right trigger up
+aim_menu right trajectory:seek
 step 12
-expect hover timeline
-button left trigger down
+button right trigger down
 step 2
-button left trigger up
-aim_menu left back
+button right trigger up
+aim_menu right trajectory:back
 step 12
-button left trigger down
+button right trigger down
 step 2
-button left trigger up
+button right trigger up
 step 20
-expect menu options
+expect menu sidebars
+button left menu down
+step 2
+button left menu up
 
 # Close the opaque tablet for each hold so captures are the unobstructed HMD-eye
 # molecular view, then reopen it only to request the next representation.
@@ -89,10 +100,10 @@ step 2
 button right menu up
 head 0.75 0 -1.30 0.7071068 0 0.7071068 0
 step 30
-expect menu options
-aim_menu left stick_only
+expect menu sidebars
+aim_menu left right_stick_[menu-view-atomistic-stick]
 step 20
-expect hover stick_only
+expect hover right_stick_[menu-view-atomistic-stick]
 button left trigger down
 step 2
 button left trigger up
@@ -119,10 +130,10 @@ step 2
 button right menu up
 head 0.75 0 -1.30 0.7071068 0 0.7071068 0
 step 30
-expect menu options
-aim_menu left full
+expect menu sidebars
+aim_menu left right_full_[menu-view-detail-full]
 step 20
-expect hover full
+expect hover right_full_[menu-view-detail-full]
 button left trigger down
 step 2
 button left trigger up
@@ -150,10 +161,10 @@ step 2
 button right menu up
 head 0.75 0 -1.30 0.7071068 0 0.7071068 0
 step 30
-expect menu options
-aim_menu left ball_stick
+expect menu sidebars
+aim_menu left right_ball_&_stick_[menu-view-atomistic-ballstick]
 step 20
-expect hover ball_stick
+expect hover right_ball_&_stick_[menu-view-atomistic-ballstick]
 button left trigger down
 step 2
 button left trigger up

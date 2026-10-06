@@ -46,7 +46,7 @@ def main():
                 backend_port=str(backend.getsockname()[1]);frontend_port=str(frontend.getsockname()[1])
             env={**os.environ,'NADOC_VR_LATTICE':lattice.upper(),'NADOC_SMOKE_BACKEND_PORT':backend_port,
                  'NADOC_SMOKE_FRONTEND_PORT':frontend_port,'NADOC_E2E_API_BASE':'http://127.0.0.1:'+backend_port,'NADOC_WORKSPACE':temporary,'NADOC_PHYSICAL_VR_TEST':'1',
-                 'NADOC_VR_PROFILE':profile,'NADOC_VR_MENU_ACTIVATION':'1','NADOC_VR_EXTRUDE_SIDEBAR':'1',
+                 'NADOC_VR_PROFILE':profile,'NADOC_VR_MENU_ACTIVATION':'1',
                  'NADOC_VR_PROFILE_CONTROLS':'1','NADOC_VR_FEEDBACK_ACQUISITION':'1',
                  'NADOC_VR_APPROACH_CONTROLS':'1','NADOC_VR_APPROACH_CELLS':'1',
                  'NADOC_VR_PAINT_ZOOM':'fit','NADOC_VR_REVIEW_VIEW':'1',

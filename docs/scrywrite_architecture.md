@@ -271,8 +271,10 @@ screenshot as proof:
 2. The actor-frustum oracle projects all four live panel corners and rejects panels
    behind or clipped by the deterministic 72-degree, 16:9 actor camera.
 3. `snapshot` reads the real OpenGL actor-eye framebuffer into PNG, a tolerant 32×18
-   luminance fingerprint, and semantic JSON metadata. Five stored menu-state
-   fingerprints cover Options open/Tools hover/Tools open/Move-Rotate hover/active.
+   luminance fingerprint, and semantic JSON metadata. Five snapshots cover sidebar
+   open/Tools-tab hover/Tools open/Move-Rotate hover/active. Obsolete legacy-menu
+   fingerprints are removed; the production renderer atlas checks visible pixels,
+   layout and negative cases across the current sidebar states.
 4. `frontend/scrywrite/witness_artifacts.spec.js` orders those artifacts by replay
    frame, checks semantic transitions and valid layout, and attaches every image and
    state record to a Playwright trace. `just scrywrite-menu-trace` runs this chain.

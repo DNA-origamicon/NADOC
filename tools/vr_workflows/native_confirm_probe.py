@@ -4,11 +4,11 @@ sys.path.insert(0,os.getcwd())
 from pathlib import Path
 from frontend.scrywrite.mcp_bridge import Bridge
 from tools.vr_motion.session import LiveSession
-from tools.vr_motion.extrude_probe import framed_origin,put
+from tools.vr_motion.extrude_probe import put
 from tools.vr_workflows.profile_input import reach_target, zoom_scene, aim_orientation
 from tools.vr_workflows.profile_controls import ProfileControls
 from tools.vr_workflows.control_approach import lattice_approach
-from tools.vr_workflows.menu_navigation import activate_extrude
+from tools.vr_workflows.menu_navigation import sidebar_click
 from tools.vr_workflows.demo_view import reveal as reveal_demo, hold as hold_demo
 from tools.vr_motion.metrics import rotate, dot, sub
 socket,output=sys.argv[1:3];out=Path(output);out.mkdir(parents=True,exist_ok=True)
@@ -33,42 +33,25 @@ profile_controls = (ProfileControls(live,out/'control-profile.json',
     feedback=os.environ.get('NADOC_VR_FEEDBACK_ACQUISITION') == '1',
     approach=os.environ.get('NADOC_VR_APPROACH_CONTROLS') == '1')
     if os.environ.get('NADOC_VR_PROFILE_CONTROLS') == '1' else None)
-sidebar_controls=None
-if os.environ.get('NADOC_VR_EXTRUDE_SIDEBAR') == '1':
-    from tools.vr_workflows.extrude_sidebar import SidebarControls
-    sidebar_controls=SidebarControls(live,out,os.environ.get('NADOC_VR_PROFILE','steady_fast'))
+from tools.vr_workflows.extrude_sidebar import SidebarControls
+sidebar_controls=SidebarControls(live,out,os.environ.get('NADOC_VR_PROFILE','steady_fast'))
 def click_control(label):
-    if sidebar_controls and live.state['sidebars'][1]['tab']=='extrude':
-        identifiers={'+':'more','-':'less','CONFIRM':'confirm','PREVIEW':'preview','UNDO':'undo','FREEFORM':'freeform'}
-        if label in identifiers:
-            return sidebar_controls.click('extrude:'+identifiers[label])
+    identifiers={'+':'more','-':'less','CONFIRM':'confirm','UNDO':'undo','FREEFORM':'freeform'}
+    if label in identifiers:
+        return sidebar_controls.click('extrude:'+identifiers[label])
     if profile_controls:
         return profile_controls.click(label)
     live.send('aim_menu',hand=1,label=label);live.frame();live.button('trigger');live.frame()
 def activate_extrude_menu():
-    if sidebar_controls: sidebar_controls.activate()
-    else: activate_extrude(live,click_control,out)
+    sidebar_controls.activate()
 
 def verify_undo():
     before = live.state['scene_revision']
     feature = live.state['committed_feature_id']
-    eye,_=live.capture_to(out/'before-undo',discard_source=True)
-    if sidebar_controls:
-        origin={'position':live.state['hands'][1]['position'],'orientation_xyzw':eye['eyes'][0]['orientation_xyzw']}
-    else:
-        origin=framed_origin(live,eye['eyes'][0],activate=activate_extrude_menu if os.environ.get('NADOC_VR_MENU_ACTIVATION') == '1' else None)
-        put(live,origin['position'],origin['orientation_xyzw'])
-    if sidebar_controls:
-        sidebar_controls.activate()
-        sidebar_controls.click('extrude:undo')
-    else:
-        if live.state['menu'] == 'closed':
-            live.button('menu', hand=1)
-        labels = {c['label'] for c in live.state['controls']}
-        path = ['BACK TO TOOLS', 'UNDO'] if 'BACK TO TOOLS' in labels else ['TOOLS', 'UNDO'] if 'TOOLS' in labels else ['UNDO']
-        for label in path:
-            assert label in {c['label'] for c in live.state['controls']}, live.state['menu']
-            click_control(label)
+    live.capture_to(out/'before-undo',discard_source=True)
+    sidebar_click(live,click_control,'tab:tools')
+    sidebar_click(live,click_control,'tool-extrude')
+    sidebar_controls.click('extrude:undo')
     undo_started=time.monotonic()
     deadline=undo_started+120
     while live.state['status'] != 'UNDONE' or live.state.get('scene_revision',0) <= before:
@@ -77,13 +60,9 @@ def verify_undo():
     (out/'undo-timing.json').write_text(json.dumps({'undo_and_snapshot_seconds':time.monotonic()-undo_started,'diagnostic_timeout_seconds':120}))
     live.capture_to(out/'undone-before-framing',discard_source=True)
     if os.environ.get('NADOC_VR_UNDO_EXPECT_AUTHORED') == '1':
-        if sidebar_controls:
-            sidebar_controls.click('extrude:recenter')
-            sidebar_controls.click('extrude:back')
-            live.button('menu',hand=1);live.frame()
-        else:
-            for label in ['BACK','RECENTER']:
-                click_control(label)
+        sidebar_controls.click('extrude:recenter')
+        sidebar_controls.click('extrude:back')
+        live.button('menu',hand=1);live.frame()
     live.capture_to(out/'undone',discard_source=True)
     import array
     for eye in ['left','right']:
@@ -109,23 +88,14 @@ try:
     zoom=(.026/live.state['extrude']['lattice_hit_radius_m']
           if zoom_mode == 'fit' else float(zoom_mode))
     if zoom != 1:zoom_scene(live,live.state['head_position'],zoom)
-    if sidebar_controls:
-        origin={'position':live.state['hands'][1]['position'],'orientation_xyzw':eye['eyes'][0]['orientation_xyzw']}
-    else:
-        origin=framed_origin(live,eye['eyes'][0],activate=activate_extrude_menu if os.environ.get('NADOC_VR_MENU_ACTIVATION') == '1' else None)
-        put(live,origin['position'],origin['orientation_xyzw'])
+    origin={'position':live.state['hands'][1]['position'],'orientation_xyzw':eye['eyes'][0]['orientation_xyzw']}
     if os.environ.get('NADOC_VR_CLEAR_TARGET') == '1':
-        # End → freeform transition through ordinary empty-space selection.
-        # Inspect closes the old lattice and drops its footprint.
-        if live.state['menu'] == 'closed':
-            live.button('menu',hand=0);live.frame()
-        labels={c['label'] for c in live.state['controls']}
-        path=(['BACK TO TOOLS'] if 'BACK TO TOOLS' in labels else ['TOOLS'] if 'TOOLS' in labels else [])+['INSPECT']
-        for label in path:
-            assert label in {c['label'] for c in live.state['controls']}, live.state['menu']
-            click_control(label)
-        if live.state['menu'] != 'closed':
-            live.button('menu',hand=0);live.frame()
+        # Inspect releases the prior end target before choosing empty space.
+        sidebar_click(live,click_control,'tab:tools')
+        sidebar_click(live,click_control,'tool-inspect')
+        for hand in (0,1):
+            if live.state['sidebars'][hand]['open']:
+                live.button('menu',hand=hand);live.frame()
         position=[a+b for a,b in zip(live.state['head_position'],[0,.7,0])]
         put(live,position,aim_orientation(position,[position[0],position[1]+1,position[2]]))
         live.button('trigger');live.frame()
@@ -208,48 +178,38 @@ try:
     if slice_reference:
         live.capture_to(out/'existing-and-painted-slice',discard_source=True)
     hold_demo(live,'painted footprint')
-    if sidebar_controls:
-        from tools.vr_workflows.lattice_grip_check import run as check_lattice_grips
-        check_lattice_grips(live,out/'lattice-grips',preset)
-        for identifier, expected in [('more',period),('less',0),('more-period',3*period),
-                                     ('less-period',0)]:
-            control=next(c for c in live.state['controls'] if c.get('id')=='extrude:'+identifier)
-            step=3*period if identifier.endswith('-period') else period
-            label=('+' if identifier.startswith('more') else '-')+str(step)+' BP'
-            assert control['label']==f'RIGHT / {label} [extrude:{identifier}]',control
-            sidebar_controls.click('extrude:'+identifier)
-            assert live.state['extrude']['length_bp']==expected,live.state['extrude']
-        for expected in [3*period,target_length]:
-            sidebar_controls.click('extrude:more-period')
-            assert live.state['extrude']['length_bp']==expected,live.state['extrude']
+    from tools.vr_workflows.lattice_grip_check import run as check_lattice_grips
+    check_lattice_grips(live,out/'lattice-grips',preset)
+    for identifier, expected in [('more',period),('less',0),('more-period',3*period),
+                                 ('less-period',0)]:
+        control=next(c for c in live.state['controls'] if c.get('id')=='extrude:'+identifier)
+        step=3*period if identifier.endswith('-period') else period
+        label=('+' if identifier.startswith('more') else '-')+str(step)+' BP'
+        assert control['label']==f'RIGHT / {label} [extrude:{identifier}]',control
+        sidebar_controls.click('extrude:'+identifier)
+        assert live.state['extrude']['length_bp']==expected,live.state['extrude']
+    for expected in [3*period,target_length]:
+        sidebar_controls.click('extrude:more-period')
+        assert live.state['extrude']['length_bp']==expected,live.state['extrude']
     if os.environ.get('NADOC_VR_PROFILE_WHEEL') == '1':
-        if sidebar_controls:
-            sidebar_controls.click('extrude:less-period')
-            sidebar_controls.click('extrude:less-period')
+        sidebar_controls.click('extrude:less-period')
+        sidebar_controls.click('extrude:less-period')
         from tools.vr_workflows.profile_wheel import set_wheel_length
-        for _ in range(int(os.environ.get('NADOC_VR_WHEEL_SIZE_STEPS','0'))):
-            click_control('SIZE +')
         live.capture_to(out/'wheel-before-drag',discard_source=True)
         set_wheel_length(live,out/'wheel-profile.json',target_length,preset,seed+20000,
-            fine_click=click_control if sidebar_controls or (profile_controls and os.environ.get('NADOC_VR_FINE_LENGTH') == '1') else None,
-            fine_step=period if sidebar_controls else 1)
+            fine_click=click_control, fine_step=period)
         live.capture_to(out/'wheel-after-drag',discard_source=True)
-        if sidebar_controls:
-            # The fine wheel must reach a non-period-aligned value and return by
-            # exactly one bp through real trigger drags, preserving the footprint.
-            for direction, target in [('up',target_length+1),('down',target_length)]:
-                set_wheel_length(live,out/f'fine-wheel-{direction}-profile.json',target,
-                    preset,seed+21000+(direction=='down')*1000,wheel='fine')
-                assert live.state['extrude']['length_bp']==target
-                live.capture_to(out/f'fine-wheel-{direction}',discard_source=True)
+        # The fine wheel must reach a non-period-aligned value and return by
+        # exactly one bp through real trigger drags, preserving the footprint.
+        for direction, target in [('up',target_length+1),('down',target_length)]:
+            set_wheel_length(live,out/f'fine-wheel-{direction}-profile.json',target,
+                preset,seed+21000+(direction=='down')*1000,wheel='fine')
+            assert live.state['extrude']['length_bp']==target
+            live.capture_to(out/f'fine-wheel-{direction}',discard_source=True)
         hold_demo(live,'Coarse and fine menu wheels set extrusion length')
-    elif not sidebar_controls:
-        for length in range(1,target_length+1):
-            click_control('+')
-            assert live.state['extrude']['length_bp']==length,live.state['extrude']
     if os.environ.get('NADOC_VR_FREEFORM') == '1':
         click_control('FREEFORM')
-        assert live.state['menu']=='closed', 'Freeform did not arm'
+        assert not live.state['sidebars'][1]['open'], 'Freeform did not arm'
         position=[origin['position'][0]+.15,origin['position'][1]+.10,origin['position'][2]]
         if os.environ.get('NADOC_VR_PROFILE_PLACEMENT') == '1':
             placement_motion=reach_target(live,position,preset,seed+30000,
@@ -259,12 +219,11 @@ try:
             put(live,position,origin['orientation_xyzw'])
         placement_pose=dict(live.state['hands'][1])
         live.button('trigger');live.frame()
-        assert live.state['menu']=='tool_config', 'Freeform placement not captured'
+        assert live.state['sidebars'][1]['open'] and live.state['sidebars'][1]['tab']=='extrude', 'Freeform placement not captured'
         (out/'freeform-capture.json').write_text(json.dumps({'position':position,'orientation':origin['orientation_xyzw'],
             'actual_capture_pose':placement_pose,'state':live.state},indent=2))
         live.capture_to(out/'freeform-preview',discard_source=True)
         put(live,origin['position'],origin['orientation_xyzw'])
-    if not sidebar_controls: click_control('BACK TO TOOLS')
     # Wait for browser validation to be published, without holding any input.
     deadline=time.monotonic()+10
     while not live.state.get("painted_commit_ready"):

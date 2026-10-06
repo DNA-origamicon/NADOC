@@ -223,3 +223,11 @@ def test_live_menu_tour_respects_assembly_context_without_hiding_missing_tabs():
     state['controls'].append({'sidebar': 'right', 'id': 'tab:assembly'})
     assembly, skipped = context_catalog(source, state)
     assert assembly == source and not skipped
+
+
+def test_current_menu_routes_have_a_focused_four_profile_entry():
+    tour = next(row for row in catalog()['tours'] if row['id'] == 'menu-actions')
+    assert tour['group'] == 'interaction'
+    assert arguments(tour, True) == ['-m','tools.vr_workflows.menu_tour',
+        '--action-checks','--validate','--hold','0','--exit']
+    assert 'all four' in tour['description']

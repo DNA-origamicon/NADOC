@@ -17,8 +17,8 @@ from tools.vr_motion.session import LiveSession
 from tools.vr_motion.extrude_probe import framed_origin, put
 from tools.vr_motion.metrics import rotate
 from tools.vr_workflows.profile_input import aim_orientation, zoom_scene, reach_target
-from tools.vr_workflows.profile_controls import ProfileControls
-from tools.vr_workflows.menu_navigation import activate_extrude
+from tools.vr_workflows.profile_controls import ProfileControls, control_hit
+from tools.vr_workflows.menu_navigation import activate_extrude, sidebar_click
 from tools.vr_workflows.demo_view import reveal as reveal_demo, hold as hold_demo
 
 
@@ -44,8 +44,8 @@ def run(socket, output):
             return controls.click(label)
         live.send('aim_menu', hand=1, label=label)
         live.frame()
-        (out/('control-'+label.replace(' ','_')+'.json')).write_text(json.dumps(live.state,indent=2))
-        if label != 'LATTICE EXIT' and live.state['hover'] != ''.join(c.lower() if c.isalnum() else '_' for c in label):
+        (out/('control-'+label.replace(' ','_').replace('/','_')+'.json')).write_text(json.dumps(live.state,indent=2))
+        if not control_hit(live.state, label):
             raise RuntimeError(f'Control aim missed {label}: {live.state["hover"]}')
         live.button('trigger')
         live.frame()
@@ -54,21 +54,19 @@ def run(socket, output):
     try:
         evidence, _ = live.capture_to(out/'anchor', discard_source=True)
         origin = framed_origin(live, evidence['eyes'][0],
-            activate=(lambda: activate_extrude(live,click,out)) if controls else None)
+            activate=lambda: activate_extrude(live,click,out))
         put(live, origin['position'], origin['orientation_xyzw'])
         live.send('pose',hand=0,position=origin['position'],orientation=origin['orientation_xyzw'])
         live.frame()
-        if live.state['menu'] != 'closed':
-            live.button('menu',hand=0)
-        live.button('menu',hand=0)
+        sidebar_click(live,click,'tab:visualization')
+        sidebar_click(live,click,'reset-btn')
+        sidebar_click(live,click,'tab:tools')
+        sidebar_click(live,click,'tool-inspect')
+        sidebar_click(live,click,'select:end')
+        for hand in (0,1):
+            if live.state['sidebars'][hand]['open']:
+                live.button('menu',hand=hand)
         live.frame()
-        click('RECENTER')
-        live.button('menu',hand=0)
-        live.frame()
-        if 'LATTICE EXIT' in {c['label'] for c in live.state['controls']}:
-            click('LATTICE EXIT')
-        click('END')
-        live.button('menu', hand=0)
         zoom = float(os.environ.get('NADOC_VR_END_ZOOM', '1'))
         if zoom != 1:
             live.capture_to(out/'before-zoom', discard_source=True)
@@ -130,14 +128,9 @@ def run(socket, output):
         if not expected_ends.intersection(live.state['owner_tokens']):
             raise RuntimeError('Selected end differs from visible target')
         put(live, origin['position'], origin['orientation_xyzw'])
-        if controls:
-            activate_extrude(live,click,out,preserve_selection=True)
-        else:
-            live.send('activate', tool='extrude')
-            live.frame()
-        for _ in range(21):
-            click('+')
-        click('BACK TO TOOLS')
+        activate_extrude(live,click,out,preserve_selection=True)
+        sidebar_click(live,click,'extrude:more-period')
+        assert live.state['extrude']['length_bp'] == 21
         deadline = time.monotonic()+15
         while not live.state.get('painted_commit_ready'):
             if time.monotonic() > deadline:
@@ -145,7 +138,7 @@ def run(socket, output):
             live.frame()
             time.sleep(.1)
         before = live.state['scene_revision']
-        click('CONFIRM')
+        sidebar_click(live,click,'extrude:confirm')
         deadline = time.monotonic()+120
         while live.state['status'] != 'COMMITTED' or live.state['scene_revision'] <= before:
             if time.monotonic() > deadline:

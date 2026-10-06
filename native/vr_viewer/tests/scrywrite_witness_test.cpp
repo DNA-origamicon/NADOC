@@ -1,4 +1,5 @@
 #include "scrywrite_witness.hpp"
+#include "sidebar_menu.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -24,31 +25,31 @@ int main() {
         "button right menu down\n"
         "step 2\n"
         "button right menu up\n"
-        "expect menu options\n"
-        "aim_menu right tools\n"
+        "expect menu sidebars\n"
+        "aim_menu right right_tools_[tab:tools]\n"
         "step 1\n"
-        "expect hover tools\n");
+        "expect hover right_tools_[tab:tools]\n");
     auto replay = nadoc_vr::scrywrite::WitnessReplay::load(source);
     replay.advance({"closed", "none"});
     require(replay.input().menuPressed[1], "menu button should be injected");
     replay.advance({"closed", "none"});
-    replay.advance({"options", "none"});
-    replay.advance({"options", "none"});
+    replay.advance({"sidebars", "none"});
+    replay.advance({"sidebars", "none"});
     require(replay.pendingAim().has_value(), "semantic menu aim should be requested");
     replay.resolveAim(glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
-    replay.advance({"options", "tools"});
-    replay.advance({"options", "tools"});
+    replay.advance({"sidebars", "right_tools_[tab:tools]"});
+    replay.advance({"sidebars", "right_tools_[tab:tools]"});
     require(replay.finished(), "matching observation should finish replay");
     require(!replay.failed(), "matching observation should pass");
 
     std::istringstream failureSource(
         "SCRYWRITE_WITNESS 1\n"
-        "expect menu tools\n");
+        "expect menu sidebars\n");
     auto failure = nadoc_vr::scrywrite::WitnessReplay::load(failureSource);
     failure.advance({"closed", "none"});
     require(failure.failed(), "menu mismatch should fail and pause");
     require(failure.paused(), "failed replay should remain inspectable");
-    require(failure.error().find("expected menu tools") != std::string::npos,
+    require(failure.error().find("expected menu sidebars") != std::string::npos,
             "menu mismatch should be diagnostic");
 
     std::istringstream stateSource(
@@ -65,7 +66,7 @@ int main() {
         "expect layout valid\n");
     auto layoutReplay = nadoc_vr::scrywrite::WitnessReplay::load(layoutSource);
     layoutReplay.advance({
-        "options", "none", "none", "none", "following", {},
+        "sidebars", "none", "none", "none", "following", {},
         "text_overflow", "text_overflow[title] text escapes its owning bounds",
     });
     require(layoutReplay.failed(), "menu layout assertions should fail semantically");
@@ -81,7 +82,7 @@ int main() {
     auto liveDisplayReplay =
         nadoc_vr::scrywrite::WitnessReplay::load(liveDisplaySource);
     liveDisplayReplay.advance({
-        "options", "none", "none", "none", "following", {}, "valid", "",
+        "sidebars", "none", "none", "none", "following", {}, "valid", "",
         "submitted", "tracked", "visible", "valid",
     });
     require(liveDisplayReplay.finished() && !liveDisplayReplay.failed(),
@@ -93,7 +94,7 @@ int main() {
     auto representationReplay =
         nadoc_vr::scrywrite::WitnessReplay::load(representationSource);
     representationReplay.advance({
-        "options", "none", "none", "none", "following", {}, "valid", "",
+        "sidebars", "none", "none", "none", "following", {}, "valid", "",
         "submitted", "tracked", "visible", "valid", "ballstick",
     });
     require(representationReplay.finished() && !representationReplay.failed(),
@@ -104,7 +105,7 @@ int main() {
         "expect display submitted\n");
     auto fallbackReplay = nadoc_vr::scrywrite::WitnessReplay::load(fallbackSource);
     fallbackReplay.advance({
-        "options", "none", "none", "none", "following", {}, "valid", "",
+        "sidebars", "none", "none", "none", "following", {}, "valid", "",
         "fallback", "tracked", "visible",
     });
     require(fallbackReplay.failed() &&
@@ -113,18 +114,18 @@ int main() {
 
     std::istringstream snapshotSource(
         "SCRYWRITE_WITNESS 1\n"
-        "snapshot options_open\n"
-        "expect menu options\n");
+        "snapshot sidebar_open\n"
+        "expect menu sidebars\n");
     auto snapshotReplay = nadoc_vr::scrywrite::WitnessReplay::load(snapshotSource);
-    snapshotReplay.advance({"options"});
+    snapshotReplay.advance({"sidebars"});
     require(snapshotReplay.pendingSnapshot().has_value() &&
-                snapshotReplay.pendingSnapshot()->name == "options_open",
+                snapshotReplay.pendingSnapshot()->name == "sidebar_open",
             "named actor-eye snapshots should pause replay until captured");
     snapshotReplay.advance({"closed"});
     require(!snapshotReplay.finished(),
             "a pending snapshot should prevent later assertions from advancing");
     snapshotReplay.resolveSnapshot();
-    snapshotReplay.advance({"options"});
+    snapshotReplay.advance({"sidebars"});
     require(snapshotReplay.finished() && !snapshotReplay.failed(),
             "replay should continue after a successful actor-eye capture");
 
@@ -143,7 +144,7 @@ int main() {
     std::istringstream heldFailureSource(
         "SCRYWRITE_WITNESS 1\n"
         "button right trigger down\n"
-        "expect menu tools\n");
+        "expect menu sidebars\n");
     auto heldFailure = nadoc_vr::scrywrite::WitnessReplay::load(heldFailureSource);
     heldFailure.advance({"closed", "none"});
     require(heldFailure.failed(), "held-input assertion mismatch should fail");
@@ -157,25 +158,25 @@ int main() {
         "expect placement docked\n"
         "expect menu_moved 0.20\n");
     auto placementReplay = nadoc_vr::scrywrite::WitnessReplay::load(placementSource);
-    placementReplay.advance({"options", "none", "none", "none", "following", {}});
+    placementReplay.advance({"sidebars", "none", "none", "none", "following", {}});
     require(placementReplay.pendingMenuTouch().has_value(),
             "semantic menu-edge touch should be requested");
     nadoc_vr::MenuPlacement placement;
     std::array<nadoc_vr::HandPose, 2> placementHands{};
     placementHands[1] = {true, false, {0.2F, 1.2F, -0.3F}, {1, 0, 0, 0}};
     placement.open(1, placementHands, {0, 1.2F, -1}, {1, 0, 0, 0});
-    const glm::vec2 menuMinimum(-nadoc_vr::MenuPlacement::kMenuHalfWidth, -0.545F);
-    const glm::vec2 menuMaximum(nadoc_vr::MenuPlacement::kMenuHalfWidth, 0.33F);
+    const glm::vec2 menuMinimum=nadoc_vr::kSidebarBounds.minimum;
+    const glm::vec2 menuMaximum=nadoc_vr::kSidebarBounds.maximum;
     nadoc_vr::scrywrite::resolveWitnessMenuTouch(
         placementReplay, placement, menuMinimum, menuMaximum, true);
     require(!placementReplay.pendingMenuTouch(),
             "live menu placement should resolve the semantic edge");
     require(glm::length(
         placementReplay.input().hands[0].position -
-        placement.worldPoint({menuMaximum.x, -0.1075F, 0.0F})) < 1.0e-6F,
+        placement.worldPoint({menuMaximum.x, (menuMinimum.y+menuMaximum.y)*.5F, 0.0F})) < 1.0e-6F,
         "touch_menu should put the requested hand on the live menu border");
     placementReplay.advance({
-        "options", "none", "none", "none", "docked",
+        "sidebars", "none", "none", "none", "docked",
         placement.position() + glm::vec3(0.25F, 0.0F, 0.0F),
     });
     require(placementReplay.finished() && !placementReplay.failed(),
@@ -200,6 +201,13 @@ int main() {
             "semantic menu labels should normalize consistently");
     require(nadoc_vr::scrywrite::witnessHoverLabel(entries, 15) == "tools",
             "production hit ids should map back to semantic labels");
+    auto playbackEntries=entries;
+    playbackEntries.front().label="LEFT / Frame 8 / 20 [trajectory:seek]";
+    playbackEntries.front().id="trajectory:seek";
+    require(nadoc_vr::scrywrite::findWitnessMenuEntry(playbackEntries,"trajectory:seek").has_value(),
+            "dynamic sidebar labels must remain aimable through their stable control id");
+    require(!nadoc_vr::scrywrite::findWitnessMenuEntry(playbackEntries,"missing-control"),
+            "unknown control ids must fail closed");
     const auto aim = nadoc_vr::scrywrite::witnessAimOrientation(
         {0.0F, 1.0F, 0.0F}, {0.0F, 1.0F, -1.0F});
     require(aim.has_value(), "a separated target should produce an aim orientation");

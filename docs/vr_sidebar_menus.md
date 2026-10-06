@@ -17,11 +17,10 @@ OS clicks. Physical mouse interaction still needs a normal controller session.
 Exit VR uses normal OpenXR shutdown, leaving the browser and SteamVR running.
 This X11 capture path does not depend on SteamVR's Desktop tab.
 
-Trajectory, job-list and tool-menu Back buttons return to the current sidebar
-and selected tab, preserving placement. Earlier desktop Back-button evidence
+Trajectory and tool-panel Return buttons restore the current sidebar and
+selected tab, preserving placement. Jobs use the Simulations sidebar directly. Earlier desktop Back-button evidence
 under `.development-artifacts/vr-menu-return-final-20260930/` describes the
 superseded embedded tablet. The detached desktop has an external Close button.
-The old detail-panel ray-placement fix remains in place.
 
 September 30 validation: the generated catalog and three native tests pass.
 `just vr-menu-tour --tab left:vr --preset steady_fast --validate --exit` exercises
@@ -101,9 +100,38 @@ the desktop forms.
 Unsupported controls are gray and consume clicks without executing an action.
 Implemented controls include representation, coloring, recentering, job and
 trajectory panels, and existing native tools. Tool availability follows the
-current selection; trajectory playback requires a loaded trajectory. Tools also
-provides **View / selection controls**, **Tool settings / Confirm / Cancel /
-Undo**, and **Desktop**, retaining the existing detailed native panels.
+current selection; trajectory playback requires a loaded trajectory. Tools contains
+Inspect, Extrude, Twist, Bend and Move / Rotate, followed by the Selection card.
+Tool settings, Confirm, Cancel and Undo live in their dedicated sidebar panels.
+Recenter is in Visualization; the desktop window is in the left VR tab.
+
+The former Options, Tools, selection, representation, coloring, job-list and
+trajectory menus have been removed. Every control now uses a sidebar or a
+sidebar tool panel. Selecting Inspect or a selection scope preserves the current
+sidebar layout. Radial Undo and Redo request controller vibration and execute the
+history command without opening or changing any menu; asynchronous completion
+also leaves menus unchanged. **Debug → VR Tours & Tests → Tools · Authoring →
+Nick with scissors, Undo and Redo** verifies these history actions and their haptic
+requests under all four motion profiles. Scripted haptic requests are observable;
+physical vibration still requires a controller session.
+
+**Debug → VR Tours & Tests → Controls & layout → Current menu routes** is the
+focused navigation regression. It exercises all five authoring choices, selection
+scopes, trajectory controls and Return buttons with all four motion profiles.
+Its owned empty viewer receives temporary trajectory metadata so request dispatch
+can be checked without browser playback, coordinates or document changes:
+
+```bash
+uv run python -m tools.vr_workflows.menu_tour --action-checks --validate --preset steady_fast --hold 0 --exit
+```
+
+The 2026-10-05 removal was checked with 71 native tests, 7,375 frontend tests,
+103 focused Python tests, the 394-state rendered atlas, all four live motion
+profiles, desktop delivery and the five-state tracked witness/Playwright timeline.
+Evidence is retained in `.development-artifacts/vr-menu-removal-20261005/`.
+The live checks exposed and fixed a trajectory launcher blocked by the adjacent
+sidebar frame; a separate timing deadline failure passed on an unchanged retry.
+Physical controller vibration still needs a hands-on check.
 
 ## Live review
 
@@ -150,7 +178,7 @@ acquisition, visible text, gray disabled controls and blue active controls.
 They do not establish through-lens legibility or physical headset comfort.
 
 **Debug → VR Tours & Tests → Controls & layout → Menu formatting review** renders
-all Part/Assembly sidebar pages, tool panels, legacy menus, long status/job names,
+all Part/Assembly sidebar pages, tool panels, long status/job names,
 radial hover states, desktop chrome, loading states and component gallery states
 with the production OpenGL renderer. Its atlas contains individual images and
 contact sheets; an optional `--viewtools-stream` adds the real desktop-icon tablet.
@@ -207,7 +235,7 @@ is explicitly partial coverage. **Stop tour** closes the owned viewer; status an
 its tooltip retain the outcome, evidence path and recent output. Closing menus
 leaves the run active. Backend shutdown closes its owned run. Active viewers or
 tours block another launch under the same workstation-local access policy.
-The legacy authoring entry remains disabled with its prerequisite in the tooltip.
+The terminal-only authoring entry remains disabled with its prerequisite in the tooltip.
 Evidence lives beneath `.development-artifacts/vr-debug-tours/<run>/`.
 
 **Right sidebar → Visualization demo** snapshots the currently open individual
@@ -346,7 +374,7 @@ length buttons (7/21 bp for honeycomb; 8/24 bp for square), direction, source pl
 painter recall, freeform placement, Frame model and Undo. The displayed lattice
 comes from the part. Confirm is enabled only for the current validated draft;
 Undo follows the existing transaction acknowledgement. Frame model and Return
-work without navigating through the legacy tool menus.
+remain in the dedicated Extrude sidebar panel.
 An accepted Confirm immediately closes the painter and right-hand tool menu and
 stops the draft preview. Successful acknowledgement clears the draft while keeping
 Undo available when Extrude is reopened. A failed or refused commit restores the
@@ -449,8 +477,8 @@ window border and spread the ray endpoints to resize; release either trigger to
 continue moving with the remaining hand. Release both to fix it in space.
 Alternatively, quickly trigger twice
 and hold the second pull to resize by sweeping outward/inward from the window
-center. The shared handler covers both sidebars, desktop, View tools, legacy
-tool/trajectory/job panels and the lattice window; ordinary nearby grips remain
+center. The shared handler covers both sidebars and their tool/trajectory panels,
+desktop, View tools and the lattice window; ordinary nearby grips remain
 available. The nearest whole panel blocks border hits behind it. Tracking loss,
 dashboard focus loss and panel closure release the gesture. Scale range is
 0.25–8.0 and panel ray reach is 30 m, allowing large distant windows to remain

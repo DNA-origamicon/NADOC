@@ -219,28 +219,78 @@ def run_tour(live, catalog, output, preset, hold, quick):
 
 
 def check_actions(live, output, preset):
-    """Exercise existing detailed menus through real sidebar trigger input."""
+    """Exercise sidebar actions and their dedicated tool panels with real input."""
     trials = []
     checks = {}
     try:
-        for identifier, page in [
-            ("vr-options", "options"),
-            ("tool-settings", "tools"),
-            ("tool-inspect", "tools"),
-        ]:
-            click(live, 1, "tab:tools", preset, trials)
-            click(live, 1, identifier, preset, trials)
-            checks[identifier] = (
-                live.state["menu"] == page
+        for hand in (0, 1):
+            if not live.state["sidebars"][hand]["open"]:
+                live.button("menu", hand=hand)
+        click(live, 0, "tab:vr", preset, trials)
+        checks["vr_controls_use_left_sidebar"] = live.state["sidebars"][0]["tab"] == "vr"
+        click(live, 1, "tab:tools", preset, trials)
+        before = [(p["open"], p["tab"]) for p in live.state["sidebars"]]
+        click(live, 1, "tool-inspect", preset, trials)
+        checks["inspect_active"] = live.state["tool"] == "inspect"
+        checks["inspect_preserves_sidebars"] = before == [(p["open"], p["tab"]) for p in live.state["sidebars"]]
+        from tools.vr_workflows.menu_navigation import sidebar_click
+        def activate(hand, identifier):
+            def input_click(label):
+                control = next(c for c in live.state["controls"] if c["label"] == label)
+                click(live, hand, control["id"], preset, trials)
+            sidebar_click(live, input_click, identifier, hand)
+            assert live.state["menu"] in ("sidebars", "closed")
+            assert not any(c.get("id") in ("tool-settings", "vr-options")
+                           or c.get("id", "").startswith("menu:") for c in live.state["controls"])
+        def capture(name):
+            live.capture_to(output / name,
+                files=["left.png", "right.png", "mirror.png", "evidence.json"], discard_source=True)
+        for identifier, panel in [("tool-extrude", "extrude"), ("tool-twist", "twist"),
+                                  ("tool-bend", "bend"), ("tool-move", "move")]:
+            activate(1, identifier)
+            checks[panel + "_uses_right_sidebar"] = (
+                live.state["sidebars"][1]["open"]
+                and live.state["sidebars"][1]["tab"] == panel
                 and live.state["sidebars"][0]["open"]
-                and not live.state["sidebars"][1]["open"]
             )
-            if identifier == "tool-inspect":
-                checks["inspect_active"] = live.state["tool"] == "inspect"
-            assert all(checks.values()), checks
-            live.button("menu", hand=1)
-            live.button("menu", hand=1)
-            assert all(s["open"] for s in live.state["sidebars"])
+            assert checks[panel + "_uses_right_sidebar"], checks
+            capture("action-" + panel)
+            activate(1, panel + ":back")
+            assert live.state["sidebars"][1]["tab"] == "tools"
+        activate(1, "tool-inspect")
+        selection = (live.state["selection_kind"], tuple(live.state["owner_tokens"]))
+        for level in ("default", "cluster", "strand", "domain", "end", "xover", "base"):
+            activate(1, "select:" + level)
+            selected = find_control(live, 1, "select:" + level)
+            checks["selection_" + level] = bool(selected["active"])
+            assert checks["selection_" + level], selected
+            assert selection == (live.state["selection_kind"], tuple(live.state["owner_tokens"]))
+        capture("action-selection")
+        activate(1, "select:default")
+        activate(1, "tab:tools")
+        while live.state["sidebars"][1]["offset"]:
+            scroll_page(live, 1, -1)
+        capture("action-tools")
+        activate(0, "tab:dynamics")
+        trajectory_id = "sim:trajectory" if any(c.get("id") == "sim:trajectory" for c in live.state["controls"]) else "vr-trajectory"
+        activate(0, trajectory_id)
+        checks["trajectory_uses_left_sidebar"] = (
+            live.state["sidebars"][0]["tab"] == "trajectory"
+            and live.state["trajectory"]["panel_open"]
+            and live.state["sidebars"][1]["open"]
+        )
+        assert checks["trajectory_uses_left_sidebar"], live.state["trajectory"]
+        for action in ("play", "previous", "next"):
+            control = find_control(live, 0, "trajectory:" + action)
+            sequence = live.state["trajectory"]["request_sequence"]
+            activate(0, "trajectory:" + action)
+            checks["trajectory_" + action] = (
+                (live.state["trajectory"]["request_sequence"] > sequence) == bool(control["enabled"]))
+        capture("action-trajectory")
+        activate(0, "trajectory:back")
+        checks["trajectory_return_restores_simulations"] = live.state["sidebars"][0]["tab"] == "dynamics"
+        checks["only_sidebar_menu_state"] = live.state["menu"] == "sidebars"
+        assert all(checks.values()), checks
         # Put the shortcut above the columns for observation, outside timed reaches.
         from tools.vr_motion.metrics import rotate
 
@@ -286,6 +336,7 @@ def check_actions(live, output, preset):
             s["open"] for s in live.state["sidebars"]
         )
         assert all(checks.values()), checks
+        return {"passed": True, "checks": checks}
     finally:
         (output / "actions.json").write_text(
             json.dumps({"checks": checks, "trials": trials}, indent=2) + "\n"
@@ -344,6 +395,7 @@ def enlarge_mirror(live):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--action-checks", action="store_true", help="Check current tool, selection and trajectory routes")
     mode.add_argument("--qr-checks", action="store_true", help="Check Share-tab Vive camera preview and cancellation")
     mode.add_argument("--room-checks", action="store_true", help="Check frosted menus and the calibrated SteamVR floor")
     mode.add_argument("--dimension-checks", action="store_true", help="Check live dimensions, pinning, entry controls and model transforms")
@@ -383,7 +435,7 @@ def main():
     )
     catalog = json.loads((root / "native/vr_viewer/sidebar_catalog.json").read_text())
     if args.tab:
-        if args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks:
+        if args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks:
             parser.error('--tab is only supported by the sidebar page tour')
         tabs = [t for t in catalog['tabs'] if f"{t['side']}:{t['key']}" == args.tab]
         if not tabs:
@@ -417,6 +469,11 @@ def main():
                     "--reference-grid",
                     "off",
                 ]
+                if args.action_checks:
+                    # Metadata-only fixture: no browser, molecular coordinates or saved document.
+                    trajectory = Path(temp) / "trajectory.txt"
+                    trajectory.write_text("NADOCVR_TRAJECTORY 1 1 1 4 10 0 1 0 1 1\n")
+                    command += ["--trajectory", str(trajectory)]
                 with (output / "viewer.log").open("w") as log:
                     proc = subprocess.Popen(
                         command,
@@ -473,7 +530,9 @@ def main():
             )
             live.button("menu", hand=0)
             results = []
-            if args.remote_checks:
+            if args.action_checks:
+                focus_run = lambda live, _catalog, destination, preset: check_actions(live, destination, preset)
+            elif args.remote_checks:
                 from tools.vr_workflows.remote_border_check import run as focus_run
             elif args.depth_checks:
                 from tools.vr_workflows.menu_depth_check import run as focus_run
@@ -495,7 +554,7 @@ def main():
                         "preset": preset,
                         **(
                             focus_run(live, catalog, destination, preset)
-                            if args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks
+                            if args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks
                             else run_tour(
                                 live,
                                 catalog,
@@ -510,7 +569,7 @@ def main():
                 (output / "result.json").write_text(
                     json.dumps(results, indent=2) + "\n"
                 )
-            if not args.remote_checks and not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks:
+            if not args.action_checks and not args.remote_checks and not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks:
                 check_actions(live, output, args.preset)
             from tools.vr_motion.desktop_check import run as check_desktop
 

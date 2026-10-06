@@ -1,6 +1,6 @@
 SCRYWRITE_WITNESS 1
 # Full semantic replay for the atomistic representations exposed by the native
-# Options menu. Run this with the real 24hb scene and latest-frame visualization.
+# Visualization sidebar. Run with the real 24hb scene and latest-frame visualization.
 head 0 1.60 0 1 0 0 0
 pose right 0.28 1.72 -0.60 1 0 0 0
 pose left -0.24 1.28 -0.24 1 0 0 0
@@ -9,20 +9,17 @@ button right menu down
 step 2
 button right menu up
 step 45
-# Desktop-mapped right sidebar -> Tools -> detailed VR controls.
-aim_menu left right_tools_[tab:tools]
-step 20
-button left trigger down
+# Keep the spawned sidebar fixed; center its full frame in the actor camera.
+head 0 1.50 0.08 1 0 0 0
 step 2
-button left trigger up
-step 20
-aim_menu left right_view_selection_controls_[vr-options]
+# Select the current Visualization sidebar tab.
+aim_menu left right_visualization_[tab:visualization]
 step 20
 button left trigger down
 step 2
 button left trigger up
 step 30
-expect menu options
+expect menu sidebars
 expect representation ballstick
 expect layout valid
 expect display submitted
@@ -33,9 +30,9 @@ snapshot atomistic_ballstick
 
 # Exercise both coarse/atomistic boundaries explicitly. The visualization feed
 # starts this run in Ball + Stick, so this first click also covers Ball + Stick -> Full.
-aim_menu left full
+aim_menu left right_full_[menu-view-detail-full]
 step 20
-expect hover full
+expect hover right_full_[menu-view-detail-full]
 button left trigger down
 step 2
 button left trigger up
@@ -45,9 +42,9 @@ expect display submitted
 expect tracking tracked
 snapshot full_from_ballstick
 
-aim_menu left ball_stick
+aim_menu left right_ball_&_stick_[menu-view-atomistic-ballstick]
 step 20
-expect hover ball_stick
+expect hover right_ball_&_stick_[menu-view-atomistic-ballstick]
 button left trigger down
 step 2
 button left trigger up
@@ -57,9 +54,9 @@ expect display submitted
 expect tracking tracked
 snapshot ballstick_from_full
 
-aim_menu left stick_only
+aim_menu left right_stick_[menu-view-atomistic-stick]
 step 20
-expect hover stick_only
+expect hover right_stick_[menu-view-atomistic-stick]
 button left trigger down
 step 2
 button left trigger up
@@ -69,9 +66,9 @@ expect display submitted
 expect tracking tracked
 snapshot atomistic_stick
 
-aim_menu left full
+aim_menu left right_full_[menu-view-detail-full]
 step 20
-expect hover full
+expect hover right_full_[menu-view-detail-full]
 button left trigger down
 step 2
 button left trigger up
@@ -82,9 +79,9 @@ expect tracking tracked
 snapshot full_from_stick
 
 # Return to the atomistic inspection state and re-check Full -> Ball + Stick.
-aim_menu left ball_stick
+aim_menu left right_ball_&_stick_[menu-view-atomistic-ballstick]
 step 20
-expect hover ball_stick
+expect hover right_ball_&_stick_[menu-view-atomistic-ballstick]
 button left trigger down
 step 2
 button left trigger up

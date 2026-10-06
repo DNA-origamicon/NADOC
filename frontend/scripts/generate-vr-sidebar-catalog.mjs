@@ -136,10 +136,15 @@ add('right','overhangs','Connection entries','frontend/src/ui/overhang_connectio
   ['oconn-mode','Overhang / Nanoparticle connection'],['oconn-a','Overhang A / Nanoparticle ssDNA handle'],['oconn-b','Overhang B / Target overhang'],['oconn-type','Connection type'],['oconn-length','Length'],['oconn-sequence','Sequence'],['oconn-connect','Connect / Add version'],['oconn-apply','Apply / Unapply'],['oconn-relax','Relax'],['oconn-driver','Driver'],['oconn-delete','Delete version'],['oconn-name','Version name'],
 ])
 tabs.push({side:'right',key:'tools',label:'Tools',rows:[
-  ['vr-options','View / selection controls','options'],
   ['tool-inspect','Inspect','tool:inspect'],['tool-move','Move / Rotate','tool:move_rotate'],['tool-extrude','Extrude','tool:extrude'],
-  ['tool-twist','Twist','tool:twist'],['tool-bend','Bend','tool:bend'],['tool-settings','Tool settings / Confirm / Cancel / Undo','tools'],
-].map(([id,label,action])=>({id,label,action,section:'Tools',kind:'button',options:[],source:'native/vr_viewer/src/menu_items.hpp',reason:''}))})
+  ['tool-twist','Twist','tool:twist'],['tool-bend','Bend','tool:bend'],
+].map(([id,label,action])=>({id,label,action,section:'Tools',kind:'button',options:[],source:'frontend/scripts/generate-vr-sidebar-catalog.mjs',reason:''}))})
+add('right','tools','Selection','frontend/scripts/generate-vr-sidebar-catalog.mjs', [
+  ['select:default','Auto / Drill','select:default'],['select:cluster','Cluster','select:cluster'],
+  ['select:strand','Strand','select:strand'],['select:domain','Domain','select:domain'],
+  ['select:end','End','select:end'],['select:xover','Crossover','select:xover'],
+  ['select:base','Base','select:base'],
+])
 tabs.push({side:'left',key:'vr',label:'VR',rows:[
   ['vr-desktop','View desktop','desktop'],
   ['vr-head-light','Head-following lighting: Off','vr:head-light'],

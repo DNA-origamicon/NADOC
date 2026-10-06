@@ -74,7 +74,7 @@ class SidebarRuntime {
         }
         const auto next=menu.activate(control);
         if(next=="dock") menu.placement.toggleDock(static_cast<size_t>(menu.hand),hands,.515F);
-        else if(!next.empty()) action(next,static_cast<size_t>(menu.hand));
+        else if(!next.empty()) action(next,hand);
         if(!menu.open) menu.focus.reset();
     }
     template<class Action> std::array<bool,2> input(const std::array<nadoc_vr::HandPose,2>& hands,

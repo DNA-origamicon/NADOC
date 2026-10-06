@@ -1,5 +1,5 @@
 SCRYWRITE_WITNESS 1
-# Open the independent right sidebar at the physical eye for human review.
+# Open the independent right sidebar at the scripted actor for human review.
 step 600
 button right menu down
 step 2

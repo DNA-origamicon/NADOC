@@ -7,6 +7,17 @@ int main() {
     for(int i=0;i<20;++i)panel.jobs.push_back({"j:"+std::to_string(i),"Completed job","",true,false});
     panel.views={{"v:0","Off","",true,true},{"v:1","Predicted shape","",true,false},{"v:2","Unavailable RMSF","",false,false}};
     assert(menu.bounds().maximum.x==.80F);panel.selected=true;assert(menu.bounds().maximum.x==1.56F);
+    for(bool selected:{false,true}) {
+        panel.selected=selected;
+        const auto controls=menu.controls(false);
+        const auto trajectory=std::find_if(controls.begin(),controls.end(),[](const auto& c){return c.id=="sim:trajectory";});
+        assert(trajectory!=controls.end() && trajectory->enabled && trajectory->action=="trajectory");
+        assert(nadoc_vr::menuLayoutContains(menu.bounds(),trajectory->bounds));
+        for(const auto& control:controls)if(control.id!=trajectory->id)
+            assert(!nadoc_vr::menuLayoutIntersects(control.bounds,trajectory->bounds));
+        menu.draw([](glm::vec3,glm::vec3,glm::vec3){},[](nadoc_vr::MenuPanelBounds,glm::vec3){});
+        assert(menu.audit.valid());
+    }
     auto items=menu.controls();assert(items.size()>15);
     menu.focus.begin("sim:scroll:jobs","");menu.navigate({0,-1});assert(panel.jobOffset==1);assert(menu.focus.id=="sim:scroll:jobs");
     menu.navigate({0,-1});menu.navigate({0,-1});menu.navigate({0,-1});assert(panel.jobOffset==4);

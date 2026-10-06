@@ -14,7 +14,7 @@ struct LiveViewerTest {
         Viewer v(SceneData{},(directory/"events.json").string());
         SceneData data;data.available.fill(true);
         v.glScene_=std::make_unique<GlScene>(std::move(data));
-        v.sidebarMenus_.initialize();v.menuPanelSurface_.initialize();
+        v.sidebarMenus_.initialize();
         v.latticePanelSurface_.initialize();v.desktopFrameSurface_.initialize();
         v.startup_.surface.initialize();
         std::ofstream manifest(directory/"states.jsonl");
@@ -180,39 +180,16 @@ struct LiveViewerTest {
             v.refreshExtrudePanel();pages(square?"tool-extrude-square-wheels":"tool-extrude-honeycomb-wheels",1);
         }
         v.latticeOpen_=false;resetMenus();
-        v.menuOpen_=true;v.menuPlacement_.openDocked({0,0,0},{1,0,0,0});v.menuPlacement_.setScale(1);
-        auto legacy=[&](const std::string& name,Viewer::MenuPage page) {
-            v.menuPage_=page;v.controllerGuides_.clear();v.appendMenuGuides();
-            v.menuLocalGuides_=v.controllerGuides_;
-            for(auto& guide:v.menuLocalGuides_)guide.position=v.menuPlacement_.localPoint(guide.position);
-            v.menuPanelSurface_.update(v.menuLocalGuides_,v.menuPanelBounds(),page==Viewer::MenuPage::desktop,
-                frostedButtonFills<Vertex>(v.menuPlacement_,v.witnessMenuEntries(),page==Viewer::MenuPage::desktop));
-            capture("legacy-"+name,v.menuPanelBounds(),[&](const auto& vp){v.renderMenuSurface(vp);},&v.menuLayoutAudit_);
-        };
-        legacy("options",Viewer::MenuPage::options);
-        nadoc_vr::VisualizationSnapshot visualization;visualization.mode="simulation_displacement_heatmap";v.glScene_->setVisualization(visualization);
-        legacy("options-live",Viewer::MenuPage::options);
-        for(size_t mode=0;mode<5;++mode) {
-            v.toolShell_.activate(static_cast<nadoc_vr::ToolMode>(mode),"cluster");
-            (void)v.toolConfig_.bind(static_cast<nadoc_vr::ToolMode>(mode),mode==2?"end:1":"cluster:1",mode==2?"end":"cluster",{"owner:1"});
-            (void)v.toolConfig_.setPlaneBp("a",-999999);(void)v.toolConfig_.setPlaneBp("b",999999);
-            v.planePickStatus_="PLANE A/B SELECTED - A LONG VALIDATION STATUS DETAIL FROM THE MODEL";
-            legacy("tools-mode-"+std::to_string(mode),Viewer::MenuPage::tools);
-            if(mode>=2)legacy("config-"+std::string(nadoc_vr::toolModeName(v.toolConfig_.mode())),Viewer::MenuPage::tool_config);
+        nadoc_vr::TrajectoryPanel trajectory;
+        for(bool active:{false,true})for(uint32_t count:{0U,1U,4294967295U})for(bool playing:{false,true}) {
+            nadoc_vr::TrajectoryState state;state.active=active;state.playing=playing;
+            state.frameCount=count;state.frameIndex=count?count-1:0;state.speed=8;state.stride=100000;
+            state.live=state.loop=true;trajectory.enter(v.sidebarMenus_.menus,state);
+            pages("trajectory-"+std::to_string(count)+(active?"-active":"-unavailable")+(playing?"-playing":"-paused"),0);
+            trajectory.exit(v.sidebarMenus_.menus);
         }
-        for(bool available:{false,true}){v.jobsSnapshotAvailable_=available;legacy(available?"jobs-empty":"jobs-unavailable",Viewer::MenuPage::jobs);}
-        v.jobsSnapshotTotal_=999;v.jobsSnapshotAvailable_=true;
-        for(int i=0;i<13;++i){nadoc_vr::JobSnapshotRow row;row.depth=i%8;row.engine=i%2?"snupi":"cando";row.label="Extremely long simulation result name for nested construction "+std::to_string(i);row.jobId="audit-job-0123456789012345678901234567890123456789-"+std::to_string(i);row.status="complete";row.statusText="Very long completed status detail with many descriptive words to exercise clipping";row.progressPermille=999;row.viewable=row.stale=row.archived=true;v.jobs_.push_back(row);}
-        v.desktopActiveJobEngine_=v.jobs_[0].engine;v.desktopActiveJobId_=v.jobs_[0].jobId;
-        for(size_t page=0;page<3;++page){v.jobPage_=page;legacy("jobs-long-page-"+std::to_string(page+1),Viewer::MenuPage::jobs);}
-        v.selectedJobIndex_=0;legacy("job-detail-active-archived-stale",Viewer::MenuPage::job_detail);
-        v.selectedJobIndex_=1;v.jobs_[1].viewable=false;legacy("job-detail-pending",Viewer::MenuPage::job_detail);
-        legacy("trajectory-unavailable",Viewer::MenuPage::trajectory);
-        v.trajectoryState_.active=v.trajectoryState_.playing=v.trajectoryState_.loop=v.trajectoryState_.live=true;
-        v.trajectoryState_.frameCount=4294967295U;v.trajectoryState_.frameIndex=4294967294U;v.trajectoryState_.speed=8;v.trajectoryState_.stride=100000;
-        legacy("trajectory-extreme",Viewer::MenuPage::trajectory);
-        legacy("desktop-default-aspect",Viewer::MenuPage::desktop);v.menuOpen_=false;
-        // New desktop panel captures chrome only: never reads unrelated desktop pixels.
+        resetMenus();
+        // Independent desktop panel captures chrome only: never reads unrelated desktop pixels.
         v.desktopPanel_.open=true;v.desktopPanel_.placement.openDocked({0,0,0},{1,0,0,0});
         for(float scale:{.75F,1.F})for(float aspect:{.75F,1.F,16.F/9.F,32.F/9.F}) {
             v.desktopPanel_.aspect=aspect;v.desktopPanel_.placement.setScale(scale);v.updateDesktopFrame();
@@ -294,7 +271,7 @@ struct LiveViewerTest {
         background();const auto plain=pixels();v.menuGlass_.capture();
         nadoc_vr::MenuPlacement offscreen;offscreen.openDocked({50,0,0},{1,0,0,0});
         const auto vp=glm::ortho(-1.F,1.F,-1.F,1.F,.01F,10.F)*glm::lookAt(glm::vec3(0,0,2),glm::vec3(0),glm::vec3(0,1,0));
-        v.menuPanelSurface_.render(vp,offscreen,v.menuPanelBounds());glFinish();
+        v.desktopFrameSurface_.render(vp,offscreen,v.desktopPanel_.chromeBounds(),.008F);glFinish();
         if(pixels()!=plain)throw std::runtime_error("offscreen negative rendered foreground");
         const auto negativePng=nadoc_vr::scrywrite::encodeActorEyePng(plain,width,height);
         std::ofstream negative(directory/"negative-offscreen.png",std::ios::binary);negative.write(reinterpret_cast<const char*>(negativePng.data()),negativePng.size());

@@ -20,14 +20,6 @@ def wheel_target(state, wheel='coarse'):
                      if w.get('id') == identifier or w.get('label') == wheel), None)
     if control is not None and settings is not None:
         return control, settings
-    # Keep archived control-mode viewers and their probe fixtures usable.
-    if wheel == 'coarse' and 'wheels' not in state['extrude']:
-        control = next(c for c in state['controls'] if c['label'] == 'EXTRUDE LENGTH WHEEL')
-        ex = state['extrude']
-        return control, {'id': identifier, 'label': wheel,
-                         'base_pairs_per_detent': ex['base_pairs_per_detent'],
-                         'notch_travel_m': ex['wheel_notch_travel_m'],
-                         'hovered': ex['wheel_hovered'], 'dragging': ex['wheel_dragging']}
     raise RuntimeError('Extrude '+wheel+' wheel is not visible in the main menu')
 
 

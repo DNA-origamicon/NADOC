@@ -74,7 +74,16 @@ def run(socket, output, action):
         assert item['enabled']
         reach((np.array(item['center'])+rotate(q,[0,0,.12])).tolist(),q,lambda s:s['radial_edit']['hovered']==index)
         live.capture_to(out/'wheel',discard_source=True)
+        history_panels = [(panel['open'], panel['tab']) for panel in live.state['sidebars']]
+        haptics_before = live.state['haptic_requests'][1]
         live.send('button',hand=1,button='trackpad',pressed=False);live.frame()
+        if action in ('undo', 'redo'):
+            assert live.state['haptic_requests'][1] > haptics_before, 'History command omitted controller feedback'
+            assert live.state['haptic_amplitude'][1] > 0
+            assert not live.state['radial_edit']['open']
+            assert live.state['menu'] == 'closed', 'History command opened a menu'
+            assert history_panels == [(panel['open'], panel['tab']) for panel in live.state['sidebars']]
+            live.capture_to(out/'history-feedback',discard_source=True)
         if action=='nick':
             assert live.state['ligation']['nick_active']
             # Quiver toggles only after a deliberate front-to-behind reach.
@@ -163,6 +172,9 @@ def run(socket, output, action):
             live.send('trigger_value',hand=1,value=1);live.frame()
         with operation(live,'nick-feedback'):
             wait(lambda s:s['scene_revision']>revision and s['ligation']['version']>version and not s['ligation']['waiting'])
+        if action in ('undo', 'redo'):
+            assert live.state['menu'] == 'closed', 'History acknowledgement opened a menu'
+            assert history_panels == [(panel['open'], panel['tab']) for panel in live.state['sidebars']]
         assert live.state['ligation']['status']=='created'
         # A held trigger across topology refresh must not cut another bond.
         settled=live.state['scene_revision']

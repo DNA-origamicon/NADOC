@@ -7,6 +7,27 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Sidebar-only menus and history feedback (2026-10-05)
+
+The old Options/Tools/selection/representation/coloring/jobs/trajectory menu
+renderer, hit targets and navigation state have been removed. Current sidebar
+panels own settings and tool transactions; Tools contains direct authoring actions
+and selection scopes. Visualization retains recentering, Simulations owns job
+selection and trajectories, and the left VR tab owns the detached desktop.
+Radial Undo/Redo dispatch history and pulse the initiating controller without
+opening menus. ScryWrite exposes per-hand haptic request counts/amplitudes; its
+synthetic input records requests while physical vibration remains suppressed.
+
+The registered Nick/Undo/Redo tour now asserts haptic requests and unchanged,
+closed sidebars both at dispatch and after acknowledgement. Navigation, focus,
+Extrude/selected-end probes, wheel fixtures and formatting atlas coverage use
+only current sidebars/tool panels. The registered Current menu routes entry
+(`menu_tour --action-checks --validate`) exercises all five authoring choices,
+selection scopes and trajectory controls with four profiles on an empty viewer
+and a temporary metadata fixture. See [sidebar guide](../docs/vr_sidebar_menus.md).
+Final validation results belong in the current task report; this records the
+implemented contract, not a physical headset or vibration verification claim.
+
 ## Continuous Move/Rotate at nominal 90 Hz (2026-10-03)
 
 Final full-24HB Ball & Stick cluster drags sustain 89.50–89.53 measured FPS across
@@ -536,7 +557,7 @@ live evidence are in `.development-artifacts/vr-scrollbar/`.
 
 `ui_style.hpp` centralizes native sidebar colors/focus/press tokens;
 `menu_focus.hpp` owns input arbitration. Per-controller trackpad clicks navigate
-its open sidebar or detailed native menu. Sidebar up/down stays in its column
+its open sidebar or sidebar tool panel. Sidebar up/down stays in its column
 and clamps at both ends (including unavailable controls); left/right moves
 spatially between tabs, scrollbar, and content, mirrored on the left hand.
 Tab selection requires trigger. Initial focus uses the pointed-at control or

@@ -48,10 +48,9 @@
 #include "controller_paths.hpp"
 #include "jobs.hpp"
 #include "menu_layout.hpp"
-#include "legacy_menu_layout.hpp"
-#include "menu_items.hpp"
 #include "sidebar_menu.hpp"
 #include "simulation_panel.hpp"
+#include "trajectory_panel.hpp"
 #include "dimension_panel.hpp"
 #include "view_volume_panel.hpp"
 #include "extrude_panel.hpp"
@@ -5029,14 +5028,9 @@ class Viewer {
           visualizationPath_(std::move(visualizationPath)),
           trajectoryPath_(std::move(trajectoryPath)),
           coordinatePath_(std::move(coordinatePath)),
-          jobsSnapshotAvailable_(jobSnapshot.available),
-          jobsSnapshotTotal_(jobSnapshot.total),
           jobSnapshotSequence_(jobSnapshot.sequence),
-          jobSnapshotUpdatedAtMs_(jobSnapshot.updatedAtMs),
           visualizationSnapshot_(std::move(visualizationSnapshot)),
           visualizationSequence_(visualizationSnapshot_.sequence),
-          desktopActiveJobEngine_(jobSnapshot.activeEngine),
-          desktopActiveJobId_(jobSnapshot.activeJobId),
           desktopRepresentation_(jobSnapshot.representation),
           desktopColoring_(jobSnapshot.coloring),
           mirrorEye_(mirrorEye), referenceGrid_(referenceGrid),
@@ -5048,7 +5042,6 @@ class Viewer {
           witnessVisualExpectationDirectory_(
               std::move(witnessVisualExpectationDirectory)),
           exitOnWitnessComplete_(exitOnWitnessComplete),
-          jobs_(std::move(jobSnapshot.rows)),
           selectionLevel_(std::move(selectionLevel)) {
         if (!visualizationPath_.empty()) {
             std::error_code error;
@@ -5120,15 +5113,6 @@ class Viewer {
             if (!selectedOwnerTokens_.empty()) {
                 committedSelectionOwnerTokens_ = {selectedOwnerTokens_.front()};
             }
-        }
-        const auto activeJob = std::find_if(
-            jobs_.begin(), jobs_.end(), [&](const nadoc_vr::JobSnapshotRow& row) {
-                return row.engine == desktopActiveJobEngine_ &&
-                       row.jobId == desktopActiveJobId_;
-            });
-        if (activeJob != jobs_.end()) {
-            selectedJobIndex_ = static_cast<size_t>(activeJob - jobs_.begin());
-            jobPage_ = selectedJobIndex_ / 5U;
         }
     }
 
@@ -5215,7 +5199,6 @@ class Viewer {
         menuGlass_.shutdown();
         startup_.surface.shutdown();
         representationLoading_.popup.surface.shutdown();
-        menuPanelSurface_.shutdown();
         latticePanelSurface_.shutdown();
         sidebarMenus_.shutdown();
         witnessSurface_.shutdown();
@@ -5576,7 +5559,6 @@ class Viewer {
         desktopFrameSurface_.initialize();
         viewTools_.initialize();
         roomFloor_.initialize(session_);
-        menuPanelSurface_.initialize();
         latticePanelSurface_.initialize();
         sidebarMenus_.initialize();
         simulationPanel_.bind(sidebarMenus_.menus[0], &sidebarMenus_.menus[1]);
@@ -5619,7 +5601,6 @@ class Viewer {
                     if(action=="move:undo")return toolShell_.undoAvailable();
                     return true;
                 }
-                if(action=="trajectory") return trajectoryState_.active;
                 if(action.starts_with("extrude:")) {
                     if(toolShell_.executionPending()) return action=="extrude:back";
                     if(action=="extrude:confirm") return paintedExtrusionReady();
@@ -5641,6 +5622,7 @@ class Viewer {
             };
             sidebar.loadingProgress=[this](const std::string& action){return representationLoading_.button(action);};
             sidebar.isActive=[this](const std::string& action) {
+                if(action.starts_with("select:"))return selectionLevel_==action.substr(7);
                 if(action=="move:base" || action=="move:domain" || action=="move:cluster")return selectionLevel_==action.substr(5);
                 if(action=="vr:head-light")return shadowLight_.headFollowing();
                 if(action=="share:avatar")return showVRAvatar_;
@@ -5684,6 +5666,8 @@ class Viewer {
     }
 
     void pulse(size_t hand, float amplitude = 0.35F) {
+        ++hapticRequests_[hand];
+        hapticAmplitude_[hand]=amplitude;
         if (witness_ || liveSocket_.enabled()) return;
         XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO};
         info.action = hapticAction_;
@@ -5697,18 +5681,6 @@ class Viewer {
         if (XR_FAILED(result) && result != XR_SESSION_NOT_FOCUSED) {
             checkXr(instance_, result, "xrApplyHapticFeedback");
         }
-    }
-
-    glm::vec3 menuWorld(float x, float y, float z = 0.0F) const {
-        return menuPlacement_.worldPoint({x, y, z});
-    }
-
-    void appendMenuText(const std::string& text, float x, float y, float scale,
-                        const glm::vec3& color, std::optional<float> rightRail = std::nullopt) {
-        nadoc_vr::drawLegacyMenuText(menuLayoutAudit_,menuPanelBounds(),text,x,y,scale,color,
-            [&](const auto& value,float left,float top,float size,glm::vec3 ink){
-                appendPlacedText(menuPlacement_,value,left,top,size,ink);
-            },rightRail);
     }
 
     void appendPlacedText(
@@ -5763,178 +5735,71 @@ class Viewer {
         appendPlacedText(placement, text, x, y, scale, color, z);
     }
 
-    enum class MenuPage {
-        options, tools, tool_config, jobs, job_detail, trajectory, desktop
-    };
-
-    using MenuItem = nadoc_vr::MenuItem;
-    static constexpr std::array<const char*, 7> kSelectionLevels = {
-        "default", "cluster", "strand", "domain", "end", "xover", "base",
-    };
-    static constexpr std::array<MenuItem, 19> kOptionsMenuItems = {{
-        {"CYLINDERS", -0.16F, 0.190F, 0.145F},
-        {"FULL", -0.16F, 0.135F, 0.145F},
-        {"BALL + STICK", -0.16F, 0.080F, 0.145F},
-        {"STICK ONLY", -0.16F, 0.025F, 0.145F},
-        {"STRAND", 0.16F, 0.190F, 0.145F},
-        {"BASE", 0.16F, 0.135F, 0.145F},
-        {"CLUSTER", 0.16F, 0.080F, 0.145F},
-        {"CPK", 0.16F, 0.025F, 0.145F},
-        {"AUTO / DRILL", -0.16F, -0.105F, 0.145F},
-        {"CLUSTER", -0.16F, -0.160F, 0.145F},
-        {"STRAND", -0.16F, -0.215F, 0.145F},
-        {"DOMAIN", -0.16F, -0.270F, 0.145F},
-        {"END", 0.16F, -0.105F, 0.145F},
-        {"CROSSOVER", 0.16F, -0.160F, 0.145F},
-        {"BASE", 0.16F, -0.215F, 0.145F},
-        {"TOOLS", -0.16F, -0.350F, 0.145F},
-        {"RECENTER", 0.16F, -0.350F, 0.145F},
-        {"TRAJECTORY", -0.16F, -0.415F, 0.145F},
-        {"DESKTOP", 0.16F, -0.415F, 0.145F},
-    }};
-    static constexpr auto kToolMenuItems = nadoc_vr::kToolMenuItems;
-    static constexpr auto kToolConfigMenuItems = nadoc_vr::kToolConfigMenuItems;
-    static constexpr std::array<MenuItem, 8> kJobsMenuItems = {{
-        {"JOB", 0.0F, 0.205F, 0.305F},
-        {"JOB", 0.0F, 0.145F, 0.305F},
-        {"JOB", 0.0F, 0.085F, 0.305F},
-        {"JOB", 0.0F, 0.025F, 0.305F},
-        {"JOB", 0.0F, -0.035F, 0.305F},
-        {"PREVIOUS", -0.16F, -0.120F, 0.145F},
-        {"NEXT", 0.16F, -0.120F, 0.145F},
-        {"BACK", 0.0F, -0.260F, 0.305F},
-    }};
-    static constexpr std::array<MenuItem, 1> kJobDetailMenuItems = {{
-        {"BACK TO JOBS", 0.0F, -0.260F, 0.305F},
-    }};
-    static constexpr std::array<MenuItem, 1> kDesktopMenuItems = {{
-        {"BACK TO VR MENU", 0.0F, -0.260F, 0.305F},
-    }};
-    static constexpr std::array<MenuItem, 5> kTrajectoryMenuItems = {{
-        {"PLAY / PAUSE", 0.0F, 0.190F, 0.305F},
-        {"TIMELINE", 0.0F, 0.075F, 0.280F},
-        {"PREVIOUS FRAME", -0.16F, -0.035F, 0.145F},
-        {"NEXT FRAME", 0.16F, -0.035F, 0.145F},
-        {"BACK", 0.0F, -0.260F, 0.305F},
-    }};
-    static constexpr std::array<MenuItem, 3> kMenuControlItems = {{
-        {"DOCK", -0.20F, -0.505F, 0.12F},
-        {"SIZE -", 0.02F, -0.505F, 0.08F},
-        {"SIZE +", 0.22F, -0.505F, 0.10F},
-    }};
-    static constexpr int kMenuControlHitBase = 100;
-    static constexpr float kMenuTop = 0.37F;
-    static constexpr float kMenuBottom = -0.585F;
     static constexpr auto kLatticePanelBounds = nadoc_vr::kLatticePainterBounds;
     static constexpr int kMaximumLatticeAxisRadius = 64;
     static constexpr auto kLatticeExitBounds = nadoc_vr::kLatticePainterExit;
     static constexpr auto kLatticeGridBounds = nadoc_vr::kLatticePainterGrid;
 
-    [[nodiscard]] nadoc_vr::MenuPanelBounds menuPanelBounds() const {
-        const nadoc_vr::MenuPanelBounds regular{
-            {-0.37F, kMenuBottom},
-            {0.37F, kMenuTop},
-        };
-        return menuPage_ == MenuPage::desktop
-            ? nadoc_vr::aspectScaledMenuBounds(
-                regular.minimum, regular.maximum,
-                desktopSurface_.aspectRatio(), 2.0F)
-            : regular;
-    }
-
-    [[nodiscard]] MenuItem menuControlItem(size_t index) const {
-        MenuItem item = kMenuControlItems.at(index);
-        if (menuPage_ == MenuPage::desktop) {
-            item.y = menuPanelBounds().minimum.y + 0.075F;
-        }
-        return item;
-    }
-
-    [[nodiscard]] MenuItem desktopBackItem() const {
-        MenuItem item = kDesktopMenuItems[0];
-        item.y = menuPanelBounds().minimum.y + 0.155F;
-        return item;
+    [[nodiscard]] const nadoc_vr::SidebarMenu& observedSidebar() const {
+        return sidebarMenus_.menus[sidebarMenus_.menus[1].open ? 1 : 0];
     }
 
     [[nodiscard]] const char* menuPageName() const {
-        if (!menuOpen_) return sidebarMenus_.anyOpen() ? "sidebars" : "closed";
-        switch (menuPage_) {
-            case MenuPage::options: return "options";
-            case MenuPage::tools: return "tools";
-            case MenuPage::tool_config: return "tool_config";
-            case MenuPage::jobs: return "jobs";
-            case MenuPage::job_detail: return "job_detail";
-            case MenuPage::trajectory: return "trajectory";
-            case MenuPage::desktop: return "desktop";
-        }
-        return "closed";
+        return sidebarMenus_.anyOpen() ? "sidebars" : "closed";
     }
 
     [[nodiscard]] std::vector<nadoc_vr::scrywrite::WitnessMenuEntry>
     witnessMenuEntries() const {
-        std::vector<nadoc_vr::scrywrite::WitnessMenuEntry> entries;
-        if (!menuOpen_) return sidebarMenus_.entries();
-        auto append = [&](const auto& items, int hitBase = 0) {
-            for (size_t index = 0; index < items.size(); ++index) {
-                const MenuItem item = items[index];
-                if (std::string(item.label) == "EXTRUDE FROM" &&
-                    toolConfig_.mode() != nadoc_vr::ToolMode::extrude) continue;
-                if (std::string(item.label) == "FREEFORM" && !freeformAvailable()) continue;
-                entries.push_back({
-                    item.label, hitBase + static_cast<int>(index),
-                    menuPlacement_.worldPoint({item.x, item.y, 0.0F}),
-                    menuPlacement_.worldPoint({item.x + item.halfWidth, item.y, 0.0F})
-                        - menuPlacement_.worldPoint({item.x, item.y, 0.0F}),
-                    menuPlacement_.worldPoint({item.x, item.y + item.halfHeight, 0.0F})
-                        - menuPlacement_.worldPoint({item.x, item.y, 0.0F}),
-                });
-                if(menuPage_==MenuPage::tools && hitBase==0 && index<5)
-                    entries.back().enabled=nadoc_vr::ToolShell::selectionCapability(static_cast<nadoc_vr::ToolMode>(index),selectedSelectionKind_)!=nadoc_vr::ToolCapability::unsupported;
-            }
-        };
-        if (menuPage_ == MenuPage::options) append(kOptionsMenuItems);
-        else if (menuPage_ == MenuPage::tools) append(kToolMenuItems);
-        else if (menuPage_ == MenuPage::tool_config) append(kToolConfigMenuItems);
-        else if (menuPage_ == MenuPage::jobs) append(kJobsMenuItems);
-        else if (menuPage_ == MenuPage::job_detail) append(kJobDetailMenuItems);
-        else if (menuPage_ == MenuPage::trajectory) append(kTrajectoryMenuItems);
-        else append(std::array<MenuItem, 1>{desktopBackItem()});
-        std::array<MenuItem, kMenuControlItems.size()> controls{};
-        for (size_t index = 0; index < controls.size(); ++index) {
-            controls[index] = menuControlItem(index);
-        }
-        append(controls, kMenuControlHitBase);
-        const auto sidebarEntries=sidebarMenus_.entries();
-        entries.insert(entries.end(),sidebarEntries.begin(),sidebarEntries.end());
-        return entries;
+        return sidebarMenus_.entries();
     }
 
     [[nodiscard]] std::string combinedMenuLayoutStatus() const {
         if(latticeOpen_ && !latticeLayoutAudit_.valid()) return latticeLayoutAudit_.status();
-        for(const auto& menu:sidebarMenus_.menus) if(menu.open && !menu.audit.valid()) return menu.audit.status();
-        if(menuOpen_) return menuLayoutAudited_?menuLayoutAudit_.status():"pending";
+        for(const auto& menu:sidebarMenus_.menus)
+            if(menu.open && !menu.audit.valid()) return menu.audit.status();
         return sidebarMenus_.anyOpen()?"valid":"closed";
     }
 
     [[nodiscard]] std::string witnessHoverName() const {
-        const auto sidebarHover=sidebarMenus_.hoverLabel();
-        if(!sidebarHover.empty()) return sidebarHover;
-        return nadoc_vr::scrywrite::witnessHoverLabel(
-            witnessMenuEntries(), menuHover_);
+        return sidebarMenus_.hoverLabel();
     }
 
     [[nodiscard]] std::string witnessMenuFramingStatus() const {
-        if (!witness_ || !menuOpen_) return "closed";
-        const auto bounds = menuPanelBounds();
+        if (!witness_ || !sidebarMenus_.anyOpen()) return "closed";
+        const auto& menu=observedSidebar();
+        const auto bounds=menu.bounds();
+        const auto& placement=menu.placement;
         const std::array<glm::vec3, 4> corners{{
-            menuPlacement_.worldPoint({bounds.minimum.x, bounds.minimum.y, 0.0F}),
-            menuPlacement_.worldPoint({bounds.minimum.x, bounds.maximum.y, 0.0F}),
-            menuPlacement_.worldPoint({bounds.maximum.x, bounds.minimum.y, 0.0F}),
-            menuPlacement_.worldPoint({bounds.maximum.x, bounds.maximum.y, 0.0F}),
+            placement.worldPoint({bounds.minimum.x, bounds.minimum.y, 0.0F}),
+            placement.worldPoint({bounds.minimum.x, bounds.maximum.y, 0.0F}),
+            placement.worldPoint({bounds.maximum.x, bounds.minimum.y, 0.0F}),
+            placement.worldPoint({bounds.maximum.x, bounds.maximum.y, 0.0F}),
         }};
         const auto& head = witness_->input().head;
         return nadoc_vr::assessActorEyePanelFraming(
             corners, head.position, head.orientation).status();
+    }
+
+    void toggleSidebar(size_t hand) {
+        if(witness_) {
+            const auto& head=witness_->input().head;
+            sidebarMenus_.toggle(hand,head.position,head.orientation);
+        } else {
+            sidebarMenus_.toggle(hand,witnessObserverPosition_,witnessObserverOrientation_);
+        }
+    }
+
+    void openSidebarTab(size_t hand, const std::string& tab) {
+        if(hand==0 && trajectoryPanel_.active) {
+            trajectoryPanel_.exit(sidebarMenus_.menus);trajectoryScrubHand_.reset();
+        }
+        auto& menu=sidebarMenus_.menus[hand];
+        if(!menu.open) toggleSidebar(hand);
+        menu.customTab.reset();
+        for(size_t index=0;index<menu.tabs.size();++index)
+            if(nadoc_vr::kSidebarTabs[menu.tabs[index]].key==tab) menu.selected=index;
+        menu.focus.reset();menu.hovered.clear();
+        suppressManipulationUntilRelease_=true;
     }
 
     void resolveWitnessAim() {
@@ -5960,20 +5825,6 @@ class Viewer {
         witness_->resolveAim(*orientation);
     }
 
-    void returnToSidebar() {
-        menuOpen_=false;
-        menuOpenRequested_=false;
-        menuHover_=-1;
-        menuHoverTargets_.fill(-1);
-        legacyMenuFocus_.focus.reset();
-        trajectoryScrubHand_.reset();
-        auto& sidebar=sidebarMenus_.menus[menuHand_];
-        sidebar.open=true;
-        sidebar.focus.reset();
-        sidebar.hovered.clear();
-        suppressManipulationUntilRelease_=true;
-    }
-
     void toggleMenu(size_t hand) {
         ligation_.cancel();
         if(bendPanel_.active) {sidebarMenus_.menus[1].open=true;return;}
@@ -5985,12 +5836,7 @@ class Viewer {
         if(volumePanel_.active) {volumePanel_.exit(sidebarMenus_.menus);return;}
         if(dimensionPanel_.tool.active) {dimensionPanel_.exit(sidebarMenus_.menus);return;}
         radialToolMenu_.close();
-        if(menuHand_==hand) legacyMenuFocus_.focus.reset();
-        if(menuOpen_ && menuHand_==hand) {
-            menuOpen_=false; menuHover_=-1; suppressManipulationUntilRelease_=true;
-            return;
-        }
-        sidebarMenus_.toggle(hand, witnessObserverPosition_, witnessObserverOrientation_);
+        toggleSidebar(hand);
         suppressManipulationUntilRelease_ = true;
         pulse(hand, 0.45F);
     }
@@ -6040,6 +5886,14 @@ class Viewer {
         publishToolIntent(nadoc_vr::ToolAction::cancel);
     }
 
+    bool undoAuthoringTool(size_t hand) {
+        if(toolShell_.executionPending() || !toolShell_.undoAvailable())return false;
+        toolShell_.apply(nadoc_vr::ToolAction::undo,selectedSelectionKind_);
+        publishToolIntent(nadoc_vr::ToolAction::undo);
+        pulse(hand,.62F);
+        return true;
+    }
+
     void confirmMove() {
         if(toolShell_.executionPending() || !toolShell_.previewRequested() || pendingToolTransform_.isIdentity())return;
         movePanel_.hand.reset();publishToolTransform();
@@ -6055,6 +5909,45 @@ class Viewer {
         return action=="share:end" || (action=="share:pause" && sharePerspective_) || (action=="share:resume" && !sharePerspective_);
     }
     void activateSidebarAction(const std::string& requestedAction, size_t hand) {
+        if(requestedAction=="trajectory") {
+            openSidebarTab(0,"dynamics");
+            trajectoryPanel_.enter(sidebarMenus_.menus,trajectoryState_);
+            return;
+        }
+        if(requestedAction.starts_with("trajectory:")) {
+            if(!trajectoryPanel_.active)return;
+            if(requestedAction=="trajectory:back") {
+                trajectoryPanel_.exit(sidebarMenus_.menus);trajectoryScrubHand_.reset();return;
+            }
+            if(!trajectoryState_.active || trajectoryState_.frameCount==0)return;
+            if(requestedAction=="trajectory:play")
+                publishTrajectoryRequest(trajectoryState_.playing?"pause":"play",trajectoryState_.frameIndex);
+            else if(requestedAction=="trajectory:previous")
+                publishTrajectoryRequest("seek",trajectoryState_.frameIndex>0?trajectoryState_.frameIndex-1:0);
+            else if(requestedAction=="trajectory:next")
+                publishTrajectoryRequest("seek",std::min(trajectoryState_.frameIndex+1,trajectoryState_.frameCount-1));
+            else if(requestedAction=="trajectory:seek")
+                publishTrajectoryRequest("seek",trajectoryState_.frameIndex);
+            return;
+        }
+        if(requestedAction.starts_with("select:")) {
+            const auto level=requestedAction.substr(7);
+            static constexpr std::array<std::string_view,7> levels{
+                "default","cluster","strand","domain","end","xover","base"};
+            if(std::find(levels.begin(),levels.end(),level)!=levels.end())publishSelectionLevel(level);
+            return;
+        }
+        const bool known=requestedAction=="options" || requestedAction=="tools" || requestedAction=="settings" ||
+            requestedAction=="jobs" || requestedAction=="trajectory" || requestedAction=="desktop" || requestedAction=="recenter" ||
+            requestedAction=="feedback:activate" || requestedAction=="vr:head-light" || requestedAction=="vr:exit" ||
+            requestedAction=="qr:calibrate" || requestedAction=="qr:cube" || requestedAction.starts_with("tool:") ||
+            requestedAction.starts_with("twist:") || requestedAction.starts_with("bend:") || requestedAction.starts_with("move:") ||
+            requestedAction.starts_with("extrude:") || requestedAction.starts_with("simulation:") || requestedAction.starts_with("share:") ||
+            requestedAction.starts_with("volume:") || requestedAction.starts_with("dimension:") || requestedAction.starts_with("repr:") ||
+            requestedAction.starts_with("color:") || requestedAction.starts_with("trajectory:");
+        if(!known)return;
+        if(requestedAction.starts_with("tool:") && requestedAction!="tool:extrude" && requestedAction!="tool:twist" &&
+           requestedAction!="tool:bend" && requestedAction!="tool:move_rotate" && requestedAction!="tool:inspect")return;
         if(requestedAction=="vr:head-light") {
             const bool enabled = !shadowLight_.headFollowing();
             shadowLight_.setHeadFollowing(enabled);
@@ -6157,6 +6050,7 @@ class Viewer {
             if(action!="bend:confirm" && action!="bend:undo")return;
             const auto intent=action=="bend:confirm"?nadoc_vr::ToolAction::confirm:nadoc_vr::ToolAction::undo;
             if(intent==nadoc_vr::ToolAction::confirm && !bendReady())return;
+            if(intent==nadoc_vr::ToolAction::undo) {undoAuthoringTool(hand);return;}
             toolShell_.apply(intent,selectedSelectionKind_,bendReady());publishToolIntent(intent);return;
         }
         if(bendPanel_.active && action.starts_with("tool:")) {bendPanel_.exit(sidebarMenus_.menus);clearPlanePick();}
@@ -6180,9 +6074,9 @@ class Viewer {
             if(toolShell_.executionPending() || moveAwaitRefresh_)return;
             if(action=="move:apply")confirmMove();
             else if(action=="move:undo") {
+                if(!toolShell_.undoAvailable())return;
                 cancelMove();
-                toolShell_.apply(nadoc_vr::ToolAction::undo,selectedSelectionKind_);
-                publishToolIntent(nadoc_vr::ToolAction::undo);
+                undoAuthoringTool(hand);
             } else if(action=="move:recenter") {recenterRequested_=true;recenterHand_=hand;}
             else {
                 cancelMove();
@@ -6196,7 +6090,7 @@ class Viewer {
             if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
             if(volumePanel_.active)volumePanel_.exit(sidebarMenus_.menus);
             if(dimensionPanel_.tool.active)dimensionPanel_.exit(sidebarMenus_.menus);
-            activateAuthoringTool(3);menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
+            activateAuthoringTool(3);radialToolMenu_.close();
             movePanel_.enter(sidebarMenus_.menus);
             movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());return;
         }
@@ -6230,6 +6124,7 @@ class Viewer {
                     :action=="extrude:preview"?nadoc_vr::ToolAction::preview
                     :action=="extrude:undo"?nadoc_vr::ToolAction::undo:nadoc_vr::ToolAction::cancel;
                 if(intent==nadoc_vr::ToolAction::confirm&&!paintedExtrusionReady())return;
+                if(intent==nadoc_vr::ToolAction::undo) {undoAuthoringTool(hand);return;}
                 toolShell_.apply(intent,toolConfig_.targetSelectionKind(),paintedExtrusionReady());
                 if(intent==nadoc_vr::ToolAction::cancel) {freeformDraft_.clear();pendingToolTransform_.cancel();publishToolTransform();}
                 publishToolIntent(intent);
@@ -6243,10 +6138,10 @@ class Viewer {
             refreshExtrudePanel();return;
         }
         if(volumePanel_.action(action,sidebarMenus_.menus,normalizationCenter_,normalizationScale_)) {
-            menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();latticeOpen_=false;return;
+            radialToolMenu_.close();latticeOpen_=false;return;
         }
         if(dimensionPanel_.action(action,sidebarMenus_.menus,normalizationScale_)) {
-            menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();latticeOpen_=false;
+            radialToolMenu_.close();latticeOpen_=false;
             dimensionPanel_.tool.update(hands_,manipulator_.transform(),false);
             return;
         }
@@ -6259,523 +6154,16 @@ class Viewer {
         } else if (action == "recenter") {
             recenterRequested_ = true; recenterHand_ = hand;
         } else if (action.starts_with("tool:")) {
-            sidebarMenus_.menus[hand].open=false;
-            legacyMenuFocus_.focus.reset();
-            menuHand_=hand;
             const std::array<std::string,5> names{"extrude","twist","bend","move_rotate","inspect"};
             const auto item=std::find(names.begin(),names.end(),action.substr(5));
             if(item!=names.end()) activateAuthoringTool(static_cast<size_t>(item-names.begin()));
-        } else {
-            sidebarMenus_.menus[hand].open=false;
-            legacyMenuFocus_.focus.reset();
-            requestedMenuPage_ = action == "options" ? MenuPage::options
-                : action == "jobs" ? MenuPage::jobs
-                : action == "trajectory" ? MenuPage::trajectory
-                : action == "desktop" ? MenuPage::desktop : MenuPage::tools;
-            menuHand_ = hand; menuOpenRequested_ = true;
-        }
-    }
-
-    void appendMenuGuides() {
-        menuLayoutAudit_.reset(menuPanelBounds());
-        menuLayoutAudited_ = menuOpen_;
-        if (!menuOpen_) return;
-        const nadoc_vr::FinishMenuLayout finish{menuLayoutAudit_};
-        nadoc_vr::auditLegacyMenuFrame(menuLayoutAudit_,menuPanelBounds());
-        auto line = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& color) {
-            controllerGuides_.push_back(Vertex{a, color, 1.0F});
-            controllerGuides_.push_back(Vertex{b, color, 1.0F});
-        };
-        auto itemBox = [&](const MenuItem& item, const glm::vec3& color,
-                           const char* overrideLabel = nullptr) {
-            const float left = item.x - item.halfWidth;
-            const float right = item.x + item.halfWidth;
-            const std::string label = overrideLabel ? overrideLabel : item.label;
-            const auto visualBounds = item.bounds();
-            const auto hitBounds = visualBounds;
-            const std::string owner = "control:" + label;
-            menuLayoutAudit_.addControl(owner, visualBounds, hitBounds);
-            menuLayoutAudit_.addSpacing(owner, visualBounds, .05F, .004F);
-            line(menuWorld(left, item.y + item.halfHeight),
-                 menuWorld(right, item.y + item.halfHeight), color * 0.7F);
-            line(menuWorld(right, item.y + item.halfHeight),
-                 menuWorld(right, item.y - item.halfHeight), color * 0.7F);
-            line(menuWorld(right, item.y - item.halfHeight),
-                 menuWorld(left, item.y - item.halfHeight), color * 0.7F);
-            line(menuWorld(left, item.y - item.halfHeight),
-                 menuWorld(left, item.y + item.halfHeight), color * 0.7F);
-            const auto textPlacement = menuLayoutAudit_.fitAndAddText(
-                owner + ".label", label, left + 0.012F, item.y + 0.012F,
-                0.0036F, visualBounds);
-            if (textPlacement.scale > 0.0F) {
-                appendPlacedText(
-                    menuPlacement_, label, textPlacement.left, textPlacement.top,
-                    textPlacement.scale, color);
-            }
-        };
-        const auto bounds = menuPanelBounds();
-        const bool borderGripAvailable = menuPlacement_.dragHand().has_value() ||
-            menuPlacement_.resizeActive() ||
-            std::any_of(hands_.begin(), hands_.end(), [&](const nadoc_vr::HandPose& hand) {
-                return menuPlacement_.nearBorder(hand, bounds.minimum, bounds.maximum) ||
-                       (menuPage_ == MenuPage::desktop &&
-                        menuPlacement_.nearPanel(hand, bounds.minimum, bounds.maximum));
-            });
-        const glm::vec3 border = borderGripAvailable
-            ? glm::vec3(1.0F, 0.62F, 0.18F)
-            : glm::vec3(0.22F, 0.42F, 0.62F);
-        nadoc_vr::drawGripFrame(bounds,(menuPlacement_.resizeActive()||menuPlacement_.remoteMode()==2)?nadoc_vr::GripFrameState::resizing:
-            (menuPlacement_.dragHand()||menuPlacement_.remoteMode()==1)?nadoc_vr::GripFrameState::moving:(borderGripAvailable||menuPlacement_.remoteHovered)?nadoc_vr::GripFrameState::ready:nadoc_vr::GripFrameState::idle,
-            [&](glm::vec3 a,glm::vec3 b,glm::vec3 color){line(menuWorld(a.x,a.y),menuWorld(b.x,b.y),color);},
-            [](nadoc_vr::MenuPanelBounds,glm::vec3){});
-        const float footerTop = menuPage_ == MenuPage::desktop
-            ? bounds.minimum.y + 0.115F : -0.465F;
-        line(menuWorld(bounds.minimum.x, footerTop),
-             menuWorld(bounds.maximum.x, footerTop), border * 0.7F);
-        const std::string title = menuPage_ == MenuPage::options
-            ? "VR MENU"
-            : menuPage_ == MenuPage::tools
-                ? "VR TOOLS"
-                : menuPage_ == MenuPage::tool_config
-                    ? "VR TOOL SETTINGS DRAFT"
-                    : menuPage_ == MenuPage::jobs
-                        ? "SIMULATION CONTEXT"
-                    : menuPage_ == MenuPage::job_detail
-                            ? "SIMULATION JOB DETAILS"
-                            : menuPage_ == MenuPage::trajectory
-                                ? "MD TRAJECTORY" : "NADOC DESKTOP";
-        const bool jobMenu = menuPage_ == MenuPage::jobs ||
-                             menuPage_ == MenuPage::job_detail;
-        appendMenuText(
-            title,
-            bounds.minimum.x + 0.055F,
-            menuPage_ == MenuPage::desktop ? bounds.maximum.y - 0.055F : 0.305F,
-            jobMenu || menuPage_ == MenuPage::options ? 0.0042F : 0.006F,
-            {0.65F, 0.88F, 1.0F});
-        if (menuPage_ == MenuPage::options &&
-            glScene_->visualizationMode() != "none") {
-            std::string display = glScene_->visualizationMode();
-            std::transform(
-                display.begin(), display.end(), display.begin(),
-                [](unsigned char value) {
-                    return value == '_' ? ' '
-                                        : static_cast<char>(std::toupper(value));
-                });
-            if (display.size() > 24U) display.resize(24U);
-            appendMenuText(
-                "DESKTOP " + display + " LIVE", -0.305F, 0.268F,
-                0.0028F, {0.35F, 1.0F, 0.68F});
-        }
-
-        for (size_t index = 0; index < kMenuControlItems.size(); ++index) {
-            const MenuItem item = menuControlItem(index);
-            glm::vec3 color = static_cast<int>(index) + kMenuControlHitBase == menuHover_
-                ? glm::vec3(1.0F, 0.78F, 0.22F)
-                : glm::vec3(0.65F, 0.70F, 0.78F);
-            const char* label = index == 0U && menuPlacement_.worldDocked()
-                ? "FOLLOW" : item.label;
-            itemBox(item, color, label);
-        }
-
-        if (menuPage_ == MenuPage::desktop) {
-            appendMenuText("GRIP SURFACE TO MOVE", bounds.minimum.x + 0.025F,
-                           bounds.minimum.y + 0.309F,
-                           0.0034F, {0.92F, 0.72F, 0.38F});
-            appendMenuText("BOTH GRIPS AT BORDER RESIZE", bounds.minimum.x + 0.025F,
-                           bounds.minimum.y + 0.276F,
-                           0.0034F, {0.92F, 0.72F, 0.38F});
-            appendMenuText("AIM + TRIGGER CLICK", bounds.minimum.x + 0.025F,
-                           bounds.minimum.y + 0.243F,
-                           0.0034F, {0.72F, 0.80F, 0.92F});
-            appendMenuText("TRACKPAD SWIPE SCROLLS", bounds.minimum.x + 0.025F,
-                           bounds.minimum.y + 0.210F,
-                           0.0034F, {0.72F, 0.80F, 0.92F});
-            const glm::vec3 backColor = menuHover_ == 0
-                ? glm::vec3(1.0F, 0.78F, 0.22F)
-                : glm::vec3(0.65F, 0.70F, 0.78F);
-            itemBox(desktopBackItem(), backColor);
-            return;
-        }
-
-        if (menuPage_ == MenuPage::trajectory) {
-            const bool available = trajectoryState_.active &&
-                                   trajectoryState_.frameCount > 0;
-            std::ostringstream frameLabel;
-            frameLabel << "FRAME " << (available ? trajectoryState_.frameIndex + 1 : 0)
-                       << " / " << trajectoryState_.frameCount;
-            appendMenuText(frameLabel.str(), -0.305F, 0.255F, 0.0042F,
-                           available ? glm::vec3(0.35F, 0.95F, 0.68F)
-                                     : glm::vec3(0.65F, 0.70F, 0.78F));
-            for (size_t index = 0; index < kTrajectoryMenuItems.size(); ++index) {
-                glm::vec3 color = available || index == 4
-                    ? glm::vec3(0.65F, 0.70F, 0.78F)
-                    : glm::vec3(0.30F, 0.32F, 0.36F);
-                if (static_cast<int>(index) == menuHover_) {
-                    color = available || index == 4
-                        ? glm::vec3(1.0F, 0.78F, 0.22F)
-                        : glm::vec3(0.48F, 0.32F, 0.30F);
-                }
-                const char* label = index == 0
-                    ? (trajectoryState_.playing ? "PAUSE" : "PLAY")
-                    : kTrajectoryMenuItems[index].label;
-                itemBox(kTrajectoryMenuItems[index], color, label);
-            }
-            const float left = kTrajectoryMenuItems[1].x - 0.245F;
-            const float right = kTrajectoryMenuItems[1].x + 0.245F;
-            const float progress = trajectoryState_.frameCount > 1
-                ? static_cast<float>(trajectoryState_.frameIndex) /
-                    static_cast<float>(trajectoryState_.frameCount - 1) : 0.0F;
-            line(menuWorld(left, 0.052F), menuWorld(right, 0.052F),
-                 glm::vec3(0.30F, 0.42F, 0.58F));
-            const float thumb = left + (right - left) * progress;
-            line(menuWorld(thumb, 0.040F), menuWorld(thumb, 0.064F),
-                 glm::vec3(0.35F, 0.95F, 0.68F));
-            appendMenuText(
-                trajectoryState_.live ? "LIVE SOURCE" :
-                    trajectoryState_.loop ? "LOOP ON" : "LOOP OFF",
-                -0.090F, -0.105F, 0.0038F,
-                trajectoryState_.live ? glm::vec3(0.95F, 0.68F, 0.22F)
-                                      : glm::vec3(0.72F, 0.80F, 0.92F));
-            std::ostringstream rate;
-            rate << "SPEED " << trajectoryState_.speed << "X  STRIDE "
-                 << trajectoryState_.stride;
-            appendMenuText(rate.str(), -0.120F, -0.155F, 0.0035F,
-                           {0.72F, 0.80F, 0.92F});
-            return;
-        }
-
-        auto jobColor = [](const nadoc_vr::JobSnapshotRow& row) {
-            if (row.stale) return glm::vec3(0.95F, 0.68F, 0.22F);
-            if (row.status == "failed") return glm::vec3(1.0F, 0.34F, 0.28F);
-            if (row.status == "completed") return glm::vec3(0.35F, 0.95F, 0.58F);
-            if (row.status == "running" || row.status == "preparing") {
-                return glm::vec3(0.35F, 0.78F, 1.0F);
-            }
-            return glm::vec3(0.65F, 0.70F, 0.78F);
-        };
-        auto shortened = [](std::string value, size_t limit) {
-            if (value.size() <= limit) return value;
-            if (limit <= 3) return value.substr(0, limit);
-            return value.substr(0, limit - 3) + "...";
-        };
-        auto shortenedMiddle = [](const std::string& value, size_t limit) {
-            if (value.size() <= limit) return value;
-            if (limit <= 3) return value.substr(0, limit);
-            const size_t left = (limit - 3) / 2;
-            return value.substr(0, left) + "..." +
-                   value.substr(value.size() - (limit - 3 - left));
-        };
-
-        if (menuPage_ == MenuPage::jobs) {
-            constexpr size_t perPage = 5;
-            const size_t pageCount = std::max<size_t>(1, (jobs_.size() + perPage - 1) / perPage);
-            if (jobPage_ >= pageCount) jobPage_ = pageCount - 1;
-            std::ostringstream snapshotLabel;
-            const auto nowMs = static_cast<uint64_t>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count());
-            const uint64_t ageSeconds = jobSnapshotUpdatedAtMs_ > 0 &&
-                    nowMs >= jobSnapshotUpdatedAtMs_
-                ? (nowMs - jobSnapshotUpdatedAtMs_) / 1000U : 999U;
-            snapshotLabel << (ageSeconds <= 5U ? "DESKTOP LIVE " : "DESKTOP LINK STALE ");
-            if (jobsSnapshotTotal_ > static_cast<int>(jobs_.size())) {
-                snapshotLabel << jobs_.size() << " OF " << jobsSnapshotTotal_ << " ";
-            }
-            snapshotLabel << "CONTEXT";
-            appendMenuText(shortened(snapshotLabel.str(), 35), -0.285F, 0.265F,
-                           0.0032F, {0.72F, 0.78F, 0.88F});
-            if (!jobsSnapshotAvailable_) {
-                appendMenuText("JOB LIST UNAVAILABLE", -0.210F, 0.120F,
-                               0.0035F, {0.95F, 0.68F, 0.22F});
-                appendMenuText("KEEP DESKTOP OPEN TO RETRY", -0.235F, 0.065F,
-                               0.0038F, {0.65F, 0.70F, 0.78F});
-            } else if (jobs_.empty()) {
-                appendMenuText("NO RUNS FOR THIS DESIGN", -0.205F, 0.120F,
-                               0.0040F, {0.65F, 0.70F, 0.78F});
-            }
-            const size_t first = jobPage_ * perPage;
-            for (size_t slot = 0; slot < perPage; ++slot) {
-                const size_t index = first + slot;
-                if (index >= jobs_.size()) continue;
-                const auto& row = jobs_[index];
-                std::string label(static_cast<size_t>(row.depth) * 2U, ' ');
-                const bool desktopActive = row.engine == desktopActiveJobEngine_ &&
-                                           row.jobId == desktopActiveJobId_;
-                if (desktopActive) label += "> ";
-                label += row.engine + " " + row.label;
-                glm::vec3 color = desktopActive
-                    ? glm::vec3(0.35F, 1.0F, 0.68F) : jobColor(row);
-                if (static_cast<int>(slot) == menuHover_) color = {1.0F, 0.78F, 0.22F};
-                itemBox(kJobsMenuItems[slot], color, shortened(label, 28).c_str());
-            }
-            const bool hasPrevious = jobPage_ > 0;
-            const bool hasNext = jobPage_ + 1 < pageCount;
-            for (size_t index = 5; index < kJobsMenuItems.size(); ++index) {
-                const bool enabled = index == 7 || (index == 5 && hasPrevious) ||
-                                     (index == 6 && hasNext);
-                glm::vec3 color = enabled
-                    ? glm::vec3(0.65F, 0.70F, 0.78F)
-                    : glm::vec3(0.30F, 0.32F, 0.36F);
-                if (static_cast<int>(index) == menuHover_) {
-                    color = enabled ? glm::vec3(1.0F, 0.78F, 0.22F)
-                                    : glm::vec3(0.48F, 0.32F, 0.30F);
-                }
-                itemBox(kJobsMenuItems[index], color);
-            }
-            std::ostringstream page;
-            page << "PAGE " << (jobPage_ + 1) << " / " << pageCount;
-            appendMenuText(page.str(), -0.055F, -0.180F, 0.0032F,
-                           {0.55F, 0.62F, 0.72F});
-            return;
-        }
-
-        if (menuPage_ == MenuPage::job_detail) {
-            if (selectedJobIndex_ < jobs_.size()) {
-                const auto& row = jobs_[selectedJobIndex_];
-                const glm::vec3 color = jobColor(row);
-                appendMenuText(shortened(row.engine + " - " + row.label, 42),
-                               -0.305F, 0.255F, 0.0042F, color);
-                appendMenuText("ID " + shortenedMiddle(row.jobId, 42),
-                               -0.305F, 0.205F, 0.0030F,
-                               {0.60F, 0.67F, 0.76F});
-                appendMenuText(shortened(row.statusText, 48), -0.305F, 0.155F,
-                               0.0036F, color);
-                if (row.engine == desktopActiveJobEngine_ &&
-                    row.jobId == desktopActiveJobId_) {
-                    appendMenuText("SELECTED ON DESKTOP", -0.305F, -0.100F,
-                                   0.0038F, {0.35F, 1.0F, 0.68F});
-                }
-                std::ostringstream progress;
-                progress << "PROGRESS " << std::fixed << std::setprecision(1)
-                         << static_cast<double>(row.progressPermille) / 10.0 << "%";
-                appendMenuText(progress.str(), -0.305F, 0.100F, 0.0038F,
-                               {0.72F, 0.80F, 0.92F});
-                appendMenuText(row.viewable ? "RESULTS AVAILABLE" : "RESULTS NOT READY",
-                               -0.305F, 0.045F, 0.0038F,
-                               row.viewable ? glm::vec3(0.35F, 0.95F, 0.58F)
-                                            : glm::vec3(0.65F, 0.70F, 0.78F));
-                if (row.stale) appendMenuText("DESIGN CHANGED SINCE RUN", -0.305F, -0.010F,
-                                              0.0038F, {0.95F, 0.68F, 0.22F});
-                if (row.archived) appendMenuText("ARCHIVED", -0.305F, -0.055F,
-                                                 0.0038F, {0.95F, 0.68F, 0.22F});
-                appendMenuText("ACTIONS REMAIN ON DESKTOP", -0.305F, -0.145F,
-                               0.0035F, {0.72F, 0.78F, 0.88F});
-            }
-            glm::vec3 backColor = menuHover_ == 0
-                ? glm::vec3(1.0F, 0.78F, 0.22F)
-                : glm::vec3(0.65F, 0.70F, 0.78F);
-            itemBox(kJobDetailMenuItems[0], backColor);
-            return;
-        }
-
-        if (menuPage_ == MenuPage::tool_config) {
-            std::ostringstream primary;
-            std::ostringstream secondary;
-            std::string option;
-            std::string flag;
-            std::array<std::string, 9> configLabels = {
-                "-", "+", "SECONDARY -", "SECONDARY +",
-                "OPTION", "FLAG", "BACK TO TOOLS",
-                extrudePlane_.label(), freeformDraft_.placed() ? "USE DEFAULT PLANE" : "PLACE FREEFORM",
-            };
-            std::array<bool, 6> enabled{true, true, true, true, true, true};
-            primary << std::fixed << std::setprecision(1);
-            secondary << std::fixed << std::setprecision(1);
-            if (toolConfig_.mode() == nadoc_vr::ToolMode::extrude) {
-                primary << "LENGTH " << toolConfig_.lengthBp() << " BP";
-                secondary << "DIRECTION "
-                          << (toolConfig_.directionSign() > 0 ? "+" : "-");
-                option = "STRANDS " + std::string(nadoc_vr::toolStrandFilterName(
-                    toolConfig_.strandFilter()));
-                flag = std::string("LIGATE ") +
-                    (toolConfig_.ligateAdjacent() ? "YES" : "NO");
-                configLabels[0] = "-1 BP";
-                configLabels[1] = "+1 BP";
-                configLabels[4] = "STRANDS";
-                configLabels[5] = "LIGATE";
-                configLabels[2] = "DIRECTION -";
-                configLabels[3] = "DIRECTION +";
-            } else if (toolConfig_.mode() == nadoc_vr::ToolMode::twist) {
-                primary << "AMOUNT " << toolConfig_.twistAmount();
-                secondary << "PLANE A ";
-                if (toolConfig_.planeABp()) secondary << *toolConfig_.planeABp();
-                else secondary << "?";
-                secondary << " / B ";
-                if (toolConfig_.planeBBp()) secondary << *toolConfig_.planeBBp();
-                else secondary << "?";
-                option = toolConfig_.twistAmountMode() ==
-                        nadoc_vr::TwistAmountMode::total_degrees
-                    ? "UNITS TOTAL DEG" : "UNITS DEG PER NM";
-                flag = "NO FLAG";
-                configLabels[2] = "PICK PLANE A";
-                configLabels[3] = "PICK PLANE B";
-                enabled[5] = false;
-            } else {
-                primary << "BEND ANGLE " << toolConfig_.bendAngleDegrees();
-                secondary << "DIRECTION " << toolConfig_.bendDirectionDegrees();
-                option = "PLANE A ";
-                option += toolConfig_.planeABp()
-                    ? std::to_string(*toolConfig_.planeABp()) : "?";
-                option += " / B ";
-                option += toolConfig_.planeBBp()
-                    ? std::to_string(*toolConfig_.planeBBp()) : "?";
-                flag = "NO FLAG";
-                configLabels[2] = "PICK PLANE A";
-                configLabels[3] = "PICK PLANE B";
-                enabled[4] = enabled[5] = false;
-            }
-            appendMenuText(
-                nadoc_vr::toolModeName(toolConfig_.mode()), -0.305F, 0.255F,
-                0.0042F, {0.42F, 0.72F, 0.95F});
-            appendMenuText(primary.str(), -0.305F, 0.210F, 0.0038F,
-                           {0.95F, 0.78F, 0.34F});
-            appendMenuText(secondary.str(), -0.305F, 0.090F, 0.0032F,
-                           {0.95F, 0.78F, 0.34F});
-            appendMenuText(option, -0.305F, -0.020F, 0.0038F,
-                           {0.72F, 0.80F, 0.92F}, -0.025F);
-            appendMenuText(flag, 0.015F, -0.020F, 0.0038F,
-                           {0.72F, 0.80F, 0.92F});
-            const auto* feedback = currentToolContextFeedback();
-            const bool singleCellFootprint =
-                toolConfig_.mode() == nadoc_vr::ToolMode::extrude &&
-                feedback && feedback->resolved && feedback->footprintResolved;
-            const bool latticeFootprint =
-                toolConfig_.mode() == nadoc_vr::ToolMode::extrude &&
-                !extrudeLatticeDraft_.cells().empty();
-            const bool deformationTool =
-                toolConfig_.mode() == nadoc_vr::ToolMode::twist ||
-                toolConfig_.mode() == nadoc_vr::ToolMode::bend;
-            const bool hasBothPlanes = toolConfig_.planeABp() && toolConfig_.planeBBp();
-            const bool orderedPlanes = hasBothPlanes &&
-                *toolConfig_.planeABp() < *toolConfig_.planeBBp();
-            const std::string geometryStatus = deformationTool
-                ? orderedPlanes && planeGuides_[0] && planeGuides_[1]
-                    ? "PLANES A/B FRAMED READ ONLY"
-                  : orderedPlanes ? "PLANE FRAME MISSING"
-                  : hasBothPlanes ? "PLANES MUST BE A < B"
-                  : "PICK PLANES IN FULL / BALL+STICK"
-                : latticeFootprint
-                    ? std::to_string(extrudeLatticeDraft_.cells().size()) +
-                        (toolConfig_.lengthBp() > 0
-                            ? " CELLS SELECTED - VR DRAFT"
-                            : " CELLS - SET LENGTH")
-                : singleCellFootprint
-                    ? toolConfig_.lengthBp() > 0
-                        ? "1 CELL FOOTPRINT READ ONLY"
-                        : "1 CELL - SET LENGTH"
-                    : "MISSING " + std::string(toolConfig_.unresolvedGeometry());
-            appendMenuText(
-                geometryStatus,
-                -0.305F, -0.165F, 0.0038F,
-                (deformationTool && orderedPlanes) || singleCellFootprint ||
-                    latticeFootprint
-                    ? glm::vec3(0.35F, 0.95F, 1.0F)
-                    : glm::vec3(0.95F, 0.48F, 0.22F));
-            if (deformationTool && !planePickStatus_.empty()) {
-                appendMenuText(planePickStatus_, -0.305F, -0.125F, 0.0032F,
-                               orderedPlanes
-                                   ? glm::vec3(0.35F, 0.95F, 1.0F)
-                                   : glm::vec3(0.95F, 0.62F, 0.28F));
-            } else if (feedback) {
-                const std::string locatorStatus = feedback->resolved
-                    ? feedback->occupied ? "FACE LOCATED - OCCUPIED"
-                      : "FACE LOCATED"
-                    : "FACE NOT LOCATED";
-                appendMenuText(locatorStatus, -0.305F, -0.125F, 0.0032F,
-                               feedback->resolved
-                                   ? feedback->occupied
-                                       ? glm::vec3(1.0F, 0.42F, 0.20F)
-                                       : glm::vec3(0.35F, 0.95F, 1.0F)
-                                   : glm::vec3(0.70F, 0.52F, 0.30F));
-            }
-            const auto* preflight = currentToolPreflightFeedback();
-            std::string preflightStatus = preflight
-                ? "PREFLIGHT " + preflight->status + " - " + preflight->reason
-                : "PREFLIGHT WAITING - DESIGN UNCHANGED";
-            std::transform(
-                preflightStatus.begin(), preflightStatus.end(),
-                preflightStatus.begin(), [](unsigned char value) {
-                    return value == '_' ? ' ' : static_cast<char>(std::toupper(value));
-                });
-            const glm::vec3 preflightColor = !preflight
-                ? glm::vec3(0.65F, 0.70F, 0.78F)
-                : preflight->status == "waiting"
-                    ? glm::vec3(0.65F, 0.70F, 0.78F)
-                : preflight->status == "ok"
-                    ? glm::vec3(0.35F, 0.95F, 0.58F)
-                    : preflight->status == "warn"
-                        ? glm::vec3(0.95F, 0.72F, 0.28F)
-                        : glm::vec3(1.0F, 0.42F, 0.20F);
-            appendMenuText(preflightStatus, -0.305F, -0.205F,
-                           0.0030F, preflightColor);
-            for (size_t index = 0; index < kToolConfigMenuItems.size(); ++index) {
-                glm::vec3 color = index < enabled.size() && !enabled[index]
-                    ? glm::vec3(0.30F, 0.32F, 0.36F)
-                    : glm::vec3(0.65F, 0.70F, 0.78F);
-                if (static_cast<int>(index) == menuHover_) {
-                    color = index < enabled.size() && !enabled[index]
-                        ? glm::vec3(0.48F, 0.32F, 0.30F)
-                        : glm::vec3(1.0F, 0.78F, 0.22F);
-                }
-                if (index == 7 && toolConfig_.mode() != nadoc_vr::ToolMode::extrude) continue;
-                if (index == 8 && !freeformAvailable()) continue;
-                itemBox(kToolConfigMenuItems[index], color,
-                        configLabels[index].c_str());
-            }
-            return;
-        }
-
-        if (menuPage_ == MenuPage::tools) {
-            appendMenuText("TOOL", -0.305F, 0.255F, 0.0042F, {0.42F, 0.72F, 0.95F});
-            appendMenuText("TRANSACTION", 0.015F, 0.255F, 0.0042F,
-                           {0.42F, 0.72F, 0.95F});
-            appendMenuText("SELECTION " + selectionLevel_, -0.305F, -0.250F,
-                           0.0038F, {0.65F, 0.70F, 0.78F});
-            appendMenuText("STATUS " + (paintedExtrusionReady() ? std::string("READY TO EXTRUDE") : toolShell_.status()), -0.305F, -0.290F,
-                           0.0038F, {0.95F, 0.72F, 0.28F});
-            appendMenuText("AMBER NEEDS SETTINGS", -0.305F, -0.330F,
-                           0.0032F, {0.72F, 0.56F, 0.30F});
-            for (size_t index = 0; index < kToolMenuItems.size(); ++index) {
-                const bool selected = index < 5 &&
-                    static_cast<size_t>(toolShell_.mode()) == index;
-                const auto capability = index < 5
-                    ? nadoc_vr::ToolShell::selectionCapability(
-                        static_cast<nadoc_vr::ToolMode>(index), selectedSelectionKind_)
-                    : nadoc_vr::ToolCapability::view_only;
-                glm::vec3 color = capability == nadoc_vr::ToolCapability::unsupported
-                    ? glm::vec3(0.30F, 0.32F, 0.36F)
-                    : capability == nadoc_vr::ToolCapability::configuration_required
-                        ? glm::vec3(0.90F, 0.58F, 0.20F)
-                        : glm::vec3(0.65F, 0.70F, 0.78F);
-                if (selected &&
-                    capability != nadoc_vr::ToolCapability::configuration_required) {
-                    color = {0.30F, 1.0F, 0.48F};
-                }
-                if (static_cast<int>(index) == menuHover_ && capability != nadoc_vr::ToolCapability::unsupported) {
-                    color = glm::vec3(1.0F, 0.78F, 0.22F);
-                }
-                if (index == 6 && toolShell_.mode() == nadoc_vr::ToolMode::extrude) color = paintedExtrusionReady() ? glm::vec3(0.30F, 1.0F, 0.48F) : glm::vec3(0.30F, 0.32F, 0.36F);
-                itemBox(kToolMenuItems[index], color);
-            }
-            return;
-        }
-
-        appendMenuText("REPRESENTATION", -0.305F, 0.241F, 0.0033F, {0.42F, 0.72F, 0.95F}, -0.015F);
-        appendMenuText("COLORING", 0.015F, 0.241F, 0.0033F, {0.42F, 0.72F, 0.95F});
-        appendMenuText("SELECTION LEVEL", -0.305F, -0.035F, 0.0042F, {0.42F, 0.72F, 0.95F});
-
-        const int selectedRepresentation = static_cast<int>(glScene_->representation());
-        const int selectedColoring = static_cast<int>(glScene_->coloring());
-        for (size_t index = 0; index < kOptionsMenuItems.size(); ++index) {
-            const bool selected = (index < 4 && static_cast<int>(index) == selectedRepresentation)
-                || (index >= 4 && index < 8
-                    && static_cast<int>(index - 4) == selectedColoring)
-                || (index >= 8 && index < 15
-                    && selectionLevel_ == kSelectionLevels[index - 8]);
-            glm::vec3 color = selected ? glm::vec3(0.30F, 1.0F, 0.48F)
-                                       : glm::vec3(0.65F, 0.70F, 0.78F);
-            if (static_cast<int>(index) == menuHover_) color = {1.0F, 0.78F, 0.22F};
-            itemBox(kOptionsMenuItems[index], color);
+        } else if (action=="options") {
+            openSidebarTab(0,"vr");
+        } else if (action=="jobs") {
+            openSidebarTab(0,"dynamics");
+        } else if (action=="tools" || action=="settings") {
+            activateAuthoringTool(4);
+            openSidebarTab(1,"tools");
         }
     }
 
@@ -7121,72 +6509,6 @@ class Viewer {
         }
     }
 
-    std::optional<glm::vec3> menuRayPanelLocalPoint(
-        const nadoc_vr::HandPose& hand) const {
-        if (!menuOpen_) return std::nullopt;
-        const auto bounds = menuPanelBounds();
-        return menuPlacement_.rayPanelLocalPoint(
-            hand,
-            bounds.minimum, bounds.maximum);
-    }
-
-    std::optional<glm::vec2> desktopPointerUv(
-        const nadoc_vr::HandPose& hand) const {
-        if (!menuOpen_ || menuPage_ != MenuPage::desktop) return std::nullopt;
-        const auto local = menuRayPanelLocalPoint(hand);
-        if (!local) return std::nullopt;
-        const auto bounds = menuPanelBounds();
-        return glm::vec2(
-            (local->x - bounds.minimum.x) / (bounds.maximum.x - bounds.minimum.x),
-            (bounds.maximum.y - local->y) / (bounds.maximum.y - bounds.minimum.y));
-    }
-
-    int menuHit(const nadoc_vr::HandPose& hand) const {
-        const auto panelHit = menuRayPanelLocalPoint(hand);
-        if (!panelHit) return -1;
-        const glm::vec3& local = *panelHit;
-        const MenuItem* items = menuPage_ == MenuPage::options
-            ? kOptionsMenuItems.data()
-            : menuPage_ == MenuPage::tools
-                ? kToolMenuItems.data()
-                : menuPage_ == MenuPage::tool_config
-                    ? kToolConfigMenuItems.data()
-                    : menuPage_ == MenuPage::jobs
-                        ? kJobsMenuItems.data()
-                    : menuPage_ == MenuPage::job_detail
-                            ? kJobDetailMenuItems.data()
-                            : menuPage_ == MenuPage::trajectory
-                                ? kTrajectoryMenuItems.data() : nullptr;
-        const size_t itemCount = menuPage_ == MenuPage::options
-            ? kOptionsMenuItems.size()
-            : menuPage_ == MenuPage::tools
-                ? kToolMenuItems.size()
-                : menuPage_ == MenuPage::tool_config
-                    ? kToolConfigMenuItems.size() -
-                        (toolConfig_.mode() == nadoc_vr::ToolMode::extrude ? 0U : 2U)
-                    : menuPage_ == MenuPage::jobs
-                        ? kJobsMenuItems.size()
-                    : menuPage_ == MenuPage::job_detail
-                            ? kJobDetailMenuItems.size()
-                            : menuPage_ == MenuPage::trajectory
-                                ? kTrajectoryMenuItems.size() : 1U;
-        for (size_t index = 0; index < itemCount; ++index) {
-            if (menuPage_ == MenuPage::tool_config && index == 8 && !freeformAvailable()) continue;
-            const MenuItem item = menuPage_ == MenuPage::desktop
-                ? desktopBackItem() : items[index];
-            if (item.contains(local)) {
-                return static_cast<int>(index);
-            }
-        }
-        for (size_t index = 0; index < kMenuControlItems.size(); ++index) {
-            const MenuItem item = menuControlItem(index);
-            if (item.contains(local)) {
-                return kMenuControlHitBase + static_cast<int>(index);
-            }
-        }
-        return -1;
-    }
-
     void cancelExtrudeInterface() {
         if(toolShell_.executionPending())return;
         freeformDraft_.clear();
@@ -7203,10 +6525,6 @@ class Viewer {
         latticeGrip_.cancel();
         resetThumbwheels();
         extrudeLatticeDraft_.clear();
-        if (menuPage_ == MenuPage::tool_config) {
-            menuOpen_ = false;
-            menuHover_ = -1;
-        }
     }
 
     std::array<bool, 2> processLatticeInput(
@@ -7263,9 +6581,9 @@ class Viewer {
         resetThumbwheels();
         latticeOrigin_ = nadoc_vr::centeredPaintOrigin(existingLatticeCells());
         latticeSquare_ = extrudePlane_.lattice == "SQUARE";
+        const auto& placement=sidebarMenus_.menus[1].placement;
         latticePlacement_.openDocked(
-            menuPlacement_.worldPoint({0.72F, 0.0F, 0.0F}),
-            menuPlacement_.orientation());
+            placement.worldPoint({-1.20F, 0.0F, 0.0F}), placement.orientation());
         centerLatticePainting();
         latticeOpen_ = true;
         latticeHover_.reset();
@@ -7276,9 +6594,11 @@ class Viewer {
     void activateRadialEdit(size_t item) {
         if(!nadoc_vr::radialEditEnabled(item) || toolShell_.executionPending() || ligation_.waiting || endResize_.waitingVersion)return;
         if(item>=2) {
-            if(movePanel_.active){cancelMove();movePanel_.exit(sidebarMenus_.menus);}
-            if(!ligation_.active && !ligation_.nickActive)activateAuthoringTool(4);
-            ligation_.request(item==2?"undo":"redo",0,[&]{publishEventState();});return;
+            if(!ligation_.version)return;
+            if(movePanel_.active)cancelMove();
+            ligation_.request(item==2?"undo":"redo",0,[&]{publishEventState();});
+            pulse(1U,0.62F);
+            return;
         }
         const bool wasEditing=ligation_.active||ligation_.nickActive;
         if((item==0&&ligation_.active)||(item==1&&ligation_.nickActive)) {
@@ -7290,7 +6610,7 @@ class Viewer {
         if(volumePanel_.active)volumePanel_.exit(sidebarMenus_.menus);
         if(dimensionPanel_.tool.active)dimensionPanel_.exit(sidebarMenus_.menus);
         activateAuthoringTool(4);
-        menuOpen_=false;menuOpenRequested_=false;latticeOpen_=false;
+        latticeOpen_=false;
         ligationPreviousLevel_=prior;ligation_.setActive(item==0);ligation_.nickActive=item==1;publishSelectionLevel(item==0?"end":"base");
     }
 
@@ -7320,12 +6640,6 @@ class Viewer {
         publishToolTransform();
         publishToolIntent(nadoc_vr::ToolAction::activate);
 
-        menuPlacement_.open(
-            1U, hands_, radialToolMenu_.position(), radialToolMenu_.orientation());
-        if (!menuPlacement_.worldDocked()) menuPlacement_.toggleDock(1U, hands_);
-        menuOpen_ = true;
-        menuHover_ = -1;
-        menuHoverTargets_.fill(-1);
         suppressManipulationUntilRelease_ = true;
 
         if (mode == nadoc_vr::ToolMode::extrude ||
@@ -7337,17 +6651,15 @@ class Viewer {
                 clearPlaneGuides();
                 publishToolConfiguration();
             }
-            menuPage_ = MenuPage::tool_config;
         } else {
             if (toolConfig_.clear()) publishToolConfiguration();
-            menuPage_ = MenuPage::tools;
         }
 
         if (mode == nadoc_vr::ToolMode::extrude) {
-            openExtrudeLattice();
             if(!sidebarMenus_.menus[1].open)
-                sidebarMenus_.toggle(1,witnessObserverPosition_,witnessObserverOrientation_);
-            menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
+                toggleSidebar(1);
+            openExtrudeLattice();
+            radialToolMenu_.close();
             extrudePanel_.enter(sidebarMenus_.menus);
             const auto& placement=sidebarMenus_.menus[1].placement;
             latticePlacement_.openDocked(placement.worldPoint({-1.20F,0,0}),placement.orientation());
@@ -7361,8 +6673,8 @@ class Viewer {
             extrudeLatticeDraft_.clear();
         }
         if(mode==nadoc_vr::ToolMode::bend || mode==nadoc_vr::ToolMode::twist) {
-            if(!sidebarMenus_.menus[1].open)sidebarMenus_.toggle(1,witnessObserverPosition_,witnessObserverOrientation_);
-            menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
+            if(!sidebarMenus_.menus[1].open)toggleSidebar(1);
+            radialToolMenu_.close();
             bendPanel_.twist=mode==nadoc_vr::ToolMode::twist;
             bendPanel_.enter(sidebarMenus_.menus);bendPanel_.pickSlot="a";
             publishSelectionLevel("cluster");
@@ -7377,8 +6689,8 @@ class Viewer {
         }
         if(mode==nadoc_vr::ToolMode::move_rotate) {
             if(!sidebarMenus_.menus[1].open)
-                sidebarMenus_.toggle(1,witnessObserverPosition_,witnessObserverOrientation_);
-            menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
+                toggleSidebar(1);
+            radialToolMenu_.close();
             movePanel_.enter(sidebarMenus_.menus);
             movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
         }
@@ -7404,7 +6716,6 @@ class Viewer {
                 if(point)foreground=std::min(foreground,
                     glm::length(surfacePlacement.worldPoint(*point)-hands_[hand].position));
             };
-            if(menuOpen_)surface(menuPlacement_,menuRayPanelLocalPoint(hands_[hand]));
             if(latticeOpen_)surface(latticePlacement_,latticePlacement_.rayPanelLocalPoint(
                 hands_[hand],kLatticePanelBounds.minimum,kLatticePanelBounds.maximum));
             if(desktopPanel_.open)surface(desktopPanel_.placement,desktopPanel_.hit(hands_[hand]));
@@ -7459,13 +6770,52 @@ class Viewer {
         std::vector<nadoc_vr::RemotePanelTarget> targets;
         auto add=[&](auto& placement,auto bounds,float width=.025F){targets.push_back({&placement,bounds,bounds,width});};
         for(auto& m:sidebarMenus_.menus)if(m.open)add(m.placement,m.bounds(),.04F);
-        if(menuOpen_)add(menuPlacement_,menuPanelBounds());
         if(latticeOpen_)add(latticePlacement_,kLatticePanelBounds);
         if(viewTools_.open)add(viewTools_.placement,VRViewTools::panelBounds());
         if(desktopPanel_.open)targets.push_back({&desktopPanel_.placement,desktopPanel_.bounds(),desktopPanel_.chromeBounds()});
         if(representationLoading_.popup.active && representationLoading_.popup.anchored)
             add(representationLoading_.popup.placement,nadoc_vr::MenuPanelBounds{{-.53F,-.38F},{.53F,.38F}});
         return targets;
+    }
+
+    std::array<bool,2> processTrajectoryInput(std::array<bool,2> blocked,
+                                             const std::array<float,2>& foreground) {
+        auto& menu=sidebarMenus_.menus[0];
+        if(!trajectoryPanel_.active || !menu.open || !menu.customTab || menu.tab().key!="trajectory" ||
+           !trajectoryState_.active || trajectoryState_.frameCount==0) {
+            trajectoryScrubHand_.reset();return blocked;
+        }
+        for(size_t hand=0;hand<hands_.size();++hand) {
+            if(trajectoryScrubHand_ && *trajectoryScrubHand_!=hand)continue;
+            if(hand==1U && radialToolMenu_.open()) {
+                if(trajectoryScrubHand_==hand)trajectoryScrubHand_.reset();
+                blocked[hand]=true;continue;
+            }
+            if(blocked[hand] || !hands_[hand].valid || !triggerPressed_[hand]) {
+                if(trajectoryScrubHand_==hand)trajectoryScrubHand_.reset();
+                continue;
+            }
+            const auto frame=nadoc_vr::TrajectoryPanel::frameAt(hands_[hand],menu,trajectoryState_);
+            if(!trajectoryScrubHand_) {
+                if(!frame || !triggerClicked_[hand])continue;
+                const auto control=menu.hit(hands_[hand]);
+                if(!control || !control->enabled || control->id!="trajectory:seek")continue;
+                const auto local=menu.raySurfacePoint(hands_[hand]);
+                if(!local)continue;
+                const float distance=glm::length(menu.placement.worldPoint(*local)-hands_[hand].position);
+                if(distance>=foreground[hand])continue;
+                const auto& other=sidebarMenus_.menus[1];
+                if(other.open)if(const auto point=other.raySurfacePoint(hands_[hand]))
+                    if(glm::length(other.placement.worldPoint(*point)-hands_[hand].position)<distance)continue;
+                if(menu.focus.active || sidebarMenus_.menus[hand].focus.active)continue;
+                trajectoryScrubHand_=hand;trajectoryScrubFrame_=*frame;
+                publishTrajectoryRequest("seek",*frame);pulse(hand,.22F);
+            } else if(frame && *frame!=trajectoryScrubFrame_) {
+                trajectoryScrubFrame_=*frame;publishTrajectoryRequest("seek",*frame);
+            }
+            blocked[hand]=true;
+        }
+        return blocked;
     }
 
     std::array<bool,2> processDesktopInput(std::array<bool,2> blocked) {
@@ -7479,8 +6829,6 @@ class Viewer {
             if(blocked[h])continue;
             const auto local=desktopPanel_.hit(hands_[h]);if(!local)continue;
             const float distance=glm::length(desktopPanel_.placement.worldPoint(*local)-hands_[h].position);
-            if(menuOpen_)if(const auto p=menuRayPanelLocalPoint(hands_[h]))
-                if(glm::length(menuPlacement_.worldPoint(*p)-hands_[h].position)<distance)continue;
             if(viewTools_.open)if(const auto uv=viewTools_.hit(hands_[h]))
                 if(glm::length(viewTools_.world(*uv)-hands_[h].position)<distance)continue;
             blocked[h]=true;
@@ -7521,270 +6869,6 @@ class Viewer {
         text("DESKTOP",content.minimum.x,close.maximum.y-.012F,.006F,nadoc_vr::ui_style::text);
         text("LIGHT TRIGGER: 3X LENS / CLICK: SELECT",content.minimum.x+.36F,close.maximum.y-.02F,.0035F,nadoc_vr::ui_style::text);
         desktopFrameSurface_.update(lines,desktopPanel_.chromeBounds(),true);
-    }
-
-    std::array<bool, 2> processMenuInput(
-        const std::array<bool, 2>& blocked = {}) {
-        std::array<bool, 2> controlTargeted = blocked;
-        menuHover_ = -1;
-        if (!menuOpen_ || menuPage_ != MenuPage::trajectory) {
-            trajectoryScrubHand_.reset();
-        }
-        auto trajectoryFrameAt = [&](const nadoc_vr::HandPose& hand)
-                -> std::optional<uint32_t> {
-            if (!trajectoryState_.active || trajectoryState_.frameCount == 0) {
-                return std::nullopt;
-            }
-            const auto local = menuRayPanelLocalPoint(hand);
-            if (!local) return std::nullopt;
-            constexpr float left = -0.245F;
-            constexpr float right = 0.245F;
-            const float amount = glm::clamp(
-                (local->x - left) / (right - left), 0.0F, 1.0F);
-            return static_cast<uint32_t>(std::lround(
-                amount * static_cast<float>(trajectoryState_.frameCount - 1)));
-        };
-        for (size_t hand = 0; hand < hands_.size(); ++hand) {
-            if (blocked[hand]) {
-                if (trajectoryScrubHand_ && *trajectoryScrubHand_ == hand) {
-                    trajectoryScrubHand_.reset();
-                }
-                menuHoverTargets_[hand] = -1;
-                continue;
-            }
-            if (hand == 1U && radialToolMenu_.open()) {
-                controlTargeted[hand] = true;
-                menuHoverTargets_[hand] = -1;
-                continue;
-            }
-            if (trajectoryScrubHand_ && *trajectoryScrubHand_ == hand) {
-                controlTargeted[hand] = true;
-                if (!triggerPressed_[hand]) {
-                    trajectoryScrubHand_.reset();
-                } else if (const auto frame = trajectoryFrameAt(hands_[hand]);
-                           frame && *frame != trajectoryScrubFrame_) {
-                    trajectoryScrubFrame_ = *frame;
-                    publishTrajectoryRequest("seek", *frame);
-                }
-            }
-            if(legacyMenuFocus_.focus.active && hand!=menuHand_) {controlTargeted[hand]=controlTargeted[hand] || menuHit(hands_[hand])>=0;continue;}
-            const int hit = hand==menuHand_ ? legacyMenuFocus_.resolve(witnessMenuEntries(),menuPageName(),menuHit(hands_[hand]),glfwGetTime(),triggerPressed_[hand]) : menuHit(hands_[hand]);
-            controlTargeted[hand]=controlTargeted[hand] || legacyMenuFocus_.focus.active;
-            const auto desktopPointer = desktopPointerUv(hands_[hand]);
-            controlTargeted[hand] = controlTargeted[hand] || hit >= 0 ||
-                                    desktopPointer.has_value();
-            const int hoverTarget = hit < 0
-                ? -1 : static_cast<int>(menuPage_) * 1000 + hit;
-            if (nadoc_vr::menuHoverHapticRequested(
-                    menuHoverTargets_[hand], hoverTarget)) {
-                pulse(hand, 0.10F);
-            }
-            menuHoverTargets_[hand] = hoverTarget;
-            if (hit >= 0 && menuHover_ < 0) menuHover_ = hit;
-            if (menuPage_ == MenuPage::desktop && desktopPointer && hit < 0) {
-                desktopSurface_.setPointer(*desktopPointer);
-                if (triggerClicked_[hand] && !witness_ && !liveSocket_.enabled()) desktopSurface_.click();
-                continue;
-            }
-            if (hit < 0 || !triggerClicked_[hand]) continue;
-            if (hit >= kMenuControlHitBase) {
-                const int control = hit - kMenuControlHitBase;
-                if (control == 0) {
-                    const auto bounds = menuPanelBounds();
-                    menuPlacement_.toggleDock(
-                        hand, hands_, (bounds.maximum.x - bounds.minimum.x) * 0.5F);
-                } else {
-                    (void)menuPlacement_.adjustScale(control == 1 ? -1 : 1);
-                }
-                menuHover_ = -1;
-                continue;
-            }
-            if (menuPage_ == MenuPage::desktop) {
-                if (hit == 0 && triggerClicked_[hand]) {
-                    returnToSidebar();
-                }
-                continue;
-            }
-            if (menuPage_ == MenuPage::job_detail) {
-                menuPage_ = MenuPage::jobs;
-                menuHover_ = -1;
-                continue;
-            }
-            if (menuPage_ == MenuPage::trajectory) {
-                if (hit == 4) {
-                    returnToSidebar();
-                    continue;
-                }
-                if (!trajectoryState_.active || trajectoryState_.frameCount == 0) {
-                    continue;
-                }
-                if (hit == 0) {
-                    publishTrajectoryRequest(
-                        trajectoryState_.playing ? "pause" : "play",
-                        trajectoryState_.frameIndex);
-                } else if (hit == 1) {
-                    if (const auto frame = trajectoryFrameAt(hands_[hand])) {
-                        trajectoryScrubHand_ = hand;
-                        trajectoryScrubFrame_ = *frame;
-                        publishTrajectoryRequest("seek", *frame);
-                    }
-                } else if (hit == 2) {
-                    publishTrajectoryRequest(
-                        "seek", trajectoryState_.frameIndex > 0
-                            ? trajectoryState_.frameIndex - 1 : 0);
-                } else if (hit == 3) {
-                    publishTrajectoryRequest(
-                        "seek", std::min(
-                            trajectoryState_.frameIndex + 1,
-                            trajectoryState_.frameCount - 1));
-                }
-                continue;
-            }
-            if (menuPage_ == MenuPage::jobs) {
-                constexpr size_t perPage = 5;
-                const size_t index = jobPage_ * perPage + static_cast<size_t>(hit);
-                if (hit < 5 && index < jobs_.size()) {
-                    selectedJobIndex_ = index;
-                    menuPage_ = MenuPage::job_detail;
-                    menuHover_ = -1;
-                } else if (hit == 5 && jobPage_ > 0) {
-                    --jobPage_;
-                } else if (hit == 6 && (jobPage_ + 1) * perPage < jobs_.size()) {
-                    ++jobPage_;
-                } else if (hit == 7) {
-                    returnToSidebar();
-                }
-                continue;
-            }
-            if (menuPage_ == MenuPage::tool_config) {
-                bool changed = false;
-                if (hit == 0 || hit == 1) {
-                    if (toolConfig_.mode() == nadoc_vr::ToolMode::extrude) {
-                        resetThumbwheels();
-                    }
-                    changed = toolConfig_.adjustPrimary(hit == 0 ? -1 : 1);
-                } else if ((hit == 2 || hit == 3) &&
-                         (toolConfig_.mode() == nadoc_vr::ToolMode::twist ||
-                          toolConfig_.mode() == nadoc_vr::ToolMode::bend)) {
-                    planePickSlot_ = hit == 2 ? "a" : "b";
-                    activePlanePickSequence_ = 0;
-                    planePickIdentity_.clear();
-                    planePickStatus_ = std::string("AIM + TRIGGER: PLANE ")
-                                     + (hit == 2 ? "A" : "B");
-                    menuOpen_ = false;
-                    menuHover_ = -1;
-                    suppressManipulationUntilRelease_ = true;
-                    std::cout << "VR " << planePickStatus_ << '\n';
-                    continue;
-                } else if (hit == 2) changed = toolConfig_.adjustSecondary(-1);
-                else if (hit == 3) changed = toolConfig_.adjustSecondary(1);
-                else if (hit == 4) changed = toolConfig_.cycleOption();
-                else if (hit == 5) changed = toolConfig_.toggleFlag();
-                else if (hit == 7) {
-                    if (toolConfig_.mode() == nadoc_vr::ToolMode::extrude) {
-                        freeformDraft_.clear();
-                        extrudePlane_.cycle();
-                        centerLatticePainting(true);
-                        changed = true;
-                    }
-                }
-                else if (hit == 8 && freeformAvailable()) {
-                    if (freeformDraft_.placed()) {freeformDraft_.clear();centerLatticePainting(true);}
-                    else { freeformDraft_.arm(); menuOpen_=false; latticeOpen_=false; }
-                    changed=true;
-                }
-                else {
-                    menuPage_ = MenuPage::tools;
-                    menuHover_ = -1;
-                }
-                if (changed) publishToolConfiguration();
-                continue;
-            }
-            if (menuPage_ == MenuPage::tools) {
-                if (toolShell_.executionPending()) {
-                    continue;
-                }
-                if (hit < 5) {
-                    const auto mode = static_cast<nadoc_vr::ToolMode>(hit);
-                    const auto capability = nadoc_vr::ToolShell::selectionCapability(
-                        mode, selectedSelectionKind_);
-                    if(capability==nadoc_vr::ToolCapability::unsupported) continue;
-                    toolShell_.activate(mode, selectedSelectionKind_);
-                    pendingToolTransform_.cancel();
-                    publishToolTransform();
-                    publishToolIntent(nadoc_vr::ToolAction::activate);
-                    if (mode != nadoc_vr::ToolMode::extrude) {
-                        latticeOpen_ = false;
-                        latticeHover_.reset();
-                        latticeExitHovered_ = false;
-                        latticePaintStroke_.reset();
-                        resetThumbwheels();
-                        extrudeLatticeDraft_.clear();
-                    }
-                    if (capability == nadoc_vr::ToolCapability::configuration_required) {
-                        if (toolConfig_.bind(
-                                mode, selectedIdentity_, selectedSelectionKind_,
-                                selectedOwnerTokens_)) {
-                            clearPlanePick();
-                            clearPlaneGuides();
-                            publishToolConfiguration();
-                        }
-                        menuPage_ = MenuPage::tool_config;
-                        menuHover_ = -1;
-                        if (mode == nadoc_vr::ToolMode::extrude) openExtrudeLattice();
-                    } else if (toolConfig_.clear()) {
-                        clearPlanePick();
-                        clearPlaneGuides();
-                        publishToolConfiguration();
-                    }
-                } else if (hit < 9) {
-                    const auto action = static_cast<nadoc_vr::ToolAction>(hit - 4);
-                    toolShell_.apply(action,
-                        toolShell_.mode()==nadoc_vr::ToolMode::extrude && toolConfig_.active()
-                            ? toolConfig_.targetSelectionKind() : selectedSelectionKind_,
-                        paintedExtrusionReady());
-                    if (action == nadoc_vr::ToolAction::confirm && toolShell_.mode() == nadoc_vr::ToolMode::extrude && !toolShell_.executionPending()) continue;
-                    if (action == nadoc_vr::ToolAction::preview &&
-                        toolShell_.previewRequested()) {
-                        pendingToolTransform_.activate();
-                        publishToolTransform();
-                    } else if (action == nadoc_vr::ToolAction::cancel) {
-                        freeformDraft_.clear();
-                        pendingToolTransform_.cancel();
-                        publishToolTransform();
-                    }
-                    publishToolIntent(action);
-                } else {
-                    returnToSidebar();
-                }
-                continue;
-            }
-            if (hit < 4) {
-                publishStyleRequest(
-                    static_cast<Representation>(hit), glScene_->coloring());
-            } else if (hit < 8) {
-                publishStyleRequest(
-                    glScene_->representation(), static_cast<Coloring>(hit - 4));
-            } else if (hit < 15) {
-                publishSelectionLevel(kSelectionLevels[hit - 8]);
-            } else if (hit == 15) {
-                menuPage_ = MenuPage::tools;
-                menuHover_ = -1;
-            } else if (hit == 16) {
-                recenterRequested_ = true;
-                recenterHand_ = hand;
-                menuOpen_ = false;
-                menuHover_ = -1;
-                suppressManipulationUntilRelease_ = true;
-            } else if (hit == 17) {
-                menuPage_ = MenuPage::trajectory;
-                menuHover_ = -1;
-            } else if (hit == 18) {
-                desktopPanel_.show(witnessObserverPosition_,witnessObserverOrientation_);
-                returnToSidebar();
-            }
-        }
-        return controlTargeted;
     }
 
     void updateControllerGuides() {
@@ -7844,9 +6928,6 @@ class Viewer {
             if(remotePanels_.rayPoints[hand])line(tip,*remotePanels_.rayPoints[hand],color*.55F);
             else if (const auto hit = sidebarMenus_.rayEndpoint(hands_[hand])) {
                 line(tip, *hit, color * 0.55F);
-            }
-            if (const auto panelHit = menuRayPanelLocalPoint(hands_[hand])) {
-                line(tip, menuPlacement_.worldPoint(*panelHit), color * 0.42F);
             }
             if (latticeOpen_ && hand == 1U) {
                 if (const auto panelHit = latticePlacement_.rayPanelLocalPoint(
@@ -8036,26 +7117,9 @@ class Viewer {
         volumePanel_.draw(manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},line);
         dimensionPanel_.tool.draw(manipulator_.transform(),normalizationScale_,witnessObserverOrientation_,line,
             [&](const auto&... args){appendPlacedText(args...);});
+        trajectoryPanel_.refresh(sidebarMenus_.menus,trajectoryState_);
         sidebarMenus_.draw();
         updateDesktopFrame();
-        const size_t menuGuideBegin = controllerGuides_.size();
-        appendMenuGuides();
-        if(menuOpen_) legacyMenuFocus_.draw(witnessMenuEntries(),line);
-        menuGuides_.assign(
-            controllerGuides_.begin() + static_cast<std::ptrdiff_t>(menuGuideBegin),
-            controllerGuides_.end());
-        controllerGuides_.resize(menuGuideBegin);
-        menuLocalGuides_.clear();
-        menuLocalGuides_.reserve(menuGuides_.size());
-        for (const Vertex& guide : menuGuides_) {
-            Vertex local = guide;
-            local.position = menuPlacement_.localPoint(guide.position);
-            menuLocalGuides_.push_back(local);
-        }
-        if (menuOpen_) {
-            menuPanelSurface_.update(
-                menuLocalGuides_, menuPanelBounds(), menuPage_ == MenuPage::desktop, frostedButtonFills<Vertex>(menuPlacement_, witnessMenuEntries(), menuPage_ == MenuPage::desktop));
-        }
         appendThumbwheelGuides();
         witnessActorGuideCount_ = controllerGuides_.size();
         if (witness_) {
@@ -8271,7 +7335,7 @@ class Viewer {
         extrudeConfirmation_=ExtrudeConfirmation{menu.offset(),latticeOpen_};
         if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
         menu.open=false;menu.focus.reset();menu.hovered.clear();menu.pressed.clear();
-        menuOpen_=false;menuOpenRequested_=false;radialToolMenu_.close();
+        radialToolMenu_.close();
         latticeOpen_=false;latticeHover_.reset();latticeExitHovered_=false;
         latticePaintStroke_.reset();latticeGrip_.cancel();resetThumbwheels();
         // Keep the submitted configuration untouched until the asynchronous
@@ -8364,7 +7428,7 @@ class Viewer {
         out<<",\"hands\":[";
         for(size_t h=0;h<2;++h) {if(h)out<<',';if(hands_[h].valid)pose(hands_[h].position,hands_[h].orientation);else out<<"null";}
         out<<"]";
-        if(showVRAvatar_ && shareActive_ && tracked)presenterUI_.write(out,controllerGuides_,witnessActorGuideCount_,sidebarMenus_,viewTools_,menuOpen_,menuPage_==MenuPage::desktop,menuPanelSurface_,desktopSurface_,menuPlacement_,menuPanelBounds(),desktopPanel_,desktopFrameSurface_);
+        if(showVRAvatar_ && shareActive_ && tracked)presenterUI_.write(out,controllerGuides_,witnessActorGuideCount_,sidebarMenus_,viewTools_,desktopSurface_,desktopPanel_,desktopFrameSurface_);
         out<<"}";
         avatarWriter_.publish(path,out.str());
     }
@@ -8831,9 +7895,6 @@ class Viewer {
             }
             return;
         }
-        requestedMenuPage_ = MenuPage::tool_config;
-        menuHand_ = 1U;
-        menuOpenRequested_ = true;
         suppressManipulationUntilRelease_ = true;
         pulse(1U, accepted ? 0.60F : 0.20F);
     }
@@ -8958,7 +8019,7 @@ class Viewer {
         }
         liveTrackpadPressed_.fill(false);
         liveTrackpadAxis_.fill(glm::vec2(0));
-        legacyMenuFocus_.focus.reset();
+        trajectoryScrubHand_.reset();
         for(auto& menu:sidebarMenus_.menus) menu.focus.reset();
         trackpadPressed_.fill(false);
         radialToolMenu_.close();
@@ -9067,6 +8128,11 @@ class Viewer {
             << ",\"parse_ms\":" << viewTools_.parseMs << ",\"upload_ms\":" << viewTools_.uploadMs << ",\"instances\":" << viewTools_.instanceCount() << ",\"lines\":" << viewTools_.lines.size()/2 << ",\"sprites\":" << viewTools_.sprites.size() << ",\"hover\":[" << viewTools_.hover[0] << ',' << viewTools_.hover[1] << "],\"items\":[";
         for(size_t i=0;i<VRViewTools::keys.size();++i){if(i)out<<',';out<<"{\"key\":"<<quote(VRViewTools::keys[i])<<",\"active\":"<<((viewTools_.flags&(1<<(i<7?i:i+1)))?"true":"false")<<",\"center\":"<<point(viewTools_.world(VRViewTools::cell(i)))<<'}';}
         out << "]}";
+        out << ",\"trajectory\":{\"panel_open\":" << (trajectoryPanel_.active && sidebarMenus_.menus[0].open?"true":"false")
+            << ",\"active\":" << (trajectoryState_.active?"true":"false")
+            << ",\"playing\":" << (trajectoryState_.playing?"true":"false")
+            << ",\"frame_index\":" << trajectoryState_.frameIndex << ",\"frame_count\":" << trajectoryState_.frameCount
+            << ",\"request_sequence\":" << trajectoryRequestSequence_ << '}';
         out << ",\"radial_edit\":{\"open\":" << (radialToolMenu_.open()?"true":"false")
             << ",\"hovered\":" << (radialToolMenu_.hovered()?std::to_string(*radialToolMenu_.hovered()):"null") << ",\"items\":[";
         for(size_t i=0;i<4;++i) {
@@ -9169,13 +8235,15 @@ class Viewer {
             << ",\"scene_revision\":" << sceneRefresh_.revision()
             << ",\"visualization_sequence\":" << visualizationSequence_
             << ",\"coordinate_sequence\":" << coordinateSequence_
-            << ",\"menu_input_mode\":" << quote(legacyMenuFocus_.focus.active?"trackpad":"pointer")
-            << ",\"menu_focus_hit\":" << quote(legacyMenuFocus_.focus.id)
+            << ",\"haptic_requests\":[" << hapticRequests_[0] << ',' << hapticRequests_[1] << ']'
+            << ",\"haptic_amplitude\":[" << hapticAmplitude_[0] << ',' << hapticAmplitude_[1] << ']'
+            << ",\"menu_input_mode\":" << quote(observedSidebar().focus.active?"trackpad":"pointer")
+            << ",\"menu_focus_hit\":" << quote(observedSidebar().focus.id)
             << ",\"representation\":" << quote(glScene_ ? representationName(glScene_->representation()) : "none")
             << ",\"layout\":" << quote(combinedMenuLayoutStatus())
-            << ",\"layout_detail\":" << quote(menuLayoutAudited_ ? menuLayoutAudit_.summary() : "")
-            << ",\"menu_position\":" << point(menuPlacement_.position())
-            << ",\"menu_docked\":" << (menuPlacement_.worldDocked() ? "true" : "false")
+            << ",\"layout_detail\":" << quote(sidebarMenus_.anyOpen() ? observedSidebar().audit.summary() : "")
+            << ",\"menu_position\":" << point(observedSidebar().placement.position())
+            << ",\"menu_docked\":" << (sidebarMenus_.anyOpen() && observedSidebar().placement.worldDocked() ? "true" : "false")
             << ",\"runtime_connected\":" << (instance_ != XR_NULL_HANDLE ? "true" : "false")
             << ",\"show_vr_model\":" << (showVRAvatar_?"true":"false")
             << ",\"head_position\":" << point(witnessObserverPosition_)
@@ -9252,7 +8320,7 @@ class Viewer {
             << ",\"wheel_notch_travel_m\":" << nadoc_vr::ThumbwheelControl::kNotchTravel * sidebarMenus_.menus[1].placement.scale()
             << ",\"base_pairs_per_detent\":" << nadoc_vr::latticeBasePairPeriod(latticeSquare_)
             << ",\"lattice_hit_radius_m\":" << latticeCellRadius() * 1.08F * latticePlacement_.scale()
-            << ",\"menu_scale\":" << menuPlacement_.scale()
+            << ",\"menu_scale\":" << observedSidebar().placement.scale()
             << ",\"panel_orientation_xyzw\":[" << latticePlacement_.orientation().x << ',' << latticePlacement_.orientation().y << ',' << latticePlacement_.orientation().z << ',' << latticePlacement_.orientation().w << ']'
             << ",\"panel_scale\":" << latticePlacement_.scale()
             << ",\"lattice_zoom\":" << latticeGrip_.zoom
@@ -9417,15 +8485,18 @@ class Viewer {
                     if (!(in >> panel >> edge)) throw std::runtime_error("missing border");
                     end();
                     const bool lattice = panel == "lattice";
-                    if ((!lattice && panel != "menu") || (lattice ? !latticeOpen_ : !menuOpen_)) throw std::runtime_error("panel unavailable");
-                    const auto bounds = lattice ? kLatticePanelBounds : menuPanelBounds();
+                    const bool sidebar=panel=="left" || panel=="right" || panel=="menu";
+                    const size_t sidebarHand=panel=="left"?0:panel=="right"?1:(sidebarMenus_.menus[1].open?1:0);
+                    const auto& menu=sidebarMenus_.menus[sidebarHand];
+                    if ((!lattice && !sidebar) || (lattice ? !latticeOpen_ : !menu.open)) throw std::runtime_error("panel unavailable");
+                    const auto bounds = lattice ? kLatticePanelBounds : menu.bounds();
                     glm::vec3 local((bounds.minimum.x + bounds.maximum.x) * 0.5F, (bounds.minimum.y + bounds.maximum.y) * 0.5F, 0.0F);
                     if (edge == "left") local.x = bounds.minimum.x;
                     else if (edge == "right") local.x = bounds.maximum.x;
                     else if (edge == "top") local.y = bounds.maximum.y;
                     else if (edge == "bottom") local.y = bounds.minimum.y;
                     else throw std::runtime_error("invalid edge");
-                    target = (lattice ? latticePlacement_ : menuPlacement_).worldPoint(local);
+                    target = (lattice ? latticePlacement_ : menu.placement).worldPoint(local);
                 }
                 const auto q = nadoc_vr::scrywrite::witnessAimOrientation(liveInput_.hands[h].position, target);
                 if (!q) throw std::runtime_error("coincident target");
@@ -9457,7 +8528,7 @@ class Viewer {
         for(auto& hand:hands_){hand.valid=false;hand.pressed=false;}
         // Preserve world placement while ending stale grabs behind the dashboard.
         manipulator_.update(hands_);
-        menuPlacement_.update(hands_);latticePlacement_.update(hands_);
+        latticePlacement_.update(hands_);
         desktopPanel_.placement.update(hands_);desktopPanel_.magnifying=false;desktopSurface_.hidePointer();
         viewTools_.placement.update(hands_);
         for(auto& menu:sidebarMenus_.menus)menu.placement.update(hands_);
@@ -9499,11 +8570,11 @@ class Viewer {
             witness_->advance({
                 menuPageName(), witnessHoverName(),
                 nadoc_vr::toolModeName(toolShell_.mode()), toolShell_.status(),
-                menuOpen_ ? (menuPlacement_.worldDocked() ? "docked" : "following")
-                          : "closed",
-                menuPlacement_.position(),
+                sidebarMenus_.anyOpen() ? (observedSidebar().placement.worldDocked() ? "docked" : "following")
+                                       : "closed",
+                observedSidebar().placement.position(),
                 combinedMenuLayoutStatus(),
-                menuLayoutAudited_ ? menuLayoutAudit_.summary() : "layout not rendered yet",
+                sidebarMenus_.anyOpen() ? observedSidebar().audit.summary() : "layout not rendered yet",
                 mirrorSourceInitialized_
                     ? (lastMirrorSubmittedEye_ ? "submitted" : "fallback")
                     : "pending",
@@ -9518,9 +8589,10 @@ class Viewer {
                 glScene_ ? representationName(glScene_->representation()) : "none",
             });
             resolveWitnessAim();
-            const auto bounds = menuPanelBounds();
+            const auto& menu=observedSidebar();
+            const auto bounds=menu.bounds();
             nadoc_vr::scrywrite::resolveWitnessMenuTouch(
-                *witness_, menuPlacement_, bounds.minimum, bounds.maximum, menuOpen_);
+                *witness_, menu.placement, bounds.minimum, bounds.maximum, menu.open);
             if (witness_->failed() && !witnessFailureReported_) {
                 std::cerr << "ScryWrite Witness " << witness_->status() << '\n';
                 witnessFailureReported_ = true;
@@ -9645,8 +8717,8 @@ class Viewer {
                     glm::length(desktopPanel_.placement.worldPoint(*local)-hands_[hand].position);
             }();
             const bool sidebarActive=!desktopActive && sidebarMenus_.scrollAt(hands_[hand]);
-            const bool focusActive=sidebarMenus_.menus[hand].focus.active || (menuOpen_ && menuHand_==hand && legacyMenuFocus_.focus.active);
-            const bool navigationMenuOpen=sidebarMenus_.menus[hand].open || (menuOpen_ && menuHand_==hand);
+            const bool focusActive=sidebarMenus_.menus[hand].focus.active;
+            const bool navigationMenuOpen=sidebarMenus_.menus[hand].open;
             if (touching && !focusActive && (desktopActive || sidebarActive)) {
                 const float y = glm::clamp(trackpadAxis.currentState.y, -1.0F, 1.0F);
                 if (!desktopTrackpadTouching_[hand]) {
@@ -9680,15 +8752,12 @@ class Viewer {
             }
 
             const glm::vec2 navigationAxis=liveControlsEnabled()?liveTrackpadAxis_[hand]:glm::vec2(trackpadAxis.currentState.x,trackpadAxis.currentState.y);
-            if(trackpadClicked && menuOpen_ && menuHand_==hand && legacyMenuFocus_.trackpad(witnessMenuEntries(),menuPageName(),menuHit(hands_[hand]),navigationAxis.x,navigationAxis.y)) {
-                pulse(hand,.12F);
-            } else if(trackpadClicked && sidebarMenus_.trackpad(hand, navigationAxis, hands_[hand])) {
+            if(trackpadClicked && sidebarMenus_.trackpad(hand, navigationAxis, hands_[hand])) {
                 pulse(hand,.12F);
             } else if (!desktopActive && !sidebarActive && trackpadClicked && !trackpadScrolled_[hand] && hand == 0U) {
                 publishSelectionLevel(nadoc_vr::nextTabSelectionLevel(selectionLevel_));
                 pulse(hand, 0.40F);
             } else if (!desktopActive && hand == 1U && trackpadClicked) {
-                menuHover_ = -1;
                 radialToolMenu_.open(hands_[hand], selectionVolumeCenter(hand));
                 (void)radialToolMenu_.update(selectionVolumeCenter(hand));
                 pulse(hand, 0.32F);
@@ -9700,7 +8769,7 @@ class Viewer {
                 if (trackpadReleased) {
                     if (hover) {
                         activateRadialEdit(*hover);
-                        pulse(hand, 0.62F);
+                        if(*hover<2) pulse(hand, 0.62F);
                     }
                     radialToolMenu_.close();
                     trackpadScrolled_[hand] = false;
@@ -9709,7 +8778,7 @@ class Viewer {
         }
 
         if(componentGallery_.active) {
-            menuOpen_=false;for(auto& menu:sidebarMenus_.menus)menu.open=false;
+            for(auto& menu:sidebarMenus_.menus)menu.open=false;
             componentGallery_.update(hands_,triggerClicked_,triggerPressed_,frameDeltaSeconds_,witnessObserverPosition_,witnessObserverOrientation_);
             updateControllerGuides();return;
         }
@@ -9760,40 +8829,6 @@ class Viewer {
                 menuGripTargeted[*latticePlacement_.dragHand()] = true;
             }
         }
-        if (menuOpen_ && std::none_of(
-                menuGripTargeted.begin(), menuGripTargeted.end(),
-                [](bool targeted) { return targeted; })) {
-            const auto bounds = menuPanelBounds();
-            const float panelHalfWidth = (bounds.maximum.x - bounds.minimum.x) * 0.5F;
-            // Update a followed/grabbed panel before proximity checks so those
-            // checks use the controller poses from this OpenXR frame.
-            menuPlacement_.update(hands_, panelHalfWidth);
-            const bool gripStarted = gripClicked_[0] || gripClicked_[1];
-            if (!menuPlacement_.resizeActive() && gripStarted &&
-                menuPlacement_.beginBorderResize(
-                    hands_, bounds.minimum, bounds.maximum)) {
-                suppressManipulationUntilRelease_ = true;
-                pulse(0, 0.52F);
-                pulse(1, 0.52F);
-            }
-            if (!menuPlacement_.resizeActive() && !menuPlacement_.dragHand()) {
-                for (size_t hand = 0; hand < hands_.size(); ++hand) {
-                    if (gripClicked_[hand] && menuPlacement_.beginDrag(
-                            hand, hands_, bounds.minimum, bounds.maximum,
-                            menuPage_ == MenuPage::desktop)) {
-                        suppressManipulationUntilRelease_ = true;
-                        pulse(hand, 0.48F);
-                        break;
-                    }
-                }
-            }
-            menuPlacement_.update(hands_, panelHalfWidth);
-            if (menuPlacement_.resizeActive()) menuGripTargeted.fill(true);
-            if (menuPlacement_.dragHand()) {
-                menuGripTargeted[*menuPlacement_.dragHand()] = true;
-            }
-        }
-
         for(size_t h=0;h<2;++h)menuGripTargeted[h]=menuGripTargeted[h]||remoteBlocked[h];
         const nadoc_vr::ManipulationMode previous = manipulator_.mode();
         if (suppressManipulationUntilRelease_ &&
@@ -9837,25 +8872,19 @@ class Viewer {
         auto wheelTargeted = processThumbwheelInput(remoteBlocked);
         for(size_t h=0;h<2;++h)wheelTargeted[h]=wheelTargeted[h]||remoteBlocked[h];
         processBendWheel(wheelTargeted);
-        std::array<float,2> legacyDistance{1e9F,1e9F};
-        if(menuOpen_) for(size_t hand=0;hand<2;++hand) {
-            auto p=menuRayPanelLocalPoint(hands_[hand]);
-            if(p) legacyDistance[hand]=glm::length(menuPlacement_.worldPoint(*p)-hands_[hand].position);
-        }
+        std::array<float,2> foregroundDistance{1e9F,1e9F};
         if(viewTools_.open)for(size_t h=0;h<2;++h)if(auto uv=viewTools_.hit(hands_[h]))
-            legacyDistance[h]=std::min(legacyDistance[h],glm::length(viewTools_.world(*uv)-hands_[h].position));
+            foregroundDistance[h]=std::min(foregroundDistance[h],glm::length(viewTools_.world(*uv)-hands_[h].position));
         for(size_t h=0;h<2;++h)if(auto p=desktopPanel_.hit(hands_[h]))
-            legacyDistance[h]=std::min(legacyDistance[h],glm::length(desktopPanel_.placement.worldPoint(*p)-hands_[h].position));
+            foregroundDistance[h]=std::min(foregroundDistance[h],glm::length(desktopPanel_.placement.worldPoint(*p)-hands_[h].position));
         auto sidebarBlocked=wheelTargeted;
         for(size_t h=0;h<2;++h)sidebarBlocked[h]=sidebarBlocked[h]||volumeTargeted[h];
-        if(menuOpen_ && legacyMenuFocus_.focus.active) sidebarBlocked[menuHand_]=true;
-        auto sidebarTargeted = sidebarMenus_.input(hands_, triggerClicked_, triggerPressed_, sidebarBlocked, legacyDistance,glfwGetTime(),
+        sidebarBlocked=processTrajectoryInput(sidebarBlocked,foregroundDistance);
+        auto sidebarTargeted = sidebarMenus_.input(hands_, triggerClicked_, triggerPressed_, sidebarBlocked, foregroundDistance,glfwGetTime(),
             [&](const std::string& action, size_t hand) { activateSidebarAction(action,hand); });
         std::array<bool, 2> menuControlTargeted = sidebarTargeted;
         for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h]||volumeTargeted[h];
-        if(menuOpen_ && legacyMenuFocus_.focus.active) menuControlTargeted[menuHand_]=wheelTargeted[menuHand_]||volumeTargeted[menuHand_]||remoteBlocked[menuHand_];
         menuControlTargeted = processDesktopInput(menuControlTargeted);
-        if (menuOpen_) menuControlTargeted = processMenuInput(menuControlTargeted);
         for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h] || wheelTargeted[h] || latticeGripTargeted[h];
         const auto latticeTargeted = processLatticeInput(menuControlTargeted);
         for (size_t hand = 0; hand < menuControlTargeted.size(); ++hand) {
@@ -9929,7 +8958,7 @@ class Viewer {
             }
             if (freeformDraft_.armed()) {
                 if (freeformDraft_.capture(hands_[hand],extrudePlane_.plane,manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})) {
-                    latticeOpen_=true; if(extrudePanel_.active) sidebarMenus_.menus[1].open=true; else {requestedMenuPage_=MenuPage::tool_config; menuOpenRequested_=true;}
+                    latticeOpen_=true; sidebarMenus_.menus[1].open=true;
                     publishToolConfiguration();
                 }
                 continue;
@@ -10432,33 +9461,6 @@ class Viewer {
         glScene_->setToolPreview(preview?selectedOwnerTokens_:std::vector<std::string>{},pendingToolTransform_.transform());
     }
 
-    void applyPendingMenu(uint32_t viewCount) {
-        if (!menuOpenRequested_ || viewCount == 0) return;
-        glm::vec3 headPosition{};
-        for (uint32_t i = 0; i < viewCount; ++i) {
-            headPosition += glm::vec3(
-                views_[i].pose.position.x,
-                views_[i].pose.position.y,
-                views_[i].pose.position.z);
-        }
-        headPosition /= static_cast<float>(viewCount);
-        const XrQuaternionf& orientation = views_[0].pose.orientation;
-        const glm::quat headOrientation = glm::normalize(glm::quat(
-            orientation.w, orientation.x, orientation.y, orientation.z));
-        const glm::vec3 fallbackPosition = headPosition
-            + headOrientation * glm::vec3(0.0F, 0.04F, -1.00F);
-        menuPlacement_.open(
-            menuHand_, hands_, fallbackPosition, headOrientation);
-        menuOpen_ = true;
-        menuPage_ = requestedMenuPage_;
-        requestedMenuPage_ = MenuPage::options;
-        menuOpenRequested_ = false;
-        menuHover_ = -1;
-        menuHoverTargets_.fill(-1);
-        pulse(menuHand_, 0.30F);
-        updateControllerGuides();
-    }
-
     void applyPendingRecenter(uint32_t viewCount) {
         if (!recenterRequested_ || viewCount == 0) return;
         glm::vec3 headPosition{};
@@ -10478,91 +9480,6 @@ class Viewer {
         pulse(recenterHand_, 0.55F);
         recenterRequested_ = false;
         updateControllerGuides();
-    }
-
-    void updateMenuComfortTelemetry(uint32_t viewCount) {
-        const bool docked = menuOpen_ && menuPlacement_.worldDocked();
-        if (menuOpen_ != menuTelemetryOpen_ ||
-            (menuOpen_ && (docked != menuTelemetryDocked_ ||
-                           menuPage_ != menuTelemetryPage_))) {
-            const auto& cache = menuPanelSurface_.stats();
-            std::cout << "VR_METRIC event=process_progress phase=menu_state"
-                      << " menu_open=" << (menuOpen_ ? "true" : "false")
-                      << " page=" << menuPageName()
-                      << " placement=" << (!menuOpen_ ? "closed" : docked ? "docked" : "following")
-                      << " depth_mode=world_depth_tested"
-                      << " backing=" << (menuPage_ == MenuPage::desktop ? "desktop" : "opaque")
-                      << " cache_updates=" << cache.updates
-                      << " cache_hits=" << cache.hits
-                      << std::endl;
-            menuTelemetryOpen_ = menuOpen_;
-            menuTelemetryDocked_ = docked;
-            menuTelemetryPage_ = menuPage_;
-            menuComfortTracker_.reset();
-            menuNearestEyeMinimum_ = std::numeric_limits<float>::infinity();
-        }
-        if (!menuOpen_ || viewCount == 0) return;
-
-        std::array<glm::vec3, 2> eyes{};
-        if (witness_) {
-            const auto& head = witness_->input().head;
-            const glm::vec3 halfIpd = head.orientation * glm::vec3(0.032F, 0.0F, 0.0F);
-            eyes = {head.position - halfIpd, head.position + halfIpd};
-        } else {
-            for (size_t index = 0; index < eyes.size(); ++index) {
-                const uint32_t viewIndex = std::min<uint32_t>(
-                    static_cast<uint32_t>(index), viewCount - 1U);
-                eyes[index] = {
-                    views_[viewIndex].pose.position.x,
-                    views_[viewIndex].pose.position.y,
-                    views_[viewIndex].pose.position.z,
-                };
-            }
-        }
-        const nadoc_vr::HandPose* controller = nullptr;
-        const size_t anchor = menuPlacement_.anchorHand();
-        if (anchor < hands_.size() && hands_[anchor].valid) controller = &hands_[anchor];
-        const auto sample = menuComfortTracker_.sample(
-            menuPlacement_, menuPanelBounds(), eyes, controller, frameDeltaSeconds_);
-        menuNearestEyeMinimum_ = std::min(
-            menuNearestEyeMinimum_, sample.nearestEyeMeters);
-        const bool report = menuNearestEyeTiming_.add(sample.nearestEyeMeters);
-        (void)menuAngularVelocityTiming_.add(
-            sample.menuAngularVelocityDegreesPerSecond);
-        (void)menuControllerJitterTiming_.add(sample.controllerJitterMillimeters);
-        (void)menuControllerAngularJitterTiming_.add(
-            sample.controllerAngularJitterDegrees);
-        (void)menuControllerDeltaTiming_.add(sample.controllerPoseDeltaMillimeters);
-        if (!report) return;
-
-        const auto nearest = menuNearestEyeTiming_.takeSummary();
-        const auto angular = menuAngularVelocityTiming_.takeSummary();
-        const auto jitter = menuControllerJitterTiming_.takeSummary();
-        const auto angularJitter = menuControllerAngularJitterTiming_.takeSummary();
-        const auto controllerDelta = menuControllerDeltaTiming_.takeSummary();
-        if (!nearest || !angular || !jitter || !angularJitter || !controllerDelta) return;
-        const auto& cache = menuPanelSurface_.stats();
-        std::cout << "VR_METRIC event=process_progress phase=menu_comfort"
-                  << " menu_open=true"
-                  << " page=" << menuPageName()
-                  << " placement=" << (docked ? "docked" : "following")
-                  << " samples=" << nearest->samples
-                  << " nearest_eye_m_min=" << menuNearestEyeMinimum_
-                  << " nearest_eye_m_p50=" << nearest->p50Milliseconds
-                  << " menu_angular_velocity_deg_s_p95=" << angular->p95Milliseconds
-                  << " controller_pose_delta_mm_p95=" << controllerDelta->p95Milliseconds
-                  << " controller_jitter_mm_p95=" << jitter->p95Milliseconds
-                  << " controller_angular_jitter_deg_p95="
-                  << angularJitter->p95Milliseconds
-                  << " cache_updates=" << cache.updates
-                  << " cache_hits=" << cache.hits
-                  << " cache_last_update_ms=" << cache.lastUpdateMilliseconds
-                  << " texture_width=" << cache.width
-                  << " texture_height=" << cache.height
-                  << " texture_samples=" << cache.samples
-                  << " guide_vertices=" << cache.guideVertices
-                  << std::endl;
-        menuNearestEyeMinimum_ = std::numeric_limits<float>::infinity();
     }
 
     void applyInitialScenePlacement(uint32_t viewCount, bool fullyTracked) {
@@ -10683,21 +9600,6 @@ class Viewer {
                 p.worldPoint({b.maximum.x,b.minimum.y,.004F})}},desktopPanel_.magnifying);
             desktopFrameSurface_.render(viewProjection,p,desktopPanel_.chromeBounds(),.008F);
         }
-        if (!menuOpen_) return;
-        const auto bounds = menuPanelBounds();
-        if (menuPage_ == MenuPage::desktop) {
-            desktopSurface_.render(viewProjection, {{
-                menuWorld(bounds.minimum.x, bounds.maximum.y, 0.004F),
-                menuWorld(bounds.minimum.x, bounds.minimum.y, 0.004F),
-                menuWorld(bounds.maximum.x, bounds.maximum.y, 0.004F),
-                menuWorld(bounds.maximum.x, bounds.minimum.y, 0.004F),
-            }});
-            menuPanelSurface_.render(
-                viewProjection, menuPlacement_, bounds, 0.008F);
-        } else {
-            menuPanelSurface_.render(
-                viewProjection, menuPlacement_, bounds, 0.002F);
-        }
     }
 
     void renderVolumeScene(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,bool ids=false) {
@@ -10777,7 +9679,7 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (componentGallery_.active || menuOpen_ || latticeOpen_ || sidebarMenus_.anyOpen() || viewTools_.open || desktopPanel_.open) {
+        if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || viewTools_.open || desktopPanel_.open) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             renderMenuSurface(viewProjection);
         }
@@ -11197,7 +10099,7 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (componentGallery_.active || menuOpen_ || latticeOpen_ || sidebarMenus_.anyOpen() || viewTools_.open || desktopPanel_.open) {
+        if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || viewTools_.open || desktopPanel_.open) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             renderMenuSurface(viewProjection);
         }
@@ -11269,7 +10171,7 @@ class Viewer {
                         nadoc_vr::toolModeName(toolShell_.mode()),
                         toolShell_.status(),
                         combinedMenuLayoutStatus(),
-                        menuLayoutAudited_ ? menuLayoutAudit_.summary()
+                        sidebarMenus_.anyOpen() ? observedSidebar().audit.summary()
                                            : "layout not rendered yet",
                     };
                     const auto result = nadoc_vr::scrywrite::writeActorEyeCapture(
@@ -11371,7 +10273,7 @@ class Viewer {
                     views_[0].pose.orientation.w, views_[0].pose.orientation.x,
                     views_[0].pose.orientation.y, views_[0].pose.orientation.z));
                 const bool quiverEnabled=validViewSet && positionTracked && orientationTracked &&
-                    sessionState_==XR_SESSION_STATE_FOCUSED && !menuOpen_ && !menuOpenRequested_ &&
+                    sessionState_==XR_SESSION_STATE_FOCUSED &&
                     !sidebarMenus_.menus[0].open && !sidebarMenus_.menus[1].open && !radialToolMenu_.open() &&
                     !ligation_.waiting && !endResize_.waitingVersion && !toolShell_.executionPending() &&
                     !ligation_.hand && !endResize_.hand && !movePanel_.active && !volumePanel_.active &&
@@ -11388,15 +10290,13 @@ class Viewer {
                 const XrQuaternionf& head = views_[0].pose.orientation;
                 const glm::quat headOrientation(head.w, head.x, head.y, head.z);
                 if (frameState.shouldRender && validViewSet) {
-                    applyPendingMenu(viewCount);
                     applyPendingRecenter(viewCount);
                 }
                 const auto keyLight = shadowLight_.update(
                     headOrientation, validViewSet && orientationTracked);
                 if (frameState.shouldRender && validViewSet) {
-                    updateMenuComfortTelemetry(viewCount);
                     frameAudit_.mark("tracking_ui");
-                    gpuFrameTimer_.begin(menuOpen_);
+                    gpuFrameTimer_.begin(sidebarMenus_.anyOpen());
                     if (witness_) {
                         const auto actorKeyLight = witnessShadowLight_.update(
                             witness_->input().head.orientation);
@@ -11551,49 +10451,19 @@ class Viewer {
             auto next = nadoc_vr::loadJobSnapshot(jobPath_);
             if (next.sequence <= jobSnapshotSequence_) return;
 
-            std::string selectedEngine;
-            std::string selectedJobId;
-            if (selectedJobIndex_ < jobs_.size()) {
-                selectedEngine = jobs_[selectedJobIndex_].engine;
-                selectedJobId = jobs_[selectedJobIndex_].jobId;
-            }
-            const bool desktopActiveChanged =
-                next.activeEngine != desktopActiveJobEngine_ ||
-                next.activeJobId != desktopActiveJobId_;
-            jobsSnapshotAvailable_ = next.available;
-            jobsSnapshotTotal_ = next.total;
             jobSnapshotSequence_ = next.sequence;
-            jobSnapshotUpdatedAtMs_ = next.updatedAtMs;
-            desktopActiveJobEngine_ = std::move(next.activeEngine);
-            desktopActiveJobId_ = std::move(next.activeJobId);
             if (!next.representation.empty()) {
                 desktopRepresentation_ = std::move(next.representation);
                 desktopColoring_ = std::move(next.coloring);
             }
-            jobs_ = std::move(next.rows);
 
             // Style is presentation state and is applied atomically with the
             // visualization snapshot. The jobs feed retains these fields only for
             // backward-compatible metadata; applying them here races the geometry.
 
-            const std::string targetEngine = desktopActiveChanged
-                ? desktopActiveJobEngine_ : selectedEngine;
-            const std::string targetJobId = desktopActiveChanged
-                ? desktopActiveJobId_ : selectedJobId;
-            const auto selected = std::find_if(
-                jobs_.begin(), jobs_.end(), [&](const nadoc_vr::JobSnapshotRow& row) {
-                    return row.engine == targetEngine && row.jobId == targetJobId;
-                });
-            if (selected != jobs_.end()) {
-                selectedJobIndex_ = static_cast<size_t>(selected - jobs_.begin());
-                if (desktopActiveChanged) jobPage_ = selectedJobIndex_ / 5U;
-            } else {
-                selectedJobIndex_ = 0;
-                if (menuPage_ == MenuPage::job_detail) menuPage_ = MenuPage::jobs;
-            }
         } catch (const std::exception&) {
             // Atomic publication makes this rare. Retain the last complete
-            // revision; its visible age tells the user the desktop link is stale.
+            // metadata revision until the next complete publication.
         }
     }
 
@@ -11784,7 +10654,7 @@ class Viewer {
                      "both grips at a border: resize panel; "
                      "trigger: Selection Volume snap/select; hold right trackpad: Ligate/Nick/Undo/Redo wheel; "
                      "left trackpad: cycle selection level; "
-                     "menu: options; Escape: exit.\n";
+                     "menu: sidebar; Escape: exit.\n";
         if (mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off) {
             std::cout << "NADOC VR desktop spectator: physical HMD "
                       << nadoc_vr::spectatorMirrorEyeName(mirrorEye_)
@@ -11881,10 +10751,7 @@ class Viewer {
     std::string visualizationPath_;
     std::string trajectoryPath_;
     std::string coordinatePath_;
-    bool jobsSnapshotAvailable_ = false;
-    int jobsSnapshotTotal_ = 0;
     uint64_t jobSnapshotSequence_ = 0;
-    uint64_t jobSnapshotUpdatedAtMs_ = 0;
     uint32_t jobSnapshotPollFrame_ = 0;
     nadoc_vr::VisualizationSnapshot visualizationSnapshot_;
     uint64_t visualizationSequence_ = 0;
@@ -11900,8 +10767,6 @@ class Viewer {
     uint64_t coordinateSequence_ = 0;
     uint64_t coordinateUpdateCount_ = 0;
     uint64_t coordinateSequenceGaps_ = 0;
-    std::string desktopActiveJobEngine_;
-    std::string desktopActiveJobId_;
     std::string desktopRepresentation_;
     std::string desktopColoring_;
     nadoc_vr::SpectatorMirrorEye mirrorEye_ = nadoc_vr::SpectatorMirrorEye::off;
@@ -11920,7 +10785,6 @@ class Viewer {
     std::string witnessVisualExpectationDirectory_;
     bool exitOnWitnessComplete_ = false;
     std::ofstream mirrorDiagnosticsOutput_;
-    std::vector<nadoc_vr::JobSnapshotRow> jobs_;
     glm::vec3 normalizationCenter_{};
     float normalizationScale_ = 1.0F;
     uint64_t eventSequence_ = 0;
@@ -12042,6 +10906,8 @@ class Viewer {
     XrTime lastActionDisplayTime_ = 0;
     float frameDeltaSeconds_ = 1.0F / 90.0F;
     std::array<bool, 2> gripPressed_{false, false};
+    std::array<uint64_t,2> hapticRequests_{};
+    std::array<float,2> hapticAmplitude_{};
     std::array<bool, 2> gripClicked_{false, false};
     std::array<bool, 2> trackpadPressed_{false, false};
     std::array<bool, 2> trackpadScrolled_{false, false};
@@ -12066,11 +10932,7 @@ class Viewer {
     std::optional<size_t> controllerContactWheel_;
     std::vector<Vertex> controllerPathGuides_;
     std::array<std::vector<Vertex>,2> controllerContactGuides_;
-    std::vector<Vertex> menuGuides_;
-    std::vector<Vertex> menuLocalGuides_;
     size_t witnessActorGuideCount_ = 0;
-    nadoc_vr::MenuLayoutAudit menuLayoutAudit_;
-    bool menuLayoutAudited_ = false;
     std::vector<Vertex> referenceGridGuides_;
     std::optional<nadoc_vr::scrywrite::WitnessReplay> witness_;
     nadoc_vr::scrywrite::WitnessSurface witnessSurface_;
@@ -12103,29 +10965,16 @@ class Viewer {
     bool latticeSquare_ = false;
     std::array<nadoc_vr::ThumbwheelControl,2> thumbwheelControls_;
     std::optional<size_t> thumbwheelHovered_,thumbwheelHand_;
-    bool menuOpen_ = false;
-    MenuPage menuPage_ = MenuPage::options;
-    MenuPage requestedMenuPage_ = MenuPage::options;
-    bool menuOpenRequested_ = false;
     bool suppressManipulationUntilRelease_ = false;
-    int menuHover_ = -1;
-    std::array<int, 2> menuHoverTargets_{-1, -1};
-    std::optional<size_t> trajectoryScrubHand_;
-    uint32_t trajectoryScrubFrame_ = 0;
-    size_t jobPage_ = 0;
-    size_t selectedJobIndex_ = 0;
-    nadoc_vr::MenuPlacement menuPlacement_;
     RoomFloor roomFloor_;
     QrCalibration qrCalibration_;
     FrostedGlass menuGlass_;
-    MenuPanelSurface menuPanelSurface_;
     MenuPanelSurface latticePanelSurface_;
     nadoc_vr::MenuLayoutAudit latticeLayoutAudit_;
     SidebarRuntime sidebarMenus_;
     nadoc_vr::ViewVolumePanel volumePanel_;
     nadoc_vr::DimensionPanel dimensionPanel_;
     nadoc_vr::DimensionSync dimensionSync_;
-    nadoc_vr::MenuFocusList legacyMenuFocus_;
     nadoc_vr::LatestAtomicFile avatarWriter_;
     nadoc_vr::OrderedAtomicFile eventWriter_;
     nadoc_vr::FrameAudit frameAudit_;
@@ -12134,17 +10983,6 @@ class Viewer {
     nadoc_vr::LoadingFrameTrace renderTrace_{"VR_RENDER_TRACE"};
     void traceRender(const char* phase){frameAudit_.mark(phase);renderTrace_.mark(phase,representationLoading_.percent,representationName(representationLoading_.target));}
     GpuFrameTimer gpuFrameTimer_;
-    nadoc_vr::MenuComfortTracker menuComfortTracker_;
-    nadoc_vr::TimingWindow menuNearestEyeTiming_{120};
-    nadoc_vr::TimingWindow menuAngularVelocityTiming_{120};
-    nadoc_vr::TimingWindow menuControllerJitterTiming_{120};
-    nadoc_vr::TimingWindow menuControllerAngularJitterTiming_{120};
-    nadoc_vr::TimingWindow menuControllerDeltaTiming_{120};
-    float menuNearestEyeMinimum_ = std::numeric_limits<float>::infinity();
-    bool menuTelemetryOpen_ = false;
-    bool menuTelemetryDocked_ = false;
-    MenuPage menuTelemetryPage_ = MenuPage::options;
-    size_t menuHand_ = 0;
     bool recenterRequested_ = false;
     size_t recenterHand_ = 0;
     XrSessionState sessionState_ = XR_SESSION_STATE_UNKNOWN;
@@ -12167,6 +11005,9 @@ class Viewer {
     int shareSequence_=0,shareAck_=0;
     std::string shareAction_;
     nadoc_vr::SimulationPanel simulationPanel_;
+    nadoc_vr::TrajectoryPanel trajectoryPanel_;
+    std::optional<size_t> trajectoryScrubHand_;
+    uint32_t trajectoryScrubFrame_=0;
     VRViewTools viewTools_;
 };
 

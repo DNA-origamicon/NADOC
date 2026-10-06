@@ -127,11 +127,24 @@ scrywrite-witness SCENE="native/vr_viewer/examples/triangle.nadocvr" SCRIPT="nat
     env XR_RUNTIME_JSON="$HOME/.local/share/Steam/steamapps/common/SteamVR/steamxr_linux64.json" native/vr_viewer/build/nadoc-vr-viewer {{SCENE}} --mirror-eye {{EYE}} --reference-grid {{GRID}} --scrywrite-witness {{SCRIPT}}
 
 # Capture and validate the five-state live menu timeline, then attach it in Playwright.
-scrywrite-menu-trace CAPTURES="/tmp/nadoc-scry-menu-trace" SCENE="native/vr_viewer/examples/triangle.nadocvr" EYE="left":
+scrywrite-menu-trace CAPTURES="" SCENE="native/vr_viewer/examples/triangle.nadocvr" EYE="left":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    capture_dir={{quote(CAPTURES)}}
+    if [[ -z "$capture_dir" ]]; then capture_dir=$(mktemp -d /tmp/nadoc-scry-menu-trace.XXXXXX); fi
+    capture_dir=$(realpath -m "$capture_dir")
+    mkdir -p "$capture_dir"
+    shopt -s nullglob dotglob
+    capture_entries=("$capture_dir"/*)
+    if (( ${#capture_entries[@]} )); then
+        echo "Capture directory must be empty: $capture_dir" >&2
+        exit 1
+    fi
     env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake -S native/vr_viewer -B native/vr_viewer/build -G Ninja -DCMAKE_BUILD_TYPE=Release
     env PATH=/usr/bin:/bin cmake --build native/vr_viewer/build --target nadoc-vr-viewer
-    env -u LD_LIBRARY_PATH XR_RUNTIME_JSON="$HOME/.local/share/Steam/steamapps/common/SteamVR/steamxr_linux64.json" native/vr_viewer/build/nadoc-vr-viewer {{SCENE}} --mirror-eye {{EYE}} --reference-grid off --scrywrite-witness native/vr_viewer/examples/scrywrite_witness_menu_capture.scry --witness-captures {{CAPTURES}} --witness-visual-expect native/vr_viewer/examples/visual --witness-exit on
-    cd frontend && SCRYWRITE_WITNESS_CAPTURE_DIR={{CAPTURES}} npx playwright test --config playwright.scrywrite.config.js witness_artifacts.spec.js --trace on
+    env -u LD_LIBRARY_PATH XR_RUNTIME_JSON="$HOME/.local/share/Steam/steamapps/common/SteamVR/steamxr_linux64.json" native/vr_viewer/build/nadoc-vr-viewer {{quote(SCENE)}} --mirror-eye {{quote(EYE)}} --reference-grid off --scrywrite-witness native/vr_viewer/examples/scrywrite_witness_menu_capture.scry --witness-captures "$capture_dir" --witness-exit on
+    cd frontend
+    SCRYWRITE_WITNESS_CAPTURE_DIR="$capture_dir" npx playwright test --config playwright.scrywrite.config.js witness_artifacts.spec.js --trace on
 
 # Report locally available API layers/profilers/frame debuggers.
 vr-diagnostics-check:

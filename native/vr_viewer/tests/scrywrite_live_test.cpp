@@ -73,6 +73,257 @@ struct LiveViewerTest {
             return p.placement==&tools.placement;
         }),"Closed ViewTools retained a remote grip target");
     }
+    static void verifySidebarSpawnView() {
+        auto witness=[](Viewer& v) {
+            std::istringstream script("SCRYWRITE_WITNESS 1\nhead 1 2 3 0.70710678 0 0.70710678 0\nstep 100\n");
+            v.witness_.emplace(nadoc_vr::scrywrite::WitnessReplay::load(script));
+            v.witness_->advance({});
+            v.witnessObserverPosition_={-3,.5F,4};
+            v.witnessObserverOrientation_={1,0,0,0};
+        };
+        auto verify=[](const Viewer& v,size_t hand,glm::vec3 position,glm::quat orientation) {
+            const auto& menu=v.sidebarMenus_.menus[hand];
+            const auto expected=position+orientation*glm::vec3(hand==0?-.24F:.24F,-.10F,-.60F);
+            requireLive(menu.open && glm::distance(menu.placement.position(),expected)<1e-5F &&
+                        std::abs(glm::dot(menu.placement.orientation(),orientation))>1.F-1e-5F,
+                        "Sidebar spawned relative to the wrong viewing head");
+        };
+        for(size_t hand:{0U,1U})for(bool scripted:{false,true}) {
+            Viewer v(SceneData{});
+            v.witnessObserverPosition_={-3,.5F,4};
+            v.witnessObserverOrientation_=glm::angleAxis(.3F,glm::vec3(0,1,0));
+            if(scripted)witness(v);
+            v.toggleSidebar(hand);
+            if(scripted)verify(v,hand,v.witness_->input().head.position,v.witness_->input().head.orientation);
+            else verify(v,hand,v.witnessObserverPosition_,v.witnessObserverOrientation_);
+        }
+        for(size_t hand:{0U,1U})for(bool tabRoute:{false,true}) {
+            Viewer v(SceneData{});witness(v);
+            if(tabRoute)v.openSidebarTab(hand,hand==0?"vr":"tools");
+            else v.toggleMenu(hand);
+            verify(v,hand,v.witness_->input().head.position,v.witness_->input().head.orientation);
+        }
+        for(size_t tool=0;tool<4;++tool) {
+            Viewer v(SceneData{});witness(v);v.selectedSelectionKind_="cluster";
+            v.activateAuthoringTool(tool);
+            verify(v,1,v.witness_->input().head.position,v.witness_->input().head.orientation);
+        }
+    }
+    static void verifyRadialHistoryAndCurrentPanels() {
+        // Record the real pulse request while witness mode suppresses OpenXR IO.
+        auto witness=[](Viewer& v) {
+            std::istringstream script("SCRYWRITE_WITNESS 1\nstep 100\n");
+            v.witness_.emplace(nadoc_vr::scrywrite::WitnessReplay::load(script));
+            v.ligation_.version=7;
+        };
+        for(size_t action:{2U,3U})for(bool open:{false,true}) {
+            Viewer v(SceneData{});witness(v);
+            if(open) {
+                v.activateAuthoringTool(0);
+                v.sidebarMenus_.menus[0].open=true;
+                v.desktopPanel_.open=v.viewTools_.open=true;
+            }
+            const auto mode=v.toolShell_.mode();
+            const auto configuration=v.toolConfig_.mode();
+            const auto rightTab=v.sidebarMenus_.menus[1].tab().key;
+            v.activateRadialEdit(action);
+            requireLive(v.ligation_.sequence==1 && v.ligation_.waiting &&
+                        v.ligation_.committedAction==(action==2?"undo":"redo") &&
+                        v.ligation_.committedVersion==7,"Radial history did not publish the requested command");
+            requireLive(v.hapticRequests_[0]==0 && v.hapticRequests_[1]==1 &&
+                        v.hapticAmplitude_[1]>.5F,"Radial history did not confirm once on the right controller");
+            requireLive(v.sidebarMenus_.menus[0].open==open && v.sidebarMenus_.menus[1].open==open &&
+                        v.extrudePanel_.active==open && v.latticeOpen_==open &&
+                        v.desktopPanel_.open==open && v.viewTools_.open==open &&
+                        !v.movePanel_.active && !v.bendPanel_.active && !v.volumePanel_.active &&
+                        !v.dimensionPanel_.tool.active && !v.radialToolMenu_.open(),
+                        "Radial history opened or replaced an interface");
+            requireLive(v.toolShell_.mode()==mode && v.toolConfig_.mode()==configuration &&
+                        v.sidebarMenus_.menus[1].tab().key==rightTab,
+                        "Radial history changed the active tool or its sidebar");
+            const auto state=v.liveState();
+            requireLive(state.find("\"haptic_requests\":[0,1]")!=std::string::npos,
+                        "History confirmation is missing from live evidence");
+            v.activateRadialEdit(action);
+            requireLive(v.ligation_.sequence==1 && v.hapticRequests_[1]==1,
+                        "Pending history replayed the command or confirmation");
+        }
+        for(size_t item=0;item<4;++item) {
+            Viewer v(SceneData{});witness(v);v.selectedSelectionKind_="cluster";
+            v.activateAuthoringTool(item);
+            const auto tab=v.sidebarMenus_.menus[1].tab().key;
+            nadoc_vr::ToolExecutionFeedback feedback;
+            feedback.mode=nadoc_vr::toolModeName(v.toolShell_.mode());
+            feedback.action="confirm";feedback.status="succeeded";
+            v.toolShell_.applyExecutionFeedback(feedback);
+            const auto action=tab+":undo";
+            v.activateSidebarAction(action,0);
+            requireLive(v.toolShell_.executionPending() && v.toolShell_.status()=="UNDOING" &&
+                        v.hapticRequests_[0]==1 && v.hapticRequests_[1]==0,
+                        "Tool-panel Undo did not dispatch and vibrate the activating controller");
+            requireLive(v.sidebarMenus_.menus[1].open && v.sidebarMenus_.menus[1].tab().key==tab &&
+                        !v.sidebarMenus_.menus[0].open,"Tool-panel Undo replaced its current sidebar");
+            v.activateSidebarAction(action,0);
+            requireLive(v.hapticRequests_[0]==1,"Pending tool Undo repeated its confirmation");
+        }
+        {
+            Viewer v(SceneData{});witness(v);v.ligation_.version=0;
+            v.activateRadialEdit(2);
+            requireLive(v.ligation_.sequence==0 && v.hapticRequests_[1]==0 && !v.sidebarMenus_.anyOpen(),
+                        "Unavailable Undo confirmed or opened a menu");
+        }
+        {
+            Viewer v(SceneData{});witness(v);v.selectedSelectionKind_="cluster";
+            v.activateAuthoringTool(3);
+            nadoc_vr::ToolExecutionFeedback feedback;feedback.mode="move_rotate";
+            feedback.action="confirm";feedback.status="succeeded";
+            v.toolShell_.applyExecutionFeedback(feedback);
+            auto& menu=v.sidebarMenus_.menus[1];
+            menu.placement.openDocked({0,0,-1},{1,0,0,0});
+            const auto controls=menu.controls(false);
+            const auto undo=std::find_if(controls.begin(),controls.end(),[](const auto& c){return c.id=="move:undo";});
+            requireLive(undo!=controls.end(),"Move Undo control missing");
+            v.hands_[0].valid=true;v.hands_[0].orientation={1,0,0,0};
+            const auto center=(undo->bounds.minimum+undo->bounds.maximum)*.5F;
+            v.hands_[0].position=menu.placement.worldPoint({center,.4F});
+            const auto blocked=v.sidebarMenus_.input(v.hands_,{true,false},{true,false},{},
+                {1e9F,1e9F},0,[&](const std::string& action,size_t hand){v.activateSidebarAction(action,hand);});
+            requireLive(blocked[0] && v.toolShell_.status()=="UNDOING" &&
+                        v.hapticRequests_[0]==2 && v.hapticRequests_[1]==0 && v.hapticAmplitude_[0]>.5F,
+                        "Cross-hand Undo confirmed the panel owner instead of the activating controller");
+            requireLive(menu.open && menu.tab().key=="move" && !v.sidebarMenus_.menus[0].open,
+                        "Cross-hand Undo opened another menu");
+        }
+        for(size_t item:{0U,1U}) {
+            Viewer v(SceneData{});witness(v);v.selectionLevel_="cluster";
+            v.activateRadialEdit(item);
+            requireLive(v.ligation_.active==(item==0) && v.ligation_.nickActive==(item==1) &&
+                        v.selectionLevel_==(item==0?"end":"base"),"Radial edit did not select its current mode");
+            requireLive(!v.sidebarMenus_.anyOpen() && !v.latticeOpen_ && !v.desktopPanel_.open &&
+                        !v.viewTools_.open,"Radial selection opened a menu");
+            v.activateRadialEdit(item);
+            requireLive(!v.ligation_.active && !v.ligation_.nickActive && v.selectionLevel_=="cluster" &&
+                        !v.sidebarMenus_.anyOpen(),"Radial toggle did not restore selection without a menu");
+        }
+        for(const auto& route:std::array<std::pair<const char*,const char*>,4>{{
+                {"options","vr"},{"tools","tools"},{"settings","tools"},{"jobs","dynamics"}}}) {
+            Viewer v(SceneData{});witness(v);
+            v.activateSidebarAction(route.first,1);
+            const size_t hand=std::string(route.second)=="tools"?1:0;
+            requireLive(v.sidebarMenus_.menus[hand].open &&
+                        v.sidebarMenus_.menus[hand].tab().key==route.second &&
+                        !v.sidebarMenus_.menus[1-hand].open,"Navigation did not route to the current sidebar tab");
+            requireLive(std::string(v.menuPageName())=="sidebars","Current sidebar reported an obsolete menu page");
+        }
+        for(const auto* level:{"default","cluster","strand","domain","end","xover","base"}) {
+            Viewer v(SceneData{});witness(v);
+            v.activateSidebarAction(std::string("select:")+level,1);
+            requireLive(v.selectionLevel_==level && !v.sidebarMenus_.anyOpen() && !v.latticeOpen_ &&
+                        !v.desktopPanel_.open && !v.viewTools_.open,"Selection action opened a menu");
+        }
+        Viewer v(SceneData{});witness(v);v.activateAuthoringTool(3);
+        v.activateSidebarAction("unknown:action",1);
+        requireLive(v.movePanel_.active && v.sidebarMenus_.menus[1].open &&
+                    v.sidebarMenus_.menus[1].tab().key=="move" && !v.sidebarMenus_.menus[0].open,
+                    "Unknown action replaced the current panel");
+    }
+    static void verifyTrajectoryLauncherWithBothSidebars() {
+        for(size_t hand:{0U,1U})for(bool selected:{false,true}) {
+            Viewer v(SceneData{});
+            std::istringstream script("SCRYWRITE_WITNESS 1\nstep 100\n");
+            v.witness_.emplace(nadoc_vr::scrywrite::WitnessReplay::load(script));
+            v.witnessObserverPosition_={0,1.6F,0};
+            v.simulationPanel_.bind(v.sidebarMenus_.menus[0],&v.sidebarMenus_.menus[1]);
+            v.simulationPanel_.selected=selected;
+            v.openSidebarTab(0,"dynamics");
+            v.sidebarMenus_.toggle(1,v.witnessObserverPosition_,v.witnessObserverOrientation_);
+            auto& left=v.sidebarMenus_.menus[0];
+            auto& right=v.sidebarMenus_.menus[1];
+            const auto controls=left.controls(false);
+            const auto launcher=std::find_if(controls.begin(),controls.end(),[](const auto& c){return c.id=="sim:trajectory";});
+            requireLive(launcher!=controls.end(),"Simulations trajectory launcher missing");
+            const auto center=(launcher->bounds.minimum+launcher->bounds.maximum)*.5F;
+            v.hands_[hand].valid=true;v.hands_[hand].orientation=left.placement.orientation();
+            v.hands_[hand].position=left.placement.worldPoint({center,.4F});
+            v.triggerClicked_[hand]=v.triggerPressed_[hand]=true;
+            const auto before=right.placement.position();
+            const auto remote=v.remotePanels_.update(v.remotePanelTargets(),v.hands_,
+                v.triggerClicked_,v.triggerPressed_,v.witnessObserverPosition_,0);
+            requireLive(!remote[hand] && !v.remotePanels_.active && right.placement.position()==before,
+                        "Default adjacent sidebar border stole the trajectory launcher click");
+            const auto blocked=v.sidebarMenus_.input(v.hands_,v.triggerClicked_,v.triggerPressed_,remote,
+                {1e9F,1e9F},0,[&](const std::string& action,size_t actor){v.activateSidebarAction(action,actor);});
+            requireLive(blocked[hand] && v.trajectoryPanel_.active && left.tab().key=="trajectory" &&
+                        left.open && right.open,"Trajectory launcher was unreachable with both default sidebars open");
+        }
+    }
+    static void verifyTrajectorySidebar(const std::string& directory) {
+        Viewer v(SceneData{},directory+"/trajectory-events.json");
+        std::istringstream script("SCRYWRITE_WITNESS 1\nstep 100\n");
+        v.witness_.emplace(nadoc_vr::scrywrite::WitnessReplay::load(script));
+        v.trajectoryState_.active=true;v.trajectoryState_.frameCount=11;v.trajectoryState_.frameIndex=5;
+        v.activateSidebarAction("trajectory",1);
+        auto& menu=v.sidebarMenus_.menus[0];
+        requireLive(v.trajectoryPanel_.active && menu.open && menu.tab().key=="trajectory" &&
+                    !v.sidebarMenus_.menus[1].open,"Playback did not open the current left sidebar panel");
+        v.activateSidebarAction("trajectory:play",1);
+        requireLive(v.trajectoryAction_=="play" && v.trajectoryRequestSequence_==1,"Playback command not published");
+        v.trajectoryState_.playing=true;v.activateSidebarAction("trajectory:play",1);
+        requireLive(v.trajectoryAction_=="pause" && v.trajectoryRequestSequence_==2,"Pause command not published");
+        v.activateSidebarAction("trajectory:previous",1);
+        requireLive(v.trajectoryAction_=="seek" && v.trajectoryRequestedFrameIndex_==4,"Previous frame not published");
+        v.activateSidebarAction("trajectory:next",1);
+        requireLive(v.trajectoryRequestedFrameIndex_==6,"Next frame not published");
+        v.trajectoryState_.frameIndex=0;v.activateSidebarAction("trajectory:previous",1);
+        requireLive(v.trajectoryRequestedFrameIndex_==0,"Previous frame underflowed");
+        v.trajectoryState_.frameIndex=10;v.activateSidebarAction("trajectory:next",1);
+        requireLive(v.trajectoryRequestedFrameIndex_==10,"Next frame overflowed");
+        menu.placement.openDocked({0,0,-1},{1,0,0,0});
+        const auto controls=menu.controls(false);
+        const auto seek=std::find_if(controls.begin(),controls.end(),[](const auto& c){return c.id=="trajectory:seek";});
+        requireLive(seek!=controls.end(),"Playback seek control missing");
+        auto& hand=v.hands_[1];hand.valid=true;hand.orientation={1,0,0,0};
+        const float y=(seek->bounds.minimum.y+seek->bounds.maximum.y)*.5F;
+        const float middle=(seek->bounds.minimum.x+seek->bounds.maximum.x)*.5F;
+        hand.position=menu.placement.worldPoint({middle,y,.4F});
+        v.triggerPressed_[1]=v.triggerClicked_[1]=true;
+        const auto before=v.trajectoryRequestSequence_;
+        for(const float x:{seek->bounds.minimum.x-.04F,seek->bounds.maximum.x+.04F}) {
+            hand.position=menu.placement.worldPoint({x,y,.4F});
+            requireLive(!v.processTrajectoryInput({},{1e9F,1e9F})[1] && !v.trajectoryScrubHand_ &&
+                        v.trajectoryRequestSequence_==before,
+                        "Blank space outside the visible timeline started a seek");
+        }
+        hand.position=menu.placement.worldPoint({middle,y,.4F});
+        menu.focus.begin("trajectory:play","");
+        requireLive(!v.processTrajectoryInput({},{1e9F,1e9F})[1] &&
+                    v.trajectoryRequestSequence_==before,"Cross-hand ray stole focused playback input");
+        menu.focus.reset();
+        requireLive(!v.processTrajectoryInput({},{1e9F,.1F})[1] &&
+                    v.trajectoryRequestSequence_==before,"Seek leaked through a foreground panel");
+        requireLive(v.processTrajectoryInput({},{1e9F,1e9F})[1] && v.trajectoryScrubHand_==1 &&
+                    v.trajectoryRequestedFrameIndex_==5 && v.trajectoryRequestSequence_==before+1,
+                    "Production ray did not acquire and publish timeline seek");
+        v.triggerClicked_[1]=false;
+        v.processTrajectoryInput({},{1e9F,1e9F});
+        requireLive(v.trajectoryRequestSequence_==before+1,"Stationary held seek published repeatedly");
+        hand.position=menu.placement.worldPoint({seek->bounds.maximum.x,y,.4F});
+        v.processTrajectoryInput({},{1e9F,1e9F});
+        requireLive(v.trajectoryRequestedFrameIndex_==10 && v.trajectoryRequestSequence_==before+2,
+                    "Held timeline drag did not reach the last frame");
+        v.processTrajectoryInput({false,true},{1e9F,1e9F});
+        requireLive(!v.trajectoryScrubHand_,"Blocked timeline retained the trigger");
+        v.triggerClicked_[1]=true;v.processTrajectoryInput({},{1e9F,1e9F});
+        v.triggerPressed_[1]=false;v.processTrajectoryInput({},{1e9F,1e9F});
+        requireLive(!v.trajectoryScrubHand_,"Released timeline retained the trigger");
+        v.trajectoryState_.active=false;
+        const auto inactive=v.trajectoryRequestSequence_;v.activateSidebarAction("trajectory:play",1);
+        requireLive(v.trajectoryRequestSequence_==inactive,"Inactive trajectory accepted playback command");
+        v.activateSidebarAction("trajectory:back",1);
+        requireLive(!v.trajectoryPanel_.active && menu.open && menu.tab().key=="dynamics" &&
+                    !menu.customTab && !v.sidebarMenus_.menus[1].open,
+                    "Playback Back did not restore the current Simulations sidebar");
+    }
     static void verifyVRTabActions() {
         Viewer v(SceneData{});
         auto& left=v.sidebarMenus_.menus[0];
@@ -94,7 +345,7 @@ struct LiveViewerTest {
         requireLive(!v.shadowLight_.headFollowing() && !v.witnessShadowLight_.headFollowing() && left.open,
                     "VR lighting toggle did not disable or closed sidebar");
         activate("vr-desktop");
-        requireLive(left.open&&v.desktopPanel_.open&&!v.menuOpenRequested_,"Desktop must pop out independently of sidebar");
+        requireLive(left.open&&v.desktopPanel_.open,"Desktop must pop out independently of sidebar");
         const auto b=v.desktopPanel_.content(),c=v.desktopPanel_.closeBounds();
         requireLive(c.minimum.y>v.desktopPanel_.bounds().maximum.y && c.minimum.y>b.maximum.y,"Close overlaps desktop pixels or outer frame");
         v.desktopPanel_.placement.openDocked({0,0,-1},glm::quat(1,0,0,0));
@@ -129,24 +380,12 @@ struct LiveViewerTest {
         v.triggerClicked_[1]=true;v.processDesktopInput({});
         requireLive(!v.desktopPanel_.open&&left.open,"Closing desktop must preserve hand menu");
         requireLive(!v.exitRequested_,"View desktop requested VR exit");
-        for(auto page:{Viewer::MenuPage::trajectory,Viewer::MenuPage::jobs}) {
-            left.open=false;v.menuOpen_=true;v.menuOpenRequested_=false;v.menuPage_=page;
-            v.menuPlacement_.openDocked({0,0,-1},glm::quat(1,0,0,0));
-            const auto item=page==Viewer::MenuPage::desktop?v.desktopBackItem():page==Viewer::MenuPage::trajectory?v.kTrajectoryMenuItems[4]:v.kJobsMenuItems[7];
-            v.hands_[1].valid=true;
-            v.hands_[1].orientation=glm::quat(1,0,0,0);
-            v.hands_[1].position=v.menuPlacement_.worldPoint({item.x,item.y,0})+glm::vec3(0,0,.4F);
-            v.triggerClicked_[1]=v.triggerPressed_[1]=true;
-            v.menuHoverTargets_[1]=static_cast<int>(page)*1000+(page==Viewer::MenuPage::desktop?0:page==Viewer::MenuPage::trajectory?4:7);
-            v.processMenuInput();
-            requireLive(!v.menuOpen_&&left.open&&left.tab().key=="vr","Back opened obsolete options instead of original sidebar tab");
-        }
         left.open=true;activate("vr-exit");
         requireLive(v.exitRequested_&&!v.exitLoop_,"Exit VR must request normal session shutdown");
-        v.menuOpen_=v.latticeOpen_=v.viewTools_.open=v.desktopPanel_.open=true;
+        v.latticeOpen_=v.viewTools_.open=v.desktopPanel_.open=true;
         v.sidebarMenus_.menus[1].open=true;
         const auto panels=v.remotePanelTargets();
-        for(auto* placement:{&left.placement,&v.sidebarMenus_.menus[1].placement,&v.menuPlacement_,
+        for(auto* placement:{&left.placement,&v.sidebarMenus_.menus[1].placement,
                 &v.latticePlacement_,&v.viewTools_.placement,&v.desktopPanel_.placement})
             requireLive(std::any_of(panels.begin(),panels.end(),[&](auto p){return p.placement==placement;}),
                 "A VR window was omitted from shared remote border handling");
@@ -273,7 +512,6 @@ struct LiveViewerTest {
             v.triggerPressed_[h] = v.liveInput_.triggerPressed[h];
         }
         auto blocked = v.processThumbwheelInput({});
-        if (v.menuOpen_) blocked = v.processMenuInput(blocked);
         v.processLatticeInput(blocked);
     }
     static void serve(Viewer& v) {
@@ -365,8 +603,7 @@ struct LiveViewerTest {
             requireLive(v.toolConfig_.lengthBp()==0,"negative extrusion length");
         }
         v.latticeSquare_=false;
-        v.menuOpen_=false;
-        requireLive(v.thumbwheelAvailable(),"wheel still requires legacy menu");
+        requireLive(v.thumbwheelAvailable(),"Extrude sidebar did not expose its wheels");
         auto wheel=v.liveTargets();
         auto wheelEntry=std::find_if(wheel.begin(),wheel.end(),[](const auto& e){return e.label=="EXTRUDE LENGTH WHEEL";});
         requireLive(wheelEntry!=wheel.end(),"coarse wheel compatibility locator undiscoverable");
@@ -672,6 +909,9 @@ int main(int argc, char** argv) {
         LiveViewerTest::verifyDashboardFocusLoss();
         LiveViewerTest::verifyViewToolsFrameSeam();
         LiveViewerTest::verifyVRTabActions();
+        LiveViewerTest::verifySidebarSpawnView();
+        LiveViewerTest::verifyRadialHistoryAndCurrentPanels();
+        LiveViewerTest::verifyTrajectoryLauncherWithBothSidebars();
         if (argc == 4 && std::string(argv[2]) == "--serve") {
             Viewer viewer(loadScene(argv[1]));
             LiveViewerTest::setup(viewer, argv[3]);
@@ -680,13 +920,14 @@ int main(int argc, char** argv) {
         }
         char directory[] = "/tmp/nadoc-scry-test-XXXXXX";
         if (!::mkdtemp(directory)) return 2;
+        LiveViewerTest::verifyTrajectorySidebar(directory);
         const auto socket = std::string(directory) + "/viewer.sock";
         {
             Viewer viewer(loadScene(argv[1]));
             LiveViewerTest::setup(viewer, socket);
             LiveViewerTest::checks(viewer);
         }
-        std::filesystem::remove(directory);
+        std::filesystem::remove_all(directory);
         std::cout << "Live viewer control/Extrude checks passed (no runtime or GL).\n";
         return 0;
     } catch (const std::exception& error) {

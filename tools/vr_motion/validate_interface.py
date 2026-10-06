@@ -39,8 +39,6 @@ def run(socket, output):
         for hand in (0, 1):
             if probe.state.get('sidebars', [{}, {}])[hand].get('open'):
                 probe.button('menu', hand=hand)
-        if probe.state['menu'] != 'closed':
-            probe.button('menu')
         anchor, _ = probe.capture('anchor')
         trace = demonstration(anchor['eyes'][0])
         (output/'desired.motion.json').write_text(json.dumps(trace))
@@ -79,36 +77,32 @@ def run(socket, output):
         probe.frame()
         probe.button('menu', hand=1)
         report['checks']['menu_button_opens'] = probe.state['menu'] == 'sidebars'
-        # Enter the ordinary detailed controls through the right Tools tab.
-        for identifier in ('tab:tools', 'vr-options'):
-            control = next(c for c in probe.state['controls'] if c.get('sidebar') == 'right' and c.get('id') == identifier)
-            probe.send('aim_menu', hand=1, label=control['label'])
-            probe.frame()
-            probe.button('trigger')
-        target = next(c for c in probe.state['controls'] if c['label'] == 'TOOLS')
-        probe.send('aim_menu', hand=1, label='TOOLS')
+        target = next(c for c in probe.state['controls']
+                      if c.get('sidebar') == 'right' and c.get('id') == 'tab:tools')
+        probe.send('aim_menu', hand=1, label=target['label'])
         probe.frame()
         good = probe.state['hands'][1]
+        previous_tab = probe.state['sidebars'][1]['tab']
         # Reverse the ray: no panel in front, no target activation expected.
         q = good['orientation_xyzw']
         probe.send('pose', hand=1, position=good['position'], orientation=multiply(q, [0, 1, 0, 0]))
         probe.frame()
-        target = next(c for c in probe.state['controls'] if c['label'] == 'TOOLS')
         miss = target_metrics(target, probe.state['hands'][1])
-        miss['hover'] = probe.state['hover']
+        miss['hover'] = probe.state['sidebars'][1]['hover_id']
         probe.button('trigger')
-        miss['menu_after_click'] = probe.state['menu']
-        report['checks']['miss_rejected'] = not miss['predicted_hit'] and miss['hover'] != 'tools' and probe.state['menu'] == 'options'
+        miss['tab_after_click'] = probe.state['sidebars'][1]['tab']
+        report['checks']['miss_rejected'] = (not miss['predicted_hit']
+            and miss['hover'] != 'tab:tools' and miss['tab_after_click'] == previous_tab)
         probe.send('pose', hand=1, position=good['position'], orientation=q)
         probe.frame()
-        target = next(c for c in probe.state['controls'] if c['label'] == 'TOOLS')
         hit = target_metrics(target, probe.state['hands'][1])
-        hit['hover'] = probe.state['hover']
+        hit['hover'] = probe.state['sidebars'][1]['hover_id']
         probe.capture('menu-target')
         probe.button('trigger')
-        hit['menu_after_click'] = probe.state['menu']
-        report['checks']['target_activated'] = hit['predicted_hit'] and hit['hover'] == 'tools' and probe.state['menu'] == 'tools'
-        report['target_trials'] = {'label': 'TOOLS', 'target': target, 'miss': miss, 'hit': hit}
+        hit['tab_after_click'] = probe.state['sidebars'][1]['tab']
+        report['checks']['target_activated'] = (hit['predicted_hit']
+            and hit['hover'] == 'tab:tools' and hit['tab_after_click'] == 'tools')
+        report['target_trials'] = {'label': target['label'], 'target': target, 'miss': miss, 'hit': hit}
         probe.capture('menu-result')
         probe.button('menu', hand=1)
         report['interaction_counts'] = {'intended_hits': 1, 'successful_hits': int(report['checks']['target_activated']),
