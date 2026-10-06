@@ -228,3 +228,21 @@ describe('cluster panel — style round trip', () => {
     expect(swatchBg(rows()[0])).toBe('#ff0000')
   })
 })
+
+it('repairs unassigned components once and disables repair in assemblies', async () => {
+  mountDom()
+  const button = document.createElement('button')
+  button.id = 'cluster-repair-btn'; document.body.append(button)
+  const store = createMockStore({ currentDesign: design(), selection: { items: [] } })
+  let finish
+  const api = { clusterUnassignedComponents: vi.fn(() => new Promise(resolve => { finish = resolve })) }
+  initClusterPanel(store, { onClusterClick: () => {}, api })
+  button.click(); button.click()
+  expect(api.clusterUnassignedComponents).toHaveBeenCalledOnce()
+  expect(button.disabled).toBe(true)
+  finish(); await Promise.resolve(); await Promise.resolve()
+  expect(button.disabled).toBe(false)
+  store.setState({ assemblyActive: true })
+  expect(button.disabled).toBe(true)
+  document.body.innerHTML = ''
+})

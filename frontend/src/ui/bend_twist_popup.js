@@ -8,6 +8,8 @@
  * angles increase counter-clockwise (standard math convention).
  */
 
+import { createToolPopup } from './tool_popup.js'
+import { el } from './primitives/dom.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
 import { store } from '../state/store.js'
 import { validateDeformation } from '../api/client.js'
@@ -18,6 +20,9 @@ import {
 
 // ── DOM refs (grabbed once on init) ─────────────────────────────────────────
 
+let _floating = null
+let _pickingHint = null
+const _pickingDisabled = new Map()
 let _popup        = null
 let _title        = null
 let _twistCtrl    = null
@@ -125,10 +130,15 @@ export function polymerBendSpanBp(design, planeA, planeB) {
  * @param {{ onPreview, onConfirm, onCancel }} callbacks
  */
 export function initBendTwistPopup(callbacks) {
+  _floating?.dispose()
+  _pickingDisabled.clear()
   _callbacks = callbacks
 
   _popup      = document.getElementById('deform-panel')
   _title      = document.getElementById('def-panel-title')
+  _floating = createToolPopup({ panel: _popup, title: 'Twist', onClose: () => { _hide(); _callbacks?.onCancel() } })
+  _pickingHint = el('p', { className: 'tool-picking-hint', attrs: { 'aria-live': 'polite', hidden: true } })
+  _popup.prepend(_pickingHint)
   _twistCtrl  = document.getElementById('def-twist-controls')
   _bendCtrl   = document.getElementById('def-bend-controls')
   _twistValue = document.getElementById('def-twist-value')
@@ -269,8 +279,10 @@ export function initBendTwistPopup(callbacks) {
 export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClusterIds = null,
                           skipInitialPreview = false) {
   if (!_popup) return
+  _restorePickingControls()
   _toolType = toolType
 
+  _floating?.setTitle(toolType === 'twist' ? 'Twist' : 'Bend')
   _title.textContent = toolType === 'twist' ? 'Twist' : 'Bend'
   _twistCtrl.style.display = toolType === 'twist' ? '' : 'none'
   _bendCtrl.style.display  = toolType === 'bend'  ? '' : 'none'
@@ -339,7 +351,7 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
   }
 
   _previewChk.checked = true
-  _popup.style.display = 'block'
+  _floating?.show()
   // In edit mode the op is already applied to the design, so an initial preview
   // would just re-compute identical geometry (a wasted round-trip). Preview fires
   // on the first slider change instead.
@@ -366,6 +378,38 @@ export function setPlanePositions(bpA, bpB) {
   _fireValidate()  // plane drag in the 3D scene changes the window → re-check
 }
 
+function _restorePickingControls() {
+  for (const [control, disabled] of _pickingDisabled) control.disabled = disabled
+  _pickingDisabled.clear()
+  for (const node of [_twistCtrl, _bendCtrl, _clusterSection]) if (node) node.inert = false
+  if (_pickingHint) _pickingHint.hidden = true
+}
+
+/** Keep the tool window present while its reference planes are being picked. */
+export function showPickingPopup(toolType, planeA = null) {
+  if (!_popup) return
+  _restorePickingControls()
+  _toolType = null
+  clearTimeout(_validateTimer)
+  _floating?.setTitle(toolType === 'twist' ? 'Twist' : 'Bend')
+  _title.textContent = toolType === 'twist' ? 'Twist' : 'Bend'
+  _twistCtrl.style.display = toolType === 'twist' ? '' : 'none'
+  _bendCtrl.style.display = toolType === 'bend' ? '' : 'none'
+  _planeABp.value = planeA ?? ''
+  _planeBBp.value = ''
+  _planeANm.textContent = planeA == null ? 'Not selected' : `${(planeA * BDNA_RISE_PER_BP).toFixed(2)} nm`
+  _planeBNm.textContent = 'Not selected'
+  _pickingHint.textContent = planeA == null ? 'Select plane A (fixed) in the 3D view, then plane B.' : 'Plane A selected. Select plane B in the 3D view to enable the parameters.'
+  _pickingHint.hidden = false
+  for (const control of _popup.querySelectorAll('input, select, button')) {
+    if (control === _cancelBtn) continue
+    _pickingDisabled.set(control, control.disabled)
+    control.disabled = true
+  }
+  for (const node of [_twistCtrl, _bendCtrl, _clusterSection]) if (node) node.inert = true
+  _floating?.show()
+}
+
 export function closePopup() {
   _hide()
 }
@@ -373,7 +417,8 @@ export function closePopup() {
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function _hide() {
-  if (_popup) _popup.style.display = 'none'
+  _restorePickingControls()
+  _floating?.hide()
   _toolType = null
   clearTimeout(_validateTimer)
   if (_feasibility) { _feasibility.style.display = 'none'; _feasibility.textContent = '' }

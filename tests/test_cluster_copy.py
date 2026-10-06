@@ -469,15 +469,14 @@ def test_paste_of_real_design_validates_clean():
 # ── Trap 1: the reconciler must not steal the pasted helices ──────────────────
 #
 # `reconcile_cluster_membership` assigns a NEW helix to a pre-existing cluster when
-# a lattice neighbour within Manhattan distance 2 belongs to one.  A paste that
+# a canonical lattice neighbour belongs to one.  A paste that
 # lands close to its source therefore gets swept into the SOURCE's membership
 # unless the mutation reports the pasted helices as explicit orphans.
 
 
 @pytest.fixture
 def adjacent_paste_design() -> Design:
-    """One helix at (0,0); a Δ=(0,+2) paste lands at Manhattan distance 2 — inside
-    the reconciler's neighbour radius, which is exactly when theft happens."""
+    """A parity-preserving paste two columns away is not a canonical neighbor."""
     return Design(
         lattice_type=LatticeType.HONEYCOMB,
         helices=[_helix("hA", 0, 0)],
@@ -486,16 +485,15 @@ def adjacent_paste_design() -> Design:
     )
 
 
-def test_reconcile_without_orphan_hint_steals_pasted_helices(adjacent_paste_design):
-    """Pins WHY the hint is needed — this is the bug, reproduced."""
+def test_reconcile_without_orphan_hint_does_not_steal_non_neighbor_paste(adjacent_paste_design):
+    """Distance-two proximity alone must no longer absorb pasted helices."""
     before = adjacent_paste_design.model_copy(deep=True)
     out, pasted, _ = paste_clusters(adjacent_paste_design, ["cA"], (0, 2))
 
     reconciled = reconcile_cluster_membership(before, out, None)  # no hint
     by_id = {c.id: c for c in reconciled.cluster_transforms}
-    assert set(by_id["cA"].helix_ids) == {"hA", *pasted}, (
-        "expected the source cluster to absorb the pasted helix without a hint"
-    )
+    assert by_id["cA"].helix_ids == ["hA"]
+    assert set(reconciled.cluster_transforms[-1].helix_ids) == set(pasted)
 
 
 def test_reconcile_with_orphan_hint_leaves_pasted_helices_alone(adjacent_paste_design):

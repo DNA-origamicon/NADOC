@@ -1226,6 +1226,56 @@ Reaching 100% is functional success, not evidence of comfortable frame delivery.
 37 files. Archive index updated, original removed only after verification; archived
 job loads successfully. Audit: `.development-artifacts/archive-recovery-cube-pore-20261003/`.
 
+## ISSUE-53 — Backend FAST environment failures during tool validation (2026-10-04, OPEN)
+
+Reproduced with `just test-smart`: 9,633 passed, 19 failed, 17 skipped. Ten VR
+representation tests require missing `native/vr_viewer/build/nadoc-vr-viewer`;
+seven photoproduct review tests require an unavailable external definition-review
+packet; VR startup rejects this WSL host; CPD snapshot-refresh preservation fails
+its coordinate comparison. These failures are outside the design-tool changes.
+Evidence: `.development-artifacts/tool-selection-clear-20261004/backend.log`.
+Next: reproduce in the relevant environment/fixtures; investigate the CPD
+comparison without updating locked scientific geometry or its reference data.
+The 186 s aggregate runtime warning has no per-test violators (maximum 4.06 s);
+the run overlapped the frontend suite. Slow-test triage made no classifications
+or budget changes because no individual heavy test was identified.
+
+
+Linear-pattern validation follow-up (2026-10-04): `just test-smart` chose **FAST**;
+9,640 passed, the same 19 failures, 17 skipped, 243.15 s. FULL remains deferred.
+Six timing flags occurred while the backend, frontend and browser suites competed
+for CPU. Isolated `just test-focused` reruns all passed below 5 s per test
+(including setup); no marker or budget changes were warranted:
+
+| Test | Contended call (s) | Isolated call (s) | Work measured |
+|---|---:|---:|---|
+| `test_undo_cap_enforced_for_large_assembly` | 8.64 | 1.59 | 15 history snapshots of 2,000 instances |
+| `test_display_route_surfaces_extension_tails` | 6.65 | 1.41 | 6HB routing and mocked relaxation display |
+| `test_teeth_spec_matches_hand_calls` | 5.79 | 0.80 | Two equivalent bundle/extrusion builds |
+| `test_prepare_excludes_both_extra_bases_topology_exactly` | 5.78 | 1.47 | Small atomistic export and mocked solvation |
+| `test_display_route_surfaces_extra_bases` | 5.70 | 1.40 | 6HB routing and mocked relaxation display |
+| `test_namd_bundle_zip_contents` | 5.05 | 0.51 | 6HB atomistic PDB/PSF archive generation |
+
+Evidence: `.development-artifacts/linear-pattern-test-smart.log` and
+`.development-artifacts/linear-pattern-timing-triage.log`. No broad rerun was
+needed to re-diagnose the already-known missing-environment failures.
+
+Custom-vector/UI follow-up: FAST has 9,644 passes, the same 19 failures, and
+17 skips (115.65 s pytest / 121 s guard). FULL remains deferred. The timing report
+has no per-test violators (maximum 4.39 s across 9,680 cases); the frontend suite
+ran afterward. Slow-test triage found aggregate suite cost rather than an
+individual over-budget test, so no classifications or budget changes were made.
+Evidence: `.development-artifacts/linear-pattern-custom-smart.log`.
+
+
+## ISSUE-54 — Pattern confirmation treated rejected requests as success (2026-10-04, FIXED)
+
+[x] `createCircularPattern` previously passed `_request`'s null failure through the
+sync helper. The tool then closed its preview as though creation had succeeded.
+Circular and linear request wrappers now reject with the recorded backend error,
+so the panel retains its inputs and preview for correction. Covered by
+`frontend/src/api/pattern_requests.test.js` and the linear panel rejection test.
+
 ## ISSUE-56 — VR Extrude Confirm leaves editing windows open; menu text collides or fades (2026-10-05, FIXED)
 
 - [x] Accepted Confirm dismisses the painter and right-hand menu immediately, freezes the submitted target/configuration, and clears the successful draft while retaining feature-bound Undo. Failed/refused commits restore the draft with fresh validation.

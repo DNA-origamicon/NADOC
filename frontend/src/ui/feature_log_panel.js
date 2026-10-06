@@ -1,3 +1,4 @@
+import { editPatternFeature, isPatternFeature } from './pattern_feature_editor.js'
 /**
  * Feature Log panel — unified timeline of geometry operations with a vertical
  * notch slider for seeking to any prior feature state.
@@ -1400,16 +1401,17 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
           'bundle-create', 'extrude-segment', 'extrude-continuation',
           'extrude-deformed-continuation', 'overhang-extrude',
         ])
+        const isPattern = isPatternFeature(entry.op_kind)
         const isLinkerAdd = entry.op_kind === 'linker-add'
         const isNanoparticle = entry.op_kind === 'nanoparticle-create'
-        const isEditable = (_EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd || isNanoparticle) && !isEvicted
+        const isEditable = (_EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd || isNanoparticle || isPattern) && !isEvicted
         const hasLaterSnapshot = isEditable && log.slice(i + 1).some(e => e.feature_type === 'snapshot')
         // Linker and nanoparticle editors change the current object; they do
         // not replay the original creation snapshot. Later operations are fine.
         const particle = isNanoparticle
           ? store.getState().currentDesign?.nanoparticles?.find(p => p.id === entry.params?.nanoparticle_id)
           : null
-        const editAllowed = isEditable && (isNanoparticle ? !!particle : (isLinkerAdd || !hasLaterSnapshot))
+        const editAllowed = isEditable && (isNanoparticle ? !!particle : (isLinkerAdd || isPattern || !hasLaterSnapshot))
 
         let editBtn = null
         if (isEditable) {
@@ -1420,6 +1422,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
                 ? `Open Overhangs Manager for this linker`
                 : isNanoparticle
                   ? `Edit scene diameter (currently ${particle.diameter_nm} nm)`
+                  : isPattern ? `Edit ${entry.label} parameters`
                   : `Edit ${entry.label} parameters (currently length_bp=${entry.params?.length_bp ?? '?'})`)
             : isNanoparticle ? 'Cannot edit: this nanoparticle has been deleted.'
               : 'Cannot edit: a later snapshot exists. Revert to this point first.'
@@ -1444,6 +1447,16 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
               }
               if (isNanoparticle) {
                 await onEditNanoparticle?.(entry.params?.nanoparticle_id)
+                return
+              }
+              if (isPattern) {
+                const params = await editPatternFeature(entry)
+                if (!params) return
+                const response = await api.editFeature(i, params)
+                if (response == null) {
+                  showPersistentToast(`Edit failed: ${store.getState().lastError?.message || 'unknown error'}`)
+                  setTimeout(dismissToast, 5000)
+                }
                 return
               }
               const current = entry.params?.length_bp
