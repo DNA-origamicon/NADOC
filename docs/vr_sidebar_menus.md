@@ -40,7 +40,7 @@ See [VR room appearance](vr_room_ui.md) for the demo and runtime fallback behavi
 
 The left **Simulations** tab has desktop-order engine tabs, a scrollable Jobs card,
 and a rightward Visualizations extension after job selection. Both lists support
-the same touchpad focus/Trigger and pointer controls described below. The result
+pointer/Trigger controls and unclicked touchpad swipes described below. The result
 extension has its own scrollbar. See [VR simulation results](vr_simulations.md)
 for job-specific options, the `2hb_1xT` demo and validation limits.
 
@@ -59,12 +59,12 @@ right of the right menu content. Use the vertical scrollbar: point and hold the 
 position its thumb, or swipe the trackpad while pointing at a panel. Buttons have
 rounded borders, subtle blue accents for enabled actions, and a muted red Close
 button; unsupported controls remain gray. The right-trackpad Tools shortcut remains available when the right menu is closed.
-With a menu open, click its trackpad to focus the pointed-at control (or the active
+With the right menu open, click the right trackpad to focus the pointed-at control (or the active
 tab when pointing away). A directional click also moves focus immediately. Moving
 down past the last visible item reveals the next row with a 200 ms smooth scroll;
-up reverses this at the top edge. This also applies to simulation jobs and views. Up/down stops at the ends of the current column; it never
+up reverses this at the top edge. Up/down stops at the ends of the current column; it never
 wraps or crosses into another column. Left/right moves spatially between tabs,
-scrollbar, and content (mirrored on the left menu), or between buttons on the same
+scrollbar, and content, or between buttons on the same
 row. Trigger activates the highlighted control, including tab changes. When the scrollbar
 is focused, up/down smoothly advances one row while retaining focus; left/right leaves the
 scrollbar for the nearest row or tab at the entry height. No trigger is needed to scroll.
@@ -74,7 +74,7 @@ button for 450 ms. See [UI style and input standard](vr_ui_style.md).
 
 Card titles use the desktop's section names and nesting. Children are indented
 slightly for each level of ancestry, including nested category titles. Point at a title and
-pull the trigger, or focus it with the matching touchpad and pull that trigger,
+pull the trigger, or focus a right-menu title with the right touchpad and pull that trigger,
 to collapse or expand it. `+` means collapsed and `-` means expanded. Titles remain
 usable even when every child control is unavailable. Hidden children are removed
 from pointer targets and touchpad navigation; the scrollbar updates to the visible
@@ -101,13 +101,13 @@ Unsupported controls are gray and consume clicks without executing an action.
 Implemented controls include representation, coloring, recentering, job and
 trajectory panels, and existing native tools. Tool availability follows the
 current selection; trajectory playback requires a loaded trajectory. Tools contains
-Inspect, Extrude, Twist, Bend and Move / Rotate, followed by the Selection card.
+Inspect, Extrude, Twist, Bend and Move / Rotate. Selection is on the left touchpad.
 Tool settings, Confirm, Cancel and Undo live in their dedicated sidebar panels.
 Recenter is in Visualization; the desktop window is in the left VR tab.
 
 The former Options, Tools, selection, representation, coloring, job-list and
 trajectory menus have been removed. Every control now uses a sidebar or a
-sidebar tool panel. Selecting Inspect or a selection scope preserves the current
+sidebar tool panel. Selecting Inspect or a wheel selection scope preserves the current
 sidebar layout. Radial Undo and Redo request controller vibration and execute the
 history command without opening or changing any menu; asynchronous completion
 also leaves menus unchanged. **Debug → VR Tours & Tests → Tools · Authoring →
@@ -117,7 +117,7 @@ physical vibration still requires a controller session.
 
 **Debug → VR Tours & Tests → Controls & layout → Current menu routes** is the
 focused navigation regression. It exercises all five authoring choices, selection
-scopes, trajectory controls and Return buttons with all four motion profiles.
+trajectory controls and Return buttons with all four motion profiles.
 Its owned empty viewer receives temporary trajectory metadata so request dispatch
 can be checked without browser playback, coordinates or document changes:
 
@@ -132,6 +132,36 @@ Evidence is retained in `.development-artifacts/vr-menu-removal-20261005/`.
 The live checks exposed and fixed a trajectory launcher blocked by the adjacent
 sidebar frame; a separate timing deadline failure passed on an unchanged retry.
 Physical controller vibration still needs a hands-on check.
+
+## Left touchpad selection wheel
+
+Click and hold the **left touchpad**, then slide your thumb toward a sector.
+Clockwise from the top: **Drill, Cluster, Strand, Domain, Crossover, Bases**.
+The impending selection highlights amber and gives one light haptic pulse when
+entering a new sector; the current selection is green. Release to confirm.
+Return to the center before release to cancel. The palette follows the left hand;
+controller motion does not choose a sector. Tracking/focus loss cancels safely.
+Tool commits temporarily prevent scope changes.
+
+This replaces the general Selection card and Move/Rotate selection buttons.
+Left-pad clicks select scope even with sidebars open; use pointer/Trigger or
+unclicked swipes for the left sidebar. Right-pad focus navigation is unchanged.
+Choosing a scope in Move/Rotate cancels its preview without opening another panel.
+The wheel changes selection scope, not the currently selected molecular identities.
+
+**Debug → VR Tours & Tests → Controls & layout → Left touchpad selection wheel**
+runs the registered demonstration/validation. The functional prototype uses plain
+labels and outlined sectors; appearance can be refined independently of input.
+
+```bash
+uv run python -m tools.vr_workflows.menu_tour --selection-checks --preset steady_fast --validate --hold 0 --exit
+```
+
+The tour checks all six choices, hover transitions/haptic requests, unchanged
+selection until release, center cancellation, sidebars staying unchanged, stereo
+highlight pixels and desktop delivery. Thumb traces use normalized pad coordinates
+with the four existing timing/noise presets; controller reaches use physical units.
+Physical haptic feel and through-lens comfort remain a manual check (MV-39).
 
 ## Live review
 
@@ -152,7 +182,7 @@ at the end; Ctrl+C closes the owned viewer. No design is saved or submitted.
 just vr-menu-tour --validate --hold 0 --exit
 # Exercise border movement, two-hand resizing, release and visible feedback:
 just vr-menu-tour --grip-checks --validate
-# Exercise collapse/expand with pointer and touchpad on both hands:
+# Exercise pointer cards on both sidebars and right-pad focus:
 just vr-menu-tour --focus-checks --validate
 # Short visual preview, only the first page of each tab:
 just vr-menu-tour --quick

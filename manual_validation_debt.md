@@ -737,3 +737,5 @@ acceptable during slow movement and pauses. Debug → VR Tours & Tests → Autho
 Automated picking, depth (shadow-only mode), full-quality restoration and edit
 persistence checks pass; these do not establish wearer comfort. Results and
 limits: `docs/audits/vr_motion_optimization_20261003.md`.
+
+- **MV-39 — PENDING — Left touchpad selection wheel (2026-10-05).** In native VR, hold the left pad and slide clockwise from Drill through Cluster, Strand, Domain, Crossover and Bases. Feel a light pulse on each new highlighted sector; confirm that scope changes only on release, center release cancels, and both sidebar menus stay unchanged. Repeat during Move/Rotate and confirm the old preview cancels. Automated tours validate four input profiles and rendered stereo/desktop pixels; physical haptic feel, thumb reach and through-lens label comfort require hands-on review. Entry: Debug → VR Tours & Tests → Controls & layout → Left touchpad selection wheel.

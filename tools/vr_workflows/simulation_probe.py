@@ -9,46 +9,9 @@ from frontend.scrywrite.mcp_bridge import Bridge
 from tools.vr_motion.session import LiveSession
 from tools.vr_workflows.menu_tour import click, find_control, scroll_page, enlarge_mirror
 from tools.vr_motion.metrics import rotate
-from tools.vr_workflows.menu_focus_check import pad
+from tools.vr_workflows.sidebar_pointer_scroll import reveal_result
 from tools.vr_workflows.demo_view import reveal, hold
 from tools.vr_workflows.menu_pixels import check
-
-
-def focus_scrollbar(live, identifier):
-    """Enter the appropriate column with ordinary touchpad clicks from its tab."""
-    if live.state['sidebars'][0]['input_mode'] == 'trackpad':
-        pad(live, 0)
-    live.send('pose', hand=0, position=live.state['head_position'], orientation=[0,1,0,0])
-    live.frame()
-    pad(live, 0)
-    for _ in range(8):
-        if live.state['sidebars'][0]['focus_id'] == identifier:
-            return
-        pad(live, 0, x=1)
-    raise AssertionError('Touchpad cannot reach scrollbar: ' + identifier)
-
-
-def focus_result(live, target):
-    views = target.startswith('sim:v:') or target == 'sim:frame'
-    focus_scrollbar(live, 'sim:scroll:views' if views else 'sim:scroll:jobs')
-    for _ in range(150):
-        controls = [c for c in live.state['controls'] if c['id'].startswith('sim:v:' if views else 'sim:j:')]
-        if any(c['id'] == target for c in live.state['controls']):
-            break
-        wanted = int(target.split(':')[2])
-        first = min(int(c['id'].split(':')[2]) for c in controls)
-        pad(live, 0, y=1 if wanted < first else -1)
-    else:
-        raise RuntimeError('Result control missing: ' + target)
-    pad(live, 0, x=-1 if views else 1)
-    for _ in range(20):
-        current = live.state['sidebars'][0]['focus_id']
-        if current == target:
-            return
-        a, b = find_control(live, 0, current), find_control(live, 0, target)
-        direction = np.dot(np.asarray(b['position'])-a['position'], a['hit_half_up'])
-        pad(live, 0, y=1 if direction > 0 else -1)
-    raise AssertionError('Touchpad cannot reach result: ' + target)
 
 
 def run(socket, output, identifier):
@@ -109,7 +72,6 @@ def run(socket, output, identifier):
             # Frame result is a footer action, outside the list navigation path.
             # Use the ordinary profile-driven ray click; keep prior touchpad
             # failures as separate evidence, without changing native focus rules.
-            if live.state['sidebars'][0]['input_mode']=='trackpad':pad(live,0)
             click(live,0,'sim:frame',preset,trials)
             anchor,_=live.capture_to(out/'fit',files=['evidence.json'],discard_source=True)
             head=np.mean([e['position'] for e in anchor['eyes']],axis=0);q=anchor['eyes'][0]['orientation_xyzw']
@@ -164,11 +126,10 @@ def run(socket, output, identifier):
         if live.state['sidebars'][0]['tab'] != 'dynamics': click(live, 0, 'tab:dynamics', preset, trials)
         target = 'sim:' + identifier
         if identifier.startswith(('j:', 'v:')):
-            focus_result(live, target)
+            reveal_result(live, target)
             assert find_control(live, 0, target)['enabled'], target
-            live.button('trigger', hand=0);live.frame()
+            click(live, 0, target, preset, trials)
         else:
-            if live.state['sidebars'][0]['input_mode'] == 'trackpad': pad(live, 0)
             click(live, 0, target, preset, trials)
         hold(live, identifier)
         evidence, _ = live.capture_to(out / 'after', files=['left.png','right.png','mirror.png','evidence.json'], discard_source=True)

@@ -215,11 +215,18 @@ struct LiveViewerTest {
                         !v.sidebarMenus_.menus[1-hand].open,"Navigation did not route to the current sidebar tab");
             requireLive(std::string(v.menuPageName())=="sidebars","Current sidebar reported an obsolete menu page");
         }
-        for(const auto* level:{"default","cluster","strand","domain","end","xover","base"}) {
-            Viewer v(SceneData{});witness(v);
-            v.activateSidebarAction(std::string("select:")+level,1);
-            requireLive(v.selectionLevel_==level && !v.sidebarMenus_.anyOpen() && !v.latticeOpen_ &&
-                        !v.desktopPanel_.open && !v.viewTools_.open,"Selection action opened a menu");
+        for(size_t i=0;i<6;++i) {
+            Viewer v(SceneData{});witness(v);v.hands_[0].valid=true;
+            auto input=[&](bool pressed,glm::vec2 axis){v.selectionWheel_.input(pressed,axis,v.hands_[0],true,
+                [&](const char* level){v.publishSelectionLevel(level);},[&](float amount){v.pulse(0,amount);});};
+            input(true,{0,0});input(true,nadoc_vr::SelectionWheel::direction(i));
+            requireLive(v.levelSequence_==0 && v.hapticRequests_[0]==1,"Wheel committed before release or missed hover pulse");
+            input(false,{0,0});
+            requireLive(v.selectionLevel_==nadoc_vr::SelectionWheel::levels[i] && v.levelSequence_==1 &&
+                        v.hapticRequests_[0]==2 && v.hapticRequests_[1]==0 && !v.sidebarMenus_.anyOpen(),
+                        "Selection wheel did not publish exactly once on release without opening menus");
+            v.activateSidebarAction("select:cluster",1);
+            requireLive(v.levelSequence_==1,"Removed menu selection route still active");
         }
         Viewer v(SceneData{});witness(v);v.activateAuthoringTool(3);
         v.activateSidebarAction("unknown:action",1);

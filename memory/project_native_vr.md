@@ -7,12 +7,26 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Left touchpad selection wheel (2026-10-05)
+
+`selection_wheel.hpp` owns the six-sector thumb gesture and rendering. Hold the
+left pad; clockwise from up: Drill, Cluster, Strand, Domain, Crossover, Bases.
+Amber hover plus light haptic requests precede release-only scope publication;
+center release and focus/tracking loss cancel. The controller-following wheel
+uses thumb axes, not world controller translation. It replaces general selection
+rows and Move/Rotate scope buttons. Right pad focus stays; left sidebar tours use
+pointer scrollbars. Scope changes cancel Move previews, preserving panels.
+Registered `selection-wheel` (`menu_tour --selection-checks --validate`) covers
+four motion profiles, stereo highlights, haptic requests, delayed commits and
+sidebar independence. Physical feel remains MV-39. `selection_wheel` live JSON
+exposes six item axes/centers, current scope, hover and visibility.
+
 ## Sidebar-only menus and history feedback (2026-10-05)
 
 The old Options/Tools/selection/representation/coloring/jobs/trajectory menu
 renderer, hit targets and navigation state have been removed. Current sidebar
 panels own settings and tool transactions; Tools contains direct authoring actions
-and selection scopes. Visualization retains recentering, Simulations owns job
+and the left touchpad wheel selects scope. Visualization retains recentering, Simulations owns job
 selection and trajectories, and the left VR tab owns the detached desktop.
 Radial Undo/Redo dispatch history and pulse the initiating controller without
 opening menus. ScryWrite exposes per-hand haptic request counts/amplitudes; its

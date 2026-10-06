@@ -23,6 +23,7 @@
 #include <zlib.h>
 
 #include "interaction.hpp"
+#include "selection_wheel.hpp"
 #include "selection_owner_index.hpp"
 #include "shadow_light.hpp"
 #include "desktop_panel.hpp"
@@ -5622,8 +5623,6 @@ class Viewer {
             };
             sidebar.loadingProgress=[this](const std::string& action){return representationLoading_.button(action);};
             sidebar.isActive=[this](const std::string& action) {
-                if(action.starts_with("select:"))return selectionLevel_==action.substr(7);
-                if(action=="move:base" || action=="move:domain" || action=="move:cluster")return selectionLevel_==action.substr(5);
                 if(action=="vr:head-light")return shadowLight_.headFollowing();
                 if(action=="share:avatar")return showVRAvatar_;
                 if(action=="share:status")return shareActive_;
@@ -5930,13 +5929,6 @@ class Viewer {
                 publishTrajectoryRequest("seek",trajectoryState_.frameIndex);
             return;
         }
-        if(requestedAction.starts_with("select:")) {
-            const auto level=requestedAction.substr(7);
-            static constexpr std::array<std::string_view,7> levels{
-                "default","cluster","strand","domain","end","xover","base"};
-            if(std::find(levels.begin(),levels.end(),level)!=levels.end())publishSelectionLevel(level);
-            return;
-        }
         const bool known=requestedAction=="options" || requestedAction=="tools" || requestedAction=="settings" ||
             requestedAction=="jobs" || requestedAction=="trajectory" || requestedAction=="desktop" || requestedAction=="recenter" ||
             requestedAction=="feedback:activate" || requestedAction=="vr:head-light" || requestedAction=="vr:exit" ||
@@ -6078,10 +6070,9 @@ class Viewer {
                 cancelMove();
                 undoAuthoringTool(hand);
             } else if(action=="move:recenter") {recenterRequested_=true;recenterHand_=hand;}
-            else {
+            else if(action=="move:back" || action=="move:cancel") {
                 cancelMove();
                 if(action=="move:back")movePanel_.exit(sidebarMenus_.menus);
-                else if(action!="move:cancel")publishSelectionLevel(action=="move:overhang"?"domain":action.substr(5));
             }
             return;
         }
@@ -7113,6 +7104,7 @@ class Viewer {
         ligation_.draw(manipulator_.transform(),line);
         ligation_.drawNick(manipulator_.transform(),line);
         appendRadialToolGuides();
+        selectionWheel_.draw([&](auto a,auto b,auto color){controllerGuides_.push_back({a,color,1});controllerGuides_.push_back({b,color,1});},selectionLevel_);
         appendLatticeGuides();
         volumePanel_.draw(manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},line);
         dimensionPanel_.tool.draw(manipulator_.transform(),normalizationScale_,witnessObserverOrientation_,line,
@@ -8017,6 +8009,7 @@ class Viewer {
             liveInput_.triggerPressed.fill(false);liveTriggerValues_.fill(0);
             liveInput_.gripPressed.fill(false);
         }
+        selectionWheel_.cancel();
         liveTrackpadPressed_.fill(false);
         liveTrackpadAxis_.fill(glm::vec2(0));
         trajectoryScrubHand_.reset();
@@ -8115,6 +8108,7 @@ class Viewer {
             << ",\"scene_hover\":" << (sceneHover_?quote(sceneHover_->identity):"null")
             << ",\"tool\":" << quote(nadoc_vr::toolModeName(toolShell_.mode()))
             << ",\"status\":" << quote(toolShell_.status())
+            << ",\"selection_level\":" << quote(selectionLevel_) << ",\"level_sequence\":" << levelSequence_
             << ",\"selection_identity\":" << quote(selectedIdentity_)
             << ",\"selection_kind\":" << quote(selectedSelectionKind_)
             << ",\"owner_tokens\":[";
@@ -8133,6 +8127,7 @@ class Viewer {
             << ",\"playing\":" << (trajectoryState_.playing?"true":"false")
             << ",\"frame_index\":" << trajectoryState_.frameIndex << ",\"frame_count\":" << trajectoryState_.frameCount
             << ",\"request_sequence\":" << trajectoryRequestSequence_ << '}';
+        selectionWheel_.writeJson(out,selectionLevel_);
         out << ",\"radial_edit\":{\"open\":" << (radialToolMenu_.open()?"true":"false")
             << ",\"hovered\":" << (radialToolMenu_.hovered()?std::to_string(*radialToolMenu_.hovered()):"null") << ",\"items\":[";
         for(size_t i=0;i<4;++i) {
@@ -8707,6 +8702,10 @@ class Viewer {
             checkXr(instance_, xrGetActionStateVector2f(
                 session_, &getInfo, &trackpadAxis),
                 "xrGetActionStateVector2f(trackpad axis)");
+            const glm::vec2 navigationAxis=liveControlsEnabled()?liveTrackpadAxis_[hand]:glm::vec2(trackpadAxis.currentState.x,trackpadAxis.currentState.y);
+            if(hand==0)selectionWheel_.input(trackpadPressed,navigationAxis,hands_[0],
+                !componentGallery_.active && !toolShell_.executionPending() && !moveAwaitRefresh_ && sessionState_==XR_SESSION_STATE_FOCUSED && (liveControlsEnabled() || trackpadAxis.isActive),
+                [&](const char* level){if(movePanel_.active)cancelMove();publishSelectionLevel(level);},[&](float strength){pulse(0,strength);});
             const bool touching = !witness_ && !liveSocket_.enabled() && trackpadTouch.isActive && trackpadTouch.currentState &&
                                   trackpadAxis.isActive;
             const bool desktopActive = [&] {
@@ -8719,7 +8718,7 @@ class Viewer {
             const bool sidebarActive=!desktopActive && sidebarMenus_.scrollAt(hands_[hand]);
             const bool focusActive=sidebarMenus_.menus[hand].focus.active;
             const bool navigationMenuOpen=sidebarMenus_.menus[hand].open;
-            if (touching && !focusActive && (desktopActive || sidebarActive)) {
+            if (touching && !trackpadPressed && !selectionWheel_.blocksInput() && !focusActive && (desktopActive || sidebarActive)) {
                 const float y = glm::clamp(trackpadAxis.currentState.y, -1.0F, 1.0F);
                 if (!desktopTrackpadTouching_[hand]) {
                     desktopTrackpadTouching_[hand] = true;
@@ -8736,7 +8735,7 @@ class Viewer {
                     }
                 }
                 selectionVolumes_[hand].endScroll();
-            } else if (touching && movePanel_.selectionEnabled(hand) && !navigationMenuOpen && !(hand == 1U && trackpadPressed)) {
+            } else if (touching && !trackpadPressed && !selectionWheel_.blocksInput() && movePanel_.selectionEnabled(hand) && !navigationMenuOpen && !(hand == 1U && trackpadPressed)) {
                 desktopTrackpadTouching_[hand] = false;
                 if (!selectionVolumes_[hand].scrolling()) {
                     selectionVolumes_[hand].beginScroll(trackpadAxis.currentState.y);
@@ -8751,12 +8750,8 @@ class Viewer {
                 if (!trackpadPressed) trackpadScrolled_[hand] = false;
             }
 
-            const glm::vec2 navigationAxis=liveControlsEnabled()?liveTrackpadAxis_[hand]:glm::vec2(trackpadAxis.currentState.x,trackpadAxis.currentState.y);
-            if(trackpadClicked && sidebarMenus_.trackpad(hand, navigationAxis, hands_[hand])) {
+            if(hand==1 && trackpadClicked && sidebarMenus_.trackpad(hand, navigationAxis, hands_[hand])) {
                 pulse(hand,.12F);
-            } else if (!desktopActive && !sidebarActive && trackpadClicked && !trackpadScrolled_[hand] && hand == 0U) {
-                publishSelectionLevel(nadoc_vr::nextTabSelectionLevel(selectionLevel_));
-                pulse(hand, 0.40F);
             } else if (!desktopActive && hand == 1U && trackpadClicked) {
                 radialToolMenu_.open(hands_[hand], selectionVolumeCenter(hand));
                 (void)radialToolMenu_.update(selectionVolumeCenter(hand));
@@ -8783,7 +8778,8 @@ class Viewer {
             updateControllerGuides();return;
         }
         frameAudit_.mark("poses_buttons");
-        const auto remoteBlocked=remotePanels_.update(remotePanelTargets(),hands_,triggerClicked_,triggerPressed_,witnessObserverPosition_,glfwGetTime());
+        auto remoteBlocked=remotePanels_.update(remotePanelTargets(),hands_,selectionWheel_.filter(triggerClicked_),selectionWheel_.filter(triggerPressed_),witnessObserverPosition_,glfwGetTime());
+        remoteBlocked[0]=remoteBlocked[0]||selectionWheel_.blocksInput();
         viewTools_.syncPose();
         const bool latticeOwnsGrip=latticeOpen_ && (latticePlacement_.dragHand() ||
             latticePlacement_.resizeActive() || latticeGrip_.held[0] || latticeGrip_.held[1]);
@@ -8838,6 +8834,7 @@ class Viewer {
             suppressManipulationUntilRelease_ = false;
         }
         auto manipulationHands = hands_;
+        if(selectionWheel_.blocksInput())manipulationHands[0].pressed=false;
         const bool menuGripActive = std::any_of(
             menuGripTargeted.begin(), menuGripTargeted.end(),
             [](bool targeted) { return targeted; });
@@ -8888,7 +8885,7 @@ class Viewer {
         for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h] || wheelTargeted[h] || latticeGripTargeted[h];
         const auto latticeTargeted = processLatticeInput(menuControlTargeted);
         for (size_t hand = 0; hand < menuControlTargeted.size(); ++hand) {
-            liveInputOwner_[hand] = latticeGripTargeted[hand] ? "lattice-grip" : volumeTargeted[hand] ? "view-volume" : (hand == 1U && radialToolMenu_.open()) ? "radial"
+            liveInputOwner_[hand] = (hand==0 && selectionWheel_.blocksInput()) ? "selection-wheel" : latticeGripTargeted[hand] ? "lattice-grip" : volumeTargeted[hand] ? "view-volume" : (hand == 1U && radialToolMenu_.open()) ? "radial"
                 : wheelTargeted[hand] ? "wheel" : menuControlTargeted[hand] ? "menu"
                 : latticeTargeted[hand] ? "lattice" : hands_[hand].valid ? "scene" : "none";
             menuControlTargeted[hand] = menuControlTargeted[hand] ||
@@ -10653,7 +10650,7 @@ class Viewer {
                      "grip a menu border or Desktop surface: move panel; "
                      "both grips at a border: resize panel; "
                      "trigger: Selection Volume snap/select; hold right trackpad: Ligate/Nick/Undo/Redo wheel; "
-                     "left trackpad: cycle selection level; "
+                     "hold left trackpad: selection wheel; "
                      "menu: sidebar; Escape: exit.\n";
         if (mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off) {
             std::cout << "NADOC VR desktop spectator: physical HMD "
@@ -10944,6 +10941,7 @@ class Viewer {
     bool witnessCompletionReported_ = false;
     std::optional<nadoc_vr::PickHit> sceneHover_;
     nadoc_vr::RadialToolMenu radialToolMenu_;
+    nadoc_vr::SelectionWheel selectionWheel_;
     bool latticeOpen_ = false;
     nadoc_vr::MenuPlacement latticePlacement_;
     nadoc_vr::LatticeGrip latticeGrip_;

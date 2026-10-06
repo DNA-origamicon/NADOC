@@ -5,10 +5,10 @@ mrDNA, oxDNA, NAMD. Engine tabs remain at the top. The Jobs card mirrors the
 current desktop list, including labels, selection and child-job rows.
 Select a job to extend the menu to the right with that engine's actual
 Visualizations card controls. Selecting a job with the menu open closes the right
-sidebar to prevent the two panels from overlapping. Each column scrolls independently. Touchpad click
-focuses controls; directional clicks navigate, and Trigger activates. Focus a
-scrollbar and click up/down to page without a trigger. Center-click restores
-pointing. Pointer swipes target the column under the ray.
+sidebar to prevent the two panels from overlapping. Each column scrolls independently. Point and pull Trigger to activate a control;
+point at a scrollbar and click or drag its thumb to page. Unclicked touchpad
+swipes scroll the column under the ray. Left-pad clicks are reserved for the
+selection wheel.
 
 Availability and checked states come from the desktop controls. Select choices
 appear as individual buttons; numeric/range controls have minus/plus steps with

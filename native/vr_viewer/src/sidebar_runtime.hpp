@@ -204,7 +204,7 @@ class SidebarRuntime {
             if(i)out<<',';
             const auto& m=menus[i];
             out<<"{\"hand\":"<<i<<",\"open\":"<<(m.open?"true":"false")<<",\"tab\":"<<q(m.tab().key)
-                <<",\"offset\":"<<m.offset()<<",\"total\":"<<m.total()<<",\"hover_id\":"<<q(m.hovered)
+                <<",\"page_rows\":"<<m.pageRows()<<",\"offset\":"<<m.offset()<<",\"total\":"<<m.total()<<",\"hover_id\":"<<q(m.hovered)
                 <<",\"input_mode\":"<<q(m.focus.active?"trackpad":"pointer")<<",\"focus_id\":"<<q(m.focus.id)
                 <<",\"grip_state\":"<<q(nadoc_vr::gripFrameName(m.gripState))
                 <<",\"grip_nearby\":["<<(m.gripNearby[0]?"true":"false")<<','<<(m.gripNearby[1]?"true":"false")<<']'

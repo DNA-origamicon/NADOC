@@ -39,6 +39,10 @@ install(TARGETS nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export
 
 include(CTest)
 if(BUILD_TESTING)
+  add_executable(nadoc-vr-selection-wheel-test tests/selection_wheel_test.cpp)
+  target_include_directories(nadoc-vr-selection-wheel-test PRIVATE src)
+  target_compile_options(nadoc-vr-selection-wheel-test PRIVATE -UNDEBUG)
+  add_test(NAME nadoc-vr-selection-wheel COMMAND nadoc-vr-selection-wheel-test)
   add_executable(nadoc-vr-ordered-atomic-file-test tests/ordered_atomic_file_test.cpp)
   target_include_directories(nadoc-vr-ordered-atomic-file-test PRIVATE src)
   target_compile_options(nadoc-vr-ordered-atomic-file-test PRIVATE -UNDEBUG)

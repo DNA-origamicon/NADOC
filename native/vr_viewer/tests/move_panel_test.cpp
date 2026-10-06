@@ -17,13 +17,8 @@ int main() {
     panel.enter(menus);panel.refresh(menus,"base","READY");
     assert(panel.selectionEnabled(0) && !panel.selectionEnabled(1));
     const auto controls=menus[1].controls();
-    float last=-1;float y=0;
-    for(const auto* name:{"base","domain","cluster"}) {
-        const auto c=std::find_if(controls.begin(),controls.end(),[&](const auto& c){return c.id==std::string("move:")+name;});
-        assert(c!=controls.end() && c->icon==name && c->bounds.minimum.x>last);
-        if(last!=-1)assert(c->bounds.minimum.y==y);
-        last=c->bounds.maximum.x;y=c->bounds.minimum.y;
-    }
+    assert(std::none_of(controls.begin(),controls.end(),[](const auto& c){return c.id=="move:selection" || c.id=="move:base" || c.id=="move:domain" || c.id=="move:cluster";}));
+    assert(std::any_of(controls.begin(),controls.end(),[](const auto& c){return c.id=="move:undo";}));
     panel.begin(0,hand,glm::mat4(1),pivot);assert(!panel.hand);
     panel.begin(1,hand,glm::mat4(1),pivot);assert(panel.hand==1);
     assert(!panel.selectionEnabled(0) && !panel.selectionEnabled(1));

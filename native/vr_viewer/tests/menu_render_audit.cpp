@@ -210,6 +210,15 @@ struct LiveViewerTest {
             capture("radial-hover-"+std::to_string(hover),{{-.18F,-.18F},{.18F,.18F}},[&](const auto& vp){v.glScene_->renderGuides(vp,v.controllerGuides_);});
         }
         v.radialToolMenu_.close();
+        hand.position=-(hand.orientation*glm::vec3(0,.04F,-.06F));
+        for(int hover=-1;hover<6;++hover) {
+            v.selectionWheel_.update(true,hover<0?glm::vec2(0):nadoc_vr::SelectionWheel::direction(size_t(hover)),hand);
+            v.controllerGuides_.clear();
+            v.selectionWheel_.draw([&](auto a,auto b,auto c){v.controllerGuides_.push_back({a,c,1});v.controllerGuides_.push_back({b,c,1});},"default");
+            capture("selection-wheel-hover-"+std::to_string(hover),{{-.18F,-.18F},{.18F,.18F}},[&](const auto& vp){v.glScene_->renderGuides(vp,v.controllerGuides_);});
+        }
+        v.selectionWheel_.cancel();
+
         v.componentGallery_.active=v.componentGallery_.posed=true;v.componentGallery_.placement.openDocked({0,0,0},{1,0,0,0});
         v.componentGallery_.placement.setScale(1);
         for(int mode=0;mode<3;++mode)for(int state=0;state<5;++state) {

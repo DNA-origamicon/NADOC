@@ -38,7 +38,7 @@ def catalog():
     add('representation-colors', 'right', 'Representation colors',
         'Quick pass through all eleven styles and both coloring pages. Checks enabled/gray controls and rendered pixels; not the full switching matrix.', ['--cycle'], module='representation_tour')
     add('simulations', 'left', 'Simulation results · 2hb_1xT',
-        'Desktop engine tabs, touchpad job/result navigation and existing static visualizations for 2hb_1xT. Copies job metadata/caches into a temporary workspace; trajectories are excluded. Validation runs all four motion profiles.', module='simulation_tour')
+        'Desktop engine tabs, pointer job/result navigation and existing static visualizations for 2hb_1xT. Copies job metadata/caches into a temporary workspace; trajectories are excluded. Validation runs all four motion profiles.', module='simulation_tour')
     add('backend-lifetime', 'interaction', 'Backend shutdown closes VR',
         'Launch an isolated backend and empty VR viewer; terminate only that backend and require viewer exit and sidecar cleanup.', module='backend_lifecycle_check')
     add('tool-frame-audit', 'authoring', 'Tools across representations · frame audit',
@@ -55,15 +55,17 @@ def catalog():
         'Start with Full, select other representations with real controller inputs, and verify loading progress plus retained model pixels in both eyes, including the point fallback. Validation uses all four motion profiles and covers Surface to Stick.', ['--representations'], module='startup_tour')
     add('startup', 'interaction', 'Cold startup and headset loading progress',
         'Launch a read-only private copy of 24HB through the normal launch route. Capture loading and first model stereo frames and verify advancing headset frames during natural-only export (no Quick Expand).', module='startup_tour')
+    add('selection-wheel', 'interaction', 'Left touchpad selection wheel',
+        'Hold the left pad, slide through Drill, Cluster, Strand, Domain, Crossover and Bases clockwise, then release. Checks hover haptics, no early selection, center cancellation, sidebar independence and stereo highlights with all four profiles.', ['--selection-checks'])
     add('menu-actions', 'interaction', 'Current menu routes',
-        'Exercise all five authoring choices, selection scopes and trajectory entry/return through the current sidebars. Isolated empty viewer with deterministic trajectory metadata; verifies requests, no browser playback or document edits. Validation runs all four controller profiles. History feedback and acknowledgements are covered by the Nick, Undo and Redo tour.', ['--action-checks'])
+        'Exercise all five authoring choices and trajectory entry/return through the current sidebars. Isolated empty viewer with deterministic trajectory metadata; verifies requests, no browser playback or document edits. Validation runs all four controller profiles. History feedback and acknowledgements are covered by the Nick, Undo and Redo tour.', ['--action-checks'])
     add('menu-depth', 'interaction', 'Menu blur and controller depth',
         'Move the controller stick and sphere in front of and behind a menu. Check sharp foreground pixels and behind-menu occlusion in both eyes, across all four motion profiles.', ['--depth-checks'])
     add('menu-formatting', 'interaction', 'Menu formatting review',
         'No headset required: render every Part and Assembly sidebar page plus tool panels, long jobs/status, radial hover, desktop chrome, component states and loading states. Retains full images, contact sheets and layout failures in a browsable atlas. An optional production View Tools stream adds its real desktop icons. Use the live sidebar tour for four-profile controller coverage.', module='menu_render_audit')
     add('room-ui', 'interaction', 'Frosted menus & SteamVR floor',
         'Barely visible white glass, subtle button tints and stereo background blur, a calibrated floor grid and SteamVR play-area outline. Checks native pixels and all four motion profiles.', ['--room-checks'])
-    add('focus', 'interaction', 'Trackpad, pointer, cards & scrollbars',
+    add('focus', 'interaction', 'Right trackpad, pointer, cards & scrollbars',
         'Check bounded columns and lateral navigation, focus gray controls, activate triggers, collapse cards, scroll, and return to pointing.', ['--focus-checks'])
     add('remote-borders', 'interaction', 'Menu controls · distant trigger grab & resize',
         'Hold a border with a fixed controller-to-border ray; move and rotate, then hold the other trigger on the border to resize. Also checks double-trigger resize and stereo feedback.', ['--remote-checks'])

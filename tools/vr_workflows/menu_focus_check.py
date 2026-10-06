@@ -30,6 +30,11 @@ def seek(live, hand, identifier):
             return
         controls = {c["id"]: c for c in live.state["controls"]
                     if c.get("sidebar") == side}
+        if current not in controls:
+            # Focus can advance before the 200 ms row reveal exports its hit box.
+            hold(live, .25)
+            controls = {c["id"]: c for c in live.state["controls"]
+                        if c.get("sidebar") == side}
         source, target = controls[current], controls[identifier]
         delta = column(identifier) - column(current)
         if delta:
@@ -55,6 +60,7 @@ def hold(live, seconds):
 
 
 def capture(live, output, name):
+    hold(live, .25)  # Let the 200 ms row animation settle before pixel evidence.
     evidence, _ = live.capture_to(
         output / name,
         files=["left.png", "right.png", "mirror.png", "evidence.json"],
@@ -79,7 +85,7 @@ def run(live, catalog, output, preset):
         from .menu_section_check import run as section_checks
         checks.update(section_checks(live, catalog, output, preset, trials))
         head = live.state["head_position"]
-        for hand in (0, 1):
+        for hand in (1,):
             # Ray points away from both panels. All navigation/activation below
             # must work through pad/trigger, without aim_menu or pose snapping.
             live.send(
@@ -226,10 +232,12 @@ def run(live, catalog, output, preset):
         live.button("trigger", hand=1)
         assert before == (live.state["tool"], live.state["tool_sequence"])
         checks["sidebar_disabled_inert"] = True
-        capture(live, output, "tools-focus")
         seek(live, 1, "extrude:back")
         live.button("trigger", hand=1)
         seek(live, 1, "tool-inspect")
+        # The text-button oracle applies to Tools. Extrude's raised wheels and
+        # painter overlap have their own renderer/interaction pixel checks.
+        capture(live, output, "tools-focus")
         before = [(s["open"], s["tab"]) for s in live.state["sidebars"]]
         live.button("trigger", hand=1)
         assert live.state["tool"] == "inspect"

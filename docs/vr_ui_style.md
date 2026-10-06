@@ -74,18 +74,22 @@ unsupported tool choices are gray and inert there as well.
 
 ## Trackpad and pointer contract
 
-Each controller navigates its own open menu. The right-trackpad radial Tools
-shortcut is available when that controller's menu is closed. Opening or closing
+The left touchpad owns the six-sector selection wheel: hold, slide to highlight,
+release to select; center release cancels. Drill is top, followed clockwise by
+Cluster, Strand, Domain, Crossover and Bases. Entering a sector highlights it and
+requests a light haptic pulse. Left menus use pointer/Trigger and unclicked swipes.
+The right controller navigates its own open menu with the pad; its radial Tools
+shortcut is available when that menu is closed. Opening or closing
 the other sidebar does not cancel the active controller's focus.
 
-1. Click the trackpad once to enter focus mode on the pointed-at sidebar control,
-   falling back to the selected tab (or first detailed-menu control). This first click does not activate anything.
+1. Click the right trackpad once to enter focus mode on the pointed-at sidebar control,
+   falling back to the selected tab (or first tool-panel control). This first click does not activate anything.
 2. Click top/bottom to move within the current column, stopping at its ends.
    It never wraps into a neighboring column. Gray controls remain focusable
    for discovery; their triggers are inert.
 3. Click left/right to move spatially between tabs, scrollbar, and content,
-   mirrored for the left hand, or between buttons on the same row. Tab changes
-   require Trigger. In detailed menus, left/right steps through the bounded list. There is one step per click, no uncontrolled repeat.
+   or between buttons on the same row. Tab changes
+   require Trigger. In tool panels, left/right steps through the bounded list. There is one step per click, no uncontrolled repeat.
 4. Pull the same controller's trigger to activate the focused control. A card
    title toggles its contents, retaining title focus for a second press to reopen.
    Card titles remain enabled even if their children are unsupported. When the

@@ -86,3 +86,19 @@ def test_selected_end_returns_from_tool_panel_before_changing_tabs():
     activate_extrude(live,click,Path('.'),preserve_selection=True)
     assert live.clicked == ['RIGHT / Return','RIGHT / Tools','RIGHT / Extrude']
     assert live.state['owner_tokens'] == ['end:identified']
+
+
+def test_pointer_result_search_does_not_use_job_count_for_view_scroll(monkeypatch):
+    from types import SimpleNamespace
+    from tools.vr_workflows import sidebar_pointer_scroll as scroll
+    live = SimpleNamespace(state={'sidebars':[{'total':1,'page_rows':7}], 'controls':[]})
+    visited = []
+    def click_fraction(_live, hand, fraction, rail):
+        assert hand == 0 and rail == 'sim:scroll:views'
+        first = round(fraction * 142) * 7
+        visited.append(first)
+        live.state['controls'] = [{'id':f'sim:v:{i}'} for i in range(first, min(first+7, 1000))]
+    monkeypatch.setattr(scroll, 'at_fraction', click_fraction)
+    scroll.reveal_result(live, 'sim:v:913')
+    assert any(c['id'] == 'sim:v:913' for c in live.state['controls'])
+    assert len(visited) <= 16

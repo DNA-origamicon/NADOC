@@ -139,12 +139,7 @@ tabs.push({side:'right',key:'tools',label:'Tools',rows:[
   ['tool-inspect','Inspect','tool:inspect'],['tool-move','Move / Rotate','tool:move_rotate'],['tool-extrude','Extrude','tool:extrude'],
   ['tool-twist','Twist','tool:twist'],['tool-bend','Bend','tool:bend'],
 ].map(([id,label,action])=>({id,label,action,section:'Tools',kind:'button',options:[],source:'frontend/scripts/generate-vr-sidebar-catalog.mjs',reason:''}))})
-add('right','tools','Selection','frontend/scripts/generate-vr-sidebar-catalog.mjs', [
-  ['select:default','Auto / Drill','select:default'],['select:cluster','Cluster','select:cluster'],
-  ['select:strand','Strand','select:strand'],['select:domain','Domain','select:domain'],
-  ['select:end','End','select:end'],['select:xover','Crossover','select:xover'],
-  ['select:base','Base','select:base'],
-])
+
 tabs.push({side:'left',key:'vr',label:'VR',rows:[
   ['vr-desktop','View desktop','desktop'],
   ['vr-head-light','Head-following lighting: Off','vr:head-light'],

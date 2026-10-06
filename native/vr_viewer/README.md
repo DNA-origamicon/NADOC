@@ -205,8 +205,9 @@ Controls on the original HTC Vive wands:
   targets through NADOC's selection controller. Accepted targets retain a green
   geometry-shaped glow after the trigger is released. Triggers also press menu buttons
   while the menu is open.
-- Click the left trackpad to cycle the exact desktop Tab order:
-  Strand, Domain, End, Crossover, Base, then Auto / Drill. Cluster remains menu-only.
+- Hold the left trackpad for the selection wheel. Clockwise from top: Drill,
+  Cluster, Strand, Domain, Crossover, Bases. Slide to highlight, release to select;
+  releasing in the center cancels.
 - Hold either grip/squeeze button to grab, move, and rotate the structure outside a
   tool preview. A grip within 7.5 cm of a menu border grabs the panel instead.
   During Move/Rotate Preview, the
@@ -403,7 +404,7 @@ Left/right menu buttons now independently open their matching desktop-style
 vertical tab menus. Unsupported controls are gray and inert; native actions
 retain their existing selection requirements. The right menu includes Tools,
 and the right-trackpad shortcut remains available when the right menu is closed.
-With a menu open, trackpad clicks enter/move focus and the matching trigger
+With the right menu open, right-trackpad clicks enter/move focus and its trigger
 activates. Center-click returns to pointer input; deliberate steady aim also
 restores pointing. See [UI style and input standard](../../docs/vr_ui_style.md).
 
@@ -487,3 +488,10 @@ the view-icon tablet and desktop/tool panels; the guest display is read-only.
 transform applies to panels and guides as well as the figure. See
 [VR presenter controls](../../docs/vr_presenter_model.md#guest-visible-vr-controls)
 and Debug → VR Tours & Tests → **VR menus and tools in guest view**.
+
+Left touchpad selection: hold the pad to show six sectors, move the thumb to
+highlight one (light haptic on entry), then release to select. Clockwise from top:
+Drill, Cluster, Strand, Domain, Crossover, Bases. Center release cancels. This
+replaces selection buttons; right-pad menu navigation remains. Run the registered
+**Left touchpad selection wheel** tour or `python -m tools.vr_workflows.menu_tour
+--selection-checks --validate --preset steady_fast --hold 0 --exit`.

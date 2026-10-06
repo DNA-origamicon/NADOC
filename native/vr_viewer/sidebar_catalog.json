@@ -2,7 +2,7 @@
   "version": 2,
   "sourceHashes": {
     "frontend/index.html": "a4fe495d5243ac87ea41f04cf4d43fcf333e599284380f53954c1a6c92726888",
-    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "aafa30a5b6c5bf869de702fa5ce741335d0862e27a5d1c8501b97fea4796a8f8",
+    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "eb8ea5ece58899fdc82cf9cd33500c2aea7e959d327210dd8f0f90b3ab29c558",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/scene/coloring_modes.js": "38b8f278e205a935a63413a0aa0d32d89762759d0b77c7da7eaba28c7d802bae",
     "frontend/src/scene/view_volumes.js": "8cb5f50859a2394fa47cf78b1d60ffd6aaf3e6319dc8cae4585ee452f3f24c9b",
@@ -13365,108 +13365,6 @@
           "section": "Tools",
           "kind": "button",
           "options": [],
-          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
-          "reason": ""
-        },
-        {
-          "id": "section:tools:template:selection",
-          "label": "Selection",
-          "section": "",
-          "kind": "section",
-          "options": [],
-          "action": "section:tools:template:selection",
-          "parents": [],
-          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
-          "reason": ""
-        },
-        {
-          "id": "select:default",
-          "label": "Auto / Drill",
-          "section": "Selection",
-          "kind": "button",
-          "options": [],
-          "action": "select:default",
-          "parents": [
-            "section:tools:template:selection"
-          ],
-          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
-          "reason": ""
-        },
-        {
-          "id": "select:cluster",
-          "label": "Cluster",
-          "section": "Selection",
-          "kind": "button",
-          "options": [],
-          "action": "select:cluster",
-          "parents": [
-            "section:tools:template:selection"
-          ],
-          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
-          "reason": ""
-        },
-        {
-          "id": "select:strand",
-          "label": "Strand",
-          "section": "Selection",
-          "kind": "button",
-          "options": [],
-          "action": "select:strand",
-          "parents": [
-            "section:tools:template:selection"
-          ],
-          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
-          "reason": ""
-        },
-        {
-          "id": "select:domain",
-          "label": "Domain",
-          "section": "Selection",
-          "kind": "button",
-          "options": [],
-          "action": "select:domain",
-          "parents": [
-            "section:tools:template:selection"
-          ],
-          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
-          "reason": ""
-        },
-        {
-          "id": "select:end",
-          "label": "End",
-          "section": "Selection",
-          "kind": "button",
-          "options": [],
-          "action": "select:end",
-          "parents": [
-            "section:tools:template:selection"
-          ],
-          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
-          "reason": ""
-        },
-        {
-          "id": "select:xover",
-          "label": "Crossover",
-          "section": "Selection",
-          "kind": "button",
-          "options": [],
-          "action": "select:xover",
-          "parents": [
-            "section:tools:template:selection"
-          ],
-          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
-          "reason": ""
-        },
-        {
-          "id": "select:base",
-          "label": "Base",
-          "section": "Selection",
-          "kind": "button",
-          "options": [],
-          "action": "select:base",
-          "parents": [
-            "section:tools:template:selection"
-          ],
           "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
           "reason": ""
         }

@@ -91,6 +91,9 @@ def click(live, hand, identifier, preset, trials):
 
 
 def scroll_page(live, hand, direction):
+    if hand == 0:
+        from .sidebar_pointer_scroll import page
+        return page(live, hand, direction)
     from .menu_focus_check import pad, seek
     if live.state["sidebars"][hand]["input_mode"] != "trackpad":
         pad(live, hand)
@@ -258,15 +261,8 @@ def check_actions(live, output, preset):
             activate(1, panel + ":back")
             assert live.state["sidebars"][1]["tab"] == "tools"
         activate(1, "tool-inspect")
-        selection = (live.state["selection_kind"], tuple(live.state["owner_tokens"]))
-        for level in ("default", "cluster", "strand", "domain", "end", "xover", "base"):
-            activate(1, "select:" + level)
-            selected = find_control(live, 1, "select:" + level)
-            checks["selection_" + level] = bool(selected["active"])
-            assert checks["selection_" + level], selected
-            assert selection == (live.state["selection_kind"], tuple(live.state["owner_tokens"]))
-        capture("action-selection")
-        activate(1, "select:default")
+        checks["selection_menu_removed"] = not any(c['id'].startswith('select:') for c in live.state['controls'])
+        assert checks["selection_menu_removed"]
         activate(1, "tab:tools")
         while live.state["sidebars"][1]["offset"]:
             scroll_page(live, 1, -1)
@@ -425,6 +421,7 @@ def main():
         action="store_true",
         help="Exit after tour instead of holding menus for review",
     )
+    mode.add_argument("--selection-checks", action="store_true", help="Check left touchpad selection wheel, haptics and release confirmation")
     args = parser.parse_args()
     if not 0 <= args.hold <= 30:
         parser.error("hold must be 0..30 seconds")
@@ -435,7 +432,7 @@ def main():
     )
     catalog = json.loads((root / "native/vr_viewer/sidebar_catalog.json").read_text())
     if args.tab:
-        if args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks:
+        if args.selection_checks or args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks:
             parser.error('--tab is only supported by the sidebar page tour')
         tabs = [t for t in catalog['tabs'] if f"{t['side']}:{t['key']}" == args.tab]
         if not tabs:
@@ -530,7 +527,9 @@ def main():
             )
             live.button("menu", hand=0)
             results = []
-            if args.action_checks:
+            if args.selection_checks:
+                from .selection_wheel_check import run as focus_run
+            elif args.action_checks:
                 focus_run = lambda live, _catalog, destination, preset: check_actions(live, destination, preset)
             elif args.remote_checks:
                 from tools.vr_workflows.remote_border_check import run as focus_run
@@ -554,7 +553,7 @@ def main():
                         "preset": preset,
                         **(
                             focus_run(live, catalog, destination, preset)
-                            if args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks
+                            if args.selection_checks or args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks
                             else run_tour(
                                 live,
                                 catalog,
@@ -569,7 +568,7 @@ def main():
                 (output / "result.json").write_text(
                     json.dumps(results, indent=2) + "\n"
                 )
-            if not args.action_checks and not args.remote_checks and not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks:
+            if not args.selection_checks and not args.action_checks and not args.remote_checks and not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks:
                 check_actions(live, output, args.preset)
             from tools.vr_motion.desktop_check import run as check_desktop
 
@@ -583,15 +582,21 @@ def main():
                     f"Details: {output / 'desktop' / 'desktop-check.json'}",
                     flush=True,
                 )
-            live.release()
+            if args.exit or not args.selection_checks:
+                live.release()
             if not args.exit:
                 print(
-                    "Menus remain open for review. Ctrl+C closes this tour viewer.",
+                    "Selection wheel remains open for review. Ctrl+C closes this tour viewer." if args.selection_checks
+                    else "Menus remain open for review. Ctrl+C closes this tour viewer.",
                     flush=True,
                 )
                 try:
-                    while proc is None or proc.poll() is None:
-                        time.sleep(0.5)
+                    if args.selection_checks:
+                        from .selection_wheel_check import review
+                        review(live, lambda: proc is None or proc.poll() is None)
+                    else:
+                        while proc is None or proc.poll() is None:
+                            time.sleep(0.5)
                 except KeyboardInterrupt:
                     pass
             if not desktop["passed"]:
