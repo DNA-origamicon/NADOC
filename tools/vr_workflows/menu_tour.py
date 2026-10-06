@@ -127,9 +127,19 @@ def check_page(live, tab):
     return rows
 
 
-def run_tour(live, catalog, output, preset, hold, quick):
+def open_sidebar_for_review(live, hand, pose):
+    """Reopen through normal input at an observed, reproducible wrist pose."""
+    if live.state["sidebars"][hand]["open"]:
+        return
+    live.send("pose", hand=hand, position=pose["position"], orientation=pose["orientation_xyzw"])
+    live.frame()
+    live.button("menu", hand=hand)
+
+
+def run_tour(live, catalog, output, preset, hold, quick, spawn_hands=None):
     trials = []
     visited = []
+    spawn_hands = spawn_hands or [dict(h) for h in live.state["hands"]]
     try:
         for tab in catalog["tabs"]:
             hand = 0 if tab["side"] == "left" else 1
@@ -137,8 +147,7 @@ def run_tour(live, catalog, output, preset, hold, quick):
             # each page with its own menu visible, through normal menu buttons.
             if live.state["sidebars"][1-hand]["open"]:
                 live.button("menu", hand=1-hand)
-            if not live.state["sidebars"][hand]["open"]:
-                live.button("menu", hand=hand)
+            open_sidebar_for_review(live, hand, spawn_hands[hand])
             click(live, hand, "tab:" + tab["key"], preset, trials)
             while live.state["sidebars"][hand]["offset"]:
                 scroll_page(live, hand, -1)
@@ -194,15 +203,14 @@ def run_tour(live, catalog, output, preset, hold, quick):
                     from tools.vr_motion.desktop_check import reveal_viewer
                     reveal_viewer(live, lower=True)
                     try:
-                        check_desktop_panel(live, output, preset, hand, trials)
+                        check_desktop_panel(live, output, preset, hand, trials, spawn_hands[hand])
                     finally:
                         reveal_viewer(live)
                 if quick or offset + len(rows) >= len(tab["rows"]):
                     break
                 scroll_page(live, hand, 1)
         for hand in (0, 1):
-            if not live.state["sidebars"][hand]["open"]:
-                live.button("menu", hand=hand)
+            open_sidebar_for_review(live, hand, spawn_hands[hand])
         if not quick:
             expected = {
                 (t["side"], t["key"], r["id"])
@@ -422,7 +430,10 @@ def main():
         help="Exit after tour instead of holding menus for review",
     )
     mode.add_argument("--selection-checks", action="store_true", help="Check left touchpad selection wheel, haptics and release confirmation")
+    mode.add_argument("--edit-checks", action="store_true", help="Check right touchpad edit wheel and history command publication")
     args = parser.parse_args()
+    if args.edit_checks and args.socket:
+        parser.error("--edit-checks requires its own isolated metadata fixture")
     if not 0 <= args.hold <= 30:
         parser.error("hold must be 0..30 seconds")
     root = Path(__file__).resolve().parents[2]
@@ -432,7 +443,7 @@ def main():
     )
     catalog = json.loads((root / "native/vr_viewer/sidebar_catalog.json").read_text())
     if args.tab:
-        if args.selection_checks or args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks:
+        if args.edit_checks or args.selection_checks or args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks:
             parser.error('--tab is only supported by the sidebar page tour')
         tabs = [t for t in catalog['tabs'] if f"{t['side']}:{t['key']}" == args.tab]
         if not tabs:
@@ -466,6 +477,12 @@ def main():
                     "--reference-grid",
                     "off",
                 ]
+                if args.edit_checks:
+                    # Owned empty scene + metadata only; never connected to a browser document.
+                    edit_events = Path(temp)/"edit-events.json"
+                    edit_events.with_suffix('.json.ligation').write_text("NADOC_LIGATION_1 1 READY 0\n")
+                    command[command.index("control")] = "transactions"
+                    command += ["--events", str(edit_events)]
                 if args.action_checks:
                     # Metadata-only fixture: no browser, molecular coordinates or saved document.
                     trajectory = Path(temp) / "trajectory.txt"
@@ -487,9 +504,9 @@ def main():
             deadline = time.monotonic() + 60
             while True:
                 try:
-                    live = LiveSession(Bridge(socket), physical=True)
-                    assert live.state["mode"] == "control", (
-                        "Tour requires isolated control mode"
+                    live = LiveSession(Bridge(socket), physical=True, allow_transactions=args.edit_checks)
+                    assert live.state["mode"] == ("transactions" if args.edit_checks else "control"), (
+                        "Tour requires its isolated input mode"
                     )
                     break
                 except (OSError, ValueError, RuntimeError):
@@ -499,18 +516,17 @@ def main():
                         raise
                     time.sleep(0.2)
             enlarge_mirror(live)
-            head = live.state["head_position"]
+            # Observe the real tracked view; place wrists so controller-spawned
+            # panels remain visible without replacing physical headset tracking.
+            from tools.vr_motion.metrics import rotate
+            anchor, _ = live.capture_to(output / "spawn-anchor", files=["evidence.json"], discard_source=True)
+            eye = anchor["eyes"][0]
+            head, orientation = eye["position"], eye["orientation_xyzw"]
             for hand in (0, 1):
-                live.send(
-                    "pose",
-                    hand=hand,
-                    position=[
-                        head[0] + (-0.3 if hand == 0 else 0.3),
-                        head[1] - 0.3,
-                        head[2] - 0.3,
-                    ],
-                    orientation=[0, 0, 0, 1],
-                )
+                offset = rotate(orientation, [-.30 if hand == 0 else .30, -.10, -.40])
+                live.send("pose", hand=hand,
+                          position=[a+b for a,b in zip(head, offset)], orientation=orientation)
+                live.frame()
                 if not live.state["sidebars"][hand]["open"]:
                     live.button("menu", hand=hand)
             live.frame()
@@ -526,8 +542,12 @@ def main():
                 and live.state["sidebars"][1]["open"]
             )
             live.button("menu", hand=0)
+            spawn_hands = [dict(h) for h in live.state["hands"]]
             results = []
-            if args.selection_checks:
+            if args.edit_checks:
+                from .edit_wheel_check import run as edit_run
+                focus_run = lambda live, catalog, destination, preset: edit_run(live, catalog, destination, preset, edit_events)
+            elif args.selection_checks:
                 from .selection_wheel_check import run as focus_run
             elif args.action_checks:
                 focus_run = lambda live, _catalog, destination, preset: check_actions(live, destination, preset)
@@ -553,7 +573,7 @@ def main():
                         "preset": preset,
                         **(
                             focus_run(live, catalog, destination, preset)
-                            if args.selection_checks or args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks
+                            if args.edit_checks or args.selection_checks or args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks
                             else run_tour(
                                 live,
                                 catalog,
@@ -561,6 +581,7 @@ def main():
                                 preset,
                                 args.hold,
                                 args.quick,
+                                spawn_hands,
                             )
                         ),
                     }
@@ -568,7 +589,7 @@ def main():
                 (output / "result.json").write_text(
                     json.dumps(results, indent=2) + "\n"
                 )
-            if not args.selection_checks and not args.action_checks and not args.remote_checks and not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks:
+            if not args.edit_checks and not args.selection_checks and not args.action_checks and not args.remote_checks and not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks:
                 check_actions(live, output, args.preset)
             from tools.vr_motion.desktop_check import run as check_desktop
 
@@ -582,17 +603,20 @@ def main():
                     f"Details: {output / 'desktop' / 'desktop-check.json'}",
                     flush=True,
                 )
-            if args.exit or not args.selection_checks:
+            if args.exit or not (args.selection_checks or args.edit_checks):
                 live.release()
             if not args.exit:
                 print(
-                    "Selection wheel remains open for review. Ctrl+C closes this tour viewer." if args.selection_checks
+                    "Touchpad wheel remains open for review. Ctrl+C closes this tour viewer." if args.selection_checks or args.edit_checks
                     else "Menus remain open for review. Ctrl+C closes this tour viewer.",
                     flush=True,
                 )
                 try:
-                    if args.selection_checks:
-                        from .selection_wheel_check import review
+                    if args.edit_checks or args.selection_checks:
+                        if args.edit_checks:
+                            from .edit_wheel_check import review
+                        else:
+                            from .selection_wheel_check import review
                         review(live, lambda: proc is None or proc.poll() is None)
                     else:
                         while proc is None or proc.poll() is None:

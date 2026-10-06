@@ -78,35 +78,41 @@ struct LiveViewerTest {
             std::istringstream script("SCRYWRITE_WITNESS 1\nhead 1 2 3 0.70710678 0 0.70710678 0\nstep 100\n");
             v.witness_.emplace(nadoc_vr::scrywrite::WitnessReplay::load(script));
             v.witness_->advance({});
+            v.hands_[0]={true,false,{-.4F,1.1F,-.2F},glm::angleAxis(.2F,glm::vec3(0,1,0))};
+            v.hands_[1]={true,false,{.4F,1.2F,-.3F},glm::angleAxis(-.3F,glm::vec3(0,1,0))};
             v.witnessObserverPosition_={-3,.5F,4};
             v.witnessObserverOrientation_={1,0,0,0};
         };
-        auto verify=[](const Viewer& v,size_t hand,glm::vec3 position,glm::quat orientation) {
+        auto verify=[](const Viewer& v,size_t hand) {
             const auto& menu=v.sidebarMenus_.menus[hand];
-            const auto expected=position+orientation*glm::vec3(hand==0?-.24F:.24F,-.10F,-.60F);
+            const auto position=v.hands_[hand].position;
+            auto orientation=v.hands_[hand].orientation;
+            const auto expected=position+orientation*glm::vec3(0,0,-.40F);
+            orientation=glm::normalize(orientation*glm::angleAxis(glm::radians(-30.F),glm::vec3(1,0,0)));
             requireLive(menu.open && glm::distance(menu.placement.position(),expected)<1e-5F &&
                         std::abs(glm::dot(menu.placement.orientation(),orientation))>1.F-1e-5F,
-                        "Sidebar spawned relative to the wrong viewing head");
+                        "Sidebar spawned relative to the wrong controller pose");
         };
         for(size_t hand:{0U,1U})for(bool scripted:{false,true}) {
             Viewer v(SceneData{});
+            v.hands_[0]={true,false,{-.4F,1.1F,-.2F},glm::angleAxis(.2F,glm::vec3(0,1,0))};
+            v.hands_[1]={true,false,{.4F,1.2F,-.3F},glm::angleAxis(-.3F,glm::vec3(0,1,0))};
             v.witnessObserverPosition_={-3,.5F,4};
             v.witnessObserverOrientation_=glm::angleAxis(.3F,glm::vec3(0,1,0));
             if(scripted)witness(v);
             v.toggleSidebar(hand);
-            if(scripted)verify(v,hand,v.witness_->input().head.position,v.witness_->input().head.orientation);
-            else verify(v,hand,v.witnessObserverPosition_,v.witnessObserverOrientation_);
+            verify(v,hand);
         }
         for(size_t hand:{0U,1U})for(bool tabRoute:{false,true}) {
             Viewer v(SceneData{});witness(v);
             if(tabRoute)v.openSidebarTab(hand,hand==0?"vr":"tools");
             else v.toggleMenu(hand);
-            verify(v,hand,v.witness_->input().head.position,v.witness_->input().head.orientation);
+            verify(v,hand);
         }
         for(size_t tool=0;tool<4;++tool) {
             Viewer v(SceneData{});witness(v);v.selectedSelectionKind_="cluster";
             v.activateAuthoringTool(tool);
-            verify(v,1,v.witness_->input().head.position,v.witness_->input().head.orientation);
+            verify(v,1);
         }
     }
     static void verifyRadialHistoryAndCurrentPanels() {
@@ -351,7 +357,10 @@ struct LiveViewerTest {
         activate("vr-head-light");
         requireLive(!v.shadowLight_.headFollowing() && !v.witnessShadowLight_.headFollowing() && left.open,
                     "VR lighting toggle did not disable or closed sidebar");
+        v.hands_[0]={true,false,{.2F,1.1F,-.3F},glm::angleAxis(.4F,glm::vec3(0,1,0))};
         activate("vr-desktop");
+        requireLive(glm::distance(v.desktopPanel_.placement.position(),v.hands_[0].position+
+            v.hands_[0].orientation*glm::vec3(0,0,-1.35F))<1e-5F,"Desktop ignored invoking controller");
         requireLive(left.open&&v.desktopPanel_.open,"Desktop must pop out independently of sidebar");
         const auto b=v.desktopPanel_.content(),c=v.desktopPanel_.closeBounds();
         requireLive(c.minimum.y>v.desktopPanel_.bounds().maximum.y && c.minimum.y>b.maximum.y,"Close overlaps desktop pixels or outer frame");
@@ -366,8 +375,8 @@ struct LiveViewerTest {
         requireLive(!v.desktopPanel_.magnifying,"Released trigger retained magnifier");
         std::array<bool,2> grips{};
         const auto frame=v.desktopPanel_.bounds();
-        v.hands_[1].position=v.desktopPanel_.placement.worldPoint({frame.maximum.x,0,0});v.hands_[1].pressed=true;
-        v.desktopPanel_.grips(v.hands_,{false,true},grips,[](size_t,float){});
+        v.hands_[1].position=v.desktopPanel_.placement.worldPoint({frame.maximum.x,0,0})+glm::vec3(0,0,.12F);v.hands_[1].pressed=true;
+        v.desktopPanel_.grips(nadoc_vr::MenuPlacement::borderContacts(v.hands_,{.025F,.025F}),{false,true},grips,[](size_t,float){});
         requireLive(grips[1]&&v.desktopPanel_.placement.dragHand(),"Desktop border must grab");
         const auto old=v.desktopPanel_.placement.position();v.hands_[1].position.x+=.1F;
         v.desktopPanel_.placement.update(v.hands_);
@@ -375,9 +384,9 @@ struct LiveViewerTest {
         v.hands_[1].pressed=false;v.desktopPanel_.placement.update(v.hands_);
         for(size_t h=0;h<2;++h) {
             v.hands_[h].valid=v.hands_[h].pressed=true;v.hands_[h].orientation=glm::quat(1,0,0,0);
-            v.hands_[h].position=v.desktopPanel_.placement.worldPoint({h?frame.maximum.x:frame.minimum.x,0,0});
+            v.hands_[h].position=v.desktopPanel_.placement.worldPoint({h?frame.maximum.x:frame.minimum.x,0,0})+glm::vec3(0,0,.12F);
         }
-        grips={};v.desktopPanel_.grips(v.hands_,{true,true},grips,[](size_t,float){});
+        grips={};v.desktopPanel_.grips(nadoc_vr::MenuPlacement::borderContacts(v.hands_,{.025F,.025F}),{true,true},grips,[](size_t,float){});
         const auto oldScale=v.desktopPanel_.placement.scale();
         v.hands_[0].position.x-=.1F;v.hands_[1].position.x+=.1F;v.desktopPanel_.placement.update(v.hands_);
         requireLive(v.desktopPanel_.placement.scale()>oldScale,"Two border grips must resize desktop");

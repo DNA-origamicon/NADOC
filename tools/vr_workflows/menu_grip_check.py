@@ -5,6 +5,7 @@ import math
 import numpy as np
 from PIL import Image
 from tools.vr_motion.model import reach
+from tools.vr_motion.metrics import rotate
 from tools.vr_motion.presets import PRESETS
 from tools.vr_motion.visual_checks import project
 
@@ -39,9 +40,26 @@ def move(live, targets, preset, trials):
                                   'extrude': live.state.get('extrude')})
 
 
+def grip_origin(live, hand, target):
+    """Place the tip selection sphere at a target without changing the wrist."""
+    offset = rotate(live.state['hands'][hand]['orientation_xyzw'], [0, 0, -.12])
+    return (np.asarray(target)-offset).tolist()
+
+
+def assert_controller_spawn(panel, pose):
+    expected = np.asarray(pose['position']) + rotate(pose['orientation_xyzw'], [0, 0, -.40])
+    assert np.linalg.norm(np.asarray(panel['position'])-expected) < 2e-5
+    left, right, top, bottom = map(np.asarray, panel['grip_targets'])
+    right_axis = (right-left)/np.linalg.norm(right-left)
+    up_axis = (top-bottom)/np.linalg.norm(top-bottom)
+    assert np.linalg.norm(right_axis-rotate(pose['orientation_xyzw'], [1, 0, 0])) < 2e-5
+    assert np.linalg.norm(up_axis-rotate(pose['orientation_xyzw'], [0, math.cos(math.pi/6), -math.sin(math.pi/6)])) < 2e-5
+
+
 def acquire(live, panel, hand, edge, preset, trials):
     for _ in range(3):
-        move(live, {hand: live.state['sidebars'][panel]['grip_targets'][edge]}, preset, trials)
+        target = np.asarray(live.state['sidebars'][panel]['grip_targets'][edge])
+        move(live, {hand: grip_origin(live, hand, target)}, preset, trials)
         if live.state['sidebars'][panel]['grip_nearby'][hand]:
             return
     raise AssertionError(f'Could not acquire {panel}/{edge} border with hand {hand}')
@@ -85,12 +103,22 @@ def capture(live, output, name, panel, state):
 def run(live, catalog, output, preset):
     del catalog
     checks, trials = {}, []
+    spawn_hands = [dict(h) for h in live.state['hands']]
     original_scene = live.state['presentation']['model_to_tracking_rows']
     try:
         for panel in (0, 1):
+            assert_controller_spawn(live.state["sidebars"][panel], spawn_hands[panel])
+            checks[f"{panel}_controller_spawn_30_degrees"] = True
             other = dict(live.state['sidebars'][1-panel])
             edge = panel  # Outside edge of each panel.
+            frozen_position = list(live.state['sidebars'][panel]['position'])
+            # The old origin-only hit must no longer light the frame.
+            move(live, {1: live.state['sidebars'][panel]['grip_targets'][edge]}, preset, trials)
+            assert not live.state['sidebars'][panel]['grip_nearby'][1]
+            checks[f'{panel}_midpoint_contact_rejected'] = True
             acquire(live, panel, 1, edge, preset, trials)
+            assert live.state['sidebars'][panel]['position'] == frozen_position
+            checks[f'{panel}_spawn_stays_world_fixed'] = True
             capture(live, output, f'{panel}-ready', panel, 'ready')
             initial = live.state['sidebars'][panel]['position']
             live.send('button', hand=1, button='grip', pressed=True)
@@ -124,7 +152,13 @@ def run(live, catalog, output, preset):
             checks[f'{panel}_move_resize_release_independent'] = True
             # Review reset outside measured motion; release before closing a panel.
             live.button('menu', hand=panel)
+            pose = spawn_hands[panel]
+            live.send('pose', hand=panel, position=pose['position'], orientation=pose['orientation_xyzw'])
+            live.frame()
             live.button('menu', hand=panel)
+        for hand, pose in enumerate(spawn_hands):
+            live.send('pose', hand=hand, position=pose['position'], orientation=pose['orientation_xyzw'])
+        live.frame()
         return {**checks, 'passed': True}
     finally:
         for hand in (0, 1):

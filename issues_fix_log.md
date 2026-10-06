@@ -338,3 +338,18 @@ clamp, framebuffer binding and whole-panel pixel counts masking faint letters)
 are retained in the [audit](docs/audits/vr_menu_formatting_20261005.md).
 425 rendered states and 12,001 layout cases pass; full frontend suite 7,375 passed,
 1 skipped. `main.js` delta 0. Reopen count: 0.
+
+2026-10-05 — ISSUE-57 intake (OPEN): right-wheel testing exposed a stale Nick
+pixel projection (+Y versus the renderer's -Z), now corrected with a pure test.
+The broader scissors/glow visual workflow still fails; no rendering fix is
+claimed. Target selection, wrist/contact adjustments, mirror size and grip zoom
+were insufficient; those experimental probe changes were removed. Evidence and
+unchanged pixel thresholds are recorded in ISSUE-57 and
+`.development-artifacts/vr-edit-wheel-20261005/`. Wheel behavior is validated by
+its own four-profile stereo tour and separate document-history workflow.
+
+2026-10-05 — ISSUE-58 intake (OPEN): the Ligate browser tour reaches the new
+right-wheel mode and rejects the invalid release, then its stretched-preview
+pixel gate fails (3/7 left, 2/7 right/mirror). Production preview code and the 0.7
+coverage threshold are unchanged. Evidence is retained under
+`.development-artifacts/vr-edit-wheel-20261005/ligate/`; commit/save was not reached.

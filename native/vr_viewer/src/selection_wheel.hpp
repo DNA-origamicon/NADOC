@@ -4,22 +4,36 @@
 #include <ostream>
 
 namespace nadoc_vr {
-// Thumb coordinates, not controller position, choose a sector. Clockwise from up.
-class SelectionWheel {
- public:
+struct SelectionWheelSpec {
+    static constexpr size_t hand=0;
+    static constexpr float phase=0, winding=1;
     static constexpr std::array<const char*,6> levels{"default","cluster","strand","domain","xover","base"};
     static constexpr std::array<const char*,6> labels{"DRILL","CLUSTER","STRAND","DOMAIN","CROSSOVER","BASES"};
+};
+struct EditWheelSpec {
+    static constexpr size_t hand=1;
+    // Preserve the established compass: Ligate right, Nick up, Undo left, Redo down.
+    static constexpr float phase=glm::half_pi<float>(), winding=-1;
+    static constexpr std::array<const char*,4> levels{"ligate","nick","undo","redo"};
+    static constexpr std::array<const char*,4> labels{"LIGATE","NICK","UNDO","REDO"};
+};
+// Both controllers use the same thumb-driven gesture and drawing implementation.
+template<class Spec> class TouchpadWheel {
+ public:
+    static constexpr auto levels=Spec::levels, labels=Spec::labels;
+    static constexpr size_t count=levels.size();
+    static float angle(size_t i) {return Spec::phase+Spec::winding*float(i)*glm::two_pi<float>()/float(count);}
     static constexpr float deadzone=.30F, outer=.175F, inner=.040F, labelRadius=.115F;
     struct Result { std::optional<size_t> commit; bool hoverChanged=false; };
     static glm::vec2 direction(size_t i) {
-        const float a=float(i)*glm::two_pi<float>()/6.F;
+        const float a=angle(i);
         return {std::sin(a),std::cos(a)};
     }
     static std::optional<size_t> sector(glm::vec2 axis) {
         if(!std::isfinite(axis.x)||!std::isfinite(axis.y)||glm::length(axis)<deadzone)return {};
-        float angle=std::atan2(axis.x,axis.y)+glm::pi<float>()/6.F;
-        if(angle<0)angle+=glm::two_pi<float>();
-        return size_t(std::floor(angle/(glm::two_pi<float>()/6.F)))%6;
+        float a=Spec::winding*(std::atan2(axis.x,axis.y)-Spec::phase)+glm::pi<float>()/float(count);
+        a=std::fmod(a+glm::two_pi<float>()*2,glm::two_pi<float>());
+        return size_t(std::floor(a/(glm::two_pi<float>()/float(count))))%count;
     }
     Result update(bool pressed,glm::vec2 axis,const HandPose& hand,bool enabled=true) {
         Result result;
@@ -30,7 +44,7 @@ class SelectionWheel {
         if(clicked)open_=true;
         if(!open_)return result;
         position_=hand.position+hand.orientation*glm::vec3(0,.04F,-.06F);
-        orientation_=glm::normalize(hand.orientation*glm::angleAxis(-glm::quarter_pi<float>(),glm::vec3(1,0,0)));
+        orientation_=MenuPlacement::controllerOrientation(hand.orientation);
         if(!pressed) {
             // OpenXR axes can reset on release. Commit the last held sample.
             result.commit=hovered_;open_=false;hovered_.reset();return result;
@@ -48,18 +62,19 @@ class SelectionWheel {
         if(result.commit) {select(levels[*result.commit]);pulse(.32F);}
     }
     void cancel() {open_=false;hovered_.reset();consumed_=false;axis_={};}
+    void close() {cancel();}
     bool open() const {return open_;}
     bool blocksInput() const {return consumed_;}
     auto hovered() const {return hovered_;}
     glm::vec3 worldPoint(glm::vec3 p) const {return position_+orientation_*p;}
     template<class T> std::array<T,2> filter(std::array<T,2> values) const {
-        if(consumed_)values[0]={};
+        if(consumed_)values[Spec::hand]={};
         return values;
     }
     void writeJson(std::ostream& out,const std::string& selected) const {
         out<<",\"selection_wheel\":{\"open\":"<<(open_?"true":"false")
            <<",\"hovered\":"<<(hovered_?std::to_string(*hovered_):"null")<<",\"items\":[";
-        for(size_t i=0;i<6;++i) {
+        for(size_t i=0;i<count;++i) {
             if(i)out<<',';
             const auto d=direction(i);const auto p=worldPoint({d.x*labelRadius,d.y*labelRadius,0});
             out<<"{\"level\":\""<<levels[i]<<"\",\"label\":\""<<labels[i]
@@ -73,12 +88,12 @@ class SelectionWheel {
         auto segment=[&](glm::vec2 a,glm::vec2 b,glm::vec3 color) {
             line(worldPoint({a.x,a.y,0}),worldPoint({b.x,b.y,0}),color);
         };
-        for(size_t item=0;item<6;++item) {
+        for(size_t item=0;item<count;++item) {
             const bool hover=hovered_==item;
             const glm::vec3 color=hover?glm::vec3(1,.78F,.20F):selected==levels[item]?glm::vec3(.4F,1,.62F):glm::vec3(.3F,.7F,.96F);
-            const float center=float(item)*glm::two_pi<float>()/6.F;
+            const float center=angle(item);
             auto polar=[](float a,float r){return glm::vec2(std::sin(a),std::cos(a))*r;};
-            const float lo=center-glm::pi<float>()/6.F+.025F,hi=center+glm::pi<float>()/6.F-.025F;
+            const float lo=center-glm::pi<float>()/float(count)+.025F,hi=center+glm::pi<float>()/float(count)-.025F;
             for(float r:{inner,outer})for(int j=0;j<16;++j)
                 segment(polar(glm::mix(lo,hi,float(j)/16),r),polar(glm::mix(lo,hi,float(j+1)/16),r),color);
             for(float a:{lo,hi})segment(polar(a,inner),polar(a,outer),color);
@@ -106,4 +121,6 @@ class SelectionWheel {
     glm::vec3 position_{};
     glm::quat orientation_{1,0,0,0};
 };
+using SelectionWheel=TouchpadWheel<SelectionWheelSpec>;
+using EditWheel=TouchpadWheel<EditWheelSpec>;
 }

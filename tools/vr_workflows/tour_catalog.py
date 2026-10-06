@@ -55,6 +55,10 @@ def catalog():
         'Start with Full, select other representations with real controller inputs, and verify loading progress plus retained model pixels in both eyes, including the point fallback. Validation uses all four motion profiles and covers Surface to Stick.', ['--representations'], module='startup_tour')
     add('startup', 'interaction', 'Cold startup and headset loading progress',
         'Launch a read-only private copy of 24HB through the normal launch route. Capture loading and first model stereo frames and verify advancing headset frames during natural-only export (no Quick Expand).', module='startup_tour')
+    add('edit-wheel-history', 'interaction', 'Right touchpad wheel · document Undo & Redo',
+        'Prepare a nicked strand in a temporary design, then undo and redo the nick through the right thumb wheel. Checks exact restored strands/helices, native refresh, haptic requests and no menus. Validation uses all four motion profiles.', module='edit_wheel_history_tour')
+    add('edit-wheel', 'interaction', 'Right touchpad edit wheel',
+        'Hold the right pad, slide to Ligate (right), Nick (up), Undo (left) or Redo (down), then release. Validates haptics, stereo highlights, independent hands, cancellation and history requests using isolated empty-scene metadata. Actual document undo/redo is covered by the Nick tour.', ['--edit-checks'])
     add('selection-wheel', 'interaction', 'Left touchpad selection wheel',
         'Hold the left pad, slide through Drill, Cluster, Strand, Domain, Crossover and Bases clockwise, then release. Checks hover haptics, no early selection, center cancellation, sidebar independence and stereo highlights with all four profiles.', ['--selection-checks'])
     add('menu-actions', 'interaction', 'Current menu routes',
@@ -70,7 +74,7 @@ def catalog():
     add('remote-borders', 'interaction', 'Menu controls · distant trigger grab & resize',
         'Hold a border with a fixed controller-to-border ray; move and rotate, then hold the other trigger on the border to resize. Also checks double-trigger resize and stereo feedback.', ['--remote-checks'])
     add('grips', 'interaction', 'Move & resize menu borders',
-        'Acquire both menu frames, reposition them and resize with two controllers.', ['--grip-checks'])
+        'Verify controller-relative 30-degree spawning, acquire both frames with controller-tip selection spheres, then move and resize with two controllers.', ['--grip-checks'])
     add('dimensions', 'dimensions', 'Place & manage dimensions',
         'Pin and recall endpoints away from menus; test icons and model movement/scaling.', ['--dimension-checks'])
     add('persistence', 'dimensions', 'Save & reopen dimensions',
@@ -94,8 +98,8 @@ def catalog():
         'Equip the two-column desktop-icon panel with the left quiver gesture and exercise the ten supported view toggles in native stereo; Quick Expand is excluded.', module='view_tools_tour')
     add('nick', 'authoring', 'Nick with scissors, Undo and Redo',
         'Equip/stow scissors with a behind-head reach, close them with analog trigger pressure, preview the glowing bond, click to nick, then use radial Undo and Redo. Check controller haptic requests and that commands and acknowledgements keep all menus closed. Validation uses all four motion profiles.', module='nick_tour')
-    add('ligate', 'authoring', 'Ligate ends with the radius wheel',
-        'Select Ligate through the four-volume wheel, stretch a preview from either end polarity, reject incompatible ends, release to create a forced ligation and verify Undo. Validation uses all four motion profiles.', module='ligation_tour')
+    add('ligate', 'authoring', 'Ligate ends with the touchpad wheel',
+        'Select Ligate by sliding right on the held touchpad wheel, stretch a preview from either end polarity, reject incompatible ends, release to create a forced ligation and verify Undo. Validation uses all four motion profiles.', module='ligation_tour')
     add('twist', 'authoring', 'Twist between two planes',
         'Isolated part: plane picking, rotation handle, signed amount wheel, unit conversion, Confirm, save/reopen and Undo. Tests all four motion profiles.', module='twist_tour')
     add('bend', 'authoring', 'Bend between two planes',
@@ -127,7 +131,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

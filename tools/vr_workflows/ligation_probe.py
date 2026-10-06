@@ -61,13 +61,14 @@ def run(socket, output, role):
         q = eye['orientation_xyzw']
         center = np.array(eye['position']) + rotate(q, [0,-.1,-.55])
         reach((center + rotate(q,[0,0,.12])).tolist(), q)
+        live.send('trackpad_axis', hand=1, x=0, y=0);live.frame()
         live.send('button', hand=1, button='trackpad', pressed=True);live.frame()
         assert live.state['radial_edit']['open']
         items = live.state['radial_edit']['items']
         assert [i['label'] for i in items] == ['LIGATE','NICK','UNDO','REDO']
         assert [i['enabled'] for i in items] == [True,True,True,True]
-        target = np.array(items[index]['center']) + rotate(q,[0,0,.12])
-        reach(target.tolist(), q, acquired=lambda s:s['radial_edit']['hovered']==index)
+        from .edit_wheel_check import slide
+        slide(live,index,preset,trials)
         live.capture_to(out/f'wheel-{index}', discard_source=True)
         live.send('button', hand=1, button='trackpad', pressed=False);live.frame()
     try:

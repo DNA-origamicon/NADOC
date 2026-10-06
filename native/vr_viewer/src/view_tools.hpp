@@ -67,7 +67,7 @@ void main(){objectId=0u;vec4 tex=t.x<0?vec4(1):texture(atlas,t);outColor=vec4(po
     void clearBatches(){for(auto& b:batches){if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}batches.clear();}
     void shutdown(){clearBatches();if(triangleVbo)glDeleteBuffers(1,&triangleVbo);if(lineVbo)glDeleteBuffers(1,&lineVbo);if(texture)glDeleteTextures(1,&texture);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(program)glDeleteProgram(program);}
     void syncPose(){position=placement.position();orientation=placement.orientation();}
-    void toggle(glm::vec3 head,glm::quat facing) {open=!open;hover={-1,-1};if(open){placement.openDocked(head+facing*glm::vec3(-.34F,0,-.8F),facing);syncPose();}}
+    void toggle(glm::vec3 controller,glm::quat facing) {open=!open;hover={-1,-1};if(open){placement.openFromController({true,false,controller,facing},.8F);syncPose();}}
     glm::vec3 world(glm::vec2 uv) const {return placement.worldPoint({(uv.x-.5F)*2*half,(.5F-uv.y)*2*half,0});}
     template<class Feedback> void grips(const std::array<nadoc_vr::HandPose,2>& hands,const std::array<bool,2>& clicked,std::array<bool,2>& blocked,Feedback feedback) {
         if(!open)return;

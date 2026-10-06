@@ -190,15 +190,14 @@ target need not be reselected in VR and an absent owner cannot become a false ma
 
 Controls on the original HTC Vive wands:
 
-- Hold the right trackpad to open a world-fixed radial **Edit** menu around that
-  controller's Selection Volume. Its volumetric sectors tilt 45° back from the
-  controller pose for a more readable wrist angle. Move the right controller until the volume enters
-  one of the four depth-bearing sectors (Ligate, Nick, Undo, Redo); the
-  sector highlights and gives a light haptic tick. Release the trackpad to activate
-  the enabled highlighted action, or release in the center/outside the ring to cancel.
-  All four actions are enabled. Quick Expand has been removed from VR.
+- Hold the right trackpad to open the thumb-driven **Edit** wheel. Slide the thumb
+  toward Ligate (right), Nick (up), Undo (left), or Redo (down). A new sector
+  highlights amber and gives a light haptic tick; releasing commits the last held
+  sector. Return to center before releasing to cancel. The wheel follows the
+  controller with the same basic design and gesture as the left selection wheel.
+  An open right sidebar retains touchpad focus navigation. Quick Expand is removed.
 - Each controller carries a wireframe **Selection Volume** 12 cm beyond its tip. Slide a
-  thumb upward or downward on that controller's trackpad to grow or shrink the volume
+  thumb upward or downward without pressing that controller's trackpad to grow or shrink the volume
   from precision-pick to area-selection size. A partial trigger pull resolves overlaps
   through the active desktop selection filter and draws an amber additive shell over
   the complete target geometry. A full pull commits up to 16 nearest distinct canonical
@@ -209,17 +208,17 @@ Controls on the original HTC Vive wands:
   Cluster, Strand, Domain, Crossover, Bases. Slide to highlight, release to select;
   releasing in the center cancels.
 - Hold either grip/squeeze button to grab, move, and rotate the structure outside a
-  tool preview. A grip within 7.5 cm of a menu border grabs the panel instead.
+  tool preview. A grip whose controller-tip selection sphere intersects a menu border grabs the panel instead.
   During Move/Rotate Preview, the
   right grip alone moves/rotates the pending handle while the left grip remains a
   structure grab unless it is targeting a panel.
 - Hold both grips and change the distance between the controllers to resize the
-  structure around their midpoint. When both controllers are within 7.5 cm of a
+  structure around their midpoint. When both controller-tip selection spheres intersect a
   menu or Desktop border, the same gesture resizes that panel instead and preserves
   its aspect ratio. A second border grip transitions an active one-hand panel grab
   directly into resizing; the captured grips cannot also transform the structure.
 - Press either application-menu button to toggle its matching sidebar. Sidebars
-  first open 60 cm ahead, 24 cm to either side, at scale 0.45. Their chosen size
+  first open 40 cm along the invoking controller pointer, tilted back 30°, at scale 0.45. Their chosen size
   survives reopening. Dock/Follow switches between world-fixed and controller
   placement. Aim at a border to move or resize remotely, or grip a nearby border.
   Gripping docks the panel at its current pose; release to leave it fixed, or choose
@@ -245,7 +244,7 @@ Controls on the original HTC Vive wands:
   a panel. The radial Edit wheel's Undo/Redo commands vibrate the controller
   without opening a menu. The old Options, Tools and tool-settings menus have
   been removed; view and selection controls live in the sidebars.
-  Choosing Extrude from the radial menu immediately creates a world-docked settings
+  Choosing Extrude from the Tools sidebar immediately creates a world-docked settings
   window plus a separate world-docked lattice window centered on the exact
   browser-resolved cell and laid out as the design's Honeycomb or Square lattice.
   The picker uses the exact desktop/caDNAno nanometre coordinates; its circles remain
@@ -437,7 +436,7 @@ avoid unnecessary source resets between measured switches.
 
 ### Ligate from the radius wheel
 
-Hold the right trackpad, move the selection sphere into **Ligate**, and release
+Hold the right trackpad, slide the thumb right toward **Ligate**, and release
 the trackpad. Hold either trigger on a 3′ or 5′ end, stretch the preview to a
 compatible opposite-polarity end on another strand, and release to create a forced
 ligation. A cyan preview follows an unsnapped hand; green means a valid target;

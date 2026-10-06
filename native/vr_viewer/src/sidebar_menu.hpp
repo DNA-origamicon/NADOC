@@ -28,6 +28,7 @@ class SidebarMenu {
     // Native Part sessions must not expose Assembly controls. An assembly host
     // must explicitly opt in with its actual document context.
     explicit SidebarMenu(int hand=0,bool assemblyActive=false): hand(hand) {
+        placement.setBorderWidth(ui_style::gripRail);
         for(size_t i=0;i<kSidebarTabs.size();++i) {
             const auto& tab=kSidebarTabs[i];
             if(tab.hand!=hand || (tab.key=="assembly" && !assemblyActive))continue;

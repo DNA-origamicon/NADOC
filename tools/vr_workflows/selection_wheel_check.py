@@ -41,11 +41,11 @@ def amber_pixels(rgb, eye, center):
                 & (crop[:, :, 2] < 110)).sum())
 
 
-def capture(live, output, name, index):
+def capture(live, output, name, index, key="selection_wheel"):
     dest = output / name
     evidence, _ = live.capture_to(dest, files=['left.png', 'right.png', 'mirror.png', 'evidence.json'], discard_source=True)
     assert evidence['xr_end_frame_succeeded']
-    center = evidence['state']['selection_wheel']['items'][index]['center']
+    center = evidence['state'][key]['items'][index]['center']
     pixels = {}
     for eye in evidence['eyes']:
         rgb = np.asarray(Image.open(dest / (eye['eye']+'.png')).convert('RGB'))

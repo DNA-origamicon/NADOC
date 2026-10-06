@@ -28,7 +28,6 @@ using nadoc_vr::HandPose;
 using nadoc_vr::ManipulationMode;
 using nadoc_vr::MenuPlacement;
 using nadoc_vr::PendingRigidTransform;
-using nadoc_vr::RadialToolMenu;
 using nadoc_vr::SceneManipulator;
 using nadoc_vr::ScenePlacementOrientation;
 using nadoc_vr::ScenePlacementView;
@@ -210,7 +209,7 @@ void menuFollowsItsControllerAndDockingFreezesItsWorldPose() {
         menu.localPoint(hands[0].position).x + MenuPlacement::kMenuHalfWidth)
         < 1e-5F);
     const glm::quat expectedTilt = glm::angleAxis(
-        glm::radians(-38.0F), glm::vec3(1.0F, 0.0F, 0.0F));
+        glm::radians(-30.0F), glm::vec3(1.0F, 0.0F, 0.0F));
     require(std::abs(glm::dot(menu.orientation(), expectedTilt)) > 1.0F - 1e-5F);
 
     hands[0].position += glm::vec3(0.25F, -0.10F, 0.05F);
@@ -238,33 +237,6 @@ void menuFollowsItsControllerAndDockingFreezesItsWorldPose() {
     hands[1].position.x += 0.2F;
     menu.update(hands);
     require(std::abs(menu.position().x - followed.x - 0.2F) < 1e-5F);
-}
-
-void radialToolMenuIsWorldFixedAndUsesExtrudedSectors() {
-    RadialToolMenu menu;
-    HandPose hand{true, false, {0.1F, 0.2F, -0.3F}, {1, 0, 0, 0}};
-    const glm::vec3 center(0.1F, 0.2F, -0.42F);
-    menu.open(hand, center);
-    require(menu.open());
-    const glm::vec3 tiltedUp = menu.orientation() * glm::vec3(0, 1, 0);
-    require(std::abs(tiltedUp.y - std::sqrt(0.5F)) < 1e-5F);
-    require(std::abs(tiltedUp.z + std::sqrt(0.5F)) < 1e-5F);
-    require(!menu.hit(center));
-    require(menu.hit(menu.worldPoint({0.10F, 0.0F, 0.0F})) == 0U);
-    require(menu.hit(menu.worldPoint({0.0F, 0.10F, 0.0F})) == 1U);
-    require(menu.hit(menu.worldPoint({-0.10F, 0.0F, 0.0F})) == 2U);
-    require(menu.hit(menu.worldPoint({0.0F, -0.10F, 0.0F})) == 3U);
-    require(!menu.hit(menu.worldPoint({0.10F, 0.0F, 0.05F})));
-
-    const glm::vec3 fixed = menu.position();
-    hand.position += glm::vec3(1.0F);
-    hand.orientation = glm::angleAxis(
-        glm::radians(80.0F), glm::vec3(0.0F, 1.0F, 0.0F));
-    (void)menu.update(menu.worldPoint({0.0F, 0.10F, 0.0F}));
-    require(glm::all(glm::epsilonEqual(menu.position(), fixed, 1e-6F)));
-    require(menu.hovered() == 1U);
-    menu.close();
-    require(!menu.open() && !menu.hovered());
 }
 
 void extrudeLatticeDraftTogglesParityCodedCells() {
@@ -1518,7 +1490,6 @@ int main() {
     namedPlacementPresetsAndOverridesAreDeterministic();
     closeInspectionAllowsTheModelToPassThroughTheHead();
     menuFollowsItsControllerAndDockingFreezesItsWorldPose();
-    radialToolMenuIsWorldFixedAndUsesExtrudedSectors();
     extrudeLatticeDraftTogglesParityCodedCells();
     partiallyVisibleLatticeCirclesRemainVisibleAndPaintable();
     thumbwheelDragAndMomentumProduceSignedNotches();

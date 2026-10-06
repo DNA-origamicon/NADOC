@@ -653,7 +653,8 @@ inline void resolveWitnessMenuTouch(
         replay.rejectMenuTouch("unknown menu edge: " + touch.edge);
         return;
     }
-    replay.resolveMenuTouch(*position, placement.position());
+    const auto& hand=replay.input().hands[touch.hand];
+    replay.resolveMenuTouch(*position-hand.orientation*glm::vec3(0,0,-.12F), placement.position());
 }
 
 inline std::vector<WitnessGuideLine> witnessHeadFrustum(const WitnessHeadPose& head) {

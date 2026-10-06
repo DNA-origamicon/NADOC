@@ -72,7 +72,7 @@ def run(live, catalog, output, preset):
         live.send('pose',hand=1,position=(head+rotate(q,[0,0,-1.15])).tolist(),orientation=[0,0,0,1]);live.frame()
         live.send('button',hand=1,button='grip',pressed=False);live.frame()
         live.button('menu',hand=0);live.frame()
-        panel=live.state['sidebars'][0];edge=np.asarray(panel['grip_targets'][0])
+        panel=live.state['sidebars'][0];edge=np.asarray(panel['grip_targets'][0])-rotate(q,[0,0,-.12])
         delta=head+rotate(q,[-.02,-.04,-.70])-panel['position']
         live.send('pose',hand=1,position=edge.tolist(),orientation=q);live.frame()
         live.send('button',hand=1,button='grip',pressed=True);live.frame()

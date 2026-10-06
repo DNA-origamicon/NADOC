@@ -286,7 +286,7 @@ def main():
                 live.button("menu", hand=0)
             if not live.state["sidebars"][1]["open"]:
                 live.button("menu", hand=1)
-            # Default sidebar opening is head-anchored; move its real grip frame
+            # Sidebar opening is controller-anchored; move its real grip frame
             # aside so the model and controls remain independently observable.
             from tools.vr_workflows.menu_grip_check import acquire, move
 

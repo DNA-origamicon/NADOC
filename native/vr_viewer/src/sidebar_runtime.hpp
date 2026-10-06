@@ -25,12 +25,12 @@ class SidebarRuntime {
         }
         return nearest;
     }
-    void toggle(size_t hand,const glm::vec3& head,const glm::quat& orientation) {
+    void toggle(size_t hand,const glm::vec3& controller,const glm::quat& orientation) {
         auto& m=menus.at(hand); m.open=!m.open; m.hovered.clear(); m.focus.reset(); m.pressed.clear();
         if(m.open) {
-            // Independent world-docked columns, centered below the tracked eye.
+            // Freeze the invoking controller pose with a backward tablet tilt.
             // Border grip/resize and Dock/Follow retain the existing tablet contract.
-            m.placement.openDocked(head+orientation*glm::vec3(hand==0?-.24F:.24F,-.10F,-.60F),orientation);
+            m.placement.openFromController({true,false,controller,orientation});
             if(!openedBefore[hand]) {m.placement.setScale(.45F);openedBefore[hand]=true;}
         }
     }

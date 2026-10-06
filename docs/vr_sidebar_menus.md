@@ -45,11 +45,18 @@ extension has its own scrollbar. See [VR simulation results](vr_simulations.md)
 for job-specific options, the `2hb_1xT` demo and validation limits.
 
 Each controller's menu button independently toggles its matching sidebar. Both
-can remain open. Menus have opaque dark backgrounds that obscure the scene
+can remain open. Each menu spawns 40 cm along its controller pointer, tilted
+back 30° about the controller’s local X axis (top edge away), then stays
+world-fixed. Headset position does not determine the spawn pose. Desktop and
+View tool panels use the same tilt at their existing viewing distances;
+attached tool panels inherit their sidebar pose. Both touchpad wheels use the
+same 30° tilt while following their controllers. Menus have opaque dark backgrounds that obscure the scene
 behind them, with sharp text and blue active styling. Tabs preserve desktop order
 and labels; their text runs vertically on the outside edge. Controls are
 larger for ray selection. The wide framed border has textured corner handles and
-side grip marks. Bring a controller within 7.5 cm of an edge: the nearest frame
+side grip marks. Intersect an edge with the selection sphere 12 cm along the
+controller pointer; its current radius and the visible rail width determine
+contact, including the rail’s inner edge. The nearest frame
 highlights blue. Hold one **Grip** to move (amber frame), add the other controller's
 **Grip** at another edge to resize (green frame), and release to set the panel.
 Grab feedback includes haptics and a status label. The grip frame sits outside
@@ -496,9 +503,8 @@ run therefore is not an overall desktop-delivery pass. No thresholds were relaxe
 Remote borders (September 30): the desktop Close button is now above the outer
 VR frame with a visible gap, not merely outside the captured image. Its chrome
 has separate render/hit bounds; the desktop image and border bounds remain
-independent. Controller sidebars initially use scale 0.45 at 0.60 m forward
-(previously 0.65 at 0.95 m), with centers 0.24 m either side and 0.10 m below
-the eye. A user-selected size survives reopening.
+independent. Controller sidebars initially use scale 0.45 at 0.40 m along the controller pointer
+with a 30° backward tilt. A user-selected size survives reopening.
 
 Aim at any interactive window border and hold Trigger to attach it to the controller
 with a fixed ray distance and angle. Translation and rotation follow the controller,
@@ -558,3 +564,28 @@ budget after cumulative panel enlargement. This verifies rendered stereo and
 monitor delivery, not physical headset comfort or OS click injection (disabled
 for scripted tests). Validation ran without builds overlapping VR sessions;
 available memory stayed around 14 GiB.
+
+The right Edit wheel uses the same thumb-driven hold/slide/release mechanism as
+left selection. Its established compass is Ligate right, Nick up, Undo left,
+Redo down. The controller-following wheel highlights and pulses on sector entry;
+center release cancels. Undo/Redo confirm with haptics and leave menus unchanged.
+The right sidebar retains pad focus navigation while open.
+Debug → VR Tours & Tests → Controls & layout → **Right touchpad edit wheel**
+checks all four profiles, stereo highlights, independent hands, cancellation,
+no early actions and history request publication in an isolated metadata fixture.
+The existing Ligate and Nick/history tours also use thumb-axis selection now.
+
+**Right touchpad wheel · document Undo & Redo** prepares an isolated nicked
+strand and verifies exact document restoration through the wheel. Its validation
+runs all four motion profiles. The broader Nick/Ligate visual workflows have
+separate unresolved pixel failures recorded as ISSUE-57 and ISSUE-58.
+
+Controller placement and grip validation (October 5): `--grip-checks --validate`
+checks 30° controller-relative spawning, world-fixed placement after opening,
+midpoint-only rejection, tip-sphere acquisition, independent movement, resizing
+and release in all four motion profiles. The left/right wheel and detached
+Desktop tours also pass all four profiles with stereo and desktop-delivery
+checks. Minimum-radius contact at the visible rail’s inner edge is covered by
+native regression tests. Evidence, retained failed attempts and cleanup:
+`.development-artifacts/vr-controller-menus-20261005/validation.json`.
+Physical comfort and haptic feel remain MV-41.

@@ -1,8 +1,8 @@
-# Ligate with the VR radius wheel
+# Ligate with the VR touchpad wheel
 
-Hold the right trackpad to open the existing four-volume wheel. Its sectors are
-now **Ligate**, **Nick**, **Undo**, and **Redo**. Move the selection sphere into
-Ligate and release the trackpad to enter Ligate mode. All four sectors are active.
+Hold the right trackpad to open the four-sector thumb wheel. Its sectors are
+now **Ligate**, **Nick**, **Undo**, and **Redo**. Slide the thumb toward
+Ligate (right) and release the trackpad to enter Ligate mode. All four sectors are active.
 Extrude, Twist/Bend and Move/Rotate retain
 their existing sidebar entry points.
 
@@ -29,7 +29,7 @@ changed endpoint catalog cancels the active drag. Selection-sphere radius keeps
 its existing trackpad adjustment. End-resize arrows do not acquire triggers while
 Ligate owns the gesture.
 
-Debug → VR Tours & Tests → Tools · Authoring → **Ligate ends with the radius wheel**
+Debug → VR Tours & Tests → Tools · Authoring → **Ligate ends with the touchpad wheel**
 provides an isolated demo and four-profile validation. It uses ordinary wheel
 volume targeting and triggers, tests both pickup polarities and incompatible
 release, checks preview and saved-bond pixels, and verifies exact desktop Undo.

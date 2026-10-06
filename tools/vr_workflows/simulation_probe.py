@@ -60,7 +60,7 @@ def run(socket, output, identifier):
             live.button('menu', hand=0);live.frame()
             click(live, 0, 'tab:dynamics', preset, trials)
             panel = live.state['sidebars'][0]
-            edge = np.array(panel['grip_targets'][0]);delta = head+rotate(q,[-.52,-.18,-1.35])-panel['position']
+            edge = np.array(panel['grip_targets'][0])-rotate(q,[0,0,-.12]);delta = head+rotate(q,[-.52,-.18,-1.35])-panel['position']
             live.send('pose', hand=1, position=edge.tolist(), orientation=q);live.frame()
             live.send('button', hand=1, button='grip', pressed=True);live.frame()
             assert live.state['sidebars'][0]['grip_state']=='moving'

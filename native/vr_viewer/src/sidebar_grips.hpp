@@ -17,7 +17,7 @@ std::array<bool,2> updateSidebarGrips(Menus& menus,const std::array<HandPose,2>&
     }
     for(size_t h=0;h<2;++h) {
         target[h]=owner[h];
-        float nearest=MenuPlacement::kBorderGrabDistanceMeters;
+        float nearest=hands[h].borderContactRadius;
         if(owner[h]<0) for(size_t i=0;i<menus.size();++i) if(menus[i].open) {
             const auto b=menus[i].bounds();
             const float distance=menus[i].placement.borderDistanceMeters(hands[h],b.minimum,b.maximum);

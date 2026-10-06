@@ -7,6 +7,44 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Controller-relative menus and tip-sphere grips (2026-10-05)
+
+Sidebars now spawn 40 cm along the invoking controller's -Z pointer, with a
+30° backward local-X tilt, then remain world-docked. Head pose no longer chooses
+menu placement. Desktop and View tools use the same controller orientation at
+1.35 m / .8 m; attached authoring/lattice panels inherit their parent pose.
+Follow mode and both touchpad wheels share the 30° tilt. Border targeting uses
+selection-sphere center (-.12 m in controller space) and the current per-hand
+radius against the visible rail band, including its inner edge at minimum
+sphere size. Contact metadata preserves the real controller origin for drag/resize
+anchoring. Sidebar, desktop, View tools and lattice borders use the same contact
+path; lattice interior zoom keeps its existing interaction. Semantic Witness
+`touch_menu` and physical grip tours place the tip sphere on the border.
+The registered `grips` tour checks both controller spawn poses, midpoint-only
+rejection, world-fixed placement, move/resize/release and stereo frame colors.
+All four profiles pass for sidebar grips, detached Desktop and both wheels,
+including stereo pixels and actual desktop delivery. 72 native tests, 48 focused
+Python tests, 7,375 frontend tests and the 397-state menu render audit pass.
+Evidence, retained timing/acquisition attempts and cleanup:
+`.development-artifacts/vr-controller-menus-20261005/validation.json`. Physical
+feel and through-lens comfort remain MV-41.
+
+## Right touchpad Edit wheel (2026-10-05)
+
+The Edit wheel now shares the left wheel's `TouchpadWheel` gesture/render module:
+thumb-axis sector hover, light tick on entry, last-held selection on release,
+center cancellation and controller-following pose. Existing compass is preserved:
+Ligate right, Nick up, Undo left, Redo down. The old `RadialToolMenu` world-volume
+hit implementation is removed. Right-sidebar focus navigation remains when open.
+`edit-wheel` is registered under Controls & layout; its empty-scene metadata
+fixture verifies history request publication without editing a user document.
+Ligate/Nick/avatar probes use profile-driven pad axes. The separate
+`edit-wheel-history` tour exercises real document Undo/Redo. Broader Nick/Ligate
+pixel workflows still fail (ISSUE-57/58); do not claim their full flows validated. Physical haptic feel and
+through-lens comfort remain manual validation (MV-40). Both wheels and real
+document history pass all four profiles; 72 native tests and 397 rendered states
+pass. Full evidence, failures and cleanup: `.development-artifacts/vr-edit-wheel-20261005/validation.json`.
+
 ## Left touchpad selection wheel (2026-10-05)
 
 `selection_wheel.hpp` owns the six-sector thumb gesture and rendering. Hold the
@@ -420,7 +458,7 @@ opposite end on another strand, and release to create one forced ligation throug
 the desktop API. Versioned catalogs and deduplicated release events protect the
 transaction; scene/menu/tracking changes cancel active drags. Each saved bond is
 independently undoable on desktop.
-Debug → VR Tours & Tests → Tools · Authoring → **Ligate ends with the radius wheel**
+Debug → VR Tours & Tests → Tools · Authoring → **Ligate ends with the touchpad wheel**
 runs the reusable demo or four-profile validation. All four profiles passed both
 pickup polarities, invalid release, native refresh, stereo/mirror preview pixels,
 saved-bond pixels and exact Undo. Evidence: `.development-artifacts/vr-ligation/69c3958ea7/`.
@@ -667,7 +705,7 @@ Ratify thresholds during Phase 0 research; do not silently turn provisional numb
 
 Detailed Phase 0–4 inventory, acceptance reasoning, and scene-contract lineage moved to `project_native_vr_archive.md`. The active invariants, phase states, manual gates, and unresolved questions remain here.
 
-Radial-tools / Extrude-interface slice (2026-08-21): the right trackpad no longer toggles Expanded Quick View. Holding it snapshots a world-fixed, depth-extruded four-sector radial menu around the right Selection Volume; its pose includes the same sign of backward X tilt as the tablet, now exactly 45°. Controller motion produces hover/haptics and release activates Extrude, Twist, Bend, or Move/Rotate, while release in the dead zone cancels. Extrude opens an already-docked settings tablet and a separate docked lattice tablet; both reuse the established one-border-grip move and two-border-grip uniform resize contract. Private End feedback v4 carries the validated desktop lattice type and exact footprint cell, so the picker centers on the real cell without native geometry inference; v1–v3 remain parseable. VR now duplicates the measured desktop/caDNAno formulas exactly: HC `x=col·1.125√3`, `y=row·3.375 + (odd(row+col)?1.125:0)` nm, Square pitch `2.25 nm`; a direct test measures the representative HC neighbour at exactly `2.25 nm`. Panel-local pitch and circle radius are recalculated from immutable nm→view normalization, live scene scale, and panel scale, making every circle's world radius equal the displayed DNA radius of `1 nm`. Rendering and picking share exact circle/viewport intersection enumeration across the full grid; clipped edge arcs remain selectable only through their visible viewport portion. A held right trigger paints multiple cells, with the first cell choosing add/erase and a visited set preventing repeat toggles during one stroke. Free-cell parity and colors match desktop/cadnano (even row+column Forward blue `#29b6f6`, odd Reverse red `#ef5350`); selected cells are amber and visibly labeled `VR DRAFT`. Each selected cell now draws a live wireframe cylinder normal to the lattice plane with exact `1 nm` radius and `length_bp × 0.334 nm` depth after scene/panel scaling; cyan/amber shows outward/inward direction. The Extrude tablet's depth-bearing thumbwheel uses lattice-repeat clicks—7 bp Honeycomb, 8 bp Square. A deliberate slow release cancels sub-click travel and sticks to the last detent, while a release above the provisional flick threshold preserves signed velocity under exponential damping. Wheel capture has priority over panel buttons, lattice paint, and scene selection. A bounded, ray-highlighted `EXIT` control emits Cancel, clears the draft/configuration and wheel motion, and closes both Extrude windows. All tablet text now uses measured 5×7 glyph width and fits/shrinks within explicit bounds. This checkpoint is deliberately interface-only: lattice picks do not yet cross the authoritative extrusion footprint protocol or enable Confirm/design mutation. Pure tests cover fixed tilted radial pose, sector/depth hit testing, exact HC/Square coordinates, physical preview depth/scale, full/partial circle intersection and clipping, add/erase paint strokes, lattice detents, slow-release settling, thumbwheel direction/inertia, bounded text width, parity, reversible cell toggles, and v4 lattice metadata. Physical headset legibility, preview depth perception, acquisition, thumbwheel damping/flick threshold, panel overlap/reach, and grip-priority checks remain required.
+Radial-tools / Extrude-interface slice (2026-08-21): the right trackpad no longer toggles Expanded Quick View. Historical implementation (superseded by the 2026-10-05 thumb wheel): holding it snapped a world-fixed, depth-extruded four-sector radial menu around the right Selection Volume; its pose includes the same sign of backward X tilt as the tablet, now exactly 45°. Controller motion produces hover/haptics and release activates Extrude, Twist, Bend, or Move/Rotate, while release in the dead zone cancels. Extrude opens an already-docked settings tablet and a separate docked lattice tablet; both reuse the established one-border-grip move and two-border-grip uniform resize contract. Private End feedback v4 carries the validated desktop lattice type and exact footprint cell, so the picker centers on the real cell without native geometry inference; v1–v3 remain parseable. VR now duplicates the measured desktop/caDNAno formulas exactly: HC `x=col·1.125√3`, `y=row·3.375 + (odd(row+col)?1.125:0)` nm, Square pitch `2.25 nm`; a direct test measures the representative HC neighbour at exactly `2.25 nm`. Panel-local pitch and circle radius are recalculated from immutable nm→view normalization, live scene scale, and panel scale, making every circle's world radius equal the displayed DNA radius of `1 nm`. Rendering and picking share exact circle/viewport intersection enumeration across the full grid; clipped edge arcs remain selectable only through their visible viewport portion. A held right trigger paints multiple cells, with the first cell choosing add/erase and a visited set preventing repeat toggles during one stroke. Free-cell parity and colors match desktop/cadnano (even row+column Forward blue `#29b6f6`, odd Reverse red `#ef5350`); selected cells are amber and visibly labeled `VR DRAFT`. Each selected cell now draws a live wireframe cylinder normal to the lattice plane with exact `1 nm` radius and `length_bp × 0.334 nm` depth after scene/panel scaling; cyan/amber shows outward/inward direction. The Extrude tablet's depth-bearing thumbwheel uses lattice-repeat clicks—7 bp Honeycomb, 8 bp Square. A deliberate slow release cancels sub-click travel and sticks to the last detent, while a release above the provisional flick threshold preserves signed velocity under exponential damping. Wheel capture has priority over panel buttons, lattice paint, and scene selection. A bounded, ray-highlighted `EXIT` control emits Cancel, clears the draft/configuration and wheel motion, and closes both Extrude windows. All tablet text now uses measured 5×7 glyph width and fits/shrinks within explicit bounds. This checkpoint is deliberately interface-only: lattice picks do not yet cross the authoritative extrusion footprint protocol or enable Confirm/design mutation. Pure tests cover fixed tilted radial pose, sector/depth hit testing, exact HC/Square coordinates, physical preview depth/scale, full/partial circle intersection and clipping, add/erase paint strokes, lattice detents, slow-release settling, thumbwheel direction/inertia, bounded text width, parity, reversible cell toggles, and v4 lattice metadata. Physical headset legibility, preview depth perception, acquisition, thumbwheel damping/flick threshold, panel overlap/reach, and grip-priority checks remain required.
 
 Phase 5 transactional-shell slice: the in-headset options panel now opens a separate, explicitly **READ ONLY** Tools page with Inspect, Move/Rotate, Extrude, Twist, and Bend modes plus Preview, Confirm, Cancel, Undo, and Back. Tool actions travel in the existing bounded/sequenced private event record; the browser owns one pure reducer that requires a canonical selection and preview-before-confirm, returns typed effects, and performs no API/store mutation. Native status text says `SELECT TARGET`, `PREVIEW ONLY`, `CONFIRM STAGED`, or `NO VR COMMIT` rather than claiming an edit occurred. Confirm emits an unexecuted `commit_requested` effect until a desktop-authoritative adapter is attached; Undo is deliberately inert before the first real VR commit. Focused evidence: 30 frontend tests, 22 route tests, 4 native tests, and a production Vite build pass.
 

@@ -1232,3 +1232,19 @@ job loads successfully. Audit: `.development-artifacts/archive-recovery-cube-por
 - [x] Audit all sidebar tabs, tool pages, legacy menus, desktop chrome, View Tools, loading panels and component galleries. Separate titles/subtitles/value columns, bound dynamic text, retain padding and readable tab labels, and keep text clear of controls, progress bars and borders.
 - [x] Correct transparent-menu alpha handling, framebuffer restoration during cache allocation, and texture aspect preservation after the width cap; wide desktop headers retain visible lettering.
 - **Evidence:** 12,001 layout states, 425 production-rendered states, native lifecycle regressions, the full frontend suite, and an actual browser-backed VR commit. Initial observation failures and human-headset limits remain recorded in the [audit](docs/audits/vr_menu_formatting_20261005.md).
+
+## ISSUE-57 — Nick tour cannot reliably observe scissors and bond glow together (2026-10-05, OPEN)
+
+- **Status:** `[ ]` OPEN. Found during right-touchpad-wheel regression work; wheel selection succeeds before this failure.
+- **Repro:** `uv run python -m tools.vr_workflows.nick_tour --validate --profile steady_fast`. The isolated one-helix fixture fails the existing stereo/mirror scissors-and-glow coverage requirement at open, half, or almost-closed squeeze.
+- **Confirmed test defect fixed:** `nick_pixels.py` projected blades along controller +Y although the current renderer and quiver oracle use controller -Z. Its corrected projection has an independent unit check. `audit_observation.py` now uses the same forward-axis contract for clearance.
+- **Remaining evidence:** `.development-artifacts/vr-edit-wheel-20261005/nick/` and the retained `nick-visible`, `nick-final`, `nick-face-on`, `nick-clear`, `nick-review-size`, `nick-beside`, and `nick-scaled` attempts. The corrected oracle passes the retained `nick-visible/open` frame, but that does not clear the whole workflow.
+- **Failed observation approaches:** near-side target selection, face-on wrist, contact offsets within the unchanged selection radius, enlarged mirror, and ordinary grip zoom did not establish all squeeze states. Experimental pose/zoom adjustments were removed from the maintained probe. No production geometry or pixel thresholds were changed.
+- **Follow-up:** diagnose blade/model/glow occlusion across squeeze states before changing rendering or accepting a new observation setup. The separate right-wheel document-history tour verifies Undo/Redo without depending on scissors visibility.
+
+## ISSUE-58 — Ligate tour stretched-preview pixel coverage fails (2026-10-05, OPEN)
+
+- **Status:** `[ ]` OPEN; discovered during right-wheel regression work after Ligate was selected successfully through thumb input.
+- **Repro:** `uv run python -m tools.vr_workflows.ligation_tour --validate --profile steady_fast`. The isolated one-helix fixture acquires an end and rejects a same-polarity release, then fails at the stretched-preview pixel assertion before committing a bond.
+- **Evidence:** `.development-artifacts/vr-edit-wheel-20261005/ligate/`. Coverage is 3/7 left-eye samples and 2/7 right-eye/mirror samples, below the unchanged 0.7 requirement. Captured state, images and input reaches are retained.
+- **Scope / follow-up:** No Ligate geometry or preview renderer was changed by the wheel conversion. Diagnose projected-line occlusion and observation setup before assigning a production root cause or altering the oracle. This failure does not establish whether later commit/save/Undo steps pass; they were not reached.

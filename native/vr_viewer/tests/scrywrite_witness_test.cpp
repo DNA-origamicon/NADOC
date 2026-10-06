@@ -172,9 +172,9 @@ int main() {
     require(!placementReplay.pendingMenuTouch(),
             "live menu placement should resolve the semantic edge");
     require(glm::length(
-        placementReplay.input().hands[0].position -
+        placementReplay.input().hands[0].position + glm::vec3(0,0,-.12F) -
         placement.worldPoint({menuMaximum.x, (menuMinimum.y+menuMaximum.y)*.5F, 0.0F})) < 1.0e-6F,
-        "touch_menu should put the requested hand on the live menu border");
+        "touch_menu should put the requested selection sphere on the live menu border");
     placementReplay.advance({
         "sidebars", "none", "none", "none", "docked",
         placement.position() + glm::vec3(0.25F, 0.0F, 0.0F),

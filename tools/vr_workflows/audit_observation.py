@@ -36,7 +36,7 @@ def front_bond(evidence, bonds, masks=None):
                 angle=.65
                 for side in (-1,1):
                     for t in (.025,.04,.052):
-                        point=mid+rotate(q,[side*np.sin(angle)*t,np.cos(angle)*t-.022,0])
+                        point=mid+rotate(q,[side*np.sin(angle)*t,0,.022-np.cos(angle)*t])
                         pixel=project(point,eye)
                         if pixel is None:visible=False;break
                         x,y=map(round,pixel)

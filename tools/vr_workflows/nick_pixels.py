@@ -7,11 +7,17 @@ from tools.vr_motion.metrics import rotate
 from tools.vr_motion.visual_checks import project, coverage
 
 
+def blade_points(center, orientation, angle):
+    # The controller forward axis is -Z; blades extend around the cutting center.
+    return [np.asarray(center)+rotate(orientation,[side*np.sin(angle)*t,0,.022-np.cos(angle)*t])
+            for side in (-1,1) for t in (.025,.04,.052)]
+
+
 def check(directory,offscreen=False):
     directory=Path(directory);e=json.loads((directory/'evidence.json').read_text());s=e['state'];l=s['ligation']
     h=s['hands'][1];q=h['orientation_xyzw'];center=np.array(h['position'])+rotate(q,[0,0,-.12])
     angle=l['scissor_angles'][1]
-    blades=[center+rotate(q,[side*np.sin(angle)*t,np.cos(angle)*t-.022,0]) for side in (-1,1) for t in (.025,.04,.052)]
+    blades=blade_points(center,q,angle)
     bond=l['bonds'][l['nick_hover'][1]]
     points={'scissors':blades,'glow':[(1-t)*np.array(bond['a'])+t*np.array(bond['b']) for t in (.25,.5,.75)]}
     result={}

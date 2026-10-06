@@ -37,6 +37,40 @@ int main() {
     hands[1]={true,true,menus[1].placement.position(),{1,0,0,0}};
     require(!update({false,true})[1],"Interior became a border target");
     hands[1].valid=false;require(!update({false,true})[1],"Invalid hand grabbed frame");
+    // Runtime contact is the selection sphere 12 cm along the pointer, while
+    // drag anchoring retains the real controller origin (no acquisition jump).
+    menus[0].open=false;
+    auto& panel=menus[1].placement;
+    panel.openDocked({0,0,-1},{1,0,0,0});panel.setScale(.45F);
+    const auto edge=panel.worldPoint({kSidebarBounds.maximum.x,0,0});
+    hands={};hands[1]={true,true,edge+glm::vec3(0,0,.14F),{1,0,0,0}};
+    auto contacts=MenuPlacement::borderContacts(hands,{.025F,.025F});
+    const auto bounds=menus[1].bounds();
+    require(!panel.nearBorder(hands[1],bounds.minimum,bounds.maximum),"Midpoint unexpectedly reached border");
+    require(panel.nearBorder(contacts[1],bounds.minimum,bounds.maximum),"Sphere intersection missed border");
+    const auto initial=panel.position();
+    require(updateSidebarGrips(menus,contacts,{false,true},[](size_t,float){})[1],"Tip sphere failed to acquire");
+    require(glm::distance(panel.position(),initial)<1e-6F,"Contact acquisition jumped panel");
+    contacts[1].position.x+=.1F;panel.update(contacts);
+    require(glm::distance(panel.position(),initial+glm::vec3(.1F,0,0))<1e-6F,"Tip grab changed translation");
+    contacts[1].pressed=false;panel.update(contacts);
+    hands[1].position=panel.worldPoint({kSidebarBounds.maximum.x,0,0});
+    contacts=MenuPlacement::borderContacts(hands,{.025F,.025F});
+    require(!panel.nearBorder(contacts[1],bounds.minimum,bounds.maximum),"Midpoint-only contact acquired border");
+    hands[1].orientation=glm::angleAxis(glm::radians(90.F),glm::vec3(0,1,0));
+    hands[1].position=panel.worldPoint({kSidebarBounds.maximum.x,0,0})+glm::vec3(.16F,0,0);
+    contacts=MenuPlacement::borderContacts(hands,{.025F,.05F});
+    require(panel.nearBorder(contacts[1],bounds.minimum,bounds.maximum),"Rotated enlarged sphere missed border");
+    contacts[1].borderContactRadius=.025F;
+    require(!panel.nearBorder(contacts[1],bounds.minimum,bounds.maximum),"Sphere radius ignored");
+    // Even the smallest sphere can touch the inner edge of a visible rail.
+    hands[1].orientation={1,0,0,0};
+    hands[1].position=panel.worldPoint({kSidebarBounds.maximum.x-ui_style::gripRail,0,0})+glm::vec3(0,0,.125F);
+    contacts=MenuPlacement::borderContacts(hands,{.008F,.008F});
+    require(panel.nearBorder(contacts[1],bounds.minimum,bounds.maximum),"Inner rail is visibly touched but not grabbable");
+    hands[1].position=panel.worldPoint({kSidebarBounds.maximum.x-ui_style::gripRail-.03F,0,0})+glm::vec3(0,0,.12F);
+    contacts=MenuPlacement::borderContacts(hands,{.008F,.008F});
+    require(!panel.nearBorder(contacts[1],bounds.minimum,bounds.maximum),"Small sphere grabbed clear panel interior");
     // Visible rails must fit the enlarged frame and leave all existing controls clear.
     drawGripFrame(kSidebarBounds,GripFrameState::idle,
         [&](glm::vec3 a,glm::vec3 b,glm::vec3){

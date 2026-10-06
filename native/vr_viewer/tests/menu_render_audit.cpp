@@ -202,10 +202,10 @@ struct LiveViewerTest {
             capture("desktop-chrome-aspect-"+std::to_string(aspect)+"-scale-"+std::to_string(scale),v.desktopPanel_.chromeBounds(),[&](const auto& vp){v.desktopFrameSurface_.render(vp,v.desktopPanel_.placement,v.desktopPanel_.chromeBounds(),.008F);},nullptr,regions);
         }
         v.desktopPanel_.open=false;
-        nadoc_vr::HandPose hand;hand.valid=true;hand.orientation=glm::angleAxis(nadoc_vr::RadialToolMenu::kBackwardTiltRadians,glm::vec3(1,0,0));
-        v.radialToolMenu_.open(hand,{});
+        nadoc_vr::HandPose hand;hand.valid=true;hand.orientation=glm::angleAxis(glm::quarter_pi<float>(),glm::vec3(1,0,0));
+        hand.position=-(hand.orientation*glm::vec3(0,.04F,-.06F));
         for(int hover=-1;hover<4;++hover) {
-            const float angle=hover*glm::half_pi<float>();(void)v.radialToolMenu_.update(hover<0?glm::vec3(0):glm::vec3(std::cos(angle)*.1F,std::sin(angle)*.1F,0));
+            v.radialToolMenu_.update(true,hover<0?glm::vec2(0):nadoc_vr::EditWheel::direction(size_t(hover)),hand);
             v.controllerGuides_.clear();v.appendRadialToolGuides();
             capture("radial-hover-"+std::to_string(hover),{{-.18F,-.18F},{.18F,.18F}},[&](const auto& vp){v.glScene_->renderGuides(vp,v.controllerGuides_);});
         }

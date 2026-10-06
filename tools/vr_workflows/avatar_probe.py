@@ -53,12 +53,10 @@ try:
         click(live,1,'tab:tools',preset,trials)
         click(live,1,'vr-desktop',preset,trials)
     if action=='wheel':
+        live.send('trackpad_axis', hand=1, x=0, y=0);live.frame()
         live.send('button',hand=1,button='trackpad',pressed=True);live.frame()
-        p=(np.array(live.state['radial_edit']['items'][1]['center'])+rotate(q,[0,0,.12])).tolist()
-        for attempt in range(3):
-            trials.append(reach_target(live,p,preset,24000+len(trials),target_position=p,target_orientation=q,hand=1,acquired=lambda s:s['radial_edit']['hovered']==1))
-            if live.state['radial_edit']['hovered']==1:break
-        assert live.state['radial_edit']['hovered']==1
+        from .edit_wheel_check import slide
+        slide(live,1,preset,trials)
     if action=='view-tools' or (action=='scissors' and not live.state['ligation']['nick_active']):
         hand=0 if action=='view-tools' else 1
         forward=rotate(q,[0,0,-1]);forward[1]=0;forward/=np.linalg.norm(forward)

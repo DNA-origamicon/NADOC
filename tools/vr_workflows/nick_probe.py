@@ -68,11 +68,13 @@ def run(socket, output, action):
         revision=live.state['scene_revision'];version=live.state['ligation']['version']
         q=eye['orientation_xyzw'];center=np.array(eye['position'])+rotate(q,[0,-.1,-.55])
         reach((center+rotate(q,[0,0,.12])).tolist(),q)
+        live.send('trackpad_axis', hand=1, x=0, y=0);live.frame()
         live.send('button',hand=1,button='trackpad',pressed=True);live.frame()
         index={'nick':1,'undo':2,'redo':3}[action]
         item=live.state['radial_edit']['items'][index]
         assert item['enabled']
-        reach((np.array(item['center'])+rotate(q,[0,0,.12])).tolist(),q,lambda s:s['radial_edit']['hovered']==index)
+        from .edit_wheel_check import slide
+        slide(live,index,preset,trials)
         live.capture_to(out/'wheel',discard_source=True)
         history_panels = [(panel['open'], panel['tab']) for panel in live.state['sidebars']]
         haptics_before = live.state['haptic_requests'][1]

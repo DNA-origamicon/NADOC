@@ -3,7 +3,7 @@ import json
 import math
 import time
 import numpy as np
-from .menu_grip_check import move
+from .menu_grip_check import move, grip_origin
 from .profile_input import reach_target
 from .control_approach import control_approach
 from tools.vr_motion.visual_checks import project, coverage
@@ -11,7 +11,7 @@ from tools.vr_motion.metrics import rotate, target_metrics
 from PIL import Image
 
 
-def run(live, output, preset, owner, trials):
+def run(live, output, preset, owner, trials, spawn_pose=None):
     def state():
         return live.state['desktop_capture']
     def control(name):
@@ -24,6 +24,7 @@ def run(live, output, preset, owner, trials):
         assert time.monotonic() < deadline
         live.frame(); time.sleep(.05)
     original = list(state()['position'])
+    original_scene = live.state['presentation']['model_to_tracking_rows']
     # Close hand menus using their real menu buttons; desktop must stay in space.
     for hand in (0,1):
         if live.state['sidebars'][hand]['open']:
@@ -31,16 +32,28 @@ def run(live, output, preset, owner, trials):
     assert state()['open'] and state()['position'] == original
     capture('native-desktop')
     # Grab its right border and move it with the existing noisy motion profile.
-    move(live,{1:control('desktop-grip-right')['position']},preset,trials)
-    live.send('button',hand=1,button='grip',pressed=True);live.frame()
+    for _ in range(3):
+        move(live,{1:grip_origin(live,1,control('desktop-grip-right')['position'])},preset,trials)
+        live.send('button',hand=1,button='grip',pressed=True);live.frame()
+        if state()['moving']:
+            break
+        # Release a missed contact before the next noisy reach; never move the
+        # scene while a failed panel acquisition is still holding Grip.
+        live.send('button',hand=1,button='grip',pressed=False);live.frame()
     assert state()['moving'], state()
     target=np.asarray(live.state['hands'][1]['position'])+np.array([.08,.05,0])
     move(live,{1:target.tolist()},preset,trials)
     live.send('button',hand=1,button='grip',pressed=False);live.frame()
     assert math.dist(original,state()['position'])>.04
-    move(live,{0:control('desktop-grip-left')['position'],1:control('desktop-grip-right')['position']},preset,trials)
-    for hand in (0,1):live.send('button',hand=hand,button='grip',pressed=True)
-    live.frame();assert state()['resizing'],state()
+    for _ in range(3):
+        move(live,{h:grip_origin(live,h,control('desktop-grip-left' if h==0 else 'desktop-grip-right')['position']) for h in (0,1)},preset,trials)
+        for hand in (0,1):live.send('button',hand=hand,button='grip',pressed=True)
+        live.frame()
+        if state()['resizing']:
+            break
+        for hand in (0,1):live.send('button',hand=hand,button='grip',pressed=False)
+        live.frame()
+    assert state()['resizing'],state()
     scale=state()['scale']
     right=np.asarray(control('desktop-content')['hit_half_right']);right/=np.linalg.norm(right)
     move(live,{h:(np.asarray(live.state['hands'][h]['position'])+right*(.08 if h else -.08)).tolist() for h in (0,1)},preset,trials)
@@ -153,6 +166,9 @@ def run(live, output, preset, owner, trials):
             assert (score>.65 if expected else score<.35),pixel_checks
     (output/'desktop-lens-pixels.json').write_text(json.dumps(pixel_checks,indent=2)+'\n')
     # Reopening a hand menu cannot dismiss/reset the desktop.
+    if spawn_pose is not None:
+        live.send('pose', hand=owner, position=spawn_pose['position'], orientation=spawn_pose['orientation_xyzw'])
+        live.frame()
     live.button('menu',hand=owner)
     assert state()['open'] and live.state['sidebars'][owner]['open']
     for attempt in range(3):
@@ -166,4 +182,5 @@ def run(live, output, preset, owner, trials):
     live.button('trigger',hand=1);live.frame()
     assert not state()['open'] and live.state['sidebars'][owner]['open']
     assert live.state['sidebars'][owner]['tab']=='vr'
+    assert live.state['presentation']['model_to_tracking_rows'] == original_scene
     (output/'desktop-panel-check.json').write_text(json.dumps({'passed':True,'preset':preset,'initial_scale':scale,'final_scale':state()['scale'],'os_input_injected':False},indent=2)+'\n')

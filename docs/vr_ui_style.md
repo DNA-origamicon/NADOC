@@ -46,11 +46,15 @@ These are NADOC defaults informed by the references, not a universal VR standard
   to viewing angle/distance. Verify rendered size and controller acquisition at
   the actual placement. [Meta targets](https://developers.meta.com/horizon/design/styles_inputs_hit_targets/),
   [Microsoft sizes](https://learn.microsoft.com/en-us/windows/mixed-reality/design/button)
+- **Placement:** menus open along the invoking controller pointer with a 30°
+  backward local-X tilt. Sidebars remain fixed after opening; Dock/Follow and
+  the two touchpad wheels use the same tilt when following a controller.
 - **Grippable frames:** sidebars reserve a 40 mm local rail outside the controls
-  (26 mm at the default scale), with textured corners and side grip marks.
+  (18 mm at the default sidebar scale), with textured corners and side grip marks.
   Near blue / moving amber / resizing green states pair color with status text;
   grab and resize acquisition pulse the controller. One nearby grip moves, two
-  resize; the existing 75 mm world-space proximity allowance is unchanged.
+  resize. Contact uses the selection sphere 120 mm along the controller pointer
+  and its current radius; controller-midpoint proximity alone does not acquire.
   Neighboring frames resolve by nearest physical border and retain held ownership.
   Detailed tool and lattice panels use the same outlined corner/rail treatment.
 - **Perimeters:** sidebar fills, outlines and focus rings use rounded corners.
@@ -78,7 +82,7 @@ The left touchpad owns the six-sector selection wheel: hold, slide to highlight,
 release to select; center release cancels. Drill is top, followed clockwise by
 Cluster, Strand, Domain, Crossover and Bases. Entering a sector highlights it and
 requests a light haptic pulse. Left menus use pointer/Trigger and unclicked swipes.
-The right controller navigates its own open menu with the pad; its radial Tools
+The right controller navigates its own open menu with the pad; its radial Edit
 shortcut is available when that menu is closed. Opening or closing
 the other sidebar does not cancel the active controller's focus.
 
@@ -207,3 +211,13 @@ hover/pressed, empty and last-page states; confirm labels remain legible and
 rays acquire the visible control faces. The existing `vr-menu-tour` above checks
 live controller interaction. An offscreen native render establishes appearance,
 not physical through-lens readability or comfort.
+
+The right Edit wheel uses the same thumb-driven hold/slide/release mechanism as
+left selection. Its established compass is Ligate right, Nick up, Undo left,
+Redo down. The controller-following wheel highlights and pulses on sector entry;
+center release cancels. Undo/Redo confirm with haptics and leave menus unchanged.
+The right sidebar retains pad focus navigation while open.
+Debug → VR Tours & Tests → Controls & layout → **Right touchpad edit wheel**
+checks all four profiles, stereo highlights, independent hands, cancellation,
+no early actions and history request publication in an isolated metadata fixture.
+The existing Ligate and Nick/history tours also use thumb-axis selection now.

@@ -26,6 +26,8 @@ struct HandPose {
     bool pressed = false;
     glm::vec3 position{};
     glm::quat orientation{1.0F, 0.0F, 0.0F, 0.0F};
+    glm::vec3 borderContactOffset{};
+    float borderContactRadius = .075F;
 };
 
 inline glm::mat4 poseMatrix(const HandPose& pose);
@@ -58,6 +60,25 @@ class MenuPlacement {
         position_ = fallbackPosition;
         orientation_ = glm::normalize(fallbackOrientation);
         update(hands);
+    }
+
+    static glm::quat controllerOrientation(const glm::quat& orientation) {
+        return glm::normalize(orientation * kTabletTilt);
+    }
+
+    void openFromController(const HandPose& hand, float distance = .40F) {
+        openDocked(hand.position + hand.orientation * glm::vec3(0, 0, -distance),
+                   controllerOrientation(hand.orientation));
+    }
+
+    // Contact geometry is separate from the real pose used to anchor motion.
+    static std::array<HandPose, 2> borderContacts(
+        std::array<HandPose, 2> hands, const std::array<float, 2>& radii) {
+        for(size_t h=0;h<hands.size();++h) {
+            hands[h].borderContactOffset={0,0,-.12F};
+            hands[h].borderContactRadius=radii[h];
+        }
+        return hands;
     }
 
     /** Open already frozen at an explicit world pose.  Tool-created windows use
@@ -136,25 +157,23 @@ class MenuPlacement {
     int remoteMode() const {return remoteMode_;}
     bool remoteHovered=false;
 
+    void setBorderWidth(float width) { borderWidth_=std::max(0.F,width); }
+
     [[nodiscard]] float borderDistanceMeters(
         const HandPose& hand, const glm::vec2& minimum,
         const glm::vec2& maximum) const {
         if (!hand.valid) return std::numeric_limits<float>::infinity();
-        const glm::vec3 local = localPoint(hand.position);
-        auto segmentDistance = [&](const glm::vec2& first, const glm::vec2& second) {
-            const glm::vec2 point(local.x, local.y);
-            const glm::vec2 edge = second - first;
-            const float denominator = glm::dot(edge, edge);
-            const float parameter = denominator > 0.0F
-                ? glm::clamp(glm::dot(point - first, edge) / denominator, 0.0F, 1.0F)
-                : 0.0F;
-            return glm::length(point - (first + edge * parameter));
+        const glm::vec3 local = localPoint(hand.position + hand.orientation * hand.borderContactOffset);
+        const glm::vec2 point(local.x,local.y);
+        const float width=std::min(borderWidth_,std::min(maximum.x-minimum.x,maximum.y-minimum.y)*.5F);
+        auto railDistance = [&](glm::vec2 lo,glm::vec2 hi) {
+            return glm::distance(point,glm::clamp(point,lo,hi));
         };
-        const float inPlane = std::min({
-            segmentDistance({minimum.x, minimum.y}, {maximum.x, minimum.y}),
-            segmentDistance({maximum.x, minimum.y}, {maximum.x, maximum.y}),
-            segmentDistance({maximum.x, maximum.y}, {minimum.x, maximum.y}),
-            segmentDistance({minimum.x, maximum.y}, {minimum.x, minimum.y}),
+        const float inPlane=std::min({
+            railDistance(minimum,{minimum.x+width,maximum.y}),
+            railDistance({maximum.x-width,minimum.y},maximum),
+            railDistance(minimum,{maximum.x,minimum.y+width}),
+            railDistance({minimum.x,maximum.y-width},maximum),
         });
         return std::hypot(inPlane, local.z) * scale_;
     }
@@ -162,7 +181,8 @@ class MenuPlacement {
     [[nodiscard]] bool nearBorder(
         const HandPose& hand, const glm::vec2& minimum,
         const glm::vec2& maximum,
-        float maximumDistanceMeters = kBorderGrabDistanceMeters) const {
+        float maximumDistanceMeters = -1.F) const {
+        if(maximumDistanceMeters < 0.F)maximumDistanceMeters=hand.borderContactRadius;
         return hand.valid && maximumDistanceMeters > 0.F &&
             borderDistanceMeters(hand, minimum, maximum) <= maximumDistanceMeters;
     }
@@ -274,9 +294,10 @@ class MenuPlacement {
     // a large tablet rather than a floating head-up display. The horizontal
     // center offset puts the matching side edge over the anchoring controller.
     static inline const glm::quat kTabletTilt = glm::angleAxis(
-        glm::radians(-38.0F), glm::vec3(1.0F, 0.0F, 0.0F));
+        glm::radians(-30.0F), glm::vec3(1.0F, 0.0F, 0.0F));
     static constexpr glm::vec3 kControllerOffset{0.0F, 0.18F, -0.13F};
 
+    float borderWidth_=.025F; // Matches the default visible grip rail, in local metres.
     int remoteMode_=0;
     glm::vec3 position_{};
     glm::quat orientation_{1.0F, 0.0F, 0.0F, 0.0F};
@@ -291,71 +312,6 @@ class MenuPlacement {
     float resizeInitialDistance_ = 1.0F;
     float resizeInitialScale_ = kDefaultScale;
     glm::vec3 resizePositionFromMidpoint_{};
-};
-
-/** Hold-to-open, world-fixed radial tool palette.
- *
- * Each target is an annular quarter-cylinder rather than a flat angle test.  A
- * controller selection-volume center therefore has to enter the visible depth
- * of a sector before it can highlight.  The menu snapshots its pose on press;
- * subsequent controller motion never changes that pose.
- */
-class RadialToolMenu {
-  public:
-    static constexpr size_t kItemCount = 4;
-    static constexpr float kInnerRadius = 0.040F;
-    static constexpr float kOuterRadius = 0.155F;
-    static constexpr float kHalfDepth = 0.035F;
-    static constexpr float kBackwardTiltRadians = glm::quarter_pi<float>();
-
-    void open(const HandPose& hand, const glm::vec3& selectionCenter) {
-        if (!hand.valid) return;
-        position_ = selectionCenter;
-        orientation_ = glm::normalize(
-            hand.orientation * glm::angleAxis(
-                -kBackwardTiltRadians, glm::vec3(1.0F, 0.0F, 0.0F)));
-        open_ = true;
-        hovered_.reset();
-    }
-
-    void close() {
-        open_ = false;
-        hovered_.reset();
-    }
-
-    [[nodiscard]] std::optional<size_t> update(const glm::vec3& selectionCenter) {
-        hovered_ = hit(selectionCenter);
-        return hovered_;
-    }
-
-    [[nodiscard]] std::optional<size_t> hit(const glm::vec3& worldPoint) const {
-        if (!open_) return std::nullopt;
-        const glm::vec3 local = glm::inverse(orientation_) * (worldPoint - position_);
-        const float radial = std::hypot(local.x, local.y);
-        if (radial < kInnerRadius || radial > kOuterRadius ||
-            std::abs(local.z) > kHalfDepth) {
-            return std::nullopt;
-        }
-        float angle = std::atan2(local.y, local.x);
-        if (angle < 0.0F) angle += glm::two_pi<float>();
-        return static_cast<size_t>(std::floor(
-            (angle + glm::quarter_pi<float>()) / glm::half_pi<float>()))
-            % kItemCount;
-    }
-
-    [[nodiscard]] glm::vec3 worldPoint(const glm::vec3& local) const {
-        return position_ + orientation_ * local;
-    }
-    [[nodiscard]] bool open() const { return open_; }
-    [[nodiscard]] const glm::vec3& position() const { return position_; }
-    [[nodiscard]] const glm::quat& orientation() const { return orientation_; }
-    [[nodiscard]] const std::optional<size_t>& hovered() const { return hovered_; }
-
-  private:
-    bool open_ = false;
-    glm::vec3 position_{};
-    glm::quat orientation_{1.0F, 0.0F, 0.0F, 0.0F};
-    std::optional<size_t> hovered_;
 };
 
 struct LatticeCell {

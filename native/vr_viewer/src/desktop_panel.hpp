@@ -21,9 +21,9 @@ struct DesktopPanel {
     MenuPanelBounds chromeBounds() const {
         const auto b=bounds();return {b.minimum,{b.maximum.x,closeBounds().maximum.y+.02F}};
     }
-    void show(const glm::vec3& head,const glm::quat& orientation) {
+    void show(const glm::vec3& controller,const glm::quat& orientation) {
         open=true;magnifying=false;closeHovered=false;
-        placement.openDocked(head+orientation*glm::vec3(0,.12F,-1.35F),orientation);
+        placement.openFromController({true,false,controller,orientation},1.35F);
     }
     std::optional<glm::vec3> hit(const HandPose& hand) const {
         if(!open)return std::nullopt;
