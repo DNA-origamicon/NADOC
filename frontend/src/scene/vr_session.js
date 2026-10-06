@@ -73,6 +73,7 @@ export function initVRSession({
   let lastNativeToolSequence = 0
   let lastNativeToolConfigSequence = 0
   let lastNativePlanePickSequence = 0
+  let lastNativeRoutingSequence = 0
   let lastNativeSimulationSequence = 0
   let lastNativeShareSequence = 0
   let lastNativeViewToolSequence = 0
@@ -256,6 +257,10 @@ export function initVRSession({
       try { event = await native.event() } catch { /* transient partial record/network */ }
       if (disposed || !nativeActive) return
       onNativePoll?.()
+      const routing = event?.routing
+      if (Number.isSafeInteger(routing?.sequence) && routing.sequence > lastNativeRoutingSequence) {
+        lastNativeRoutingSequence = routing.sequence; onNativeEvent({ type: 'routing', ...routing })
+      }
       const simulation = event?.simulation
       if (Number.isSafeInteger(simulation?.sequence) && simulation.sequence > lastNativeSimulationSequence) {
         lastNativeSimulationSequence = simulation.sequence; onNativeEvent({ type: 'simulation', ...simulation })
@@ -424,6 +429,7 @@ export function initVRSession({
       lastNativePlanePickSequence = 0
       lastNativeTransformSequence = 0
       lastNativeResizeSequence = 0
+      lastNativeRoutingSequence = 0
       lastNativeSimulationSequence = 0
       lastNativeShareSequence = 0
       lastNativeViewToolSequence = 0

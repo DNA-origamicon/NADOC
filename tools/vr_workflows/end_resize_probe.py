@@ -8,10 +8,9 @@ from pathlib import Path
 import numpy as np
 from frontend.scrywrite.mcp_bridge import Bridge
 from tools.vr_motion.session import LiveSession
-from tools.vr_workflows.profile_input import reach_target
+from tools.vr_workflows.profile_input import reach_target, aim_orientation
 from tools.vr_workflows.demo_view import reveal, hold
 from tools.vr_motion.metrics import rotate
-from tools.vr_motion.model import multiply
 
 
 def check_pixels(directory, color, *, points_override=None):
@@ -60,7 +59,14 @@ def run(socket, output, amount="12", frame="1"):
     out.mkdir(parents=True, exist_ok=True)
     bridge = Bridge(socket)
     deadline = time.monotonic() + 30
-    while not bridge.call('scrywrite_observe', {}).get('focused'):
+    while True:
+        try:
+            if bridge.call('scrywrite_observe', {}).get('focused'):
+                break
+        except TimeoutError:
+            # The socket can open before the first submitted frame. Keep the
+            # existing 30-second focus deadline instead of failing on one poll.
+            pass
         if time.monotonic() > deadline:
             raise RuntimeError('Viewer did not focus')
         time.sleep(.1)
@@ -77,9 +83,9 @@ def run(socket, output, amount="12", frame="1"):
             try:live.frame()
             except TimeoutError:continue
             time.sleep(.05)
-    def reach(point, acquired=None):
+    def reach(point, acquired=None, orientation=None):
         trials.append(reach_target(live, point, preset, 7300 + len(trials),
-            target_position=point, target_orientation=[0, 0, 0, 1], acquired=acquired))
+            target_position=point, target_orientation=orientation or [0, 0, 0, 1], acquired=acquired))
         (out/'reaches.json').write_text(json.dumps(trials, indent=2))
     try:
         reveal(live)
@@ -95,9 +101,16 @@ def run(socket, output, amount="12", frame="1"):
             arrow = live.state['end_resize']['arrows'][0]
             # Translate/rotate the generated helix into the actual tracked view using
             # the same grip gesture available to the user. Outside measured reaches.
-            center = np.array(arrow['origin']) - np.array(arrow['bp_step']) * 20.5
-            target = np.array(eye['position']) + rotate(eye['orientation_xyzw'], [0, 0, -1.05])
-            turn = multiply(eye['orientation_xyzw'], [0, np.sin(np.pi/4), 0, np.cos(np.pi/4)])
+            center = np.array(arrow['origin'])
+            target = np.array(eye['position']) + rotate(eye['orientation_xyzw'], [-.15, 0, -.95])
+            # Rotate the observed helix tangent broadside to the eye. Its launch
+            # rotation is not necessarily the world Z axis.
+            axis = np.array(arrow['bp_step']); axis /= np.linalg.norm(axis)
+            right = np.array(rotate(eye['orientation_xyzw'], [1, 0, 0]))
+            turn = np.r_[np.cross(axis, right), 1+np.dot(axis, right)]
+            if np.linalg.norm(turn) < 1e-6:
+                turn = np.r_[rotate(eye['orientation_xyzw'], [0, 1, 0]), 0]
+            turn = (turn/np.linalg.norm(turn)).tolist()
             live.send('pose', hand=1, position=center.tolist(), orientation=[0,0,0,1])
             live.frame()
             live.send('button', hand=1, button='grip', pressed=True)
@@ -122,16 +135,39 @@ def run(socket, output, amount="12", frame="1"):
             raise AssertionError('Offscreen arrow unexpectedly passed the pixel check')
         arrow = live.state['end_resize']['arrows'][0]
         point = ((np.array(arrow['origin']) + arrow['tip']) / 2).tolist()
-        reach(point, acquired=lambda s: s['end_resize']['nearby'])
+        # Point from 35 cm away with a vertical offset so the beam and midpoint
+        # label are distinguishable in the actual tracked view.
+        eye = json.loads((out/'selected-clear'/'evidence.json').read_text())['eyes'][0]
+        body = (np.array(point) + rotate(eye['orientation_xyzw'], [0, -.16, .35])).tolist()
+        orientation = aim_orientation(body, point)
+        reach(body, acquired=lambda s: s['end_resize']['hover_hand'] == 1 and
+              s['end_resize']['hovered_arrow'] == 0 and
+              np.linalg.norm(np.array(s['hands'][1]['position'])-point) > .15,
+              orientation=orientation)
+        live.capture_to(out/'hover', discard_source=True)
+        check_pixels(out/'hover', 'yellow')
+        hover = live.state['end_resize']
+        start_beam, end_beam = np.array(hover['pointer_start']), np.array(hover['pointer_end'])
+        check_pixels(out/'hover', 'yellow', points_override=[
+            (start_beam*.8+end_beam*.2).tolist(), (start_beam*.65+end_beam*.35).tolist()])
         live.send('button', hand=1, button='trigger', pressed=True)
         live.frame()
         assert live.state['end_resize']['grabbing'], 'Arrow did not acquire trigger'
         start = np.array(live.state['hands'][1]['position'])
-        reach((start + np.array(arrow['bp_step']) * amount).tolist())
+        reach((start + np.array(arrow['bp_step']) * amount).tolist(), orientation=orientation)
         delta = live.state['end_resize']['delta']
         assert delta * amount > 0, 'Pull did not resize in the requested direction'
         live.capture_to(out/'preview', discard_source=True)
-        check_pixels(out/'preview', 'yellow' if delta > 0 else 'orange')
+        color = 'yellow' if delta > 0 else 'orange'
+        check_pixels(out/'preview', color)
+        preview = live.state['end_resize']
+        assert preview['label'] == f'{delta:+d} bases'
+        midpoint = (np.array(preview['pointer_start'])+preview['pointer_end'])/2
+        assert np.linalg.norm(midpoint-preview['label_position']) < 1e-5
+        right = rotate(eye['orientation_xyzw'], [.13, 0, 0])
+        up = rotate(eye['orientation_xyzw'], [0, .024, 0])
+        check_pixels(out/'preview', color, points_override=[
+            (midpoint-right-up).tolist(), (midpoint+right+up).tolist()])
         version = live.state['end_resize']['version']
         revision = live.state['scene_revision']
         with operation(live,'end_resize-commit'):

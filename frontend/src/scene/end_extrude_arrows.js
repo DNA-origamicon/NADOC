@@ -22,7 +22,7 @@ import * as THREE from 'three'
 import { store }           from '../state/store.js'
 import { resizeStrandEnds } from '../api/client.js'
 import { adjacentBpFree, oneNtResizableEnd } from '../shared/strand_end_resize.js'
-import { parseBaseKey } from './base_ref.js'
+import { baseKey, parseBaseKey } from './base_ref.js'
 import { canonicalSelection } from './selection_model.js'
 
 // ── Arrow dimensions (nm) ─────────────────────────────────────────────────────
@@ -483,6 +483,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   }
 
   async function _commitResize(dragBeads, delta) {
+    const previousSelection = canonicalSelection(store.getState())
     const entries = dragBeads.map(meta => ({
       strand_id: meta.bead.nuc.strand_id,
       helix_id:  meta.bead.nuc.helix_id,
@@ -500,24 +501,22 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     // highlight and arrow both move to where the strand now ends.
     const state = store.getState()
     const { currentGeometry } = state
-    const primary = canonicalSelection(state).primary
-    const oldTarget = (primary?.kind === 'base' || primary?.kind === 'end')
-      ? parseBaseKey(primary.key) : null
-    if (!currentGeometry || !oldTarget || oldTarget.helix_id === '__xb__') return
-    const _isFiveEnd = (meta) => (meta.endRole ?? (meta.bead.nuc.is_five_prime ? '5p' : '3p')) === '5p'
-    const movedMeta = dragBeads.find(meta =>
-      meta.bead.nuc.helix_id  === oldTarget.helix_id &&
-      meta.bead.nuc.bp_index  === oldTarget.bp_index &&
-      meta.bead.nuc.direction === oldTarget.direction,
-    )
-    if (!movedMeta) return
-    const newNuc = currentGeometry.find(n =>
-      n.strand_id === movedMeta.bead.nuc.strand_id &&
-      n.helix_id  === movedMeta.bead.nuc.helix_id  &&
-      n.direction === movedMeta.bead.nuc.direction  &&
-      (_isFiveEnd(movedMeta) ? n.is_five_prime : n.is_three_prime),
-    )
-    if (newNuc) selectionManager.selectNucleotide(newNuc)
+    if (!currentGeometry || !opts.selectionController) return
+    const moved = new Map(dragBeads.map(meta => [baseKey(meta.bead.nuc, meta.bead.entry?._copy ?? meta.bead.nuc.copy_k ?? 0), meta]))
+    const surviving = new Set(canonicalSelection(state).items.map(ref => JSON.stringify(ref)))
+    const refs = previousSelection.items.flatMap(ref => {
+      const meta = (ref.kind === 'base' || ref.kind === 'end') ? moved.get(ref.key) : null
+      if (!meta) return surviving.has(JSON.stringify(ref)) ? [ref] : []
+      const old = meta.bead.nuc
+      const five = (meta.endRole ?? (old.is_five_prime ? '5p' : '3p')) === '5p'
+      const nuc = currentGeometry.find(n => n.strand_id === old.strand_id &&
+        n.helix_id === old.helix_id && n.direction === old.direction &&
+        (five ? n.is_five_prime : n.is_three_prime))
+      return nuc ? [{ kind: ref.kind, key: baseKey(nuc, nuc.copy_k ?? 0) }] : []
+    })
+    // Keep every resized end selected, including after topology reconciliation
+    // removes its old base key. A second pull must resize the same entire set.
+    opts.selectionController.replace(refs)
   }
 
   function _onDragKey(e) {

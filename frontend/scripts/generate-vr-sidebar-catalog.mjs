@@ -140,6 +140,16 @@ tabs.push({side:'right',key:'tools',label:'Tools',rows:[
   ['tool-twist','Twist','tool:twist'],['tool-bend','Bend','tool:bend'],
 ].map(([id,label,action])=>({id,label,action,section:'Tools',kind:'button',options:[],source:'frontend/scripts/generate-vr-sidebar-catalog.mjs',reason:''}))})
 
+// Keep the native Tools menu in sync with the active desktop routing menu.
+const routingActions = [
+ ['menu-routing-scaffold-ends','Autoscaffold'], ['menu-routing-full-autostaple','Full Autostaple'],
+ ['menu-routing-polymerization','Route for Polymerization'], ['menu-seq-update-routing','Add Loops/Skips'],
+ ['menu-seq-clear-all-loop-skips','Clear All Loop/Skips'], ['menu-seq-assign-scaffold','Assign Scaffold Sequence'],
+ ['menu-seq-assign-staples','Assign Staple Sequences'], ['menu-seq-generate-overhangs','Generate Overhangs'],
+ ['menu-seq-hairpin-dimer','Hairpin/Dimer Checker'], ['menu-edit-undo','Undo'], ['menu-edit-redo','Redo'],
+]
+for (const [id,label] of routingActions) tabs.find(tab=>tab.key==='tools').rows.push({id,label,action:`routing:${id}`,section:'Routing and Sequencing',kind:'button',options:[],source:'frontend/index.html',reason:''})
+
 tabs.push({side:'left',key:'vr',label:'VR',rows:[
   ['vr-desktop','View desktop','desktop'],
   ['vr-head-light','Head-following lighting: Off','vr:head-light'],

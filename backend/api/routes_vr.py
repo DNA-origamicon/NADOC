@@ -14,6 +14,7 @@ from backend.core.display_placement import measured_display_placement
 from backend.api.vr_ligation import parse_event as parse_ligation_event
 from backend.api.vr_view_tools import parse_event as parse_view_tool_event
 from backend.api.vr_simulations import parse_event as parse_simulation_event
+from backend.api.vr_routing import parse_event as parse_routing_event
 from backend.api.vr_share import parse_share_event
 
 import gzip
@@ -2954,6 +2955,8 @@ def _cleanup_after_process(
     Path(str(event_path) + ".viewtools.next").unlink(missing_ok=True)
     Path(str(event_path) + ".simulations").unlink(missing_ok=True)
     Path(str(event_path) + ".simulations.next").unlink(missing_ok=True)
+    Path(str(event_path) + ".routing").unlink(missing_ok=True)
+    Path(str(event_path) + ".routing.next").unlink(missing_ok=True)
     Path(str(event_path) + ".end-resize").unlink(missing_ok=True)
     event_path.unlink(missing_ok=True)
     feedback_path.unlink(missing_ok=True)
@@ -3462,6 +3465,7 @@ def _event_payload(state: dict | None) -> dict:
             "sequence": sequence,
             **({"share_control": value} if (value := parse_share_event(event.get("share_control"))) else {}),
             **({"simulation": value} if (value := parse_simulation_event(event.get("simulation"))) else {}),
+            **({"routing": value} if (value := parse_routing_event(event.get("routing"))) else {}),
             **({"view_tool": view_tool} if (view_tool := parse_view_tool_event(event.get("view_tool"))) else {}),
             **({"ligation": ligation} if (ligation := parse_ligation_event(event.get("ligation"))) else {}),
             **({"end_resize": resize} if (resize := _parse_end_resize(event.get("end_resize"))) else {}),

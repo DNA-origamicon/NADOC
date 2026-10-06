@@ -481,6 +481,36 @@ describe('VR arrow resizing', () => {
     arrows.dispose()
   })
 
+  it('resizes both termini by the same outward amount and retains both relocated end refs', async () => {
+    const selectionController = { replace: vi.fn() }
+    const arrows = initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, null, { selectionController })
+    selectionStoreSub = store.subscribe.mock.calls[0][0]
+    store.getState().currentDesign.strands = [{ id: 's1', domains: [{ helix_id: 'h_XY_0_0', direction: 'FORWARD', start_bp: 0, end_bp: 41 }] }]
+    const first = makeBead(), last = makeBead({ bp: 41, isFivePrime: false, pos: [0, 0, 14] })
+    first.nuc.strand_id = last.nuc.strand_id = 's1'
+    selectEndBeads([first, last])
+    const snapshot = arrows.vrHandles()
+    expect(snapshot.handles).toHaveLength(2)
+    resizeStrandEnds.mockImplementation(async () => {
+      // A topology refresh prunes old terminal keys before the response resolves.
+      store.getState().selection = selectionFor(null)
+      store.getState().currentGeometry = [
+        { ...first.nuc, bp_index: -7 }, { ...last.nuc, bp_index: 48 },
+      ]
+      return { design: {} }
+    })
+    await arrows.resizeFromVR(snapshot.version, 7)
+    expect(resizeStrandEnds).toHaveBeenCalledWith([
+      { strand_id: 's1', helix_id: 'h_XY_0_0', end: '5p', delta_bp: -7 },
+      { strand_id: 's1', helix_id: 'h_XY_0_0', end: '3p', delta_bp: 7 },
+    ])
+    expect(selectionController.replace).toHaveBeenCalledWith([
+      { kind: 'end', key: 'h_XY_0_0:-7:FORWARD' },
+      { kind: 'end', key: 'h_XY_0_0:48:FORWARD' },
+    ])
+    arrows.dispose()
+  })
+
   it('rejects a stale design, duplicate release, and shortening through the last base', async () => {
     const arrows = fixture()
     const snapshot = arrows.vrHandles()

@@ -1,4 +1,5 @@
 import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
+import { createVRRouting } from './scene/vr_routing.js'
 import { createVRSimulations } from './scene/vr_simulations.js'
 import { commitVRMovePose } from './scene/vr_move_pose.js'
 import { nativeRepresentation } from './scene/vr_representations.js'
@@ -906,6 +907,7 @@ async function main() {
   // ── End extrusion arrows ──────────────────────────────────────────────────────
   // Thick arrows pointing outward along the helix axis at each selected 5'/3' end.
   const endExtrudeArrows = initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, controls, {
+    selectionController,
     getCamera:   () => sceneCtx.getRenderCamera(),
     getControls: () => sceneCtx.getActiveControls(),
   })
@@ -6469,6 +6471,7 @@ async function main() {
 
   let _vrStyleApply = Promise.resolve()
   let _vrTrajectoryPublishCount = 0
+  const vrRouting = createVRRouting({ onError: message => showToast(message, { severity: 'error' }) })
   const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
   const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
@@ -6491,7 +6494,7 @@ async function main() {
   }
   const vrSession = initVRSession({
     onNativeActiveChange: vrDesktopDisplay.setActive,
-    onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish() },
+    onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish(); void vrRouting.publish() },
     renderer,
     scene,
     camera,
@@ -6555,8 +6558,9 @@ async function main() {
     },
     onNativeEvent: (_handleNativeVREvent = event => {
       _recordScrywriteBrowser('native_event', event)
-      if (event?.type === 'native_session_end') { vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset(); vrShare.reset(); vrSimulations.reset() }
+      if (event?.type === 'native_session_end') { vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset(); vrShare.reset(); vrSimulations.reset(); vrRouting.reset() }
       const button = document.getElementById('menu-help-view-vr')
+      if (event?.type === 'routing') { void vrRouting.activate(event); return }
       if (event?.type === 'simulation') {
         void vrSimulations.activate(event)
       } else if (event?.type === 'share_control') {

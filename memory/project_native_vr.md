@@ -7,6 +7,20 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## End resize pointer and group retention (2026-10-05)
+
+Selected terminal arrows support remote ray hover and trigger-held resizing as
+well as proximity grabs. Only the hovered arrow highlights before acquisition;
+all selected arrows share the snapped delta while dragging. A controller-to-tip
+line carries a signed base count at its midpoint. The browser retains all moved
+Base/End refs after commit, supporting repeated equal group resizes. Inspector
+state includes pointer/label coordinates and cancellation reasons. Four profiles
+pass +12/-6 on two selected ends with stereo/mirror evidence and independent Undo;
+variable-deliberate required one retry after an uncommitted cancellation. No
+through-lens review. Full unit suite: 7,409 passed, one skipped; builds and focused
+native/API checks pass. Failures, framing adjustments and evidence paths:
+`.development-artifacts/vr-end-pointer-validation-20261005.json`.
+
 ## Controller-relative menus and tip-sphere grips (2026-10-05)
 
 Sidebars now spawn 40 cm along the invoking controller's -Z pointer, with a
@@ -1152,3 +1166,13 @@ placed the origin within .004 mm of the expected stage target. First capture was
 out of view with headset set aside; user repositioned it toward center and the
 second submitted stereo capture shows the model. Diagnostic viewer was left open
 for inspection. Evidence: `.development-artifacts/vr-origin-20261001/report.json`.
+
+## VR routing and sequence tools (2026-10-06)
+
+Right Tools now exposes the nine active desktop routing/sequencing actions plus
+Undo/Redo. `vr_routing.js` bridges actual DOM handlers and allowlisted dialogs over
+a document-bound versioned `/api/vr/routing` snapshot. `routing_panel.hpp` owns a
+separate foreground SidebarRuntime; dialogs preserve the underlying menu and
+block click-through. Custom scaffold input uses a DNA keypad. Background autosave
+is excluded from operation busy tracking. See `docs/vr_routing_sequence.md` and
+`frontend/e2e/vr_routing{,_physical}.spec.js` for validation and retained evidence.

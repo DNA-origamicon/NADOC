@@ -5,10 +5,14 @@ Each click adds to the selection; clicking an already selected end keeps it
 selected. Trigger-click empty space to clear the selection. Other fixed VR
 selection modes also accumulate; Drill keeps its existing behavior.
 
-Select a terminal end, bring either controller to its cyan arrow, and hold the
-trigger. Pull outward to extend or inward to shorten, then release to save.
-The arrow turns yellow on acquisition/extension and orange while shortening.
-All selected end arrows resize together, following the desktop behavior.
+Point either controller at a cyan arrow, or bring the controller close to it.
+The targeted arrow highlights yellow and a pointer line joins the controller to
+the arrow. Hold the trigger, pull outward to extend or inward to shorten, then
+release to save. During the pull, a signed base count appears at the midpoint
+of that line, facing the viewer. Arrows turn orange while shortening.
+All selected ends preview and commit the same outward base count, clamped to
+the shared collision/length limits. Their relocated ends remain selected for
+subsequent group resizing.
 
 Displacement snaps to whole base pairs and respects the desktop collision and
 terminal-run limits (including inline overhangs and single-nucleotide ends).
@@ -40,3 +44,14 @@ ScryWrite exposes `end_resize` targets, grab state, and snapped delta for inspec
 
 Rendered stereo/mirror evidence and simulated controller paths do not establish
 human through-lens comfort. See [validation record](audits/vr_end_resize_20260928.md).
+
+Pointer interaction validation (2026-10-05): all four motion profiles exercised
+remote hover, pointer and midpoint label pixels in both eyes and the mirror,
+two selected ends extended by +12 and shortened by -6 together, retained end
+selection, and independent Undo. The variable-deliberate run required a retry
+after an uncommitted drag cancellation; cancellation telemetry was added and the
+retry passed without changing motion profiles or input tolerances. Initial
+visibility failures and observation-framing changes are retained alongside the
+passing captures in `.development-artifacts/vr-end-pointer-validation-20261005.json`.
+The inspector exposes `hover_hand`, `hovered_arrow`, `pointer_start`, `pointer_end`,
+`label_position`, `label`, and `cancel_reason` under `end_resize`.

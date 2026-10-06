@@ -51,6 +51,7 @@
 #include "menu_layout.hpp"
 #include "sidebar_menu.hpp"
 #include "simulation_panel.hpp"
+#include "routing_panel.hpp"
 #include "trajectory_panel.hpp"
 #include "dimension_panel.hpp"
 #include "view_volume_panel.hpp"
@@ -5201,6 +5202,7 @@ class Viewer {
         startup_.surface.shutdown();
         representationLoading_.popup.surface.shutdown();
         latticePanelSurface_.shutdown();
+        routingPopup_.shutdown();
         sidebarMenus_.shutdown();
         witnessSurface_.shutdown();
         viewTools_.shutdown();
@@ -5562,6 +5564,9 @@ class Viewer {
         roomFloor_.initialize(session_);
         latticePanelSurface_.initialize();
         sidebarMenus_.initialize();
+        routingPopup_.initialize();
+        routingPopup_.menus[1].available=[this](const std::string& action){return routingPanel_.available(action);};
+        routingPopup_.menus[1].isActive=[this](const std::string& action){return routingPanel_.active(action);};
         simulationPanel_.bind(sidebarMenus_.menus[0], &sidebarMenus_.menus[1]);
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.label=[this](const std::string& action,const std::string& fallback) {
@@ -5573,6 +5578,7 @@ class Viewer {
                 return std::string(shareFailed_?"Action failed - check desktop":!shareActive_?"Start presentation on desktop":shareBusy_ || shareAck_<shareSequence_?"Updating presentation...":sharePerspective_?"Sharing desktop perspective":"Perspective paused");
             };
             sidebar.available=[this](const std::string& action) {
+                if(action.starts_with("routing:"))return routingPanel_.available(action);
                 if(action=="qr:status" || action=="qr:cube-status")return false;
                 if(action=="qr:cube")return !qrCalibration_.running() || qrCalibration_.cubeMode();
                 if(action=="qr:calibrate")return !qrCalibration_.running() || !qrCalibration_.cubeMode();
@@ -5623,6 +5629,7 @@ class Viewer {
             };
             sidebar.loadingProgress=[this](const std::string& action){return representationLoading_.button(action);};
             sidebar.isActive=[this](const std::string& action) {
+                if(action.starts_with("routing:"))return routingPanel_.active(action);
                 if(action=="vr:head-light")return shadowLight_.headFollowing();
                 if(action=="share:avatar")return showVRAvatar_;
                 if(action=="share:status")return shareActive_;
@@ -5740,6 +5747,7 @@ class Viewer {
     static constexpr auto kLatticeGridBounds = nadoc_vr::kLatticePainterGrid;
 
     [[nodiscard]] const nadoc_vr::SidebarMenu& observedSidebar() const {
+        if(routingPopup_.anyOpen())return routingPopup_.menus[1];
         return sidebarMenus_.menus[sidebarMenus_.menus[1].open ? 1 : 0];
     }
 
@@ -5749,6 +5757,7 @@ class Viewer {
 
     [[nodiscard]] std::vector<nadoc_vr::scrywrite::WitnessMenuEntry>
     witnessMenuEntries() const {
+        if(routingPopup_.anyOpen())return routingPopup_.entries();
         return sidebarMenus_.entries();
     }
 
@@ -5760,7 +5769,7 @@ class Viewer {
     }
 
     [[nodiscard]] std::string witnessHoverName() const {
-        return sidebarMenus_.hoverLabel();
+        return routingPopup_.anyOpen()?routingPopup_.hoverLabel():sidebarMenus_.hoverLabel();
     }
 
     [[nodiscard]] std::string witnessMenuFramingStatus() const {
@@ -5780,6 +5789,13 @@ class Viewer {
     }
 
     void toggleSidebar(size_t hand) {
+        if(routingPopup_.anyOpen()) {
+            for(const auto& row:routingPanel_.controls)if(row.label=="Cancel"||row.label=="Done"||row.id=="dismiss") {
+                if(routingPanel_.activate("routing:"+row.id))publishEventState();
+                break;
+            }
+            return;
+        }
         sidebarMenus_.toggle(hand,hands_[hand].position,hands_[hand].orientation);
     }
 
@@ -5929,7 +5945,7 @@ class Viewer {
             requestedAction=="feedback:activate" || requestedAction=="vr:head-light" || requestedAction=="vr:exit" ||
             requestedAction=="qr:calibrate" || requestedAction=="qr:cube" || requestedAction.starts_with("tool:") ||
             requestedAction.starts_with("twist:") || requestedAction.starts_with("bend:") || requestedAction.starts_with("move:") ||
-            requestedAction.starts_with("extrude:") || requestedAction.starts_with("simulation:") || requestedAction.starts_with("share:") ||
+            requestedAction.starts_with("extrude:") || requestedAction.starts_with("routing:") || requestedAction.starts_with("simulation:") || requestedAction.starts_with("share:") ||
             requestedAction.starts_with("volume:") || requestedAction.starts_with("dimension:") || requestedAction.starts_with("repr:") ||
             requestedAction.starts_with("color:") || requestedAction.starts_with("trajectory:");
         if(!known)return;
@@ -6048,6 +6064,7 @@ class Viewer {
             if(dimensionPanel_.tool.active)dimensionPanel_.exit(sidebarMenus_.menus);
             activateAuthoringTool(action=="tool:twist"?1:2);return;
         }
+        if(action.starts_with("routing:")) {if(routingPanel_.activate(action))publishEventState();return;}
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
         if(action=="qr:calibrate") {qrCalibration_.start();return;}
         if(action=="qr:cube") {qrCalibration_.start(true);return;}
@@ -6827,7 +6844,7 @@ class Viewer {
             line(tip - up * 0.008F, tip + up * 0.008F, color);
             if (const auto p = desktopPanel_.hit(hands_[hand])) line(tip,desktopPanel_.placement.worldPoint(*p),color*.55F);
             if(remotePanels_.rayPoints[hand])line(tip,*remotePanels_.rayPoints[hand],color*.55F);
-            else if (const auto hit = sidebarMenus_.rayEndpoint(hands_[hand])) {
+            else if (const auto hit = routingPopup_.anyOpen()?routingPopup_.rayEndpoint(hands_[hand]):sidebarMenus_.rayEndpoint(hands_[hand])) {
                 line(tip, *hit, color * 0.55F);
             }
             if (latticeOpen_ && hand == 1U) {
@@ -7010,7 +7027,11 @@ class Viewer {
                     normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},line);
         }
         drawBend(line);
-        if(!bendPanel_.active && !ligation_.active && !ligation_.nickActive)endResize_.draw(manipulator_.transform(),normalizationScale_,line);
+        if(!bendPanel_.active && !ligation_.active && !ligation_.nickActive) {
+            endResize_.draw(manipulator_.transform(),normalizationScale_,line);
+            endResize_.drawPointer(witnessObserverOrientation_,line,
+                [&](const auto&... args){appendPlacedText(args...);});
+        }
         ligation_.draw(manipulator_.transform(),line);
         ligation_.drawNick(manipulator_.transform(),line);
         appendRadialToolGuides();
@@ -7021,6 +7042,7 @@ class Viewer {
             [&](const auto&... args){appendPlacedText(args...);});
         trajectoryPanel_.refresh(sidebarMenus_.menus,trajectoryState_);
         sidebarMenus_.draw();
+        routingPopup_.draw();
         updateDesktopFrame();
         appendThumbwheelGuides();
         witnessActorGuideCount_ = controllerGuides_.size();
@@ -7356,6 +7378,7 @@ class Viewer {
         identity(publishedHoverIdentity_);
         output << ",\"share_control\":{\"sequence\":" << shareSequence_ << ",\"action\":\"" << shareAction_ << "\"}";
         output << ",\"simulation\":{\"sequence\":" << simulationPanel_.sequence << ",\"version\":" << simulationPanel_.requestedVersion << ",\"id\":\"" << simulationPanel_.requested << "\"}";
+        output << ",\"routing\":{\"sequence\":" << routingPanel_.sequence << ",\"version\":" << routingPanel_.requestedVersion << ",\"id\":\"" << routingPanel_.requested << "\"}";
         output << ",\"view_tool\":{\"sequence\":" << viewTools_.sequence << ",\"index\":" << viewTools_.requested << "}";
         output << ",\"ligation\":{\"sequence\":" << ligation_.sequence
                << ",\"action\":\"" << ligation_.committedAction << "\""
@@ -8087,7 +8110,14 @@ class Viewer {
         out << ",\"end_resize\":{\"version\":" << endResize_.version
             << ",\"grabbing\":" << (endResize_.hand?"true":"false")
             << ",\"nearby\":" << (endResize_.nearby?"true":"false")
-            << ",\"delta\":" << endResize_.delta << ",\"arrows\":[";
+            << ",\"delta\":" << endResize_.delta
+            << ",\"cancel_reason\":" << quote(endResize_.cancelReason)
+            << ",\"hover_hand\":" << (endResize_.hoverHand?int(*endResize_.hoverHand):-1)
+            << ",\"hovered_arrow\":" << (endResize_.hoverHand?int(endResize_.hovered):-1)
+            << ",\"pointer_start\":" << point(endResize_.pointerStart)
+            << ",\"pointer_end\":" << point(endResize_.pointerEnd)
+            << ",\"label_position\":" << point(endResize_.labelPosition())
+            << ",\"label\":" << quote(endResize_.hand?endResize_.label():"") << ",\"arrows\":[";
         for(size_t i=0;i<endResize_.arrows.size();++i) {
             if(i)out<<',';
             const auto& a=endResize_.arrows[i];const auto model=manipulator_.transform();
@@ -8177,7 +8207,7 @@ class Viewer {
                 << ",\"tab\":" << quote(entries[i].tab) << ",\"enabled\":" << (entries[i].enabled?"true":"false")
                 << ",\"active\":" << (entries[i].active?"true":"false") << '}';
         }
-        out << "],\"sidebars\":" << sidebarMenus_.json() << ",\"dimensions\":" << dimensionPanel_.tool.json(normalizationScale_,manipulator_.transform());
+        out << "],\"routing_popup\":" << routingPopup_.json() << ",\"sidebars\":" << sidebarMenus_.json() << ",\"dimensions\":" << dimensionPanel_.tool.json(normalizationScale_,manipulator_.transform());
         const auto& volumeInteraction=volumePanel_.interaction;
         out << ",\"view_volumes\":{\"held_id\":" << quote(volumeInteraction.held)
             << ",\"hand\":" << (volumeInteraction.hand?int(*volumeInteraction.hand):-1)
@@ -8447,7 +8477,8 @@ class Viewer {
         viewTools_.placement.update(hands_);
         for(auto& menu:sidebarMenus_.menus)menu.placement.update(hands_);
         volumePanel_.interaction.cancel();dimensionPanel_.tool.freeze();
-        endResize_.hand.reset();endResize_.delta=0;
+        if(endResize_.hand)endResize_.cancelReason="focus_lost";
+        endResize_.hand.reset();endResize_.hoverHand.reset();endResize_.delta=0;
         movePanel_.hand.reset();bendPanel_.hand.reset();bendPanel_.wheelHand.reset();bendPanel_.planeHand.reset();
         bendPanel_.wheel.reset();for(auto& wheel:bendPanel_.wheels)wheel.reset();
         bendPanel_.planeHover.fill(std::nullopt);bendPanel_.beamEnd.fill(std::nullopt);
@@ -8622,7 +8653,7 @@ class Viewer {
                 "xrGetActionStateVector2f(trackpad axis)");
             const glm::vec2 navigationAxis=liveControlsEnabled()?liveTrackpadAxis_[hand]:glm::vec2(trackpadAxis.currentState.x,trackpadAxis.currentState.y);
             if(hand==0)selectionWheel_.input(trackpadPressed,navigationAxis,hands_[0],
-                !componentGallery_.active && !toolShell_.executionPending() && !moveAwaitRefresh_ && sessionState_==XR_SESSION_STATE_FOCUSED && (liveControlsEnabled() || trackpadAxis.isActive),
+                !routingPopup_.anyOpen() && !componentGallery_.active && !toolShell_.executionPending() && !moveAwaitRefresh_ && sessionState_==XR_SESSION_STATE_FOCUSED && (liveControlsEnabled() || trackpadAxis.isActive),
                 [&](const char* level){if(movePanel_.active)cancelMove();publishSelectionLevel(level);},[&](float strength){pulse(0,strength);});
             const bool touching = !witness_ && !liveSocket_.enabled() && trackpadTouch.isActive && trackpadTouch.currentState &&
                                   trackpadAxis.isActive;
@@ -8633,9 +8664,10 @@ class Viewer {
                 return !other || glm::length(*other-hands_[hand].position) >=
                     glm::length(desktopPanel_.placement.worldPoint(*local)-hands_[hand].position);
             }();
-            const bool sidebarActive=!desktopActive && sidebarMenus_.scrollAt(hands_[hand]);
-            const bool focusActive=sidebarMenus_.menus[hand].focus.active;
-            const bool navigationMenuOpen=sidebarMenus_.menus[hand].open;
+            auto& navigationMenus=routingPopup_.anyOpen()?routingPopup_:sidebarMenus_;
+            const bool sidebarActive=!desktopActive && navigationMenus.scrollAt(hands_[hand]);
+            const bool focusActive=navigationMenus.menus[hand].focus.active;
+            const bool navigationMenuOpen=routingPopup_.anyOpen() || sidebarMenus_.menus[hand].open;
             if (touching && !trackpadPressed && !(hand==0?selectionWheel_.blocksInput():radialToolMenu_.blocksInput()) && !focusActive && (desktopActive || sidebarActive)) {
                 const float y = glm::clamp(trackpadAxis.currentState.y, -1.0F, 1.0F);
                 if (!desktopTrackpadTouching_[hand]) {
@@ -8646,7 +8678,7 @@ class Viewer {
                     desktopTrackpadTravel_[hand] += y - desktopTrackpadLastY_[hand];
                     desktopTrackpadLastY_[hand] = y;
                     if (std::abs(desktopTrackpadTravel_[hand]) >= 0.18F) {
-                        if(sidebarActive) sidebarMenus_.scrollAt(hands_[hand],desktopTrackpadTravel_[hand]>0.0F?-1:1);
+                        if(sidebarActive) navigationMenus.scrollAt(hands_[hand],desktopTrackpadTravel_[hand]>0.0F?-1:1);
                         else desktopSurface_.scroll(desktopTrackpadTravel_[hand] > 0.0F);
                         desktopTrackpadTravel_[hand] = 0.0F;
                         trackpadScrolled_[hand] = true;
@@ -8669,7 +8701,7 @@ class Viewer {
             }
 
             if(hand==1) {
-                if(!radialToolMenu_.open() && trackpadClicked && sidebarMenus_.trackpad(hand,navigationAxis,hands_[hand]))pulse(hand,.12F);
+                if(!radialToolMenu_.open() && trackpadClicked && (routingPopup_.anyOpen()?routingPopup_:sidebarMenus_).trackpad(hand,navigationAxis,hands_[hand]))pulse(hand,.12F);
                 const auto result=radialToolMenu_.update(trackpadPressed,navigationAxis,hands_[hand],
                     !navigationMenuOpen && (!desktopActive || radialToolMenu_.open()) && !componentGallery_.active && !toolShell_.executionPending() &&
                     !moveAwaitRefresh_ && sessionState_==XR_SESSION_STATE_FOCUSED && (liveControlsEnabled() || trackpadAxis.isActive));
@@ -8684,7 +8716,8 @@ class Viewer {
             updateControllerGuides();return;
         }
         frameAudit_.mark("poses_buttons");
-        auto remoteBlocked=remotePanels_.update(remotePanelTargets(),hands_,radialToolMenu_.filter(selectionWheel_.filter(triggerClicked_)),radialToolMenu_.filter(selectionWheel_.filter(triggerPressed_)),witnessObserverPosition_,glfwGetTime());
+        auto remoteBlocked=remotePanels_.update(remotePanelTargets(),hands_,routingPopup_.anyOpen()?std::array<bool,2>{}:radialToolMenu_.filter(selectionWheel_.filter(triggerClicked_)),routingPopup_.anyOpen()?std::array<bool,2>{}:radialToolMenu_.filter(selectionWheel_.filter(triggerPressed_)),witnessObserverPosition_,glfwGetTime());
+        if(routingPopup_.anyOpen())remoteBlocked.fill(true);
         remoteBlocked[0]=remoteBlocked[0]||selectionWheel_.blocksInput();
         remoteBlocked[1]=remoteBlocked[1]||radialToolMenu_.blocksInput();
         viewTools_.syncPose();
@@ -8693,7 +8726,7 @@ class Viewer {
             latticePlacement_.resizeActive() || latticeGrip_.held[0] || latticeGrip_.held[1]);
         const bool desktopOwnsGrip=desktopPanel_.open && (desktopPanel_.placement.dragHand() || desktopPanel_.placement.resizeActive());
         const bool viewOwnsGrip=viewTools_.open && (viewTools_.placement.dragHand() || viewTools_.placement.resizeActive());
-        std::array<bool, 2> menuGripTargeted = (latticeOwnsGrip || viewOwnsGrip || desktopOwnsGrip) ? std::array<bool,2>{} : sidebarMenus_.grips(gripContacts, gripClicked_, [this](size_t hand,float strength) { suppressManipulationUntilRelease_=true; pulse(hand,strength); });
+        std::array<bool, 2> menuGripTargeted = (routingPopup_.anyOpen() || latticeOwnsGrip || viewOwnsGrip || desktopOwnsGrip) ? std::array<bool,2>{} : sidebarMenus_.grips(gripContacts, gripClicked_, [this](size_t hand,float strength) { suppressManipulationUntilRelease_=true; pulse(hand,strength); });
         if(!latticeOwnsGrip && !viewOwnsGrip)desktopPanel_.grips(gripContacts,gripClicked_,menuGripTargeted,[this](size_t hand,float strength){suppressManipulationUntilRelease_=true;pulse(hand,strength);});
         if(!latticeOwnsGrip)viewTools_.grips(gripContacts,gripClicked_,menuGripTargeted,[this](size_t hand,float strength){suppressManipulationUntilRelease_=true;pulse(hand,strength);});
         const auto latticeGripTargeted=latticeGrip_.update(latticePlacement_,gripContacts,gripClicked_,
@@ -8742,6 +8775,7 @@ class Viewer {
             suppressManipulationUntilRelease_ = false;
         }
         auto manipulationHands = hands_;
+        if(routingPopup_.anyOpen())for(auto& hand:manipulationHands)hand.pressed=false;
         if(selectionWheel_.blocksInput())manipulationHands[0].pressed=false;
         if(radialToolMenu_.blocksInput())manipulationHands[1].pressed=false;
         const bool menuGripActive = std::any_of(
@@ -8786,9 +8820,15 @@ class Viewer {
         auto sidebarBlocked=wheelTargeted;
         for(size_t h=0;h<2;++h)sidebarBlocked[h]=sidebarBlocked[h]||volumeTargeted[h];
         sidebarBlocked=processTrajectoryInput(sidebarBlocked,foregroundDistance);
+        if(routingPopup_.anyOpen()) {
+            routingPopup_.input(hands_,triggerClicked_,triggerPressed_,{false,false},{1e9F,1e9F},glfwGetTime(),
+                [&](const std::string& action,size_t hand){activateSidebarAction(action,hand);});
+            sidebarBlocked.fill(true);
+        }
         auto sidebarTargeted = sidebarMenus_.input(hands_, triggerClicked_, triggerPressed_, sidebarBlocked, foregroundDistance,glfwGetTime(),
             [&](const std::string& action, size_t hand) { activateSidebarAction(action,hand); });
         std::array<bool, 2> menuControlTargeted = sidebarTargeted;
+        if(routingPopup_.anyOpen())menuControlTargeted.fill(true);
         for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h]||volumeTargeted[h];
         menuControlTargeted = processDesktopInput(menuControlTargeted);
         for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h] || wheelTargeted[h] || latticeGripTargeted[h];
@@ -8809,6 +8849,7 @@ class Viewer {
         if(volumePanel_.active) menuControlTargeted.fill(true);
         frameAudit_.mark("dimensions");
         simulationPanel_.poll(eventPath_);
+        routingPanel_.poll(eventPath_,routingPopup_.menus[1],sidebarMenus_.menus[1]);
         { std::error_code error; const auto path=eventPath_+".share";
           const auto changed=std::filesystem::last_write_time(path,error);
           if(error || std::filesystem::file_time_type::clock::now()-changed>std::chrono::seconds(3)) {shareActive_=false;shareBusy_=true;}
@@ -9497,6 +9538,7 @@ class Viewer {
         solidWheels_.render(viewProjection);
         menuGlass_.capture();
         sidebarMenus_.render(viewProjection);
+        routingPopup_.render(viewProjection);
         if(latticeOpen_) latticePanelSurface_.render(viewProjection,latticePlacement_,kLatticePanelBounds);
         viewTools_.renderPanel(viewProjection);
         if(desktopPanel_.open) {
@@ -10879,6 +10921,8 @@ class Viewer {
     MenuPanelSurface latticePanelSurface_;
     nadoc_vr::MenuLayoutAudit latticeLayoutAudit_;
     SidebarRuntime sidebarMenus_;
+    SidebarRuntime routingPopup_;
+    nadoc_vr::RoutingPanel routingPanel_;
     nadoc_vr::ViewVolumePanel volumePanel_;
     nadoc_vr::DimensionPanel dimensionPanel_;
     nadoc_vr::DimensionSync dimensionSync_;
