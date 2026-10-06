@@ -533,3 +533,69 @@ describe('VR arrow resizing', () => {
     arrows.dispose()
   })
 })
+
+
+describe('curved desktop resize gesture', () => {
+  it.each([1, 2])('traces a trim around the bend for %i ends, turns arrows, and cancels without a commit', count => {
+    const rise = .334
+    const samples = [[0, 0, 0], [0, 0, 7 * rise], [7 * rise, 0, 7 * rise], [14 * rise, 0, 7 * rise]]
+    const helix = { ...makeHelix(), length_bp: 22 }
+    store.getState().currentDesign = { helices: [helix], strands: [{ id: 's', domains: [
+      { helix_id: helix.id, direction: 'FORWARD', start_bp: 0, end_bp: 21 },
+    ] }] }
+    store.getState().currentHelixAxes = { [helix.id]: { start: samples[0], end: samples.at(-1), samples } }
+    camera = new THREE.OrthographicCamera(-10, 10, 7.5, -7.5, .1, 100)
+    camera.position.set(0, 20, 0); camera.up.set(0, 0, 1); camera.lookAt(0, 0, 0); camera.updateMatrixWorld()
+    const arrows = initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, { enabled: true })
+    selectionStoreSub = store.subscribe.mock.calls[0][0]
+    const bead = makeBead({ bp: 21, isFivePrime: false, pos: samples.at(-1) }); bead.nuc.strand_id = 's'
+    const beads = [bead]
+    if (count === 2) {
+      const other = { ...helix, id: 'other' }
+      store.getState().currentDesign.helices.push(other)
+      store.getState().currentDesign.strands.push({ id: 'other-strand', domains: [{ helix_id: other.id, direction: 'FORWARD', start_bp: 0, end_bp: 21 }] })
+      const shifted = samples.map(([x, y, z]) => [x, y + 2, z])
+      store.getState().currentHelixAxes.other = { start: shifted[0], end: shifted.at(-1), samples: shifted }
+      const second = makeBead({ helixId: other.id, bp: 21, isFivePrime: false, pos: shifted.at(-1) })
+      second.nuc.strand_id = 'other-strand'
+      beads.push(second)
+    }
+    selectEndBeads(beads)
+    const group = scene.add.mock.calls[0][0], preview = scene.add.mock.calls[1][0]
+    const hit = vi.spyOn(THREE.Raycaster.prototype, 'intersectObjects').mockReturnValue([{ object: group.children[0].children[0] }])
+    const screen = xyz => {
+      const p = new THREE.Vector3(...xyz).project(camera)
+      return { clientX: (p.x + 1) * 400, clientY: (1 - p.y) * 300 }
+    }
+    try {
+      const down = canvas.addEventListener.mock.calls.find(c => c[0] === 'pointerdown')[1]
+      down({ button: 0, ...screen([14 * rise + .75, 0, 7 * rise]), stopImmediatePropagation() {} })
+      document.dispatchEvent(new MouseEvent('pointermove', screen([0, 0, 3 * rise + .75])))
+      expect(preview.children).toHaveLength(3 * count)
+      for (const arrow of group.children) expect(arrow.position.z).toBeCloseTo(3 * rise)
+      expect(group.children[0].position.x).toBeCloseTo(0)
+      expect(group.children[0].position.z).toBeCloseTo(3 * rise)
+      const direction = new THREE.Vector3(0, 1, 0).applyQuaternion(group.children[0].quaternion)
+      expect(direction.z).toBeCloseTo(1)
+      expect(preview.children.every(m => m.material.color.getHex() === 0xff4400)).toBe(true)
+      document.dispatchEvent(new MouseEvent('pointermove', screen([264 * rise + .75, 0, 7 * rise])))
+      expect(group.children[0].position.x).toBeCloseTo(214 * rise)
+      expect(preview.children.every(m => m.material.color.getHex() === 0x00e5ff)).toBe(true)
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(preview.children).toHaveLength(0)
+      expect(group.children[0].position.toArray()).toEqual(samples.at(-1))
+      expect(resizeStrandEnds).not.toHaveBeenCalled()
+    } finally { hit.mockRestore(); arrows.dispose() }
+  })
+
+  it('orients an interior terminus by its bp tangent rather than the nearest helix endpoint', () => {
+    const samples = [[0, 0, 0], [0, 0, 2], [2, 0, 2], [2, 0, 0]]
+    store.getState().currentDesign.helices = [{ ...makeHelix(), length_bp: 22 }]
+    store.getState().currentHelixAxes = { h_XY_0_0: { start: samples[0], end: samples.at(-1), samples } }
+    const { rootGroup } = setup()
+    selectEndBeads([makeBead({ bp: 10, isFivePrime: false, pos: [.8, 0, 2] })])
+    const direction = new THREE.Vector3(0, 1, 0).applyQuaternion(rootGroup.children[0].quaternion)
+    expect(direction.x).toBeCloseTo(1)
+    expect(direction.z).toBeCloseTo(0)
+  })
+})

@@ -173,6 +173,18 @@ requires the manager controller, and pins the assembly boundary.
   (`project_crossover_catenation.md`, `project_nucleotide_transform.md`); this plan and
   its archive are discoverable.
 
+## End-resize previews (2026-10-06)
+
+Desktop end-resize dragging uses the displayed helix's sampled axis, not its
+endpoint chord. `scene/end_resize_axis.js` maps the backend's seven-bp samples
+and shorter final interval to base-pair coordinates; extension beyond available
+samples follows the terminal tangent. Each selected end retains its own path,
+backbone anchor, and topological outward sign. Arrows turn with the local tangent;
+trim/extension ghosts trace the path. Cadnano keeps its straight track.
+Geometry and topology are unchanged until the existing resize commit.
+Regression coverage: `end_resize_axis.test.js`, `end_extrude_arrows.test.js`,
+and the real-pointer Bend/Twist browser test `e2e/end_resize_axis.spec.js`.
+
 ## Future-session protocol
 
 1. Read this head and inspect the current matrix; avoid the archive unless historical

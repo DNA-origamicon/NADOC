@@ -24,6 +24,7 @@ it.each(['bend', 'twist'])('picks a fresh cluster before starting %s and restore
   expect(d.store.getState().selection.level).toBe('default')
   expect(d.store.getState().selectableTypes).toEqual(d.filters)
   expect(d.store.getState().selection.items).toEqual([])
+  expect(d.store.getState().activeClusterId).toBeNull()
   expect(d.setScope).toHaveBeenCalledWith(['c'])
   expect(d.start).toHaveBeenCalledExactlyOnceWith(type)
   expect(d.watchDeformState).toHaveBeenCalledOnce()

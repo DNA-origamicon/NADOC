@@ -357,7 +357,7 @@ export async function confirmDeformation(params) {
 // Called by popup on cancel — keep plane A, remove B so user can re-select
 export function cancelDeformation() {
   _clearPreviewSession()
-  _sessionClusterIds = null   // popup is closing; revert to default scope
+  // Keep the picked scope while the user reselects plane B.
   if (_solidB) { _scene.remove(_solidB.group); _solidB = null }
   _planeB = null
   _setState(STATE.A_PLACED)
@@ -581,7 +581,7 @@ function _effectiveClusterIds() {
 /** Returns the default cluster ids the popup should preselect when opening
  *  a fresh deformation session. Exported so the popup can prefill its UI. */
 export function getDeformDefaultClusterIds() {
-  return _defaultClusterIds()
+  return _effectiveClusterIds()
 }
 
 function _getHelixAxisData(clusterIdsOverride = null) {

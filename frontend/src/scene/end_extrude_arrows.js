@@ -20,10 +20,12 @@
 
 import * as THREE from 'three'
 import { store }           from '../state/store.js'
+import { BDNA_RISE_PER_BP } from '../constants.js'
 import { resizeStrandEnds } from '../api/client.js'
 import { adjacentBpFree, oneNtResizableEnd } from '../shared/strand_end_resize.js'
 import { baseKey, parseBaseKey } from './base_ref.js'
 import { canonicalSelection } from './selection_model.js'
+import { createEndResizeAxis, projectRayToResizeAxis } from './end_resize_axis.js'
 
 // ── Arrow dimensions (nm) ─────────────────────────────────────────────────────
 
@@ -36,7 +38,6 @@ const ARROW_COLOR  = 0x00e5ff  // cyan
 
 // ── Drag constants ────────────────────────────────────────────────────────────
 
-const RISE_PER_BP   = 0.334   // nm — matches backend BDNA_RISE_PER_BP
 const MAX_EXTEND_BP = 200     // max bp change per drag
 
 const _Y = new THREE.Vector3(0, 1, 0)   // CylinderGeometry / ConeGeometry default axis
@@ -159,8 +160,8 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   const _mat      = new THREE.MeshPhongMaterial({ color: ARROW_COLOR })
 
   // Preview materials (ghost cylinders during drag)
-  const _extMat  = new THREE.MeshPhongMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.35 })
-  const _trimMat = new THREE.MeshPhongMaterial({ color: 0xff4400, transparent: true, opacity: 0.35 })
+  const _extMat  = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.55 })
+  const _trimMat = new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.55 })
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -172,6 +173,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   let _dragExtMin     = -MAX_EXTEND_BP
   let _dragExtMax     = +MAX_EXTEND_BP
   let _dragOriginMeta = null          // meta of the grabbed arrow
+  let _dragPointerOffset = 0
   let _lastDelta      = 0             // last committed extensionDelta
 
   // ── Entry lookup ──────────────────────────────────────────────────────────
@@ -273,18 +275,14 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     raycaster.setFromCamera(_ndc, _cam())
     const ray = raycaster.ray
 
-    // Closest point on helix axis to the cursor ray
-    // Line1: ray.origin + t * ray.direction
-    // Line2: aStart   + s * axisDir
-    const w0    = ray.origin.clone().sub(originMeta.aStart)
-    const b     = ray.direction.dot(originMeta.axisDir)
-    const denom = 1 - b * b
-    if (Math.abs(denom) < 1e-8) return 0   // rays nearly parallel
-
-    const s = (originMeta.axisDir.dot(w0) - b * ray.direction.dot(w0)) / denom
-
-    // extensionDelta: positive = outward (extend), negative = inward (trim)
-    return (s - originMeta.sOrigin) / RISE_PER_BP * originMeta.outwardSign
+    const { resizeAxis, bead, outwardSign } = originMeta
+    const bp = bead.nuc.bp_index
+    // Project past the clamp by the handle length, so subtracting the grip
+    // offset does not make the last few allowed base pairs unreachable.
+    const margin = (ARROW_OFFSET + SHAFT_LEN + HEAD_LEN) / BDNA_RISE_PER_BP + 1
+    const projected = projectRayToResizeAxis(ray, resizeAxis,
+      bp + (_dragExtMin - margin) * outwardSign, bp + (_dragExtMax + margin) * outwardSign)
+    return (projected - bp) * outwardSign
   }
 
   // ── Rebuild ───────────────────────────────────────────────────────────────
@@ -321,76 +319,15 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       const endRole = isOneNt
         ? oneNtResizableEnd(nuc, currentDesign.strands)
         : (nuc.is_five_prime ? '5p' : '3p')
-      // Extension direction of the chosen end (only used to override the ambiguous
-      // position-based direction for 1-nt beads).
-      const oneNtToward = isOneNt ? ((endRole === '3p') !== (nuc.direction === 'REVERSE')) : null
-
-      // ── Axis endpoints (deformed if available) ──────────────────────────
-      const axDef  = currentHelixAxes?.[nuc.helix_id]
-      const aStart = axDef
-        ? new THREE.Vector3(...axDef.start)
-        : new THREE.Vector3(helix.axis_start.x, helix.axis_start.y, helix.axis_start.z)
-      const aEnd   = axDef
-        ? new THREE.Vector3(...axDef.end)
-        : new THREE.Vector3(helix.axis_end.x, helix.axis_end.y, helix.axis_end.z)
-
-      const axisVec = aEnd.clone().sub(aStart)
-      const axisDir = axisVec.clone().normalize()
-
-      // ── Outward direction ────────────────────────────────────────────────
-      const beadPos   = bead.entry.pos
-      const nearStart = beadPos.distanceToSquared(aStart) <= beadPos.distanceToSquared(aEnd)
-      // For a 1-nt bead position is ambiguous (both ends coincide) → use the chosen
-      // end's extension direction; otherwise keep the position-based direction.
-      const towardHigherBp = isOneNt ? oneNtToward : !nearStart
-      const outwardSign = towardHigherBp ? +1 : -1   // +1 = toward aEnd, -1 = toward aStart
-
-      let outward
-      if (axDef?.samples?.length >= 2) {
-        const s = axDef.samples
-        const n = s.length
-        if (!towardHigherBp) {
-          outward = new THREE.Vector3(
-            s[0][0] - s[1][0], s[0][1] - s[1][1], s[0][2] - s[1][2],
-          ).normalize()
-        } else {
-          outward = new THREE.Vector3(
-            s[n-1][0] - s[n-2][0], s[n-1][1] - s[n-2][1], s[n-1][2] - s[n-2][2],
-          ).normalize()
-        }
-      } else {
-        outward = towardHigherBp ? axisDir.clone() : axisDir.clone().negate()
-      }
-
-      // ── Terminal run length (for shorten limit) ──────────────────────────
-      // Spans the whole contiguous same-helix run when the terminal domain is an
-      // inline overhang, so the end can be dragged through the scaffold boundary
-      // (dissolving the overhang) — see terminalRunLength.
+      // Direction comes from the selected terminus, not spatial proximity to
+      // helix endpoints (a bend can put the opposite endpoint closer).
+      const outwardSign = ((endRole === '3p') !== (nuc.direction === 'REVERSE')) ? 1 : -1
+      const beadPos = bead.entry.pos
+      const resizeAxis = createEndResizeAxis(helix, currentHelixAxes?.[nuc.helix_id],
+        nuc.bp_index, beadPos, store.getState().cadnanoActive)
+      const outward = resizeAxis.tangent(nuc.bp_index).multiplyScalar(outwardSign)
       const strand = strandById.get(nuc.strand_id)
       const terminalLen = strand ? terminalRunLength(strand, endRole === '5p') : 1
-
-      // sOrigin = distance along axis (nm) from aStart to bead position
-      const sOrigin = beadPos.clone().sub(aStart).dot(axisDir)
-
-      // ── Cadnano override ─────────────────────────────────────────────────
-      // In cadnano mode beads lie on a flat track along Z (z = bp_index × RISE_PER_BP).
-      // Override axis, origin and outward direction to use the cadnano Z axis so
-      // that arrow orientation and drag projection both work in the flat 2D layout.
-      //   FORWARD 3' and REVERSE 5' ends are at the high-bp (high-Z) edge → outward = +Z
-      //   FORWARD 5' and REVERSE 3' ends are at the low-bp (low-Z) edge  → outward = −Z
-      const { cadnanoActive } = store.getState()
-      let _axisDir = axisDir, _aStart = aStart, _sOrigin = sOrigin
-      let _outward = outward, _outwardSign = outwardSign
-      if (cadnanoActive) {
-        const goesHigherZ = isOneNt
-          ? oneNtToward
-          : (nuc.direction === 'FORWARD' ? nuc.is_three_prime : nuc.is_five_prime)
-        _outwardSign = goesHigherZ ? +1 : -1
-        _outward     = new THREE.Vector3(0, 0, _outwardSign)
-        _axisDir     = new THREE.Vector3(0, 0, 1)
-        _aStart      = new THREE.Vector3(beadPos.x, beadPos.y, 0)
-        _sOrigin     = beadPos.z
-      }
 
       // ── Build arrow group ────────────────────────────────────────────────
       const shaft = new THREE.Mesh(_shaftGeo, _mat)
@@ -403,16 +340,14 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       ag.add(shaft)
       ag.add(head)
       ag.position.copy(beadPos)
-      ag.quaternion.setFromUnitVectors(_Y, _outward)
+      ag.quaternion.setFromUnitVectors(_Y, outward)
 
       // Store metadata for drag
       ag.userData.dragMeta = {
         bead,
         endRole,
-        outwardSign: _outwardSign,
-        sOrigin:     _sOrigin,
-        aStart:      _aStart.clone(),
-        axisDir:     _axisDir.clone(),
+        outwardSign,
+        resizeAxis,
         terminalLen,
       }
 
@@ -437,27 +372,22 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       const meta = ag.userData.dragMeta
       if (!meta) continue
 
-      // New axis distance: outward moves arrow in outwardSign * axisDir direction
-      const sNew = meta.sOrigin + extensionDelta * RISE_PER_BP * meta.outwardSign
+      const from = meta.bead.nuc.bp_index
+      const to = from + extensionDelta * meta.outwardSign
+      ag.position.copy(meta.resizeAxis.point(to))
+      ag.quaternion.setFromUnitVectors(_Y, meta.resizeAxis.tangent(to).multiplyScalar(meta.outwardSign))
 
-      // Move arrow group to new position
-      const posNew = meta.aStart.clone().addScaledVector(meta.axisDir, sNew)
-      ag.position.copy(posNew)
-
-      // Ghost cylinder showing the delta region
-      const cylLen = Math.abs(extensionDelta) * RISE_PER_BP
-      if (cylLen > 0.01) {
-        const sMid   = (meta.sOrigin + sNew) / 2
-        const midPos = meta.aStart.clone().addScaledVector(meta.axisDir, sMid)
-
-        const cylGeo = new THREE.CylinderGeometry(SHAFT_RAD * 1.8, SHAFT_RAD * 1.8, cylLen, 8)
-        const cylMesh = new THREE.Mesh(cylGeo, extensionDelta >= 0 ? _extMat : _trimMat)
-
-        cylMesh.position.copy(midPos)
-        // Align cylinder to axisDir (cylinder default axis is Y)
-        cylMesh.quaternion.setFromUnitVectors(_Y, meta.axisDir)
-
-        _previewGroup.add(cylMesh)
+      const path = meta.resizeAxis.path(from, to)
+      for (let i = 1; i < path.length; i++) {
+        const a = path[i - 1].position, b = path[i].position
+        const direction = b.clone().sub(a)
+        const length = direction.length()
+        if (length < 0.01) continue
+        const geometry = new THREE.CylinderGeometry(SHAFT_RAD * 1.8, SHAFT_RAD * 1.8, length, 8)
+        const mesh = new THREE.Mesh(geometry, extensionDelta >= 0 ? _extMat : _trimMat)
+        mesh.position.copy(a).lerp(b, 0.5)
+        mesh.quaternion.setFromUnitVectors(_Y, direction.normalize())
+        _previewGroup.add(mesh)
       }
     }
   }
@@ -466,7 +396,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
 
   function _onDragMove(e) {
     if (!_dragging || !_dragOriginMeta) return
-    const raw     = _projectToExtDelta(e.clientX, e.clientY, _dragOriginMeta)
+    const raw     = _projectToExtDelta(e.clientX, e.clientY, _dragOriginMeta) - _dragPointerOffset
     const snapped = Math.round(raw)
     _lastDelta    = Math.max(_dragExtMin, Math.min(_dragExtMax, snapped))
     _applyPreview(_lastDelta)
@@ -583,6 +513,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     const limits = _computeDragLimits(_dragBeads, currentDesign)
     _dragExtMin = limits.extMin
     _dragExtMax = limits.extMax
+    _dragPointerOffset = _projectToExtDelta(e.clientX, e.clientY, _dragOriginMeta)
 
     _dragging = true
     const activeCtrl = _ctrl()

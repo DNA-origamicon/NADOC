@@ -38,7 +38,8 @@ export function initDeformationToolLauncher({
     popup.show()
     pending = beginClusterSelection({ store, selectionManager, onCancelled: cancel, onSelected: cluster => {
       cancel()
-      store.setState({ activeClusterId: cluster.id })
+      // The editor owns its scope independently of Move/Rotate's active marker.
+      // Leaving that marker set makes the cluster row stay lit after deselection.
       setScope([cluster.id])
       start(type)
       watchDeformState()
