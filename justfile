@@ -83,7 +83,7 @@ test-fast:
 # `just test-smart --dry-run` shows the decision without running; `--base origin/master`
 # overrides the watermark; forward pytest args after `--`.
 test-smart *ARGS:
-    scripts/test_guard.sh "test-smart" 0 0 -- uv run python scripts/select_tests.py --since-last-full {{ARGS}}
+    scripts/validation_guard.sh scripts/test_guard.sh "test-smart" 0 0 -- uv run python scripts/select_tests.py --since-last-full {{ARGS}}
 
 # Tightest inner loop: point pytest at the area you're editing. Pass file paths
 # and/or `-k pattern`; heavy solves are dropped (`-m 'not slow'`) so it stays
@@ -104,9 +104,13 @@ test-affected *ARGS:
 test-focused TARGET *ARGS:
     uv run python scripts/test_focused.py {{quote(TARGET)}} {{ARGS}}
 
+# Run a build or custom check with serialized, bounded desktop resources.
+validate-safe *COMMAND:
+    scripts/validation_guard.sh {{COMMAND}}
+
 # Run frontend unit tests (Vitest), single pass
 test-frontend:
-    cd frontend && npm test
+    cd frontend && ../scripts/validation_guard.sh npm test
 
 # Build and run the headless native + Playwright ScryWrite proof of concept.
 test-scrywrite:
@@ -231,7 +235,7 @@ test-all:
 # Override with NADOC_IGNORE_SIM_GUARD=1.
 smoke:
     @uv run python scripts/sim_guard.py smoke
-    cd frontend && npx playwright test --config playwright.smoke.config.js smoke.spec.js assembly_exit_cleanup.spec.js
+    cd frontend && ../scripts/validation_guard.sh npx playwright test --config playwright.smoke.config.js smoke.spec.js assembly_exit_cleanup.spec.js
 
 # Diagnose oxDNA GPU setup (add --fix to auto-build a CUDA-enabled oxDNA)
 oxdna-doctor *ARGS:

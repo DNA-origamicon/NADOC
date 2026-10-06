@@ -86,6 +86,8 @@ def catalog():
     add('extrude-slice', 'authoring', 'Extrude beside an existing 1x8 platform',
         'Isolated square part: display the existing 1x8 cross-section, paint one and two lattice rows beside it, use coarse/fine wheels, and verify preview, committed 3D spacing, refreshed occupied cells and both menus closing on Confirm. Native checks preserve drafts for retry after failure. Motion validation uses all four profiles.',
         ['--slice-reference'], module='extrude_tour')
+    add('lattice-compatibility', 'authoring', 'Extrude · older part compatibility',
+        'No headset required: repairs uniquely matching old lattice addresses, preserves clusters, validates VR extrusion, Undo and save/reopen.', module='lattice_compatibility_check')
     add('presence-ui', 'left', 'VR menus and tools in guest view',
         'Real guest receives native menu labels, desktop icons, controller guides and scissors; checks closing panels and hiding presence.', module='presence_ui_tour')
     add('avatar', 'left', 'VR presenter model',
@@ -133,7 +135,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

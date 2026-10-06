@@ -677,10 +677,11 @@ def make_bundle_segment(
                 )
             )
 
-    return existing_design.copy_with(
+    from backend.core.lattice_frame_compatibility import repair_lattice_frame_membership
+    return repair_lattice_frame_membership(existing_design.copy_with(
         helices=existing_design.helices + new_helices,
         strands=existing_design.strands + new_strands,
-    )
+    ))
 
 
 def make_circle_segment(

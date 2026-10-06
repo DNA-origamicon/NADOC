@@ -1719,6 +1719,8 @@ def load_design(body: FilePathRequest) -> dict:
         design = Design.from_json(text)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
+    from backend.core.lattice_frame_compatibility import repair_lattice_frame_membership
+    design = repair_lattice_frame_membership(design)
     design = migrate_split_staple_domains(design)
     # Full detection (Pass 1 autodetect + Pass 2 reconcile), not just reconcile:
     # idempotent for already-tagged overhangs, but also catches overhangs the
@@ -1749,6 +1751,8 @@ def _install_loaded_design(design: Design) -> dict:
     )
     from backend.core.validator import validate_design
 
+    from backend.core.lattice_frame_compatibility import repair_lattice_frame_membership
+    design = repair_lattice_frame_membership(design)
     design = migrate_split_staple_domains(design)
     # Full detection (Pass 1 autodetect + Pass 2 reconcile), not just reconcile:
     # idempotent for already-tagged overhangs, but also catches overhangs the

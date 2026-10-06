@@ -6328,7 +6328,8 @@ class Viewer {
                     ? nadoc_vr::GripFrameState::ready : nadoc_vr::GripFrameState::idle;
         latticeLayoutAudit_ = nadoc_vr::drawLatticePainterChrome(
             {extrudePlane_.plane,latticeSquare_,latticeGrip_.scaling,latticeExitHovered_,
-                extrudeLatticeDraft_.cells().size(),existingLatticeCells().size(),grip},
+                extrudeLatticeDraft_.cells().size(),existingLatticeCells().size(),grip,
+                freeformDraft_.placed() || freeformDraft_.armed() || latticeContext_.find(extrudePlane_.plane)},
             line,fill,[&](const auto& text,float x,float y,float scale,glm::vec3 color) {
                 appendPlacedText(latticePlacement_,text,x,y,scale,color);
             });

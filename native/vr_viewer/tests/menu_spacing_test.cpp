@@ -58,6 +58,13 @@ static void pages(SidebarMenu& menu) {
     }while(true);
 }
 int main() {
+    bool unresolved=false;
+    auto missing=drawLatticePainterChrome({"XY",true,false,false,0,0,GripFrameState::idle,false},
+        [](glm::vec3,glm::vec3,glm::vec3){},[](MenuPanelBounds,glm::vec3){},
+        [&](const std::string& text,float,float,float,glm::vec3){
+            if(text=="0 SELECTED / SOURCE UNRESOLVED")unresolved=true;
+        });
+    assert(unresolved && missing.valid());
     for(bool square:{false,true})for(size_t count:{0U,8U,16641U}) {
         const auto audit=drawLatticePainterChrome({"XY",square,false,false,count,count},
             [](glm::vec3,glm::vec3,glm::vec3){},[](MenuPanelBounds,glm::vec3){},

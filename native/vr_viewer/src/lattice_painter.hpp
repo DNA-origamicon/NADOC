@@ -8,6 +8,7 @@ struct LatticePainterChrome {
     bool square=false, scaling=false, exitHovered=false;
     size_t selected=0, existing=0;
     GripFrameState grip=GripFrameState::idle;
+    bool contextResolved=true;
 };
 
 // The same geometry feeds the cached frosted surface and the layout audit.
@@ -33,7 +34,7 @@ MenuLayoutAudit drawLatticePainterChrome(const LatticePainterChrome& state,
         content,.199F,.0021F,state.scaling?glm::vec3(.4F,1,.6F):ui_style::disabledText);
     line({content.minimum.x,.181F,0},{content.maximum.x,.181F,0},ui_style::border);
     line({content.minimum.x,-.162F,0},{content.maximum.x,-.162F,0},ui_style::border);
-    label("counts",std::to_string(state.selected)+" SELECTED / "+std::to_string(state.existing)+" EXISTING",
+    label("counts",std::to_string(state.selected)+" SELECTED / "+(state.contextResolved ? std::to_string(state.existing)+" EXISTING" : "SOURCE UNRESOLVED"),
         content,-.174F,.0024F,ui_style::focus);
     label("forward","FWD BLUE",{{-.251F,-.216F},{-.09F,-.190F}},-.198F,.0023F,{41.F/255,182.F/255,246.F/255});
     label("reverse","REV RED",{{-.08F,-.216F},{.07F,-.190F}},-.198F,.0023F,{239.F/255,83.F/255,80.F/255});

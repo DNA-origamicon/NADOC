@@ -47,6 +47,16 @@ The app is at `http://localhost:5173` when both servers run. See [START.md](STAR
 
 ## Verification law
 
+- **Desktop resource safety:** do not overlap backend suites, frontend suites,
+  browser workflows and native builds. `just test-smart`, `just test-frontend`
+  and `just smoke` serialize through `scripts/validation_guard.sh`; use
+  `just validate-safe COMMAND ...` for other heavy development checks/builds.
+  On user-systemd Linux this puts checks in a separate 8 GiB memory scope (512 MiB
+  swap), outside VS Code's scope. Auto pytest workers default to four, Vitest to
+  two, native builds under the wrapper to one. Keep existing test-session gates
+  and timing thresholds. October 6 overlapping checks exhausted RAM and killed
+  VS Code's process scope; do not raise parallelism to chase the time budget.
+
 - Normal test commands validate software only. Physical sampling/convergence and production simulations require a specific user request and `just test-scientific TARGET`; never launch them from change-based selection. See [scientific inventory](docs/scientific_validation.md).
 
 - Keep test/development output out of the main user workspace. Delete disposable artifacts; retain useful evidence under `.development-artifacts/`. Follow [artifact cleanup](memory/feedback_development_artifact_cleanup.md), including dependency checks and final cleanup verification.

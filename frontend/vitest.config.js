@@ -5,6 +5,8 @@ export default defineConfig({
   server: { fs: { allow: [fileURLToPath(new URL('..', import.meta.url))] } },
   test: {
     environment: 'jsdom',
+    // Each jsdom worker has its own V8 heap; CPU count is not a memory budget.
+    maxWorkers: 2,
     include: ['src/**/*.test.js'],
   },
 })

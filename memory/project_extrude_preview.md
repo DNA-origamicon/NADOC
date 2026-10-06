@@ -7,6 +7,24 @@ metadata:
   originSessionId: 9242672e-6640-4491-bdd3-c5b7f01e77e6
 ---
 
+## Mixed-frame compatibility (2026-10-06)
+
+Editor `.nadoc` open/import now repairs missing lattice-frame IDs only when canonical
+rest coordinates and rigid placement match exactly one existing frame. Desktop
+fresh segment construction uses the same repair. `lattice_frame_compatibility.py`
+changes metadata only: clusters, bends, strand topology and coordinates are kept.
+Ambiguous frames, moved/nested/domain-scoped placements and off-grid helices stay
+unresolved. The native painter labels absent mapping `SOURCE UNRESOLVED`, rather
+than claiming `0 EXISTING`. Reopen older parts to apply the repair; normal Save
+persists it. Original files are not rewritten merely by opening. Raw JSON/history/simulation
+snapshot deserialization preserves original metadata to retain content hashes.
+
+The Benchy reproduction has eight framed platform helices and two unframed bent
+segment helices. Repair exports all ten occupied addresses with identical
+nucleotide coordinates. Reusable check: Debug → VR Tours & Tests → Tools · Authoring
+→ Extrude · older part compatibility. It runs without a headset; the CLI also
+accepts `--part path/to/part.nadoc` and operates only on an isolated copy.
+
 ## Native VR painter and length controls (2026-10-05)
 
 Accepted native Confirm now closes the painter and right-hand Extrude menu

@@ -150,6 +150,8 @@ fi
 # lets the OS hand cores back to the foreground app; on an idle machine the run is
 # just as fast. Set NADOC_TEST_NICE=0 to opt out.
 NICE_LEVEL="${NADOC_TEST_NICE:-10}"
+# Keep automatic xdist from filling all 32 logical CPUs with independent heaps.
+export PYTEST_XDIST_AUTO_NUM_WORKERS="${PYTEST_XDIST_AUTO_NUM_WORKERS:-4}"
 
 # BLAS/OpenMP thread pinning (fast-only recipes).  numpy/scipy here are built against
 # scipy-openblas with MAX_THREADS=64, so every L-BFGS-B / lstsq / eigh call fans out

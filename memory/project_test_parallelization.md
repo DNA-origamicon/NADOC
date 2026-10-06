@@ -13,6 +13,21 @@ metadata:
   originSessionId: 2557a198-2648-4182-8f9b-1f6ff948cb26
 ---
 
+## Desktop memory isolation (2026-10-06)
+
+A global OOM during overlapping pytest, Vitest, Playwright and C++ compilation
+ended `app-com.microsoft.VSCode-8437.scope` with `oom-kill`. Kernel task accounting
+also showed about 8.1 GiB in Steam web helpers; this was combined machine pressure,
+not evidence of a VS Code extension leak. Do not run heavy checks concurrently.
+
+`validation_guard.sh` serializes smart/frontend/smoke checks and creates a separate
+user-systemd scope (6 GiB high, 8 GiB max, 512 MiB swap). On systems without a user
+manager it explicitly reports that only serialization/worker caps apply.
+`just validate-safe COMMAND ...` provides the same protection for native builds
+and custom browser workflows. Existing backend test gates remain unchanged.
+Auto xdist defaults to four workers; Vitest uses two. All guards preserve failure
+exit statuses. Timing debt remains visible rather than increasing budgets.
+
 ## Current scope rule — user clarification, 2026-09-26
 
 `just test-session` authorizes full/broad regression sweeps, not elapsed test time.
