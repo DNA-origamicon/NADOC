@@ -129,3 +129,12 @@ changing canonical identity:
 4. Sole-item re-click clears at fixed levels; default drill stays hierarchical.
 5. Overhang is the sole selected ref; its domain is a related selector.
 6. Selection level resets to `default` across reloads and context changes.
+
+## VR fixed selection levels (2026-10-05)
+
+Native trigger selections at fixed levels accumulate canonical refs across clicks,
+including Base and End for shared terminal resizing. Repeated picks retain the
+ref; an empty-space trigger clears the set. Unsupported nonempty hits preserve
+the set. Default Drill and desktop click policies are unchanged. Owner-token
+feedback includes the accumulated set (up to 4096 tokens), independently of the
+16-hit bound per trigger. Browser coverage: `vr_selection_accumulation.spec.js`.

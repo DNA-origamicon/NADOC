@@ -7088,6 +7088,10 @@ class Viewer {
                 if(resolved.ownerTokens.size()>1)resolved.ownerTokens.resize(1);
                 if(resolved.directIdentities.size()>1)resolved.directIdentities.resize(1);
             }
+            // A hit unsupported by the fixed level is not an empty-space click.
+            // Let the browser reject it while preserving the accumulated selection.
+            if (selectionLevel_ != "default" && resolved.representatives.empty() && !overlaps.empty())
+                resolved.representatives.push_back(overlaps.front());
             snapSelectionHits_[hand] = std::move(resolved.representatives);
             snapSelectionOwnerTokens_[hand] = std::move(resolved.ownerTokens);
             snapSelectionDirectIdentities_[hand] = std::move(resolved.directIdentities);
@@ -7513,7 +7517,7 @@ class Viewer {
         if (!input) return;
         input.seekg(0, std::ios::end);
         const std::streamoff size = input.tellg();
-        if (size < 0 || size > 4096) return;
+        if (size < 0 || size > 1048576) return;
         input.seekg(0);
         std::string record(static_cast<size_t>(size), '\0');
         input.read(record.data(), size);

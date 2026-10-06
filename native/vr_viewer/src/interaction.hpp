@@ -1592,8 +1592,9 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
         result.selectionIdentities = {result.identity};
     }
     if (version >= 5) {
+        // Fixed-level clicks accumulate beyond the per-click 16-primitive limit.
         size_t ownerSelectionCount = 0;
-        if (!(fields >> ownerSelectionCount) || ownerSelectionCount > 16) {
+        if (!(fields >> ownerSelectionCount) || ownerSelectionCount > 4096) {
             return std::nullopt;
         }
         result.selectionOwnerTokens.resize(ownerSelectionCount);
@@ -1604,7 +1605,7 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
             }
             totalBytes += token.size();
         }
-        if (totalBytes > 2048) return std::nullopt;
+        if (totalBytes > 524288) return std::nullopt;
         std::sort(result.selectionOwnerTokens.begin(), result.selectionOwnerTokens.end());
         if (std::adjacent_find(
                 result.selectionOwnerTokens.begin(), result.selectionOwnerTokens.end()) !=

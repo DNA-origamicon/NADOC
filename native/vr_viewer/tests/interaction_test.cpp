@@ -882,6 +882,11 @@ void canonicalSelectionFeedbackIsStrictAndSequenced() {
     require(!nadoc_vr::parseSelectionFeedback(
         "NADOCVR_FEEDBACK 5 12 1 0 strand none primitive-a 0 1 "
         "primitive-a 2 same same\n", 11, 12));
+    std::string accumulated = "NADOCVR_FEEDBACK 5 13 1 0 base none - 0 0 40";
+    for (int i = 0; i < 40; ++i) accumulated += " base:" + std::to_string(i);
+    const auto multi = nadoc_vr::parseSelectionFeedback(accumulated, 12, 13);
+    require(multi && multi->selectionOwnerTokens.size() == 40);
+
 }
 
 void toolContextFeedbackIsExactSequencedAndFinite() {

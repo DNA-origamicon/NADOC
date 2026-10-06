@@ -75,8 +75,9 @@ subtype.
 - End is its own base-keyed ref kind.
 - Forced ligations are crossover subtypes.
 - Primary is the most recently explicitly selected survivor.
-- Re-clicking the sole item clears it at fixed levels. Default drill remains
-  hierarchical and may restart at strand.
+- Desktop re-clicking the sole item clears it at fixed levels. VR fixed-level
+  trigger picks accumulate (including repeated picks); empty-space trigger clicks
+  clear the set. Default drill remains hierarchical and may restart at strand.
 - Overhang selection contains only an overhang ref; backing domain and strand are
   derived relations.
 - Selection level resets to `default` across every reload and context change. It is not

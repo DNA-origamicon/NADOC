@@ -155,6 +155,9 @@ Left-pad clicks select scope even with sidebars open; use pointer/Trigger or
 unclicked swipes for the left sidebar. Right-pad focus navigation is unchanged.
 Choosing a scope in Move/Rotate cancels its preview without opening another panel.
 The wheel changes selection scope, not the currently selected molecular identities.
+In fixed scopes, trigger clicks add elements to the selection, and re-clicking an
+element keeps it selected. Trigger-click empty space to clear the set. Drill
+retains its existing hierarchical selection behavior.
 
 **Debug → VR Tours & Tests → Controls & layout → Left touchpad selection wheel**
 runs the registered demonstration/validation. The functional prototype uses plain

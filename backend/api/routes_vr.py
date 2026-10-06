@@ -208,7 +208,8 @@ class VRFeedbackRequest(BaseModel):
     owner_tokens: list[str] = Field(default_factory=list, max_length=8)
     selection_kind: SelectionKind = "none"
     selected_identities: list[str] = Field(default_factory=list, max_length=16)
-    selected_owner_tokens: list[str] = Field(default_factory=list, max_length=16)
+    # Canonical accumulated selection; the 16 identities above describe this click.
+    selected_owner_tokens: list[str] = Field(default_factory=list, max_length=4096)
 
 
 VRToolContextReason = Literal[
@@ -3579,8 +3580,8 @@ def _write_feedback(state: dict | None, body: VRFeedbackRequest) -> None:
         or len(set(selected_identities)) != len(selected_identities)
         or len(set(selected_owner_tokens)) != len(selected_owner_tokens)
         or sum(len(value) for value in selected_identities) > 2048
-        or sum(len(value) for value in selected_owner_tokens) > 2048
-        or len(record.encode()) > 4096
+        or sum(len(value) for value in selected_owner_tokens) > 524288
+        or len(record.encode()) > 1048576
         or any(
             any(character.isspace() for character in value) or len(value) > 2048
             for value in values

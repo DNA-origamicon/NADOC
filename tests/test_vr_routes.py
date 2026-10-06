@@ -693,6 +693,17 @@ def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:
         "NADOCVR_FEEDBACK 5 7 1 0 base none - 0 0 0\n"
     )
 
+    # Accumulated fixed-level picks can exceed a single 16-hit trigger volume.
+    owners = [f"base:{index}" for index in range(40)]
+    _write_feedback(
+        {"feedback_path": str(feedback_path)},
+        VRFeedbackRequest(
+            select_sequence=8, accepted=True, selected=False,
+            selection_level="base", selected_owner_tokens=owners,
+        ),
+    )
+    assert feedback_path.read_text().endswith("40 " + " ".join(owners) + "\n")
+
     with pytest.raises(HTTPException, match="Invalid VR feedback identity"):
         _write_feedback(
             {"feedback_path": str(feedback_path)},

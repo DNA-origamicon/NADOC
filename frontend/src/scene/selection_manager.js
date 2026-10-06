@@ -2563,7 +2563,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   }
 
-  /** Replace canonical selection with the distinct refs touched by a VR Selection Volume. */
+  /** Drill replaces selection; fixed VR levels accumulate until an empty trigger click. */
   function _selectVrIdentities(identities = []) {
     const bounded = [...new Set(
       identities.filter(identity => typeof identity === 'string' && identity),
@@ -2582,7 +2582,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         selectedOwnerTokens: [],
       }
     }
-    if (bounded.length === 1) {
+    const additive = _selLevel !== 'default'
+    const previousRefs = additive ? selectionController.getState().items : []
+    if (bounded.length === 1 && !additive) {
       const result = _selectVrIdentity(bounded[0])
       return result ? {
         ...result,
@@ -2609,8 +2611,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const key = JSON.stringify(ref)
       if (!selections.has(key)) selections.set(key, { identity, ref, result })
     }
-    selectionController.replace([...selections.values()].map(value => value.ref))
-    if (selections.size === 1) {
+    const resolvedRefs = [...selections.values()].map(value => value.ref)
+    // Re-clicking retains the ref and makes it the most recently selected item.
+    const retainedRefs = previousRefs.filter(ref => !selections.has(JSON.stringify(ref)))
+    const committed = selectionController.replace([...retainedRefs, ...resolvedRefs])
+    const selectedOwnerTokens = committed.items.flatMap(vrInitialSelectionOwnerTokens)
+    if (committed.items.length === 1 && selections.size === 1) {
       const only = selections.values().next().value
       return {
         ...only.result,
@@ -2622,16 +2628,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
     }
     return {
-      accepted: selections.size > 0,
+      // A nonempty hit that cannot resolve at this level still preserves the set.
+      accepted: additive || selections.size > 0,
       selected: false,
       ownerTokens: [],
       selectionKind: 'none',
       identity: bounded[0] ?? null,
-      selectionCount: selections.size,
+      selectionCount: committed.items.length,
       selectedIdentities: [...selections.values()].map(value => value.identity),
-      selectedOwnerTokens: [...new Set(
-        [...selections.values()].map(value => value.result.ownerTokens?.[0]).filter(Boolean),
-      )],
+      selectedOwnerTokens,
     }
   }
 

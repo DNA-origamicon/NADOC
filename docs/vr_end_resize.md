@@ -1,5 +1,10 @@
 # Resize selected ends in VR
 
+Use Bases (or End) selection mode to trigger-click multiple 5′ or 3′ ends.
+Each click adds to the selection; clicking an already selected end keeps it
+selected. Trigger-click empty space to clear the selection. Other fixed VR
+selection modes also accumulate; Drill keeps its existing behavior.
+
 Select a terminal end, bring either controller to its cyan arrow, and hold the
 trigger. Pull outward to extend or inward to shorten, then release to save.
 The arrow turns yellow on acquisition/extension and orange while shortening.
