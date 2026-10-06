@@ -4,6 +4,15 @@ description: How _autodetect_clusters works, algorithm rules for each cluster ty
 type: project
 originSessionId: 97d1bf68-963a-4055-a1d4-0a23b4019608
 ---
+## Lattice component update (2026-10-03)
+
+Lattice adjacency is shared with incremental authoring in `cluster_components.py`.
+Cell lookup includes explicit frame identity (or legacy axial direction), retains
+multiple helices per cell, and excludes reference-only and virtual linker helices.
+Multi-scaffold geometry detection now also creates clusters for disconnected
+unassigned lattice components. Incremental extrusion and additive repair are
+covered in `project_cluster_reconcile.md`; neither replaces existing cluster poses.
+
 ## Interchange integrity update (2026-09-22)
 
 caDNAno/scadnano imports now perform strict source and topology checks before

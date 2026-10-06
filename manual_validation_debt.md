@@ -743,3 +743,31 @@ limits: `docs/audits/vr_motion_optimization_20261003.md`.
 - **MV-40 — PENDING — Right touchpad Edit wheel (2026-10-05).** Hold the right pad, slide toward Ligate/right, Nick/up, Undo/left and Redo/down, and release. Check physical haptic strength, thumb reach, through-lens labels and center cancellation; verify that wrist motion alone does not change the highlighted sector. Automated validation checks command publication, both-eye pixels and desktop delivery. Entry: Debug → VR Tours & Tests → Controls & layout → Right touchpad edit wheel.
 
 - **MV-41 — PENDING — Controller-relative menu placement and tip-sphere grips (2026-10-05).** Open each menu from several wrist poses; check the 30° backward tilt, spawn distance and through-lens comfort. Touch borders with the controller-tip selection sphere at small and enlarged radii, then move, rotate and resize with Grip. Verify physical acquisition feel and haptics. Automated controller-pose, sphere-contact, stereo frame and desktop checks are available under Debug → VR Tours & Tests → Controls & layout → Move & resize menu borders. Evidence: `.development-artifacts/vr-controller-menus-20261005/`.
+
+## MV-CIRCULAR-PART-PREVIEW — popup and part-space review (2026-10-03)
+
+PENDING user review. Tools → Circular Pattern: pick a cluster, then review the
+point-cloud copies, lattice, axis and draggable bead in the main part view.
+Check popup placement at the usual window size, X/Y/Z/Helices toggles, switching
+the source cluster, and Centered about → second cluster. Centering uses the
+second cluster’s backbone centroid. Offset and Centered about are exclusive;
+Offset alone shows the draggable bead, XYZ fields (three decimal places) and snap
+toggle. Centered about alone shows the second-cluster selector. Check BP totals,
+Confirm (one undoable copy operation), Cancel (no changes) and undo/redo.
+Explanations are tooltips. Automated scene/DOM tests and the browser gesture
+exercise cover switching, centering, snapping, instance counts and teardown;
+visual density and placement remain for manual review.
+
+## MV-DEFORM-CLUSTER-START — Bend/Twist entry (2026-10-03)
+
+Pending manual review: Tools → Bend or Twist prompts for a cluster in the floating
+popup. Pick via the 3D view or cluster list; selection returns to Default and
+plane selection begins for that cluster. Check Cancel/Escape and switching tools.
+
+## MV-TOOL-GLASS — desktop popup appearance (2026-10-04)
+
+Pending user review: Circular Pattern, Extrude, Bend and Twist now share a
+translucent blurred surface, VR-inspired neutral rim, and NADOC type/control
+colors. Drag over a dense part and compare legibility against bright and dark
+geometry; review at the usual window size. Reduced-transparency preference uses
+an opaque backing. Screenshots: `.development-artifacts/tool-popup-glass-20261004/`.

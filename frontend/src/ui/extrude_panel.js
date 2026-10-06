@@ -1,5 +1,5 @@
 /**
- * Extrude tool — the right-sidebar panel that hosts the extrude controls and the
+ * Extrude tool — the floating tool panel that hosts the extrude controls and the
  * "Extrude from" plane dropdown.
  *
  * This replaces the old floating `#slice-ctx-menu` + the `workspace.js` plane
@@ -16,6 +16,7 @@
  *    deformed frame). The CALLER drives `slicePlane.showAtEnd/showDeformed`; this
  *    module just shows the panel and locks the dropdown to the context plane.
  */
+import { createToolPopup } from './tool_popup.js'
 import { resolveExtrudeSourcePlane } from './extrude_source_plane.js'
 import { resolveDefaultPlane, dropdownStateForMode } from './extrude_panel_logic.js'
 
@@ -28,14 +29,16 @@ const IDLE_INDICATOR = 'NADOC · WORKSPACE'
  * @param {object} deps.store
  * @param {object} deps.slicePlane       slice_plane API (show / showAtEnd / hide / setExtrudeUiOpen)
  * @param {object} deps.expandedSpacing  { forceOff }
- * @param {object} deps.rightSidebar     { open } tab controller
  * @returns {{ activate: Function, hide: Function, isActive: () => boolean }}
  */
-export function initExtrudePanel({ store, slicePlane, expandedSpacing, rightSidebar }) {
+export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
   const _panel  = document.getElementById('extrude-panel')
   const _select = document.getElementById('extrude-from')
   let _active = false
   let _mode   = null
+  const count = _panel?.querySelector('.ctx-count')
+  if (count) _panel.prepend(count)
+  const popup = createToolPopup({ panel: _panel, title: 'Extrude', onClose: hide })
 
   function _modeIndicator() { return document.getElementById('mode-indicator') }
   function _latticeType() { return store.getState().currentDesign?.lattice_type ?? 'HONEYCOMB' }
@@ -55,7 +58,6 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing, rightSide
     _mode   = mode
     _active = true
     expandedSpacing?.forceOff?.()
-    rightSidebar?.open?.('properties')
 
     const source = resolveExtrudeSourcePlane(store.getState().currentDesign, resolveDefaultPlane(store.getState().currentPlane))
     const defaultPlane = source.plane
@@ -64,7 +66,7 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing, rightSide
       : 'Canonical lattice source plane; independent of viewing orientation.'
     const { value, disabled } = dropdownStateForMode(mode, ctx.plane, defaultPlane)
     if (_select) { _select.value = value; _select.disabled = disabled }
-    if (_panel) _panel.style.display = 'block'
+    popup?.show()
     slicePlane.setExtrudeUiOpen(true)
 
     if (mode === 'newBundle') {
@@ -83,7 +85,7 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing, rightSide
     _mode   = null
     slicePlane.setExtrudeUiOpen(false)
     if (wasActive) slicePlane.hide()
-    if (_panel)  _panel.style.display = 'none'
+    popup?.hide()
     if (_select) _select.disabled = false
     if (wasActive) {
       const mi = _modeIndicator()

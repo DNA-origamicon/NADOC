@@ -50,8 +50,8 @@ describe('right sidebar tabs', () => {
     const storage = { getItem: () => null, setItem: () => {} }
     const tabs = initRightSidebarTabs({ document, getAvailableWidth: () => 1600, storage })
     expect(document.getElementById('measurements-section')).toBeNull()
-    expect(document.querySelector('#right-tab-content-properties #extrude-panel')).toBeTruthy()
-    expect(document.querySelector('#right-tab-content-properties #deform-panel')).toBeTruthy()
+    expect(document.querySelector('#right-tab-content-properties #extrude-panel')).toBeNull()
+    expect(document.querySelector('#right-tab-content-properties #deform-panel')).toBeNull()
     expect(document.querySelector('#right-tab-content-properties #move-rotate-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-clustering #joints-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-overhangs #strand-anim-panel')).toBeTruthy()

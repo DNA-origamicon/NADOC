@@ -202,6 +202,7 @@ def structural_reference_targets(pre, post, added: set, modified: set) -> set:
     dependent even when its domains stay on unrelated helices.
     """
     qm = _id_map(post)
+    pm = _id_map(pre)
     out: set = set()
     for iid in set(added) | set(modified):
         item = qm.get(iid)
@@ -209,7 +210,21 @@ def structural_reference_targets(pre, post, added: set, modified: set) -> set:
             continue
         out |= _object_refs(item, post)
         if iid in modified:
-            out.add(iid)
+            old = pm.get(iid)
+            # Automatic identity-pose grouping is derived membership, not a
+            # structural dependency of a later independent extrusion. Explicit
+            # groups, pose changes and domain-level grouping remain dependencies.
+            membership_only = (
+                item.__class__.__name__ == 'ClusterRigidTransform'
+                and old is not None and item.auto_created
+                and not item.domain_ids and item.parent_cluster_id is None
+                and item.translation == [0.0, 0.0, 0.0]
+                and item.rotation == [0.0, 0.0, 0.0, 1.0]
+                and set(old.helix_ids) <= set(item.helix_ids)
+                and old.model_dump(exclude={'helix_ids'}) == item.model_dump(exclude={'helix_ids'})
+            )
+            if not membership_only:
+                out.add(iid)
     return out
 
 

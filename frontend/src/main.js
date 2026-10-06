@@ -1,3 +1,4 @@
+import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
 import { createVRSimulations } from './scene/vr_simulations.js'
 import { commitVRMovePose } from './scene/vr_move_pose.js'
 import { nativeRepresentation } from './scene/vr_representations.js'
@@ -117,7 +118,7 @@ import { createScriptRunner }  from './ui/script_runner.js'
 import { store, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
 import { beginOperationTiming, markOperationTiming, finishOperationAfterRender } from './perf/operation_timing.js'
-import { startTool,
+import {
          isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
          handlePointerDown as deformPointerDown,
@@ -246,6 +247,8 @@ import { initSceneInspector }                  from './scene/scene_inspector.js'
 import { createModal }                         from './ui/primitives/modal.js'
 import { createButton }                        from './ui/primitives/button.js'
 import { initBackgroundModal }                 from './ui/background_modal.js'
+import { initLinearPatternPanel } from './ui/linear_pattern_panel.js'
+import { initCircularPatternPanel } from './ui/circular_pattern_panel.js'
 import { initDebugMenu }                       from './ui/debug_menu.js'
 import { initLeftSidebar }                     from './ui/left_sidebar.js'
 import { initFileLoadDialog }                  from './ui/file_load_dialog.js'
@@ -2463,7 +2466,9 @@ async function main() {
   // Owns #extrude-panel visibility, the "Extrude from" origin-plane dropdown, and
   // the tool lifecycle. Replaces the retired workspace.js plane-picker as the entry
   // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
-  _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing, rightSidebar })
+  _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing })
+  initLinearPatternPanel({ store, showToast, selectionManager, scene })
+  initCircularPatternPanel({ store, showToast, selectionManager, scene, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
 
   // ── Primitives library (right-sidebar panel) → ui/primitive_library.js ──
   // Owns #primitives-panel; revealed by Tools → Add Primitive. Lists pre-validated
@@ -3836,31 +3841,7 @@ async function main() {
     _startEmptySpaceExtrude()
   })
 
-  document.getElementById('menu-tools-twist')?.addEventListener('click', () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
-    if (!deformView.isActive() && currentDesign.deformations?.length) {
-      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
-      return
-    }
-    if (!_clusterDeformGuard()) return
-    startTool('twist')
-    document.getElementById('mode-indicator').textContent =
-      'TWIST — click plane A (fixed), then plane B · Esc to exit'
-  })
-
-  document.getElementById('menu-tools-bend')?.addEventListener('click', () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
-    if (!deformView.isActive() && currentDesign.deformations?.length) {
-      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
-      return
-    }
-    if (!_clusterDeformGuard()) return
-    startTool('bend')
-    document.getElementById('mode-indicator').textContent =
-      'BEND — click plane A (fixed), then plane B · Esc to exit'
-  })
+  initDeformationToolLauncher({ store, selectionManager, showToast, deformView, watchDeformState: _watchDeformState })
 
   // Tools → Add Primitive: reveal the right-sidebar Primitives library.
   document.getElementById('menu-tools-add-primitive')?.addEventListener('click', () => {
@@ -4046,13 +4027,9 @@ async function main() {
   // _resetForNewDesign, and any other place that calls slicePlane.hide/show directly.
 
   // ── Selection filter toggles ──────────────────────────────────────────────────
-  // Tool-driven navigation mirrors Move/Rotate: Bend/Twist owns a Properties
-  // card, so activating either deformation tool reveals that tab even when the
-  // user launched it from a menu, a blunt end, or the feature log.
   // Slice plane: cross-section geometry is only valid on the undeformed model.
   store.subscribe((newState, prevState) => {
     if (newState.deformToolActive && !prevState.deformToolActive) {
-      rightSidebar?.open?.('properties')
       if (slicePlane.isVisible()) {
         slicePlane.hide()
         crossSectionMinimap.clearSlice()

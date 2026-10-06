@@ -4,13 +4,14 @@ Incremental cluster membership reconciliation.
 After a topology mutation (add helix, place crossover, nick, ligate, extrude
 overhang, etc.), this module repairs cluster membership so that:
 
-  * New helices/domains are added to the cluster of their nearest existing
-    neighbor and therefore inherit that cluster's translation/rotation/pivot.
+  * New lattice components inherit a canonical neighbor or explicit parent
+    cluster, including its translation/rotation/pivot.
   * Stale ``DomainRef`` entries (strand_id gone, domain_index out of range)
     are dropped.
   * Existing cluster membership the user manually edited is preserved.
   * Cluster transforms (translation/rotation/pivot) are never modified.
-  * Clusters are never created, deleted, split, or merged.
+  * Existing clusters are never deleted, split, or merged. Extrusion can opt
+    into creating clusters for disconnected new lattice components.
 
 The reconciler is a pure function:
 
@@ -60,6 +61,9 @@ class MutationReport:
         also orphaned. Pass ``parent_helix_id=None`` to explicitly orphan a
         new helix even if it has lattice-adjacent neighbours (e.g. virtual
         linker bridge helices).
+    cluster_disconnected:
+        Create clusters for unassigned new lattice components (extrusion opt-in).
+        Explicit parents and explicit orphans are excluded from creation.
     new_domain_origins:
         List of ``(new_ref, parent_ref)`` pairs. Used as a tie-breaker when a
         new domain's bp range overlaps two clusters' claims equally.
@@ -67,6 +71,7 @@ class MutationReport:
         Diagnostic only; the reconciler computes these from set diffs.
     """
 
+    cluster_disconnected: bool = False
     strand_id_renames: dict[str, str] = field(default_factory=dict)
     new_helix_origins: dict[str, Optional[str]] = field(default_factory=dict)
     new_domain_origins: list[tuple[DomainRef, DomainRef]] = field(default_factory=list)
@@ -91,12 +96,16 @@ def reconcile_cluster_membership(
     inputs. ``design_before`` may be ``None`` (e.g. on first import) — in
     that case the call is a no-op.
     """
-    if design_before is None or not design_before.cluster_transforms:
-        return design_after
-    if not design_after.cluster_transforms:
-        return design_after
-
     rep = report or EMPTY_REPORT
+    if design_before is None:
+        return design_after
+    from backend.core.cluster_components import cluster_unassigned_components
+    eligible = {h.id for h in design_after.helices} - {h.id for h in design_before.helices}
+    eligible -= rep.new_helix_origins.keys()  # explicit parents/orphans remain authoritative
+    def finish(result):
+        return cluster_unassigned_components(result, eligible) if rep.cluster_disconnected else result
+    if not design_before.cluster_transforms or not design_after.cluster_transforms:
+        return finish(design_after)
 
     coverage = _build_coverage_map(design_before)
     domain_level_cluster_ids = {
@@ -143,7 +152,7 @@ def reconcile_cluster_membership(
             )
         )
 
-    return design_after.model_copy(update={"cluster_transforms": updated_clusters})
+    return finish(design_after.model_copy(update={"cluster_transforms": updated_clusters}))
 
 
 # ── Coverage map ──────────────────────────────────────────────────────────────
@@ -216,7 +225,7 @@ def _compute_helix_membership(
     * Helix that exists in both designs: keeps its current cluster membership
       (preserving manual edits, including manual orphans).
     * Helix in design_after only (new): inherits every cluster its origin
-      helix belongs to. Origin = report hint, else lattice-neighbour majority,
+      helix belongs to. Origin = report hint, else a canonical lattice-component neighbor,
       else None (orphan). If origin is orphan, new helix is orphan.
     * Helix in design_before only (deleted): dropped from all clusters.
     """
@@ -227,25 +236,30 @@ def _compute_helix_membership(
         for hid in cluster.helix_ids:
             helix_membership_before.setdefault(hid, set()).add(cluster.id)
 
+    from backend.core.cluster_components import lattice_cluster_graph, lattice_components
+    graph = lattice_cluster_graph(design_after)
     new_helices = after_helix_ids - before_helix_ids
+    inferred = {}
+    # Propagate an existing neighbor through an entire new component, so only
+    # touching cells are not accidentally inherited while the far side is orphaned.
+    explicit_orphans = {hid for hid, parent in report.new_helix_origins.items() if parent is None}
+    automatic = new_helices - explicit_orphans
+    for component in lattice_components(graph, automatic):
+        neighbors = set().union(*(graph[hid] for hid in component)) & before_helix_ids
+        neighbors.update(report.new_helix_origins[hid] for hid in component
+                         if report.new_helix_origins.get(hid) in before_helix_ids)
+        claimed_neighbors = {hid for hid in neighbors if helix_membership_before.get(hid)}
+        origin = min(claimed_neighbors or neighbors) if neighbors else None
+        for hid in component:
+            inferred[hid] = origin
     new_helix_targets: dict[str, set[str]] = {}
-    for new_hid in new_helices:
-        if new_hid in report.new_helix_origins:
-            origin = report.new_helix_origins[new_hid]
-            # Explicit None means the route wants this helix orphaned
-            # regardless of lattice neighbours.
-        else:
-            origin = _infer_origin_via_lattice_neighbors(
-                new_hid, design_after, before_helix_ids
-            )
-        if origin is not None and origin in helix_membership_before:
-            new_helix_targets[new_hid] = helix_membership_before[origin]
-        else:
-            new_helix_targets[new_hid] = set()  # orphan
+    for new_hid in sorted(new_helices):
+        origin = report.new_helix_origins.get(new_hid) if new_hid in report.new_helix_origins else inferred.get(new_hid)
+        new_helix_targets[new_hid] = set(helix_membership_before.get(origin, ()))
         helix = next(h for h in design_after.helices if h.id == new_hid)
         if helix.lattice_frame_id is not None:
             frame = next(f for f in design_after.lattice_frames if f.id == helix.lattice_frame_id)
-            new_helix_targets[new_hid] = set(new_helix_targets[new_hid]) | {frame.placement_cluster_id}
+            new_helix_targets[new_hid].add(frame.placement_cluster_id)
 
     result: dict[str, list[str]] = {}
     for cluster in design_before.cluster_transforms:
@@ -270,29 +284,10 @@ def _infer_origin_via_lattice_neighbors(
     design_after: Design,
     candidate_helix_ids: set[str],
 ) -> Optional[str]:
-    """Return the existing helix closest in lattice grid_pos to ``new_hid``.
-
-    Considers only helices in ``candidate_helix_ids`` (typically the helices
-    that existed pre-mutation). Returns ``None`` if no candidate has a known
-    grid_pos within Manhattan distance 2.
-    """
-    new_helix = next((h for h in design_after.helices if h.id == new_hid), None)
-    if new_helix is None or new_helix.grid_pos is None:
-        return None
-
-    new_row, new_col = new_helix.grid_pos
-    best: Optional[tuple[int, str]] = None
-    for h in design_after.helices:
-        if h.id == new_hid or h.id not in candidate_helix_ids:
-            continue
-        if h.grid_pos is None or h.lattice_frame_id != new_helix.lattice_frame_id:
-            continue
-        dist = abs(h.grid_pos[0] - new_row) + abs(h.grid_pos[1] - new_col)
-        if dist > 2:
-            continue
-        if best is None or dist < best[0] or (dist == best[0] and h.id < best[1]):
-            best = (dist, h.id)
-    return best[1] if best else None
+    """Return a canonical lattice neighbor in the same frame, if present."""
+    from backend.core.cluster_components import lattice_cluster_graph
+    neighbors = lattice_cluster_graph(design_after).get(new_hid, set()) & candidate_helix_ids
+    return min(neighbors) if neighbors else None
 
 
 # ── Domain membership ─────────────────────────────────────────────────────────
