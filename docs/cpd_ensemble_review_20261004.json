@@ -1,0 +1,278 @@
+{
+  "at": "2026-10-05T05:14:45.916377+00:00",
+  "source": {
+    "path": "/home/jojo/Work/NADOC/experiments/cpd_anti_additive/review_ensemble_v3.py",
+    "sha256": "baa9abfceef3898aa3adebc94bb50ad9f9c416e305654c82f5f476e35e354637"
+  },
+  "box_A": [
+    64.93,
+    87.438,
+    132.763
+  ],
+  "records": [
+    {
+      "case": "anti",
+      "replica": 1,
+      "segment": 4,
+      "samples": 100,
+      "first_step": 1555000.0,
+      "last_step": 2055000.0,
+      "mean_temperature_K": 299.205397,
+      "mean_pressure_bar": -1290.568622,
+      "mean_group_pressure_bar": -1290.6326740000002,
+      "mean_interval_group_pressure_bar": -1287.903379,
+      "endpoint_reference_error_kcal": 0.12609999999403954,
+      "endpoint_reference_limit_kcal": 0.25373387119999996,
+      "checkpoint_coordinates_identical": true,
+      "inputs": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-1/validation/segment-04/run.log",
+          "sha256": "73b0e06bec296010718fff5cfb4d7e1fec76d5f3bc429bfa62769b0366989d70"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-1/validation/segment-04/run.conf",
+          "sha256": "2d9803b115b4734d48b72ee2bf5542997c23c6dda8de0e8eeef732b1f587b80d"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-1/validation/segment-04/result.coor",
+          "sha256": "bb549fd7bbaff06d1334a11673805af378feb9ce3a5b17e6d37d1b646e7dc531"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-1/validation/segment-04/result.restart.coor",
+          "sha256": "bb549fd7bbaff06d1334a11673805af378feb9ce3a5b17e6d37d1b646e7dc531"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-1/validation/segment-04/native_exit.json",
+          "sha256": "6e58dadc006d10fc212197df08da44f289f2f7a50c3840e177c316c7c3f35744"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-1/validation/segment-04/endpoint-reference/run.log",
+          "sha256": "26a2b35e57974ad5b3ddb152f1ee2af5548688a38e5d4331cdee0fea700b13e0"
+        }
+      ]
+    },
+    {
+      "case": "anti",
+      "replica": 3,
+      "segment": 3,
+      "samples": 100,
+      "first_step": 1055000.0,
+      "last_step": 1555000.0,
+      "mean_temperature_K": 299.13615799999997,
+      "mean_pressure_bar": -589.027519,
+      "mean_group_pressure_bar": -589.141228,
+      "mean_interval_group_pressure_bar": -666.9325850000001,
+      "endpoint_reference_error_kcal": 0.1300000000046566,
+      "endpoint_reference_limit_kcal": 0.25584886069999996,
+      "checkpoint_coordinates_identical": true,
+      "inputs": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-03/run.log",
+          "sha256": "d7d01e6ad0fb469475382dba6422af2f8c3551dd7e9816b4dc21709c142f6782"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-03/run.conf",
+          "sha256": "ff00516c8e9beda84b628e50e4f57c30d7241bd6db33bf0a6ea0d77ce1ecc49d"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-03/result.coor",
+          "sha256": "0bc9d58d762951fdc05b3a38f44d2b53f6b8d9ff69f71b4af608351991c088a9"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-03/result.restart.coor",
+          "sha256": "0bc9d58d762951fdc05b3a38f44d2b53f6b8d9ff69f71b4af608351991c088a9"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-03/native_exit.json",
+          "sha256": "f3b5859e79b8767e3d7cb27de27af3c84bbbb97626675d4225091cf745055c8e"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-03/endpoint-reference/run.log",
+          "sha256": "41a24436b38a1c3c08556720e6d59465280a914c517c5c7af64a72206404ffea"
+        }
+      ],
+      "void_witness_A": [
+        46.0,
+        40.0,
+        12.0
+      ],
+      "nearest_any_atom_A": 17.932451961571513,
+      "nearest_atom_index": 33992
+    },
+    {
+      "case": "anti",
+      "replica": 3,
+      "segment": 4,
+      "samples": 100,
+      "first_step": 1555000.0,
+      "last_step": 2055000.0,
+      "mean_temperature_K": 299.20102499999996,
+      "mean_pressure_bar": -475.2628189999999,
+      "mean_group_pressure_bar": -475.08836199999996,
+      "mean_interval_group_pressure_bar": -473.5997059999999,
+      "endpoint_reference_error_kcal": 0.1371999999973923,
+      "endpoint_reference_limit_kcal": 0.2557589945,
+      "checkpoint_coordinates_identical": true,
+      "inputs": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-04/run.log",
+          "sha256": "1037e40a718c50072edbcc62a207d93b58da8e2779c65aa62f01330bbc2808fd"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-04/run.conf",
+          "sha256": "2be02f4c3775ce270ed3b5e4b70b86e703ab346d7cf15bf92e7dfbe3e3c06d18"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-04/result.coor",
+          "sha256": "4ca5997dcf148b6908e1c4c87c0556b616bd05f9aa09f04db68f0ae7d89ac29b"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-04/result.restart.coor",
+          "sha256": "4ca5997dcf148b6908e1c4c87c0556b616bd05f9aa09f04db68f0ae7d89ac29b"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-04/native_exit.json",
+          "sha256": "c545d6c149d49d7a9d48e553565f296d8904afd9daf6d2c71ee9f8444cda259b"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/anti/replica-3/validation/segment-04/endpoint-reference/run.log",
+          "sha256": "403aa6a281ca9ba6ddb9846950473fb0828c397ae021f1e1c33872849595a70c"
+        }
+      ]
+    },
+    {
+      "case": "control",
+      "replica": 1,
+      "segment": 1,
+      "samples": 100,
+      "first_step": 55000.0,
+      "last_step": 555000.0,
+      "mean_temperature_K": 299.157809,
+      "mean_pressure_bar": -904.5600309999999,
+      "mean_group_pressure_bar": -904.3151240000002,
+      "mean_interval_group_pressure_bar": -985.8148770000001,
+      "endpoint_reference_error_kcal": 0.13529999999445863,
+      "endpoint_reference_limit_kcal": 0.2554882206,
+      "checkpoint_coordinates_identical": true,
+      "inputs": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-01/run.log",
+          "sha256": "e9e134a2ac52e5c1af8d09ff8a8f3febd0e10ec8382200a12ff2e493fb11aa56"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-01/run.conf",
+          "sha256": "eabeba6084f0b19f4090988748903e3d4767e69d71277ff61d296b3c6e1a5395"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-01/result.coor",
+          "sha256": "55a92d34d1413a885a5e7b3c6db54b2f3d03a79ee3c32f14c9f6ca6305177f5a"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-01/result.restart.coor",
+          "sha256": "55a92d34d1413a885a5e7b3c6db54b2f3d03a79ee3c32f14c9f6ca6305177f5a"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-01/native_exit.json",
+          "sha256": "a5ebf4051a6dfe9a1552107ac8878a4623f6a3c14cc6006bbd3ebfca7c1a5633"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-01/endpoint-reference/run.log",
+          "sha256": "d0b3d82f1a9b11ed1f0a04f52b8994857dd5b8c541ac1a3a7fc77ffa745419b5"
+        }
+      ],
+      "void_witness_A": [
+        62.0,
+        14.0,
+        36.0
+      ],
+      "nearest_any_atom_A": 17.257137763811574,
+      "nearest_atom_index": 22653
+    },
+    {
+      "case": "control",
+      "replica": 1,
+      "segment": 2,
+      "samples": 100,
+      "first_step": 555000.0,
+      "last_step": 1055000.0,
+      "mean_temperature_K": 299.391873,
+      "mean_pressure_bar": -467.18102,
+      "mean_group_pressure_bar": -467.2398519999999,
+      "mean_interval_group_pressure_bar": -466.0037989999999,
+      "endpoint_reference_error_kcal": 0.13119999997434206,
+      "endpoint_reference_limit_kcal": 0.25586946299999996,
+      "checkpoint_coordinates_identical": true,
+      "inputs": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-02/run.log",
+          "sha256": "af679c9361a9fe3558be2e2645a84a959f440611e73cd6b08211b431f34befcd"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-02/run.conf",
+          "sha256": "dfb8ba0d2c6e4115ded3d2cfb767c2646c4e64cebba94a9042b6f4f0a0bede27"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-02/result.coor",
+          "sha256": "ae6cb51622a02d0e2fd06abf63bfcecee5a0f1c56ca472044cffb25fac1dcdca"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-02/result.restart.coor",
+          "sha256": "ae6cb51622a02d0e2fd06abf63bfcecee5a0f1c56ca472044cffb25fac1dcdca"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-02/native_exit.json",
+          "sha256": "f967b18a4c8772909f7281d46535280c98651f4ac5cfe2c5a6c4ea301d48ae39"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-1/validation/segment-02/endpoint-reference/run.log",
+          "sha256": "fb178efde33610d9078b30262a83ee198252aa8531a7377745bee1851712a401"
+        }
+      ]
+    },
+    {
+      "case": "control",
+      "replica": 2,
+      "segment": 4,
+      "samples": 100,
+      "first_step": 1555000.0,
+      "last_step": 2055000.0,
+      "mean_temperature_K": 299.41090599999995,
+      "mean_pressure_bar": -1283.5946350000002,
+      "mean_group_pressure_bar": -1283.66389,
+      "mean_interval_group_pressure_bar": -1279.212989,
+      "endpoint_reference_error_kcal": 0.12780000001657754,
+      "endpoint_reference_limit_kcal": 0.2534184463,
+      "checkpoint_coordinates_identical": true,
+      "inputs": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-2/validation/segment-04/run.log",
+          "sha256": "d90d915a846c9896edb8b25b91471671cd473695e6f604c2382895a008257f19"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-2/validation/segment-04/run.conf",
+          "sha256": "5b5baddb1d40fda4da73b7a1b941a6ee3baf148314e19e18c50fed68bab9c0d4"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-2/validation/segment-04/result.coor",
+          "sha256": "bdbacddab977fc0a4c1f9ae2220509661d3a0d0062f27ee077966383f2636e1c"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-2/validation/segment-04/result.restart.coor",
+          "sha256": "bdbacddab977fc0a4c1f9ae2220509661d3a0d0062f27ee077966383f2636e1c"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-2/validation/segment-04/native_exit.json",
+          "sha256": "838940a51cbd93a1a06698595d99bd8c86b1484318fd0f914706472c918f1014"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-longbox-v3/control/replica-2/validation/segment-04/endpoint-reference/run.log",
+          "sha256": "a9e63edb4fce54cabf5da66025df3c1ef746b90b99f5b5e8d4276a9797d17a94"
+        }
+      ]
+    }
+  ],
+  "interpretation": "Large atom-free pockets and sustained negative pressures: current fixed-volume preparation does not qualify ambient aqueous production. Endpoint replay passes, so this evidence is not explained by the earlier saved-state corruption. Cause still needs diagnosis; no inference that CPD parameters themselves are wrong.",
+  "scope": "Targeted read-only review of completed segments, not all-frame cavity audit or new numerical acceptance threshold.",
+  "simulation_ready": false,
+  "minimum_certified": false
+}

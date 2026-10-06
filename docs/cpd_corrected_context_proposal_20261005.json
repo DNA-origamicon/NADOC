@@ -1,0 +1,55 @@
+{
+  "created_at": "2026-10-05T06:20:46.938087+00:00",
+  "status": "proposed_budget_extension_not_activated",
+  "basis": "NPTdiagnosticremovedlargecavitiesandsustainedtension;unchangedNVTvalidationdoesnotqualifyphysicalproduction.",
+  "scientific_scope": "Existingpreliminarycis-anti-IinterstrandTTconstructonly;noQMrefit,mechanics,kinetics,equilibriumorgeneralCPDclaim.",
+  "steps": [
+    {
+      "name": "force_switch_qualification",
+      "cases": 2,
+      "ns_per_case": 1.01,
+      "method": "GPUresidentLangevinpiston300K/1.01325bar;CHARMMvdwForceSwitchingon,10-12A,2fs,ordinarymasses;1ns+10psrestart;registeredbeforeacquisition",
+      "cap": "Withinremainingoriginaldiagnostictimeandcontextbudget;noautomaticretries"
+    },
+    {
+      "name": "fresh_matched_preparation",
+      "replicas_each": 3,
+      "conditions": [
+        "anti",
+        "undamaged"
+      ],
+      "method": "Originalsoluteinputsandmatchedfreshsolvation;qualifyexactfinalPSFs/forcefield/PME;commonminimization+50psheating+1nsNPTpreparationeach;declaredseedsthenfreezecheckpoints",
+      "salt": "ChoosecommonintegerNaClpairsnearest150mMusingmeanforce-switchNPTcalibrationvolume;reportactualpostequilibrationconcentration. No claimthatoriginal68pairsremain150mMaftercompression."
+    },
+    {
+      "name": "context_validation",
+      "replicas_each": 3,
+      "ns_each": 10,
+      "ensemble": "NPT300K/1.01325bar,GPUresident,force-switch10-12A",
+      "checks": "Retainexistingchemistry/water/image12Aandnativeenergy/force/restartlimits.Useactualper-framecellandfullXSC.Pressure/temperature/densityblocktrendsandspatialvoidchecksrequired;allreplicasreviewed.Physicalinterpretationmustbeexplicit,numericalcompletionisnotreadiness."
+    },
+    {
+      "name": "review_and_package",
+      "max_hours": 6,
+      "scope": "Structuralobservables/sharedcontactpairs,replicaspread,knownbadlyrepresentedconformations,provenanceerrata,restartablepackage.Applicabilitystatementmandatory.Noautomaticpromotion."
+    }
+  ],
+  "budget": {
+    "current_context_max_hours": 36,
+    "proposed_context_max_hours": 48,
+    "proposed_extension_hours": 12,
+    "overall_max_hours": 72,
+    "overall_deadline_unchanged": true,
+    "context_original_deadline_epoch": 1791237908.8733842,
+    "context_proposed_deadline_epoch": 1791281108.8733842,
+    "native60ns_hours": 14.994367,
+    "six1ns_preparation_native_hours": 1.499437,
+    "planning_allowance": "25%native-runtimemarginplus3hoursanalysisand1hourqualification;approximately24.6hoursfromproposal,packagingseparatewithinexisting72hcap",
+    "on_cap": "Stopandreportincomplete;noautomaticextension,nofewerreplicastoclaimpass"
+  },
+  "approval_required": "Theoriginalcontractforbidsautomaticcapextensions. Do notactivate48hdeadlineorlaunchfresh60nsuntiluserapprovesconcreteextension.",
+  "reference_contract": ".development-artifacts/cpd-anti-readiness-v3-20261003/contract.json",
+  "production_hold": true,
+  "simulation_ready": false,
+  "minimum_certified": false
+}

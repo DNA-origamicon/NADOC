@@ -1,0 +1,74 @@
+{
+  "reviewed_at": "2026-10-05T05:16:05.201928+00:00",
+  "scope": "User-requested broad verification and academic-defensibility review; assumed application is structural use of cis-anti-I in current construct pending clarification.",
+  "verdict": {
+    "runnable_namd_model_evidence": true,
+    "ambient_solution_production_ready": false,
+    "general_cpd_forcefield_validated": false,
+    "academic_acceptance_guaranteed": false,
+    "minimum_certified": false
+  },
+  "critical_finding": {
+    "evidence": "docs/cpd_ensemble_review_20261004.json",
+    "finding": "Completed fixed-volume trajectories show sustained large negative pressure and atom-free solvent cavities with witnessed radii17.26 and17.93A. Native endpoint energies agree with static replay. Current numerical/chemistry checks miss this physical failure.",
+    "action": "Existing pause guard set reversibly; active segment can checkpoint, next segment prevented. No thresholds or pinned candidate/worker changed.",
+    "archive_record": ".development-artifacts/cpd-anti-gpu-longbox-v3/physical_ensemble_review_hold.json",
+    "root_cause_status": "Unresolved; do not infer CPD parameters themselves are wrong."
+  },
+  "unchanged_gates": [
+    "All23 old conformational targets retained plus lower branch24, with old23RMSE separately checked",
+    "Existing quantitative energy/geometry/hydration limits retained for current preliminary policy",
+    "Candidate frozen before four latest prospective targets; no refit after scoring",
+    "Periodic-image12A gate unchanged; replacements fresh6x10ns with no partial credit",
+    "Original36h context/72h overall deadlines not reset; failures retained"
+  ],
+  "documented_revisions": [
+    "v1 all-branch scope replaced by explicitly authorized preliminary v2; not a retrospective v1 pass",
+    "DirectHFdipole target replaced mandatory ratio convention, following modified-nucleotide precedent",
+    "Exposed failed holdouts became development data; new nearby\u00b118.75degree targets acquired prospectively",
+    "GPUforce fixtures changed coordinate-representation target; cannot claim original arbitrary-double-coordinate absolute equivalence",
+    "DCDOHtest accounts forfloat32measurementuncertainty; binary checks remain direct",
+    "User-authorized new fit continuation adds rounds beyond closed historical ledger; not unchanged lifetime fitting budget",
+    "Two cell redesigns preserve failure evidence; unactivated48h one-replacement proposal was never accepted"
+  ],
+  "parameter_evidence": {
+    "water_development_curves": 17,
+    "water_max_energy_error_kcal": 0.410448,
+    "water_max_distance_error_A": 0.123903,
+    "dipole_vector_residuals_D": [
+      0.440822,
+      0.877911,
+      0.98589
+    ],
+    "latest_prospective_cases": 4,
+    "prospective_energy_rmse_kcal": 0.425149877,
+    "prospective_energy_max_abs_kcal": 0.723403,
+    "prospective_scope": "Same two capped49atomfragments;\u00b118.75degreepoints only3.75degreesfromexposedangles; local interpolation, not broad transfer",
+    "final_psf_charge_mapping_max_error_e": 4.84e-13
+  },
+  "remaining_limitations": [
+    "Thermostat/density review was requested earlier but not implemented as substantive final review; current temperature range record is insufficient",
+    "Local stationarity or one-direction positive curvature is not all-mode minimum or final-MMstiffness certification",
+    "Joint two-sugar attachment/environment transfer is not validated by current prospectiveQMset",
+    "Hydration development targets are not independent hydration validation",
+    "Three10nsreplicas percondition do not establish equilibrium/kinetics/mechanics; shared starting conformers and differinghistoricalconditioning limitcausal claims",
+    "No experimental validation of this exact DNAjunction; Su2008isidentityevidence atdifferentconditions",
+    "Final release must correct stale inherited optimizer/timestamp/constrained metadata by append-only crosswalk, preserving frozenrecords"
+  ],
+  "bounded_next_step_recommendation": [
+    "Diagnose and document ensemble/solvent problem on existing outputs; specify intended thermodynamicconditions",
+    "Before new dynamics preregister one GPUresidentpressure/densityequilibration qualification with explicit finitebudget and testphysicalhomogeneity/nativeconsistency",
+    "On success run matched fresh contextvalidation undercorrectedpreparation, retaining originalchemical/parameter/enginegates; reassessremainingoriginalbudget first",
+    "Keep structuralreview, applicabilitystatement andportableprovenancepackage mandatory; noautomaticreadinesspromotion",
+    "Broaderforcefield/energetics/mechanics claims require a separately scoped study, not silentexpansionofcurrentendpoint"
+  ],
+  "primary_sources": {
+    "CGenFF2010": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/",
+    "ffTK2013": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3874408/",
+    "modified_nucleotides2016": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4801715/",
+    "Su2008identity": "https://pubmed.ncbi.nlm.nih.gov/18680367/",
+    "simulation_foundations": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6884151/",
+    "sampling_uncertainty": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6286151/",
+    "NAMDpressure": "https://www.ks.uiuc.edu/Research/namd/cvs/ug/node39.html"
+  }
+}

@@ -245,3 +245,13 @@ experiments/exp60_extra_vs_native_photoproducts/results/jobs/*/summary.json
 # Generated print meshes; retain export code and compact provenance, not geometry.
 *.stl
 *.3mf
+
+# CPD campaign runtime data and generated structures; source and proposals stay tracked.
+/experiments/cpd_anti_additive/results/
+/experiments/cpd_anti_additive/checkpoints/
+/experiments/cpd_anti_additive/**/*.pdb
+/experiments/cpd_anti_additive/**/*.psf
+/experiments/cpd_anti_additive/**/*.npy
+/experiments/cpd_anti_additive/**/*.chk
+/experiments/cpd_anti_additive/**/*.h5
+/experiments/cpd_anti_additive/**/*.hdf5

@@ -1,0 +1,102 @@
+{
+  "at": "2026-10-05T15:55:17.075518+00:00",
+  "title": "Cubic-cell replacement campaign after rotational image-clearance failure",
+  "status": "awaiting_budget_decision",
+  "evidence": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-cube-diagnostic-v5/startup_native_audit.json",
+    "sha256": "b421eeb7fddfa41b201f9c89a32a877020fc9f0810e96e7546080426794efd55"
+  },
+  "final_inputs": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-cube-context-v5/inputs_lock.json",
+    "sha256": "f957dec8ef6e61952a090965c1dab16daf0ccea0b7e2e7c7406ce2c5d3efc6f6"
+  },
+  "preparation_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-gpu-cube-context-v5/preparation_plan.json",
+    "sha256": "e0cb30d3aac2b2490b55c8bd4225cd07a70becf34c27d71c36a50e8b0a78fe89"
+  },
+  "case_scope": "Existing preliminarycis-anti-I interstrandTT construct only; no equilibrium,kinetics,mechanics,generalCPDtransfer or minimum-certification claim.",
+  "method": "140Ainitialcube, GPUresident force-switch NPT300K/1.01325bar, ordinarymasses2fs,PME144cubed,p4+affinity. Originalparameters and12Aimagegate unchanged.",
+  "composition": {
+    "atoms": 265477,
+    "waters": 87289,
+    "sodium": 330,
+    "chloride": 237,
+    "neutralizing_sodium": 93,
+    "calibration": {
+      "salt_pairs": 237,
+      "sodium": 330,
+      "chloride": 237,
+      "neutralizing_sodium": 93,
+      "target_added_NaCl_molar": 0.15,
+      "pooled_late500ps_volume_A3": 2625874.08862,
+      "predicted_added_NaCl_molar": 0.1498730501305287,
+      "rule": "Nearest150mM frompooledlate500ps ofboth cubicNPTdiagnostics, frozen before finalpreparation. ReportactualfinalNPTconcentration without outcome-driven tuning.",
+      "convention": "Added NaCl pairs/full cell volume, excludes neutralizing sodium."
+    },
+    "actual_new_NPT_concentration_pending": true
+  },
+  "order": [
+    [
+      "anti",
+      1
+    ],
+    [
+      "control",
+      1
+    ],
+    [
+      "anti",
+      2
+    ],
+    [
+      "control",
+      2
+    ],
+    [
+      "anti",
+      3
+    ],
+    [
+      "control",
+      3
+    ]
+  ],
+  "operational_requirements": "Sequential only; Archive data; retain100psrestartsets and1nsendpoints; completion-triggered modelreview per10ns; no cloud; no polling; usersteeringtakesprecedence.",
+  "budget": {
+    "status": "proposed_not_activated",
+    "clock_policy": "A new explicitly approved replacement window starts at launch; retain original clocks and record supersession. No automatic clock reset.",
+    "scope": "Same six fresh matched10ns runs, final exact-systemqualification and matchedpreparation, structuralreview, provenanceerrata, restartablepackage; no longproduction.",
+    "reference_seconds_per_ns": 3227.944092,
+    "atom_count_scale": 1.000165766879024,
+    "native_hours_per_10ns": 8.967997717271654,
+    "native_hours_six_10ns": 53.807986303629924,
+    "native_hours_six_1_06ns_preparations": 5.703646548184772,
+    "native_margin_fraction": 0.25,
+    "context_analysis_reserve_hours": 3,
+    "package_reserve_hours": 6,
+    "estimated_context_hours": 77.38954106476837,
+    "estimated_total_hours": 83.38954106476837,
+    "proposed_context_window_hours": 78,
+    "proposed_total_window_hours": 84,
+    "original_context_deadline_epoch": 1791281108.8733842,
+    "original_overall_deadline_epoch": 1791339464.4342022,
+    "original_context_hours_remaining": 18.164388297663795,
+    "original_overall_hours_remaining": 34.374266302453144,
+    "admission": "Explicit user decision required to replace prior timecaps. Each full10ns completes and is reviewed before nextlaunch; unchanged scientific gates. Stop at newcap if stillincomplete; no automaticextensions.",
+    "validation_credit_from_failed_or_diagnostic_trajectories_ns": 0
+  },
+  "alternatives": [
+    {
+      "option": "Do not expand compute budget",
+      "consequence": "Stop with failed context validation and qualified diagnostic evidence only; no readiness claim."
+    },
+    {
+      "option": "Additional cell/method research",
+      "consequence": "Compact periodic cells might reduce atomcount but require newconstruction, triclinicgeometry/restart validation and performancequalification; no current speed or readiness claim. Not selected for this proposal."
+    }
+  ],
+  "scientific_thresholds_changed": false,
+  "failed_evidence_preserved": true,
+  "simulation_ready": false,
+  "minimum_certified": false
+}
