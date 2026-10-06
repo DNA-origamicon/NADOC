@@ -1,5 +1,268 @@
 # Cis-anti-I additive parity campaign
 
+**PAUSED BY USER — 2026-10-06. Do not launch or continue jobs until explicit resume.**
+The user requested: "Pause the run. commit what we have so far. prepare to resume later."
+Stopped `cpd-anti-cube-validation-anti-1-v6-watch.service` first, then the complete
+`cpd-anti-cube-validation-anti-1-v6.service` cgroup. Both are inactive/dead; no NAMD
+process remains. No completion wake should resume this paused campaign. This
+pause supersedes every earlier next-job admission and continuation instruction.
+
+Six preparations remain audited. Anti1 validation segment01 completed 1 ns and
+passed worker gates; independent validation review is still pending. Segment02
+was interrupted, not accepted. Latest complete checkpoint is step1300000,
+1.54 ns into validation; native log reached1328000 (~1.596 ns) before stopping.
+Checkpoint coor/vel arrays have265477 finite atoms, full XSC at the matching step,
+cubic edge137.93626449 A, geometry/water checks pass, image clearance41.0346 A.
+The checkpoint is a restart candidate, not acceptance of all partial trajectory.
+Preserved all native outputs and original provenance/authorization/deadline files.
+Machine pause receipt: `cpd-anti-gpu-cube-context-v5/campaign_pause_v6.json`;
+service copy `cpd-anti-cube-validation-anti-1-service-v6/user_pause.json`.
+The old supervisor status may still say running because it was terminated;
+user_pause and actual inactive systemd state are authoritative.
+
+Resume handoff: [cpd_resume_handoff_20261006.md](cpd_resume_handoff_20261006.md).
+No automatic restart or deadline extension. Existing launcher refuses duplicate
+validation outputs; a reviewed continuation must use a new plan/output location
+and retain full checkpoint state. No full NAMD readiness or minimum certification.
+
+**All six preparations audited; first cubic validation admitted — 2026-10-06.**
+Control3 wake 1eb68864-3b27-452d-a4e0-86535386f220 acknowledged and linked to
+native audit/review in `cpd-anti-cube-prep-control-3-service-v6`. Return 0;
+4073.93 s (67.90 min). Audit verified 209 input pins, five new native jobs,
+existing static comparisons, all 555 DCD cells, ten complete 100 ps restart
+sets, restart/endpoint potentials, nine stratified frames and three endpoints.
+Control3 NPT minimum image 38.765 A; late500ps 299.176 K,+0.731 bar,
+density1.022940 g/cm3,149.842 mM added NaCl; density half-change+0.0001460.
+Endpoint/restart void witnesses3.353/3.299 A. All preparation gates pass;
+short physical histories do not establish equilibrium or minimum certification.
+
+Aggregate `cpd-anti-gpu-cube-context-v5/startup_admission_v6.json` admits
+bounded validation only. Six preparations:3330 saved DCD cells,60 complete
+100ps checkpoint sets,54 stratified frames and18 endpoints replayed;
+3348 worker geometry records pass, not independent full-frame chemistry.
+NPT minimum-image range31.417–40.110 A; late density1.022940–1.023110 g/cm3,
+addedNaCl149.842–149.867 mM. Frozen `startup_endpoints_lock_v6.json` retains
+six complete step530000 checkpoints, distinct velocities, full XSC and finite
+registered observables. Historical failures and gates remain intact.
+
+Worst native1ns3590.166s plus worst preparation analysis277.340s; ten times
+their sum with25%margin and1800s additional reserve =50143.83s (13.93h).
+First validation has15h hard cap (<16h),~11h expected, overdue review at13h.
+New worker`gpu_cube_validation_v6.py` and launcher`launch_cube_validation_v6.py`
+reuse pinned cube engine and dynamically correct265477-atom final composition.
+Only anti1 launches: ten1ns NPT segments, ordinary-mass2fs,p4,PME144cubed,
+force-switch10–12A,full XSC,100ps checkpoints and1ns endpoints; DCD10ps and
+raw energy2ps retain preceding registered validation cadence. Every segment
+checks saved chemistry/water/image/cell/restart/CPU endpoint energy, physical
+blocks, voids and registered structural observables. Any gate failure stops;
+>20% native slowdown stops for explicit review. Time admission reserves margin
+before another segment. Partial files/checkpoints are retained on interruption;
+no automatic rerun or overwrite.
+
+Service`cpd-anti-cube-validation-anti-1-v6`, evidence
+`cpd-anti-cube-validation-anti-1-service-v6`, plan`validation_anti_1_v6.json`.
+On completion ACK, independently audit native evidence/checkpoint sets and
+stratified chemistry, review all segment physical/structural/throughput trends
+and necessity/alternatives, then write validation/completion_review.json with
+approved_for_next_run plus pinned assessment,audit,performance_report before
+control1 admission. Preserve failed evidence and halt on uncertainty requiring
+method review. No parallel replicas, cloud or promotion. Six fresh10ns runs,
+structural interpretation, provenance errata and portable package remain.
+19 focused tests pass, including deadline margin, exact restart chaining,
+failures/slowdown stopping, no output overwrite and pending-readiness semantics.
+
+**Anti replica 3 audited; final control preparation admitted — 2026-10-06.**
+Wake 77652072-116c-4f19-a62d-6035d0d8c672 acknowledged; delivery verification
+links audit/review in `cpd-anti-cube-prep-anti-3-service-v6`. Return 0;
+4057.59 s (67.63 min). Audit verified 207 input pins, five new native jobs,
+existing exact-system static comparisons, all 555 DCD cells, ten complete
+100 ps restart sets, restart/endpoint potentials, nine stratified frames and
+three binary endpoints. All 558 worker geometry records pass. This remains
+sampled chemistry replay, not independent full-frame or minimum certification.
+
+NPT minimum image 40.110 A. Late 500 ps: 299.123 K, +1.170 bar, density
+1.023110 g/cm3, added NaCl 149.867 mM; density half-change -0.0001849 g/cm3.
+Pressure 50 ps blocks -8.586..+14.368 bar. Heating endpoint void witness
+4.872 A reduces under NPT; sampled NPT witnesses 3.090..3.532 A, restart
+endpoint 3.414 A. No previous sustained-tension/large-cavity pattern; no
+convergence/equilibrium claim. NPT 1 ns took 3573.794 s plus 274.885 s analysis;
+GPU mean 97.52%. Timing remains consistent; retain qualified method and p4.
+
+Five of six preparations complete. Next single job control3, paired seed 63037,
+verified common control minimization, 50 ps heat + 1 ns NPT + 10 ps restart;
+3 h hard cap, 100 ps checkpoints, completion-triggered review. Service
+`cpd-anti-cube-prep-control-3-v6`, evidence `cpd-anti-cube-prep-control-3-service-v6`.
+On completion audit control3, then review all six preparations together and
+freeze exact restart endpoints. Prepare/test a versioned validation runner
+using final dynamic composition, full XSC, unchanged gates and observables,
+100 ps checkpoints and 1 ns endpoints. Estimate full per-job native plus
+analysis runtime and margin below 16 h before admitting only anti1 validation.
+Each later validation requires a scientific/performance/necessity audit of its
+predecessor. No automatic next job, cloud, parameter changes or promotion.
+Structural interpretation, provenance correction and portable package remain.
+
+**Control replica 2 audited; anti replica 3 admitted — 2026-10-06.**
+Wake bc8f222b-afcc-4e23-9aa7-3251ff359c4d acknowledged; delivery verification
+links audit/review in `cpd-anti-cube-prep-control-2-service-v6`. Return 0;
+4070.84 s (67.85 min). Audit verified 205 input pins, five new native jobs,
+existing static comparisons, all 555 DCD cells, ten complete 100 ps restart
+sets, restart/endpoint potentials, nine stratified frames and three binary
+endpoints. All 558 worker geometry records pass; sampled chemistry replay
+is not independent full-frame validation or minimum/equilibrium certification.
+
+NPT minimum image 37.855 A. Late 500 ps: 299.247 K, +6.504 bar, density
+1.023082 g/cm3, added NaCl 149.863 mM; density half-change +0.0000450 g/cm3.
+Pressure blocks range -8.020 to +20.375 bar. Endpoint/restart void witnesses
+3.280/3.124 A; transient NPT maximum 3.818 A subsides, with late values near
+3.2 A. Bulk properties remain consistent with the first three preparations;
+no former sustained-tension/large-cavity pattern. Short blocks do not prove
+pressure convergence. NPT 1 ns took 3584.769 s plus 275.913 s analysis; GPU
+mean 97.22%. Projected 10 ns ~9.96 native h + ~0.77 analysis h before margin.
+Retain qualified method and p4; no new evidence warrants a tuning detour.
+
+Four of six preparations complete. Next single job anti3, paired seed 63037,
+using verified common anti minimization, 50 ps heat + 1 ns NPT + 10 ps restart;
+3 h hard cap, 100 ps checkpoints, completion-triggered review. Service
+`cpd-anti-cube-prep-anti-3-v6`, evidence `cpd-anti-cube-prep-anti-3-service-v6`.
+Audit before control3 with the same paired seed. After all six reviews, freeze
+startup endpoints and prepare/review the bounded validation runner and budget
+before the first fresh 10 ns job. No cloud, automatic next job, duplicate static
+work or readiness promotion. Structural interpretation, provenance correction
+and portable package remain pending.
+
+**Anti replica 2 audited; control replica 2 admitted — 2026-10-06.**
+Wake1873de87-51f0-43b3-9294-9c9b18b2c9eb acknowledged; delivery verification
+links native audit and review in`cpd-anti-cube-prep-anti-2-service-v6`.
+Return0;4056.94s (67.62min). Audit verified203 input pins, five new native jobs,
+replayed existing exact-system static comparisons, all555 DCD cells, ten complete
+100ps restart sets, restart/endpoint potentials, nine stratified frames and three
+binary endpoints.558 worker geometry records pass; not independent full-frame
+chemistry or equilibrium/minimum certification.
+
+NPT minimum image38.071A; endpoint/restart void witnesses3.303/3.243A after
+heating transient4.475A. Late500ps299.160K,+0.292bar,density1.023027g/cm3,
+149.855mM addedNaCl; density half-change+0.0002126g/cm3; pressure50ps blocks
+-12.750..+7.288bar. No former sustained-tension/large-cavity pattern. NPT1ns
+3570.643s (24.197ns/day), consistent with preceding runs; GPU mean97.72%.
+Measured1ns analysis275.993s. Ten ns projects~9.92nativeh+~0.77analysis h at
+this cadence, before margin; re-evaluate admission after remaining preparations.
+Retain method/p4 because no new evidence supports a tuning detour.
+
+Three of six preparations complete. Next single job control2, pairedseed52027,
+verified common control minimization,50psheat+1nsNPT+10psrestart,3h hard cap and
+100ps checkpoints. Service`cpd-anti-cube-prep-control-2-v6`, evidence
+`cpd-anti-cube-prep-control-2-service-v6`. Completion review required before anti3,
+then control3 (pairedseed63037). Use unchanged launcher and frozen worker;
+no duplicate static/minimization, automatic next job, cloud spending or readiness
+promotion. All six startup reviews precede fresh10ns validation, structural
+interpretation, provenance correction and portable packaging.
+
+**Control replica 1 audited; anti replica 2 admitted — 2026-10-06.**
+Wake c99d5f24-9bce-4fe1-8a1d-900783c27519 acknowledged and linked to review/audit
+in `cpd-anti-cube-prep-control-1-service-v6`. Return0;4096.10s (68.27min) total.
+Independent audit verified198 input pins, eight native jobs, static forces/energies,
+all555 DCD cells, ten complete100ps restart sets, restart/endpoint potentials,
+nine stratified frames and three binary endpoints.558 worker geometry records
+pass; this is not independent full-frame chemistry replay.
+
+Control NPT minimum image37.507A; endpoint/restart void witnesses3.280/3.308A
+(the heating endpoint transient was4.590A). Late500ps299.205K,+3.818bar,
+density1.023005g/cm3,149.851mM addedNaCl; density half-change-0.0000876g/cm3.
+50ps pressure blocks -5.373..+14.172bar. Bulk density and salt closely match anti1;
+no sustained-tension/large-cavity pattern, but no equilibrium certification.
+NPT1ns3590.166s,24.066ns/day,0.22% slower than anti1; GPU mean97.38%.
+Current10ns native estimate9.97h before analysis/margin, within16h policy.
+Retain p4,cell and timestep; no evidence for a new tuning experiment. Heating
+summary uses audited unique-timestep rows; frozen historical summary preserved.
+
+Two of six matched preparations complete. Next single job anti2, pairedseed52027:
+reuse verified common anti minimization,50psheat+1nsNPT+10psrestart; expected
+~1–1.5h, hard3h cap,100ps checkpoints. Service`cpd-anti-cube-prep-anti-2-v6`,
+evidence`cpd-anti-cube-prep-anti-2-service-v6`. On wake audit before control2;
+then anti3/control3 with pairedseed63037 individually. No duplicate static or
+minimization jobs, parameter changes, cloud use or validation launch. All six
+preparations still require review before fresh10ns validations. Readiness remains
+false; final structural interpretation, provenance and package remain pending.
+
+**Anti replica 1 audited; matched control 1 admitted — 2026-10-06.**
+Completion wake 7328e6be-6b6e-4a11-bd3c-33714a53cf99 acknowledged and linked to
+native audit/review in `cpd-anti-cube-prep-anti-1-service-v6`. Native return 0;
+4086.72 s (68.11 min) total. Independent replay verified 194 input pins, eight
+native jobs, exact final-system static force/energy comparison, all 555 DCD cells,
+ten complete 100 ps checkpoint sets, restart/endpoint potentials, nine stratified
+frames and three binary endpoints. Worker 558 geometry records pass; sampled
+replay is not an independent full-frame chemistry audit.
+
+NPT minimum saved image clearance 31.417 A; endpoint/restart void witnesses
+3.206/3.215 A. Late500ps: 299.120 K, -2.753 bar, density1.022951 g/cm3,
+149.843 mM added NaCl; density half-change -0.0001955 g/cm3. Pressure blocks
+fluctuate -21.32 to +10.07 bar; no prior sustained-tension/large-cavity pattern.
+These support proceeding, not equilibrium or full NAMD readiness.
+
+NPT1ns took3582.307s (~24.12ns/day), 11% slower than prior3227.944s reference.
+GPU mean97.19%; p4 retained because prior p8 gain<1%. Current10ns estimate
+9.95nativeh; add runtime margin and analysis before admitting validation. No
+new core/timestep/cell experiment justified now; control supplies the next matched
+performance measurement. Frozen worker heat summary duplicated nine run-boundary
+energy rows; audited statistics use unique timesteps and the complete50ps.
+Original reports retained; NPT/restart summaries unaffected. Auditor command:
+`NADOC_REPO_ROOT=/home/jojo/Work/NADOC OPENBLAS_NUM_THREADS=1 .venv/bin/python experiments/cpd_anti_additive/audit_cube_preparation_v6.py --plan .development-artifacts/cpd-anti-gpu-cube-context-v5/preparation_anti_1_v6.json`.
+
+Next single job: control replica1, pairedseed41017, same final composition/method,
+static checks + minimization +50psheat +1nsNPT +10psrestart; 3h cap, ~1–1.5h
+expected,100ps checkpoints. Launcher`launch_cube_preparation_v6.py` requires
+hash-verified passed audits and affirmative completion reviews for every earlier
+preparation and rejects duplicate admission/outputs. Frozen worker and original
+inputs reused; historical failed campaigns remain held. Service
+`cpd-anti-cube-prep-control-1-v6`, evidence`cpd-anti-cube-prep-control-1-service-v6`.
+On completion audit control before admitting anti2 (pairedseed52027), then
+control2/anti3/control3 individually. No full validation yet.
+
+**Sequential resumption authorized — 2026-10-06.**
+The user resumed CPD readiness work and authorized individual restartable jobs
+strictly below 16 hours, with longer processes split into chunks and audits of
+progress, necessity, alternatives, and speed between jobs. This supersedes the
+expired aggregate time caps and the pending 84-hour budget question below; it
+is not a reset of scientific gates or historical evidence. No further budget
+confirmation is needed for work within this instruction. Historical holds on
+failed campaigns remain; only the new final-composition path is admitted.
+
+First job: final cubic anti replica 1 preparation, seed 41017, at
+`cpd-anti-gpu-cube-context-v5`, using versioned worker
+`experiments/cpd_anti_additive/gpu_cube_preparation_v6.py` and frozen v5 engine.
+265477 atoms, 87289 waters, 237 salt pairs, mass 1617952.3015 Da; dynamic assembly
+values replace provisional diagnostic composition. Exact-system static CPU/GPU
+energy and force checks, 1000 minimization steps, 50 ps heating, 1 ns NPT, and
+10 ps restart test. Expected about 1–1.5 hours including analysis; hard cap
+3 hours. Four CPU cores, ordinary masses, 2 fs, force switch, PME 144 cubed.
+Unique complete restart sets every 100 ps, full XSC, all saved-frame chemistry,
+water and >12 A image gates retained. No automatic retry or next replica.
+
+Service `cpd-anti-cube-prep-anti-1-v6`; service evidence directory
+`cpd-anti-cube-prep-anti-1-service-v6`. Separate event-driven completion watcher
+queues a review to this resumed thread. On completion acknowledge the wake,
+verify native outputs and independently replay representative checks, review
+physical blocks/voids/salt/performance and usefulness before admitting control 1
+preparation. Then prepare anti2/control2/anti3/control3 individually with paired
+seeds 52027/63037, checking frozen initial inputs and each prior review. All six
+startups need review before validation. Prepare a versioned validation runner
+for six sequential 10 ns runs (historical estimate ~9 native hours each), retaining
+1 ns endpoints and intermediate audits; enforce <16-hour process limits. If
+measured runtime exceeds that, split further, preserving complete checkpoint
+state and unchanged scientific gates. Do not invoke obsolete v4 deadline guards.
+
+Authorization and first job plan are retained as
+`sequential_authorization_20261006.json` and `preparation_anti_1_v6.json` in the
+final cube root. Failures and original clocks remain intact. Stop/restart uses
+a newly admitted output directory after auditing the last complete checkpoint;
+the worker refuses to overwrite existing native stage directories. Final
+structural interpretation, provenance errata and portable package still remain.
+Current scope is preliminary cis-anti-I and matched controls; no general CPD,
+equilibrium, minimum-certification or production-readiness claim.
+
+Validation before launch: 13 focused tests passed for admission expiry/caps/input
+integrity, final composition/PME/checkpoint settings, native logs and restart XSC.
+
 **Cube qualification audited; final inputs ready, replacement-budget decision pending — 2026-10-05.**
 Wakef3cee3ce-259c-46c8-9793-5788fb5013cb ACKed. Service returned0; independent
 `audit_gpu_cube_diagnostic_v5.py` verified508inputpins,22nativejobs, staticforce/
