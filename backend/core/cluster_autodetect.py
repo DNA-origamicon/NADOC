@@ -19,7 +19,7 @@ NOTE: ``_ensure_default_cluster`` stays in crud.py — it calls
 ``design_state.set_design_silent`` (api-state) and is shared cross-region.
 """
 
-from backend.core.models import Design, LatticeType, StrandType
+from backend.core.models import Design, StrandType
 
 
 def _cluster_bundle_regions(design: Design) -> Design:
@@ -45,40 +45,9 @@ def _cluster_bundle_regions(design: Design) -> Design:
     if design.cluster_transforms or not design.helices:
         return design
     from backend.core.models import ClusterRigidTransform
-    from backend.core.crossover_positions import crossover_neighbor
-    from backend.core.constants import HC_CROSSOVER_PERIOD, SQ_CROSSOVER_PERIOD
-
-    ref_ids = design.reference_helix_ids()
-    gridded = [
-        h for h in design.helices if h.grid_pos is not None and h.id not in ref_ids
-    ]
-    if not gridded:
-        return design  # nothing clusterable; _ensure_default_cluster handles it
-
-    cell_to_id: dict[tuple[int, int], str] = {
-        (h.grid_pos[0], h.grid_pos[1]): h.id for h in gridded
-    }
-    helix_ids = {h.id for h in gridded}
-    period = (
-        HC_CROSSOVER_PERIOD
-        if design.lattice_type == LatticeType.HONEYCOMB
-        else SQ_CROSSOVER_PERIOD
-    )
-
-    adj: dict[str, set[str]] = {hid: set() for hid in helix_ids}
-    for h in gridded:
-        row, col = h.grid_pos
-        for is_scaf in (False, True):
-            for idx in range(period):
-                nb = crossover_neighbor(
-                    design.lattice_type, row, col, idx, is_scaffold=is_scaf
-                )
-                if nb is not None and nb in cell_to_id:
-                    nb_id = cell_to_id[nb]
-                    if nb_id != h.id:
-                        adj[h.id].add(nb_id)
-                        adj[nb_id].add(h.id)
-
+    from backend.core.cluster_components import lattice_cluster_graph
+    adj = lattice_cluster_graph(design)
+    helix_ids = set(adj)
     visited: set[str] = set()
     components: list[list[str]] = []
     for hid in helix_ids:
@@ -143,50 +112,14 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
     Clusters are named "Cluster 1", "Cluster 2", … sorted by minimum helix ID.
     """
     from backend.core.models import ClusterRigidTransform, ForcedLigation  # noqa: F401
-    from backend.core.crossover_positions import crossover_neighbor
-    from backend.core.constants import HC_CROSSOVER_PERIOD, SQ_CROSSOVER_PERIOD
-
-    gridded = [h for h in design.helices if h.grid_pos is not None]
+    from backend.core.cluster_components import lattice_cluster_graph
+    graph = lattice_cluster_graph(design)
+    gridded = [h for h in design.helices if h.id in graph]
     if not gridded:
         return design
 
-    cell_to_id: dict[tuple[int, int], str] = {
-        (h.grid_pos[0], h.grid_pos[1]): h.id for h in gridded
-    }
-    period = (
-        HC_CROSSOVER_PERIOD
-        if design.lattice_type == LatticeType.HONEYCOMB
-        else SQ_CROSSOVER_PERIOD
-    )
-
-    crossover_pairs: set[frozenset] = {
-        frozenset({xo.half_a.helix_id, xo.half_b.helix_id}) for xo in design.crossovers
-    }
-    fl_pairs: set[frozenset] = {
-        frozenset({fl.three_prime_helix_id, fl.five_prime_helix_id})
-        for fl in design.forced_ligations
-    }
-
     def _lattice_adj(helix_ids: set[str]) -> dict[str, set[str]]:
-        """Build lattice-adjacency graph restricted to helix_ids, removing FL-only edges."""
-        adj: dict[str, set[str]] = {hid: set() for hid in helix_ids}
-        for h in gridded:
-            if h.id not in helix_ids:
-                continue
-            row, col = h.grid_pos
-            for is_scaf in (False, True):
-                for idx in range(period):
-                    nb = crossover_neighbor(
-                        design.lattice_type, row, col, idx, is_scaffold=is_scaf
-                    )
-                    if nb is not None and nb in cell_to_id:
-                        nb_id = cell_to_id[nb]
-                        if nb_id in helix_ids and nb_id != h.id:
-                            pair = frozenset({h.id, nb_id})
-                            if pair not in fl_pairs or pair in crossover_pairs:
-                                adj[h.id].add(nb_id)
-                                adj[nb_id].add(h.id)
-        return adj
+        return {hid: graph[hid] & helix_ids for hid in helix_ids}
 
     def _connected_components(
         helix_ids: set[str], adj: dict[str, set[str]]
@@ -221,7 +154,7 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
     for i, s in enumerate(design.strands):
         if s.strand_type != StrandType.SCAFFOLD:
             continue
-        unique_helices = {d.helix_id for d in s.domains}
+        unique_helices = {d.helix_id for d in s.domains if d.helix_id in graph}
         if len(unique_helices) < _MIN_MODULE_HELICES:
             continue  # tiny fragment — not a module boundary
         for hid in unique_helices:
@@ -659,7 +592,12 @@ def _geometry_clusters_multi_scaffold(design: Design) -> Design:
         )
         for n, si in enumerate(scaffolds_sorted, start=1)
     ]
-    return design.copy_with(cluster_transforms=clusters)
+    from backend.core.cluster_components import cluster_unassigned_components
+    result = cluster_unassigned_components(design.copy_with(cluster_transforms=clusters))
+    return result.copy_with(cluster_transforms=[
+        c.model_copy(update={"name": f"Geometry Cluster {i}"})
+        for i, c in enumerate(result.cluster_transforms, 1)
+    ])
 
 
 def _autodetect_clusters(design: Design) -> Design:

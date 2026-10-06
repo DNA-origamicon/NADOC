@@ -325,6 +325,12 @@ failing renderer test, then kept collapsed connectors finite and hidden. Visible
 molecular coordinates and topology are unchanged. Shared-animation browser
 coverage exercises the construction-stage transition that exposed the defect.
 
+
+- 2026-10-04 — ISSUE-54 [x]: pattern API wrappers propagate rejected requests;
+  panels retain their preview and show the error. Regression coverage:
+  `frontend/src/api/pattern_requests.test.js`, `linear_pattern_panel.test.js`.
+  No additional main.js logic (linear-tool feature wiring is +2 LOC).
+
 2026-10-05 — ISSUE-56: Extrude dismissal now follows acceptance of the Confirm
 intent, retaining the asynchronous submission until matching feedback arrives.
 Retry republishes a consumed validation plan, and Undo uses its saved feature

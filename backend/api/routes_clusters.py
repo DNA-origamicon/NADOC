@@ -37,6 +37,12 @@ from backend.api import state as design_state
 # crud.py's auto-clustering path). Both stay in crud.py and are imported back
 # here (same convention as routes_camera_poses.py / routes_deformation.py).
 from backend.api.crud import _design_response, _ensure_default_cluster
+from backend.api.pattern_features import (
+    CircularPatternBody,
+    LinearPatternBody,
+    build_pattern,
+    pattern_label,
+)
 from backend.core.cluster_copy import paste_clusters
 from backend.core.cluster_reconcile import MutationReport
 from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry
@@ -135,6 +141,26 @@ def add_cluster(body: AddClusterBody) -> dict:
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
+
+
+@router.post("/design/cluster-unassigned", status_code=200)
+def repair_unassigned_clusters() -> dict:
+    """Undoable additive repair; existing cluster identities and poses survive."""
+    from backend.core.cluster_components import cluster_unassigned_components
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    updated = cluster_unassigned_components(design)
+    if updated is not design:
+        log = list(design.feature_log)
+        if design.feature_log_cursor >= 0:
+            log = log[:design.feature_log_cursor + 1]
+        entries = [ClusterCreateLogEntry(cluster_id=c.id, name=c.name,
+                   helix_ids=list(c.helix_ids), domain_ids=list(c.domain_ids))
+                   for c in updated.cluster_transforms[len(design.cluster_transforms):]]
+        updated = updated.copy_with(feature_log=log + entries, feature_log_cursor=-1)
+        design_state.set_design(updated)
+    return _design_response(updated, validate_design(updated))
 
 
 @router.patch("/design/cluster/{cluster_id}", status_code=200)
@@ -392,3 +418,40 @@ def cluster_paste(body: ClusterPasteBody) -> dict:
         "dropped_boundary_fls": copy_report.dropped_boundary_fls,
     }
     return resp
+
+
+def _create_pattern(kind, body):
+    holder = {}
+    params = body.model_dump(exclude={"expected_revision"})
+
+    def build(design):
+        try:
+            candidate, ids, copy_report = build_pattern(kind, design, params)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        holder["report"] = copy_report
+        return candidate, MutationReport(new_helix_origins={hid: None for hid in ids})
+
+    updated, report, _ = design_state.mutate_with_feature_log(
+        op_kind=kind,
+        label=pattern_label(kind, params),
+        params=params,
+        fn=build,
+        expected_revision=body.expected_revision,
+    )
+    response = _design_response(updated, report)
+    copies = holder["report"]
+    response["pattern_report"] = (
+        [vars(r) for r in copies] if isinstance(copies, list) else vars(copies)
+    )
+    return response
+
+
+@router.post("/design/circular-pattern", status_code=200)
+def circular_pattern(body: CircularPatternBody) -> dict:
+    return _create_pattern("circular-pattern", body)
+
+
+@router.post("/design/linear-pattern", status_code=200)
+def linear_pattern(body: LinearPatternBody) -> dict:
+    return _create_pattern("linear-pattern", body)

@@ -180,3 +180,16 @@ calls, click-to-place commit, Escape, design-change disposal — all pass, 0 con
 Still human-eye only: the posed-ghost appearance and the cadnano 2D layout of the copy.
 
 See also [[project_cluster_reconcile]], [[project_primitive_library]], [[project_feature_log_overhaul]].
+
+## Circular pattern (2026-10-03)
+
+Tools → Circular Pattern uses the same extraction rules, then gives each copy
+independent lattice frames and composes world-space rotation with its source pose.
+Canonical cells, polarity and BP indices stay unchanged. Strand sequences are
+cleared as for ordinary cluster paste; boundary strands are truncated by extraction.
+Confirmation is one snapshot history operation; cancellation only removes preview.
+The popup reports new helix-length BP and whole-part total, with exclusive Offset
+(XYZ/bead/snap) and Centered about (second-cluster selector) modes.
+Whole-helix lattice clusters are supported; domain-specific poses, selected
+individual nucleotide transforms, overhangs and extensions are refused explicitly.
+Core: `backend/core/circular_pattern.py`; panel: `circular_pattern_panel.js`.

@@ -10,7 +10,7 @@ import {
   STATES as DEFORM_STATES,
 } from '../scene/deformation_editor.js'
 import {
-  initBendTwistPopup, openPopup as openDeformPopup,
+  showPickingPopup, initBendTwistPopup, openPopup as openDeformPopup,
   closePopup as closeDeformPopup, setPlanePositions as setDeformPopupPlanes,
 } from '../ui/bend_twist_popup.js'
 
@@ -104,10 +104,13 @@ export function initFeatureEditor({
 
   // Watch deformation editor state — open/close popup when state changes
   let _prevDeformState = DEFORM_STATES.IDLE
+  let _prevDeformType = null
   function _watchDeformState() {
     const st = getDeformState()
-    if (st === _prevDeformState) return
+    const type = getDeformToolType()
+    if (st === _prevDeformState && type === _prevDeformType) return
     _prevDeformState = st
+    _prevDeformType = type
     if (st === DEFORM_STATES.BOTH) {
       const { a, b } = getDeformPlanes()
       const editParams = _editContext?.pendingParams ?? null
@@ -126,10 +129,20 @@ export function initFeatureEditor({
         skipInitialPreview,
       )
       if (_editContext) delete _editContext.pendingParams
+    } else if (st === DEFORM_STATES.AWAITING_A || st === DEFORM_STATES.A_PLACED) {
+      showPickingPopup(type ?? 'twist', getDeformPlanes().a?.bp ?? null)
     } else {
       closeDeformPopup()
     }
   }
+
+  store.subscribe((next, previous) => {
+    if (next.deformToolActive !== previous.deformToolActive) {
+      _watchDeformState()
+      // End/context entry points place both planes synchronously after activation.
+      queueMicrotask(_watchDeformState)
+    }
+  })
 
   async function _onEditFeature(entry, featureIndex) {
     // ── Overhang orientation edit — open orientation panel for this overhang ─

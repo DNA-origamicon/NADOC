@@ -38,7 +38,7 @@ describe('initExtrudePanel — new-bundle', () => {
     panel.activate('newBundle')
 
     expect(deps.expandedSpacing.forceOff).toHaveBeenCalled()
-    expect(deps.rightSidebar.open).toHaveBeenCalledWith('properties')
+    expect(deps.rightSidebar.open).not.toHaveBeenCalled()
     expect(document.getElementById('extrude-panel').style.display).toBe('block')
     expect(document.getElementById('extrude-from').disabled).toBe(false)
     expect(document.getElementById('extrude-from').value).toBe('XY')

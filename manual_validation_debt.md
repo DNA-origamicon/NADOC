@@ -739,3 +739,31 @@ persistence checks pass; these do not establish wearer comfort. Results and
 limits: `docs/audits/vr_motion_optimization_20261003.md`.
 
 - **MV-39 — PENDING — Left touchpad selection wheel (2026-10-05).** In native VR, hold the left pad and slide clockwise from Drill through Cluster, Strand, Domain, Crossover and Bases. Feel a light pulse on each new highlighted sector; confirm that scope changes only on release, center release cancels, and both sidebar menus stay unchanged. Repeat during Move/Rotate and confirm the old preview cancels. Automated tours validate four input profiles and rendered stereo/desktop pixels; physical haptic feel, thumb reach and through-lens label comfort require hands-on review. Entry: Debug → VR Tours & Tests → Controls & layout → Left touchpad selection wheel.
+
+## MV-CIRCULAR-PART-PREVIEW — popup and part-space review (2026-10-03)
+
+PENDING user review. Tools → Circular Pattern: pick a cluster, then review the
+point-cloud copies, lattice, axis and draggable bead in the main part view.
+Check popup placement at the usual window size, X/Y/Z/Helices toggles, switching
+the source cluster, and Centered about → second cluster. Centering uses the
+second cluster’s backbone centroid. Offset and Centered about are exclusive;
+Offset alone shows the draggable bead, XYZ fields (three decimal places) and snap
+toggle. Centered about alone shows the second-cluster selector. Check BP totals,
+Confirm (one undoable copy operation), Cancel (no changes) and undo/redo.
+Explanations are tooltips. Automated scene/DOM tests and the browser gesture
+exercise cover switching, centering, snapping, instance counts and teardown;
+visual density and placement remain for manual review.
+
+## MV-DEFORM-CLUSTER-START — Bend/Twist entry (2026-10-03)
+
+Pending manual review: Tools → Bend or Twist prompts for a cluster in the floating
+popup. Pick via the 3D view or cluster list; selection returns to Default and
+plane selection begins for that cluster. Check Cancel/Escape and switching tools.
+
+## MV-TOOL-GLASS — desktop popup appearance (2026-10-04)
+
+Pending user review: Circular Pattern, Extrude, Bend and Twist now share a
+translucent blurred surface, VR-inspired neutral rim, and NADOC type/control
+colors. Drag over a dense part and compare legibility against bright and dark
+geometry; review at the usual window size. Reduced-transparency preference uses
+an opaque backing. Screenshots: `.development-artifacts/tool-popup-glass-20261004/`.

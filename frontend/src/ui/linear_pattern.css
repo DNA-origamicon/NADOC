@@ -1,0 +1,57 @@
+.cp-controls fieldset.lp-section {
+  display: block;
+  padding: 10px;
+  margin: 0 0 12px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+}
+.cp-controls .lp-section > legend {
+  padding: 0 6px;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.cp-controls fieldset.lp-section[hidden] { display: none; }
+.lp-section .cp-presets { margin: 0 0 10px; }
+.lp-cluster-list {
+  box-sizing: border-box;
+  min-height: 54px;
+  max-height: 120px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  border: 1px solid var(--color-border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-canvas);
+  padding: 4px 8px;
+}
+.cp-controls .lp-cluster-list .cp-snap { margin: 6px 0; overflow-wrap: anywhere; }
+.lp-cluster-list input { flex-shrink: 0; }
+.lp-number-fields, .lp-vector { display: flex; gap: 8px; }
+.lp-vector { margin-bottom: 10px; }
+.lp-number-field { flex: 1; min-width: 0; font-size: var(--text-xs); }
+.lp-stepper { display: flex; align-items: stretch; margin-top: var(--space-1); }
+.cp-controls .lp-stepper input.input { margin: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm); appearance: textfield; -moz-appearance: textfield; }
+.lp-stepper input::-webkit-inner-spin-button, .lp-stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.lp-stepper-arrows { display: flex; flex-direction: column; flex-shrink: 0; }
+.lp-stepper-arrows button {
+  flex: 1;
+  width: 25px;
+  min-height: 16px;
+  padding: 0 4px;
+  border: 1px solid var(--color-border-default);
+  border-left: 0;
+  background: var(--color-bg-canvas);
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lp-stepper-arrows button:first-child { border-radius: 0 var(--radius-sm) 0 0; }
+.lp-stepper-arrows button:last-child { border-top: 0; border-radius: 0 0 var(--radius-sm) 0; }
+.lp-stepper-arrows button:hover { background: var(--color-accent-strong); color: var(--color-text-primary); }
+.lp-stepper-arrows button:disabled { opacity: .5; cursor: default; }
+.lp-stepper-arrows button:focus-visible, .lp-cluster-list:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.lp-help { margin: 0 0 10px; font-size: var(--text-xs); line-height: 1.5; color: var(--color-text-muted); }
+.lp-section .cp-totals { border: 0; padding: 0; background: transparent; }
