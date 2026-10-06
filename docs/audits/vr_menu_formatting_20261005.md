@@ -132,3 +132,19 @@ were verified absent after testing. Browser Confirm teardown removed its isolate
 test project and document. Atlas fixture copies were removed and its renderer
 exited. Useful images, failed attempts, source comparisons and test logs remain
 under the development-artifact roots; user workspace designs were not changed.
+
+## Publication integration
+
+Merged the newer desktop pattern-tool commits `e4521d7c` and `68fd350f` in an
+isolated checkout before publishing. Both issue-log histories were preserved.
+Regenerated the sidebar catalog against their updated desktop source: obsolete
+unsupported Properties copies of floating Extrude/Twist controls are removed,
+and the new cluster-repair button is listed with its existing unsupported status.
+The native Extrude/Bend/Twist editing panels are unchanged.
+
+The combined tree passes 7,408 frontend tests (1 skipped), 26 lattice-context and
+3 empty-scene backend tests, all four focused native sidebar/layout/spacing/Extrude
+panel tests, and the generated-catalog check. The earlier 425-state atlas and
+live tours describe the pre-integration catalog; the refreshed catalog was checked
+by the native geometry tests, without repeating the entire live matrix. Logs are
+retained as `publish-*` under the menu-formatting evidence root.

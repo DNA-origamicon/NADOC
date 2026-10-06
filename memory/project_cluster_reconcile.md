@@ -4,6 +4,24 @@ description: Incremental cluster reconciliation after every topology mutation, r
 type: project
 originSessionId: ee620174-49a0-4f10-bf04-4e60bf23fabc
 ---
+## Disconnected extrusion update (2026-10-03)
+
+Extrusion segment/circle/continuation reports opt into additive creation for
+unassigned new lattice components. Canonical neighbor edges are now shared by
+reconciliation and lattice autodetection via `cluster_components.py`, with frame
+identity, legacy axial direction, forced-ligation boundaries, and reference/linker
+exclusions. Membership propagates through a new component; existing clusters are
+never merged or split. Explicit parent/orphan hints remain authoritative. Segment,
+continuation and deformed-continuation routes now pass their generated hints into
+the transaction; replay also reconciles them. New component IDs are deterministic
+for feature replay.
+
+`POST /design/cluster-unassigned`, exposed as **Cluster Unassigned Components** in
+Movable Clusters, repairs existing orphan lattice components additively. It logs
+cluster creation, supports undo, and preserves existing IDs and poses. It does not
+rewrite saved files automatically. Regression coverage: `test_cluster_components`,
+`test_cluster_reconcile_e2e`, and `frontend/e2e/cluster_unassigned.spec.js`.
+
 ## Overview (2026-05-02, overhang-overhaul branch)
 
 Every topology-changing API route now runs `reconcile_cluster_membership` after the mutation, so new helices and domains automatically inherit the cluster of their nearest existing neighbor and appear inside any deformed cluster frame instead of snapping back to the unposed lattice.
@@ -48,7 +66,7 @@ Slice-plane extrude • overhang extrude • overhang connection create/patch/de
 3. **Rebuild `domain_ids` from scratch every call.** Don't try to patch incrementally — nick→ligate→merge sequences renumber domain indices, so any incremental patcher would have to chase. Scratch rebuild via bp-range overlap is bulletproof.
 4. **`__lnk__` bridge helices are explicit orphans.** They have a `grid_pos` (set by `generate_linker_topology`) that happens to be lattice-adjacent to one of the connected real helices. Without an explicit orphan hint, lattice-neighbor proximity would pull the bridge helix into one cluster and drag the unrelated linker-side strand with it. Routes that create linkers populate `MutationReport.new_helix_origins[bridge_id] = None`.
 5. **Orphan helices stay orphaned and propagate.** If parent helix is in zero clusters, new helix inherits empty membership.
-6. **Reconciler never splits, merges, or modifies existing clusters' transforms.** Only membership (`helix_ids` and `domain_ids`) changes. Full re-evaluation is a separate user action (the autodetect button).
+6. **Reconciler never splits, merges, or modifies existing clusters' transforms.** Extrusion may opt into creating new clusters for disconnected additions; existing cluster membership is reconciled incrementally.
 
 ---
 
@@ -66,7 +84,7 @@ Slice-plane extrude • overhang extrude • overhang connection create/patch/de
 2. **Cross-part assembly connections not reconciled.** `cluster_transform_overrides` on `PartInstance` (`backend/core/models.py:778`) and assembly routes are out of scope.
 3. **Latent edge case: a domain-level cluster whose `domain_ids` becomes fully empty** (all its claimed domains deleted) would be re-classified as helix-level by the deformation code's `if not c.domain_ids` check, which would suddenly transform the entire helix instead of disjoint sub-ranges. The reconciler doesn't currently guard against this. Probably never happens in practice — to trigger it the user would have to delete every staple covering a bridge-helix bp range while keeping the helix in the cluster. If we ever see weird scaffold-cluster behaviour after large strand deletions, this is the place to look.
 4. **Reconciler never splits/merges clusters.** A new crossover that bridges two clusters keeps both clusters separate (per user's stated rule). Full bridge-helix re-evaluation requires the user to re-run cluster autodetect.
-5. **Lattice-neighbor proximity is Manhattan distance ≤ 2 with grid_pos check.** Works for HC and SQ. Doesn't use `crossover_neighbor` (the precise lattice-edge primitive). For routes that generate non-grid helices (linker bridges) we orphan explicitly via report; everything else has been fine.
+5. **Lattice-neighbor proximity now uses canonical frame-aware edges.** The former Manhattan-distance heuristic was replaced; virtual linker and reference-only helices are excluded.
 
 ---
 

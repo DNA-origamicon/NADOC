@@ -17,6 +17,7 @@
  * @param {function} [opts.onStylePreview] — called with (clusterId, {color?, opacity?}) while
  *   the style popover's controls are dragged; renderer-only, no persistence.
  */
+import { showToast } from './toast.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { initClusterStylePopover } from './cluster_style_popover.js'
 import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
@@ -36,6 +37,21 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   const arrow    = document.getElementById('cluster-panel-arrow')
   const body     = document.getElementById('cluster-panel-body')
   if (!listEl || !newBtn || !heading) return {}
+
+  const repairBtn = document.getElementById('cluster-repair-btn')
+  let repairing = false
+  const syncRepair = () => {
+    if (repairBtn) repairBtn.disabled = repairing || !!store.getState().assemblyActive || !store.getState().currentDesign
+  }
+  repairBtn?.addEventListener('click', async () => {
+    if (repairing || store.getState().assemblyActive) return
+    repairing = true; syncRepair()
+    try { await api.clusterUnassignedComponents() }
+    catch (error) { showToast(`Could not cluster unassigned components: ${error.message}`, { severity: 'error' }) }
+    finally { repairing = false; syncRepair() }
+  })
+  store.subscribe(syncRepair)
+  syncRepair()
 
   // ── Cluster visibility state ──────────────────────────────────────────────────
   const _hiddenClusterIds = new Set()

@@ -1872,6 +1872,8 @@ SnapshotOpKind = Literal[
     "aptamer-import",
     "bundle-create",
     "cluster-paste",
+    "circular-pattern",
+    "linear-pattern",
     "extrude-segment",
     "circle-segment",
     "extrude-continuation",

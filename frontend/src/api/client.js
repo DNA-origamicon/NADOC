@@ -3712,6 +3712,26 @@ export const getClusterAvailability = ({ jobId = null, force = false, historyDay
 
 // ── Cluster rigid transforms ──────────────────────────────────────────────────
 
+export async function clusterUnassignedComponents() {
+  return _syncFromDesignResponse(await _request('POST', '/design/cluster-unassigned', {}))
+}
+
+export async function createLinearPattern(body) {
+  const response = await _request('POST', '/design/linear-pattern', {
+    ...body, expected_revision: currentRevisionWatermark(),
+  })
+  if (!response) throw new Error(store.getState().lastError?.message || 'Linear pattern failed')
+  return _syncFromDesignResponse(response)
+}
+
+export async function createCircularPattern(body) {
+  const response = await _request('POST', '/design/circular-pattern', {
+    ...body, expected_revision: currentRevisionWatermark(),
+  })
+  if (!response) throw new Error(store.getState().lastError?.message || 'Circular pattern failed')
+  return _syncFromDesignResponse(response)
+}
+
 export async function createCluster(body) {
   const json = await _request('POST', '/design/cluster', body)
   return _syncFromDesignResponse(json)
