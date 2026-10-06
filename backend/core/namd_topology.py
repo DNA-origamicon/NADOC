@@ -14,6 +14,7 @@ from pathlib import Path
 
 from backend.core.atomistic import Atom, AtomisticModel, build_atomistic_model
 from backend.core.base_keys import atom_base_key
+from backend.core.chain_ids import alphabetic_chain_id
 from backend.core.md_charge import audit_psf
 from backend.core.models import Design
 from backend.core.pdb_export import _chain_char, _cryst1_record, _h36
@@ -194,14 +195,7 @@ def psfgen_dna_segids_for_design(n_strands: int) -> list[str]:
     more than 26 strands, neither decimal nor base-36 encoding of the strand index
     identifies the packaged residue.  Reproduce both ordering steps here.
     """
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-    def chain_id(strand_index: int) -> str:
-        if strand_index < 26:
-            return letters[strand_index]
-        return letters[strand_index // 26 - 1] + letters[strand_index % 26]
-
-    chain_ids = [chain_id(i) for i in range(n_strands)]
+    chain_ids = [alphabetic_chain_id(i) for i in range(n_strands)]
     segid_by_chain = {
         cid: _psfgen_segid(i) for i, cid in enumerate(sorted(chain_ids))
     }

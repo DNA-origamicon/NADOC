@@ -15,6 +15,8 @@ import tempfile
 
 import numpy as np
 
+from backend.core.chain_ids import alphabetic_chain_id
+
 
 _TABLES = OrderedDict()
 
@@ -91,9 +93,8 @@ def _build_tables(topology, coordinate, design):
         raise ValueError('no package residue mapping')
     cm, _ = build_namd_coarse_reference(design, coordinate, segmap, mapping_only=True)
     reference = build_active_design_reference(design)
-    letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     strand_by_chain = {
-        (letters[i] if i < 26 else letters[i // 26 - 1] + letters[i % 26]): s.id
+        alphabetic_chain_id(i): s.id
         for i, s in enumerate(design.strands)
     }
     residues = {}

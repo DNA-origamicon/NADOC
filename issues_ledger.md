@@ -120,6 +120,8 @@ historical only and should move to `issues_ledger_archive.md` during the next ar
 | 9 | **ISSUE-13** Strand-end resize still uses the questioned axis endpoint convention. | geometry | small | ask-first |
 | 10 | **ISSUE-12** `cluster_create` still falls through the generic move/rotate feature-log branch. | functional bug | small | no |
 | 11 | **ISSUE-1** Context-menu consolidation remains a large multi-phase UX program. | UX / debt | large | decisions banked |
+| 12 | **ISSUE-59** Creating an all-helix cluster drops the lattice placement cluster and produces a saved design that cannot reload. | persistence / cluster correctness | triage | no |
+| 13 | **ISSUE-60** Extrusion into fresh cells leaves new helices outside the default placement cluster; moving that cluster moves only the original cells. | geometry / cluster correctness | triage | no |
 | done | ~~**ISSUE-16**~~ ✅ FIXED — all relevant `eigsh()` calls now pass deterministic `_eigsh_v0(...)`; focused verification still owed before archival. | reproducibility | — | — |
 
 ISSUE-8 and ISSUE-11 remain decision-gated. Closed ISSUE-9/14/15/16/17 belong in the archive, not in
@@ -1275,6 +1277,29 @@ sync helper. The tool then closed its preview as though creation had succeeded.
 Circular and linear request wrappers now reject with the recorded backend error,
 so the panel retains its inputs and preview for correction. Covered by
 `frontend/src/api/pattern_requests.test.js` and the linear panel rejection test.
+## ISSUE-59 — All-helix cluster creation leaves a dangling lattice placement reference (2026-10-05, OPEN)
+
+- **Status:** `[ ]` OPEN; observed during the native-tool Benchy benchmark. The saved design was repaired through existing tools; product cluster code is unchanged.
+- **Repro / observed:** Create a square-lattice bundle, continue it with `hb.extrude`, then call `hb.add_cluster(..., helix_ids=all_helix_ids)` and save normally. The resulting Benchy file has 1,157 helices and one new cluster, while `lattice_frames[0].placement_cluster_id` still names the removed default cluster. `Design.from_json(...)` rejects the saved file with `Value error, lattice frame placement cluster is missing`.
+- **Confirmed location:** `backend/api/routes_clusters.py::add_cluster` removes an emptied default cluster from `cluster_transforms`; the observed output retains its ID in `lattice_frames`. No broader behavior is inferred.
+- **Evidence:** [Retained invalid native design](.development-artifacts/benchy_20261005/Benchy_v4_initial_invalid.nadoc), [frame/cluster IDs and native reload error](.development-artifacts/benchy_20261005/cluster_bug_evidence.json).
+- **Benchmark workaround:** Keep the existing placement cluster and rename/patch it through `update_cluster`, then save normally. The corrected file passes native reload; see [final native geometry validation](.development-artifacts/benchy_20261005/native_model_validation.json).
+- **Follow-up:** Pin a minimal create-cluster → save → native-reload regression before changing placement-cluster handling.
+
+## ISSUE-60 — Extruded fresh cells are omitted from default placement-cluster membership (2026-10-05, OPEN)
+
+- **Status:** `[ ]` OPEN; observed during the native-tool Benchy benchmark. Only the benchmark design received a native membership patch; product extrusion/cluster code is unchanged.
+- **Repro / observed:** Create 443 square-lattice cells, then call `hb.extrude(..., extend_inplace=True)` for successive contours containing fresh cells. The completed design has 1,157 helices, but its default placement cluster still contains only the original 443. Moving that cluster by `[-1.649, 0, 0]` nm moves 443 helices and leaves 714 unmoved. Actual occupied-domain geometry then differs from the intended uniformly moved reference by 972 missing and 874 extra sampled cell-slabs.
+- **Evidence:** The final saved file's last `extrude-continuation` post-state still records the 443/1,157 membership before the workaround; [read-only extracted counts and observed movement](.development-artifacts/benchy_20261005/cluster_bug_evidence.json). [Native build log](.development-artifacts/benchy_20261005/build.log) records the contour growth. Entry points to investigate are `backend/api/headless_build.py::extrude` and its native bundle-continuation route; no deeper cause has been established.
+- **Benchmark workaround:** Use native `update_cluster` with `PatchClusterBody(helix_ids=all_1157_ids, commit=True, log=True)`, retaining the intended whole-model Move, then save. [Native domain validation](.development-artifacts/benchy_20261005/native_model_validation.json) now matches all 11,984 measured cell-slabs with zero missing, extra, or off-grid intervals; [occupied-domain renders](.development-artifacts/benchy_20261005/native_model_views.png) preserve the openings.
+- **Follow-up:** Pin a minimal fresh-cell continuation → default-cluster Move regression and verify membership/placement after normal save/reload.
+
+## ISSUE-55 — Native atomistic and print export fail above 702 strands (2026-10-05, FIXED)
+
+- [x] Reproduce the 3,062-strand Benchy failing before surface extraction: `build_atomistic_model` indexes beyond `A`…`Z` while assigning chain 702.
+- [x] Replace the two-letter limit with shared alphabetic chain labels (`A`…`ZZ`, `AAA`…), preserving all existing 702 labels. Generalize PDB single-character cycling and the matching NAMD package/playback encoders.
+- [x] Verify 24 focused chain tests, including a real 3,062-strand atomistic model and legacy semantic component IDs such as `ST0`. Existing NAMD segment-order, streptavidin preparation, and large-design PDB-connectivity compatibility tests also pass. Native Benchy print export now completes.
+- **Scope:** Identity bookkeeping only; no topology, atom placements, phase constants, or surface algorithm changes. See `backend/core/chain_ids.py`, `tests/test_chain_ids.py`, and [native export provenance](.development-artifacts/benchy_20261005/Benchy_v4_candidate.provenance.json).
 
 ## ISSUE-56 — VR Extrude Confirm leaves editing windows open; menu text collides or fades (2026-10-05, FIXED)
 

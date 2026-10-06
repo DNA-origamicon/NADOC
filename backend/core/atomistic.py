@@ -68,6 +68,7 @@ from backend.core.constants import (
     BDNA_MINOR_GROOVE_ANGLE_RAD,
     BDNA_RISE_PER_BP,
 )
+from backend.core.chain_ids import alphabetic_chain_id
 from backend.core.geometry import (
     NucleotidePosition,
     nucleotide_positions,
@@ -2020,14 +2021,11 @@ def build_atomistic_model(
                 extra_base_xover_dst.add((_d.helix_id, _d.start_bp, _d.direction.value))
             _prev_d = _d
 
-    # Build chain_id assignment: one letter per strand, wrapping A-Z then AA-AZ etc.
-    strand_to_chain: dict[str, str] = {}
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    for si, strand in enumerate(design.strands):
-        if si < 26:
-            strand_to_chain[strand.id] = letters[si]
-        else:
-            strand_to_chain[strand.id] = letters[si // 26 - 1] + letters[si % 26]
+    # One stable, unbounded alphabetic chain label per design-order strand.
+    strand_to_chain = {
+        strand.id: alphabetic_chain_id(si)
+        for si, strand in enumerate(design.strands)
+    }
 
     # (helix_id, bp_index, direction_str) → (o3_serial, p_serial) for backbone bonds
     bp_to_serials: dict[tuple[str, int, str], tuple[Optional[int], Optional[int]]] = {}

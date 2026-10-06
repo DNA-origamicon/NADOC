@@ -241,3 +241,7 @@ experiments/exp60_extra_vs_native_photoproducts/results/jobs/*/summary.json
 /experiments/cube_pore_cavity_20260914/**/FFTW_*.txt
 /experiments/cube_pore_cavity_20260914/**/xstFile
 /experiments/graphene_pressure_implementation_20260914/**/*.pdb
+
+# Generated print meshes; retain export code and compact provenance, not geometry.
+*.stl
+*.3mf

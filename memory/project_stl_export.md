@@ -135,6 +135,17 @@ The 3MF spec REQUIRES watertight meshes, so open shells are spec-violating.
   compute_colored_surfaces → export_3mf_parts. `X-NADOC-Coloring` header +
   toast unchanged. `_zip_store` hand-rolled deflate zip (no deps).
 
+## Large-strand-count export repair — 2026-10-05
+
+The 3,062-strand DNA Benchy exposed an atomistic chain-label limit: the old
+two-letter encoder raised `IndexError` at strand index 702, before surface
+construction. `backend/core/chain_ids.py` now supplies shared, unbounded
+alphabetic labels (`A`…`ZZ`, `AAA`…), preserving every existing label. PDB chain
+cycling and NAMD export/playback mappings use the same encoding. This changes
+identity bookkeeping only; geometry, topology, and surface settings are unchanged.
+`tests/test_chain_ids.py` covers the boundaries and a real 3,062-strand atomistic
+build.
+
 ## TODO if revisited
 - Color mappings beyond scaffold/staple-sets (cluster / strand-group / manual
   pick). The staple coloring is map-based on surface adjacency; a different

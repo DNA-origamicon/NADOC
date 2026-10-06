@@ -246,17 +246,16 @@ def _chain_char(chain_id: str) -> str:
     26-51, etc.  We map these back to a stable single character using the
     62-char _CHAIN_CHARS alphabet, cycling if there are > 62 strands.
     """
-    if not chain_id:
+    if not chain_id or (len(chain_id) == 1 and not "A" <= chain_id <= "Z"):
         return "A"
     # Decode the atomistic model's alpha-only encoding to an index
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    if len(chain_id) == 1:
-        idx = letters.index(chain_id) if chain_id in letters else 0
-    else:
-        # Multi-char: first char is the "tens" digit (1-based), second is units
-        hi = letters.index(chain_id[0]) + 1  # 1-based block number
-        lo = letters.index(chain_id[1])
-        idx = hi * 26 + lo
+    from backend.core.chain_ids import alphabetic_chain_index
+
+    # Protein/component exporters also use semantic labels such as ST0. Their
+    # historical PDB identity comes from the first two letters; retain it while
+    # decoding every letter of the DNA builder's alphabetic chain labels.
+    label = chain_id if all("A" <= char <= "Z" for char in chain_id) else chain_id[:2]
+    idx = alphabetic_chain_index(label)
     return _CHAIN_CHARS[idx % len(_CHAIN_CHARS)]
 
 

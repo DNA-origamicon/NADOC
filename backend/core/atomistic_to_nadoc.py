@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from backend.core.chain_ids import alphabetic_chain_id
+
 if TYPE_CHECKING:
     from backend.core.atomistic import AtomisticModel
     from backend.core.models import Design
@@ -226,7 +228,6 @@ def build_namd_coarse_reference(design: "Design", pdb_path, seg2chain: dict[str,
     from backend.core.atomistic import _atomistic_domain_bp_range, _loop_copy_order
     from backend.core.geometry import nucleotide_positions
 
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     helix_map = {h.id: h for h in design.helices}
     copies: dict[str, dict[tuple, int]] = {}
     for hid, helix in helix_map.items():
@@ -238,7 +239,7 @@ def build_namd_coarse_reference(design: "Design", pdb_path, seg2chain: dict[str,
 
     chain_map: ChainMap = {}
     for si, strand in enumerate(design.strands):
-        chain = letters[si] if si < 26 else letters[si // 26 - 1] + letters[si % 26]
+        chain = alphabetic_chain_id(si)
         seq = 0
         for domain in strand.domains:
             for bp in _atomistic_domain_bp_range(domain, strand):

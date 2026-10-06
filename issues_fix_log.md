@@ -330,6 +330,31 @@ coverage exercises the construction-stage transition that exposed the defect.
   panels retain their preview and show the error. Regression coverage:
   `frontend/src/api/pattern_requests.test.js`, `linear_pattern_panel.test.js`.
   No additional main.js logic (linear-tool feature wiring is +2 LOC).
+2026-10-05 — ISSUE-59 / ISSUE-60: OPEN intake from the Benchy native-tool
+benchmark. All-helix cluster creation left a saved lattice frame referring to a
+removed default cluster; fresh-cell extrusion left 714 of 1,157 helices outside
+the placement cluster, so its Move affected only the initial 443. Product code
+was not changed. The benchmark workaround preserves the placement cluster and
+patches its membership through the native cluster API. Corrected native reload
+and occupied-domain validation match all 11,984 reference cell-slabs, with zero
+missing/extra/off-grid intervals. [Observed state and retained failing file](.development-artifacts/benchy_20261005/cluster_bug_evidence.json).
+Regression tests and product fixes remain pending; `main.js` delta 0.
+
+2026-10-05 — ISSUE-55: fixed native print/atomistic export failing at strand
+702. Shared unbounded alphabetic chain labels preserve A…ZZ exactly and agree
+with PDB cycling plus NAMD package/playback maps. All 24 focused chain tests
+pass, including a real 3,062-strand build and legacy semantic component IDs;
+existing NAMD segment-order, streptavidin preparation, and large-design PDB
+connectivity regressions pass. Native 3,062-strand Benchy STL export completes
+in 32.3 s with the initial surface settings. Identity
+bookkeeping only; molecular geometry is unchanged. `main.js` delta 0.
+Final native Benchy export (0.30 nm grid, 0.90 nm probe, 60 mm target) is one
+watertight connected surface: 1,446,424 triangles and zero boundary, nonmanifold,
+degenerate, or inconsistent-winding elements. Final `just test-smart` decision
+FAST: 9,605 passed, 93 skipped, one unrelated existing loop/skip bit-identity
+failure (1.11e-16), reproduced independently against unchanged geometry code.
+Full-suite debt remains deferred; exact output is retained in
+`.development-artifacts/benchy_20261005/test_smart_final.log`.
 
 2026-10-05 — ISSUE-56: Extrude dismissal now follows acceptance of the Confirm
 intent, retaining the asynchronous submission until matching feedback arrives.
