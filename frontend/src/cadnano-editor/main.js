@@ -18,6 +18,7 @@ import { addRecentFile, getRecentFiles, closeSession as apiCloseSession,
          mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem } from '../api/client.js'
 import { openFileBrowser } from '../ui/file_browser.js'
 import { initMenuFlyouts } from '../ui/menu_flyouts.js'
+import { initDesignReadinessHost } from '../ui/design_readiness_host.js'
 import {
   fetchDesign, addHelixAtCell, deleteHelix, reorderHelices, extendHelixBounds,
   scaffoldDomainPaint,
@@ -2557,6 +2558,8 @@ initLigationDebug()
   // Suppress unused-var warning in non-strict modes.
   void flPanel
 }
+
+initDesignReadinessHost({ store: editorStore, mode: 'cadnano' })
 
 // ── Initial load ─────────────────────────────────────────────────────────────
 ;(async () => {

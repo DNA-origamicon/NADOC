@@ -148,6 +148,26 @@ Multiple 2D editor tabs stay in sync automatically — backend is ground truth.
 
 ## Additional Features
 
+### Design readiness
+
+A compact progress ring in the upper-right of the 3D and cadnano path views
+tracks scaffold routing, staple routing, scaffold sequence, oligo sequences and
+design integrity. Hover, focus or click to expand the checklist. Missing steps
+open the existing commands, with their keyboard shortcuts; assembly issues lead
+to the affected part editor. The indicator follows the viewport as sidebars resize.
+
+The ring is red while applicable standard steps are missing, blue with **Sim
+recommended** when they are complete, and hides entirely after a matching completed
+Fine or Production simulation. It also hides while Lighting and Appearance is
+enabled and during image/video capture, returning afterward if steps remain.
+Simulation is optional and excluded from the progress denominator.
+Structural or sequence edits invalidate an earlier simulation;
+display-only edits do not. Job stage metadata and a matching saved design are
+required, so coarse runs, failed runs and unverified remote-only results cannot
+hide the checklist. This is workflow readiness, not a folding-yield or convergence
+certificate. Unpaired scaffold is allowed; native oligo-only structures omit
+inapplicable scaffold steps.
+
 ### Workspace selection and right sidebar
 
 The 3D workspace uses one canonical selection model across pointer gestures, fixed

@@ -783,3 +783,14 @@ acquisition, untouched partners, and persistence after desktop reopen. Automated
 browser and native GL checks are recorded under `.development-artifacts/vr-multiselect*`;
 SteamVR was not running during this implementation, so no physical headset or
 through-lens check is claimed.
+
+## MV-DESIGN-READINESS — PENDING (2026-10-07)
+
+In the 3D view and standalone cadnano pathview, review the upper-right readiness
+ring at the usual window size and over dense geometry. Hover across the gap into
+the checklist, try keyboard focus/Escape and click-to-pin, resize the right sidebar,
+and judge whether the compact indicator and expanded text are unobtrusive and
+legible. On an assembly, open a missing step and check navigation to its owning
+part. Automated unit/API and browser checks cover behavior; hands-on visual
+preference and touch interaction remain for user review. Simulation completion
+is a workflow signal and does not certify scientific convergence or folding yield.

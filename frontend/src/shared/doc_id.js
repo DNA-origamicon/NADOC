@@ -24,6 +24,10 @@ const _isEditor = location.pathname.includes('cadnano-editor')
 //     the URL so child windows (cadnano editor, part editor) inherit it.
 function _resolveDocId() {
   const explicit = _params.get('doc')
+  // Explicit default-document handoffs must share the standalone editor's null
+  // identity (headers, broadcasts and storage keys). Keep the URL sentinel so a
+  // main-app reload takes this branch instead of minting a new sticky document.
+  if (explicit === '__default__') return null
   if (explicit) return explicit
   if (_isEditor) return null
   const SK = 'nadoc:tab-doc'

@@ -316,6 +316,7 @@ import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 import { initRightSidebarTabs } from './ui/right_sidebar_tabs.js'
+import { initDesignReadinessHost } from './ui/design_readiness_host.js'
 import { initViewVolumes } from './scene/view_volumes.js'
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
@@ -7129,6 +7130,8 @@ async function main() {
     store,
     syncBadge: _syncBadge,
   })
+
+  initDesignReadinessHost({ store, api, onRestored: _hideWelcome, onSimulate: () => _leftSidebar?.selectTab('dynamics') })
 
   // ── Run the boot action for a New/Open-spawned tab (?new / ?open) ────────────
   // This tab owns a fresh ?doc=<id>, so the action targets its own document.

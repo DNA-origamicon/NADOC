@@ -1,4 +1,8 @@
 import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
+import { withMediaExport } from '../shared/media_export_activity.js'
+
+export function exportVideo(options) { return withMediaExport(() => captureVideo(options)) }
+export function exportPhotoVideo(options) { return withMediaExport(() => capturePhotoVideo(options)) }
 
 /**
  * Client-side video / GIF export for NADOC animations.
@@ -22,7 +26,7 @@ import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
  *   export bar (see scene/export_progress.js). Every long step reports through this;
  *   `onProgress` remains the per-frame-only callback it always was.
  */
-export async function exportVideo({ animation, renderer, scene, camera, player, options = {}, onProgress, onPhase, signal }) {
+async function captureVideo({ animation, renderer, scene, camera, player, options = {}, onProgress, onPhase, signal }) {
   assertPlacementExportSafe(scene)
   const { format = 'webm', fps: fpsOpt, resolution = 'current' } = options
   const fps = Math.max(1, Math.min(60, fpsOpt ?? animation.fps ?? 30))
@@ -99,7 +103,7 @@ export async function exportVideo({ animation, renderer, scene, camera, player, 
  * @param {function} [opts.onProgress]  — (frac, {frame, frames}) => void
  * @param {AbortSignal} [opts.signal]
  */
-export async function exportPhotoVideo({ animation, player, photoRenderer, width, height, options = {}, onProgress, onPhase, signal }) {
+async function capturePhotoVideo({ animation, player, photoRenderer, width, height, options = {}, onProgress, onPhase, signal }) {
   assertPlacementExportSafe()
   const { format = 'webm', fps: fpsOpt } = options
   const fps = Math.max(1, Math.min(60, fpsOpt ?? animation.fps ?? 30))

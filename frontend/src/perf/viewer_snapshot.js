@@ -1,7 +1,9 @@
+import { withMediaExport } from '../shared/media_export_activity.js'
+
 /** Read the rendered canvas in the same frame, after normal rendering. No extra
  * render pass or preserveDrawingBuffer setting is added to measured rendering. */
 export function snapshotViewer({ canvas, addFrameCallback, removeFrameCallback, inspect, timeoutMs = 5000 }) {
-  return new Promise((resolve, reject) => {
+  return withMediaExport(() => new Promise((resolve, reject) => {
     let settled = false
     const timer = setTimeout(() => finish(new Error('No rendered frame available for snapshot')), timeoutMs)
     function finish(error, value) {
@@ -27,5 +29,5 @@ export function snapshotViewer({ canvas, addFrameCallback, removeFrameCallback, 
       })
     }
     addFrameCallback(frame)
-  })
+  }))
 }
