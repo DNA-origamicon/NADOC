@@ -1,6 +1,6 @@
 ---
 name: measured-atomistic
-description: "MD-measured all-atom nucleotide templates: every heavy atom of BOTH strands measured in one base-pair frame from free NAMD, 21 bp averaged, replacing the 1ZEW templates behind Help ▸ New Positioning. FORWARD and REVERSE measured separately — the pseudo-dyad is a result, not an input."
+description: "MD-measured all-atom nucleotide templates: every heavy atom of BOTH strands measured in one base-pair frame from free NAMD, 21 bp averaged, the sole native Full placement source; legacy positioning is removed. FORWARD and REVERSE measured separately — the pseudo-dyad is a result, not an input."
 metadata:
   node_type: memory
   type: project
@@ -8,42 +8,40 @@ metadata:
 
 # The atomistic templates are measured now, not derived
 
-**Status: NATIVE (2026-08-06).** `build_atomistic_model(measured_positioning=True)` is the DEFAULT,
-so the measured templates are what NADOC draws **and** what it exports to every simulation
-(verified: an exported PDB matches the native build to 5e-5 nm and differs from legacy by up to
-0.38 nm). `Help ▸ New Positioning` is now default-ON and turning it OFF is a *comparison
-affordance* that returns the 1ZEW geometry. Companion to [[project_extra_base_spacing]] and the CG
-half in `backend/core/measured_positioning.py`.
+**Status: canonical native placement only (2026-10-06).** The measured atomistic
+landmarks remain the accepted geometry. The Help positioning toggle, its module,
+the legacy projection function and frozen landmark fallbacks are deleted.
+`measured_positioning=False` is an error, including API requests and caches.
 
-## Current full-representation contract (2026-08-08)
+## Current Full representation contract (2026-10-06)
 
-The full-representation bead is the atomistic **O5'** site. Forward and reverse sites are measured
-independently from the atomistic templates and are not mirrored or reconstructed from one another.
-The historical simulation-facing `MEASURED` placement remains a separate concern; do not use it to
-position full-representation beads.
+`FULL_REP` in `backend/core/measured_positioning.py` derives O5′ bead sites and
+base-ring centroids exclusively from the atomistic template. Missing template data
+is fatal. `native_full_placement.py` projects these landmarks into each nucleotide's
+own transported helical site; it never infers an axis from a bent endpoint chord or
+retains provisional construction bead coordinates when a guard fails.
 
-Base slabs use one renderer-owned placement function, `pairedSlabCenter` in
-`frontend/src/scene/helix_renderer.js`:
+`native_slab_placement.py` derives the accepted slab registration once from the same
+landmarks. It emits `slab_position`, `slab_quaternion` and `placement_source` with each
+record. Full/compact/straight/history responses serialize the same authority.
+Desktop and VR consume these poses; the old renderer-owned `pairedSlabCenter` and
+VR copy are deleted. Updates refresh the full pose, and previews transport its local
+registration. Loop copies retain explicit identities through moves and updates.
 
-- `base_position` and the mate's `base_position` establish their shared axis-normal plane;
-- `base_normal` projected perpendicular to `axis_tangent` establishes slab orientation;
-- the O5' `backbone_position` establishes the outward contact direction;
-- the center moves only perpendicular to the axis until the slab reaches its associated bead.
+Deposited chemical coordinates and physical trajectories are explicitly distinct
+scientific states, never fallbacks for failed native helical placement. Historical
+`MEASURED` denotes the simulation-facing C3′ landmark; it is not a Full-view option.
+Native Full records also carry their transported helical site for explicit oxDNA
+landmark conversion. `resolved_nuc_map` converts tagged O5′ records before building
+physical extra bases or tails; endpoint-chord/radius inference is gone. Untagged
+physical trajectory coordinates are never reprojected as native display sites.
+Importer/lattice phase constants remain locked and unchanged by this consolidation.
 
-The obsolete representation-side slab reconstruction and fixed offsets were removed. Build,
-deformation, restore, and override paths must all use the canonical solver.
-
-`nucleotide_geometry(measured_positioning=...)` still
-defaults False, and the app states the flag explicitly on both endpoints rather than relying on
-either default. Flipping the CG default was tried and reverted: the other CG position paths
-(oxDNA seeding, `positions_for_design`, linker relax, extension tail beads) do not share
-`apply_measured_positioning`, so the default flip put them out of register with each other.
-Making CG native means threading the measured placement through those paths — a separate job,
-now scoped as **TD-27** in [[project_tech_debt]] (Stage 3). Two things that audit found and this
-file did not know: `_positions_for_design` is a **fifth** un-flagged CG path whose output ships as
-`straight_positions_by_helix` in the *same* response as the measured nucleotides, and the coating is
-already partial even with the flag ON — `_emit_arrs` at `design_geometry.py:446`/`:455` passes no
-axis line, and bridges/extension tails bypass `_emit_arrs` entirely.
+The critical regression suites journal failures and require explicit review even
+after a green rerun; runtime errors block molecular rendering. See
+[review policy](../docs/native_placement_review.md). Before/after Manual_Benchy
+images and all 2,526 per-site comparisons are retained under
+`.development-artifacts/bead-slab-20261006/`; the original document is preserved.
 
 ## The inter-helix phase, measured at last (2026-08-06)
 
@@ -187,15 +185,15 @@ Crossover junction nucleotides are relocated by the bridging pass after stamping
 
 ## Wiring
 
-`build_atomistic_model()` (default) → `GET /api/design/atomistic` (defaults true) →
-`atom_surface_display._atomisticUrl()` appends `geometryQuerySuffix`, which now always states the
-mode explicitly because the two endpoints it feeds do **not** default alike. The Help handler
-invalidates the atom cache + refetches. `atomistic_cache` keys on the mode, or a legacy build
-would be served for a native request.
+`build_atomistic_model()` and `GET /api/design/atomistic` use the native template.
+The Help toggle, positioning request suffix/header, and legacy projection are removed.
+Explicit False requests fail before mutation or cache access. `atomistic_cache` keys on
+the canonical placement source version. Desktop and VR consume backend slab centers
+and quaternions; neither reconstructs placement from a partner or remembered offset.
 
 ## Tests that pin this
 
-`tests/test_measured_atomistic.py` (45): bond lengths, chirality signs, planarity, emergent WC,
+`tests/test_measured_atomistic.py`: bond lengths, chirality signs, planarity, emergent WC,
 the dyad as a fitted result, the native default, cell-type independence of the legacy frame, and
 the legacy-local conversion. `tests/test_atomistic_geometry_lock.py` goldens were regenerated —
 approved change, `_PHASE_*` untouched.

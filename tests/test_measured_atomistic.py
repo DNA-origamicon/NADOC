@@ -325,8 +325,8 @@ def test_build_reproduces_the_template_cross_strand_geometry_exactly():
     )
 
 
-def test_both_comparison_states_preserve_native_base_pair_width():
-    """The retired comparison flag cannot restore the collapsed legacy duplex."""
+def test_default_and_explicit_native_preserve_base_pair_width():
+    """Default and explicit native calls preserve the accepted duplex width."""
 
     def median_c1(model):
         nucs = _by_nucleotide(model)
@@ -340,14 +340,14 @@ def test_both_comparison_states_preserve_native_base_pair_width():
         ]
         return float(np.median(vals))
 
-    baseline, candidate = median_c1(_build(False)), median_c1(_build(True))
+    baseline, candidate = median_c1(_build_default()), median_c1(_build(True))
     assert baseline == candidate
     assert 0.99 < baseline < 1.10
 
 
-def test_both_comparison_states_keep_identical_atoms_and_bonds():
-    """Both comparison slots preserve the accepted atoms, positions, and bonds."""
-    baseline, candidate = _build(False), _build(True)
+def test_default_and_explicit_native_keep_identical_atoms_and_bonds():
+    """Default and explicit native calls produce identical atoms and bonds."""
+    baseline, candidate = _build_default(), _build(True)
     assert candidate.bonds == baseline.bonds
     assert [(a.name, a.x, a.y, a.z) for a in candidate.atoms] == [
         (a.name, a.x, a.y, a.z) for a in baseline.atoms
@@ -475,3 +475,10 @@ def test_provenance_travels_with_the_numbers():
     assert prov["span_bp"] == 21
     assert prov["bp_measured"] > 10_000
     assert len(prov["sources"]) >= 3, "pooled from several independent trajectories"
+
+
+def test_removed_atomistic_placement_option_errors():
+    from backend.core.native_full_placement import NativePlacementError
+
+    with pytest.raises(NativePlacementError, match="Legacy bead/slab placement has been removed"):
+        _build(False)

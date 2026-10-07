@@ -1623,7 +1623,7 @@ def _build_nt_arrays(
     from backend.core.design_geometry import _geometry_for_helices
 
     seen_extended: Dict[Tuple[str, int, str], int] = {}
-    for g in _geometry_for_helices(design, None, junction_balance=False):
+    for g in _geometry_for_helices(design, None):
         dk = (g["helix_id"], g["bp_index"], g["direction"])
         k = seen_extended.get(dk, 0)
         seen_extended[dk] = k + 1

@@ -51,6 +51,7 @@ from backend.core.geometry import (
     nucleotide_positions_arrays_extended_right,
 )
 from backend.core.models import Design, Direction
+from backend.physics.native_oxdna import native_full_to_oxdna_geometry
 
 
 # ── Geometry helpers ─────────────────────────────────────────────────────────
@@ -1041,7 +1042,9 @@ def write_configuration(
                normal (:func:`oxdna_native_seed_map`) so designed WC pairs START
                bonded at oxDNA's native duplex width instead of NADOC's wide B-DNA —
                eliminates the startup "collapse"/melt of a relaxation seed.  Off by
-               default so display/reference/export configs keep raw NADOC geometry.
+               default so reference/export configs retain the unseeded calibrated
+               physical convention. Tagged native Full O5′ records are always
+               converted to particle frames; O5′ is never written as a CM.
     """
     resolved_map = resolved_nuc_map(design, geometry)
     if oxdna_native_seed:
@@ -1074,6 +1077,9 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
     Extracted from ``write_configuration`` so the hybrid protein+DNA writer reuses
     the identical DNA geometry resolution.
     """
+    # Convert native chemical landmarks before synthesizing physical inserts,
+    # tails or flexible arcs. All writers and references share this boundary.
+    geometry = native_full_to_oxdna_geometry(design, geometry)
     geo_map: dict[tuple[str, int, str], dict] = {
         (n["helix_id"], n["bp_index"], n["direction"]): n for n in geometry
     }
@@ -1332,105 +1338,17 @@ OXDNA_NATIVE_HBOND_NM: float = 0.4 * OXDNA_LENGTH_UNIT  # HYDR_R0 = 0.34072 nm
 def _oxdna_cm_radius_map(
     design: Design, resolved_map: dict[tuple, dict]
 ) -> dict[tuple, dict]:
-    """Put every backbone bead back on oxDNA's centre-of-mass cylinder.
+    """Compatibility entry for explicit tagged native-to-particle conversion.
 
-    ``nuc_conf_line`` writes ``backbone_position`` straight into the conf as the oxDNA
-    CENTRE OF MASS, and ``HELIX_RADIUS`` is defined as exactly that ("the radius from
-    helix axis to the nucleotide centre of mass ... in the oxDNA model", constants.py).
-    The DISPLAY bead is a different landmark: since TD-27 it is the MD-measured ribose
-    C3' at 0.804 nm.  Feeding the C3' in as a CM pulls every bead 0.196 nm inward, which
-    widens each inter-helix crossover gap by 2 x 0.196 = 0.39 nm and pushes borderline
-    backbone bonds over oxDNA's FENE cliff.  Measured before this conversion existed:
-    on VoltronCore 42 bonds that were comfortably safe under the legacy placement
-    (median 0.77 units) landed at a median of 1.38, over ``FENE_RMAX_UNITS`` = 1.0064,
-    which aborts oxDNA at configuration load.
-
-    ``delta`` in :func:`oxdna_native_seed_map` cannot fix that — it slides CROSS-STRAND
-    along a1, and the crossover gap is a radial, inter-helix quantity.  So the seed
-    boundary restores the radius instead, keeping each bead's azimuth and axial offset.
-
-    NO-OP ON LEGACY GEOMETRY BY CONSTRUCTION: legacy beads already sit at exactly
-    ``HELIX_RADIUS`` from ``deformed_helix_axes`` (every one of VoltronCore's 14,774),
-    so this returns them unchanged and cannot perturb an existing seed.
-
-    Not a full inversion: the measured placement also rotates the bead +24.5 deg in
-    azimuth, which this deliberately keeps.  Restoring that too would just be reverting
-    to the legacy geometry wholesale.  Measured residual (bonds over the cliff, legacy /
-    measured / measured+this): NS_trans_fix 588 / 620 / 535, VoltronCore 538 / 580 / 551,
-    U6hb 170 / 211 / 210, 6hb_test 2 / 2 / 2, 26hb_platform_v3 0 / 0 / 0.  Skip-dense
-    designs (U6hb) keep most of their regression — see TD-27 Stage 3.
+    No radius detection or axis fitting is permitted. Already physical maps,
+    including authored folds, retain their coordinates and object identity.
     """
-    from backend.core.constants import HELIX_RADIUS
-    from backend.core.deformation import deformed_helix_axes
-    from backend.core.measured_positioning import FULL_REP, MEASURED
-
-    # Recognise both the historical C3' display sites and the native full-rep O5' sites.
-    # Only beads AT one of these are converted — see below.
-    _MEASURED_CM_RADII = (
-        MEASURED.backbone_fwd.radius_nm,
-        MEASURED.backbone_rev.radius_nm,
-        FULL_REP.backbone_fwd.radius_nm,
-        FULL_REP.backbone_rev.radius_nm,
-    )
-    _MEASURED_R_TOL = 1e-6
-
-    axes: dict[str, tuple] = {}
-    for a in deformed_helix_axes(design):
-        start = np.asarray(a["start"], dtype=float)
-        vec = np.asarray(a["end"], dtype=float) - start
-        n = float(np.linalg.norm(vec))
-        if n > 1e-12:
-            axes[a["helix_id"]] = (start, vec / n)
-    if not axes:
+    converted = native_full_to_oxdna_geometry(design, list(resolved_map.values()))
+    if len(converted) != len(resolved_map):
+        raise ValueError("A resolved oxDNA map contains non-DNA labels")
+    if all(a is b for a, b in zip(converted, resolved_map.values(), strict=True)):
         return resolved_map
-
-    shift_of: dict[tuple, np.ndarray] = {}
-    out: dict[tuple, dict] = {}
-    for key, nuc in resolved_map.items():
-        entry = axes.get(key[0]) if isinstance(key, tuple) and key else None
-        if entry is None:  # inserts, tails, __lnk__ bridges
-            continue
-        origin, tangent = entry
-        pos = np.asarray(nuc["backbone_position"], dtype=float)
-        d = pos - origin
-        axial = float(d @ tangent)
-        radial = d - axial * tangent
-        r = float(np.linalg.norm(radial))
-        # Convert ONLY beads sitting at a MEASURED backbone radius.  "Anything not at
-        # HELIX_RADIUS" is the wrong test and was a real bug: a bead can be legitimately
-        # off the ideal cylinder without being measured — folded ssDNA seeds, relaxed
-        # overrides, flexible segments — and snapping those onto the cylinder destroys
-        # the very fold the caller built (caught by
-        # tests/test_cg_seed_ssdna_collapse.py, whose collapse fixture stopped
-        # reproducing because its folded beads were being straightened).
-        if r < 1e-9 or not any(
-            abs(r - m) < _MEASURED_R_TOL for m in _MEASURED_CM_RADII
-        ):
-            continue
-        shift_of[key] = (origin + axial * tangent + (radial / r) * HELIX_RADIUS) - pos
-    if not shift_of:
-        return resolved_map
-
-    # A tail bead has no helix axis of its own, so it must be translated RIGIDLY WITH
-    # ITS ANCHOR — the same rule oxdna_native_seed_map's delta shift already follows,
-    # and for the same reason: moving the anchor while leaving the tail behind snaps the
-    # anchor->tail backbone bond straight over the FENE cliff.
-    for bead_key, anchor_key, _end in extension_beads(design):
-        if bead_key in resolved_map and anchor_key in shift_of:
-            shift_of[bead_key] = shift_of[anchor_key]
-
-    for key, nuc in resolved_map.items():
-        shift = shift_of.get(key)
-        out[key] = (
-            nuc
-            if shift is None
-            else {
-                **nuc,
-                "backbone_position": np.asarray(nuc["backbone_position"], dtype=float)
-                + shift,
-            }
-        )
-    return out
+    return dict(zip(resolved_map, converted, strict=True))
 
 
 def oxdna_native_seed_map(

@@ -203,6 +203,9 @@ experiments/*/results/longrun_result.json
 # scripts/test_guard.sh exclusive-run lock (mkdir dir holding pid+label). Machine-local.
 .nadoc-test.lock/
 
+# Persistent native Full geometry incident/reviewer ledger; never cleared by tests.
+/.native-placement-review/
+
 # Test-dedicated session window (scripts/test_session.sh) — the TTY-only unlock for the
 # slow suites. Machine-local and short-lived; never synced.
 .nadoc-test-session

@@ -1,35 +1,14 @@
-/**
- * Strand-animation RENDERER — draws a strand-list (see model.js) into a THREE
- * scene in NADOC's ball-and-slab style, decoupled from the page/panel/camera.
- *
- * This is the second drop-in piece: a host (this page, or the main animation
- * toolset) calls `createStrandRenderer(scene)` once, then `update(strands)`
- * each frame/edit with the output of `buildStrandGeometry(params, phi)`. It
- * owns two InstancedMeshes (backbone balls + base slabs, packed strand after
- * strand) and a pooled THREE.Line per strand for the backbone connector. It
- * adds/removes only its own objects to the given `scene`, grows buffers as
- * needed, and never touches DOM, params, or the camera.
- *
- * Bead/slab dimensions + slab orientation/offset are copied verbatim from
- * scene/helix_renderer.js so the look matches the main 3D view (kept local so
- * this stays dependency-light; no import of that 4k-line module).
- */
+/** Render only complete backend-authorized poses, including transient rigid transport. */
 
 import * as THREE from 'three'
 import { ROLE_COLOR } from './model.js'
+import { placementIntegrityFailure, validateNativePlacement } from '../viewer/native_placement.js'
 
-// ── synthetic animation ball-and-slab constants ──────────────────────────────
+// Mesh dimensions affect shape only; every center and rotation comes from a pose.
 const BEAD_RADIUS = 0.10
-const HELIX_RADIUS = 1.0
-const SLAB = { length: 0.30, width: 0.06, thickness: 0.70, distance: 0.55 }
+const SLAB = { length: 0.30, width: 0.06, thickness: 0.70 }
 const GEO_SPHERE = new THREE.SphereGeometry(BEAD_RADIUS, 10, 8)
 const GEO_BOX = new THREE.BoxGeometry(1, 1, 1)
-
-function slabQuaternion(bnDir, tanDir, out) {
-  const tangential = new THREE.Vector3().crossVectors(tanDir, bnDir).normalize()
-  const m = new THREE.Matrix4().makeBasis(tangential, tanDir, bnDir)
-  return out.setFromRotationMatrix(m)
-}
 
 /**
  * @param {THREE.Object3D} scene  scene or group to add the meshes/lines to
@@ -45,8 +24,6 @@ export function createStrandRenderer(scene, { roleColor = ROLE_COLOR, lineOpacit
 
   // Reusable temporaries — no per-frame allocation.
   const _v = new THREE.Vector3()
-  const _tan = new THREE.Vector3()
-  const _bn = new THREE.Vector3()
   const _q = new THREE.Quaternion()
   const _m = new THREE.Matrix4()
   const _ID = new THREE.Quaternion()
@@ -89,14 +66,11 @@ export function createStrandRenderer(scene, { roleColor = ROLE_COLOR, lineOpacit
     }
   }
 
-  function _writeInstance(idx, pos, tan, bn, o, colorHex) {
-    _v.set(pos[o], pos[o + 1], pos[o + 2])
+  function _writeInstance(idx, nucleotide, colorHex) {
+    _v.fromArray(nucleotide.backbone_position)
     _m.compose(_v, _ID, _scaleBead)
     iBeads.setMatrixAt(idx, _m); iBeads.setColorAt(idx, _color.setHex(colorHex))
-    _tan.set(tan[o], tan[o + 1], tan[o + 2]); _bn.set(bn[o], bn[o + 1], bn[o + 2])
-    slabQuaternion(_bn, _tan, _q)
-    // Animation-model convention only; canonical duplex slabs use pairedSlabCenter.
-    _v.addScaledVector(_bn, HELIX_RADIUS - SLAB.distance)
+    _v.fromArray(nucleotide.slab_position); _q.fromArray(nucleotide.slab_quaternion)
     _m.compose(_v, _q, _scaleSlab)
     iSlabs.setMatrixAt(idx, _m); iSlabs.setColorAt(idx, _color.setHex(colorHex))
   }
@@ -104,19 +78,29 @@ export function createStrandRenderer(scene, { roleColor = ROLE_COLOR, lineOpacit
   /** Draw the given strand list. Safe to call every frame. */
   function update(strands) {
     let total = 0, maxLen = 0
-    for (const st of strands) { const c = st.pos.length / 3; total += c; if (c > maxLen) maxLen = c }
+    for (const st of strands) {
+      if (!Array.isArray(st.nucleotides)) placementIntegrityFailure(null, 'animation_nucleotides', null,
+        'Strand animation requires complete backend-authorized poses')
+      for (const nucleotide of st.nucleotides) {
+        validateNativePlacement(nucleotide)
+        if (!nucleotide.slab_position) placementIntegrityFailure(nucleotide, 'slab_position', null,
+          'This animation requires an authoritative slab pose')
+      }
+      const c = st.nucleotides.length; total += c; if (c > maxLen) maxLen = c
+    }
     _ensureInstanced(total)
     _ensureLines(strands.length, maxLen)
 
     let base = 0
     for (let s = 0; s < strands.length; s++) {
       const st = strands[s]
-      const cnt = st.pos.length / 3
+      const cnt = st.nucleotides.length
       const col = roleColor[st.role] ?? 0xffffff
-      for (let i = 0; i < cnt; i++) _writeInstance(base + i, st.pos, st.tan, st.bn, i * 3, col)
+      for (let i = 0; i < cnt; i++) _writeInstance(base + i, st.nucleotides[i], col)
       const ln = lines[s]
       const lp = ln.geometry.getAttribute('position')
-      lp.array.set(st.pos); lp.needsUpdate = true
+      for (let i = 0; i < cnt; i++) lp.array.set(st.nucleotides[i].backbone_position, i * 3)
+      lp.needsUpdate = true
       ln.geometry.setDrawRange(0, cnt)
       ln.material.color.setHex(col)
       ln.visible = true

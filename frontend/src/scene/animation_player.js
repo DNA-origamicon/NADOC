@@ -1,3 +1,5 @@
+import { setNativePoseMap } from '../viewer/native_placement.js'
+import { expandCompactNucleotides } from '../viewer/geometry_codec.js'
 /**
  * Animation player — drives camera and cluster-config state through a sequence
  * of AnimationKeyframes.
@@ -375,36 +377,14 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     const bnMap     = new Map()
     const strandSet = new Set()
     const helixSet  = new Set()
-    const compact = geo?.nucleotides_compact
-    if (compact) {
-      for (const helixId of Object.keys(compact)) {
-        const byDir = compact[helixId]
-        for (const dir of Object.keys(byDir)) {
-          const b = byDir[dir]
-          if (!b || !Array.isArray(b.bp)) continue
-          const M = b.bp.length
-          for (let i = 0; i < M; i++) {
-            const key = `${helixId}:${b.bp[i]}:${dir}`
-            const bb  = b.bb[i]
-            posMap.set(key, new THREE.Vector3(bb[0], bb[1], bb[2]))
-            const bn = b.bn?.[i]
-            if (bn) bnMap.set(key, new THREE.Vector3(bn[0], bn[1], bn[2]))
-            const sid = b.sid?.[i]
-            if (sid) strandSet.add(sid)
-          }
-          helixSet.add(helixId)
-        }
-      }
-    } else if (Array.isArray(geo?.nucleotides)) {
-      // Legacy dict-list path — kept for safety in case some endpoint still
-      // emits the old format.
-      for (const nuc of geo.nucleotides) {
-        const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
-        posMap.set(key, new THREE.Vector3(...nuc.backbone_position))
-        if (nuc.base_normal) bnMap.set(key, new THREE.Vector3(...nuc.base_normal))
-        if (nuc.strand_id)   strandSet.add(nuc.strand_id)
-        if (nuc.helix_id)    helixSet.add(nuc.helix_id)
-      }
+    const nucleotides = geo?.nucleotides_compact
+      ? expandCompactNucleotides(geo.nucleotides_compact) : (geo?.nucleotides ?? [])
+    for (const nuc of nucleotides) {
+      const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+      setNativePoseMap(posMap, new THREE.Vector3(...nuc.backbone_position), nuc)
+      if (nuc.base_normal) bnMap.set(key, new THREE.Vector3(...nuc.base_normal))
+      if (nuc.strand_id) strandSet.add(nuc.strand_id)
+      if (nuc.helix_id) helixSet.add(nuc.helix_id)
     }
     const axesMap = new Map()
     for (const ax of geo?.helix_axes ?? []) {
@@ -480,7 +460,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
               }
               _tick()
             })
-            .catch(err => { if (err?.name !== 'AbortError') _tick() })
+            .catch(err => {
+              if (err?.code === 'NATIVE_PLACEMENT_INTEGRITY') throw err
+              if (err?.name !== 'AbortError') _tick()
+            })
         )
         if (onFetchAtomisticBatch && atomisticActive) {
           tasks.push(
@@ -491,7 +474,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
                 }
                 _tick()
               })
-              .catch(err => { if (err?.name !== 'AbortError') _tick() })
+              .catch(err => {
+              if (err?.code === 'NATIVE_PLACEMENT_INTEGRITY') throw err
+              if (err?.name !== 'AbortError') _tick()
+            })
           )
         }
         if (onFetchSurfaceBatch && surfaceActive) {
@@ -503,7 +489,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
                 }
                 _tick()
               })
-              .catch(err => { if (err?.name !== 'AbortError') _tick() })
+              .catch(err => {
+              if (err?.code === 'NATIVE_PLACEMENT_INTEGRITY') throw err
+              if (err?.name !== 'AbortError') _tick()
+            })
           )
         }
       }

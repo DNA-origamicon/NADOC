@@ -85,16 +85,13 @@ def constrained_nanoparticle_move(design: Design, nanoparticle_id: str, version,
     old_pose = particle.pose.to_array()
     cluster = duplex_cluster_for(design, version.overhang_id)
     flag = "is_five_prime" if conjugation.attach_end == "5p" else "is_three_prime"
-    if record.backbone_attachment_local_nm is not None:
-        local_joint = np.array([*record.backbone_attachment_local_nm, 1.0], dtype=float)
-    else:
-        # Legacy NADOC files predate the persisted exact helical joint.  Match
-        # the browser's radial fallback exactly so Apply cannot jump relative
-        # to its preview; the field is populated on the next Apply/rebind.
-        local_joint = np.array([
-            *(np.asarray(record.site_local, dtype=float)
-              * (particle.diameter_nm / 2.0 + conjugation.spacer_nm)), 1.0
-        ])
+    from backend.core.native_full_placement import NativePlacementError
+    attachment = record.backbone_attachment_local_nm
+    if attachment is None or len(attachment) != 3 or not np.all(np.isfinite(attachment)):
+        raise NativePlacementError("Nanoparticle movement requires its exact saved native backbone attachment; reapply the connection.",
+            details={"nanoparticle_id": nanoparticle_id, "strand_id": record.strand_id,
+                     "field": "backbone_attachment_local_nm", "actual": attachment})
+    local_joint = np.array([*attachment, 1.0], dtype=float)
     body_joint = (old_pose @ local_joint)[:3]
     handle_nuc = next((n for n in geometry if n.get("strand_id") == record.strand_id
                        and n.get(flag)), None)

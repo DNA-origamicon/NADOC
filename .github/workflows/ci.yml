@@ -41,11 +41,43 @@ jobs:
       - name: Lint
         run: uv run ruff check backend/ tests/
 
+      - name: Restore native placement review ledger
+        uses: actions/cache/restore@v4
+        with:
+          path: .native-placement-review
+          key: native-placement-review-v1-backend-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: native-placement-review-v1-backend-${{ github.ref }}-
+
+      - name: Apply explicit native placement review acknowledgements
+        run: python3 -m tools.native_placement_audit apply-reviews
+
       # Deselect `slow` (runs GROMACS energy-minimisation) and `integration`
       # (needs external files at /tmp) — neither is available on a CI runner.
       # Tests for conda-only deps (openmm) skip gracefully on their own.
       - name: Test
         run: uv run pytest tests/ -m "not slow and not integration" -q
+
+      - name: Require completed native placement review
+        if: always()
+        run: |
+          python3 -m tools.native_placement_audit apply-reviews
+          python3 -m tools.native_placement_audit check
+
+      - name: Retain native placement incident reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-placement-review-backend-${{ github.run_attempt }}
+          path: .native-placement-review
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+      - name: Preserve native placement review latch across reruns
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .native-placement-review
+          key: native-placement-review-v1-backend-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   frontend:
     name: Frontend (vitest)
@@ -64,8 +96,40 @@ jobs:
         run: npm ci
         working-directory: frontend
 
+      - name: Restore native placement review ledger
+        uses: actions/cache/restore@v4
+        with:
+          path: .native-placement-review
+          key: native-placement-review-v1-frontend-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: native-placement-review-v1-frontend-${{ github.ref }}-
+
+      - name: Apply explicit native placement review acknowledgements
+        run: python3 -m tools.native_placement_audit apply-reviews
+
       # Unit tests only — Playwright e2e/smoke is too slow for the gate and
       # needs running servers + browsers (kept as the local commit gate).
       - name: Test
         run: npm test
         working-directory: frontend
+
+      - name: Require completed native placement review
+        if: always()
+        run: |
+          python3 -m tools.native_placement_audit apply-reviews
+          python3 -m tools.native_placement_audit check
+
+      - name: Retain native placement incident reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-placement-review-frontend-${{ github.run_attempt }}
+          path: .native-placement-review
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+      - name: Preserve native placement review latch across reruns
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .native-placement-review
+          key: native-placement-review-v1-frontend-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}

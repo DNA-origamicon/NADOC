@@ -384,7 +384,7 @@ def test_linker_complement_phase_matches_tilted_overhang():
     on its own (``_frame_from_helix_axis`` is not rotation-equivariant;
     ``get_linker_geometry`` corrects it with a phase_offset δ)."""
     import math as _math
-    from backend.core.geometry import nucleotide_positions_arrays
+    from backend.core.design_geometry import native_full_arrays_for_helix
     from backend.core.assembly_linker import namespaced_helix_id
     from backend.core.lattice import _opposite_direction
 
@@ -416,7 +416,7 @@ def test_linker_complement_phase_matches_tilted_overhang():
     comp_dir_int = (
         0 if _opposite_direction(oh_dom.direction) == Direction.FORWARD else 1
     )
-    arrs = nucleotide_positions_arrays(d_b.find_helix(oh_dom.helix_id))
+    arrs = native_full_arrays_for_helix(d_b.find_helix(oh_dom.helix_id), d_b)
     T = np.array(t_b.values).reshape(4, 4)
     expected = {
         int(arrs["bp_indices"][i]): (T @ np.append(arrs["positions"][i], 1.0))[:3]

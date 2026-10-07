@@ -19,6 +19,8 @@ def publish_scene(body):
         session = vr._read_state()
         if not session or session.get('doc_id') != get_current_doc():
             raise HTTPException(409, detail='VR session belongs to a different document or is unavailable')
+        from backend.api.routes_placement_integrity import require_native_placement_review_clear
+        require_native_placement_review_clear(event_path=session['event_path'])
         design, revision = design_state.get_design_with_revision()
         if design is None or design.id != body.expected_design_id or revision != body.expected_revision:
             raise HTTPException(409, detail='Design changed before scene refresh')
@@ -38,6 +40,7 @@ def publish_scene(body):
             if current is None or current.id != body.expected_design_id or current_revision != revision:
                 raise HTTPException(409, detail='Design changed during scene refresh')
             previous = manifest.read_text().split()[-1] if manifest.exists() else None
+            require_native_placement_review_clear(event_path=session['event_path'])
             os.replace(source, destination)
             pending.write_text(f'NADOCVR_SCENE 1 {revision} {destination}\n')
             pending.chmod(0o600)
@@ -61,6 +64,7 @@ def refresh_scene(body: VRSceneRefreshRequest, request: Request):
 
 def cleanup_scene_refresh(event_path):
     event = Path(event_path)
+    Path(str(event) + '.placement-error').unlink(missing_ok=True)
     Path(str(event) + '.scene').unlink(missing_ok=True)
     Path(str(event) + '.scene.next').unlink(missing_ok=True)
     for candidate in event.parent.glob(event.name + '.scene-*'):

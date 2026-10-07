@@ -43,6 +43,9 @@ from backend.core.deformation import (
     deformed_nucleotide_arrays,
     effective_helix_for_geometry,
 )
+from backend.core.native_full_placement import (
+    SOURCE, NativePlacementError, place_native_full, require_native_full_option,
+)
 from backend.core.constants import (
     ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG,
     FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG,
@@ -75,7 +78,7 @@ def apply_nucleotide_transforms_to_geometry(nucleotides: list[dict], design: Des
     for nuc in nucleotides:
         key = (
             "base", nuc.get("helix_id"), nuc.get("bp_index"),
-            nuc.get("direction"), int(nuc.get("copy", 0) or 0),
+            nuc.get("direction"), int(nuc.get("copy_k", nuc.get("copy", 0)) or 0),
         )
         transform = transforms.get(key)
         if transform is None:
@@ -91,27 +94,49 @@ def apply_nucleotide_transforms_to_geometry(nucleotides: list[dict], design: Des
             parts = rotation, np.asarray(transform.pivot), np.asarray(transform.translation)
             matrices[transform.id] = parts
         rotation, pivot, translation = parts
-        for field in ("backbone_position", "base_position"):
+        if nuc.get("helical_site") is not None:
+            site = dict(nuc["helical_site"])
+            site["axis_point"] = (pivot + rotation @ (np.asarray(site["axis_point"]) - pivot) + translation).tolist()
+            site["radial_hat"] = (rotation @ np.asarray(site["radial_hat"])).tolist()
+            nuc["helical_site"] = site
+        for field in ("backbone_position", "base_position", "slab_position"):
             if nuc.get(field) is not None:
                 p = np.asarray(nuc[field], dtype=float)
                 nuc[field] = (pivot + rotation @ (p - pivot) + translation).tolist()
         for field in ("base_normal", "axis_tangent"):
             if nuc.get(field) is not None:
                 nuc[field] = (rotation @ np.asarray(nuc[field], dtype=float)).tolist()
+        if nuc.get("slab_quaternion") is not None:
+            from scipy.spatial.transform import Rotation
+
+            try:
+                quaternion = np.asarray(nuc["slab_quaternion"], dtype=float)
+            except (TypeError, ValueError, OverflowError) as error:
+                raise NativePlacementError("Cannot transform a nonnumeric canonical slab quaternion.",
+                    details={"identity": key, "field": "slab_quaternion",
+                             "actual": nuc["slab_quaternion"]}) from error
+            if (quaternion.shape != (4,) or not np.all(np.isfinite(quaternion))
+                    or abs(np.linalg.norm(quaternion) - 1.0) > 1e-6):
+                raise NativePlacementError("Cannot transform an invalid canonical slab quaternion.")
+            nuc["slab_quaternion"] = Rotation.from_matrix(
+                rotation @ Rotation.from_quat(quaternion).as_matrix()
+            ).as_quat().tolist()
         matched.add(transform.id)
     return matched
 
 
 def full_rep_balance_roll_rad(design: Design) -> float:
-    """Display-only roll that equalises the two arcs of each i:i+1 DX junction.
+    """The accepted lattice-dependent roll of the native Full nucleotide frame.
 
     Returns the angle every helix is rotated about its own axis by, for the FULL
     (coarse-grained) representation only: 0 on honeycomb, which already draws its
     junctions symmetrically, and +13.125° on square, which without it draws one arc of
-    every pair at 1.126 nm and the other at 0.286 nm.  Provenance, the measurement and
-    the firewall rule are on ``constants.FULL_REP_BALANCE_ROLL_*``.
+    every pair at 1.126 nm and the other at 0.286 nm under the old construction
+    projection. Provenance is on ``constants.FULL_REP_BALANCE_ROLL_*``.
 
-    Never call this from a path that feeds a simulation, an export or a pose fitter.
+    Every native Full caller, including pose fitting, uses this same frame.
+    Simulation-specific chemical landmarks must be converted at the named
+    simulation boundary; disabling this roll is not a placement option.
     """
     from backend.core.models import LatticeType
 
@@ -121,6 +146,61 @@ def full_rep_balance_roll_rad(design: Design) -> float:
         else FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG
     )
     return math.radians(deg)
+
+
+def native_full_phase_roll_rad(design: Design) -> float:
+    """Canonical phase convention used by native Full and its anchor readers."""
+    return full_rep_balance_roll_rad(design) - math.radians(ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG)
+
+
+def native_full_arrays_for_helix(
+    helix, design: Design, *, compact_skips=False, apply_overhang_pose=True,
+) -> dict:
+    """The shared canonical per-helix preparation, including unoccupied sites.
+
+    Prospective linker anchors need an unoccupied complementary site before
+    topology is created. They must consume this same authority as Full; raw
+    construction beads must never stand in for those anchors.
+    """
+    arrs = deformed_nucleotide_arrays(
+        helix, design, compact_skips=compact_skips,
+        phase_roll_rad=native_full_phase_roll_rad(design))
+    if effective_helix_for_geometry(helix, design).native_residues:
+        arrs = {**arrs, "placement_source": "authored-residue-c1-v1"}
+    else:
+        arrs = place_native_full(arrs)
+    return apply_overhang_rotation_if_needed(arrs, helix, design) if apply_overhang_pose else arrs
+
+
+def native_full_nucleotide_at(helix, design: Design, bp: int, direction: Direction) -> dict | None:
+    """Resolve a prospective anchor through the same native placement and pose.
+
+    Unoccupied complementary sites are needed while linker topology is built.
+    This includes a persisted per-nucleotide override, just as Full emission
+    does before deriving its bridge from the live anchor records.
+    """
+    arrs = native_full_arrays_for_helix(helix, design)
+    matches = np.flatnonzero((arrs["bp_indices"] == bp) &
+                            (arrs["directions"] == (direction == Direction.REVERSE)))
+    if not len(matches):
+        return None
+    i = int(matches[0])
+    record = {"helix_id": helix.id, "bp_index": int(bp), "direction": direction.value,
+              "copy_k": 0, "placement_source": arrs["placement_source"],
+              "backbone_position": arrs["positions"][i].tolist(),
+              "base_position": arrs["base_positions"][i].tolist(),
+              "base_normal": arrs["base_normals"][i].tolist(),
+              "axis_tangent": arrs["axis_tangents"][i].tolist()}
+    if arrs["placement_source"] == SOURCE:
+        record["helical_site"] = {
+            "axis_point": arrs["axis_points"][i].tolist(),
+            "radial_hat": arrs["radial_hats"][i].tolist(),
+            "azimuth_rad": float(arrs["azimuths"][i]),
+            "groove_offset_rad": float(arrs["azimuths"][i // 2 * 2 + 1] - arrs["azimuths"][i // 2 * 2]),
+            "phase_roll_rad": native_full_phase_roll_rad(design),
+        }
+    apply_nucleotide_transforms_to_geometry([record], design)
+    return record
 
 
 def _rolled(helix, roll_rad: float):
@@ -396,6 +476,7 @@ def _strand_extension_geometry(
                 "domain_index": domain_index,
                 "overhang_id": None,
                 "extension_id": ext.id,
+                "placement_source": "chemical-modification-v1" if is_mod else "native-full-extension-v1",
                 "nucleobase": base_char,
                 "is_modification": is_mod,
                 "modification": mod_name,
@@ -418,8 +499,8 @@ def _geometry_for_helices(
     compact_skips: bool = False,
     *,
     extension_ids: frozenset[str] | None = None,
-    measured_positioning: bool = False,
-    junction_balance: bool = False,
+    measured_positioning: bool = True,
+    junction_balance: bool = True,
     helix_axes: list[dict] | None = None,
 ) -> list[dict]:
     """Compute nucleotide geometry for *design*.
@@ -432,11 +513,10 @@ def _geometry_for_helices(
     include the owning strands' terminal anchor helices in *helix_ids* so the
     required nucleotide frames are available in ``nuc_pos_map``.
 
-    *junction_balance* rolls every helix about its own axis so the two arcs of each
-    i:i+1 DX junction come out equal (see :func:`full_rep_balance_roll_rad`).  DISPLAY
-    ONLY — pass it from the render feeds and from nowhere else; the default False is what
-    keeps the oxDNA/LAMMPS/mrDNA seeds, the exporters, the FEM node placers and the pose
-    fitters on the unrolled geometric layer.
+    The accepted lattice-dependent roll is part of the canonical native frame.
+    Retired ``measured_positioning=False`` and ``junction_balance=False`` requests
+    raise errors; neither is an alternative geometry. Explicitly different
+    simulation landmarks require conversion at their named chemical boundary.
 
     *include_linker_helices*: per-design rendering skips ``__lnk__`` virtual
     bridge helices and emits their bridge nucs via ``_emit_bridge_nucs`` (which
@@ -449,13 +529,10 @@ def _geometry_for_helices(
 
     full_mode = helix_ids is None
     nuc_info = _strand_nucleotide_info(design, helix_ids)
-    roll = full_rep_balance_roll_rad(design) if junction_balance else 0.0
-    if measured_positioning:
-        # The measured landmark sites already contain the atomistic template's base
-        # phase.  Apply the remaining template-balance roll here so the full and
-        # atomistic representations are sibling projections of the same physical
-        # duplex frame, independent of lattice-cell direction.
-        roll -= math.radians(ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG)
+    if junction_balance is not True:
+        raise NativePlacementError("Unbalanced native Full placement has been removed; junction_balance must be True.")
+    roll = native_full_phase_roll_rad(design)
+    require_native_full_option(measured_positioning)
 
     # Only nucleotide tails replace the terminal DNA nucleotide. A modification
     # remains outside the DNA walk and must not hide its attachment endpoint.
@@ -493,39 +570,27 @@ def _geometry_for_helices(
             if hid not in max_domain_bp or hi > max_domain_bp[hid]:
                 max_domain_bp[hid] = hi
 
-    def _emit_arrs(
-        arrs: dict,
-        helix_id: str,
-        axis_line: "tuple | None" = None,
-    ) -> None:
-        """Append geometry dicts from a nucleotide arrays block."""
+    def _emit_arrs(arrs: dict, helix_id: str) -> None:
+        """Serialize an already-authoritative nucleotide arrays block."""
         M = len(arrs["bp_indices"])
         if M == 0:
             return
-        if measured_positioning and axis_line is not None:
-            # Display-only re-placement: the backbone bead onto the MD-measured ribose
-            # O5' and the base bead onto its base-ring centroid.  Applied here, at the
-            # serialiser, so the geometric layer itself is untouched and every other
-            # consumer of nucleotide_positions (MD seeds, exports, crossover solving)
-            # keeps the legacy placement.
-            from backend.core.measured_positioning import apply_measured_positioning
-            from backend.core.constants import HELIX_RADIUS
-
-            arrs = apply_measured_positioning(
-                arrs,
-                axis_origin=axis_line[0],
-                axis_hat=axis_line[1],
-                legacy_radius=HELIX_RADIUS,
-            )
+        if not arrs.get("placement_source"):
+            raise NativePlacementError(f"Unplaced nucleotide arrays on helix {helix_id}.")
         bp_list = arrs["bp_indices"].tolist()
         dir_arr = arrs["directions"]
         pos_list = arrs["positions"].tolist()
         base_list = arrs["base_positions"].tolist()
         bn_list = arrs["base_normals"].tolist()
         at_list = arrs["axis_tangents"].tolist()
+        sites = arrs["placement_source"] == SOURCE
+        copies: dict[tuple[int, Direction], int] = {}
         for i in range(M):
             bp = bp_list[i]
             d_enum = _dir_enums[dir_arr[i]]
+            copy_key = (bp, d_enum)
+            copy_k = copies.get(copy_key, 0)
+            copies[copy_key] = copy_k + 1
             key = (helix_id, bp, d_enum)
             if key in anchor_keys:
                 nuc_pos_map[key] = SimpleNamespace(
@@ -550,74 +615,31 @@ def _geometry_for_helices(
                     "helix_id": helix_id,
                     "bp_index": bp,
                     "direction": d_enum.value,
+                    "copy_k": copy_k,
                     "backbone_position": pos_list[i],
                     "base_position": base_list[i],
                     "base_normal": bn_list[i],
                     "axis_tangent": at_list[i],
+                    "placement_source": arrs["placement_source"],
+                    **({"helical_site": {
+                        "axis_point": arrs["axis_points"][i].tolist(),
+                        "radial_hat": arrs["radial_hats"][i].tolist(),
+                        "azimuth_rad": float(arrs["azimuths"][i]),
+                        "groove_offset_rad": float(arrs["azimuths"][i // 2 * 2 + 1] - arrs["azimuths"][i // 2 * 2]),
+                        "phase_roll_rad": roll,
+                    }} if sites else {}),
                     **sinfo,
                 }
             )
 
-    # Centrelines for the measured re-placement, which needs each base pair's REAL axis:
-    # its two beads admit two mirror-image axis candidates 0.52 nm apart and nothing in
-    # the arrays distinguishes them (see measured_positioning).
-    #
-    # It must come from deformed_helix_axes, NOT effective_helix_for_geometry: the latter
-    # does not carry cluster transforms, so on a clustered design it hands back the
-    # helix's PRE-transform centreline while the beads have already moved.  Measured on
-    # workspace/VoltronCore.nadoc, that put one 8-helix cluster's beads up to 2.7 nm off
-    # their own axis — the beads were re-placed about a phantom centreline.  Against
-    # deformed_helix_axes every one of the design's 14,774 legacy beads sits at exactly
-    # HELIX_RADIUS, clustered or not.
-    _measured_axes: dict = {}
-    if measured_positioning:
-        import numpy as _np
-
-        native_ids = {h.id for h in design.helices if effective_helix_for_geometry(h, design).native_residues}
-        for _a in (helix_axes if helix_axes is not None else deformed_helix_axes(design)):
-            if _a["helix_id"] in native_ids:
-                continue
-            _s = _np.asarray(_a["start"], dtype=float)
-            _v = _np.asarray(_a["end"], dtype=float) - _s
-            _n = float(_np.linalg.norm(_v))
-            if _n > 1e-12:
-                _measured_axes[_a["helix_id"]] = (_s, _v / _n)
-
-    # Reuse partition axes across helices; one full axis pass per scope signature.
-    _scope_axis_cache = {}
     for helix in design.helices:
         if helix_ids is not None and helix.id not in helix_ids:
             continue
         if helix.id.startswith("__lnk__") and not include_linker_helices:
             continue  # virtual linker helices have no real geometry (per-design:
             # bridge nucs come from _emit_bridge_nucs below instead)
-        from backend.core import deformation_scope
-        scoped_measured = measured_positioning and deformation_scope.scoped(design)
-        arrs = (deformation_scope.measured_arrays(helix, design, compact_skips, roll, _scope_axis_cache)
-                if scoped_measured else deformed_nucleotide_arrays(
-                    helix, design, compact_skips=compact_skips, phase_roll_rad=roll))
-        axis_line = _measured_axes.get(helix.id)
-        if measured_positioning and axis_line is not None and not scoped_measured:
-            # Measured placement belongs to the nucleotide's native helix frame.
-            # Apply it BEFORE the overhang's rigid transform.  Doing this afterward
-            # makes a legitimately rotated overhang appear off its parent axis, so
-            # apply_measured_positioning's safety guard skips it and leaves a legacy
-            # bead/slab arrangement beside measured geometry (VoltronCoreArm OH7).
-            from backend.core.measured_positioning import apply_measured_positioning
-            from backend.core.constants import HELIX_RADIUS
-
-            arrs = apply_measured_positioning(
-                arrs,
-                axis_origin=axis_line[0],
-                axis_hat=axis_line[1],
-                legacy_radius=HELIX_RADIUS,
-            )
-        arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
-        _emit_arrs(
-            arrs,
-            arrs["helix_id"],
-            None,
-        )
+        arrs = native_full_arrays_for_helix(helix, design, compact_skips=compact_skips)
+        _emit_arrs(arrs, arrs["helix_id"])
 
         # Render nucleotides outside the physical helix span (ss-scaffold loops).
         # These must go through the same deformation / cluster transform pipeline
@@ -633,11 +655,9 @@ def _geometry_for_helices(
             extra_arrs = deform_extended_arrays(
                 extra_arrs, helix, design, edge_bp=helix.bp_start
             )
-            _emit_arrs(
-                extra_arrs,
-                helix.id,
-                _measured_axes.get(helix.id),
-            )
+            extra_arrs = place_native_full(extra_arrs)
+            extra_arrs = apply_overhang_rotation_if_needed(extra_arrs, helix, design)
+            _emit_arrs(extra_arrs, helix.id)
 
         hi_bp = max_domain_bp.get(helix.id, helix.bp_start + helix.length_bp - 1)
         helix_hi = helix.bp_start + helix.length_bp  # first bp past helix right edge
@@ -648,22 +668,24 @@ def _geometry_for_helices(
             extra_arrs = deform_extended_arrays(
                 extra_arrs, helix, design, edge_bp=helix_hi - 1
             )
-            _emit_arrs(
-                extra_arrs,
-                helix.id,
-                _measured_axes.get(helix.id),
-            )
+            extra_arrs = place_native_full(extra_arrs)
+            extra_arrs = apply_overhang_rotation_if_needed(extra_arrs, helix, design)
+            _emit_arrs(extra_arrs, helix.id)
 
     # Emit bridge nucs for ds linkers AFTER the regular helix loop so they
     # can read the live OH/complement positions (cluster transforms applied)
     # to derive their axis. Without this pass the bridge tube is JS-only —
     # not selectable, no real geometry payload, no slabs/cones in standard
     # rendering paths.
+    apply_nucleotide_transforms_to_geometry(result, design)
+    regular_count = len(result)
     _emit_bridge_nucs(design, nuc_info, result)
 
     if design.extensions and (full_mode or extension_ids):
         result.extend(_strand_extension_geometry(design, nuc_pos_map, extension_ids))
-    apply_nucleotide_transforms_to_geometry(result, design)
+    apply_nucleotide_transforms_to_geometry(result[regular_count:], design)
+    from backend.core.native_slab_placement import attach_native_slab_poses
+    attach_native_slab_poses(result)
     return result
 
 
@@ -671,72 +693,24 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
     """For each ds OverhangConnection, append nuc dicts for the bridge
     domain to *result*. Bridge positions are derived from the live anchors
     on each side (complement nuc on the OH helix at the OH's `attach`-end
-    bp), with the bridge axis offset off the chord so the boundary beads
-    sit at native B-DNA radius (HELIX_RADIUS_NM) AND colocalize with their
-    anchors when the relax-target chord is reached.
+    bp). The bridge axis is centred using the exact canonical O5′ boundary
+    beads, including strand-specific radial, azimuthal, and axial offsets.
 
     No-op when the design has no ds linkers, when the linker strand or its
     bridge domain can't be resolved, or when the OH/complement nucs aren't
     in *result* yet (e.g. partial geometry that didn't compute the OH helix).
     """
-    import numpy as _np
-    from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.linker_relax import (
-        _oh_attach_nuc,
+        _anchor_pos_and_normal,
         _comp_first,
         bridge_axis_geometry,
-        _BDNA_TWIST_RAD,
-        _MINOR_GROOVE_RAD,
-        _BRIDGE_PHASE_OFFSET,
+        bridge_nucleotide_geometry,
+        bridge_nucleotide_site,
     )
 
     ds_conns = [c for c in design.overhang_connections if c.linker_type == "ds"]
     if not ds_conns:
         return
-
-    # Index already-emitted nucs for fast anchor lookup.
-    nucs_by_strand: dict[str, list[dict]] = {}
-    nucs_by_ovhg: dict[str, list[dict]] = {}
-    for n in result:
-        sid = n.get("strand_id")
-        if sid:
-            nucs_by_strand.setdefault(sid, []).append(n)
-        oid = n.get("overhang_id")
-        if oid:
-            nucs_by_ovhg.setdefault(oid, []).append(n)
-
-    def _anchor_for(conn, side: str):
-        """Live anchor (pos, base_normal) for one side: the complement nuc
-        on the OH's helix at the OH's `attach`-end bp. Direct same-bp
-        lookup — no "farthest from tip" heuristic. Mirrors
-        backend.core.linker_relax._anchor_pos_and_normal."""
-        ovhg_id = conn.overhang_a_id if side == "a" else conn.overhang_b_id
-        attach = conn.overhang_a_attach if side == "a" else conn.overhang_b_attach
-        strand_id = f"__lnk__{conn.id}__{side}"
-        oh_nucs = nucs_by_ovhg.get(ovhg_id, [])
-        attach_nuc = _oh_attach_nuc(oh_nucs, attach)
-        if attach_nuc is None:
-            return None, None
-        target_helix = attach_nuc.get("helix_id")
-        target_bp = attach_nuc.get("bp_index")
-        comp = next(
-            (
-                n
-                for n in nucs_by_strand.get(strand_id, [])
-                if not (n.get("helix_id") or "").startswith("__lnk__")
-                and n.get("helix_id") == target_helix
-                and n.get("bp_index") == target_bp
-            ),
-            None,
-        )
-        if comp is None:
-            return None, None
-        pos = comp.get("backbone_position") or comp.get("base_position")
-        bn = comp.get("base_normal")
-        return (
-            _np.asarray(pos, dtype=float) if pos is not None else None,
-            _np.asarray(bn, dtype=float) if bn is not None else None,
-        )
 
     for conn in ds_conns:
         bridge_helix_id = f"__lnk__{conn.id}"
@@ -759,8 +733,8 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
         if not side_bridge:
             continue
 
-        pa, na = _anchor_for(conn, "a")
-        pb, _ = _anchor_for(conn, "b")
+        pa, na = _anchor_pos_and_normal(result, conn, conn.overhang_a_id, True)
+        pb, _ = _anchor_pos_and_normal(result, conn, conn.overhang_b_id, False)
         if pa is None or pb is None:
             continue
 
@@ -768,10 +742,10 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
         L = abs(any_dom.end_bp - any_dom.start_bp) + 1
         cfa = _comp_first(conn.overhang_a_id, conn.overhang_a_attach)
         cfb = _comp_first(conn.overhang_b_id, conn.overhang_b_attach)
-        g = bridge_axis_geometry(pa, na, pb, L, cfa, cfb)
-        fx, fy, fz = g["fx"], g["fy"], g["fz"]
-        axis_start = g["axis_start"]
-        R = g["helix_radius"]
+        g = bridge_axis_geometry(pa, na, pb, L, cfa, cfb,
+            identity={"connection_id": conn.id, "bridge_helix_id": bridge_helix_id,
+                      "overhang_a_id": conn.overhang_a_id, "overhang_b_id": conn.overhang_b_id})
+        fz = g["fz"]
 
         # Per-side: emit one nuc per bp of the bridge domain. Side A's
         # strand uses FORWARD-style angles (radial = fx·cos+fy·sin) when
@@ -790,16 +764,13 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
             for bp in range(
                 min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp) + 1
             ):
-                axis_pt = axis_start + fz * (bp * BDNA_RISE_PER_BP)
-                ang = (
-                    bp * _BDNA_TWIST_RAD
-                    + (0.0 if is_fwd else _MINOR_GROOVE_RAD)
-                    + _BRIDGE_PHASE_OFFSET
-                )
-                radial = fx * math.cos(ang) + fy * math.sin(ang)
-                bb_pos = axis_pt + radial * R
-                base_pos = axis_pt - radial * R
-                bn = -radial  # backbone → base = inward
+                bb_pos, base_pos, bn = bridge_nucleotide_geometry(g, bp, reverse=not is_fwd)
+                site_origin, site_radial, _site_tangent, site_angle = bridge_nucleotide_site(g, bp)
+                from backend.core.geometry import groove_offset_rad
+                bridge_helix = design.find_helix(bridge_helix_id)
+                groove = groove_offset_rad(bridge_helix.direction if bridge_helix else None)
+                if not is_fwd:
+                    site_radial = np.cos(groove) * site_radial + np.sin(groove) * np.cross(fz, site_radial)
                 key = (bridge_helix_id, bp, dom.direction)
                 sinfo = nuc_info.get(
                     key,
@@ -821,6 +792,14 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
                         "base_position": base_pos.tolist(),
                         "base_normal": bn.tolist(),
                         "axis_tangent": fz.tolist(),
+                        "placement_source": SOURCE,
+                        "helical_site": {
+                            "axis_point": site_origin.tolist(),
+                            "radial_hat": site_radial.tolist(),
+                            "azimuth_rad": float(site_angle + (0 if is_fwd else groove)),
+                            "groove_offset_rad": groove,
+                            "phase_roll_rad": native_full_phase_roll_rad(design),
+                        },
                         **sinfo,
                     }
                 )
@@ -831,32 +810,10 @@ def _geometry_for_design(
     include_linker_helices: bool = False,
     compact_skips: bool = False,
     *,
-    measured_positioning: bool = False,
-    junction_balance: bool = False,
+    measured_positioning: bool = True,
+    junction_balance: bool = True,
 ) -> list[dict]:
-    """The design's per-nucleotide geometry.
-
-    This used to DROP ``measured_positioning`` on the floor, so the ~50 consumers that
-    go through here could only ever see the legacy placement while
-    ``GET /design/geometry`` served the measured one.  It now forwards (TD-27 Stage 3).
-
-    ⚠ The default is still LEGACY.  Flipping it is the one remaining step of Stage 3 and
-    it is BLOCKED on re-calibrating the relax / cluster pose-fitters — measured with the
-    flip in place: 24 fast-suite failures, 14 of them in linker_relax / direct_relax /
-    duplex_cluster / child-cluster composition, which fit poses against bead positions
-    and need their targets re-derived.  Three more are oxDNA tests whose PREMISE the
-    measured placement invalidates (they assert raw NADOC geometry is not oxDNA-bonded;
-    with measured base beads, base-pair retention goes 0 -> 100 %).  Full taxonomy in
-    the TD-27 ledger entry.
-
-    When it is flipped, the oxDNA/mrDNA/NAMD seed paths reading this get the display
-    placement converted back to oxDNA's centre-of-mass convention at the seed boundary —
-    ``oxdna_interface._oxdna_cm_radius_map``, a no-op on legacy geometry.
-
-    ``junction_balance`` is the display-only i:i+1 arc roll and defaults OFF here for the
-    same reason: most of this function's ~50 consumers are seeds, exporters and pose
-    fitters.  The render feeds pass it explicitly.
-    """
+    """The sole native Full per-nucleotide geometry, including canonical slab poses."""
     return _geometry_for_helices(
         design,
         include_linker_helices=include_linker_helices,
@@ -867,25 +824,11 @@ def _geometry_for_design(
 
 
 def fitting_geometry(design: Design) -> list[dict]:
-    """The geometry a POSE FITTER fits against — explicitly not the display.
+    """Fit against the same canonical nucleotide geometry the user sees.
 
-    `direct_relax`, `linker_relax` and `duplex_cluster` fit a rigid pose and write it to
-    ``design.cluster_transforms``, which is **persisted in the .nadoc file**.  So whatever
-    layer they fit against becomes load-bearing for every pose a user has already saved.
-
-    They were reading ``_geometry_for_design(design)`` and were correct only by accident:
-    both display tweaks (the MD-measured bead re-placement and the junction-balance roll)
-    happen to default OFF.  TD-27 Stage 3's stated goal is to flip ``measured_positioning``
-    to True — the day that lands, all three fitters would silently start fitting against
-    measured beads and writing different saved poses, with nothing to catch it.
-
-    This states the contract instead of inheriting it.  Deformation and cluster transforms
-    ARE applied (a fitter must see the design as posed); only the display tweaks are
-    excluded.  Pinned by ``test_a_display_default_flip_cannot_reach_the_pose_fitters``.
+    There is no alternate bead/base placement hidden behind the fitting boundary.
     """
-    return _geometry_for_design(
-        design, measured_positioning=False, junction_balance=False
-    )
+    return _geometry_for_design(design)
 
 
 def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
@@ -913,6 +856,9 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
                 "bs": [],
                 "bn": [],
                 "at": [],
+                "sp": [],
+                "sq": [],
+                "pv": [],
                 "sid": [],
                 "stype": [],
                 "is5": [],
@@ -931,6 +877,9 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
         b["bs"].append(n.get("base_position"))
         b["bn"].append(n.get("base_normal"))
         b["at"].append(n.get("axis_tangent"))
+        b["sp"].append(n.get("slab_position"))
+        b["sq"].append(n.get("slab_quaternion"))
+        b["pv"].append(n["placement_source"])
         b["sid"].append(n.get("strand_id"))
         b["stype"].append(n.get("strand_type"))
         b["is5"].append(bool(n.get("is_five_prime")))
@@ -977,7 +926,7 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
 
 
 def _compact_geometry_for_design(
-    design: "Design", *, measured_positioning: bool = False, junction_balance: bool = False
+    design: "Design", *, measured_positioning: bool = True, junction_balance: bool = True
 ) -> dict:
     """Compute full deformed geometry in COMPACT per-helix-per-direction
     parallel-arrays form. Wire size is ~50% of the equivalent dict-list
@@ -994,11 +943,10 @@ def _compact_geometry_for_design(
 
 
 def _positions_by_helix(nucleotides: list[dict]) -> dict:
-    """Compact per-nuc-position payload for the ``positions_only`` diff,
-    converted from a list-of-dicts. Used as a fallback when callers already
-    have nucleotide dicts on hand. Hot paths should call
-    :func:`_positions_for_design` instead, which emits parallel arrays
-    directly from the numpy pipeline and skips the per-nuc dict allocation.
+    """Serialize canonical records for ``positions_only`` without recalculation.
+
+    Bead, base and slab poses plus their authority identifier always travel
+    together. Full and incremental views cannot select different placement.
     """
     out: dict = {}
     for n in nucleotides:
@@ -1008,317 +956,42 @@ def _positions_by_helix(nucleotides: list[dict]) -> dict:
         direction = n.get("direction")
         bucket = out.setdefault(helix, {}).setdefault(direction, None)
         if bucket is None:
-            bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
+            bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": [], "sp": [], "sq": [], "pv": [],
+                      "sid": [], "extid": [], "ismod": [], "mod": []}
             out[helix][direction] = bucket
         bucket["bp"].append(n.get("bp_index"))
         bucket["bb"].append(n.get("backbone_position"))
         bucket["bs"].append(n.get("base_position"))
         bucket["bn"].append(n.get("base_normal"))
         bucket["at"].append(n.get("axis_tangent"))
+        bucket["sp"].append(n.get("slab_position"))
+        bucket["sq"].append(n.get("slab_quaternion"))
+        bucket["pv"].append(n["placement_source"])
+        bucket["sid"].append(n.get("strand_id"))
+        bucket["extid"].append(n.get("extension_id"))
+        bucket["ismod"].append(bool(n.get("is_modification")))
+        bucket["mod"].append(n.get("modification"))
     return out
 
 
 def _positions_for_design(
-    design: "Design",
+    design: Design,
     *,
-    measured_positioning: bool = False,
-    junction_balance: bool = False,
+    measured_positioning: bool = True,
+    junction_balance: bool = True,
 ) -> tuple[dict, list[dict]]:
-    """Compute positions for *design* in compact per-helix-per-direction
-    parallel arrays, **without** materialising per-nuc dicts for the bulk
-    geometry. Used by the ``positions_only`` fast path.
+    """Compact positions from the exact same canonical records as a full rebuild.
 
-    Returns ``(positions_by_helix, helix_axes)``.
-
-    The numpy pipeline (``deformed_nucleotide_arrays`` + extension/loop
-    helpers) is the same as ``_geometry_for_helices``; the saving comes
-    from skipping the ~50K dict allocations + ``**sinfo`` spreads that
-    dominate the full-geometry path's response-build time.
-
-    ds-linker bridge nucs: ``_emit_bridge_nucs`` emits per-nuc dicts and
-    needs anchor-nuc lookups by overhang_id. Bridges are a tiny fraction
-    of total nucs (≤200 per design), so we build a thin dict list for
-    JUST the OH-bearing helices and feed that through the existing helper,
-    then fold the resulting bridge-nuc positions into ``positions_by_helix``.
-    Bulk positions stay dict-free.
+    A second positioning implementation is forbidden. In particular, scoped
+    strand transforms, overhangs, residue poses, and extensions cannot select
+    different placement through an incremental response.
     """
-    from backend.core.deformation import (
-        deform_extended_arrays,
+    nucleotides = _geometry_for_design(
+        design, measured_positioning=measured_positioning,
+        junction_balance=junction_balance,
     )
-
-    positions: dict = {}
-    # Junction-balance roll: this output ships as `straight_positions_by_helix` in the
-    # SAME response as the (rolled) nucleotides, so it must carry the same roll or the
-    # deform-revert / unfold / deform-lerp paths would draw unrolled beads beside rolled
-    # ones — the identical trap the measured re-placement hit in TD-27 Stage 3.
-    roll = full_rep_balance_roll_rad(design) if junction_balance else 0.0
-    if measured_positioning:
-        roll -= math.radians(ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG)
-    # Occupancy map (real strand nucleotides) — used to suppress ghost lattice slots so
-    # this fast path stays IDENTICAL to _geometry_for_helices (both emit only real bases;
-    # ss-overhang regions render single-stranded, no phantom complementary base).
-    nuc_info = _strand_nucleotide_info(design)
-    _dir_enums = (Direction.FORWARD, Direction.REVERSE)  # index by int 0/1
-
-    # Strand-domain bp range per helix (needed for ss-scaffold loop extensions).
-    min_domain_bp: dict[str, int] = {}
-    max_domain_bp: dict[str, int] = {}
-    for strand in design.strands:
-        for domain in strand.domains:
-            lo = min(domain.start_bp, domain.end_bp)
-            hi = max(domain.start_bp, domain.end_bp)
-            hid = domain.helix_id
-            if hid not in min_domain_bp or lo < min_domain_bp[hid]:
-                min_domain_bp[hid] = lo
-            if hid not in max_domain_bp or hi > max_domain_bp[hid]:
-                max_domain_bp[hid] = hi
-
-    _DIR_NAMES = ("FORWARD", "REVERSE")
-
-    # Same MD-measured re-placement the full-geometry path applies, and it has to be
-    # here too: crud ships this output as `straight_positions_by_helix` in the SAME
-    # response as the (measured) nucleotides, and the frontend's deform-revert,
-    # unfold and deform-lerp paths read the straight map.  While this path stayed
-    # legacy, those three drew legacy beads next to measured ones — which is why the
-    # `helix_renderer` sites that look like they bypass measured positioning are
-    # actually correct today (TD-27 Stage 3).
     axes = deformed_helix_axes(design)
-    _measured_axes: dict = {}
-    if measured_positioning:
-        import numpy as _np
-
-        native_ids = {h.id for h in design.helices if effective_helix_for_geometry(h, design).native_residues}
-        for _a in axes:
-            if _a["helix_id"] in native_ids:
-                continue
-            _s = _np.asarray(_a["start"], dtype=float)
-            _v = _np.asarray(_a["end"], dtype=float) - _s
-            _n = float(_np.linalg.norm(_v))
-            if _n > 1e-12:
-                _measured_axes[_a["helix_id"]] = (_s, _v / _n)
-
-    def _emit_compact(
-        arrs: dict,
-        helix_id: str,
-        axis_line: "tuple | None" = None,
-    ) -> None:
-        M = len(arrs["bp_indices"])
-        if M == 0:
-            return
-        if measured_positioning and axis_line is not None:
-            from backend.core.measured_positioning import apply_measured_positioning
-            from backend.core.constants import HELIX_RADIUS
-
-            arrs = apply_measured_positioning(
-                arrs,
-                axis_origin=axis_line[0],
-                axis_hat=axis_line[1],
-                legacy_radius=HELIX_RADIUS,
-            )
-        bp_list = arrs["bp_indices"].tolist()
-        dir_arr = arrs["directions"]
-        pos_list = arrs["positions"].tolist()
-        base_list = arrs["base_positions"].tolist()
-        bn_list = arrs["base_normals"].tolist()
-        at_list = arrs["axis_tangents"].tolist()
-        helix_bucket = positions.get(helix_id)
-        if helix_bucket is None:
-            helix_bucket = {}
-            positions[helix_id] = helix_bucket
-        for i in range(M):
-            if (helix_id, bp_list[i], _dir_enums[dir_arr[i]]) not in nuc_info:
-                continue  # ghost lattice slot (no real strand) — suppress, as _emit_arrs does
-            dir_name = _DIR_NAMES[dir_arr[i]]
-            dir_bucket = helix_bucket.get(dir_name)
-            if dir_bucket is None:
-                dir_bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
-                helix_bucket[dir_name] = dir_bucket
-            dir_bucket["bp"].append(bp_list[i])
-            dir_bucket["bb"].append(pos_list[i])
-            dir_bucket["bs"].append(base_list[i])
-            dir_bucket["bn"].append(bn_list[i])
-            dir_bucket["at"].append(at_list[i])
-
-    for helix in design.helices:
-        if helix.id.startswith("__lnk__"):
-            continue  # virtual linker helix has no real geometry of its own
-
-        arrs = deformed_nucleotide_arrays(helix, design, phase_roll_rad=roll)
-        axis_line = _measured_axes.get(helix.id)
-        if measured_positioning and axis_line is not None:
-            from backend.core.measured_positioning import apply_measured_positioning
-            from backend.core.constants import HELIX_RADIUS
-
-            arrs = apply_measured_positioning(
-                arrs,
-                axis_origin=axis_line[0],
-                axis_hat=axis_line[1],
-                legacy_radius=HELIX_RADIUS,
-            )
-        arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
-        _emit_compact(
-            arrs,
-            arrs["helix_id"],
-            None,
-        )
-
-        norm_helix = None
-        lo_bp = min_domain_bp.get(helix.id, helix.bp_start)
-        if lo_bp < helix.bp_start:
-            norm_helix = _rolled(effective_helix_for_geometry(helix, design), roll)
-            extra = nucleotide_positions_arrays_extended(norm_helix, lo_bp)
-            extra = deform_extended_arrays(extra, helix, design, edge_bp=helix.bp_start)
-            _emit_compact(
-                extra,
-                helix.id,
-                _measured_axes.get(helix.id),
-            )
-
-        hi_bp = max_domain_bp.get(helix.id, helix.bp_start + helix.length_bp - 1)
-        helix_hi = helix.bp_start + helix.length_bp
-        if hi_bp >= helix_hi:
-            if norm_helix is None:
-                norm_helix = _rolled(effective_helix_for_geometry(helix, design), roll)
-            extra = nucleotide_positions_arrays_extended_right(norm_helix, hi_bp)
-            extra = deform_extended_arrays(extra, helix, design, edge_bp=helix_hi - 1)
-            _emit_compact(
-                extra,
-                helix.id,
-                _measured_axes.get(helix.id),
-            )
-
-    # Reuse the same axes used for measured placement above.
-
-    # Build the (helix_id, bp_index, direction) → backbone_position lookup
-    # straight from positions_by_helix so _apply_ovhg_rotations_to_axes can
-    # work without us materialising per-nuc dicts. Direction here uses
-    # string form to match the dict-based legacy API.
-    nuc_lookup: dict = {}
-    for hid, by_dir in positions.items():
-        for dir_name, bucket in by_dir.items():
-            d_enum = Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE
-            bp_arr = bucket["bp"]
-            bb_arr = bucket["bb"]
-            for i in range(len(bp_arr)):
-                nuc_lookup[(hid, bp_arr[i], d_enum)] = bb_arr[i]
-                # _apply_ovhg_rotations_to_axes' lookup uses the legacy
-                # tuple form keyed by Direction enum; in older code the
-                # tuple key uses the .value string. Cover both for safety.
-                nuc_lookup[(hid, bp_arr[i], dir_name)] = bb_arr[i]
-    _apply_ovhg_rotations_to_axes(design, axes, nuc_lookup=nuc_lookup)
-
-    # Bridge nucs: build a thin dict list for OH-bearing helices and run
-    # _emit_bridge_nucs. Bridge nucs are typically <200 per design — paying
-    # the dict cost for them is fine. After emission, fold their positions
-    # into positions_by_helix.
-    if any(c.linker_type == "ds" for c in design.overhang_connections):
-        nuc_info = _strand_nucleotide_info(design)
-        # Identify helices that carry an overhang or a complement strand on
-        # the OH side; that's the lookup _emit_bridge_nucs needs.
-        oh_strand_ids = {o.strand_id for o in design.overhangs}
-        anchor_dicts: list[dict] = []
-        for hid, by_dir in positions.items():
-            for dir_name, bucket in by_dir.items():
-                d_enum = (
-                    Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE
-                )
-                bp_arr = bucket["bp"]
-                bb_arr = bucket["bb"]
-                bs_arr = bucket["bs"]
-                bn_arr = bucket["bn"]
-                at_arr = bucket["at"]
-                for i in range(len(bp_arr)):
-                    sinfo = nuc_info.get((hid, bp_arr[i], d_enum))
-                    # We only need anchors whose strand has an overhang_id
-                    # OR is a linker complement strand. Skip bulk-only nucs
-                    # so the dict list stays small.
-                    if not sinfo or (
-                        sinfo.get("overhang_id") is None
-                        and sinfo.get("strand_id") not in oh_strand_ids
-                        and not (sinfo.get("strand_id") or "").startswith("__lnk__")
-                    ):
-                        continue
-                    anchor_dicts.append(
-                        {
-                            "helix_id": hid,
-                            "bp_index": bp_arr[i],
-                            "direction": dir_name,
-                            "backbone_position": bb_arr[i],
-                            "base_position": bs_arr[i],
-                            "base_normal": bn_arr[i],
-                            "axis_tangent": at_arr[i],
-                            **sinfo,
-                        }
-                    )
-        # _emit_bridge_nucs reads anchor_dicts (via nucs_by_strand /
-        # nucs_by_ovhg) and APPENDS bridge nucs to it.
-        before = len(anchor_dicts)
-        _emit_bridge_nucs(design, {}, anchor_dicts)
-        for n in anchor_dicts[before:]:
-            hid = n.get("helix_id")
-            if not hid:
-                continue
-            dir_name = n.get("direction")
-            helix_bucket = positions.get(hid)
-            if helix_bucket is None:
-                helix_bucket = {}
-                positions[hid] = helix_bucket
-            dir_bucket = helix_bucket.get(dir_name)
-            if dir_bucket is None:
-                dir_bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
-                helix_bucket[dir_name] = dir_bucket
-            dir_bucket["bp"].append(n.get("bp_index"))
-            dir_bucket["bb"].append(n.get("backbone_position"))
-            dir_bucket["bs"].append(n.get("base_position"))
-            dir_bucket["bn"].append(n.get("base_normal"))
-            dir_bucket["at"].append(n.get("axis_tangent"))
-
-    # Strand extension tails (5′/3′ ssDNA). The full-geometry path appends these
-    # via _strand_extension_geometry in full_mode; the compact path must too, or
-    # the __ext_ beads are absent from straight_positions_by_helix and the deform
-    # toggle has no straight anchor for them — they stay pinned at their deformed
-    # position when the user toggles deform OFF (they detach from the now-straight
-    # anchor strand). Build the anchor lookup the helper needs from the compact
-    # buckets, then fold the resulting arc beads into positions_by_helix.
-    if design.extensions:
-        import numpy as np
-        from types import SimpleNamespace
-
-        ext_anchor_map: dict = {}
-        anchor_keys = _extension_anchor_keys(design)
-        for hid, by_dir in positions.items():
-            for dir_name, bucket in by_dir.items():
-                d_enum = (
-                    Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE
-                )
-                bp_arr = bucket["bp"]
-                bb_arr = bucket["bb"]
-                bn_arr = bucket["bn"]
-                at_arr = bucket["at"]
-                for i in range(len(bp_arr)):
-                    key = (hid, bp_arr[i], d_enum)
-                    if key not in anchor_keys:
-                        continue
-                    ext_anchor_map[key] = SimpleNamespace(
-                        position=np.array(bb_arr[i], dtype=float),
-                        base_normal=np.array(bn_arr[i], dtype=float),
-                        axis_tangent=np.array(at_arr[i], dtype=float),
-                    )
-        for bead in _strand_extension_geometry(design, ext_anchor_map):
-            hid = bead["helix_id"]
-            dir_name = bead["direction"]  # "FORWARD" / "REVERSE" (Direction.value)
-            helix_bucket = positions.get(hid)
-            if helix_bucket is None:
-                helix_bucket = {}
-                positions[hid] = helix_bucket
-            dir_bucket = helix_bucket.get(dir_name)
-            if dir_bucket is None:
-                dir_bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
-                helix_bucket[dir_name] = dir_bucket
-            dir_bucket["bp"].append(bead["bp_index"])
-            dir_bucket["bb"].append(bead["backbone_position"])
-            dir_bucket["bs"].append(bead["base_position"])
-            dir_bucket["bn"].append(bead["base_normal"])
-            dir_bucket["at"].append(bead["axis_tangent"])
-
-    return positions, axes
+    lookup = {(n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
+              for n in nucleotides}
+    _apply_ovhg_rotations_to_axes(design, axes, nuc_lookup=lookup)
+    return _positions_by_helix(nucleotides), axes

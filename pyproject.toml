@@ -42,6 +42,7 @@ dependencies = [
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
+    "native_placement: native Full bead/slab positioning; failure requires explicit review",
     "scientific: opt-in physical validation; only runs with --scientific",
     "slow: marks tests as slow (run GROMACS EM; deselect with -m 'not slow')",
     "integration: marks tests requiring external files at /tmp",

@@ -1927,8 +1927,7 @@ def build_atomistic_model(
       the CG view does, and this follows it.
 
     Measured placement is the sole duplex template. The ``measured_positioning``
-    argument is accepted for compatibility, but both values use today's native
-    geometry; the legacy viewer comparison has been retired.
+    argument may only be True. Requesting the removed alternative fails.
 
     Measured placement covers the duplex stamping path, the surface point cloud, the
     fast client-side stamp descriptor and the oxDNA rigid-frame calibration.
@@ -1954,6 +1953,9 @@ def build_atomistic_model(
     authoritative result of a simulation or reconstruction.
 
     """
+    from backend.core.native_full_placement import require_native_full_option
+    require_native_full_option(measured_positioning)
+
     # frame_sink requires the full per-nucleotide loop (the cached-reference fast
     # path never computes per-nucleotide frames), so requesting one forces it.
     #

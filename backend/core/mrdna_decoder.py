@@ -16,10 +16,9 @@ def _mrdna_seed_reference_by_key(design) -> dict[tuple, dict]:
     return {
         (p["helix_id"], p["bp_index"], p["direction"], p.get("copy", 0)): p
         # This must be the exact geometry convention used by
-        # mrdna_bridge._build_nt_arrays. Junction balancing is a renderer-only
-        # displacement of crossover phosphates; applying it here after mrDNA
-        # simulated the unbalanced sites changes their helical phase by ~0.23 nm.
-        for p in _geometry_for_helices(design, None, junction_balance=False)
+        # mrdna_bridge._build_nt_arrays: the mandatory native source, with the
+        # same phase and local frames on seed and read-back.
+        for p in _geometry_for_helices(design, None)
     }
 
 

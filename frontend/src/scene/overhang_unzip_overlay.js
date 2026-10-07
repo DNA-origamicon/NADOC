@@ -30,6 +30,7 @@
  */
 
 import * as THREE from 'three'
+import { transportNativePose } from './native_pose_transport.js'
 import { meltFraction } from '../strand-anim/melt.js'
 import { DEFAULTS as STRAND_DEFAULTS } from '../strand-anim/params.js'
 
@@ -45,7 +46,7 @@ export function initOverhangUnzipOverlay({ getHelixCtrl, getDesign }) {
   const _q = new THREE.Quaternion(), _J = new THREE.Vector3(), _ax = new THREE.Vector3()
   const _UP = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1)
 
-  const _key = (n) => `${n.helix_id}:${n.bp_index}:${n.direction}`
+  const _key = (n) => `${n.helix_id}:${n.bp_index}:${n.direction}:${n.copy_k ?? n.copy ?? 0}`
   const _vec = (a, out) => out.set(a[0], a[1], a[2])
 
   /** Overhang nucleotides, root-first (lowest bp_index). */
@@ -96,10 +97,9 @@ export function initOverhangUnzipOverlay({ getHelixCtrl, getDesign }) {
       if (rot && rot.helixIds.has(nuc.helix_id)) {   // follow the rotating arm
         _H.sub(rot.J).applyQuaternion(rot.q).add(rot.J)
       }
-      updates.push({
-        helix_id: nuc.helix_id, bp_index: nuc.bp_index, direction: nuc.direction,
-        backbone_position: [_H.x, _H.y, _H.z],
-      })
+      const orientation = new THREE.Quaternion(...nuc.slab_quaternion)
+      if (rot && rot.helixIds.has(nuc.helix_id)) orientation.premultiply(rot.q)
+      updates.push(transportNativePose(nuc, _H.toArray(), orientation))
       nowKeys.add(_key(nuc))
     }
   }
@@ -145,14 +145,7 @@ export function initOverhangUnzipOverlay({ getHelixCtrl, getDesign }) {
 
   /** Build an "restore to authored position" update for a moved key. */
   function _authoredUpdate(key, geometry) {
-    for (const n of geometry) {
-      if (_key(n) === key) {
-        const p = n.backbone_position
-        return { helix_id: n.helix_id, bp_index: n.bp_index, direction: n.direction,
-                 backbone_position: [p[0], p[1], p[2]] }
-      }
-    }
-    return null
+    return geometry.find(n => _key(n) === key) ?? null
   }
 
   /** Restore every overridden bead to its authored position. */

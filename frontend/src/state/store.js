@@ -15,6 +15,7 @@ import { activeOperationTiming, markOperationTiming } from '../perf/operation_ti
 import { createSelectionState } from '../scene/selection_model.js'
 
 const _initialState = {
+  placementIntegrityFailure: null,
   /** The full Design object from the API, or null if not loaded. */
   currentDesign: null,
 

@@ -355,8 +355,8 @@ def test_add_helix():
     body = r.json()
     assert "helix" in body
     assert "geometry" in body
-    # Geometry for new helix: 42 bp × 2 = 84 nucleotides
-    assert len(body["geometry"]) == 84
+    # An empty helix track has no nucleotides until a strand occupies it.
+    assert body["geometry"] == []
     # Design should now have 2 helices
     assert len(body["design"]["helices"]) == 2
 

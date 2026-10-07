@@ -26,6 +26,8 @@ from backend.api.assembly import _WORKSPACE_DIR
 from backend.api.assembly import router as assembly_router
 from backend.api.crud import router as crud_router
 from backend.api.doc_context import DocContextMiddleware
+from backend.api.routes_placement_integrity import router as placement_integrity_router, native_placement_exception_handler
+from backend.core.native_full_placement import NativePlacementError
 from backend.api.surface_progress import (
     SurfaceProgressMiddleware,
     router as surface_progress_router,
@@ -398,6 +400,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_exception_handler(NativePlacementError, native_placement_exception_handler)
+app.include_router(placement_integrity_router, prefix="/api")
 app.include_router(dimensions_router, prefix="/api")
 app.include_router(router, prefix="/api")
 app.include_router(surface_progress_router, prefix="/api")

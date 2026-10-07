@@ -2,7 +2,7 @@
 Design-layer steric-clash detector (geometric, pure, importable).
 
 Flags backbone beads that collide in the *posed* geometry — the geometry
-produced by ``deformed_nucleotide_positions`` with all cluster poses and
+produced by the canonical native Full authority with all cluster poses and
 bend/twist deformations applied — but that are NOT close to each other in the
 un-posed (straight) design.  This is the criterion that separates a real steric
 clash from designed packing:
@@ -43,17 +43,16 @@ from typing import TYPE_CHECKING
 import numpy as np
 from scipy.spatial import cKDTree
 
-from backend.core.deformation import deformed_nucleotide_positions
+from backend.core.design_geometry import _geometry_for_design
 
 if TYPE_CHECKING:
     from backend.core.models import Design
 
 
 # ── Calibrated defaults ───────────────────────────────────────────────────────
-# Backbone beads sit at HELIX_RADIUS (1.0 nm) from the axis.  Adjacent-helix
-# lattice packing legitimately brings them to ~0.25–0.3 nm, so a bare nearest-
-# bead test would flag every clean bundle — the straight-geometry exclusion is
-# what makes the threshold usable.
+# Use actual canonical O5′ bead coordinates. A bare nearest-bead threshold also
+# sees legitimate lattice contacts, so the straight-geometry exclusion separates
+# designed proximity from collisions caused by a pose.
 DEFAULT_CLASH_THRESHOLD_NM: float = 0.65
 # Two beads within this distance in the STRAIGHT design are treated as a designed
 # contact, never a clash.  Designed-close pairs measure ≤ ~0.5 nm straight; the
@@ -117,19 +116,18 @@ class ClashReport:
         }
 
 
-def _bead_arrays(design: "Design") -> tuple[list[tuple[str, int, str]], np.ndarray]:
+def _bead_arrays(design: "Design") -> tuple[list[tuple[str, int, str, int]], np.ndarray]:
     """Posed backbone-bead keys + positions for every nucleotide in *design*.
 
-    Key = (helix_id, bp_index, direction-name).  Positions run through
-    ``deformed_nucleotide_positions`` so cluster poses + deformations are applied
-    (and the effective-helix / loop-skip handling matches ``GET /design/geometry``).
+    Key = (helix_id, bp_index, direction-name, copy_k). Positions are the exact
+    records used by native Full, including occupancy, local deformation frames,
+    loop copies, overhang transforms, and saved individual nucleotide poses.
     """
-    keys: list[tuple[str, int, str]] = []
+    keys: list[tuple[str, int, str, int]] = []
     pts: list[np.ndarray] = []
-    for helix in design.helices:
-        for nuc in deformed_nucleotide_positions(helix, design):
-            keys.append((nuc.helix_id, int(nuc.bp_index), nuc.direction.name))
-            pts.append(np.asarray(nuc.position, dtype=float))
+    for nuc in _geometry_for_design(design):
+        keys.append((nuc["helix_id"], int(nuc["bp_index"]), nuc["direction"], int(nuc.get("copy_k", 0))))
+        pts.append(np.asarray(nuc["backbone_position"], dtype=float))
     arr = np.asarray(pts, dtype=float) if pts else np.empty((0, 3), dtype=float)
     return keys, arr
 

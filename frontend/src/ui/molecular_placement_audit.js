@@ -13,7 +13,6 @@ import { computeAtomStrandColors } from '../scene/color_util.js'
 import { buildCrossoverConnections } from '../scene/crossover_connections.js'
 import { buildHelixObjects, buildStapleColorMap } from '../scene/helix_renderer.js'
 import { docHeaders } from '../shared/doc_id.js'
-import { isNewPositioningOn } from './new_positioning.js'
 import './molecular_placement_audit.css'
 
 const PANEL_DEFS = [
@@ -522,7 +521,7 @@ function _modalMarkup() {
 export function initMolecularPlacementAudit({
   setMenuToggle = () => {},
   fetchAudit = async () => {
-    const measured = isNewPositioningOn() ? 'true' : 'false'
+    const measured = 'true'
     const response = await fetch(
       `/api/design/molecular-placement-audit?measured_positioning=${measured}`,
       { headers: docHeaders() },

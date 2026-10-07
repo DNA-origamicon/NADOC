@@ -35,6 +35,9 @@ def export_request(body, event_path, process, request):
     from backend.api import routes_vr as vr
     from backend.api.doc_context import get_current_doc
     from backend.api import state
+    from backend.api.routes_placement_integrity import require_native_placement_review_clear
+
+    require_native_placement_review_clear(event_path=event_path)
 
     seq, rep, generation = request
     source = None
@@ -73,6 +76,7 @@ def export_request(body, event_path, process, request):
             raise ValueError('Part changed during loading. Select the representation to retry.')
         progress(85, 'Export complete')
         destination = Path(str(event_path) + f'.repr-{seq}')
+        require_native_placement_review_clear(event_path=event_path)
         source.replace(destination)
         publish(event_path, request, 'ready', 75, records, 'Parsing and validating')
     finally:
@@ -94,6 +98,11 @@ def serve(body, event_path, process):
                 except Superseded:
                     pass
                 except Exception as exc:
+                    from backend.core.native_full_placement import NativePlacementError
+                    if isinstance(exc, NativePlacementError):
+                        from backend.api.routes_placement_integrity import record_native_placement_failure
+                        record_native_placement_failure(exc, phase="native-vr-representation", event_path=event_path,
+                            context={"request_sequence": request[0], "representation": request[1], "scene_generation": request[2]})
                     if process.poll() is None and read_request(event_path) == request:
                         publish(event_path, request, 'error', 0, 0, getattr(exc, 'detail', str(exc)))
                 # An obsolete parser cannot install after the request changes.

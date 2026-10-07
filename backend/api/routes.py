@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from backend.core.geometry import nucleotide_positions
+from backend.core.design_geometry import _geometry_for_design
 from backend.core.models import (
     Design,
     DesignMetadata,
@@ -167,31 +167,4 @@ def get_demo_geometry() -> list[dict]:
     the Design's strand+domain structure so the frontend can draw correct
     strand direction arrows and mark 5′ end cubes without hard-coding anything.
     """
-    design = _demo_design()
-    nuc_info = _strand_nucleotide_info(design)
-    _missing = {
-        "strand_id": None,
-        "strand_type": StrandType.STAPLE.value,
-        "is_five_prime": False,
-        "is_three_prime": False,
-        "domain_index": 0,
-    }
-
-    result: list[dict] = []
-    for helix in design.helices:
-        for nuc in nucleotide_positions(helix):
-            key = (nuc.helix_id, nuc.bp_index, nuc.direction)
-            sinfo = nuc_info.get(key, _missing)
-            result.append(
-                {
-                    "helix_id": nuc.helix_id,
-                    "bp_index": nuc.bp_index,
-                    "direction": nuc.direction.value,
-                    "backbone_position": nuc.position.tolist(),
-                    "base_position": nuc.base_position.tolist(),
-                    "base_normal": nuc.base_normal.tolist(),
-                    "axis_tangent": nuc.axis_tangent.tolist(),
-                    **sinfo,
-                }
-            )
-    return result
+    return _geometry_for_design(_demo_design())

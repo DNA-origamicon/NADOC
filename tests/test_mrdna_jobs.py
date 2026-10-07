@@ -23,37 +23,6 @@ from backend.core.mrdna_job import MrdnaJob, MrdnaStatus, new_mrdna_job
 # ── Job model ─────────────────────────────────────────────────────────────────
 
 
-def test_fine_display_expands_loop_copies_and_builds_relaxed_slab_frames():
-    from backend.core.geometry import nucleotide_positions
-    from backend.core.models import Design, Helix, LoopSkip, Vec3
-    from backend.core.mrdna_runner import (
-        _add_relaxed_frames,
-        _expanded_nucleotide_records,
-    )
-
-    helix = Helix(
-        id="h0",
-        axis_start=Vec3(x=0, y=0, z=0),
-        axis_end=Vec3(x=0, y=0, z=2),
-        length_bp=4,
-        loop_skips=[LoopSkip(bp_index=1, delta=1)],
-    )
-    design = Design(helices=[helix])
-    override = {
-        (n.helix_id, n.bp_index, n.direction.value): n.position + np.array([1, 2, 3])
-        for n in nucleotide_positions(helix)
-    }
-    records = _expanded_nucleotide_records(design, override)
-    loop = [p for p in records if p["bp_index"] == 1 and p["direction"] == "FORWARD"]
-    assert [p["copy"] for p in loop] == [0, 1]
-    assert not np.allclose(loop[0]["backbone_position"], loop[1]["backbone_position"])
-
-    _add_relaxed_frames(records)
-    framed = [p for p in records if p["helix_id"] == "h0"]
-    assert all({"nx", "ny", "nz", "tx", "ty", "tz"} <= p.keys() for p in framed)
-    assert all(np.isclose(np.linalg.norm([p["nx"], p["ny"], p["nz"]]), 1) for p in framed)
-
-
 def test_fine_display_root_anchors_missing_extruded_overhang():
     from backend.core.models import (
         Design,

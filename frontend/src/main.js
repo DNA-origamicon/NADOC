@@ -1,3 +1,4 @@
+import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.js'
 import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
 import { createVRRouting } from './scene/vr_routing.js'
 import { createVRSimulations } from './scene/vr_simulations.js'
@@ -68,7 +69,6 @@ import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { quatToEulerDeg, extractJointAngleDeg } from './scene/rotation_math.js'
 import { initDimensionsTool }        from './scene/dimensions_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
-import { isNewPositioningOn, setNewPositioning } from './ui/new_positioning.js'
 import { initCreateSeam } from './scene/create_seam.js'
 import { initGroupGizmo } from './scene/group_gizmo.js'
 import { initAssemblyTransform } from './scene/assembly_transform.js'
@@ -333,6 +333,7 @@ if (document.readyState === 'loading') {
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
 async function main() {
+  initNativePlacementIntegrityMonitor()
   const rightSidebar = initRightSidebarTabs({ document })
   const canvas = document.getElementById('canvas')
   const {
@@ -345,7 +346,7 @@ async function main() {
     addFrameCallback, removeFrameCallback,
     setRenderFn, resetRenderFn, isStandardRender,
     setNativeVRActive, setNativeVRDesktopEnabled,
-  } = initScene(canvas)
+  } = initScene(canvas, { placementStore: store })
   const vrDesktopDisplay = initVRDesktopDisplay({ document, setNativeVRActive, setNativeVRDesktopEnabled })
   initNamdPegCoatingPreview({ scene })
   initTwoElectrodePreview({ scene, camera, controls })
@@ -6512,7 +6513,6 @@ async function main() {
           ? new URLSearchParams(window.location.search).get('scrywrite') : 'off',
         ..._vrCompanionState(),
         camera: captureCurrentCamera(),
-        measured_positioning: isNewPositioningOn(),
         assembly_active: store.getState().assemblyActive,
         show_periodic_seam_arcs: store.getState().showPeriodicSeamArcs === true,
         mirror_eye: 'left',
@@ -6922,22 +6922,6 @@ async function main() {
   })
   window.addEventListener('nadoc:representation-change', (event) => {
     if (_overlayMode && event.detail?.representation !== 'ballstick') _setOverlayMode(false)
-  })
-
-  // Placement comparison: baseline OFF / candidate ON, both reset to the
-  // accepted native placement. Keep both render feeds on the same selection.
-  _setMenuToggle('menu-help-new-positioning', isNewPositioningOn())
-  document.getElementById('menu-help-new-positioning')?.addEventListener('click', async () => {
-    const next = !isNewPositioningOn()
-    if (!setNewPositioning(next)) return
-    _setMenuToggle('menu-help-new-positioning', next)
-    // getGeometry writes currentGeometry, and design_renderer rebuilds off that
-    // store change (design_renderer.js:762) — no explicit rebuild needed.
-    await api.getGeometry()
-    // The atomistic reps are a SEPARATE fetch with its own cache, so they need an
-    // explicit invalidate + refetch so future candidates update both representations.
-    _atomSurface?.invalidateAtomCache()
-    await _atomSurface?.refetchAtomistic()
   })
 
   initPegCoatingSetup({ reviewSetup: api.reviewPegSetup, getSurface: () => oxdnaFloorSetup.getSurfaceSpec(), getCoating: () => oxdnaSurfaceStrandsSetup.getStrandsSpec() })

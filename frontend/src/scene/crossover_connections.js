@@ -30,7 +30,7 @@ import {
 const BEAD_RADIUS    = 0.10  // nm — matches helix_renderer
 const HELIX_RADIUS   = 1.0   // nm — matches helix_renderer / constants.py
 // Synthetic crossover-extra decoration only; canonical duplex slabs use
-// helix_renderer.pairedSlabCenter and have no fixed backbone-to-center offset.
+// backend-authorized slab poses and never use this ssDNA decoration offset.
 const SLAB_DISTANCE  = 0.55
 export const SLAB_LENGTH    = 0.30  // nm (X scale)
 export const SLAB_WIDTH     = 0.06  // nm (Y scale)

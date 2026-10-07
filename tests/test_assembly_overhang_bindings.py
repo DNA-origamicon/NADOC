@@ -60,7 +60,15 @@ def _design_with_overhang(oh_id: str, seq: str) -> Design:
         sequence=seq,
         label=oh_id,
     )
-    return Design(overhangs=[ovhg])
+    reverse = oh_id.endswith("_3p")
+    x = 5.0 if "B" in oh_id else 0.0
+    return Design(overhangs=[ovhg], helices=[Helix(id="h-stub",
+        axis_start=Vec3(x=x, y=0, z=0), axis_end=Vec3(x=x, y=0, z=len(seq)*BDNA_RISE_PER_BP),
+        length_bp=len(seq))], strands=[Strand(id="s-stub", strand_type=StrandType.STAPLE,
+        domains=[Domain(helix_id="h-stub", start_bp=len(seq)-1 if reverse else 0,
+            end_bp=0 if reverse else len(seq)-1,
+            direction=Direction.REVERSE if reverse else Direction.FORWARD,
+            overhang_id=oh_id)])])
 
 
 def _two_part_assembly() -> Assembly:

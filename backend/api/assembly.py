@@ -2787,15 +2787,17 @@ def _linker_geometry_for_assembly(assembly) -> dict:
     """Compute nucleotide geometry for *assembly*'s linker helices and strands.
 
     Pure (takes the assembly explicitly) so the relax solver + connector-arc
-    checker can emit the SAME world-space beads the renderer shows, not a
-    re-derived approximation. Builds a synthetic Design from assembly_helices +
-    assembly_strands plus *world-space alias helices* for every cross-part
-    complement domain (``<inst_id>::<orig_helix_id>``) and runs the main
-    geometry pipeline. Returns ``{nucleotides, helix_axes, aliased_helices}``.
+    checker consume the same world-space beads as the renderer. Bridge helices
+    use their world-space design; cross-part complements use the actual source
+    design and then receive its rigid instance transform, including axis metadata.
+    Returns ``{nucleotides, helix_axes, aliased_helices}``.
 
     Returns empty arrays when there are no linker helices/strands.
     """
-    from backend.api.crud import _geometry_for_design
+    from backend.core.design_geometry import (_geometry_for_design, _geometry_for_helices,
+        _strand_nucleotide_info)
+    from backend.core.native_full_placement import NativePlacementError
+    from scipy.spatial.transform import Rotation
     from backend.core.assembly_linker import (
         parse_namespaced_helix_id,
         _world_axes_for_helix,
@@ -2818,6 +2820,7 @@ def _linker_geometry_for_assembly(assembly) -> dict:
                 referenced[d.helix_id] = parsed
 
     aliased: list = []
+    source_contexts = {}
     seen_namespaced_ids: set[str] = set()
     for namespaced_id, (inst_id, orig_helix_id) in referenced.items():
         if namespaced_id in seen_namespaced_ids:
@@ -2825,12 +2828,19 @@ def _linker_geometry_for_assembly(assembly) -> dict:
         seen_namespaced_ids.add(namespaced_id)
         inst = next((i for i in assembly.instances if i.id == inst_id), None)
         if inst is None:
-            continue
-        design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+            raise NativePlacementError(f"Assembly complement references missing instance {inst_id}.")
+        design = _design_with_instance_overrides(inst, _assembly_source_path(assembly))
+        source_contexts[inst_id] = (inst, design)
         helix = design.find_helix(orig_helix_id)
         if helix is None:
-            continue
+            raise NativePlacementError(f"Assembly complement references missing source helix {orig_helix_id}.")
         T = inst.transform.to_array()
+        R = T[:3, :3]
+        if (not np.all(np.isfinite(T))
+                or not np.allclose(T[3], [0., 0., 0., 1.], atol=1e-12, rtol=0)
+                or not np.allclose(R.T @ R, np.eye(3), atol=1e-8, rtol=0)
+                or not np.isclose(np.linalg.det(R), 1., atol=1e-8, rtol=0)):
+            raise NativePlacementError(f"Assembly instance {inst_id} has a nonrigid nucleotide transform.")
         ws, we = _world_axes_for_helix(helix, T)
         # Phase correction. The geometry pipeline derives a helix's radial frame
         # from a FIXED world reference (`_frame_from_helix_axis`), which is NOT
@@ -2842,7 +2852,6 @@ def _linker_geometry_for_assembly(assembly) -> dict:
         # frame(R·axis) instead — visibly wrong phase for any tilted part. Bake
         # the roll difference δ between the world-pipeline frame and R·(local
         # frame) into phase_offset so the world pass reproduces R·(local geometry).
-        R = T[:3, :3]
         local_axis = helix.axis_end.to_array() - helix.axis_start.to_array()
         world_axis = we - ws
         wx = _frame_from_helix_axis(world_axis)[:, 0]
@@ -2873,18 +2882,83 @@ def _linker_geometry_for_assembly(assembly) -> dict:
         lattice_type="HONEYCOMB",  # LatticeType enum value (lowercase 500s the endpoint)
         metadata=DesignMetadata(name="__linkers__"),
     )
+    # Bridge helices are world-space authoritative structures. Complements are
+    # evaluated on their actual source design (lattice, bend, twist, loop copies,
+    # residue poses and instance overrides), never a reconstructed straight alias.
+    # Aliases above remain axes/selection metadata, not a nucleotide placement path.
+    bridge_design = synthetic.copy_with(helices=list(assembly.assembly_helices))
+    nucleotides = _geometry_for_design(bridge_design, include_linker_helices=True)
+    helix_axes = deformed_helix_axes(bridge_design)
+    linker_info = _strand_nucleotide_info(synthetic)
+    for inst_id, (inst, source) in source_contexts.items():
+        local_strands = []
+        original_domain_indices = {}
+        helix_ids = set()
+        for strand in assembly.assembly_strands:
+            domains = []
+            for original_index, domain in enumerate(strand.domains):
+                parsed = parse_namespaced_helix_id(domain.helix_id)
+                if parsed is not None and parsed[0] == inst_id:
+                    helix_ids.add(parsed[1])
+                    original_domain_indices[(strand.id, len(domains))] = original_index
+                    domains.append(domain.model_copy(update={"helix_id": parsed[1]}))
+            if domains:
+                local_strands.append(strand.model_copy(update={"domains": domains}))
+        # Temporary projection only: neither source nor assembly topology is changed.
+        local = source.copy_with(strands=[*source.strands, *local_strands])
+        wanted = {strand.id for strand in local_strands}
+        matrix = inst.transform.to_array()
+        rotation, offset = matrix[:3, :3], matrix[:3, 3]
+        rigid = Rotation.from_matrix(rotation)
+
+        def transform_axis_points(entry):
+            result = dict(entry)
+            for field in ("start", "end"):
+                result[field] = (rotation @ np.asarray(entry[field]) + offset).tolist()
+            if "samples" in entry:
+                result["samples"] = (np.asarray(entry["samples"]) @ rotation.T + offset).tolist()
+            return result
+
+        for axis in deformed_helix_axes(local):
+            if axis["helix_id"] not in helix_ids:
+                continue
+            transformed = transform_axis_points(axis)
+            transformed["helix_id"] = f"{inst_id}::{axis['helix_id']}"
+            segments = []
+            for segment in axis.get("segments", []):
+                owners = segment.get("domain_ids") or [segment]
+                members = [{"strand_id": owner["strand_id"],
+                            "domain_index": original_domain_indices[(owner["strand_id"], owner["domain_index"])]}
+                           for owner in owners if (owner["strand_id"], owner["domain_index"]) in original_domain_indices]
+                if members:
+                    segments.append({**transform_axis_points(segment), **members[0], "domain_ids": members})
+            transformed["segments"] = segments
+            helix_axes.append(transformed)
+        for nucleotide in _geometry_for_helices(local, frozenset(helix_ids)):
+            if nucleotide.get("strand_id") not in wanted:
+                continue
+            record = dict(nucleotide)
+            record["helix_id"] = f"{inst_id}::{record['helix_id']}"
+            info = linker_info.get((record["helix_id"], record["bp_index"], Direction(record["direction"])))
+            if info is None:
+                raise NativePlacementError("Assembly complement has no topological identity.")
+            record.update(info)
+            for field in ("backbone_position", "base_position", "slab_position"):
+                if record.get(field) is not None:
+                    record[field] = (rotation @ record[field] + offset).tolist()
+            for field in ("base_normal", "axis_tangent"):
+                record[field] = (rotation @ record[field]).tolist()
+            if record.get("helical_site") is not None:
+                site = record["helical_site"]
+                record["helical_site"] = {**site,
+                    "axis_point": (rotation @ site["axis_point"] + offset).tolist(),
+                    "radial_hat": (rotation @ site["radial_hat"]).tolist()}
+            if record.get("slab_quaternion") is not None:
+                record["slab_quaternion"] = (rigid * Rotation.from_quat(record["slab_quaternion"])).as_quat().tolist()
+            nucleotides.append(record)
     return {
-        # include_linker_helices=True: render the world-space __lnk__ bridge
-        # helix directly (the assembly synthetic design has no
-        # overhang_connections, so _emit_bridge_nucs can't emit the bridge).
-        # junction_balance is a no-op here: `synthetic` is hardcoded HONEYCOMB above,
-        # whose balance roll is 0.  A ds linker on a SQUARE design therefore draws its
-        # bridge unrolled beside rolled part beads — a known gap, unexercised (no
-        # fixture in Examples/ or workspace/ has a ds linker).
-        "nucleotides": _geometry_for_design(
-            synthetic, include_linker_helices=True, junction_balance=True
-        ),
-        "helix_axes": deformed_helix_axes(synthetic),
+        "nucleotides": nucleotides,
+        "helix_axes": helix_axes,
         "aliased_helices": [h.model_dump(mode="json") for h in aliased],
     }
 

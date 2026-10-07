@@ -1,12 +1,12 @@
 """
-Tests for the metadata-only OverhangConnection feature.
+Tests for OverhangConnection metadata and generated linker topology.
 
 Endpoints under test:
   POST   /design/overhang-connections
   DELETE /design/overhang-connections/{conn_id}
 
-These records are pure annotations — no strand topology is mutated. The API
-is tested against a synthetic design seeded with two minimal OverhangSpecs.
+Linker creation requires physical overhang domains; metadata without a native
+anchor must fail rather than producing an origin placeholder.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ client = TestClient(app)
 
 
 def _seed_with_two_overhangs() -> Design:
-    """Demo design plus four synthetic OverhangSpec entries (no real geometry).
+    """Demo design plus four real single-stranded overhang helices.
 
     Four overhangs (two 5p, two 3p) so tests can build multiple connections
     without bumping into the per-end uniqueness rule.
@@ -83,12 +83,23 @@ def _seed_with_two_overhangs() -> Design:
             label="OH4",
         ),
     ]
-    return base.model_copy(update={"overhangs": overhangs})
+    helices, strands, specs = list(base.helices), list(base.strands), []
+    for i, spec in enumerate(overhangs):
+        hid, sid = f"fixture-oh-h{i}", f"fixture-oh-s{i}"
+        reverse = spec.id.endswith("_3p")
+        helices.append(Helix(id=hid, axis_start=Vec3(x=4*i, y=1, z=0),
+            axis_end=Vec3(x=4*i, y=1, z=8*BDNA_RISE_PER_BP), length_bp=8))
+        strands.append(Strand(id=sid, strand_type=StrandType.STAPLE, domains=[
+            Domain(helix_id=hid, start_bp=7 if reverse else 0, end_bp=0 if reverse else 7,
+                   direction=Direction.REVERSE if reverse else Direction.FORWARD,
+                   overhang_id=spec.id)]))
+        specs.append(spec.model_copy(update={"helix_id": hid, "strand_id": sid}))
+    return base.model_copy(update={"overhangs": specs, "helices": helices, "strands": strands})
 
 
 def _seed_with_two_5p_overhangs() -> Design:
     """Demo design with two 5p overhangs (same-end pair — rule constraints apply)."""
-    base = _demo_design()
+    base = _seed_with_two_overhangs()
     overhangs = [
         OverhangSpec(
             id="ovhg_inline_a_5p",
@@ -103,7 +114,8 @@ def _seed_with_two_5p_overhangs() -> Design:
             label="OH2",
         ),
     ]
-    return base.model_copy(update={"overhangs": overhangs})
+    ids = {o.id for o in overhangs}
+    return base.model_copy(update={"overhangs": [o for o in base.overhangs if o.id in ids]})
 
 
 def _seed_with_real_oh_domains() -> Design:
@@ -817,7 +829,9 @@ def test_relax_endpoint_accepts_ssdna_with_fjc_target():
         length_value=8,
         length_unit="bp",
     )
-    design_state.set_design(seeded.model_copy(update={"overhang_connections": [conn]}))
+    from backend.core.lattice import generate_linker_topology
+    seeded = seeded.model_copy(update={"overhang_connections": [conn]})
+    design_state.set_design(generate_linker_topology(seeded, conn))
     r = client.post(f"/api/design/overhang-connections/{conn.id}/relax")
     assert r.status_code == 200, r.text
     info = r.json()["relax_info"]
@@ -1396,21 +1410,26 @@ def test_ss_linker_bridge_polarity_chains_5p_to_3p():
     assert bridge["end_bp"] == 11  # L-1
 
 
-def test_ss_linker_bridge_only_strand_when_overhangs_lack_domains():
-    """Synthetic seed (no real OH domains): ss strand still emitted but
-    bridge-only — the cleanup path needs a strand to remove on disconnect.
-    """
+def test_ss_linker_without_physical_anchor_fails_without_mutating_design(monkeypatch, tmp_path):
+    """Missing anchor geometry cannot manufacture a strand at the origin."""
+    monkeypatch.setenv("NADOC_PLACEMENT_REPORT_DIR", str(tmp_path / "expected-integrity-error"))
+    seeded = _seed_with_two_overhangs()
+    physical_ids = {o.helix_id for o in seeded.overhangs}
+    seeded = seeded.model_copy(update={"helices": [h for h in seeded.helices if h.id not in physical_ids],
+        "strands": [s for s in seeded.strands if not any(d.helix_id in physical_ids for d in s.domains)]})
+    design_state.set_design(seeded)
+    before = design_state.get_or_404().to_json()
     r = _post_conn(linker_type="ss", length_value=10)
-    design = r.json()["design"]
-    cid = design["overhang_connections"][0]["id"]
-    strands = _linker_strands_for(design, cid)
-    # ONE bridge-only strand (instead of zero in the legacy implementation).
-    assert len(strands) == 1
-    assert strands[0]["id"].endswith("__s")
-    assert len(strands[0]["domains"]) == 1
-    assert strands[0]["domains"][0]["helix_id"].startswith("__lnk__")
-    # Virtual bridge helix is created (was not in the legacy implementation).
-    assert len(_linker_helices_for(design, cid)) == 1
+    assert r.status_code == 500
+    assert r.json()["detail"]["code"] == "NATIVE_PLACEMENT_INTEGRITY"
+    incident = r.json()["detail"]["incident_id"]
+    assert (tmp_path / "expected-integrity-error" / "incidents" / incident / "report.json").is_file()
+    context = r.json()["detail"]["details"]
+    assert context["connection_id"]
+    assert context["anchors"]["a"]["overhang_id"] == "ovhg_inline_a_5p"
+    assert context["anchors"]["b"]["overhang_id"] == "ovhg_inline_a_3p"
+    assert context["anchors"]["a"]["helix_id"] is None
+    assert design_state.get_or_404().to_json() == before
 
 
 def test_ds_linker_creates_two_strands_one_bridge_helix():

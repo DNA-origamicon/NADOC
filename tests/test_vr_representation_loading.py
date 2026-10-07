@@ -99,3 +99,8 @@ def test_cylinders_use_desktop_radius_and_staple_color():
     assert np.max(np.linalg.norm(points[:, :2], axis=1)) == pytest.approx(1.125)
     assert mesh['palettes'][:3] == [1, 0, 0]
     assert np.linalg.norm(np.asarray(mesh['normals']).reshape(-1, 3), axis=1) == pytest.approx(np.ones(len(points)))
+
+
+@pytest.fixture(autouse=True)
+def isolated_native_review_journal(monkeypatch, tmp_path):
+    monkeypatch.setenv("NADOC_PLACEMENT_REPORT_DIR", str(tmp_path / "placement-reports"))

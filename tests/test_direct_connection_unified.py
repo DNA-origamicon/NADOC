@@ -344,8 +344,10 @@ def test_relax_direct_closes_tip_root_chord_with_joint():
         min_angle_deg=-180.0,
         max_angle_deg=180.0,
     )
-    d = _seed(cluster_b_translation=(6.0, 0.0, 0.0), joint=joint)
+    d = _seed(cluster_b_translation=(5.3, 0.0, 0.0), joint=joint)
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
+    minimum, maximum, span = _direct_hinge_reach(d, joint)
+    assert minimum < span + 2 * _TARGET < maximum
     before = _tip_root_chord(d)
     # Apply already SEATS the duplex at the oriented midpoint; the bridge-method relax
     # rotates the joint to bring the two roots to the duplex's natural span, closing the
@@ -363,6 +365,34 @@ def test_relax_direct_closes_tip_root_chord_with_joint():
     cl = duplex_cluster_for(updated, "oh_a")
     assert cl is not None and cl.rotation != _IDENTITY
     assert next(o for o in updated.overhangs if o.id == "oh_a").rotation == _IDENTITY
+
+
+def _direct_hinge_reach(design, joint):
+    """Independent circle-distance bound using actual native root/duplex beads."""
+    from backend.core.direct_relax import _root_anchors
+    from backend.core.models import _local_to_world_joint
+
+    pa, ca, pb, cb = _root_anchors(design, _geometry_for_design(design), "oh_a", "oh_b")
+    cluster = next(c for c in design.cluster_transforms if c.id == joint.cluster_id)
+    origin, axis = _local_to_world_joint(joint.local_axis_origin, joint.local_axis_direction, cluster)
+    axis = np.asarray(axis) / np.linalg.norm(axis)
+    a, b = pa-origin, pb-origin
+    za, zb = np.dot(a, axis), np.dot(b, axis)
+    ra, rb = np.linalg.norm(a-za*axis), np.linalg.norm(b-zb*axis)
+    return float(np.hypot(ra-rb, za-zb)), float(np.hypot(ra+rb, za-zb)), float(np.linalg.norm(ca-cb))
+
+
+def test_relax_direct_stops_at_analytic_reach_limit_with_native_beads():
+    """The former positive fixture is unreachable with accepted O5′ endpoints."""
+    joint = ClusterJoint(id="jB", cluster_id="cB", local_axis_origin=[0, 0, 6*BDNA_RISE_PER_BP],
+                         local_axis_direction=[0, 1, 0], min_angle_deg=-180, max_angle_deg=180)
+    design = _seed(cluster_b_translation=(6, 0, 0), joint=joint)
+    design = _cv_create_bound_binding(design, "oh_a", "oh_b", "root", "root", "root-to-root")
+    minimum, _, span = _direct_hinge_reach(design, joint)
+    assert minimum > span+2*_TARGET
+    updated, info = relax_direct_binding(design, "oh_a", "oh_b")
+    np.testing.assert_allclose(info["final_root_chord_nm"], minimum, rtol=0, atol=1e-5)
+    np.testing.assert_allclose(_tip_root_chord(updated), (minimum-span)/2, rtol=0, atol=1e-5)
     assert next(o for o in updated.overhangs if o.id == "oh_b").rotation == _IDENTITY
 
 

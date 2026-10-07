@@ -39,6 +39,18 @@ install(TARGETS nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export
 
 include(CTest)
 if(BUILD_TESTING)
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  add_executable(nadoc-vr-placement-integrity-test tests/placement_integrity_test.cpp)
+  target_include_directories(nadoc-vr-placement-integrity-test PRIVATE src)
+  target_compile_options(nadoc-vr-placement-integrity-test PRIVATE -UNDEBUG)
+  add_test(NAME nadoc-vr-placement-integrity COMMAND ${Python3_EXECUTABLE} -m tools.native_placement_audit.command
+    --test-id native::placement-integrity
+    --source-file native/vr_viewer/src/main.cpp
+    --source-file native/vr_viewer/src/placement_integrity.hpp
+    --source-file native/vr_viewer/tests/placement_integrity_test.cpp
+    -- $<TARGET_FILE:nadoc-vr-placement-integrity-test>)
+  set_tests_properties(nadoc-vr-placement-integrity PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../.." SKIP_RETURN_CODE 77)
   add_executable(nadoc-vr-selection-wheel-test tests/selection_wheel_test.cpp)
   target_include_directories(nadoc-vr-selection-wheel-test PRIVATE src)
   target_compile_options(nadoc-vr-selection-wheel-test PRIVATE -UNDEBUG)

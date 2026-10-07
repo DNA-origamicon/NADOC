@@ -1,3 +1,4 @@
+import { requireNativeBackbonePosition } from '../viewer/native_placement.js'
 // Where to draw connector arcs along cross-part linker strands (assembly view).
 //
 // A linker strand's backbone "jumps" whenever two consecutive domains sit on
@@ -27,7 +28,8 @@ export function assemblyConnectorArcEndpoints(linkerStrands, nucs) {
   const posByKey = new Map()
   for (const n of nucs ?? []) {
     if (!n.strand_id) continue
-    const p = n.backbone_position ?? n.base_position
+    const ds = /__(a|b)$/.test(n.strand_id) && n.strand_id.startsWith('__lnk__')
+    const p = ds ? requireNativeBackbonePosition(n) : (n.backbone_position ?? n.base_position)
     if (p) posByKey.set(`${n.strand_id}|${n.helix_id}|${n.bp_index}`, p)
   }
   const out = []

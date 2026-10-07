@@ -795,23 +795,42 @@ def test_autonomous_build_end_to_root_binding_is_valid_and_roundtrip_stable():
 
 # ── relax_overhang_connection + relax_bond (AF-27 P2 — linker/bond pose) ─────────
 #
-# Fixture facts, DERIVED (AF-42 — not fished; re-derive with the same method if
-# the leaves ever move).  These hold once ``generate_linker_topology`` is wired
-# in, which is what makes the anchors the REAL `__lnk__<conn>__a`/`__b`
-# complements rather than the synthetic-fixture fallback:
-#   moving anchor (cluster A's complement) = [2.0, 0.866, 0]
-#   fixed  anchor (cluster B's complement) = [4.133, 0.499, 2.338]
-#   start chord 3.186 nm.  The moving anchor rides a radius-2.0 circle about the
-#   hinge axis and the fixed anchor sits 4.749 nm off-axis, so the reachable
-#   chord range is [2.773, 6.759] nm (closed form, confirmed by a brute-force
-#   360-deg sweep).  Anchors do NOT depend on length_bp — the complements sit on
-#   the real overhang helices; only the bridge lives on the virtual helix.
-# => the ds span must satisfy (length_bp - 1) * BDNA_RISE_PER_BP <= 6.759, i.e.
-#    length_bp <= 21.  _DS_LINKER_BP=16 (span 5.010 nm) sits comfortably inside
-#    the range AND 1.824 nm off the start chord, so the relax lands exactly ON
-#    the span (strain -> 0) instead of saturating at the kinematic boundary.
-_DS_LINKER_BP = 16  # span 5.010 nm — reachable, unambiguous swing
-_DS_LINKER_BP_UNREACHABLE = 24  # span 7.682 nm — beyond the 6.759 nm max
+# Reachability is computed from the actual canonical complementary beads below.
+# Hardcoded cylindrical-radius anchor coordinates are not native DNA geometry.
+_DS_LINKER_BP = 16
+_DS_LINKER_BP_UNREACHABLE = 40  # axis span 13.026 nm exceeds the fixture's reach
+
+
+def _hinge_through_linker_anchor(design, conn_id):
+    """Derive a genuinely immobile moving anchor from the accepted Full records."""
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.linker_relax import _anchor_pos_and_normal
+
+    conn = next(c for c in design.overhang_connections if c.id == conn_id)
+    anchor, _ = _anchor_pos_and_normal(_geometry_for_design(design), conn, conn.overhang_a_id, True)
+    joint = design.cluster_joints[0].model_copy(update={"local_axis_origin": anchor.tolist()})
+    return design.model_copy(update={"cluster_joints": [joint]})
+
+
+def _linker_hinge_chord_bounds(design, conn_id):
+    """Closed-form min/max distances from a point on a full circle to a fixed point."""
+    import numpy as np
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.linker_relax import _anchor_pos_and_normal
+    from backend.core.models import _local_to_world_joint
+
+    conn = next(c for c in design.overhang_connections if c.id == conn_id)
+    nucs = _geometry_for_design(design)
+    a, _ = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
+    b, _ = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)
+    joint = design.cluster_joints[0]
+    cluster = next(c for c in design.cluster_transforms if c.id == joint.cluster_id)
+    origin, axis = _local_to_world_joint(joint.local_axis_origin, joint.local_axis_direction, cluster)
+    axis = np.asarray(axis) / np.linalg.norm(axis)
+    a, b = a-origin, b-origin
+    za, zb = np.dot(a, axis), np.dot(b, axis)
+    ra, rb = np.linalg.norm(a-za*axis), np.linalg.norm(b-zb*axis)
+    return float(np.hypot(ra-rb, za-zb)), float(np.hypot(ra+rb, za-zb))
 
 
 def _two_overhang_leaves_with_joint(*, joint_origin, length_bp=_DS_LINKER_BP):
@@ -822,16 +841,11 @@ def _two_overhang_leaves_with_joint(*, joint_origin, length_bp=_DS_LINKER_BP):
     Calls ``generate_linker_topology`` (load-bearing, exactly as the ss sibling
     does): the per-side bridge strands it emits (``__lnk__<conn>__a`` / ``__b``)
     are what let ``_anchor_pos_and_normal`` resolve the REAL complement anchor.
-    Without it no bridge exists in geometry at all and the lookup silently takes
-    its synthetic-fixture fallback — the overhang's OWN backbone nuc — so the pin
-    exercises a different, weaker path than the app does (AF-42).
+    Without it the canonical complementary anchor is absent and lookup errors.
 
-    ``joint_origin`` is the cluster-A-local hinge-axis origin.  Place it OFF the
-    moving anchor (``[0,0,0]``) so the relax can swing the chord onto the linker's
-    natural span; place it ON the anchor (``[2.0,0,0]``, i.e. the axis {(2.0,t,0)}
-    runs THROUGH the complement at [2.0,0.866,0]) for the degenerate no-op case.
-    Note [2.0,0,0], not [2.5,0,0]: 2.5 is the x of the *fallback* backbone anchor
-    and does NOT freeze the real one.  See the derived-facts block above.
+    ``joint_origin`` is the cluster-A-local hinge-axis origin. Pass [0,0,0]
+    for a movable anchor, or None to derive an axis through the actual native
+    complementary bead and make a genuinely degenerate no-op fixture.
 
     The grid_pos-less ``demo_helix`` from the base demo design is dropped so the
     fixture's ``canonical_topology`` is well-defined (every helix keyed by cell).
@@ -858,7 +872,7 @@ def _two_overhang_leaves_with_joint(*, joint_origin, length_bp=_DS_LINKER_BP):
         id="joint_a",
         cluster_id="cluster_a",
         name="Hinge",
-        local_axis_origin=list(joint_origin),
+        local_axis_origin=list(joint_origin or [0, 0, 0]),
         local_axis_direction=[0.0, 1.0, 0.0],
         min_angle_deg=-180.0,
         max_angle_deg=180.0,
@@ -880,7 +894,10 @@ def _two_overhang_leaves_with_joint(*, joint_origin, length_bp=_DS_LINKER_BP):
             "overhang_connections": [conn],
         }
     )
-    return generate_linker_topology(seeded, conn), conn.id
+    seeded = generate_linker_topology(seeded, conn)
+    if joint_origin is None:
+        seeded = _hinge_through_linker_anchor(seeded, conn.id)
+    return seeded, conn.id
 
 
 def _seed_with_real_oh_domains_for_relax():
@@ -999,12 +1016,14 @@ def test_relax_ds_linker_anchors_on_the_real_complement_not_the_fallback():
         "would silently fall back to the overhang's own backbone nuc"
     )
 
-    # The real complement anchor sits at x=2.0; the fallback backbone anchor
-    # would sit at x=2.5 (oh_helix_a's axis).  Chord is the cheap tell.
-    assert _ds_anchor_chord_nm(seeded, conn_id) == pytest.approx(3.186, abs=1e-2), (
-        "start chord should be the real-complement 3.186 nm, not the "
-        "fallback's 4.327 nm"
-    )
+    from backend.core.linker_relax import linker_anchor_nucleotide
+    conn = next(c for c in seeded.overhang_connections if c.id == conn_id)
+    a = linker_anchor_nucleotide(nucs, conn, conn.overhang_a_id, True)
+    b = linker_anchor_nucleotide(nucs, conn, conn.overhang_b_id, False)
+    assert a["strand_id"] == f"__lnk__{conn_id}__a"
+    assert b["strand_id"] == f"__lnk__{conn_id}__b"
+    assert _ds_anchor_chord_nm(seeded, conn_id) == pytest.approx(
+        math.dist(a["backbone_position"], b["backbone_position"]), abs=1e-12)
 
 
 def test_relax_overhang_connection_pulls_linker_toward_natural_span():
@@ -1034,7 +1053,7 @@ def test_relax_overhang_connection_pulls_linker_toward_natural_span():
 
 def test_relax_overhang_connection_saturates_when_span_is_out_of_reach():
     """An over-long ds linker whose natural span exceeds what the 1-DOF hinge can
-    open to: the relax saturates at the kinematic maximum (6.759 nm) rather than
+    open to: the relax saturates at the independently computed kinematic maximum rather than
     failing, and strain still falls — so the oracle stays green.  Pins the
     boundary behaviour the default _DS_LINKER_BP deliberately avoids (AF-42)."""
     seeded, conn_id = _two_overhang_leaves_with_joint(
@@ -1049,7 +1068,9 @@ def test_relax_overhang_connection_saturates_when_span_is_out_of_reach():
     span = (_DS_LINKER_BP_UNREACHABLE - 1) * BDNA_RISE_PER_BP
     chord_after = _ds_anchor_chord_nm(after, conn_id)
     assert chord_after < span, "an unreachable span cannot be reached, by definition"
-    assert chord_after == pytest.approx(6.759, abs=1e-2), (
+    _, maximum_chord = _linker_hinge_chord_bounds(before, conn_id)
+    assert maximum_chord < span, "fixture must actually make the desired span unreachable"
+    assert chord_after == pytest.approx(maximum_chord, abs=1e-2), (
         "the relax should open to the hinge's maximum reachable chord"
     )
 
@@ -1059,10 +1080,10 @@ def test_relax_overhang_connection_degenerate_hinge_is_a_noop():
     change the chord — the relax is a no-op and the strain-reduction oracle
     (rightly) fires.  Guards that the pass above is non-vacuous.
 
-    The origin is DERIVED, not fished (AF-42): the anchor is [2.0, 0.866, 0] and
-    the axis direction is [0,1,0], so the axis {(2.0, t, 0)} runs through it.
+    The origin is derived from the actual canonical anchor at fixture creation;
+    no cylindrical-radius coordinate is embedded in the test.
     """
-    seeded, conn_id = _two_overhang_leaves_with_joint(joint_origin=[2.0, 0.0, 0.0])
+    seeded, conn_id = _two_overhang_leaves_with_joint(joint_origin=None)
     design_state.set_design(seeded)
     before = design_state.get_or_404()
     after = hb.relax_overhang_connection(conn_id)
@@ -1085,19 +1106,11 @@ def test_relax_overhang_connection_is_pose_only():
 # The ss path is a DIFFERENT target than ds: `relax_ss_linker` closes the anchor
 # chord onto the chosen FJC histogram bin's R_ee, not onto the duplex span.
 #
-# Fixture facts, DERIVED (not fished — see the joint-origin note below):
-#   moving anchor (cluster A's `__lnk__<conn>__s` complement) = [2.0, 0.866, 0]
-#   fixed  anchor (cluster B)                                 = [4.133, 0.499, 2.338]
-#   start chord 3.186 nm; the moving anchor rides a radius-2.0 circle about the
-#   hinge axis, so the reachable chord range is [2.773, 6.759] nm.
-# => bins 23..39 (R_ee 2.843..4.187 nm) are reachable.
-# (CORRECTED 2026-07-16, AF-42: this block used to add "while the ds span this
-#  connection WOULD have had (6.346 nm) is out of reach entirely" — FALSE, and
-#  contradicted by its own stated range.  6.346 < 6.759, and a brute-force 360-deg
-#  sweep plus an actual bp=20 relax landing exactly on 6.346 both confirm it is
-#  reachable.  The ds span only leaves reach above length_bp=21.)
+# Both selected FJC bins are within the native fixture's reachable interval.
+# The contradiction test explicitly puts its initial pose between the short
+# FJC target and duplex span before checking their opposing strain changes.
 _SS_LINKER_BP = 20
-_SS_BIN_SHORT = 23  # R_ee 2.843 nm — BELOW the start chord
+_SS_BIN_SHORT = 23  # R_ee 2.843 nm
 _SS_BIN_LONG = 39  # R_ee 4.187 nm — ABOVE it; the wide, unambiguous swing
 
 
@@ -1105,20 +1118,10 @@ def _two_overhang_leaves_ss_linker(*, joint_origin, length_bp=_SS_LINKER_BP):
     """The ss sibling of ``_two_overhang_leaves_with_joint``: same two leaves and
     one revolute joint, but tied by a ``linker_type="ss"`` connection.
 
-    Unlike the ds fixture this calls ``generate_linker_topology``, which is
-    load-bearing: the bridge strand it emits (``__lnk__<conn>__s``) is what lets
-    ``_anchor_pos_and_normal`` resolve the REAL complement anchor.  Without it
-    there is no bridge in geometry at all and the lookup silently takes its
-    synthetic-fixture fallback (the overhang's own backbone nuc) — a different,
-    weaker path.
-
-    ``joint_origin`` is the cluster-A-local hinge-axis origin, and its degenerate
-    value differs from the ds fixture's for exactly that reason: the real
-    complement anchor sits at x=2.0, z=0, so the axis ``{(2.0, t, 0)}`` runs
-    THROUGH it (rotation cannot move it → chord frozen → the can-go-red).  The ds
-    fixture's [2.5,0,0] degenerate is the x of its *fallback* backbone anchor and
-    does NOT freeze this one.  Pass [0,0,0] to leave the anchor 2.0 nm off-axis
-    and let the relax actually swing.
+    Like the ds fixture, this creates real complementary topology before
+    resolving physical anchors. A missing complement cannot be substituted.
+    Pass None for ``joint_origin`` to derive the degenerate axis through the
+    canonical moving anchor; pass [0,0,0] for a movable fixture.
     """
     base = _seed_with_real_oh_domains_for_relax()
     ca = ClusterRigidTransform(
@@ -1141,7 +1144,7 @@ def _two_overhang_leaves_ss_linker(*, joint_origin, length_bp=_SS_LINKER_BP):
         id="joint_a",
         cluster_id="cluster_a",
         name="Hinge",
-        local_axis_origin=list(joint_origin),
+        local_axis_origin=list(joint_origin or [0, 0, 0]),
         local_axis_direction=[0.0, 1.0, 0.0],
         min_angle_deg=-180.0,
         max_angle_deg=180.0,
@@ -1163,7 +1166,10 @@ def _two_overhang_leaves_ss_linker(*, joint_origin, length_bp=_SS_LINKER_BP):
             "overhang_connections": [conn],
         }
     )
-    return generate_linker_topology(seeded, conn), conn.id
+    seeded = generate_linker_topology(seeded, conn)
+    if joint_origin is None:
+        seeded = _hinge_through_linker_anchor(seeded, conn.id)
+    return seeded, conn.id
 
 
 def _ss_anchor_chord_nm(design, conn_id):
@@ -1225,6 +1231,13 @@ def test_relax_ss_linker_targets_fjc_r_ee_not_the_duplex_span():
     same relax is green under the R_ee yardstick and RED under the ds one.  This
     is what makes ``natural_span_nm`` mandatory for ss rather than cosmetic."""
     seeded, conn_id = _two_overhang_leaves_ss_linker(joint_origin=[0.0, 0.0, 0.0])
+    # Put the starting chord between the two distinct targets, so reducing the
+    # FJC error must increase the duplex-span error. This is an input pose, not
+    # a change to either scientific target or acceptance threshold.
+    fixed = seeded.cluster_transforms[1].model_copy(update={"translation": [1, 0, 0]})
+    seeded = seeded.model_copy(update={"cluster_transforms": [seeded.cluster_transforms[0], fixed]})
+    r_ee = ssdna_fjc.bin_r_ee(_SS_LINKER_BP, _SS_BIN_SHORT)
+    assert r_ee < _ss_anchor_chord_nm(seeded, conn_id) < (_SS_LINKER_BP-1)*BDNA_RISE_PER_BP
     design_state.set_design(seeded)
     before = design_state.get_or_404()
     r_ee = ssdna_fjc.bin_r_ee(_SS_LINKER_BP, _SS_BIN_SHORT)
@@ -1238,7 +1251,7 @@ def test_relax_ss_linker_degenerate_hinge_is_a_noop():
     """Guards that the ss pass above is non-vacuous: with the hinge axis running
     through the moving complement anchor, rotation cannot change the chord, so
     the relax is a no-op and the strain-reduction oracle (rightly) fires."""
-    seeded, conn_id = _two_overhang_leaves_ss_linker(joint_origin=[2.0, 0.0, 0.0])
+    seeded, conn_id = _two_overhang_leaves_ss_linker(joint_origin=None)
     design_state.set_design(seeded)
     before = design_state.get_or_404()
     r_ee = ssdna_fjc.bin_r_ee(_SS_LINKER_BP, _SS_BIN_LONG)

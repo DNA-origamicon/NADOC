@@ -86,7 +86,7 @@ def _resolve_blunt_label_local(
 
     Bypasses the stored ip.position (which is a snapshot from registration
     time and goes stale when clusters change). Pulls live geometry from
-    ``deformed_helix_axes`` / ``deformed_nucleotide_positions`` so a hinge
+    ``deformed_helix_axes`` / canonical native Full records so a hinge
     angle edit (cluster transform change) propagates straight to mate
     resolve + the highlight markers without requiring IP re-registration.
 
@@ -136,43 +136,35 @@ def _resolve_blunt_label_local(
         normal = -axis_dir if bp_spec == "start" else axis_dir
         return pos, normal
 
-    # Interior bp label "bpN": use deformed_nucleotide_positions and look up
-    # the matching bp_index.
+    # Interior bp label "bpN": resolve an occupied nucleotide in native Full.
     if bp_spec.startswith("bp"):
         try:
             target_bp = int(bp_spec[2:])
         except ValueError:
             return None
-        try:
-            from backend.core.deformation import deformed_nucleotide_positions
+        from backend.core.design_geometry import _geometry_for_helices
+        from backend.core.native_full_placement import NativePlacementError
 
-            positions_by_helix = cache.setdefault("positions_by_helix", {})
-            positions_by_bp = positions_by_helix.get(helix_id)
-            if positions_by_bp is None:
-                positions_by_bp = {}
-                for position in deformed_nucleotide_positions(helix, design):
-                    positions_by_bp.setdefault(position.bp_index, position)
-                positions_by_helix[helix_id] = positions_by_bp
-        except Exception:
-            return None
-        # Two NucleotidePosition entries share a bp_index (forward + reverse);
-        # the axis-centerline position is the same for both, just take the first.
+        positions_by_helix = cache.setdefault("positions_by_helix", {})
+        positions_by_bp = positions_by_helix.get(helix_id)
+        if positions_by_bp is None:
+            positions_by_bp = {}
+            for record in _geometry_for_helices(design, frozenset({helix_id})):
+                if record["helix_id"] == helix_id:
+                    positions_by_bp.setdefault(record["bp_index"], record)
+            positions_by_helix[helix_id] = positions_by_bp
+        # A label has no strand direction; deterministic native emission order
+        # picks the first occupied site, never a phantom construction bead.
         nuc = positions_by_bp.get(target_bp)
         if nuc is None:
-            return None
-        pos = np.array(nuc.position, dtype=float)
+            raise NativePlacementError("Interior connector has no occupied native nucleotide.",
+                details={"connector_label": label, "helix_id": helix_id, "bp_index": target_bp})
+        pos = np.array(nuc["backbone_position"], dtype=float)
         # axis_tangent points along the helix axis at this bp; for an interior
         # blunt-end the strand exits in either direction depending on whether
         # this is the strand's terminal-low or terminal-high bp. We don't
         # know that here — default to +tangent (interior overhang convention).
-        tangent = getattr(nuc, "axis_tangent", None)
-        if tangent is None:
-            normal = np.array([0.0, 0.0, 1.0], dtype=float)
-        else:
-            normal = np.array(tangent, dtype=float)
-            n = float(np.linalg.norm(normal))
-            if n > 1e-9:
-                normal /= n
+        normal = np.array(nuc["axis_tangent"], dtype=float)
         return pos, normal
 
     return None

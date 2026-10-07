@@ -33,7 +33,6 @@ import { canonicalSelection, overhangSelectionTarget } from './selection_model.j
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { showPersistentToast, dismissToast, showToast } from '../ui/toast.js'
 import { docHeaders } from '../shared/doc_id.js'
-import { geometryQuerySuffix } from '../ui/new_positioning.js'
 import { parseSurfaceBin } from './surface_bin.js'
 import { withSurfaceProgress } from '../api/surface_progress_request.js'
 
@@ -556,7 +555,7 @@ export function initAtomSurfaceDisplay({
     const base = _seedLatticeNm === null
       ? '/api/design/atomistic'
       : `/api/design/atomistic?seed_lattice_nm=${encodeURIComponent(_seedLatticeNm)}`
-    return base + geometryQuerySuffix(base.includes('?'))
+    return base
   }
 
   /**

@@ -1,3 +1,4 @@
+import { requireNativeBackbonePosition } from '../viewer/native_placement.js'
 /**
  * Cross-part linker rendering for the assembly view — the `__lnk__` bridge
  * duplexes between bound overhangs, plus the white connector arcs that close the
@@ -102,7 +103,9 @@ export async function _rebuildLinkerHelices({ assembly, api, linkerGroup, axesTo
   if (linkerHelices.length === 0 && linkerStrands.length === 0) return
 
   let geoData = null
-  try { geoData = await api.getLinkerGeometry() } catch (_) {}
+  try { geoData = await api.getLinkerGeometry() } catch (error) {
+    if (error?.code === 'NATIVE_PLACEMENT_INTEGRITY') throw error
+  }
   if (!geoData?.nucleotides?.length) return
 
   const syntheticDesign = {
@@ -149,7 +152,7 @@ export async function _rebuildLinkerHelices({ assembly, api, linkerGroup, axesTo
   for (const n of geoData.nucleotides ?? []) {
     const sid = n.strand_id ?? ''
     if (!/^__lnk__.+__(a|b|s)$/.test(sid)) continue
-    const p = n.backbone_position ?? n.base_position
+    const p = /__(a|b)$/.test(sid) ? requireNativeBackbonePosition(n) : (n.backbone_position ?? n.base_position)
     if (!p) continue
     linkerNucs.push({ connId: sid.replace(/^__lnk__/, '').replace(/__(a|b|s)$/, ''), pos: [p[0], p[1], p[2]] })
   }

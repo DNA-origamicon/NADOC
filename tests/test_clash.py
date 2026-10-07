@@ -6,6 +6,7 @@ reports its folded A↔B seam clashes.  See clash.py's module docstring.
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from backend.core.clash import (
@@ -15,6 +16,8 @@ from backend.core.clash import (
 )
 from backend.core.models import Design
 from tests.conftest import make_6hb_design, make_18hb_design
+
+pytestmark = pytest.mark.native_placement
 
 _CORNER = Path(__file__).resolve().parent / "fixtures" / "corner_miter_test.nadoc"
 _26HB = Path(__file__).resolve().parents[1] / "Examples" / "26hb_platform_v3.nadoc"
@@ -47,11 +50,33 @@ def test_clean_26hb_platform_reports_no_clashes():
 
 @pytest.mark.skipif(not _CORNER.exists(), reason="corner_miter_test fixture missing")
 def test_corner_miter_reports_seam_clashes():
-    report = clash_report(_load(_CORNER))
+    from backend.core.design_geometry import _geometry_for_design
+
+    design = _load(_CORNER)
+    report = clash_report(design)
 
     # The two arms fold together at the mitred corner → real backbone overlaps.
     assert report.count > 0
-    assert report.count >= 10  # reference ≈ 11–15 A↔B pairs
+    # Independently enumerate distances between the actual exported native DNA
+    # beads. A count calibrated against radius1 construction points included
+    # phantom/incorrectly positioned beads and cannot be a molecular oracle.
+    # Keep both calibrated distance thresholds unchanged and require every
+    # expected pair's identity, not just a minimum number of collisions.
+    posed = _geometry_for_design(design)
+    straight = _geometry_for_design(design.model_copy(update={"deformations": [], "cluster_transforms": []}))
+    key = lambda n: (n["helix_id"], n["bp_index"], n["direction"], n.get("copy_k", 0))
+    straight_by_key = {key(n): n["backbone_position"] for n in straight}
+    positions = np.asarray([n["backbone_position"] for n in posed])
+    rest = np.asarray([straight_by_key[key(n)] for n in posed])
+    distances = np.linalg.norm(positions[:, None]-positions[None, :], axis=2)
+    rest_distances = np.linalg.norm(rest[:, None]-rest[None, :], axis=2)
+    selected = np.argwhere(np.triu((distances < DEFAULT_CLASH_THRESHOLD_NM) &
+                                  (rest_distances > DEFAULT_DESIGNED_MARGIN_NM), k=1))
+    expected = {frozenset((key(posed[i])[:3], key(posed[j])[:3])) for i, j in selected}
+    actual = {frozenset(((p.a.helix_id, p.a.bp_index, p.a.direction),
+                         (p.b.helix_id, p.b.bp_index, p.b.direction))) for p in report.pairs}
+    assert report.count == len(selected)
+    assert actual == expected
 
     # Every flagged pair is a genuine sub-0.65 nm overlap, nearest first.
     dists = [p.distance_nm for p in report.pairs]

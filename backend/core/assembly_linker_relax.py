@@ -37,7 +37,6 @@ from typing import Any, Optional, Tuple
 
 import numpy as np
 
-from backend.core.models import Direction
 from backend.core.lattice import _opposite_direction
 from backend.core.assembly_linker import _world_axes_for_helix
 
@@ -123,24 +122,18 @@ def _world_anchor_axial(
     if helix is None:
         return None
 
-    from backend.core.deformation import deformed_nucleotide_arrays
+    from backend.core.design_geometry import native_full_nucleotide_at
 
     tip_bp = oh_dom.end_bp if ovhg_id.endswith("_3p") else oh_dom.start_bp
     root_bp = oh_dom.start_bp if tip_bp == oh_dom.end_bp else oh_dom.end_bp
     attach_bp = tip_bp if attach == "free_end" else root_bp
     other_bp = root_bp if attach == "free_end" else tip_bp
     direction = _opposite_direction(oh_dom.direction)
-    dir_int = 0 if direction == Direction.FORWARD else 1
-
-    arrs = deformed_nucleotide_arrays(helix, design)
-    bp_arr = arrs["bp_indices"]
-    dir_arr = arrs["directions"]
-
     def _pos_local(bp: int) -> Optional[np.ndarray]:
-        m = (bp_arr == bp) & (dir_arr == dir_int)
-        if not m.any():
+        record = native_full_nucleotide_at(helix, design, bp, direction)
+        if record is None:
             return None
-        return np.asarray(arrs["positions"][int(m.argmax())], dtype=float)
+        return np.asarray(record["backbone_position"], dtype=float)
 
     pos_attach = _pos_local(attach_bp)
     if pos_attach is None:

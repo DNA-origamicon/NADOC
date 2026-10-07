@@ -284,7 +284,7 @@ def test_the_mrdna_seed_is_the_geometric_layers_site(fixture):
     from backend.core.design_geometry import _geometry_for_helices
 
     seen_extended = {}
-    for g in _geometry_for_helices(design, None, junction_balance=False):
+    for g in _geometry_for_helices(design, None):
         dk = (g["helix_id"], g["bp_index"], g["direction"])
         k = seen_extended.get(dk, 0)
         seen_extended[dk] = k + 1
@@ -566,51 +566,12 @@ def test_the_rigid_frame_calibration_does_not_touch_the_display_serialiser():
 # ── Round 2: the pose fitters' geometry contract ─────────────────────────────
 
 
-def test_a_display_default_flip_cannot_reach_the_pose_fitters():
-    """Pose fitters write PERSISTED ``cluster_transforms``, so their input layer is
-    load-bearing for poses already saved to disk.
-
-    They were correct only by accident: both display tweaks happen to default OFF, and
-    flipping ``measured_positioning`` to True is TD-27 Stage 3's stated goal.  This asserts
-    the contract is stated rather than inherited — ``fitting_geometry`` must be unmoved by a
-    flipped default, while the plain call follows it.
-    """
+def test_pose_fitters_have_no_alternative_bead_placement():
+    """The same saved pose must be evaluated against the user's native geometry."""
     import backend.core.design_geometry as dg
-
-    design = _load(PLAIN_SQ)
-    before = dg.fitting_geometry(design)
-
-    orig = dg._geometry_for_design
-
-    # Only a DEFAULT flip is simulated: an explicit False must still win.
-    def default_flipped(d, *a, measured_positioning=True, **k):
-        return orig(d, *a, measured_positioning=measured_positioning, **k)
-
-    dg._geometry_for_design = default_flipped
-    try:
-        after = dg.fitting_geometry(design)
-        followed = dg._geometry_for_design(design)
-    finally:
-        dg._geometry_for_design = orig
-
-    assert len(before) == len(after)
-    for a, b in zip(before, after):
-        assert a["backbone_position"] == b["backbone_position"], (
-            "fitting_geometry followed a display default"
-        )
-
-    moved = max(
-        float(
-            np.linalg.norm(
-                np.asarray(a["backbone_position"], float)
-                - np.asarray(b["backbone_position"], float)
-            )
-        )
-        for a, b in zip(before, followed)
-    )
-    assert moved > 0.01, (
-        "the simulated flip changed nothing — this pin would be vacuous"
-    )
+    from tests.conftest import make_minimal_design
+    design = make_minimal_design(lattice=LatticeType.SQUARE)
+    assert dg.fitting_geometry(design) == dg._geometry_for_design(design)
 
 
 # ── Round 2: the atomistic phase answers to MD, not to the display ───────────

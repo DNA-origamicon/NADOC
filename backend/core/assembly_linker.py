@@ -23,7 +23,6 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.lattice import (
     _LINKER_HELIX_PREFIX,
     _LINKER_DEFAULT_COLOR,
@@ -158,22 +157,17 @@ def _world_anchor(
     if helix is None:
         return None
 
-    from backend.core.deformation import deformed_nucleotide_arrays
+    from backend.core.design_geometry import native_full_nucleotide_at
 
     tip_bp = oh_dom.end_bp if ovhg_id.endswith("_3p") else oh_dom.start_bp
     root_bp = oh_dom.start_bp if tip_bp == oh_dom.end_bp else oh_dom.end_bp
     bp = tip_bp if attach == "free_end" else root_bp
     direction = _opposite_direction(oh_dom.direction)
-    arrs = deformed_nucleotide_arrays(helix, design)
-    bp_arr = arrs["bp_indices"]
-    dir_arr = arrs["directions"]
-    dir_int = 0 if direction == Direction.FORWARD else 1
-    matches = (bp_arr == bp) & (dir_arr == dir_int)
-    if not matches.any():
+    record = native_full_nucleotide_at(helix, design, bp, direction)
+    if record is None:
         return None
-    i = int(matches.argmax())
-    pos_local = np.asarray(arrs["positions"][i], dtype=float)
-    normal_local = np.asarray(arrs["base_normals"][i], dtype=float)
+    pos_local = np.asarray(record["backbone_position"], dtype=float)
+    normal_local = np.asarray(record["base_normal"], dtype=float)
 
     T = instance.transform.to_array()
     pos_world = (T @ np.array([pos_local[0], pos_local[1], pos_local[2], 1.0]))[:3]
@@ -239,33 +233,15 @@ def _make_world_virtual_linker_helix(
     comp_first_b: bool,
 ) -> Helix:
     """Virtual ``__lnk__`` helix placed in world space between the two anchors."""
-    axis_start: Optional[np.ndarray]
-    axis_end: Optional[np.ndarray]
-    try:
-        g = bridge_axis_geometry(
-            pos_a, normal_a, pos_b, linker_bp, comp_first_a, comp_first_b
-        )
-        axis_start = g["axis_start"]
-        axis_end = g["axis_end"]
-    except Exception:
-        chord = pos_b - pos_a
-        cl = float(np.linalg.norm(chord))
-        if cl < 1e-9:
-            axis_start = pos_a.copy()
-            axis_end = pos_a + np.array(
-                [0.0, 0.0, max(linker_bp - 1, 1) * BDNA_RISE_PER_BP]
-            )
-        else:
-            visual = max(linker_bp - 1, 1) * BDNA_RISE_PER_BP
-            mid = (pos_a + pos_b) * 0.5
-            dirn = chord / cl
-            axis_start = mid - dirn * (visual * 0.5)
-            axis_end = mid + dirn * (visual * 0.5)
+    from backend.core.linker_relax import bridge_helix_phase_offset
+
+    g = bridge_axis_geometry(pos_a, normal_a, pos_b, linker_bp, comp_first_a, comp_first_b,
+        identity={"bridge_helix_id": helix_id, "connection_id": helix_id.removeprefix("__lnk__")})
     return Helix(
         id=helix_id,
-        axis_start=Vec3.from_array(axis_start),
-        axis_end=Vec3.from_array(axis_end),
-        phase_offset=0.0,
+        axis_start=Vec3.from_array(g["axis_start"]),
+        axis_end=Vec3.from_array(g["axis_end"]),
+        phase_offset=bridge_helix_phase_offset(g),
         length_bp=linker_bp,
     )
 
@@ -384,9 +360,18 @@ def generate_assembly_linker_topology(
         pos_a, n_a = anchor_a
         pos_b, _ = anchor_b
     else:
-        pos_a = np.array([0.0, 0.0, 0.0])
-        n_a = np.array([1.0, 0.0, 0.0])
-        pos_b = np.array([0.0, 0.0, max(linker_bp - 1, 1) * BDNA_RISE_PER_BP])
+        from backend.core.native_full_placement import NativePlacementError
+        details = {"connection_id": conn.id, "bridge_helix_id": bridge_helix_id, "anchors": {}}
+        for side, instance, oh_id, attach, domain, anchor in (
+            ("a", inst_a, conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom, anchor_a),
+            ("b", inst_b, conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom, anchor_b)):
+            from backend.core.lattice import _overhang_attach_bp
+            details["anchors"][side] = {"instance_id": instance.id, "overhang_id": oh_id,
+                "attach": attach, "helix_id": domain.helix_id if domain else None,
+                "bp_index": _overhang_attach_bp(oh_id, domain, attach) if domain else None,
+                "direction": _opposite_direction(domain.direction).value if domain else None,
+                "backbone_position": anchor[0].tolist() if anchor else None}
+        raise NativePlacementError("Assembly linker has no canonical anchor; refusing an origin placeholder.", details=details)
 
     comp_first_a = (
         _is_comp_first(conn.overhang_a_id, conn.overhang_a_attach)

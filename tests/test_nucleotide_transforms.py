@@ -227,8 +227,12 @@ def test_delete_transform_records_pose_reset_in_feature_log():
 
 
 @pytest.mark.parametrize("comparison", ["true", "false", None])
-def test_put_route_embeds_the_requested_display_projection(comparison):
+def test_put_route_embeds_the_requested_display_projection(comparison, monkeypatch, tmp_path):
     """Apply must not replace measured display geometry with legacy geometry."""
+    if comparison == "false":
+        # This deliberate rejected request must exercise incident recording without
+        # leaving an expected-negative self-test in the real review journal.
+        monkeypatch.setenv("NADOC_PLACEMENT_REPORT_DIR", str(tmp_path / "expected-rejection"))
     design_state.set_design(make_minimal_design())
     client = TestClient(app)
     body = {
@@ -236,10 +240,17 @@ def test_put_route_embeds_the_requested_display_projection(comparison):
         "copy_k": 0, "pivot": [0, 0, 0], "translation": [1, 0, 0],
         "rotation": [0, 0, 0, 1],
     }
+    before = design_state.get_design().model_dump(mode="json")
     measured = client.put(
         "/api/design/nucleotide-transform", json=body,
         headers={"X-NADOC-Measured-Positioning": comparison} if comparison else {},
     )
+    if comparison == "false":
+        assert measured.status_code == 500
+        assert "Legacy bead/slab placement" in measured.text
+        assert design_state.get_design().model_dump(mode="json") == before
+        assert len(list((tmp_path / "expected-rejection" / "incidents").glob("*/report.json"))) == 1
+        return
     assert measured.status_code == 200
 
     # The mutation response and canonical measured GET must agree for every

@@ -540,7 +540,12 @@ def _nuc_arrays_loop_skip_fast(helix: Helix, compact_skips: bool) -> dict:
     rev_bb = axis_pts + HELIX_RADIUS * rev_radial
 
     bp_vec = rev_bb - fwd_bb
-    bp_hat = bp_vec / np.linalg.norm(bp_vec, axis=1, keepdims=True)
+    # Preserve the scalar oracle's dot/norm reduction order. NumPy's batched
+    # reduction differs by an ULP on some platforms, which downstream template
+    # minimizers can amplify. The indexing/trigonometry remain vectorized above.
+    lengths = np.fromiter((np.linalg.norm(v) for v in bp_vec),
+                          dtype=np.float64, count=len(bp_vec))
+    bp_hat = bp_vec / lengths[:, None]
 
     fwd_base = fwd_bb + BASE_DISPLACEMENT * bp_hat
     rev_base = rev_bb - BASE_DISPLACEMENT * bp_hat

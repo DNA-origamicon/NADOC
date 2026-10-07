@@ -17,6 +17,8 @@ def prepare_scene(body, scene_path, progress_path, process, event_path=None):
     candidate = None
     started = time.time()
     try:
+        from backend.api.routes_placement_integrity import require_native_placement_review_clear
+        require_native_placement_review_clear(event_path=event_path)
         def progress(percent, detail):
             if process.poll() is not None:
                 raise RuntimeError('VR viewer closed during loading')
@@ -28,6 +30,7 @@ def prepare_scene(body, scene_path, progress_path, process, event_path=None):
             body, line_writer=write_line, progress=progress, design_snapshot=design, representations={"full"}))
         if process.poll() is not None:
             return
+        require_native_placement_review_clear(event_path=event_path)
         candidate.replace(scene_path)
         publish(progress_path, 'ready', 85, 'Reading and validating scene')
         with vr._STATE_LOCK:
@@ -39,6 +42,11 @@ def prepare_scene(body, scene_path, progress_path, process, event_path=None):
             from backend.api.vr_representation_loading import serve
             serve(body, event_path, process)
     except Exception as exc:
+        from backend.core.native_full_placement import NativePlacementError
+        if isinstance(exc, NativePlacementError):
+            from backend.api.routes_placement_integrity import record_native_placement_failure
+            record_native_placement_failure(exc, phase="native-vr-startup", event_path=event_path,
+                                            context={"viewer_pid": process.pid})
         if process.poll() is None:
             publish(progress_path, 'error', 0, str(exc))
     finally:

@@ -1,3 +1,4 @@
+#include "placement_integrity.hpp"
 #include <atomic>
 #include <future>
 #include <deque>
@@ -5213,6 +5214,7 @@ class Viewer {
         menuGlass_.shutdown();
         startup_.surface.shutdown();
         representationLoading_.popup.surface.shutdown();
+        placementFailurePopup_.surface.shutdown();
         latticePanelSurface_.shutdown();
         routingPopup_.shutdown();
         sidebarMenus_.shutdown();
@@ -5651,6 +5653,7 @@ class Viewer {
         }
         if(startup_.active)startup_.surface.initialize();
         representationLoading_.popup.surface.initialize();
+        placementFailurePopup_.surface.initialize();
         gpuFrameTimer_.initialize();
         if (witness_) witnessSurface_.initialize(makeDesktopProgram());
         glEnable(GL_DEPTH_TEST);
@@ -8044,6 +8047,8 @@ class Viewer {
             << ",\"event_write_failures\":" << eventWriter_.failures()
             << ",\"lightweight_guard\":" << (representationLoading_.lightweight?"true":"false") << "}"
             << ",\"component_gallery\":" << componentGallery_.observation()
+            << ",\"placement_integrity\":{\"blocked\":" << (placementIntegrity_.blocked()?"true":"false")
+            << ",\"detail\":" << quote(placementIntegrity_.detail()) << "}"
             << ",\"startup\":{\"active\":" << (startup_.active?"true":"false")
             << ",\"percent\":" << startup_.percent << ",\"phase\":" << quote(startup_.phase)
             << ",\"detail\":" << quote(startup_.detail) << "}"
@@ -9561,6 +9566,7 @@ class Viewer {
     }
 
     void renderVolumeScene(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,bool ids=false) {
+        if(placementIntegrity_.blocked())return;
         if(viewTools_.overrideScene()) {viewTools_.renderScene(vp,model,witnessObserverOrientation_);if(!guides.empty())glScene_->renderGuides(vp,guides);}
         else glScene_->renderVolumes(vp,model,guides,ids,volumePanel_.entries,representationLoading_.pending && representationLoading_.lightweight);
     }
@@ -9665,6 +9671,7 @@ class Viewer {
         }
         startup_.render(viewProjection, head);
         representationLoading_.render(viewProjection, head);
+        placementFailurePopup_.render(viewProjection, head, false, true);
         traceRender("eye_draw");
         captureLiveEye(index, view, swapchain.width, swapchain.height);
         liveMeasure_.readEye(index, swapchain.width, swapchain.height);
@@ -10069,6 +10076,7 @@ class Viewer {
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
         startup_.render(viewProjection, view.pose);
         representationLoading_.render(viewProjection, view.pose);
+        placementFailurePopup_.render(viewProjection, view.pose, false, true);
         glScene_->renderGuides(viewProjection, controllerPathGuides_);
         for(size_t pass=0;pass<3;++pass) {
             const size_t trace=pass==1 ? 1 : 0;
@@ -10178,7 +10186,7 @@ class Viewer {
         const auto frameStarted = std::chrono::steady_clock::now();
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
-        if(!startup_.active) syncActions(frameState.predictedDisplayTime);
+        if(!startup_.active && !placementIntegrity_.blocked()) syncActions(frameState.predictedDisplayTime);
         traceRender("input");
         const auto inputFinished = std::chrono::steady_clock::now();
         desktopSurface_.update(desktopPanel_.open);
@@ -10258,10 +10266,10 @@ class Viewer {
                     if (witness_) {
                         const auto actorKeyLight = witnessShadowLight_.update(
                             witness_->input().head.orientation);
-                        glScene_->renderShadowMap(manipulator_.transform(), actorKeyLight);
+                        if(!placementIntegrity_.blocked())glScene_->renderShadowMap(manipulator_.transform(), actorKeyLight);
                         captureWitnessView();
                     }
-                    if(!representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyLight);
+                    if(!placementIntegrity_.blocked() && !representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyLight);
                     traceRender("shadow");
                     for (uint32_t offset = 0; offset < viewCount; ++offset) {
                         const auto i=nadoc_vr::spectatorRenderViewIndex(mirrorEye_,offset,viewCount);
@@ -10281,10 +10289,10 @@ class Viewer {
                     if (witness_) {
                         const auto actorKeyLight = witnessShadowLight_.update(
                             witness_->input().head.orientation);
-                        glScene_->renderShadowMap(manipulator_.transform(), actorKeyLight);
+                        if(!placementIntegrity_.blocked())glScene_->renderShadowMap(manipulator_.transform(), actorKeyLight);
                         captureWitnessView();
                     }
-                    if(!representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyLight);
+                    if(!placementIntegrity_.blocked() && !representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyLight);
                     const auto selected = nadoc_vr::spectatorMirrorViewIndex(
                         mirrorEye_, viewCount);
                     if (selected) {
@@ -10636,6 +10644,11 @@ class Viewer {
             glfwPollEvents();trace("events_glfw");
             pollXrEvents();trace("events_xr");
             pollLive();trace("events_live");
+            placementIntegrity_.poll(eventPath_);
+            if(placementIntegrity_.blocked()) {
+                placementFailurePopup_.active=true;placementFailurePopup_.phase="error";
+                placementFailurePopup_.percent=0;placementFailurePopup_.detail=placementIntegrity_.detail();
+            }
             if (exitRequested_ || glfwWindowShouldClose(window_) ||
                 glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS || gStopRequested) {
                 if (sessionRunning_) {
@@ -10691,6 +10704,8 @@ class Viewer {
     std::chrono::steady_clock::time_point liveInputDeadline_{}, liveCaptureDeadline_{};
     RepresentationLoading representationLoading_;
     StartupLoading startup_;
+    nadoc_vr::PlacementIntegrityLatch placementIntegrity_;
+    StartupLoading placementFailurePopup_;
     std::vector<std::string> startupOwners_;
     std::string startupKind_;
     SceneData sceneData_;

@@ -53,3 +53,8 @@ def test_concurrent_edit_during_snapshot_retains_prior_scene(monkeypatch,tmp_pat
     with pytest.raises(HTTPException):publish_scene(body)
     assert manifest.read_text()==before
     cleanup_scene_refresh(session['event_path'])
+
+
+@pytest.fixture(autouse=True)
+def isolated_native_review_journal(monkeypatch, tmp_path):
+    monkeypatch.setenv("NADOC_PLACEMENT_REPORT_DIR", str(tmp_path / "placement-reports"))

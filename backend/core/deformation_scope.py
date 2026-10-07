@@ -194,37 +194,3 @@ def selection_boundary_warning(design, ranges):
         return None
     return {'status': 'warn', 'message': f'{boundaries} strand connection(s) cross the selection boundary. '
             'Bending or twisting may strain these connections; unselected nucleotides stay fixed.'}
-
-
-def measured_arrays(helix, design, compact_skips, phase_roll_rad, axis_cache=None):
-    """Keep existing display placement independent for each operation partition.
-
-    The measured-placement guard tests both strands against an axis. Feeding it
-    strands with different transforms would change placement even on the stationary
-    partner. Evaluate the existing guard in each coherent frame, then select rows.
-    No measured landmarks or molecular placement constants change.
-    """
-    from backend.core.constants import HELIX_RADIUS
-    from backend.core.deformation import deformed_nucleotide_arrays, deformed_helix_axes, effective_helix_for_geometry
-    from backend.core.measured_positioning import apply_measured_positioning
-
-    if axis_cache is None:
-        axis_cache = {}
-
-    def evaluate(view):
-        arrs = deformed_nucleotide_arrays(helix, view, compact_skips=compact_skips, phase_roll_rad=phase_roll_rad)
-        if effective_helix_for_geometry(helix, view).native_residues:
-            return arrs
-        key = tuple(op.id for op in view.deformations)
-        if key not in axis_cache:
-            axis_cache[key] = {a['helix_id']: a for a in deformed_helix_axes(view)}
-        axis = axis_cache[key].get(helix.id)
-        if axis is None:
-            return arrs
-        start = np.asarray(axis['start'])
-        tangent = np.asarray(axis['end']) - start
-        length = np.linalg.norm(tangent)
-        if length <= 1e-12:
-            return arrs
-        return apply_measured_positioning(arrs, axis_origin=start, axis_hat=tangent / length, legacy_radius=HELIX_RADIUS)
-    return selected_arrays(helix, design, evaluate)

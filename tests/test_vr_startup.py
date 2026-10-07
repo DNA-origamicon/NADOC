@@ -7,7 +7,8 @@ from backend.api import vr_startup, routes_vr
 
 
 @pytest.fixture(autouse=True)
-def private_design(monkeypatch):
+def private_design(monkeypatch, tmp_path):
+    monkeypatch.setenv("NADOC_PLACEMENT_REPORT_DIR", str(tmp_path / "placement-reports"))
     from backend.core.models import Design
     monkeypatch.setattr(routes_vr.design_state, 'get_or_404', lambda: Design())
 

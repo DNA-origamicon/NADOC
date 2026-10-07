@@ -7,6 +7,8 @@ import os
 
 import pytest
 
+pytest_plugins = ["tools.native_placement_audit.pytest_plugin"]
+
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
     Design,

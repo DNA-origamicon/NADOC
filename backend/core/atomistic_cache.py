@@ -76,15 +76,16 @@ def build_atomistic_model_cached(
     it MUST be ``atomistic_fingerprint(design)`` for the same design.
     """
     from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
+    from backend.core.native_full_placement import SOURCE, require_native_full_option
+    require_native_full_option(measured_positioning)
 
     base_key = fingerprint if fingerprint is not None else atomistic_fingerprint(design)
     # Bridge construction changes coordinates, so keep exact and interpolated
-    # models in distinct cache entries.  Positioning mode likewise: the fingerprint
-    # hashes the DESIGN, and the mode is a view/build setting outside it, so without
-    # it here a legacy build would be served for a native request and vice versa.
+    # models in distinct cache entries. The placement authority version prevents
+    # reusing a cache entry produced before the single-source contract.
     key = (
         f"{base_key}:fast_bridges={int(fast_bridges)}"
-        f":measured={int(measured_positioning)}"
+        f":placement={SOURCE}"
     )
 
     # Fast path: already built.

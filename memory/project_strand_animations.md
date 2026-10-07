@@ -1,6 +1,6 @@
 ---
 name: strand-animations
-description: "Strand Animations Testing — standalone display-only un/hybridization sandbox (ssDNA⇄duplex), φ reaction coordinate"
+description: "Canonical captured-pose strand animations; synthetic playground retired, incomplete invader targets fail closed"
 metadata: 
   node_type: memory
   type: project
@@ -8,6 +8,48 @@ metadata:
 ---
 
 # Strand Animations Testing
+
+## Current placement contract — 2026-10-06
+
+Native DNA bead and slab placement has one backend authority. The standalone
+`/strand-anim.html` playground is unavailable because it had no authoritative
+document geometry. Its three `geometry_{straight,helical,displacement}.js`
+generators and `buildStrandGeometry` export were deleted. The page displays an
+explicit unavailable message and never creates a molecular preview. Earlier
+claims below that its radius/groove/offset matched NADOC are historical and must
+not be used to restore those removed positioning rules.
+
+The main document's `overhang_strand_anim.js` and `overhang_unzip_overlay.js`
+remain functional for captured molecular poses. `native_pose_transport.js`
+transports each complete captured bead/base/slab pose by a rigid rotation and
+translation; it never chooses a radius, groove, or bead-to-slab offset. Both
+slab center and orientation move with the nucleotide, including hinge rotations.
+`helixCtrl.setBeadOverrides` accepts complete validated poses and preserves
+`copy_k` identity. Partial position/normal updates now fail before any displayed
+matrix changes. Clear restores exact captured poses.
+
+The lightweight `strand_renderer.js` accepts
+`[{role, nucleotides: [complete_authoritative_pose, ...]}]`. It renders supplied
+slab centers/quaternions directly. The old `{pos,tan,bn}` contract and independent
+slab placement function have been removed.
+
+Displacement previews require an actual captured, backend-authorized opposite
+pose for every target site, including the toehold and loop-copy identity.
+When any target is absent, animation stops with an explicit placement-integrity
+error and report before moving or drawing molecules. It must never construct
+an absent complement from averaged radius/groove or approximate a slab pose.
+A future prospective-target backend API can support such previews; no fallback
+is authorized. Existing overhang/binder unzip animation remains available.
+
+Regression coverage lives in
+`frontend/src/scene/strand_animation.native_placement.test.js`, with fixed
+canonical Manual_Benchy poses in `fixtures/native_animation_positions.json`.
+It checks actual renderer matrices, captured internal registration during
+animation, hinge transport, exact restoration, loop copies, missing invader
+target failure, and deletion of the synthetic generators. These tests use the
+durable native-placement review gate; a passing rerun does not clear incidents.
+
+## Historical implementation notes (superseded where they describe placement)
 
 A standalone, **display-only** teaching/figure tool for showing strand-displacement / un-zipping
 of two DNA strands (ssDNA ⇄ duplex) and every intermediate. First stage toward animating dynamic

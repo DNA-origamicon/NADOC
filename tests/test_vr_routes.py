@@ -34,7 +34,7 @@ from backend.api.routes_vr import (
     _runtime_timing,
     _selection_cluster,
     _selection_clusters,
-    _serialize_scene,
+    _serialize_scene as _serialize_authoritative_scene,
     _view_rotation,
     _viewer_command,
     _write_feedback,
@@ -48,6 +48,31 @@ from backend.api.routes_vr import (
     _write_scene_snapshot,
 )
 from backend.core.vr_scene_contract import compare_scenes, parse_scene_contract
+
+
+def _serialize_fixture_scene(design, nucleotides, *args, **kwargs):
+    """Give synthetic route fixtures explicit poses before the strict exporter.
+
+    These tests isolate identities/colors/topology using invented coordinates.
+    Real molecular placement is tested from model generation in the separate
+    native-placement suite; production has no such fixture adapter.
+    """
+    from copy import deepcopy
+    from backend.core.native_slab_placement import attach_native_slab_poses
+    records = deepcopy(nucleotides)
+    for record in records:
+        if record.get("is_modification"):
+            record["placement_source"] = "chemical-modification-v1"
+        elif str(record.get("helix_id", "")).startswith("__ext_"):
+            record["placement_source"] = "native-full-extension-v1"
+        else:
+            record["placement_source"] = "authored-residue-c1-v1"
+            record.setdefault("direction", "FORWARD")
+            record.setdefault("base_normal", [1., 0., 0.])
+            record.setdefault("axis_tangent", [0., 0., 1.])
+            record.setdefault("base_position", (np.array(record["backbone_position"]) + np.array(record["base_normal"]) * .3).tolist())
+    attach_native_slab_poses(records)
+    return _serialize_authoritative_scene(design, records, *args, **kwargs)
 
 
 @pytest.fixture(autouse=True)
@@ -1574,7 +1599,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
         ),
     ]
 
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         nucleotides,
         [{"helix_id": "h1", "start": [0, 0, 0], "end": [0, 0, 1]}],
@@ -1626,7 +1651,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     first_stick_bond = next(record for record in sections["stick"] if record[0] == "C")
     assert float(first_stick_bond[7]) == pytest.approx(0.025)
 
-    reversed_bond_text = _serialize_scene(
+    reversed_bond_text = _serialize_fixture_scene(
         design,
         nucleotides,
         [{"helix_id": "h1", "start": [0, 0, 0], "end": [0, 0, 1]}],
@@ -1635,7 +1660,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     )
     assert compare_scenes(text, reversed_bond_text).ok
     streamed_lines = []
-    manifest = _serialize_scene(
+    manifest = _serialize_fixture_scene(
         design,
         nucleotides,
         [{"helix_id": "h1", "start": [0, 0, 0], "end": [0, 0, 1]}],
@@ -1661,14 +1686,14 @@ def test_v11_atom_identity_rejects_missing_or_duplicate_chemical_names() -> None
         element="P",
     )
     with pytest.raises(HTTPException, match="Duplicate semantic VR atom identity"):
-        _serialize_scene(
+        _serialize_fixture_scene(
             SimpleNamespace(strands=[], cluster_transforms=[]),
             [],
             [],
             atomistic_model=SimpleNamespace(atoms=[atom, atom], bonds=[]),
         )
     with pytest.raises(HTTPException, match="missing its name"):
-        _serialize_scene(
+        _serialize_fixture_scene(
             SimpleNamespace(strands=[], cluster_transforms=[]),
             [],
             [],
@@ -1741,7 +1766,7 @@ def test_v12_generalized_handles_and_tool_scopes_bridge_representations() -> Non
         residue="DA",
         element="C",
     )
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         [nucleotide],
         [
@@ -1910,7 +1935,7 @@ def test_v12_boundary_connections_assign_every_tool_scope_per_endpoint() -> None
         for index in (1, 2)
     ]
     scene = parse_scene_contract(
-        _serialize_scene(
+        _serialize_fixture_scene(
             design,
             nucleotides,
             [],
@@ -1964,7 +1989,7 @@ def test_v12_boundary_connections_assign_every_tool_scope_per_endpoint() -> None
     )
 
 
-def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
+def test_full_slabs_consume_authoritative_pose_without_pair_registration() -> None:
     design = SimpleNamespace(
         strands=[
             SimpleNamespace(id="forward", is_scaffold=True, color=None, sequence="A"),
@@ -1998,7 +2023,7 @@ def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
             "axis_tangent": [0, 0, 1],
         },
     ]
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         nucleotides,
         [],
@@ -2013,11 +2038,11 @@ def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
     assert len(boxes) == 2
     centers = np.asarray([[float(value) for value in record[1:4]] for record in boxes])
 
-    # Both largest faces use the mean axial plane despite staggered source bases.
-    np.testing.assert_allclose(centers[:, 2], [0.1, 0.1])
-    # The contact shift leaves each bead 0.33 nm from its slab center: the
-    # 0.35 nm half-extent penetrates the 0.10 nm bead center by 0.02 nm.
-    np.testing.assert_allclose(centers[:, 0], [-0.67, 0.67])
+    from backend.core.native_slab_placement import attach_native_slab_poses
+    for record in nucleotides:
+        record["placement_source"] = "authored-residue-c1-v1"
+    attach_native_slab_poses(nucleotides)
+    np.testing.assert_allclose(centers, [n["slab_position"] for n in nucleotides], atol=1e-6)
 
 
 def test_reverse_loop_insertions_thread_backbone_in_desktop_copy_order() -> None:
@@ -2055,7 +2080,7 @@ def test_reverse_loop_insertions_thread_backbone_in_desktop_copy_order() -> None
         nucleotide(4, 1.34),
     ]
     kwargs = {"atomistic_model": SimpleNamespace(atoms=[], bonds=[])}
-    natural = _serialize_scene(design, natural_nucleotides, [], **kwargs)
+    natural = _serialize_fixture_scene(design, natural_nucleotides, [], **kwargs)
     scene = parse_scene_contract(natural)
 
     expected = [
@@ -2088,6 +2113,7 @@ def test_reverse_loop_insertions_thread_backbone_in_desktop_copy_order() -> None
         assert natural_points[identity].values[7:10] == pytest.approx(color)
 
 
+@pytest.mark.native_placement
 def test_base_coloring_keeps_extensions_and_overhang_fallback_semantic() -> None:
     design = SimpleNamespace(
         strands=[
@@ -2136,6 +2162,10 @@ def test_base_coloring_keeps_extensions_and_overhang_fallback_semantic() -> None
             "bp_index": bp_index,
             "direction": "FORWARD",
             "backbone_position": [x, 0, 0],
+            "base_position": [x + 0.3, 0, 0],
+            "base_normal": [1, 0, 0],
+            "axis_tangent": [0, 0, 1],
+            "is_modification": False,
             **extra,
         }
 
@@ -2162,7 +2192,7 @@ def test_base_coloring_keeps_extensions_and_overhang_fallback_semantic() -> None
         nucleotide("overhang", "ho", 0, 2, overhang_id="oh"),
         nucleotide("overhang", "ho", 1, 2.34, overhang_id="oh"),
     ]
-    natural = _serialize_scene(
+    natural = _serialize_fixture_scene(
         design,
         nucleotides,
         [],
@@ -2237,7 +2267,7 @@ def test_axis_records_preserve_same_helix_domain_gaps() -> None:
             },
         ],
     }
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         [nucleotide],
         [axis],
@@ -2334,7 +2364,7 @@ def test_full_snapshot_projects_explicit_cross_helix_connections() -> None:
             ("h2", "REVERSE", 2.0),
         )
     ]
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         nucleotides,
         [],
@@ -2366,7 +2396,7 @@ def test_full_snapshot_projects_explicit_cross_helix_connections() -> None:
         atom_bond.owner_aliases
     )
 
-    visible_periodic = _serialize_scene(
+    visible_periodic = _serialize_fixture_scene(
         design,
         nucleotides,
         [],
@@ -2458,7 +2488,7 @@ def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> 
         )
         for helix_id, bp, direction, crossover_id, extra_k, residue, x in atom_keys
     ]
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         nucleotides,
         [],
@@ -2588,7 +2618,7 @@ def test_full_snapshot_uses_desktop_extension_modification_marker() -> None:
         "is_modification": True,
         "modification": "cy3",
     }
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         [modification],
         [],
@@ -2646,7 +2676,7 @@ def test_cylinder_snapshot_distinguishes_single_stranded_overhang_halves() -> No
             }
         ],
     }
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         [nucleotide],
         [axis],
@@ -2675,7 +2705,7 @@ def test_cylinder_snapshot_distinguishes_single_stranded_overhang_halves() -> No
             driven_oh_id="ov2",
         )
     ]
-    direct_text = _serialize_scene(
+    direct_text = _serialize_fixture_scene(
         design,
         [nucleotide],
         [axis],
@@ -2792,7 +2822,7 @@ def test_ss_linker_details_are_full_only_but_backbone_remains_in_cylinders() -> 
             is_default=False,
         ),
     ]
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         _vr_linker_anchor_nucleotides("ss"),
         [],
@@ -2801,18 +2831,10 @@ def test_ss_linker_details_are_full_only_but_backbone_remains_in_cylinders() -> 
     sections = _scene_sections(text)
     identities = _scene_identities(text)
 
-    linker_slabs = [
-        record
-        for record in sections["full"]
-        if record[0] == "B"
-        and np.allclose(
-            np.linalg.norm(
-                np.asarray([float(value) for value in record[4:13]]).reshape(3, 3),
-                axis=1,
-            ),
-            [0.30, 0.06, 0.70],
-        )
-    ]
+    # Count the explicit linker primitives, not valid anchor-base slabs that
+    # the old exporter silently omitted when these synthetic fixtures lacked frames.
+    linker_slabs = [primitive for identity, primitive in parse_scene_contract(text)["full"].items()
+                    if identity.startswith("linker:link:ss:slab:")]
     assert len(linker_slabs) == 2
     assert (
         sum(
@@ -2890,7 +2912,7 @@ def test_ds_linker_connector_arcs_are_visible_in_full_and_cylinders() -> None:
             },
         ]
     )
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         nucleotides,
         [],
@@ -2984,7 +3006,7 @@ def test_ds_linker_cylinders_pair_overhang_halves_and_recover_bridge_axis() -> N
             ],
         }
     ]
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         nucleotides,
         axes,
@@ -3095,7 +3117,7 @@ def test_flexible_segment_replaces_filtered_beads_in_full_only() -> None:
             (2, "hb", 7, [4, 0, 0], False),
         )
     ]
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         nucleotides,
         [{"helix_id": "obstacle", "start": [0, -1, -1], "end": [4, -1, -1]}],
@@ -3201,7 +3223,7 @@ def test_unligated_crossover_gets_full_only_amber_warning_at_midpoint() -> None:
             ("h2", "REVERSE", 2),
         )
     ]
-    text = _serialize_scene(
+    text = _serialize_fixture_scene(
         design,
         nucleotides,
         [],
@@ -3321,7 +3343,7 @@ def test_full_domain_move_preserves_bead_slab_registration(angle, copy_k) -> Non
             for s, d, x, z in [('forward', 'FORWARD', -1, 0),
                                 ('reverse', 'REVERSE', 1, .2)]]
     def export(nucleotides):
-        return parse_scene_contract(_serialize_scene(
+        return parse_scene_contract(_serialize_fixture_scene(
             design, nucleotides, [], representations={'full'},
             atomistic_model=SimpleNamespace(atoms=[], bonds=[])))['full']
     # Repeated sites exercise the loop-copy identity independently of the mate.

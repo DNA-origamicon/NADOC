@@ -183,6 +183,15 @@ class DocContextMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and _extract_measured_positioning(scope) is False:
+            # Reject obsolete clients before the route can mutate a document.
+            from starlette.requests import Request
+            from backend.core.native_full_placement import NativePlacementError
+            from backend.api.routes_placement_integrity import native_placement_exception_handler
+            response = await native_placement_exception_handler(Request(scope), NativePlacementError(
+                "Legacy bead/slab placement has been removed. Remove X-NADOC-Measured-Positioning: false."))
+            await response(scope, receive, send)
+            return
         if scope["type"] in ("http", "websocket"):
             doc_token = _current_doc.set(_extract_doc_id(scope))
             geo_token = _skip_geometry.set(_extract_skip_geometry(scope))

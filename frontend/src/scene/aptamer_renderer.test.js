@@ -10,7 +10,7 @@ function fixture() {
     crossovers:[],overhangs:[],cluster_transforms:[],
   }
   const geometry = positions.map((p,i) => ({helix_id:'g4',bp_index:i,direction:'FORWARD',strand_id:'apt',strand_type:'staple',domain_index:0,
-    is_five_prime:i===0,base:'GGTTG'[i],backbone_position:p,base_position:[p[0]+.2,p[1],p[2]],base_normal:[1,0,0],axis_tangent:[0,0,1]}))
+    is_five_prime:i===0,base:'GGTTG'[i],backbone_position:p,base_position:[p[0]+.2,p[1],p[2]],base_normal:[1,0,0],axis_tangent:[0,0,1],placement_source:'authored-residue-c1-v1',slab_position:[p[0]+.2,p[1],p[2]],slab_quaternion:[0,Math.SQRT1_2,Math.SQRT1_2,0]}))
   const axes = {g4:{start:positions[0],end:positions.at(-1),samples:positions}}
   return {design,geometry,axes}
 }

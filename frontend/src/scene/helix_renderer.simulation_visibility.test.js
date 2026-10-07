@@ -1,12 +1,14 @@
 import { expect, it } from 'vitest'
 import * as THREE from 'three'
 import { buildHelixObjects } from './helix_renderer.js'
+import { setNativePoseMap } from '../viewer/native_placement.js'
 
 it('keeps simulated beads and slabs registered when visibility is refreshed, hidden, and restored', () => {
   const target = { helix_id: 'h', bp_index: 0, direction: 'FORWARD', copy: 0 }
   const nucleotide = {
     ...target, strand_id: 's', strand_type: 'staple', domain_index: 0,
     backbone_position: [1, 0, 0], base_position: [0.5, 0, 0],
+    placement_source: 'native-full-o5-v1', slab_position: [.67, 0, 0], slab_quaternion: [0, Math.SQRT1_2, Math.SQRT1_2, 0],
     base_normal: [-1, 0, 0], axis_tangent: [0, 0, 1],
   }
   const design = { helices: [], strands: [{ id: 's', strand_type: 'staple', domains: [] }] }
@@ -31,7 +33,7 @@ it('renders measured trajectory slab centers instead of rotating the native offs
   const nuc = {
     helix_id:'h', bp_index:0, direction:'FORWARD', strand_id:'s',
     strand_type:'staple', domain_index:0, backbone_position:[1,0,0],
-    base_position:[.5,0,0], base_normal:[-1,0,0], axis_tangent:[0,0,1],
+    placement_source:'native-full-o5-v1', slab_position:[.67,0,0], slab_quaternion:[0,Math.SQRT1_2,Math.SQRT1_2,0], base_position:[.5,0,0], base_normal:[-1,0,0], axis_tangent:[0,0,1],
   }
   const design = {helices:[], strands:[{id:'s',strand_type:'staple',domains:[]}]}
   const ctrl = buildHelixObjects([nuc], design, new THREE.Scene())
@@ -55,10 +57,12 @@ it('renders measured trajectory slab centers instead of rotating the native offs
 
 it('keeps slab connectors finite and hidden at an animation fade endpoint, then restores them', () => {
   const nuc = { helix_id: 'h', bp_index: 0, direction: 'FORWARD', strand_id: 's', strand_type: 'staple', domain_index: 0,
-    backbone_position: [1, 0, 0], base_position: [.5, 0, 0], base_normal: [-1, 0, 0], axis_tangent: [0, 0, 1] }
+    backbone_position: [1, 0, 0], base_position: [.5, 0, 0], placement_source: 'native-full-o5-v1', slab_position: [.67, 0, 0], slab_quaternion: [0, Math.SQRT1_2, Math.SQRT1_2, 0], base_normal: [-1, 0, 0], axis_tangent: [0, 0, 1] }
   const scene = new THREE.Scene(), design = { helices: [], strands: [{ id: 's', strand_type: 'staple', domains: [] }] }
   const ctrl = buildHelixObjects([nuc], design, scene)
   const full = { posMap: new Map([['h:0:FORWARD', new THREE.Vector3(1, 0, 0)]]), bnMap: new Map([['h:0:FORWARD', new THREE.Vector3(-1, 0, 0)]]), axesMap: new Map() }
+  full.posMap.clear()
+  setNativePoseMap(full.posMap, new THREE.Vector3(...nuc.backbone_position), nuc)
   const empty = { posMap: new Map(), bnMap: new Map(), axesMap: new Map() }
   ctrl.applyPositionLerp(full, empty, 1)
   const connectors = scene.getObjectByName('slabBackboneConnectors'), matrix = new THREE.Matrix4()

@@ -34,7 +34,7 @@ class StartupLoading {
             parsed=std::async(std::launch::async,[path=scenePath]{return loadScene(path);});
         }
     }
-    void render(const glm::mat4& vp,const XrPosef& head,bool representation=false) {
+    void render(const glm::mat4& vp,const XrPosef& head,bool representation=false,bool integrity=false) {
         if(!active)return;
         if(!anchored) {
             const glm::quat q(head.orientation.w,head.orientation.x,head.orientation.y,head.orientation.z);
@@ -63,7 +63,7 @@ class StartupLoading {
                 fills.push_back({{p.x,p.y,0},color,1});
         };
         rect(-.53F,-.38F,1.06F,.76F,{.025F,.04F,.065F});
-        text(phase=="error"?"NADOC VR - LOADING FAILED":(representation?"NADOC VR - LOADING VIEW":"NADOC VR - LOADING PART"),.33F,{1,1,1},.004F);
+        text(integrity?"DNA POSITIONING CHECK FAILED":phase=="error"?"NADOC VR - LOADING FAILED":(representation?"NADOC VR - LOADING VIEW":"NADOC VR - LOADING PART"),.33F,{1,1,1},.004F);
         text(detail,.265F,phase=="error"?glm::vec3(1,.5F,.4F):glm::vec3(.7F,.85F,1));
         rect(-.49F,.19F,.98F,.026F,{.15F,.19F,.24F});
         rect(-.49F,.19F,.98F*percent/100,.026F,{.25F,.8F,.65F});
@@ -78,7 +78,7 @@ class StartupLoading {
         for(const auto& [end,label]:stages) {
             text(std::string(percent>=end?"DONE  ":"WAIT  ")+label,y,percent>=end?glm::vec3(.4F,.85F,.65F):glm::vec3(.7F));y-=.041F;
         }
-        text(phase=="error"?"CLOSE VR AND RETRY FROM NADOC":"HEADSET TRACKING REMAINS ACTIVE",-.335F,{.75F,.8F,.85F},.0026F);
+        text(integrity?"CLOSE VR. REVIEW THE DNA POSITION REPORT IN NADOC.":phase=="error"?"CLOSE VR AND RETRY FROM NADOC":"HEADSET TRACKING REMAINS ACTIVE",-.335F,{.75F,.8F,.85F},.0026F);
         const nadoc_vr::MenuPanelBounds bounds{{-.53F,-.38F},{.53F,.38F}};
         surface.update(lines,bounds,false,fills);
         surface.render(vp,placement,bounds,.002F,false);

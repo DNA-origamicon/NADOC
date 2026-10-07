@@ -1,19 +1,9 @@
-"""The full representation draws both arcs of a DX junction equally — and only it does.
+"""The accepted native Full roll is canonical and cannot be disabled.
 
-A DX junction is two staple crossovers between the same helix pair at bp i and bp i+1.
-The full (coarse-grained) rep draws each as a backbone bead-to-bead arc, and a Holliday
-junction is symmetric, so the two arcs must be equal.
-
-Honeycomb already was.  Square drew 1.126 nm against 0.286 nm until the display-only
-``junction_balance`` roll landed (``constants.FULL_REP_BALANCE_ROLL_*``).
-
-These tests assert the PROPERTY (equal arcs), not the constant.  If the shared lattice
-phase ever moves, the balance point moves with it and this fails rather than drifting
-silently — the roll must then be re-measured.
-
-The other two tests are the firewall: the roll is display-only, so the geometric layer,
-every seed writer, every exporter and every pose fitter must see byte-identical geometry
-with it absent.
+A DX junction has two staple crossover arcs. The historical phase imbalance
+motivated the fixed lattice-dependent roll retained by native Full. These tests
+pin accepted frame behavior and atomistic independence, while rejecting the
+retired unbalanced placement rather than keeping an alternate display mode.
 """
 
 from collections import defaultdict
@@ -58,7 +48,7 @@ def _staple_slots(design: Design) -> set:
 
 
 def _junction_arc_deltas(
-    design: Design, *, junction_balance: bool, measured_positioning: bool = False
+    design: Design, *, junction_balance: bool, measured_positioning: bool = True
 ) -> list[float]:
     """Signed (arc at i+1) − (arc at i) for every DX junction, in nm."""
     nucs = _geometry_for_design(
@@ -116,10 +106,11 @@ def test_the_roll_survives_help_new_positioning():
     assert max(abs(d) for d in deltas) < 1.1e-3
 
 
-def test_the_square_full_rep_is_grossly_asymmetric_without_the_roll():
-    """The bug this fixes — pinned so a silent revert cannot pass as 'no change'."""
-    deltas = _junction_arc_deltas(_load(SQUARE_FIXTURE), junction_balance=False)
-    assert min(deltas) < -0.8, "square without the roll should be ~0.84 nm out"
+def test_the_retired_unbalanced_square_placement_is_unavailable():
+    from backend.core.native_full_placement import NativePlacementError
+    from tests.conftest import make_minimal_design
+    with pytest.raises(NativePlacementError, match="Unbalanced native Full placement has been removed"):
+        _geometry_for_design(make_minimal_design(lattice=LatticeType.SQUARE), junction_balance=False)
 
 
 def test_the_honeycomb_full_rep_stays_balanced_and_unrolled():
@@ -130,33 +121,13 @@ def test_the_honeycomb_full_rep_stays_balanced_and_unrolled():
     assert max(abs(d) for d in deltas) < ARC_TOL_NM
 
 
-def test_the_roll_is_absent_from_the_geometric_layer_by_default():
-    """FIREWALL: every seed, export and pose fitter goes through the default.
-
-    ``_geometry_for_design`` has ~50 consumers and almost all of them are simulation
-    or fitting paths.  The default must stay unrolled, and on square the two must
-    differ — otherwise this test would pass on a build where the flag does nothing.
-    """
-    design = _load(SQUARE_FIXTURE)
-    default = _geometry_for_design(design, compact_skips=True)
-    explicit_off = _geometry_for_design(
-        design, compact_skips=True, junction_balance=False
-    )
-    rolled = _geometry_for_design(design, compact_skips=True, junction_balance=True)
-
-    for a, b in zip(default, explicit_off):
-        assert a["backbone_position"] == b["backbone_position"]
-
-    moved = max(
-        float(
-            np.linalg.norm(
-                np.asarray(a["backbone_position"], float)
-                - np.asarray(b["backbone_position"], float)
-            )
-        )
-        for a, b in zip(default, rolled)
-    )
-    assert moved > 0.1, "the flag moved nothing — the firewall test would be vacuous"
+def test_every_default_uses_the_accepted_native_roll():
+    from tests.conftest import make_minimal_design
+    from backend.core.design_geometry import fitting_geometry
+    design = make_minimal_design(lattice=LatticeType.SQUARE)
+    canonical = _geometry_for_design(design, junction_balance=True)
+    assert _geometry_for_design(design) == canonical
+    assert fitting_geometry(design) == canonical
 
 
 def test_the_atomistic_build_never_sees_the_display_roll():

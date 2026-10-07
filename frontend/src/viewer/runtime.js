@@ -13,6 +13,7 @@ import { makeMultiscaleControls } from '../scene/multiscale_controls.js'
 import { fovPanScale } from '../scene/fov_pan.js'
 import { screenPlaneCameraUp } from '../scene/camera_basis.js'
 import { attachTrajectoryRenderClock } from '../ui/trajectory_render_clock.js'
+import { installPlacementSceneGuard, assertPlacementExportSafe } from './placement_scene_guard.js'
 
 function _makeOrbitControls(camera, canvas, target) {
   const c = new OrbitControls(camera, canvas)
@@ -39,7 +40,7 @@ function _makeTrackballControls(camera, canvas, target) {
   return c
 }
 
-export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false } = {}) {
+export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, placementStore, stopNativeVR } = {}) {
   let disposed = false
   let finishAnimation = null
   const pendingFrames = new Set()
@@ -56,6 +57,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false }
 
   const scene = new THREE.Scene()
   scene.background = null
+  const placementGuard = installPlacementSceneGuard({ scene, renderer, store: placementStore, stopNativeVR })
 
   // Camera positioned to see a 42 bp helix (~14 nm long along Z).
   // near=0.1 nm is well below single-nucleotide scale (~0.34 nm).
@@ -284,12 +286,17 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false }
   const trajectoryClock = attachTrajectoryRenderClock()
   window._cnFrame = 0
   renderer.setAnimationLoop(() => {
+    if (placementGuard.blocked()) return
     if (pauseWhenHidden && canvas.ownerDocument.hidden && !renderer.xr.isPresenting) return
     trajectoryClock.tick()
     _cnFrame++
     window._cnFrame = _cnFrame
     if (!renderer.xr.isPresenting) _inner.update()
-    _frameCallbacks.forEach(fn => fn())
+    for (const fn of _frameCallbacks) {
+      if (placementGuard.blocked()) return
+      fn()
+    }
+    if (placementGuard.blocked()) return
     if (nativeVRActive && !renderer.xr.isPresenting &&
         (!nativeVRDesktopEnabled || (canvas.ownerDocument.hidden || !canvas.ownerDocument.hasFocus()))) return
     _renderFn()
@@ -316,6 +323,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false }
     if (disposed) return
     disposed = true
     trajectoryClock.dispose()
+    placementGuard.dispose()
     renderer.setAnimationLoop(null)
     resizeObserver.disconnect()
     canvas.removeEventListener('wheel', fastZoom, true)
@@ -344,7 +352,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false }
     pushControls, popControls,
     addFrameCallback, removeFrameCallback,
     setNativeVRActive, setNativeVRDesktopEnabled,
-    setRenderFn, resetRenderFn, renderNow: () => _renderFn(),
+    setRenderFn, resetRenderFn, renderNow: () => { assertPlacementExportSafe(scene); return _renderFn() },
     isStandardRender: () => _renderFn === _defaultRenderFn && _renderCamera === camera,
   }
 }

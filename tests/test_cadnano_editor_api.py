@@ -151,14 +151,22 @@ class TestHelixAtCell:
         h = r.json()["design"]["helices"][0]
         assert abs(h["twist_per_bp_rad"] - SQUARE_TWIST_PER_BP_RAD) < 1e-8
 
-    def test_response_includes_nucleotides(self, client):
-        """Response embeds nucleotide geometry."""
+    @pytest.mark.native_placement
+    @pytest.mark.parametrize("populate", [False, True])
+    def test_response_includes_nucleotides(self, client, populate):
+        """Only occupied sites emit canonical nucleotide geometry."""
         _make_hc_design(client)
-        r = client.post("/api/design/helix-at-cell", json={"row": 0, "col": 0})
+        r = client.post("/api/design/helix-at-cell", json={
+            "row": 0, "col": 0, "populate_strands": populate,
+        })
+        assert r.status_code == 201
         body = r.json()
         assert "nucleotides" in body
-        # 42 bp × 2 strands = 84 nucleotides
-        assert len(body["nucleotides"]) == 84
+        # A bare track has no DNA; populated 42 bp has two occupied strands.
+        assert len(body["nucleotides"]) == (84 if populate else 0)
+        from backend.core.design_geometry import _geometry_for_design
+
+        assert body["nucleotides"] == _geometry_for_design(design_state.get_or_404())
 
     def test_default_no_strands(self, client):
         """Without populate_strands, the new helix has no strands (back-compat)."""

@@ -798,7 +798,7 @@ def _insert_sugar_origins(model, design):
 
 
 @pytest.mark.parametrize("fast_bridges", [False, True])
-@pytest.mark.parametrize("measured_positioning", [False, True])
+@pytest.mark.parametrize("measured_positioning", [None, True])
 def test_three_prime_anchor_of_extra_base_run_has_clockwise_gamma_rotation(
     fast_bridges, measured_positioning, monkeypatch
 ):

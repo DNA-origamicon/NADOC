@@ -4866,41 +4866,30 @@ def _linker_anchor_nuc(
     deformed geometry, so atomistic and surface (which trust the stored helix
     axis) only match when that axis is computed from the same deformed frame.
 
-    Notes:
-      * `deformed_nucleotide_positions(helix, design)` is INSUFFICIENT here —
-        it skips domain-level cluster transforms (the `if not c.domain_ids`
-        branch in deformation.py only handles helix-level clusters), which
-        leaves linker anchors at their un-deformed positions whenever the
-        overhang's helix is in a domain-level cluster (e.g. Hinge3). We use
-        `deformed_nucleotide_arrays` instead, which goes through
-        `_apply_cluster_transforms_domain_aware` and respects both kinds.
+    Uses the native Full authority, including domain-aware deformation,
+    accepted lattice phase, and saved per-nucleotide pose overrides.
     """
     if oh_dom is None:
         return None
     helix = design.find_helix(oh_dom.helix_id)
     if helix is None:
         return None
-    from backend.core.deformation import deformed_nucleotide_arrays
+    from backend.core.design_geometry import native_full_nucleotide_at
     from backend.core.geometry import NucleotidePosition
 
     bp = _overhang_attach_bp(ovhg_id, oh_dom, attach)
     direction = _opposite_direction(oh_dom.direction)
-    arrs = deformed_nucleotide_arrays(helix, design)
-    bp_arr = arrs["bp_indices"]
-    dir_arr = arrs["directions"]  # int array: 0 = FORWARD, 1 = REVERSE
-    dir_int = 0 if direction == Direction.FORWARD else 1
-    matches = (bp_arr == bp) & (dir_arr == dir_int)
-    if not matches.any():
+    record = native_full_nucleotide_at(helix, design, bp, direction)
+    if record is None:
         return None
-    i = int(matches.argmax())
     return NucleotidePosition(
         helix_id=helix.id,
         bp_index=int(bp),
         direction=direction,
-        position=arrs["positions"][i],
-        base_position=arrs["base_positions"][i],
-        base_normal=arrs["base_normals"][i],
-        axis_tangent=arrs["axis_tangents"][i],
+        position=np.asarray(record["backbone_position"]),
+        base_position=np.asarray(record["base_position"]),
+        base_normal=np.asarray(record["base_normal"]),
+        axis_tangent=np.asarray(record["axis_tangent"]),
     )
 
 
@@ -4943,65 +4932,35 @@ def _make_virtual_linker_helix(
     atomistic ds linker strands from appearing at the origin while preserving a
     separated lattice ``grid_pos`` for pathview.
     """
-    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.linker_relax import bridge_axis_geometry, bridge_helix_phase_offset, _comp_first
+    from backend.core.native_full_placement import NativePlacementError
 
+    if conn is None:
+        raise NativePlacementError("Virtual linker requires its real connection anchors.",
+            details={"bridge_helix_id": helix_id, "base_count": length_bp})
+    anchor_a = _linker_anchor_nuc(design, conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom)
+    anchor_b = _linker_anchor_nuc(design, conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom)
+    identity = {"connection_id": conn.id, "bridge_helix_id": helix_id, "anchors": {}}
+    for side, oh_id, attach, dom, anchor in (
+        ("a", conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom, anchor_a),
+        ("b", conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom, anchor_b)):
+        identity["anchors"][side] = {"overhang_id": oh_id, "attach": attach,
+            "helix_id": dom.helix_id if dom else None,
+            "bp_index": _overhang_attach_bp(oh_id, dom, attach) if dom else None,
+            "direction": _opposite_direction(dom.direction).value if dom else None,
+            "backbone_position": anchor.position.tolist() if anchor else None}
+    if anchor_a is None or anchor_b is None:
+        raise NativePlacementError("Virtual linker has no canonical anchor; refusing an origin placeholder.", details=identity)
+    g = bridge_axis_geometry(
+        anchor_a.position, anchor_a.base_normal, anchor_b.position, length_bp,
+        _comp_first(conn.overhang_a_id, conn.overhang_a_attach),
+        _comp_first(conn.overhang_b_id, conn.overhang_b_attach), identity=identity)
     row, col = grid_pos if grid_pos is not None else _linker_grid_pos(design)
-    visual_length = max(length_bp - 1, 1) * BDNA_RISE_PER_BP
-    axis_start = np.array([0.0, 0.0, 0.0])
-    axis_end = np.array([0.0, 0.0, visual_length])
-    phase_offset = 0.0
-    if conn is not None:
-        anchor_a = _linker_anchor_nuc(
-            design, conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom
-        )
-        anchor_b = _linker_anchor_nuc(
-            design, conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom
-        )
-        if anchor_a is not None and anchor_b is not None:
-            pos_a = np.array(anchor_a.position, dtype=float)
-            pos_b = np.array(anchor_b.position, dtype=float)
-            chord = pos_b - pos_a
-            if np.linalg.norm(chord) > 1e-9:
-                preferred = np.array(anchor_a.base_normal, dtype=float)
-                frame_x, frame_y, frame_z = _frame_from_axis(chord, preferred)
-                # Use the same offset-from-chord placement as the geometry
-                # emitter (`_emit_bridge_nucs` → `bridge_axis_geometry`) so
-                # the atomistic linker atoms land at the same world-space
-                # position as the CG bridge beads. Falls back to the
-                # chord-midpoint axis if `bridge_axis_geometry` errors (e.g.
-                # missing comp_first inputs on legacy designs).
-                axis_start = None
-                try:
-                    from backend.core.linker_relax import (
-                        bridge_axis_geometry,
-                        _comp_first,
-                    )
-
-                    cfa = _comp_first(conn.overhang_a_id, conn.overhang_a_attach)
-                    cfb = _comp_first(conn.overhang_b_id, conn.overhang_b_attach)
-                    g = bridge_axis_geometry(
-                        pos_a, preferred, pos_b, length_bp, cfa, cfb
-                    )
-                    axis_start = g["axis_start"]
-                    axis_end = g["axis_end"]
-                except Exception:
-                    pass
-                if axis_start is None:
-                    mid = (pos_a + pos_b) * 0.5
-                    axis_start = mid - frame_z * (visual_length * 0.5)
-                    axis_end = axis_start + frame_z * visual_length
-                # Geometry's nucleotide frame derives its x/y basis from axis
-                # direction; choose phase so bp0's forward radial matches the
-                # full-renderer frame as closely as the stored helix allows.
-                geom_x, geom_y, _ = _frame_from_axis(frame_z)
-                phase_offset = math.atan2(
-                    float(np.dot(frame_x, geom_y)), float(np.dot(frame_x, geom_x))
-                )
     return Helix(
         id=helix_id,
-        axis_start=Vec3.from_array(axis_start),
-        axis_end=Vec3.from_array(axis_end),
-        phase_offset=phase_offset,
+        axis_start=Vec3.from_array(g["axis_start"]),
+        axis_end=Vec3.from_array(g["axis_end"]),
+        phase_offset=bridge_helix_phase_offset(g, design),
         length_bp=length_bp,
         grid_pos=(row, col),
     )

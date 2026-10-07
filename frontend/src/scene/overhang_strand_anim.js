@@ -26,6 +26,8 @@
 
 import * as THREE from 'three'
 import { createStrandRenderer } from '../strand-anim/strand_renderer.js'
+import { placementIntegrityFailure, validateNativePlacement } from '../viewer/native_placement.js'
+import { nativePoseFrame, transportNativePose } from './native_pose_transport.js'
 
 const TWO_PI = Math.PI * 2
 /** shortest signed angle a→b in (−π, π] */
@@ -45,7 +47,7 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
   let _bound = null          // capture (see bind())
   let _movedKeys = new Set()
   let _lastGeometry = null
-  let _invader = null        // synthetic invader strand renderer (lazy, TMSD mode)
+  let _invader = null        // captured-pose invader strand renderer (lazy, TMSD mode)
 
   // scratch (no per-frame allocation)
   const _A0 = new THREE.Vector3(), _Adir = new THREE.Vector3()
@@ -55,13 +57,8 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
   // frame-slerp scratch (invader slab orientation: direct shortest path, no
   // orthogonalization-singularity swings between bound/unbound).
   const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _mm = new THREE.Matrix4()
-  const _st = new THREE.Vector3(), _sn = new THREE.Vector3(), _sc = new THREE.Vector3()
   function _frameQuat(tx, ty, tz, nx, ny, nz, out) {       // orthonormal slab frame → quat
-    _st.set(tx, ty, tz); const tl = _st.length() || 1; _st.divideScalar(tl)
-    _sn.set(nx, ny, nz); _sn.addScaledVector(_st, -_sn.dot(_st))
-    const nl = _sn.length(); if (nl < 1e-6) { _sn.set(0, 0, 1).addScaledVector(_st, -_st.z); _sn.normalize() } else _sn.divideScalar(nl)
-    _sc.crossVectors(_st, _sn).normalize()
-    _mm.makeBasis(_sc, _st, _sn); out.setFromRotationMatrix(_mm)
+    out.copy(nativePoseFrame(_bound.ohNucs[0], [nx, ny, nz], [tx, ty, tz]))
   }
   /** Slerp the slab frame from (bt,bn) to (ft,fn) by t∈[0,1] → tanArr/bnArr at o. */
   function _slerpFrame(bt, bn, ft, fn, t, tanArr, bnArr, o) {
@@ -74,7 +71,7 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     bnArr[o] = e[8]; bnArr[o + 1] = e[9]; bnArr[o + 2] = e[10]     // column 2 = base-normal
   }
 
-  const _key = (n) => `${n.helix_id}:${n.bp_index}:${n.direction}`
+  const _key = (n) => `${n.helix_id}:${n.bp_index}:${n.direction}:${n.copy_k ?? n.copy ?? 0}`
   const _v3 = (a, out) => out.set(a[0] ?? a.x, a[1] ?? a.y, a[2] ?? a.z)
 
   function _overhangNucs(geometry, ohId) {
@@ -112,14 +109,18 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
 
     // Binder beads on the overhang helix (ANY length). Pair to overhang beads by
     // bp_index where they overlap — overhang & binder may differ in length.
-    const ohBpToIdx = new Map(); oh.forEach((n, i) => ohBpToIdx.set(n.bp_index, i))
+    const ohBpToIdx = new Map(); oh.forEach((n, i) => ohBpToIdx.set(`${n.bp_index}:${n.copy_k ?? 0}`, i))
     const binderNucs = geometry
       .filter(n => n.strand_id === binderStrandId && n.helix_id === ohHelix)
       .sort((a, b) => a.bp_index - b.bp_index)
     if (!binderNucs.length) return { ok: false, reason: 'no binder beads on the overhang helix' }
-    const bnToOh = binderNucs.map(n => (ohBpToIdx.has(n.bp_index) ? ohBpToIdx.get(n.bp_index) : -1))
+    const bnToOh = binderNucs.map(n => (ohBpToIdx.has(`${n.bp_index}:${n.copy_k ?? 0}`) ? ohBpToIdx.get(`${n.bp_index}:${n.copy_k ?? 0}`) : -1))
     if (!bnToOh.some(x => x >= 0)) return { ok: false, reason: 'binder does not overlap the overhang' }
     const Mb = binderNucs.length
+    for (const nucleotide of [...oh, ...binderNucs]) validateNativePlacement(nucleotide)
+    const invaderNucs = oh.map(n => geometry.find(candidate => candidate.helix_id === n.helix_id
+      && candidate.bp_index === n.bp_index && (candidate.copy_k ?? 0) === (n.copy_k ?? 0)
+      && candidate.direction !== n.direction))
 
     // Helix axis (cylinder axis). Prefer the helix's stored axis; fall back to
     // the overhang bead root→tip line.
@@ -142,8 +143,8 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     // per-bead decomposition → cached arrays (axisPt, radius, azimuth). Slab
     // base-normals are cached in the axis frame (U,V,Adir components) so the
     // paired region's slabs can be rotated by the unwind angle each frame.
-    const ohAxis = new Float32Array(M * 3), ohR = new Float32Array(M), ohTheta = new Float32Array(M), ohBnUVA = new Float32Array(M * 3)
-    const bnAxis = new Float32Array(Mb * 3), bnR = new Float32Array(Mb), bnTheta = new Float32Array(Mb), bnBnUVA = new Float32Array(Mb * 3)
+    const ohAxis = new Float64Array(M * 3), ohR = new Float64Array(M), ohTheta = new Float64Array(M), ohBnUVA = new Float64Array(M * 3)
+    const bnAxis = new Float64Array(Mb * 3), bnR = new Float64Array(Mb), bnTheta = new Float64Array(Mb), bnBnUVA = new Float64Array(Mb * 3)
     const _uva = (v, out, k) => { out[k] = v[0] * _U.x + v[1] * _U.y + v[2] * _U.z;
       out[k + 1] = v[0] * _V.x + v[1] * _V.y + v[2] * _V.z;
       out[k + 2] = v[0] * _Adir.x + v[1] * _Adir.y + v[2] * _Adir.z }
@@ -186,16 +187,13 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     const toeholdIdx = [], coveredIdx = []
     for (let j = 0; j < M; j++) (covered[j] ? coveredIdx : toeholdIdx).push(j)
     const hasToehold = toeholdIdx.length > 0 && coveredIdx.length > 0
-    const dOf = new Float32Array(M)
-    let grooveOffset = Math.PI, toeholdAtTip = true
+    const dOf = new Float64Array(M)
+    let toeholdAtTip = true
     if (hasToehold) {
       const meanToe = toeholdIdx.reduce((a, b) => a + b, 0) / toeholdIdx.length
       const meanCov = coveredIdx.reduce((a, b) => a + b, 0) / coveredIdx.length
       toeholdAtTip = meanToe > meanCov
       for (let j = 0; j < M; j++) dOf[j] = toeholdAtTip ? (M - 1 - j) : j
-      let gs = 0, gc = 0
-      for (let k = 0; k < Mb; k++) { const oj = bnToOh[k]; if (oj >= 0) { gs += _angDiff(ohTheta[oj], bnTheta[k]); gc++ } }
-      grooveOffset = gc > 0 ? gs / gc : Math.PI
     }
     if (!_invader) { const sc = getScene?.(); if (sc) _invader = createStrandRenderer(sc, { roleColor: { invader: 0x3fb950 }, lineOpacity: 0.6 }) }
 
@@ -210,11 +208,11 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     const tipSign = _spanAx >= 0 ? 1 : -1
 
     _bound = {
-      overhangId, binderStrandId, M, Mb, ohNucs: oh, binderNucs, bnToOh,
+      overhangId, binderStrandId, M, Mb, ohNucs: oh, binderNucs, bnToOh, invaderNucs,
       Adir: _Adir.clone(), U: _U.clone(), V: _V.clone(),
       ohAxis, ohR, ohTheta, ohBnUVA, thetaRoot: ohTheta[0],
       bnAxis, bnR, bnTheta, bnBnUVA, twist, meanRise, meanW, bnRootTheta: bnTheta[0], bnRootR: bnR[0],
-      hasToehold, dOf, grooveOffset, toeholdAtTip, tipSign,
+      hasToehold, dOf, toeholdAtTip, tipSign,
     }
     return { ok: true, N: M, R: rSum / M, hasToehold }
   }
@@ -225,6 +223,12 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     if (!_bound || !helixCtrl?.setBeadOverrides) return
     const straight = params?.form === 'straight'
     if (params?.mode === 'displacement' && _bound.hasToehold) {
+      for (let i = 0; i < _bound.M; i++) {
+        const target = _bound.invaderNucs[i]
+        if (!target) placementIntegrityFailure(_bound.ohNucs[i], 'invader_target_pose', null,
+          'Displacement animation requires the backend-authorized complementary pose at every site; this target is absent')
+        validateNativePlacement(target)
+      }
       if (straight) _displacementStraight(phi, params, helixCtrl)
       else _displacement(phi, params, helixCtrl)
       return
@@ -307,7 +311,7 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
       let nbz = (opu * U.z + opv * V.z + oA * Adir.z) * (1 - w) - rhz * w
       const nl = Math.hypot(nbx, nby, nbz) || 1; nbx /= nl; nby /= nl; nbz /= nl
       const on = b.ohNucs[i]
-      updates.push({ helix_id: on.helix_id, bp_index: on.bp_index, direction: on.direction,
+      updates.push({ helix_id: on.helix_id, bp_index: on.bp_index, direction: on.direction, copy_k: on.copy_k ?? on.copy ?? 0,
         backbone_position: [ox, oy, oz], nx: nbx, ny: nby, nz: nbz })
       nowKeys.add(_key(on))
     }
@@ -320,7 +324,7 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
       const oj = b.bnToOh[bk]
       if (oj < 0) {
         const ap = bn.backbone_position, an = bn.base_normal
-        const u = { helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, backbone_position: [ap[0], ap[1], ap[2]] }
+        const u = { helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, copy_k: bn.copy_k ?? bn.copy ?? 0, backbone_position: [ap[0], ap[1], ap[2]] }
         if (an) { u.nx = an[0]; u.ny = an[1]; u.nz = an[2] }
         updates.push(u); nowKeys.add(_key(bn)); continue
       }
@@ -343,7 +347,7 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
       let mby = (bpu * U.y + bpv * V.y + bA * Adir.y) * (1 - w) + pdY * w
       let mbz = (bpu * U.z + bpv * V.z + bA * Adir.z) * (1 - w) + pdZ * w
       const ml = Math.hypot(mbx, mby, mbz) || 1; mbx /= ml; mby /= ml; mbz /= ml
-      updates.push({ helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction,
+      updates.push({ helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, copy_k: bn.copy_k ?? bn.copy ?? 0,
         backbone_position: [bx, by, bz], nx: mbx, ny: mby, nz: mbz })
       nowKeys.add(_key(bn))
     }
@@ -352,13 +356,13 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
       const u = _authoredUpdate(key, _lastGeometry)
       if (u) updates.push(u)
     }
-    helixCtrl.setBeadOverrides(updates)
+    _applyUpdates(helixCtrl, updates)
     _movedKeys = nowKeys
   }
 
   /**
-   * Toehold-mediated strand displacement (TMSD). A synthetic invader (rendered
-   * via the sandbox strand renderer) binds the toehold then branch-migrates,
+   * Toehold-mediated strand displacement (TMSD). A captured-pose invader (rendered
+   * from complete authoritative nucleotide poses) binds the toehold then branch-migrates,
    * displacing the real binder. The overhang (substrate) stays put. φ: 0 =
    * invader free + binder bound → 1 = invader bound + binder displaced.
    */
@@ -366,7 +370,7 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     const b = _bound, M = b.M, U = b.U, V = b.V, Adir = b.Adir
     const meltBp = params?.meltBp ?? 0
     const meltSafe = Math.max(meltBp, 1e-6)
-    // separate splay angles: displaced binder vs the synthetic invader.
+    // separate splay angles: displaced binder vs the captured-pose invader.
     const thRadB = (params?.thetaDeg ?? 30) * Math.PI / 180
     const thRadI = (params?.invaderSplayDeg ?? params?.thetaDeg ?? 30) * Math.PI / 180
     const armStep = b.meanRise * (params?.armPull ?? 1.0)
@@ -398,11 +402,9 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     const dotI = aInvX * Adir.x + aInvY * Adir.y + aInvZ * Adir.z
     const [uiX, uiY, uiZ] = _norm3(-(aInvX - dotI * Adir.x), -(aInvY - dotI * Adir.y), -(aInvZ - dotI * Adir.z))
 
-    const _pairPos = (j, out) => {                 // antiparallel partner on the cylinder
-      const ang = b.ohTheta[j] + b.grooveOffset, R = b.ohR[j], o = j * 3
-      out[0] = b.ohAxis[o] + R * (Math.cos(ang) * U.x + Math.sin(ang) * V.x)
-      out[1] = b.ohAxis[o + 1] + R * (Math.cos(ang) * U.y + Math.sin(ang) * V.y)
-      out[2] = b.ohAxis[o + 2] + R * (Math.cos(ang) * U.z + Math.sin(ang) * V.z)
+    const _pairPos = (j, out) => {
+      const position = b.invaderNucs[j].backbone_position
+      out[0] = position[0]; out[1] = position[1]; out[2] = position[2]
     }
     // invader branch-point anchor = paired position at d = bf; the binder's is
     // ahead at d = bfB (so the two Λ tails emanate from slightly offset points).
@@ -416,8 +418,8 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     const fX = _fI[0], fY = _fI[1], fZ = _fI[2]
     const fbX = _fB[0], fbY = _fB[1], fbZ = _fB[2]
 
-    // ── synthetic invader strand ───────────────────────────────────────────────
-    const ipos = new Float32Array(M * 3), itan = new Float32Array(M * 3), ibn = new Float32Array(M * 3)
+    // ── captured-pose invader strand ───────────────────────────────────────────────
+    const ipos = new Float64Array(M * 3), itan = new Float64Array(M * 3), ibn = new Float64Array(M * 3)
     const _bp = [0, 0, 0]
     for (let j = 0; j < M; j++) {
       const o = j * 3, d = b.dOf[j]
@@ -426,19 +428,17 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
       const s = (d - bf) * armStep                  // free (d>bf) trails along +d arm
       const fx = fX + s * aInvX, fy = fY + s * aInvY, fz = fZ + s * aInvZ
       ipos[o] = _bp[0] * wj + fx * (1 - wj); ipos[o + 1] = _bp[1] * wj + fy * (1 - wj); ipos[o + 2] = _bp[2] * wj + fz * (1 - wj)
-      const oo = j * 3
-      const ox = b.ohAxis[oo] + b.ohR[j] * (Math.cos(b.ohTheta[j]) * U.x + Math.sin(b.ohTheta[j]) * V.x)
-      const oy = b.ohAxis[oo + 1] + b.ohR[j] * (Math.cos(b.ohTheta[j]) * U.y + Math.sin(b.ohTheta[j]) * V.y)
-      const oz = b.ohAxis[oo + 2] + b.ohR[j] * (Math.cos(b.ohTheta[j]) * U.z + Math.sin(b.ohTheta[j]) * V.z)
       // Slab frame SLERPs the shortest path from BOUND (tangent = axis, base-normal
       // = toward the overhang it pairs) to UNBOUND (tangent = backbone direction in
       // array order = axSign·arm, base-normal = toward axis). Using axSign·arm (not
       // the arm-extension direction) keeps the free tangent aligned with the bound
       // tangent — else the frame slerps ~180° about the normal.
-      _slerpFrame([Adir.x, Adir.y, Adir.z], [ox - _bp[0], oy - _bp[1], oz - _bp[2]],
+      _slerpFrame(b.invaderNucs[j].axis_tangent, b.invaderNucs[j].base_normal,
         [axSign * aInvX, axSign * aInvY, axSign * aInvZ], [uiX, uiY, uiZ], 1 - wj, itan, ibn, o)
     }
-    if (_invader) _invader.update([{ pos: ipos, tan: itan, bn: ibn, role: 'invader' }])
+    if (_invader) _invader.update([{ role: 'invader', nucleotides: b.invaderNucs.map((n, j) =>
+      transportNativePose(n, Array.from(ipos.slice(j * 3, j * 3 + 3)),
+        nativePoseFrame(n, Array.from(ibn.slice(j * 3, j * 3 + 3)), Array.from(itan.slice(j * 3, j * 3 + 3))))) }])
 
     // ── displaced binder (real beads) ──────────────────────────────────────────
     const updates = []
@@ -447,7 +447,7 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
       const o = bk * 3, bn = b.binderNucs[bk], oj = b.bnToOh[bk]
       if (oj < 0) {
         const ap = bn.backbone_position, an = bn.base_normal
-        const u = { helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, backbone_position: [ap[0], ap[1], ap[2]] }
+        const u = { helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, copy_k: bn.copy_k ?? bn.copy ?? 0, backbone_position: [ap[0], ap[1], ap[2]] }
         if (an) { u.nx = an[0]; u.ny = an[1]; u.nz = an[2] }
         updates.push(u); nowKeys.add(_key(bn)); continue
       }
@@ -464,7 +464,7 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
       let mby = (an ? an[1] : pdBY) * (1 - df) + pdBY * df
       let mbz = (an ? an[2] : pdBZ) * (1 - df) + pdBZ * df
       const ml = Math.hypot(mbx, mby, mbz) || 1; mbx /= ml; mby /= ml; mbz /= ml
-      updates.push({ helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction,
+      updates.push({ helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, copy_k: bn.copy_k ?? bn.copy ?? 0,
         backbone_position: [pcx * (1 - df) + dx * df, pcy * (1 - df) + dy * df, pcz * (1 - df) + dz * df],
         nx: mbx, ny: mby, nz: mbz })
       nowKeys.add(_key(bn))
@@ -475,7 +475,7 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
       const u = _authoredUpdate(key, _lastGeometry)
       if (u) updates.push(u)
     }
-    helixCtrl.setBeadOverrides(updates)
+    _applyUpdates(helixCtrl, updates)
     _movedKeys = nowKeys
   }
 
@@ -531,25 +531,25 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     const updates = [], nowKeys = new Set()
     for (let i = 0; i < M; i++) {                       // overhang rail — at the root azimuth/radius
       const o = i * 3, on = b.ohNucs[i]
-      updates.push({ helix_id: on.helix_id, bp_index: on.bp_index, direction: on.direction,
+      updates.push({ helix_id: on.helix_id, bp_index: on.bp_index, direction: on.direction, copy_k: on.copy_k ?? on.copy ?? 0,
         backbone_position: [b.ohAxis[o] + f.ohR0 * f.ohRx, b.ohAxis[o + 1] + f.ohR0 * f.ohRy, b.ohAxis[o + 2] + f.ohR0 * f.ohRz],
         nx: -f.ohRx, ny: -f.ohRy, nz: -f.ohRz })       // slab → toward axis
       nowKeys.add(_key(on))
     }
     for (let bk = 0; bk < b.Mb; bk++) {                 // binder: root rail ↔ arm
       const o = bk * 3, bn = b.binderNucs[bk], oj = b.bnToOh[bk]
-      if (oj < 0) { const ap = bn.backbone_position, an = bn.base_normal; const u = { helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, backbone_position: [ap[0], ap[1], ap[2]] }; if (an) { u.nx = an[0]; u.ny = an[1]; u.nz = an[2] } updates.push(u); nowKeys.add(_key(bn)); continue }
+      if (oj < 0) { const ap = bn.backbone_position, an = bn.base_normal; const u = { helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, copy_k: bn.copy_k ?? bn.copy ?? 0, backbone_position: [ap[0], ap[1], ap[2]] }; if (an) { u.nx = an[0]; u.ny = an[1]; u.nz = an[2] } updates.push(u); nowKeys.add(_key(bn)); continue }
       const w = _sstep((forkPos - oj) / meltSafe + 0.5), oo = oj * 3
       const pcx = b.ohAxis[oo] + f.bnR0 * f.bnRx, pcy = b.ohAxis[oo + 1] + f.bnR0 * f.bnRy, pcz = b.ohAxis[oo + 2] + f.bnR0 * f.bnRz
       const s = (forkPos - oj) * armStep
       const bx = pcx * (1 - w) + (pfX + s * aX) * w, by = pcy * (1 - w) + (pfY + s * aY) * w, bz = pcz * (1 - w) + (pfZ + s * aZ) * w
       // freed binder slab → uniform direction 90° from the splay/arm (all aligned)
-      updates.push({ helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction,
+      updates.push({ helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, copy_k: bn.copy_k ?? bn.copy ?? 0,
         backbone_position: [bx, by, bz], nx: pdX, ny: pdY, nz: pdZ })
       nowKeys.add(_key(bn))
     }
     for (const key of _movedKeys) { if (nowKeys.has(key)) continue; const u = _authoredUpdate(key, _lastGeometry); if (u) updates.push(u) }
-    helixCtrl.setBeadOverrides(updates)
+    _applyUpdates(helixCtrl, updates)
     _movedKeys = nowKeys
   }
 
@@ -582,7 +582,7 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
       out[2] = (b.ohAxis[j0 * 3 + 2] * (1 - jt) + b.ohAxis[j1 * 3 + 2] * jt) + f.bnR0 * f.bnRz
     }
     const _fI = [0, 0, 0], _fB = [0, 0, 0]; _railAt(bf, _fI); _railAt(bfB, _fB)
-    const ipos = new Float32Array(M * 3), itan = new Float32Array(M * 3), ibn = new Float32Array(M * 3)
+    const ipos = new Float64Array(M * 3), itan = new Float64Array(M * 3), ibn = new Float64Array(M * 3)
     for (let j = 0; j < M; j++) {
       const o = j * 3, d = b.dOf[j], wj = _sstep((bf - d) / meltSafe + 0.5)
       const bx = b.ohAxis[o] + f.bnR0 * f.bnRx, by = b.ohAxis[o + 1] + f.bnR0 * f.bnRy, bz = b.ohAxis[o + 2] + f.bnR0 * f.bnRz   // bound = binder rail
@@ -596,44 +596,50 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
       // this the frame would slerp ~180° about the normal.
       _slerpFrame([Adir.x, Adir.y, Adir.z], [-f.bnRx, -f.bnRy, -f.bnRz], [axSign * aIX, axSign * aIY, axSign * aIZ], [uiX, uiY, uiZ], 1 - wj, itan, ibn, o)
     }
-    if (_invader) _invader.update([{ pos: ipos, tan: itan, bn: ibn, role: 'invader' }])
+    if (_invader) _invader.update([{ role: 'invader', nucleotides: b.invaderNucs.map((n, j) =>
+      transportNativePose(n, Array.from(ipos.slice(j * 3, j * 3 + 3)),
+        nativePoseFrame(n, Array.from(ibn.slice(j * 3, j * 3 + 3)), Array.from(itan.slice(j * 3, j * 3 + 3))))) }])
     const updates = [], nowKeys = new Set()
     for (let i = 0; i < M; i++) {                       // overhang substrate rail — root-aligned
       const o = i * 3, on = b.ohNucs[i]
-      updates.push({ helix_id: on.helix_id, bp_index: on.bp_index, direction: on.direction,
+      updates.push({ helix_id: on.helix_id, bp_index: on.bp_index, direction: on.direction, copy_k: on.copy_k ?? on.copy ?? 0,
         backbone_position: [b.ohAxis[o] + f.ohR0 * f.ohRx, b.ohAxis[o + 1] + f.ohR0 * f.ohRy, b.ohAxis[o + 2] + f.ohR0 * f.ohRz],
         nx: -f.ohRx, ny: -f.ohRy, nz: -f.ohRz })
       nowKeys.add(_key(on))
     }
     for (let bk = 0; bk < b.Mb; bk++) {
       const o = bk * 3, bn = b.binderNucs[bk], oj = b.bnToOh[bk]
-      if (oj < 0) { const ap = bn.backbone_position, an = bn.base_normal; const u = { helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, backbone_position: [ap[0], ap[1], ap[2]] }; if (an) { u.nx = an[0]; u.ny = an[1]; u.nz = an[2] } updates.push(u); nowKeys.add(_key(bn)); continue }
+      if (oj < 0) { const ap = bn.backbone_position, an = bn.base_normal; const u = { helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, copy_k: bn.copy_k ?? bn.copy ?? 0, backbone_position: [ap[0], ap[1], ap[2]] }; if (an) { u.nx = an[0]; u.ny = an[1]; u.nz = an[2] } updates.push(u); nowKeys.add(_key(bn)); continue }
       const d = b.dOf[oj], df = _sstep((bfB - d) / meltSafe + 0.5), oo = oj * 3
       const pcx = b.ohAxis[oo] + f.bnR0 * f.bnRx, pcy = b.ohAxis[oo + 1] + f.bnR0 * f.bnRy, pcz = b.ohAxis[oo + 2] + f.bnR0 * f.bnRz
       const s = (bfB - d) * armStep
       const bx = pcx * (1 - df) + (_fB[0] + s * aBX) * df, by = pcy * (1 - df) + (_fB[1] + s * aBY) * df, bz = pcz * (1 - df) + (_fB[2] + s * aBZ) * df
       const inw = _inwardAxis(b, bx, by, bz)          // displaced-strand slab → toward axis center
-      updates.push({ helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction,
+      updates.push({ helix_id: bn.helix_id, bp_index: bn.bp_index, direction: bn.direction, copy_k: bn.copy_k ?? bn.copy ?? 0,
         backbone_position: [bx, by, bz], nx: inw[0], ny: inw[1], nz: inw[2] })
       nowKeys.add(_key(bn))
     }
     for (const key of _movedKeys) { if (nowKeys.has(key)) continue; const u = _authoredUpdate(key, _lastGeometry); if (u) updates.push(u) }
-    helixCtrl.setBeadOverrides(updates)
+    _applyUpdates(helixCtrl, updates)
     _movedKeys = nowKeys
   }
 
+  function _applyUpdates(helixCtrl, updates) {
+    const captured = new Map((_lastGeometry ?? []).map(n => [_key(n), n]))
+    const poses = updates.map(update => {
+      const nucleotide = captured.get(_key(update))
+      if (!nucleotide) placementIntegrityFailure(update, 'captured_native_pose', null,
+        'Animation cannot move a nucleotide without its complete captured pose')
+      if (update.placement_source) { validateNativePlacement(update); return update }
+      const orientation = update.nx === undefined ? nucleotide.slab_quaternion
+        : nativePoseFrame(nucleotide, [update.nx, update.ny, update.nz])
+      return transportNativePose(nucleotide, update.backbone_position, orientation)
+    })
+    helixCtrl.setBeadOverrides(poses)
+  }
+
   function _authoredUpdate(key, geometry) {
-    if (!geometry) return null
-    for (const n of geometry) {
-      if (_key(n) === key) {
-        const p = n.backbone_position, bnv = n.base_normal
-        const u = { helix_id: n.helix_id, bp_index: n.bp_index, direction: n.direction,
-          backbone_position: [p[0], p[1], p[2]] }
-        if (bnv) { u.nx = bnv[0]; u.ny = bnv[1]; u.nz = bnv[2] }  // restore slab orientation
-        return u
-      }
-    }
-    return null
+    return geometry?.find(n => _key(n) === key) ?? null
   }
 
   function clear() {
@@ -644,9 +650,9 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
         const u = _authoredUpdate(key, _lastGeometry)
         if (u) updates.push(u)
       }
-      if (updates.length) helixCtrl.setBeadOverrides(updates)
+      if (updates.length) _applyUpdates(helixCtrl, updates)
     }
-    if (_invader) _invader.update([])           // hide the synthetic invader
+    if (_invader) _invader.update([])           // hide the captured-pose invader
     _movedKeys = new Set()
     _bound = null
   }

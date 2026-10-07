@@ -722,7 +722,7 @@ def _np_duplex_measurement(design: Design, version: NanoparticleConnectionVersio
 
 def _np_tether_measurements(design: Design, nanoparticle_id: str, geometry=None) -> list[dict]:
     """Measure Au surface→actual DNA-root backbone tethers in emitted geometry."""
-    from backend.core.constants import HELIX_RADIUS
+    from backend.core.measured_positioning import FULL_REP
     from backend.core.design_geometry import fitting_geometry
 
     particle = next((p for p in design.nanoparticles if p.id == nanoparticle_id), None)
@@ -743,7 +743,12 @@ def _np_tether_measurements(design: Design, nanoparticle_id: str, geometry=None)
             sulfur = (matrix @ np.array([*record.sulfur_local_nm, 1.0], dtype=float))[:3]
             backbone = np.asarray(root["backbone_position"], dtype=float)
             length = float(np.linalg.norm(backbone - sulfur))
-            nominal = float(np.hypot(conjugation.spacer_nm, HELIX_RADIUS))
+            # An unbound radial helix starts spacer_nm beyond the sulfur.
+            # Its O5′ bead has the sole native template's radial AND axial
+            # displacement from that plane; the construction radius is not
+            # a physical nucleotide landmark.
+            landmark = FULL_REP.backbone_rev if conjugation.attach_end == "3p" else FULL_REP.backbone_fwd
+            nominal = float(np.hypot(conjugation.spacer_nm + landmark.axial_nm, landmark.radius_nm))
             out.append({
                 "strand_id": record.strand_id,
                 "bound": record.bound_overhang_id is not None,

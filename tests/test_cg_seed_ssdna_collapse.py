@@ -107,6 +107,10 @@ def _write_folded_conf(path: Path):
     indices meet in space), and return (design, unpaired-key set)."""
     design = _overhang_design()
     geometry = _geometry_for_design(design)
+    # This fixture authors an arbitrary physical fold. Convert explicitly before
+    # moving CMs; stale native O5/site metadata must never bless edited positions.
+    from backend.physics.native_oxdna import native_full_to_oxdna_geometry
+    geometry = native_full_to_oxdna_geometry(design, geometry)
     # identify the unpaired overhang nucleotides from a straight write
     write_configuration(design, geometry, path, oxdna_native_seed=True)
     ss = _unpaired_keys(read_configuration_full_unwrapped(path, design))

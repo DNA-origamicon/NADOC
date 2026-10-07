@@ -11,6 +11,8 @@ data.
 from __future__ import annotations
 
 from backend.core.display_placement import measured_display_placement
+from backend.core.native_slab_placement import authoritative_slab_pose
+from backend.core.deformation import _rot_from_quaternion
 from backend.api.vr_ligation import parse_event as parse_ligation_event
 from backend.api.vr_view_tools import parse_event as parse_view_tool_event
 from backend.api.vr_simulations import parse_event as parse_simulation_event
@@ -46,7 +48,6 @@ from backend.core.constants import STAPLE_PALETTE
 from backend.core.models import MODIFICATION_COLORS
 from backend.core.vr_scene_projection import (
     normalize_geometry_copy_indices,
-    full_slab_reference_geometry,
     strand_nucleotide_order_key,
 )
 
@@ -1495,9 +1496,10 @@ def _serialize_scene(
             transform_owners=transform_owners,
         )
 
-    slab_reference, slab_poses = full_slab_reference_geometry(
-        nucleotides, getattr(design, "nucleotide_transforms", ())
-    )
+    bead_rotations = {}
+    for transform in getattr(design, "nucleotide_transforms", ()):
+        if transform.kind == "base":
+            bead_rotations[transform.target_key()] = _rot_from_quaternion(*transform.rotation)
     for index, nucleotide in assigned:
         backbone = point(nucleotide.get("backbone_position"))
         if backbone is None:
@@ -1522,8 +1524,10 @@ def _serialize_scene(
         aliases = nucleotide_owner_tokens(nucleotide)
         if nucleotide.get("is_five_prime"):
             size = np.identity(3) * 0.18
-            if slab_poses[index] is not None:
-                size = slab_poses[index][0] @ size
+            bead_rotation = bead_rotations.get(("base", nucleotide.get("helix_id"),
+                nucleotide.get("bp_index"), nucleotide.get("direction"), int(nucleotide.get("copy_k", 0))))
+            if bead_rotation is not None:
+                size = bead_rotation @ size
             box(
                 f"{primitive_owner}:backbone",
                 backbone,
@@ -1566,82 +1570,17 @@ def _serialize_scene(
             aliases=nucleotide_owner_tokens(nucleotide),
         )
 
-    # Standard Full uses one oriented 0.30 × 0.06 × 0.70 nm base slab per
-    # nucleotide. Paired slabs share their mean axial plane and are shifted
-    # radially until their rectangle reaches the backbone bead, exactly matching
-    # helix_renderer.pairedSlabCenter().
-    slab_assigned = [(index, slab_reference[index]) for index, _ in assigned]
-    pair_groups: dict[tuple, dict[str, list[tuple[int, dict]]]] = {}
-    for index, nucleotide in slab_assigned:
-        helix_id = str(nucleotide.get("helix_id") or "")
-        if helix_id.startswith("__ext_"):
+    # Desktop and VR consume the same authoritative pose. No local solver,
+    # re-pairing, inferred frame, or fallback placement exists at this boundary.
+    for index, nucleotide in assigned:
+        pose = authoritative_slab_pose(nucleotide)
+        if pose is None:
             continue
-        key = (helix_id, int(nucleotide.get("bp_index") or 0))
-        group = pair_groups.setdefault(key, {"FORWARD": [], "REVERSE": []})
-        direction = nucleotide.get("direction")
-        if direction in group:
-            group[direction].append((index, nucleotide))
-    mates: dict[int, dict] = {}
-    for group in pair_groups.values():
-        for (_, forward), (_, reverse) in zip(group["FORWARD"], group["REVERSE"]):
-            mates[id(forward)] = reverse
-            mates[id(reverse)] = forward
-
-    for index, nucleotide in slab_assigned:
-        if str(nucleotide.get("helix_id") or "").startswith("__ext_"):
-            continue
-        try:
-            raw_bead = np.asarray(nucleotide.get("backbone_position"), dtype=float)
-            raw_base = np.asarray(nucleotide.get("base_position"), dtype=float)
-            raw_normal = np.asarray(nucleotide.get("base_normal"), dtype=float)
-            raw_tangent = np.asarray(nucleotide.get("axis_tangent"), dtype=float)
-        except (TypeError, ValueError):
-            continue
-        if not all(
-            value.shape == (3,) and np.all(np.isfinite(value))
-            for value in (raw_bead, raw_base, raw_normal, raw_tangent)
-        ):
-            continue
-        tangent_norm = float(np.linalg.norm(raw_tangent))
-        if tangent_norm < 1e-9:
-            continue
-        tangent = raw_tangent / tangent_norm
-        normal = raw_normal - tangent * float(np.dot(raw_normal, tangent))
-        normal_norm = float(np.linalg.norm(normal))
-        if normal_norm < 1e-9:
-            continue
-        normal /= normal_norm
-        tangential = np.cross(tangent, normal)
-        tangential /= max(float(np.linalg.norm(tangential)), 1e-9)
-
-        center = raw_base.copy()
-        mate = mates.get(id(nucleotide))
-        if mate and isinstance(mate.get("base_position"), (list, tuple)):
-            mate_base = np.asarray(mate["base_position"], dtype=float)
-            if mate_base.shape == (3,) and np.all(np.isfinite(mate_base)):
-                center += tangent * float(np.dot(mate_base - center, tangent)) * 0.5
-        radial = raw_bead - center
-        radial -= tangent * float(np.dot(radial, tangent))
-        bead_distance = float(np.linalg.norm(radial))
-        if bead_distance > 1e-9:
-            radial /= bead_distance
-            support = (
-                abs(float(np.dot(radial, tangential))) * 0.15
-                + abs(float(np.dot(radial, normal))) * 0.35
-            )
-            center += radial * max(0.0, bead_distance - support + 0.02)
-
-        # Carry the solved native slab, including its bead contact corner, by
-        # this residue's pose. Never re-pair it with an independently moved mate.
+        center, frame = pose
+        tangential, tangent, normal = (frame[:, column] for column in range(3))
+        raw_bead = np.asarray(nucleotide["backbone_position"], dtype=float)
         z_sign = -1.0 if float(np.dot(raw_bead - center, normal)) < 0 else 1.0
         corner = center + tangential * 0.15 + normal * (z_sign * 0.35)
-        pose = slab_poses[index]
-        if pose is not None:
-            rigid, offset = pose
-            center = rigid @ center + offset
-            corner = rigid @ corner + offset
-            raw_bead = rigid @ raw_bead + offset
-            tangential, tangent, normal = (rigid @ v for v in (tangential, tangent, normal))
 
         palette = palette_variant(palette_for_index(index), nucleotide, "#0277bd")
         box(
@@ -4679,6 +4618,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
     ):
         raise HTTPException(422, detail="Invalid VR job snapshot availability or total.")
 
+    from backend.api.routes_placement_integrity import require_native_placement_review_clear
+    require_native_placement_review_clear()
     body = body.model_copy(update={"representation": "full"})
 
     # Starting SteamVR through the Steam client (rather than incidentally through

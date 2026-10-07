@@ -37,7 +37,7 @@ const GEO_BEAD = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6)
 // y=width (0.06), z=thickness (0.70).
 const GEO_SLAB = new THREE.BoxGeometry(0.30, 0.06, 0.70)
 // Synthetic ssDNA-arc decoration only. Canonical duplex slabs are positioned by
-// helix_renderer.pairedSlabCenter; this fixed offset must not be reused there.
+// backend-authorized native slab poses; this ssDNA offset must not be reused there.
 const SLAB_DISTANCE = 0.55
 
 function _fallbackBow(dHat) {

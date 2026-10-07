@@ -13,7 +13,6 @@ surface (the only edit in the lift was _mat4_from_model(x) -> x.to_array(),
 provably identical: both compute np.array(values, dtype=float).reshape(4, 4)).
 """
 
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -246,27 +245,21 @@ def test_build_world_connector_frames_shares_live_geometry_resolution(monkeypatc
         calls["axes"] += 1
         return [{"helix_id": "h0", "start": [1.0, 2.0, 3.0], "end": [1.0, 2.0, 11.0]}]
 
-    def fake_positions(actual_helix, actual_design):
-        assert actual_helix is helix
+    def fake_positions(actual_design, helix_ids):
         assert actual_design is design
+        assert helix_ids == frozenset({helix.id})
         calls["positions"] += 1
         return [
-            SimpleNamespace(
-                bp_index=2, position=[4.0, 5.0, 6.0], axis_tangent=[0.0, 0.0, 1.0]
-            ),
+            {"helix_id": "h0", "bp_index": 2, "backbone_position": [4.0, 5.0, 6.0], "axis_tangent": [0.0, 0.0, 1.0]},
             # The real function returns two strands at each bp. First-match
             # semantics must remain stable when the bp map is built.
-            SimpleNamespace(
-                bp_index=2, position=[40.0, 50.0, 60.0], axis_tangent=[0.0, 0.0, -1.0]
-            ),
-            SimpleNamespace(
-                bp_index=3, position=[7.0, 8.0, 9.0], axis_tangent=[0.0, 0.0, 1.0]
-            ),
+            {"helix_id": "h0", "bp_index": 2, "backbone_position": [40.0, 50.0, 60.0], "axis_tangent": [0.0, 0.0, -1.0]},
+            {"helix_id": "h0", "bp_index": 3, "backbone_position": [7.0, 8.0, 9.0], "axis_tangent": [0.0, 0.0, 1.0]},
         ]
 
     monkeypatch.setattr("backend.core.deformation.deformed_helix_axes", fake_axes)
     monkeypatch.setattr(
-        "backend.core.deformation.deformed_nucleotide_positions", fake_positions
+        "backend.core.design_geometry._geometry_for_helices", fake_positions
     )
 
     frames, _ = _build_world_connector_frames(

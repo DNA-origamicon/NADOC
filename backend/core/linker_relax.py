@@ -1,8 +1,8 @@
 """Relax-linker optimization.
 
-Given an OverhangConnection, find joint angle(s) that bring the chord between
-the two overhang anchors to the duplex's "fully bound" length so the connector
-arcs vanish. Updates each joint's owning cluster_transform and appends one
+Given an OverhangConnection, find joint angle(s) minimizing the distances from
+the two actual overhang anchors to the canonical bridge boundary beads.
+Updates each joint's owning cluster_transform and appends one
 ClusterOpLogEntry per moved cluster to feature_log.
 
 v2 scope:
@@ -23,7 +23,8 @@ from typing import Any
 import numpy as np
 from scipy.optimize import minimize, minimize_scalar
 
-from backend.core.constants import BDNA_RISE_PER_BP
+from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_RAD
+from backend.core.native_full_placement import NativePlacementError, positions_in_native_frame
 from backend.core.models import ClusterOpLogEntry, Design
 
 
@@ -38,8 +39,11 @@ def _linker_bp(conn) -> int:
 
 
 def _ds_target_length_nm(conn) -> float:
-    """Distance between anchors at which both connector arcs collapse to zero
-    length — equal to the duplex's visualLength in `_makeDsLinkerMeshes`."""
+    """Nominal duplex axis span used by the coarse connection-tether model.
+
+    This scalar is not a bead-placement or connector-closure authority; actual
+    native endpoint residuals come from ``_arc_chord_lengths``.
+    """
     return max(1, _linker_bp(conn) - 1) * BDNA_RISE_PER_BP
 
 
@@ -217,41 +221,21 @@ def _moving_anchor_at(
     return R @ (base_anchor - axis_origin) + axis_origin
 
 
-# Constants — must match the bridge geometry emitted by `_emit_bridge_nucs`
-# in backend/api/crud.py so the relax loss minimizes the same gap that the
-# renderer shows the user.
-_BDNA_TWIST_RAD = 34.3 * np.pi / 180.0
-_MINOR_GROOVE_RAD = 150.0 * np.pi / 180.0
-_HELIX_RADIUS_NM = 1.0
-# Target = 0: the bridge boundary bead must land EXACTLY on its anchor
-# (= complement nuc at OH-attach-bp). Boundary is at native B-DNA radius
-# (HELIX_RADIUS_NM); the bridge axis is offset off the chord so the
-# boundary bead lands on the anchor when chord matches the "perfect" 3D
-# vector fz·visualLength + (radial_b − radial_a)·R.
+# A bridge authors an axis and phase; all chemical offsets come from the same
+# native Full authority as every other nucleotide. No bead radius or strand
+# groove convention is defined by this relaxation module.
+_BDNA_TWIST_RAD = BDNA_TWIST_PER_BP_RAD
+_BRIDGE_PHASE_OFFSET = np.pi
 _ARC_TARGET_NM = 0.0
 
-# Phase offset added to every bridge radial angle. 0 puts the bridge axis
-# on one side of the chord (boundary bead at +radial·R from axis ends up
-# at anchor − (radial_b−radial_a)/2·R post-relax); π flips the bridge to
-# the OPPOSITE side of the chord, reversing the anchor↔bridge gap vector
-# while preserving its magnitude and the duplex's internal geometry. Must
-# be applied IDENTICALLY in `_bridge_boundary_radials` (here) and in
-# `_emit_bridge_nucs` (crud.py) — they would otherwise disagree.
-_BRIDGE_PHASE_OFFSET = np.pi
-
-# Tiebreaker between equivalent global minima. The chord-magnitude loss
-# `|visualLength − |chord||²` is genuinely flat between any two θ values
-# that put the cluster at the right separation — for a typical hinge
-# joint there are two such θ per period, often 100°+ apart, and only
-# one of them avoids clashing with neighbouring geometry. Adding a
-# small λ·θ² penalty makes the optimizer prefer the θ closest to 0
-# (= the smallest cluster rotation from the user's current pose).
+# Tiebreaker between equivalent minima of the actual connector-gap loss.
+# A typical hinge can reach the same minimum at two θ values per period.
+# Adding a small λ·θ² penalty prefers the smallest cluster rotation.
 #
 # Sizing: chord errors are O(nm²) for typical pre-relax geometry (1–40),
 # θ² is O(rad²) ≤ π². With λ = 1e-3, the regularizer contributes ≤ 1e-2
 # nm²-equivalent — three orders below typical chord error, so it never
-# distorts the global chord fit, but it cleanly breaks ties when two
-# minima both bottom out near zero residual.
+# distorts the endpoint fit, but it breaks ties at equivalent minima.
 _THETA_REG_LAMBDA = 1e-3
 
 
@@ -273,34 +257,35 @@ def _comp_first(ovhg_id: str, attach: str) -> bool:
     return True  # untagged synthetic fixtures — legacy behaviour
 
 
-def _bridge_boundary_radials(
-    fx: np.ndarray,
-    fy: np.ndarray,
-    base_count: int,
-    comp_first_a: bool,
-    comp_first_b: bool,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Unit radial directions at the two bridge boundary beads:
-       side A's strand at bp 0, side B's strand at bp L−1.
+def bridge_nucleotide_site(geometry: dict, bp: int):
+    """Transported forward-reference site shared by native and physical projections."""
+    fz, fx, fy = (geometry[key] for key in ("fz", "fx", "fy"))
+    angle = bp * _BDNA_TWIST_RAD + _BRIDGE_PHASE_OFFSET
+    radial = fx * np.cos(angle) + fy * np.sin(angle)
+    origin = geometry["axis_start"] + fz * (bp * BDNA_RISE_PER_BP)
+    return origin, radial, fz, angle
 
-    Bridge direction per side (mirrors `_make_bridge_domain` in
-    backend/core/lattice.py):
-      side a: comp_first → FORWARD; bridge_first → REVERSE
-      side b: comp_first → REVERSE; bridge_first → FORWARD
 
-    FORWARD bp i  → angle = i·twist
-    REVERSE bp i  → angle = i·twist + minor_groove
+def bridge_nucleotide_geometry(geometry: dict, bp: int, reverse: bool):
+    """Canonical bead/base/normal for a bridge site, shared by emitter and fitter."""
+    origin, radial, fz, _angle = bridge_nucleotide_site(geometry, bp)
+    return positions_in_native_frame(origin, radial, fz, np.asarray(reverse))
+
+
+def bridge_helix_phase_offset(geometry: dict, design: Design | None = None) -> float:
+    """Store this exact bridge frame in a normal native Full virtual helix.
+
+    The normal renderer applies its canonical phase roll; compensate only that
+    frame convention here so rendering an assembly bridge reproduces the same
+    physical sites as the per-design bridge emitter.
     """
-    # side A boundary at bp 0
-    ang_a = (0.0 if comp_first_a else _MINOR_GROOVE_RAD) + _BRIDGE_PHASE_OFFSET
-    radial_a = fx * np.cos(ang_a) + fy * np.sin(ang_a)
-    # side B boundary at bp L−1
-    base = (base_count - 1) * _BDNA_TWIST_RAD
-    ang_b = (
-        (base + _MINOR_GROOVE_RAD) if comp_first_b else base
-    ) + _BRIDGE_PHASE_OFFSET
-    radial_b = fx * np.cos(ang_b) + fy * np.sin(ang_b)
-    return radial_a, radial_b
+    from backend.core.geometry import _frame_from_helix_axis
+    from backend.core.design_geometry import native_full_phase_roll_rad
+
+    basis = _frame_from_helix_axis(geometry["fz"])
+    phase = np.arctan2(np.dot(geometry["fx"], basis[:, 1]),
+                       np.dot(geometry["fx"], basis[:, 0]))
+    return float(phase + _BRIDGE_PHASE_OFFSET - native_full_phase_roll_rad(design or Design()))
 
 
 def bridge_axis_geometry(
@@ -310,66 +295,64 @@ def bridge_axis_geometry(
     base_count: int,
     comp_first_a: bool,
     comp_first_b: bool,
+    *, identity: dict | None = None,
 ) -> dict:
-    """Compute bridge axis + boundary radials for a ds linker.
+    """Place a bridge symmetrically about its actual canonical O5′ endpoints.
 
-    Symmetric placement: axis_start chosen so that side-A and side-B
-    boundary residuals are equal in magnitude (and opposite in sign), so
-    the relax loss drives both gaps to zero together.
-
-    Used by both the geometry emitter (`_emit_bridge_nucs`) and the relax
-    loss (`_arc_chord_lengths`) so they stay in lockstep.
+    Each boundary includes its direction-specific O5′ azimuth, radius AND axial
+    offset. An invalid anchor/frame fails; it cannot select a guessed midpoint
+    axis or retired cylindrical placement.
     """
+    details = {**(identity or {}), "base_count": base_count,
+               "comp_first_a": comp_first_a, "comp_first_b": comp_first_b}
+    for field, value in (("anchor_a_nm", p_a), ("anchor_b_nm", p_b), ("anchor_a_base_normal", n_a)):
+        details[field] = value.tolist() if isinstance(value, np.ndarray) else value
+    try:
+        p_a, p_b = np.asarray(p_a, float), np.asarray(p_b, float)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise NativePlacementError("DS linker anchors must be numeric coordinates.", details=details) from error
+    if (p_a.shape != (3,) or p_b.shape != (3,) or not np.all(np.isfinite([p_a, p_b]))
+            or not isinstance(base_count, (int, np.integer)) or base_count < 1):
+        raise NativePlacementError("DS linker needs finite anchors and a positive integer base count.", details=details)
     chord = p_b - p_a
-    cl = float(np.linalg.norm(chord))
-    axis_dir = chord / cl if cl > 1e-9 else np.array([0.0, 0.0, 1.0])
-    fx, fy, fz = _frame_from_axis(axis_dir, n_a)
-    visual_length = max(base_count - 1, 1) * BDNA_RISE_PER_BP
-    radial_a, radial_b = _bridge_boundary_radials(
-        fx, fy, base_count, comp_first_a, comp_first_b
-    )
-    R = _HELIX_RADIUS_NM
-    axis_start = (
-        (p_a + p_b) / 2 - (radial_a + radial_b) / 2 * R - fz * (visual_length / 2)
-    )
-    axis_end = axis_start + fz * visual_length
-    return {
-        "fx": fx,
-        "fy": fy,
-        "fz": fz,
-        "axis_start": axis_start,
-        "axis_end": axis_end,
-        "radial_a_boundary": radial_a,
-        "radial_b_boundary": radial_b,
-        "visual_length": visual_length,
-        "helix_radius": R,
-    }
+    fx, fy, fz = _frame_from_axis(chord, n_a, details=details)
+    # A one-base bridge has one base-pair plane; its virtual helix still needs a
+    # nonzero axis segment to specify orientation for the normal geometry path.
+    span = (base_count - 1) * BDNA_RISE_PER_BP
+    geometry = {"fx": fx, "fy": fy, "fz": fz, "axis_start": np.zeros(3)}
+    offset_a = bridge_nucleotide_geometry(geometry, 0, reverse=not comp_first_a)[0]
+    offset_b = bridge_nucleotide_geometry(geometry, base_count - 1, reverse=comp_first_b)[0]
+    axis_start = (p_a + p_b - offset_a - offset_b) * 0.5
+    geometry.update(axis_start=axis_start,
+                    axis_end=axis_start + fz * max(span, BDNA_RISE_PER_BP),
+                    visual_length=span)
+    # Read the final endpoints through the identical world-frame operation as
+    # emission. Re-adding separately computed offsets changes floating-point
+    # operation order and needlessly creates a second numerical result.
+    geometry["boundary_a"] = bridge_nucleotide_geometry(geometry, 0, reverse=not comp_first_a)[0]
+    geometry["boundary_b"] = bridge_nucleotide_geometry(geometry, base_count - 1, reverse=comp_first_b)[0]
+    return geometry
 
 
-def _frame_from_axis(
-    axis_dir: np.ndarray, preferred_normal: np.ndarray | None
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Build an orthonormal frame (fx, fy, fz) around *axis_dir*.
-
-    Mirrors the JS `_frameFromAxis` so backend-computed aStart/bStart match
-    the renderer's bead positions exactly. preferred_normal seeds fx (used
-    for sliding the linker tube around its axis); falls back to a canonical
-    axis if not provided or degenerate."""
-    n = float(np.linalg.norm(axis_dir))
-    z = axis_dir / n if n > 1e-9 else np.array([0.0, 0.0, 1.0])
-    x = (
-        preferred_normal.astype(float)
-        if preferred_normal is not None
-        else np.array([0.0, 0.0, 1.0])
-    )
+def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: np.ndarray | None, *, details=None):
+    """Use the actual anchor direction and normal; invalid frames fail closed."""
+    try:
+        z = np.asarray(axis_dir, dtype=float)
+        x = np.asarray(preferred_normal, dtype=float)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise NativePlacementError("DS linker frame must have numeric anchor vectors.", details=details) from error
+    if (z.shape != (3,) or x.shape != (3,) or not np.all(np.isfinite([x, z]))):
+        raise NativePlacementError("DS linker needs an explicit finite anchor direction and base normal.", details=details)
+    length = float(np.linalg.norm(z))
+    if length <= 1e-9:
+        raise NativePlacementError("DS linker anchors coincide; no physical bridge axis is defined.", details=details)
+    z = z / length
     x = x - z * float(np.dot(x, z))
-    if float(np.dot(x, x)) < 1e-6:
-        x = np.array([0.0, 0.0, 1.0]) if abs(z[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
-        x = x - z * float(np.dot(x, z))
-    x = x / float(np.linalg.norm(x))
-    y = np.cross(z, x)
-    y = y / float(np.linalg.norm(y))
-    return x, y, z
+    length = float(np.linalg.norm(x))
+    if length <= 1e-9:
+        raise NativePlacementError("DS linker anchor normal is parallel to its axis; no bridge phase is defined.", details=details)
+    x = x / length
+    return x, np.cross(z, x), z
 
 
 def _arc_chord_lengths(
@@ -380,28 +363,15 @@ def _arc_chord_lengths(
     comp_first_a: bool,
     comp_first_b: bool,
 ) -> tuple[float, float]:
-    """Half-residuals driving the relax — each equals |visualLength − |chord||/2.
+    """Actual distances from anchors to the SAME O5′ beads the renderer emits.
 
-    Why this form (not the full anchor-to-bridge-boundary distance):
-    The bridge boundary radials are PERPENDICULAR to the chord, so
-    folding their offset (radial_a − radial_b)·R into the loss creates a
-    degenerate minimum at chord ≈ 0 (the "fz fallback" frame at
-    chord = 0 happens to make the perp term cancel a chunk of the chord
-    term). The only physically meaningful constraint is that the bridge
-    duplex span its native length: |chord| → visualLength. The small
-    perpendicular offset between anchor and bridge boundary (≤ 1 nm)
-    is then absorbed by the connector arc visualisation; the renderer's
-    symmetric `bridge_axis_geometry` still positions the bridge so the
-    arcs are visibly small post-relax.
-
-    `comp_first_a` / `comp_first_b` are accepted for API symmetry with
-    the geometry helper but aren't used in this scalar-magnitude form.
+    The existing squared-distance objective remains unchanged. Its native
+    endpoints now include O5′ axial offsets and the real symmetric radial gap;
+    a nonzero gap can no longer be misreported as a fully closed connector.
     """
-    del n_a, comp_first_a, comp_first_b
-    visual_length = max(base_count - 1, 1) * BDNA_RISE_PER_BP
-    chord_mag = float(np.linalg.norm(p_b - p_a))
-    half_residual = abs(visual_length - chord_mag) * 0.5
-    return half_residual, half_residual
+    geometry = bridge_axis_geometry(p_a, n_a, p_b, base_count, comp_first_a, comp_first_b)
+    return (float(np.linalg.norm(geometry["boundary_a"] - p_a)),
+            float(np.linalg.norm(geometry["boundary_b"] - p_b)))
 
 
 def _optimize_angle(
@@ -432,8 +402,8 @@ def _optimize_angle(
     """
 
     def chord_loss(theta: float) -> float:
-        """Pure chord-magnitude loss (NO θ regularizer) — used inside each
-        local-minimum bracket so refinement converges on the actual chord
+        """Pure endpoint-gap loss (NO θ regularizer) — used inside each
+        local-minimum bracket so refinement converges on the actual endpoint
         minimum, not a regularizer-shifted point."""
         R = _rot_axis_angle(axis_dir, theta)
         p_moving = R @ (moving_anchor - axis_origin) + axis_origin
@@ -648,7 +618,7 @@ def relax_linker(
         return p_a, n_a, p_b, n_b
 
     # ── Optimize ─────────────────────────────────────────────────────────────
-    # Loss: sum-of-squares arc-chord residuals around _ARC_TARGET_NM (0.67 nm).
+    # Loss: sum-of-squares distances to the actual canonical bridge endpoints.
     # The two connector arcs (posA→aStart, posB→bStart) should both read like
     # standard backbone-to-backbone bonds at the target length.
     if len(selected) == 1:
@@ -871,11 +841,13 @@ def linker_anchor_nucleotide(
             None,
         )
 
-    if chosen is None:
-        # Fallback for synthetic fixtures: attach to the OH attach-end nuc
-        # itself (OH backbone, not complement) — keeps the anchor on the
-        # right structural end even when complement geometry is missing.
-        chosen = attach_nuc
+    if chosen is None and attach_nuc is not None:
+        raise NativePlacementError("Linker complementary anchor is missing; the other strand cannot substitute.",
+            details={"connection_id": conn.id, "overhang_id": ovhg_id, "side": side,
+                "attach": attach, "helix_id": attach_nuc.get("helix_id"),
+                "bp_index": attach_nuc.get("bp_index"),
+                "overhang_direction": attach_nuc.get("direction"),
+                "expected_complement_strand_ids": candidate_strand_ids})
     return chosen
 
 
@@ -885,12 +857,24 @@ def _anchor_pos_and_normal(nucs: list[dict], conn, ovhg_id: str, is_a_side: bool
     if chosen is None:
         return None, None
 
-    pos = chosen.get("backbone_position") or chosen.get("base_position")
+    pos = chosen.get("backbone_position")
     bn = chosen.get("base_normal")
-    return (
-        np.asarray(pos, dtype=float) if pos is not None else None,
-        np.asarray(bn, dtype=float) if bn is not None else None,
-    )
+    details = {"connection_id": conn.id, "overhang_id": ovhg_id,
+               "helix_id": chosen.get("helix_id"), "bp_index": chosen.get("bp_index"),
+               "direction": chosen.get("direction"), "strand_id": chosen.get("strand_id"),
+               "backbone_position": pos, "base_normal": bn}
+    if pos is None or bn is None:
+        raise NativePlacementError("Linker anchor is missing its native backbone/base frame.",
+            details=details)
+    try:
+        pos, bn = np.asarray(pos, dtype=float), np.asarray(bn, dtype=float)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise NativePlacementError("Linker anchor coordinates must be numeric.",
+            details=details) from error
+    if pos.shape != (3,) or bn.shape != (3,) or not np.all(np.isfinite([pos, bn])):
+        raise NativePlacementError("Linker anchor coordinates must be finite 3D vectors.",
+            details=details)
+    return pos, bn
 
 
 def _anchor_position(nucs, conn, ovhg_id, is_a_side):

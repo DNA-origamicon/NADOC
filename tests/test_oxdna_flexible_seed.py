@@ -11,6 +11,7 @@ Physical-layer only: never mutates Design topology.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 import backend.physics.oxdna_interface as ox
 from backend.core.constants import OXDNA_LENGTH_UNIT, SSDNA_RISE_PER_BASE_NM
@@ -183,11 +184,15 @@ def test_reseat_is_readonly_over_topology():
     assert d.model_dump_json() == before
 
 
+@pytest.mark.native_placement
 def test_no_flexible_connections_is_identity():
+    from backend.physics.native_oxdna import native_full_to_oxdna_geometry
+
     d = _hinge_design()  # no marks → no connections
-    geom = _geometry_for_design(d)
+    geom = native_full_to_oxdna_geometry(d, _geometry_for_design(d))
     resolved = ox.resolved_nuc_map(d, geom)
-    # every real bead keeps its raw geometry position (no arc pass fired).
+    # Every physical particle keeps its input position when no arc pass fires;
+    # native O5′ landmarks and physical CMs are deliberately separate inputs.
     for n in geom:
         k = (n["helix_id"], n["bp_index"], n["direction"])
         if k in resolved:

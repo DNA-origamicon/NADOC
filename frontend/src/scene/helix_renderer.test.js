@@ -352,20 +352,6 @@ describe('cylinder visibility and glow hot-path indexes', () => {
   })
 })
 
-describe('slab build tolerates nucleotides without a base site', () => {
-  it('skips a nucleotide with no base_position instead of spreading undefined', () => {
-    // Injected non-design nucleotides (oxDNA surface capture strands) are built in
-    // the frontend, so nothing guarantees the backend's full nucleotide record. Before
-    // this guard `new THREE.Vector3(...nuc.base_position)` threw out of the entire
-    // rebuild, and the exception unwound through the setup card's onChange — which
-    // then stopped tracking its own fields, so the 3D froze on a stale spec.
-    const start = HR.indexOf("// Extension beads have no base-pair slabs.")
-    expect(start).toBeGreaterThan(-1)
-    const region = HR.slice(start, HR.indexOf('new THREE.Vector3(...nuc.base_normal)', start))
-    expect(region).toContain('if (!nuc.base_position) continue')
-  })
-})
-
 describe('slab connector colour parity', () => {
   it('the shared recolour path updates a slab connector with its slab', () => {
     const body = fnBody(HR, '_setInstColor')
@@ -434,7 +420,7 @@ describe('authoritative partial geometry preserves the applied bead preview', ()
   it('rewrites bead matrices through the same updater used by undo/redo positions', () => {
     expect(body).toContain('this.applyPositionsUpdate(positionsByHelix)')
     const updater = HR.slice(HR.lastIndexOf('applyPositionsUpdate(positionsByHelix'))
-    expect(updater).toContain('syncPatchedBeadPosition(entry, u.bb)')
+    expect(updater).toContain('syncPatchedBeadPosition(entry, u.backbone_position)')
     expect(updater).toContain('entry.instMesh.setMatrixAt(entry.id, _tMatrix)')
   })
 

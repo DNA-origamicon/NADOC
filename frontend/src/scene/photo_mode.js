@@ -41,6 +41,7 @@
  */
 
 import * as THREE from 'three'
+import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js'
 import { SMAAPass }       from 'three/addons/postprocessing/SMAAPass.js'
@@ -1099,6 +1100,7 @@ export function createPhotoMode(sceneCtx) {
    * @returns {{renderFrame: () => Promise<Blob>, dispose: () => void, tiles: number}}
    */
   function beginFrameSession(width, height, { followMotion = false } = {}) {
+    assertPlacementExportSafe(scene)
     if (!_active) throw new Error('photo: beginFrameSession requires the mode to be active')
 
     const probeCanvas = document.createElement('canvas')
@@ -1167,6 +1169,7 @@ export function createPhotoMode(sceneCtx) {
      * before rendering the next frame.
      */
     function renderFrameToCanvas() {
+      assertPlacementExportSafe(scene)
       if (_disposed) throw new Error('photo: renderFrame() called after dispose()')
       _syncForOfflineFrame(followMotion)
 
@@ -1208,7 +1211,9 @@ export function createPhotoMode(sceneCtx) {
 
     async function renderFrame() {
       renderFrameToCanvas()
-      return new Promise(resolve => finalCanvas.toBlob(resolve, 'image/png'))
+      return new Promise((resolve, reject) => finalCanvas.toBlob(blob => {
+        try { assertPlacementExportSafe(scene); resolve(blob) } catch (error) { reject(error) }
+      }, 'image/png'))
     }
 
     function dispose() {
@@ -1229,6 +1234,7 @@ export function createPhotoMode(sceneCtx) {
    * separate-GL-context rules that govern both.
    */
   async function renderToBlob(width, height) {
+    assertPlacementExportSafe(scene)
     if (!_active) throw new Error('photo: renderToBlob requires the mode to be active')
     const session = beginFrameSession(width, height)
     try {

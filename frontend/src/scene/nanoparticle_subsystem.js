@@ -1,3 +1,4 @@
+import { placementIntegrityFailure } from '../viewer/native_placement.js'
 import * as THREE from 'three'
 import { createMultiColorGlowLayer } from './glow_layer.js'
 import { initProteinGizmo } from './protein_gizmo.js'
@@ -155,15 +156,19 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
         Math.abs((n.bp_index ?? 0) - (tip.bp_index ?? 0)) > Math.abs((best.bp_index ?? 0) - (tip.bp_index ?? 0)) ? n : best, tip)
       if (!record || !rootNuc?.backbone_position) continue
       const rootPoint = new THREE.Vector3(...(version.constraint_root_nm ?? rootNuc.backbone_position))
-      const jointPoint = record.backbone_attachment_local_nm
-        ? new THREE.Vector3(...record.backbone_attachment_local_nm).applyMatrix4(poseMatrix(particle))
-        : new THREE.Vector3(...record.site_local)
-          .multiplyScalar(particle.diameter_nm / 2 + (conjugation.spacer_nm ?? 0))
-          .applyMatrix4(poseMatrix(particle))
+      const attachment = record.backbone_attachment_local_nm
+      if (!Array.isArray(attachment) || attachment.length !== 3 || !attachment.every(Number.isFinite)) {
+        placementIntegrityFailure({ strand_id: record.strand_id }, 'backbone_attachment_local_nm', attachment,
+          'Nanoparticle movement requires its exact saved native backbone attachment; reapply the connection')
+      }
+      const jointPoint = new THREE.Vector3(...attachment).applyMatrix4(poseMatrix(particle))
       const handleNucs = geometry.filter(n => n.strand_id === version.strand_id)
       const handleJointNuc = handleNucs.find(n => conjugation.attach_end === '3p' ? n.is_three_prime : n.is_five_prime)
-      const rigidJoint = handleJointNuc?.backbone_position
-        ? new THREE.Vector3(...handleJointNuc.backbone_position) : jointPoint
+      if (handleJointNuc?.backbone_position?.length !== 3 || !handleJointNuc.backbone_position.every(Number.isFinite)) {
+        placementIntegrityFailure(handleJointNuc ?? { strand_id: version.strand_id }, 'backbone_position', null,
+          'Nanoparticle movement requires the actual canonical handle joint')
+      }
+      const rigidJoint = new THREE.Vector3(...handleJointNuc.backbone_position)
       const cluster = (design.cluster_transforms ?? []).find(c => c.overhang_duplex_driver_id === version.overhang_id)
       movementConstraints.set(particle.id, {
         mode: 'two_ball_joint', root: rootPoint.toArray(), joint: jointPoint.toArray(),

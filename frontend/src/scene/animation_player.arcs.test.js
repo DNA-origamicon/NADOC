@@ -23,7 +23,7 @@ const HELICES = ['h0', 'h1']
 function geoAt(pos) {
   const compact = {}
   for (const [hi, h] of HELICES.entries()) {
-    compact[h] = { fwd: { bp: [0, 1], bb: [[hi, 0, pos], [hi, 1, pos]], bn: [[0, 0, 1], [0, 0, 1]], sid: ['s0', 's0'] } }
+    compact[h] = { fwd: { bp: [0, 1], bb: [[hi, 0, pos], [hi, 1, pos]], bn: [[0, 0, 1], [0, 0, 1]], bs: [[hi, 0, pos + .2], [hi, 1, pos + .2]], at: [[0, 1, 0], [0, 1, 0]], sp: [[hi, 0, pos + .3], [hi, 1, pos + .3]], sq: [[0, 0, 0, 1], [0, 0, 0, 1]], pv: ['native-full-o5-v1', 'native-full-o5-v1'], sid: ['s0', 's0'] } }
   }
   // helix_axes is an ARRAY of {helix_id, start, end} — an object here makes
   // _bakedFromGeo throw and the bake silently produces nothing.

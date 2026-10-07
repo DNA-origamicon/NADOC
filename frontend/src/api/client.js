@@ -1,6 +1,8 @@
 import { nativeRepresentation } from '../scene/vr_representations.js'
 import { withSurfaceProgress, isSurfaceComputation } from './surface_progress_request.js'
-import { expandCompactNucleotides as _expandCompactNucleotides, decodeAssemblyGeometry } from '../viewer/geometry_codec.js'
+import { expandCompactNucleotides as _expandCompactNucleotides, decodeAssemblyGeometry, positionUpdateLookup } from '../viewer/geometry_codec.js'
+import { replaceNativePlacement, placementIntegrityFailure } from '../viewer/native_placement.js'
+import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
 import { recordPanelRequest } from '../ui/panel_loading.js'
 import { recordRequestDiagnostic } from '../perf/process_log.js'
 /**
@@ -17,7 +19,6 @@ import { recordRequestDiagnostic } from '../perf/process_log.js'
 import { parseMdAtomFrames, parseMdAtomModel } from '../scene/md_atom_frames_bin.js'
 import { store } from '../state/store.js'
 import { createFrameExtrusionAPI } from './frame_extrusion.js'
-import { geometryQuerySuffix, isNewPositioningOn } from '../ui/new_positioning.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 import { recordNameEdit } from '../ui/name_edit_audit.js'
 
@@ -429,10 +430,6 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     method,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      // Mutation responses embed replacement display geometry. Keep its projection
-      // identical to GET /geometry so Apply cannot transiently re-register every
-      // bead and slab until the next reload.
-      'X-NADOC-Measured-Positioning': String(isNewPositioningOn()),
       // X-NADOC-Doc: route to this tab's backend document, OR to an explicitly
       // named doc (docId) for one-off cross-document calls (e.g. a part editor
       // reaching into the assembly's doc). `undefined` keeps the legacy default.
@@ -522,6 +519,10 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     }
   }
   if (!r.ok) {
+    if (json?.detail?.code === 'NATIVE_PLACEMENT_INTEGRITY') {
+      placementIntegrityFailure(null, 'backend_authority', json.detail,
+        json.detail.message ?? 'The backend rejected unverified molecular placement')
+    }
     markOperationTiming('operation-rejected', { status: r.status }, operationTrace)
     finishOperationTiming(operationTrace, { status: 'Failed', phase: 'request-rejected' })
     if (r.status === 409 && json?.detail?.code === 'protected_simulation_loadout' && protectedRetry) {
@@ -780,29 +781,10 @@ async function _applyDesignResponse(json, {
     // (parallel float arrays per helix per direction). Re-materialise a thin
     // flat nuc-list here so the existing deform_view / unfold_view consumers
     // (which iterate `for (const nuc of straightGeometry)`) keep working
-    // unchanged. Each materialised nuc carries only the fields those
-    // consumers actually read — backbone_position / base_normal / helix_id /
-    // bp_index / direction — same memory footprint as before, but the wire
-    // payload is ~3× smaller and parses ~3× faster.
+    // unchanged. Retain the complete authoritative pose: dropping slab fields
+    // here would force animation to invent another placement.
     if (json.straight_positions_by_helix) {
-      const straightGeo = []
-      const pbh = json.straight_positions_by_helix
-      for (const helixId of Object.keys(pbh)) {
-        const byDir = pbh[helixId]
-        for (const dir of Object.keys(byDir)) {
-          const data = byDir[dir]
-          if (!data || !Array.isArray(data.bp)) continue
-          for (let i = 0; i < data.bp.length; i++) {
-            straightGeo.push({
-              helix_id:          helixId,
-              bp_index:          data.bp[i],
-              direction:         dir,
-              backbone_position: data.bb[i],
-              base_normal:       data.bn?.[i],
-            })
-          }
-        }
-      }
+      const straightGeo = [...positionUpdateLookup(json.straight_positions_by_helix).values()]
       updates.straightGeometry = straightGeo
       const straightAxesMap = {}
       for (const ax of json.straight_helix_axes ?? []) {
@@ -1268,36 +1250,14 @@ async function _syncPositionsOnlyDiff(json) {
   //    backboneEntries entries hold direct references to these objects, so
   //    later applyPositionsUpdate() will see the fresh values.
   if (Array.isArray(state.currentGeometry) && positionsByHelix) {
-    // Build a fast lookup keyed by "helix:bp:dir".
-    const lookup = new Map()
-    for (const helixId of Object.keys(positionsByHelix)) {
-      const byDir = positionsByHelix[helixId]
-      for (const dir of Object.keys(byDir)) {
-        const data = byDir[dir]
-        if (!data) continue
-        for (let i = 0; i < data.bp.length; i++) {
-          lookup.set(`${helixId}:${data.bp[i]}:${dir}`, {
-            bb: data.bb?.[i], bs: data.bs?.[i], bn: data.bn?.[i], at: data.at?.[i],
-          })
-        }
-      }
-    }
+    const lookup = positionUpdateLookup(positionsByHelix)
+    const seen = new Map()
     for (const nuc of state.currentGeometry) {
       const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
-      const u = lookup.get(key)
-      if (!u) continue
-      if (u.bb && nuc.backbone_position) {
-        nuc.backbone_position[0] = u.bb[0]; nuc.backbone_position[1] = u.bb[1]; nuc.backbone_position[2] = u.bb[2]
-      }
-      if (u.bs && nuc.base_position) {
-        nuc.base_position[0]    = u.bs[0]; nuc.base_position[1]    = u.bs[1]; nuc.base_position[2]    = u.bs[2]
-      }
-      if (u.bn && nuc.base_normal) {
-        nuc.base_normal[0]      = u.bn[0]; nuc.base_normal[1]      = u.bn[1]; nuc.base_normal[2]      = u.bn[2]
-      }
-      if (u.at && nuc.axis_tangent) {
-        nuc.axis_tangent[0]     = u.at[0]; nuc.axis_tangent[1]     = u.at[1]; nuc.axis_tangent[2]     = u.at[2]
-      }
+      const copy = seen.get(key) ?? 0
+      seen.set(key, copy + 1)
+      const update = lookup.get(`${key}:${copy}`)
+      if (update) replaceNativePlacement(nuc, update)
     }
   }
 
@@ -1733,6 +1693,7 @@ export async function exportScadnano(compatibilityToken = '') {
  * fixed-width outputs can't be produced client-side.
  */
 async function _downloadBinaryExport(path, fallbackName, options = null) {
+  assertPlacementExportSafe()
   const r = await fetch(`${BASE}${path}`, options ?? { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
@@ -1742,6 +1703,7 @@ async function _downloadBinaryExport(path, fallbackName, options = null) {
     return false
   }
   const blob = await r.blob()
+  assertPlacementExportSafe()
   const cd = r.headers.get('Content-Disposition') || ''
   const match = cd.match(/filename="?([^"]+)"?/)
   const filename = match ? match[1] : fallbackName
@@ -1778,6 +1740,7 @@ export function exportPsf() {
 }
 
 export async function exportSurfaceStl({ targetMm = 200, gridSpacing, probeRadius } = {}) {
+  assertPlacementExportSafe()
   const params = new URLSearchParams({ target_mm: String(targetMm) })
   if (gridSpacing != null) params.set('grid_spacing', String(gridSpacing))
   if (probeRadius != null) params.set('probe_radius', String(probeRadius))
@@ -1788,6 +1751,7 @@ export async function exportSurfaceStl({ targetMm = 200, gridSpacing, probeRadiu
     return false
   }
   const blob = await r.blob()
+  assertPlacementExportSafe()
   const cd = r.headers.get('Content-Disposition') || ''
   const match = cd.match(/filename="?([^"]+)"?/)
   const filename = match ? match[1] : 'surface.stl'
@@ -1799,6 +1763,7 @@ export async function exportSurfaceStl({ targetMm = 200, gridSpacing, probeRadiu
 }
 
 export async function exportSurface3mf({ targetMm = 200, gridSpacing, probeRadius } = {}) {
+  assertPlacementExportSafe()
   const params = new URLSearchParams({ target_mm: String(targetMm) })
   if (gridSpacing != null) params.set('grid_spacing', String(gridSpacing))
   if (probeRadius != null) params.set('probe_radius', String(probeRadius))
@@ -1810,6 +1775,7 @@ export async function exportSurface3mf({ targetMm = 200, gridSpacing, probeRadiu
   }
   const coloring = r.headers.get('X-NADOC-Coloring') || ''
   const blob = await r.blob()
+  assertPlacementExportSafe()
   const cd = r.headers.get('Content-Disposition') || ''
   const match = cd.match(/filename="?([^"]+)"?/)
   const filename = match ? match[1] : 'surface.3mf'
@@ -1903,7 +1869,7 @@ export async function getGeometry(helixIds = null) {
     : '/design/geometry'
   // Measured ("new positioning") placement is a query flag on this endpoint, so a
   // toggle costs one refetch and the legacy request stays byte-identical when off.
-  const url  = base + geometryQuerySuffix(base.includes('?'))
+  const url  = base
   const json = await _request('GET', url)
   return _applyTimedResponse(json, () => _applyGeometryResponse(json))
 }
@@ -1931,24 +1897,7 @@ async function _applyGeometryResponse(json) {
   let straightGeo  = null
   let straightAxes = null
   if (json.straight_positions_by_helix) {
-    straightGeo = []
-    const pbh = json.straight_positions_by_helix
-    for (const helixId of Object.keys(pbh)) {
-      const byDir = pbh[helixId]
-      for (const dir of Object.keys(byDir)) {
-        const data = byDir[dir]
-        if (!data || !Array.isArray(data.bp)) continue
-        for (let i = 0; i < data.bp.length; i++) {
-          straightGeo.push({
-            helix_id:          helixId,
-            bp_index:          data.bp[i],
-            direction:         dir,
-            backbone_position: data.bb[i],
-            base_normal:       data.bn?.[i],
-          })
-        }
-      }
-    }
+    straightGeo = [...positionUpdateLookup(json.straight_positions_by_helix).values()]
     straightAxes = {}
     for (const ax of json.straight_helix_axes ?? []) {
       straightAxes[ax.helix_id] = {
@@ -2005,7 +1954,7 @@ export async function getDeformDebug() {
  */
 export async function getStraightGeometry() {
   const base = '/design/geometry?apply_deformations=false'
-  const json = await _request('GET', base + geometryQuerySuffix(true), undefined, { excludeFromTiming: true })
+  const json = await _request('GET', base, undefined, { excludeFromTiming: true })
   if (!json) return null
   const nucleotides = json.nucleotides ?? json
   const helixAxesMap = {}
@@ -2677,6 +2626,7 @@ export async function addBundleDeformedContinuation({ cells, lengthBp, plane = '
  * (topology.top, conf.dat, input.txt, README.txt).
  */
 export async function exportOxdna() {
+  assertPlacementExportSafe()
   const r = await fetch(`${BASE}/design/oxdna/export`, { method: 'POST' })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
@@ -2687,6 +2637,7 @@ export async function exportOxdna() {
   const match = disposition.match(/filename="([^"]+)"/)
   const filename = match ? match[1] : 'design_oxdna.zip'
   const blob = await r.blob()
+  assertPlacementExportSafe()
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement('a')
   a.href     = url
@@ -4759,7 +4710,7 @@ export async function getInstanceDesign(id) {
 export { expandCompactNucleotides as _expandCompactNucleotides } from '../viewer/geometry_codec.js'
 
 export async function getInstanceGeometry(id) {
-  const json = await _request('GET', `/assembly/instances/${id}/geometry${geometryQuerySuffix(false)}`)
+  const json = await _request('GET', `/assembly/instances/${id}/geometry`)
   // Decode compact wire format → flat nuc list (legacy shape the renderer
   // expects). Server always ships compact for this endpoint now.
   if (json && !json.nucleotides && json.nucleotides_compact) {
@@ -4813,7 +4764,7 @@ export async function getInstancePeriodicClosure(id, count = 4) {
  * so V8 doesn't carry N copies of identical nucleotide lists.
  */
 export async function getAssemblyGeometry() {
-  const json = await _request('GET', `/assembly/geometry${geometryQuerySuffix(false)}`)
+  const json = await _request('GET', `/assembly/geometry`)
   if (!json) return json
   if (!json.sources) return json  // pre-Phase-3 shape passthrough (legacy)
 

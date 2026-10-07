@@ -307,6 +307,7 @@ def geometry(design):
 # ── oxdna-native seed (designed pairs start bonded; no startup collapse) ───────
 
 
+@pytest.mark.native_placement
 def test_oxdna_native_seed_bonds_pairs_at_frame_zero(tmp_path, design, geometry):
     """The native seed must land every designed WC pair inside oxDNA's H-bond range
     at frame 0 (bp≈0→~1.0) AND clear the FENE backbone over-stretch that NADOC's
@@ -334,6 +335,7 @@ def test_oxdna_native_seed_bonds_pairs_at_frame_zero(tmp_path, design, geometry)
     assert backbone_fene_stretch(design, fm_native)[1] == 0
 
 
+@pytest.mark.native_placement
 def test_oxdna_native_seed_preserves_orientation(tmp_path, design, geometry):
     """Only the centre of mass moves — a1/a3 (base normal + 5′→3′) are untouched."""
     import numpy as np
@@ -356,6 +358,7 @@ def test_oxdna_native_seed_preserves_orientation(tmp_path, design, geometry):
         assert np.linalg.norm(w["backbone_position"] - n["backbone_position"]) > 0.1
 
 
+@pytest.mark.native_placement
 def test_oxdna_native_seed_map_noop_without_pairs(design):
     """No designed pairs (single strand) → the seed map is returned unchanged."""
     from backend.physics.oxdna_interface import resolved_nuc_map, oxdna_native_seed_map
@@ -368,6 +371,7 @@ def test_oxdna_native_seed_map_noop_without_pairs(design):
     assert out is fwd_only
 
 
+@pytest.mark.native_placement
 def test_oxdna_native_seed_map_handles_loop_inserts():
     """Loop insertions add WC-paired copies keyed by a 4-tuple (helix, bp, dir,
     copy) — the native seed map must NOT choke on them (regression: it assumed
@@ -3587,6 +3591,7 @@ def test_melted_designed_pair_uses_true_oxdna_rigid_frames(design, geometry, tmp
     assert reverse2 in overrides
 
 
+@pytest.mark.native_placement
 def test_rigid_frame_calibration_buckets_exact():
     """The empirical calibration covers all four (strand_dir, helix_is_forward)
     buckets and each (Q, c) is a near-exact constant — the internal residual assert
@@ -3608,6 +3613,7 @@ def test_rigid_frame_calibration_buckets_exact():
         assert c.shape == (3,)
 
 
+@pytest.mark.native_placement
 def test_rigid_frame_placer_reproduces_design_build(design, geometry, tmp_path):
     """Stamping each nucleotide by its OWN ideal oxDNA frame reproduces the
     validated build_atomistic_model(design) EXACTLY: identical atom count, identical
@@ -3641,6 +3647,7 @@ def test_rigid_frame_placer_reproduces_design_build(design, geometry, tmp_path):
     assert float(np.linalg.norm(rf - pf, axis=1).max()) < 1e-3  # <0.01 Å
 
 
+@pytest.mark.native_placement
 def test_rigid_frame_placer_is_rigid_under_reorientation(design, geometry, tmp_path):
     """The placer's orientation comes from a1/a3 (NOT re-derived from position vs a
     fitted axis — the old bug that turned MC noise into a crossing-bond mesh).  Proof:
@@ -4255,6 +4262,7 @@ def test_escalate_md_relax_spec_schedule():
     assert base.steps == 1000 and base.dt == 0.002
 
 
+@pytest.mark.native_placement
 def test_backbone_fene_stretch_is_site_based(design, geometry, tmp_path):
     """The FENE metric measures backbone-SITE distance (oxDNA units) — the quantity
     oxDNA's FENE term checks — so ideal NADOC geometry (which oxDNA needs relaxed)
@@ -4280,6 +4288,7 @@ def test_backbone_fene_stretch_is_site_based(design, geometry, tmp_path):
     assert cm_units < max_units
 
 
+@pytest.mark.native_placement
 def test_health_check_flags_not_equil_ready(design, geometry, tmp_path):
     """run_oxdna_health_check reports fene_safe=False (with a reason note) on an
     unrelaxed structure, while still PASSING the bp gate (fene drives the retry, not
@@ -4298,6 +4307,7 @@ def test_health_check_flags_not_equil_ready(design, geometry, tmp_path):
     assert "over-stretched" in res.reason
 
 
+@pytest.mark.native_placement
 def test_runner_retries_then_fails_when_not_equil_ready(
     design, geometry, tmp_path, mock_oxdna
 ):
@@ -6542,6 +6552,7 @@ def test_frame_surface_json_rmsf_mode_still_carries_identity(
     assert entry.get("vertex_nuc_index_table")
 
 
+@pytest.mark.native_placement
 def test_the_native_seed_reproduces_oxdnas_own_equilibrium_pair_geometry():
     """The seed must start a base pair where oxDNA's model puts it, not near it.
 

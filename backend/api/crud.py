@@ -95,9 +95,6 @@ class _TimingTrace:
 from backend.api import state as design_state
 from backend.api.doc_context import requested_measured_positioning, should_skip_geometry
 from backend.core.display_placement import measured_display_placement
-from backend.core.geometry import (
-    nucleotide_positions,
-)
 from backend.core.deformation import (
     _apply_ovhg_rotations_to_axes,
     deformed_frame_at_bp,
@@ -964,10 +961,9 @@ def _design_replace_response(
          recompute or scene rebuild.
       2. ``positions_only`` — topology unchanged but cluster_transforms
          and/or deformations differ; backend ships compact per-nuc
-         positions (parallel arrays, no per-nuc strand metadata) and
-         the frontend mutates existing entry.nuc fields in place. Skips
-         the per-nuc dict construction that dominates the full-geometry
-         response and the per-nuc dict parse on the frontend.
+         positions and authoritative slab poses (parallel arrays without
+         strand metadata). These serialize the same records as full geometry;
+         the frontend updates existing nucleotide entries in place.
       3. Partial geometry — identity-pose topology edits whose affected helices
          can be determined exactly (including extrusion undo/redo).
       4. Embedded full geometry — fallback for topology changes that cannot be
@@ -1012,9 +1008,8 @@ def _design_replace_response(
         # Straight topology is identical; ship compact positions for the
         # changed deformed/cluster geometry. Helix axes ride along since
         # cluster transforms move axes too.
-        # _positions_for_design builds the parallel arrays directly from
-        # numpy without the per-nuc dict round-trip that dominated the
-        # earlier _positions_by_helix(_geometry_for_helices(design)) chain.
+        # Compact fields serialize the same authoritative records as a full
+        # geometry response, including slab poses and placement provenance.
         positions, axes = _positions_for_design(design)
         return {
             **_design_response(design, report, full_feature_log=True),
@@ -1603,8 +1598,7 @@ def get_geometry(
     ),
     measured_positioning: bool = Query(
         True,
-        description="Placement comparison selector. Both baseline (false) and "
-        "candidate (true) currently use the accepted measured geometry.",
+        description="Native Full placement is mandatory. False is rejected.",
     ),
 ):
     """Return geometry for the active design.
@@ -2176,18 +2170,7 @@ def add_helix(body: HelixRequest) -> dict:
     )
     return {
         "helix": new_helix.model_dump(),
-        "geometry": [
-            {
-                "helix_id": n.helix_id,
-                "bp_index": n.bp_index,
-                "direction": n.direction.value,
-                "backbone_position": n.position.tolist(),
-                "base_position": n.base_position.tolist(),
-                "base_normal": n.base_normal.tolist(),
-                "axis_tangent": n.axis_tangent.tolist(),
-            }
-            for n in nucleotide_positions(new_helix)
-        ],
+        "geometry": _geometry_for_helices(design, frozenset({new_helix.id})),
         **_design_response(design, report),
     }
 
@@ -2335,18 +2318,7 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
     )
     return {
         **_design_response(design, report),
-        "nucleotides": [
-            {
-                "helix_id": n.helix_id,
-                "bp_index": n.bp_index,
-                "direction": n.direction.value,
-                "backbone_position": n.position.tolist(),
-                "base_position": n.base_position.tolist(),
-                "base_normal": n.base_normal.tolist(),
-                "axis_tangent": n.axis_tangent.tolist(),
-            }
-            for n in nucleotide_positions(new_helix)
-        ],
+        "nucleotides": _geometry_for_helices(design, frozenset({new_helix.id})),
     }
 
 
@@ -2410,18 +2382,7 @@ def get_helix(helix_id: str) -> dict:
     helix = _find_helix(design, helix_id)
     return {
         "helix": helix.model_dump(),
-        "geometry": [
-            {
-                "helix_id": n.helix_id,
-                "bp_index": n.bp_index,
-                "direction": n.direction.value,
-                "backbone_position": n.position.tolist(),
-                "base_position": n.base_position.tolist(),
-                "base_normal": n.base_normal.tolist(),
-                "axis_tangent": n.axis_tangent.tolist(),
-            }
-            for n in nucleotide_positions(helix)
-        ],
+        "geometry": _geometry_for_helices(design, frozenset({helix.id})),
     }
 
 
@@ -5773,7 +5734,7 @@ def get_sub_domain_frame(overhang_id: str, sub_domain_id: str) -> dict:
     """
     import numpy as _np
     from backend.core.deformation import _default_phi_ref
-    from backend.core.geometry import nucleotide_positions_arrays
+    from backend.core.design_geometry import native_full_nucleotide_at
     from backend.core.models import Direction as _Direction
 
     design = design_state.get_or_404()
@@ -5818,38 +5779,18 @@ def get_sub_domain_frame(overhang_id: str, sub_domain_id: str) -> dict:
             detail=(f"Helix {spec.helix_id!r} not found for overhang {overhang_id!r}."),
         )
 
-    arrs = nucleotide_positions_arrays(helix)
-    # Apply existing deformations and rotations so the returned frame is
-    # post-upstream.
-    from backend.core.deformation import (
-        apply_overhang_rotation_if_needed,
-        _apply_cluster_transforms_domain_aware,
-        _clusters_for_helix,
-    )
-
-    clusters = _clusters_for_helix(design, helix.id)
-    if clusters:
-        arrs = _apply_cluster_transforms_domain_aware(arrs, clusters, helix, design)
-    arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
-
-    dir_int = 0 if domain.direction == _Direction.FORWARD else 1
-    mask = (arrs["bp_indices"] == junction_side_bp) & (arrs["directions"] == dir_int)
-    if not mask.any():
-        raise HTTPException(
-            409,
-            detail=(
-                f"Could not locate pivot bp {junction_side_bp} on helix "
-                f"{spec.helix_id!r}; design may need geometry rebuild."
-            ),
-        )
-
-    pivot = arrs["positions"][mask][0].astype(float)
-    pa = arrs["axis_tangents"][mask][0].astype(float)
-    pa_norm = float(_np.linalg.norm(pa))
-    if pa_norm < 1e-9:
-        pa = _np.array([0.0, 0.0, 1.0])
-    else:
-        pa = pa / pa_norm
+    # Read the same final native residue pose shown by Full, including bends,
+    # clusters, overhang rotations and saved individual transforms.
+    record = native_full_nucleotide_at(helix, design, junction_side_bp, domain.direction)
+    if record is None:
+        from backend.core.native_full_placement import NativePlacementError
+        raise NativePlacementError("Overhang sub-domain pivot has no canonical nucleotide.",
+            details={"overhang_id": overhang_id, "sub_domain_id": sub_domain_id,
+                     "helix_id": helix.id, "bp_index": junction_side_bp,
+                     "direction": domain.direction.value})
+    pivot = _np.asarray(record["backbone_position"], dtype=float)
+    pa = _np.asarray(record["axis_tangent"], dtype=float)
+    pa /= _np.linalg.norm(pa)
     pr = _default_phi_ref(pa)
 
     return {

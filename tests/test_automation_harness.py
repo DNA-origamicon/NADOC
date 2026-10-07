@@ -1182,13 +1182,12 @@ def test_linker_relaxed_pose_oracle_fires_on_degenerate_noop():
     """Red-test: a degenerate hinge (the moving linker ANCHOR on the joint axis)
     cannot change the chord — strain is not reduced, so the oracle fires.
 
-    Origin [2.0,0,0] is derived from the real complement anchor [2.0,0.866,0]
-    (AF-42); the old [2.5,0,0] was the *fallback* backbone anchor's x and stopped
-    being degenerate once the fixture resolved the real one.
+    The fixture derives the joint origin from the canonical complementary
+    anchor so the no-op remains physical when chemical landmarks change.
     """
     from tests.automation_harness import assert_linker_relaxed_pose
 
-    before, after, cid = _relaxed_linker_pair(joint_origin=[2.0, 0.0, 0.0])
+    before, after, cid = _relaxed_linker_pair(joint_origin=None)
     with pytest.raises(AssertionError, match="reduce strain"):
         assert_linker_relaxed_pose(before, after, cid)
 

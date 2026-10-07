@@ -1,3 +1,4 @@
+import { requireNativeBackbonePosition } from '../viewer/native_placement.js'
 /**
  * Overhang Link Arcs.
  *
@@ -7,9 +8,9 @@
  * nucleotide that sits at the user-specified attach end of the overhang.
  * ssDNA connections use the same visual language as crossover extra bases:
  * the saved linker length is rendered as bead+slab instances distributed along
- * a visible backbone arc. dsDNA connections render an ideal double-stranded
- * segment at the midpoint between anchors, with short arcs from each overhang
- * binding domain to the appropriate end of that segment.
+ * a visible backbone arc. dsDNA connector arcs attach to the authoritative
+ * backend bridge beads. The native helix renderer draws that bridge's beads
+ * and slabs; this module never reconstructs their placement.
  *
  * Pure visualisation — no interaction in v1.
  *
@@ -613,7 +614,7 @@ function _linkerAttachAnchor(nucsByOvhg, nucsByStrand, connId, side, ovhgId, att
                               && n.bp_index === ohNuc.bp_index) ?? null
   }
   const nuc = chosen ?? ohNuc
-  const pos = _vec3(nuc.backbone_position ?? nuc.base_position)
+  const pos = _vec3(linkerType === 'ds' ? requireNativeBackbonePosition(nuc) : (nuc.backbone_position ?? nuc.base_position))
   return pos ? { pos, nuc, usedLinkerComplement: chosen != null } : null
 }
 
@@ -782,7 +783,7 @@ function _bridgeBoundaryPos(nucsByStrand, connId, side, bpIndex) {
   const nuc = (nucsByStrand.get(strandId) ?? [])
     .find(n => n.helix_id === helixId && n.bp_index === bpIndex)
   if (!nuc) return null
-  return _vec3(nuc.backbone_position ?? nuc.base_position)
+  return _vec3(requireNativeBackbonePosition(nuc))
 }
 
 function _makeDsLinkerMeshes(conn, anchorA, anchorB, nucsByStrand, colorA = ARC_COLOR, colorB = ARC_COLOR, strandIds = null) {

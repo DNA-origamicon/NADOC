@@ -1,13 +1,13 @@
-/**
- * Entry point for the standalone "Strand Animations Testing" page.
- */
-
+/** Standalone synthetic nucleotide construction has been removed. */
 import { initStrandAnimApp } from './app.js'
 
-const canvas = document.getElementById('strand-canvas')
-const panelRoot = document.getElementById('strand-panel-body')
-
-const app = initStrandAnimApp(canvas, panelRoot)
-
-// Expose for quick console poking during development.
-window.strandAnim = app
+try {
+  initStrandAnimApp()
+} catch (error) {
+  const canvas = document.getElementById('strand-canvas')
+  if (canvas) canvas.hidden = true
+  const panel = document.getElementById('strand-panel-body')
+  if (panel) { panel.textContent = error.message; panel.setAttribute('role', 'alert') }
+  const readout = document.getElementById('strand-readout')
+  if (readout) readout.textContent = 'Molecular preview unavailable'
+}

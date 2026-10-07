@@ -1,3 +1,5 @@
+import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
+
 /**
  * Client-side video / GIF export for NADOC animations.
  *
@@ -21,6 +23,7 @@
  *   `onProgress` remains the per-frame-only callback it always was.
  */
 export async function exportVideo({ animation, renderer, scene, camera, player, options = {}, onProgress, onPhase, signal }) {
+  assertPlacementExportSafe(scene)
   const { format = 'webm', fps: fpsOpt, resolution = 'current' } = options
   const fps = Math.max(1, Math.min(60, fpsOpt ?? animation.fps ?? 30))
 
@@ -97,6 +100,7 @@ export async function exportVideo({ animation, renderer, scene, camera, player, 
  * @param {AbortSignal} [opts.signal]
  */
 export async function exportPhotoVideo({ animation, player, photoRenderer, width, height, options = {}, onProgress, onPhase, signal }) {
+  assertPlacementExportSafe()
   const { format = 'webm', fps: fpsOpt } = options
   const fps = Math.max(1, Math.min(60, fpsOpt ?? animation.fps ?? 30))
 
@@ -212,10 +216,12 @@ async function _captureWebMPhoto({ animation, player, session, w, h, fps, totalD
   await _yield()
   return new Promise((resolve, reject) => {
     recorder.onstop = () => {
-      onPhase?.('save')
-      const blob = new Blob(chunks, { type: 'video/webm' })
-      _download(blob, `${animation.name || 'animation'}-photo.webm`)
-      resolve()
+      try {
+        onPhase?.('save')
+        const blob = new Blob(chunks, { type: 'video/webm' })
+        _download(blob, `${animation.name || 'animation'}-photo.webm`)
+        resolve()
+      } catch (error) { reject(error) }
     }
     recorder.onerror = e => reject(e.error ?? new Error('MediaRecorder error'))
     recorder.stop()
@@ -311,10 +317,12 @@ async function _captureWebM({ animation, canvas, renderer, scene, camera, player
   await _yield()
   return new Promise((resolve, reject) => {
     recorder.onstop = () => {
-      onPhase?.('save')
-      const blob = new Blob(chunks, { type: 'video/webm' })
-      _download(blob, `${animation.name || 'animation'}.webm`)
-      resolve()
+      try {
+        onPhase?.('save')
+        const blob = new Blob(chunks, { type: 'video/webm' })
+        _download(blob, `${animation.name || 'animation'}.webm`)
+        resolve()
+      } catch (error) { reject(error) }
     }
     recorder.onerror = e => reject(e.error ?? new Error('MediaRecorder error'))
     recorder.stop()
@@ -478,6 +486,7 @@ function _gifCapacity(w, h, frames) {
 const _PALETTE_EVERY = 12
 
 function _download(blob, filename) {
+  assertPlacementExportSafe()
   const url = URL.createObjectURL(blob)
   const a   = Object.assign(document.createElement('a'), { href: url, download: filename })
   document.body.appendChild(a)

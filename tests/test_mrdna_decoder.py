@@ -251,12 +251,12 @@ def test_native_roundtrip_report_measures_full_pose_contract():
     assert report["tangent_error_deg"]["max"] == pytest.approx(0)
 
 
-def test_decoder_uses_same_unbalanced_geometry_as_mrdna_seed(monkeypatch):
-    """Crossover balancing must never be introduced only on read-back."""
+def test_decoder_uses_same_canonical_geometry_as_mrdna_seed(monkeypatch):
+    """Seed and read-back must use the same mandatory native placement."""
     calls = []
 
-    def fake_geometry(_design, _selection, *, junction_balance):
-        calls.append(junction_balance)
+    def fake_geometry(_design, _selection, **kwargs):
+        calls.append(kwargs)
         return [
             {
                 "helix_id": "h",
@@ -271,7 +271,7 @@ def test_decoder_uses_same_unbalanced_geometry_as_mrdna_seed(monkeypatch):
         "backend.core.design_geometry._geometry_for_helices", fake_geometry
     )
     result = _mrdna_seed_reference_by_key(object())
-    assert calls == [False]
+    assert calls == [{}]
     assert result[("h", 2, "FORWARD", 0)]["backbone_position"] == [1, 2, 3]
 
 

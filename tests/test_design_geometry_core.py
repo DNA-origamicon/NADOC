@@ -6,6 +6,8 @@ DIRECTLY from the core module (not via crud's re-export) so they assert the
 core module's own input→output behavior — the earned pin for the moved code.
 """
 
+import pytest
+
 from backend.core.design_geometry import (
     _strand_nucleotide_info,
     _straight_helix_axes,
@@ -252,17 +254,24 @@ def test_compact_geometry_for_design_equals_compose():
     )
 
 
+@pytest.mark.native_placement
 def test_positions_by_helix_emits_only_position_fields():
-    """The positions_only payload carries just bp + the four position arrays,
-    no strand metadata."""
+    """Incremental poses retain the identity needed to verify their authority."""
     d = _single_helix_design(length_bp=10)
     pos = _positions_by_helix(_geometry_for_design(d))
     fwd = pos["h0"][Direction.FORWARD.value]
-    assert set(fwd.keys()) == {"bp", "bb", "bs", "bn", "at"}
+    assert set(fwd.keys()) == {"bp", "bb", "bs", "bn", "at", "sp", "sq", "pv",
+                               "sid", "extid", "ismod", "mod"}
     n = len(fwd["bp"])
     assert n == 10
     for key in ("bb", "bs", "bn", "at"):
         assert len(fwd[key]) == n
+    for key in ("sp", "sq", "pv", "sid", "extid", "ismod", "mod"):
+        assert len(fwd[key]) == n
+    assert fwd["sid"] == ["s0"] * n
+    assert fwd["extid"] == [None] * n
+    assert fwd["ismod"] == [False] * n
+    assert fwd["mod"] == [None] * n
 
 
 def test_positions_for_design_matches_dict_path_backbone():

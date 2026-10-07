@@ -21,12 +21,10 @@ from backend.core.atomistic import (
 from backend.core.constants import HELIX_RADIUS
 from backend.core.measured_positioning import (
     FULL_REP,
-    _FULL_REP_FALLBACK,
-    _FALLBACK,
     _from_atomistic_template,
-    apply_measured_positioning,
 )
 from backend.core.models import Direction, Helix, Vec3
+from backend.core.native_full_placement import place_native_full, NativePlacementError
 
 
 def _template_p_azimuth_offset_rad(p_radius_nm: float) -> float:
@@ -105,9 +103,7 @@ def _arrays(direction: Direction) -> dict:
 
 
 def _measured(direction: Direction) -> dict:
-    return apply_measured_positioning(
-        _arrays(direction), axis_origin=ORIGIN, axis_hat=T, legacy_radius=HELIX_RADIUS
-    )
+    return place_native_full(_arrays(direction))
 
 
 # ── the defect being corrected ────────────────────────────────────────────────
@@ -211,60 +207,27 @@ def test_base_normals_stay_cross_strand_and_antiparallel():
 def test_the_input_arrays_are_not_mutated():
     arrs = _arrays(Direction.FORWARD)
     snapshot = np.array(arrs["positions"], copy=True)
-    apply_measured_positioning(
-        arrs, axis_origin=ORIGIN, axis_hat=T, legacy_radius=HELIX_RADIUS
-    )
+    place_native_full(arrs)
     assert np.asarray(arrs["positions"]) == pytest.approx(snapshot)
 
 
-def test_a_bead_on_the_axis_is_left_alone():
-    """Fail safe: a nucleotide with no radial direction has no azimuth to place it at,
-    so it keeps its existing position rather than being sent somewhere invented."""
+def test_invalid_frame_fails_instead_of_retaining_provisional_bead_positions():
     arrs = _arrays(Direction.FORWARD)
-    arrs = {
-        k: (np.array(v, copy=True) if isinstance(v, np.ndarray) else v)
-        for k, v in arrs.items()
-    }
-    arrs["positions"][0] = np.array([0.0, 0.0, 0.0])  # exactly on the axis
-    out = apply_measured_positioning(
-        arrs, axis_origin=ORIGIN, axis_hat=T, legacy_radius=HELIX_RADIUS
-    )
-    assert np.asarray(out["positions"])[0] == pytest.approx([0.0, 0.0, 0.0])
-    # the rest of the helix still moved
-    r_bb, _ = _cyl(np.asarray(out["positions"])[2:], ORIGIN, T)
-    assert r_bb[0::2] == pytest.approx(FULL_REP.backbone_fwd.radius_nm, abs=1e-9)
+    arrs["radial_hats"][0] = 0
+    with pytest.raises(NativePlacementError, match="not orthonormal"):
+        place_native_full(arrs)
 
 
-def test_a_pair_split_across_a_domain_transform_is_left_alone():
-    """The failure this guard exists for, reproduced.
-
-    Cluster transforms are applied per DOMAIN, so a base pair whose two strands belong
-    to different domains gets one bead moved and the other left behind — they are then
-    in different frames.  Anchoring the pair's frame on the stale bead threw the
-    placement out by 1.9 nm on ``workspace/VoltronCore.nadoc`` (helix ``h_XY_4_10``),
-    which is worse than not moving it at all.  Such a pair must keep legacy placement.
-    """
+def test_partner_displacement_does_not_change_native_internal_placement():
     arrs = _arrays(Direction.FORWARD)
-    arrs = {
-        k: (np.array(v, copy=True) if isinstance(v, np.ndarray) else v)
-        for k, v in arrs.items()
-    }
-    before = np.array(arrs["positions"], copy=True)
-    # Drag ONE bead of the first pair off the cylinder, as a domain transform would.
-    arrs["positions"][0] = arrs["positions"][0] * 3.0
-    out = apply_measured_positioning(
-        arrs, axis_origin=ORIGIN, axis_hat=T, legacy_radius=HELIX_RADIUS
-    )
-    pos = np.asarray(out["positions"])
-    assert pos[0] == pytest.approx(before[0] * 3.0), (
-        "displaced bead must not be re-placed"
-    )
-    assert pos[1] == pytest.approx(before[1]), (
-        "its partner must not be re-placed either"
-    )
-    # every other pair still moved
-    r_bb, _ = _cyl(pos[2:], ORIGIN, T)
-    assert r_bb[0::2] == pytest.approx(FULL_REP.backbone_fwd.radius_nm, abs=1e-9)
+    before = place_native_full(arrs)
+    shift = np.array([3.0, -1.0, 2.0])
+    arrs["axis_points"][0] += shift
+    # Provisional construction beads do not influence the authoritative result.
+    arrs["positions"][0] = 1000
+    out = place_native_full(arrs)
+    np.testing.assert_allclose(out["positions"][0], before["positions"][0] + shift)
+    np.testing.assert_array_equal(out["positions"][1:], before["positions"][1:])
 
 
 def test_the_bead_lands_on_the_atomistic_o5_prime():
@@ -299,7 +262,8 @@ def test_the_bead_lands_on_the_atomistic_o5_prime():
     # The remaining ~0.025 nm is sequence specificity: the display site is averaged over
     # all four residues while this fixture stamps one concrete residue at each site.
     # Lattice-groove registration used to leave this at 0.545 nm on REVERSE/None cells.
-    assert 0.18 < miss(measured=False) < 0.19, "legacy bead is no longer where it was"
+    with pytest.raises(NativePlacementError, match="Legacy bead/slab placement has been removed"):
+        miss(measured=False)
     assert miss(measured=True) < 0.027
 
 
@@ -342,36 +306,18 @@ def test_both_lattice_cell_types_overlay_the_atomistic_o5_prime():
     assert min(wrong_landmark_misses["C3'"]) > 0.20
 
 
-def test_the_frozen_fallback_still_matches_what_the_template_derives():
-    """``MEASURED = _from_atomistic_template() or _FALLBACK`` — the fallback is what keeps
-    a missing or corrupt ``measured_atomistic_template.json`` from hard-failing every
-    geometry response at import time, so it has to stay.
+def test_template_is_the_only_source_and_missing_data_fails(monkeypatch):
+    from backend.core import measured_atomistic, measured_positioning
+    assert _from_atomistic_template("O5'") == FULL_REP
+    assert not hasattr(measured_positioning, "_FALLBACK")
+    assert not hasattr(measured_positioning, "_FULL_REP_FALLBACK")
+    assert not hasattr(measured_positioning, "apply_measured_positioning")
 
-    What it must NOT be is a silent second source of truth.  Nothing may read ``_FALLBACK``
-    directly, and this pins it to the derivation it duplicates: if the template is
-    re-extracted and these drift, the fallback would quietly serve the old placement on
-    exactly the runs where the real one is unavailable (TD-27 Stage 1).
-    """
-    derived = _from_atomistic_template()
-    assert derived is not None, "the measured template must be loadable in a test run"
-
-    for field in ("backbone_fwd", "backbone_rev", "base_fwd", "base_rev"):
-        want, got = getattr(derived, field), getattr(_FALLBACK, field)
-        assert got.radius_nm == pytest.approx(want.radius_nm, abs=5e-5), field
-        assert got.azimuth_deg == pytest.approx(want.azimuth_deg, abs=5e-3), field
-        assert got.axial_nm == pytest.approx(want.axial_nm, abs=5e-5), field
-    assert _FALLBACK.slab_extent_nm == pytest.approx(derived.slab_extent_nm, abs=5e-5)
-
-    full_derived = _from_atomistic_template("O5'")
-    assert full_derived is not None
-    for field in ("backbone_fwd", "backbone_rev", "base_fwd", "base_rev"):
-        want, got = getattr(full_derived, field), getattr(_FULL_REP_FALLBACK, field)
-        assert got.radius_nm == pytest.approx(want.radius_nm, abs=5e-5), field
-        assert got.azimuth_deg == pytest.approx(want.azimuth_deg, abs=5e-3), field
-        assert got.axial_nm == pytest.approx(want.axial_nm, abs=5e-5), field
-    assert _FULL_REP_FALLBACK.slab_extent_nm == pytest.approx(
-        full_derived.slab_extent_nm, abs=5e-5
-    )
+    def unavailable():
+        raise measured_atomistic.MeasuredTemplateUnavailable("deliberately missing test source")
+    monkeypatch.setattr(measured_atomistic, "measured_templates", unavailable)
+    with pytest.raises(measured_atomistic.MeasuredTemplateUnavailable):
+        _from_atomistic_template("O5'")
 
 
 # ── firewalls: what must NOT move when the CG placement becomes measured ──────
@@ -393,16 +339,14 @@ def test_the_atomistic_build_is_immune_to_the_cg_measured_flag():
 
     design = Design.model_validate_json(Path("Examples/6hb_test.nadoc").read_text())
 
-    def atoms(measured: bool):
-        # Build the CG geometry in the given mode FIRST, so any shared cache or global
-        # the flag might touch is warm, then stamp the atoms.
-        _geometry_for_helices(design, None, measured_positioning=measured)
+    def atoms():
         m = build_atomistic_model(design, close_backbone=False)
         return np.array([[a.x, a.y, a.z] for a in m.atoms], dtype=float)
 
-    off, on = atoms(False), atoms(True)
-    assert off.shape == on.shape
-    assert np.array_equal(off, on), "the CG measured flag reached the atomistic build"
+    before = atoms()
+    _geometry_for_helices(design)
+    after = atoms()
+    np.testing.assert_array_equal(before, after)
 
 
 def test_the_periodic_seam_solver_still_gets_a_valid_axis():
@@ -437,20 +381,8 @@ def test_the_periodic_seam_solver_still_gets_a_valid_axis():
     )
 
 
-def test_the_oxdna_seed_restores_the_cm_radius_and_is_a_legacy_no_op():
-    """The oxDNA conf's first three floats are the CENTRE OF MASS, and HELIX_RADIUS is
-    defined as exactly that radius in oxDNA's model.  The display bead is a different
-    landmark — currently O5' at 0.849 nm — so the seed boundary converts.
-
-    Two properties, both load-bearing:
-
-      1. On LEGACY geometry it is a no-op, because legacy beads already sit at
-         HELIX_RADIUS.  That is what makes the conversion safe to apply unconditionally.
-      2. On MEASURED geometry it puts the bead back on the HELIX_RADIUS cylinder while
-         keeping its azimuth and axial offset — undoing the 0.196 nm inward pull that
-         widens every crossover gap by 0.39 nm and pushes borderline backbone bonds over
-         oxDNA's FENE cliff (TD-27 Stage 3).
-    """
+def test_oxdna_converts_canonical_o5_to_its_named_centre_of_mass_landmark():
+    """The oxDNA conversion is a chemical export boundary, not a display option."""
     from pathlib import Path
 
     from backend.core.deformation import deformed_helix_axes
@@ -479,28 +411,14 @@ def test_the_oxdna_seed_restores_the_cm_radius_and_is_a_legacy_no_op():
             out.append(float(np.linalg.norm(d - (d @ t) * t)))
         return np.asarray(out)
 
-    legacy = resolved_nuc_map(
-        design,
-        _geometry_for_helices(
-            design, None, compact_skips=True, measured_positioning=False
-        ),
-    )
-    measured = resolved_nuc_map(
-        design,
-        _geometry_for_helices(
-            design, None, compact_skips=True, measured_positioning=True
-        ),
-    )
-
-    # (1) legacy beads are already on the CM cylinder, so the conversion changes nothing.
-    assert radii(legacy) == pytest.approx(HELIX_RADIUS, abs=1e-6)
-    assert _oxdna_cm_radius_map(design, legacy) is legacy, "must be a no-op on legacy"
-
-    # (2) measured full-rep beads come in at the O5' radius and go out on the CM cylinder.
+    native = _geometry_for_helices(design, None, compact_skips=True)
+    measured = {(n["helix_id"], n["bp_index"], n["direction"]): n for n in native}
+    # The shared resolver now performs the conversion before any writer can
+    # mistake an O5′ landmark for a particle CM. Inspect both sides explicitly.
     assert radii(measured) == pytest.approx(FULL_REP.backbone_fwd.radius_nm, abs=5e-3)
-    assert radii(_oxdna_cm_radius_map(design, measured)) == pytest.approx(
-        HELIX_RADIUS, abs=1e-6
-    )
+    physical = resolved_nuc_map(design, native)
+    assert radii(physical) == pytest.approx(HELIX_RADIUS, abs=1e-6)
+    assert _oxdna_cm_radius_map(design, physical) is physical
 
 
 def test_rotated_oh7_keeps_the_same_measured_bead_to_base_geometry():

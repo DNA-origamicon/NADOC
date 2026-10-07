@@ -41,7 +41,7 @@ from typing import Optional, TYPE_CHECKING
 
 import numpy as np
 
-from backend.core.constants import BASE_DISPLACEMENT, BDNA_RISE_PER_BP, HELIX_RADIUS
+from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.geometry import (
     NucleotidePosition,
     nucleotide_positions,
@@ -950,10 +950,7 @@ def _apply_cluster_rigid_transform_arrays(
         return vecs @ R.T
 
     out = {
-        "helix_id": arrs["helix_id"],
-        "bp_indices": arrs["bp_indices"],
-        "local_bps": arrs["local_bps"],
-        "directions": arrs["directions"],
+        **arrs,
         "positions": _xf_pos(arrs["positions"]),
         "base_positions": _xf_pos(arrs["base_positions"]),
         "base_normals": _xf_dir(arrs["base_normals"]),
@@ -1688,11 +1685,11 @@ def deformed_nucleotide_arrays(
     *phase_roll_rad* rolls the helix about its own axis by that angle, applied AFTER
     ``effective_helix_for_geometry`` — the stored ``phase_offset`` is dead data for a
     grid-derived helix (it is re-derived from ``grid_pos``), so this is the only place a
-    roll can enter.  It defaults to 0.0 and the ONLY caller that passes anything else is
-    the display serialiser's junction-balance roll
-    (``design_geometry._geometry_for_helices(junction_balance=True)``).  Nothing that
-    feeds a simulation, an export or a pose fitter may set it — see
-    ``constants.FULL_REP_BALANCE_ROLL_*``.
+    roll can enter. Construction-frame callers default to 0.0. Canonical native
+    preparation supplies the sole accepted lattice roll for rendering, fitting and
+    attachment pivots. Simulation particle landmarks are converted explicitly from
+    the transported site at their named physical boundary; a native caller cannot
+    disable the roll to select another Full placement.
     """
     if _scope.scoped(design):
         return _scope.selected_arrays(helix, design, lambda view: deformed_nucleotide_arrays(
@@ -1777,7 +1774,9 @@ def deformed_nucleotide_arrays(
     # Deformed backbone position: axis_d + R @ nuc_local  (batched)
     pos_d = axis_d + np.einsum("mij,mj->mi", R_n, nuc_locals)  # (M, 3)
     bn_d = np.einsum("mij,mj->mi", R_n, arrs["base_normals"])  # (M, 3)
-    base_d = pos_d + BASE_DISPLACEMENT * bn_d  # (M, 3)
+    # A nucleotide's own base follows its complete frame. Reconstructing it
+    # from a provisional bead-to-base distance would replace chemical geometry.
+    base_d = axis_d + np.einsum("mij,mj->mi", R_n, arrs["base_positions"] - axis_origs)
     at_d = np.einsum("mij,mj->mi", R_n, arrs["axis_tangents"])  # (M, 3)
 
     result = {
@@ -1791,20 +1790,12 @@ def deformed_nucleotide_arrays(
         "axis_tangents": at_d,
     }
 
-    # Carry the HELICAL SITE through the bend, split so the projection identity
-    # `positions == axis_points + HELIX_RADIUS * radial_hats` still holds afterwards.
-    #
-    # `nuc_locals` is the nucleotide's whole offset from its straight axis point, which is
-    # the radial part PLUS any axial part (a loop copy's ±½·rise, and the difference
-    # between this helix's own tangent and the arm tangent used above).  Rotating the two
-    # parts separately keeps the axial part in the axis point where it belongs, so the
-    # identity survives to rounding — it is no longer exact once a rotation is involved,
-    # which is why the test asserts 1e-12 on deformed arrays and equality on straight ones.
-    if "radial_hats" in arrs:
-        radial_d = np.einsum("mij,mj->mi", R_n, arrs["radial_hats"])
-        axial_local = nuc_locals - HELIX_RADIUS * arrs["radial_hats"]
-        result["axis_points"] = axis_d + np.einsum("mij,mj->mi", R_n, axial_local)
-        result["radial_hats"] = radial_d
+    # Transport authoritative geometric sites directly, independently of any
+    # provisional construction bead radius or a downstream display landmark.
+    if "axis_points" in arrs:
+        result["axis_points"] = axis_d + np.einsum(
+            "mij,mj->mi", R_n, arrs["axis_points"] - axis_origs)
+        result["radial_hats"] = np.einsum("mij,mj->mi", R_n, arrs["radial_hats"])
         result["azimuths"] = arrs["azimuths"]
 
     if clusters:
@@ -1887,7 +1878,7 @@ def deform_extended_arrays(
     offsets = extra_arrs["positions"] - axis_orig_edge  # (M, 3)
     pos_d = axis_d_edge + offsets @ R_e.T  # (M, 3)
     bn_d = extra_arrs["base_normals"] @ R_e.T  # (M, 3)
-    base_d = pos_d + BASE_DISPLACEMENT * bn_d  # (M, 3)
+    base_d = axis_d_edge + (extra_arrs["base_positions"] - axis_orig_edge) @ R_e.T
     at_d = extra_arrs["axis_tangents"] @ R_e.T  # (M, 3)
 
     result = {
@@ -1900,11 +1891,9 @@ def deform_extended_arrays(
         "base_normals": bn_d,
         "axis_tangents": at_d,
     }
-    if "radial_hats" in extra_arrs:  # site, split as in deformed_nucleotide_arrays
-        radial_d = extra_arrs["radial_hats"] @ R_e.T
-        axial_local = offsets - HELIX_RADIUS * extra_arrs["radial_hats"]
-        result["axis_points"] = axis_d_edge + axial_local @ R_e.T
-        result["radial_hats"] = radial_d
+    if "axis_points" in extra_arrs:
+        result["axis_points"] = axis_d_edge + (extra_arrs["axis_points"] - axis_orig_edge) @ R_e.T
+        result["radial_hats"] = extra_arrs["radial_hats"] @ R_e.T
         result["azimuths"] = extra_arrs["azimuths"]
 
     if clusters:
@@ -2056,7 +2045,10 @@ def apply_deformations_to_atoms(atoms: list, design: "Design") -> None:
                 # as the rotation joint everywhere else.  Resolve the pivots
                 # from the pre-overhang nucleotide geometry so all-atom and CG
                 # representations rotate about the identical physical joint.
-                cg_arrs = deformed_nucleotide_arrays(helix_raw, design)
+                from backend.core.design_geometry import native_full_arrays_for_helix
+
+                cg_arrs = native_full_arrays_for_helix(
+                    helix_raw, design, apply_overhang_pose=False)
                 strand_by_id = {s.id: s for s in design.strands}
                 pivot_overrides: dict[str, list[float]] = {}
                 for ovhg in design.overhangs:
@@ -2178,7 +2170,7 @@ def deformed_nucleotide_positions(
         axis_deformed = spine_p + R_p @ cs_offset
         pos_d = axis_deformed + R_p @ nuc_local
         base_normal_d = R_p @ nuc.base_normal
-        base_pos_d = pos_d + BASE_DISPLACEMENT * base_normal_d
+        base_pos_d = axis_deformed + R_p @ (nuc.base_position - axis_orig)
         axis_tangent_d = R_p @ nuc.axis_tangent
 
         result.append(

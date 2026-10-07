@@ -85,9 +85,7 @@ def get_atomistic(
     The −32° helical phase offset (aligning the all-atom backbone groove with the
     NADOC CG model) is baked into build_atomistic_model via _ATOMISTIC_PHASE_OFFSET_RAD.
 
-    ``measured_positioning`` is the baseline/candidate comparison selector.
-    Both states now use the accepted measured placement. The legacy geometry
-    previously selected by false has been retired.
+    ``measured_positioning=False`` is rejected; native placement has one authority.
 
     ``seed_lattice_nm`` switches this to **MD SEED** mode — the t=0, pre-minimisation
     coordinates the simulation would actually start from, for EVERY atom:

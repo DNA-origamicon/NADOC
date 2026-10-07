@@ -1,3 +1,4 @@
+import { setNativePoseMap } from '../viewer/native_placement.js'
 /**
  * Deformed Geometry View — lerps helices between straight (t=0) and deformed (t=1).
  *
@@ -125,7 +126,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     _straightBaseMap = new Map()
     for (const nuc of geometry ?? []) {
       const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
-      _straightPosMap.set(key, new THREE.Vector3(...nuc.backbone_position))
+      setNativePoseMap(_straightPosMap, new THREE.Vector3(...nuc.backbone_position), nuc)
       _straightBnMap.set(key, new THREE.Vector3(...nuc.base_normal))
       if (nuc.base_position) _straightBaseMap.set(key, new THREE.Vector3(...nuc.base_position))
     }
