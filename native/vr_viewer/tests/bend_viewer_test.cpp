@@ -197,8 +197,11 @@ struct LiveViewerTest {
         std::array<bool,2> blocked{};
         v.processBendHandles(blocked,false);
         assert(v.bendPanel_.hand==1 && blocked[1]);
+        assert(v.bendPointPreviewActive()); // Live preview must remain on during grabs.
         v.triggerClicked_[1]=false;
         const auto fixed=v.bendPanel_.arc.a;
+        blocked[0]=true; // Other-hand panel pointer ownership is not scene motion.
+        v.processBendHandles(blocked,false);assert(v.bendPanel_.hand==1);
         // Replay all existing noise presets when supplied by the profile harness.
         std::ifstream samples(directory+"/motion.txt");
         float x,y,z;
@@ -373,15 +376,17 @@ struct LiveViewerTest {
     }
 };
 }
+#include "bend_points_checks.inc"
 int main(int argc,char** argv) {
-    if(argc!=2)return 2;
-    std::filesystem::create_directories(argv[1]);
-    std::filesystem::permissions(argv[1],std::filesystem::perms::owner_all);
+    if(argc!=2 && ((argc!=5 && argc!=6) || std::string(argv[1])!="--benchmark"))return 2;
+    if(argc==2)std::filesystem::create_directories(argv[1]);
+    if(argc==2)std::filesystem::permissions(argv[1],std::filesystem::perms::owner_all);
     if(!glfwInit())return 77;
     glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);glfwWindowHint(GLFW_OPENGL_PROFILE,GLFW_OPENGL_CORE_PROFILE);
-    auto* window=glfwCreateWindow(128,128,"Bend validation",nullptr,nullptr);if(!window)return 77;
+    auto* window=glfwCreateWindow(argc>=5?1852:128,argc>=5?2056:128,"Bend validation",nullptr,nullptr);if(!window)return 77;
     glfwMakeContextCurrent(window);
-    LiveViewerTest::run(argv[1]);
+    if(argc>=5)bendPointBenchmark(argv[2],argv[3],argv[4],argc==6?argv[5]:"bend");
+    else {bendPointChecks(argv[1]);LiveViewerTest::run(argv[1]);}
     glfwDestroyWindow(window);glfwTerminate();
 }

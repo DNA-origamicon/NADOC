@@ -22,7 +22,8 @@ paired controls, thumbwheel input, and Confirm / Cancel / Return layout.
    the sign; **Zero twist** clears the amount. Switching units preserves total
    twist and requires ordered planes. It refuses conversions outside the existing
    supported amount range.
-4. The mint pair of curves previews the amount and direction of torsion; it is
+4. A cyan point cloud previews the selected shape, alongside mint curves showing
+   the amount and direction of torsion. The preview is
    a guide, not a live atomistic deformation. **Confirm** applies the standard
    desktop Twist deformation, records one feature, and refreshes VR geometry.
    Release the handle or wheel before confirming.
@@ -71,3 +72,17 @@ Other checks:
 Multi-selection uses the same exact scope, stale-selection guards, persistence,
 and registered [Bend / Twist multi-selection regression](vr_bend.md#multi-selection-regression)
 as Bend. One shared signed twist is applied to the selected union.
+
+## Live point preview
+
+Twist displays the same cyan, bounded GPU point cloud as Bend while turning the
+endpoint, adjusting the amount wheel, or changing direction. Plane 1 stays fixed;
+the signed rotation grows to the total angle at plane 2 and remains constant
+beyond it. Zero twist hides the cloud. Selection/plane-picking and pending commits
+suppress it. The original geometry remains visible for comparison.
+
+The cloud samples resident representation buffers (at most 8,192 primitives per
+channel, 49,152 points per eye). Motion changes shader uniforms without rebuilding
+geometry. This spatial guide approximates the backend's bp-based deformation,
+particularly for existing deformations, disconnected arms and boundary primitives.
+Confirm still uses the authoritative backend geometry.

@@ -1457,9 +1457,15 @@ nadoc_vr::HandPose handPoseFromXr(const XrPosef& pose) {
 #include "scene_retirement.hpp"
 #include "staged_representation.hpp"
 #include "loading_points.hpp"
+#include "bend_points.hpp"
 
 class GlScene {
     LoadingPoints loadingPoints_;
+    mutable BendPoints bendPoints_;
+    std::optional<nadoc_vr::BendArc> bendPointArc_;
+    bool twistPointMode_=false;
+    std::vector<std::string> movePointOwners_;
+    glm::mat4 movePointTransform_{1};
   public:
 #include "prepared_style_controller.inc"
 #include "staged_scene_refresh.inc"
@@ -1744,6 +1750,11 @@ class GlScene {
     }
 
     [[nodiscard]] bool acceptToolCommit() {
+        // Materialize detailed geometry once, only after a successful commit.
+        if (!movePointOwners_.empty()) {
+            setToolPreview(movePointOwners_,movePointTransform_);
+            movePointOwners_.clear();
+        }
         if (toolPreviewToken_.empty()) return false;
         const bool retainPacked = toolCommittedToken_.empty() && previewGeometry_.active() &&
             previewGeometry_.token == toolPreviewToken_;
@@ -2960,6 +2971,33 @@ class GlScene {
         return out.str();
     }
 
+    size_t bendPointCount() const {return bendPointArc_ && bendPointArc_->angle!=0?bendPoints_.pointCount():0;}
+    size_t movePointCount() const {return movePointOwners_.empty()?0:bendPoints_.pointCount();}
+    void setMovePointPreview(const std::vector<std::string>& owners,const glm::mat4& transform) {
+        movePointOwners_=owners;movePointTransform_=transform;
+    }
+    void setBendPointArc(std::optional<nadoc_vr::BendArc> arc,bool twist=false) {
+        bendPointArc_=std::move(arc);twistPointMode_=twist;
+    }
+    void renderBendPoints(const glm::mat4& vp,const glm::mat4& model,bool ids=false) const {
+        const bool move=!movePointOwners_.empty();
+        if(!move && (!bendPointArc_ || bendPointArc_->length<=0 || bendPointArc_->angle==0))return;
+        nadoc_vr::CalculationScope auditScope("renderBendPoints");
+        updateSelectionTint();bendPoints_.update(selectionMasks_);
+        if(ids){const GLenum buffers[]={GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT1};glDrawBuffers(2,buffers);}
+        nadoc_vr::BendArc arc=move?nadoc_vr::BendArc{}:*bendPointArc_;
+        if(move)arc.length=1;
+        bendPoints_.begin(vp,model,arc,move?2:twistPointMode_?1:0,movePointTransform_);
+        bendPoints_.draw<Vertex>(0,sphereInstanceVbo_,offsetof(Vertex,position));
+        bendPoints_.draw<Cylinder>(1,cylinderInstanceVbo_,offsetof(Cylinder,start));
+        bendPoints_.draw<Cylinder>(1,cylinderInstanceVbo_,offsetof(Cylinder,end));
+        bendPoints_.draw<Cylinder>(2,halfCylinderInstanceVbo_,offsetof(Cylinder,start));
+        bendPoints_.draw<Cylinder>(2,halfCylinderInstanceVbo_,offsetof(Cylinder,end));
+        bendPoints_.draw<Box>(3,boxInstanceVbo_,offsetof(Box,center));
+        bendPoints_.end();
+        if(ids)glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    }
+
     void renderVolumes(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,
             bool ids,const std::vector<nadoc_vr::ViewVolumeRecord>& entries,bool lightweight=false) {
         nadoc_vr::CalculationScope auditScope("renderVolumes");
@@ -2997,7 +3035,7 @@ class GlScene {
         glActiveTexture(GL_TEXTURE7);glBindTexture(GL_TEXTURE_BUFFER,volumeTexture_);
         glTexBuffer(GL_TEXTURE_BUFFER,GL_RGBA32F,volumeBuffer_);glActiveTexture(GL_TEXTURE0);
         auto clip=[&](int layer,float opacity) {
-            for(GLuint program:{program_,sphereProgram_,cylinderProgram_,boxProgram_,atomisticBondProgram_,loadingPoints_.program()}) {
+            for(GLuint program:{program_,sphereProgram_,cylinderProgram_,boxProgram_,atomisticBondProgram_,loadingPoints_.program(),bendPoints_.program()}) {
                 glUseProgram(program);
                 glUniform1i(glGetUniformLocation(program,"uVolumes"),7);
                 glUniform1i(glGetUniformLocation(program,"uVolumeCount"),int(active.size()));
@@ -3037,6 +3075,7 @@ class GlScene {
             }
             loadingPoints_.draw<Box>(boxInstanceVbo_,boxCount_,offsetof(Box,center));
             loadingPoints_.end(captureIds);
+            renderBendPoints(viewProjection,modelTransform,captureIds);
             renderGuides(viewProjection,guides);
             return;
         }
@@ -3187,6 +3226,7 @@ class GlScene {
             glDepthMask(GL_TRUE);
         }
 
+        renderBendPoints(viewProjection,modelTransform,captureIds);
         renderGuides(viewProjection, guides);
         glBindVertexArray(0);
         glUseProgram(0);
@@ -5908,6 +5948,7 @@ class Viewer {
     void cancelMove() {
         if(toolShell_.executionPending())return;
         movePanel_.hand.reset();pendingToolTransform_.cancel();publishToolTransform();
+        glScene_->setMovePointPreview({},glm::mat4(1));
         toolShell_.apply(nadoc_vr::ToolAction::cancel,selectedSelectionKind_);
         publishToolIntent(nadoc_vr::ToolAction::cancel);
     }
@@ -8186,6 +8227,7 @@ class Viewer {
             << ",\"tangents\":[" << point(glm::normalize(glm::mat3(manipulator_.transform())*bendPanel_.arc.endTangent(0)))
             << ',' << point(glm::normalize(glm::mat3(manipulator_.transform())*bendPanel_.arc.endTangent(1))) << ']'
             << ",\"targets\":" << (glScene_ && bendPanel_.active?glScene_->movePickPoints(manipulator_.transform()):"[]")
+            << ",\"point_preview_count\":" << (glScene_ && bendPointPreviewActive()?glScene_->bendPointCount():0)
             << ",\"angle\":" << toolConfig_.bendAngleDegrees()
             << ",\"handles\":[";
         if(bendPanel_.active && planeGuides_[0] && planeGuides_[1])for(size_t i=0;i<2;++i) {
@@ -8203,6 +8245,7 @@ class Viewer {
         out << ",\"move_targets\":" << (glScene_ && movePanel_.active?glScene_->movePickPoints(manipulator_.transform()):"[]")
             << ",\"move_handle\":" << (moveCenter?point(*moveCenter):"null")
             << ",\"move_beam_end\":" << (movePanel_.beamEnd?point(*movePanel_.beamEnd):"null")
+            << ",\"move_point_preview_count\":" << (glScene_?glScene_->movePointCount():0)
             << ",\"move_grabbing\":" << (movePanel_.hand?"true":"false")
             << ",\"move_nearby\":" << ((movePanel_.nearby[0]||movePanel_.nearby[1])?"true":"false")
             << ",\"tool_sequence\":" << toolSequence_
@@ -8827,7 +8870,7 @@ class Viewer {
             toolShell_.previewRequested() &&
             (!toolShell_.executionPending() || sceneRefresh_.revision()==moveStartRevision_);
         // Grips retain scene manipulation in every tool; edit grabs use triggers.
-        glScene_->setToolPreview(
+        glScene_->setMovePointPreview(
             rigidToolPreview ? selectedOwnerTokens_ : std::vector<std::string>{},
             pendingToolTransform_.transform());
         if (inputSuppressed) {
@@ -8929,7 +8972,11 @@ class Viewer {
         processMoveInput(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
         frameAudit_.mark("move_preview");
         processBendPlanes(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
-        processBendHandles(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none || menuGripActive);
+        // Remote panel border hover reserves its pointer, but does not move the
+        // model. Let the free hand cross that border to reach a Bend wheel
+        // without cancelling the other hand's endpoint grab. Actual world
+        // manipulation (and the model-matrix guard) still ends the grab.
+        processBendHandles(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none);
         frameAudit_.mark("bend");
         updateSelectionVolumeCandidates(menuControlTargeted);
         frameAudit_.mark("selection_candidates");
@@ -9436,7 +9483,7 @@ class Viewer {
         }
         const bool preview=toolShell_.previewRequested() &&
             (!toolShell_.executionPending() || sceneRefresh_.revision()==moveStartRevision_);
-        glScene_->setToolPreview(preview?selectedOwnerTokens_:std::vector<std::string>{},pendingToolTransform_.transform());
+        glScene_->setMovePointPreview(preview?selectedOwnerTokens_:std::vector<std::string>{},pendingToolTransform_.transform());
     }
 
     void applyPendingRecenter(uint32_t viewCount) {
@@ -9582,8 +9629,19 @@ class Viewer {
         }
     }
 
+    bool bendPointPreviewActive() const {
+        return bendPanel_.active && !bendPanel_.selecting &&
+            !bendPanel_.defaultPlanes && !bendPanel_.pickSlot && !activePlanePickSequence_ &&
+            bendPanel_.pendingSelection.empty() && planeGuides_[0] && planeGuides_[1] &&
+            toolConfig_.planeABp() && toolConfig_.planeBBp() &&
+            *toolConfig_.planeABp()<*toolConfig_.planeBBp() &&
+            !viewTools_.overrideScene() && !toolShell_.executionPending();
+    }
     void renderVolumeScene(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,bool ids=false) {
         if(placementIntegrity_.blocked())return;
+        auto arc=bendPanel_.arc;
+        if(bendPanel_.twist)arc.angle=glm::radians(float(toolConfig_.twistTotalDegrees()));
+        glScene_->setBendPointArc(bendPointPreviewActive()?std::optional{arc}:std::nullopt,bendPanel_.twist);
         if(viewTools_.overrideScene()) {viewTools_.renderScene(vp,model,witnessObserverOrientation_);if(!guides.empty())glScene_->renderGuides(vp,guides);}
         else glScene_->renderVolumes(vp,model,guides,ids,volumePanel_.entries,representationLoading_.pending && representationLoading_.lightweight);
     }

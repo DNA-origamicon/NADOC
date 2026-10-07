@@ -145,3 +145,52 @@ neighbors, stale-target refusal, save/reopen, and Undo. This check uses simulate
 headset transport; it requires no headset. Native panel/viewer tests cover the
 controller control path separately. Physical headset interaction remains a
 separate validation gate.
+
+## Live point-cloud shape preview
+
+A nonzero Bend now draws cyan points for the selected geometry alongside the
+original model. The preview follows endpoint grabs and angle/direction/radius
+wheels, including wheel inertia, and remains visible after release. Zero angle,
+Cancel, selection editing, plane picking, tool exit and pending Confirm suppress
+it. Alternate inspection layouts do not display the preview.
+
+This is an **approximate spatial shape guide** around the native circular arc.
+It rotates cross sections and continues material outside the two planes along
+the endpoint tangents. It does not solve the backend's per-bp deformation,
+loop/skip corrections, existing deformations or independent disconnected arms.
+The original model and authoritative backend Confirm/Undo remain unchanged.
+The Bend panel labels the cyan points as approximate.
+
+The GPU reads existing instance buffers. Selection/style changes build bounded
+index lists (at most 8,192 selected instances per primitive channel; cylinder
+endpoints reuse their indices). The maximum is 49,152 rendered points per eye
+and 128 KiB of index storage. Dragging updates shader uniforms, without CPU
+point deformation, geometry-buffer uploads, backend requests or style rebuilds.
+The cloud is depth-tested, follows view-volume clipping and writes no editable
+object ID. It casts no shadow. The original detailed model still incurs its
+usual rendering cost.
+
+Native validation includes GPU transform-feedback comparisons for both fixed
+ends, rotated bases, long bends and tangent tails, bounded sampling, live grab
+activation, and visible/absent point-pixel checks. ScryWrite observation exposes
+`bend.point_preview_count`; the controller probe requires a nonempty cloud at
+both endpoint preview captures.
+
+A reproducible isolated stereo renderer benchmark is available after building
+`nadoc-vr-bend-viewer-test`:
+
+```sh
+native/vr_viewer/build/nadoc-vr-bend-viewer-test \
+  --benchmark /path/to/scene.nadocvr full /tmp/bend-full
+```
+
+Replace `full` with `ballstick`, `stick` or `surface`. Modes are selected original
+geometry (0), original plus animated cloud (1), and cloud only (2). Each uses
+an explicit 1852 × 2056 framebuffer for each eye, ten warmup iterations and 120
+measured iterations. GPU timestamps include both eyes and, in modes 0/1, the
+original shadow pass. CPU timing measures submission, not GPU completion.
+The cloud-only mode is diagnostic; production retains the original geometry.
+These timings do not establish headset cadence, first-use latency or comfort.
+
+Full-size measurements and live-runtime validation limits are recorded in the
+[24HB point-preview audit](audits/vr_bend_point_preview_20261006.md).

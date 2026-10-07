@@ -20,6 +20,7 @@
         const auto& prepared = scene_.prepared[static_cast<size_t>(representation_)];
         if (selectionTintDirty_) {
             selectionTintDirty_ = false;
+            bendPoints_.dirty = true;
             const std::array<size_t,4> counts{size_t(sphereCount_),size_t(cylinderCount_),
                 size_t(halfCylinderCount_),size_t(boxCount_)};
             for(size_t c=0;c<4;++c) selectionMasks_[c].assign(counts[c],0);

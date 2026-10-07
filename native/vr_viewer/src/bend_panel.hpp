@@ -112,7 +112,7 @@ class BendPanel {
         auto row=[&](std::string id,std::string label,std::string detail="") {
             tab.rows.push_back({key+":"+id,label,detail,key+":"+id,{}});
         };
-        row("back",(twist?"Twist":"Bend")+std::string(" - Return to tools"),clusterLabel+" | "+status);row("confirm","CONFIRM");row("cancel","CANCEL");
+        row("back",(twist?"Twist":"Bend")+std::string(" - Return to tools"),clusterLabel+" | "+status);row("confirm","CONFIRM","CYAN POINTS: APPROXIMATE PREVIEW");row("cancel","CANCEL");
         auto bp=[](auto v){return v?std::to_string(*v):std::string("--");};
         row("plane1","Plane 1: "+bp(config.planeABp()),twist?"TRIGGER HOLD NEAREST ELEMENT / BP":"BP INDEX / GRAB PLANE TO MOVE");
         row("plane2","Plane 2: "+bp(config.planeBBp()),twist?"TRIGGER HOLD NEAREST ELEMENT / BP":"BP INDEX / GRAB PLANE TO MOVE");
@@ -137,7 +137,7 @@ class BendPanel {
         row("manual",selecting?"Clear selection":manual?"Manual bend: ON":shared?"Shape handle":"Manual bend",
             selecting?"FILTER: CLUSTER / STRAND / DOMAIN":shared?"PLANE 1 FIXED / SHARED CURVATURE":"KEEP BP INDICES / MOVE PLANE");
         row("angle-wheel", "");row("direction-wheel", "");row("radius-wheel", "");
-        row("angle","Angle: "+std::to_string(int(std::round(config.bendAngleDegrees())))+" deg","DRAG THUMBWHEEL / 1 DEG");
+        row("angle","Angle: "+std::to_string(int(std::round(config.bendAngleDegrees())))+" deg","CYAN POINTS: APPROXIMATE PREVIEW");
         row("direction","Direction: "+std::to_string(int(std::round(config.bendDirectionDegrees())))+" deg","DRAG THUMBWHEEL / 1 DEG");
         row("direction-less","-5 deg");row("direction-more","+5 deg");
         std::ostringstream radius;

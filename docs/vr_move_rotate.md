@@ -5,9 +5,8 @@ Open **Tools → Move / Rotate** on the right controller. Choose **Clusters**,
 object to select it. The closest object wins when several overlap the selection
 sphere. Overhang beads select their entire overhang in the overhang/domain mode.
 
-The selected center has an axis handle. Bring either controller within 9 cm:
-the handle highlights yellow. Hold the trigger to translate and rotate the target
-about its center. Release saves one undoable edit. A stationary click does not
+Use the left trigger to select, then point the right controller at the selected
+geometry. Hold the right trigger to translate and rotate the target about its center. Release saves one undoable edit. A stationary click does not
 save an edit. Losing tracking or starting scene movement cancels an unfinished
 grab. Grips continue moving/scaling the part, and menu borders retain their grip
 controls.
@@ -24,7 +23,7 @@ the ordinary `cluster_op` entry; bases and overhangs use one
 moved. These are the same entries used by desktop Move / Rotate, with the same
 saved history and Undo behavior.
 
-Preview and saved edits reuse the native geometry and exact endpoint ownership.
+The cyan preview samples native geometry; saved edits use exact endpoint ownership.
 Saving does not regenerate every representation. Related handles follow the
 edit, so moving a cluster and then adjusting one of its bases uses the new pose.
 Another edit becomes available when the backend acknowledges the saved edit.
@@ -53,3 +52,18 @@ movement and stationary reference geometry in both eyes. Framing adjustments are
 recorded separately from measured reaches. Evidence is retained under
 `.development-artifacts/vr-move/`; it establishes submitted-eye rendering, not
 through-lens comfort or hand tracking accuracy.
+
+## Live point preview
+
+While the right trigger holds a Move / Rotate grab, a cyan point cloud shows the
+translated and rotated selection alongside the original geometry. Release applies
+the edit; Cancel or tracking loss removes the preview. The cloud remains visible
+while the commit is pending and is replaced by detailed committed geometry.
+
+Move shares Bend/Twist's bounded resident-buffer samples: at most 8,192 selected
+primitives per channel (49,152 points per eye). Dragging updates only the rigid
+matrix and does not transform/upload detailed geometry each frame. The existing
+weighted geometry path runs once when successful commit feedback arrives, if a
+refreshed authoritative scene has not already arrived. Undo retains that path's
+exact baseline. Boundary cylinders are approximate point guides; committed
+geometry still uses the backend ownership weights.

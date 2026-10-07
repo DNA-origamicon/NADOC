@@ -29,7 +29,7 @@ class MovePanel {
         };
         row("back","Move / Rotate - Return",status);
         row("apply","APPLY",kind=="none"?"LEFT TRIGGER SELECTS":"POINT RIGHT / TRIGGER GRABS");
-        row("cancel","CANCEL","LEFT SELECTS / RIGHT MOVES / GRIPS MOVE SCENE");
+        row("cancel","CANCEL","CYAN POINTS: PREVIEW / RELEASE TO APPLY");
         row("undo","UNDO","HOLD LEFT PAD TO CHOOSE SELECTION");
         row("recenter","Frame model");
         menus[1].customTab=std::move(tab);

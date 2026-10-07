@@ -37,6 +37,24 @@ def wait(predicate):
 def reach(position,orientation=None,acquired=None,hand=1):
  trials.append(reach_target(live,position,preset,3000+len(trials),target_position=position,target_orientation=orientation or [0,0,0,1],acquired=acquired,hand=hand))
  (out/'reaches.json').write_text(json.dumps(trials,indent=2))
+def radial_choice(hand, target, seed):
+    from tools.vr_workflows.selection_wheel_check import thumb_samples
+    live.send('trackpad_axis', hand=hand, x=0, y=0)
+    live.send('button', hand=hand, button='trackpad', pressed=True); live.frame()
+    begun = time.monotonic()
+    samples = []
+    try:
+        for sample in thumb_samples(preset, (0, 0), target, seed):
+            time.sleep(max(0, begun+sample['t']-time.monotonic()))
+            lag = time.monotonic()-begun-sample['t']
+            if lag > .15:
+                raise TimeoutError(f'Thumb profile playback late by {lag:.3f}s')
+            live.send('trackpad_axis', hand=hand, x=sample['axis'][0], y=sample['axis'][1]); live.frame()
+            samples.append({**sample, 'lag_s':lag})
+    finally:
+        live.send('button', hand=hand, button='trackpad', pressed=False); live.frame()
+        (out/f'radial-{hand}-{seed}.json').write_text(json.dumps(samples, indent=2))
+
 def park():
  p=np.array(live.state['head_position'])+[0,-1,0]
  for h in (0,1):live.send('pose',hand=h,position=p.tolist(),orientation=[0,0,0,1])
@@ -72,7 +90,8 @@ try:
   assert live.state['presentation']['model_to_tracking_rows']!=presentation
   assert live.state['tool_sequence']==sequence and not live.state['move_grabbing']
   controls.click('move:recenter');live.frame()
-  controls.click('move:'+('domain' if kind=='overhang' else kind))
+  radial_choice(0,{'cluster':(.69282,.4),'overhang':(0,-.8),'base':(-.69282,.4)}[kind],3099)
+  wait(lambda s:s['selection_level']==('domain' if kind=='overhang' else kind))
   live.capture_to(out/'selection-options',discard_source=True)
   before=json.loads(Path(before_path).read_text())
   cluster=(max(before['design']['cluster_transforms'],key=lambda c:len(c['helix_ids'])) if os.environ.get('NADOC_VR_AUDIT_DESIGN') else next((c for c in before['design']['cluster_transforms'] if c['name']=='Movable helix'),None))
@@ -107,7 +126,9 @@ try:
   candidates=sorted(matches,key=lambda p:np.linalg.norm(np.array(p['world'])-live.state['head_position']))
   acquisitions=[]
   for target in candidates[:24]:
-   reach((np.array(target['world'])+[0,0,.12]).tolist(),hand=0)
+   point=np.array(target['world']);toward=np.array(live.state['head_position'])-point
+   body=(point+.12*toward/np.linalg.norm(toward)).tolist()
+   reach(body,aim_orientation(body,point.tolist()),hand=0)
    live.send('trigger_value',hand=0,value=.5);live.frame()
    acquisitions.append({'target':target,'hover':live.state.get('scene_hover')})
    (out/'acquisition.json').write_text(json.dumps(acquisitions,indent=2))
@@ -165,6 +186,7 @@ try:
    settled_drag(live,out,preset,start,q,shift,rotation)
   end=np.array(live.state['hands'][1]['position'])
   expected_center=np.array(center)+end-start
+  assert live.state['move_point_preview_count'] > 0
   live.capture_to(out/'preview',discard_source=True)
   commit_revision=live.state['scene_revision']
   commit_started=time.monotonic()

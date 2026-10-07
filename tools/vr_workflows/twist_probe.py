@@ -54,6 +54,24 @@ def run(socket, output, preset, mode):
         (out/'reaches.json').write_text(json.dumps(trials, indent=2))
         return trial
 
+    def radial_choice(hand, target, seed):
+        from tools.vr_workflows.selection_wheel_check import thumb_samples
+        live.send('trackpad_axis', hand=hand, x=0, y=0)
+        live.send('button', hand=hand, button='trackpad', pressed=True); live.frame()
+        begun = time.monotonic()
+        samples = []
+        try:
+            for sample in thumb_samples(preset, (0, 0), target, seed):
+                time.sleep(max(0, begun+sample['t']-time.monotonic()))
+                lag = time.monotonic()-begun-sample['t']
+                if lag > .15:
+                    raise TimeoutError(f'Thumb profile playback late by {lag:.3f}s')
+                live.send('trackpad_axis', hand=hand, x=sample['axis'][0], y=sample['axis'][1]); live.frame()
+                samples.append({**sample, 'lag_s':lag})
+        finally:
+            live.send('button', hand=hand, button='trackpad', pressed=False); live.frame()
+            (out/f'radial-{hand}-{seed}.json').write_text(json.dumps(samples, indent=2))
+
     def keep_alive():
         # Renew the ScryWrite input lease without moving or re-clicking the hand.
         pose = live.state['hands'][1]
@@ -77,6 +95,8 @@ def run(socket, output, preset, mode):
         live.frame()
 
     def capture(name):
+        if name == 'rotation-preview':
+            assert live.state['twist']['point_preview_count'] > 0
         keep_alive()
         evidence,_ = live.capture_to(out/name, discard_source=True)
         if name not in ('before-framing','twist-menu'):
@@ -121,7 +141,9 @@ def run(socket, output, preset, mode):
         park(); settle()
 
     try:
-        reveal(live); menu()
+        reveal(live)
+        live.send('pose',hand=1,position=(np.array(live.state['head_position'])+[.2,-.25,-.35]).tolist(),orientation=[0,0,0,1])
+        live.frame(); menu();wait(lambda s: s['sidebars'][1]['open'])
         if mode == 'undo':
             click('twist:undo'); wait(lambda s: s['status'] == 'UNDONE')
             park(); capture('undone')
@@ -136,6 +158,38 @@ def run(socket, output, preset, mode):
             settle(); menu()
             click('tab:tools'); click('tool-twist')
             click('twist:cancel')
+            # Entry starts in selection mode. Desktop selection may not survive
+            # native startup/reframing; acquire through the ordinary controller.
+            if live.state['selection_kind'] != 'cluster':
+                park()
+                # The persistent Twist panel owns rays through its surface even
+                # during selection. Frame the model beside it before acquisition.
+                from tools.vr_workflows.bend_layout import place
+                selection_view, _ = live.capture_to(out/'selection-menu', discard_source=True)
+                place(live, selection_view, out/'selection-framing')
+                radial_choice(0, (.69282, .4), 7099)
+                wait(lambda s: s['selection_level'] == 'cluster')
+                candidates = sorted(live.state['twist']['targets'],
+                    key=lambda p: np.linalg.norm(np.array(p['world'])-live.state['head_position']))
+                acquisitions = []
+                for target in candidates[:24]:
+                    point = np.array(target['world'])
+                    toward_eye = np.array(live.state['head_position'])-point
+                    body = point+.12*toward_eye/np.linalg.norm(toward_eye)
+                    reach(body, hand=0, target_orientation=aim_orientation(body.tolist(), point.tolist()))
+                    live.send('trigger_value', hand=0, value=.5); live.frame()
+                    acquisitions.append({'target':target, 'hover':live.state.get('scene_hover')})
+                    (out/'selection-acquisition.json').write_text(json.dumps(acquisitions, indent=2))
+                    if (live.state.get('scene_hover') or '').startswith('nuc:'):
+                        live.button('trigger', hand=0)
+                        live.send('trigger_value', hand=0, value=0); live.frame()
+                        wait(lambda s: s['selection_kind'] == 'cluster')
+                        break
+                    live.send('trigger_value', hand=0, value=0); live.frame()
+                else:
+                    raise RuntimeError('No nucleotide acquired for Twist cluster selection')
+                park(); menu()
+            radial_choice(1, (.8, 0), 7100)  # Workflow Next / Use selection.
             wait(lambda s: s['twist']['ready'])
             assert live.state['twist']['plane1'] < live.state['twist']['plane2']
             assert live.state['sidebars'][1]['tab'] == 'twist'
@@ -145,11 +199,6 @@ def run(socket, output, preset, mode):
             evidence = json.loads((out/'twist-menu/evidence.json').read_text())
             place(live, evidence, out)
             park(); settle()
-            # Two-column controls retain ordinary touchpad directional navigation.
-            from tools.vr_workflows.menu_focus_check import pad, seek
-            seek(live,1,'twist:less');pad(live,1,x=1)
-            assert live.state['sidebars'][1]['focus_id'] == 'twist:more'
-            pad(live,1)
             pick(1, 12); pick(2, 80)
             wait(lambda s: s['twist']['ready'])
             if os.environ.get('NADOC_VR_AUDIT_DESIGN'):

@@ -203,6 +203,18 @@ int parity() {
     compare("invalid-owner");
     for(auto* scene:{&fast,&reference})scene->setSelectionHighlights({}, {},{"moving"},{});
 
+    for(int repeat=0;repeat<2;++repeat) {
+        const auto delta=glm::translate(glm::mat4(1),glm::vec3(.04F,.02F,0));
+        const auto styles=fast.styleApplicationsForTest;
+        fast.setMovePointPreview({"moving"},delta);
+        assert(fast.styleApplicationsForTest==styles);
+        reference.setToolPreview({"moving"},delta);
+        for(auto* scene:{&fast,&reference})assert(scene->acceptToolCommit());
+        assert(fast.movePointCount()==0);
+        compare("point-preview-commit");
+    }
+    for(auto* scene:{&fast,&reference})assert(scene->acceptToolUndo());
+    compare("point-preview-undo");
     for(float angle:{.15F,-.6F,3.14159265F,0.F}) {
         const auto transform=glm::translate(glm::mat4(1),glm::vec3(.03F,-.02F,-1.3F))*glm::rotate(glm::mat4(1),angle,glm::vec3(0,1,0))*glm::translate(glm::mat4(1),glm::vec3(0,0,1.3F));
         for(auto* scene:{&fast,&reference})scene->setToolPreview({"moving"},transform);
