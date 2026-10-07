@@ -7,19 +7,22 @@ export function showGenerateDesign({ api, store }) {
   const body = el('div')
   const state = store.getState()
   const particles = state.currentDesign?.nanoparticles?.filter(p => p.kind === 'gold_nanosphere') ?? []
-  const enabled = !state.assemblyActive && !!state.currentDesign && particles.length === 2
+  const platform = particles.length > 2
+  const enabled = !state.assemblyActive && !!state.currentDesign && [2, 3, 4].includes(particles.length)
+  const rotationLabel = platform ? 'Platform rotation within fitted plane (degrees)' : 'Rotation around particle axis (degrees)'
   body.append(el('p', { text: enabled
-    ? 'Build a straight solid rod beside the two gold nanoparticles, preserving their centers and the current lattice. Construction is added to the current loadout with individual editable history steps. Existing geometry is preserved.'
-    : 'Open a part containing exactly two gold nanoparticles to use this generator.' }))
+    ? `Build a ${platform ? 'solid platform for the ' + particles.length : 'straight solid rod for the two'} gold nanoparticles, preserving their centers and the current lattice. Construction is added to the current loadout with individual editable history steps. Existing geometry is preserved.`
+    : 'Open a part containing two, three, or four gold nanoparticles to use this generator.' }))
+  if (platform) body.append(el('p', { text: 'Fit one plane to the particle centers and place all connections on the same side. Noncoplanar centers are accepted only if every duplex can reach and the DNA clears every gold core.' }))
   body.append(el('p', { text: 'Temporary geometric prototype. Stiffness, RMSF, and sequence thermodynamics are not predicted.' }))
-  const roll = el('input', { attrs: { type: 'number', min: '-180', max: '180', step: '1', value: '0', 'aria-label': 'Rotation around particle axis (degrees)' } })
+  const roll = el('input', { attrs: { type: 'number', min: '-180', max: '180', step: '1', value: '0', 'aria-label': rotationLabel } })
   const length = el('input', { attrs: { type: 'number', min: '12', max: '60', step: '1', value: '18', 'aria-label': 'New duplex length (bp)' } })
-  for (const [text, input] of [['Rotation around particle axis (degrees)', roll], ['New duplex length (bp)', length]]) {
+  for (const [text, input] of [[rotationLabel, roll], ['New duplex length (bp)', length]]) {
     const label = el('label', { attrs: { style: 'display:flex;justify-content:space-between;gap:16px;margin:12px 0' }, children: [text, input] })
     input.disabled = !enabled
     body.append(label)
   }
-  body.append(el('p', { text: 'Compatible handles retain their sequence and length. Otherwise, create one direct-thiol handle per particle. Extend the rod beyond both attachment sites to use most of the scaffold.' }))
+  body.append(el('p', { text: `Compatible handles retain their sequence and length. Otherwise, create one direct-thiol handle per particle. Extend the ${platform ? 'platform' : 'rod'} beyond the attachment sites to use most of the scaffold.` }))
   const status = el('div', { attrs: { role: 'status', 'aria-live': 'polite', style: 'white-space:pre-line;margin-top:14px' } })
   body.append(status)
   let plan = null
@@ -46,7 +49,8 @@ export function showGenerateDesign({ api, store }) {
         ? `${c.scaffold_size}: no supported cross-section fits.`
         : `${c.scaffold_size}: ${c.section}, ${c.helix_count} helices, ${c.length_nm.toFixed(1)} nm long; ${c.scaffold_used_nt} nt routed.`)
       status.textContent = [
-        `Particle separation: ${plan.center_distance_nm.toFixed(2)} nm · ${plan.lattice_type}`,
+        `${platform ? 'Maximum particle separation' : 'Particle separation'}: ${plan.center_distance_nm.toFixed(2)} nm · ${plan.lattice_type}`,
+        ...(platform ? [`Maximum distance from fitted plane: ${(plan.plane_deviation_nm ?? 0).toFixed(2)} nm`] : []),
         ...lines, plan.reason,
         `${plan.selected.unused_scaffold_nt} scaffold bases remain unrouted and are not represented as a tail.`,
         plan.attachment_status,
@@ -64,7 +68,7 @@ export function showGenerateDesign({ api, store }) {
       plan = null
       if (result) {
         const items = result.generation.connections
-        status.textContent = `Added ${items.length} connections to the current loadout (${items.filter(c => c.reused).length} reused handles). Both particle centers are unchanged. Edit, scrub, or revert the individual construction steps in the feature log.`
+        status.textContent = `Added ${items.length} connections to the current loadout (${items.filter(c => c.reused).length} reused handles). ${platform ? 'All' : 'Both'} particle centers are unchanged. Edit, scrub, or revert the individual construction steps in the feature log.`
       } else status.textContent = error()
     } catch (e) { status.textContent = e.message; plan = null }
     finally { setBusy(false) }

@@ -8,7 +8,8 @@ from pydantic import Field
 from backend.api import state
 from backend.api.crud import _design_response_with_geometry
 from backend.api.generated_history import build_recorded
-from backend.core.two_np_generator import GeneratorSettings, plan_rods
+from backend.core.two_np_generator import GeneratorSettings
+from backend.core.platform_generator import plan_generated
 from backend.core.validator import validate_design
 
 router = APIRouter()
@@ -22,7 +23,8 @@ def _source():
     source, revision = state.copy_for_persist()
     if source is None:
         raise HTTPException(
-            404, detail="Open a design containing two gold nanoparticles first."
+            404,
+            detail="Open a design containing two, three, or four gold nanoparticles first.",
         )
     return source, revision
 
@@ -31,7 +33,7 @@ def _source():
 def plan_design(settings: GeneratorSettings):
     source, revision = _source()
     try:
-        _, report = plan_rods(source, settings)
+        _, report = plan_generated(source, settings)
     except ValueError as exc:
         raise HTTPException(422, detail=str(exc)) from exc
     return {
@@ -59,7 +61,7 @@ def generate_design(body: GenerateRequest):
     state._assert_active_loadout_editable(source)
     settings = GeneratorSettings(**body.model_dump(exclude={"expected_revision"}))
     try:
-        candidate, report = plan_rods(source, settings)
+        candidate, report = plan_generated(source, settings)
         generated, placement = build_recorded(source, candidate, settings)
     except ValueError as exc:
         raise HTTPException(422, detail=str(exc)) from exc

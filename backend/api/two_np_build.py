@@ -36,7 +36,7 @@ from backend.core.protein import resolve_overhang_anchor, _rotation_between
 from backend.core.sequences import assign_staple_sequences
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.two_np_generator import (
-    gold_pair,
+    gold_particles,
     pair_frame,
     GeneratorSettings,
     RodCandidate,
@@ -127,7 +127,12 @@ def _handles(source, rod, particles, settings, history=None):
             continue
         # Deterministic, mixed-base prototype sequence; not a thermodynamic
         # sequence optimizer. Different particles get different handles.
-        motif = "ACGTGACTCAGTACGATC" if not selected else "GTCAGATCGTACAGTCGA"
+        motif = (
+            "ACGTGACTCAGTACGATC",
+            "GTCAGATCGTACAGTCGA",
+            "TCGATGACCTAGTCAGAC",
+            "CATGTCAGGATCTACGTC",
+        )[index]
         length = _params(
             history,
             f"overhang:{index}",
@@ -190,7 +195,9 @@ def _handles(source, rod, particles, settings, history=None):
     return rod, selected
 
 
-def _add_root(design, rod_ids, target_z, length, five_prime, history=None, index=0):
+def _add_root(
+    design, rod_ids, target_z, length, five_prime, history=None, index=0, target_x=None
+):
     """Choose a legal outward crossover phase near the target axial position."""
     pinned = _params(history, f"nick:{index}", {}, ("bp_index",)).get("bp_index")
     hs = [h for h in design.helices if h.id in rod_ids]
@@ -228,6 +235,8 @@ def _add_root(design, rod_ids, target_z, length, five_prime, history=None, index
             cost = abs(bp - desired) * BDNA_RISE_PER_BP + 0.6 * (
                 max(x.axis_start.y for x in hs) - center[1]
             )
+            if target_x is not None:
+                cost += abs(center[0] - target_x)
             candidates.append((cost, h.id, bp, neighbor))
     for _, hid, bp, neighbor in sorted(candidates):
         covered = [
@@ -367,6 +376,9 @@ def _fit_swing(
     unit = delta / distance
     a = (length**2 - radius**2 + distance**2) / (2 * distance)
     perpendicular = frame[:, 2] - unit * np.dot(frame[:, 2], unit)
+    if np.linalg.norm(perpendicular) < 1e-8:
+        reference = np.eye(3)[int(np.argmin(np.abs(unit)))]
+        perpendicular = reference - unit * np.dot(reference, unit)
     perpendicular /= np.linalg.norm(perpendicular)
     other = np.cross(unit, perpendicular)
     circle_radius = np.sqrt(max(0, length**2 - a**2))
@@ -425,7 +437,7 @@ def _fit_swing(
             )
     if best_clearance < 0:
         raise ValueError(
-            "No sampled fixed-center duplex orientation clears both gold cores. Try a longer duplex or a different particle arrangement."
+            "No sampled fixed-center duplex orientation clears all gold cores. Try a longer duplex or a different particle arrangement."
         )
     return best
 
@@ -437,12 +449,27 @@ def materialize(
     from backend.core.seamed_router import auto_scaffold_seamed
     from backend.core.two_np_generator import scaffold_nt
 
-    particles, centers, distance = gold_pair(source)
+    from backend.core.platform_generator import platform_frame
+
+    particles, centers, distance = gold_particles(source)
+    platform = len(particles) > 2
+    shape = "platform" if platform else "rod"
     pose_params = _params(
         history, "rod-pose", {"roll_deg": settings.roll_deg}, ("roll_deg",)
     )
     roll = GeneratorSettings(roll_deg=pose_params["roll_deg"]).roll_deg
-    frame = pair_frame(centers, roll)
+    frame = platform_frame(centers, roll) if platform else pair_frame(centers, roll)
+    origin = centers.mean(0)
+    if platform:
+        projected = (centers - origin) @ frame
+        origin = origin + frame @ np.array(
+            [
+                (projected[:, 0].min() + projected[:, 0].max()) / 2,
+                0,
+                (projected[:, 2].min() + projected[:, 2].max()) / 2,
+            ]
+        )
+    targets = (centers - origin) @ frame
     bp = _params(
         history,
         "bundle",
@@ -450,12 +477,12 @@ def materialize(
         ("length_bp",),
     )
     if not isinstance(bp["length_bp"], int) or not 21 <= bp["length_bp"] <= 2016:
-        raise ValueError("Rod length must be an integer from 21 to 2016 bp.")
+        raise ValueError("Bundle length must be an integer from 21 to 2016 bp.")
     before = Design(lattice_type=source.lattice_type, nanoparticles=particles)
     rod = make_bundle_design(
         candidate.summary["cells"],
         bp["length_bp"],
-        name="Generated two-NP rod",
+        name=f"Generated {len(particles)}-NP {shape}",
         lattice_type=source.lattice_type,
     )
     rod = rod.copy_with(nanoparticles=particles)
@@ -464,7 +491,7 @@ def materialize(
         before,
         rod,
         "bundle-create",
-        "Create rod bundle",
+        f"Create {shape} bundle",
         {
             **bp,
             "cells": candidate.summary["cells"],
@@ -482,7 +509,7 @@ def materialize(
         before,
         rod,
         "auto-scaffold-seamed",
-        "Route rod scaffold",
+        f"Route {shape} scaffold",
         {},
         "scaffold",
     )
@@ -495,7 +522,7 @@ def materialize(
     budget = {"M13mp18": 7249, "p8064": 8064}.get(sequence_params["scaffold_name"])
     if budget is None or scaffold_nt(rod) > budget:
         raise ValueError(
-            "The routed rod exceeds the selected 7249/8064 scaffold budget."
+            "The routed bundle exceeds the selected 7249/8064 scaffold budget."
         )
     before = rod
     with scratch_session(source.lattice_type):
@@ -507,7 +534,7 @@ def materialize(
         before,
         rod,
         "full-autostaple",
-        "Route and sequence rod staples",
+        f"Route and sequence {shape} staples",
         sequence_params,
         "autostaple",
         ("scaffold_name",),
@@ -521,7 +548,7 @@ def materialize(
     rod, handles = _handles(source, rod, particles, settings, history)
     connections = []
     for index, (owner, record, sequence, reused) in enumerate(handles):
-        target_z = center_local[2] + (-0.5 if index == 0 else 0.5) * distance
+        target_z = center_local[2] + targets[index, 2]
         length = _params(
             history, f"overhang:{index}", {"length_bp": len(sequence)}, ("length_bp",)
         )["length_bp"]
@@ -530,7 +557,14 @@ def materialize(
                 "Overhang length must match the retained handle sequence. Edit its conjugation sequence first."
             )
         rod, oid = _add_root(
-            rod, rod_ids, target_z, length, owner.attach_end == "3p", history, index
+            rod,
+            rod_ids,
+            target_z,
+            length,
+            owner.attach_end == "3p",
+            history,
+            index,
+            target_x=center_local[0] + targets[index, 0] if platform else None,
         )
         rc = sequence.upper().translate(str.maketrans("ACGT", "TGCA"))[::-1]
         before = rod
@@ -577,10 +611,10 @@ def materialize(
         r.helix_id for c in rod.nanoparticle_conjugations for r in c.surface_strands
     }
     cluster = ClusterRigidTransform(
-        name="Generated rod",
+        name=f"Generated {shape}",
         helix_ids=[h.id for h in rod.helices if h.id not in np_hids],
         rotation=Rotation.from_matrix(frame).as_quat().tolist(),
-        translation=(centers.mean(0) - frame @ center_local).tolist(),
+        translation=(origin - frame @ center_local).tolist(),
     )
     before = rod
     rod = rod.copy_with(cluster_transforms=[cluster])
@@ -589,7 +623,7 @@ def materialize(
         before,
         rod,
         "cluster-pose",
-        "Align rod with nanoparticle centers",
+        f"Align {shape} with nanoparticle centers",
         pose_params,
         "rod-pose",
         ("roll_deg",),
@@ -616,12 +650,13 @@ def materialize(
             item,
             f"connect:{index}",
         )
-    # A common transverse offset must be reachable by BOTH actual duplexes.
+    # One common offset must be reachable by every actual duplex, including
+    # unequal core sizes and particle centers displaced from the fitted plane.
     geometry = fitting_geometry(rod)
     upper = float("inf")
     lower = (
         float(np.max(starts[:, 1]) - center_local[1])
-        + max(p.diameter_nm / 2 for p in particles)
+        + max(p.diameter_nm / 2 - targets[i, 1] for i, p in enumerate(particles))
         + 1.2
     )
     for i, v in enumerate(rod.nanoparticle_connection_versions):
@@ -643,7 +678,7 @@ def materialize(
         raise ValueError("Rod offset must be finite.")
     if offset < lower:
         raise ValueError(
-            "The two fixed centers cannot both be reached on the same side with these handle lengths and core radii. Increase duplex length or adjust the particle arrangement."
+            "The fixed centers cannot all be reached on the same side with these handle lengths and core radii. Increase duplex length or adjust the particle arrangement."
         )
     cluster = cluster.model_copy(
         update={
@@ -659,7 +694,7 @@ def materialize(
         before,
         rod,
         "cluster-pose",
-        "Offset rod beside both nanoparticles",
+        f"Offset {shape} beside the nanoparticles",
         offset_params,
         "rod-offset",
         ("offset_nm",),
@@ -751,7 +786,7 @@ def materialize(
         ]
     )
     # Pose patches invalidate cached staple sequences; rederive the final
-    # sequenced topology, including both complementary attachment domains.
+    # sequenced topology, including all complementary attachment domains.
     rod = assign_staple_sequences(rod)
     _record(
         history,
@@ -766,4 +801,5 @@ def materialize(
         "connections": connections,
         "attachment_residuals_nm": residuals,
         "rod_offset_nm": offset,
+        "platform_offset_nm": offset if platform else None,
     }

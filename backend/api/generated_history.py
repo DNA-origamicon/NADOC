@@ -265,7 +265,8 @@ def build_recorded(
 
 
 def edit_generated_feature(index, params):
-    from backend.core.two_np_generator import GeneratorSettings, plan_rods
+    from backend.core.two_np_generator import GeneratorSettings
+    from backend.core.platform_generator import plan_generated
     from backend.core.validator import validate_design
     from backend.api.crud import _design_response_with_geometry
 
@@ -308,7 +309,7 @@ def edit_generated_feature(index, params):
         for e in current.feature_log[start : end + 1]
     }
     try:
-        candidate, _ = plan_rods(baseline, settings)
+        candidate, _ = plan_generated(baseline, settings)
         rebuilt, _ = build_recorded(
             baseline,
             candidate,

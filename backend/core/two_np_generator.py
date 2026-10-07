@@ -36,11 +36,11 @@ class RodCandidate:
     summary: dict
 
 
-def gold_pair(design: Design):
+def gold_particles(design: Design, counts=(2, 3, 4)):
     particles = [p for p in design.nanoparticles if p.kind == "gold_nanosphere"]
-    if len(particles) != 2:
+    if len(particles) not in counts:
         raise ValueError(
-            f"Generate design requires exactly two gold nanoparticles; found {len(particles)}."
+            f"Generate design requires {'exactly two' if counts == (2,) else 'two, three, or four'} gold nanoparticles; found {len(particles)}."
         )
     if any(p.coating or p.biotin_dna for p in particles):
         raise ValueError(
@@ -49,12 +49,22 @@ def gold_pair(design: Design):
     centers = np.array([p.pose.to_array()[:3, 3] for p in particles])
     if not np.isfinite(centers).all():
         raise ValueError("Nanoparticle centers must be finite.")
-    distance = float(np.linalg.norm(centers[1] - centers[0]))
-    if distance <= (particles[0].diameter_nm + particles[1].diameter_nm) / 2:
-        raise ValueError(
-            "The two gold cores overlap or touch. Separate their centers before generating a connecting rod."
-        )
+    distances = np.linalg.norm(centers[:, None] - centers[None, :], axis=-1)
+    for i in range(len(particles)):
+        for j in range(i):
+            if (
+                distances[i, j]
+                <= (particles[i].diameter_nm + particles[j].diameter_nm) / 2
+            ):
+                raise ValueError(
+                    "Gold cores overlap or touch. Separate their centers before generating."
+                )
+    distance = float(distances.max())
     return particles, centers, distance
+
+
+def gold_pair(design: Design):
+    return gold_particles(design, (2,))
 
 
 def pair_frame(centers: np.ndarray, roll_deg: float = 0) -> np.ndarray:

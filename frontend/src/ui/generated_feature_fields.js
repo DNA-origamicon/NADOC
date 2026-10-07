@@ -5,8 +5,8 @@ const fields = {
   scaffold_name: { label: 'Scaffold', type: 'select', options: ['M13mp18', 'p8064'] },
   sequence: { label: 'Sequence (5′ → 3′)', type: 'text' },
   spacer_nm: { label: 'Thiol spacer (nm)', type: 'number', min: 0, max: 100, step: 0.1 },
-  roll_deg: { label: 'Rod rotation (degrees)', type: 'number', min: -180, max: 180, step: 1 },
-  offset_nm: { label: 'Rod offset (nm)', type: 'number', min: 0, step: 0.1 },
+  roll_deg: { label: 'Rotation (degrees)', type: 'number', min: -180, max: 180, step: 1 },
+  offset_nm: { label: 'Offset from particles (nm)', type: 'number', min: 0, step: 0.1 },
   phase_deg: { label: 'Attachment position around reachable circle (degrees)', type: 'number', step: 1 },
   duplex_roll_deg: { label: 'Duplex rotation (degrees)', type: 'number', step: 1 },
 }
