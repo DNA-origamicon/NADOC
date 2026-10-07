@@ -1,3 +1,4 @@
+import { createSelectionDragGuard } from './selection_drag_guard.js'
 import { vrDeformationSelection, resolveVRDeformationSelection, vrDeformationRefForOwner } from './vr_deformation_selection.js'
 /**
  * Selection manager — raycaster-based gestures backed by canonical selection refs.
@@ -4113,13 +4114,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // ── Left-click ───────────────────────────────────────────────────────────
 
-  // Capture-phase: disable controls before OrbitControls sees Ctrl/Alt/Shift+left
-  // so it cannot start a pan or rotate gesture that competes with our selection
-  // click (Ctrl-drag → no action; Alt-click → bead pick; Shift-click → additive pick).
-  canvas.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || !controls) return
-    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) controls.enabled = false
-  }, { capture: true })
+  // Left mouse navigation is unbound; selection must never disable/re-enable
+  // camera controls owned by a gizmo or another drag tool.
+  const dragGuard = createSelectionDragGuard(canvas, {
+    controls,
+    isDisabled: () => isDisabled?.() || store.getState().deformToolActive ||
+      moveRotateSelectionLocked(store.getState()),
+  })
 
   let _downPos     = null
   let _ctrlDownPos = null   // pending Ctrl+left-down — Ctrl-drag is inert; bare click = unified toggle
@@ -4128,6 +4129,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return
+    if (!dragGuard.allows(e)) { cancelSelectionGesture(); return }
     if (store.getState().deformToolActive || moveRotateSelectionLocked(store.getState())) return
     if (isDisabled?.()) return
 
@@ -4152,39 +4154,46 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   })
 
   canvas.addEventListener('pointermove', e => {
-    // Hover preview (default level + strand selected) — pops the bead/cone under
-    // the cursor. Suspended while ANY mouse button is held (e.buttons !== 0): a
-    // button-down drag is selection (left), orbit (right), or pan (middle), and a moving camera
-    // would flicker the snap target under a stationary cursor. Wheel ZOOM holds no
-    // button, so hover keeps working while zooming (as desired). Also skipped during
-    // a selection drag or while disabled.
-    if (e.buttons !== 0) {
-      _clearHoverPreview()
-    } else if (moveRotateSelectionLocked(store.getState())) {
-      _clearHoverPreview()
-    } else if (!_ctrlDownPos && !_inLassoMode && !isDisabled?.()) {
-      _updateHoverPreview(e.clientX, e.clientY)
-    }
-    // Plain left-drag selects; modified drags never start a rectangle.
-    if (_downPos && !_inLassoMode) {
-      if (Math.hypot(e.clientX - _downPos.x, e.clientY - _downPos.y) > 4) {
-        _inLassoMode  = true
-        _lassoStart   = _downPos
-        _downPos = null
-        _lassoOverlay = _createLassoOverlay()
-        _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
-        canvas.style.cursor = 'crosshair'
-        // Preserve committed selection; lasso intents are additive.
-        _restoreStrand()
-        _clearCylinderSelection()
-        _mode     = 'none'
-        _strandId = null
-        _clearMultiLoopSkips()
+    // Wait for later drag-tool listeners before displaying any rectangle.
+    dragGuard.afterEvent(() => {
+      if ((_downPos || _ctrlDownPos || _altDownPos || _shiftDownPos || _inLassoMode) && !dragGuard.allows(e)) {
+        cancelSelectionGesture()
+        return
       }
-      return
-    }
-    if (!_inLassoMode || !_lassoStart) return
-    _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
+      // Hover preview (default level + strand selected) — pops the bead/cone under
+      // the cursor. Suspended while ANY mouse button is held (e.buttons !== 0): a
+      // button-down drag is selection (left), orbit (right), or pan (middle), and a moving camera
+      // would flicker the snap target under a stationary cursor. Wheel ZOOM holds no
+      // button, so hover keeps working while zooming (as desired). Also skipped during
+      // a selection drag or while disabled.
+      if (e.buttons !== 0) {
+        _clearHoverPreview()
+      } else if (moveRotateSelectionLocked(store.getState())) {
+        _clearHoverPreview()
+      } else if (!_ctrlDownPos && !_inLassoMode && !isDisabled?.()) {
+        _updateHoverPreview(e.clientX, e.clientY)
+      }
+      // Plain left-drag selects; modified drags never start a rectangle.
+      if (_downPos && !_inLassoMode) {
+        if (Math.hypot(e.clientX - _downPos.x, e.clientY - _downPos.y) > 4) {
+          _inLassoMode  = true
+          _lassoStart   = _downPos
+          _downPos = null
+          _lassoOverlay = _createLassoOverlay()
+          _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
+          canvas.style.cursor = 'crosshair'
+          // Preserve committed selection; lasso intents are additive.
+          _restoreStrand()
+          _clearCylinderSelection()
+          _mode     = 'none'
+          _strandId = null
+          _clearMultiLoopSkips()
+        }
+        return
+      }
+      if (!_inLassoMode || !_lassoStart) return
+      _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
+    })
   })
 
   function cancelSelectionGesture() {
@@ -4194,7 +4203,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _lassoOverlay?.remove()
     _lassoOverlay = null
     canvas.style.cursor = ''
-    if (controls) controls.enabled = true
   }
   canvas.addEventListener('pointercancel', cancelSelectionGesture)
   window.addEventListener('keydown', e => {
@@ -4202,8 +4210,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   })
 
   canvas.addEventListener('pointerup', e => {
-    if (controls) controls.enabled = true
     if (e.button !== 0) return
+    if (!dragGuard.allows(e)) { cancelSelectionGesture(); return }
 
     // Once Move/Rotate has a target, canvas selection is frozen. Clear stale
     // gesture bookkeeping without consuming right-click/context-menu behavior;

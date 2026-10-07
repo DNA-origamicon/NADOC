@@ -1,3 +1,4 @@
+import { createSelectionDragGuard } from './selection_drag_guard.js'
 /**
  * Assembly drag-rectangle ("lasso") multi-select extracted from main.js.
  * Left-drag: left-to-right contains whole bounds, right-to-left crosses bounds. `instancesInRect` is the PURE
@@ -54,12 +55,13 @@ export function toggleInstanceSelection(multiIds, activeId, hitId) {
  * @param {object} deps
  * @param {HTMLElement} deps.canvas
  * @param {THREE.Camera} deps.camera
- * @param {{enabled:boolean}} deps.controls   OrbitControls (disabled during drag)
+ * @param {{enabled:boolean}} deps.controls   navigation controls (a disabled controller means another tool owns the drag)
  * @param {() => Array} deps.getInstanceCenters
  * @param {(hits:string[], additive:boolean)=>void} deps.onSelect
  * @returns {{ start:(e)=>boolean, cancel:()=>void }}
  */
-export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters, onSelect, onClick, onPlainClick }) {
+export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters, onSelect, onClick, onPlainClick, isDisabled }) {
+  const dragGuard = createSelectionDragGuard(canvas, { controls, isDisabled })
   let state = null   // { startX, startY, overlayEl, additive } | null
 
   function createOverlay() {
@@ -74,14 +76,19 @@ export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters
   }
 
   function onMove(e) {
-    if (!state?.overlayEl || state.modified) return
-    const el = state.overlayEl
-    el.style.display = ''
-    el.style.borderStyle = e.clientX < state.startX ? 'dashed' : 'solid'
-    el.style.left   = Math.min(state.startX, e.clientX) + 'px'
-    el.style.top    = Math.min(state.startY, e.clientY) + 'px'
-    el.style.width  = Math.abs(e.clientX - state.startX) + 'px'
-    el.style.height = Math.abs(e.clientY - state.startY) + 'px'
+    const gesture = state
+    dragGuard.afterEvent(() => {
+      if (!gesture || state !== gesture) return
+      if (!dragGuard.allows(e)) { cancel(); return }
+      if (!state?.overlayEl || state.modified) return
+      const el = state.overlayEl
+      el.style.display = ''
+      el.style.borderStyle = e.clientX < state.startX ? 'dashed' : 'solid'
+      el.style.left   = Math.min(state.startX, e.clientX) + 'px'
+      el.style.top    = Math.min(state.startY, e.clientY) + 'px'
+      el.style.width  = Math.abs(e.clientX - state.startX) + 'px'
+      el.style.height = Math.abs(e.clientY - state.startY) + 'px'
+    })
   }
 
   // Esc aborts an in-flight drag (listener added on start, removed on end).
@@ -95,10 +102,10 @@ export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters
   }
 
   function finalize(endE) {
+    if (!dragGuard.allows(endE)) { cancel(); return }
     const s = state
     state = null
     detach()
-    controls.enabled = true
     if (!s) return
     s.overlayEl?.remove()
     const rect = canvas.getBoundingClientRect()
@@ -123,8 +130,9 @@ export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters
   function start(e) {
     if (e.button != null && e.button !== 0) return false
     if (e.altKey) return false
+    dragGuard.begin(e)
+    if (!dragGuard.allows(e)) return false
     state = { startX: e.clientX, startY: e.clientY, overlayEl: createOverlay(), additive: e.shiftKey, modified: e.ctrlKey || e.metaKey }
-    controls.enabled = false
     canvas.addEventListener('pointermove', onMove)
     canvas.addEventListener('pointerup',   onUp)
     canvas.addEventListener('pointercancel', cancel)
@@ -139,8 +147,7 @@ export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters
     state.overlayEl?.remove()
     detach()
     state = null
-    controls.enabled = true
   }
 
-  return { start, cancel }
+  return { start, cancel, dispose() { cancel(); dragGuard.dispose() } }
 }
