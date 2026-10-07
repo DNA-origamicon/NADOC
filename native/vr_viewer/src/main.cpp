@@ -5893,6 +5893,7 @@ class Viewer {
         return "EXTRUSION BLOCKED - CHECK DESIGN";
     }
     void refreshExtrudePanel() {
+        radialToolMenu_.setWorkflow(bendPanel_.active,bendHasAngle());
         const std::string bendStatus=toolShell_.executionPending()?toolShell_.status()
             :bendPanel_.hand?"PLANE "+std::to_string(2-bendPanel_.grabbed)+" FIXED / RELEASE TO FINISH"
             :bendPanel_.pickSlot?"HOLD TRIGGER CLOSE TO ELEMENT"
@@ -6021,6 +6022,9 @@ class Viewer {
             }
             if(action=="bend:cluster" || action=="bend:target") {
                 bendPanel_.selecting=!bendPanel_.selecting;
+                if(bendPanel_.twist)(void)toolConfig_.setTwist(0);
+                else (void)toolConfig_.setBend(0,toolConfig_.bendDirectionDegrees());
+                publishToolConfiguration();
                 bendPanel_.reset();bendPanel_.pickSlot.reset();clearPlanePick();clearPlaneGuides();
                 if(!bendPanel_.selecting && nadoc_vr::BendPanel::supports(selectedSelectionKind_)) {
                     bendPanel_.defaultPlanes=true;requestBendDefaultPlane("a");
@@ -6530,7 +6534,20 @@ class Viewer {
         publishToolConfiguration(); // Publish cleared cells and the new lattice together.
     }
 
+    bool bendHasAngle() const {
+        return !bendPanel_.selecting && std::abs(bendPanel_.twist?toolConfig_.twistAmount():toolConfig_.bendAngleDegrees())>1e-6;
+    }
+
     void activateRadialEdit(size_t item) {
+        if(bendPanel_.active) {
+            if(toolShell_.executionPending() || bendPanel_.hand || bendPanel_.wheelHand || bendPanel_.planeHand)return;
+            if(item==0)activateSidebarAction(bendPanel_.selecting?"bend:back":"bend:cluster",1);
+            else if(item==1) {
+                if(bendPanel_.selecting)activateSidebarAction("bend:cluster",1);
+                else if(bendHasAngle() && bendReady())activateSidebarAction("bend:confirm",1);
+            }
+            return;
+        }
         if(!nadoc_vr::radialEditEnabled(item) || toolShell_.executionPending() || ligation_.waiting || endResize_.waitingVersion)return;
         if(item>=2) {
             if(!ligation_.version)return;
@@ -6617,12 +6634,11 @@ class Viewer {
             bendPanel_.twist=mode==nadoc_vr::ToolMode::twist;
             bendPanel_.enter(sidebarMenus_.menus);bendPanel_.pickSlot.reset();
             bendPanel_.manual=false;
-            bendPanel_.selecting=!nadoc_vr::BendPanel::supports(selectedSelectionKind_);
+            bendPanel_.selecting=true;
+            if(bendPanel_.twist)(void)toolConfig_.setTwist(0);
+            else (void)toolConfig_.setBend(0,0);
+            publishToolConfiguration();
             bendPanel_.describeSelection(selectedSelectionKind_,committedSelectionOwnerTokens_);
-            if(selectionLevel_=="default")publishSelectionLevel("cluster");
-            if(!bendPanel_.selecting) {
-                bendPanel_.defaultPlanes=true;requestBendDefaultPlane("a");
-            }
             refreshExtrudePanel();
         }
         if(mode==nadoc_vr::ToolMode::move_rotate) {
@@ -8092,11 +8108,11 @@ class Viewer {
         selectionWheel_.writeJson(out,selectionLevel_);
         out << ",\"radial_edit\":{\"open\":" << (radialToolMenu_.open()?"true":"false")
             << ",\"hovered\":" << (radialToolMenu_.hovered()?std::to_string(*radialToolMenu_.hovered()):"null") << ",\"items\":[";
-        for(size_t i=0;i<4;++i) {
+        for(size_t i=0;i<radialToolMenu_.itemCount();++i) {
             if(i)out<<',';
-            const auto axis=nadoc_vr::EditWheel::direction(i);
-            out << "{\"label\":" << quote(nadoc_vr::kRadialEditLabels[i])
-                << ",\"enabled\":" << (nadoc_vr::radialEditEnabled(i)?"true":"false")
+            const auto axis=radialToolMenu_.itemDirection(i);
+            out << "{\"label\":" << quote(radialToolMenu_.itemLabel(i))
+                << ",\"enabled\":" << ((bendPanel_.active?(i==0 || (bendPanel_.selecting?nadoc_vr::BendPanel::supports(selectedSelectionKind_):bendHasAngle() && bendReady())):nadoc_vr::radialEditEnabled(i))?"true":"false")
                 << ",\"axis\":[" << axis.x << ',' << axis.y << "]"
                 << ",\"center\":" << point(radialToolMenu_.worldPoint({nadoc_vr::EditWheel::labelRadius*axis.x,nadoc_vr::EditWheel::labelRadius*axis.y,0})) << '}';
         }
@@ -8721,9 +8737,10 @@ class Viewer {
             }
 
             if(hand==1) {
-                if(!radialToolMenu_.open() && trackpadClicked && (routingPopup_.anyOpen()?routingPopup_:sidebarMenus_).trackpad(hand,navigationAxis,hands_[hand]))pulse(hand,.12F);
+                radialToolMenu_.setWorkflow(bendPanel_.active,bendHasAngle());
+                if(!bendPanel_.active && !radialToolMenu_.open() && trackpadClicked && (routingPopup_.anyOpen()?routingPopup_:sidebarMenus_).trackpad(hand,navigationAxis,hands_[hand]))pulse(hand,.12F);
                 const auto result=radialToolMenu_.update(trackpadPressed,navigationAxis,hands_[hand],
-                    !navigationMenuOpen && (!desktopActive || radialToolMenu_.open()) && !componentGallery_.active && !toolShell_.executionPending() &&
+                    (!navigationMenuOpen || (bendPanel_.active && !routingPopup_.anyOpen())) && (bendPanel_.active || !desktopActive || radialToolMenu_.open()) && !componentGallery_.active && !toolShell_.executionPending() &&
                     !moveAwaitRefresh_ && sessionState_==XR_SESSION_STATE_FOCUSED && (liveControlsEnabled() || trackpadAxis.isActive));
                 if(result.hoverChanged)pulse(hand,.14F);
                 if(result.commit) {activateRadialEdit(*result.commit);if(*result.commit<2)pulse(hand,.32F);}

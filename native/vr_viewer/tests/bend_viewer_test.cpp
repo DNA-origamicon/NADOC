@@ -92,6 +92,8 @@ struct LiveViewerTest {
         v.witnessObserverPosition_={0,0,0};v.selectedIdentity_="nuc:near";
         v.selectedSelectionKind_="cluster";v.selectedOwnerTokens_={"near"};
         v.activateSidebarAction("tool:bend",1);
+        assert(v.bendPanel_.selecting && !v.bendPanel_.defaultPlanes && !v.bendHasAngle());
+        v.activateRadialEdit(1);
         assert(v.bendPanel_.clusterLabel=="Selected cluster" && v.bendPanel_.defaultPlanes);
         assert(v.bendPickExtent_=="a" && !v.bendPickPosition_ && v.activePlanePickSequence_);
         v.planeFeedbackPath_=directory+"/plane-feedback.txt";
@@ -113,14 +115,19 @@ struct LiveViewerTest {
         assert(v.toolConfig_.targetIdentity()=="selection:test:2");
         // Switching tools preserves the complete set and requests aggregate bounds.
         v.activateSidebarAction("tool:twist",1);
+        assert(v.bendPanel_.selecting && !v.bendHasAngle());
+        v.activateRadialEdit(0);
+        assert(!v.bendPanel_.active);
+        v.activateSidebarAction("tool:twist",1);
+        v.activateRadialEdit(1);
         assert(v.selectedIdentity_=="selection:test:2" && v.bendPanel_.defaultPlanes);
         assert(v.bendPanel_.clusterLabel=="1 clusters / 1 strands / 1 domains");
         assert(v.toolConfig_.targetSelectionKind()=="selection");
         acknowledge("a",20);acknowledge("b",80);
         assert(v.bendReady());
         v.activateSidebarAction("twist:more",1);
-        assert(v.toolConfig_.twistAmount()==95);
-        v.activateSidebarAction("twist:target",1);assert(v.bendPanel_.selecting);
+        assert(v.toolConfig_.twistAmount()==5 && v.bendHasAngle());
+        v.activateRadialEdit(0);assert(v.bendPanel_.selecting && !v.bendHasAngle());
         const auto selectSequence=v.selectSequence_;
         v.activateSidebarAction("twist:zero",1);
         assert(v.selectSequence_==selectSequence+1 && v.lastSelectIdentities_.empty());
@@ -129,6 +136,8 @@ struct LiveViewerTest {
         auto event=publishedEvent(v);
         assert(event.find("selection:test:2")!=std::string::npos);
         v.activateSidebarAction("tool:bend",1);
+        assert(v.bendPanel_.selecting && !v.bendPanel_.defaultPlanes && !v.bendHasAngle());
+        v.activateRadialEdit(1);
         acknowledge("a",20);acknowledge("b",80);
         assert(v.bendReady());
         v.applyBendAdjustment(60,30);
@@ -136,7 +145,7 @@ struct LiveViewerTest {
         assert(event.find("selection:test:2")!=std::string::npos);
         assert(event.find("bend_endpoints")==std::string::npos);
         assert(v.toolConfig_.bendAngleDegrees()==60);
-        v.activateSidebarAction("bend:confirm",1);
+        v.activateRadialEdit(1);
         assert(v.toolShell_.executionPending());
 
     }
@@ -150,6 +159,8 @@ struct LiveViewerTest {
         v.glScene_=std::make_unique<GlScene>(std::move(data));
         v.selectedIdentity_="test";v.selectedSelectionKind_="cluster";v.selectedOwnerTokens_={"owner"};
         v.activateSidebarAction("tool:bend",1);
+        assert(v.bendPanel_.selecting && !v.bendPanel_.defaultPlanes && !v.bendHasAngle());
+        v.activateRadialEdit(1);
         assert(v.bendPanel_.active && !v.latticeOpen_);
         assert(v.sidebarMenus_.menus[1].customTab->key=="bend");
         v.activateSidebarAction("bend:plane1",1);
@@ -357,7 +368,7 @@ struct LiveViewerTest {
         std::ofstream ppm(directory+"/bend-preview.ppm",std::ios::binary);ppm<<"P6\n128 128\n255\n";
         for(int y=127;y>=0;--y)ppm.write(reinterpret_cast<const char*>(visible.data()+y*128*3),128*3);
         assert(v.bendReady());
-        v.activateSidebarAction("bend:confirm",1);assert(v.toolShell_.executionPending());
+        v.activateRadialEdit(1);assert(v.toolShell_.executionPending());
         std::cout<<"Bend trigger, fixed ends, wheel, touchpad and rendered preview passed\n";
     }
 };

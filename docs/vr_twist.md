@@ -4,7 +4,12 @@ Choose **Tools → Twist**. The persistent panel reuses Bend's plane picking,
 paired controls, thumbwheel input, and Confirm / Cancel / Return layout.
 
 1. The panel retains the full selection of clusters, strands, and domains,
-   including mixed selections, and initializes planes at its outer bp bounds.
+   including mixed selections, and always starts in selection mode using the
+   current left radial filter. The right touchpad has **Back** (left half) and
+   **Next** (right half). **Next** initializes planes at the selection’s outer bp
+   bounds. Twist starts at zero; entering a nonzero amount changes **Next** to
+   **Confirm**. **Back** from plane editing clears the amount and returns to
+   selection; **Back** from selection exits the tool.
    **Change selection** enables the existing filters and selection volume;
    **Use selection / Pick planes** resumes editing. **Clear selection** appears
    in selection mode. Choose **Plane 1** or **Plane 2** and hold a trigger near

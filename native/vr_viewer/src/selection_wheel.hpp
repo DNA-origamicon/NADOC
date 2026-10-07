@@ -35,6 +35,20 @@ template<class Spec> class TouchpadWheel {
         a=std::fmod(a+glm::two_pi<float>()*2,glm::two_pi<float>());
         return size_t(std::floor(a/(glm::two_pi<float>()/float(count))))%count;
     }
+    // Tool workflows replace the edit compass with left/right navigation.
+    void setWorkflow(bool active,bool confirm=false) {
+        if(workflow_!=active)cancel();
+        workflow_=active;confirm_=confirm;
+    }
+    size_t itemCount() const {return workflow_?2:count;}
+    const char* itemLabel(size_t i) const {return workflow_?(i==0?"BACK":confirm_?"CONFIRM":"NEXT"):labels[i];}
+    float itemAngle(size_t i) const {return workflow_?(i==0?-glm::half_pi<float>():glm::half_pi<float>()):angle(i);}
+    glm::vec2 itemDirection(size_t i) const {const float a=itemAngle(i);return {std::sin(a),std::cos(a)};}
+    std::optional<size_t> itemSector(glm::vec2 axis) const {
+        if(!workflow_)return sector(axis);
+        if(!std::isfinite(axis.x)||!std::isfinite(axis.y)||glm::length(axis)<deadzone)return {};
+        return axis.x<0?0:1;
+    }
     Result update(bool pressed,glm::vec2 axis,const HandPose& hand,bool enabled=true) {
         Result result;
         consumed_=open_ || pressed;
@@ -49,7 +63,7 @@ template<class Spec> class TouchpadWheel {
             // OpenXR axes can reset on release. Commit the last held sample.
             result.commit=hovered_;open_=false;hovered_.reset();return result;
         }
-        const auto next=sector(axis);
+        const auto next=itemSector(axis);
         result.hoverChanged=next && next!=hovered_;
         hovered_=next;
         axis_=next?glm::normalize(axis)*std::min(glm::length(axis),1.F):glm::vec2(0);
@@ -88,19 +102,19 @@ template<class Spec> class TouchpadWheel {
         auto segment=[&](glm::vec2 a,glm::vec2 b,glm::vec3 color) {
             line(worldPoint({a.x,a.y,0}),worldPoint({b.x,b.y,0}),color);
         };
-        for(size_t item=0;item<count;++item) {
+        for(size_t item=0;item<itemCount();++item) {
             const bool hover=hovered_==item;
-            const glm::vec3 color=hover?glm::vec3(1,.78F,.20F):selected==levels[item]?glm::vec3(.4F,1,.62F):glm::vec3(.3F,.7F,.96F);
-            const float center=angle(item);
+            const glm::vec3 color=hover?glm::vec3(1,.78F,.20F):(!workflow_ && selected==levels[item])?glm::vec3(.4F,1,.62F):glm::vec3(.3F,.7F,.96F);
+            const float center=itemAngle(item);
             auto polar=[](float a,float r){return glm::vec2(std::sin(a),std::cos(a))*r;};
-            const float lo=center-glm::pi<float>()/float(count)+.025F,hi=center+glm::pi<float>()/float(count)-.025F;
+            const float lo=center-glm::pi<float>()/float(itemCount())+.025F,hi=center+glm::pi<float>()/float(itemCount())-.025F;
             for(float r:{inner,outer})for(int j=0;j<16;++j)
                 segment(polar(glm::mix(lo,hi,float(j)/16),r),polar(glm::mix(lo,hi,float(j+1)/16),r),color);
             for(float a:{lo,hi})segment(polar(a,inner),polar(a,outer),color);
             if(hover)for(float r=outer-.018F;r<outer;r+=.003F)for(int j=0;j<16;++j)
                 segment(polar(glm::mix(lo,hi,float(j)/16),r),polar(glm::mix(lo,hi,float(j+1)/16),r),color);
-            const std::string label=labels[item];const float scale=.00165F;
-            const auto p=direction(item)*labelRadius;
+            const std::string label=itemLabel(item);const float scale=.00165F;
+            const auto p=itemDirection(item)*labelRadius;
             for(size_t c=0;c<label.size();++c) {
                 const auto rows=glyph(label[c]);
                 for(size_t row=0;row<rows.size();++row)for(int col=0;col<5;++col)if(rows[row]&(1U<<(4-col))) {
@@ -115,6 +129,7 @@ template<class Spec> class TouchpadWheel {
         segment(p-glm::vec2(0,.004F),p+glm::vec2(0,.004F),{1,1,1});
     }
  private:
+    bool workflow_=false,confirm_=false;
     bool open_=false,wasPressed_=false,consumed_=false;
     std::optional<size_t> hovered_;
     glm::vec2 axis_{};

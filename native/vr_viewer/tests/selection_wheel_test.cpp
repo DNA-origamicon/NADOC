@@ -44,6 +44,17 @@ int main() {
     assert(!edit.update(false,editAxes[0],lost).commit && !edit.open());
     edit.update(true,editAxes[0],hand);edit.update(true,editAxes[3],hand);
     assert(edit.update(false,editAxes[0],hand).commit==3);
+    edit.setWorkflow(true);
+    assert(edit.itemCount()==2 && std::string(edit.itemLabel(0))=="BACK" && std::string(edit.itemLabel(1))=="NEXT");
+    for(auto axis:std::array<glm::vec2,4>{{{-.8F,.5F},{-.8F,-.5F},{.8F,.5F},{.8F,-.5F}}}) {
+        edit.update(true,axis,hand);
+        assert(edit.update(false,{0,0},hand).commit==(axis.x<0?0U:1U));
+    }
+    edit.setWorkflow(true,true);
+    assert(std::string(edit.itemLabel(1))=="CONFIRM");
+    edit.update(true,{-1,0},hand);
+    edit.setWorkflow(false);
+    assert(!edit.update(false,{0,0},hand).commit && edit.itemCount()==4);
     assert(SelectionWheel::sector({.49F,.8660254F})==0);
     assert(SelectionWheel::sector({.51F,.8660254F})==1);
     assert(SelectionWheel::sector({-.51F,.8660254F})==5);

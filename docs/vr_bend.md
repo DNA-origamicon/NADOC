@@ -15,14 +15,16 @@ plane hits, Twist handle angles, and Move's world-space rigid delta. The native
 pixels. These are synthetic renderer checks, not through-headset validation.
 
 Choose **Tools → Bend**. It replaces the tool list with the Bend panel, following
-Extrude's pinned Return / Confirm / Cancel layout. All Bend controls stay visible on one page. Touchpad directions move
-between controls, including the paired step buttons. Grips move the scene; triggers edit the bend.
+Extrude's pinned Return / Confirm / Cancel layout. All Bend controls stay visible on one page. The right touchpad opens a two-half
+workflow menu: **Back** on the left and **Next** on the right. Grips move the scene; triggers edit the bend.
 
 1. Opening Bend retains the current selection, including multiple clusters,
-   strands, domains, or a mixed set. **Change selection** enables the existing
-   controller selection volume and Cluster / Strand / Domain filters. Fixed-level
+   strands, domains, or a mixed set, and always starts in selection mode. The
+   left radial menu keeps its current filter. Cluster / Strand / Domain fixed-level
    clicks accumulate; an empty click or **Clear selection** clears the set.
-   **Use selection / Pick planes** freezes the current scope for the draft.
+   Choose right-wheel **Next** to freeze the scope and initialize the planes.
+   **Back** during selection exits the tool; during plane editing it returns to
+   selection and clears the angle. A nonzero angle changes **Next** to **Confirm**.
 2. Both planes start at the selection's lowest and highest occupied bp indices.
    **Plane 1 / Plane 2** are readouts. Hold a trigger on a plane to slide it along
    selected contours. Picking rounds to integer bp, excludes gaps between selected
