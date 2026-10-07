@@ -689,7 +689,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         for (let i = 0; i < group.length; i++) {
           mesh.getMatrixAt(i, mat)
           pos.setFromMatrixPosition(mat)
-          visitor(_state.atoms.get(group[i]), pos)
+          visitor(_state.atoms.get(group[i]), pos, { instMesh: mesh, id: i })
         }
       }
     },

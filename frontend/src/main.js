@@ -926,7 +926,7 @@ async function main() {
   if (!localStorage.getItem(_SEL_HINT_KEY)) {
     setTimeout(() => {
       showToast(
-        'Selection: D = dimensions · Shift-click = add to selection · Ctrl-drag = lasso',
+        'Selection: D = dimensions · Shift-click = add to selection · Left-drag = box selection',
         { duration: 8000 },
       )
       localStorage.setItem(_SEL_HINT_KEY, '1')
@@ -5524,16 +5524,8 @@ async function main() {
     getExtras: () => selectionManager.getPresentationSelectionExtras(),
   })
 
-  // ── Assembly-mode lasso (Ctrl-drag → multi-select PartInstances) ────────────
-  // Mirrors design-mode lasso (selection_manager.js: _createLassoOverlay /
-  // _updateLassoOverlay / _finalizeLasso) so the gesture is identical: hold
-  // Ctrl (or Meta on macOS) and drag a rectangle; instances whose projected
-  // world-space center falls inside the rect on pointerup populate
-  // multiSelectedInstanceIds. Ctrl-click without drag toggles the picked
-  // instance in/out of the set (see _onAssemblyClick).
-  // Assembly drag-rectangle multi-select — factory in scene/assembly_lasso.js
-  // (pure hit-test core unit-tested). Deferred handlers, so the const is built
-  // before any fires; assemblyRenderer via a lazy getter.
+  // Directional left-drag box selection. A plain click follows the normal
+  // assembly selection path; Ctrl-click toggles and Ctrl-drag does nothing.
   const assemblyLasso = initAssemblyLasso({
     canvas, camera, controls,
     getInstanceCenters: () => assemblyRenderer.getInstanceCenters?.() ?? [],
@@ -5542,6 +5534,10 @@ async function main() {
         ? Array.from(new Set([...(store.getState().multiSelectedInstanceIds ?? []), ...hits]))
         : hits
       store.setState({ multiSelectedInstanceIds: next, activeInstanceId: null, activeGroupId: null })
+    },
+    onPlainClick: (e) => {
+      _assemblyPtrDownAt = { x: e.clientX, y: e.clientY }
+      void _assemblyPointer.onAssemblyClick(e)
     },
     // Ctrl-click (no drag) → toggle the picked instance in/out of the multi-select.
     onClick: (e) => {

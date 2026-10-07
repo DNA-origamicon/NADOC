@@ -11,8 +11,9 @@ import { vrDeformationSelection, resolveVRDeformationSelection, vrDeformationRef
  *   Click on empty space        → clear selection (unless zoom scope pre-hover active).
  *
  * Modifier semantics (remapped 2026-05-17):
- *   Ctrl+left-drag             → rectangle lasso multi-select.
- *   Ctrl+left-click (no drag)  → no-op (was bead/arc toggle pre-remap).
+ *   Left-drag                  → directional rectangle multi-select.
+ *   Ctrl+left/right-drag       → no action.
+ *   Ctrl+left-click (no drag)   → toggle selection.
  *   Alt+left-click             → toggle a legacy dimension anchor.
  *   Plain click (Dimensions)   → select one of the two live dimension bases.
  *   Shift+left-click           → toggle the hit element at the active level.
@@ -33,6 +34,7 @@ import * as api from '../api/client.js'
 import { canConvertExtraThymines } from './cpd_selection.js'
 import { showCpdConversion } from '../ui/cpd_conversion.js'
 import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
+import { instanceBounds, boundsInRect, createRectangleCollector, segmentInRect } from './rectangle_selection.js'
 import { deferrableContextMenu } from './right_click_menu.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterIdForNucleotide, clusterMemberFilter } from './cluster_entries.js'
@@ -42,7 +44,7 @@ import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
 import { baseKey, xbKey, atomBaseKey, parseBaseKey, toggleBaseKey, mergeBaseKeys } from './base_ref.js'
 import {
   backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
-  nearestCandidate, candidatesInRect, makeProjector, worldPosOf,
+  nearestCandidate, makeProjector, worldPosOf,
   resolveIndividualBaseElements,
 } from './base_pick.js'
 import { flexAnchorKey } from './flexible_arcs.js'
@@ -2808,7 +2810,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _clearMultiLoopSkips()
   }
 
-  // ── Multi-selection (Ctrl+drag rectangle lasso) ──────────────────────────
+  // ── Multi-selection (left-drag rectangle lasso) ──────────────────────────
 
   let _inLassoMode     = false
   let _lassoStart      = null   // { x, y } in client coords
@@ -2823,7 +2825,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _createLassoOverlay() {
     const div = document.createElement('div')
-    div.style.cssText = 'position:fixed;border:1.5px dashed #74b9ff;background:rgba(116,185,255,0.07);' +
+    div.style.cssText = 'position:fixed;border:1.5px solid #74b9ff;background:rgba(116,185,255,0.07);' +
                         'pointer-events:none;z-index:1000;box-sizing:border-box'
     document.body.appendChild(div)
     return div
@@ -2831,6 +2833,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _updateLassoOverlay(x1, y1, x2, y2) {
     if (!_lassoOverlay) return
+    _lassoOverlay.style.borderStyle = x2 < x1 ? 'dashed' : 'solid'
     _lassoOverlay.style.left   = Math.min(x1, x2) + 'px'
     _lassoOverlay.style.top    = Math.min(y1, y2) + 'px'
     _lassoOverlay.style.width  = Math.abs(x2 - x1) + 'px'
@@ -3580,7 +3583,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // if it is — at the ACTIVE selection level, so it toggles the SAME element a plain
   // click would select (snap-to-nearest, same radius as the hover preview). This
   // replaced the old split (Ctrl=crossover only, Shift=strand only, Alt=overhang).
-  // Ctrl+drag is still the lasso; Alt+click is still the measurement-bead picker.
+  // Ctrl+drag is inert; Alt+click is the measurement-bead picker.
 
   function _toggleStrand(strandId) {
     if (!strandId) return
@@ -3750,6 +3753,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (_lassoOverlay) { _lassoOverlay.remove(); _lassoOverlay = null }
     if (!_lassoStart) return
 
+    const crossing = endX < _lassoStart.x
     const sx1 = Math.min(_lassoStart.x, endX)
     const sy1 = Math.min(_lassoStart.y, endY)
     const sx2 = Math.max(_lassoStart.x, endX)
@@ -3763,8 +3767,26 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cx1 = sx1 - rect.left,  cy1 = sy1 - rect.top
     const cx2 = sx2 - rect.left,  cy2 = sy2 - rect.top
 
-    const mat = new THREE.Matrix4()
-    const pos = new THREE.Vector3()
+    const selectionRect = { x1: cx1, y1: cy1, x2: cx2, y2: cy2 }
+    const collector = createRectangleCollector(selectionRect, crossing)
+    const boundsFor = entry => instanceBounds(entry, _cam(), rect)
+    const pointBounds = point => {
+      const v = point.clone().project(_cam())
+      if (v.z < -1 || v.z > 1) return null
+      const x = (v.x + 1) * rect.width / 2, y = (1 - v.y) * rect.height / 2
+      return { x1: x, x2: x, y1: y, y2: y }
+    }
+    function record(nuc, bounds, copy) {
+      collector.add(`strand:${nuc.strand_id}`, bounds)
+      collector.add(`domain:${nuc.strand_id}:${nuc.domain_index ?? 0}`, bounds)
+      if (nuc.overhang_id) collector.add(`overhang:${nuc.overhang_id}`, bounds)
+      if (nuc.extension_id) collector.add(`extension:${nuc.extension_id}`, bounds)
+      const cid = useCluster && _resolveClusterId(nuc, store.getState().currentDesign)
+      if (cid) collector.add(`cluster:${cid}`, bounds)
+      const end = endRefForEntry({ nuc, _copy: copy })
+      if (end) collector.add(`end:${end.key}`, bounds)
+      return boundsInRect(bounds, selectionRect, crossing)
+    }
     const strandIdSet   = new Set()
     const domainKeyMap  = new Map()   // 'strandId:domainIndex' → { strandId, domainIndex }
     const ovhangIdSet   = new Set()   // overhang_id strings
@@ -3812,21 +3834,17 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // applied inside backboneCandidates.
     if (useBase) {
       if (inCylinderLOD) return
+      const bases = createRectangleCollector(selectionRect, crossing)
       if (atomRenderers.length) {
-        const atomKeys = []
-        for (const ar of atomRenderers) ar.visitAtoms?.((a, atomPos) => {
-          const sp = _toScreen(atomPos)
-          if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) return
+        for (const ar of atomRenderers) ar.visitAtoms?.((a, atomPos, instance) => {
           const key = atomBaseKey(a)
-          if (key) atomKeys.push(key)
+          if (key) bases.add(key, instance ? boundsFor(instance) : pointBounds(atomPos))
         })
-        if (atomKeys.length) _setBaseKeys(mergeBaseKeys(_baseKeys, atomKeys))
-        return
+      } else {
+        for (const candidate of _baseCandidates()) bases.add(candidate.key, boundsFor(candidate))
       }
-      const hits = candidatesInRect(
-        _baseCandidates(), { x1: cx1, y1: cy1, x2: cx2, y2: cy2 }, makeProjector(_cam(), canvas),
-      )
-      if (hits.length) _setBaseKeys(mergeBaseKeys(_baseKeys, hits.map(c => c.key)))
+      const keys = bases.keys()
+      if (keys.length) _setBaseKeys(mergeBaseKeys(_baseKeys, keys))
       return
     }
 
@@ -3843,10 +3861,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         const stype = strandTypeMap.get(dom.strandId)
         if (stype === 'scaffold' && !st.scaffold) continue
         if (stype !== 'scaffold' && !st.staples)  continue
-        cylMesh.getMatrixAt(dom.cylIdx, mat)
-        pos.setFromMatrixPosition(mat).applyMatrix4(cylMesh.matrixWorld)
-        const sp = _toScreen(pos)
-        if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) continue
+        const nuc = { helix_id: dom.helixId, strand_id: dom.strandId, domain_index: dom.domainIndex }
+        if (!record(nuc, boundsFor({ instMesh: cylMesh, id: dom.cylIdx }))) continue
         // Cluster level resolves the whole cluster below; strand level takes the strand.
         if (useCluster) {
           clusterHitNucs.push({ helix_id: dom.helixId, strand_id: dom.strandId, domain_index: dom.domainIndex })
@@ -3864,10 +3880,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // this hidden/full-representation bead would make the lasso key to stale CG space.
       const colRep = designRenderer.columnRepAt?.(entry.nuc.helix_id, entry.nuc.bp_index)
       if (globalAtomActive || (atomRenderers.length && (colRep === 'vdw' || colRep === 'ballstick' || colRep === 'stick'))) continue
-      entry.instMesh.getMatrixAt(entry.id, mat)
-      pos.setFromMatrixPosition(mat).applyMatrix4(entry.instMesh.matrixWorld)
-      const sp = _toScreen(pos)
-      if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) continue
+      if (_isHiddenReferenceNuc(entry.nuc)) continue
+      if (!record(entry.nuc, boundsFor(entry), entry._copy)) continue
 
       const isScaffold = entry.nuc.strand_type === 'scaffold'
       const isStaple   = entry.nuc.strand_type === 'staple'
@@ -3906,10 +3920,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (useExt) {
       for (const entry of (designRenderer.getFluoroEntries?.() ?? [])) {
         if (!entry.nuc.extension_id || !entry.instMesh.visible) continue
-        entry.instMesh.getMatrixAt(entry.id, mat)
-        pos.setFromMatrixPosition(mat).applyMatrix4(entry.instMesh.matrixWorld)
-        const sp = _toScreen(pos)
-        if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
+        if (record(entry.nuc, boundsFor(entry), entry._copy)) {
           extensionIdSet.add(entry.nuc.extension_id)
         }
       }
@@ -3921,11 +3932,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // rectangle test at the atom's actual instance position. Several atoms from the
     // same nucleotide naturally collapse into the element-id sets below.
     if (!inCylinderLOD && atomRenderers.length) {
-      for (const ar of atomRenderers) ar.visitAtoms?.((atom, atomPos) => {
+      for (const ar of atomRenderers) ar.visitAtoms?.((atom, atomPos, instance) => {
         const entry = backboneByAtomKey.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}`)
         if (!entry?.nuc?.strand_id) return
-        const sp = _toScreen(atomPos)
-        if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) return
+        if (!record({ ...entry.nuc, extension_id: atom.extension_id || entry.nuc.extension_id },
+          instance ? boundsFor(instance) : pointBounds(atomPos))) return
 
         const nuc = entry.nuc
         const isScaffold = nuc.strand_type === 'scaffold'
@@ -3953,6 +3964,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         const cid = _resolveClusterId(nuc, design)
         if (cid) clusterIdSet.add(cid)
       }
+    }
+
+    for (const id of strandIdSet) if (!collector.has(`strand:${id}`)) strandIdSet.delete(id)
+    for (const key of domainKeyMap.keys()) if (!collector.has(`domain:${key}`)) domainKeyMap.delete(key)
+    for (const id of ovhangIdSet) if (!collector.has(`overhang:${id}`)) ovhangIdSet.delete(id)
+    for (const id of extensionIdSet) if (!collector.has(`extension:${id}`)) extensionIdSet.delete(id)
+    for (const id of clusterIdSet) if (!collector.has(`cluster:${id}`)) clusterIdSet.delete(id)
+    for (let i = endEntries.length - 1; i >= 0; i--) {
+      if (!collector.has(`end:${endRefForEntry(endEntries[i])?.key}`)) endEntries.splice(i, 1)
     }
 
     // ── Loop/skip markers ──────────────────────────────────────────────────
@@ -3986,10 +4006,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         if (!arc.crossover_id) continue
         if (_arcCrossoverBlocked(arc)) continue   // scaffold/staple filter gates crossover arcs
         if (existingIds.has(arc.crossover_id)) continue
-        const sp = _toScreen(arc.getMidWorld())
-        if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
-          newArcs.push(arc)
-        }
+        const points = (arc.getPositions?.() ?? [arc.getMidWorld()]).map(pointBounds)
+        const inside = b => boundsInRect(b, selectionRect, false)
+        const captured = crossing
+          ? points.some(inside) || points.some((b, i) => i > 0 && b && points[i - 1] &&
+              segmentInRect(points[i - 1], b, selectionRect))
+          : points.length > 0 && points.every(inside)
+        if (captured) newArcs.push(arc)
       }
       if (newArcs.length) {
         const refs = newArcs.map(arc => _crossoverRefForArc(arc)).filter(Boolean)
@@ -4092,14 +4115,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // Capture-phase: disable controls before OrbitControls sees Ctrl/Alt/Shift+left
   // so it cannot start a pan or rotate gesture that competes with our selection
-  // click (Ctrl-drag → lasso; Alt-click → bead pick; Shift-click → additive pick).
+  // click (Ctrl-drag → no action; Alt-click → bead pick; Shift-click → additive pick).
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0 || !controls) return
-    if (e.ctrlKey || e.altKey || e.shiftKey) controls.enabled = false
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) controls.enabled = false
   }, { capture: true })
 
   let _downPos     = null
-  let _ctrlDownPos = null   // pending Ctrl+left-down — Ctrl-drag = lasso; bare click = unified toggle
+  let _ctrlDownPos = null   // pending Ctrl+left-down — Ctrl-drag is inert; bare click = unified toggle
   let _altDownPos  = null   // pending Alt+left-down — release without drag = measurement bead
   let _shiftDownPos = null  // pending Shift+left-down — bare click = unified toggle (Ctrl alias)
 
@@ -4111,7 +4134,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Modifier precedence: Alt > Shift > Ctrl. They never combine meaningfully
     // here, so the first match wins. Alt-down records position for measurement
     // bead pick; Shift-down and Ctrl-down both record for the unified multi-select
-    // toggle on release, and a Ctrl-drag becomes the lasso (drag detected on move).
+    // toggle on release. Only an unmodified left-drag becomes a lasso.
     if (e.altKey) {
       _altDownPos = { x: e.clientX, y: e.clientY }
       return
@@ -4120,57 +4143,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _shiftDownPos = { x: e.clientX, y: e.clientY }
       return
     }
-    if (e.ctrlKey) {
+    if (e.ctrlKey || e.metaKey) {
       _ctrlDownPos = { x: e.clientX, y: e.clientY }
       return
     }
 
     _downPos = { x: e.clientX, y: e.clientY }
-
-    // Disable OrbitControls for this click if a bead, cone, or cylinder is under the cursor,
-    // so the camera does not drift when the user selects a strand.
-    // Skip when the CG root is hidden (atomistic/surface mode): Three.js r172 does not check
-    // visible in Raycaster.intersectObjects, so hidden InstancedMeshes would still register
-    // hits and incorrectly disable controls.
-    _setNdc(e.clientX, e.clientY)
-    raycaster.setFromCamera(_ndc, _cam())
-    const nanoparticleHit = Boolean(getNanoparticleRenderer?.()?.raycastPick?.(raycaster))
-    const cgRootVisible = designRenderer.getHelixCtrl()?.root?.visible !== false
-    if (controls && cgRootVisible) {
-      // Filter to visible meshes only — Three.js r172+ ignores .visible in
-      // intersectObjects, so hidden meshes (e.g. iHelixCylinders in full-detail
-      // mode, or iSpheres/iCubes in cylinder-LOD mode) would otherwise register
-      // false hits at their stale design-geometry positions after cluster moves.
-      const beadMeshes = [...new Set(designRenderer.getBackboneEntries().map(e => e.instMesh))].filter(m => m.visible)
-      const coneMeshes = [...new Set(designRenderer.getConeEntries().map(e => e.instMesh))].filter(m => m.visible)
-      const cylMesh    = designRenderer.getCylinderMesh()
-      const beadHit = beadMeshes.length > 0 && raycaster.intersectObjects(beadMeshes).some(hit => {
-        const entry = designRenderer.getBackboneEntries().find(
-          item => item.instMesh === hit.object && item.id === hit.instanceId)
-        return entry && !_isHiddenReferenceNuc(entry.nuc)
-      })
-      const coneHit = coneMeshes.length > 0 && raycaster.intersectObjects(coneMeshes).some(hit => {
-        const entry = designRenderer.getConeEntries().find(
-          item => item.instMesh === hit.object && item.id === hit.instanceId)
-        return entry && !_isHiddenReferenceStrand(entry.strandId)
-      })
-      const cylHit  = (cylMesh?.visible) && raycaster.intersectObjects([cylMesh]).some(hit => {
-        const domain = designRenderer.getCylinderDomainAt(hit.instanceId)
-        return domain && !_isHiddenReferenceStrand(domain.strandId)
-      })
-      if (nanoparticleHit || beadHit || coneHit || cylHit) controls.enabled = false
-    } else if (controls && nanoparticleHit) {
-      controls.enabled = false
-    }
   })
 
   canvas.addEventListener('pointermove', e => {
     // Hover preview (default level + strand selected) — pops the bead/cone under
     // the cursor. Suspended while ANY mouse button is held (e.buttons !== 0): a
-    // button-down drag is an orbit (left) or pan (right/middle), and a moving camera
+    // button-down drag is selection (left), orbit (right), or pan (middle), and a moving camera
     // would flicker the snap target under a stationary cursor. Wheel ZOOM holds no
     // button, so hover keeps working while zooming (as desired). Also skipped during
-    // a ctrl/lasso drag or while disabled.
+    // a selection drag or while disabled.
     if (e.buttons !== 0) {
       _clearHoverPreview()
     } else if (moveRotateSelectionLocked(store.getState())) {
@@ -4178,12 +4165,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     } else if (!_ctrlDownPos && !_inLassoMode && !isDisabled?.()) {
       _updateHoverPreview(e.clientX, e.clientY)
     }
-    // If ctrl is held and we haven't yet started a lasso, check if the drag threshold is exceeded.
-    if (_ctrlDownPos && !_inLassoMode) {
-      if (Math.hypot(e.clientX - _ctrlDownPos.x, e.clientY - _ctrlDownPos.y) > 4) {
+    // Plain left-drag selects; modified drags never start a rectangle.
+    if (_downPos && !_inLassoMode) {
+      if (Math.hypot(e.clientX - _downPos.x, e.clientY - _downPos.y) > 4) {
         _inLassoMode  = true
-        _lassoStart   = _ctrlDownPos
-        _ctrlDownPos  = null
+        _lassoStart   = _downPos
+        _downPos = null
         _lassoOverlay = _createLassoOverlay()
         _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
         canvas.style.cursor = 'crosshair'
@@ -4198,6 +4185,20 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
     if (!_inLassoMode || !_lassoStart) return
     _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
+  })
+
+  function cancelSelectionGesture() {
+    _downPos = _ctrlDownPos = _altDownPos = _shiftDownPos = null
+    _inLassoMode = false
+    _lassoStart = null
+    _lassoOverlay?.remove()
+    _lassoOverlay = null
+    canvas.style.cursor = ''
+    if (controls) controls.enabled = true
+  }
+  canvas.addEventListener('pointercancel', cancelSelectionGesture)
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && (_inLassoMode || _downPos || _ctrlDownPos)) cancelSelectionGesture()
   })
 
   canvas.addEventListener('pointerup', e => {
@@ -4239,7 +4240,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
 
     // Ctrl+left click (no drag) → toggle the nearest crossover in/out of the
-    // multi-crossover selection. Ctrl+drag is the lasso (finalized above).
+    // multi-crossover selection. Ctrl+drag does nothing.
     if (_ctrlDownPos) {
       const moved = Math.hypot(e.clientX - _ctrlDownPos.x, e.clientY - _ctrlDownPos.y)
       _ctrlDownPos = null
@@ -4247,7 +4248,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
-    if (_downPos && Math.hypot(e.clientX - _downPos.x, e.clientY - _downPos.y) > 4) return
+    const down = _downPos
+    _downPos = null
+    if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return
     if (e.clientX > window.innerWidth - 300) return
 
     _dismissMenu()
