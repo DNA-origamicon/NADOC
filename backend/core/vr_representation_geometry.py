@@ -28,6 +28,37 @@ REPRESENTATIONS = (
 )
 
 
+def _surface_owners(surface, source):
+    """Keep desktop strand/nucleotide ownership when anchoring VR surface vertices.
+
+    A base-facing vertex can be nearer the opposite strand's backbone. Spatial
+    lookup is only a tie-break within the authored identity (including copies),
+    or a fallback for older meshes without identity metadata.
+    """
+    anchors = np.asarray([n["backbone_position"] for n in source])
+    by_strand, by_nucleotide = {}, {}
+    for i, n in enumerate(source):
+        sid = n.get("strand_id", "")
+        direction = n.get("direction", "FORWARD")
+        direction = getattr(direction, "value", direction)
+        nuc = n.get("scalar_key") or f'{n.get("helix_id", "")}:{n.get("bp_index", 0)}:{direction}'
+        by_strand.setdefault(sid, []).append(i)
+        by_nucleotide.setdefault((sid, nuc), []).append(i)
+    vertices = np.asarray(surface.vertices)
+    owners = cKDTree(anchors).query(vertices)[1]
+    groups = {}
+    for i, sid in enumerate(surface.vertex_strand_ids or []):
+        nuc = surface.vertex_nuc_ids[i] if surface.vertex_nuc_ids else ""
+        groups.setdefault((sid, nuc), []).append(i)
+    for identity, rows in groups.items():
+        candidates = by_nucleotide.get(identity) or by_strand.get(identity[0])
+        if candidates:
+            candidates = np.asarray(candidates)
+            nearest = cKDTree(anchors[candidates]).query(vertices[rows])[1]
+            owners[rows] = candidates[nearest]
+    return owners
+
+
 def build(design, nucleotides, axes, representations=None):
     from backend.api.routes_display_geometry import _build_design_surface_mesh
 
@@ -68,6 +99,7 @@ def build(design, nucleotides, axes, representations=None):
             desktop[rep] = {
                 "vertices": vertices[faces].reshape(-1, 3),
                 "normals": normals[faces].reshape(-1, 3),
+                "owners": _surface_owners(surface, source)[faces].reshape(-1),
             }
     desktop["source"] = source
     desktop["anchors"] = np.asarray([n["backbone_position"] for n in source])
@@ -102,9 +134,10 @@ def records(data, nucleotides):
     )
     tree = data["tree"]
 
-    def moved(points):
+    def moved(points, owners=None):
         points = np.asarray(points, dtype=float).reshape(-1, 3)
-        owners = tree.query(points)[1]
+        if owners is None:
+            owners = tree.query(points)[1]
         return points + offsets[owners], owners
 
     for rep, meshes in [
@@ -115,7 +148,7 @@ def records(data, nucleotides):
     ]:
         face_id = 0
         for mesh in meshes:
-            points, owners = moved(mesh["vertices"])
+            points, owners = moved(mesh["vertices"], mesh.get("owners"))
             normals = np.asarray(mesh["normals"]).reshape(-1, 3)
             colors = (
                 np.asarray(mesh["colors"]).reshape(-1, 3)
@@ -269,7 +302,14 @@ def append_records(
             dict.fromkeys(t for i in owners for t in source_aliases[int(i)])
         )[:8]
         if palette is None:
-            palette = source_palettes[int(owners[0])]
+            color_owner = owners[0]
+            if rep in {"surface", "surface-detail"} and len(owners) == 3:
+                # Native triangles have one palette. Match desktop crisp zones:
+                # majority strand, with a first-corner tie break.
+                a, b, c = (data["source"][int(i)].get("strand_id", "") for i in owners)
+                if a != b and a != c and b == c:
+                    color_owner = owners[1]
+            palette = source_palettes[int(color_owner)]
         coords = np.asarray(coordinates).copy()
         if kind == "P":
             coords[:3] = rotation @ coords[:3]
