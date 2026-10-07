@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { createSelectionHaloMaterial, updateSelectionHaloPositions, MAX_SELECTION_HALO_POINTS } from './selection_halo.js'
 import { matchTargetEntries, createTargetEntryMatcher, unresolvedBaseKeys, describeTarget } from './annotation_targets.js'
 import { createExternalTargets } from './annotation_external.js'
 import { mountSelectionPing } from '../viewer/selection_ping.js'
@@ -51,8 +52,8 @@ export function initPresentationSelection({ scene, store, container, getCamera, 
   document: doc = document, now = Date.now }) {
   const matchEntries = createTargetEntryMatcher()
   const external = createExternalTargets({ getDesign: () => store.getState().currentDesign, getProteinRenderer, getNanoparticleSubsystem })
-  let geometry = new THREE.BufferGeometry()
-  const material = new THREE.PointsMaterial({ color: 0xffd166, size: .65, transparent: true, opacity: .65, depthTest: false, depthWrite: false })
+  const geometry = new THREE.BufferGeometry()
+  const material = createSelectionHaloMaterial()
   const cloud = new THREE.Points(geometry, material); cloud.name = 'Presenter selection'; cloud.userData.presentationSelection = 'points'; cloud.raycast = () => {}; cloud.userData.setupOnly = true; cloud.renderOrder = 1250; cloud.frustumCulled = false; cloud.visible = false; scene.add(cloud)
   let cache = null
   let key = '', revision = 0, selection = null, ping = null, disposed = false
@@ -70,15 +71,8 @@ export function initPresentationSelection({ scene, store, container, getCamera, 
     cache = { value, design: state.currentDesign, selection: state.selection, cluster: state.activeClusterId, entries }
     if (value.key !== key) { key = value.key; revision++; ping = null; effect.clear() }
     const points = value.points.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z))
-    const stride = Math.max(1, Math.ceil(points.length / 20000)), count = Math.ceil(points.length / stride)
-    let attr = geometry.getAttribute('position')
-    if (!attr || attr.count !== count) { geometry.dispose(); geometry = new THREE.BufferGeometry(); cloud.geometry = geometry; attr = new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3); geometry.setAttribute('position', attr) }
-    let changed = false
-    for (let i = 0; i < count; i++) {
-      const p = points[i * stride], offset = i * 3
-      if (attr.array[offset] !== Math.fround(p.x) || attr.array[offset + 1] !== Math.fround(p.y) || attr.array[offset + 2] !== Math.fround(p.z)) { attr.setXYZ(i, p.x, p.y, p.z); changed = true }
-    }
-    if (changed) attr.needsUpdate = true
+    const stride = Math.max(1, Math.ceil(points.length / MAX_SELECTION_HALO_POINTS)), count = Math.ceil(points.length / stride)
+    updateSelectionHaloPositions(geometry, points, stride)
     cloud.visible = count > 0
     button.disabled = !count
     if (ping && now() - ping.createdAt > 8000) ping = null

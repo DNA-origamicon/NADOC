@@ -1,3 +1,4 @@
+import { selectionHaloShader, installSelectionHalo } from '../scene/selection_halo.js'
 import { installSelectionTint, selectionBaseCompiler } from '../scene/selection_tint.js'
 import { bakePreparedAssemblyInstances } from '../scene/prepared_assembly_instances.js'
 import { hullCutoutShader, applyHullCutouts, validateHullCutouts } from '../scene/hull_volume_cutouts.js'
@@ -53,10 +54,11 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
     const alpha = compile === instanceAlphaOnBeforeCompile
     const hullCutouts = compile === hullCutoutShader ? m.userData.hullCutouts : null
     const sectionCap = compile === sectionCapShader
-    if (!hullCutouts && !impostor && !alpha && !sectionCap && compile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
+    const selectionHalo = compile === selectionHaloShader
+    if (!hullCutouts && !impostor && !alpha && !sectionCap && !selectionHalo && compile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
     const data = m.isLineMaterial ? encodeWideLineMaterial(m) : m.toJSON(meta)
     delete data.userData
-    materials.set(m.uuid, { ...data, instanceAlpha: alpha, sectionCap, ...(hullCutouts ? { hullCutouts } : {}), ...(impostor ? { impostor } : {}),
+    materials.set(m.uuid, { ...data, instanceAlpha: alpha, sectionCap, ...(selectionHalo ? { selectionHalo: true } : {}), ...(hullCutouts ? { hullCutouts } : {}), ...(impostor ? { impostor } : {}),
       sectionPlanes: (m.clippingPlanes ?? []).map(p => [...p.normal.toArray(), p.constant]),
       clipIntersection: m.clipIntersection, clipShadows: m.clipShadows,
       colors: Object.fromEntries(COLOR_KEYS.filter(k => m[k]?.isColor).map(k => [k, m[k].toArray()])) })
@@ -153,6 +155,7 @@ export function validateScene(data) {
     if (!MATERIALS.has(m.type) || m.vertexShader || m.fragmentShader || m.uniforms || m.clippingPlanes) fail('Unsupported package material')
     if (m.hullCutouts != null) { validateHullCutouts(m.hullCutouts); if (m.hullCutouts.length && data.version < 6) fail('Unsupported hull cutout version'); if (m.impostor || m.instanceAlpha || m.sectionCap || !['MeshPhongMaterial', 'MeshBasicMaterial', 'LineBasicMaterial'].includes(m.type)) fail('Unsupported hull cutout material') }
     if (m.impostor != null && (data.version < 4 || m.type !== 'MeshPhongMaterial' || !Number.isFinite(m.impostor.radius) || m.impostor.radius <= 0 || typeof m.impostor.instanceAlpha !== 'boolean' || m.instanceAlpha || m.sectionCap || m.wideLine)) fail('Invalid sphere impostor')
+    if (m.selectionHalo != null && (m.selectionHalo !== true || m.type !== 'PointsMaterial' || m.impostor || m.instanceAlpha || m.sectionCap || m.hullCutouts || m.wideLine)) fail('Invalid selection halo')
     if (m.sectionCap != null && typeof m.sectionCap !== 'boolean') fail('Invalid section cap')
     if (m.sectionPlanes && (!Array.isArray(m.sectionPlanes) || m.sectionPlanes.length > 16 || m.sectionPlanes.some(p => !finiteVector(p, 4) || Math.abs(Math.hypot(...p.slice(0, 3)) - 1) > .001))) fail('Invalid section planes')
     for (const [key, value] of Object.entries(m)) if ((key === 'map' || key.endsWith('Map')) && value != null && !textures.has(value)) fail('Missing material texture')
@@ -242,6 +245,7 @@ export async function loadPreparedScene(buffer) {
       }
       if (m.hullCutouts) applyHullCutouts(materials[m.uuid], m.hullCutouts)
       if (m.instanceAlpha) applyInstanceAlphaMaterial(materials[m.uuid])
+      if (m.selectionHalo) installSelectionHalo(materials[m.uuid])
       if (m.sectionCap) materials[m.uuid].onBeforeCompile = sectionCapShader
       materials[m.uuid].clippingPlanes = (m.sectionPlanes ?? []).map(p => new THREE.Plane(new THREE.Vector3(...p.slice(0, 3)), p[3]))
       materials[m.uuid].clipIntersection = !!m.clipIntersection
