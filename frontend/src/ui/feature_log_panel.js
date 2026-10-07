@@ -21,6 +21,7 @@ import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_sta
 import { showConfirm } from './primitives/confirm.js'
 import { showDependentsDecision } from './primitives/dependents_dialog.js'
 import { editFeature, isEditable as _isOpEditable } from './edit_feature_popover.js'
+import { generatedFeatureSchema, canReplayGenerated } from './generated_feature_fields.js'
 import { canonicalSelection } from '../scene/selection_model.js'
 
 const FEATURE_LOG_BOTTOM_TOLERANCE_PX = 8
@@ -1404,19 +1405,20 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
         const isPattern = isPatternFeature(entry.op_kind)
         const isLinkerAdd = entry.op_kind === 'linker-add'
         const isNanoparticle = entry.op_kind === 'nanoparticle-create'
-        const isEditable = (_EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd || isNanoparticle || isPattern) && !isEvicted
+        const isGenerated = entry.params?._generator?.version === 1
+        const isEditable = (isGenerated || _EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd || isNanoparticle || isPattern) && !isEvicted
         const hasLaterSnapshot = isEditable && log.slice(i + 1).some(e => e.feature_type === 'snapshot')
         // Linker and nanoparticle editors change the current object; they do
         // not replay the original creation snapshot. Later operations are fine.
         const particle = isNanoparticle
           ? store.getState().currentDesign?.nanoparticles?.find(p => p.id === entry.params?.nanoparticle_id)
           : null
-        const editAllowed = isEditable && (isNanoparticle ? !!particle : (isLinkerAdd || isPattern || !hasLaterSnapshot))
+        const editAllowed = isEditable && (isGenerated ? canReplayGenerated(log, i) : isNanoparticle ? !!particle : (isLinkerAdd || isPattern || !hasLaterSnapshot))
 
         let editBtn = null
         if (isEditable) {
           editBtn = document.createElement('button')
-          editBtn.textContent = '✎'
+          editBtn.textContent = isGenerated && !generatedFeatureSchema(entry).length ? '↻' : '✎'
           editBtn.title = editAllowed
             ? (isLinkerAdd
                 ? `Open Overhangs Manager for this linker`
@@ -1427,6 +1429,9 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
             : isNanoparticle ? 'Cannot edit: this nanoparticle has been deleted.'
               : 'Cannot edit: a later snapshot exists. Revert to this point first.'
           editBtn.disabled = !editAllowed
+          if (isGenerated) editBtn.title = editAllowed
+            ? (generatedFeatureSchema(entry).length ? 'Edit parameters and rebuild dependent generated steps' : 'Rebuild this operation and dependent generated steps')
+            : 'Revert later manual features before rebuilding this generated run.'
           editBtn.style.cssText = [
             editAllowed
               ? 'background:#21262d;border:1px solid #30363d;color:#8b949e;cursor:pointer'
@@ -1437,6 +1442,18 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
           if (editAllowed) {
             editBtn.addEventListener('click', async e => {
               e.stopPropagation()
+              if (isGenerated) {
+                const schema = generatedFeatureSchema(entry)
+                const patch = schema.length ? await editFeature({ title: `Edit ${entry.label}`,
+                  opKind: entry.op_kind, currentParams: entry.params, schema }) : {}
+                if (!patch) return
+                editBtn.disabled = true
+                try {
+                  const response = await api.editFeature(i, patch)
+                  if (response == null) showPersistentToast(`Edit failed: ${store.getState().lastError?.message || 'unknown error'}`)
+                } finally { editBtn.disabled = false }
+                return
+              }
               if (isLinkerAdd) {
                 // Open Overhangs Manager preselected on the linker's two
                 // overhangs so the user lands directly on the relevant row.

@@ -8360,6 +8360,11 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
 
     entry = log[index]
 
+    if getattr(entry, "params", {}).get("_generator", {}).get("version") == 1:
+        from backend.api.generated_history import edit_generated_feature
+
+        return edit_generated_feature(index, body.params)
+
     # ── Deformation edit branch ───────────────────────────────────────────────
     if isinstance(entry, _DeformationLogEntry):
         return _edit_deformation_feature(index, entry, body, design)
@@ -8648,7 +8653,13 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
 
     # Keep only entries strictly before this one — see truncation rationale above.
     truncated_log = log[:index]
-    restored = restored.copy_with(feature_log=truncated_log, feature_log_cursor=-1)
+    restored = restored.copy_with(
+        feature_log=truncated_log,
+        feature_log_cursor=-1,
+        loadouts=design.loadouts,
+        active_loadout_id=design.active_loadout_id,
+        last_editable_loadout_id=design.last_editable_loadout_id,
+    )
 
     design_state.set_design(restored)
     report = validate_design(restored)
@@ -8855,6 +8866,35 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
     connection cache is restored alongside its marks so the two stay consistent at every
     seek position.
     """
+    generated = any(
+        getattr(e, "params", {}).get("_generator", {}).get("version") == 1
+        for e in design.feature_log
+    )
+    if generated:
+        # Generator commands carry canonical cargo/duplex state and independent
+        # cluster poses in their snapshots. Future generated objects must not
+        # survive a backward scrub. Ordinary cluster delta replay still owns
+        # non-generated clusters and any later manual moves.
+        touched_clusters = {
+            cid
+            for entry in design.feature_log
+            for cid in getattr(entry, "params", {}).get("_generator", {}).get("cluster_ids", [])
+        }
+        touched_clusters.update(
+            c.id for c in [*design.cluster_transforms, *snap_design.cluster_transforms]
+            if c.id.startswith("gen_")
+        )
+        design = design.copy_with(
+            nanoparticles=snap_design.nanoparticles,
+            nanoparticle_conjugations=snap_design.nanoparticle_conjugations,
+            nanoparticle_connection_versions=snap_design.nanoparticle_connection_versions,
+            duplexes=snap_design.duplexes,
+            overhang_bindings=snap_design.overhang_bindings,
+            staple_groups=snap_design.staple_groups,
+            cluster_transforms=[
+                c for c in design.cluster_transforms if c.id not in touched_clusters
+            ] + [c for c in snap_design.cluster_transforms if c.id in touched_clusters],
+        )
     return design.copy_with(
         helices=snap_design.helices,
         lattice_frames=snap_design.lattice_frames,

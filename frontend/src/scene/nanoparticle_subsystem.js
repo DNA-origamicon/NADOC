@@ -214,35 +214,6 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
         linkerAtomRoot.add(bonds)
       }
     }
-    for (const version of design?.nanoparticle_connection_versions ?? []) {
-      if (!version.applied) continue
-      const strandNucs = geometry.filter(n => n.strand_id === version.strand_id)
-      const overhangNucs = geometry.filter(n => n.overhang_id === version.overhang_id)
-      if (!strandNucs.length || !overhangNucs.length) continue
-      const particle = particlesById.get(version.nanoparticle_id)
-      if (!particle) continue
-      const center = new THREE.Vector3().setFromMatrixPosition(poseMatrix(particle))
-      const sourceNuc = strandNucs.reduce((best, n) => {
-        const p = new THREE.Vector3(...n.backbone_position)
-        return !best || p.distanceToSquared(center) > best.distance ? { n, distance: p.distanceToSquared(center) } : best
-      }, null)?.n
-      const targetNuc = overhangNucs.find(n => n.is_five_prime || n.is_three_prime) ?? overhangNucs[overhangNucs.length - 1]
-      if (!sourceNuc || !targetNuc) continue
-      const source = new THREE.Vector3(...sourceNuc.backbone_position)
-      const target = new THREE.Vector3(...targetNuc.backbone_position)
-      const midpoint = source.clone().lerp(target, .5)
-      const chord = target.clone().sub(source)
-      const bend = new THREE.Vector3(0, 1, 0).cross(chord)
-      if (bend.lengthSq() < 1e-8) bend.set(1, 0, 0)
-      midpoint.addScaledVector(bend.normalize(), Math.min(5, chord.length() * .15))
-      const points = new THREE.QuadraticBezierCurve3(source, midpoint, target).getPoints(32)
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),
-        new THREE.LineBasicMaterial({ color: version.relaxed ? 0x3fb950 : 0xffffff }))
-      line.name = `nanoparticle-overhang-connection:${version.id}`
-      line.userData = { nanoparticleId: version.nanoparticle_id, strandId: version.strand_id,
-        overhangId: version.overhang_id, versionId: version.id }
-      connectorRoot.add(line)
-    }
     syncSelection(true)
   }
 

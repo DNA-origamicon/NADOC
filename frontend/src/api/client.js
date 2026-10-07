@@ -3968,6 +3968,20 @@ export async function createLoadout(name) {
   return _syncFromDesignResponse(json)
 }
 
+export async function planGeneratedDesign(settings) {
+  const docId = docHeaders()['X-NADOC-Doc']
+  const json = await _request('POST', '/design/generate-design/plan', settings, { docId })
+  return json ? { ...json, doc_id: docId } : null
+}
+
+export async function generateDesign(settings, expectedRevision, docId = docHeaders()['X-NADOC-Doc']) {
+  const json = await _request('POST', '/design/generate-design', {
+    ...settings, expected_revision: expectedRevision,
+  }, { docId })
+  if (json && docHeaders()['X-NADOC-Doc'] === docId) await _syncFromDesignResponse(json)
+  return json
+}
+
 export async function selectLoadout(loadoutId, { saveCurrent = true } = {}) {
   const q = saveCurrent ? '' : '?save_current=false'
   const json = await _request('POST', `/design/loadouts/${loadoutId}/select${q}`)

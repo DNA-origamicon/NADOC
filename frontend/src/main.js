@@ -6853,6 +6853,11 @@ async function main() {
     showAboutFileModal({ api, path: _workspacePath })
   })
 
+  document.getElementById('menu-help-generate-design')?.addEventListener('click', async () => {
+    const { showGenerateDesign } = await import('./ui/generate_design.js')
+    showGenerateDesign({ api, store })
+  })
+
   document.getElementById('menu-help-cpd-progress')?.addEventListener('click', async () => {
     const { showCpdProgress } = await import('./ui/cpd_progress.js')
     showCpdProgress()

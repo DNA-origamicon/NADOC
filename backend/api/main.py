@@ -113,6 +113,7 @@ from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
 from backend.api.routes_photoproducts import router as photoproducts_router
 from backend.api.routes_nanoparticles import router as nanoparticles_router
+from backend.api.routes_generate_design import router as generate_design_router
 from backend.api.routes_project_collaboration import router as project_collaboration_router
 from backend.api.routes_peg_setup import router as peg_setup_router
 from backend.api.routes_namd_peg_surfaces import router as namd_peg_surfaces_router
@@ -409,6 +410,7 @@ app.include_router(surface_progress_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
 app.include_router(crud_router, prefix="/api")
 app.include_router(design_loadouts_router, prefix="/api")
+app.include_router(generate_design_router, prefix="/api")
 app.include_router(design_interchange_router, prefix="/api")
 app.include_router(connection_versions_router, prefix="/api")
 app.include_router(overhang_connections_router, prefix="/api")
