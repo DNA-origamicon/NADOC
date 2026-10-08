@@ -1,3 +1,4 @@
+import { createSelectionHaloMaterial } from '../scene/selection_halo.js'
 import * as THREE from 'three'
 import { updateSelectionTint } from '../scene/selection_tint.js'
 import { validateSelectionUpdate } from './selection_update.js'
@@ -59,7 +60,7 @@ export function mountSharedSelection({ container, runtime }) {
     }
     if (!overlay) {
       overlay = new THREE.Group(); overlay.name = 'Shared selection overlay'
-      const cloud = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xffd166, size: .65, transparent: true, opacity: .65, depthTest: false, depthWrite: false }))
+      const cloud = new THREE.Points(new THREE.BufferGeometry(), createSelectionHaloMaterial())
       cloud.renderOrder = 1250; cloud.frustumCulled = false; cloud.raycast = () => {}
       const corners = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x38ff6b, depthTest: true, depthWrite: false }))
       corners.frustumCulled = false; overlay.add(cloud, corners); runtime.scene.add(overlay)

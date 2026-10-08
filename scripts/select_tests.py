@@ -145,6 +145,7 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("openmm", ("md",)),
     # atomistic_validation.py is a leaf (the atomistic BASE is a full-trigger above)
     ("atomistic_validation", ("atomistic",)),
+    ("vr_representation", ("atomistic",)),
     # CPD conversion exercises the atomistic multi-start attachment relaxation.
     ("cpd_design", ("atomistic",)),
     # pdb_export.py builds on the atomistic model — its heavy export test lives in the

@@ -59,6 +59,7 @@ from backend.api.routes_relaxation import router as relaxation_router
 from backend.api.routes_assembly_overhangs import router as assembly_overhangs_router
 from backend.api.routes_assembly_polymerize import router as assembly_polymerize_router
 from backend.api.routes_assembly_validation import router as assembly_validation_router
+from backend.api.routes_design_readiness import router as design_readiness_router
 from backend.api.routes_assembly_workspace import router as assembly_workspace_router
 from backend.api.routes_camera_poses import router as camera_poses_router
 from backend.api.routes_cluster import router as cluster_router
@@ -112,6 +113,7 @@ from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
 from backend.api.routes_photoproducts import router as photoproducts_router
 from backend.api.routes_nanoparticles import router as nanoparticles_router
+from backend.api.routes_generate_design import router as generate_design_router
 from backend.api.routes_project_collaboration import router as project_collaboration_router
 from backend.api.routes_peg_setup import router as peg_setup_router
 from backend.api.routes_namd_peg_surfaces import router as namd_peg_surfaces_router
@@ -408,6 +410,7 @@ app.include_router(surface_progress_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
 app.include_router(crud_router, prefix="/api")
 app.include_router(design_loadouts_router, prefix="/api")
+app.include_router(generate_design_router, prefix="/api")
 app.include_router(design_interchange_router, prefix="/api")
 app.include_router(connection_versions_router, prefix="/api")
 app.include_router(overhang_connections_router, prefix="/api")
@@ -462,6 +465,7 @@ app.include_router(assembly_loadouts_router, prefix="/api")
 app.include_router(assembly_overhangs_router, prefix="/api")
 app.include_router(assembly_polymerize_router, prefix="/api")
 app.include_router(assembly_validation_router, prefix="/api")
+app.include_router(design_readiness_router, prefix="/api")
 app.include_router(assembly_workspace_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
 app.include_router(md_router, prefix="/api")

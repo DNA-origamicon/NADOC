@@ -3,9 +3,9 @@ import { loadScaffoldedPart } from './helpers/scene_harness.js'
 
 // Persistence inventory: only __e2e__circular-axis*.nadoc, __e2e__circular-confirm*.nadoc and project
 // history via loadScaffoldedPart. global-teardown.js removes both on all outcomes.
-// Session caching is disabled by the Playwright server config. No screenshots,
-// exports, downloads, or custom output paths are written by this spec.
-test('drag and lattice-snap a circular axis and preview instances without editing the part', async ({ page }) => {
+// Session caching is disabled by the Playwright server config. Screenshots use
+// testInfo.outputPath and the cleanup reporter removes them on all outcomes.
+test('drag and lattice-snap a circular axis and preview instances without editing the part', async ({ page }, testInfo) => {
   test.setTimeout(90_000)
   await page.setViewportSize({ width: 1800, height: 1000 })
   const errors = []
@@ -51,6 +51,9 @@ test('drag and lattice-snap a circular axis and preview instances without editin
     if (await page.locator('.cp-panel-body').isVisible()) break
   }
   await expect(page.locator('.cp-panel-body')).toBeVisible()
+  for (const name of ['Cluster', 'Direction', 'Origin', 'Pattern', 'Info']) {
+    await expect(page.locator('#circular-pattern-panel').getByRole('group', { name, exact: true })).toHaveCSS('border-top-width', '1px')
+  }
   expect(await page.evaluate(() => window.__nadocTest.getSelectionLevel())).toBe('default')
   await expect(page.locator('#circular-pattern-panel canvas')).toHaveCount(0)
   await expect.poll(() => page.evaluate(async () => {
@@ -61,6 +64,11 @@ test('drag and lattice-snap a circular axis and preview instances without editin
   const previewData = () => page.evaluate(() => window.__nadocTest.scene.getObjectByName('circularPatternPreview')?.userData)
   expect((await previewData()).instances).toBe(6)
   await expect(page.getByRole('spinbutton', { name: 'Total angle (degrees)', exact: true })).toHaveValue('360')
+  const angle = page.getByRole('spinbutton', { name: 'Total angle (degrees)', exact: true })
+  await angle.press('ArrowDown')
+  await expect(angle).toHaveValue('359')
+  await angle.press('ArrowUp')
+  await expect(angle).toHaveValue('360')
   expect((await previewData()).instances).toBe(6)
   const snap = page.getByRole('checkbox', { name: 'Snap to lattice' })
   await expect(snap).toBeEnabled()
@@ -106,7 +114,7 @@ test('drag and lattice-snap a circular axis and preview instances without editin
   expect(ids).toHaveLength(2)
   await expect(source).toHaveValue((await previewData()).sourceClusterId)
   await expect(page.locator('.tool-popup[data-tool-panel="circular-pattern-panel"]')).toHaveCSS('backdrop-filter', 'blur(18px) saturate(1.25)')
-  if (process.env.NADOC_POPUP_SCREENSHOTS) await page.screenshot({ path: `${process.env.NADOC_POPUP_SCREENSHOTS}/circular-pattern.png` })
+  await page.screenshot({ path: testInfo.outputPath('circular-pattern.png') })
   await page.getByRole('button', { name: 'Centered about', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Centered about', exact: true })).toHaveCSS('background-color', 'rgb(31, 111, 235)')
   await expect(page.getByRole('combobox', { name: 'Center cluster', exact: true })).toBeVisible()

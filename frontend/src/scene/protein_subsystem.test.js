@@ -7,7 +7,7 @@
  * changes and assert the subscribers route to refresh / gizmo correctly.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { Vector3 } from 'three'
+import { Vector3, Matrix4 } from 'three'
 import { createMockStore } from '../test-helpers/mock_store.js'
 
 // Capture the gizmo callbacks main.js wires (onLiveStart/onLive/onLiveEnd) and
@@ -81,6 +81,23 @@ describe('initProteinSubsystem', () => {
     global.window = global.window || {}
   })
   afterEach(() => { vi.clearAllMocks() })
+
+  it('previews and cancels copied free-protein DNA with the protein', async () => {
+    const deps = makeDeps({ currentDesign: {
+      protein_attachments: [{ id: 'p1', target: { kind: 'free' }, binder_strand_id: 's' }],
+      strands: [{ id: 's', domains: [{ helix_id: 'private-h' }] }],
+    } })
+    deps.designRenderer = { captureClusterBase: vi.fn(), applyClusterTransform: vi.fn() }
+    initProteinSubsystem(deps)
+    _lastRenderer.centroidOf.mockReturnValue({ x: 1, y: 2, z: 3 })
+    global.fetch.mockResolvedValue({ ok: true, json: async () => ({ atoms: [] }) })
+    _lastGizmo._cbs.onLiveStart('p1')
+    _lastGizmo._cbs.onLive(new Matrix4().makeTranslation(4, 0, 0))
+    expect(deps.designRenderer.captureClusterBase).toHaveBeenCalledWith(['private-h'])
+    expect(deps.designRenderer.applyClusterTransform.mock.calls[0][2].toArray()).toEqual([5, 2, 3])
+    await _lastGizmo._cbs.onCancelled()
+    expect(deps.designRenderer.applyClusterTransform.mock.calls[1][2].toArray()).toEqual([1, 2, 3])
+  })
 
   it('returns the renderer + gizmo + refresh + syncSelectionVisual api', () => {
     const deps = makeDeps()

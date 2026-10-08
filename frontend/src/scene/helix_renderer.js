@@ -25,6 +25,7 @@ import { nativeCorePaired } from '../shared/aptamer.js'
 
 import * as THREE from 'three'
 import { baseKey } from './base_ref.js'
+import { createPolymerizationPreview } from './polymerization_preview.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
   impostorsEnabled,
@@ -3161,6 +3162,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     // Re-gate axis lines per-region: only full-rendered columns keep their axis.
     if (_axisArrowsVisible) _applyShaftModeVisibility(_currentShaftMode)
   }
+
+  createPolymerizationPreview(root, design, backboneEntries, slabEntries, BEAD_RADIUS)
 
   // ── Public interface ───────────────────────────────────────────────────────
 

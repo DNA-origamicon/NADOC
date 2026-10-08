@@ -22,11 +22,13 @@ export function mountSelectionPing({ container, getCamera, getTarget, now = Date
     const w = container.clientWidth || 1, h = container.clientHeight || 1
     const pixels = []
     let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity
-    for (let i = 0; i < attr.count; i++) {
+    const start = target.geometry.drawRange.start
+    const end = Math.min(attr.count, start + target.geometry.drawRange.count)
+    for (let i = start; i < end; i++) {
       projected.fromBufferAttribute(attr, i).applyMatrix4(target.matrixWorld).project(camera)
       if (projected.z <= -1 || projected.z >= 1) continue
       const x = (projected.x + 1) * w / 2, y = (1 - projected.y) * h / 2
-      if (i % Math.max(1, Math.ceil(attr.count / 5000)) === 0) pixels.push([x, y])
+      if (i % Math.max(1, Math.ceil((end - start) / 5000)) === 0) pixels.push([x, y])
       left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y)
     }
     if (!Number.isFinite(left)) { ring.hidden = true; dots.hidden = true; return }

@@ -2,6 +2,7 @@ import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { el } from './primitives/dom.js'
 import { createLinearPatternControls, linearPatternSection } from './linear_pattern_controls.js'
+import { toolSection } from './tool_sections.js'
 import { linearPatternOffsets } from './linear_pattern_math.js'
 import { patternAngles } from './circular_pattern_math.js'
 import { normalizedAxis } from './circular_pattern_panel.js'
@@ -28,15 +29,19 @@ export function editPatternFeature(entry) {
       function number(label, value, change, integer = false) {
         return el('label', { children: [label, el('input', { className: 'input input--sm', attrs: { type: 'number', step: integer ? '1' : 'any', value, 'aria-label': label }, on: { input: event => change(event.target.value === '' ? NaN : Number(event.target.value)) } })] })
       }
-      controls.append(number('Instances', values.instances, v => { values.instances = v }, true), number('Total angle (degrees)', values.total_angle, v => { values.total_angle = v }))
+      controls.append(toolSection('Pattern', [el('div', { className: 'tool-fields', children: [number('Instances', values.instances, v => { values.instances = v }, true), number('Total angle (degrees)', values.total_angle, v => { values.total_angle = v })] })]))
       for (const [key, title] of [['axis_point', 'Axis origin (nm)'], ['axis_direction', 'Axis direction']]) {
-        const fields = el('fieldset', { children: [el('legend', { text: title })] })
-        for (const [i, axis] of ['X', 'Y', 'Z'].entries()) fields.append(number(`${title} ${axis}`, values[key][i], v => { values[key][i] = v }))
-        controls.append(fields)
+        const fields = el('div', { className: 'tool-fields' })
+        for (const [i, axis] of ['X', 'Y', 'Z'].entries()) {
+          const field = number(`${title} ${axis}`, values[key][i], v => { values[key][i] = v })
+          field.firstChild.textContent = axis
+          fields.append(field)
+        }
+        controls.append(toolSection(title, [fields]))
       }
+      controls.append(toolSection('Info', [el('p', { className: 'tool-help', text: 'Counts include the original. The axis direction is normalized.' }), error]))
       body.append(controls)
     }
-    if (entry.op_kind !== 'linear-pattern') body.append(error)
     const save = () => {
       const valid = entry.op_kind === 'linear-pattern' ? linearPatternOffsets(values) : patternAngles(values.instances, values.total_angle) && normalizedAxis(values.axis_point, values.axis_direction)
       if (!valid) {

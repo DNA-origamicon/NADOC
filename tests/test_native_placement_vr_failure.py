@@ -110,6 +110,8 @@ def test_quarantine_delivery_failure_retains_report_and_original_error(monkeypat
 
 
 def test_pending_review_prevents_relaunch_without_duplicate_incident(monkeypatch, tmp_path):
+    # Exercise the review gate independently of the test runner's VR platform.
+    monkeypatch.setattr(vr, "_native_platform_reason", lambda: None)
     integrity.record_native_placement_failure(NativePlacementError("Review me"), event_path=tmp_path / "old-session")
     def forbidden():
         pytest.fail("A pending positioning review must be checked before starting SteamVR")

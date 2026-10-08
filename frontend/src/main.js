@@ -61,6 +61,7 @@ import { initDesignRenderer }        from './scene/design_renderer.js'
 import { deferrableContextMenu }      from './scene/right_click_menu.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
+import { initElementClipboard } from './scene/element_clipboard.js'
 import { initClusterClipboard }      from './scene/cluster_clipboard.js'
 import { initExtrudePanel }          from './ui/extrude_panel.js'
 import { initPrimitiveLibrary }      from './ui/primitive_library.js'
@@ -316,6 +317,7 @@ import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 import { initRightSidebarTabs } from './ui/right_sidebar_tabs.js'
+import { initDesignReadinessHost } from './ui/design_readiness_host.js'
 import { initViewVolumes } from './scene/view_volumes.js'
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
@@ -926,7 +928,7 @@ async function main() {
   if (!localStorage.getItem(_SEL_HINT_KEY)) {
     setTimeout(() => {
       showToast(
-        'Selection: D = dimensions · Shift-click = add to selection · Ctrl-drag = lasso',
+        'Selection: D = dimensions · Shift-click = add to selection · Left-drag = box selection',
         { duration: 8000 },
       )
       localStorage.setItem(_SEL_HINT_KEY, '1')
@@ -4260,6 +4262,7 @@ async function main() {
     store, api,
     slicePlane, expandedSpacing, debugOverlay, dimensionsTool, selectionManager,
     clusterClipboard: _clusterClipboard,
+    elementClipboard: initElementClipboard({ store, api, selectionController, showToast }),
     extrudePanel: _extrudePanel, deformView, crossSectionMinimap, sliceHighlighter,
     primitiveLibrary: _primitiveLibrary,
     viewCube, camera, controls,
@@ -5524,16 +5527,8 @@ async function main() {
     getExtras: () => selectionManager.getPresentationSelectionExtras(),
   })
 
-  // ── Assembly-mode lasso (Ctrl-drag → multi-select PartInstances) ────────────
-  // Mirrors design-mode lasso (selection_manager.js: _createLassoOverlay /
-  // _updateLassoOverlay / _finalizeLasso) so the gesture is identical: hold
-  // Ctrl (or Meta on macOS) and drag a rectangle; instances whose projected
-  // world-space center falls inside the rect on pointerup populate
-  // multiSelectedInstanceIds. Ctrl-click without drag toggles the picked
-  // instance in/out of the set (see _onAssemblyClick).
-  // Assembly drag-rectangle multi-select — factory in scene/assembly_lasso.js
-  // (pure hit-test core unit-tested). Deferred handlers, so the const is built
-  // before any fires; assemblyRenderer via a lazy getter.
+  // Directional left-drag box selection. A plain click follows the normal
+  // assembly selection path; Ctrl-click toggles and Ctrl-drag does nothing.
   const assemblyLasso = initAssemblyLasso({
     canvas, camera, controls,
     getInstanceCenters: () => assemblyRenderer.getInstanceCenters?.() ?? [],
@@ -5542,6 +5537,10 @@ async function main() {
         ? Array.from(new Set([...(store.getState().multiSelectedInstanceIds ?? []), ...hits]))
         : hits
       store.setState({ multiSelectedInstanceIds: next, activeInstanceId: null, activeGroupId: null })
+    },
+    onPlainClick: (e) => {
+      _assemblyPtrDownAt = { x: e.clientX, y: e.clientY }
+      void _assemblyPointer.onAssemblyClick(e)
     },
     // Ctrl-click (no drag) → toggle the picked instance in/out of the multi-select.
     onClick: (e) => {
@@ -6856,6 +6855,11 @@ async function main() {
     showAboutFileModal({ api, path: _workspacePath })
   })
 
+  document.getElementById('menu-help-generate-design')?.addEventListener('click', async () => {
+    const { showGenerateDesign } = await import('./ui/generate_design.js')
+    showGenerateDesign({ api, store })
+  })
+
   document.getElementById('menu-help-cpd-progress')?.addEventListener('click', async () => {
     const { showCpdProgress } = await import('./ui/cpd_progress.js')
     showCpdProgress()
@@ -7133,6 +7137,8 @@ async function main() {
     store,
     syncBadge: _syncBadge,
   })
+
+  initDesignReadinessHost({ store, api, onRestored: _hideWelcome, onSimulate: () => _leftSidebar?.selectTab('dynamics') })
 
   // ── Run the boot action for a New/Open-spawned tab (?new / ?open) ────────────
   // This tab owns a fresh ?doc=<id>, so the action targets its own document.

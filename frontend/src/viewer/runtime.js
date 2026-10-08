@@ -7,6 +7,7 @@
  */
 
 import * as THREE from 'three'
+import { configureMouseBindings, attachMouseBindings } from './mouse_bindings.js'
 import { OrbitControls }    from 'three/addons/controls/OrbitControls.js'
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
 import { makeMultiscaleControls } from '../scene/multiscale_controls.js'
@@ -17,6 +18,7 @@ import { installPlacementSceneGuard, assertPlacementExportSafe } from './placeme
 
 function _makeOrbitControls(camera, canvas, target) {
   const c = new OrbitControls(camera, canvas)
+  configureMouseBindings(c)
   c.enableDamping = false
   c.zoomToCursor = true        // zoom toward cursor position, not just target
   c.screenSpacePanning = true  // pan moves in screen plane (better for arbitrary 3-D views)
@@ -26,6 +28,7 @@ function _makeOrbitControls(camera, canvas, target) {
 
 function _makeTrackballControls(camera, canvas, target) {
   const c = new TrackballControls(camera, canvas)
+  configureMouseBindings(c)
   c.rotateSpeed = 3.0
   c.zoomSpeed   = 1.2
   c.panSpeed    = 0.8
@@ -70,6 +73,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
   // A Proxy is returned to callers so that switchOrbitMode() can swap the
   // underlying instance without invalidating any stored references.
   let _inner = _makeOrbitControls(camera, canvas)
+  const detachMouseBindings = attachMouseBindings(canvas, () => _inner)
   _inner.target.set(0, 0, 7)   // midpoint of 42 bp helix on Z axis
 
   const controls = new Proxy({}, {
@@ -320,6 +324,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
   // Scene children belong to the host. Dispose their resources before disposing
   // this runtime; the editor and a prepared viewer have different resource owners.
   function dispose() {
+    detachMouseBindings()
     if (disposed) return
     disposed = true
     trajectoryClock.dispose()

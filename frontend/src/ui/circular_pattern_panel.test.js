@@ -104,6 +104,7 @@ it('previews in the part scene, switches clusters and centers about a second clu
   expect(preview.userData.instances).toBe(6)
   expect(document.querySelector('#circular-pattern-panel canvas')).toBeNull()
   expect(document.querySelector('[aria-label="Cluster"]').value).toBe('c')
+  expect([...document.querySelectorAll('.tool-section > legend')].map(node => node.textContent)).toEqual(['Cluster', 'Direction', 'Origin', 'Pattern', 'Info'])
   const centered = [...document.querySelectorAll('button')].find(b => b.textContent === 'Centered about')
   centered.click()
   centered.click() // active mode cannot be deselected
@@ -118,7 +119,7 @@ it('previews in the part scene, switches clusters and centers about a second clu
   expect(preview.userData.axisPoint).toEqual([-88, -97, -100])
   const x = [...document.querySelectorAll('button')].find(b => b.textContent === 'X')
   x.click()
-  expect(document.querySelectorAll('fieldset.cp-presets [aria-pressed="true"]')).toHaveLength(1)
+  expect(x.closest('.tool-section').querySelectorAll('[aria-pressed="true"]')).toHaveLength(1)
   expect(x.getAttribute('aria-pressed')).toBe('true')
   controller.clear()
   expect(tool.isActive()).toBe(true)

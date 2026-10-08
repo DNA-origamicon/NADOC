@@ -1,5 +1,6 @@
 import { el } from './primitives/dom.js'
 import './tool_popup.css'
+import './tool_sections.css'
 
 /** Non-modal CAD tool window. Reparents the actual controls, preserving handlers. */
 export function createToolPopup({ panel, title, onClose }) {

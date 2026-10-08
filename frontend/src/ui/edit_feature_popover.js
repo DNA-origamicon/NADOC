@@ -80,8 +80,8 @@ export function isEditable(opKind) {
 /**
  * Open the popover and resolve with a new params object, or null on cancel.
  */
-export function editFeature({ title, opKind, currentParams = {} }) {
-  const schema = OP_SCHEMAS[opKind]
+export function editFeature({ title, opKind, currentParams = {}, schema: fieldSchema }) {
+  const schema = fieldSchema ?? OP_SCHEMAS[opKind]
   if (!schema) {
     showToast(`Edit not supported for ${opKind}.`, { severity: 'error' })
     return Promise.resolve(null)

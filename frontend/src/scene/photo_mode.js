@@ -56,6 +56,7 @@ import { FigurePass }                 from './photo_renderer/figure_pass.js'
 import { dollyDistanceForFov, PARALLEL_FOV, PERSPECTIVE_FOV }
   from './photo_renderer/figure_camera.js'
 import { applyLighting, LIGHTING_PRESETS } from './photo_renderer/lighting_presets.js'
+import { withMediaExport } from '../shared/media_export_activity.js'
 import { computeShadowBounds, isShadowExcluded, findBoundsOutlier, rejectedObjects,
          sceneSignature } from './photo_renderer/shadow_bounds.js'
 import { createShadowCatcher, FLOOR_AXES, DEFAULT_FLOOR_AXIS }
@@ -1233,7 +1234,11 @@ export function createPhotoMode(sceneCtx) {
    * A one-shot session — see `beginFrameSession` for the tiling and
    * separate-GL-context rules that govern both.
    */
-  async function renderToBlob(width, height) {
+  function renderToBlob(width, height) {
+    return withMediaExport(() => captureToBlob(width, height))
+  }
+
+  async function captureToBlob(width, height) {
     assertPlacementExportSafe(scene)
     if (!_active) throw new Error('photo: renderToBlob requires the mode to be active')
     const session = beginFrameSession(width, height)

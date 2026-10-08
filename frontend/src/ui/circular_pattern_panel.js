@@ -1,6 +1,7 @@
 import { beginClusterSelection } from './tool_cluster_selection.js'
 import * as THREE from 'three'
 import { createToolPopup } from './tool_popup.js'
+import { toolSection } from './tool_sections.js'
 import { el } from './primitives/dom.js'
 import { canonicalSelection, selectedClusterIds } from '../scene/selection_model.js'
 import { clusterMemberFilter } from '../scene/cluster_entries.js'
@@ -98,7 +99,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     const readout = el('div', { className: 'cp-readout', attrs: { 'aria-live': 'polite' } })
     const snap = el('input', { attrs: { type: 'checkbox', 'aria-label': 'Snap to lattice' } })
     const bead = el('button', { className: 'cp-bead', attrs: { type: 'button', 'aria-label': 'Move rotation axis', title: 'Drag to move the axis in its perpendicular plane' } })
-    const body = el('div', { className: 'cp-panel-body ox-card__body', children: [controlsPane, readout] })
+    const body = el('div', { className: 'cp-panel-body ox-card__body', children: [controlsPane] })
     const preview = new THREE.Group()
     preview.name = 'circularPatternPreview'
     preview.position.set(...target.center)
@@ -253,9 +254,9 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     centerButton.addEventListener('click', () => setCentered(true))
     offsetButton.addEventListener('click', () => setCentered(false))
     centerSelect.addEventListener('change', () => { reference = targets.find(t => t.cluster.id === centerSelect.value); setCentered(true) })
-    controlsPane.append(el('label', { children: ['Cluster', sourceSelect] }))
+    controlsPane.append(toolSection('Cluster', [sourceSelect]))
     const directionButtons = new Map()
-    const presets = el('fieldset', { className: 'cp-presets', children: [el('legend', { text: 'Direction' })] })
+    const presets = el('div', { className: 'cp-presets' })
     for (const name of ['X', 'Y', 'Z', 'Helices']) {
       const button = el('button', { text: name, attrs: { 'aria-pressed': String(name === directionMode), title: name === 'Helices' ? 'Use the cluster’s helical axis direction' : `Use the part’s ${name} axis` }, on: { click: () => {
         directionMode = name
@@ -264,21 +265,24 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
       } } })
       directionButtons.set(name, button); presets.append(button)
     }
-    controlsPane.append(presets, el('div', { className: 'cp-presets', children: [offsetButton, centerButton] }), centerRow)
+    controlsPane.append(toolSection('Direction', [presets]))
+    const origin = toolSection('Origin', [el('div', { className: 'cp-presets', children: [offsetButton, centerButton] }), centerRow])
     const positionInputs = numbers('Origin offset (nm)', point, applySnap)
     const offsetFields = positionInputs[0].closest('fieldset')
     positionInputs.forEach(input => {
       input.title = 'Offset from the source cluster’s backbone centroid in part coordinates; drag the amber bead to adjust'
     })
     const snapRow = el('label', { className: 'cp-snap', children: [snap, 'Snap to lattice'] })
-    controlsPane.append(snapRow)
+    origin.append(offsetFields, snapRow)
+    controlsPane.append(origin)
     snap.addEventListener('change', () => { if (snap.checked) setCentered(false); applySnap() })
-    const pattern = el('fieldset', { children: [el('legend', { text: 'Pattern preview' })] })
+    const patternFields = el('div', { className: 'tool-fields' })
+    const pattern = toolSection('Pattern', [patternFields])
     for (const [label, value, min, max, change] of [
       ['Instances', count, 1, 128, value => { count = value }],
-      ['Total angle (degrees)', degrees, .001, 360, value => { degrees = value }],
+      ['Total angle (degrees)', degrees, 0, 360, value => { degrees = value }],
     ]) {
-      pattern.append(el('label', { children: [label, el('input', { attrs: { type: 'number', value, min, max, step: label === 'Instances' ? 1 : 'any', 'aria-label': label }, on: { input: event => { change(event.target.value === '' ? NaN : Number(event.target.value)); update() } } })] }))
+      patternFields.append(el('label', { children: [label, el('input', { attrs: { type: 'number', value, min, max, step: 1, 'aria-label': label }, on: { input: event => { change(event.target.value === '' ? NaN : Number(event.target.value)); update() } } })] }))
     }
     pattern.title = 'Count includes the original. Full circles omit the duplicate endpoint; partial arcs include both ends. Violet points preview the copies.'
     const newBP = el('output', { attrs: { 'aria-label': 'New BP created' } })
@@ -310,7 +314,8 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
       }
     } } })
     const cancel = el('button', { text: 'Cancel', on: { click: close } })
-    controlsPane.append(pattern, totals, el('div', { className: 'cp-actions', children: [cancel, confirm] }))
+    const info = toolSection('Info', [el('p', { className: 'tool-help', text: 'Counts include the original. Full circles omit the duplicate endpoint; partial arcs include both ends.' }), totals, readout])
+    controlsPane.append(pattern, info, el('div', { className: 'cp-actions', children: [cancel, confirm] }))
     const ray = new THREE.Raycaster(), pointer = new THREE.Vector2()
     const hitPlane = event => {
       const rect = canvas.getBoundingClientRect()

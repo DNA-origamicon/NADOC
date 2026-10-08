@@ -11,7 +11,7 @@ import { nanoparticleRenderInputsChanged } from './nanoparticle_render_dependenc
 import { createStreptavidinAtomicRenderer } from './streptavidin_atomic_renderer.js'
 import { openStreptavidinDialog } from '../ui/streptavidin_dialog.js'
 
-const GOLD = 0xd4af37
+const GOLD = 0xeac13b
 
 function poseMatrix(particle) {
   const values = particle?.pose?.values ?? particle?.pose
@@ -36,12 +36,16 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   let livePivot = null
   let movementConstraints = new Map()
 
+  // The editor has no studio environment: diffuse colour and a small emissive
+  // fill keep gold readable, while broad highlights retain the sphere's shape.
+  // Photo mode supplies its own physically metallic material and studio lighting.
   const material = new THREE.MeshPhysicalMaterial({
-    color: GOLD, metalness: 1, roughness: 0.18, clearcoat: 0.45,
-    clearcoatRoughness: 0.12, envMapIntensity: 1.35,
+    color: GOLD, metalness: 0.575, roughness: 0.34, clearcoat: 0.265,
+    clearcoatRoughness: 0.26, envMapIntensity: 0.975,
+    emissive: GOLD, emissiveIntensity: 0.15,
   })
   const selectedMaterial = material.clone()
-  selectedMaterial.emissive.setHex(0x5b4300)
+  selectedMaterial.emissiveIntensity = 0.35
   const dotMaterials = new Map()
   const dotGlows = new Map()
   let fluorescenceOn = false
@@ -213,35 +217,6 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
         bonds.userData = { strandId: record.strand_id, surfaceAttachment: true }
         linkerAtomRoot.add(bonds)
       }
-    }
-    for (const version of design?.nanoparticle_connection_versions ?? []) {
-      if (!version.applied) continue
-      const strandNucs = geometry.filter(n => n.strand_id === version.strand_id)
-      const overhangNucs = geometry.filter(n => n.overhang_id === version.overhang_id)
-      if (!strandNucs.length || !overhangNucs.length) continue
-      const particle = particlesById.get(version.nanoparticle_id)
-      if (!particle) continue
-      const center = new THREE.Vector3().setFromMatrixPosition(poseMatrix(particle))
-      const sourceNuc = strandNucs.reduce((best, n) => {
-        const p = new THREE.Vector3(...n.backbone_position)
-        return !best || p.distanceToSquared(center) > best.distance ? { n, distance: p.distanceToSquared(center) } : best
-      }, null)?.n
-      const targetNuc = overhangNucs.find(n => n.is_five_prime || n.is_three_prime) ?? overhangNucs[overhangNucs.length - 1]
-      if (!sourceNuc || !targetNuc) continue
-      const source = new THREE.Vector3(...sourceNuc.backbone_position)
-      const target = new THREE.Vector3(...targetNuc.backbone_position)
-      const midpoint = source.clone().lerp(target, .5)
-      const chord = target.clone().sub(source)
-      const bend = new THREE.Vector3(0, 1, 0).cross(chord)
-      if (bend.lengthSq() < 1e-8) bend.set(1, 0, 0)
-      midpoint.addScaledVector(bend.normalize(), Math.min(5, chord.length() * .15))
-      const points = new THREE.QuadraticBezierCurve3(source, midpoint, target).getPoints(32)
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),
-        new THREE.LineBasicMaterial({ color: version.relaxed ? 0x3fb950 : 0xffffff }))
-      line.name = `nanoparticle-overhang-connection:${version.id}`
-      line.userData = { nanoparticleId: version.nanoparticle_id, strandId: version.strand_id,
-        overhangId: version.overhang_id, versionId: version.id }
-      connectorRoot.add(line)
     }
     syncSelection(true)
   }

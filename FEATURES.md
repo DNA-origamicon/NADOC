@@ -14,6 +14,11 @@ or fewer. Simulation engines and VR require their respective dependencies.
 
 ## Design and Editing
 
+- **Design Readiness**
+  - Shared 3D/pathview progress ring
+  - Actionable checklist and shortcuts
+  - Assembly part issue navigation
+  - Optional current-design simulation completion
 - **Lattice Design**
   - Honeycomb lattice
   - Square lattice

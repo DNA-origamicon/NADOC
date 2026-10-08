@@ -231,6 +231,7 @@ export async function listPrimitives() {
 
 /** Erase the active design on the server and clear all local persistence. */
 export async function closeSession() {
+  window.dispatchEvent(new Event('nadoc:document-reset'))
   try { await fetch(`${BASE}/design`, { method: 'DELETE' }) } catch { /* ignore if unreachable */ }
   clearPersistedDesign()
 }
@@ -3968,6 +3969,20 @@ export async function createLoadout(name) {
   return _syncFromDesignResponse(json)
 }
 
+export async function planGeneratedDesign(settings) {
+  const docId = docHeaders()['X-NADOC-Doc']
+  const json = await _request('POST', '/design/generate-design/plan', settings, { docId })
+  return json ? { ...json, doc_id: docId } : null
+}
+
+export async function generateDesign(settings, expectedRevision, docId = docHeaders()['X-NADOC-Doc']) {
+  const json = await _request('POST', '/design/generate-design', {
+    ...settings, expected_revision: expectedRevision,
+  }, { docId })
+  if (json && docHeaders()['X-NADOC-Doc'] === docId) await _syncFromDesignResponse(json)
+  return json
+}
+
 export async function selectLoadout(loadoutId, { saveCurrent = true } = {}) {
   const q = saveCurrent ? '' : '?save_current=false'
   const json = await _request('POST', `/design/loadouts/${loadoutId}/select${q}`)
@@ -5432,5 +5447,13 @@ export async function saveAssemblyAnnotations({ annotations, enabled }) {
   const json = await _request('PUT', '/assembly/annotations', { annotations, enabled }, { suppressBusy: true })
   if (store.getState().currentAssembly?.id === id)
     _assemblyRevisions.acceptMetadata(json, ['annotations', 'annotations_enabled'], id)
+  return json
+}
+
+/** Paste rigid elements and owned DNA as one undoable edit. */
+export async function pasteElements(snapshot) {
+  const json = await _request('POST', '/design/element-paste', snapshot)
+  if (!json) return null
+  await _syncFromDesignResponse(json)
   return json
 }

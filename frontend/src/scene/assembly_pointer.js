@@ -225,6 +225,7 @@ export function initAssemblyPointer({
   // ── Assembly canvas pointer-down (joint ring pick + part-joint drag arm) ──
   function onAssemblyPointerDown(e) {
     if (e.button === 0) {
+      if (e.ctrlKey || e.metaKey) { assemblyLasso.start(e); return }
       // Belt-define / attach-to-belt modes run their own picking on separate
       // handlers; suppress all other left-button assembly interactions while
       // they own the canvas.
@@ -366,7 +367,7 @@ export function initAssemblyPointer({
 
       }
 
-      // Priority 2c: Ctrl/Meta + left-down on empty space or any instance →
+      // Priority 2c: left-down on empty space or any instance →
       // start a lasso. Disables OrbitControls for the drag duration so the
       // user's drag doesn't fight the camera. Picking is suppressed; the
       // pointerup finalizes the multi-select.

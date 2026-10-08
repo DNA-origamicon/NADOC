@@ -48,6 +48,7 @@ export function initKeyboardShortcuts(deps) {
     store, api,
     slicePlane, expandedSpacing, debugOverlay, dimensionsTool, selectionManager,
     clusterClipboard,
+    elementClipboard,
     extrudePanel, deformView, crossSectionMinimap, sliceHighlighter, primitiveLibrary,
     viewCube, camera, controls,
     isUnfoldActive, isDeformActive,
@@ -116,28 +117,36 @@ export function initKeyboardShortcuts(deps) {
   // overrides, and a paste there would mint clusters the instances know nothing about.
   registerShortcut({
     key: 'c', ctrl: true, shift: false,
-    description: 'Copy selected cluster(s)',
+    description: 'Copy selected clusters, nanoparticles or proteins',
     blockedInInput: true,
     noRepeat: true,
     blockedWhen: () => store.getState().assemblyActive || isDeformActive(),
     handler(e) {
       // Don't steal a real text copy — only claim the key when a cluster is selected.
-      const hasCluster = canonicalSelection(store.getState()).items.some(ref => ref.kind === 'cluster')
+      const refs = canonicalSelection(store.getState()).items
+      if (refs.some(ref => ref.kind === 'protein' || ref.kind === 'nanoparticle')) {
+        e.preventDefault()
+        clusterClipboard.cancel()
+        elementClipboard?.copy()
+        return
+      }
+      const hasCluster = refs.some(ref => ref.kind === 'cluster')
       if (!hasCluster) return
       e.preventDefault()
-      clusterClipboard.copy()
+      if (clusterClipboard.copy()) elementClipboard?.clear()
     },
   })
 
   registerShortcut({
     key: 'v', ctrl: true, shift: false,
-    description: 'Paste copied cluster(s) — ghost follows the cursor, click to place',
+    description: 'Paste copied elements (clusters: click to place)',
     blockedInInput: true,
     noRepeat: true,
     blockedWhen: () => store.getState().assemblyActive || isDeformActive(),
     handler(e) {
       e.preventDefault()
-      clusterClipboard.paste()
+      if (elementClipboard?.hasCopy()) elementClipboard.paste()
+      else clusterClipboard.paste()
     },
   })
 

@@ -40,9 +40,11 @@ export function captureSelectionUpdate({ scene, view }) {
       if (!attr) return
       o.updateWorldMatrix(true, false)
       const matrix = o.matrixWorld.elements
-      const values = cached(attr, matrix.join(','), () => {
+      const start = o.geometry.drawRange.start
+      const end = Math.min(attr.count, start + o.geometry.drawRange.count)
+      const values = cached(attr, `${matrix.join(',')}:${start}:${end}`, () => {
         const out = []
-        for (let i = 0; i < attr.count; i++) {
+        for (let i = start; i < end; i++) {
           const x = attr.getX(i), y = attr.getY(i), z = attr.getZ(i)
           out.push(matrix[0]*x + matrix[4]*y + matrix[8]*z + matrix[12], matrix[1]*x + matrix[5]*y + matrix[9]*z + matrix[13], matrix[2]*x + matrix[6]*y + matrix[10]*z + matrix[14])
         }

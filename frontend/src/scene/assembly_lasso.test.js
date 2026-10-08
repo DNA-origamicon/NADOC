@@ -66,16 +66,16 @@ describe('initAssemblyLasso', () => {
     return { lasso, controls, onSelect, handlers }
   }
 
-  it('start() is a no-op without Ctrl/Meta', () => {
+  it('start() ignores navigation buttons', () => {
     const { lasso, controls } = setup()
-    expect(lasso.start({ clientX: 10, clientY: 10 })).toBe(false)
+    expect(lasso.start({ button: 2, clientX: 10, clientY: 10 })).toBe(false)
     expect(controls.enabled).toBe(true)
   })
 
-  it('Ctrl-drag selects the contained instances on pointerup', () => {
+  it('Left-drag selects the contained instances on pointerup', () => {
     const { lasso, controls, onSelect, handlers } = setup()
-    expect(lasso.start({ ctrlKey: true, shiftKey: false, clientX: 5, clientY: 5 })).toBe(true)
-    expect(controls.enabled).toBe(false)            // orbit disabled during drag
+    expect(lasso.start({ button: 0, shiftKey: false, clientX: 5, clientY: 5 })).toBe(true)
+    expect(controls.enabled).toBe(true)            // selection does not own navigation controls
     handlers.pointerup({ clientX: 195, clientY: 195 }) // big rect → contains origin part
     expect(onSelect).toHaveBeenCalledWith(['a'], false)
     expect(controls.enabled).toBe(true)             // re-enabled after finalize
@@ -90,7 +90,7 @@ describe('initAssemblyLasso', () => {
 
   it('shift makes the selection additive', () => {
     const { lasso, onSelect, handlers } = setup()
-    lasso.start({ ctrlKey: true, shiftKey: true, clientX: 5, clientY: 5 })
+    lasso.start({ button: 0, shiftKey: true, clientX: 5, clientY: 5 })
     handlers.pointerup({ clientX: 195, clientY: 195 })
     expect(onSelect).toHaveBeenCalledWith(['a'], true)
   })
@@ -128,18 +128,18 @@ describe('initAssemblyLasso — Ctrl-click toggle + Esc-cancel (new UX)', () => 
     expect(onSelect).not.toHaveBeenCalled()
   })
 
-  it('a real drag fires onSelect, not onClick', () => {
+  it('a Ctrl-drag does nothing', () => {
     const { lasso, onSelect, onClick, handlers } = setup()
     lasso.start({ ctrlKey: true, clientX: 5, clientY: 5 })
     handlers.pointerup({ clientX: 195, clientY: 195 })
-    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onSelect).not.toHaveBeenCalled()
     expect(onClick).not.toHaveBeenCalled()
   })
 
   it('Esc during a drag cancels it: controls re-enabled, no selection on release', () => {
     const { lasso, controls, onSelect, handlers } = setup()
     lasso.start({ ctrlKey: true, clientX: 5, clientY: 5 })
-    expect(controls.enabled).toBe(false)
+    expect(controls.enabled).toBe(true)
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(controls.enabled).toBe(true)          // cancelled
     expect(handlers.pointerup).toBeUndefined()   // pointer + key listeners detached
@@ -152,4 +152,48 @@ describe('initAssemblyLasso — Ctrl-click toggle + Esc-cancel (new UX)', () => 
     handlers.pointerup({ clientX: 195, clientY: 195 })   // finalize detaches keydown
     expect(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))).not.toThrow()
   })
+})
+
+it('switches solid/dashed styles with direction and selects partially overlapped parts only when crossing', async () => {
+  const canvas = document.createElement('canvas')
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 200 })
+  const onSelect = vi.fn(), onPlainClick = vi.fn()
+  const lasso = initAssemblyLasso({ canvas, camera: camera(), controls: { enabled: true },
+    getInstanceCenters: () => [at('a', [0, 0, 0])], onSelect, onPlainClick })
+  lasso.start({ button: 0, clientX: 50, clientY: 50 })
+  canvas.dispatchEvent(new MouseEvent('pointermove', { clientX: 100, clientY: 150 }))
+  await new Promise(resolve => setTimeout(resolve, 0))
+  expect(document.body.lastElementChild.style.borderStyle).toBe('solid')
+  canvas.dispatchEvent(new MouseEvent('pointerup', { clientX: 100, clientY: 150 }))
+  expect(onSelect).toHaveBeenLastCalledWith([], undefined)
+  lasso.start({ button: 0, clientX: 100, clientY: 50 })
+  canvas.dispatchEvent(new MouseEvent('pointermove', { clientX: 50, clientY: 150 }))
+  await new Promise(resolve => setTimeout(resolve, 0))
+  expect(document.body.lastElementChild.style.borderStyle).toBe('dashed')
+  canvas.dispatchEvent(new MouseEvent('pointerup', { clientX: 50, clientY: 150 }))
+  expect(onSelect).toHaveBeenLastCalledWith(['a'], undefined)
+  lasso.start({ button: 0, clientX: 100, clientY: 100 })
+  canvas.dispatchEvent(new MouseEvent('pointerup', { clientX: 100, clientY: 100 }))
+  expect(onPlainClick).toHaveBeenCalledOnce()
+})
+
+it.each(['pointerdown', 'pointermove'])('never shows a rectangle or selects when a later tool claims %s', async claimAt => {
+  const canvas = document.createElement('canvas')
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 200 })
+  const controls = { enabled: true }, onSelect = vi.fn(), onPlainClick = vi.fn()
+  const lasso = initAssemblyLasso({ canvas, camera: camera(), controls,
+    getInstanceCenters: () => [at('a', [0,0,0])], onSelect, onPlainClick })
+  canvas.addEventListener('pointerdown', e => lasso.start(e))
+  if (claimAt === 'pointerdown') canvas.addEventListener(claimAt, () => { controls.enabled = false })
+  canvas.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 5, clientY: 5 }))
+  const overlay = document.body.lastElementChild
+  if (claimAt === 'pointermove') canvas.addEventListener(claimAt, () => { controls.enabled = false })
+  canvas.dispatchEvent(new MouseEvent('pointermove', { buttons: 1, clientX: 195, clientY: 195 }))
+  await new Promise(resolve => setTimeout(resolve, 0))
+  expect(overlay.isConnected).toBe(false)
+  expect(controls.enabled).toBe(false) // cancelling selection must not release the tool's lock
+  controls.enabled = true
+  canvas.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 195, clientY: 195 }))
+  expect(onSelect).not.toHaveBeenCalled(); expect(onPlainClick).not.toHaveBeenCalled()
+  lasso.dispose()
 })

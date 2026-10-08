@@ -1002,3 +1002,29 @@ def preview_streptavidin(nanoparticle_id: str, body: StreptavidinRequest):
     except ValueError as exc:
         raise HTTPException(422, str(exc))
     return {'coating': coating.model_dump(mode='json')}
+
+
+class ElementPasteRequest(BaseModel):
+    source: Design
+    protein_ids: list[str] = Field(default_factory=list)
+    nanoparticle_ids: list[str] = Field(default_factory=list)
+    paste_index: int = Field(default=1, ge=1, le=10000)
+
+
+@router.post('/design/element-paste')
+def paste_rigid_elements(body: ElementPasteRequest):
+    from backend.core.element_copy import paste_elements
+    refs = []
+    def mutate(design):
+        result, selected = paste_elements(design, body.source, body.protein_ids, body.nanoparticle_ids, body.paste_index)
+        refs.extend(selected)
+        return result
+    try:
+        updated, report, _ = design_state.mutate_with_feature_log(
+            'element-paste', 'Paste elements with conjugated DNA',
+            {'protein_ids': body.protein_ids, 'nanoparticle_ids': body.nanoparticle_ids}, mutate)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    response = _design_response(updated, report)
+    response['pasted_refs'] = refs
+    return response

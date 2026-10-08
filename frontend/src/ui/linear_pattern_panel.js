@@ -71,7 +71,7 @@ export function initLinearPatternPanel({ store, showToast, selectionManager, sce
       readout.hidden = !!valid
       readout.textContent = !selected.size ? 'Select at least one cluster.' : overlaps ? 'Selected clusters overlap; select each helix only once.' : 'Use finite, nonzero vectors and spacing, and integer counts; at most 128 total instances. 2D directions must not be parallel.'
     }
-    const list = el('div', { className: 'lp-cluster-list', attrs: { role: 'group', 'aria-label': 'Available clusters', tabindex: 0 } })
+    const list = el('div', { className: 'lp-cluster-list tool-scroll-list', attrs: { role: 'group', 'aria-label': 'Available clusters', tabindex: 0 } })
     const sources = linearPatternSection('Clusters', [list])
     for (const t of targets) {
       const input = el('input', { attrs: { type: 'checkbox', 'aria-label': `Include ${t.cluster.name || t.cluster.id}` }, on: { change: event => { if (event.target.checked) selected.add(t.cluster.id); else selected.delete(t.cluster.id); update() } } })

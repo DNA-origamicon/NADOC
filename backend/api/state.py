@@ -390,9 +390,11 @@ def load_design(d: Design | None) -> None:
         _bump_revision(s)
 
 
-def set_design(d: Design) -> None:
+def set_design(d: Design, *, expected_revision: int | None = None) -> None:
     with _lock:
         s = _session()
+        if expected_revision is not None and s.revision != expected_revision:
+            raise HTTPException(409, detail="Design changed while the feature operations were being prepared. Try again.")
         _assert_active_loadout_editable(s.design, d)
         _assert_photoproduct_dependencies(d)
         if s.design is not None:
@@ -402,10 +404,12 @@ def set_design(d: Design) -> None:
         _bump_revision(s)
 
 
-def set_design_branch(d: Design) -> None:
+def set_design_branch(d: Design, *, expected_revision: int | None = None) -> None:
     """Navigate to a branch without undoing back into a different branch."""
     with _lock:
         s = _session()
+        if expected_revision is not None and s.revision != expected_revision:
+            raise HTTPException(409, detail="Design changed during generation. Recalculate before generating.")
         _assert_photoproduct_dependencies(d)
         if s.design is None or s.design.id != d.id:
             s.workspace_heads.clear()

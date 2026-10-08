@@ -1881,10 +1881,14 @@ class OverhangRotationLogEntry(BaseModel):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
+    "generate-design",
+    "nick",
+    "cluster-pose",
     "extrude-frame",
     "aptamer-import",
     "bundle-create",
     "cluster-paste",
+    "element-paste",
     "circular-pattern",
     "linear-pattern",
     "extrude-segment",
