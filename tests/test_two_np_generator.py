@@ -60,7 +60,7 @@ def test_section_families_are_complete_and_rotationally_symmetric():
     for section in cross_sections(LatticeType.HONEYCOMB):
         xy = np.array([honeycomb_position(*cell) for cell in section["cells"]])
         xy -= xy.mean(0)
-        angle = 2 * np.pi / (3 if len(xy) == 18 else 6)
+        angle = 2 * np.pi / (2 if len(xy) in (10, 14) else 3 if len(xy) == 18 else 6)
         rotation = np.array(
             [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
         )
@@ -157,7 +157,12 @@ def assert_materialized(d, original, roll=0):
 
 
 @pytest.mark.slow
-def test_current_loadout_history_scrub_edit_revert_and_undo():
+def test_current_loadout_history_scrub_edit_revert_and_undo(monkeypatch):
+    # Saved v1 generator features retain their original dependent replay editor.
+    from functools import partial
+    from backend.api import routes_generate_design
+    from backend.api.generated_history import build_recorded
+    monkeypatch.setattr(routes_generate_design, "build_recorded", partial(build_recorded, standard=False))
     from backend.api.headless_build import create_bundle
     from backend.api.routes_design_loadouts import create_loadout, LoadoutCreateBody
     from backend.api.crud import (

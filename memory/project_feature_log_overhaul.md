@@ -6,6 +6,40 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
+## Generated designs use ordinary operations (2026-10-08)
+
+New generator runs use additive **Extrude segment** (the ordinary slice-plane
+builder), Auto Scaffold (seamed), individual native bend entries, Full Autostaple,
+Fine Routing loop/skip and nick children, scaffold/staple sequencing, overhang
+extrusion/sequencing/rotation, cluster creation/moves, and nanoparticle pose and
+connection operations. `generated_commands.py` compiles the planner's chosen
+parameters into those native history types; v2 provenance is not a custom editor.
+Standard feature editing/revert rules apply. Old v1 saved generator entries retain
+their dependent rebuild editor; no saved user files are migrated automatically.
+Native cluster-creation entries now retain an optional full creation snapshot,
+including duplex ownership and parent membership. Seek reconstructs active groups
+before pose replay; v2 snapshot baselines also restore the original pre-generator
+groups. This preserves attachment parenting at every construction boundary.
+
+Audit of `4NP_gen_test_aligned.nadoc`: “Create curved rod bundle” concealed an
+ordinary solid cross-section extrusion, and “Curve rod through nanoparticle path”
+concealed many ordinary bend windows. Curvature marks are reproducible using
+manual insert/delete commands; the existing Apply Deformations command is **not**
+equivalent because it rounds each short bend window independently. The generator
+carries fractional counts across windows, then applies the selected ordinary marks.
+
+Potential general tools, not missing molecular primitives: a multi-point planar
+path planner, continuous-curvature loop/skip allocation, and a fixed-center
+attachment pose fitter. The existing NP Relax command can move particle centers
+and must not be substituted for the fixed-center search. Its selected rotations
+are now explicit ordinary overhang/cluster/particle edits.
+
+Generation progress is request- and document-scoped (`generation_progress.py`),
+polled only while the popup is working. It reports actual scaffold routing,
+staple sequence/nick/crossover/growth stages, attachment construction/fitting,
+validation, history commit and display geometry. Percentages are stage milestones,
+not an estimate of remaining time. The final 100% UI update follows response application.
+
 ## Pattern features (2026-10-04)
 
 Tools → Linear Pattern creates a row or a 2D grid of whole-helix clusters. Each direction has X/Y/Z or Custom with XYZ vector fields, signed spacing in nm, and an instance count including the original; the total is capped at 128. Custom vectors are normalized, must be finite and nonzero, and must be nonparallel for a 2D pattern. Additional disjoint clusters can share the pattern. The panel separates Clusters, Direction 1, Direction 2, and Info with borders; the cluster list scrolls. Creation and editing share controls with explicit ±1 nm and ±1 instance steppers. Circular and linear creation reuse `backend/core/pattern_copy.py`, preserving canonical cells, independent frames, and composed source poses/deformations.

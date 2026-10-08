@@ -69,6 +69,9 @@ Pending terminal-to-terminal connections remain representable. The validator's
 existing nick-at-crossover check distinguishes them from realized crossovers.
 Synthetic linker/overhang paths have their own explicit attachment model.
 """
+    from backend.core.backbone_continuations import backbone_continuation_edges
+
+    continuations = backbone_continuation_edges(design)
     ranges = defaultdict(list)
     refs = defaultdict(list)
     transitions = set()
@@ -89,7 +92,9 @@ Synthetic linker/overhang paths have their own explicit attachment model.
         return any(lo <= key[1] <= hi for lo, hi in index.get((key[0], key[2]), ()))
 
     def continuous(a, b):
-        if a[0] != b[0] or a[2] != b[2]:
+        if a[0] != b[0]:
+            return (a, b) in continuations and covered(a) and covered(b)
+        if a[2] != b[2]:
             return False
         step = 1 if a[2] == "FORWARD" else -1
         return b[1] == a[1] + step and covered(a) and covered(b)

@@ -7,6 +7,31 @@ metadata:
   originSessionId: e8eafa48-297e-4c65-8397-7de37a254477
 ---
 
+## Continued helices — 2026-10-08
+
+User-confirmed contract: Sweep from a blunt end preserves the existing duplex
+backbone across the segment boundary. In `Sweep_test` all six source tracks
+continue through bp 62/63; only the four added tracks have ends there. Both modes
+must route one scaffold while retaining all twelve scaffold/staple interface
+bonds, including bonds explicitly recorded as forced ligations. See
+[`docs/scaffold_routing.md`](../docs/scaffold_routing.md).
+
+`backbone_continuations.py` recognizes authored connections from strand order and
+sweep attachment/forced-ligation provenance. The loader no longer invents forced
+ligations for ordinary sweep joins. `scaffold_continuations.py` contracts connected
+segments into a temporary routing view, then restores the original helix IDs,
+frames, deformations, staple strands and forced-ligation records. Reroute/reset
+operates on that view, so it cannot drop the internal connections. A nick on the
+scaffold does not erase track continuity established by the complementary strand.
+
+Heterogeneous tracks use `scaffold_face_paths.py`: seamed end-turn pairs share both
+free faces; seamless traversal pairs the actual outgoing free face. Seamed routing
+uses local end turns rather than applying one matched translation to unequal
+lengths. The adapter rejects lost connections, fragmentation, excessive extension,
+invalid junctions, missing buried closure, or seams in a seamless result.
+Nonconsecutive or inserted-base forced junctions are not flattened into ordinary
+backbone. Integration coverage: `tests/test_scaffold_continuations.py`.
+
 ## Routing integrity update — 2026-09-22
 
 R1–R9 regressions are covered by `tests/test_routing_integrity.py`. Public seamed,

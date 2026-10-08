@@ -511,7 +511,7 @@ def loop_skip(helix_id: str, bp_index: int, delta: int) -> Design:
 def apply_loop_skip_deformations() -> Design:
     """Bake every DeformationOp into concrete loop/skip marks (POST /design/loop-skip/apply-deformations).
 
-    Wipes existing marks, then for each bend/twist op (and, on SQUARE lattices, the
+    Wipes existing marks, then for each bend/twist/sweep op (and, on SQUARE lattices, the
     periodic skips) computes the per-helix loop/skip pattern and applies it
     atomically — the topological realisation of a geometric deformation.  Requires
     crossovers placed (cells are 7 bp) and at least one deformation op (or a SQUARE
@@ -1763,3 +1763,18 @@ def place_primitive(
     design_state.snapshot()
     design_state.set_design_silent(placed)
     return placed
+
+
+def sweep(cells, points_nm, *, plane="XY", source_helix_id=None, source_end="end",
+          strand_filter="both", ligate_adjacent=True):
+    """Create one editable/revertible sweep; XYZ points are offsets in world nm.
+
+    The first point is (0,0,0). A source helix anchors and ligates continuation
+    at its selected end. The footprint can include coplanar existing ends and
+    vacant cells; occupied cells that cross the source plane are rejected.
+    """
+    from backend.api.routes_sweep import create_sweep
+    from backend.core.sweep import SweepRequest
+    return create_sweep(SweepRequest(cells=cells, points_nm=points_nm, plane=plane,
+        source_helix_id=source_helix_id, source_end=source_end,
+        strand_filter=strand_filter, ligate_adjacent=ligate_adjacent))

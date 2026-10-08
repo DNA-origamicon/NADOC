@@ -24,8 +24,11 @@ from backend.core.two_np_generator import (
 )
 
 
-def platform_frame(centers, angle_deg=0):
-    """Best-fit plane; local Y is its normal, X/Z span the solid platform."""
+ALIGNMENT_TOLERANCE_DEG = 5.0
+
+
+def _plane_frame(centers):
+    """PCA supplies the plane normal, not the platform's perimeter direction."""
     _, singular, axes = np.linalg.svd(centers - centers.mean(0), full_matrices=True)
     if singular[1] < 1e-6:
         raise ValueError(
@@ -37,16 +40,126 @@ def platform_frame(centers, angle_deg=0):
     z = axes[0].copy()
     if z[np.argmax(np.abs(z))] < 0:
         z *= -1
-    x = np.cross(y, z)
+    return np.column_stack((np.cross(y, z), y, z))
+
+
+def rotate_platform_frame(frame, angle_deg):
+    x, y, z = frame.T
     angle = math.radians(angle_deg)
     z = math.cos(angle) * z + math.sin(angle) * x
     return np.column_stack((np.cross(y, z), y, z))
 
 
-def plan_platforms(source, settings):
+def _perimeter(centers, frame):
+    """Convex hull in the fitted plane; exclude diagonals and interior particles."""
+    points = ((centers - centers.mean(0)) @ frame)[:, [0, 2]]
+    ordered = sorted(range(len(points)), key=lambda i: tuple(points[i]))
+    scale = max(float(np.ptp(points, axis=0).max()), 1.0)
+
+    def turn(i, j, k):
+        a, b = points[j] - points[i], points[k] - points[j]
+        return a[0] * b[1] - a[1] * b[0]
+
+    def chain(indices):
+        result = []
+        for i in indices:
+            while (
+                len(result) >= 2 and turn(result[-2], result[-1], i) <= 1e-12 * scale**2
+            ):
+                result.pop()
+            result.append(i)
+        return result
+
+    hull = chain(ordered)[:-1] + chain(ordered[::-1])[:-1]
+    edges = [(i, hull[(k + 1) % len(hull)]) for k, i in enumerate(hull)]
+    vectors = np.array([points[j] - points[i] for i, j in edges])
+    return edges, vectors
+
+
+def perimeter_alignment(centers, frame):
+    edges, vectors = _perimeter(centers, frame)
+    components = np.abs(vectors)
+    errors = np.degrees(np.arctan2(components.min(1), components.max(1)))
+    return {
+        "target_edges": 1 if len(centers) == 3 else 2,
+        "tolerance_deg": ALIGNMENT_TOLERANCE_DEG,
+        "aligned_edges": int(np.sum(errors <= ALIGNMENT_TOLERANCE_DEG + 1e-8)),
+        "edges": [
+            {"particle_indices": [i, j], "error_deg": float(error)}
+            for (i, j), error in zip(edges, errors)
+        ],
+    }
+
+
+def _perimeter_frames(centers):
+    plane = _plane_frame(centers)
+    _, edges = _perimeter(centers, plane)
+    lengths = np.linalg.norm(edges, axis=1)
+    angles = np.arctan2(edges[:, 0], edges[:, 1])
+    candidates = list(angles)
+    if len(centers) == 4:
+        # A rectangle's parallel AND perpendicular edges share a direction
+        # modulo 90 degrees. Fit noisy edge pairs/all edges in that space.
+        groups = [list(range(len(edges)))] + [
+            [i, j] for i in range(len(edges)) for j in range(i)
+        ]
+        for group in groups:
+            mean = np.sum(lengths[group] * np.exp(4j * angles[group]))
+            if abs(mean) > 1e-10 * lengths.sum():
+                candidates.append(float(np.angle(mean) / 4))
+    ranked = []
+    seen = set()
+    for angle in candidates:
+        key = round(float(angle % (math.pi / 2)), 10)
+        if key in seen:
+            continue
+        seen.add(key)
+        frame = rotate_platform_frame(plane, math.degrees(angle))
+        local = (centers - centers.mean(0)) @ frame
+        span = np.ptp(local[:, [0, 2]], axis=0)
+        # Prefer the longer footprint direction along helices, but retain the
+        # swapped orientation as a routing/budget fallback with equal alignment.
+        if span[0] > span[1] + 1e-8:
+            frame = rotate_platform_frame(frame, 90)
+        if frame[np.argmax(np.abs(frame[:, 2])), 2] < 0:
+            frame[:, [0, 2]] *= -1
+        _, projected = _perimeter(centers, frame)
+        components = np.abs(projected)
+        errors = np.degrees(np.arctan2(components.min(1), components.max(1)))
+        aligned = errors <= ALIGNMENT_TOLERANCE_DEG + 1e-8
+        count = int(aligned.sum())
+        coverage = len(set(np.argmax(components[aligned], axis=1)))
+        target = 1 if len(centers) == 3 else 2
+        area = float(np.prod(span))
+        # Triangles keep one edge exact, then minimize footprint. Four-particle
+        # layouts prioritize two edge directions and overall perimeter agreement.
+        score = (
+            max(0, target - count),
+            -coverage,
+            -count,
+            area
+            if len(centers) == 3
+            else float(
+                np.average(errors**2, weights=np.linalg.norm(projected, axis=1))
+            ),
+            area,
+        )
+        ranked.append((score, frame))
+    ranked.sort(key=lambda item: item[0])
+    return [
+        frame for _, base in ranked for frame in (base, rotate_platform_frame(base, 90))
+    ]
+
+
+def platform_frame(centers, angle_deg=0):
+    """Perimeter-aligned platform, with a user rotation inside the fitted plane."""
+    return rotate_platform_frame(_perimeter_frames(centers)[0], angle_deg)
+
+
+def _plan_platforms_in_frame(source, settings, base_frame):
     particles, centers, distance = gold_particles(source, (3, 4))
     lattice = source.lattice_type
-    frame = platform_frame(centers, settings.roll_deg)
+    frame = rotate_platform_frame(base_frame, settings.roll_deg)
     local = (centers - centers.mean(0)) @ frame
     period = 21 if lattice == LatticeType.HONEYCOMB else 32
     minimum_bp = (
@@ -103,6 +216,7 @@ def plan_platforms(source, settings):
             summary = {
                 **section,
                 "shape": "platform",
+                "base_frame": base_frame.tolist(),
                 "scaffold_name": name,
                 "scaffold_size": size,
                 "scaffold_used_nt": used,
@@ -137,6 +251,7 @@ def plan_platforms(source, settings):
         "centers_nm": centers.tolist(),
         "center_distance_nm": distance,
         "plane_deviation_nm": float(np.max(np.abs(local[:, 1]))),
+        "perimeter_alignment": perimeter_alignment(centers, frame),
         "selected": deepcopy(chosen.summary),
         "alternatives": [
             deepcopy(best[n].summary)
@@ -152,8 +267,25 @@ def plan_platforms(source, settings):
     }
 
 
+def plan_platforms(source, settings):
+    _, centers, _ = gold_particles(source, (3, 4))
+    failure = None
+    for base_frame in _perimeter_frames(centers):
+        try:
+            return _plan_platforms_in_frame(source, settings, base_frame)
+        except ValueError as exc:
+            failure = exc
+    raise failure
+
+
 def plan_generated(source, settings):
     particles, _, _ = gold_particles(source)
+    if settings.shape == "curved-rod":
+        from backend.core.curved_rod_generator import plan_curved_rods
+
+        return plan_curved_rods(source, settings)
+    if settings.shape == "platform" and len(particles) < 3:
+        raise ValueError("A platform needs three or four nanoparticles.")
     return (
         plan_rods(source, settings)
         if len(particles) == 2

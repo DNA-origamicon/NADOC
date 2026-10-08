@@ -1,8 +1,7 @@
-"""Recorded generator commands, scoped composition, and parameter replay.
+"""Compose generated construction into the ordinary feature timeline.
 
-Each command owns a real PRE/POST snapshot in the ordinary feature timeline.
-Replaying a generated run rebuilds its commands and dependent geometry in
-isolation; it never substitutes stale downstream snapshots after a parameter edit.
+New runs emit native operations with snapshots or replayable deltas. Legacy v1
+histories retain their isolated dependent-rebuild path for parameter edits.
 """
 
 from __future__ import annotations
@@ -43,7 +42,9 @@ class GeneratedHistory:
         overrides=None,
         entry_ids=None,
         stop_key=None,
+        standard=True,
     ):
+        self.standard = standard
         self.design = source.model_copy(deep=True)
         self.settings = settings.model_dump()
         self.group_id = group_id or str(uuid.uuid4())
@@ -78,7 +79,7 @@ class GeneratedHistory:
                 f"Unsupported parameters for {key}: {', '.join(sorted(unknown))}"
             )
         for name, value in patch.items():
-            if name in ("sequence", "scaffold_name"):
+            if name in ("sequence", "scaffold_name", "path_order", "pathing"):
                 if not isinstance(value, str):
                     raise ValueError(f"{name} must be text.")
             elif (
@@ -158,6 +159,8 @@ class GeneratedHistory:
                 active_loadout_id=self.design.active_loadout_id,
                 last_editable_loadout_id=self.design.last_editable_loadout_id,
             )
+        if self.standard and updated == self.design:
+            return
         pre, pre_size = state.encode_design_snapshot(self.design)
         post, post_size = state.encode_design_snapshot(updated)
         pre_clusters = {c.id: c for c in self.design.cluster_transforms}
@@ -189,8 +192,13 @@ class GeneratedHistory:
             post_state_gz_b64=post,
             post_state_size_bytes=post_size,
         )
+        entries = [entry]
+        if self.standard:
+            from backend.api.generated_commands import ordinary_entries
+            entry.params = self._map(entry.params)
+            entries = ordinary_entries(self.design, updated, entry, key)
         self.design = updated.copy_with(
-            feature_log=[*self.design.feature_log, entry],
+            feature_log=[*self.design.feature_log, *entries],
             feature_log_cursor=-1,
             feature_log_sub_cursor=None,
         )
@@ -208,6 +216,7 @@ def build_recorded(
     overrides=None,
     entry_ids=None,
     stop_key=None,
+    standard=True,
 ):
     from backend.api.two_np_build import materialize
     from backend.api.routes_nanoparticles import _set_np_version_applied
@@ -223,6 +232,7 @@ def build_recorded(
         overrides=overrides,
         entry_ids=entry_ids,
         stop_key=stop_key,
+        standard=standard,
     )
     prepared = source.model_copy(deep=True)
     particle_ids = {p.id for p in source.nanoparticles if p.kind == "gold_nanosphere"}
@@ -304,6 +314,27 @@ def edit_generated_feature(index, params):
         last_editable_loadout_id=current.last_editable_loadout_id,
     )
     settings = GeneratorSettings(**meta["settings"])
+    pathing = overrides.get("curve-path", {}).get("pathing", settings.pathing)
+    if pathing not in ("colocalized", "interior", "exterior"):
+        raise HTTPException(
+            422, detail="Pathing must be colocalized, interior, or exterior."
+        )
+    settings = settings.model_copy(update={"pathing": pathing})
+    order_text = overrides.get("curve-path", {}).get("path_order")
+    if order_text is not None:
+        try:
+            numbers = [int(s.strip()) for s in order_text.split(",")]
+            gold = [p for p in baseline.nanoparticles if p.kind == "gold_nanosphere"]
+            if sorted(numbers) != list(range(1, len(gold) + 1)):
+                raise ValueError()
+            settings = settings.model_copy(
+                update={"particle_order": [gold[i - 1].id for i in numbers]}
+            )
+        except (ValueError, AttributeError):
+            raise HTTPException(
+                422,
+                detail="Path order must list every particle number once, separated by commas.",
+            )
     ids = {
         e.params["_generator"]["key"]: e.id
         for e in current.feature_log[start : end + 1]
@@ -318,6 +349,7 @@ def edit_generated_feature(index, params):
             overrides=overrides,
             entry_ids=ids,
             stop_key=current.feature_log[end].params["_generator"]["key"],
+            standard=False,
         )
         validation = validate_design(rebuilt)
         if not validation.passed:

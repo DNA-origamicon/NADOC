@@ -1,3 +1,5 @@
+import { welcomeVisible, observeWelcomeVisibility } from '../shared/welcome_visibility.js'
+
 /** Read-only readiness refresh shared by the desktop and cadnano hosts. */
 export function readinessTarget(state, mode = '3d') {
   const assembly = mode !== 'cadnano' && !!state.assemblyActive
@@ -25,6 +27,7 @@ export function initDesignReadinessController({
   let resetDocument = null
   let dismissed = false
   function currentTarget(state = store.getState()) {
+    if (mode !== 'cadnano' && welcomeVisible(document)) return null
     const next = readinessTarget(state, mode)
     return dismissed || next?.document === resetDocument ? null : next
   }
@@ -132,6 +135,7 @@ export function initDesignReadinessController({
   window.addEventListener('focus', wake)
   window.addEventListener('nadoc:sim-jobs-changed', wake)
   document.addEventListener('visibilitychange', visibilityChanged)
+  const stopWelcome = observeWelcomeVisibility(invalidate, document)
   invalidate()
 
   return {
@@ -145,6 +149,7 @@ export function initDesignReadinessController({
       clearTimers()
       cancelRequest()
       unsubscribe?.()
+      stopWelcome()
       widget.setReport(null)
       window.removeEventListener('nadoc:document-reset', reset)
       window.removeEventListener('focus', wake)

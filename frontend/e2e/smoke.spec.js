@@ -316,6 +316,7 @@ test.describe('Teardown gate', () => {
   const realErrors = (errs) => errs.filter((t) => !BENIGN.some((b) => t.includes(b)))
 
   test('Close Session from a loaded design tears down cleanly', async ({ page }) => {
+    test.setTimeout(60_000)
     const errors = trackConsoleErrors(page)
 
     // A real loaded design in THIS tab's doc (a bare goto boots to welcome with an
@@ -324,12 +325,49 @@ test.describe('Teardown gate', () => {
     // pinned doc, so `currentDesign` is set and the full teardown runs.
     await loadScaffoldedPart(page, { doc: 'smoke-close', name: 'close' })
 
+    // Hold a display read past the working-popup threshold. Close must cancel it.
+    let releaseGeometry
+    const held = new Promise(resolve => { releaseGeometry = resolve })
+    page.on('close', () => releaseGeometry())
+    await page.route('**/api/design/geometry*', async route => {
+      await held
+      await route.fulfill({ json: { nucleotides: [], helix_axes: [] } }).catch(() => {})
+    })
+    const geometryFailed = page.waitForEvent('requestfailed', request => request.url().includes('/design/geometry'))
+    await page.evaluate(async () => {
+      const api = await import('/src/api/client.js')
+      window.__closeGeometryDone = false
+      api.getGeometry().then(() => { window.__closeGeometryDone = true })
+    })
+    await expect(page.locator('#op-progress')).toHaveClass(/visible/, { timeout: 8000 })
+
     // File → Close Session.
     await openDropdownAndClick(page, 'File', 'menu-file-close-session')
 
     // Returns to the welcome screen with the workspace mode indicator.
     await expect(page.locator('#mode-indicator')).toHaveText('NADOC · WORKSPACE', { timeout: 10_000 })
     await expect(page.locator('#welcome-screen')).toBeVisible()
+    await geometryFailed
+    await page.waitForFunction(() => window.__closeGeometryDone)
+    expect(await page.evaluate(async () => {
+      const { processLogSnapshot } = await import('/src/perf/process_log.js')
+      return processLogSnapshot().entries.some(entry =>
+        entry.label === 'GET /design/geometry' && entry.status === 'Cancelled')
+    })).toBe(true)
+    await expect(page.locator('#op-progress')).not.toHaveClass(/visible/)
+    await expect(page.locator('[data-role="design-readiness"]')).toBeHidden()
+    const closed = await page.request.get('/api/design', { headers: { 'X-NADOC-Doc': 'smoke-close' } })
+    expect(closed.status()).toBe(404)
+    releaseGeometry()
+    await page.unroute('**/api/design/geometry*')
+    // Covers the readiness polling interval and reloading the same document URL.
+    await page.waitForTimeout(10_500)
+    await expect(page.locator('[data-role="design-readiness"]')).toBeHidden()
+    await page.reload()
+    await page.waitForFunction(() => !!window.__nadocTest)
+    await expect(page.locator('#welcome-screen')).toBeVisible()
+    await expect(page.locator('[data-role="design-readiness"]')).toBeHidden()
+    await expect(page.locator('#op-progress')).not.toHaveClass(/visible/)
 
     const real = realErrors(errors)
     expect(real, `console/page errors during close-session teardown:\n${real.join('\n')}`).toEqual([])

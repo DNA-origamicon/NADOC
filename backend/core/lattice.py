@@ -3398,6 +3398,8 @@ def make_overhang_extrude(
     neighbor_row: int,
     neighbor_col: int,
     length_bp: int,
+    *,
+    reuse_existing_helix: bool = True,
 ) -> Design:
     """Extrude a staple-only overhang from a nick into an unoccupied neighbour cell.
 
@@ -3517,12 +3519,13 @@ def make_overhang_extrude(
     # If a previous extrusion already created an overhang helix at
     # (neighbor_row, neighbor_col), reuse it — extend its bp range to cover
     # the new domain.  This ensures both overhangs share one helix row in
-    # the cadnano 2D path view.
+    # the cadnano 2D path view. Independently posed path attachments opt out.
     ovhg_helix_ids = {o.helix_id for o in design.overhangs}
     reuse_helix: Helix | None = None
     for h in design.helices:
         if (
-            h.grid_pos is not None
+            reuse_existing_helix
+            and h.grid_pos is not None
             and tuple(h.grid_pos) == (neighbor_row, neighbor_col)
             and h.id in ovhg_helix_ids
         ):

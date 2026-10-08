@@ -63,6 +63,7 @@ import { initSelectionManager }      from './scene/selection_manager.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { initElementClipboard } from './scene/element_clipboard.js'
 import { initClusterClipboard }      from './scene/cluster_clipboard.js'
+import { initSweepPanel } from './ui/sweep_panel.js'
 import { initExtrudePanel }          from './ui/extrude_panel.js'
 import { initPrimitiveLibrary }      from './ui/primitive_library.js'
 import { axesVisibleForDesign }      from './ui/extrude_panel_logic.js'
@@ -901,7 +902,7 @@ async function main() {
     controls,
     getHoverEntry: () => zoomScope.getHoverEntry(),
     getCamera:     () => sceneCtx.getRenderCamera(),
-    isDisabled:    () => slicePlane?.isContinuation() || store.getState().forceXoverActive,
+    isDisabled:    () => slicePlane?.isContinuation() || store.getState().forceXoverActive || store.getState().sweepActive,
   })
   store.subscribe((newState, prevState) => {
     if (newState.currentDesign === prevState.currentDesign || !newState.currentDesign) return
@@ -2472,6 +2473,7 @@ async function main() {
   // the tool lifecycle. Replaces the retired workspace.js plane-picker as the entry
   // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
   _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing })
+  const sweepPanel = initSweepPanel({ store, api, slicePlane, scene, extrudePanel: _extrudePanel, expandedSpacing, showToast, getDocId, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
   initLinearPatternPanel({ store, showToast, selectionManager, scene })
   initCircularPatternPanel({ store, showToast, selectionManager, scene, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
 
@@ -2626,6 +2628,7 @@ async function main() {
     store, api, slicePlane, expandedSpacing, deformView,
     clusterDeformGuard: _clusterDeformGuard,
     extrudePanel: _extrudePanel,
+    sweepPanel,
   })
 
   // Scaffold right-click now uses the unified scaffold context menu built in
@@ -2681,6 +2684,7 @@ async function main() {
       if (_isUnfoldActive()) return true
       if (isDeformActive()) return true
       const s = store.getState()
+      if (s.sweepActive) return true
       if (s.deformToolActive) return true
       if (s.translateRotateActive) return true
       return false
@@ -5760,6 +5764,7 @@ async function main() {
 
   // ── Feature Log panel ────────────────────────────────────────────────────────
   _partFeatureLogPanel = initFeatureLogPanel(store, {
+    onEditSweep: (entry, index) => sweepPanel.edit(entry, index),
     api: {
       ...api,
       seekFeatures:         _seekFeaturesWithDelta,

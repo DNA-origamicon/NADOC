@@ -411,9 +411,11 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
         assign_staple_sequences,
     )
 
+    from backend.api.generation_progress import report as progress
     params = body.model_dump()
 
     def _run(design):
+        progress("Assign scaffold sequence", body.scaffold_name, .30)
         use_custom = bool(body.custom_sequence and body.custom_sequence.strip())
         if use_custom:
             sequenced, total_nt, padded_nt = assign_custom_scaffold_sequence(
@@ -455,6 +457,7 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
         # ≤56-nt staples.  Placing crossovers after nicking assembles them into
         # open chains (no staple cycles), so every crossover stays traversed and
         # none has to be pruned — which is also why full density is preserved.
+        progress("Break staple precursors", "Nick at major ticks", .34)
         precursors, precursor_report = _linearize_staple_precursors(sequenced)
         nicked = nick_all_major_ticks(precursors, skip_strand_ids=protected_ids)
         # Iterate crossover placement to a FIXPOINT. A single pass is order-dependent
@@ -467,6 +470,7 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
         crossed = nicked
         total_placed = 0
         for _ in range(12):  # safety bound; placement is monotonic so it converges fast
+            progress("Route staple crossovers", f"Pass {_ + 1}; {total_placed} crossovers placed", .37)
             locked_i, overhang_i = _locked_and_overhang_staple_ids(crossed)
             crossed, crossover_report = _place_auto_crossovers(
                 crossed, protected_strand_ids=locked_i, tip_only_strand_ids=overhang_i
@@ -475,7 +479,9 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
             if crossover_report["placed"] == 0:
                 break
         crossover_report = {**crossover_report, "placed": total_placed}
+        progress("Grow staples", "Merge staple fragments up to 56 nucleotides", .42)
         clean = grow_staples(crossed, max_merged_length=56, locked_ids=locked_ids)
+        progress("Assign staple sequences", "Complement the scaffold", .46)
         clean = assign_staple_sequences(clean)
         # Record a Crossover for any bare same-bp lattice-neighbour junction left in the
         # strand graph — chiefly an overhang's body→tip attachment, which crossover

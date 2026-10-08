@@ -52,6 +52,7 @@ from backend.core.models import (
     ClusterRigidTransform,
     Direction,
     TwistParams,
+    SweepParams,
 )
 
 if TYPE_CHECKING:
@@ -281,6 +282,14 @@ def _arm_helices_for(design: "Design", ref_helix_id: str) -> list["Helix"]:
     if constrained is not None:
         affected = set(constrained.affected_helix_ids)
         candidates = [h for h in candidates if h.id in affected]
+    sweep = next((op for op in reversed(design.deformations)
+                  if isinstance(op.params, SweepParams) and ref_helix_id in op.affected_helix_ids), None)
+    if sweep is not None:
+        candidates = [h for h in candidates if h.id in sweep.affected_helix_ids]
+    else:
+        swept = {hid for op in design.deformations if isinstance(op.params, SweepParams)
+                 for hid in op.affected_helix_ids}
+        candidates = [h for h in candidates if h.id not in swept]
     overhang_helix_ids = {o.helix_id for o in design.overhangs}
     ref = design.find_helix(ref_helix_id)
     if ref is None:
@@ -558,6 +567,9 @@ def _frame_at_bp(
         for op in design.deformations
         if not op.affected_helix_ids or bool(arm_ids & set(op.affected_helix_ids))
     ]
+    sweep = next((op for op in relevant_ops if isinstance(op.params, SweepParams)), None)
+    if sweep is not None:
+        relevant_ops = [op for op in relevant_ops if op.id not in sweep.params.preceding_op_ids]
 
     tangent = tangent_0.copy()
     R = np.eye(3)
@@ -580,6 +592,12 @@ def _frame_at_bp(
         if pose is not None:
             rotation, translation = pose
             spine, R, tangent = rotation @ spine + translation, rotation @ R, rotation @ tangent
+    from backend.core.sweep_path import sweep_frames
+    sweep = next((op for op in relevant_ops if isinstance(op.params, SweepParams)), None)
+    if sweep is not None:
+        sp, sr, _ = sweep_frames(sweep, [target_bp], arm_bp_start, centroid_0, tangent_0)
+        straight = centroid_0 + tangent_0 * target_bp * BDNA_RISE_PER_BP
+        spine, R, tangent = sp[0] + sr[0] @ (spine - straight), sr[0] @ R, sr[0] @ tangent
     return spine, R, tangent
 
 
@@ -1628,6 +1646,9 @@ def _precompute_arm_frames(
         for op in design.deformations
         if not op.affected_helix_ids or bool(arm_ids & set(op.affected_helix_ids))
     ]
+    sweep = next((op for op in relevant_ops if isinstance(op.params, SweepParams)), None)
+    if sweep is not None:
+        relevant_ops = [op for op in relevant_ops if op.id not in sweep.params.preceding_op_ids]
     # Running frame state — represents the frame at the start of the current
     # sub-interval. centroid_0 anchors the spine at arm-local 0; back-extrapolate
     # (straight) when an op begins before the arm's first bp (start_bp < 0).
@@ -1657,6 +1678,15 @@ def _precompute_arm_frames(
         spines_out = spines_out @ rotation.T + translation
         Rs_out = rotation @ Rs_out
         tans_out = tans_out @ rotation.T
+    from backend.core.sweep_path import sweep_frames
+    sweep = next((op for op in relevant_ops if isinstance(op.params, SweepParams)), None)
+    if sweep is not None:
+        indices = np.arange(M)
+        sp, sr, _ = sweep_frames(sweep, indices, arm_min_bp, centroid_0, tangent_0)
+        straight = centroid_0 + indices[:, None] * tangent_0 * BDNA_RISE_PER_BP
+        spines_out = sp + np.einsum('mij,mj->mi', sr, spines_out - straight)
+        Rs_out = sr @ Rs_out
+        tans_out = np.einsum('mij,mj->mi', sr, tans_out)
     return spines_out, Rs_out, tans_out
 
 

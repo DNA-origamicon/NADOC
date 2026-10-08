@@ -156,3 +156,37 @@ it('clears readiness synchronously on reset and ignores stale requests and wake 
     expect(widget.setReport).toHaveBeenLastCalledWith(ready)
   } finally { ctrl.dispose(); vi.useRealTimers() }
 })
+
+it('pauses readiness on welcome even with retained/replaced design objects and resumes when the editor opens', async () => {
+  vi.useFakeTimers()
+  document.body.innerHTML = '<div id="welcome-screen"></div>'
+  const welcome = document.getElementById('welcome-screen')
+  const pending = deferred()
+  const store = createMockStore({ currentDesign: design('old') })
+  const widget = { setReport: vi.fn(), setLoading: vi.fn(), setError: vi.fn() }
+  const fetchReport = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(ready)
+  const ctrl = initDesignReadinessController({ store, widget, fetchReport, debounceMs: 1, pollMs: 10 })
+  try {
+    ctrl.show()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(fetchReport).not.toHaveBeenCalled()
+    welcome.classList.add('hidden')
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchReport).toHaveBeenCalledTimes(1)
+    const signal = fetchReport.mock.calls[0][1].signal
+    welcome.classList.remove('hidden')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(signal.aborted).toBe(true)
+    store.setState({ currentDesign: design('old') })
+    window.dispatchEvent(new Event('focus'))
+    ctrl.show()
+    pending.resolve(ready)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(fetchReport).toHaveBeenCalledTimes(1)
+    expect(widget.setReport).toHaveBeenLastCalledWith(null)
+    welcome.classList.add('hidden')
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchReport).toHaveBeenCalledTimes(2)
+    expect(widget.setReport).toHaveBeenLastCalledWith(ready)
+  } finally { ctrl.dispose(); document.body.replaceChildren(); vi.useRealTimers() }
+})

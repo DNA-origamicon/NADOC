@@ -5107,6 +5107,7 @@ def add_nick_batch(body: NickBatchRequest) -> dict:
 
 
 class OverhangExtrudeRequest(BaseModel):
+    reuse_existing_helix: bool = True
     helix_id: str
     bp_index: int
     direction: Direction
@@ -5161,6 +5162,7 @@ def _build_overhang_extrude(
         body.neighbor_row,
         body.neighbor_col,
         body.length_bp,
+        reuse_existing_helix=body.reuse_existing_helix,
     )
     after_helix_ids = {h.id for h in out.helices}
     new_helix_ids = after_helix_ids - before_helix_ids
@@ -8230,6 +8232,9 @@ def _edit_dispatch_run(op_kind: str, pre_state: Design, params: dict) -> Design:
     """Validate ``params`` against the schema for ``op_kind`` and return the
     new design produced by replaying the op on ``pre_state``. Raises HTTP 400
     on schema mismatch, HTTP 422 on op-runtime errors."""
+    if op_kind == "sweep":
+        from backend.core.sweep import SweepRequest, build_sweep
+        return build_sweep(pre_state, SweepRequest.model_validate(params))
     if op_kind == "bundle-create":
         body = BundleRequest.model_validate(params)
         cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
@@ -8409,6 +8414,8 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
         )
 
     pre_state = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
+    if entry.op_kind == "sweep":
+        body.params = {**body.params, "sweep_id": entry.params["sweep_id"]}
 
     try:
         new_post = _edit_dispatch_run(entry.op_kind, pre_state, body.params)
@@ -8444,7 +8451,15 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     from backend.core.validator import validate_design as _validate_design
 
     final = new_post.copy_with(feature_log=new_log, feature_log_cursor=-1)
-    design_state.set_design(final)
+    if entry.op_kind == "sweep":
+        from backend.api.routes_sweep import _guard
+        from backend.core.sweep import SweepRequest
+        sweep_body = SweepRequest.model_validate(body.params)
+        _guard(design, sweep_body)
+        final = _seek_feature_log(final, -1)
+        design_state.set_design(final, expected_revision=sweep_body.expected_revision)
+    else:
+        design_state.set_design(final)
     report = _validate_design(final)
     # Snapshot edits typically change topology (extrusion params), so the
     # response usually lands in the embedded full-geometry path. Cluster_only
@@ -8867,7 +8882,7 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
     seek position.
     """
     generated = any(
-        getattr(e, "params", {}).get("_generator", {}).get("version") == 1
+        getattr(e, "params", {}).get("_generator", {}).get("version") in (1, 2)
         for e in design.feature_log
     )
     if generated:
@@ -8885,17 +8900,23 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
             if c.id.startswith("gen_")
         )
         design = design.copy_with(
+            deformations=[d for d in design.deformations if not d.id.startswith("gen_")]
+                + [d for d in snap_design.deformations if d.id.startswith("gen_")],
             nanoparticles=snap_design.nanoparticles,
             nanoparticle_conjugations=snap_design.nanoparticle_conjugations,
             nanoparticle_connection_versions=snap_design.nanoparticle_connection_versions,
             duplexes=snap_design.duplexes,
             overhang_bindings=snap_design.overhang_bindings,
             staple_groups=snap_design.staple_groups,
-            cluster_transforms=[
-                c for c in design.cluster_transforms if c.id not in touched_clusters
-            ] + [c for c in snap_design.cluster_transforms if c.id in touched_clusters],
+            cluster_transforms=(snap_design.cluster_transforms if any(
+                getattr(e, "params", {}).get("_generator", {}).get("version") == 2
+                for e in design.feature_log
+            ) else [c for c in design.cluster_transforms if c.id not in touched_clusters]
+                + [c for c in snap_design.cluster_transforms if c.id in touched_clusters]),
         )
     return design.copy_with(
+        deformations=[d for d in design.deformations if d.type != "sweep"]
+            + [d for d in snap_design.deformations if d.type == "sweep"],
         helices=snap_design.helices,
         lattice_frames=snap_design.lattice_frames,
         strands=snap_design.strands,
@@ -8946,7 +8967,8 @@ def _rebuild_deformed_continuations(design: Design) -> Design:
         i
         for i, e in enumerate(log)
         if isinstance(e, _SnapshotLogEntry)
-        and e.op_kind == "extrude-deformed-continuation"
+        and (e.op_kind == "extrude-deformed-continuation"
+             or (e.op_kind == "sweep" and e.params.get("source_helix_id")))
         and not e.evicted
         and e.design_snapshot_gz_b64
     ]
@@ -8964,7 +8986,7 @@ def _rebuild_deformed_continuations(design: Design) -> Design:
         for e in log[:first]
         if e.feature_type == "deformation" and e.op_snapshot is not None
     ]
-    state = state.copy_with(deformations=defs_before)
+    state = state.copy_with(deformations=defs_before + [op for op in state.deformations if op.type == "sweep"])
 
     new_log = list(log)
     for i in range(first, len(log)):
@@ -9181,6 +9203,8 @@ def _seek_feature_log(
     # logic operates on this topology-corrected base, so the existing
     # rebuild-from-log logic Just Works for snapshot-bearing histories.
     design = _seek_snapshot_base(design, position, sub_position, optimized=optimized)
+    from backend.core.feature_history_clusters import restore_cluster_creations
+    design = restore_cluster_creations(design, position)
     log = list(design.feature_log)
     from backend.core.circular_pattern import pattern_history_overlays
     pattern_clusters, pattern_ops, pattern_baselines = pattern_history_overlays(
@@ -9388,8 +9412,12 @@ def _seek_feature_log(
 
         new_overhangs.append(ovhg)
 
+    native_deformation_ids = {e.deformation_id for e in log if e.feature_type == "deformation"}
+    generated_ops = [d for d in design.deformations if (d.id.startswith("gen_") or d.type == "sweep")
+                     and d.id not in native_deformation_ids
+                     and d.id not in {op.id for op in new_deformations + pattern_ops}]
     return design.copy_with(
-        deformations=new_deformations + pattern_ops,
+        deformations=new_deformations + pattern_ops + generated_ops,
         cluster_transforms=new_cts,
         cluster_joints=new_joints,
         overhangs=new_overhangs,
@@ -9707,6 +9735,7 @@ def apply_loop_skips_from_deformations() -> dict:
     For each DeformationOp:
       - twist → call twist_loop_skips with computed target_twist_deg
       - bend  → convert curvature_deg_per_bp to radius_nm and call bend_loop_skips
+      - sweep → integrate signed local curvature along the transported footprint
 
     All modifications are merged and applied atomically via apply_loop_skips.
     Pushes to undo history.
@@ -9726,7 +9755,9 @@ def apply_loop_skips_from_deformations() -> dict:
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.models import LatticeType
 
-    design = design_state.get_or_404()
+    design, revision = design_state.copy_for_persist()
+    if design is None:
+        raise HTTPException(404, detail="No active design.")
     reference_helix_ids = design.reference_helix_ids()
     overhang_helix_ids = {o.helix_id for o in design.overhangs}
     linker_helix_ids = {
@@ -9784,6 +9815,8 @@ def apply_loop_skips_from_deformations() -> dict:
             all_mods.setdefault(hid, []).extend(ls_list)
 
     for op in design.deformations:
+        if op.type == "sweep":
+            continue  # Sweeps use local signed strain, merged below.
         affected = [
             helix_map[hid]
             for hid in op.affected_helix_ids
@@ -9823,7 +9856,14 @@ def apply_loop_skips_from_deformations() -> dict:
         for hid, ls_list in mods.items():
             all_mods.setdefault(hid, []).extend(ls_list)
 
-    if not all_mods:
+    from backend.core.sweep_loop_skips import sweep_loop_skips
+    has_sweep = any(op.type == "sweep" for op in design.deformations)
+    try:
+        for hid, marks in sweep_loop_skips(design, existing=all_mods, ignored_helix_ids=ignored_helix_ids).items():
+            all_mods.setdefault(hid, []).extend(marks)
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    if not all_mods and not has_sweep:
         raise HTTPException(400, detail="No loop/skip modifications were produced.")
 
     # Relocate any auto-placed mark off a crossover / strand end / margin to the nearest free
@@ -9834,7 +9874,7 @@ def apply_loop_skips_from_deformations() -> dict:
     from backend.core.loop_skip_calculator import relocate_marks_off_forbidden
 
     all_mods = relocate_marks_off_forbidden(all_mods, design)
-    if not all_mods:
+    if not all_mods and not has_sweep:
         raise HTTPException(400, detail="No loop/skip modifications were produced.")
 
     n_helices = len(all_mods)
@@ -9849,7 +9889,10 @@ def apply_loop_skips_from_deformations() -> dict:
             "sq_periodic": design.lattice_type == LatticeType.SQUARE,
             "deformation_count": len(design.deformations),
         },
-        fn=lambda d: apply_loop_skips(d, all_mods),
+        expected_revision=revision,
+        fn=lambda d: apply_loop_skips(clear_loop_skips(d, active_helix_ids,
+            min((h.bp_start for h in d.helices), default=0),
+            max((h.bp_start + h.length_bp for h in d.helices), default=0)), all_mods),
     )
     response = _design_response(updated, report)
     response["loop_skips"] = {hid: len(ls) for hid, ls in all_mods.items()}

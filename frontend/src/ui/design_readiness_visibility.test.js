@@ -61,3 +61,23 @@ it('unsubscribes export and lighting listeners on disposal', async () => {
   await withMediaExport(() => expect(root.hidden).toBe(false))
   expect(root.hidden).toBe(false)
 })
+
+it('stays suppressed throughout welcome, including reload, late reports and explicit show', async () => {
+  document.body.innerHTML = '<div id="welcome-screen"></div><div id="host"></div>'
+  widget = initDesignReadiness({ host: document.getElementById('host') })
+  visibility = initDesignReadinessVisibility({ widget })
+  const root = document.querySelector('[data-role="design-readiness"]')
+  widget.setReport(report)
+  widget.show(); widget.open()
+  expect(root.hidden).toBe(true)
+  const welcome = document.getElementById('welcome-screen')
+  welcome.classList.add('hidden')
+  await Promise.resolve()
+  expect(root.hidden).toBe(false)
+  welcome.classList.remove('hidden')
+  await Promise.resolve()
+  widget.setReport(report)
+  widget.show(); widget.open()
+  expect(root.hidden).toBe(true)
+  expect(root.querySelector('.design-readiness__popover').hidden).toBe(true)
+})

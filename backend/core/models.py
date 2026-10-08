@@ -13,6 +13,8 @@ Rules:
 
 from __future__ import annotations
 
+from backend.core.sweep_model import SweepParams
+
 import json
 import math
 import time
@@ -1417,10 +1419,10 @@ class DeformationRange(BaseModel):
 
 
 class DeformationOp(BaseModel):
-    """One twist or bend applied to a segment of the bundle."""
+    """One twist, bend, or authored sweep applied to a bundle segment."""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: Literal["twist", "bend"]
+    type: Literal["twist", "bend", "sweep"]
     targets: Optional[List[dict]] = None
     target_ranges: Optional[List[DeformationRange]] = None
     plane_a_bp: int  # fixed plane (5′ side); must be < plane_b_bp
@@ -1431,7 +1433,7 @@ class DeformationOp(BaseModel):
     # at creation/edit time, so multiple clusters within a part can be bent or twisted
     # independently — even when their bp ranges overlap.
     cluster_ids: List[str] = Field(default_factory=list)
-    params: Annotated[Union[TwistParams, BendParams], Field(discriminator="kind")]
+    params: Annotated[Union[TwistParams, BendParams, SweepParams], Field(discriminator="kind")]
 
 
 class DomainRef(BaseModel):
@@ -1772,6 +1774,8 @@ class ClusterCreateLogEntry(BaseModel):
 
     feature_type: Literal["cluster_create"] = "cluster_create"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    # Preserve parent/domain ownership for automatically grouped duplexes too.
+    cluster_snapshot: Optional[ClusterRigidTransform] = None
     cluster_id: str
     name: str
     helix_ids: List[str]
@@ -1881,6 +1885,8 @@ class OverhangRotationLogEntry(BaseModel):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
+    "sweep",
+    "curve-path",
     "generate-design",
     "nick",
     "cluster-pose",
@@ -2614,7 +2620,8 @@ def _backfill_dropped_junctions(design: "Design") -> None:
     junction with the SAME rule as :func:`extract_crossovers_from_strands`: a
     same-bp transition between valid lattice neighbours becomes a **Crossover**;
     everything else (mismatched-bp loopouts, non-neighbour junctions) becomes a
-    **ForcedLigation**.
+    **ForcedLigation**. Authored sweep continuations at a segment boundary
+    remain ordinary backbone and do not acquire a junction record.
 
     Because it reuses that classifier, a crossover-valid junction can never be
     minted as a forced ligation here (the previous version emitted a ForcedLigation
@@ -2626,6 +2633,9 @@ def _backfill_dropped_junctions(design: "Design") -> None:
     Mutates *design* in place.
     """
     from backend.core.crossover_positions import extract_crossovers_from_strands  # noqa: PLC0415
+    from backend.core.backbone_continuations import backbone_continuation_edges
+
+    continuations = backbone_continuation_edges(design)
 
     # Junctions (unordered {helix,bp} endpoint pair) already annotated by a record.
     def _junction(a_hid: str, a_bp: int, b_hid: str, b_bp: int) -> frozenset:
@@ -2691,6 +2701,8 @@ def _backfill_dropped_junctions(design: "Design") -> None:
             fl.five_prime_bp,
             fl.five_prime_direction.value,
         )
+        if (key[:3], key[3:]) in continuations:
+            continue  # A swept segment boundary is ordinary backbone, not a new ligation.
         junc = _junction(
             fl.three_prime_helix_id,
             fl.three_prime_bp,
@@ -3559,6 +3571,9 @@ class Design(BaseModel):
         This keeps old .nadoc files working correctly without a migration step.
         """
         design = cls.model_validate(json.loads(text))
+        from backend.core.backbone_continuations import backbone_continuation_edges
+
+        continuations = backbone_continuation_edges(design)
         if not design.crossovers:
             # Lazy import avoids a circular dependency with crossover_positions.py.
             from backend.core.crossover_positions import extract_crossovers_from_strands  # noqa: PLC0415
@@ -3572,7 +3587,10 @@ class Design(BaseModel):
             # Only seed forced_ligations if the file didn't already record any —
             # otherwise we'd duplicate user-created records on re-load.
             if not design.forced_ligations:
-                design.forced_ligations = fls
+                design.forced_ligations = [fl for fl in fls if (
+                    (fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction.value),
+                    (fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction.value),
+                ) not in continuations]
 
         # Reclassify Crossover records that fail the lattice-neighbour test
         # (older cadnano imports kept them as Crossovers even when same-bp

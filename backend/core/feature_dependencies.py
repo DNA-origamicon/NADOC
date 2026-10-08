@@ -27,6 +27,7 @@ from typing import Optional
 # via crud._edit_dispatch_run. MUST stay in sync with that dispatcher.
 REPLAYABLE_SNAPSHOT_OPS = frozenset(
     {
+        "sweep",
         "bundle-create",
         "extrude-segment",
         "extrude-continuation",

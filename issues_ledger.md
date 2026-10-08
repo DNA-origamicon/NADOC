@@ -1324,6 +1324,13 @@ so the panel retains its inputs and preview for correction. Covered by
 - **Evidence:** `.development-artifacts/vr-edit-wheel-20261005/ligate/`. Coverage is 3/7 left-eye samples and 2/7 right-eye/mirror samples, below the unchanged 0.7 requirement. Captured state, images and input reaches are retained.
 - **Scope / follow-up:** No Ligate geometry or preview renderer was changed by the wheel conversion. Diagnose projected-line occlusion and observation setup before assigning a production root cause or altering the oracle. This failure does not establish whether later commit/save/Undo steps pass; they were not reached.
 
+## ISSUE-65 — Native cluster creation loses attachment ownership during history replay (2026-10-08, FIXED)
+
+- **Status:** `[x]` FIXED during generator conversion to ordinary operations.
+- **Repro / cause:** Seeking to an attachment's native Create cluster entry could omit its parent and duplex driver, because the entry only retained helix/domain membership. Snapshot substitution also omitted original groups when seeking before generation.
+- **Fix:** Optional full cluster-creation snapshots preserve ownership; a small replay helper reconstructs active creations before pose replay. Native generator snapshots restore the full cluster baseline; legacy v1 histories retain compatibility.
+- **Evidence:** `tests/test_feature_history_clusters.py`; all 98 history boundaries in the isolated `4NP_standard_operations.nadoc` review passed. Geometry equivalence remains 28,428 positions with maximum delta 0 nm.
+
 ## ISSUE-61 — Pending-review regression was not isolated from WSL platform rejection (2026-10-07, FIXED)
 
 - **Status:** `[x]` FIXED; discovered during readiness-feature FAST validation. The test-only platform isolation is verified and the infrastructure incident explicitly reviewed. Runtime platform policy, placement geometry, and review-gate behavior are unchanged.
@@ -1367,3 +1374,11 @@ so the panel retains its inputs and preview for correction. Covered by
   does not establish observed instability. No active job or production code changed.
 - **Follow-up:** Derive cadence from timestep consistently, pin actual generated
   4 fs configs against manifest, and review active prepared inputs before dynamics.
+
+## ISSUE-66 — Add Loops/Skips recomputation retains obsolete marks (2026-10-08, FIXED)
+
+- **Status:** `[x]` Fixed while extending realization to sweeps.
+- **Repro:** Seed a routed bundle with a loop at a helix end, then run Add Loops/Skips. The recomputed pattern excludes that end, but the old mark survives.
+- **Root cause:** Calculation cleared a local design copy; commit merged the new marks into the original, uncleared design.
+- **Fix:** Clear the active bundle helices inside the commit before applying the new pattern. Reference, overhang and linker marks remain preserved. A revision guard rejects a calculation made stale by another edit.
+- **Evidence:** `tests/test_sweep_loop_skips.py::test_tool_api_recomputes_atomically_and_supports_history` covers HC/SQ, forbidden sites, repeat application, undo/redo, feature revert and JSON persistence; stale-computation and atomic-failure tests cover transaction boundaries. Existing 75 loop/skip tests pass.

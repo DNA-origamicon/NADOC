@@ -502,6 +502,7 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
 
 # Whole modules where every test is a heavy real-sim / trajectory test.
 _SLOW_MODULES = {
+    "test_generated_commands",  # shared real origami build + fixed-center attachment fitting
     # Every HMC check launches the real CUDA Chudoba oxDNA engine; the harmonic
     # distribution samples 5,000 trajectories (185,000 integration steps).
     "test_chudoba_hmc",
@@ -992,7 +993,7 @@ def _slow_area_for(module: str) -> str:
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"
-    if "headless" in module or "spec_build" in module:
+    if "headless" in module or "spec_build" in module or module == "test_generated_commands":
         return "headless"
     # cluster autodetect's heavy test is heavy because it builds a fully ROUTED 18hb
     # through the headless build API — so a headless/routing change is what should

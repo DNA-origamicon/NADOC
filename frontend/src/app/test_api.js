@@ -584,6 +584,25 @@ export function installTestApi({
     getVRToolEndTable: () => bluntEnds.getVRToolEndTable?.() ?? [],
     getDomainEndScreenPositions: () =>
       bluntEnds.getEndScreenInfo?.(camera, canvas.getBoundingClientRect()) ?? [],
+    /** Read-only locations for real Sweep point and translation-handle gestures. */
+    getSweepScreenPositions() {
+      scene.updateMatrixWorld(true)
+      const rect = canvas.getBoundingClientRect()
+      const project = (object, point) => {
+        const p = point.applyMatrix4(object.matrixWorld).project(camera)
+        return { name: object.name, x: rect.left + (p.x + 1) * rect.width / 2,
+          y: rect.top + (1 - p.y) * rect.height / 2 }
+      }
+      const points = (scene.getObjectByName('sweep-control-points')?.children ?? [])
+        .map(o => project(o, new THREE.Vector3()))
+      const handles = []
+      scene.getObjectByName('sweep-point-gizmo')?.traverseVisible(o => {
+        if (!o.isMesh || !['X', 'Y', 'Z'].includes(o.name)) return
+        o.geometry.computeBoundingBox()
+        handles.push(project(o, o.geometry.boundingBox.getCenter(new THREE.Vector3())))
+      })
+      return { points, handles }
+    },
     /** Slice-plane mode snapshot (visible / placement / continuation). */
     getSliceState: () => ({
       visible: slicePlane.isVisible(),
