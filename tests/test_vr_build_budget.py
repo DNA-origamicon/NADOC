@@ -1,5 +1,6 @@
 """Launching VR must not rebuild the test suite with unbounded compiler jobs."""
 from types import SimpleNamespace
+import os
 from backend.api import routes_vr
 
 
@@ -27,3 +28,11 @@ def test_automatic_build_is_serial_and_viewer_only(tmp_path, monkeypatch):
     assert len(calls) == 2
     routes_vr._ensure_viewer_built()
     assert len(calls) == 2  # A waiting caller reuses the completed build.
+    # Sweep's runtime implementation is an included source fragment. Changing it
+    # must rebuild the viewer just like changing main.cpp or a header.
+    fragment = root / 'src' / 'sweep_runtime.inc'
+    fragment.write_text('// revised gesture handling')
+    newer = viewer.stat().st_mtime + 1
+    os.utime(fragment, (newer, newer))
+    routes_vr._ensure_viewer_built()
+    assert len(calls) == 4

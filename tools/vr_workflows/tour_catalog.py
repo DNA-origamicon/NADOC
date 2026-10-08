@@ -83,6 +83,8 @@ def catalog():
         'Isolated demo part: create square and hex volumes, show/hide, enable/delete, trigger move/rotate, two-hand resize, and grip the scene. Validation runs all four motion profiles.', module='view_volumes_check')
     add('extrude', 'authoring', 'Extrude a 6HB and inspect a volume',
         'Creates a new isolated part; paints a honeycomb ring, zooms and moves its frosted lattice window, and adjusts coarse (7/8 bp) and fine (1 bp) wheels. Checks that Confirm closes the painter and right menu, removes the draft preview and preserves Undo. Compares local volume representations. Native checks cover failed-commit recovery; motion validation covers all four profiles.', module='extrude_tour')
+    add('sweep', 'authoring', 'Sweep an S shape · Free Draw and point editing',
+        'Isolated part: paint a footprint, draw a glowing S-shaped stroke, edit its fitted points by trigger dragging and XYZ arrows, and check radial Delete Last. Confirm, edit through the desktop feature log, then Undo and Redo both edits and creation. Demo pauses for review; validation uses all four controller profiles and retained stereo evidence.', module='sweep_tour')
     add('extrude-slice', 'authoring', 'Extrude beside an existing 1x8 platform',
         'Isolated square part: display the existing 1x8 cross-section, paint one and two lattice rows beside it, use coarse/fine wheels, and verify preview, committed 3D spacing, refreshed occupied cells and both menus closing on Confirm. Native checks preserve drafts for retry after failure. Motion validation uses all four profiles.',
         ['--slice-reference'], module='extrude_tour')
@@ -135,7 +137,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

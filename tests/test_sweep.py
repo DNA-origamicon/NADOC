@@ -242,7 +242,7 @@ def test_swept_helix_preview_matches_committed_axis_endpoints(plane, end):
     original = original.copy_with(helices=[h.model_copy(update={'grid_pos': cell}) for h, cell in zip(original.helices, [(0,0), (0,1)])])
     direction = -1 if end == 'start' else 1
     normal = np.eye(3)[{'XY': 2, 'XZ': 1, 'YZ': 0}[plane]] * direction
-    body = SweepRequest(cells=[(0,0), (0,1)], plane=plane,
+    body = SweepRequest(cells=[(0,0), (0,1)] if end else [(1,0), (1,1)], plane=plane,
         points_nm=[(0,0,0), tuple(normal * 8), tuple(normal * 14 + np.array([4,3,2]))],
         source_helix_id=original.helices[0].id if end else None, source_end=end or 'end')
     preview, _ = sweep_preview(original, body, include_geometry=True)

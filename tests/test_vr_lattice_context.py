@@ -70,7 +70,7 @@ def test_metadata_contract_roundtrip_and_invalid_basis_cells():
     header, geometry = fixture.replace('NADOCVR 12', 'NADOCVR 16', 1).split('\n', 1)
     scene = header+'\n'+'\n'.join(records)+'\n'+geometry
     assert parse_scene_contract(scene) == parse_scene_contract(fixture)
-    record = records[0].split()
+    record = next(r for r in records if r.startswith('L ')).split()
     bad_basis = record.copy(); bad_basis[5] = '2'
     duplicate_cell = record.copy(); duplicate_cell[-2:] = duplicate_cell[-4:-2]
     bad_count = record.copy(); bad_count[14] = '3'
@@ -79,3 +79,14 @@ def test_metadata_contract_roundtrip_and_invalid_basis_cells():
             parse_scene_contract('NADOCVR 16 full strand\n'+' '.join(bad)+'\nR full\n')
     with pytest.raises(ValueError):
         parse_scene_contract('NADOCVR 16 full strand\n'+records[0]+'\n'+records[0]+'\nR full\n')
+
+
+def test_occupancy_survives_ambiguous_placement_and_is_plane_scoped():
+    design = append_independent_bundle(Design(), [[0, 0]], 21)
+    design = append_independent_bundle(design, [[0, 1]], 21)
+    design = append_independent_bundle(design, [[2, 3]], 21, plane='YZ')
+    assert lattice_plane_context(design, 'XY') is None
+    records = lattice_context_records(design)
+    assert 'G XY 2 0 0 0 1' in records
+    assert 'G XZ 0' in records
+    assert 'G YZ 1 2 3' in records

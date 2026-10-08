@@ -40,12 +40,13 @@ template<class Spec> class TouchpadWheel {
         if(workflow_!=active)cancel();
         workflow_=active;confirm_=confirm;
     }
-    size_t itemCount() const {return workflow_?2:count;}
-    const char* itemLabel(size_t i) const {return workflow_?(i==0?"BACK":confirm_?"CONFIRM":"NEXT"):labels[i];}
-    float itemAngle(size_t i) const {return workflow_?(i==0?-glm::half_pi<float>():glm::half_pi<float>()):angle(i);}
+    void setSweep(bool active) {if(sweep_!=active)cancel();sweep_=active;}
+    size_t itemCount() const {return workflow_||sweep_?2:count;}
+    const char* itemLabel(size_t i) const {return sweep_?(i==0?"DELETE LAST":"ADD POINT"):workflow_?(i==0?"BACK":confirm_?"CONFIRM":"NEXT"):labels[i];}
+    float itemAngle(size_t i) const {return workflow_||sweep_?(i==0?-glm::half_pi<float>():glm::half_pi<float>()):angle(i);}
     glm::vec2 itemDirection(size_t i) const {const float a=itemAngle(i);return {std::sin(a),std::cos(a)};}
     std::optional<size_t> itemSector(glm::vec2 axis) const {
-        if(!workflow_)return sector(axis);
+        if(!workflow_&&!sweep_)return sector(axis);
         if(!std::isfinite(axis.x)||!std::isfinite(axis.y)||glm::length(axis)<deadzone)return {};
         return axis.x<0?0:1;
     }
@@ -104,7 +105,7 @@ template<class Spec> class TouchpadWheel {
         };
         for(size_t item=0;item<itemCount();++item) {
             const bool hover=hovered_==item;
-            const glm::vec3 color=hover?glm::vec3(1,.78F,.20F):(!workflow_ && selected==levels[item])?glm::vec3(.4F,1,.62F):glm::vec3(.3F,.7F,.96F);
+            const glm::vec3 color=hover?glm::vec3(1,.78F,.20F):(!workflow_ && !sweep_ && selected==levels[item])?glm::vec3(.4F,1,.62F):glm::vec3(.3F,.7F,.96F);
             const float center=itemAngle(item);
             auto polar=[](float a,float r){return glm::vec2(std::sin(a),std::cos(a))*r;};
             const float lo=center-glm::pi<float>()/float(itemCount())+.025F,hi=center+glm::pi<float>()/float(itemCount())-.025F;
@@ -129,7 +130,7 @@ template<class Spec> class TouchpadWheel {
         segment(p-glm::vec2(0,.004F),p+glm::vec2(0,.004F),{1,1,1});
     }
  private:
-    bool workflow_=false,confirm_=false;
+    bool workflow_=false,confirm_=false,sweep_=false;
     bool open_=false,wasPressed_=false,consumed_=false;
     std::optional<size_t> hovered_;
     glm::vec2 axis_{};

@@ -11,6 +11,10 @@ int main() {
     context.read(record);
     const auto* plane=context.find("XY");assert(plane && !context.find("XZ"));
     assert(plane->cells.size()==8 && plane->occupied({4,-3}) && !plane->occupied({4,5}));
+    assert(context.occupancy("XY")==plane);
+    std::istringstream occupied("XY 2 4 -3 4 5");context.readOccupancy(occupied);
+    assert(context.occupancy("XY")->occupied({4,5}) && !plane->occupied({4,5}));
+    assert(context.occupancy("XY")->cells.size()==2);
     ExtrudeLatticeDraft draft;
     assert(draft.setSelected({4,-3},true) && draft.setSelected({4,5},true));
     assert(plane->discardOccupied(draft));

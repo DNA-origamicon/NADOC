@@ -55,6 +55,16 @@ int main() {
     edit.update(true,{-1,0},hand);
     edit.setWorkflow(false);
     assert(!edit.update(false,{0,0},hand).commit && edit.itemCount()==4);
+    edit.setSweep(true);
+    assert(edit.itemCount()==2 && std::string(edit.itemLabel(0))=="DELETE LAST" && std::string(edit.itemLabel(1))=="ADD POINT");
+    edit.update(true,{1,0},hand);
+    assert(edit.update(false,{0,0},hand).commit==1); // Release axes reset, retained Add is committed.
+    edit.update(true,{-1,0},hand);
+    edit.update(true,{0,0},hand);
+    assert(!edit.update(false,{-1,0},hand).commit); // Center cancels a destructive point edit.
+    edit.update(true,{-1,0},hand);
+    edit.setSweep(false);
+    assert(!edit.update(false,{0,0},hand).commit && edit.itemCount()==4); // Switching tools never leaks Delete.
     assert(SelectionWheel::sector({.49F,.8660254F})==0);
     assert(SelectionWheel::sector({.51F,.8660254F})==1);
     assert(SelectionWheel::sector({-.51F,.8660254F})==5);

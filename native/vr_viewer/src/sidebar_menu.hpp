@@ -79,24 +79,31 @@ class SidebarMenu {
         return rows;
     }
     bool toolFooter() const {
-        return customTab && (tab().key=="extrude" || tab().key=="move" || tab().key=="bend" || tab().key=="twist");
+        return customTab && (tab().key=="extrude" || tab().key=="sweep" || tab().key=="move" || tab().key=="bend" || tab().key=="twist");
+    }
+    bool sweepPath() const {
+        return customTab && tab().key=="sweep" && std::any_of(tab().rows.begin(),tab().rows.end(),[](const auto& r){return r.id=="sweep:free-draw";});
     }
     bool raisedAction(const SidebarControl& c) const {
         return toolFooter() && (c.id==tab().key+":back" || c.id==tab().key+":confirm" || c.id=="move:apply");
     }
     float footerY() const {
-        return tab().key=="extrude"?-.425F:tab().key=="move"?.045F:tab().key=="bend"?-.54F:-.51F;
+        return tab().key=="extrude" || tab().key=="sweep"?-.425F:tab().key=="move"?.045F:tab().key=="bend"?-.54F:-.51F;
     }
     std::vector<const SidebarRow*> contentRows() const {
         auto rows=visibleRows();
+        if(customTab && tab().key=="sweep") {
+            const bool path=sweepPath();
+            std::erase_if(rows,[&](const auto* r){return path?!r->id.starts_with("sweep:point:"):r->id=="sweep:back" || r->id=="sweep:confirm";});
+        }
         if(customTab && tab().key=="extrude") {
             std::erase_if(rows,[](const auto* r){return r->id=="extrude:back" || r->id=="extrude:confirm" || r->id=="extrude:length" || extrudeWheelIndex(r->id).has_value();});
             std::rotate(rows.begin(),rows.begin()+1,rows.end());
         }
         return rows;
     }
-    size_t total() const { if(dynamicActive())return dynamicTotal();return visibleRows().size()-(customTab && tab().key=="extrude"?5:toolFooter()?2:customTab?3:0); }
-    size_t pageRows() const { if(customTab && (tab().key=="move" || tab().key=="bend" || tab().key=="twist"))return total();return dynamicActive()?7:customTab?5:kSidebarPageRows; }
+    size_t total() const { if(dynamicActive())return dynamicTotal();if(customTab && tab().key=="sweep")return contentRows().size();return visibleRows().size()-(customTab && tab().key=="extrude"?5:toolFooter()?2:customTab?3:0); }
+    size_t pageRows() const { if(customTab && tab().key=="sweep")return sweepPath()?2:6;if(customTab && (tab().key=="move" || tab().key=="bend" || tab().key=="twist"))return total();return dynamicActive()?7:customTab?5:kSidebarPageRows; }
     MenuPanelBounds bounds() const {
         if(dynamicActive()) return dynamicBounds();
         auto b=kSidebarBounds;
@@ -125,6 +132,7 @@ class SidebarMenu {
     }
     MenuPanelBounds scrollBounds() const {
         const float cx=toolFooter()?0.F:hand==0?.058F:-.058F;
+        if(customTab && tab().key=="sweep")return {{ui_style::toolHalfWidth-.062F,sweepPath()?-.234F:-.191F},{ui_style::toolHalfWidth,sweepPath()?.282F:.517F}};
         if(customTab && tab().key=="extrude")return {{ui_style::toolHalfWidth-.062F,-.339F},{ui_style::toolHalfWidth,.249F}};
         const float top=customTab?.157F:.517F;
         return hand==0 ? MenuPanelBounds{{cx-.327F,-.431F},{cx-.265F,top}}
@@ -178,7 +186,7 @@ class SidebarMenu {
             const auto row=std::find_if(rows.begin(),rows.end(),[&](const auto* r){return r->id==(focus.id=="menu-view-surface-detail"?"menu-view-surface":focus.id);});
             if(row!=rows.end()) {
                 const auto index=std::ptrdiff_t(row-rows.begin())+(axis.y>0?-1:1);
-                const size_t fixed=customTab && tab().key!="extrude"?3:0;
+                const size_t fixed=customTab && tab().key!="extrude" && tab().key!="sweep"?3:0;
                 if(index>=0 && index<std::ptrdiff_t(rows.size())) {
                     focus.id=rows[size_t(index)]->id;
                     if(size_t(index)>=fixed) {
@@ -228,14 +236,16 @@ class SidebarMenu {
             const float left=-ui_style::toolHalfWidth,right=ui_style::toolHalfWidth,middle=0;
             const float gap=ui_style::raisedColumnGap*.5F;
             // Cancel remains a distinct action; Back retains its existing return behavior.
-            if(tab().key!="extrude")for(auto& c:out)if(c.id==tab().key+":cancel")
+            if(tab().key!="extrude" && tab().key!="sweep")for(auto& c:out)if(c.id==tab().key+":cancel")
                 c.bounds={{left,.418F},{right,.508F}};
+            for(auto& c:out)if(c.id==tab().key+":cancel")
+                c.bounds.maximum.x=middle-gap;
             for(bool back:{false,true}) {
                 const std::string id=tab().key+":"+(back?"back":tab().key=="move"?"apply":"confirm");
                 const auto row=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& r){return r.id==id;});
                 if(row==tab().rows.end())continue;
-                out.push_back({id,back?"BACK":tab().key=="move"?"APPLY":"CONFIRM","",row->action,
-                    {{back?middle+gap:left,footerY()-ui_style::footerHalfHeight},{back?right:middle-gap,footerY()+ui_style::footerHalfHeight}},available(row->action)});
+                out.push_back({id,back?"BACK":tab().key=="move"?"APPLY":tab().key=="sweep"?row->label:"CONFIRM","",row->action,
+                    {{back?left:middle+gap,footerY()-ui_style::footerHalfHeight},{back?middle-gap:right,footerY()+ui_style::footerHalfHeight}},available(row->action)});
             }
         }
         for(auto& c:out) if(c.viewport) {
@@ -258,6 +268,53 @@ class SidebarMenu {
             const auto extra=dynamicControls(animated);out.insert(out.end(),extra.begin(),extra.end());
             out.push_back({"close","Close","","close",{{-.269F,-.657F},{.046F,-.585F}}});
             out.push_back({"dock","Dock / Follow","","dock",{{.07F,-.657F},{.385F,-.585F}}});
+            return out;
+        }
+        if(customTab && tab().key=="sweep") {
+            const float left=-ui_style::toolHalfWidth,right=ui_style::toolHalfWidth-.080F;
+            const bool path=sweepPath();
+            auto add=[&](const std::string& id,MenuPanelBounds box,const std::string& icon="",bool selected=false) {
+                const auto r=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& row){return row.id=="sweep:"+id;});
+                if(r==tab().rows.end())return;
+                const bool value=id.ends_with(":value") || id=="smoothing";
+                const bool originAxis=id.starts_with("axis:0:") && !value;
+                out.push_back({r->id,r->label,r->section,r->action,box,!originAxis && !value && available(r->action),selected || isActive(r->action),false,icon});
+            };
+            if(path) {
+                add("free-draw",{{left,.420F},{ui_style::toolHalfWidth,.510F}});
+                add("add-point",{{left,.306F},{-.006F,.394F}});
+                add("delete-point",{{.006F,.306F},{ui_style::toolHalfWidth,.394F}});
+                add("smoothing-less",{{left,-.341F},{-.207F,-.263F}});
+                add("smoothing",{{-.195F,-.341F},{.195F,-.263F}});
+                add("smoothing-more",{{.207F,-.341F},{ui_style::toolHalfWidth,-.263F}});
+            }
+            const auto rows=contentRows();
+            const float position=animated?rowScroll.value(float(offset()),animationClock()):float(offset());
+            const size_t start=size_t(std::floor(position)),end=std::min(size_t(std::ceil(position))+pageRows(),rows.size());
+            const MenuPanelBounds viewport{{left,path?-.234F:-.191F},{right,path?.282F:.517F}};
+            for(size_t index=start;index<end;++index) {
+                const auto& row=*rows[index];const size_t before=out.size();
+                if(path) {
+                    const auto id=row.id.substr(12);
+                    const float top=.282F-(float(index)-position)*.258F;
+                    const bool selected=row.section=="SELECTED";
+                    add("point:"+id,{{left,top-.065F},{right,top}},"",selected);
+                    out.back().section.clear();
+                    const float width=(right-left-.024F)/3.F;
+                    for(int axis=0;axis<3;++axis) {
+                        const float x=left+float(axis)*(width+.012F),y=top-.077F;
+                        const auto prefix="axis:"+id+":"+std::to_string(axis);
+                        add(prefix+":value",{{x,y-.142F},{x+width-.086F,y}},"",selected);
+                        add(prefix+":1",{{x+width-.074F,y-.065F},{x+width,y}},"up");
+                        add(prefix+":-1",{{x+width-.074F,y-.142F},{x+width,y-.077F}},"down");
+                    }
+                } else {
+                    const float y=.463F-(float(index)-position)*.12F;
+                    add(row.id.substr(6),{{left,y-.054F},{right,y+.054F}});
+                }
+                for(size_t i=before;i<out.size();++i)out[i].viewport=viewport;
+            }
+            if(total()>pageRows())out.push_back({"scrollbar","Scroll points","","",scrollBounds(),true});
             return out;
         }
         if(customTab && tab().key=="move") {
@@ -549,7 +606,7 @@ class SidebarMenu {
                 const auto color=focus.active && c.id==focus.id?ui_style::focus:ui_style::selectedBorder;
                 ui_style::rounded({lo,hi},bg,color,line,[](MenuPanelBounds,glm::vec3){},ui_style::cornerRadius-.004F,.003F);
             }
-            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,c.id.ends_with("-wheel")?glm::vec2(.05F,.065F):(!c.icon.empty() || c.id.starts_with("volume:enabled:"))?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,.15F):glm::vec2(.15F,.065F));
+            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,c.id.starts_with("sweep:axis:")?glm::vec2(.07F,.065F):c.id.ends_with("-wheel")?glm::vec2(.05F,.065F):(!c.icon.empty() || c.id.starts_with("volume:enabled:"))?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,.15F):glm::vec2(.15F,.065F));
             if(scrollbar) {
                 const auto thumb=dynamicActive()?dynamicThumb(c.id):scrollThumb();
                 const auto color=c.enabled?ui_style::disabledText:glm::vec3(.55F);
@@ -580,6 +637,10 @@ class SidebarMenu {
                     text(c.id+":label",c.label,{center.x-strokeTextWidth(c.label.size(),scale)*.5F,b.minimum.y+.028F},scale,fg,b);
                 }
                 else if(c.icon=="x") {stroke({-6,-6},{6,6});stroke({-6,6},{6,-6});}
+                else if(c.icon=="up" || c.icon=="down") {
+                    const float sign=c.icon=="up"?1.F:-1.F;
+                    stroke({-5,-3*sign},{0,3*sign});stroke({0,3*sign},{5,-3*sign});
+                }
                 else {
                     // Desktop eye silhouette and pupil, with slash when hidden.
                     for(int i=0;i<24;++i) {

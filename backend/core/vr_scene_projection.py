@@ -479,7 +479,7 @@ def _flexible_arc_points(
 
 
 def _centripetal_catmull_rom(
-    control_points: tuple[np.ndarray, ...], *, segments: int = 32
+    control_points: tuple[np.ndarray, ...], *, segments: int = 32, arc_length: bool = False
 ) -> tuple[np.ndarray, ...]:
     """Sample Three.js' default centripetal CatmullRomCurve3."""
     if len(control_points) < 2:
@@ -523,7 +523,16 @@ def _centripetal_catmull_rom(
         c3 = 2.0 * p1 - 2.0 * p2 + tangent1 + tangent2
         return c0 + c1 * weight + c2 * weight**2 + c3 * weight**3
 
-    return tuple(point_at(index / segments) for index in range(segments + 1))
+    parameters = np.linspace(0, 1, segments + 1)
+    if arc_length:
+        # Three.js TubeGeometry uses getPointAt, with Curve's default 200-step
+        # arc-length lookup, rather than uniformly spaced spline parameters.
+        lookup = np.linspace(0, 1, 201)
+        positions = np.asarray([point_at(t) for t in lookup])
+        lengths = np.r_[0, np.cumsum(np.linalg.norm(np.diff(positions, axis=0), axis=1))]
+        if lengths[-1] > 0:
+            parameters = np.interp(parameters * lengths[-1], lengths, lookup)
+    return tuple(point_at(t) for t in parameters)
 
 
 def _flexible_anchor_nucleotide(design, nucleotides: list[dict], anchor):

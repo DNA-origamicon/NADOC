@@ -47,7 +47,8 @@ import { buildVRVisualizationSnapshot } from './scene/vr_visualization_snapshot.
 import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
 import { createVRBend } from './scene/vr_bend.js'
 import { createVRPaintedCommit } from './scene/vr_painted_commit.js'
-import { createVRToolTransactionCoordinator } from './scene/vr_tool_transaction.js'
+import { createVRSweepCommit } from './scene/vr_sweep_commit.js'
+import { createVRToolTransactionCoordinator, vrToolExecutionFeedback } from './scene/vr_tool_transaction.js'
 import {
   initialVRToolConfigState, reduceVRToolConfig, vrPlaneFeedbackPayload,
 } from './scene/vr_tool_config.js'
@@ -6318,21 +6319,10 @@ async function main() {
     undoDesign: api.undo,
   })
   const _sendVRToolExecution = async (event, status, reason, transaction = null) => {
-    const targetIdentity = transaction ? transaction.targetIdentity : event.targetIdentity
-    const targetKind = transaction?.targetKind ?? event.targetKind
-    if ((!targetIdentity || targetKind === 'none') && !(event.mode === 'extrude' && targetKind === 'none' && !targetIdentity)) return Promise.resolve(null)
-    const payload = {
-      execution_sequence: ++_vrToolExecutionSequence,
-      tool_sequence: event.sequence,
-      tool_mode: event.mode,
-      tool_action: event.action,
-      target_identity: targetIdentity,
-      target_kind: targetKind,
-      status,
-      reason,
-      feature_log_entry_id: status === 'succeeded'
-        ? transaction?.featureLogEntryId ?? null : null,
-    }
+    const payload = vrToolExecutionFeedback({ event, status, reason, transaction,
+      executionSequence: _vrToolExecutionSequence + 1 })
+    if (!payload) return null
+    _vrToolExecutionSequence = payload.execution_sequence
     _recordScrywriteBrowser('execution_verdict', payload)
     let result
     try {
@@ -6361,10 +6351,13 @@ async function main() {
     transaction: _vrToolTransaction, sendFeedback: _sendVRToolExecution,
     onError: message => showToast(message, { severity: 'error' }) })
   const _vrPaintedCommit = createVRPaintedCommit({ resolveTarget: target => selectionManager.resolveVRToolTargetSnapshot?.(target), preflight: _vrToolPreflight, transaction: _vrToolTransaction, api, getState: store.getState, sendFeedback: _sendVRToolExecution, onOutcome: outcome => showToast(`VR Extrude: ${outcome.reason.replaceAll('_', ' ')}.`) })
+  const _vrSweepCommit = createVRSweepCommit({ preflight: _vrToolPreflight, transaction: _vrToolTransaction,
+    api, getState: store.getState, sendFeedback: _sendVRToolExecution,
+    onOutcome: outcome => showToast(`VR Sweep: ${outcome.reason.replaceAll('_', ' ')}.`) })
   const _requestVRToolPreflight = (
     sequence, draft, { waitingReason = null } = {},
   ) => {
-    if (!draft) return
+    if (!draft) { _vrToolPreflight.cancel(); return }
     const targetSnapshotPresent = draft.target_kind !== 'none' ||
       !!draft.target_identity || !!draft.target_owner_tokens?.length
     const toolTarget = targetSnapshotPresent
@@ -6669,6 +6662,7 @@ async function main() {
         })
         if (feedback) api.sendVRPlaneFeedback(feedback).catch(() => {})
       } else if (event?.type === 'tool') {
+        if (_vrSweepCommit.handle(event)) return
         if (_vrBend.handle(event)) return
         if (_vrPaintedCommit.handle(event)) return
         const targetSnapshotPresent = event.targetKind !== 'none' ||
@@ -6805,6 +6799,7 @@ async function main() {
         _vrToolPreflight.cancel()
         _vrToolTransaction.clear()
         _vrPaintedCommit.reset()
+        _vrSweepCommit.reset()
         _vrBend.reset()
         _vrToolConfigState = initialVRToolConfigState
       } else {

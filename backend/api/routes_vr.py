@@ -260,7 +260,7 @@ class VRToolPreflightFeedbackRequest(BaseModel):
     tool_config_sequence: int = Field(ge=1)
     target_identity: Optional[str] = Field(default=None, max_length=2048)
     target_kind: SelectionKind
-    tool_mode: Literal["extrude", "twist", "bend"]
+    tool_mode: Literal["extrude", "sweep", "twist", "bend"]
     status: Literal["waiting", "ok", "warn", "block", "error"]
     reason: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")
 
@@ -270,7 +270,7 @@ class VRToolExecutionFeedbackRequest(BaseModel):
 
     execution_sequence: int = Field(ge=1, le=2**53 - 1)
     tool_sequence: int = Field(ge=1, le=2**53 - 1)
-    tool_mode: Literal["move_rotate", "extrude", "bend", "twist"]
+    tool_mode: Literal["move_rotate", "extrude", "sweep", "bend", "twist"]
     tool_action: Literal["confirm", "undo"]
     target_identity: Optional[str] = Field(default=None, min_length=1, max_length=2048)
     target_kind: SelectionKind
@@ -1947,6 +1947,8 @@ def _serialize_scene(
     append_linker_geometry(include_full_bases=True)
     append_flexible_geometry()
 
+    axis_helices = {h.id: h for h in getattr(design, 'helices', ())}
+
     def axis_edges(axis: dict):
         """Yield visible axis edges, preferring authoritative domain segments.
 
@@ -1955,10 +1957,10 @@ def _serialize_scene(
         segments exist fills the negative space between domains, which changes
         the topology's visual reading in both Full and cylinder views.
         """
-        segments = axis.get("segments")
-        if segments is not None:
-            for segment_index, segment in enumerate(segments):
-                first, second = point(segment.get("start")), point(segment.get("end"))
+        from backend.core.vr_axis_lines import axis_line_paths
+        for path, segment, path_id in axis_line_paths(axis, axis_helices.get(axis.get('helix_id'))):
+            for sample_index, (first_raw, second_raw) in enumerate(zip(path, path[1:])):
+                first, second = point(first_raw), point(second_raw)
                 if first is not None and second is not None:
                     edge_identity = ":".join(
                         str(value)
@@ -1967,24 +1969,13 @@ def _serialize_scene(
                             axis.get("helix_id") or "_",
                             segment.get("strand_id") or "_",
                             int(segment.get("domain_index") or 0),
-                            int(segment.get("bp_lo", segment_index)),
-                            int(segment.get("bp_hi", segment_index)),
+                            segment.get("bp_lo", path_id),
+                            segment.get("bp_hi", path_id),
                         )
-                    )
+                    ) if segment is not None else f"axis:{axis.get('helix_id') or '_'}:{path_id}"
+                    if len(path)>2 or segment is None:
+                        edge_identity += f':sample:{sample_index}'
                     yield first, second, segment, edge_identity
-            return
-        samples = axis.get("samples") or [axis.get("start"), axis.get("end")]
-        for sample_index, (first_raw, second_raw) in enumerate(
-            zip(samples, samples[1:])
-        ):
-            first, second = point(first_raw), point(second_raw)
-            if first is not None and second is not None:
-                yield (
-                    first,
-                    second,
-                    None,
-                    f"axis:{axis.get('helix_id') or '_'}:sample:{sample_index}",
-                )
 
     def append_axes(radius: float = 0.025) -> None:
         palette = solid_palette((0.30, 0.34, 0.42))
@@ -2645,6 +2636,7 @@ def _build_viewer_locked() -> None:
         _VIEWER_DIR / "CMakeLists.txt",
         *(_VIEWER_DIR / "src").glob("*.cpp"),
         *(_VIEWER_DIR / "src").glob("*.hpp"),
+        *(_VIEWER_DIR / "src").glob("*.inc"),
     ]
     newest_source = max(path.stat().st_mtime for path in sources)
     if _VIEWER.is_file() and _VIEWER.stat().st_mtime >= newest_source:
@@ -3016,7 +3008,7 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
     target_kind = raw.get("target_kind")
     target_owner_tokens = raw.get("target_owner_tokens")
     if (
-        mode not in {"extrude", "twist", "bend"}
+        mode not in {"extrude", "sweep", "twist", "bend"}
         or target_kind not in _VR_TOOL_CONFIG_TARGET_KINDS
         or not isinstance(target_owner_tokens, list)
         or len(target_owner_tokens) > 8
@@ -3064,6 +3056,10 @@ def _parse_tool_config(raw: object, sequence: int) -> dict | None:
         if not math.isfinite(result) or not low <= result <= high:
             raise ValueError("invalid tool configuration number")
         return result
+
+    if mode == "sweep":
+        from backend.core.vr_sweep_draft import validate_sweep_draft
+        return {**common, **validate_sweep_draft(raw)}
 
     if mode == "extrude":
         from backend.core.vr_extrude_draft import validate_painted_footprint
@@ -3295,7 +3291,7 @@ def _event_payload(state: dict | None) -> dict:
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
             or representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna"}
             or coloring not in {"strand", "base", "cluster", "cpk"}
-            or tool_mode not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
+            or tool_mode not in {"inspect", "move_rotate", "extrude", "sweep", "twist", "bend"}
             or tool_action not in {"activate", "preview", "confirm", "cancel", "undo"}
             or (
                 plane_pick_sequence == 0
@@ -3918,9 +3914,10 @@ def _write_tool_execution_feedback(
         raise HTTPException(409, detail="Native VR is not running.")
     entry_id = body.feature_log_entry_id or "-"
     identity = body.target_identity or "-"
-    targetless = body.tool_mode == "extrude" and body.target_kind == "none" and body.target_identity is None
+    targetless = body.tool_mode in {"extrude", "sweep"} and body.target_kind == "none" and body.target_identity is None
     if (
         (not targetless and (body.target_kind == "none" or body.target_identity is None))
+        or (body.tool_mode == "sweep" and not targetless)
         or (body.status == "succeeded") != (body.feature_log_entry_id is not None)
         or any(
             any(character.isspace() for character in value)

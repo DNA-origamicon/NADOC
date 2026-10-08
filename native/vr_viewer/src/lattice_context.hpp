@@ -54,6 +54,25 @@ struct LatticePlaneContext {
 
 class LatticeContext {
   public:
+    const LatticePlaneContext* occupancy(const std::string& plane) const {
+        for(const auto& entry:occupancy_)if(entry.plane==plane)return &entry;
+        return find(plane); // Older v16 exports only carry L records.
+    }
+    void readOccupancy(std::istream& input) {
+        std::string plane;int64_t count=-1;input>>plane>>count;
+        if(!input || !ExtrudePlane::valid(plane) || count<0 || count>1000000 ||
+           std::any_of(occupancy_.begin(),occupancy_.end(),[&](const auto& p){return p.plane==plane;}))
+            throw std::runtime_error("Invalid lattice occupancy");
+        LatticePlaneContext value;value.plane=plane;
+        for(int64_t i=0;i<count;++i) {
+            LatticeCell cell;input>>cell.row>>cell.column;
+            if(!input || cell.row < -100000 || cell.row > 100000 || cell.column < -100000 || cell.column > 100000 ||
+               !value.occupiedCells.insert(LatticePlaneContext::key(cell)).second)
+                throw std::runtime_error("Invalid occupied lattice cell");
+            value.cells.push_back(cell);
+        }
+        occupancy_.push_back(std::move(value));
+    }
     const LatticePlaneContext* find(const std::string& plane) const {
         for(const auto& entry:planes_)if(entry.plane==plane)return &entry;
         return nullptr;
@@ -84,5 +103,6 @@ class LatticeContext {
     }
   private:
     std::vector<LatticePlaneContext> planes_;
+    std::vector<LatticePlaneContext> occupancy_;
 };
 }

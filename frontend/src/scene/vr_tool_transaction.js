@@ -12,6 +12,20 @@ export function featureLogTailId(state) {
     : null
 }
 
+/** Use the committed action's target when acknowledging an undo, including
+ * independent Extrude/Sweep edits which deliberately have no scene target. */
+export function vrToolExecutionFeedback({ event, status, reason, transaction = null, executionSequence }) {
+  const targetIdentity = transaction ? transaction.targetIdentity : event.targetIdentity
+  const targetKind = transaction?.targetKind ?? event.targetKind
+  const targetless = ['extrude', 'sweep'].includes(event.mode) && targetKind === 'none' && !targetIdentity
+  if ((!targetIdentity || targetKind === 'none') && !targetless) return null
+  if (event.mode === 'sweep' && !targetless) return null
+  return { execution_sequence: executionSequence, tool_sequence: event.sequence,
+    tool_mode: event.mode, tool_action: event.action, target_identity: targetIdentity ?? null,
+    target_kind: targetKind, status, reason,
+    feature_log_entry_id: status === 'succeeded' ? transaction?.featureLogEntryId ?? null : null }
+}
+
 function _transactionFrom(outcome) {
   return outcome?.result?.vr_transaction ?? outcome?.vr_transaction ?? null
 }

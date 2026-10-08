@@ -57,6 +57,7 @@
 #include "dimension_panel.hpp"
 #include "view_volume_panel.hpp"
 #include "extrude_panel.hpp"
+#include "sweep_panel.hpp"
 #include "bend_panel.hpp"
 #include "move_panel.hpp"
 #include "end_resize.hpp"
@@ -1053,6 +1054,9 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
         } else if (type == 'L' && version >= 16) {
             if (active) throw std::runtime_error("Lattice context must precede geometry");
             scene.latticeContext.read(input);
+        } else if (type == 'G' && version >= 16) {
+            if(active)throw std::runtime_error("Lattice occupancy must precede geometry");
+            scene.latticeContext.readOccupancy(input);
         } else if (type == 'Q' && version >= 14) {
             std::string purpose;
             input >> purpose;
@@ -5637,7 +5641,8 @@ class Viewer {
                 if(action=="qr:cube")return !qrCalibration_.running() || qrCalibration_.cubeMode();
                 if(action=="qr:calibrate")return !qrCalibration_.running() || !qrCalibration_.cubeMode();
                 if(action.starts_with("share:")) return shareAvailable(action);
-                if(action=="tool:bend" || action=="tool:twist")return !toolShell_.executionPending();
+                if(action=="tool:bend" || action=="tool:twist" || action=="tool:sweep")return !toolShell_.executionPending();
+                if(action.starts_with("sweep:"))return sweepActionAvailable(action);
                 if(action.starts_with("twist:")) {
                     if(toolShell_.executionPending())return false;
                     if(action=="twist:confirm")return bendReady();
@@ -5890,8 +5895,11 @@ class Viewer {
         witness_->resolveAim(*orientation);
     }
 
+#include "sweep_runtime.inc"
+
     void toggleMenu(size_t hand) {
         ligation_.cancel();
+        if(sweepPanel_.active) {sidebarMenus_.menus[1].open=!sidebarMenus_.menus[1].open;return;}
         if(bendPanel_.active) {sidebarMenus_.menus[1].open=true;return;}
         if(movePanel_.active) {
             sidebarMenus_.menus[1].open=!sidebarMenus_.menus[1].open;
@@ -5934,6 +5942,9 @@ class Viewer {
     }
     void refreshExtrudePanel() {
         radialToolMenu_.setWorkflow(bendPanel_.active,bendHasAngle());
+        radialToolMenu_.setSweep(sweepPanel_.active && sweepDraft_.step==2);
+        sweepPanel_.refresh(sidebarMenus_.menus,sweepDraft_,extrudeLatticeDraft_.cells().size(),latticeSquare_,
+            nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter()),toolConfig_.ligateAdjacent(),sweepStatus(),extrudePlane_.plane);
         const std::string bendStatus=toolShell_.executionPending()?toolShell_.status()
             :bendPanel_.hand?"PLANE "+std::to_string(2-bendPanel_.grabbed)+" FIXED / RELEASE TO FINISH"
             :bendPanel_.pickSlot?"HOLD TRIGGER CLOSE TO ELEMENT"
@@ -6002,12 +6013,18 @@ class Viewer {
             requestedAction=="feedback:activate" || requestedAction=="vr:head-light" || requestedAction=="vr:exit" ||
             requestedAction=="qr:calibrate" || requestedAction=="qr:cube" || requestedAction.starts_with("tool:") ||
             requestedAction.starts_with("twist:") || requestedAction.starts_with("bend:") || requestedAction.starts_with("move:") ||
-            requestedAction.starts_with("extrude:") || requestedAction.starts_with("routing:") || requestedAction.starts_with("simulation:") || requestedAction.starts_with("share:") ||
+            requestedAction.starts_with("extrude:") || requestedAction.starts_with("sweep:") || requestedAction.starts_with("routing:") || requestedAction.starts_with("simulation:") || requestedAction.starts_with("share:") ||
             requestedAction.starts_with("volume:") || requestedAction.starts_with("dimension:") || requestedAction.starts_with("repr:") ||
             requestedAction.starts_with("color:") || requestedAction.starts_with("trajectory:");
         if(!known)return;
-        if(requestedAction.starts_with("tool:") && requestedAction!="tool:extrude" && requestedAction!="tool:twist" &&
+        if(requestedAction.starts_with("tool:") && requestedAction!="tool:extrude" && requestedAction!="tool:sweep" && requestedAction!="tool:twist" &&
            requestedAction!="tool:bend" && requestedAction!="tool:move_rotate" && requestedAction!="tool:inspect")return;
+        if(requestedAction.starts_with("sweep:")) {activateSweepAction(requestedAction,hand);return;}
+        if(sweepPanel_.active && (requestedAction.starts_with("tool:") || requestedAction.starts_with("volume:") || requestedAction.starts_with("dimension:"))) {
+            if(toolShell_.executionPending())return;
+            cancelSweep();
+        }
+        if(requestedAction=="tool:sweep") {activateSweep();return;}
         if(requestedAction=="vr:head-light") {
             const bool enabled = !shadowLight_.headFollowing();
             shadowLight_.setHeadFollowing(enabled);
@@ -6237,20 +6254,25 @@ class Viewer {
 
     [[nodiscard]] bool latticeCellOccupied(const nadoc_vr::LatticeCell& cell) const {
         if(freeformDraft_.placed() || freeformDraft_.armed())return false;
-        const auto* context=latticeContext_.find(extrudePlane_.plane);
+        const auto* context=paintOccupancy();
         return context && context->occupied(cell);
     }
 
     [[nodiscard]] const std::vector<nadoc_vr::LatticeCell>& existingLatticeCells() const {
         static const std::vector<nadoc_vr::LatticeCell> empty;
         if(freeformDraft_.placed() || freeformDraft_.armed())return empty;
-        const auto* context=latticeContext_.find(extrudePlane_.plane);
+        const auto* context=paintOccupancy();
         return context?context->cells:empty;
+    }
+
+    [[nodiscard]] const nadoc_vr::LatticePlaneContext* paintOccupancy() const {
+        if(!sweepPanel_.active)if(const auto* source=latticeContext_.find(extrudePlane_.plane))return source;
+        return latticeContext_.occupancy(extrudePlane_.plane);
     }
 
     void centerLatticePainting(bool discardOccupied=false) {
         if(discardOccupied && !freeformDraft_.placed() && !freeformDraft_.armed()) {
-            if(const auto* context=latticeContext_.find(extrudePlane_.plane))
+            if(const auto* context=paintOccupancy())
                 context->discardOccupied(extrudeLatticeDraft_);
             latticePaintStroke_.reset();latticeHover_.reset();
         }
@@ -6375,7 +6397,7 @@ class Viewer {
         latticeLayoutAudit_ = nadoc_vr::drawLatticePainterChrome(
             {extrudePlane_.plane,latticeSquare_,latticeGrip_.scaling,latticeExitHovered_,
                 extrudeLatticeDraft_.cells().size(),existingLatticeCells().size(),grip,
-                freeformDraft_.placed() || freeformDraft_.armed() || latticeContext_.find(extrudePlane_.plane)},
+                sweepPanel_.active || freeformDraft_.placed() || freeformDraft_.armed() || latticeContext_.find(extrudePlane_.plane)},
             line,fill,[&](const auto& text,float x,float y,float scale,glm::vec3 color) {
                 appendPlacedText(latticePlacement_,text,x,y,scale,color);
             });
@@ -6494,6 +6516,7 @@ class Viewer {
     }
 
     void cancelExtrudeInterface() {
+        if(sweepPanel_.active) {cancelSweep();return;}
         if(toolShell_.executionPending())return;
         freeformDraft_.clear();
         if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
@@ -6580,6 +6603,10 @@ class Viewer {
     }
 
     void activateRadialEdit(size_t item) {
+        if(sweepPanel_.active) {
+            if(sweepDraft_.step==2)activateSweepAction(item==0?"sweep:delete-last-point":"sweep:add-point",1);
+            return;
+        }
         if(bendPanel_.active) {
             if(toolShell_.executionPending() || bendPanel_.hand || bendPanel_.wheelHand || bendPanel_.planeHand)return;
             if(item==0)activateSidebarAction(bendPanel_.selecting?"bend:back":"bend:cluster",1);
@@ -6613,6 +6640,7 @@ class Viewer {
 
     void activateAuthoringTool(size_t item) {
         if(toolShell_.executionPending())return;
+        if(sweepPanel_.active)cancelSweep();
         if(bendPanel_.active) {bendPanel_.exit(sidebarMenus_.menus);clearPlanePick();clearPlaneGuides();}
         if(ligation_.active||ligation_.nickActive){ligation_.setActive(false);publishSelectionLevel(ligationPreviousLevel_);}
 
@@ -7098,6 +7126,7 @@ class Viewer {
                     toolConfig_.lengthBp()*toolConfig_.directionSign(),manipulator_.transform(),
                     normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},line);
         }
+        drawSweep(line);
         drawBend(line);
         if(!bendPanel_.active && !ligation_.active && !ligation_.nickActive) {
             endResize_.draw(manipulator_.transform(),normalizationScale_,line);
@@ -7379,6 +7408,9 @@ class Viewer {
         lastToolTargetIdentity_ = selectedIdentity_;
         lastToolTargetOwnerTokens_ = selectedOwnerTokens_;
         lastToolTargetKind_ = selectedSelectionKind_;
+        if(toolShell_.mode()==nadoc_vr::ToolMode::sweep) {
+            lastToolTargetIdentity_.clear();lastToolTargetOwnerTokens_.clear();lastToolTargetKind_="none";
+        }
         if(action==nadoc_vr::ToolAction::confirm && toolConfig_.active() &&
            toolConfig_.mode()==nadoc_vr::ToolMode::extrude) {
             // A failed commit restores its original draft. Selection feedback
@@ -7531,6 +7563,8 @@ class Viewer {
                     output << '[' << cell.row << ',' << cell.column << ']';
                 }
                 output << "]}";
+            } else if(toolConfig_.mode()==nadoc_vr::ToolMode::sweep) {
+                writeSweepConfiguration(output);
             } else {
                 auto optionalInteger = [&](const std::optional<int32_t>& value) {
                     if (value) output << *value;
@@ -7644,8 +7678,8 @@ class Viewer {
         const bool targetChanged = selectedIdentity_ != previousIdentity ||
             selectedOwnerTokens_ != previousOwnerTokens ||
             selectedSelectionKind_ != previousSelectionKind;
-        toolShell_.syncSelection(selectedSelectionKind_, targetChanged);
-        if (targetChanged && !extrudeConfirmation_ && toolConfig_.active() &&
+        if(toolShell_.mode()!=nadoc_vr::ToolMode::sweep)toolShell_.syncSelection(selectedSelectionKind_, targetChanged);
+        if (targetChanged && toolConfig_.mode()!=nadoc_vr::ToolMode::sweep && !extrudeConfirmation_ && toolConfig_.active() &&
             toolConfig_.bind(
                 toolConfig_.mode(), selectedIdentity_, selectedSelectionKind_,
                 selectedOwnerTokens_)) {
@@ -7720,6 +7754,13 @@ class Viewer {
         }
         toolShell_.applyExecutionFeedback(*feedback);
         finishConfirmedExtrude(*feedback);
+        if(feedback->mode=="sweep" && feedback->action=="confirm" && feedback->status!="pending") {
+            if(feedback->status=="succeeded") {
+                sweepPanel_.exit(sidebarMenus_.menus);latticeOpen_=false;
+                sweepDraft_.reset(sweepDefaultDirection());extrudeLatticeDraft_.clear();
+                if(toolConfig_.clear())publishToolConfiguration();
+            } else publishToolConfiguration();
+        }
     }
 
     [[nodiscard]] const nadoc_vr::ToolContextFeedback*
@@ -8018,6 +8059,7 @@ class Viewer {
     }
 
     void neutralLiveInput(bool forgetPoses = true) {
+        interruptSweepGesture();
         remotePanels_.cancel();
         ligation_.cancel();quiver_.reset();liveTriggerValues_.fill(0);
         if (forgetPoses) liveInput_ = {};
@@ -8287,6 +8329,7 @@ class Viewer {
                 << ",\"active\":" << (entries[i].active?"true":"false") << '}';
         }
         out << "],\"routing_popup\":" << routingPopup_.json() << ",\"sidebars\":" << sidebarMenus_.json() << ",\"dimensions\":" << dimensionPanel_.tool.json(normalizationScale_,manipulator_.transform());
+        writeSweepObservation(out);
         const auto& volumeInteraction=volumePanel_.interaction;
         out << ",\"view_volumes\":{\"held_id\":" << quote(volumeInteraction.held)
             << ",\"hand\":" << (volumeInteraction.hand?int(*volumeInteraction.hand):-1)
@@ -8781,9 +8824,11 @@ class Viewer {
 
             if(hand==1) {
                 radialToolMenu_.setWorkflow(bendPanel_.active,bendHasAngle());
-                if(!bendPanel_.active && !radialToolMenu_.open() && trackpadClicked && (routingPopup_.anyOpen()?routingPopup_:sidebarMenus_).trackpad(hand,navigationAxis,hands_[hand]))pulse(hand,.12F);
+                const bool sweepWheel=sweepPanel_.active && sweepDraft_.step==2;
+                radialToolMenu_.setSweep(sweepWheel);
+                if(!sweepWheel && !bendPanel_.active && !radialToolMenu_.open() && trackpadClicked && (routingPopup_.anyOpen()?routingPopup_:sidebarMenus_).trackpad(hand,navigationAxis,hands_[hand]))pulse(hand,.12F);
                 const auto result=radialToolMenu_.update(trackpadPressed,navigationAxis,hands_[hand],
-                    (!navigationMenuOpen || (bendPanel_.active && !routingPopup_.anyOpen())) && (bendPanel_.active || !desktopActive || radialToolMenu_.open()) && !componentGallery_.active && !toolShell_.executionPending() &&
+                    (!navigationMenuOpen || ((bendPanel_.active || sweepWheel) && !routingPopup_.anyOpen())) && (bendPanel_.active || sweepWheel || !desktopActive || radialToolMenu_.open()) && !componentGallery_.active && !toolShell_.executionPending() &&
                     !moveAwaitRefresh_ && sessionState_==XR_SESSION_STATE_FOCUSED && (liveControlsEnabled() || trackpadAxis.isActive));
                 if(result.hoverChanged)pulse(hand,.14F);
                 if(result.commit) {activateRadialEdit(*result.commit);if(*result.commit<2)pulse(hand,.32F);}
@@ -8898,6 +8943,8 @@ class Viewer {
         for(size_t h=0;h<2;++h)if(auto p=desktopPanel_.hit(hands_[h]))
             foregroundDistance[h]=std::min(foregroundDistance[h],glm::length(desktopPanel_.placement.worldPoint(*p)-hands_[h].position));
         auto sidebarBlocked=wheelTargeted;
+        // A held point/stroke keeps trigger ownership while crossing a menu.
+        if(sweepHand_)sidebarBlocked[*sweepHand_]=true;
         for(size_t h=0;h<2;++h)sidebarBlocked[h]=sidebarBlocked[h]||volumeTargeted[h];
         sidebarBlocked=processTrajectoryInput(sidebarBlocked,foregroundDistance);
         if(routingPopup_.anyOpen()) {
@@ -8921,6 +8968,7 @@ class Viewer {
                                         latticeTargeted[hand];
         }
         if (radialToolMenu_.blocksInput()) menuControlTargeted[1] = true;
+        processSweepInput(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none);
         frameAudit_.mark("menus_manipulation");
         dimensionPanel_.input(hands_,manipulator_.transform(),next!=nadoc_vr::ManipulationMode::none,
             triggerClicked_,menuControlTargeted,liveInputOwner_,sidebarMenus_.menus,normalizationScale_,
@@ -8965,7 +9013,7 @@ class Viewer {
             manipulator_.transform(),normalizationScale_,
             sessionState_==XR_SESSION_STATE_FOCUSED && next==nadoc_vr::ManipulationMode::none &&
             !menuGripActive && !dimensionPanel_.tool.active && !volumePanel_.active &&
-            !ligation_.active && !ligation_.nickActive && !ligation_.waiting && !movePanel_.active && !bendPanel_.active && !toolShell_.executionPending() && !radialToolMenu_.blocksInput(),
+            !ligation_.active && !ligation_.nickActive && !ligation_.waiting && !movePanel_.active && !bendPanel_.active && !sweepPanel_.active && !toolShell_.executionPending() && !radialToolMenu_.blocksInput(),
             [&]{ publishEventState(); });
         if(endResize_.hand)liveInputOwner_[*endResize_.hand]="end-resize";
         frameAudit_.mark("end_resize");
@@ -10998,6 +11046,17 @@ class Viewer {
     nadoc_vr::MenuPlacement latticePlacement_;
     nadoc_vr::LatticeGrip latticeGrip_;
     nadoc_vr::ExtrudePanel extrudePanel_;
+    nadoc_vr::SweepPanel sweepPanel_;
+    nadoc_vr::SweepDraft sweepDraft_;
+    std::optional<size_t> sweepHand_;
+    std::array<std::optional<size_t>,2> sweepHovered_;
+    glm::vec3 sweepDragStart_{},sweepPointStart_{};
+    glm::mat4 sweepStartModel_{1};
+    double sweepPublishedAt_=0;
+    uint64_t sweepPublishedRevision_=0;
+    float sweepStrokeMetresPerNm_=.01F;
+    uint64_t sweepGeometryRevision_=std::numeric_limits<uint64_t>::max();
+    std::vector<glm::vec3> sweepCurve_,sweepCloud_;
     struct ExtrudeConfirmation { size_t settingsOffset; bool painterOpen; };
     std::optional<ExtrudeConfirmation> extrudeConfirmation_;
     nadoc_vr::BendPanel bendPanel_;

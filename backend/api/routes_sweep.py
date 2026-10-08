@@ -12,7 +12,7 @@ def _guard(design, body):
 
 
 @router.post('/design/sweep/preview')
-def preview_sweep(body: SweepRequest, feature_index: int | None = None):
+def preview_sweep(body: SweepRequest, feature_index: int | None = None, include_geometry: bool = True):
     design, revision = state.copy_for_persist()
     if design is None:
         raise HTTPException(404, detail='No active design')
@@ -21,7 +21,7 @@ def preview_sweep(body: SweepRequest, feature_index: int | None = None):
         raise HTTPException(409, detail='Design revision changed')
     try:
         if feature_index is None:
-            result, _ = sweep_preview(design, body, include_geometry=True)
+            result, _ = sweep_preview(design, body, include_geometry=include_geometry)
         else:
             from backend.api.sweep_history import preview_sweep_edit
             result = preview_sweep_edit(design, body, feature_index)
@@ -43,4 +43,6 @@ def create_sweep(body: SweepRequest):
     updated, report, entry = state.mutate_with_feature_log(
         op_kind='sweep', label=f'Sweep: {len(body.cells)} cells · {len(body.points_nm)} points',
         params=body.model_dump(mode='json'), fn=build, expected_revision=body.expected_revision)
-    return _design_response_with_geometry(updated, report, preserve_feature_log_id=entry.id)
+    payload = _design_response_with_geometry(updated, report, preserve_feature_log_id=entry.id)
+    payload['vr_transaction'] = {'feature_log_entry_id': entry.id, 'target_count': len(body.cells)}
+    return payload

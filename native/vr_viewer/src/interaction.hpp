@@ -1037,7 +1037,7 @@ class BoundsAccumulator {
     glm::vec3 maximum_{std::numeric_limits<float>::lowest()};
 };
 
-enum class ToolMode { inspect, move_rotate, extrude, twist, bend };
+enum class ToolMode { inspect, move_rotate, extrude, twist, bend, sweep };
 enum class ToolAction { activate, preview, confirm, cancel, undo };
 enum class ToolCapability {
     view_only, direct_preview, configuration_required, unsupported,
@@ -1046,8 +1046,8 @@ enum class ToolStrandFilter { both, scaffold, staples };
 enum class TwistAmountMode { total_degrees, degrees_per_nm };
 
 inline const char* toolModeName(ToolMode mode) {
-    static constexpr std::array<const char*, 5> names = {
-        "inspect", "move_rotate", "extrude", "twist", "bend",
+    static constexpr std::array<const char*, 6> names = {
+        "inspect", "move_rotate", "extrude", "twist", "bend", "sweep",
     };
     return names[static_cast<size_t>(mode)];
 }
@@ -1088,7 +1088,7 @@ class ToolConfigurationDraft {
         ToolMode mode, const std::string& identity, const std::string& selectionKind,
         const std::vector<std::string>& ownerTokens) {
         const bool parameterized = mode == ToolMode::extrude || mode == ToolMode::twist ||
-                                   mode == ToolMode::bend;
+                                   mode == ToolMode::bend || mode == ToolMode::sweep;
         if (!parameterized) return clear();
         if (active_ && mode_ == mode && targetIdentity_ == identity &&
             targetSelectionKind_ == selectionKind && targetOwnerTokens_ == ownerTokens) {
@@ -1191,7 +1191,7 @@ class ToolConfigurationDraft {
 
     [[nodiscard]] bool cycleOption() {
         if (!active_) return false;
-        if (mode_ == ToolMode::extrude) {
+        if (mode_ == ToolMode::extrude || mode_ == ToolMode::sweep) {
             strandFilter_ = static_cast<ToolStrandFilter>(
                 (static_cast<size_t>(strandFilter_) + 1U) % 3U);
             return true;
@@ -1206,7 +1206,7 @@ class ToolConfigurationDraft {
     }
 
     [[nodiscard]] bool toggleFlag() {
-        if (!active_ || mode_ != ToolMode::extrude) return false;
+        if (!active_ || (mode_ != ToolMode::extrude && mode_ != ToolMode::sweep)) return false;
         ligateAdjacent_ = !ligateAdjacent_;
         return true;
     }
@@ -1295,7 +1295,7 @@ class ToolShell {
         ToolMode mode, const std::string& selectionKind) {
         if (mode == ToolMode::inspect) return ToolCapability::view_only;
         if (selectionKind.empty() || selectionKind == "none") {
-            if (mode == ToolMode::extrude) return ToolCapability::configuration_required;
+            if (mode == ToolMode::extrude || mode == ToolMode::sweep) return ToolCapability::configuration_required;
             return ToolCapability::unsupported;
         }
         struct CapabilityEntry {
@@ -1351,7 +1351,8 @@ class ToolShell {
             }
         } else if (action == ToolAction::confirm) {
             if (((mode_ == ToolMode::bend || mode_ == ToolMode::twist) && paintedReady) ||
-                (mode_ == ToolMode::extrude && (!hasSelection || selectionKind == "end"))) {
+                (mode_ == ToolMode::extrude && (!hasSelection || selectionKind == "end")) ||
+                (mode_ == ToolMode::sweep && !hasSelection)) {
                 if (!executionPending_ && paintedReady) executionPending_ = true;
                 status_ = executionPending_ ? "COMMITTING" : "VALIDATE DRAFT";
             } else if (capability == ToolCapability::configuration_required) {
@@ -1448,7 +1449,7 @@ class ToolShell {
     [[nodiscard]] static std::string targetStatus(
         ToolMode mode, const std::string& selectionKind) {
         if (mode == ToolMode::inspect) return "VIEW ONLY";
-        if ((selectionKind.empty() || selectionKind == "none") && mode != ToolMode::extrude) return "SELECT TARGET";
+        if ((selectionKind.empty() || selectionKind == "none") && mode != ToolMode::extrude && mode != ToolMode::sweep) return "SELECT TARGET";
         const ToolCapability capability = selectionCapability(mode, selectionKind);
         if (capability == ToolCapability::direct_preview) return "READY";
         if (capability == ToolCapability::configuration_required) {
@@ -1660,8 +1661,8 @@ inline std::optional<ToolExecutionFeedback> parseToolExecutionFeedback(
         fields >> trailing) {
         return std::nullopt;
     }
-    static constexpr std::array<const char*, 4> modes = {
-        "move_rotate", "extrude", "bend", "twist",
+    static constexpr std::array<const char*, 5> modes = {
+        "move_rotate", "extrude", "bend", "twist", "sweep",
     };
     static constexpr std::array<const char*, 2> actions = {"confirm", "undo"};
     static constexpr std::array<const char*, 4> statuses = {
@@ -1679,7 +1680,7 @@ inline std::optional<ToolExecutionFeedback> parseToolExecutionFeedback(
         result.reason.empty() || result.reason.size() > 64) {
         return std::nullopt;
     }
-    const bool targetless = result.mode == "extrude" && result.selectionKind == "none" && result.identity == "-";
+    const bool targetless = (result.mode == "extrude" || result.mode == "sweep") && result.selectionKind == "none" && result.identity == "-";
     if (!targetless && (result.selectionKind == "none" || result.identity == "-")) return std::nullopt;
     if ((result.status == "succeeded") != (result.featureLogEntryId != "-") ||
         result.featureLogEntryId.size() > 128) {
@@ -1809,8 +1810,8 @@ inline std::optional<ToolPreflightFeedback> parseToolPreflightFeedback(
     static constexpr std::array<const char*, 5> statuses = {
         "waiting", "ok", "warn", "block", "error",
     };
-    static constexpr std::array<const char*, 3> modes = {
-        "extrude", "twist", "bend",
+    static constexpr std::array<const char*, 4> modes = {
+        "extrude", "twist", "bend", "sweep",
     };
     if (std::find(statuses.begin(), statuses.end(), result.status) == statuses.end() ||
         std::find(modes.begin(), modes.end(), result.mode) == modes.end() ||

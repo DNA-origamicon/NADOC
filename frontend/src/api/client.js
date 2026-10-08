@@ -5495,7 +5495,12 @@ export async function pasteElements(snapshot) {
 }
 
 /** Spline preview is read-only; commit uses the ordinary geometry/history sync. */
-export const previewSweep = (body, index = null) => _request('POST', `/design/sweep/preview${index == null ? '' : `?feature_index=${index}`}`, body, { suppressBusy: true })
+export const previewSweep = (body, index = null, { includeGeometry = true } = {}) => {
+  const query = new URLSearchParams()
+  if (index != null) query.set('feature_index', index)
+  if (!includeGeometry) query.set('include_geometry', 'false')
+  return _request('POST', `/design/sweep/preview${query.size ? `?${query}` : ''}`, body, { suppressBusy: true })
+}
 export async function createSweep(body) {
   return _syncFromDesignResponse(await _request('POST', '/design/sweep', body))
 }

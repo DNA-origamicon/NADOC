@@ -30,11 +30,11 @@ def run(socket, output, preset, mode):
             raise RuntimeError('Viewer did not become focused')
         time.sleep(.1)
     live = LiveSession(bridge, physical=True, allow_transactions=True)
+    from tools.vr_workflows.audit_representation import wait_startup
+    wait_startup(live)
     from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
-    if os.environ.get('NADOC_VR_AUDIT_DESIGN') and mode=='edit':
-        from tools.vr_workflows.audit_representation import wait_startup
-        wait_startup(live)
-    else:prepare_audit_representation(live)
+    if not (os.environ.get('NADOC_VR_AUDIT_DESIGN') and mode=='edit'):
+        prepare_audit_representation(live)
     controls = SidebarControls(live, out, preset)
     trials = []
 
@@ -114,7 +114,7 @@ def run(socket, output, preset, mode):
     def menu():
         if not live.state['sidebars'][1]['open']:
             live.button('menu', hand=1)
-            live.frame()
+            wait(lambda state: state['sidebars'][1]['open'])
         assert live.state['sidebars'][1]['open']
 
     def approach_point(point):

@@ -14,7 +14,7 @@ export const VR_TOOL_CONFIG_LIMITS = Object.freeze({
   maxTwistMagnitude: 1_000_000,
 })
 
-const PARAMETERIZED_MODES = new Set(['extrude', 'twist', 'bend'])
+const PARAMETERIZED_MODES = new Set(['extrude', 'sweep', 'twist', 'bend'])
 const TARGET_KINDS = new Set([
   'none', 'selection', 'cluster', 'strand', 'domain', 'base', 'end', 'bond', 'crossover',
   'overhang', 'extension', 'protein',
@@ -76,6 +76,21 @@ export function normalizeVRToolConfig(input) {
       !PARAMETERIZED_MODES.has(input.mode)) return null
   const target = _target(input)
   if (!target) return null
+  if (input.mode === 'sweep') {
+    const footprint = normalizePaintedFootprint(input.painted_footprint)
+    if (target.target_kind !== 'none' || !footprint ||
+        footprint.cells.some(cell => cell.some(v => Math.abs(v) > 10000)) ||
+        input.freeform_placement !== undefined || input.source_helix_id != null ||
+        !['XY', 'XZ', 'YZ'].includes(input.extrude_from) ||
+        !STRAND_FILTERS.has(input.strand_filter) || typeof input.ligate_adjacent !== 'boolean' ||
+        !Array.isArray(input.points_nm) || input.points_nm.length > 256 ||
+        input.points_nm.some(point => !Array.isArray(point) || point.length !== 3 ||
+          point.some(v => !Number.isFinite(v) || Math.abs(v) > 10000)) ||
+        input.points_nm[0]?.some(v => v !== 0)) return null
+    return { mode: input.mode, ...target, painted_footprint: footprint,
+      extrude_from: input.extrude_from, strand_filter: input.strand_filter,
+      ligate_adjacent: input.ligate_adjacent, points_nm: input.points_nm.map(point => [...point]) }
+  }
   if (input.mode === 'extrude') {
     const placement = normalizeFreeformPlacement(input.freeform_placement)
     if (placement === null || (placement !== undefined && target.target_kind !== 'none')) return null
@@ -148,6 +163,11 @@ export function vrToolConfigMissing(draft) {
   const config = normalizeVRToolConfig(draft)
   if (!config) return ['invalid_draft']
   const missing = []
+  if (config.mode === 'sweep') {
+    if (!config.painted_footprint.cells.length) missing.push('footprint')
+    if (config.points_nm.length < 2) missing.push('points')
+    return missing
+  }
   if (config.target_kind === 'none') missing.push('target')
   if (config.mode === 'extrude') {
     if (config.length_bp === 0) missing.push('length')

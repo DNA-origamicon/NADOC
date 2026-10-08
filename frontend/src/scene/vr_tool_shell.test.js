@@ -15,9 +15,14 @@ const targetFor = (selectedRef, identity = 'primitive:1') => ({
 })
 
 describe('native VR transactional tool shell', () => {
+  it('recognizes independent Sweep configuration without a selected scene target', () => {
+    expect(vrToolSelectionCapability('sweep', null)).toBe(VR_TOOL_CAPABILITIES.configurationRequired)
+    expect(reduceVRToolShell(initialVRToolShellState, { sequence: 1, mode: 'sweep', action: 'activate' }).reason)
+      .toBe('configuration_required')
+  })
   it('exposes the requested tool and action vocabulary', () => {
     expect(VR_TOOL_MODES).toEqual([
-      'inspect', 'move_rotate', 'extrude', 'twist', 'bend',
+      'inspect', 'move_rotate', 'extrude', 'sweep', 'twist', 'bend',
     ])
     expect(VR_TOOL_ACTIONS).toEqual([
       'activate', 'preview', 'confirm', 'cancel', 'undo',

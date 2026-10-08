@@ -136,7 +136,7 @@ add('right','overhangs','Connection entries','frontend/src/ui/overhang_connectio
   ['oconn-mode','Overhang / Nanoparticle connection'],['oconn-a','Overhang A / Nanoparticle ssDNA handle'],['oconn-b','Overhang B / Target overhang'],['oconn-type','Connection type'],['oconn-length','Length'],['oconn-sequence','Sequence'],['oconn-connect','Connect / Add version'],['oconn-apply','Apply / Unapply'],['oconn-relax','Relax'],['oconn-driver','Driver'],['oconn-delete','Delete version'],['oconn-name','Version name'],
 ])
 tabs.push({side:'right',key:'tools',label:'Tools',rows:[
-  ['tool-inspect','Inspect','tool:inspect'],['tool-move','Move / Rotate','tool:move_rotate'],['tool-extrude','Extrude','tool:extrude'],
+  ['tool-inspect','Inspect','tool:inspect'],['tool-move','Move / Rotate','tool:move_rotate'],['tool-extrude','Extrude','tool:extrude'],['tool-sweep','Sweep','tool:sweep'],
   ['tool-twist','Twist','tool:twist'],['tool-bend','Bend','tool:bend'],
 ].map(([id,label,action])=>({id,label,action,section:'Tools',kind:'button',options:[],source:'frontend/scripts/generate-vr-sidebar-catalog.mjs',reason:''}))})
 

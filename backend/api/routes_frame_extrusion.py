@@ -33,6 +33,12 @@ def _candidate(design, body):
     if len(body.cells) * abs(body.length_bp) > 200_000:
         raise HTTPException(422, detail='Extrusion exceeds 200000 base-pair cells')
     try:
+        # Explicit freeform placement describes a different plane. Default-plane
+        # requests must not bypass occupancy by omitting their source frame.
+        if (not body.source_frame_id and not body.source_legacy_plane
+                and body.translation_nm == [0, 0, 0] and body.rotation_xyzw == [0, 0, 0, 1]):
+            from backend.core.lattice_occupancy import require_vacant_lattice_cells
+            require_vacant_lattice_cells(design, body.cells, body.plane)
         if body.source_legacy_plane:
             from backend.core.legacy_plane_extrusion import append_legacy_plane_bundle
             if body.source_frame_id or body.translation_nm != [0, 0, 0] or body.rotation_xyzw != [0, 0, 0, 1]:

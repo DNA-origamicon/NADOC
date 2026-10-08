@@ -6,6 +6,7 @@ import { deformationTargets, targetState } from './deformation_targets.js'
  * adapter must use after the physical headset gates pass.
  */
 import { buildPaintedExtrusionPlan } from './vr_painted_extrusion_plan.js'
+import { buildVRSweepPlan } from './vr_sweep_plan.js'
 import { parseBaseKey } from './base_ref.js'
 import { clusterIdForNucleotide } from './cluster_entries.js'
 import { normalizeVRToolConfig } from './vr_tool_config.js'
@@ -201,6 +202,7 @@ export function buildVRParameterizedToolPlan(draft, {
 } = {}) {
   const config = normalizeVRToolConfig(draft)
   if (!config) return { accepted: false, reason: 'invalid_draft', plan: null }
+  if (config.mode === 'sweep') return buildVRSweepPlan(config, design, revision)
   if (config.mode === 'extrude' && config.target_kind === 'none' && !toolTarget) {
     return buildPaintedExtrusionPlan(config, design, revision)
   }
@@ -248,7 +250,12 @@ export async function evaluateVRToolPreflight(sequence, draft, {
   }
   let result = null
   try {
-    result = described.plan.kind === 'extrude_frame'
+    if (described.plan.kind === 'sweep') {
+      const preview = await api?.previewSweep?.(described.plan.preflight.arguments, null, { includeGeometry: false })
+      result = preview && Number.isFinite(preview.length_nm) && preview.length_nm > 0 &&
+        preview.revision === described.plan.preflight.arguments.expected_revision
+        ? { status: 'ok' } : null
+    } else result = described.plan.kind === 'extrude_frame'
       ? await api?.validateFrameExtrusion?.(described.plan.preflight.arguments)
       : described.plan.kind === 'extrude_continuation'
       ? await api?.validateBundleContinuation?.(

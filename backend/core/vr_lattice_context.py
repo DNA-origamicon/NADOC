@@ -8,6 +8,7 @@ import numpy as np
 
 from backend.core.deformation import _apply_cluster_transforms_to_point
 from backend.core.legacy_plane_extrusion import legacy_plane_source
+from backend.core.lattice_occupancy import occupied_lattice_cells
 
 
 PLANE_AXES = {'XY': (0, 1, 2), 'XZ': (0, 2, 1), 'YZ': (1, 2, 0)}
@@ -23,7 +24,6 @@ def lattice_plane_context(design, plane, view_rotation=None):
     axes = PLANE_AXES[plane]
     origin = np.zeros(3)
     clusters = []
-    members = []
     if design.helices:
         if not design.lattice_frames:
             try:
@@ -31,7 +31,6 @@ def lattice_plane_context(design, plane, view_rotation=None):
             except ValueError:
                 return None
             origin[list(axes[:2])] = transverse
-            members = design.helices
         else:
             # Keep native plane selection identical to the browser plan. A plane
             # shared by independent frames needs a frame picker, not merged cells.
@@ -42,7 +41,6 @@ def lattice_plane_context(design, plane, view_rotation=None):
             clusters = [c for c in design.cluster_transforms if c.id == frame.placement_cluster_id]
             if len(clusters) != 1 or clusters[0].domain_ids or clusters[0].parent_cluster_id:
                 return None
-            members = [h for h in design.helices if h.lattice_frame_id == frame.id]
     elif any(getattr(design, field, ()) for field in ('strands', 'overhangs', 'protein_assets',
             'protein_attachments', 'nanoparticles', 'extensions', 'crossovers', 'forced_ligations')):
         return None
@@ -52,14 +50,21 @@ def lattice_plane_context(design, plane, view_rotation=None):
 
     placed_origin = point(origin)
     basis = [point(origin + np.eye(3)[axis]) - placed_origin for axis in axes]
-    cells = sorted({tuple(h.grid_pos) for h in members if h.grid_pos is not None})
+    cells = sorted(occupied_lattice_cells(design, plane,
+        frame_id=frame.id if design.helices and design.lattice_frames else None))
     return {'plane': plane, 'origin': placed_origin, 'basis': basis, 'cells': cells}
 
 
 def lattice_context_records(design, view_rotation=None):
-    """Optional NADOCVR v16 L records, before representation geometry."""
+    """Optional NADOCVR v16 placement L and occupancy G records."""
     records = []
     for plane in PLANE_AXES:
+        # Occupancy remains known even when several frames make the placement
+        # ambiguous. Keep it separate from L's unique placement contract.
+        if hasattr(design, 'helices'):
+            occupied = sorted(occupied_lattice_cells(design, plane))
+            cells = ' '.join(f'{row} {col}' for row, col in occupied)
+            records.append(f'G {plane} {len(occupied)}' + (' '+cells if cells else ''))
         context = lattice_plane_context(design, plane, view_rotation)
         if context is None:
             continue

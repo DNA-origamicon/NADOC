@@ -6,7 +6,7 @@
  */
 
 export const VR_TOOL_MODES = Object.freeze([
-  'inspect', 'move_rotate', 'extrude', 'twist', 'bend',
+  'inspect', 'move_rotate', 'extrude', 'sweep', 'twist', 'bend',
 ])
 
 export const VR_TOOL_ACTIONS = Object.freeze([
@@ -36,6 +36,7 @@ const CONFIGURATION_KINDS = Object.freeze({
  * previewable until every required parameter and visual adapter exists. */
 export function vrToolSelectionCapability(mode, selectedRef) {
   if (mode === 'inspect') return VR_TOOL_CAPABILITIES.viewOnly
+  if (mode === 'sweep') return VR_TOOL_CAPABILITIES.configurationRequired
   if (!selectedRef) return VR_TOOL_CAPABILITIES.unsupported
   if (mode === 'move_rotate' && DIRECT_MOVE_ROTATE_KINDS.has(selectedRef.kind)) {
     return VR_TOOL_CAPABILITIES.directPreview
@@ -96,6 +97,7 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
   if (action === 'activate') {
     const stage = mode === 'inspect'
       ? 'inspect'
+      : mode === 'sweep' ? 'configuration_required'
       : targetSnapshotPresent && !toolTarget ? 'stale_target'
       : !selectedRef ? 'waiting_selection'
         : !selectionSupported ? 'unsupported_selection'
@@ -113,7 +115,7 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
     }
   }
   if (action === 'cancel') {
-    const stage = !selectedRef
+    const stage = mode === 'sweep' ? 'configuration_required' : !selectedRef
       ? 'waiting_selection'
       : !selectionSupported ? 'unsupported_selection'
         : directPreview ? 'armed' : 'configuration_required'
@@ -129,6 +131,10 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
       effect: { type: 'undo_requested', tool: mode },
       accepted: undoAvailable, reason: undoAvailable ? 'undo_requested' : 'no_vr_commit',
     }
+  }
+  if (mode === 'sweep') {
+    return { state: { ...base, stage: 'configuration_required' }, effect: null,
+      accepted: false, reason: 'configuration_required' }
   }
   if (targetSnapshotPresent && !toolTarget) {
     return {

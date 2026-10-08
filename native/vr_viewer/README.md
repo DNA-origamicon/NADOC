@@ -238,12 +238,38 @@ Controls on the original HTC Vive wands:
   while they intersect the tablet panel.
 - The left Simulations tab contains the job list, result visualizations and
   trajectory controls. The old Jobs/OBS status pages have been removed.
-- The right Tools tab offers Inspect, Move/Rotate, Extrude, Twist and Bend.
+- The right Tools tab offers Inspect, Move/Rotate, Extrude, Sweep, Twist and Bend.
   Editing tools open their current sidebar panels with their own settings,
   Confirm, Undo and Back controls. Inspect activates selection without opening
   a panel. The radial Edit wheel's Undo/Redo commands vibrate the controller
   without opening a menu. The old Options, Tools and tool-settings menus have
   been removed; view and selection controls live in the sidebars.
+  **Sweep** starts with the same lattice painter and raised navigation buttons.
+  Paint a new bundle's Honeycomb or Square footprint, choose XY/XZ/YZ and the
+  strand settings, then press **Next**. Step 2 shows the fixed origin and first
+  editable point, with a scrollable point list and relative XYZ nanometre fields
+  with up/down arrows. Aim either controller at a point for a pointer line;
+  click to select and hold the trigger while moving to drag it. Hold the right
+  touchpad, slide right for **Add Point** or left for **Delete Last**, and release
+  to apply. Radial deletion removes the last added point (the last point in the
+  list), regardless of selection. The panel's **Delete Selected** button removes
+  the selected point; the origin is fixed. Touchpad swipes without pressing still
+  scroll the point list.
+  A bounded point cloud previews the spline during step 2. **Free Draw** clears
+  the other points and arms one continuous right-trigger stroke. Begin wherever
+  comfortable: the first hand sample maps to the painted lattice centroid. The
+  green line becomes editable points on release; pressing Free Draw again replaces
+  it. **Smooth -/+** adjusts the filtering strength and refits the retained stroke
+  until a point is manually edited. Filtering uses physical distances (36 mm
+  radius and 15 mm simplification at 1x) captured at stroke start, independently
+  of model zoom. These defaults are synthetic noisy-profile calibration, with
+  human usability calibration still pending. Confirm validates and creates the
+  same Sweep feature as desktop; Undo targets that exact feature-log tail.
+  This initial VR workflow creates an independent bundle. Desktop Sweep also
+  supports continuation from a selected helix end.
+  Run `python -m tools.vr_motion.sweep_calibration --output /tmp/sweep-calibration.json`
+  for deterministic profile stress results, and the native `nadoc-vr-sweep-draft`
+  and `nadoc-vr-sweep-panel` CTest cases for geometry and layout checks.
   Choosing Extrude from the Tools sidebar immediately creates a world-docked settings
   window plus a separate world-docked lattice window centered on the exact
   browser-resolved cell and laid out as the design's Honeycomb or Square lattice.
@@ -360,6 +386,12 @@ primitives: 0.10 nm backbone beads, 0.18 nm 5′ cubes, oriented
 same-helix strand connectors.
 Production snapshots are streamed into private gzip files; the viewer reads them
 incrementally while retaining transparent support for plain legacy fixtures.
+Version 16 snapshots may include `G <XY|XZ|YZ> <count> <row col>...` records
+before representation blocks. These carry occupied lattice cells independently
+of the unique placement context in `L` records, so both Sweep and Extrude can
+show and reject occupied cells even when several frames share a plane. Older
+snapshots without `G` retain the `L` occupancy fallback. Curved helical axis
+lines use the same sampled centerlines and domain gaps as the desktop renderer.
 Scene format v13 adds `F <XY|XZ|YZ> <HONEYCOMB|SQUARE> <geometry|mixed|unknown|empty>`
 before representation blocks. It initializes the `EXTRUDE FROM` draft control and
 lattice type independently of tablet pose. Versions 4–12 remain readable and use

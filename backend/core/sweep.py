@@ -65,6 +65,8 @@ def sweep_source(design, body):
     from backend.core.lattice import _lattice_position
     normal = np.eye(3)[{'XY': 2, 'XZ': 1, 'YZ': 0}[body.plane]]
     if body.source_helix_id is None:
+        from backend.core.lattice_occupancy import require_vacant_lattice_cells
+        require_vacant_lattice_cells(design, body.cells, body.plane)
         coords = [_lattice_position(r, c, design.lattice_type) for r, c in body.cells]
         xy = np.mean(coords, axis=0)
         origin = np.array({'XY': [*xy, 0], 'XZ': [xy[0], 0, xy[1]], 'YZ': [0, *xy]}[body.plane])

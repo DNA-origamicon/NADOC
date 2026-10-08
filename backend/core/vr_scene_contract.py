@@ -90,6 +90,7 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     handle_ids: dict[str, dict[str, str]] = {}
     active: str | None = None
     lattice_planes: set[str] = set()
+    occupancy_planes: set[str] = set()
     for line_number, line in enumerate(lines[1:], start=2):
         fields = line.split()
         if not fields or fields[0].startswith("#"):
@@ -102,6 +103,17 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
                     or not np.allclose(basis @ basis.T, np.eye(3), atol=1e-5)
                     or not np.isclose(np.linalg.det(basis), 1, atol=1e-5)):
                 raise ValueError("invalid source coordinate frame")
+            continue
+        if fields[0] == 'G':
+            if (version < 16 or active is not None or len(fields) < 3
+                    or fields[1] not in {'XY', 'XZ', 'YZ'} or fields[1] in occupancy_planes):
+                raise ValueError('invalid lattice occupancy')
+            count = int(fields[2])
+            cells = [tuple(map(int, fields[i:i+2])) for i in range(3, len(fields), 2)]
+            if (not 0 <= count <= 1_000_000 or len(fields) != 3+2*count
+                    or len(set(cells)) != count or any(abs(v) > 100000 for cell in cells for v in cell)):
+                raise ValueError('invalid occupied lattice cells')
+            occupancy_planes.add(fields[1])
             continue
         if fields[0] == "F" and version >= 13:
             if (len(fields) != 4 or active is not None
