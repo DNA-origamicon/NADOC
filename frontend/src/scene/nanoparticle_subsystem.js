@@ -106,7 +106,9 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     if (gizmo?.isAttached?.()) gizmo.reset?.()
   })
 
+  let externalView = null
   function rebuild() {
+    const view = externalView ?? store.getState()
     for (const glow of dotGlows.values()) glow.clear()
     dotGlows.clear()
     for (const mesh of meshes.values()) {
@@ -115,12 +117,12 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
       for (const child of mesh.children) if (['streptavidin-coating', 'biotin-pockets'].includes(child.name)) child.traverse(obj => { obj.geometry?.dispose(); obj.material?.dispose() })
     }
     meshes.clear()
-    const ids = new Set((store.getState().currentDesign?.nanoparticles ?? []).map(p => p.id))
+    const ids = new Set((view.currentDesign?.nanoparticles ?? []).map(p => p.id))
     for (const [id, mat] of dotMaterials) {
       if (!ids.has(id)) { mat.dispose(); dotMaterials.delete(id) }
     }
     connectorRoot.clear(); linkerAtomRoot.clear()
-    for (const particle of store.getState().currentDesign?.nanoparticles ?? []) {
+    for (const particle of view.currentDesign?.nanoparticles ?? []) {
       if (!particle.visible) continue
       const mesh = new THREE.Mesh(new THREE.SphereGeometry(particle.diameter_nm / 2, 48, 32),
         particleMaterial(particle, particle.id === highlighted))
@@ -139,13 +141,13 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
         mesh.userData.strepAtoms.setMode(representation)
         mesh.getObjectByName('streptavidin-coating').visible = !['vdw', 'ballstick', 'stick'].includes(representation)
       }
-      addBiotinMarkers(mesh, particle, representation, store.getState().currentGeometry ?? [])
+      addBiotinMarkers(mesh, particle, representation, view.currentGeometry ?? [])
       if (particle.coating) applyCoatingTransforms(mesh, particle, coatingTransforms)
       root.add(mesh)
       meshes.set(particle.id, mesh)
     }
-    const design = store.getState().currentDesign
-    const geometry = store.getState().currentGeometry ?? []
+    const design = view.currentDesign
+    const geometry = view.currentGeometry ?? []
     const particlesById = new Map((design?.nanoparticles ?? []).map(p => [p.id, p]))
     movementConstraints = new Map()
     for (const particle of design?.nanoparticles ?? []) {
@@ -377,6 +379,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   }, { capture: true }), { capture: true })
 
   store.subscribe((next, prev) => {
+    if (externalView) return
     // Persisted metadata and identical geometry responses must retain the PDB
     // prototype and compiled materials. Actual placement/topology edits rebuild.
     if (nanoparticleRenderInputsChanged(next, prev)) rebuild()
@@ -411,6 +414,15 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   rebuild()
   return {
     root, meshes, gizmo, rebuild, connectorRoot, linkerAtomRoot,
+    renderExternalGeometry(design, geometry) {
+      externalView = { currentDesign: design, currentGeometry: geometry }
+      rebuild()
+    },
+    clearExternalGeometry() {
+      if (!externalView) return
+      externalView = null
+      rebuild()
+    },
     applyOxdnaPoses(poses) {
       if (!poses?.length) { this.clearOxdnaPoses(); return }
       oxdnaPoses = new Map((poses || []).map(p => [p.id, p.pose]))

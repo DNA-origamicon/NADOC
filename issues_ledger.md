@@ -1382,3 +1382,51 @@ so the panel retains its inputs and preview for correction. Covered by
 - **Root cause:** Calculation cleared a local design copy; commit merged the new marks into the original, uncleared design.
 - **Fix:** Clear the active bundle helices inside the commit before applying the new pattern. Reference, overhang and linker marks remain preserved. A revision guard rejects a calculation made stale by another edit.
 - **Evidence:** `tests/test_sweep_loop_skips.py::test_tool_api_recomputes_atomically_and_supports_history` covers HC/SQ, forbidden sites, repeat application, undo/redo, feature revert and JSON persistence; stale-computation and atomic-failure tests cover transaction boundaries. Existing 75 loop/skip tests pass.
+
+## ISSUE-67 — Build animations reuse current topology and wall-clock video timestamps (2026-10-08, FIXED)
+
+- **Status:** `[x]` Fixed under the user's construction-animation/export request.
+- **Repro:** pin two keyframes several feature ticks apart. The old player blended
+  only endpoints; earlier routing and deleted sites were rendered using current
+  meshes. On Voltron, a future gold particle also remained visible at the initial
+  state. MediaRecorder assigned export timing from render wall time.
+- **Cause:** endpoint-only bake planning, current-topology mesh ownership,
+  ordinary snapshot substitution omitting nanoparticle collections, and a live
+  recording encoder used for offline frame stepping. Atom serials also cannot
+  identify the same atom across different historical topologies.
+- **Fix:** adjacent historical-state planning, external-snapshot DNA/arc/particle
+  rendering, nanoparticle snapshot restoration, topology-aware atomistic frames,
+  and WebCodecs/WebM encoding with explicit timestamps and frame backpressure.
+  Export rejects FPS/timing combinations that cannot sample every build step.
+- **Evidence:** `animation_build_sequence.spec.js` visits forward/reverse/held
+  states on an isolated Voltron copy and decodes actual downloads. Pure/factory
+  tests cover sequencing, snapshot restoration, missing states, encoding errors,
+  and atom-identity changes. Evidence: `.development-artifacts/build-animation/`.
+- **Final validation:** headed Voltron preview plus decoded Animations/Photo
+  exports passed (132/22 frames, both 11s); 7,658 frontend tests passed (1 skipped),
+  26 animation and 17 evaluation backend tests passed. FAST: 10,215 passed,
+  90 skipped; three existing failures (mutable Benchy count, native VR IPC crash,
+  disk forecast) remain. Benchy incident reviewed and acknowledged; native
+  placement gate clear. Broad FULL deferred to `.nadoc-slow-pending`.
+  Smoke: 23 passed; production build passed. Test artifacts were removed.
+  Lint retains one unrelated unused import. Evidence and timing triage are in
+  `.development-artifacts/build-animation/validation-status.json`.
+- **Boundary:** State pins remain top-level feature-log ticks; routing children
+  stay grouped. This does not implement assembly configuration/joint export
+  (the separate open work in ISSUE-21).
+
+
+ISSUE-67 sweep follow-up (2026-10-08): sweep additions now reveal along authored
+path order, with reversed ordering for source-start continuations and symmetric
+reverse playback. CG/atom sites scale locally; tube/surface triangles use cached
+path ordering and draw ranges. Non-sweep transitions retain their existing behavior.
+Surface pre-bake accepts the empty initial build state and retains nucleotide
+identity for the reveal. Verified headed Full/Cylinders/Ball-and-Stick/Surface
+views and decoded WebM; 7,664 frontend tests and 27 focused backend tests passed.
+Evidence: `.development-artifacts/build-animation/sweep/` and `sweep-*.log`.
+Sweep follow-up final gates: 23 smoke tests and production build passed. FAST:
+10,216 passed / 90 skipped / three unchanged baseline failures. The two flagged
+slow tests took 0.05s and 0.02s in isolated reruns (no real engine work); no budget
+or classification changes. Native placement review gate clear. Test artifacts
+removed. Decoded sweep video has exactly 76 frames / 9.5s at 8fps. Full validation
+record: `.development-artifacts/build-animation/sweep-validation.json`.

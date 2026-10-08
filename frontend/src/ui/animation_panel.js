@@ -1558,7 +1558,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         'background:#0d1117;border:1px solid #30363d;border-radius:3px',
         'color:#c9d1d9;padding:3px 3px;font-size:var(--text-xs)',
       ].join(';')
-      cfgSelect.title = 'Pin this keyframe to a feature-log entry'
+      cfgSelect.title = 'Walk through intermediate build states during the transition; matching states hold. Works forward or backward.'
       cfgSelect.addEventListener('keydown', e => e.stopPropagation())
 
       const _addOpt = (val, label) => {
@@ -1818,8 +1818,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         _stopPreview()
         Promise.resolve(player.play(anim, playOpts)).catch(err => {
           _lastPlayedKfSig = null
-          onPlayerEvent({ type: 'baking_cancelled' })
-          showToast(`Could not load animation: ${err.message}`, { severity: 'error' })
+          onPlayerEvent({ type: 'baking_error', message: err.message })
         })
       } else {
         player.resume()

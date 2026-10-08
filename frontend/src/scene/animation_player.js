@@ -1,3 +1,7 @@
+import { sweepAnimationReveal, revealSweepSurface } from './sweep_animation_reveal.js'
+import { createFeatureAtomisticDisplay } from './feature_atomistic_display.js'
+import { createFeatureAnimationDisplay, featureTopologySignature } from './feature_animation_display.js'
+import { featurePath, featurePair, featureBakePositions, assertFeatureSampling, sameFeatureSource } from './feature_animation_sequence.js'
 import { setNativePoseMap } from '../viewer/native_placement.js'
 import { expandCompactNucleotides } from '../viewer/geometry_codec.js'
 /**
@@ -52,7 +56,9 @@ function _ease(t, curve) {
  * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
  * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry, onFetchGeometryBatch, trajectoryKeyframes, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate, onPlaybackFrame }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry, onFetchGeometryBatch, trajectoryKeyframes, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate, onPlaybackFrame, getNanoparticleRenderer }) {
+  const featureDisplay = createFeatureAnimationDisplay({ getDesignRenderer, getUnfoldView, getNanoparticleRenderer })
+  const featureAtoms = createFeatureAtomisticDisplay(getAtomisticRenderer)
   let _raf          = null
   let _playGeneration = 0
   let _loopEpoch = 0
@@ -74,9 +80,12 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   // Pre-baked geometry states: Map<featureLogIndex, BakedGeometry>
   // BakedGeometry = { posMap, axesMap, bnMap }
   let _bakedStates  = new Map()
+  let _preparedDesign = null
+  let _preparedGeometry = null
   // The feature-log index the design was ACTUALLY sitting at when Play was pressed, and
   // therefore the state stop() has to put the beads back to. Keyframes may pin any other
   // index; playback leaves the beads wherever the last one pinned.
+  let _clusterPairBase = null
   let _baseFLI      = null
   // Helix ids the feature-log lerp moves (everything not cluster-owned), and the ids the
   // last cluster lerp moved. `_applyAt` re-seats the arcs over the union of the two.
@@ -85,8 +94,6 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   // Pre-baked atomistic position arrays: Map<featureLogIndex, number[]>
   // Each value is a flat [x0,y0,z0, x1,y1,z1, ...] array indexed by atom serial.
   let _bakedAtomistic = new Map()
-  // Play-start atomistic positions — used as the rigid-body base for cluster atoms.
-  let _liveAtomistic  = null
   // Pre-baked surface vertex arrays: Map<featureLogIndex, number[]>
   // Each value is a flat [x,y,z, ...] vertex array (same order as the live mesh).
   let _bakedSurface   = new Map()
@@ -99,6 +106,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   // The Animations panel's authoring preview holds the same module independently.
   let _ownsTrajectory = false
   let _cameraOnly = false
+  let _hasBuildStates = false
 
   // Joint update callback — set by play() when assemblyActive
   let _onJointUpdate  = null   // (jointId: string, value: number) => void
@@ -315,6 +323,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
       segments.push({
         kfId:                kf.id,
+        featurePath: transDur > 0 ? featurePath(prevFLI, toFLI, getDesign()?.feature_log?.length ?? 0) : [toFLI, toFLI],
         fromFeatureLogIndex: prevFLI,
         toFeatureLogIndex:   toFLI,
         startT:              cursor,
@@ -394,7 +403,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       })
       helixSet.add(ax.helix_id)
     }
-    return { posMap, axesMap, bnMap, strandSet, helixSet }
+    return { posMap, axesMap, bnMap, strandSet, helixSet,
+      nucleotides, helixAxes: geo?.helix_axes, displayDesign: geo?.display_design,
+      topologySignature: featureTopologySignature(geo?.display_design), clusterTransforms: geo?.cluster_transforms?.map(c => ({ ...c, cluster_id: c.id })) }
   }
 
   /**
@@ -408,17 +419,14 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
    * for CPU-bound numpy), so total wall-clock is the same as the legacy
    * single-batch call — but the user sees incremental progress.
    */
-  async function _bakeStates(animation, liveFeatureLogIndex) {
+  async function _bakeStates(animation, liveFeatureLogIndex, reusableStates = new Map()) {
     _baking = true
     const abort = new AbortController()
     _bakeAbort = abort
     const signal = abort.signal
     try {
-      const positionSet = new Set(_cameraOnly ? [] : [liveFeatureLogIndex])
-      for (const kf of animation.keyframes) {
-        if (kf.feature_log_index != null) positionSet.add(kf.feature_log_index)
-      }
-      const positions = [...positionSet]
+      const positions = _cameraOnly ? [] : featureBakePositions(
+        animation, liveFeatureLogIndex, getDesign()?.feature_log?.length ?? 0)
 
       const atomisticActive = getAtomisticRenderer?.()?.getMode?.() !== 'off'
       const surfaceActive   = getSurfaceRenderer?.()?.getMode?.()   !== 'off'
@@ -444,60 +452,55 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         })
       }
 
-      _bakedStates    = new Map()
+      _bakedStates    = new Map(reusableStates)
       _bakedAtomistic = new Map()
       _bakedSurface   = new Map()
 
-      const tasks = []
       for (const pos of positions) {
+        if (signal.aborted) throw new DOMException('bake cancelled', 'AbortError')
+        const tasks = []
         // CG geometry — always.
         tasks.push(
-          (onFetchGeometryBatch ? onFetchGeometryBatch([pos], { signal, suppressBusy: true })
-                                : Promise.resolve(null))
+          (reusableStates.has(pos) ? Promise.resolve(null)
+            : onFetchGeometryBatch ? onFetchGeometryBatch([pos], { signal, suppressBusy: true })
+            : Promise.resolve(null))
             .then(batch => {
+              signal.throwIfAborted()
+              if (onFetchGeometryBatch && !reusableStates.has(pos) && !batch?.[String(pos)]) throw new Error(`Build state ${pos} could not be prepared`)
               if (batch && batch[String(pos)]) {
                 _bakedStates.set(pos, _bakedFromGeo(batch[String(pos)]))
               }
               _tick()
             })
-            .catch(err => {
-              if (err?.code === 'NATIVE_PLACEMENT_INTEGRITY') throw err
-              if (err?.name !== 'AbortError') _tick()
-            })
         )
         if (onFetchAtomisticBatch && atomisticActive) {
           tasks.push(
-            onFetchAtomisticBatch([pos], { signal, suppressBusy: true })
+            onFetchAtomisticBatch([pos], { signal, suppressBusy: true, includeTopology: true })
               .then(batch => {
+                signal.throwIfAborted()
+                if (!batch || batch[String(pos)] === undefined) throw new Error(`Build state ${pos} representation could not be prepared`)
                 if (batch && batch[String(pos)] !== undefined) {
                   _bakedAtomistic.set(pos, batch[String(pos)])
                 }
                 _tick()
               })
-              .catch(err => {
-              if (err?.code === 'NATIVE_PLACEMENT_INTEGRITY') throw err
-              if (err?.name !== 'AbortError') _tick()
-            })
           )
         }
         if (onFetchSurfaceBatch && surfaceActive) {
           tasks.push(
             onFetchSurfaceBatch([pos], { signal, suppressBusy: true })
               .then(batch => {
+                signal.throwIfAborted()
+                if (!batch || batch[String(pos)] === undefined) throw new Error(`Build state ${pos} representation could not be prepared`)
                 if (batch && batch[String(pos)] !== undefined) {
                   _bakedSurface.set(pos, batch[String(pos)])
                 }
                 _tick()
               })
-              .catch(err => {
-              if (err?.code === 'NATIVE_PLACEMENT_INTEGRITY') throw err
-              if (err?.name !== 'AbortError') _tick()
-            })
           )
         }
+        await Promise.all(tasks)
       }
-
-      await Promise.all(tasks)
       if (signal.aborted) throw new DOMException('bake cancelled', 'AbortError')
 
       // Phase 2 — trajectory keyframes. Delegated: the display controller loads the
@@ -549,10 +552,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
    * Capture base positions for all clusters referenced in the animation.
    * Uses append mode so all clusters are captured in a single logical snapshot.
    */
-  function _captureAllBases() {
+  function _captureAllBases(clusters = getClusterTransforms()) {
     const helixCtrl = getHelixCtrl()
     if (!helixCtrl) return
-    const clusters = getClusterTransforms()
     if (!clusters.length) return
     const bluntEnds = getBluntEnds?.()
     let first = true
@@ -679,11 +681,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
    *  per play — cluster membership cannot change mid-animation — because `_syncArcs` runs
    *  on every frame. */
   function _computeLerpHelixIds() {
-    const owned = new Set()
-    for (const base of _baseClusters ?? []) base.helix_ids.forEach(id => owned.add(id))
-    _lerpHelixIds = (getDesign()?.helices ?? [])
-      .map(h => h.id)
-      .filter(id => !owned.has(id))
+    _lerpHelixIds = [...new Set([..._bakedStates.values()].flatMap(b => [...b.helixSet]))]
   }
 
   /** Restore all clusters to their base (design) positions after stop. */
@@ -853,7 +851,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
     onTextOverlayUpdate?.(_textOverlayAt(elapsed))
 
-    const { fromState, toState, startT, transEnd, easing, fromFeatureLogIndex, toFeatureLogIndex } = seg
+    const { fromState, toState, startT, transEnd, easing } = seg
 
     const inTransition = elapsed < transEnd
     const rawT = inTransition
@@ -910,6 +908,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // One call, and only when the frame index actually moves: the controller's showFrame
     // drives the CG beads AND whichever heavy rep is on, from frames it already holds.
     if (seg.trajectory) {
+      featureDisplay.clear()
+      getSurfaceRenderer?.()?.getMesh?.()?.geometry.setDrawRange(0, Infinity)
+      featureAtoms.clear()
       const nFrames = trajectoryKeyframes?.frameCount(seg.trajectory.jobId, seg.trajectory.spec) ?? 0
       if (nFrames > 0) {
         const holdSpan = seg.endT - transEnd
@@ -933,26 +934,49 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // cached frames for the next trajectory segment.
     trajectoryKeyframes?.suspend()
 
+    // Build-history channel advances through every adjacent tick. Camera, joints,
+    // and binding channels retain the authored whole-transition timing.
+    const pair = featurePair(seg.featurePath, t)
+    const buildT = pair.t
+    const fromBaked = _bakedStates.get(pair.from)
+    const toBaked = _bakedStates.get(pair.to)
+    const sweepReveal = sweepAnimationReveal(fromBaked, toBaked, buildT)
+    if (_hasBuildStates && featureDisplay.show(fromBaked, toBaked, buildT)) {
+      _clusterPairBase = null
+      _baseClusters = null
+      _captureAllBases(featureDisplay.getDesign()?.cluster_transforms ?? getClusterTransforms())
+    }
+    const buildFromClusters = fromBaked?.clusterTransforms ?? _clusterStateAtIndex(pair.from, getDesign())
+    const buildToClusters = toBaked?.clusterTransforms ?? _clusterStateAtIndex(pair.to, getDesign())
+
     // Cluster configs
     let clusterHelixIds    = null
     let clusterTransforms  = []
     let movedByLerp        = false
     _lastClusterHelixIds   = null
-    if (toState.clusterTransforms) {
-      clusterTransforms = _applyClusterLerp(fromState.clusterTransforms, toState.clusterTransforms, t)
-      // Build exclusion set so applyPositionLerp skips helices owned by rigid-body
-      // cluster transforms. Linear position lerp on rotated clusters causes compression
-      // (chord path instead of arc); applyClusterTransform already handles them correctly.
-      if (_baseClusters?.length) {
-        clusterHelixIds = new Set()
-        for (const base of _baseClusters) base.helix_ids.forEach(id => clusterHelixIds.add(id))
+    const movingClusters = buildToClusters.filter(to => {
+      const from = buildFromClusters.find(c => c.cluster_id === to.cluster_id)
+      return from && (to.rotation.some((v, i) => v !== from.rotation[i]) ||
+        to.translation.some((v, i) => v !== from.translation[i]))
+    })
+    if (movingClusters.length && fromBaked) {
+      // A rigid move starts from THIS historical shape, not the final live shape.
+      // Capture only when entering an adjacent pair; regular frames stay cheap.
+      if (_clusterPairBase !== fromBaked) {
+        getHelixCtrl()?.applyPositionLerp(fromBaked, fromBaked, 0)
+        const clusters = buildFromClusters.map(c => ({
+          ...getClusterTransforms().find(live => live.id === c.cluster_id), ...c,
+          id: c.cluster_id,
+        })).filter(c => c.helix_ids && c.pivot)
+        _captureAllBases(clusters)
+        _clusterPairBase = fromBaked
       }
+      clusterTransforms = _applyClusterLerp(buildFromClusters, movingClusters, buildT)
+      clusterHelixIds = new Set(clusterTransforms.flatMap(c => c.helix_ids))
     }
 
     // Deform geometry lerp — pure client-side from pre-baked states.
     // Pass clusterHelixIds so cluster helices are handled by applyClusterTransform above.
-    const fromBaked = _bakedStates.get(fromFeatureLogIndex)
-    const toBaked   = _bakedStates.get(toFeatureLogIndex)
     if (fromBaked && toBaked) {
       // Fade-in / fade-out diff for "this is how I made this" reveal:
       // strands or helices in to-state but not from-state ⇒ scale by t (grow in).
@@ -975,7 +999,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
           fadeOpts = { revealInStrandIds, revealOutStrandIds, revealInHelixIds, revealOutHelixIds }
         }
       }
-      getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, t, clusterHelixIds, fadeOpts)
+      getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, buildT, clusterHelixIds, { ...fadeOpts, sweepReveal })
       movedByLerp = true
     }
 
@@ -1011,8 +1035,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
           const inTo   = toS.has(a)   || toS.has(b)
           let s
           if (inFrom && inTo)  s = 1
-          else if (inTo)       s = t
-          else if (inFrom)     s = 1 - t
+          else if (inTo)       s = buildT
+          else if (inFrom)     s = 1 - buildT
           else                 s = 0
           scales.set(c.id, s)
         }
@@ -1022,22 +1046,25 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
     // Atomistic lerp — lerp flat xyz arrays between pre-baked deformed states.
     // Cluster atoms use rigid-body rotation (same formula as CG applyClusterTransform)
-    // rather than linear lerp, with the play-start positions as the rotation base.
-    const fromAtom = _bakedAtomistic.get(fromFeatureLogIndex)
-    const toAtom   = _bakedAtomistic.get(toFeatureLogIndex)
-    if (fromAtom && toAtom) {
-      getAtomisticRenderer?.()?.applyPositionLerp(
-        fromAtom, toAtom, t,
-        _liveAtomistic, clusterTransforms, clusterHelixIds,
-      )
-    }
+    // rather than linear lerp, with the historical source positions as the rotation base.
+    const fromAtom = _bakedAtomistic.get(pair.from)
+    const toAtom   = _bakedAtomistic.get(pair.to)
+    featureAtoms.show(fromAtom, toAtom, buildT, clusterTransforms, clusterHelixIds, sweepReveal)
 
     // Surface lerp — lerp vertex positions of the live mesh between pre-baked states.
-    // Skipped automatically when vertex counts differ (topology mismatch).
-    const fromSurf = _bakedSurface.get(fromFeatureLogIndex)
-    const toSurf   = _bakedSurface.get(toFeatureLogIndex)
+    // Different vertex counts switch to the nearest historical mesh.
+    const fromSurf = _bakedSurface.get(pair.from)
+    const toSurf   = _bakedSurface.get(pair.to)
     if (fromSurf && toSurf) {
-      getSurfaceRenderer?.()?.applyPositionLerp(fromSurf, toSurf, t)
+      const renderer = getSurfaceRenderer?.()
+      if (sweepReveal) {
+        const frame = fromSurf.vertices.length > toSurf.vertices.length ? fromSurf : toSurf
+        renderer?.applyPositionLerp(frame, frame, 0)
+        revealSweepSurface(renderer?.getMesh?.(), frame, sweepReveal)
+      } else {
+        renderer?.getMesh?.()?.geometry.setDrawRange(0, Infinity)
+        renderer?.applyPositionLerp(fromSurf, toSurf, buildT)
+      }
     }
 
     // Assembly joint lerp — interpolate joint_values from keyframe to keyframe.
@@ -1099,8 +1126,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     const atBound  = _direction === 1 ? elapsed >= _totalDur : elapsed <= 0
     const animation = _animation
     const loopEpoch = _loopEpoch
-    _applyAt(atBound ? (_direction === 1 ? _totalDur : 0) : elapsed)
     const waitStart = performance.now()
+    _applyAt(atBound ? (_direction === 1 ? _totalDur : 0) : elapsed)
     _pendingTime = { epoch: loopEpoch, time: Math.max(0, Math.min(elapsed, _totalDur)) }
     try {
       await trajectoryKeyframes?.settle?.()
@@ -1159,6 +1186,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
    *   restore state on stop().
    */
   function play(animation, opts = {}) {
+    // Reuse an already-prepared preview for export/replay while its immutable
+    // source and native geometry are unchanged. Explicit Stop still frees it.
+    const reusableStates = _preparedDesign === getDesign() &&
+      _preparedGeometry === getDesignGeometry?.() ? _bakedStates : new Map()
     stop()
     const generation = _playGeneration
     if (!animation?.keyframes?.length) return Promise.resolve()
@@ -1167,6 +1198,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _liveJointValues = opts.liveJointValues ?? null
 
     _animation = animation
+    _hasBuildStates = animation.keyframes.some(kf => kf.feature_log_index != null)
+    const sourceDesign = getDesign()
     // Camera-only animations orbit the live visualization without taking geometry ownership.
     _cameraOnly = animation.keyframes.every(kf =>
       kf.feature_log_index == null && !kf.trajectory_job_id &&
@@ -1188,11 +1221,12 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // position set with exactly this index).
     _baseFLI = liveFLI
 
-    return _bakeStates(animation, liveFLI).then(() => {
+    return _bakeStates(animation, liveFLI, reusableStates).then(() => {
       if (_playGeneration !== generation) return   // user stopped while baking
 
-      // Capture play-start atomistic positions as the rigid-body base for cluster atoms.
-      _liveAtomistic = _bakedAtomistic.get(liveFLI) ?? null
+      if (!sameFeatureSource(sourceDesign, getDesign())) throw new Error('Design changed while preparing animation; play again to use the new design.')
+      _preparedDesign = getDesign()
+      _preparedGeometry = getDesignGeometry?.()
 
       // Compute model centroid for any spin keyframes — mean of all backbone
       // bead positions in the live baked state. Done before _buildSchedule so
@@ -1254,6 +1288,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
   /** Stop completely, reset position, and restore the model's visual state. */
   function stop() {
+    _bakeAbort?.abort()
     const geometryChanged = !!_animation && !_cameraOnly
     _loopEpoch++
     _playGeneration++
@@ -1272,8 +1307,11 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     }
     // Then the beads the feature-log lerp moved, then the cluster-owned ones. Each
     // re-seats the crossover arcs on the helices it just moved.
-    _restoreBaseGeometry()
     _restoreBaseClusters()
+    _restoreBaseGeometry()
+    featureDisplay.clear()
+    getSurfaceRenderer?.()?.getMesh?.()?.geometry.setDrawRange(0, Infinity)
+    featureAtoms.clear()
     // Restore overhang link arcs to full visibility — playback may have
     // scaled them down for linker creation/deletion fade-outs.
     if (_animation && !_cameraOnly) getOverhangLinkArcs?.()?.resetConnectionScales?.()
@@ -1299,11 +1337,13 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _seekOffset      = 0
     _lastSeekKfId    = null
     _bakedStates     = new Map()
+    _preparedDesign = null
+    _preparedGeometry = null
     _baseFLI         = null
+    _clusterPairBase = null
     _lerpHelixIds        = null
     _lastClusterHelixIds = null
     _bakedAtomistic  = new Map()
-    _liveAtomistic   = null
     _bakedSurface    = new Map()
     _baking          = false
     _onJointUpdate   = null
@@ -1398,5 +1438,5 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         || getSurfaceRenderer?.()?.getMode?.()   !== 'off'
   }
 
-  return { play, pause, resume, stop, seekTo, settleFrame, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep }
+  return { assertExportSampling: fps => assertFeatureSampling(_schedule, fps), play, pause, resume, stop, seekTo, settleFrame, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep }
 }

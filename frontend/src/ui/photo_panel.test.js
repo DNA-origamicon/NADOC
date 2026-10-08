@@ -92,6 +92,11 @@ describe('videoPlan', () => {
     expect(p.text).toContain('21 frames')
   })
 
+  it('counts fixed-duration WebM frames without an extra endpoint still', () => {
+    const p = videoPlan({ durationS: 2, fps: 10, width: 1920, height: 1080, format: 'webm' })
+    expect(p.frames).toBe(20)
+  })
+
   it('reports the per-frame tile cost, which is what makes long exports slow', () => {
     // 4K is still one tile; a 300-DPI still preset would be four.
     expect(videoPlan({ durationS: 1, fps: 30, width: 3840, height: 2160 }).tiles).toBe(1)
@@ -652,7 +657,7 @@ describe('initPhotoPanel — video export', () => {
     // 2.0 s at 24 fps = 49 frames. play() bakes geometry — merely opening the
     // dropdown must not pay that.
     expect(els['photo-video-note'].textContent).toContain('2.0 s')
-    expect(els['photo-video-note'].textContent).toContain('49 frames')
+    expect(els['photo-video-note'].textContent).toContain('48 frames')
     expect(els['photo-video-note'].textContent).toContain('1920×1080')
   })
 
@@ -664,7 +669,7 @@ describe('initPhotoPanel — video export', () => {
 
     els['photo-video-fps'].value = '10'
     els['photo-video-fps'].dispatchEvent(new Event('change'))
-    expect(els['photo-video-note'].textContent).toContain('21 frames')
+    expect(els['photo-video-note'].textContent).toContain('20 frames')
   })
 
   it('exports the SELECTED animation at the chosen size and format', async () => {

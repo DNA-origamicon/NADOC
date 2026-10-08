@@ -4178,8 +4178,8 @@ export async function getClashes() {
  * @param {number[]} positions  e.g. [-2, 0, 1, -1]
  * @returns {Promise<Record<string, number[]> | null>}  pos → [x0,y0,z0, x1,y1,z1, ...]
  */
-export async function getAtomisticBatch(positions, { signal, suppressBusy = false } = {}) {
-  return _request('POST', '/design/features/atomistic-batch', { positions }, { signal, suppressBusy })
+export async function getAtomisticBatch(positions, { signal, suppressBusy = false, includeTopology = false } = {}) {
+  return _request('POST', '/design/features/atomistic-batch', { positions, include_topology: includeTopology }, { signal, suppressBusy })
 }
 
 /**

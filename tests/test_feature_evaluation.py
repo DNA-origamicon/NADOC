@@ -239,6 +239,9 @@ def test_geometry_batch_only_materializes_requested_distinct_states(monkeypatch)
     b = routes.geometry_batch(body)
     assert b == a
     assert calls == [0, 2, 3]
+    assert b["2"]["cluster_transforms"][0]["translation"][0] == 2
+    assert "feature_log" not in b["2"]["display_design"]
+    assert b["2"]["display_design"]["cluster_transforms"][0]["translation"][0] == 2
     assert d.feature_log_cursor == -1
 
 

@@ -5,6 +5,7 @@ import { parseBaseKey } from '../scene/base_ref.js'
 
 export function installTestApi({
   scrywrite = null,
+  animPlayer,
   scene,
   store,
   visibilityController,
@@ -48,6 +49,7 @@ export function installTestApi({
       focused: document.hasFocus(), hidden: document.hidden }),
     pauseViewerRenderingForTest: () => renderer.setAnimationLoop(null),
     scrywrite,
+    animPlayer,
     scene,
     dimensions: {
       open: () => dimensionsTool?.open?.(),

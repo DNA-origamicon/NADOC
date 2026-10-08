@@ -1163,9 +1163,9 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
      * @param {Array}            [clusterTransforms]  [{helix_ids, center, dummy, incrRot}, ...]
      * @param {Set<string>|null} [clusterHelixIds]    set of helix IDs in any cluster
      */
-    applyPositionLerp(fromXyz, toXyz, t, baseXyz = null, clusterTransforms = [], clusterHelixIds = null) {
+    applyPositionLerp(fromXyz, toXyz, t, baseXyz = null, clusterTransforms = [], clusterHelixIds = null, revealScale = null) {
       if (!fromXyz || !toXyz) return
-      if (fromXyz === toXyz && !(clusterHelixIds && baseXyz && clusterTransforms.length)) {
+      if (!revealScale && fromXyz === toXyz && !(clusterHelixIds && baseXyz && clusterTransforms.length)) {
         _applySnapshot(fromXyz)
         _weldOverlay?.update(serial => {
           const s = serial * 3
@@ -1212,7 +1212,8 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         const scale = _state.elementScale[el], out = mesh.instanceMatrix.array
         for (let i = 0; i < group.length; i++) {
           const r = group[i] * 3
-          writeSphereMatrix(out, i * 16, positions[r], positions[r + 1], positions[r + 2], scale)
+          writeSphereMatrix(out, i * 16, positions[r], positions[r + 1], positions[r + 2],
+            scale * (revealScale?.(table.get(group[i])) ?? 1))
         }
         if (group.length) mesh.instanceMatrix.needsUpdate = true
       }
@@ -1229,7 +1230,9 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
             _HIDDEN_BOND.toArray(out, i * 16)
             continue
           }
-          writeBondMatrix(_state.geom, out, i * 16, ax, ay, az, bx, by, bz, BOND_RADIUS)
+          const fade = revealScale ? Math.min(revealScale(table.get(bidx[i * 2])), revealScale(table.get(bidx[i * 2 + 1]))) : 1
+          if (fade === 0) { _HIDDEN_BOND.toArray(out, i * 16); continue }
+          writeBondMatrix(_state.geom, out, i * 16, ax, ay, az, bx, by, bz, BOND_RADIUS * fade)
         }
         _state.bondMesh.instanceMatrix.needsUpdate = true
       }

@@ -405,3 +405,18 @@ failure signatures exactly match the preceding sweep-wizard run. Timing guard
 reports 20 unrelated existing tests over 5 s, none from the new sweep suite.
 Full suite deferred by the session gate. Lint retains the existing unused `Path`
 import in `tests/test_cpd_cube_validation_v6.py`; `git diff --check` passes.
+
+2026-10-08 — ISSUE-67: construction animations now traverse intermediate states
+and render their historical DNA/particle topology. Explicit WebCodecs timestamps
+replace wall-clock WebM capture in both exporters. Root cause: endpoint-only
+planning and live-topology/live-recorder assumptions were insufficient for a
+historical build movie. The closer Voltron check additionally exposed ordinary
+snapshot replay retaining future nanoparticles; a failing browser assertion and
+backward/forward backend regression pinned that defect before the replay fix.
+No molecular-placement formula or golden changed. `main.js` delta +2 wiring lines.
+Reopen count: 0. Validation evidence: `.development-artifacts/build-animation/`.
+
+2026-10-08 — ISSUE-67 follow-up: sweep construction animation reveals origin to
+path end in Full/Cylinders/atomistic/surface displays; reverse playback retracts
+from the end. Empty initial surface preparation is handled explicitly. Headed
+preview and decoded video verified; source geometry/topology stays unchanged.

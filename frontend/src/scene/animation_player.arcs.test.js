@@ -31,7 +31,7 @@ function geoAt(pos) {
   return { nucleotides_compact: compact, helix_axes }
 }
 
-function makeHarness({ design, clusterTransforms = [], cameraPoses = [], onPlaybackFrame } = {}) {
+function makeHarness({ design, clusterTransforms = [], cameraPoses = [], onPlaybackFrame, fetchGeometry } = {}) {
   const calls = { arc: [], extArc: [], xover: [], lerp: [], order: [], events: [] }
 
   const helixCtrl = {
@@ -76,8 +76,8 @@ function makeHarness({ design, clusterTransforms = [], cameraPoses = [], onPlayb
     getOverhangUnzipOverlay:    () => null,
     getMultiOverhangStrandAnim: () => null,
     getDesignGeometry:    () => null,
-    onFetchGeometryBatch: async (positions) =>
-      Object.fromEntries(positions.map(p => [String(p), geoAt(p)])),
+    onFetchGeometryBatch: fetchGeometry ?? (async (positions) =>
+      Object.fromEntries(positions.map(p => [String(p), geoAt(p)]))),
     trajectoryKeyframes,
     onFetchAtomisticBatch: null,
     getAtomisticRenderer:  () => ({ getMode: () => 'off' }),
@@ -339,4 +339,46 @@ describe('shared playback frame boundaries', () => {
       expect(h.calls.events.at(-1).type).toBe('finished')
     } finally { h.player.stop(); clock.mockRestore(); vi.unstubAllGlobals() }
   })
+})
+
+describe('intermediate build states', () => {
+  it('shows a non-endpoint state in forward and reverse transitions and holds it', async () => {
+    const d = { ...design(0), feature_log: [{}, {}, {}, {}] }
+    const h = makeHarness({ design: d })
+    await h.player.play({ keyframes: [
+      kf({ feature_log_index: 3, transition_duration_s: 3, hold_duration_s: 1 }),
+      kf({ feature_log_index: 0, transition_duration_s: 3, hold_duration_s: 1 }),
+      kf({ feature_log_index: 0, transition_duration_s: 2, hold_duration_s: 1 }),
+    ] })
+    h.player.pause()
+    const sample = time => {
+      h.player.seekTo(time)
+      const { from, to, t } = h.calls.lerp.at(-1)
+      return [from.posMap.get('h0:0:fwd').z, to.posMap.get('h0:0:fwd').z, t]
+    }
+    expect(sample(1.5)).toEqual([1, 2, 0.5])
+    expect(sample(3.5)).toEqual([2, 3, 1])
+    expect(sample(5.5)).toEqual([2, 1, 0.5])
+    expect(sample(9)).toEqual([0, 0, 0.5])
+    h.player.stop()
+  })
+})
+
+it('reuses prepared CG states for export but releases them on explicit Stop', async () => {
+  const fetchGeometry = vi.fn(async positions => Object.fromEntries(positions.map(p => [p, geoAt(p)])))
+  const h = makeHarness({ design: { ...design(0), feature_log: [{}, {}, {}] }, fetchGeometry })
+  const anim = { keyframes: [kf({ feature_log_index: 2 })] }
+  await h.player.play(anim); h.player.pause()
+  expect(fetchGeometry).toHaveBeenCalledTimes(3)
+  await h.player.play(anim); h.player.pause()
+  expect(fetchGeometry).toHaveBeenCalledTimes(3)
+  h.player.stop(); await h.player.play(anim)
+  expect(fetchGeometry).toHaveBeenCalledTimes(6)
+  h.player.stop()
+})
+it('rejects a missing intermediate state instead of skipping it in a movie', async () => {
+  const fetchGeometry = vi.fn(async positions => positions[0] === 1 ? null : { [positions[0]]: geoAt(positions[0]) })
+  const h = makeHarness({ design: { ...design(0), feature_log: [{}, {}, {}] }, fetchGeometry })
+  await expect(h.player.play({ keyframes: [kf({ feature_log_index: 2 })] })).rejects.toThrow('Build state 1')
+  expect(h.player.isPlaying()).toBe(false)
 })

@@ -1,3 +1,4 @@
+import { encodeWebM } from './encode_webm.js'
 import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
 import { withMediaExport } from '../shared/media_export_activity.js'
 
@@ -11,7 +12,7 @@ export function exportPhotoVideo(options) { return withMediaExport(() => capture
  * deterministic regardless of machine speed.
  *
  * Formats
- *   'webm' — canvas.captureStream(0) + MediaRecorder (VP9 → VP8 → default)
+ *   'webm' — WebCodecs + WebM muxing with explicit animation timestamps
  *   'gif'  — gifenc (pure-JS quantizer, no worker required)
  *
  * @param {object} opts
@@ -37,14 +38,7 @@ async function captureVideo({ animation, renderer, scene, camera, player, option
   // prebuild — reports its own phases through the player's bake events, which the
   // panel routes into the same bar; this call is opaque from here.
   onPhase?.('prepare')
-  await player.play(animation)
-  if (signal?.aborted) {
-    player.stop()
-    const e = new Error('Aborted'); e.name = 'AbortError'; throw e
-  }
-  player.pause()
-  const totalDur = player.getTotalDuration()
-  if (totalDur <= 0) throw new Error('Animation has no duration — check keyframe timings.')
+  const totalDur = await _preparePlayer(player, animation, fps, signal)
 
   const canvas = renderer.domElement
 
@@ -87,7 +81,7 @@ async function captureVideo({ animation, renderer, scene, camera, player, option
  * Render an animation as a video using the photo-mode renderer for each
  * frame. Mirrors `exportVideo` but uses `photoRenderer.renderToBlob(w, h)`
  * to produce tiled high-resolution frames (same path as the Export PNG
- * button), then encodes them with MediaRecorder (WebM) or gifenc (GIF).
+ * button), then encodes them with timestamped WebCodecs (WebM) or gifenc (GIF).
  *
  * Path-traced quality is intentionally NOT used per-frame — PT can take
  * minutes per still, which is impractical for a video. Rasterised photo
@@ -109,17 +103,14 @@ async function capturePhotoVideo({ animation, player, photoRenderer, width, heig
   const fps = Math.max(1, Math.min(60, fpsOpt ?? animation.fps ?? 30))
 
   onPhase?.('prepare')
-  await player.play(animation)
-  if (signal?.aborted) { player.stop(); const e = new Error('Aborted'); e.name = 'AbortError'; throw e }
-  player.pause()
-  const totalDur = player.getTotalDuration()
-  if (totalDur <= 0) throw new Error('Animation has no duration — check keyframe timings.')
+  const totalDur = await _preparePlayer(player, animation, fps, signal)
 
   // Open a single export session — ONE offscreen WebGL context shared by
   // every frame. Calling photoRenderer.renderToBlob() per frame instead
   // would create a fresh context each call and the browser blocks new
   // contexts after ~30 ("Web page caused context loss and was blocked").
   if (typeof photoRenderer.beginFrameSession !== 'function') {
+    player.stop()
     throw new Error('photoRenderer.beginFrameSession() is required for video export.')
   }
   // followMotion: the animation moves clusters and drives binding hinges, which
@@ -180,56 +171,16 @@ async function _frameToCanvas(session, w, h, scratch, ctx) {
 async function _captureWebMPhoto({ animation, player, session, w, h, fps, totalDur, onProgress, onPhase, signal }) {
   const scratch = Object.assign(document.createElement('canvas'), { width: w, height: h })
   const ctx = scratch.getContext('2d', { willReadFrequently: true })
-  if (typeof scratch.captureStream !== 'function') {
-    throw new Error('canvas.captureStream() not supported in this browser.')
-  }
-  const stream     = scratch.captureStream(0)
-  const videoTrack = stream.getVideoTracks()[0]
-  if (!videoTrack) throw new Error('Could not acquire video track from canvas stream.')
-
-  const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', '']
-    .find(m => !m || MediaRecorder.isTypeSupported(m))
-  const chunks   = []
-  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-  recorder.ondataavailable = e => { if (e.data?.size > 0) chunks.push(e.data) }
-  recorder.start()
-
-  const frameCount = Math.ceil(totalDur * fps)
-  let aborted = false
-  for (let i = 0; i <= frameCount; i++) {
-    if (signal?.aborted) { aborted = true; break }
-    const t = Math.min((i / frameCount) * totalDur, totalDur)
-    player.seekTo(t)
-    if (await player.settleFrame?.() === false) throw new Error('Trajectory ions / bounding box are not ready for export')
-    // Single shared offscreen renderer (see beginFrameSession).
-    await _frameToCanvas(session, w, h, scratch, ctx)
-    _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
-    videoTrack.requestFrame()
-    onProgress?.(i / frameCount, { frame: i, frames: frameCount })
-    onPhase?.('capture', { done: i, total: frameCount })
-    await _yield()
-  }
-
-  if (aborted) {
-    try { recorder.stop() } catch {}
-    const e = new Error('Aborted'); e.name = 'AbortError'; throw e
-  }
-  // Flushing the recorder is not instant on a long capture — it is the phase the
-  // user waits through at "100%" if nobody says otherwise.
-  onPhase?.('encode')
-  await _yield()
-  return new Promise((resolve, reject) => {
-    recorder.onstop = () => {
-      try {
-        onPhase?.('save')
-        const blob = new Blob(chunks, { type: 'video/webm' })
-        _download(blob, `${animation.name || 'animation'}-photo.webm`)
-        resolve()
-      } catch (error) { reject(error) }
-    }
-    recorder.onerror = e => reject(e.error ?? new Error('MediaRecorder error'))
-    recorder.stop()
+  const blob = await encodeWebM({ canvas: scratch, fps, totalDur, onProgress, onPhase, signal,
+    renderFrame: async t => {
+      player.seekTo(t)
+      if (await player.settleFrame?.() === false) throw new Error('Animation frame is not ready for export')
+      await _frameToCanvas(session, w, h, scratch, ctx)
+      _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
+    },
   })
+  onPhase?.('save')
+  _download(blob, `${animation.name || 'animation'}-photo.webm`)
 }
 
 async function _captureGIFPhoto({ animation, player, session, w, h, fps, totalDur, onProgress, onPhase, signal }) {
@@ -270,67 +221,20 @@ async function _captureGIFPhoto({ animation, player, session, w, h, fps, totalDu
 // ── WebM via MediaRecorder + captureStream(0) ─────────────────────────────────
 
 async function _captureWebM({ animation, canvas, renderer, scene, camera, player, fps, totalDur, onProgress, onPhase, signal }) {
-  // Route through a 2D scratch canvas so we can composite the text overlay on
-  // top of the WebGL frame before capture.
-  const w   = canvas.width
-  const h   = canvas.height
+  const w = canvas.width, h = canvas.height
   const tmp = Object.assign(document.createElement('canvas'), { width: w, height: h })
   const ctx = tmp.getContext('2d', { willReadFrequently: true })
-
-  if (typeof tmp.captureStream !== 'function') {
-    throw new Error('canvas.captureStream() not supported in this browser.')
-  }
-  const stream     = tmp.captureStream(0)
-  const videoTrack = stream.getVideoTracks()[0]
-  if (!videoTrack) {
-    throw new Error('Could not acquire video track from canvas stream.')
-  }
-
-  // Prefer VP9, fall back to VP8, then browser default.
-  const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', '']
-    .find(m => !m || MediaRecorder.isTypeSupported(m))
-
-  const chunks   = []
-  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-  recorder.ondataavailable = e => { if (e.data?.size > 0) chunks.push(e.data) }
-  recorder.start()
-
-  const frameCount = Math.ceil(totalDur * fps)
-  let aborted = false
-  for (let i = 0; i <= frameCount; i++) {
-    if (signal?.aborted) { aborted = true; break }
-    const t = Math.min((i / frameCount) * totalDur, totalDur)
-    player.seekTo(t)
-    if (await player.settleFrame?.() === false) throw new Error('Trajectory ions / bounding box are not ready for export')
-    renderer.render(scene, camera)
-    ctx.clearRect(0, 0, w, h)
-    ctx.drawImage(canvas, 0, 0, w, h)
-    _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
-    videoTrack.requestFrame()
-    onProgress?.(i / frameCount, { frame: i, frames: frameCount })
-    onPhase?.('capture', { done: i, total: frameCount })
-    await _yield()
-  }
-
-  if (aborted) {
-    try { recorder.stop() } catch {}
-    const e = new Error('Aborted'); e.name = 'AbortError'; throw e
-  }
-
-  onPhase?.('encode')
-  await _yield()
-  return new Promise((resolve, reject) => {
-    recorder.onstop = () => {
-      try {
-        onPhase?.('save')
-        const blob = new Blob(chunks, { type: 'video/webm' })
-        _download(blob, `${animation.name || 'animation'}.webm`)
-        resolve()
-      } catch (error) { reject(error) }
-    }
-    recorder.onerror = e => reject(e.error ?? new Error('MediaRecorder error'))
-    recorder.stop()
+  const blob = await encodeWebM({ canvas: tmp, fps, totalDur, onProgress, onPhase, signal,
+    renderFrame: async t => {
+      player.seekTo(t)
+      if (await player.settleFrame?.() === false) throw new Error('Animation frame is not ready for export')
+      renderer.render(scene, camera)
+      _copyEditorFrame(ctx, canvas, w, h)
+      _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
+    },
   })
+  onPhase?.('save')
+  _download(blob, `${animation.name || 'animation'}.webm`)
 }
 
 // ── GIF via gifenc ─────────────────────────────────────────────────────────────
@@ -355,8 +259,7 @@ async function _captureGIF({ animation, canvas, renderer, scene, camera, player,
     player.seekTo(t)
     if (await player.settleFrame?.() === false) throw new Error('Trajectory ions / bounding box are not ready for export')
     renderer.render(scene, camera)
-    ctx.clearRect(0, 0, w, h)
-    ctx.drawImage(canvas, 0, 0)
+    _copyEditorFrame(ctx, canvas, w, h)
     _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
     const { data } = ctx.getImageData(0, 0, w, h)
     if (!palette || i % _PALETTE_EVERY === 0) palette = quantize(data, 256)
@@ -373,6 +276,35 @@ async function _captureGIF({ animation, canvas, renderer, scene, camera, player,
   onPhase?.('save')
   await _yield()
   _download(new Blob([gif.bytesView()], { type: 'image/gif' }), `${animation.name || 'animation'}.gif`)
+}
+
+async function _preparePlayer(player, animation, fps, signal) {
+  try {
+    await player.play(animation)
+    signal?.throwIfAborted()
+    player.pause()
+    const duration = player.getTotalDuration()
+    if (duration <= 0) throw new Error('Animation has no duration — check keyframe timings.')
+    player.assertExportSampling?.(fps)
+    return duration
+  } catch (error) {
+    player.stop()
+    throw error
+  }
+}
+
+/** Composite the editor canvas over its visible CSS background. */
+function _copyEditorFrame(ctx, canvas, w, h) {
+  let element = canvas, background = '#0d1117'
+  while (element) {
+    const color = getComputedStyle(element).backgroundColor
+    if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') { background = color; break }
+    element = element.parentElement
+  }
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = background
+  ctx.fillRect(0, 0, w, h)
+  ctx.drawImage(canvas, 0, 0, w, h)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

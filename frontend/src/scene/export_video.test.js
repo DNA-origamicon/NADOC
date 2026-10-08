@@ -72,7 +72,7 @@ beforeEach(() => {
   encoderOpts.length = 0
   // jsdom has no canvas 2D context and no createImageBitmap.
   HTMLCanvasElement.prototype.getContext = () => ({
-    drawImage: vi.fn(), clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(),
+    drawImage: vi.fn(), fillRect: vi.fn(), clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(),
     fillText: vi.fn(), measureText: () => ({ width: 10 }),
     getImageData: () => ({ data: new Uint8ClampedArray(4) }),
   })

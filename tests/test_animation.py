@@ -233,6 +233,8 @@ def test_surface_batch_includes_vertex_colors_in_strand_mode():
     assert "faces" in entry and len(entry["faces"]) > 0
     assert "vertex_colors" in entry, "strand color_mode must include vertex_colors"
     assert len(entry["vertex_colors"]) == len(entry["vertices"])
+    assert len(entry["vertex_nuc_ids"]) == len(entry["vertices"]) // 3
+    assert all(entry["vertex_nuc_ids"])
 
 
 def test_surface_batch_omits_vertex_colors_in_uniform_mode():
@@ -580,3 +582,48 @@ def test_strand_anim_fields_survive_model_roundtrip():
         "mode": "displacement",
         "thetaDeg": 45,
     }
+
+
+def test_atomistic_batch_can_include_historical_atom_identity_without_mutating_design():
+    """Topology-aware animation keeps atom serials bound to the historical model."""
+    before = design_state.get_or_404().model_dump()
+    legacy = client.post('/api/design/features/atomistic-batch', json={'positions': [-1]})
+    detailed = client.post('/api/design/features/atomistic-batch', json={
+        'positions': [-1], 'include_topology': True,
+    })
+    assert legacy.status_code == detailed.status_code == 200
+    frame = detailed.json()['-1']
+    assert frame['positions'] == legacy.json()['-1']
+    assert frame['atoms'] and frame['bonds']
+    for atom in frame['atoms'][::max(1, len(frame['atoms']) // 10)]:
+        index = atom['serial'] * 3
+        assert frame['positions'][index:index + 3] == [atom['x'], atom['y'], atom['z']]
+    assert design_state.get_or_404().model_dump() == before
+
+
+def test_historical_nanoparticles_follow_ordinary_snapshots_in_both_directions():
+    from backend.api.crud import _seek_feature_log
+    from backend.core.models import Nanoparticle, SnapshotLogEntry
+
+    before = _demo_design()
+    particle = Nanoparticle(id='history-gold', diameter_nm=5)
+    after = before.copy_with(nanoparticles=[particle])
+    pre_body, _ = design_state.encode_design_snapshot(before)
+    post_body, _ = design_state.encode_design_snapshot(after)
+    after = after.copy_with(feature_log=[SnapshotLogEntry(
+        op_kind='nanoparticle-create', label='Gold particle',
+        design_snapshot_gz_b64=pre_body, post_state_gz_b64=post_body,
+    )])
+    initial = _seek_feature_log(after, -2)
+    assert initial.nanoparticles == []
+    restored = _seek_feature_log(initial, -1)
+    assert restored.nanoparticles == [particle]
+    assert after.nanoparticles == [particle]
+
+
+def test_surface_batch_can_prepare_empty_initial_build_state():
+    from backend.core.models import Design
+    design_state.set_design(Design())
+    response = client.post("/api/design/features/surface-batch", json={"positions": [-2]})
+    assert response.status_code == 200
+    assert response.json()["-2"] == {"vertices": [], "faces": [], "vertex_nuc_ids": []}

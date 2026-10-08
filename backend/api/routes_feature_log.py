@@ -175,6 +175,7 @@ def seek_features(body: SeekFeaturesBody):
 
 class GeometryBatchBody(BaseModel):
     positions: list[int]  # e.g. [-2, 0, 1, -1]; duplicates ignored
+    include_topology: bool = False
 
 
 @router.post("/design/features/geometry-batch", status_code=200)
@@ -204,6 +205,12 @@ def geometry_batch(body: GeometryBatchBody) -> dict:
                 junction_balance=True,
             ),
             "helix_axes": deformed_helix_axes(d),
+            "cluster_transforms": [c.model_dump(mode="json") for c in d.cluster_transforms],
+            # Historical rendering needs historical routing, including sites no
+            # longer present in the editor. Never transfer snapshot history here.
+            "display_design": d.model_dump(mode="json", exclude={
+                "feature_log", "animations", "camera_poses",
+            }),
         }
         for alias in aliases:
             result[str(alias)] = entry
@@ -220,15 +227,17 @@ def atomistic_batch(body: GeometryBatchBody) -> dict:
     Returns: { "<position>": [x0,y0,z0, x1,y1,z1, ...], ... }
     Positions are indexed by atom serial (same order as GET /design/atomistic).
     """
-    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
+    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat, atomistic_to_json
 
     design = design_state.get_or_404()
-    result: dict[str, list] = {}
+    result: dict[str, list | dict] = {}
     groups = batch_target_groups(design, body.positions, optimized=optimization_enabled())
     for position, aliases in groups.items():
         d = _seek_feature_log(design, position)
         model = build_atomistic_model(d)
         entry = atomistic_positions_flat(model)
+        if body.include_topology:
+            entry = {**atomistic_to_json(model), "positions": entry}
         for alias in aliases:
             result[str(alias)] = entry
     return result
@@ -269,6 +278,10 @@ def surface_batch(body: SurfaceBatchBody) -> dict:
     for position, aliases in groups.items():
         d = _seek_feature_log(design, position)
         model = build_atomistic_model(d)
+        if not model.atoms:
+            for alias in aliases:
+                result[str(alias)] = {"vertices": [], "faces": [], "vertex_nuc_ids": []}
+            continue
         mesh = compute_surface(
             model.atoms,
             grid_spacing=body.grid_spacing,
@@ -278,7 +291,7 @@ def surface_batch(body: SurfaceBatchBody) -> dict:
         mesh = smooth_mesh(mesh, iterations=body.smooth)
         verts = [round(float(v), 5) for v in mesh.vertices.ravel()]
         faces = [int(f) for f in mesh.faces.ravel()]
-        entry: dict = {"vertices": verts, "faces": faces}
+        entry: dict = {"vertices": verts, "faces": faces, "vertex_nuc_ids": mesh.vertex_nuc_ids}
         if body.color_mode == "strand":
             full = surface_to_json(mesh, d, color_mode="strand")
             vc = full.get("vertex_colors")

@@ -1081,6 +1081,7 @@ async function main() {
     // generic "Working…" auto-popup so frame preparation remains non-modal.
     // The animation panel reports its progress inline.
     onFetchGeometryBatch:   (positions, opts) => api.getGeometryBatch(positions, opts),
+    getNanoparticleRenderer: () => nanoparticleSubsystem,
     trajectoryKeyframes,
     onFetchAtomisticBatch:  (positions, opts) => api.getAtomisticBatch(positions, opts),
     getAtomisticRenderer:   () => atomisticRenderer,
@@ -7071,6 +7072,7 @@ async function main() {
   // Dev-only Playwright facade; implementation lives outside the composition root.
   if (import.meta.env.DEV) {
     installTestApi({
+      animPlayer,
       scrywrite: new URLSearchParams(window.location.search).has('scrywrite') ? {
         dispatch: event => _handleNativeVREvent(event),
         select: ref => selectionController.replace([ref]),

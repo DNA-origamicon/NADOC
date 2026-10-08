@@ -15,6 +15,7 @@
   "dependencies": {
     "gifenc": "^1.0.3",
     "jsqr": "^1.4.0",
+    "mediabunny": "^1.61.3",
     "qrcode-generator": "^2.0.4",
     "svg-pan-zoom": "^3.6.2",
     "three": "^0.172.0",

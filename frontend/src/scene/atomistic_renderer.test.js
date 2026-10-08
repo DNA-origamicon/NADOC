@@ -1017,3 +1017,15 @@ it('does not interpolate cached atoms after switching the representation off', (
   expect(scene.children).toHaveLength(0)
   ar.dispose()
 })
+it('hides unrevealed sweep atoms and their bonds without moving the atoms', () => {
+  const { scene, ar } = makeTwoAtomBond()
+  const xyz = [0, 0, 0, .15, 0, 0]
+  ar.applyPositionLerp(xyz, xyz, 0, null, [], null, atom => atom.serial === 0 ? 1 : 0)
+  expect(bondCylinderScaleY(scene)).toBe(0)
+  const oxygen = scene.children.find(mesh => mesh.isInstancedMesh && mesh.userData.element === 'O')
+  expect(oxygen).toBeDefined()
+  expect(oxygen.instanceMatrix.array[0]).toBe(0)
+  ar.applyPositionLerp(xyz, xyz, 0)
+  expect(bondCylinderScaleY(scene)).toBeCloseTo(.15)
+  ar.dispose()
+})

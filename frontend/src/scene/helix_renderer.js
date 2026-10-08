@@ -1,3 +1,4 @@
+import { revealSweepTube } from './sweep_animation_reveal.js'
 import { positionUpdateLookup } from '../viewer/geometry_codec.js'
 import { validateNativePlacement, placementIntegrityFailure, requireMappedNativePose, replaceNativePlacement, nativeMapPosition, validateNativePoseMap } from '../viewer/native_placement.js'
 import { nativeCorePaired } from '../shared/aptamer.js'
@@ -1668,6 +1669,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const capA   = mkCap(pts[0],                tStart.clone().negate())  // start cap faces away from tube
     const capB   = mkCap(pts[pts.length - 1],   tEnd)                     // end cap faces forward
     const geo = mergeGeometries([tube, capA, capB], false) ?? tube
+    geo.userData.sweepBodyIndexCount = tube.index.count
     return { geo, t0Curve: t0c, t1Curve: t1c }
   }
 
@@ -4799,6 +4801,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         else if (tp)        fade = t
         else if (fp)        fade = 1 - t
         else                fade = 0   // defensive — bead exists in scene but neither baked
+        fade = fadeOpts?.sweepReveal?.scale(entry.nuc, fade) ?? fade
         if (isExcluded && fade === 1) continue   // applyClusterTransform already set the matrix
         const s = _beadScale * fade
         _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(s, s, s))
@@ -4828,6 +4831,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         else if (existsAfter)                   coneFade = t
         else if (existedBefore)                 coneFade = 1 - t
         else                                    coneFade = 0
+        if (fadeOpts?.sweepReveal) coneFade = Math.min(
+          fadeOpts.sweepReveal.scale(cone.fromNuc, coneFade),
+          fadeOpts.sweepReveal.scale(cone.toNuc, coneFade))
         if (isExcluded && coneFade === 1) continue   // cluster transform already wrote the matrix
 
         const fe = _nucToEntry.get(cone.fromNuc)
@@ -4866,7 +4872,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const isExcluded = _isExcluded(slab.nuc.helix_id)
         const fp = nativeMapPosition(fromPosMap, slab.nuc, slab._copy ?? 0)
         const tp = nativeMapPosition(toPosMap, slab.nuc, slab._copy ?? 0)
-        const fade = fp && tp ? 1 : tp ? t : fp ? 1 - t : 0
+        const defaultFade = fp && tp ? 1 : tp ? t : fp ? 1 - t : 0
+        const fade = fadeOpts?.sweepReveal?.scale(slab.nuc, defaultFade) ?? defaultFade
         if (isExcluded && fade === 1) continue
         const entry = _nucToEntry.get(slab.nuc)
         if (!entry) continue
@@ -4902,6 +4909,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           if (midColon < 0) continue
           const hid = key.slice(0, midColon)
           const bp  = +key.slice(midColon + 1, lastColon)
+          if (fadeOpts?.sweepReveal?.scale({ helix_id: hid, bp_index: bp }) === 0) continue
           let s = m.get(hid)
           if (!s) { s = new Set(); m.set(hid, s) }
           s.add(bp)
@@ -5136,7 +5144,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           // Per-domain fade based on bp range coverage in fromPosMap/toPosMap.
           // Falls back to strand+helix fade only when bp_lo/bp_hi aren't
           // available (legacy code paths).
-          const fade = (dom.bp_lo != null && dom.bp_hi != null)
+          const fade = fadeOpts?.sweepReveal?.ranges.has(dom.helixId) && dom.arrow.isCurved ? 0
+            : (dom.bp_lo != null && dom.bp_hi != null)
             ? _segFadeFor(dom.helixId, dom.bp_lo, dom.bp_hi)
             : Math.min(_strandFade(dom.strandId), _helixFade(dom.helixId))
           if (isExcluded && fade === 1) continue   // cluster transform already wrote the matrix
@@ -5151,6 +5160,18 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _processCylArr(_overhangCylData,     _ovhgCylMesh)
       _processCylArr(_curvedDomainCylData, iCurvedHelixCylinders)
       _processCylArr(_curvedOvhgCylData,   _curvedOvhgCylMesh)
+      for (const group of [_curvedCylGroup, _curvedOvhgGroup]) {
+        for (const mesh of group.children) {
+          const data = mesh.userData
+          revealSweepTube(mesh, fadeOpts?.sweepReveal?.ranges.get(data.helixId), data.bp_lo, data.bp_hi)
+        }
+      }
+      for (const arrow of axisArrows) {
+        const range = fadeOpts?.sweepReveal?.ranges.get(arrow.helixId)
+        if (range && arrow.straightShaft && arrow.isCurved) arrow.straightShaft.scale.set(0, 0, 0)
+        revealSweepTube(arrow.shaft, range, arrow.bpStart, arrow.bpStart + arrow.bpLen - 1)
+        for (const seg of arrow.segments ?? []) revealSweepTube(seg.tubeMesh, range, seg.bp_lo, seg.bp_hi)
+      }
     },
 
     /**

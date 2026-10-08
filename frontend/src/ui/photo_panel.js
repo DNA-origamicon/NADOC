@@ -115,10 +115,10 @@ export function animationDuration(animation) {
  * @param {{durationS:number, fps:number, width:number, height:number}} p
  * @returns {{frames:number, tiles:number, text:string}}
  */
-export function videoPlan({ durationS, fps, width, height }) {
+export function videoPlan({ durationS, fps, width, height, format = 'gif' }) {
   if (!(durationS > 0) || !(fps > 0)) return { frames: 0, tiles: 0, text: '' }
-  // +1 because the loop renders both endpoints (t=0 and t=duration).
-  const frames = Math.ceil(durationS * fps) + 1
+  // GIF includes a final still; WebM has exactly the authored duration.
+  const frames = Math.ceil(durationS * fps) + (format === 'gif' ? 1 : 0)
   const tiles  = Math.max(1, Math.ceil(width / 4096)) * Math.max(1, Math.ceil(height / 4096))
   return {
     frames, tiles,
@@ -837,7 +837,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
     const [w, h] = _videoSize()
     const fpsVal = parseInt(els.videoFps?.value)
     const fps = Number.isFinite(fpsVal) && fpsVal > 0 ? fpsVal : (anim.fps ?? 30)
-    const plan = videoPlan({ durationS: animationDuration(anim), fps, width: w, height: h })
+    const plan = videoPlan({ durationS: animationDuration(anim), fps, width: w, height: h, format: els.videoFormat?.value || 'webm' })
     // A trajectory keyframe is RESAMPLED onto the capture grid, so fps decides how much
     // of the simulation reaches the file. Say so here rather than let the user discover
     // it as "the motion looks coarser than the run was" after an hours-long render.

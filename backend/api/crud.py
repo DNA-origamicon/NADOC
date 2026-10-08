@@ -8930,6 +8930,9 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
         cluster_joints=snap_design.cluster_joints,
         flexible_segment_marks=snap_design.flexible_segment_marks,
         flexible_connections=snap_design.flexible_connections,
+        nanoparticles=snap_design.nanoparticles,
+        nanoparticle_conjugations=snap_design.nanoparticle_conjugations,
+        nanoparticle_connection_versions=snap_design.nanoparticle_connection_versions,
     )
 
 

@@ -396,14 +396,13 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    * @param {Array<{from, to, color, fromHelixId, toHelixId, fromNuc, toNuc}>} connections
    * @param {Map<string,THREE.Vector3>|null} straightPosMap
    */
-  function _initArcs(connections, straightPosMap) {
+  function _initArcs(connections, straightPosMap, design = store.getState().currentDesign) {
     _clearArcs()
     if (!connections.length) return
 
     // Build a lookup: "helix_id:bp_index:direction" → crossover, so each arc can
     // be associated with its Crossover ID for the extra-bases context menu.
     // Keys cover both half_a and half_b so either end of an arc resolves the crossover.
-    const design = store.getState().currentDesign
     const xoBySiteKey = new Map()
     if (design) {
       for (const xo of (design.crossovers ?? [])) {
@@ -1227,6 +1226,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     activate,
     deactivate,
     setSpacing,
+    refreshExternalGeometry(design = store.getState().currentDesign) {
+      const offsets = _buildOffsets(store.getState().unfoldSpacing)
+      _initArcs(designRenderer.getCrossHelixConnections(), null, design)
+      _buildXbArcMap(offsets, null)
+      _buildExtArcMap(offsets, null)
+      _reapplyArcHidden()
+      _applyStapleArcVisibility()
+      _updateArcPositions(0, offsets, null)
+    },
     applyFemArcs,
     applyFemArcColors,
     isActive:  () => _active,
