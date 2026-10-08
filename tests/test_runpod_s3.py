@@ -44,13 +44,26 @@ def test_s3_upload_is_multipart_parallel_and_maps_workspace_key(tmp_path, monkey
     source.write_bytes(b"x" * 100)
     seen = {}
 
-    class Client:
-        def upload_file(self, filename, bucket, key, Callback=None, Config=None):
-            seen.update(filename=filename, bucket=bucket, key=key, config=Config)
-            Callback(40)
-            Callback(60)
+    class Transfer:
+        def result(self):
+            pass
 
-    monkeypatch.setattr("boto3.client", lambda *_a, **_kw: Client())
+    class Manager:
+        def upload(self, filename, bucket, key, subscribers):
+            seen.update(filename=filename, bucket=bucket, key=key)
+            subscribers[0].on_progress(40)
+            subscribers[0].on_progress(60)
+            return Transfer()
+
+        def shutdown(self):
+            seen['shutdown'] = True
+
+    def manager(_client, config):
+        seen['config'] = config
+        return Manager()
+
+    monkeypatch.setattr("boto3.client", lambda *_a, **_kw: object())
+    monkeypatch.setattr("boto3.s3.transfer.create_transfer_manager", manager)
     conn = runpod_s3.RunpodS3Connection(
         runpod_s3.S3Credentials("user_x", "rps_x", "test"),
         volume_id="vol", data_center_id="EU-RO-1", remote_root="/workspace/job",
@@ -65,6 +78,59 @@ def test_s3_upload_is_multipart_parallel_and_maps_workspace_key(tmp_path, monkey
     assert seen["key"] == "nadoc_jobs/j/.nadoc_stage/package.tar.gz"
     assert seen["config"].max_concurrency == 10
     assert seen["config"].multipart_chunksize == 16 * 1024 * 1024
+    assert seen['shutdown']
+
+
+def test_cancel_upload_drains_worker_and_blocks_late_progress(tmp_path, monkeypatch):
+    import threading
+    import pytest
+
+    source = tmp_path / 'package.tar.gz'
+    source.write_bytes(b'x' * 100)
+    cancelled = threading.Event()
+    drained = threading.Event()
+    seen = {}
+
+    class Transfer:
+        def result(self):
+            assert cancelled.wait(5), 'upload was never cancelled'
+            # A callback already in flight when the transfer was cancelled.
+            seen['subscriber'].on_progress(50)
+            raise RuntimeError('transfer cancelled')
+
+        def cancel(self):
+            cancelled.set()
+
+    class Manager:
+        def upload(self, *_args, subscribers):
+            seen['subscriber'] = subscribers[0]
+            return Transfer()
+
+        def shutdown(self):
+            drained.set()
+
+    monkeypatch.setattr('boto3.client', lambda *_a, **_kw: object())
+    monkeypatch.setattr('boto3.s3.transfer.create_transfer_manager', lambda *_a: Manager())
+    conn = runpod_s3.RunpodS3Connection(
+        runpod_s3.S3Credentials('test', 'test', 'test'),
+        volume_id='vol', data_center_id='EU-RO-1', remote_root='/workspace/job',
+    )
+    progress = []
+
+    async def scenario():
+        task = asyncio.create_task(conn.sftp_put(
+            str(source), '/workspace/job/package.tar.gz',
+            on_progress=lambda *args: progress.append(args),
+        ))
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert drained.is_set()
+        await asyncio.sleep(0)
+        assert progress == []
+
+    asyncio.run(scenario())
 
 
 def test_s3_file_inventory_is_relative_to_job_root(monkeypatch):

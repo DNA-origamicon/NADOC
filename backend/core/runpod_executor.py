@@ -83,6 +83,9 @@ FETCH_TIMEOUT_S = 900.0
 # (resumable) rather than crashes the whole run. Reset to 0 on any successful poll.
 MAX_POLL_SSH_FAILURES = 5
 S3_STAGE_ARCHIVE = ".nadoc_stage/package.tar.gz"
+# Expanding multi-GB inputs on the network volume is bulk I/O, not a short SSH
+# status command. Keep it bounded without applying run()'s 60-second default.
+S3_EXTRACT_TIMEOUT_S = 600.0
 
 
 def _volume_file_reusable(rel: str, remote_size: Optional[int], local_size: int) -> bool:
@@ -210,7 +213,15 @@ async def _prestage_package_s3(
                 for path, rel in missing:
                     tf.add(path, arcname=rel, recursive=False)
 
-        await asyncio.to_thread(build_archive)
+        compression = asyncio.create_task(asyncio.to_thread(build_archive))
+        try:
+            await asyncio.shield(compression)
+        except asyncio.CancelledError:
+            # The worker still owns the input files and temporary archive. Drain it
+            # before Stop permits deletion or the finally block removes the archive.
+            with contextlib.suppress(Exception):
+                await asyncio.shield(compression)
+            raise
         compressed = archive.stat().st_size
         last_save = 0.0
 
@@ -248,7 +259,8 @@ async def _extract_s3_stage(conn: RunpodConnection, remote: str, archive_path: s
         # can make an otherwise successful extraction exit nonzero after writing files.
         f"tar --no-same-owner -xzf {shlex.quote(archive_path)} "
         f"-C {shlex.quote(remote)} && "
-        f"rm -f {shlex.quote(archive_path)}"
+        f"rm -f {shlex.quote(archive_path)}",
+        timeout=S3_EXTRACT_TIMEOUT_S,
     )
     if result.rc != 0:
         raise RunpodError(f"Could not unpack the S3-staged package: {result.stderr.strip()}")
@@ -936,11 +948,17 @@ async def run_job_on_pod(
                 )
             finally:
                 await conn.close()
-    except BaseException:
+    except BaseException as exc:
         # A pod that never received the detached chain has nothing useful to preserve.
         # Once submitted, however, SSH/NADOC loss must not kill healthy computation;
         # RunPod's terminateAfter remains the hard bill boundary.
         if job.runpod_pod_id and not submitted:
+            if isinstance(exc, Exception):
+                client.record_lifecycle(
+                    "startup_failed", pod_id=job.runpod_pod_id,
+                    job_id=job.job_id, error=str(exc),
+                    error_type=type(exc).__name__,
+                )
             job.remote_submit_progress = None
             with contextlib.suppress(Exception):
                 await client.terminate_pod(

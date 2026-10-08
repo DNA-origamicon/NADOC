@@ -77,3 +77,18 @@ def test_delete_still_allows_a_failed_job(monkeypatch, tmp_path):
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
     assert not job.job_dir(tmp_path).exists()
+
+
+def test_delete_refuses_stopped_job_with_preparation_worker(monkeypatch, tmp_path):
+    from backend.core.md_prep_progress import (
+        register_active_preparation, unregister_active_preparation,
+    )
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    job = _make_job(tmp_path, MdStatus.stopped)
+    register_active_preparation(job.job_id)
+    try:
+        resp = TestClient(app).delete(f"/api/md/jobs/{job.job_id}")
+        assert resp.status_code == 400
+        assert job.job_dir(tmp_path).exists()
+    finally:
+        unregister_active_preparation(job.job_id)
