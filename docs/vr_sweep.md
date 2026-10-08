@@ -1,4 +1,29 @@
-# Sweep in VR
+# Sweep on desktop and in VR
+
+Sweep carries a painted lattice cross-section along an editable path. Both
+interfaces support direction and twist at individual points, curvature warnings,
+and automatic loop/skip correction when creating the DNA. The completed
+implementation is recorded in commit `561c590c`.
+
+## Desktop workflow
+
+1. Open **Tools → Sweep**, choose a new bundle or an existing source end, and
+   paint the cross-section. Choose **Next** to edit the path.
+2. Select a point in the list or on the canvas. Edit XYZ or drag the translation
+   gizmo to position it. Use **Add point** to extend the path.
+3. Enable **Control direction and twist** to enter angles, or press **Tab** with
+   focus on the selected point entry or canvas to switch to the rotation gizmo.
+   Desktop rotation accepts arbitrary angles.
+4. Review the cross-sections, **New BP** count and any highlighted curve regions.
+   Hover an amber warning icon to read **Loop/skip limit is exceeded**.
+5. Choose **Confirm** to create the DNA with safe corrections. Warnings allow
+   creation and their icons remain visible afterward. Reopen the feature through
+   **Feature Log → Edit** to change the path or orientation.
+
+For continuation from the model, use the selected terminal blunt end's **Sweep**
+action. The attached origin's position and orientation remain fixed to that end.
+
+## VR workflow
 
 Open the right hand **Tools → Sweep** panel. As in desktop Sweep, paint the
 lattice footprint first, then choose **Next**. The second step starts with an
@@ -94,6 +119,53 @@ backend evaluator used by desktop. While an oriented draft is being evaluated,
 the native line shows its current steering and the old helix cloud is hidden.
 The new cloud appears when feedback for that exact configuration arrives.
 
+## Correction scope and saved designs
+
+Automatic correction runs as part of creating or rebuilding the Sweep feature,
+after its strand joins are established. It applies to the newly generated
+helices; existing source geometry and its loop/skip marks are preserved. When
+safe sites cannot satisfy the requested bending correction, the builder applies
+what fits and records the remaining demand as warnings.
+
+**Add skips/loops** remains a design-wide command. For automatically corrected
+sweeps it deterministically recomputes marks, including square-lattice periodic
+compensation, rather than adding a second copy. Repeating it with unchanged
+geometry and strand topology preserves the resulting marks; it can still create
+a history entry. Changing routing or other deformations can change the available
+safe sites and therefore the recomputed marks.
+
+Saved sweep parameters retain authored point frames, warning locations in bp
+coordinates, and automatic-correction status. Older designs without that status
+keep the legacy strict loop/skip command behavior; loading them does not silently
+opt them into automatic correction. Warning icons follow generated helix
+positions and are restored by loading and history operations.
+
+**New BP** counts nominal lattice base-pair sites in the new helices before
+loop/skip adjustments. It excludes source geometry and is not a nucleotide count
+or a prediction of a routed strand's final length.
+
+## Focused regression commands
+
+Run these from the repository root after installing the normal dependencies.
+The native commands assume its CMake build directory has been configured.
+
+```bash
+uv run python -m pytest tests/test_sweep*.py tests/test_vr_sweep.py -q
+npm --prefix frontend test -- --run src/scene/sweep_warning_markers.test.js src/scene/sweep_preview.test.js src/scene/vr_sweep.test.js src/ui/sweep_panel.test.js src/ui/sweep_points.test.js
+(cd frontend && npx playwright test --config playwright.sweep.config.js sweep_orientation.spec.js sweep.spec.js --workers=1)
+cmake --build native/vr_viewer/build --target nadoc-vr-sweep-draft-test nadoc-vr-sweep-panel-test nadoc-vr-sweep-viewer-test
+ctest --test-dir native/vr_viewer/build -R '^nadoc-vr-sweep-' --output-on-failure
+npm --prefix frontend run build
+```
+
+Validation on 2026-10-08 passed 80 backend tests, 40 frontend tests, three native
+tests, four desktop browser tests, and the four-profile VR tour described below.
+The native render tests exercise pending spinner animation and warning picking;
+desktop tests cover persistent warning hover, arbitrary rotation, display-only
+truncation, end continuation, and history. Run desktop browser tests and VR tours
+sequentially because they can interact with the same native VR session. Avoid
+source edits during browser runs, since development reloads invalidate them.
+
 ## Calibration and regression
 
 The calibration harness calls the production C++ smoother and natural spline
@@ -160,6 +232,11 @@ The direct Playwright command keeps evidence in its isolated
 `/tmp/nadoc-scry-browser-*` directory. These are application-submitted stereo
 images, not compositor presentation measurements. Offscreen native rendering
 checks and headless geometry tests remain separate from physical-headset proof.
+
+## Validation evidence and investigation history
+
+Paths below identify local review artifacts; `/tmp` files are temporary and are
+not shipped with the repository. Use the commands above to reproduce them.
 
 The 2026-10-08 S-shape Demo passed in about 1.5 minutes, including visible review
 pauses, post-Free Draw point dragging and XYZ edits, desktop feature-log editing,

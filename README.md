@@ -33,6 +33,10 @@ To try it, click **File → Open File…** and load a design from `Examples/`
 
 See [START.md](START.md) for the day-to-day run commands and the WSL2 networking note.
 
+For curved lattice bundles, see the [desktop and VR Sweep guide](docs/vr_sweep.md):
+path editing, per-point direction and twist, persistent curvature warnings, and
+automatic loop/skip correction.
+
 ### Working across computers with Tailscale
 
 Run NADOC on each computer with:

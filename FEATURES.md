@@ -34,6 +34,20 @@ or fewer. Simulation engines and VR require their respective dependencies.
   - Adjacent-end ligation
   - Existing-bundle continuation
   - Deformed-end continuation
+- **[Sweep](docs/vr_sweep.md)**
+  - Desktop and VR authoring
+  - Painted lattice cross-sections
+  - Editable spline control points
+  - VR free-drawn paths
+  - Per-point direction and twist
+  - Desktop Tab rotation gizmo
+  - VR 15° grip rotation
+  - Visible cross-section orientation
+  - Persistent curvature warning icons
+  - Safe automatic loop/skip correction
+  - Idempotent correction recomputation
+  - New base-pair site count
+  - Editable feature history
 - **Primitive Library**
   - 6-helix bundles
   - 18-helix bundles
