@@ -1332,3 +1332,38 @@ so the panel retains its inputs and preview for correction. Covered by
 - **Evidence:** [Preserved incident report](.native-placement-review/incidents/20261007T180833-b0aaf4e5ebcb/report.json), incident `20261007T180833-b0aaf4e5ebcb`; the failing host's `/proc/version` identifies `microsoft-standard-WSL2`. Original report, source traces, and focused logs remain retained.
 - **Focused remediation (2026-10-07):** The single pending-review test now stubs only `_native_platform_reason`, retaining real locality checks and all runtime behavior. All 18 VR-failure assertions pass; that pre-acknowledgement process exited 1 for the preserved unresolved incident. All four supported/unsupported-platform cases pass separately. No molecular coordinates were evaluated by the original failing call; this fix makes no molecular-placement certification.
 - **Review completed:** After inspecting the candidate review and source trace, Codex (OpenAI coding agent) explicitly acknowledged this incident at `2026-10-07T18:22:10Z`. The [recorded review](.native-placement-review/incidents/20261007T180833-b0aaf4e5ebcb/review.json) binds the original report SHA-256; the explicit audit check is clear and the journal has no pending incidents. A passing rerun did not clear the gate. See ISSUE-53 for separate broader-suite environment failures.
+
+## ISSUE-63 — SNUPI PDB reader drops adjacent negative coordinates (2026-10-07, FIXED)
+
+- **Status:** `[x]` Fixed during the three-design Exp comparison.
+- **Repro:** Official SNUPI platform output contains `11.250-155.885` in adjacent 8-character coordinate fields. Whitespace parsing silently returned 5,572 of 6,766 graph nodes.
+- **Root cause:** The reader assumed separators between every coordinate even though SNUPI writes PDB-width xyz fields.
+- **Fix:** Preserve the existing whitespace reader and fall back to xyz columns 30:54 plus the existing node identity prefix. No node-order, topology or coordinate changes.
+- **Evidence:** `tests/test_snupi_reference.py::test_parse_snupi_pdb_adjacent_negative_coordinate_fields`; task artifacts under `.development-artifacts/exp_local_20261007/`. The comparison still requires complete mapping and a 0.1 nm geometric residual check.
+
+## ISSUE-64 — Requested MgCl2 absorbed by Mg counterion count (2026-10-07, FIXED)
+
+- **Repro:** DNA -6982 e and a requested 84 MgCl2 units produced 3491 Mg / 0 Cl,
+  because `ion_counts` selected max(counterions, salt). UI describes salt excluding counterions.
+- **Fix:** Add salt to neutralising Mg; record the concentration convention in new
+  charge audits and distinguish historical package notes. Existing packages are unchanged.
+- **Evidence:** Official tutorial PSFs contain DNA -865 e / 516 Mg / 167 Cl;
+  `.development-artifacts/mg_recipe_audit_20261007/tutorial_census.json`.
+  Thirteen focused ion-recipe tests pass, including odd charges, zero Mg, bare ions,
+  added NaCl, both salt/counterion regimes and historical/new protocol notes.
+- **Regression:** `just test-smart` chose FAST: 9,978 passed, 90 skipped. FULL
+  deferred without a test-dedicated session; retained log in the audit directory.
+
+## ISSUE-62 — Fast relaxation PME cadence contradicts manifest (2026-10-07, OPEN)
+
+- **Observed remotely:** job `8466ccc17eff` has 4 fs relaxation configs with
+  `fullElectFrequency 2` (8 fs full electrostatics). Remote hashes match the local
+  package. `protocol_fidelity` claims frequency 1 / 4 fs instead.
+- **Location:** `md_protocols._common_header` writes literal frequency 2;
+  `protocol_fidelity` reports 1. The separate production builder uses 1 at 4 fs.
+- **Evidence:** `.development-artifacts/runpod_8466_audit_20261007/audit.json`,
+  `remote_hashes.json`, and the submitted `24hb_0xT_04_300K_NPT_MGHH_only_p100.conf`.
+- **Scope:** Read-only audit while the pod is minimizing; no dynamics yet, so this
+  does not establish observed instability. No active job or production code changed.
+- **Follow-up:** Derive cadence from timestep consistently, pin actual generated
+  4 fs configs against manifest, and review active prepared inputs before dynamics.

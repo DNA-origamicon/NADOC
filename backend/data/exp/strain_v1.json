@@ -1,0 +1,80 @@
+{
+  "feature_schema": "bundle-strain-v1",
+  "features": [
+    "radial",
+    "radial_end",
+    "axial",
+    "axial_end",
+    "twist",
+    "twist_end"
+  ],
+  "coefficients": [
+    0.1258406768689498,
+    -0.0574088897299193,
+    0.012079903612323447,
+    -0.005020651793146764,
+    0.361626328099466,
+    -0.36355640627673635
+  ],
+  "training_manifest_sha256": "686413b8c67a1fe314b749ef3f5609bc31a2543443bfaeb43b521446c07347ae",
+  "training_inputs": {
+    "24hb_0xT": {
+      "design_sha256": "8b4adde86b5c054fb257fd895c2e2cebf6762c81906998cec288eeadc315ddae",
+      "dataset_sha256": "3184a79c964c2a75936f8a3e3741afb1e1e93e83ce2c918bd30292eff9ed1154"
+    },
+    "6hb_0xT": {
+      "design_sha256": "5a1a08dc9107959e18af08198a5d0751592acf37f8d745fb1ef450851c05c267",
+      "dataset_sha256": "1c81aa77e15bccc51b2b245247fe28b8d75e5dff6731aeca01fa6cde92d2d12c"
+    }
+  },
+  "model_card": {
+    "id": "exp-0xT-strain-v1",
+    "trained_designs": [
+      "24hb_0xT",
+      "6hb_0xT"
+    ],
+    "trained_extra_base_counts": [
+      0
+    ],
+    "target": "aligned last-half production-window phosphate mean",
+    "limits": "0xT 6HB/24HB infrastructure pilot; finite-window means, no equilibrium or seed validation. Na-neutralized DNA plus hydrated Mg and Cl; historical screening recipe, not newer Mg-counterion recipe.",
+    "conditions": {
+      "temperature_K": 300,
+      "ions": "Na-neutralized DNA plus hydrated Mg and Cl; historical screening recipe, not newer Mg-counterion recipe",
+      "ion_counts_psf": {
+        "24hb_0xT": {
+          "Na": 6644,
+          "Mg": 103,
+          "Cl": 206
+        },
+        "6hb_0xT": {
+          "Na": 1307,
+          "Mg": 24,
+          "Cl": 48
+        }
+      },
+      "production_timestep_fs": 4,
+      "HMR": true,
+      "langevin_damping_per_ps": {
+        "24hb_0xT": 1,
+        "6hb_0xT": 5
+      },
+      "DNA_restraints": false
+    },
+    "validation": [
+      {
+        "design": "24hb_0xT",
+        "baseline_rms_nm": 1.08828626059197,
+        "prediction_rms_nm": 0.8646890293188768,
+        "relative_improvement": 0.20545810359809946
+      },
+      {
+        "design": "6hb_0xT",
+        "baseline_rms_nm": 0.7017775236763076,
+        "prediction_rms_nm": 0.6042152932367303,
+        "relative_improvement": 0.1390215946622103
+      }
+    ],
+    "review": "Both size holdouts improve on native geometry"
+  }
+}

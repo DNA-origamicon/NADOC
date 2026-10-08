@@ -81,6 +81,21 @@ def test_parse_snupi_pdb(tmp_path):
     assert nodes[2].pos == pytest.approx([-1.0, 2.0, 3.0])
 
 
+def test_parse_snupi_pdb_adjacent_negative_coordinate_fields(tmp_path):
+    # Real platform output: y/z meet without whitespace. Dropping these rows
+    # silently destroys the graph's node-order bijection.
+    path = tmp_path / "platform_INIT_STRCT.pdb"
+    path.write_text(
+        "ATOM      1 TA   H1      1    -336.600  11.250-155.885 6.0\n"
+        "ATOM   6766 TA   H34   199     336.600 -11.250 155.885 2.1\n"
+    )
+    nodes = parse_snupi_pdb(path)
+    assert [(n.chain, n.resseq) for n in nodes] == [("H1", 1), ("H34", 199)]
+    assert nodes[0].pos == pytest.approx([-33.66, 1.125, -15.5885])
+    assert nodes[0].rmsf == pytest.approx(6.0)
+    assert nodes[1].pos == pytest.approx([33.66, -1.125, 15.5885])
+
+
 def test_parse_snupi_xyz(tmp_path):
     p = tmp_path / "x.xyz"
     p.write_text("2\n\nA 10.0 20.0 30.0\nA -5.0 0.0 5.0\n")

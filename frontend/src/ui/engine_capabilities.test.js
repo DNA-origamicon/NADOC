@@ -39,6 +39,12 @@ const idPresent = (id) => HTML.includes(`id="${id}"`)
 // enabled: card the panel renders today, with its verified DOM toggle/button id.
 // disabled: card absent today, with the conventional id it WOULD use + why.
 const CENSUS = {
+  exp: {
+    run: { on: 'exp-run' }, viz: { on: 'exp-viz' },
+    efield: { off: 'exp-efield-toggle' }, anchors: { off: 'exp-anchors-toggle' },
+    surface: { off: 'exp-surface-toggle' }, advanced: { off: 'exp-advanced-toggle' },
+    metrics: { off: 'exp-metrics-toggle' }, joblist: { off: 'exp-jobs-list-toggle' },
+  },
   oxdna: {
     run:        { on: 'oxdna-jobs-run-btn' },
     efield:     { on: 'efield-toggle' },
@@ -110,7 +116,7 @@ describe('engine capability descriptor — shape + completeness', () => {
     // BLADE was ARCHIVED 2026-07-20 (removed from ENGINE_KEYS — its capability/census entries
     // stay dormant; see engine_capabilities.js). LAMMPS is deliberately NOT a selectable engine
     // — it's the auto-policy CPU fallback, shown in the unified job list with an [L] badge.
-    expect(ENGINE_KEYS).toEqual(['cando', 'snupi', 'mrdna', 'oxdna', 'namd'])
+    expect(ENGINE_KEYS).toEqual(['cando', 'snupi', 'mrdna', 'oxdna', 'namd', 'exp'])
   })
 
   it('every engine has an entry for EVERY card in the universe (never absent)', () => {

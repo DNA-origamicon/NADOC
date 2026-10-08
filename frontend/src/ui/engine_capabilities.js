@@ -37,9 +37,10 @@
 // block below, the panel/display/backend modules, and the NAMD seed_blade_job_id plumbing all
 // remain dormant. To revive: put 'blade' back in ENGINE_KEYS (between 'cando' and 'snupi') and
 // restore the parity test + #blade-jobs-panel display. See memory/project_blade_frontend.md.
-export const ENGINE_KEYS = ['cando', 'snupi', 'mrdna', 'oxdna', 'namd']
+export const ENGINE_KEYS = ['cando', 'snupi', 'mrdna', 'oxdna', 'namd', 'exp']
 
 export const ENGINE_LABELS = {
+  exp: 'Exp',
   oxdna: 'oxDNA',
   mrdna: 'mrDNA',
   cando: 'CanDo',
@@ -79,6 +80,19 @@ const off = (reason) => ({ enabled: false, domAnchorId: null, reason })
  *   advancedParams  -> the advanced-drawer input ids (the param schema)
  */
 export const ENGINE_CAPABILITIES = {
+  exp: {
+    label: ENGINE_LABELS.exp,
+    cards: {
+      run: on('exp-run'), viz: on('exp-viz'),
+      joblist: off('Exp keeps one session-only screening result.'),
+      advanced: off('The trained model defines its reference conditions.'),
+      anchors: off('External restraints are outside the initial training target.'),
+      efield: off('Applied fields are outside the initial training target.'),
+      surface: off('Surface interactions are outside the initial training target.'),
+      metrics: off('Model validation is reported with the trained model.'),
+    },
+    protocols: ['screen'], advancedParams: [],
+  },
   oxdna: {
     label: ENGINE_LABELS.oxdna,
     cards: {

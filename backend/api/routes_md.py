@@ -3568,10 +3568,10 @@ def _spawn_prep_job(
     ion_conc_mM = body.ion_conc_mM
     mg_conc_mM = body.mg_conc_mM
     if body.salt_mode == "screening":
-        # The published origami recipe: the backbone is neutralised by Mg(H2O)6(2+) and
-        # Cl- balances the excess — no Na+ at all (Methods Mol Biol 1811 §3.3).  The Mg
-        # figure is a BULK FLOOR above neutralisation, not the whole magnesium content;
-        # the counts come from namd_solvate.ion_counts against the audited charge.
+        # Mg(H2O)6(2+) neutralises the backbone, as in the origami tutorial (§3.3).
+        # NADOC's 12.5 mM setting adds MgCl2 AFTER neutralisation; it is not total
+        # magnesium concentration or a universal concentration specified by the guide.
+        # namd_solvate.ion_counts supplies counterions + salt and balancing chloride.
         ion_conc_mM = 0.0
         mg_conc_mM = 12.5
 

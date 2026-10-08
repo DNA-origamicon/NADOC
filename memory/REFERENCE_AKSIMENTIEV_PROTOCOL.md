@@ -14,6 +14,34 @@ from <https://bionano.physics.illinois.edu/tutorials/practical-guide-dna-origami
 plus the Methods-in-Molecular-Biology chapter PDF (`origamiprotocols_0.pdf`).
 Reference system = `hextube`, a cadnano hexagonal tube.
 
+## Mg census correction (2026-10-07)
+
+Direct census of the official tutorial archive's step2/hextube.psf and
+step3/hextube_MGHH_WI.psf gives DNA charge -865 e (880 nt), 516 MGH and 167 CLA.
+That is 433 neutralising Mg plus 83 additional MgCl2 units and one odd-charge
+chloride. The tutorial does not mandate 12.5 mM; its chosen count depends on the
+system. Retained source scripts, PSFs and census are under
+`.development-artifacts/mg_recipe_audit_20261007/`.
+
+NADOC previously used max(neutralising Mg, requested bulk Mg), so its newer dense
+origami boxes received effectively neutralising Mg alone. This is superseded:
+`ion_counts` now adds ceil(|Q|/2) counterions AND the requested MgCl2 formula units;
+Cl balances Mg excess and any requested NaCl. New charge audits record
+`concentration_convention: added_salt_after_neutralization`. Historical packages
+are unchanged and their salt notes retain the legacy convention. Mg hexahydrate,
+Mg-O restraints, near-backbone seeding and CHARMM36/CUFIX remain in place.
+Nominal added-salt concentration is distinct from total Mg/box volume and from
+measured free Mg; the current solvent-volume convention is unchanged.
+
+The archived 24HB 0xT has 6,644 Na / 103 MGH / 206 Cl, whereas 1xT has
+3,491 MGH / no Na / no Cl and 2xT has 3,660 MGH / no Na / no Cl. Thus salt
+protocol is confounded with extra bases. At the recorded 1xT preparation volume,
+12.5 mM added MgCl2 adds 84 Mg and 168 Cl to the neutralising census.
+Publication comparisons should use matched 0/1/2xT salt/protocol, comparable
+periodic-image separation, independent replicas and convergence diagnostics.
+Correcting only 0xT to the new convention does not make old 1/2xT salt-matched.
+No production simulations were launched by this audit.
+
 ## The pipeline
 
 **Stage 1 — cadnano → all-atom** via the ENRG-MD web service (returns psf/pdb/`.exb`/namd).
